@@ -23,7 +23,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
 | 创建 GitHub 仓库 + 项目骨架 | ✅ Done | P0 | 仓库已创建并推送至 GitHub |
-| 实现 notion_client 真实 API | 🔲 Pending | P0 | 当前为占位符，需 T1 实现 |
+| 实现 notion_client 真实 API | ✅ Done | P0 | notion_client v3 实现，Notion-Version=2022-06-28，88 tests pass |
 | 实现 FoamAgentExecutor 适配器 | 🔲 Pending | P0 | 当前为占位符，需 T1 实现 |
 | 初始化白名单 + Gold Standards | ⚠️ Partial | P1 | whitelist.yaml 存在，gold_standards/ 为空 |
 | Notion Hub Sync 脚本 | 🔲 Pending | P0 | run_notion_hub_sync.py 尚未创建 |
@@ -47,7 +47,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 
 Phase 0 完成条件 (需 Opus 审查后方可推进 Phase 1):
 - [x] GitHub 仓库创建并推送
-- [ ] notion_client 真实 API 集成并测试
+- [x] notion_client 真实 API 集成并测试
 - [ ] FoamAgentExecutor Protocol 通过集成测试
 - [ ] 至少 1 条 Gold Standard YAML 文件写入 gold_standards/
 - [ ] run_notion_hub_sync.py 能成功同步到 Notion
