@@ -22,7 +22,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 
 | Task | Status | Priority | Notes |
 |------|--------|----------|-------|
-| 创建 GitHub 仓库 + 项目骨架 | ✅ Done (本地) | P0 | 目录已创建，git repo 待 init + push |
+| 创建 GitHub 仓库 + 项目骨架 | ✅ Done | P0 | 仓库已创建并推送至 GitHub |
 | 实现 notion_client 真实 API | 🔲 Pending | P0 | 当前为占位符，需 T1 实现 |
 | 实现 FoamAgentExecutor 适配器 | 🔲 Pending | P0 | 当前为占位符，需 T1 实现 |
 | 初始化白名单 + Gold Standards | ⚠️ Partial | P1 | whitelist.yaml 存在，gold_standards/ 为空 |
@@ -35,7 +35,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 |----|-------|--------|
 | D-001 | Notion API token 获取方式 (internal/public) | Open |
 | D-002 | FoamAgentExecutor — 本地 subprocess vs Docker | Open |
-| D-003 | git repo 是否与全局 repo 合并或独立 | Open |
+| D-003 | git repo 是否与全局 repo 合并或独立 | ✅ Done (Option A — 独立仓库) |
 
 # Known Risks
 
@@ -46,7 +46,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 # Opus Gate Checklist
 
 Phase 0 完成条件 (需 Opus 审查后方可推进 Phase 1):
-- [ ] GitHub 仓库创建并推送
+- [x] GitHub 仓库创建并推送
 - [ ] notion_client 真实 API 集成并测试
 - [ ] FoamAgentExecutor Protocol 通过集成测试
 - [ ] 至少 1 条 Gold Standard YAML 文件写入 gold_standards/
