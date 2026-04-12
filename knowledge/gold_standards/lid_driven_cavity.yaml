@@ -1,0 +1,134 @@
+# Gold Standard — Lid-Driven Cavity
+# Based on Ghia et al. 1982, J. Comput. Phys. 47, 387-411
+# Re = 100, square cavity, lid-driven top wall (u=1.0), all other walls no-slip (u=0)
+# Steady-state, incompressible, structured grid
+
+quantity: u_centerline
+reference_values:
+  - y: 0.0625
+    u: -0.03717
+  - y: 0.1250
+    u: -0.04192
+  - y: 0.1875
+    u: -0.04124
+  - y: 0.2500
+    u: -0.03667
+  - y: 0.3125
+    u: -0.02799
+  - y: 0.3750
+    u: -0.01641
+  - y: 0.4375
+    u: -0.00289
+  - y: 0.5000
+    u: 0.02526
+  - y: 0.5625
+    u: 0.07156
+  - y: 0.6250
+    u: 0.11910
+  - y: 0.6875
+    u: 0.17285
+  - y: 0.7500
+    u: 0.33304
+  - y: 0.8125
+    u: 0.46687
+  - y: 0.8750
+    u: 0.65487
+  - y: 0.9375
+    u: 0.84927
+  - y: 1.0000
+    u: 1.00000
+tolerance: 0.05
+source: "Ghia et al. 1982, J. Comput. Phys."
+literature_doi: "10.1016/0021-9991(82)90058-4"
+mesh_info:
+  cells: 64800
+  type: structured
+solver_info:
+  name: icoFoam
+  schemes: PISO
+case_info:
+  id: lid_driven_cavity
+  Re: 100
+  flow_type: INTERNAL
+  geometry_type: SIMPLE_GRID
+  steady_state: STEADY
+  boundary_conditions:
+    top_wall_u: 1.0
+    other_walls_u: 0.0
+
+---
+quantity: v_centerline
+reference_values:
+  - y: 0.1250
+    v: -0.04939
+  - y: 0.1875
+    v: -0.06203
+  - y: 0.2500
+    v: -0.06904
+  - y: 0.3125
+    v: -0.07080
+  - y: 0.3750
+    v: -0.06629
+  - y: 0.4375
+    v: -0.05259
+  - y: 0.5000
+    v: 0.05454
+  - y: 0.5625
+    v: 0.06406
+  - y: 0.6250
+    v: 0.06920
+  - y: 0.6875
+    v: 0.06878
+  - y: 0.7500
+    v: 0.06021
+  - y: 0.8125
+    v: 0.04404
+  - y: 0.8750
+    v: 0.02429
+tolerance: 0.05
+source: "Ghia et al. 1982, J. Comput. Phys."
+literature_doi: "10.1016/0021-9991(82)90058-4"
+mesh_info:
+  cells: 64800
+  type: structured
+solver_info:
+  name: icoFoam
+  schemes: PISO
+case_info:
+  id: lid_driven_cavity
+  Re: 100
+  flow_type: INTERNAL
+  geometry_type: SIMPLE_GRID
+  steady_state: STEADY
+  boundary_conditions:
+    top_wall_u: 1.0
+    other_walls_u: 0.0
+
+---
+quantity: primary_vortex_location
+reference_values:
+  - name: vortex_center_x
+    value: 0.5000
+    unit: normalized
+  - name: vortex_center_y
+    value: 0.7650
+    unit: normalized
+  - name: u_min
+    value: -0.03717
+    unit: normalized
+    location_y: 0.0625
+tolerance: 0.05
+source: "Ghia et al. 1982, J. Comput. Phys."
+literature_doi: "10.1016/0021-9991(82)90058-4"
+mesh_info:
+  cells: 64800
+  type: structured
+solver_info:
+  name: icoFoam
+  schemes: PISO
+case_info:
+  id: lid_driven_cavity
+  Re: 100
+  flow_type: INTERNAL
+  geometry_type: SIMPLE_GRID
+  steady_state: STEADY

@@ -59,10 +59,14 @@ class TestMockExecutor:
 
 
 class TestFoamAgentExecutor:
-    def test_raises_not_implemented(self):
+    def test_foam_agent_not_found_returns_failed_result(self):
+        """foam-agent 不可用时返回 success=False 的 ExecutionResult，不 crash。"""
         executor = FoamAgentExecutor()
-        with pytest.raises(NotImplementedError):
-            executor.execute(make_task())
+        result = executor.execute(make_task())
+        assert result.success is False
+        assert result.is_mock is False
+        assert result.error_message is not None
+        assert "foam-agent" in result.error_message.lower()
 
     def test_not_protocol_instance_by_default(self):
         # FoamAgentExecutor 有 execute 方法，所以也满足 Protocol

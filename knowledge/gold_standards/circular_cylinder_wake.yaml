@@ -1,0 +1,105 @@
+# Gold Standard — Circular Cylinder Wake
+# Based on Williamson 1996, Annu. Rev. Fluid Mech. 28, 477-539
+# Re = 100 (based on cylinder diameter D and free-stream velocity U),
+# 2D unsteady laminar vortex shedding (Karman vortex street)
+# TRANSIENT simulation required
+
+quantity: strouhal_number
+reference_values:
+  - value: 0.164
+    unit: dimensionless
+    description: "St = fD/U, 2D laminar vortex shedding at Re=100"
+tolerance: 0.05
+source: "Williamson 1996, Annu. Rev. Fluid Mech."
+literature_doi: "10.1146/annurev.fl.28.010196.002421"
+mesh_info:
+  cells: 40000
+  type: structured
+solver_info:
+  name: pimpleFoam
+  schemes: PISO
+case_info:
+  id: circular_cylinder_wake
+  Re: 100
+  flow_type: EXTERNAL
+  geometry_type: BODY_IN_CHANNEL
+  steady_state: TRANSIENT
+  cylinder_diameter: 1.0
+
+---
+quantity: cd_mean
+reference_values:
+  - value: 1.33
+    unit: dimensionless
+    description: "mean drag coefficient at Re=100"
+tolerance: 0.05
+source: "Williamson 1996, Annu. Rev. Fluid Mech."
+literature_doi: "10.1146/annurev.fl.28.010196.002421"
+mesh_info:
+  cells: 40000
+  type: structured
+solver_info:
+  name: pimpleFoam
+  schemes: PISO
+case_info:
+  id: circular_cylinder_wake
+  Re: 100
+  flow_type: EXTERNAL
+  geometry_type: BODY_IN_CHANNEL
+  steady_state: TRANSIENT
+  cylinder_diameter: 1.0
+
+---
+quantity: cl_rms
+reference_values:
+  - value: 0.048
+    unit: dimensionless
+    description: "RMS lift coefficient at Re=100"
+tolerance: 0.05
+source: "Williamson 1996, Annu. Rev. Fluid Mech."
+literature_doi: "10.1146/annurev.fl.28.010196.002421"
+mesh_info:
+  cells: 40000
+  type: structured
+solver_info:
+  name: pimpleFoam
+  schemes: PISO
+case_info:
+  id: circular_cylinder_wake
+  Re: 100
+  flow_type: EXTERNAL
+  geometry_type: BODY_IN_CHANNEL
+  steady_state: TRANSIENT
+  cylinder_diameter: 1.0
+
+---
+quantity: u_mean_centerline
+reference_values:
+  - x_D: 1.0
+    u_Uinf: 0.83
+    description: "centerline velocity deficit at x/D=1.0 (near wake)"
+  - x_D: 2.0
+    u_Uinf: 0.64
+    description: "centerline velocity deficit at x/D=2.0"
+  - x_D: 3.0
+    u_Uinf: 0.55
+    description: "centerline velocity deficit at x/D=3.0 (far wake)"
+  - x_D: 5.0
+    u_Uinf: 0.35
+    description: "centerline velocity deficit at x/D=5.0"
+tolerance: 0.05
+source: "Williamson 1996, Annu. Rev. Fluid Mech."
+literature_doi: "10.1146/annurev.fl.28.010196.002421"
+mesh_info:
+  cells: 40000
+  type: structured
+solver_info:
+  name: pimpleFoam
+  schemes: PISO
+case_info:
+  id: circular_cylinder_wake
+  Re: 100
+  flow_type: EXTERNAL
+  geometry_type: BODY_IN_CHANNEL
+  steady_state: TRANSIENT
+  cylinder_diameter: 1.0

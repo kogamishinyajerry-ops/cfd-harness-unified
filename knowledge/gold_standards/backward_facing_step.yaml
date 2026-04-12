@@ -1,0 +1,113 @@
+# Gold Standard — Backward-Facing Step
+# Based on Driver & Seegmiller 1985, AIAA J. 23(1), 163-165
+# Re = 7600 (based on step height H and inlet bulk velocity),
+# expansion ratio 1.125, incompressible, steady
+# INTERNAL flow over a backward-facing step
+
+quantity: reattachment_length
+reference_values:
+  - value: 6.26
+    unit: Xr/H
+    description: "reattachment length normalized by step height H"
+tolerance: 0.10
+source: "Driver & Seegmiller 1985, AIAA J."
+literature_doi: "10.2514/3.9086"
+mesh_info:
+  cells: 36000
+  type: structured
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: backward_facing_step
+  Re: 7600
+  flow_type: INTERNAL
+  geometry_type: BACKWARD_FACING_STEP
+  steady_state: STEADY
+  expansion_ratio: 1.125
+
+---
+quantity: cd_mean
+reference_values:
+  - value: 2.08
+    unit: dimensionless
+    description: "mean drag coefficient based on step height H"
+tolerance: 0.10
+source: "Driver & Seegmiller 1985, AIAA J."
+literature_doi: "10.2514/3.9086"
+mesh_info:
+  cells: 36000
+  type: structured
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: backward_facing_step
+  Re: 7600
+  flow_type: INTERNAL
+  geometry_type: BACKWARD_FACING_STEP
+  steady_state: STEADY
+  expansion_ratio: 1.125
+
+---
+quantity: pressure_recovery
+reference_values:
+  - location: inlet
+    value: -0.90
+    unit: dimensionless
+    description: "static pressure coefficient Cp at inlet (x/H = 0)"
+  - location: outlet
+    value: 0.10
+    unit: dimensionless
+    description: "static pressure coefficient Cp at outlet (x/H = 30)"
+  - value: 1.00
+    unit: dimensionless
+    description: "pressure rise Cp_outlet - Cp_inlet"
+tolerance: 0.10
+source: "Driver & Seegmiller 1985, AIAA J."
+literature_doi: "10.2514/3.9086"
+mesh_info:
+  cells: 36000
+  type: structured
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: backward_facing_step
+  Re: 7600
+  flow_type: INTERNAL
+  geometry_type: BACKWARD_FACING_STEP
+  steady_state: STEADY
+  expansion_ratio: 1.125
+
+---
+quantity: velocity_profile_reattachment
+reference_values:
+  - x_H: 6.0
+    y_H: 0.5
+    u_Ubulk: 0.40
+    description: "velocity profile near reattachment zone at x/H=6.0"
+  - x_H: 6.0
+    y_H: 1.0
+    u_Ubulk: 0.85
+    description: "velocity profile near reattachment zone at x/H=6.0"
+  - x_H: 6.0
+    y_H: 2.0
+    u_Ubulk: 1.05
+    description: "velocity profile near reattachment zone at x/H=6.0"
+tolerance: 0.10
+source: "Driver & Seegmiller 1985, AIAA J."
+literature_doi: "10.2514/3.9086"
+mesh_info:
+  cells: 36000
+  type: structured
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: backward_facing_step
+  Re: 7600
+  flow_type: INTERNAL
+  geometry_type: BACKWARD_FACING_STEP
+  steady_state: STEADY
+  expansion_ratio: 1.125
