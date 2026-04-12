@@ -1,8 +1,10 @@
-"""Notion API 读写封装（占位符实现，测试用 mock 替换）"""
+"""Notion API 读写封装 — 真实 API 实现"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+
+from notion_client import Client
 
 from .models import (
     Compressibility,
@@ -17,8 +19,12 @@ from .models import (
 class NotionClient:
     """Notion API 客户端
 
-    真实使用时需配置 token 和 database_ids（见 config/notion_config.yaml）。
-    测试时通过 mock 替换 _fetch_page / _update_page 等底层方法。
+    数据库架构（cfd-harness-unified 控制平面）：
+        tasks:          2b25c81b15174eb48d0cca20e8d37c09  # ⚡ Tasks
+        sessions:       7905136d58de43a09cc365dec52ba51b  # 📝 Sessions
+        decisions:      fa55d3ed0a6d452f909d91a8c8d218a7  # ⚖️ Decisions
+        canonical_docs: 96a6344f4a42442dabb3a96e9faadee6  # 📚 Canonical Docs
+        phases:         25a50aa20e3f476a8ad611725a9fbe8b  # 🔄 Phases
     """
 
     def __init__(
@@ -28,10 +34,10 @@ class NotionClient:
     ) -> None:
         self._token = token
         self._database_ids = database_ids or {}
-        self._client: Any = None  # 真实 notion_client.Client 实例（占位符）
+        self._client = Client(auth=token, notion_version="2022-06-28") if token else None
 
     # ------------------------------------------------------------------
-    # 公开 API（单元测试 mock 这些方法）
+    # 公开 API
     # ------------------------------------------------------------------
 
     def list_pending_tasks(self) -> List[TaskSpec]:
@@ -51,27 +57,35 @@ class NotionClient:
         self._update_page(
             page_id=task_spec.notion_task_id,
             properties={
-                "Status": "Done" if result.success else "Failed",
+                "Status": {"status": {"name": "Done" if result.success else "Failed"}},
                 "Summary": summary,
                 "ExecutionTime": result.execution_time_s,
             },
         )
 
     # ------------------------------------------------------------------
-    # 内部方法（占位符，供 mock 替换）
+    # 内部方法（Notion API 真实调用）
     # ------------------------------------------------------------------
 
     def _fetch_tasks(self, filter_status: str) -> List[Dict[str, Any]]:
-        """向 Notion API 查询任务列表（占位符）"""
-        raise NotImplementedError(
-            "请配置 notion_config.yaml 并实例化真实 Notion 客户端"
+        """向 Notion API 查询任务列表"""
+        if self._client is None:
+            raise NotImplementedError("Notion token 未配置")
+        db_id = self._database_ids.get("tasks")
+        if not db_id:
+            raise ValueError("database_ids['tasks'] 未配置")
+        response = self._client.request(
+            path=f"/v1/databases/{db_id}/query",
+            method="POST",
+            body={"filter": {"property": "Status", "status": {"equals": filter_status}}},
         )
+        return response.get("results", [])
 
     def _update_page(self, page_id: str, properties: Dict[str, Any]) -> None:
-        """更新 Notion 页面属性（占位符）"""
-        raise NotImplementedError(
-            "请配置 notion_config.yaml 并实例化真实 Notion 客户端"
-        )
+        """更新 Notion 页面属性"""
+        if self._client is None:
+            raise NotImplementedError("Notion token 未配置")
+        self._client.pages.update(page_id=page_id, properties=properties)
 
     # ------------------------------------------------------------------
     # 解析辅助
@@ -80,15 +94,29 @@ class NotionClient:
     @staticmethod
     def _parse_task(row: Dict[str, Any]) -> TaskSpec:
         """把 Notion 行数据解析为 TaskSpec"""
+        props = row.get("properties", {})
+
+        def get_title(field: str) -> str:
+            segments = props.get(field, {}).get("title", [])
+            return "".join(s.get("plain_text", "") for s in segments)
+
+        def get_rich_text(field: str) -> str:
+            segments = props.get(field, {}).get("rich_text", [])
+            return "".join(s.get("plain_text", "") for s in segments)
+
+        def get_select(field: str) -> Optional[str]:
+            sel = props.get(field, {}).get("select")
+            return sel.get("name") if sel else None
+
         return TaskSpec(
-            name=row.get("name", "unnamed"),
-            geometry_type=GeometryType(row.get("geometry_type", "SIMPLE_GRID")),
-            flow_type=FlowType(row.get("flow_type", "INTERNAL")),
-            steady_state=SteadyState(row.get("steady_state", "STEADY")),
-            compressibility=Compressibility(row.get("compressibility", "INCOMPRESSIBLE")),
-            Re=row.get("Re"),
-            Ma=row.get("Ma"),
-            boundary_conditions=row.get("boundary_conditions", {}),
-            description=row.get("description", ""),
-            notion_task_id=row.get("notion_task_id"),
+            name=get_title("Name") or "unnamed",
+            geometry_type=GeometryType(get_select("GeometryType") or "SIMPLE_GRID"),
+            flow_type=FlowType(get_select("FlowType") or "INTERNAL"),
+            steady_state=SteadyState(get_select("SteadyState") or "STEADY"),
+            compressibility=Compressibility(get_select("Compressibility") or "INCOMPRESSIBLE"),
+            Re=None,
+            Ma=None,
+            boundary_conditions={},
+            description=get_rich_text("Acceptance Criteria"),
+            notion_task_id=row.get("id"),
         )

@@ -1,10 +1,11 @@
-# Notion API 配置占位符
-# 填写真实值后取消注释
+# Notion API 配置 (cfd-harness-unified 控制平面)
+# 参考: cfd-harness-unified Notion 控制面架构
 
-# notion_token: "secret_xxxxxxxxxxxx"
-# database_ids:
-#   phases: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-#   tasks: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-#   sessions: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-#   decisions: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-#   canonical_docs: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+notion_token: "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"
+
+database_ids:
+  tasks:          "2b25c81b15174eb48d0cca20e8d37c09"   # ⚡ Tasks — 任务执行
+  sessions:       "7905136d58de43a09cc365dec52ba51b"   # 📝 Sessions — 会话记录
+  decisions:      "fa55d3ed0a6d452f909d91a8c8d218a7"   # ⚖️ Decisions — 决策留痕
+  canonical_docs: "96a6344f4a42442dabb3a96e9faadee6"   # 📚 Canonical Docs — 文档索引
+  phases:         "25a50aa20e3f476a8ad611725a9fbe8b"   # 🔄 Phases — 阶段控制

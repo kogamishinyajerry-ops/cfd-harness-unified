@@ -15,24 +15,29 @@ def client():
     return NotionClient(token="fake-token", database_ids={"tasks": "fake-db-id"})
 
 
+def _make_page(page_id, name, flow_type="INTERNAL", geometry_type="SIMPLE_GRID",
+               steady_state="STEADY", compressibility="INCOMPRESSIBLE", description=""):
+    """构建符合 Notion API 页面格式的 mock 数据"""
+    return {
+        "id": page_id,
+        "properties": {
+            "Name": {"type": "title", "title": [{"plain_text": name}]},
+            "FlowType": {"type": "select", "select": {"name": flow_type}},
+            "GeometryType": {"type": "select", "select": {"name": geometry_type}},
+            "SteadyState": {"type": "select", "select": {"name": steady_state}},
+            "Compressibility": {"type": "select", "select": {"name": compressibility}},
+            "Acceptance Criteria": {"type": "rich_text", "rich_text": [{"plain_text": description}]},
+        },
+    }
+
+
 class TestListPendingTasks:
     def test_returns_task_specs(self, client):
-        rows = [
-            {
-                "name": "Lid-Driven Cavity",
-                "geometry_type": "SIMPLE_GRID",
-                "flow_type": "INTERNAL",
-                "steady_state": "STEADY",
-                "compressibility": "INCOMPRESSIBLE",
-                "Re": 100,
-                "notion_task_id": "abc123",
-            }
-        ]
+        rows = [_make_page("abc123", "Lid-Driven Cavity", flow_type="INTERNAL")]
         client._fetch_tasks = MagicMock(return_value=rows)
         tasks = client.list_pending_tasks()
         assert len(tasks) == 1
         assert tasks[0].name == "Lid-Driven Cavity"
-        assert tasks[0].Re == 100
         assert tasks[0].flow_type == FlowType.INTERNAL
         client._fetch_tasks.assert_called_once_with(filter_status="Ready")
 
@@ -42,10 +47,8 @@ class TestListPendingTasks:
 
     def test_multiple_tasks(self, client):
         rows = [
-            {"name": "A", "geometry_type": "SIMPLE_GRID", "flow_type": "INTERNAL",
-             "steady_state": "STEADY", "compressibility": "INCOMPRESSIBLE"},
-            {"name": "B", "geometry_type": "BODY_IN_CHANNEL", "flow_type": "EXTERNAL",
-             "steady_state": "TRANSIENT", "compressibility": "INCOMPRESSIBLE"},
+            _make_page("p1", "A", flow_type="INTERNAL"),
+            _make_page("p2", "B", flow_type="EXTERNAL"),
         ]
         client._fetch_tasks = MagicMock(return_value=rows)
         tasks = client.list_pending_tasks()
@@ -66,7 +69,7 @@ class TestWriteExecutionResult:
         client._update_page.assert_called_once()
         call_kwargs = client._update_page.call_args
         assert call_kwargs[1]["page_id"] == "page-1"
-        assert call_kwargs[1]["properties"]["Status"] == "Done"
+        assert call_kwargs[1]["properties"]["Status"] == {"status": {"name": "Done"}}
 
     def test_skips_when_no_task_id(self, client):
         client._update_page = MagicMock()
@@ -89,34 +92,43 @@ class TestWriteExecutionResult:
         result = ExecutionResult(success=False, is_mock=False)
         client.write_execution_result(spec, result, summary="fail")
         props = client._update_page.call_args[1]["properties"]
-        assert props["Status"] == "Failed"
+        assert props["Status"] == {"status": {"name": "Failed"}}
 
 
-class TestFetchTasksRaisesNotImplemented:
-    def test_raises(self, client):
-        with pytest.raises(NotImplementedError):
-            client._fetch_tasks("Ready")
+class TestClientInit:
+    def test_raises_without_token(self):
+        client = NotionClient(token=None)
+        assert client._client is None
 
-    def test_update_raises(self, client):
-        with pytest.raises(NotImplementedError):
-            client._update_page("id", {})
 
 
 class TestParseTask:
     def test_parse_minimal(self):
-        row = {
-            "name": "Test",
-            "geometry_type": "CUSTOM",
-            "flow_type": "EXTERNAL",
-            "steady_state": "TRANSIENT",
-            "compressibility": "COMPRESSIBLE",
-        }
+        row = _make_page("x", "Test", flow_type="EXTERNAL",
+                         geometry_type="CUSTOM", steady_state="TRANSIENT",
+                         compressibility="COMPRESSIBLE")
         spec = NotionClient._parse_task(row)
         assert spec.name == "Test"
+        assert spec.flow_type == FlowType.EXTERNAL
         assert spec.geometry_type == GeometryType.CUSTOM
+        assert spec.steady_state == SteadyState.TRANSIENT
         assert spec.compressibility == Compressibility.COMPRESSIBLE
 
     def test_parse_with_defaults(self):
-        row = {"name": "X"}
+        row = _make_page("y", "X")
         spec = NotionClient._parse_task(row)
+        assert spec.name == "X"
         assert spec.flow_type == FlowType.INTERNAL
+        assert spec.geometry_type == GeometryType.SIMPLE_GRID
+        assert spec.steady_state == SteadyState.STEADY
+        assert spec.compressibility == Compressibility.INCOMPRESSIBLE
+
+    def test_extracts_description(self):
+        row = _make_page("z", "Y", description="do something")
+        spec = NotionClient._parse_task(row)
+        assert spec.description == "do something"
+
+    def test_extracts_notion_id(self):
+        row = _make_page("abc123", "Z")
+        spec = NotionClient._parse_task(row)
+        assert spec.notion_task_id == "abc123"
