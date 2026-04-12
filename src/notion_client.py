@@ -75,7 +75,7 @@ class NotionClient:
         if not db_id:
             raise ValueError("database_ids['tasks'] 未配置")
         response = self._client.request(
-            path=f"/v1/databases/{db_id}/query",
+            path=f"/databases/{db_id}/query",
             method="POST",
             body={"filter": {"property": "Status", "status": {"equals": filter_status}}},
         )
