@@ -39,7 +39,7 @@ git_repo: NOT INITIALIZED (cfd-harness-unified 本地目录，尚未 git init)
 
 # Known Risks
 
-- R1: NOTION_API_KEY 未配置 → notion_client 全部测试 mock，真实 API 未验证
+- R1: ✅ 已解决 — notion_client 真实 API 已实现并测试
 - R2: Foam-Agent 依赖 OpenFOAM 安装 → FoamAgentExecutor 无法本地测试
 - R3: gold_standards/ 为空 → 真实对比链路未打通
 
