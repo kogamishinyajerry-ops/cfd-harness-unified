@@ -1,0 +1,7 @@
+# Foam-Agent 配置占位符
+# 填写真实值后取消注释
+
+# foam_agent_path: "/path/to/Foam-Agent"
+# openfoam_path: "/usr/lib/openfoam/openfoam2312"
+# work_dir: "/tmp/cfd-harness-runs"
+# timeout_seconds: 3600

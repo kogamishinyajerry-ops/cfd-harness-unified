@@ -1,0 +1,10 @@
+# Notion API 配置占位符
+# 填写真实值后取消注释
+
+# notion_token: "secret_xxxxxxxxxxxx"
+# database_ids:
+#   phases: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#   tasks: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#   sessions: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#   decisions: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#   canonical_docs: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

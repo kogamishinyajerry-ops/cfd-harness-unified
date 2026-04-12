@@ -1,0 +1,62 @@
+# 冷启动白名单：3 条经典验证案例
+# 来源均为公开发表论文，可作为 Gold Standard
+
+cases:
+  - id: lid_driven_cavity
+    name: "Lid-Driven Cavity"
+    reference: "Ghia et al. 1982"
+    doi: "10.1016/0021-9991(82)90058-4"
+    flow_type: INTERNAL
+    geometry_type: SIMPLE_GRID
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    parameters:
+      Re: 100
+    boundary_conditions:
+      top_wall_u: 1.0
+      other_walls_u: 0.0
+    gold_standard:
+      quantity: u_centerline
+      description: "沿垂直中线的 u 速度分布（y=0.5 处）"
+      reference_values:
+        - {y: 0.0625, u: -0.03717}
+        - {y: 0.1250, u: -0.04192}
+        - {y: 0.5000, u: 0.02526}
+        - {y: 0.7500, u: 0.33304}
+        - {y: 1.0000, u: 1.00000}
+      tolerance: 0.05  # 5% 相对误差
+
+  - id: backward_facing_step
+    name: "Backward-Facing Step"
+    reference: "Driver & Seegmiller 1985"
+    doi: "10.2514/3.9086"
+    flow_type: INTERNAL
+    geometry_type: BACKWARD_FACING_STEP
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    parameters:
+      Re: 7600
+      expansion_ratio: 1.125
+    gold_standard:
+      quantity: reattachment_length
+      description: "再附长度 Xr/H（H 为台阶高度）"
+      reference_values:
+        - {value: 6.26, unit: "Xr/H"}
+      tolerance: 0.10  # 10% 相对误差
+
+  - id: circular_cylinder_wake
+    name: "Circular Cylinder Wake"
+    reference: "Williamson 1996"
+    doi: "10.1146/annurev.fl.28.010196.002421"
+    flow_type: EXTERNAL
+    geometry_type: BODY_IN_CHANNEL
+    compressibility: INCOMPRESSIBLE
+    steady_state: TRANSIENT
+    parameters:
+      Re: 100
+    gold_standard:
+      quantity: strouhal_number
+      description: "斯特劳哈尔数 St = fD/U"
+      reference_values:
+        - {value: 0.165, unit: "dimensionless"}
+      tolerance: 0.05  # 5% 相对误差
