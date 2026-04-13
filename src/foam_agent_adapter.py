@@ -152,9 +152,6 @@ class FoamAgentExecutor:
             elif task_spec.geometry_type == GeometryType.NATURAL_CONVECTION_CAVITY:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
                 solver_name = "buoyantSimpleFoam"
-            elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
-                self._generate_steady_internal_flow(case_host_dir, task_spec)
-                solver_name = "simpleFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
                 self._generate_circular_cylinder_wake(case_host_dir, task_spec)
                 solver_name = "pimpleFoam"
@@ -164,6 +161,14 @@ class FoamAgentExecutor:
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
+            elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
+                # lid_driven_cavity 用专用 laminar generator (icoFoam)
+                if "lid" in task_spec.name.lower() or task_spec.Re is not None and task_spec.Re < 2300:
+                    self._generate_lid_driven_cavity(case_host_dir, task_spec)
+                    solver_name = "icoFoam"
+                else:
+                    self._generate_steady_internal_flow(case_host_dir, task_spec)
+                    solver_name = "simpleFoam"
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
                 solver_name = "icoFoam"

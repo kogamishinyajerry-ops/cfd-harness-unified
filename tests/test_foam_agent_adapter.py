@@ -341,11 +341,8 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
             if "blockMesh" in cmd_str and "source" in cmd_str:
                 # blockMesh command - succeeds
                 return MagicMock(exit_code=0)
-            elif "simpleFoam" in cmd_str and "source" in cmd_str:
-                # simpleFoam command - fails (SIMPLE_GRID routes to simpleFoam)
-                return MagicMock(exit_code=1, output=b"solver error")
             elif "icoFoam" in cmd_str and "source" in cmd_str:
-                # icoFoam command - fails
+                # icoFoam command - fails (SIMPLE_GRID Re<2300 routes here)
                 return MagicMock(exit_code=1, output=b"solver error")
             else:
                 # mkdir/chmod commands - succeed
@@ -367,7 +364,7 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         result = executor.execute(make_task())
 
         assert result.success is False
-        assert "simpleFoam failed" in result.error_message
+        assert "icoFoam failed" in result.error_message
 
     def test_execute_mkdir_failure(self, tmp_path, monkeypatch):
         """case 目录创建失败时返回 failed result。"""
