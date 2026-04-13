@@ -69,7 +69,7 @@ class TestWriteExecutionResult:
         client._update_page.assert_called_once()
         call_kwargs = client._update_page.call_args
         assert call_kwargs[1]["page_id"] == "page-1"
-        assert call_kwargs[1]["properties"]["Status"] == {"status": {"name": "Done"}}
+        assert call_kwargs[1]["properties"]["Status"] == {"status": {"id": "c?pc", "name": "Done"}}
 
     def test_skips_when_no_task_id(self, client):
         client._update_page = MagicMock()
@@ -92,7 +92,7 @@ class TestWriteExecutionResult:
         result = ExecutionResult(success=False, is_mock=False)
         client.write_execution_result(spec, result, summary="fail")
         props = client._update_page.call_args[1]["properties"]
-        assert props["Status"] == {"status": {"name": "Failed"}}
+        assert props["Status"] == {"status": {"id": "vBjn", "name": "Review"}}
 
 
 class TestClientInit:

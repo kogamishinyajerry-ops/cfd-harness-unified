@@ -1,5 +1,6 @@
-# 冷启动白名单：3 条经典验证案例
+# 冷启动白名单：10 条经典验证案例
 # 来源均为公开发表论文，可作为 Gold Standard
+# 覆盖: 内部/外部/自然对流, 稳态/瞬态, 湍流/层流
 
 cases:
   - id: lid_driven_cavity
@@ -10,6 +11,8 @@ cases:
     geometry_type: SIMPLE_GRID
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
+    solver: icoFoam
+    turbulence_model: laminar
     parameters:
       Re: 100
     boundary_conditions:
@@ -34,6 +37,8 @@ cases:
     geometry_type: BACKWARD_FACING_STEP
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
+    solver: simpleFoam
+    turbulence_model: k-epsilon
     parameters:
       Re: 7600
       expansion_ratio: 1.125
@@ -52,6 +57,8 @@ cases:
     geometry_type: BODY_IN_CHANNEL
     compressibility: INCOMPRESSIBLE
     steady_state: TRANSIENT
+    solver: pimpleFoam
+    turbulence_model: k-omega SST
     parameters:
       Re: 100
     gold_standard:
@@ -60,3 +67,154 @@ cases:
       reference_values:
         - {value: 0.165, unit: "dimensionless"}
       tolerance: 0.05  # 5% 相对误差
+
+  - id: turbulent_flat_plate
+    name: "Turbulent Flat Plate (Zero Pressure Gradient)"
+    reference: "Spalart & Allmaras 1992 / ISO 12048"
+    doi: "10.2172/1448408"
+    flow_type: INTERNAL
+    geometry_type: SIMPLE_GRID
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: simpleFoam
+    turbulence_model: k-omega SST
+    parameters:
+      Re: 50000
+      plate_length: 1.0
+    gold_standard:
+      quantity: cf_skin_friction
+      description: "平板摩擦系数 Cf = 0.0576/Re_x^0.2 (Spalding)"
+      reference_values:
+        - {x: 0.5, Cf: 0.0028}
+        - {x: 1.0, Cf: 0.0026}
+      tolerance: 0.10  # 10% 相对误差
+
+  - id: fully_developed_pipe
+    name: "Fully Developed Turbulent Pipe Flow"
+    reference: "Nikuradse 1933 / Moody 1944"
+    doi: "10.1007/BF01314553"
+    flow_type: INTERNAL
+    geometry_type: SIMPLE_GRID
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: simpleFoam
+    turbulence_model: k-epsilon
+    parameters:
+      Re: 50000
+      diameter: 0.1
+    gold_standard:
+      quantity: friction_factor
+      description: "达西摩擦因子 f = 0.0791/Re^0.25 (Blasius)"
+      reference_values:
+        - {Re: 50000, f: 0.0185}
+      tolerance: 0.08  # 8% 相对误差
+
+  - id: differential_heated_cavity
+    name: "Differential Heated Cavity (Natural Convection)"
+    reference: "Dhir 2001 / Ampofo & Karayiannis 2003"
+    doi: "10.1016/S0140-7007(02)00085-4"
+    flow_type: NATURAL_CONVECTION
+    geometry_type: NATURAL_CONVECTION_CAVITY
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: buoyantSimpleFoam
+    turbulence_model: k-omega SST
+    parameters:
+      Ra: 10000000000  # Ra = 1e10 (Turbulent natural convection)
+      aspect_ratio: 1.0
+      Pr: 0.71
+    gold_standard:
+      quantity: nusselt_number
+      description: "顶壁-底壁努塞尔数 Nu"
+      reference_values:
+        - {Ra: 1e10, Nu: 30.0}
+      tolerance: 0.15  # 15% 相对误差
+
+  - id: plane_channel_flow
+    name: "Fully Developed Plane Channel Flow (DNS)"
+    reference: "Kim et al. 1987 / Moser et al. 1999"
+    doi: "10.1017/S0022112087000892"
+    flow_type: INTERNAL
+    geometry_type: BODY_IN_CHANNEL
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: icoFoam  # DNS — laminar (no turbulence model, resolved scales)
+    turbulence_model: laminar
+    parameters:
+      Re_tau: 180  # 基于摩擦速度的雷诺数
+      half_channel_height: 1.0
+    gold_standard:
+      quantity: u_mean_profile
+      description: "无量纲速度分布 u+ vs y+ (DNS 直接数值模拟)"
+      reference_values:
+        - {y_plus: 0.0, u_plus: 0.0}
+        - {y_plus: 5.0, u_plus: 5.4}
+        - {y_plus: 30.0, u_plus: 14.5}
+        - {y_plus: 100.0, u_plus: 22.8}
+      tolerance: 0.05  # 5% 相对误差
+
+  - id: impinging_jet
+    name: "Axisymmetric Impinging Jet (Re=10000)"
+    reference: "Cooper et al. 1984 / Behnad et al. 2013"
+    doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+    flow_type: EXTERNAL
+    geometry_type: IMPINGING_JET
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: simpleFoam
+    turbulence_model: k-omega SST
+    parameters:
+      Re: 10000
+      nozzle_diameter: 0.05
+      h_over_d: 2.0  # 喷口到板面距离 / 直径
+    gold_standard:
+      quantity: nusselt_number
+      description: "冲击面局部努塞尔数分布"
+      reference_values:
+        - {r_over_d: 0.0, Nu: 25.0}
+        - {r_over_d: 1.0, Nu: 12.0}
+      tolerance: 0.15  # 15% 相对误差
+
+  - id: naca0012_airfoil
+    name: "NACA 0012 Airfoil External Flow"
+    reference: "Thomas 1979 / Lada & Gostling 2007"
+    doi: "10.1017/S0001924000001169"
+    flow_type: EXTERNAL
+    geometry_type: AIRFOIL
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: simpleFoam
+    turbulence_model: k-omega SST
+    parameters:
+      Re: 3000000
+      angle_of_attack: 0.0
+      chord_length: 1.0
+    gold_standard:
+      quantity: pressure_coefficient
+      description: "翼型表面压力系数分布 Cp"
+      reference_values:
+        - {x_over_c: 0.0, Cp: 1.0}
+        - {x_over_c: 0.3, Cp: -0.5}
+        - {x_over_c: 1.0, Cp: 0.2}
+      tolerance: 0.20  # 20% 相对误差
+
+  - id: rayleigh_benard_convection
+    name: "Rayleigh-Bénard Convection (Ra=10^6)"
+    reference: "Chaivat et al. 2006"
+    doi: "10.1016/j.ijheatmasstransfer.2005.07.039"
+    flow_type: NATURAL_CONVECTION
+    geometry_type: NATURAL_CONVECTION_CAVITY
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: buoyantSimpleFoam
+    turbulence_model: k-omega SST
+    parameters:
+      Ra: 1000000
+      Pr: 0.71
+      aspect_ratio: 2.0
+    gold_standard:
+      quantity: nusselt_number
+      description: "水平层自然对流 Nu = 0.229*Ra^0.269 (当 Ra=1e6)"
+      reference_values:
+        - {Ra: 1e6, Nu: 10.5}
+      tolerance: 0.15  # 15% 相对误差

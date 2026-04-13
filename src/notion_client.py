@@ -27,6 +27,16 @@ class NotionClient:
         phases:         25a50aa20e3f476a8ad611725a9fbe8b  # 🔄 Phases
     """
 
+    # Notion Status 字段选项 ID 映射（从 DB schema 获取）
+    _STATUS_ID_MAP = {
+        "Done": "c?pc",
+        "Ready": "lIe}",
+        "Inbox": "<XF",
+        "In Progress": ";FjG",
+        "Waiting": "ollp",
+        "Review": "vBjn",
+    }
+
     def __init__(
         self,
         token: Optional[str] = None,
@@ -54,12 +64,11 @@ class NotionClient:
         """把执行结果摘要回写到对应 Notion Task 页面"""
         if task_spec.notion_task_id is None:
             return
+        status_name = "Done" if result.success else "Review"
         self._update_page(
             page_id=task_spec.notion_task_id,
             properties={
-                "Status": {"status": {"name": "Done" if result.success else "Failed"}},
-                "Summary": summary,
-                "ExecutionTime": result.execution_time_s,
+                "Status": {"status": {"id": self._resolve_status_id(status_name), "name": status_name}},
             },
         )
 
@@ -85,7 +94,16 @@ class NotionClient:
         """更新 Notion 页面属性"""
         if self._client is None:
             raise NotImplementedError("Notion token 未配置")
-        self._client.pages.update(page_id=page_id, properties=properties)
+        self._client.request(
+            path=f"/pages/{page_id}",
+            method="PATCH",
+            body={"properties": properties},
+        )
+
+    @staticmethod
+    def _resolve_status_id(status_name: str) -> str:
+        """根据 Status 选项名称解析对应的 Notion 选项 ID"""
+        return NotionClient._STATUS_ID_MAP.get(status_name, "")
 
     # ------------------------------------------------------------------
     # 解析辅助

@@ -329,7 +329,7 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         assert "blockMesh failed" in result.error_message
 
     def test_execute_solver_failure(self, tmp_path, monkeypatch):
-        """icoFoam 失败时返回 failed result。"""
+        """simpleFoam 失败时返回 failed result。"""
         mock_container = MagicMock()
         mock_container.status = "running"
 
@@ -341,6 +341,9 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
             if "blockMesh" in cmd_str and "source" in cmd_str:
                 # blockMesh command - succeeds
                 return MagicMock(exit_code=0)
+            elif "simpleFoam" in cmd_str and "source" in cmd_str:
+                # simpleFoam command - fails (SIMPLE_GRID routes to simpleFoam)
+                return MagicMock(exit_code=1, output=b"solver error")
             elif "icoFoam" in cmd_str and "source" in cmd_str:
                 # icoFoam command - fails
                 return MagicMock(exit_code=1, output=b"solver error")
@@ -364,7 +367,7 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         result = executor.execute(make_task())
 
         assert result.success is False
-        assert "icoFoam failed" in result.error_message
+        assert "simpleFoam failed" in result.error_message
 
     def test_execute_mkdir_failure(self, tmp_path, monkeypatch):
         """case 目录创建失败时返回 failed result。"""

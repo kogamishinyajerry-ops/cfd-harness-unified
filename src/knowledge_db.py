@@ -80,6 +80,128 @@ class KnowledgeDB:
         return result
 
     # ------------------------------------------------------------------
+    # Knowledge Query API — geometry→turbulence→BC→mesh→result 链路查询
+    # ------------------------------------------------------------------
+
+    def query_cases(
+        self,
+        geometry_type: Optional[GeometryType] = None,
+        flow_type: Optional[FlowType] = None,
+        steady_state: Optional[SteadyState] = None,
+        compressibility: Optional[Compressibility] = None,
+    ) -> List[Dict[str, Any]]:
+        """通用查询：按条件筛选白名单案例。
+
+        Returns:
+            List of matching case dicts with full metadata (including gold_standard).
+        """
+        whitelist = self._load_whitelist()
+        results = []
+        for case in whitelist.get("cases", []):
+            if geometry_type and case.get("geometry_type") != geometry_type.value:
+                continue
+            if flow_type and case.get("flow_type") != flow_type.value:
+                continue
+            if steady_state and case.get("steady_state") != steady_state.value:
+                continue
+            if compressibility and case.get("compressibility") != compressibility.value:
+                continue
+            results.append(case)
+        return results
+
+    def get_execution_chain(self, case_id: str) -> Optional[Dict[str, Any]]:
+        """返回指定案例的完整执行链路：geometry→turbulence→BC→mesh→result。
+
+        Returns:
+            Dict with keys: geometry_type, flow_type, solver, turbulence_model,
+            boundary_conditions, mesh_strategy, gold_standard. Returns None if not found.
+        """
+        whitelist = self._load_whitelist()
+        for case in whitelist.get("cases", []):
+            if case.get("id") == case_id or case.get("name") == case_id:
+                return self._build_chain(case)
+        return None
+
+    def list_turbulence_models(
+        self, geometry_type: Optional[GeometryType] = None
+    ) -> Dict[str, List[str]]:
+        """返回每种 geometry_type 对应的湍流模型列表。
+
+        用于 Knowledge Query API：给定几何，返回可用湍流模型。
+        """
+        whitelist = self._load_whitelist()
+        model_map: Dict[str, List[str]] = {}
+        for case in whitelist.get("cases", []):
+            geom = case.get("geometry_type")
+            turb = case.get("turbulence_model", "k-epsilon (default)")
+            if geometry_type and geom != geometry_type.value:
+                continue
+            if geom not in model_map:
+                model_map[geom] = []
+            if turb not in model_map[geom]:
+                model_map[geom].append(turb)
+        return model_map
+
+    def list_solver_for_geometry(
+        self, geometry_type: GeometryType, steady_state: Optional[SteadyState] = None
+    ) -> List[str]:
+        """返回给定几何类型对应的推荐求解器列表。"""
+        whitelist = self._load_whitelist()
+        solvers: List[str] = []
+        for case in whitelist.get("cases", []):
+            if case.get("geometry_type") != geometry_type.value:
+                continue
+            if steady_state and case.get("steady_state") != steady_state.value:
+                continue
+            solver = case.get("solver", self._default_solver(
+                FlowType(case.get("flow_type", "INTERNAL")),
+                SteadyState(case.get("steady_state", "STEADY")),
+            ))
+            if solver not in solvers:
+                solvers.append(solver)
+        return solvers
+
+    def _build_chain(self, case: Dict[str, Any]) -> Dict[str, Any]:
+        """为单个 case 构建完整的执行链路描述。"""
+        flow = FlowType(case.get("flow_type", "INTERNAL"))
+        steady = SteadyState(case.get("steady_state", "STEADY"))
+        return {
+            "case_id": case.get("id"),
+            "case_name": case.get("name"),
+            "reference": case.get("reference"),
+            "geometry_type": case.get("geometry_type"),
+            "flow_type": case.get("flow_type"),
+            "steady_state": case.get("steady_state"),
+            "compressibility": case.get("compressibility"),
+            "parameters": case.get("parameters", {}),
+            "boundary_conditions": case.get("boundary_conditions", {}),
+            "solver": case.get("solver", self._default_solver(flow, steady)),
+            "turbulence_model": case.get("turbulence_model", self._default_turbulence(flow)),
+            "mesh_strategy": case.get("mesh_strategy", "structured (blockMesh)"),
+            "gold_standard": case.get("gold_standard"),
+        }
+
+    @staticmethod
+    def _default_solver(flow: FlowType, steady: SteadyState) -> str:
+        """根据流型和稳态类型推荐求解器。"""
+        if flow == FlowType.NATURAL_CONVECTION:
+            return "buoyantSimpleFoam"
+        if steady == SteadyState.TRANSIENT:
+            return "pimpleFoam"
+        if flow == FlowType.EXTERNAL:
+            return "simpleFoam"
+        return "icoFoam"
+
+    @staticmethod
+    def _default_turbulence(flow: FlowType) -> str:
+        """根据流型推荐湍流模型。"""
+        if flow == FlowType.NATURAL_CONVECTION:
+            return "k-omega SST"
+        if flow == FlowType.EXTERNAL:
+            return "k-omega SST"
+        return "k-epsilon"
+
+    # ------------------------------------------------------------------
     # CorrectionSpec
     # ------------------------------------------------------------------
 
