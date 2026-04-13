@@ -163,6 +163,7 @@ class TestFoamAgentExecutor:
         assert (tmp_path / "system" / "controlDict").is_file()
         assert (tmp_path / "system" / "fvSchemes").is_file()
         assert (tmp_path / "system" / "fvSolution").is_file()
+        assert (tmp_path / "system" / "sampleDict").is_file()
         assert (tmp_path / "constant" / "physicalProperties").is_file()
         assert (tmp_path / "0" / "U").is_file()
         assert (tmp_path / "0" / "p").is_file()
@@ -178,6 +179,19 @@ class TestFoamAgentExecutor:
         assert "value           uniform (1 0 0);" in u_file
         # 验证 lid 边界存在
         assert "lid" in u_file
+
+    def test_generate_lid_driven_cavity_sample_dict(self, tmp_path):
+        """验证 sampleDict 包含 mid-plane velocity sampling 配置。"""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_lid_driven_cavity(tmp_path, make_task())
+
+        sample_file = (tmp_path / "system" / "sampleDict").read_text()
+        # 验证 uCenterline set 配置
+        assert "uCenterline" in sample_file
+        assert "axis        y" in sample_file
+        assert "fields" in sample_file
+        assert "(U)" in sample_file
 
     # ------------------------------------------------------------------
     # _make_tarball() tests

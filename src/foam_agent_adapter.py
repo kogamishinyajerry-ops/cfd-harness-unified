@@ -195,9 +195,16 @@ class FoamAgentExecutor:
                     raw_output_path=raw_output_path,
                 )
 
+            # 6.5. 执行 sample 提取关键物理量 (sampleDict 已在 case 生成时创建)
+            # sample 将结果写入 postProcessing/sets/ 目录
+            sample_ok, sample_log = self._docker_exec(
+                "sample", case_cont_dir, 120,
+            )
+            # sample 失败不阻塞主流程（后续解析会处理无数据的情况）
+
             # 7. 解析 log 文件
             log_path = case_host_dir / f"log.{solver_name}"
-            residuals, key_quantities = self._parse_solver_log(log_path, solver_name)
+            residuals, key_quantities = self._parse_solver_log(log_path, solver_name, task_spec)
 
             elapsed = time.monotonic() - t0
             return ExecutionResult(
@@ -522,6 +529,38 @@ boundaryField
         type            zeroGradient;
     }
 }
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 8. system/sampleDict — 提取 mid-plane velocity profile (Ghia 1982)
+        (case_dir / "system" / "sampleDict").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\\
+|  sampleDict - extract velocity profile for Gold Standard comparison      |
+\\*---------------------------------------------------------------------------*/
+type            sets;
+libs            ("libsampling.so");
+
+interpolationScheme cellPoint;
+
+setFormat       raw;
+
+sets
+(
+    uCenterline
+    {
+        type        uniform;
+        axis        y;
+        start       (0.5 0.0 0.0);
+        end         (0.5 1.0 0.0);
+        nPoints     16;
+    }
+);
+
+fields          (U);
 
 // ************************************************************************* //
 """,
@@ -1123,6 +1162,40 @@ boundaryField
         type            empty;
     }}
 }}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 8. system/sampleDict — extract velocity profile to find reattachment length (Driver 1985)
+        # Sample Ux at y=0.5 (boundary layer) along x from -1 to 12
+        # Reattachment point: where Ux changes from negative (recirculation) to positive
+        (case_dir / "system" / "sampleDict").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\\
+|  sampleDict - extract velocity profile for reattachment length           |
+\\*---------------------------------------------------------------------------*/
+type            sets;
+libs            ("libsampling.so");
+
+interpolationScheme cellPoint;
+
+setFormat       raw;
+
+sets
+(
+    wallProfile
+    {
+        type        uniform;
+        axis        x;
+        start       (-1.0 0.5 0.0);
+        end         (12.0 0.5 0.0);
+        nPoints     100;
+    }
+);
+
+fields          (U);
 
 // ************************************************************************* //
 """,
@@ -2393,6 +2466,38 @@ boundaryField
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # system/sampleDict — extract temperature profile for Nusselt number validation
+        (case_dir / "system" / "sampleDict").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\\
+|  sampleDict - extract temperature profile for natural convection cavity     |
+\\*---------------------------------------------------------------------------*/
+type            sets;
+libs            ("libsampling.so");
+
+interpolationScheme cellPoint;
+
+setFormat       raw;
+
+sets
+(
+    midPlaneT
+    {
+        type        uniform;
+        axis        y;
+        start       (0.5 0.0 0.0);
+        end         (0.5 1.0 0.0);
+        nPoints     20;
+    }
+);
+
+fields          (T);
 
 // ************************************************************************* //
 """,
@@ -4006,11 +4111,13 @@ mergePatchPairs
     # Log parsing
     # ------------------------------------------------------------------
 
-    def _parse_solver_log(self, log_path: Path, solver_name: str = "icoFoam") -> tuple[Dict[str, float], Dict[str, Any]]:
+    def _parse_solver_log(self, log_path: Path, solver_name: str = "icoFoam", task_spec: Optional[TaskSpec] = None) -> tuple[Dict[str, float], Dict[str, Any]]:
         """解析 solver log 文件，提取最终（末次迭代）残差和关键物理量。
 
         Args:
             log_path: log 文件路径
+            solver_name: "icoFoam" 或 "simpleFoam" 或 "buoyantSimpleFoam"
+            task_spec: 任务规格，用于 case-specific 物理量解释
             solver_name: "icoFoam" 或 "simpleFoam"
 
         Returns:
@@ -4070,26 +4177,127 @@ mergePatchPairs
                 uy_res = float(uy_matches[-1].group(1))
                 key_quantities["U_max_approx"] = max(ux_res, abs(uy_res))
 
-        # 从 postProcessing 目录读取速度场统计（如果存在）
-        if not key_quantities:
-            post_dir = log_path.parent / "postProcessing"
-            if post_dir.exists():
-                for sub in sorted(post_dir.iterdir()):
-                    if sub.is_dir():
-                        files = sorted(sub.iterdir())
-                        if files:
-                            last_file = files[-1]
-                            lines = last_file.read_text(encoding="utf-8", errors="replace").splitlines()
-                            vals = []
-                            for line in lines:
-                                parts = line.split()
-                                if len(parts) > 3 and not line.startswith("#"):
-                                    try:
-                                        vals.append(float(parts[3]))
-                                    except ValueError:
-                                        pass
-                            if vals:
-                                key_quantities["u_centerline"] = vals
+        # 从 postProcessing/sets 目录读取 sample utility 输出的关键物理量
+        post_dir = log_path.parent / "postProcessing"
+        if post_dir.exists():
+            sets_dir = post_dir / "sets"
+            if sets_dir.exists():
+                # 遍历所有时间目录
+                for time_dir in sorted(sets_dir.iterdir()):
+                    if time_dir.is_dir():
+                        # 查找 sample 输出文件 (e.g., U_uCenterline, T_midPlaneT)
+                        for sample_file in sorted(time_dir.iterdir()):
+                            filename = sample_file.name
+                            lines = sample_file.read_text(encoding="utf-8", errors="replace").splitlines()
+
+                            # 解析 sample 文件格式:
+                            # #   Time  x  y  z  Ux  Uy  Uz  (for vector fields)
+                            # #   Time  x  y  z  T         (for scalar fields)
+                            if filename.startswith("U_"):
+                                # Velocity sample - extract Ux component for centerline profile
+                                set_name = filename[2:]  # e.g., "uCenterline"
+                                vals = []
+                                y_coords = []
+                                for line in lines:
+                                    if line.startswith("#") or not line.strip():
+                                        continue
+                                    parts = line.split()
+                                    # Format: time x y z Ux Uy Uz
+                                    if len(parts) >= 6:
+                                        try:
+                                            y_coords.append(float(parts[2]))  # y coordinate
+                                            vals.append(float(parts[4]))  # Ux component
+                                        except ValueError:
+                                            pass
+                                if vals:
+                                    # Use set name as key, e.g., "uCenterline"
+                                    key_quantities[set_name] = vals
+                                    # Also store y coordinates for profile matching
+                                    key_quantities[f"{set_name}_y"] = y_coords
+
+                            elif filename.startswith("T_"):
+                                # Temperature sample - extract T component
+                                set_name = filename[2:]  # e.g., "midPlaneT"
+                                vals = []
+                                y_coords = []
+                                for line in lines:
+                                    if line.startswith("#") or not line.strip():
+                                        continue
+                                    parts = line.split()
+                                    # Format: time x y z T
+                                    if len(parts) >= 5:
+                                        try:
+                                            y_coords.append(float(parts[2]))  # y coordinate
+                                            vals.append(float(parts[4]))  # T value
+                                        except ValueError:
+                                            pass
+                                if vals:
+                                    key_quantities[set_name] = vals
+                                    key_quantities[f"{set_name}_y"] = y_coords
+
+        # Case-specific interpretation: 映射 sample 输出到 Gold Standard 期望的 quantity 名称
+        if task_spec is not None:
+            geom = task_spec.geometry_type
+            name_lower = task_spec.name.lower()
+
+            # LDC: uCenterline -> u_centerline (Gold Standard 格式)
+            if geom == GeometryType.SIMPLE_GRID and ("lid" in name_lower or task_spec.Re < 2300):
+                if "uCenterline" in key_quantities:
+                    key_quantities["u_centerline"] = key_quantities["uCenterline"]
+                    del key_quantities["uCenterline"]
+                    if "uCenterline_y" in key_quantities:
+                        key_quantities["u_centerline_y"] = key_quantities["uCenterline_y"]
+                        del key_quantities["uCenterline_y"]
+
+            # BFS: 从 wallProfile 计算再附着长度 Xr/H
+            elif geom == GeometryType.BACKWARD_FACING_STEP:
+                if "wallProfile" in key_quantities:
+                    x_coords = key_quantities.get("wallProfile_x", [])
+                    ux_vals = key_quantities.get("wallProfile", [])
+                    if x_coords and ux_vals and len(x_coords) == len(ux_vals):
+                        # 找再附着点: Ux 从负变正的第一个位置
+                        reattachment_x = None
+                        for i in range(1, len(ux_vals)):
+                            if ux_vals[i-1] < 0 and ux_vals[i] >= 0:
+                                # 线性插值找精确零交点
+                                x1, x2 = x_coords[i-1], x_coords[i]
+                                u1, u2 = ux_vals[i-1], ux_vals[i]
+                                if u2 != u1:
+                                    reattachment_x = x1 - u1 * (x2 - x1) / (u2 - u1)
+                                else:
+                                    reattachment_x = x1
+                                break
+                        if reattachment_x is not None:
+                            H = 1.0  # step height
+                            key_quantities["reattachment_length"] = reattachment_x / H
+                    # 清理中间数据
+                    for k in list(key_quantities.keys()):
+                        if k.startswith("wallProfile"):
+                            del key_quantities[k]
+
+            # NC Cavity: 从 midPlaneT 计算 Nusselt number
+            elif geom == GeometryType.NATURAL_CONVECTION_CAVITY:
+                if "midPlaneT" in key_quantities:
+                    T_vals = key_quantities.get("midPlaneT", [])
+                    y_coords = key_quantities.get("midPlaneT_y", [])
+                    if T_vals and y_coords and len(T_vals) == len(y_coords):
+                        # Nu = -L * dT/dy |wall / dT_bulk
+                        # 用壁面梯度 (y 最小处) 近似
+                        # 找到 y 最小的点（热壁）及其邻点来计算梯度
+                        min_y_idx = min(range(len(y_coords)), key=lambda i: y_coords[i])
+                        if min_y_idx < len(T_vals) - 1:
+                            dy = y_coords[min_y_idx + 1] - y_coords[min_y_idx]
+                            dT = T_vals[min_y_idx + 1] - T_vals[min_y_idx]
+                            if abs(dy) > 1e-10:
+                                # 简化: Nu ≈ |dT/dy| * L / dT (取 L=1, dT=10K)
+                                L = 1.0
+                                dT_bulk = 10.0  # T_hot - T_cold
+                                grad_T = abs(dT / dy) if dT != 0 else 0.0
+                                key_quantities["nusselt_number"] = grad_T * L / dT_bulk
+                    # 清理中间数据
+                    for k in list(key_quantities.keys()):
+                        if k.startswith("midPlaneT"):
+                            del key_quantities[k]
 
         return residuals, key_quantities
 
