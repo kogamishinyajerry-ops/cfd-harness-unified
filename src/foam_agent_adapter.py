@@ -9,7 +9,7 @@ import shutil
 import tarfile
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .models import CFDExecutor, ExecutionResult, FlowType, GeometryType, TaskSpec
 
@@ -195,16 +195,27 @@ class FoamAgentExecutor:
                     raw_output_path=raw_output_path,
                 )
 
-            # 6.5. 执行 sample 提取关键物理量 (sampleDict 已在 case 生成时创建)
-            # sample 将结果写入 postProcessing/sets/ 目录
-            sample_ok, sample_log = self._docker_exec(
-                "sample", case_cont_dir, 120,
+            # 6.5. 执行 postProcess 提取完整场数据用于关键物理量计算
+            # writeObjects: 写出 U/p/phi 等场文件
+            # writeCellCentres: 写出 Cx/Cy/Cz cell center 坐标 (用于定位 probe 坐标)
+            # 注意: 用 -funcs '(...)' 而非 -func，OpenFOAM 才能识别多个 functionObject
+            post_ok, post_log = self._docker_exec(
+                "postProcess -funcs '(writeObjects writeCellCentres)' -latestTime", case_cont_dir, 120,
             )
-            # sample 失败不阻塞主流程（后续解析会处理无数据的情况）
+            # postProcess 失败不阻塞主流程（后续解析会处理无数据的情况）
 
-            # 7. 解析 log 文件
+            # 7. 复制 postProcess 输出的场文件到宿主机
+            # postProcess 写出到 latestTime 目录，需要复制回 host 才能解析
+            self._copy_postprocess_fields(container, case_cont_dir, case_host_dir)
+
+            # 8. 解析 log 文件
             log_path = case_host_dir / f"log.{solver_name}"
             residuals, key_quantities = self._parse_solver_log(log_path, solver_name, task_spec)
+
+            # 9. 从 writeObjects 输出的场文件提取 case-specific 关键物理量
+            key_quantities = self._parse_writeobjects_fields(
+                log_path.parent, solver_name, task_spec, key_quantities
+            )
 
             elapsed = time.monotonic() - t0
             return ExecutionResult(
@@ -239,8 +250,11 @@ class FoamAgentExecutor:
             block_mesh, encoding="utf-8"
         )
 
-        # 2. constant/physicalProperties — 水的物性（nu = 0.01 ~ Re=100 时 U=1）
-        nu_val = 0.01  # m^2/s, corresponds to Re=100 when U=1 and L=0.1
+        # 2. constant/physicalProperties — 水的物性
+        # convertToMeters=0.1, 实际 L=0.1m, U_lid=1 m/s
+        # Re = U*L/nu → nu = U*L/Re = 0.1/Re
+        Re = float(task_spec.Re or 100)
+        nu_val = 0.1 / Re  # Re=100 → nu=0.001; Re=10 → nu=0.01
         (case_dir / "constant" / "physicalProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -4021,7 +4035,7 @@ mergePatchPairs
         command: str,
         working_dir: str,
         timeout: int,
-    ) -> tuple[bool, str]:
+    ) -> Tuple[bool, str]:
         """在 cfd-openfoam 容器中执行命令，返回 (success, stdout_log)。
 
         流程：
@@ -4107,11 +4121,41 @@ mergePatchPairs
         except Exception:
             pass
 
+    def _copy_postprocess_fields(
+        self, container: Any, case_cont_dir: str, case_host_dir: Path
+    ) -> None:
+        """从容器内复制 postProcess -func writeObjects 输出的场文件到宿主机。
+
+        postProcess 在 latestTime 目录写出 U, Cx, Cy, (T) 等场文件，
+        将这些文件复制到宿主机的对应时间目录。
+        """
+        try:
+            # 找到容器内最新时间目录（数字目录）
+            result = container.exec_run(
+                cmd=["bash", "-c", f"ls {case_cont_dir}/ 2>/dev/null | grep -E '^[0-9]' | sort -n | tail -1"]
+            )
+            latest_time = result.output.decode().strip()
+            if not latest_time:
+                return
+
+            latest_cont_dir = f"{case_cont_dir}/{latest_time}"
+
+            # 场文件：U 和 Cx/Cy 必选，T 可选
+            field_files = ["U", "Cx", "Cy", "T"]
+
+            for field_file in field_files:
+                cont_path = f"{latest_cont_dir}/{field_file}"
+                host_time_dir = case_host_dir / latest_time
+                host_path = host_time_dir / field_file
+                self._copy_file_from_container(container, cont_path, host_path)
+        except Exception:
+            pass  # 静默失败，后续解析会处理无数据的情况
+
     # ------------------------------------------------------------------
     # Log parsing
     # ------------------------------------------------------------------
 
-    def _parse_solver_log(self, log_path: Path, solver_name: str = "icoFoam", task_spec: Optional[TaskSpec] = None) -> tuple[Dict[str, float], Dict[str, Any]]:
+    def _parse_solver_log(self, log_path: Path, solver_name: str = "icoFoam", task_spec: Optional[TaskSpec] = None) -> Tuple[Dict[str, float], Dict[str, Any]]:
         """解析 solver log 文件，提取最终（末次迭代）残差和关键物理量。
 
         Args:
@@ -4300,6 +4344,299 @@ mergePatchPairs
                             del key_quantities[k]
 
         return residuals, key_quantities
+
+    # ------------------------------------------------------------------
+    # writeObjects field extraction
+    # ------------------------------------------------------------------
+
+    def _parse_writeobjects_fields(
+        self,
+        case_dir: Path,
+        solver_name: str,
+        task_spec: Optional[TaskSpec],
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """从 postProcess writeObjects 输出的场文件提取 case-specific 关键物理量。
+
+        postProcess -func writeObjects -latestTime 在最新时间目录写出:
+        - U: vector field (Ux, Uy, Uz) for each cell
+        - Cx, Cy, Cz: cell centre coordinates
+        - p: pressure field
+        这些文件格式为 OpenFOAM internalField nonuniform List<...>。
+
+        Returns:
+            key_quantities updated with u_centerline, reattachment_length, nusselt_number
+        """
+        if task_spec is None:
+            return key_quantities
+
+        # 找到最新时间目录
+        time_dirs = []
+        for item in case_dir.iterdir():
+            if item.is_dir():
+                try:
+                    t = float(item.name)
+                    time_dirs.append((t, item))
+                except ValueError:
+                    pass
+        if not time_dirs:
+            return key_quantities
+
+        latest_t, latest_dir = max(time_dirs, key=lambda x: x[0])
+
+        # 检查是否有 U 和 Cx/Cy 文件
+        u_path = latest_dir / "U"
+        cx_path = latest_dir / "Cx"
+        cy_path = latest_dir / "Cy"
+        if not all(p.exists() for p in [u_path, cx_path, cy_path]):
+            return key_quantities
+
+        # 读取场数据
+        cxs = self._read_openfoam_scalar_field(cx_path)
+        cys = self._read_openfoam_scalar_field(cy_path)
+        u_vecs = self._read_openfoam_vector_field(u_path, len(cxs))
+
+        if len(cxs) != len(cys) or len(cxs) != len(u_vecs):
+            return key_quantities
+
+        geom = task_spec.geometry_type
+        name_lower = task_spec.name.lower()
+
+        # LDC / SIMPLE_GRID: 提取 x=0.5 (normalized) 的中心线速度剖面
+        if geom == GeometryType.SIMPLE_GRID and ("lid" in name_lower or task_spec.Re < 2300):
+            key_quantities = self._extract_ldc_centerline(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
+
+        # BFS: 提取 y=0.5 (wall) 的速度剖面找再附着长度
+        elif geom == GeometryType.BACKWARD_FACING_STEP:
+            key_quantities = self._extract_bfs_reattachment(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
+
+        # NC Cavity: 提取 mid-plane 温度剖面算 Nusselt number
+        elif geom == GeometryType.NATURAL_CONVECTION_CAVITY:
+            t_path = latest_dir / "T"
+            if t_path.exists():
+                t_vals = self._read_openfoam_scalar_field(t_path)
+                key_quantities = self._extract_nc_nusselt(
+                    cxs, cys, t_vals, task_spec, key_quantities
+                )
+
+        return key_quantities
+
+    @staticmethod
+    def _read_openfoam_scalar_field(filepath: Path) -> List[float]:
+        """解析 OpenFOAM internalField nonuniform List<scalar> 文件。"""
+        with filepath.open() as f:
+            lines = f.readlines()
+        # 找 count 行（紧跟在 internalField nonuniform List<scalar> 之后）
+        count_line = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and stripped[0].isdigit():
+                count_line = i
+                n = int(stripped.rstrip(';'))
+                break
+        if count_line is None:
+            return []
+        # count 后第一个非空行是 '('，数据从下一行开始
+        data_start = count_line + 2
+        data_end = data_start + n
+        vals = []
+        for j in range(n):
+            line = lines[data_start + j].strip()
+            if not line or line == ')':
+                break
+            try:
+                vals.append(float(line.rstrip(';')))
+            except ValueError:
+                break
+        return vals
+
+    @staticmethod
+    def _read_openfoam_vector_field(filepath: Path, n_expected: int) -> List[Tuple]:
+        """解析 OpenFOAM internalField nonuniform List<vector> 文件。"""
+        with filepath.open() as f:
+            lines = f.readlines()
+        # 找 count 行
+        count_line = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and stripped[0].isdigit():
+                count_line = i
+                break
+        if count_line is None:
+            return []
+        # 数据从 count + 2 行开始 (跳过 '(')
+        data_start = count_line + 2
+        vecs = []
+        for j in range(min(n_expected, 100000)):
+            line = lines[data_start + j].strip()
+            if not line or line in (')', 'boundaryField'):
+                break
+            inner = line.strip('();')
+            parts = inner.split()
+            if len(parts) >= 3:
+                try:
+                    vecs.append((float(parts[0]), float(parts[1]), float(parts[2])))
+                except ValueError:
+                    break
+        return vecs
+
+    @staticmethod
+    def _extract_ldc_centerline(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """LDC: 提取 x=0.5 中心线速度剖面，对应 Ghia 1982 标准值。
+
+        Cavity mesh: x∈[0,0.1], y∈[0,0.1], z∈[0,0.1]
+        Ghia 1982 标准: x_norm=0.5 → x_actual=0.05m
+        网格 x-cell centers: 0.0025, 0.0075, ..., 0.0975 (步长 0.005)
+        目标 x=0.05 落在 cells 9-10 (cx=0.0475 和 0.0525)，取平均
+        """
+        # x=0.05m = normalized x=0.5
+        x_target = 0.05
+        x_tol = 0.006  # 半格宽 0.0025 × 1.2
+
+        from collections import defaultdict
+        y_groups: Dict[float, List[float]] = defaultdict(list)
+
+        for i in range(len(cxs)):
+            if abs(cxs[i] - x_target) < x_tol:
+                yr = round(cys[i], 4)
+                y_groups[yr].append(u_vecs[i][0])  # Ux component
+
+        if not y_groups:
+            return key_quantities
+
+        # 建立 [y_norm, avg_Ux] profile，插值到 Ghia 1982 位置
+        ghia_y = [0.0000, 0.0625, 0.1250, 0.1875, 0.2500, 0.3125, 0.3750,
+                  0.4375, 0.5000, 0.5625, 0.6250, 0.6875, 0.7500, 0.8125,
+                  0.8750, 0.9375, 1.0000]
+
+        sorted_y = sorted(y_groups.keys())
+        profile = [(yr / 0.1, sum(y_groups[yr]) / len(y_groups[yr])) for yr in sorted_y]
+
+        # 线性插值到 Ghia y 位置
+        u_centerline = []
+        for g_y in ghia_y:
+            p_below = None
+            p_above = None
+            for p_y, p_u in profile:
+                if p_y <= g_y:
+                    p_below = (p_y, p_u)
+                if p_y >= g_y and p_above is None:
+                    p_above = (p_y, p_u)
+            if p_below and p_above and p_above[0] != p_below[0]:
+                frac = (g_y - p_below[0]) / (p_above[0] - p_below[0])
+                sim_u = p_below[1] + frac * (p_above[1] - p_below[1])
+            elif p_below:
+                sim_u = p_below[1]
+            elif p_above:
+                sim_u = p_above[1]
+            else:
+                sim_u = 0.0
+            u_centerline.append(sim_u)
+
+        key_quantities["u_centerline"] = u_centerline
+        key_quantities["u_centerline_y"] = ghia_y
+        return key_quantities
+
+    @staticmethod
+    def _extract_bfs_reattachment(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """BFS: 从 y=0.5 (normalized) wall profile 找 Ux 零交点计算再附着长度。"""
+        # BFS mesh: step at x=0, step height H=1, domain x∈[-1,8], y∈[0,3]
+        # y=0.5 normalized = y_actual = 0.5*H = 0.5 (in mesh coords)
+        y_target = 0.5
+        y_tol = 0.15  # capture wall BL region
+
+        from collections import defaultdict
+        x_groups: Dict[float, List[float]] = defaultdict(list)
+
+        for i in range(len(cxs)):
+            if abs(cys[i] - y_target) < y_tol:
+                xr = round(cxs[i], 3)
+                x_groups[xr].append(u_vecs[i][0])  # Ux
+
+        if not x_groups:
+            return key_quantities
+
+        sorted_x = sorted(x_groups.keys())
+        x_ux_pairs = [(xr, sum(x_groups[xr]) / len(x_groups[xr])) for xr in sorted_x]
+
+        # 找 Ux 零交点（从负变正）
+        reattachment_x = None
+        for j in range(1, len(x_ux_pairs)):
+            x1, u1 = x_ux_pairs[j - 1]
+            x2, u2 = x_ux_pairs[j]
+            if u1 < 0 and u2 >= 0:
+                if abs(u2 - u1) > 1e-10:
+                    reattachment_x = x1 - u1 * (x2 - x1) / (u2 - u1)
+                else:
+                    reattachment_x = x1
+                break
+
+        if reattachment_x is not None:
+            H = 1.0  # step height
+            key_quantities["reattachment_length"] = reattachment_x / H
+
+        return key_quantities
+
+    @staticmethod
+    def _extract_nc_nusselt(
+        cxs: List[float],
+        cys: List[float],
+        t_vals: List[float],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """NC Cavity: 从 mid-plane 温度剖面计算 Nusselt number。"""
+        # Mid-plane: x=0.5 (normalized), x_actual = 0.05m for domain [0,0.1]
+        x_target = 0.05
+        x_tol = 0.006
+
+        from collections import defaultdict
+        y_groups: Dict[float, List[float]] = defaultdict(list)
+
+        for i in range(min(len(cxs), len(t_vals))):
+            if abs(cxs[i] - x_target) < x_tol:
+                yr = round(cys[i], 4)
+                y_groups[yr].append(t_vals[i])
+
+        if not y_groups:
+            return key_quantities
+
+        sorted_y = sorted(y_groups.keys())
+        y_t_pairs = [(yr, sum(y_groups[yr]) / len(y_groups[yr])) for yr in sorted_y]
+
+        # 找热壁（y 最小处）并计算壁面梯度
+        if len(y_t_pairs) >= 2:
+            y0, T0 = y_t_pairs[0]
+            y1, T1 = y_t_pairs[1]
+            dy = y1 - y0
+            if abs(dy) > 1e-10:
+                dT = T1 - T0
+                L = 1.0
+                dT_bulk = 10.0  # ΔT hot-cold
+                grad_T = abs(dT / dy)
+                key_quantities["nusselt_number"] = grad_T * L / dT_bulk
+
+        # 存储 mid-plane T profile
+        key_quantities["midPlaneT"] = [T for _, T in y_t_pairs]
+        key_quantities["midPlaneT_y"] = [y for y, _ in y_t_pairs]
+
+        return key_quantities
 
     # ------------------------------------------------------------------
     # Error helper

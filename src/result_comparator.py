@@ -53,7 +53,10 @@ class ResultComparator:
         deviations: List[DeviationDetail] = []
 
         if isinstance(actual_value, list) and reference_values:
-            deviations = self._compare_vector(quantity_key, actual_value, reference_values, tolerance)
+            actual_y = result.key_quantities.get(f"{quantity_key}_y")
+            deviations = self._compare_vector(
+                quantity_key, actual_value, reference_values, tolerance, actual_y=actual_y
+            )
         elif isinstance(actual_value, (int, float)) and reference_values:
             deviations = self._compare_scalar(quantity_key, actual_value, reference_values, tolerance)
         else:
@@ -108,21 +111,72 @@ class ResultComparator:
         actual_list: List[float],
         reference_values: List[Dict[str, Any]],
         tolerance: float,
+        actual_y: Optional[List[float]] = None,
     ) -> List[DeviationDetail]:
-        """向量比较：逐点比较，收集超出阈值的点"""
+        """向量比较：支持 y-aware 插值比较。
+
+        如果 actual_y 提供（与 actual_list 等长），则在 Gold Standard 的 y 位置
+        对 actual_list 进行线性插值后再比较。
+        否则退化为 index-based positional matching。
+        """
         deviations = []
         ref_scalars = [r.get("u") or r.get("value") for r in reference_values]
-        # 只比较长度重叠部分
-        for i, (act, ref) in enumerate(zip(actual_list, ref_scalars)):
-            if ref is None:
-                continue
-            rel_err = abs(act - ref) / (abs(ref) + 1e-12)
-            if rel_err > tolerance:
-                deviations.append(DeviationDetail(
-                    quantity=f"{quantity}[{i}]",
-                    expected=ref,
-                    actual=act,
-                    relative_error=rel_err,
-                    tolerance=tolerance,
-                ))
+        ref_ys = [r.get("y") for r in reference_values]
+
+        # y-aware 插值比较：只有当 actual_y 可用且 reference 有 y 坐标时才启用
+        use_interp = (
+            actual_y is not None
+            and len(actual_y) == len(actual_list)
+            and all(y is not None for y in ref_ys)
+        )
+
+        if use_interp:
+            # 构建 actual profile 并在 Gold Standard y 位置插值
+            actual_pairs = sorted(zip(actual_y, actual_list))
+            act_y_sorted = [p[0] for p in actual_pairs]
+            act_u_sorted = [p[1] for p in actual_pairs]
+
+            for i, (ref_y, ref_u) in enumerate(zip(ref_ys, ref_scalars)):
+                if ref_u is None:
+                    continue
+                # 线性插值
+                sim_u = self._interp1d(act_y_sorted, act_u_sorted, ref_y)
+                rel_err = abs(sim_u - ref_u) / (abs(ref_u) + 1e-12)
+                if rel_err > tolerance:
+                    deviations.append(DeviationDetail(
+                        quantity=f"{quantity}[y={ref_y:.4f}]",
+                        expected=ref_u,
+                        actual=sim_u,
+                        relative_error=rel_err,
+                        tolerance=tolerance,
+                    ))
+        else:
+            # Fallback: positional matching
+            for i, (act, ref) in enumerate(zip(actual_list, ref_scalars)):
+                if ref is None:
+                    continue
+                rel_err = abs(act - ref) / (abs(ref) + 1e-12)
+                if rel_err > tolerance:
+                    deviations.append(DeviationDetail(
+                        quantity=f"{quantity}[{i}]",
+                        expected=ref,
+                        actual=act,
+                        relative_error=rel_err,
+                        tolerance=tolerance,
+                    ))
         return deviations
+
+    @staticmethod
+    def _interp1d(xs: List[float], ys: List[float], x_target: float) -> float:
+        """线性插值。xs 必须单调递增。"""
+        if x_target <= xs[0]:
+            return ys[0]
+        if x_target >= xs[-1]:
+            return ys[-1]
+        for k in range(len(xs) - 1):
+            if xs[k] <= x_target <= xs[k + 1]:
+                if xs[k + 1] == xs[k]:
+                    return ys[k]
+                frac = (x_target - xs[k]) / (xs[k + 1] - xs[k])
+                return ys[k] + frac * (ys[k + 1] - ys[k])
+        return ys[-1]
