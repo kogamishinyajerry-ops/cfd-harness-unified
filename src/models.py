@@ -117,6 +117,32 @@ class CorrectionSpec:
     needs_replay: bool = False
     task_spec_name: Optional[str] = None
     created_at: Optional[str] = None
+    # 误差自动归因链 (Phase 4)
+    attribution: Optional["AttributionReport"] = None
+
+
+@dataclass
+class AttributionReport:
+    """结构化误差归因报告：偏差→定量分析→根因分类→修正建议"""
+    # 归因链状态
+    chain_complete: bool = False
+    # 定量分析
+    max_relative_error: Optional[float] = None
+    worst_quantity: Optional[str] = None
+    deviation_magnitude_pct: Optional[float] = None  # 偏差幅度百分比
+    # 根因分类
+    primary_cause: str = "unknown"  # mesh / boundary_condition / turbulence / solver / parameters
+    confidence: float = 0.0  # 0.0-1.0
+    secondary_causes: List[str] = field(default_factory=list)
+    # 定量修正建议
+    mesh_recommendation: Optional[str] = None  # e.g. "increase ncx from 40 to 80 in separation zone"
+    turbulence_recommendation: Optional[str] = None  # e.g. "switch to k-omega SST for better near-wall"
+    bc_recommendation: Optional[str] = None  # e.g. "verify velocity inlet profile"
+    solver_recommendation: Optional[str] = None  # e.g. "try pimpleFoam for better convergence"
+    # 知识库检索结果
+    similar_cases: List[str] = field(default_factory=list)  # similar case IDs from knowledge DB
+    recommended_solvers: List[str] = field(default_factory=list)
+    recommended_turbulence_models: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

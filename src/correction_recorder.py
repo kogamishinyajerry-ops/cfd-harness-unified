@@ -6,6 +6,7 @@ import datetime
 import logging
 from typing import Optional
 
+from .error_attributor import ErrorAttributor
 from .models import (
     ComparisonResult,
     CorrectionSpec,
@@ -25,6 +26,9 @@ class CorrectionRecorder:
     human_reason / root_cause / fix_action 提供基于规则的默认文本，
     后续由工程师补充。
     """
+
+    def __init__(self) -> None:
+        self._attributor = ErrorAttributor()
 
     def record(
         self,
@@ -47,6 +51,15 @@ class CorrectionRecorder:
         root_cause = self._infer_root_cause(error_type, task_spec)
         fix_action = self._suggest_fix(error_type, task_spec)
 
+        # Phase 4: 误差自动归因链
+        attribution = None
+        if comparison.deviations and not comparison.passed:
+            attribution = self._attributor.attribute(task_spec, exec_result, comparison)
+            if attribution and attribution.chain_complete:
+                # 用归因链的详细信息增强 root_cause 和 fix_action
+                root_cause = self._enrich_root_cause(root_cause, attribution)
+                fix_action = self._enrich_fix_action(fix_action, attribution)
+
         return CorrectionSpec(
             error_type=error_type,
             wrong_output=wrong_output,
@@ -59,6 +72,7 @@ class CorrectionRecorder:
             needs_replay=True,
             task_spec_name=task_spec.name,
             created_at=datetime.datetime.utcnow().isoformat() + "Z",
+            attribution=attribution,
         )
 
     # ------------------------------------------------------------------
@@ -130,3 +144,38 @@ class CorrectionRecorder:
             ErrorType.OTHER: "人工审查执行日志",
         }
         return fixes.get(error_type, "人工审查")
+
+    @staticmethod
+    def _enrich_root_cause(base: str, attr) -> str:
+        """用 AttributionReport 增强 root_cause"""
+        if attr is None:
+            return base
+        parts = [base]
+        if attr.primary_cause != "unknown":
+            parts.append(f"[归因链] 主根因: {attr.primary_cause} (置信度 {attr.confidence:.0%})")
+        if attr.worst_quantity:
+            parts.append(f"最大偏差: {attr.worst_quantity} ({attr.max_relative_error:.1%})")
+        if attr.secondary_causes:
+            parts.append(f"次要原因: {', '.join(attr.secondary_causes)}")
+        if attr.similar_cases:
+            parts.append(f"同类案例: {', '.join(attr.similar_cases)}")
+        return " | ".join(parts)
+
+    @staticmethod
+    def _enrich_fix_action(base: str, attr) -> str:
+        """用 AttributionReport 增强 fix_action"""
+        if attr is None:
+            return base
+        parts = [base]
+        if attr.mesh_recommendation:
+            parts.append(f"[mesh] {attr.mesh_recommendation}")
+        if attr.turbulence_recommendation:
+            parts.append(f"[turbulence] {attr.turbulence_recommendation}")
+        if attr.bc_recommendation:
+            parts.append(f"[BC] {attr.bc_recommendation}")
+        if attr.solver_recommendation:
+            parts.append(f"[solver] {attr.solver_recommendation}")
+        if attr.recommended_turbulence_models:
+            models = ", ".join(attr.recommended_turbulence_models)
+            parts.append(f"[知识库] 可用湍流模型: {models}")
+        return "\n".join(parts)
