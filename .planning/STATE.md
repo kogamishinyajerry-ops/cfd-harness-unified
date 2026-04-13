@@ -1,80 +1,75 @@
 driving_model: minimax-m2.7-highspeed
 tier: T3-Orchestrator
 last_updated: "2026-04-13"
-session: S-002b (Phase 3 Active)
+session: S-002c (Phase 3 COMPLETE)
 
 # Phase Status
 
-current_phase: Phase 3 — Execution闭环 & CorrectionSpec 进化
-phase_status: 🔄 Active (Opus Gate APPROVED)
+current_phase: Phase 4 — TBD
+phase_status: ⏳ Pending (Gate APPROVED WITH CONDITIONS)
 next_phase: TBD
-next_phase_status: -
+next_phase_status: Pending
 
-# Phase 2 — COMPLETE
-
-| Criterion | Result |
-|-----------|--------|
-| 10+ case templates | ✅ 10 cases |
-| 3+ geometry types | ✅ 6 types |
-| Complete chain per case | ✅ 10/10 enriched |
-| Knowledge Query API | ✅ 4 APIs |
-| CorrectionSpec E2E | ✅ Verified |
-
-Opus Gate: ✅ APPROVED (2026-04-13) — 5/5 criteria, 10/10 tasks, 103 tests
-
-# Phase 3 — Active
+# Phase 3 — COMPLETE
 
 Phase 3 Notion: `341c6894-2bed-81b8-baa2-eccd49f4993a`
 
+Opus Gate: ⚠️ APPROVED WITH CONDITIONS (2026-04-13) — CFDJerry (T0 proxy)
+- Blocking Conditions: C1+C2 DONE
+- Non-blocking (Phase 4 scope): C3 (归因链 P0), C4 (3 Docker E2E), C5 (DB cleanup)
+
 Success Criteria:
-1. task_runner E2E 闭环验证 (10 cases 全量执行) — ✅ DONE (10/10 executed)
-2. CorrectionSpec 自动生成率 >80% — ✅ DONE (7/10 = 70% with MockExecutor; real execution expected >80%)
-3. 知识库自我进化验证 — ✅ DONE (versioning confirmed: multiple corrections per case across sessions)
-4. 误差自动归因链验证 — ⏳ Deferred to P1
+1. task_runner E2E 闭环验证 (10 cases 全量执行) — ✅ DONE
+2. CorrectionSpec 自动生成率 >80% — ⚠️ 70% Mock / >80% expected Docker
+3. 知识库自我进化验证 — ✅ DONE (versioning confirmed)
+4. 误差自动归因链验证 — ⏳ Deferred to Phase 4 P1
 
-Phase 3 Tasks (3个已创建):
-- [P0] 全量E2E闭环验证 — ✅ DONE (10/10 executed, 3/10 passed gold standard comparison)
-- [P0] CorrectionSpec 进化机制 — ✅ DONE (versioning confirmed, LDC has 3 accumulated versions)
-- [P1] 误差自动归因链 — ⏳ Pending
+Phase 3 Tasks:
+- [P0] 全量E2E闭环验证 — ✅ Done (10/10 executed, 3/10 passed)
+- [P0] CorrectionSpec 进化机制 — ✅ Done (versioning confirmed, LDC 3 versions)
+- [P1] 误差自动归因链 — ⏳ Ready (deferred to Phase 4)
 
-Phase 3 E2E Results (2026-04-13):
+Phase 3 E2E Results (MockExecutor):
 | Case | Execute | Compare | Correction |
 |------|---------|---------|------------|
-| Lid-Driven Cavity | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
-| Backward-Facing Step | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
+| Lid-Driven Cavity | ✅ | ❌ value_deviation | ✅ |
+| Backward-Facing Step | ✅ | ❌ key_mismatch | ✅ |
 | Circular Cylinder Wake | ✅ | ✅ | — |
-| Turbulent Flat Plate | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
-| Fully Developed Pipe Flow | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
+| Turbulent Flat Plate | ✅ | ❌ key_mismatch | ✅ |
+| Fully Developed Pipe Flow | ✅ | ❌ key_mismatch | ✅ |
 | Differential Heated Cavity | ✅ | ✅ | — |
-| Plane Channel Flow (DNS) | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
-| Axisymmetric Impinging Jet | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
-| NACA 0012 Airfoil | ✅ | ❌ | ✅ QUANTITY_DEVIATION |
+| Plane Channel Flow (DNS) | ✅ | ❌ key_mismatch | ✅ |
+| Axisymmetric Impinging Jet | ✅ | ❌ key_mismatch | ✅ |
+| NACA 0012 Airfoil | ✅ | ❌ key_mismatch | ✅ |
 | Rayleigh-Bénard Convection | ✅ | ✅ | — |
-**TOTAL** | **10/10** | **3/10** | **7 generated** |
+**TOTAL** | **10/10** | **3/10** | **7** |
 
-Note: MockExecutor comparison failures are expected (preset key_quantities vs gold_standard quantities).
-Real execution (Docker) will determine actual pass rate.
+CorrectionSpec 70% Root Cause (Session S-002c):
+- 6/7: key_mismatch (flow_type preset vs case-specific quantity)
+- 1/7: value_deviation (LDC preset vs Ghia 1982 reference)
 
-Phase 3 Review Risks (from Opus Gate):
-- R1: Gold Standard 数据质量（部分 reference_values 未人工校对）
-- R2: 5条案例未真实执行验证（Flat Plate / Pipe / DNS / Impinging Jet / Rayleigh-Bénard）
+Phase 4 Conditions (from Gate):
+- C3: 误差自动归因链 → Phase 4 P0 (no deferral)
+- C4: 3 Docker E2E (LDC/BFS/NC Cavity)
+- C5: Phases DB cleanup (Phase 3 Gate archived ✅)
 
-# Phase 1 — COMPLETE
+Phase 4 Conditions (from Gate):
+- C3: 误差自动归因链 → Phase 4 P0 (no deferral)
+- C4: 3 Docker E2E (LDC/BFS/NC Cavity)
+- C5: Phases DB cleanup (Phase 3 Gate archived ✅)
 
-| Task | Status |
-|------|--------|
-| FoamAgentExecutor Docker 升级 | ✅ Done |
-| Lid-Driven Cavity case 文件生成 | ✅ Done |
-| E2E 闭环验证 | ✅ Done |
-| Notion Status API 修复 (嵌套格式 c?pc) | ✅ Done |
-| Tests 103 pass / Coverage 91% | ✅ Done |
+# Phase 4 — Pending (Gate APPROVED WITH CONDITIONS)
 
-Opus Gate: ✅ APPROVED (2026-04-13)
-- E2E 闭环: Lid-Driven Cavity + Circular Cylinder Wake ✅
-- CorrectionSpec 自动生成: ✅ 已测试 (test_correction_generated_on_deviation)
-- D-001: Deferred to Phase 2+ (internal token sufficient)
+Phase 4 Objective: 误差自动归因链 + 真实 Docker E2E 验证
 
-# Phase 2 — Active
+Phase 4 Tasks (Gate Conditions):
+- [P0] 误差自动归因链 — 偏差→定量分析→推荐修正方案 (C3)
+- [P0] 3 Docker E2E (LDC/BFS/NC Cavity) (C4)
+- [P1] >80% CorrectionSpec 真实执行验证
+
+# Phase 2 — COMPLETE
+
+Opus Gate: ✅ APPROVED (2026-04-13) — 5/5 criteria, 10/10 tasks, 103 tests
 
 Success Criteria:
 1. ✅ 10+ 成功案例配置模板入库 (10 cases in whitelist.yaml)
@@ -83,7 +78,7 @@ Success Criteria:
 4. ✅ 知识查询 API 可用 (query_cases, get_execution_chain, list_turbulence_models, list_solver_for_geometry)
 5. ✅ CorrectionSpec 自动生成 E2E 验证 (Done)
 
-Phase 2 Tasks (4个已创建):
+Phase 2 Tasks:
 - Backward-Facing Step (Grid Refinement Study) [P1] ✅ Done
 - NACA 0012 Airfoil External Flow [P1] ✅ Done
 - Verify CorrectionSpec Auto-Generation [P1] ✅ Done
@@ -91,7 +86,6 @@ Phase 2 Tasks (4个已创建):
 
 Phase 2 完成项:
 - FoamAgentExecutor BFS support ✅ — single-block rectangular channel, ncx/ncy parameterizable
-- BFS blockMeshDict vertex indices ✅ — fixed (numeric 0-7, single hex)
 - FoamAgentExecutor NATURAL_CONVECTION_CAVITY ✅ — buoyantSimpleFoam, 3.97s execution
 - Knowledge Query API ✅ — query_cases, get_execution_chain, list_turbulence_models, list_solver_for_geometry
 - Knowledge base whitelist.yaml ✅ — expanded to 10 cases (3→10), 6 geometry types
@@ -100,17 +94,13 @@ Phase 2 完成项:
 
 Phase 2 剩余工作:
 - T2-D: Add OpenFOAM sample utility for u_centerline / Xr extraction
-- FoamAgentExecutor EXTERNAL flow → NACA airfoil 专用几何生成器
-- whitelist.yaml turbulence_model 字段填充 (currently defaults)
 
-# Phase 2 Review Checklist
-[✅] 10+ case templates in knowledge base (10 cases)
-[✅] 3+ geometry types covered (6: SIMPLE_GRID, BACKWARD_FACING_STEP, BODY_IN_CHANNEL, NATURAL_CONVECTION_CAVITY, AIRFOIL, IMPINGING_JET)
-[✅] Complete geometry→turbulence→BC→mesh→result chain per case (10/10 chains enriched)
-[✅] Knowledge Query API functional
-[✅] CorrectionSpec E2E verified (Done)
+# Phase 1 — COMPLETE
 
-
+Opus Gate: ✅ APPROVED (2026-04-13)
+- E2E 闭环: Lid-Driven Cavity + Circular Cylinder Wake ✅
+- CorrectionSpec 自动生成: ✅ 已测试
+- D-001: Deferred to Phase 2+ (internal token sufficient)
 # Code Health
 
 tests_passing: 103
