@@ -3283,7 +3283,7 @@ application     pimpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-endTime         5.0;
+endTime         1.0;
 deltaT          0.002;
 writeControl    runTime;
 writeInterval   0.5;
