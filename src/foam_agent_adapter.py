@@ -151,7 +151,7 @@ class FoamAgentExecutor:
                 solver_name = "simpleFoam"
             elif task_spec.geometry_type == GeometryType.NATURAL_CONVECTION_CAVITY:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
-                solver_name = "buoyantSimpleFoam"
+                solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
                 # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam kOmegaSST
                 if task_spec.flow_type == FlowType.INTERNAL:
@@ -1254,7 +1254,7 @@ fields          (U);
         - Left wall: hot (T_hot), Right wall: cold (T_cold)
         - Top/bottom: adiabatic
         - 2D approximation (z-depth = 0.1m)
-        - Solver: buoyantSimpleFoam (Boussinesq approximation)
+        - Solver: buoyantFoam (Boussinesq, h-based energy)
         - Turbulence: k-omega SST
         """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
@@ -1368,6 +1368,10 @@ mergePatchPairs
         # --------------------------------------------------------------------------
         # 2. constant/physicalProperties — Boussinesq fluid
         # --------------------------------------------------------------------------
+        # Cp for Boussinesq: use 1005 J/(kg·K) for air at ~300K
+        Cp = 1005.0
+        mu = nu  # dynamic viscosity == nu * rho (rho=1 for Boussinesq)
+
         (case_dir / "constant" / "physicalProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -1387,13 +1391,36 @@ FoamFile
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-transportModel  Newtonian;
+thermoType
+{{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          hConst;
+    equationOfState Boussinesq;
+    energy          sensibleEnthalpy;
+}}
 
-nu              [0 2 -1 0 0 0 0] {nu:.16e};
-
-Pr              {Pr};
-
-Prt             0.71;
+mixture
+{{
+    Specie          1.0;
+    molWeight       28.9;
+    transport
+    {{
+        mu          [1 -1 -1 0 0 0 0] {mu:.16e};
+        Pr           {Pr};
+    }}
+    thermo
+    {{
+        Cp          [0 2 -2 -1 0 0 0] {Cp:.16e};
+        Hf           0;
+    }}
+    equationOfState
+    {{
+        rho0        1.0;
+        beta         [0 0 -1 0 0 0 0] {beta:.16e};
+    }}
+}}
 
 // ************************************************************************* //
 """,
@@ -1421,6 +1448,8 @@ FoamFile
     object      g;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions       [0 1 -2 0 0 0 0];
 
 value           (0 -{g:.16e} 0);
 
@@ -1489,7 +1518,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     buoyantSimpleFoam;
+application     buoyantFoam;
 
 startFrom       startTime;
 
@@ -1560,7 +1589,8 @@ divSchemes
 {
     default         none;
     div(phi,U)      Gauss linearUpwind grad(U);
-    div(phi,T)      Gauss linearUpwind grad(T);
+    div(phi,h)      Gauss linearUpwind grad(h);
+    div(phi,K)      Gauss linearUpwind grad(K);
     div(phi,k)      Gauss linearUpwind grad(k);
     div(phi,epsilon) Gauss linearUpwind grad(epsilon);
     div(phi,omega)  Gauss linearUpwind grad(omega);
@@ -1611,16 +1641,28 @@ FoamFile
 
 solvers
 {
-    p
+    p_rgh
     {
-        solver          GAMG;
-        smoother        GaussSeidel;
-        tolerance       1e-6;
+        solver          PCG;
+        preconditioner   DIC;
+        tolerance       1e-7;
         relTol          0.01;
     }
-    pFinal
+    p_rghFinal
     {
-        $p;
+        $p_rgh;
+        relTol          0;
+    }
+    h
+    {
+        solver          PBiCGStab;
+        preconditioner   DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    hFinal
+    {
+        $h;
         relTol          0;
     }
     U
@@ -1633,18 +1675,6 @@ solvers
     UFinal
     {
         $U;
-        relTol          0;
-    }
-    T
-    {
-        solver          PBiCGStab;
-        preconditioner   DILU;
-        tolerance       1e-7;
-        relTol          0.01;
-    }
-    TFinal
-    {
-        $T;
         relTol          0;
     }
     k
@@ -1670,15 +1700,15 @@ solvers
     }
 }
 
-SIMPLE
+PIMPLE
 {
     nNonOrthogonalCorrectors 1;
 
     residualControl
     {
         U       1e-5;
-        T       1e-5;
-        p       1e-4;
+        h       1e-5;
+        p_rgh   1e-4;
         k       1e-5;
         epsilon 1e-5;
         omega   1e-5;
@@ -1687,10 +1717,14 @@ SIMPLE
 
 relaxationFactors
 {
+    fields
+    {
+        p_rgh           0.3;
+    }
     equations
     {
         U               0.9;
-        T               0.7;
+        h               0.7;
         k               0.9;
         epsilon         0.9;
         omega           0.9;
@@ -1760,9 +1794,10 @@ boundaryField
         )
 
         # --------------------------------------------------------------------------
-        # 9. 0/p — Pressure
+        # 9. 0/p_rgh — buoyant pressure (hydrostatic)
+        # p_rgh = p - rho*g*h for Boussinesq
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "p").write_text(
+        (case_dir / "0" / "p_rgh").write_text(
             """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -1777,7 +1812,7 @@ FoamFile
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      p;
+    object      p_rgh;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -1789,19 +1824,23 @@ boundaryField
 {
     hot_wall
     {
-        type            zeroGradient;
+        type            fixedFluxPressure;
+        value           uniform 0;
     }
     cold_wall
     {
-        type            zeroGradient;
+        type            fixedFluxPressure;
+        value           uniform 0;
     }
     adiabatic_top
     {
-        type            zeroGradient;
+        type            fixedFluxPressure;
+        value           uniform 0;
     }
     adiabatic_bottom
     {
-        type            zeroGradient;
+        type            fixedFluxPressure;
+        value           uniform 0;
     }
     front { type empty; }
     back  { type empty; }
@@ -1813,9 +1852,10 @@ boundaryField
         )
 
         # --------------------------------------------------------------------------
-        # 10. 0/T — Temperature
+        # 10. 0/h — Sensible enthalpy (replaces T for buoyantFoam)
+        # h = Cp*(T-T_cold), [0 2 -2 0 0 0 0]; hot: Cp*10K=10050, cold: 0
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "T").write_text(
+        (case_dir / "0" / "h").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -1830,25 +1870,25 @@ FoamFile
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      T;
+    object      h;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [0 0 1 0 0 0 0];
+dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform {T_cold};
+internalField   uniform 0;
 
 boundaryField
 {{
     hot_wall
     {{
         type            fixedValue;
-        value           uniform {T_hot};
+        value           uniform 10050.0;
     }}
     cold_wall
     {{
         type            fixedValue;
-        value           uniform {T_cold};
+        value           uniform 0;
     }}
     adiabatic_top
     {{
@@ -5076,7 +5116,7 @@ mergePatchPairs
             latest_cont_dir = f"{case_cont_dir}/{latest_time}"
 
             # 场文件：U 和 Cx/Cy 必选，T 可选
-            field_files = ["U", "Cx", "Cy", "T"]
+            field_files = ["U", "Cx", "Cy", "h"]
 
             for field_file in field_files:
                 cont_path = f"{latest_cont_dir}/{field_file}"
@@ -5337,8 +5377,8 @@ mergePatchPairs
         geom = task_spec.geometry_type
         name_lower = task_spec.name.lower()
 
-        # LDC / SIMPLE_GRID: 提取 x=0.5 (normalized) 的中心线速度剖面
-        if geom == GeometryType.SIMPLE_GRID and ("lid" in name_lower or task_spec.Re < 2300):
+        # LDC / CUSTOM: 提取 x=0.5 (normalized) 的中心线速度剖面
+        if geom in (GeometryType.SIMPLE_GRID, GeometryType.CUSTOM) and ("lid" in name_lower or task_spec.Re < 2300):
             key_quantities = self._extract_ldc_centerline(
                 cxs, cys, u_vecs, task_spec, key_quantities
             )
@@ -5351,12 +5391,54 @@ mergePatchPairs
 
         # NC Cavity: 提取 mid-plane 温度剖面算 Nusselt number
         elif geom == GeometryType.NATURAL_CONVECTION_CAVITY:
-            t_path = latest_dir / "T"
-            if t_path.exists():
-                t_vals = self._read_openfoam_scalar_field(t_path)
+            # buoyantFoam writes h (enthalpy) not T; convert h → T via T = T_cold + h/Cp
+            h_path = latest_dir / "h"
+            if h_path.exists():
+                h_vals = self._read_openfoam_scalar_field(h_path)
+                Cp = 1005.0
+                T_cold_extract = 295.0
+                t_vals = [T_cold_extract + h / Cp for h in h_vals]
                 key_quantities = self._extract_nc_nusselt(
                     cxs, cys, t_vals, task_spec, key_quantities
                 )
+
+        # Plane Channel Flow DNS: BODY_IN_CHANNEL + INTERNAL -> u_mean_profile
+        elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.INTERNAL:
+            key_quantities = self._extract_plane_channel_profile(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
+
+        # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL -> strouhal_number
+        elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.EXTERNAL:
+            p_path = latest_dir / "p"
+            key_quantities = self._extract_cylinder_strouhal(
+                cxs, cys, u_vecs, p_path, task_spec, key_quantities
+            )
+
+        # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
+        elif geom == GeometryType.SIMPLE_GRID and task_spec.Re is not None and task_spec.Re >= 2300:
+            key_quantities = self._extract_flat_plate_cf(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
+
+        # Impinging Jet: IMPINGING_JET -> nusselt_number
+        elif geom == GeometryType.IMPINGING_JET:
+            t_path = latest_dir / "T"
+            if t_path.exists():
+                t_vals = self._read_openfoam_scalar_field(t_path)
+                key_quantities = self._extract_jet_nusselt(
+                    cxs, cys, t_vals, task_spec, key_quantities
+                )
+
+        # Airfoil: AIRFOIL -> pressure_coefficient
+        elif geom == GeometryType.AIRFOIL:
+            p_path = latest_dir / "p"
+            if p_path.exists():
+                p_vals = self._read_openfoam_scalar_field(p_path)
+                key_quantities = self._extract_airfoil_cp(
+                    cxs, cys, p_vals, task_spec, key_quantities
+                )
+
 
         return key_quantities
 
