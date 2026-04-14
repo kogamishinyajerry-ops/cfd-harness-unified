@@ -161,6 +161,16 @@ class KnowledgeDB:
                 solvers.append(solver)
         return solvers
 
+    def get_solver_for_case(self, case_name: str) -> Optional[str]:
+        """根据case名称从whitelist返回期望的solver（用于dispatch归因）"""
+        whitelist = self._load_whitelist()
+        for case in whitelist.get('cases', []):
+            name = case.get('name', '')
+            # match by id (slug) or name
+            if case.get('id') == case_name or name == case_name:
+                return case.get('solver')
+        return None
+
     def _build_chain(self, case: Dict[str, Any]) -> Dict[str, Any]:
         """为单个 case 构建完整的执行链路描述。"""
         flow = FlowType(case.get("flow_type", "INTERNAL"))
