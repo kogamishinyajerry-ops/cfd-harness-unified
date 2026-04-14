@@ -2838,9 +2838,10 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      Gauss linearUpwind grad(U);
-    div(phi,k)      Gauss linearUpwind grad(k);
-    div(phi,epsilon) Gauss linearUpwind grad(epsilon);
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,k)      bounded Gauss limitedLinear 1;
+    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(phi,omega)  bounded Gauss limitedLinear 1;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes
@@ -2855,21 +2856,109 @@ snGradSchemes
 {
     default         corrected;
 }
+wallDist
+{
+    method          meshWave;
+}
 
 // ************************************************************************* //
 """,
             encoding="utf-8",
         )
 
-        # system/fvSolution
-        (case_dir / "system" / "fvSolution").write_text(
-            """\
-/*--------------------------------*- C++ -*---------------------------------*\\
+
+        # Build fvSolution content conditionally based on turbulence model
+        if turbulence_model == "kOmegaSST":
+            solvers_block = """\
+/*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  10                                    |
-|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\\\/     M anipulation  |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    U
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    UFinal
+    {
+        $U;
+        relTol          0;
+    }
+    k
+    {
+        solver          PBiCGStab;
+        preconditioner   DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    omega
+    {
+        solver          PBiCGStab;
+        preconditioner   DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 1;
+    residualControl
+    {
+        U       1e-5;
+        p       1e-4;
+        k       1e-5;
+        omega   1e-5;
+    }
+}
+
+relaxationFactors
+{
+    equations
+    {
+        U               0.9;
+        k               0.9;
+        omega           0.9;
+    }
+}
+"""
+        else:
+            solvers_block = """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -2944,11 +3033,8 @@ relaxationFactors
         epsilon         0.9;
     }
 }
-
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
+"""
+        (case_dir / "system" / "fvSolution").write_text(solvers_block, encoding="utf-8")
 
         # 0/U
         (case_dir / "0" / "U").write_text(
@@ -3087,8 +3173,49 @@ boundaryField
 
         # 0/epsilon
         eps_init = 0.001
-        (case_dir / "0" / "epsilon").write_text(
-            f"""\
+        # 0/epsilon (kEpsilon) or 0/omega (kOmegaSST) — only the relevant one
+        if turbulence_model == "kOmegaSST":
+            omega_init = 1e-5
+            (case_dir / "0" / "omega").write_text(
+                f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform {omega_init};
+
+boundaryField
+{{
+    inlet        {{ type fixedValue; value uniform {omega_init}; }}
+    outlet       {{ type zeroGradient; }}
+    walls        {{ type omegaWallFunction; value uniform {omega_init}; }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+        else:
+            eps_init = 0.01
+            (case_dir / "0" / "epsilon").write_text(
+                f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -3121,8 +3248,8 @@ boundaryField
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
+                encoding="utf-8",
+            )
 
         # 0/nut
         (case_dir / "0" / "nut").write_text(
@@ -3608,16 +3735,11 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      Gauss linearUpwind grad(U);
-    div(phi,k)      Gauss linearUpwind grad(k);
-    div(phi,epsilon) Gauss linearUpwind grad(epsilon);
-    div(phi,omega)   Gauss linearUpwind grad(omega);
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,k)      bounded Gauss limitedLinear 1;
+    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(phi,omega)  bounded Gauss limitedLinear 1;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
-}
-
-wallDist
-{
-    method          meshWave;
 }
 laplacianSchemes
 {
@@ -3630,6 +3752,10 @@ interpolationSchemes
 snGradSchemes
 {
     default         corrected;
+}
+wallDist
+{
+    method          meshWave;
 }
 
 // ************************************************************************* //
@@ -4172,10 +4298,10 @@ ddtSchemes { default steadyState; }
 gradSchemes { default Gauss linear; }
 divSchemes {
     default none;
-    div(phi,U) Gauss linearUpwind grad(U);
-    div(phi,k) Gauss linearUpwind grad(k);
-    div(phi,omega) Gauss linearUpwind grad(omega);
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+    div(phi,U) bounded Gauss linearUpwind grad(U);
+    div(phi,k) bounded Gauss limitedLinear 1;
+    div(phi,omega) bounded Gauss limitedLinear 1;
+    div((nuEff*dev2(T(grad(U))))) bounded Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
@@ -4785,19 +4911,16 @@ ddtSchemes { default steadyState; }
 gradSchemes { default Gauss linear; }
 divSchemes {
     default none;
-    div(phi,U) Gauss linearUpwind grad(U);
-    div(phi,k) Gauss linearUpwind grad(k);
-    div(phi,epsilon) Gauss linearUpwind grad(epsilon);
-    div(phi,omega) Gauss linearUpwind grad(omega);
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,k)      bounded Gauss limitedLinear 1;
+    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(phi,omega)  bounded Gauss limitedLinear 1;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
 snGradSchemes { default corrected; }
-wallDist
-{
-    method meshWave;
-}
+wallDist { method meshWave; }
 
 // ************************************************************************* //
 """,
