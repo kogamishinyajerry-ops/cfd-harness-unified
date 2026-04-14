@@ -5499,7 +5499,7 @@ mergePatchPairs
             latest_cont_dir = f"{case_cont_dir}/{latest_time}"
 
             # 场文件：U 和 Cx/Cy 必选，T 可选
-            field_files = ["U", "Cx", "Cy", "T"]
+            field_files = ["U", "p", "Cx", "Cy", "T"]
 
             for field_file in field_files:
                 cont_path = f"{latest_cont_dir}/{field_file}"
@@ -5791,9 +5791,11 @@ mergePatchPairs
         # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL -> strouhal_number
         elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.EXTERNAL:
             p_path = latest_dir / "p"
-            key_quantities = self._extract_cylinder_strouhal(
-                cxs, cys, u_vecs, p_path, task_spec, key_quantities
-            )
+            if p_path.exists():
+                p_vals = self._read_openfoam_scalar_field(p_path)
+                key_quantities = self._extract_cylinder_strouhal(
+                    cxs, cys, p_vals, task_spec, key_quantities
+                )
 
         # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
         elif geom == GeometryType.SIMPLE_GRID and task_spec.Re is not None and task_spec.Re >= 2300:
@@ -6137,7 +6139,7 @@ mergePatchPairs
         p_near = []
         for i in range(min(len(cxs), len(cys), len(p_vals))):
             dist = ((cxs[i] - cx_c)**2 + (cys[i] - cy_c)**2)**0.5
-            if 0.4 < dist < 0.6:  # near cylinder surface
+            if 0.04 < dist < 0.06:  # near cylinder surface (D=0.1)
                 p_near.append(p_vals[i])
 
         if p_near:
