@@ -145,6 +145,17 @@ class AttributionReport:
     recommended_turbulence_models: List[str] = field(default_factory=list)
 
 
+@dataclass
+class BatchResult:
+    """批量执行汇总结果"""
+    total: int
+    passed: int
+    failed: int
+    errors: List[str]
+    results: List["ComparisonResult"] = field(default_factory=list)
+    attribution_reports: List[Optional["AttributionReport"]] = field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # CFDExecutor Protocol
 # ---------------------------------------------------------------------------

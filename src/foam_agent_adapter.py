@@ -153,16 +153,22 @@ class FoamAgentExecutor:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
-                # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam kOmegaSST
+                # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam
                 if task_spec.flow_type == FlowType.INTERNAL:
                     self._generate_steady_internal_channel(case_host_dir, task_spec)
                     solver_name = "icoFoam"
                 else:
-                    self._generate_circular_cylinder_wake(case_host_dir, task_spec)
                     solver_name = "pimpleFoam"
+                    turbulence_model = self._turbulence_model_for_solver(
+                        solver_name, task_spec.geometry_type, task_spec.Re
+                    )
+                    self._generate_circular_cylinder_wake(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.AIRFOIL:
-                self._generate_airfoil_flow(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
+                turbulence_model = self._turbulence_model_for_solver(
+                    solver_name, task_spec.geometry_type, task_spec.Re
+                )
+                self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
@@ -172,8 +178,11 @@ class FoamAgentExecutor:
                     self._generate_lid_driven_cavity(case_host_dir, task_spec)
                     solver_name = "icoFoam"
                 else:
-                    self._generate_steady_internal_flow(case_host_dir, task_spec)
                     solver_name = "simpleFoam"
+                    turbulence_model = self._turbulence_model_for_solver(
+                        solver_name, task_spec.geometry_type, task_spec.Re
+                    )
+                    self._generate_steady_internal_flow(case_host_dir, task_spec, turbulence_model)
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
                 solver_name = "icoFoam"
@@ -267,6 +276,20 @@ class FoamAgentExecutor:
     # ------------------------------------------------------------------
     # Case file generation (Lid-Driven Cavity)
     # ------------------------------------------------------------------
+
+    def _turbulence_model_for_solver(
+        self, solver_name: str, geometry_type: GeometryType, Re: Optional[float] = None
+    ) -> str:
+        """Auto-select turbulence model based on solver family.
+
+        Core rule: buoyantFoam family -> kEpsilon (avoids OF10 kOmegaSST dimension bug);
+        SIMPLE_GRID laminar -> laminar; others -> kOmegaSST.
+        """
+        if "buoyant" in solver_name:
+            return "kEpsilon"
+        if geometry_type == GeometryType.SIMPLE_GRID and Re is not None and Re < 2300:
+            return "laminar"
+        return "kOmegaSST"
 
     def _generate_lid_driven_cavity(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """生成 Lid-Driven Cavity 最小 OpenFOAM case 文件。"""
@@ -2571,12 +2594,14 @@ boundaryField
             encoding="utf-8",
         )
 
-    def _generate_steady_internal_flow(self, case_dir: Path, task_spec: TaskSpec) -> None:
-        """生成稳态内部流 case 文件（simpleFoam + k-epsilon）。
+    def _generate_steady_internal_flow(
+        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kEpsilon"
+    ) -> None:
+        """生成稳态内部流 case 文件（simpleFoam + configurable turbulence model）。
 
         适用于:
-        - Turbulent Flat Plate (SIMPLE_GRID, Re=5e4)
-        - Fully Developed Pipe Flow (SIMPLE_GRID, Re=5e4)
+        - Turbulent Flat Plate (SIMPLE_GRID, Re=5e4) -> kOmegaSST
+        - Fully Developed Pipe Flow (SIMPLE_GRID, Re=5e4) -> kOmegaSST
 
         几何: 矩形通道, 2D 近似 (z-depth = 0.1m)
         - inlet: uniform velocity U = (U_bulk, 0, 0)
@@ -2708,7 +2733,7 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
 
         # constant/turbulenceProperties — k-epsilon
         (case_dir / "constant" / "turbulenceProperties").write_text(
-            """\
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -2717,23 +2742,23 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
 |    \\\\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      turbulenceProperties;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 simulationType  RAS;
 
 RAS
-{
-    RASModel      kEpsilon;
+{{
+    RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}
+}}
 
 // ************************************************************************* //
 """,
@@ -3169,7 +3194,9 @@ fields          (T);
             encoding="utf-8",
         )
 
-    def _generate_circular_cylinder_wake(self, case_dir: Path, task_spec: TaskSpec) -> None:
+    def _generate_circular_cylinder_wake(
+        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
+    ) -> None:
         """生成圆柱尾迹 case 文件 (pimpleFoam transient).
 
         适用于:
@@ -3474,9 +3501,9 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
             encoding="utf-8",
         )
 
-        # constant/turbulenceProperties — k-omega SST for external aerodynamic
+        # constant/turbulenceProperties
         (case_dir / "constant" / "turbulenceProperties").write_text(
-            """\
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -3485,23 +3512,23 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
 |    \\\\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      turbulenceProperties;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 simulationType  RAS;
 
 RAS
-{
-    RASModel      kOmegaSST;
+{{
+    RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}
+}}
 
 // ************************************************************************* //
 """,
@@ -4380,7 +4407,9 @@ boundaryField
             encoding="utf-8",
         )
 
-    def _generate_airfoil_flow(self, case_dir: Path, task_spec: TaskSpec) -> None:
+    def _generate_airfoil_flow(
+        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
+    ) -> None:
         """生成翼型外部流 case 文件 (simpleFoam steady k-omega SST).
 
         适用于:
@@ -4663,7 +4692,7 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
         )
 
         (case_dir / "constant" / "turbulenceProperties").write_text(
-            """\
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -4672,22 +4701,21 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
 |    \\\\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      turbulenceProperties;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
 simulationType  RAS;
 RAS
-{
-    RASModel      kOmegaSST;
+{{
+    RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}
+}}
 
 // ************************************************************************* //
 """,

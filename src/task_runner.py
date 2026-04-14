@@ -8,10 +8,19 @@ from typing import List, Optional
 
 from .foam_agent_adapter import MockExecutor
 from .knowledge_db import KnowledgeDB
-from .models import CFDExecutor, ComparisonResult, CorrectionSpec, ExecutionResult, TaskSpec
+from .models import (
+    AttributionReport,
+    BatchResult,
+    CFDExecutor,
+    ComparisonResult,
+    CorrectionSpec,
+    ExecutionResult,
+    TaskSpec,
+)
 from .notion_client import NotionClient
 from .result_comparator import ResultComparator
 from .correction_recorder import CorrectionRecorder
+from .error_attributor import ErrorAttributor
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +55,7 @@ class TaskRunner:
         self._db = knowledge_db or KnowledgeDB()
         self._comparator = ResultComparator(threshold=deviation_threshold)
         self._recorder = CorrectionRecorder()
+        self._attributor = ErrorAttributor(knowledge_db=self._db)
 
     # ------------------------------------------------------------------
     # 公开接口
@@ -104,6 +114,95 @@ class TaskRunner:
             report = self.run_task(task)
             reports.append(report)
         return reports
+
+    def run_batch(self, case_ids: List[str]) -> BatchResult:
+        """批量执行指定 case_id 列表（串行，一个失败不阻塞其他）。
+
+        每个 case 执行 run_task -> compare -> attribute 完整链路。
+        """
+        results: List[ComparisonResult] = []
+        attribution_reports: List[Optional[AttributionReport]] = []
+        errors: List[str] = []
+        passed = 0
+        failed = 0
+        total = len(case_ids)
+
+        for idx, case_id in enumerate(case_ids, 1):
+            try:
+                task_spec = self._task_spec_from_case_id(case_id)
+                report = self.run_task(task_spec)
+
+                comparison = report.comparison_result
+                if comparison is None:
+                    comparison = self._ensure_batch_comparison(case_id, report)
+
+                results.append(comparison)
+
+                # 归因（即使 passed=True 也做归因）
+                if comparison is not None:
+                    attribution = self._attributor.attribute(task_spec, report.execution_result, comparison)
+                else:
+                    attribution = None
+                attribution_reports.append(attribution)
+
+                if report.comparison_result is not None and report.comparison_result.passed:
+                    passed += 1
+                    print(f"Case {idx}/{total}: {case_id} [PASSED]")
+                else:
+                    failed += 1
+                    print(f"Case {idx}/{total}: {case_id} [FAILED]")
+
+            except Exception:
+                failed += 1
+                errors.append(case_id)
+                results.append(ComparisonResult(passed=False, summary=f"Exception during {case_id}"))
+                attribution_reports.append(None)
+                logger.exception("Batch case failed: %s", case_id)
+                print(f"Case {idx}/{total}: {case_id} [ERROR]")
+
+        return BatchResult(
+            total=total,
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            results=results,
+            attribution_reports=attribution_reports,
+        )
+
+    def _task_spec_from_case_id(self, case_id: str) -> TaskSpec:
+        """从 knowledge_db 通过 case_id 还原 TaskSpec。"""
+        chain = self._db.get_execution_chain(case_id)
+        if chain is None:
+            raise ValueError(f"Unknown case_id: {case_id}")
+        parameters = chain.get("parameters", {})
+        return TaskSpec(
+            name=chain.get("case_name", case_id),
+            geometry_type=GeometryType(chain.get("geometry_type", "SIMPLE_GRID")),
+            flow_type=FlowType(chain.get("flow_type", "INTERNAL")),
+            steady_state=SteadyState(chain.get("steady_state", "STEADY")),
+            compressibility=Compressibility(chain.get("compressibility", "INCOMPRESSIBLE")),
+            Re=parameters.get("Re"),
+            Ma=parameters.get("Ma"),
+            boundary_conditions=chain.get("boundary_conditions", {}),
+            description=chain.get("reference", ""),
+        )
+
+    def _ensure_batch_comparison(self, case_id: str, report: RunReport) -> ComparisonResult:
+        """确保 report 有 comparison_result（如果没有则尝试生成）。"""
+        if report.comparison_result is not None:
+            return report.comparison_result
+        if not report.execution_result.success:
+            return ComparisonResult(
+                passed=False,
+                summary=report.execution_result.error_message or "Execution failed before comparison",
+            )
+        gold = self._db.load_gold_standard(case_id) or self._db.load_gold_standard(report.task_spec.name)
+        if gold is None:
+            return ComparisonResult(
+                passed=False,
+                summary=f"No gold standard found for case '{case_id}'",
+            )
+        return self._comparator.compare(report.execution_result, gold)
 
     # ------------------------------------------------------------------
     # 内部辅助
