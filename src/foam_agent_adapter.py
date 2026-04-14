@@ -3175,9 +3175,9 @@ boundaryField
 {{
     inlet        {{ type fixedValue; value uniform 0.01; }}
     outlet       {{ type zeroGradient; }}
-    lower_wall   {{ type kqWallFunction; value uniform 0; }}
-    upper_wall   {{ type kqWallFunction; value uniform 0; }}
-    cylinder     {{ type kqWallFunction; value uniform 0; }}
+    lower_wall   {{ type kLowReWallFunction; value uniform 0; }}
+    upper_wall   {{ type kLowReWallFunction; value uniform 0; }}
+    cylinder     {{ type kLowReWallFunction; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}

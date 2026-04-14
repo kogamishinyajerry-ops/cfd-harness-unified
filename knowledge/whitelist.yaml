@@ -117,7 +117,7 @@ cases:
     geometry_type: NATURAL_CONVECTION_CAVITY
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
-    solver: buoyantSimpleFoam
+    solver: buoyantFoam
     turbulence_model: k-omega SST
     parameters:
       Ra: 10000000000  # Ra = 1e10 (Turbulent natural convection)
@@ -206,7 +206,7 @@ cases:
     geometry_type: NATURAL_CONVECTION_CAVITY
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
-    solver: buoyantSimpleFoam
+    solver: buoyantFoam
     turbulence_model: k-omega SST
     parameters:
       Ra: 1000000

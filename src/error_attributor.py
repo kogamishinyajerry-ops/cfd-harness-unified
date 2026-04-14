@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .knowledge_db import KnowledgeDB
 from .models import (
@@ -17,6 +18,114 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Solver-level error pattern registry
+# Each entry: (regex_or_None, cause_label, confidence, suggestion_factory)
+# suggestion_factory receives (match_dict) -> str
+# =============================================================================
+_SOLVER_PATTERNS: List[Tuple[Optional[re.Pattern], str, float, callable]] = []
+
+
+def _register_solver_pattern(
+    regex: str,
+    cause: str,
+    confidence: float,
+    suggestion: str,
+) -> None:
+    """Decorator-free helper: compile and register a solver pattern."""
+    compiled = re.compile(regex, re.IGNORECASE | re.MULTILINE)
+    _SOLVER_PATTERNS.append((compiled, cause, confidence, lambda _: suggestion))
+
+
+def _register_solver_pattern_group(
+    regex: str,
+    cause: str,
+    confidence: float,
+    suggestion_factory: callable,
+) -> None:
+    """Register a pattern with named capture groups for dynamic suggestion."""
+    compiled = re.compile(regex, re.IGNORECASE | re.MULTILINE)
+    _SOLVER_PATTERNS.append((compiled, cause, confidence, suggestion_factory))
+
+
+# --- unknown_patch_field_type ---
+_register_solver_pattern(
+    r"Unknown patchField type\s+(?P<bc>\w+)",
+    "boundary_condition",
+    0.9,
+    "Unsupported BC type for this OpenFOAM version. Replace with kqRWallFunction / kLowReWallFunction / fixedValue as appropriate.",
+)
+
+# --- missing_initial_field ---
+_register_solver_pattern_group(
+    r'Cannot find file ".*?/0/(?P<field>[UvpkomegaepsilonnutalphatTprgh]+)"',
+    "solver",
+    0.85,
+    lambda m: f"Required field 0/{m['field']} is missing. Generate it before running the solver.",
+)
+
+# --- patch_name_mismatch ---
+_register_solver_pattern_group(
+    r"(?:Cannot find patch(?:Field)? entry for\s+|patch\s+)(\w+)",
+    "boundary_condition",
+    0.85,
+    lambda m: f"Patch '{m[1]}' in 0/ boundary file not found in polyMesh/boundary. Derive BC files from final mesh patch list.",
+)
+
+# --- missing_bc_value ---
+_register_solver_pattern(
+    r"keyword value is undefined|Essential entry ['\"]value['\"] missing",
+    "boundary_condition",
+    0.9,
+    "Incomplete boundary-condition stanza. Add explicit 'value uniform ...' entry.",
+)
+
+# --- floating_point_exception ---
+_register_solver_pattern(
+    r"Floating point exception|sigFpe|(?<![a-zA-Z])nan(?![a-zA-Z])|(?<![a-zA-Z])inf(?![a-zA-Z])",
+    "solver",
+    0.95,
+    "Numerical blow-up (NaN/Inf). Reduce deltaT, enable adjustTimeStep, or lower scheme aggressiveness.",
+)
+
+# --- courant_number_explosion ---
+_register_solver_pattern_group(
+    r"Courant Number mean:\s*[0-9eE.+\-]+\s*max:\s*(?P<co>[0-9eE.+\-]+)",
+    "solver",
+    0.8,
+    lambda m: f"Coupling number explosion (max Co={m['co']}). Set adjustTimeStep yes; maxCo 0.5.",
+)
+
+# --- turbulence_field_unbounded ---
+_register_solver_pattern_group(
+    r"bounding\s+(?P<field>k|epsilon|omega|nut)\b.*min:\s*-",
+    "turbulence",
+    0.85,
+    lambda m: f"Turbulence field {m['field']} went negative (unbounded). Use safer initial fields, smaller deltaT, or different wall function.",
+)
+
+# --- linear_solver_breakdown ---
+_register_solver_pattern(
+    r"solution singularity|Final residual\s*=\s*nan|GAMG.*failed|DILUPBiCGStab.*failed",
+    "solver",
+    0.9,
+    "Linear solver breakdown. Fix pressure reference/outlet BCs and initialization.",
+)
+
+# --- buoyant_setup_missing_field_or_property ---
+_register_solver_pattern_group(
+    r'Cannot find file ".*?/0/(?P<field>T|prgh|alphat)"|'
+    r"keyword\s+(TRef|beta|Pr|Cp|g)\s+is undefined|Unknown thermoType",
+    "solver",
+    0.85,
+    lambda m: f"BuoyantFoam setup incomplete: {m.get('field') or m.get(1)} missing or invalid. Validate g, thermo dictionaries, T, p_rgh, and buoyancy parameters.",
+)
+
+# --- dispatch_metadata_mismatch ---
+# Non-regex: handled as a special case after pattern matching
+# (see _try_dispatch_mismatch_detection)
 
 
 # 湍流模型推荐规则（按雷诺数范围）
@@ -136,8 +245,12 @@ class ErrorAttributor:
         exec_result: ExecutionResult,
         comparison: ComparisonResult,
     ) -> AttributionReport:
-        """生成完整的误差归因报告"""
+        """生成完整的误差归因报告 (支持 solver-level 崩溃归因)"""
+        # Stage 0: 无偏差时 — 尝试从 error_message 做 solver-level 归因
         if not comparison.deviations:
+            solver_report = self._try_parse_solver_crash(exec_result, task_spec)
+            if solver_report is not None:
+                return solver_report
             return AttributionReport(chain_complete=True)
 
         # Step 1: 定量分析
@@ -354,3 +467,94 @@ class ErrorAttributor:
             flow_type=task_spec.flow_type,
         )
         return [c.get("id", c.get("name", "")) for c in results[:3]]
+
+    # --------------------------------------------------------------------------
+    # Stage 0: Solver-level crash parser (T3 extension)
+    # --------------------------------------------------------------------------
+
+    def _try_parse_solver_crash(
+        self,
+        exec_result: ExecutionResult,
+        task_spec: TaskSpec,
+    ) -> Optional[AttributionReport]:
+        """解析 solver 崩溃错误信息，返回归因报告（无可用偏差时）"""
+        err = exec_result.error_message or ""
+        if not err:
+            return None
+
+        best_cause = "solver"
+        best_confidence = 0.0
+        best_suggestion = "Solver failed. Check logs for details."
+        best_bc_suggestion: Optional[str] = None
+        best_solver_suggestion: Optional[str] = None
+
+        # 1. Pattern-based detection
+        for compiled_re, cause, confidence, suggestion_fn in _SOLVER_PATTERNS:
+            m = compiled_re.search(err)
+            if m and confidence > best_confidence:
+                best_confidence = confidence
+                best_cause = cause
+                try:
+                    if callable(suggestion_fn) and not isinstance(suggestion_fn, str):
+                        sug = suggestion_fn(m.groupdict())
+                    else:
+                        sug = str(suggestion_fn)
+                except Exception:
+                    sug = str(suggestion_fn) if isinstance(suggestion_fn, str) else "Fix required"
+                if cause == "boundary_condition":
+                    best_bc_suggestion = sug
+                else:
+                    best_solver_suggestion = sug
+
+        # 2. dispatch_metadata_mismatch — non-regex heuristic
+        dispatch_suggestion = self._try_dispatch_mismatch_detection(exec_result, task_spec, err)
+        if dispatch_suggestion is not None:
+            best_cause = "solver"
+            best_confidence = max(best_confidence, 0.9)
+            best_solver_suggestion = (best_solver_suggestion or "") + " " + dispatch_suggestion
+
+        if best_confidence < 0.1:
+            return None
+
+        similar = self._find_similar_cases(task_spec)
+        solvers = self._db.list_solver_for_geometry(task_spec.geometry_type)
+        turb_models = self._db.list_turbulence_models(task_spec.geometry_type).get(
+            task_spec.geometry_type.value, []
+        )
+
+        return AttributionReport(
+            chain_complete=True,
+            max_relative_error=None,
+            worst_quantity=None,
+            deviation_magnitude_pct=None,
+            primary_cause=best_cause,
+            confidence=best_confidence,
+            secondary_causes=[],
+            mesh_recommendation=None,
+            turbulence_recommendation=None,
+            bc_recommendation=best_bc_suggestion,
+            solver_recommendation=best_solver_suggestion,
+            similar_cases=similar[:3],
+            recommended_solvers=solvers,
+            recommended_turbulence_models=turb_models,
+        )
+
+    def _try_dispatch_mismatch_detection(
+        self,
+        exec_result: ExecutionResult,
+        task_spec: TaskSpec,
+        err: str,
+    ) -> Optional[str]:
+        """检测运行时 solver/generator 与 whitelist benchmark 元数据不匹配的案例"""
+        # Detect pimpleFoam being used when icoFoam + laminar is expected
+        if "pimpleFoam" in err or "pimpleFoam failed" in err:
+            expected_solver = self._db.get_solver_for_case(task_spec.name)
+            if expected_solver and expected_solver != "pimpleFoam":
+                return (
+                    f"Dispatch mismatch: case configured for '{expected_solver}' "
+                    f"but generated as pimpleFoam. "
+                    f"Verify geometry_type ({task_spec.geometry_type.value}) + "
+                    f"flow_type ({task_spec.flow_type.value}) routing."
+                )
+        return None
+
