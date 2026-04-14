@@ -3337,6 +3337,11 @@ divSchemes
     div(phi,omega)   Gauss linearUpwind grad(omega);
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
+
+wallDist
+{
+    method          meshWave;
+}
 laplacianSchemes
 {
     default         Gauss linear corrected;
@@ -3421,6 +3426,21 @@ solvers
         preconditioner   DILU;
         tolerance       1e-7;
         relTol          0.01;
+    }
+    omegaFinal
+    {
+        $omega;
+        relTol          0;
+    }
+    kFinal
+    {
+        $k;
+        relTol          0;
+    }
+    epsilonFinal
+    {
+        $epsilon;
+        relTol          0;
     }
 }
 
