@@ -146,6 +146,16 @@ class AttributionReport:
 
 
 @dataclass
+class SystematicPattern:
+    """批量级别系统性误差模式"""
+    cause: str  # e.g. "mesh", "turbulence", "mock_executor", "sample_config_mismatch"
+    affected_cases: List[str] = field(default_factory=list)
+    frequency: float = 0.0  # affected / total
+    confidence: str = "low"  # high (>0.5), medium (>0.3), low
+    recommendation: str = ""
+
+
+@dataclass
 class BatchResult:
     """批量执行汇总结果"""
     total: int
@@ -154,6 +164,7 @@ class BatchResult:
     errors: List[str]
     results: List["ComparisonResult"] = field(default_factory=list)
     attribution_reports: List[Optional["AttributionReport"]] = field(default_factory=list)
+    systematic_patterns: List[SystematicPattern] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

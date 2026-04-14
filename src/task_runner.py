@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .foam_agent_adapter import MockExecutor
 from .knowledge_db import KnowledgeDB
@@ -19,6 +19,7 @@ from .models import (
     FlowType,
     GeometryType,
     SteadyState,
+    SystematicPattern,
     TaskSpec,
 )
 from .notion_client import NotionClient
@@ -164,6 +165,9 @@ class TaskRunner:
                 logger.exception("Batch case failed: %s", case_id)
                 print(f"Case {idx}/{total}: {case_id} [ERROR]")
 
+        # Batch-level systematic pattern analysis
+        systematic_patterns = self._analyze_systematic_patterns(case_ids, results, attribution_reports)
+
         return BatchResult(
             total=total,
             passed=passed,
@@ -171,6 +175,7 @@ class TaskRunner:
             errors=errors,
             results=results,
             attribution_reports=attribution_reports,
+            systematic_patterns=systematic_patterns,
         )
 
     def _task_spec_from_case_id(self, case_id: str) -> TaskSpec:
@@ -207,6 +212,50 @@ class TaskRunner:
                 summary=f"No gold standard found for case '{case_id}'",
             )
         return self._comparator.compare(report.execution_result, gold)
+
+    def _analyze_systematic_patterns(
+        self,
+        case_ids: List[str],
+        results: List[ComparisonResult],
+        attribution_reports: List[Optional[AttributionReport]],
+    ) -> List[SystematicPattern]:
+        """检测批量执行中的系统性误差模式（frequency > 0.3）。"""
+        cause_counts: Dict[str, List[str]] = {}
+        for case_id, attr in zip(case_ids, attribution_reports):
+            if attr is None:
+                continue
+            cause = attr.primary_cause
+            if cause not in ("unknown", "none", ""):
+                cause_counts.setdefault(cause, []).append(case_id)
+
+        patterns = []
+        total = len(case_ids)
+        for cause, affected in cause_counts.items():
+            freq = len(affected) / total
+            if freq > 0.3:
+                if freq > 0.5:
+                    confidence = "high"
+                elif freq > 0.3:
+                    confidence = "medium"
+                else:
+                    confidence = "low"
+
+                recommendations = {
+                    "mock_executor": "Consider Docker real execution for these cases to get physical results",
+                    "sample_config_mismatch": "Review sampleDict configuration — field names may not match generated output",
+                    "mesh": "Consider increasing mesh resolution across affected cases",
+                    "turbulence": "Review turbulence model selection — kEpsilon may be more stable than kOmegaSST for these geometries",
+                    "boundary_condition": "Verify BC setup against reference literature",
+                    "solver": "Check solver convergence settings — may need adjusted relaxation or time step",
+                }
+                patterns.append(SystematicPattern(
+                    cause=cause,
+                    affected_cases=affected,
+                    frequency=freq,
+                    confidence=confidence,
+                    recommendation=recommendations.get(cause, f"Review cases with {cause} root cause"),
+                ))
+        return patterns
 
     # ------------------------------------------------------------------
     # 内部辅助

@@ -50,6 +50,38 @@ def _register_solver_pattern_group(
     _SOLVER_PATTERNS.append((compiled, cause, confidence, suggestion_factory))
 
 
+# --- kOmegaSST dimension bug (OF10) ---
+_register_solver_pattern_group(
+    r"Arguments of min have different dimensions",
+    "turbulence",
+    0.9,
+    lambda m: "kOmegaSST dimension bug in OF10 F2(). Switch to kEpsilon for buoyantFoam family.",
+)
+
+# --- generic dimension mismatch ---
+_register_solver_pattern_group(
+    r"Dimension of unit of field .+ is not correct",
+    "turbulence",
+    0.85,
+    lambda m: "Field dimension mismatch. Check turbulence model compatibility with solver.",
+)
+
+# --- blockMesh failure ---
+_register_solver_pattern_group(
+    r"points is not closed|cannot match face planes|blockMesh error",
+    "mesh",
+    0.9,
+    lambda m: "blockMesh geometry error. Check vertex coordinates and face connectivity in blockMeshDict.",
+)
+
+# --- solver divergence ---
+_register_solver_pattern_group(
+    r"Floating point exception|Maximum number of iterations exceeded",
+    "solver",
+    0.9,
+    lambda m: "Solver divergence. Reduce deltaT, lower relaxation factors, or adjust scheme aggressiveness.",
+)
+
 # --- unknown_patch_field_type ---
 _register_solver_pattern(
     r"Unknown patchField type\s+(?P<bc>\w+)",
@@ -230,6 +262,17 @@ def _classify_turbulence_issue(
     return False
 
 
+def _key_coverage_ratio(
+    gold_keys: List[str],
+    executor_keys: List[str],
+) -> float:
+    """Compute ratio of gold_standard keys covered by executor output keys."""
+    if not gold_keys:
+        return 1.0
+    covered = sum(1 for k in gold_keys if k in executor_keys)
+    return covered / len(gold_keys)
+
+
 class ErrorAttributor:
     """误差自动归因链引擎
 
@@ -257,16 +300,44 @@ class ErrorAttributor:
         max_err, worst_qty = self._find_worst_deviation(comparison.deviations)
         mag_pct = self._deviation_magnitude(comparison.deviations)
 
+        # Step 1b: key_coverage 检测 — Mock 模式或 sampleDict 配置问题
+        gold_keys = [d.quantity for d in comparison.deviations]
+        executor_keys = list(exec_result.key_quantities.keys())
+        coverage = _key_coverage_ratio(gold_keys, executor_keys)
+        key_mismatch_cause: Optional[str] = None
+        key_mismatch_confidence: float = 0.0
+        key_mismatch_recommendation: Optional[str] = None
+        if coverage < 0.5:
+            if exec_result.is_mock:
+                key_mismatch_cause = "mock_executor"
+                key_mismatch_confidence = 0.95
+                key_mismatch_recommendation = (
+                    "MockExecutor key mismatch: returned keys do not cover gold_standard. "
+                    "Run Docker real execution to validate."
+                )
+            else:
+                key_mismatch_cause = "sample_config_mismatch"
+                key_mismatch_confidence = 0.8
+                key_mismatch_recommendation = (
+                    f"Executor returned {executor_keys} but gold_standard needs {gold_keys}. "
+                    "Check sampleDict field configuration."
+                )
+
         # Step 2: 根因分类
-        primary, confidence, secondaries = self._classify_root_cause(
-            comparison, exec_result, task_spec
-        )
+        if key_mismatch_cause:
+            primary, confidence, secondaries = key_mismatch_cause, key_mismatch_confidence, []
+        else:
+            primary, confidence, secondaries = self._classify_root_cause(
+                comparison, exec_result, task_spec
+            )
 
         # Step 3: 生成修正建议
         mesh_fix = self._suggest_mesh_fix(primary, task_spec, max_err)
         turb_fix = self._suggest_turbulence_fix(primary, task_spec)
         bc_fix = self._suggest_bc_fix(primary, task_spec)
         solver_fix = self._suggest_solver_fix(primary, task_spec)
+        if key_mismatch_recommendation:
+            solver_fix = key_mismatch_recommendation
 
         # Step 4: 知识库检索
         similar = self._find_similar_cases(task_spec)
