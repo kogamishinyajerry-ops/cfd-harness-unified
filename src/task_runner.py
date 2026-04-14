@@ -13,8 +13,12 @@ from .models import (
     BatchResult,
     CFDExecutor,
     ComparisonResult,
+    Compressibility,
     CorrectionSpec,
     ExecutionResult,
+    FlowType,
+    GeometryType,
+    SteadyState,
     TaskSpec,
 )
 from .notion_client import NotionClient
