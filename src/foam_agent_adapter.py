@@ -1398,27 +1398,31 @@ thermoType
     transport       const;
     thermo          hConst;
     equationOfState Boussinesq;
+    specie          specie;
     energy          sensibleEnthalpy;
 }}
 
 mixture
 {{
-    Specie          1.0;
-    molWeight       28.9;
-    transport
+    specie
     {{
-        mu          [1 -1 -1 0 0 0 0] {mu:.16e};
-        Pr           {Pr};
-    }}
-    thermo
-    {{
-        Cp          [0 2 -2 -1 0 0 0] {Cp:.16e};
-        Hf           0;
+        molWeight       28.9;
     }}
     equationOfState
     {{
-        rho0        1.0;
-        beta         [0 0 -1 0 0 0 0] {beta:.16e};
+        rho0            1;
+        T0              300;
+        beta            {beta:.16e};
+    }}
+    thermodynamics
+    {{
+        Cp              {Cp:.16e};
+        Hf              0;
+    }}
+    transport
+    {{
+        mu              {mu:.16e};
+        Pr              {Pr};
     }}
 }}
 
@@ -1484,7 +1488,7 @@ simulationType  RAS;
 
 RAS
 {
-    RASModel      kOmegaSST;
+    RASModel      kEpsilon;
 
     turbulence    on;
 
@@ -1588,13 +1592,12 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      Gauss linearUpwind grad(U);
-    div(phi,h)      Gauss linearUpwind grad(h);
-    div(phi,K)      Gauss linearUpwind grad(K);
-    div(phi,k)      Gauss linearUpwind grad(k);
-    div(phi,epsilon) Gauss linearUpwind grad(epsilon);
-    div(phi,omega)  Gauss linearUpwind grad(omega);
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+    div(phi,U)      bounded Gauss upwind;
+    div(phi,h)      bounded Gauss upwind;
+    div(phi,K)      bounded Gauss linear;
+    div(phi,k)      bounded Gauss upwind;
+    div(phi,epsilon) bounded Gauss upwind;
+    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
 }
 
 laplacianSchemes
@@ -1691,18 +1694,13 @@ solvers
         tolerance       1e-6;
         relTol          0.01;
     }
-    omega
-    {
-        solver          PBiCGStab;
-        preconditioner   DILU;
-        tolerance       1e-7;
-        relTol          0.01;
-    }
 }
 
 PIMPLE
 {
     nNonOrthogonalCorrectors 1;
+    pRefCell        0;
+    pRefValue       0;
 
     residualControl
     {
@@ -1711,7 +1709,6 @@ PIMPLE
         p_rgh   1e-4;
         k       1e-5;
         epsilon 1e-5;
-        omega   1e-5;
     }
 }
 
@@ -1727,7 +1724,6 @@ relaxationFactors
         h               0.7;
         k               0.9;
         epsilon         0.9;
-        omega           0.9;
     }
 }
 
@@ -1794,7 +1790,64 @@ boundaryField
         )
 
         # --------------------------------------------------------------------------
-        # 9. 0/p_rgh — buoyant pressure (hydrostatic)
+        # 9. 0/p — Static pressure (thermodynamic pressure, used by buoyantFoam)
+        # --------------------------------------------------------------------------
+        (case_dir / "0" / "p").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    hot_wall
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    cold_wall
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    adiabatic_top
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    adiabatic_bottom
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    front { type empty; }
+    back  { type empty; }
+}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------------------
+        # 9b. 0/p_rgh — buoyant pressure (hydrostatic)
         # p_rgh = p - rho*g*h for Boussinesq
         # --------------------------------------------------------------------------
         (case_dir / "0" / "p_rgh").write_text(
@@ -1816,7 +1869,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [0 2 -2 0 0 0 0];
+dimensions      [1 -1 -2 0 0 0 0];
 
 internalField   uniform 0;
 
@@ -1825,22 +1878,22 @@ boundaryField
     hot_wall
     {
         type            fixedFluxPressure;
-        value           uniform 0;
+        value           $internalField;
     }
     cold_wall
     {
         type            fixedFluxPressure;
-        value           uniform 0;
+        value           $internalField;
     }
     adiabatic_top
     {
         type            fixedFluxPressure;
-        value           uniform 0;
+        value           $internalField;
     }
     adiabatic_bottom
     {
         type            fixedFluxPressure;
-        value           uniform 0;
+        value           $internalField;
     }
     front { type empty; }
     back  { type empty; }
@@ -1876,18 +1929,135 @@ FoamFile
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform 0;
+// h = Cp*(T - T0), T0=300K from equationOfState
+// cold wall T=295K: h = 1005*(295-300) = -5025
+// hot wall T=305K: h = 1005*(305-300) = 5025
+internalField   uniform -5025.0;
 
 boundaryField
 {{
     hot_wall
     {{
         type            fixedValue;
-        value           uniform 10050.0;
+        value           uniform 5025.0;
     }}
     cold_wall
     {{
         type            fixedValue;
+        value           uniform -5025.0;
+    }}
+    adiabatic_top
+    {{
+        type            zeroGradient;
+    }}
+    adiabatic_bottom
+    {{
+        type            zeroGradient;
+    }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------------------
+        # 10b. 0/T — Temperature (required by buoyantFoam even with sensibleEnthalpy)
+        # buoyantFoam reads T, converts to h=Cp*(T-T0) internally, solves for h, writes T
+        # --------------------------------------------------------------------------
+        (case_dir / "0" / "T").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      T;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform {T_cold};
+
+boundaryField
+{{
+    hot_wall
+    {{
+        type            fixedValue;
+        value           uniform {T_hot};
+    }}
+    cold_wall
+    {{
+        type            fixedValue;
+        value           uniform {T_cold};
+    }}
+    adiabatic_top
+    {{
+        type            zeroGradient;
+    }}
+    adiabatic_bottom
+    {{
+        type            zeroGradient;
+    }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------------------
+        # 10c. 0/alphat — Turbulent thermal diffusivity (required by kOmegaSST)
+        # alphat = mu_t / Pr_t; wallFunction handles near-wall treatment
+        # --------------------------------------------------------------------------
+        (case_dir / "0" / "alphat").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      alphat;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{{
+    hot_wall
+    {{
+        type            compressible::alphatJayatillekeWallFunction;
+        Prt             0.85;
+        value           uniform 0;
+    }}
+    cold_wall
+    {{
+        type            compressible::alphatJayatillekeWallFunction;
+        Prt             0.85;
         value           uniform 0;
     }}
     adiabatic_top
@@ -1908,11 +2078,10 @@ boundaryField
         )
 
         # --------------------------------------------------------------------------
-        # 11. 0/k and 0/omega — Turbulence (initial)
+        # 11. 0/k — Turbulent kinetic energy [m2/s2]
         # --------------------------------------------------------------------------
-        for fname, val in [("k", 1e-4), ("omega", 1e-4)]:
-            (case_dir / "0" / fname).write_text(
-                f"""\
+        (case_dir / "0" / "k").write_text(
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -1926,28 +2095,69 @@ FoamFile
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      {fname};
+    object      k;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform {val:.16e};
+internalField   uniform 1e-4;
 
 boundaryField
 {{
-    hot_wall           {{ type calculated; value uniform {val:.16e}; }}
-    cold_wall          {{ type calculated; value uniform {val:.16e}; }}
-    adiabatic_top       {{ type calculated; value uniform {val:.16e}; }}
-    adiabatic_bottom    {{ type calculated; value uniform {val:.16e}; }}
+    hot_wall           {{ type kqRWallFunction; value uniform 1e-4; }}
+    cold_wall          {{ type kqRWallFunction; value uniform 1e-4; }}
+    adiabatic_top       {{ type kqRWallFunction; value uniform 1e-4; }}
+    adiabatic_bottom    {{ type kqRWallFunction; value uniform 1e-4; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
 
 // ************************************************************************* //
 """,
-                encoding="utf-8",
-            )
+            encoding="utf-8",
+        )
+
+        # --------------------------------------------------------------------------
+        # 11b. 0/epsilon — Turbulent dissipation rate [m2/s3]
+        # --------------------------------------------------------------------------
+        (case_dir / "0" / "epsilon").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      epsilon;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -3 0 0 0 0];
+
+internalField   uniform 1e-5;
+
+boundaryField
+{{
+    hot_wall           {{ type epsilonWallFunction; value uniform 1e-5; }}
+    cold_wall          {{ type epsilonWallFunction; value uniform 1e-5; }}
+    adiabatic_top       {{ type epsilonWallFunction; value uniform 1e-5; }}
+    adiabatic_bottom    {{ type epsilonWallFunction; value uniform 1e-5; }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
 
         # --------------------------------------------------------------------------
         # 12. 0/nut — Turbulent viscosity (for k-omega SST)
@@ -5116,7 +5326,7 @@ mergePatchPairs
             latest_cont_dir = f"{case_cont_dir}/{latest_time}"
 
             # 场文件：U 和 Cx/Cy 必选，T 可选
-            field_files = ["U", "Cx", "Cy", "h"]
+            field_files = ["U", "Cx", "Cy", "T"]
 
             for field_file in field_files:
                 cont_path = f"{latest_cont_dir}/{field_file}"
@@ -5391,13 +5601,10 @@ mergePatchPairs
 
         # NC Cavity: 提取 mid-plane 温度剖面算 Nusselt number
         elif geom == GeometryType.NATURAL_CONVECTION_CAVITY:
-            # buoyantFoam writes h (enthalpy) not T; convert h → T via T = T_cold + h/Cp
-            h_path = latest_dir / "h"
-            if h_path.exists():
-                h_vals = self._read_openfoam_scalar_field(h_path)
-                Cp = 1005.0
-                T_cold_extract = 295.0
-                t_vals = [T_cold_extract + h / Cp for h in h_vals]
+            # buoyantFoam writes T (temperature) to disk; read it directly
+            t_path = latest_dir / "T"
+            if t_path.exists():
+                t_vals = self._read_openfoam_scalar_field(t_path)
                 key_quantities = self._extract_nc_nusselt(
                     cxs, cys, t_vals, task_spec, key_quantities
                 )
@@ -5661,6 +5868,7 @@ mergePatchPairs
         key_quantities["midPlaneT"] = [T for _, T in y_t_pairs]
         key_quantities["midPlaneT_y"] = [y for y, _ in y_t_pairs]
 
+        return key_quantities
 
     # ------------------------------------------------------------------
     # Plane Channel Flow DNS — 提取中心线速度分布
