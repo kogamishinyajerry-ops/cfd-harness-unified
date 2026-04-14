@@ -3764,14 +3764,45 @@ wallDist
         )
 
         # system/fvSolution
-        (case_dir / "system" / "fvSolution").write_text(
+        is_kepsilon = turbulence_model == "kEpsilon"
+        eps_block = ("""\
+    epsilon
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-5;
+        relTol          0.01;
+    }
+    epsilonFinal
+    {
+        $epsilon;
+        relTol          0;
+    }
+""") if is_kepsilon else ""
+        omega_block = ("""\
+    omega
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    omegaFinal
+    {
+        $omega;
+        relTol          0;
+    }
+""") if turbulence_model == "kOmegaSST" else ""
+        rel_eps = ("        epsilon         0.9;\n        ") if is_kepsilon else ""
+        rel_omg = ("        omega           0.9;\n        ") if turbulence_model == "kOmegaSST" else ""
+        fvsol = (
             """\
-/*--------------------------------*- C++ -*---------------------------------*\\
+/*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  10                                    |
-|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\\\/     M anipulation  |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -3816,33 +3847,13 @@ solvers
         tolerance       1e-6;
         relTol          0.01;
     }
-    epsilon
-    {
-        solver          PBiCGStab;
-        preconditioner   DILU;
-        tolerance       1e-5;
-        relTol          0.01;
-    }
-    omega
-    {
-        solver          PBiCGStab;
-        preconditioner   DILU;
-        tolerance       1e-7;
-        relTol          0.01;
-    }
-    omegaFinal
-    {
-        $omega;
-        relTol          0;
-    }
+"""
+            + eps_block
+            + omega_block
+            + """\
     kFinal
     {
         $k;
-        relTol          0;
-    }
-    epsilonFinal
-    {
-        $epsilon;
         relTol          0;
     }
 }
@@ -3860,15 +3871,17 @@ relaxationFactors
     {
         U               0.9;
         k               0.9;
-        epsilon         0.9;
-        omega           0.9;
+"""
+            + rel_eps
+            + rel_omg
+            + """\
     }
 }
 
 // ************************************************************************* //
-""",
-            encoding="utf-8",
+"""
         )
+        (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
         # 0/U
         (case_dir / "0" / "U").write_text(
@@ -4927,14 +4940,21 @@ wallDist { method meshWave; }
             encoding="utf-8",
         )
 
-        (case_dir / "system" / "fvSolution").write_text(
+        is_kepsilon = turbulence_model == "kEpsilon"
+        eps_block = ("""\
+    epsilon { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.001; }
+""") if is_kepsilon else ""
+        omega_block = ("""\
+    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
+""") if turbulence_model == "kOmegaSST" else ""
+        fvsol = (
             """\
-/*--------------------------------*- C++ -*---------------------------------*\\
+/*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  10                                    |
-|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\\\/     M anipulation  |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -4953,8 +4973,10 @@ solvers
     U { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
     UFinal { $U; relTol 0; }
     k { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
-    epsilon { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.001; }
-    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
+"""
+            + eps_block
+            + omega_block
+            + """\
 }
 
 SIMPLE
@@ -4969,9 +4991,9 @@ relaxationFactors
 }
 
 // ************************************************************************* //
-""",
-            encoding="utf-8",
+"""
         )
+        (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
         Ux = U_inf
         (case_dir / "0" / "U").write_text(
