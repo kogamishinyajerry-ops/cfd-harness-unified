@@ -4012,11 +4012,11 @@ FoamFile
 
 dimensions      [0 0 -1 0 0 0 0];
 
-internalField   uniform 100.0;
+internalField   uniform 1.0;
 
 boundaryField
 {{
-    inlet        {{ type fixedValue; value uniform 100.0; }}
+    inlet        {{ type fixedValue; value uniform 1.0; }}
     outlet       {{ type zeroGradient; }}
     lower_wall   {{ type omegaWallFunction; value uniform 1.0; }}
     upper_wall   {{ type omegaWallFunction; value uniform 1.0; }}
@@ -4482,12 +4482,12 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 -1 0 0 0 0];
-internalField   uniform 500.0;
+internalField   uniform 1.0;
 boundaryField
 {{
-    inlet           {{ type fixedValue; value uniform 500.0; }}
-    plate           {{ type omegaWallFunction; value uniform 500.0; }}
-    outer           {{ type fixedValue; value uniform 500.0; }}
+    inlet           {{ type fixedValue; value uniform 1.0; }}
+    plate           {{ type omegaWallFunction; value uniform 1.0; }}
+    outer           {{ type fixedValue; value uniform 1.0; }}
     axis            {{ type empty; }}
     front           {{ type empty; }}
     back            {{ type empty; }}
@@ -5107,10 +5107,10 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 -1 0 0 0 0];
-internalField   uniform 1000.0;
+internalField   uniform 10.0;
 boundaryField
 {{
-    inlet    {{ type fixedValue; value uniform 1000.0; }}
+    inlet    {{ type fixedValue; value uniform 10.0; }}
     outlet   {{ type zeroGradient; }}
     airfoil  {{ type omegaWallFunction; value uniform 1.0; }}
     upper    {{ type omegaWallFunction; value uniform 1.0; }}
