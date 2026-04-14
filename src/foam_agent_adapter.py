@@ -153,8 +153,13 @@ class FoamAgentExecutor:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
                 solver_name = "buoyantSimpleFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
-                self._generate_circular_cylinder_wake(case_host_dir, task_spec)
-                solver_name = "pimpleFoam"
+                # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam kOmegaSST
+                if task_spec.flow_type == FlowType.INTERNAL:
+                    self._generate_steady_internal_channel(case_host_dir, task_spec)
+                    solver_name = "icoFoam"
+                else:
+                    self._generate_circular_cylinder_wake(case_host_dir, task_spec)
+                    solver_name = "pimpleFoam"
             elif task_spec.geometry_type == GeometryType.AIRFOIL:
                 self._generate_airfoil_flow(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
@@ -184,7 +189,11 @@ class FoamAgentExecutor:
                     raw_output_path=raw_output_path,
                 )
 
-            if task_spec.geometry_type in {GeometryType.BODY_IN_CHANNEL, GeometryType.AIRFOIL}:
+            needs_topo = task_spec.geometry_type == GeometryType.AIRFOIL or (
+                task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
+                and task_spec.flow_type == FlowType.EXTERNAL
+            )
+            if needs_topo:
                 topo_ok, topo_log = self._docker_exec(
                     "topoSet", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
                 )
@@ -1936,6 +1945,380 @@ boundaryField
     back  { type empty; }
 }
 
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+
+    def _generate_steady_internal_channel(self, case_dir: Path, task_spec: TaskSpec) -> None:
+        """生成平面通道层流 case 文件（icoFoam + laminar, 无湍流模型）。
+
+        适用于:
+        - Plane Channel Flow DNS (BODY_IN_CHANNEL + INTERNAL, Re_tau=180)
+
+        几何: 矩形通道 x=[-5D, 10D], y=[-D/2, D/2], z=[-D/2, D/2], D=1
+        - Inlet (x=-5D): fixedValue U=(U_bulk,0,0), zeroGradient p
+        - Outlet (x=10D): zeroGradient U, fixedValue p=0
+        - Walls (y=±D/2, z=±D/2): noSlip
+        - 2D: front/back empty
+        """
+        (case_dir / "system").mkdir(parents=True, exist_ok=True)
+        (case_dir / "constant").mkdir(parents=True, exist_ok=True)
+        (case_dir / "0").mkdir(parents=True, exist_ok=True)
+
+        D = 1.0
+        L = 15.0 * D
+        half_D = D / 2.0
+        ncx = max(4, self._ncx)
+        ncy = max(4, self._ncy // 2)
+        ncz = max(4, self._ncy // 2)
+
+        Re = float(task_spec.Re or 5600)
+        nu_val = 1.0 / Re
+        U_bulk = 1.0
+
+        # 1. system/blockMeshDict
+        (case_dir / "system" / "blockMeshDict").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+convertToMeters 1;
+
+vertices
+(
+    (-{L} -{half_D} -{half_D})
+    ({L}  -{half_D} -{half_D})
+    ({L}   {half_D} -{half_D})
+    (-{L}  {half_D} -{half_D})
+    (-{L} -{half_D}  {half_D})
+    ({L}  -{half_D}  {half_D})
+    ({L}   {half_D}  {half_D})
+    (-{L}  {half_D}  {half_D})
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) ({ncx} {ncy} {ncz})
+    (simpleGrading (1 1 1))
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {{
+        type            patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }}
+    outlet
+    {{
+        type            patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }}
+    walls
+    {{
+        type            wall;
+        faces
+        (
+            (3 7 6 2)
+            (0 1 5 4)
+            (0 3 2 1)
+            (4 5 6 7)
+        );
+    }}
+    front
+    {{
+        type            empty;
+        faces
+        (
+            (0 3 2 1)
+        );
+    }}
+    back
+    {{
+        type            empty;
+        faces
+        (
+            (4 5 6 7)
+        );
+    }}
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 2. constant/physicalProperties
+        (case_dir / "constant" / "physicalProperties").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      physicalProperties;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+transportModel  Newtonian;
+nu              [0 2 -1 0 0 0 0] {nu_val};
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 3. system/controlDict
+        (case_dir / "system" / "controlDict").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+application     icoFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         50;
+deltaT          0.002;
+writeControl    timeStep;
+writeInterval   25000;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 4. system/fvSchemes
+        (case_dir / "system" / "fvSchemes").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+ddtSchemes
+{
+    default         Euler;
+}
+gradSchemes
+{
+    default         Gauss linear;
+}
+divSchemes
+{
+    default         none;
+    div(phi,U)      Gauss linear;
+}
+laplacianSchemes
+{
+    default         Gauss linear corrected;
+}
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 5. system/fvSolution
+        (case_dir / "system" / "fvSolution").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+solvers
+{
+    p
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-06;
+        relTol          0.05;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    U
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-05;
+        relTol          0.05;
+    }
+}
+PISO
+{
+    nCorrectors         2;
+    nNonOrthogonalCorrectors 0;
+    pRefCell            0;
+    pRefValue           0;
+}
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 6. 0/U
+        (case_dir / "0" / "U").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (0 0 0);
+boundaryField
+{{
+    inlet
+    {{
+        type            fixedValue;
+        value           uniform ({U_bulk} 0 0);
+    }}
+    outlet
+    {{
+        type            zeroGradient;
+    }}
+    walls
+    {{
+        type            noSlip;
+    }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 7. 0/p
+        (case_dir / "0" / "p").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0;
+boundaryField
+{{
+    inlet
+    {{
+        type            zeroGradient;
+    }}
+    outlet
+    {{
+        type            fixedValue;
+        value           uniform 0;
+    }}
+    walls
+    {{
+        type            zeroGradient;
+    }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
 // ************************************************************************* //
 """,
             encoding="utf-8",
