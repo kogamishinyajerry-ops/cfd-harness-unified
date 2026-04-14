@@ -4301,7 +4301,7 @@ divSchemes {
     div(phi,U) bounded Gauss linearUpwind grad(U);
     div(phi,k) bounded Gauss limitedLinear 1;
     div(phi,omega) bounded Gauss limitedLinear 1;
-    div((nuEff*dev2(T(grad(U))))) bounded Gauss linear;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
