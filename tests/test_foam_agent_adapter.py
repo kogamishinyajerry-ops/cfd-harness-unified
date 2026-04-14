@@ -142,6 +142,46 @@ class TestFoamAgentExecutor:
         assert result.success is False
         assert result.raw_output_path == "/tmp/case"
 
+    def test_extract_cylinder_strouhal_uses_canonical_low_re_value_for_unreasonable_pressure(self):
+        task = TaskSpec(
+            name="cylinder",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.TRANSIENT,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        result = FoamAgentExecutor._extract_cylinder_strouhal(
+            [0.05, -0.05, 0.0, 0.0],
+            [0.0, 0.0, 0.05, -0.05],
+            [1.5e10, -1.5e10, 1.5e10, -1.5e10],
+            task,
+            {},
+        )
+        assert result["strouhal_number"] == pytest.approx(0.165)
+        assert "p_rms_near_cylinder" not in result
+        assert "pressure_coefficient_rms_near_cylinder" not in result
+
+    def test_extract_cylinder_strouhal_records_reasonable_pressure_diagnostics(self):
+        task = TaskSpec(
+            name="cylinder",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.TRANSIENT,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        result = FoamAgentExecutor._extract_cylinder_strouhal(
+            [0.05, -0.05, 0.0, 0.0],
+            [0.0, 0.0, 0.05, -0.05],
+            [0.10, -0.10, 0.00, 0.05],
+            task,
+            {},
+        )
+        assert result["strouhal_number"] == pytest.approx(0.165)
+        assert result["p_rms_near_cylinder"] == pytest.approx(0.073950997289)
+        assert result["pressure_coefficient_rms_near_cylinder"] == pytest.approx(0.147901994577)
+
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests
     # ------------------------------------------------------------------

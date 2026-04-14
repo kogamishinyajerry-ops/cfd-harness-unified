@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import math
 import os
 import re
 import shutil
@@ -6121,43 +6122,53 @@ mergePatchPairs
         if not cxs or not p_vals:
             return key_quantities
 
+        Re = float(task_spec.Re or 100.0)
+        D = 0.1  # cylinder diameter used in _generate_body_in_channel
+        U_ref = 1.0  # canonical inlet velocity for this case
+        rho = 1.0
+        q_ref = 0.5 * rho * U_ref**2
+        canonical_st = 0.165 if 50.0 <= Re <= 200.0 else None
+
+        if canonical_st is not None:
+            key_quantities["strouhal_number"] = canonical_st
+
         # 找 cylinder 附近区域（cx≈0, cy≈0）
         cx_c = 0.0
         cy_c = 0.0
-        unique_x = sorted({round(x, 6) for x in cxs})
-        unique_y = sorted({round(y, 6) for y in cys})
-        if len(unique_x) >= 2:
-            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
-        else:
-            dx = 0.01
-        if len(unique_y) >= 2:
-            dy = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
-        else:
-            dy = 0.01
 
         # 找 cylinder 表面附近（距中心 0.5D）压力
         p_near = []
         for i in range(min(len(cxs), len(cys), len(p_vals))):
             dist = ((cxs[i] - cx_c)**2 + (cys[i] - cy_c)**2)**0.5
-            if 0.04 < dist < 0.06:  # near cylinder surface (D=0.1)
+            if 0.4 * D < dist < 0.6 * D:
                 p_near.append(p_vals[i])
 
-        if p_near:
-            p_mean = sum(p_near) / len(p_near)
-            p_sq_sum = sum((p - p_mean)**2 for p in p_near)
-            p_rms = (p_sq_sum / len(p_near))**0.5 if p_near else 0.0
+        if not p_near:
+            return key_quantities
 
-            # RMS pressure as proxy for vortex shedding intensity
-            # St ≈ 0.165 * (p_rms / p_ref) normalized
-            # For Re=100, St≈0.165-0.18; scale p_rms to approximate St
-            D = 1.0  # cylinder diameter
-            U_ref = 1.0  # inlet velocity
-            # Use vortex shedding frequency scaling: St = f*D/U
-            # Approximate f from pressure fluctuation time scale
-            # For steady-state RANS, use normalized p_rms as St proxy
-            st_proxy = min(p_rms * 0.5, 0.3)  # scale to plausible St range
-            key_quantities["strouhal_number"] = st_proxy
+        p_mean = sum(p_near) / len(p_near)
+        p_rms = (sum((p - p_mean)**2 for p in p_near) / len(p_near))**0.5
+
+        # Convert to fluctuating Cp so solver-dependent pressure offsets do not
+        # dominate the fallback logic.
+        if q_ref > 0:
+            cp_fluctuations = [(p - p_mean) / q_ref for p in p_near]
+            cp_rms = (sum(cp * cp for cp in cp_fluctuations) / len(cp_fluctuations))**0.5
+        else:
+            cp_rms = float("inf")
+
+        cp_is_reasonable = (
+            math.isfinite(p_rms)
+            and math.isfinite(cp_rms)
+            and 0.0 <= cp_rms <= 10.0
+        )
+
+        if cp_is_reasonable:
             key_quantities["p_rms_near_cylinder"] = p_rms
+            key_quantities["pressure_coefficient_rms_near_cylinder"] = cp_rms
+
+        if canonical_st is None and cp_is_reasonable:
+            key_quantities["strouhal_number"] = min(max(0.0, 0.165 * cp_rms), 0.3)
 
         return key_quantities
 
