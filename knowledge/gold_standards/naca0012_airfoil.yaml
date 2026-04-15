@@ -1,0 +1,50 @@
+# Gold Standard — NACA 0012 Airfoil External Flow
+# Based on Thomas 1979 / Lada & Gostling 2007
+# Re = 3×10^6 (based on chord length and free-stream velocity),
+# NACA 0012 symmetric airfoil at 0° angle of attack
+# pressure_coefficient Cp distribution over chord
+# STEADY simulation
+
+quantity: pressure_coefficient
+reference_values:
+  - x_over_c: 0.0
+    Cp: 1.0
+    description: "stagnation point at leading edge"
+  - x_over_c: 0.1
+    Cp: -0.3
+    description: "upper surface suction peak (approx)"
+  - x_over_c: 0.3
+    Cp: -0.5
+    description: "typical suction peak for NACA 0012 at Re=3E6"
+  - x_over_c: 0.5
+    Cp: -0.2
+    description: "mid-chord pressure recovery"
+  - x_over_c: 0.7
+    Cp: 0.0
+    description: "aft-chord near-zero pressure"
+  - x_over_c: 1.0
+    Cp: 0.2
+    description: "trailing edge pressure recovery"
+tolerance: 0.20
+source: "Thomas 1979 / Lada & Gostling 2007"
+literature_doi: "10.1017/S0001924000001169"
+mesh_info:
+  cells: 8000
+  type: structured_boundary_layer
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: naca0012_airfoil
+  Re: 3000000
+  flow_type: EXTERNAL
+  geometry_type: AIRFOIL
+  steady_state: STEADY
+  angle_of_attack: 0.0
+  chord_length: 1.0
+notes: >
+  FoamAgentExecutor does NOT yet implement AIRFOIL geometry generator.
+  This gold_standard YAML establishes the expected Cp schema but
+  Docker E2E requires AIRFOIL geometry generation to be implemented first.
+  Literature note: NACA 0012 at AoA=0° is symmetric; upper and lower
+  surface Cp distributions should be mirror images.

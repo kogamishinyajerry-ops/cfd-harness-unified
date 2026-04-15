@@ -14,6 +14,8 @@ from .models import (
     DeviationDetail,
     ErrorType,
     ExecutionResult,
+    GeometryType,
+    SteadyState,
     TaskSpec,
 )
 
@@ -148,7 +150,7 @@ _register_solver_pattern(
 
 # --- buoyant_setup_missing_field_or_property ---
 _register_solver_pattern_group(
-    r'Cannot find file ".*?/0/(?P<field>T|prgh|alphat)"|'
+    r'Cannot find file ".*?/0/(?P<field>T|p_rgh|alphat)"|'
     r"keyword\s+(TRef|beta|Pr|Cp|g)\s+is undefined|Unknown thermoType",
     "solver",
     0.85,
@@ -360,8 +362,13 @@ class ErrorAttributor:
                 )
 
         # Step 2: 根因分类
-        if key_mismatch_cause:
+        structured_override = self._match_structured_deviation_cause(
+            comparison, exec_result, task_spec
+        )
+        if key_mismatch_cause and structured_override is None:
             primary, confidence, secondaries = key_mismatch_cause, key_mismatch_confidence, []
+        elif structured_override is not None:
+            primary, confidence, secondaries = structured_override[0], structured_override[1], []
         else:
             primary, confidence, secondaries = self._classify_root_cause(
                 comparison, exec_result, task_spec
@@ -372,7 +379,7 @@ class ErrorAttributor:
         turb_fix = self._suggest_turbulence_fix(primary, task_spec)
         bc_fix = self._suggest_bc_fix(primary, task_spec)
         solver_fix = self._suggest_solver_fix(primary, task_spec)
-        if key_mismatch_recommendation:
+        if key_mismatch_recommendation and structured_override is None:
             solver_fix = key_mismatch_recommendation
 
         # Step 4: 知识库检索
@@ -424,6 +431,41 @@ class ErrorAttributor:
     # 根因分类
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _match_structured_deviation_cause(
+        comparison: ComparisonResult,
+        exec_result: ExecutionResult,
+        task_spec: TaskSpec,
+    ) -> Optional[tuple[str, float]]:
+        """Structured deviation → cause mapping for Phase 5 T3 patterns."""
+        deviations = comparison.deviations
+
+        # 1. COMPARATOR_SCHEMA_MISMATCH: quantity not found (actual=None)
+        if any(d.actual is None for d in deviations):
+            return ("comparator_schema_mismatch", 0.8)
+
+        # 2. GEOMETRY_MODEL_MISMATCH: reattachment_length on BFS or SIMPLE_GRID
+        if (
+            task_spec.geometry_type
+            in {GeometryType.SIMPLE_GRID, GeometryType.BACKWARD_FACING_STEP}
+            and any(d.quantity == "reattachment_length" for d in deviations)
+        ):
+            return ("geometry_model_mismatch", 0.75)
+
+        # 3. INSUFFICIENT_TRANSIENT_SAMPLING: TRANSIENT without strouhal
+        if (
+            task_spec.steady_state == SteadyState.TRANSIENT
+            and "strouhal" not in exec_result.key_quantities
+            and deviations
+        ):
+            return ("insufficient_transient_sampling", 0.75)
+
+        # 4. PARAMETER_PLUMBING_MISMATCH: Ra/Re_tau present but deviations exist
+        if deviations and (task_spec.Ra is not None or task_spec.Re_tau is not None):
+            return ("parameter_plumbing_mismatch", 0.7)
+
+        return None
+
     def _classify_root_cause(
         self,
         comparison: ComparisonResult,
@@ -435,6 +477,14 @@ class ErrorAttributor:
         deviations = comparison.deviations
         Re = task_spec.Re
         turbulence = self._get_turbulence_model_from_task(task_spec)
+
+        # Phase 5 T3: structured deviation patterns override scoring
+        structured_match = self._match_structured_deviation_cause(
+            comparison, exec_result, task_spec
+        )
+        if structured_match is not None:
+            cause, confidence = structured_match
+            return cause, confidence, []
 
         scores: Dict[str, float] = {
             "mesh": 0.0,
@@ -473,7 +523,7 @@ class ErrorAttributor:
             elif Re < 2300:
                 scores["turbulence"] -= 0.3
 
-        # 基于 ErrorType
+        # 基于 ErrorType (Phase 5 T3: 5 new ErrorTypes added)
         error_type_scores = {
             ErrorType.CONVERGENCE_FAILURE: {"solver": 0.5, "mesh": 0.2},
             ErrorType.QUANTITY_DEVIATION: {"mesh": 0.3, "turbulence": 0.3, "parameters": 0.2},
@@ -481,11 +531,23 @@ class ErrorAttributor:
             ErrorType.WRONG_TURBULENCE_MODEL: {"turbulence": 0.8},
             ErrorType.WRONG_MESH: {"mesh": 0.8},
             ErrorType.WRONG_SOLVER: {"solver": 0.7},
+            ErrorType.BUOYANT_ENERGY_SETUP_INCOMPLETE: {"solver": 0.7, "mesh": 0.1},
+            ErrorType.PARAMETER_PLUMBING_MISMATCH: {"parameters": 0.8},
+            ErrorType.COMPARATOR_SCHEMA_MISMATCH: {"solver": 0.6, "parameters": 0.3},
+            ErrorType.GEOMETRY_MODEL_MISMATCH: {"solver": 0.7, "mesh": 0.2},
+            ErrorType.INSUFFICIENT_TRANSIENT_SAMPLING: {"solver": 0.6, "parameters": 0.3},
             ErrorType.OTHER: {},
         }
 
-        for d in deviations:
-            pass
+        inferred_error_types: List[ErrorType] = []
+        if not exec_result.success:
+            inferred_error_types.append(ErrorType.CONVERGENCE_FAILURE)
+        if deviations:
+            inferred_error_types.append(ErrorType.QUANTITY_DEVIATION)
+
+        for error_type in inferred_error_types:
+            for cause, delta in error_type_scores.get(error_type, {}).items():
+                scores[cause] += delta
 
         # 取最高分
         primary = max(scores, key=lambda k: scores[k])
@@ -598,20 +660,35 @@ class ErrorAttributor:
         # 1. Pattern-based detection
         for compiled_re, cause, confidence, suggestion_fn in _SOLVER_PATTERNS:
             m = compiled_re.search(err)
-            if m and confidence > best_confidence:
-                best_confidence = confidence
-                best_cause = cause
-                try:
-                    if callable(suggestion_fn) and not isinstance(suggestion_fn, str):
-                        sug = suggestion_fn(m.groupdict())
-                    else:
-                        sug = str(suggestion_fn)
-                except Exception:
-                    sug = str(suggestion_fn) if isinstance(suggestion_fn, str) else "Fix required"
-                if cause == "boundary_condition":
-                    best_bc_suggestion = sug
+            if not m:
+                continue
+
+            match_dict = m.groupdict()
+            effective_cause = cause
+            # Phase 5 T3: T/p_rgh/alphat field errors → buoyant_energy_setup_incomplete
+            if match_dict.get("field") in {"T", "p_rgh", "alphat"}:
+                effective_cause = "buoyant_energy_setup_incomplete"
+
+            should_take = confidence > best_confidence
+            if effective_cause == "buoyant_energy_setup_incomplete" and confidence >= best_confidence:
+                should_take = True
+            if not should_take:
+                continue
+
+            best_confidence = confidence
+            best_cause = effective_cause
+            try:
+                if callable(suggestion_fn) and not isinstance(suggestion_fn, str):
+                    sug = suggestion_fn(match_dict)
                 else:
-                    best_solver_suggestion = sug
+                    sug = str(suggestion_fn)
+            except Exception:
+                sug = str(suggestion_fn) if isinstance(suggestion_fn, str) else "Fix required"
+
+            if effective_cause == "boundary_condition":
+                best_bc_suggestion = sug
+            else:
+                best_solver_suggestion = sug
 
         # 2. dispatch_metadata_mismatch — non-regex heuristic
         dispatch_suggestion = self._try_dispatch_mismatch_detection(exec_result, task_spec, err)

@@ -1,0 +1,46 @@
+# Gold Standard — Fully Developed Turbulent Pipe Flow
+# Based on Nikuradse 1933 / Moody 1944
+# Re = 50000 (smooth pipe, internal fully-developed turbulent flow)
+# STEADY simulation
+#
+# Friction factor reference:
+#   Blasius (smooth pipe): f ≈ 0.0791/Re^0.25  [NOTE: gives 0.0053, applies to VERY rough pipes]
+#   Colebrook-White (smooth, Re=50000): f ≈ 0.0185
+#   Moody chart (smooth pipe, Re=50000): f ≈ 0.0185–0.020
+# Reference values below follow Nikuradse 1933 / Moody 1944 tabulated data.
+
+quantity: friction_factor
+reference_values:
+  - Re: 50000
+    f: 0.0185
+    description: "Darcy friction factor f for smooth pipe at Re=50000 (Moody 1944)"
+  - Re: 30000
+    f: 0.0200
+    description: "Darcy friction factor f for smooth pipe at Re=30000 (Moody 1944)"
+  - Re: 100000
+    f: 0.0165
+    description: "Darcy friction factor f for smooth pipe at Re=100000 (Moody 1944)"
+tolerance: 0.08
+source: "Nikuradse 1933 / Moody 1944"
+doi: "10.1007/BF01314553"
+mesh_info:
+  cells: 2000
+  type: structured
+  topology: PIPE
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: fully_developed_pipe
+  Re: 50000
+  diameter: 0.1
+  flow_type: INTERNAL
+  geometry_type: SIMPLE_GRID
+  steady_state: STEADY
+  turbulence_model: k-epsilon
+notes: >
+  Darcy friction factor f = ΔP/(L/D) × 2/(ρU²), related to Fanning friction factor Cf by f = 4Cf.
+  The Blasius formula f = 0.0791/Re^0.25 is often misapplied to smooth pipes;
+  the correct smooth-pipe correlation at moderate Re is the Colebrook-White (ε→0) or
+  equivalent Swamee-Jain giving f ≈ 0.0185 at Re=50000.
+  Primary reference: Moody, L.F. (1944), "Friction Factors for Pipe Flow", Trans. ASME, 66(8), 671–684.

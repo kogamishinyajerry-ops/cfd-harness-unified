@@ -207,7 +207,7 @@ class TaskRunner:
             Ra=parameters.get("Ra"),
             Re_tau=parameters.get("Re_tau"),
             Ma=parameters.get("Ma"),
-            boundary_conditions=chain.get("boundary_conditions", {}),
+            boundary_conditions={**chain.get("boundary_conditions", {}), **parameters},  # includes aspect_ratio, plate_length, etc.
             description=chain.get("reference", ""),
         )
 

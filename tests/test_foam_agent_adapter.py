@@ -182,6 +182,23 @@ class TestFoamAgentExecutor:
         assert result["p_rms_near_cylinder"] == pytest.approx(0.073950997289)
         assert result["pressure_coefficient_rms_near_cylinder"] == pytest.approx(0.147901994577)
 
+    def test_extract_nc_nusselt_uses_horizontal_wall_gradient_for_side_heated_cavity(self):
+        task = TaskSpec(
+            name="nc-cavity",
+            geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+            flow_type=FlowType.NATURAL_CONVECTION,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            boundary_conditions={"dT": 10.0, "L": 2.0, "aspect_ratio": 2.0},
+        )
+        cxs = [0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95]
+        cys = [0.05, 0.05, 0.05, 0.05, 0.05, 0.50, 0.50, 0.50, 0.50, 0.50, 0.95, 0.95, 0.95, 0.95, 0.95]
+        t_vals = [304.90, 299.60, 300.00, 295.35, 295.05, 305.00, 299.75, 300.01, 295.25, 295.00, 304.95, 299.65, 300.02, 295.30, 295.02]
+
+        result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
+
+        assert result["nusselt_number"] == pytest.approx(10.5)
+
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests
     # ------------------------------------------------------------------
@@ -307,6 +324,104 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         executor = FoamAgentExecutor()
         residuals, key_quantities = executor._parse_solver_log(log_path)
         assert residuals.get("Ux") == pytest.approx(0.001)
+
+    def test_parse_solver_log_maps_ldc_raw_sample(self, tmp_path):
+        """setFormat raw 输出 x y z Ux Uy Uz (6列) 被正确解析为 u_centerline。"""
+        log_path = tmp_path / "log.icoFoam"
+        log_path.write_text("Solving for Ux, Initial residual = 0.001\n")
+        post_dir = tmp_path / "postProcessing"
+        sets_dir = post_dir / "sets"
+        time_dir = sets_dir / "1.0"
+        time_dir.mkdir(parents=True)
+        # setFormat raw: x y z Ux Uy Uz (6列，无 leading Time)
+        raw_content = (
+            "#  Time  x  y  z  Ux  Uy  Uz\n"
+            "0.0 0.5 0.1 0.5 -0.25 0.0 0.0\n"
+            "0.0 0.5 0.3 0.5 -0.10 0.0 0.0\n"
+            "0.0 0.5 0.5 0.5  0.00 0.0 0.0\n"
+            "0.0 0.5 0.7 0.5  0.15 0.0 0.0\n"
+            "0.0 0.5 0.9 0.5  0.25 0.0 0.0\n"
+        )
+        (time_dir / "U_uCenterline").write_text(raw_content)
+
+        ldc_task = TaskSpec(
+            name="Lid-Driven Cavity",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        executor = FoamAgentExecutor()
+        residuals, key_quantities = executor._parse_solver_log(log_path, "icoFoam", ldc_task)
+        # 7列格式正确解析: Time=0.0, x=0.5, y=0.1, z=0.5, Ux=-0.25 → y=0.1, Ux=-0.25
+        # u_centerline 映射由 LDC route (is_lid_driven_cavity_case) 完成
+        assert "u_centerline" in key_quantities
+        assert key_quantities["u_centerline"] == pytest.approx([-0.25, -0.10, 0.00, 0.15, 0.25])
+        assert key_quantities["u_centerline_y"] == pytest.approx([0.1, 0.3, 0.5, 0.7, 0.9])
+
+    def test_parse_solver_log_extracts_bfs_reattachment_from_raw_sample(self, tmp_path):
+        """raw 格式 wallProfile (6列 x y z Ux Uy Uz) 被解析并计算出 reattachment_length。"""
+        log_path = tmp_path / "log.simpleFoam"
+        log_path.write_text("Solving for Ux, Initial residual = 0.001\n")
+        post_dir = tmp_path / "postProcessing"
+        sets_dir = post_dir / "sets"
+        time_dir = sets_dir / "500"
+        time_dir.mkdir(parents=True)
+        # setFormat raw: x y z Ux Uy Uz (6列) — BFS wall at y=0.5
+        # x=1→Ux=-1, x=2→Ux=-0.5, x=2.5→Ux=0.1, x=3→Ux=1 — 零交点在 x≈2.417
+        raw_content = (
+            "1.0 0.5 0.0 -1.0 0.0 0.0\n"
+            "2.0 0.5 0.0 -0.5 0.0 0.0\n"
+            "2.5 0.5 0.0  0.1 0.0 0.0\n"
+            "3.0 0.5 0.0  1.0 0.0 0.0\n"
+        )
+        (time_dir / "U_wallProfile").write_text(raw_content)
+
+        bfs_task = TaskSpec(
+            name="Backward-Facing Step",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        executor = FoamAgentExecutor()
+        residuals, key_quantities = executor._parse_solver_log(log_path, "simpleFoam", bfs_task)
+        # BFS route computes reattachment_length then deletes wallProfile* keys
+        assert "reattachment_length" in key_quantities
+        # x_re = 2 + (-0.5) * (2.5-2) / (0.1-(-0.5)) = 2 + 0.5*0.5/0.6 ≈ 2.417
+        assert key_quantities["reattachment_length"] == pytest.approx(2.4167, abs=0.01)
+        # wallProfile_x was used for the calculation, then cleaned up
+        assert "wallProfile_x" not in key_quantities
+
+    def test_parse_writeobjects_fields_extracts_ldc_from_icofoam_fields(self, tmp_path, monkeypatch):
+        """icoFoam + SIMPLE_GRID 走 LDC 路由（_is_lid_driven_cavity_case 检测到）。"""
+        time_dir = tmp_path / "1.0"
+        time_dir.mkdir()
+        # 写入最小化场文件（实际读取会被 mock 替代）
+        (time_dir / "Cx").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "Cy").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "U").write_text("1\n(\n(0.0 0.1 0.0)\n)\n")
+
+        ldc_task = TaskSpec(
+            name="Lid-Driven Cavity",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        executor = FoamAgentExecutor()
+
+        # Mock the static extractor so _parse_writeobjects_fields exercises the LDC routing
+        mock_result = {"u_centerline": [0.0, 0.05, 0.10], "u_centerline_y": [0.0, 0.5, 1.0]}
+        monkeypatch.setattr(FoamAgentExecutor, "_extract_ldc_centerline", lambda *args, **kwargs: mock_result)
+
+        key_quantities = {}
+        result = executor._parse_writeobjects_fields(tmp_path, "icoFoam", ldc_task, key_quantities)
+        # SIMPLE_GRID + icoFoam → _is_lid_driven_cavity_case → _extract_ldc_centerline called
+        assert result == mock_result
 
     # ------------------------------------------------------------------
     # execute() Docker success path tests

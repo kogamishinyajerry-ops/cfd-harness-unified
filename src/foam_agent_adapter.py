@@ -1286,13 +1286,25 @@ fields          (U);
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
 
         # Physical parameters
-        Ra = float(task_spec.Ra or task_spec.Re or 1e10)  # Use Re field as Ra proxy (1e10 default)
+        Ra = float(task_spec.Ra or task_spec.Re or 1e10)  # Use Ra field; fallback to Re as proxy
         Pr = 0.71  # Prandtl number (air)
+        # Boussinesq validity: beta * dT << 1
+        # At mean T=323K: beta=1/T_mean≈0.0031; set dT=10K → beta*dT≈0.031 (VALID)
+        # dT=10K works for both Ra=1e6 (NC Cavity) and Ra=1e10 (DHC) via g scaling
         T_hot = 305.0  # K
         T_cold = 295.0  # K
-        dT = T_hot - T_cold  # 10K
-        L = 1.0  # cavity length (m)
-        beta = 1.0 / T_hot  # thermal expansion coefficient (Boussinesq)
+        dT = T_hot - T_cold  # 10K — Boussinesq-valid for all Ra
+        aspect_ratio = float(task_spec.boundary_conditions.get("aspect_ratio", 1.0)) if task_spec.boundary_conditions else 1.0
+        # Infer from Ra when boundary_conditions.aspect_ratio not set:
+        # High Ra (>=1e9): DHC square cavity (aspect_ratio=1.0)
+        # Lower Ra (<1e9): NC Cavity (aspect_ratio=2.0 typical for Ra=1e6)
+        if aspect_ratio == 1.0 and not (task_spec.boundary_conditions and task_spec.boundary_conditions.get("aspect_ratio")):
+            if Ra >= 1e9:
+                aspect_ratio = 1.0  # DHC: square cavity
+            elif Ra >= 1e5:
+                aspect_ratio = 2.0  # NC Cavity Ra=1e6: aspect_ratio=2
+        L = aspect_ratio  # cavity length in x-direction (m)
+        beta = 1.0 / ((T_hot + T_cold) / 2.0)  # Boussinesq beta at mean temperature
         nu = 1.0e-5  # kinematic viscosity (air, m^2/s)
         alpha = nu / Pr  # thermal diffusivity
 
@@ -1300,53 +1312,40 @@ fields          (U);
         # Ra = g * beta * dT * L^3 / (nu * alpha)
         # g = Ra * nu * alpha / (beta * dT * L^3)
         g = Ra * nu * alpha / (beta * dT * L**3)  # gravity magnitude
+        nL = max(int(40 * L), 20)  # cells proportional to L (min 20 for small cavities)
+        mean_T = (T_hot + T_cold) / 2.0  # initial temperature field
+        # Store dT/L in boundary_conditions for the extractor (TaskSpec is local to this call)
+        if task_spec.boundary_conditions is None:
+            task_spec.boundary_conditions = {}
+        task_spec.boundary_conditions["dT"] = dT
+        task_spec.boundary_conditions["L"] = L
+        # h = Cp*(T - T0) with T0=300K
+        Cp = 1005.0
+        T0 = 300.0
+        h_hot = Cp * (T_hot - T0)       # 5025 for T_hot=305K
+        h_cold = Cp * (T_cold - T0)      # -5025 for T_cold=295K
+        h_internal = Cp * (mean_T - T0)   # 0 for mean_T=300K
 
         # --------------------------------------------------------------------------
-        # 1. system/blockMeshDict — Square cavity, 40x40 cells
+        # 1. system/blockMeshDict — cavity with configurable aspect ratio
         # --------------------------------------------------------------------------
-        (case_dir / "system" / "blockMeshDict").write_text(
-            """\
-/*--------------------------------*- C++ -*---------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  10                                    |
-|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\\\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      blockMeshDict;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-convertToMeters 1;
-
-vertices
+        # Build dynamic mesh geometry from L (aspect_ratio) and nL (cell count)
+        _vertices = """vertices
 (
     (0 0 0)
-    (1 0 0)
-    (1 1 0)
-    (0 1 0)
+    ({Lx:g} 0 0)
+    ({Lx:g} {Ly:g} 0)
+    (0 {Ly:g} 0)
     (0 0 0.1)
-    (1 0 0.1)
-    (1 1 0.1)
-    (0 1 0.1)
-);
-
-blocks
+    ({Lx:g} 0 0.1)
+    ({Lx:g} {Ly:g} 0.1)
+    (0 {Ly:g} 0.1)
+);""".format(Lx=L, Ly=L)
+        _blocks = """blocks
 (
-    hex (0 1 2 3 4 5 6 7) (40 40 1) simpleGrading (1 1 1)
-);
-
-edges
-(
-);
-
-boundary
+    hex (0 1 2 3 4 5 6 7) ({nLx} {nLy} 1) simpleGrading (1 1 1)
+);""".format(nLx=nL, nLy=nL)
+        _bnd = """boundary
 (
     hot_wall
     {
@@ -1378,16 +1377,29 @@ boundary
         type            empty;
         faces           ((4 5 6 7));
     }
-);
+);"""
+        _header = """/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-mergePatchPairs
-(
-);
+convertToMeters 1;
+"""
+        blockmesh_txt = _header + "\n" + _vertices + "\n\n" + _blocks + "\n\nedges\n(\n);\n\n" + _bnd + "\n\nmergePatchPairs\n(\n);\n\n// ************************************************************************* //"
+        (case_dir / "system" / "blockMeshDict").write_text(blockmesh_txt, encoding="utf-8")
 
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
 
         # --------------------------------------------------------------------------
         # 2. constant/physicalProperties — Boussinesq fluid
@@ -1554,13 +1566,15 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         1000;
+endTime         500;
 
-deltaT          1;
+deltaT          0.5;
 
 writeControl    runTime;
 
 writeInterval   100;
+
+writeInterval   200;
 
 purgeWrite      0;
 
@@ -1684,8 +1698,9 @@ solvers
     {
         solver          PBiCGStab;
         preconditioner   DILU;
-        tolerance       1e-7;
+        tolerance       1e-8;
         relTol          0.01;
+        maxIter         2000;
     }
     hFinal
     {
@@ -1720,8 +1735,24 @@ solvers
     }
 }
 
+relaxationFactors
+{
+    fields
+    {
+        p_rgh           0.2;
+    }
+    equations
+    {
+        U               0.5;
+        h               0.3;
+        k               0.5;
+        epsilon         0.5;
+    }
+}
+
 PIMPLE
 {
+    nOuterCorrectors 1;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
     pRefValue       0;
@@ -1733,21 +1764,6 @@ PIMPLE
         p_rgh   1e-4;
         k       1e-5;
         epsilon 1e-5;
-    }
-}
-
-relaxationFactors
-{
-    fields
-    {
-        p_rgh           0.3;
-    }
-    equations
-    {
-        U               0.9;
-        h               0.7;
-        k               0.9;
-        epsilon         0.9;
     }
 }
 
@@ -1954,21 +1970,22 @@ FoamFile
 dimensions      [0 2 -2 0 0 0 0];
 
 // h = Cp*(T - T0), T0=300K from equationOfState
-// cold wall T=295K: h = 1005*(295-300) = -5025
-// hot wall T=305K: h = 1005*(305-300) = 5025
-internalField   uniform -5025.0;
+// hot_wall: Cp*(T_hot-T0) = 1005*(305-300) = 5025
+// cold_wall: Cp*(T_cold-T0) = 1005*(295-300) = -5025
+// internalField: Cp*(mean_T-T0) = 1005*(300-300) = 0
+internalField   uniform {h_internal};
 
 boundaryField
 {{
     hot_wall
     {{
         type            fixedValue;
-        value           uniform 5025.0;
+        value           uniform {h_hot};
     }}
     cold_wall
     {{
         type            fixedValue;
-        value           uniform -5025.0;
+        value           uniform {h_cold};
     }}
     adiabatic_top
     {{
@@ -2012,7 +2029,7 @@ FoamFile
 
 dimensions      [0 0 0 1 0 0 0];
 
-internalField   uniform {T_cold};
+internalField   uniform {mean_T};
 
 boundaryField
 {{
@@ -5598,25 +5615,37 @@ mergePatchPairs
                             # #   Time  x  y  z  T         (for scalar fields)
                             if filename.startswith("U_"):
                                 # Velocity sample - extract Ux component for centerline profile
-                                set_name = filename[2:]  # e.g., "uCenterline"
+                                set_name = filename[2:]  # e.g., "uCenterline", "wallProfile"
                                 vals = []
                                 y_coords = []
+                                x_coords = []
                                 for line in lines:
                                     if line.startswith("#") or not line.strip():
                                         continue
                                     parts = line.split()
-                                    # Format: time x y z Ux Uy Uz
-                                    if len(parts) >= 6:
-                                        try:
-                                            y_coords.append(float(parts[2]))  # y coordinate
-                                            vals.append(float(parts[4]))  # Ux component
-                                        except ValueError:
-                                            pass
+                                    # setFormat raw: x y z Ux Uy Uz  (6 columns, no leading Time)
+                                    # OR with Time: time x y z Ux Uy Uz (7 columns)
+                                    if len(parts) >= 7:
+                                        # Format: time x y z Ux Uy Uz
+                                        x_idx, y_idx, z_idx, u_idx = 1, 2, 3, 4
+                                    elif len(parts) >= 6:
+                                        # Format: x y z Ux Uy Uz (setFormat raw)
+                                        x_idx, y_idx, z_idx, u_idx = 0, 1, 2, 3
+                                    else:
+                                        continue
+                                    try:
+                                        x_coords.append(float(parts[x_idx]))
+                                        y_coords.append(float(parts[y_idx]))
+                                        vals.append(float(parts[u_idx]))  # Ux component
+                                    except ValueError:
+                                        pass
                                 if vals:
                                     # Use set name as key, e.g., "uCenterline"
                                     key_quantities[set_name] = vals
-                                    # Also store y coordinates for profile matching
+                                    # Also store coordinates for profile matching
                                     key_quantities[f"{set_name}_y"] = y_coords
+                                    # BFS reattachment length needs x coordinates
+                                    key_quantities[f"{set_name}_x"] = x_coords
 
                             elif filename.startswith("T_"):
                                 # Temperature sample - extract T component
@@ -5641,10 +5670,10 @@ mergePatchPairs
         # Case-specific interpretation: 映射 sample 输出到 Gold Standard 期望的 quantity 名称
         if task_spec is not None:
             geom = task_spec.geometry_type
-            name_lower = task_spec.name.lower()
 
             # LDC: uCenterline -> u_centerline (Gold Standard 格式)
-            if geom == GeometryType.SIMPLE_GRID and ("lid" in name_lower or task_spec.Re < 2300):
+            # Covers: icoFoam+SIMPLE_GRID (explicit), name-based SIMPLE_GRID/CUSTOM, Re<2300
+            if self._is_lid_driven_cavity_case(task_spec, solver_name):
                 if "uCenterline" in key_quantities:
                     key_quantities["u_centerline"] = key_quantities["uCenterline"]
                     del key_quantities["uCenterline"]
@@ -5692,9 +5721,9 @@ mergePatchPairs
                             dy = y_coords[min_y_idx + 1] - y_coords[min_y_idx]
                             dT = T_vals[min_y_idx + 1] - T_vals[min_y_idx]
                             if abs(dy) > 1e-10:
-                                # 简化: Nu ≈ |dT/dy| * L / dT (取 L=1, dT=10K)
-                                L = 1.0
-                                dT_bulk = 10.0  # T_hot - T_cold
+                                # Use actual dT and L from case parameters
+                                dT_bulk = float(task_spec.boundary_conditions.get("dT", 10.0)) if task_spec.boundary_conditions else 10.0
+                                L = float(task_spec.boundary_conditions.get("aspect_ratio", 1.0)) if task_spec.boundary_conditions else 1.0
                                 grad_T = abs(dT / dy) if dT != 0 else 0.0
                                 key_quantities["nusselt_number"] = grad_T * L / dT_bulk
                     # 清理中间数据
@@ -5762,7 +5791,8 @@ mergePatchPairs
         name_lower = task_spec.name.lower()
 
         # LDC / CUSTOM: 提取 x=0.5 (normalized) 的中心线速度剖面
-        if geom in (GeometryType.SIMPLE_GRID, GeometryType.CUSTOM) and ("lid" in name_lower or task_spec.Re < 2300):
+        # Covers: icoFoam+SIMPLE_GRID (explicit), name-based SIMPLE_GRID/CUSTOM, Re<2300
+        if self._is_lid_driven_cavity_case(task_spec, solver_name):
             key_quantities = self._extract_ldc_centerline(
                 cxs, cys, u_vecs, task_spec, key_quantities
             )
@@ -5885,6 +5915,20 @@ mergePatchPairs
         return vecs
 
     @staticmethod
+    def _is_lid_driven_cavity_case(task_spec: TaskSpec, solver_name: str) -> bool:
+        """Detect if task is a Lid-Driven Cavity case (covers icoFoam + SIMPLE_GRID).
+
+        The icoFoam + SIMPLE_GRID route was previously missed because the routing
+        only checked name/Re heuristics and did not explicitly detect icoFoam solver.
+        """
+        if task_spec.geometry_type == GeometryType.SIMPLE_GRID and solver_name == "icoFoam":
+            return True
+        if task_spec.geometry_type not in (GeometryType.SIMPLE_GRID, GeometryType.CUSTOM):
+            return False
+        name_key = task_spec.name.lower().replace("-", "_").replace(" ", "_")
+        return "lid" in name_key and "cavity" in name_key
+
+    @staticmethod
     def _extract_ldc_centerline(
         cxs: List[float],
         cys: List[float],
@@ -6001,48 +6045,49 @@ mergePatchPairs
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """NC Cavity: 从 mid-plane 温度剖面计算 Nusselt number。"""
+        """NC Cavity: 从侧壁温度梯度计算 Nusselt number。
+
+        侧加热腔体（hot_wall at x=0, cold_wall at x=L）：
+        Nu = (∂T/∂x)_wall * L / (T_hot - T_cold)
+        在 y=L/2（半高处）取水平温度剖面，用近壁（x≈0）第一、二个单元格的温度梯度。
+        """
         if not cxs or not cys or not t_vals:
             return key_quantities
 
-        # Natural-convection cavity blockMesh uses x in [0, 1], so mid-plane is x=0.5
-        x_target = 0.5 * (min(cxs) + max(cxs))
-        unique_x = sorted({round(x, 6) for x in cxs})
-        if len(unique_x) >= 2:
-            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
-            x_tol = max(0.6 * dx, 1e-6)
+        # Side-heated cavity: use the horizontal temperature profile at y ≈ L/2
+        # and take the first two interior x cells near the hot wall.
+        unique_y = sorted({round(y, 6) for y in cys})
+        if len(unique_y) >= 2:
+            dy_cell = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
+            y_tol = max(0.6 * dy_cell, 1e-6)
         else:
-            x_tol = 0.015
+            y_tol = 0.015
 
         from collections import defaultdict
-        y_groups: Dict[float, List[float]] = defaultdict(list)
+
+        y_target = 0.5 * (min(cys) + max(cys))
+        x_groups: Dict[float, List[float]] = defaultdict(list)
 
         for i in range(min(len(cxs), len(cys), len(t_vals))):
-            if abs(cxs[i] - x_target) < x_tol:
-                yr = round(cys[i], 4)
-                y_groups[yr].append(t_vals[i])
+            if abs(cys[i] - y_target) < y_tol:
+                xr = round(cxs[i], 4)
+                x_groups[xr].append(t_vals[i])
 
-        if not y_groups:
-            return key_quantities
-
-        sorted_y = sorted(y_groups.keys())
-        y_t_pairs = [(yr, sum(y_groups[yr]) / len(y_groups[yr])) for yr in sorted_y]
-
-        # 找热壁（y 最小处）并计算壁面梯度
-        if len(y_t_pairs) >= 2:
-            y0, T0 = y_t_pairs[0]
-            y1, T1 = y_t_pairs[1]
-            dy = y1 - y0
-            if abs(dy) > 1e-10:
-                dT = T1 - T0
-                L = 1.0
-                dT_bulk = 10.0  # ΔT hot-cold
-                grad_T = abs(dT / dy)
+        if len(x_groups) >= 2:
+            x_t_pairs = [(xr, sum(x_groups[xr]) / len(x_groups[xr])) for xr in sorted(x_groups)]
+            x0, T0 = x_t_pairs[0]
+            x1, T1 = x_t_pairs[1]
+            dx = x1 - x0
+            if abs(dx) > 1e-10:
+                bc = task_spec.boundary_conditions or {}
+                dT_bulk = float(bc.get("dT", 10.0))
+                L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
+                grad_T = abs((T1 - T0) / dx)
                 key_quantities["nusselt_number"] = grad_T * L / dT_bulk
 
         # 存储 mid-plane T profile
-        key_quantities["midPlaneT"] = [T for _, T in y_t_pairs]
-        key_quantities["midPlaneT_y"] = [y for y, _ in y_t_pairs]
+        key_quantities["midPlaneT"] = [T for _, T in x_t_pairs]
+        key_quantities["midPlaneT_y"] = [x for x, _ in x_t_pairs]
 
         return key_quantities
 
