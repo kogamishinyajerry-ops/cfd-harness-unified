@@ -172,7 +172,7 @@ class FoamAgentExecutor:
                 self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
-                solver_name = "simpleFoam"
+                solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
                 # lid_driven_cavity 用专用 laminar generator (icoFoam)
                 if "lid" in task_spec.name.lower() or task_spec.Re is not None and task_spec.Re < 2300:
@@ -4100,7 +4100,11 @@ boundaryField
         )
 
     def _generate_impinging_jet(self, case_dir: Path, task_spec: TaskSpec) -> None:
-        """Generate impinging jet case files (simpleFoam steady)."""
+        """Generate impinging jet case files (buoyantFoam steady, Boussinesq).
+
+        Uses buoyantFoam with Boussinesq approximation for thermal fields.
+        Hot jet inlet (310K) impinges on cold plate (290K).
+        """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
         (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
@@ -4112,6 +4116,20 @@ boundaryField
         U_bulk = 1.0
         nu_val = U_bulk * D / Re
 
+        # Thermal parameters (Boussinesq)
+        T_inlet = 310.0   # hot jet
+        T_plate = 290.0   # cold impingement plate
+        T_mean = 300.0    # reference
+        Cp = 1005.0
+        beta = 1.0 / T_mean
+        Pr = 0.71
+        mu_val = nu_val  # dynamic viscosity for Boussinesq
+
+        # Enthalpy: h = Cp*(T - T_mean)
+        h_inlet = Cp * (T_inlet - T_mean)   # 10050
+        h_plate = Cp * (T_plate - T_mean)   # -10050
+        h_internal = 0.0                     # mean field starts at T_mean
+
         # Domain: r=[0, 5D], z=[z_min, z_max]; split at z=0 for planar faces
         r_max = 5.0 * D
         z_min = -D / 2
@@ -4122,14 +4140,17 @@ boundaryField
         n_z_lower = max(1, int(round(total_nz * (z_split - z_min) / (z_max - z_min))))
         n_z_upper = total_nz - n_z_lower
 
+        # Gravity = 0 (forced convection impinging jet, buoyancy negligible)
+        g_val = 0.0
+
         (case_dir / "system" / "blockMeshDict").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
@@ -4182,7 +4203,7 @@ boundary
     }}
     outer
     {{
-        type            wall;
+        type            patch;
         faces           ((1 5 6 2) (2 6 10 9));
     }}
     axis
@@ -4211,40 +4232,102 @@ mergePatchPairs
             encoding="utf-8",
         )
 
-        (case_dir / "constant" / "physicalProperties").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+        # Boussinesq thermophysical properties for buoyantFoam
+        (case_dir / "constant" / "thermophysicalProperties").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
-    object      physicalProperties;
+    object      thermophysicalProperties;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-transportModel  Newtonian;
-nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
+thermoType
+{{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          hConst;
+    equationOfState Boussinesq;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}}
+
+mixture
+{{
+    specie
+    {{
+        molWeight       28.9;
+    }}
+    equationOfState
+    {{
+        rho0            1.0;
+        T0              {T_mean:g};
+        beta            {beta:.16e};
+    }}
+    thermodynamics
+    {{
+        Cp              {Cp:.16e};
+        Hf              0;
+    }}
+    transport
+    {{
+        mu              {mu_val:.16e};
+        Pr              {Pr};
+    }}
+}}
 
 // ************************************************************************* //
 """,
             encoding="utf-8",
         )
 
-        (case_dir / "constant" / "turbulenceProperties").write_text(
-            """/*--------------------------------*- C++ -*---------------------------------*\
+        # Zero gravity (forced convection - buoyancy negligible compared to inertia)
+        (case_dir / "constant" / "g").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      g;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions       [0 1 -2 0 0 0 0];
+
+value           (0 {g_val:.16e} 0);
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # kEpsilon turbulence (simpler for buoyant flow)
+        (case_dir / "constant" / "turbulenceProperties").write_text(
+            """/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -4256,9 +4339,10 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 simulationType  RAS;
+
 RAS
 {
-    RASModel      kOmegaSST;
+    RASModel      kEpsilon;
     turbulence    on;
     printCoeffs   on;
 }
@@ -4269,13 +4353,13 @@ RAS
         )
 
         (case_dir / "system" / "controlDict").write_text(
-            """/*--------------------------------*- C++ -*---------------------------------*\
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -4286,12 +4370,14 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     simpleFoam;
+application     buoyantFoam;
+
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
 endTime         1000;
 deltaT          1;
+
 writeControl    runTime;
 writeInterval   100;
 purgeWrite      0;
@@ -4308,13 +4394,13 @@ runTimeModifiable true;
         )
 
         (case_dir / "system" / "fvSchemes").write_text(
-            """/*--------------------------------*- C++ -*---------------------------------*\
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -4330,14 +4416,15 @@ gradSchemes { default Gauss linear; }
 divSchemes {
     default none;
     div(phi,U) bounded Gauss linearUpwind grad(U);
+    div(phi,h) bounded Gauss linearUpwind grad(h);
+    div(phi,K) bounded Gauss linear;
     div(phi,k) bounded Gauss limitedLinear 1;
-    div(phi,omega) bounded Gauss limitedLinear 1;
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
 snGradSchemes { default corrected; }
-wallDist { method meshWave; }
 
 // ************************************************************************* //
 """,
@@ -4345,13 +4432,13 @@ wallDist { method meshWave; }
         )
 
         (case_dir / "system" / "fvSolution").write_text(
-            """/*--------------------------------*- C++ -*---------------------------------*\
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -4364,21 +4451,89 @@ FoamFile
 
 solvers
 {
-    p { solver GAMG; smoother GaussSeidel; tolerance 1e-6; relTol 0.01; }
-    U { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.01; }
-    k { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.01; }
-    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.01; }
-}
-
-SIMPLE
-{
-    nNonOrthogonalCorrectors 1;
-    residualControl { U 1e-5; p 1e-4; k 1e-5; omega 1e-5; }
+    p_rgh
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;
+    }
+    h
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-8;
+        relTol          0.01;
+        maxIter         2000;
+    }
+    hFinal
+    {
+        $h;
+        relTol          0;
+    }
+    U
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    UFinal
+    {
+        $U;
+        relTol          0;
+    }
+    k
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    epsilon
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
 }
 
 relaxationFactors
 {
-    equations { U 0.7; k 0.7; omega 0.7; }
+    fields
+    {
+        p_rgh           0.2;
+    }
+    equations
+    {
+        U               0.5;
+        h               0.3;
+        k               0.5;
+        epsilon         0.5;
+    }
+}
+
+PIMPLE
+{
+    nOuterCorrectors  1;
+    nNonOrthogonalCorrectors 1;
+    pRefCell          0;
+    pRefValue         101325;
+
+    residualControl
+    {
+        U               1e-5;
+        h               1e-5;
+        p_rgh           1e-4;
+        k               1e-5;
+        epsilon         1e-5;
+    }
 }
 
 // ************************************************************************* //
@@ -4388,13 +4543,13 @@ relaxationFactors
 
         U_nozzle = U_bulk
         (case_dir / "0" / "U").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
@@ -4407,7 +4562,8 @@ FoamFile
 
 dimensions      [0 1 -1 0 0 0 0];
 
-internalField   uniform (0 0 0);
+// Non-zero init for adjustPhi: upward jet (Uy=0.5) + radial spread (Ux=0.05)
+internalField   uniform (0.05 0.5 0);
 
 boundaryField
 {{
@@ -4424,14 +4580,15 @@ boundaryField
             encoding="utf-8",
         )
 
+        # Static thermodynamic pressure (101325 Pa reference)
         (case_dir / "0" / "p").write_text(
-            """/*--------------------------------*- C++ -*---------------------------------*\
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -4442,13 +4599,15 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [0 2 -2 0 0 0 0];
-internalField   uniform 0;
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform 101325;
+
 boundaryField
 {
-    inlet       { type zeroGradient; }
-    plate       { type zeroGradient; }
-    outer       { type fixedValue; value uniform 0; }
+    inlet       { type calculated; value $internalField; }
+    plate       { type calculated; value $internalField; }
+    outer       { type calculated; value $internalField; }
     axis        { type empty; }
     front       { type empty; }
     back        { type empty; }
@@ -4459,14 +4618,171 @@ boundaryField
             encoding="utf-8",
         )
 
-        (case_dir / "0" / "k").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+        # Buoyant pressure p_rgh = p - rho*g*h (0 for zero gravity)
+        (case_dir / "0" / "p_rgh").write_text(
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p_rgh;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet       { type fixedFluxPressure; value $internalField; }
+    plate       { type fixedFluxPressure; value $internalField; }
+    outer       { type fixedValue; value uniform 101325; }
+    axis        { type empty; }
+    front       { type empty; }
+    back        { type empty; }
+}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # Sensible enthalpy h = Cp*(T - T_mean)
+        (case_dir / "0" / "h").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      h;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+
+// h = Cp*(T - T_mean), T_mean=300K from equationOfState
+// inlet (310K): Cp*10 = {h_inlet:.6g}
+// plate (290K): Cp*(-10) = {h_plate:.6g}
+// internal: 0 (at T_mean=300K)
+internalField   uniform {h_internal:.6g};
+
+boundaryField
+{{
+    inlet           {{ type fixedValue; value uniform {h_inlet:.6g}; }}
+    plate           {{ type fixedValue; value uniform {h_plate:.6g}; }}
+    outer           {{ type inletOutlet; inletValue uniform 0; value uniform 0; }}
+    axis            {{ type empty; }}
+    front           {{ type empty; }}
+    back            {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # Temperature field
+        (case_dir / "0" / "T").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      T;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform {T_mean:.6g};
+
+boundaryField
+{{
+    inlet           {{ type fixedValue; value uniform {T_inlet:.6g}; }}
+    plate           {{ type fixedValue; value uniform {T_plate:.6g}; }}
+    outer           {{ type inletOutlet; inletValue uniform {T_mean:.6g}; value uniform {T_mean:.6g}; }}
+    axis            {{ type empty; }}
+    front           {{ type empty; }}
+    back            {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # Turbulent thermal diffusivity
+        (case_dir / "0" / "alphat").write_text(
+            """/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      alphat;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet       { type calculated; value uniform 0; }
+    plate       { type compressible::alphatWallFunction; value uniform 0; }
+    outer       { type zeroGradient; }
+    axis        { type empty; }
+    front       { type empty; }
+    back        { type empty; }
+}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # Turbulent kinetic energy
+        (case_dir / "0" / "k").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
@@ -4478,12 +4794,14 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 2 -2 0 0 0 0];
+
 internalField   uniform 0.01;
+
 boundaryField
 {{
     inlet           {{ type fixedValue; value uniform 0.01; }}
     plate           {{ type kLowReWallFunction; value uniform 0.01; }}
-    outer           {{ type fixedValue; value uniform 0.01; }}
+    outer           {{ type inletOutlet; inletValue uniform 0.01; value uniform 0.01; }}
     axis            {{ type empty; }}
     front           {{ type empty; }}
     back            {{ type empty; }}
@@ -4494,31 +4812,34 @@ boundaryField
             encoding="utf-8",
         )
 
-        (case_dir / "0" / "omega").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+        # Turbulence dissipation epsilon
+        (case_dir / "0" / "epsilon").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      omega;
+    object      epsilon;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [0 0 -1 0 0 0 0];
-internalField   uniform 1.0;
+dimensions      [0 2 -3 0 0 0 0];
+
+internalField   uniform 0.01;
+
 boundaryField
 {{
-    inlet           {{ type fixedValue; value uniform 1.0; }}
-    plate           {{ type omegaWallFunction; value uniform 1.0; }}
-    outer           {{ type fixedValue; value uniform 1.0; }}
+    inlet           {{ type fixedValue; value uniform 0.01; }}
+    plate           {{ type epsilonWallFunction; value uniform 0.01; }}
+    outer           {{ type inletOutlet; inletValue uniform 0.01; value uniform 0.01; }}
     axis            {{ type empty; }}
     front           {{ type empty; }}
     back            {{ type empty; }}
@@ -4529,41 +4850,43 @@ boundaryField
             encoding="utf-8",
         )
 
+        # nut (not used by kEpsilon but needed for wall function compatibility)
         (case_dir / "0" / "nut").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\
+            """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  10                                    |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+*---------------------------------------------------------------------------*/
 FoamFile
-{{
+{
     version     2.0;
     format      ascii;
     class       volScalarField;
     location    "0";
     object      nut;
-}}
+}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 2 -1 0 0 0 0];
-internalField   uniform 0.0;
+
+internalField   uniform 0;
+
 boundaryField
-{{
-    inlet           {{ type calculated; value uniform 0.0; }}
-    plate           {{ type nutkWallFunction; value uniform 0.0; }}
-    outer           {{ type calculated; value uniform 0.0; }}
-    axis            {{ type empty; }}
-    front           {{ type empty; }}
-    back            {{ type empty; }}
-}}
+{
+    inlet       { type calculated; value uniform 0; }
+    plate       { type nutkWallFunction; value uniform 0; }
+    outer       { type zeroGradient; }
+    axis        { type empty; }
+    front       { type empty; }
+    back        { type empty; }
+}
 
 // ************************************************************************* //
 """,
             encoding="utf-8",
         )
-
     def _generate_airfoil_flow(
         self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
     ) -> None:
@@ -5536,9 +5859,8 @@ mergePatchPairs
 
         Args:
             log_path: log 文件路径
-            solver_name: "icoFoam" 或 "simpleFoam" 或 "buoyantSimpleFoam"
+            solver_name: "icoFoam" 或 "simpleFoam" 或 "buoyantFoam"
             task_spec: 任务规格，用于 case-specific 物理量解释
-            solver_name: "icoFoam" 或 "simpleFoam"
 
         Returns:
             (residuals, key_quantities)
@@ -5757,6 +6079,8 @@ mergePatchPairs
         """
         if task_spec is None:
             return key_quantities
+
+        import sys; print(f'DEBUG _parse_writeobjects: case_dir={case_dir}', file=sys.stderr)
 
         # 找到最新时间目录
         time_dirs = []
@@ -6308,8 +6632,8 @@ mergePatchPairs
         D_nozzle = 0.05
         U_ref = 1.0
 
-        # 找 impingement wall: cy ≈ min(cy)
-        cy_min = min(cys)
+        # 找 impingement wall: cy ≈ max(cy) (plate at z_max = top of domain)
+        cy_max = max(cys)
         unique_y = sorted({round(y, 6) for y in cys})
         if len(unique_y) >= 2:
             dy = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
@@ -6321,7 +6645,7 @@ mergePatchPairs
         r_groups: Dict[float, List[float]] = defaultdict(list)
 
         for i in range(min(len(cxs), len(cys), len(t_vals))):
-            if abs(cys[i] - cy_min) < y_tol:
+            if abs(cys[i] - cy_max) < y_tol:
                 # radial position r = cx (jet is axisymmetric, axis at cx=0)
                 r = abs(cxs[i])
                 r_groups[round(r, 4)].append(t_vals[i])
