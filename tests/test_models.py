@@ -40,7 +40,10 @@ class TestEnums:
     def test_error_type_coverage(self):
         expected = {
             "WRONG_BOUNDARY", "WRONG_SOLVER", "WRONG_TURBULENCE_MODEL",
-            "WRONG_MESH", "CONVERGENCE_FAILURE", "QUANTITY_DEVIATION", "OTHER"
+            "WRONG_MESH", "CONVERGENCE_FAILURE", "QUANTITY_DEVIATION",
+            "PARAMETER_PLUMBING_MISMATCH", "COMPARATOR_SCHEMA_MISMATCH",
+            "GEOMETRY_MODEL_MISMATCH", "INSUFFICIENT_TRANSIENT_SAMPLING",
+            "BUOYANT_ENERGY_SETUP_INCOMPLETE", "OTHER"
         }
         assert {e.value for e in ErrorType} == expected
 

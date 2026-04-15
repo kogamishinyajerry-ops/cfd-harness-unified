@@ -155,6 +155,42 @@ _register_solver_pattern_group(
     lambda m: f"BuoyantFoam setup incomplete: {m.get('field') or m.get(1)} missing or invalid. Validate g, thermo dictionaries, T, p_rgh, and buoyancy parameters.",
 )
 
+# --- parameter_plumbing_mismatch ---
+# Ra/Re_tau/h_over_d/diameter silently dropped or default-used instead of user-specified
+_register_solver_pattern(
+    r"parameter.*not found|Ra\s*[=:]\s*1e10\s*(default|assumed)",
+    "solver",
+    0.7,
+    "Parameter plumbing mismatch: Ra or Re_tau may have been silently defaulted. Verify parameter injection in batch reconstruction.",
+)
+
+# --- comparator_schema_mismatch ---
+# Quantity key exists in result but gold standard schema uses incompatible keys (Nu/Cp/Cf/u_plus without value fallback)
+_register_solver_pattern(
+    r"quantity.*not found|no gold standard.*found",
+    "solver",
+    0.7,
+    "Comparator schema mismatch: quantity exists but gold standard key schema is incompatible. Expand ResultComparator fallback.",
+)
+
+# --- geometry_model_mismatch ---
+# Generated geometry differs from benchmark intent (e.g., rectangular pipe vs circular, simplified BFS geometry)
+_register_solver_pattern(
+    r"reattachment.*length.*mismatch|geometry.*mismatch|channel.*rectangular",
+    "solver",
+    0.6,
+    "Geometry model mismatch: generated geometry differs from benchmark specification. Verify ncx/ncy and geometry type routing.",
+)
+
+# --- insufficient_transient_sampling ---
+# Transient run completes but insufficient time-history for unsteady metrics (Strouhal etc.)
+_register_solver_pattern(
+    r"strouhal.*not.*found|no time.*history|transient.*incomplete|insufficient.*samples",
+    "solver",
+    0.75,
+    "Insufficient transient sampling: run may have completed before vortex shedding statistics converged. Increase endTime or reduce time step.",
+)
+
 # --- dispatch_metadata_mismatch ---
 # Non-regex: handled as a special case after pattern matching
 # (see _try_dispatch_mismatch_detection)
