@@ -1,0 +1,32 @@
+# Gold Standard — Axisymmetric Impinging Jet (Re=10000)
+# Based on Cooper 1984 / Behnad et al. 2013
+# Re = 10000 (based on nozzle diameter and inlet velocity),
+# axisymmetric jet impinging on flat plate
+# h/d = 2.0 (nozzle-to-plate distance / nozzle diameter)
+# STEADY simulation
+
+quantity: nusselt_number
+reference_values:
+  - r_over_d: 0.0
+    Nu: 25.0
+    description: "peak Nusselt number at stagnation point (r/d=0)"
+  - r_over_d: 1.0
+    Nu: 12.0
+    description: "Nusselt number at r/d=1.0 (Cooper 1984)"
+tolerance: 0.15
+source: "Cooper 1984 / Behnad et al. 2013"
+literature_doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+mesh_info:
+  cells: 4800
+  type: structured
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+case_info:
+  id: impinging_jet
+  Re: 10000
+  flow_type: EXTERNAL
+  geometry_type: IMPINGING_JET
+  steady_state: STEADY
+  nozzle_diameter: 0.05
+  h_over_d: 2.0

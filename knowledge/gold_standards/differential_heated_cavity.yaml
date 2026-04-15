@@ -1,0 +1,28 @@
+# Gold Standard — Differential Heated Cavity (Natural Convection)
+# Based on Dhir 2001 / Ampofo & Karayiannis 2003
+# Ra = 1e10 (turbulent natural convection, aspect ratio = 1)
+# Square cavity, left wall hot, right wall cold, top/bottom adiabatic
+# STEADY simulation
+
+quantity: nusselt_number
+reference_values:
+  - value: 30.0
+    unit: dimensionless
+    description: "Nu at hot wall for Ra=1e10 (Dhir 2001)"
+tolerance: 0.15
+source: "Dhir 2001 / Ampofo & Karayiannis 2003"
+literature_doi: "10.1016/S0140-7007(02)00085-4"
+mesh_info:
+  cells: 1600
+  type: structured
+solver_info:
+  name: buoyantFoam
+  schemes: PIMPLE
+case_info:
+  id: differential_heated_cavity
+  Ra: 1.0e10
+  Pr: 0.71
+  flow_type: NATURAL_CONVECTION
+  geometry_type: NATURAL_CONVECTION_CAVITY
+  steady_state: STEADY
+  aspect_ratio: 1.0

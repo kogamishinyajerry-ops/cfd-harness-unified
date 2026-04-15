@@ -1,0 +1,36 @@
+# Gold Standard — Fully Developed Plane Channel Flow (DNS)
+# Based on Kim et al. 1987 / Moser et al. 1999
+# Re_tau = 180 (based on friction velocity),
+# 2D channel flow, DNS (direct numerical simulation)
+# STEADY simulation (time-averaged)
+
+quantity: u_mean_profile
+reference_values:
+  - y_plus: 0.0
+    u_plus: 0.0
+    description: "no-slip boundary at wall"
+  - y_plus: 5.0
+    u_plus: 5.4
+    description: "near-wall point (Kim 1987 DNS)"
+  - y_plus: 30.0
+    u_plus: 14.5
+    description: "logarithmic region (Kim 1987 DNS)"
+  - y_plus: 100.0
+    u_plus: 22.8
+    description: "channel center (Kim 1987 DNS)"
+tolerance: 0.05
+source: "Kim et al. 1987 / Moser et al. 1999"
+literature_doi: "10.1017/S0022112087000892"
+mesh_info:
+  cells: 4000
+  type: structured
+solver_info:
+  name: icoFoam
+  schemes: PISO
+case_info:
+  id: plane_channel_flow
+  Re_tau: 180
+  flow_type: INTERNAL
+  geometry_type: BODY_IN_CHANNEL
+  steady_state: STEADY
+  half_channel_height: 1.0

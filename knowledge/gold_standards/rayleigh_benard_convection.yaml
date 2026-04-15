@@ -1,0 +1,28 @@
+# Gold Standard — Rayleigh-Bénard Convection (Ra=1e6)
+# Based on Chaivat et al. 2006 / Kritsuk et al.
+# Ra = 1e6 (turbulent natural convection, aspect ratio = 2)
+# Horizontal fluid layer, bottom heated, top cooled
+# STEADY simulation
+
+quantity: nusselt_number
+reference_values:
+  - value: 10.5
+    unit: dimensionless
+    description: "Nu at Ra=1e6 (Chaivat 2006)"
+tolerance: 0.15
+source: "Chaivat et al. 2006"
+literature_doi: "10.1016/j.ijheatmasstransfer.2005.07.039"
+mesh_info:
+  cells: 1600
+  type: structured
+solver_info:
+  name: buoyantFoam
+  schemes: PIMPLE
+case_info:
+  id: rayleigh_benard_convection
+  Ra: 1.0e6
+  Pr: 0.71
+  flow_type: NATURAL_CONVECTION
+  geometry_type: NATURAL_CONVECTION_CAVITY
+  steady_state: STEADY
+  aspect_ratio: 2.0
