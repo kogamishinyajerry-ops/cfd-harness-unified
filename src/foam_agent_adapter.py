@@ -1286,7 +1286,7 @@ fields          (U);
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
 
         # Physical parameters
-        Ra = float(task_spec.Re or 1e10)  # Use Re field as Ra proxy (1e10 default)
+        Ra = float(task_spec.Ra or task_spec.Re or 1e10)  # Use Re field as Ra proxy (1e10 default)
         Pr = 0.71  # Prandtl number (air)
         T_hot = 305.0  # K
         T_cold = 295.0  # K

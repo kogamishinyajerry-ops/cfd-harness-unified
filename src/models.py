@@ -66,6 +66,8 @@ class TaskSpec:
     steady_state: SteadyState
     compressibility: Compressibility
     Re: Optional[float] = None
+    Ra: Optional[float] = None
+    Re_tau: Optional[float] = None
     Ma: Optional[float] = None
     boundary_conditions: Dict[str, Any] = field(default_factory=dict)
     description: str = ""

@@ -191,6 +191,8 @@ class TaskRunner:
             steady_state=SteadyState(chain.get("steady_state", "STEADY")),
             compressibility=Compressibility(chain.get("compressibility", "INCOMPRESSIBLE")),
             Re=parameters.get("Re"),
+            Ra=parameters.get("Ra"),
+            Re_tau=parameters.get("Re_tau"),
             Ma=parameters.get("Ma"),
             boundary_conditions=chain.get("boundary_conditions", {}),
             description=chain.get("reference", ""),

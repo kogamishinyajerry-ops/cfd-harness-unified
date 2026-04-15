@@ -90,7 +90,12 @@ class ResultComparator:
         """标量比较：从 reference_values 取第一个 value"""
         deviations = []
         for ref in reference_values:
-            expected = ref.get("value")
+            _v = ref.get("value")
+            if _v is None: _v = ref.get("Nu")
+            if _v is None: _v = ref.get("Cp")
+            if _v is None: _v = ref.get("Cf")
+            if _v is None: _v = ref.get("u_plus")
+            expected = _v
             if expected is None:
                 continue
             rel_err = abs(actual - expected) / (abs(expected) + 1e-12)
@@ -120,7 +125,14 @@ class ResultComparator:
         否则退化为 index-based positional matching。
         """
         deviations = []
-        ref_scalars = [r.get("u") or r.get("value") for r in reference_values]
+        ref_scalars = [
+            r.get("u") if r.get("u") is not None
+            else r.get("value") if r.get("value") is not None
+            else r.get("Nu") if r.get("Nu") is not None
+            else r.get("Cp") if r.get("Cp") is not None
+            else r.get("Cf")
+            for r in reference_values
+        ]
         ref_ys = [r.get("y") for r in reference_values]
 
         # y-aware 插值比较：只有当 actual_y 可用且 reference 有 y 坐标时才启用
