@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from .foam_agent_adapter import MockExecutor
+from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
 from .models import (
     AttributionReport,
@@ -55,7 +56,19 @@ class TaskRunner:
         knowledge_db: Optional[KnowledgeDB] = None,
         deviation_threshold: float = 0.10,
     ) -> None:
-        self._executor: CFDExecutor = executor or MockExecutor()
+        # Precedence: explicit executor kwarg > EXECUTOR_MODE env var > MockExecutor
+        if executor is not None:
+            self._executor: CFDExecutor = executor
+        else:
+            mode = os.environ.get("EXECUTOR_MODE", "mock").lower()
+            if mode == "mock":
+                self._executor = MockExecutor()
+            elif mode == "foam_agent":
+                self._executor = FoamAgentExecutor()
+            else:
+                raise ValueError(
+                    f'EXECUTOR_MODE must be "mock" or "foam_agent", got "{mode}"'
+                )
         self._notion = notion_client or NotionClient()
         self._db = knowledge_db or KnowledgeDB()
         self._comparator = ResultComparator(threshold=deviation_threshold)

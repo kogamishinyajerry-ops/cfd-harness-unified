@@ -1,11 +1,12 @@
 """tests/test_task_runner.py — TaskRunner 单元测试"""
 
+import os
 import pytest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 from src.task_runner import TaskRunner, RunReport
-from src.foam_agent_adapter import MockExecutor
+from src.foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from src.models import (
     Compressibility, ComparisonResult, CorrectionSpec, DeviationDetail,
     ErrorType, ExecutionResult, FlowType, GeometryType,
@@ -154,3 +155,26 @@ class TestBuildSummary:
         )
         summary = TaskRunner._build_summary(result, comparison, correction)
         assert "CorrectionSpec" in summary
+
+
+class TestExecutorMode:
+    def test_executor_mode_env_mock(self, mock_db):
+        with patch.dict(os.environ, {"EXECUTOR_MODE": "mock"}):
+            runner = TaskRunner(knowledge_db=mock_db)
+            assert isinstance(runner._executor, MockExecutor)
+
+    def test_executor_mode_env_foam_agent(self, mock_db):
+        with patch.dict(os.environ, {"EXECUTOR_MODE": "foam_agent"}, clear=False):
+            runner = TaskRunner(knowledge_db=mock_db)
+            assert isinstance(runner._executor, FoamAgentExecutor)
+
+    def test_executor_mode_env_invalid_raises(self, mock_db):
+        with patch.dict(os.environ, {"EXECUTOR_MODE": "invalid_mode"}):
+            with pytest.raises(ValueError, match="EXECUTOR_MODE"):
+                TaskRunner(knowledge_db=mock_db)
+
+    def test_executor_kwarg_overrides_env(self, mock_db):
+        """explicit executor= takes precedence over EXECUTOR_MODE"""
+        with patch.dict(os.environ, {"EXECUTOR_MODE": "foam_agent"}):
+            runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+            assert isinstance(runner._executor, MockExecutor)
