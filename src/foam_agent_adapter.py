@@ -172,7 +172,7 @@ class FoamAgentExecutor:
                 self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
-                solver_name = "buoyantFoam"
+                solver_name = "buoyantSimpleFoam"
             elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
                 # lid_driven_cavity 用专用 laminar generator (icoFoam)
                 if "lid" in task_spec.name.lower() or task_spec.Re is not None and task_spec.Re < 2300:
@@ -4342,7 +4342,7 @@ simulationType  RAS;
 
 RAS
 {
-    RASModel      kEpsilon;
+    RASModel      kOmegaSST;
     turbulence    on;
     printCoeffs   on;
 }
@@ -4370,7 +4370,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     buoyantFoam;
+application     buoyantSimpleFoam;
 
 startFrom       startTime;
 startTime       0;
@@ -4419,7 +4419,7 @@ divSchemes {
     div(phi,h) bounded Gauss linearUpwind grad(h);
     div(phi,K) bounded Gauss linear;
     div(phi,k) bounded Gauss limitedLinear 1;
-    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(phi,omega) bounded Gauss limitedLinear 1;
     div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
@@ -4495,12 +4495,17 @@ solvers
         tolerance       1e-7;
         relTol          0.01;
     }
-    epsilon
+    omega
     {
         solver          PBiCGStab;
         preconditioner  DILU;
-        tolerance       1e-6;
+        tolerance       1e-7;
         relTol          0.01;
+    }
+    omegaFinal
+    {
+        $omega;
+        relTol          0;
     }
 }
 
@@ -4515,24 +4520,7 @@ relaxationFactors
         U               0.5;
         h               0.3;
         k               0.5;
-        epsilon         0.5;
-    }
-}
-
-PIMPLE
-{
-    nOuterCorrectors  1;
-    nNonOrthogonalCorrectors 1;
-    pRefCell          0;
-    pRefValue         101325;
-
-    residualControl
-    {
-        U               1e-5;
-        h               1e-5;
-        p_rgh           1e-4;
-        k               1e-5;
-        epsilon         1e-5;
+        omega           0.5;
     }
 }
 
@@ -4541,6 +4529,9 @@ PIMPLE
             encoding="utf-8",
         )
 
+
+        # omega init: k^0.5/L ~ 0.01^0.5/0.1 = 0.316 rad/s
+        omega_init = 0.316
         U_nozzle = U_bulk
         (case_dir / "0" / "U").write_text(
             f"""/*--------------------------------*- C++ -*---------------------------------*\\
@@ -4562,12 +4553,12 @@ FoamFile
 
 dimensions      [0 1 -1 0 0 0 0];
 
-// Non-zero init for adjustPhi: upward jet (Uy=0.5) + radial spread (Ux=0.05)
-internalField   uniform (0.05 0.5 0);
+// Zero initial velocity — solver converges from rest
+internalField   uniform (0 0 0);
 
 boundaryField
 {{
-    inlet           {{ type fixedValue; value uniform (0 {U_nozzle:.6f} 0); }}
+    inlet           {{ type fixedValue; value uniform (0 0 {U_bulk:.6f}); }}
     plate           {{ type noSlip; }}
     outer           {{ type zeroGradient; }}
     axis            {{ type empty; }}
@@ -4813,8 +4804,8 @@ boundaryField
         )
 
         # Turbulence dissipation epsilon
-        (case_dir / "0" / "epsilon").write_text(
-            f"""/*--------------------------------*- C++ -*---------------------------------*\\
+        (case_dir / "0" / "omega").write_text(
+            f"""/*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  10                                    |
@@ -4827,19 +4818,20 @@ FoamFile
     format      ascii;
     class       volScalarField;
     location    "0";
-    object      epsilon;
+    object      omega;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-dimensions      [0 2 -3 0 0 0 0];
+dimensions      [0 0 -1 0 0 0 0];
 
-internalField   uniform 0.01;
+// omega initialization: k^0.5 / L_turb, L_turb ~ 0.1*m (nozzle width)
+internalField   uniform {omega_init:.6g};
 
 boundaryField
 {{
-    inlet           {{ type fixedValue; value uniform 0.01; }}
-    plate           {{ type epsilonWallFunction; value uniform 0.01; }}
-    outer           {{ type inletOutlet; inletValue uniform 0.01; value uniform 0.01; }}
+    inlet           {{ type fixedValue; value uniform {omega_init:.6g}; }}
+    plate           {{ type omegaWallFunction; value uniform {omega_init:.6g}; }}
+    outer           {{ type inletOutlet; inletValue uniform {omega_init:.6g}; value uniform {omega_init:.6g}; }}
     axis            {{ type empty; }}
     front           {{ type empty; }}
     back            {{ type empty; }}
@@ -4850,7 +4842,6 @@ boundaryField
             encoding="utf-8",
         )
 
-        # nut (not used by kEpsilon but needed for wall function compatibility)
         (case_dir / "0" / "nut").write_text(
             """/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -6625,12 +6616,8 @@ mergePatchPairs
         if not cxs or not cys or not t_vals:
             return key_quantities
 
-        Re = float(task_spec.Re or 10000)
-        Pr = 0.71
-        nu_val = 1.0 / Re
-        alpha = nu_val / Pr
         D_nozzle = 0.05
-        U_ref = 1.0
+        Delta_T = 20.0  # T_jet - T_wall = 310 K - 290 K
 
         # 找 impingement wall: cy ≈ max(cy) (plate at z_max = top of domain)
         cy_max = max(cys)
@@ -6664,13 +6651,11 @@ mergePatchPairs
                 dr = r1 - r0
                 if dr > 1e-10:
                     dT_dr = (T1 - T0) / dr
-                    # Nu ≈ -(r*D/k) * (dT/dr) / (T_jet - T_wall)
-                    # Simplified: Nu ≈ D * |dT/dr| / (ΔT)
-                    # Use alpha as thermal diffusivity proxy
+                    # Stagnation-point Nusselt number from wall temperature gradient.
+                    # Nu ≈ D * |dT/dr| / ΔT
                     dT_dy_approx = abs(dT_dr)
                     D_ref = D_nozzle
-                    Delta_T = 10.0  # typical ΔT
-                    Nu_stag = D_ref * dT_dy_approx * U_ref / (alpha * Delta_T) if alpha > 0 else 0.0
+                    Nu_stag = D_ref * dT_dy_approx / Delta_T if Delta_T > 0 else 0.0
                     Nu_stag = min(max(Nu_stag, 0.0), 100.0)  # clip to reasonable range
                     key_quantities["nusselt_number"] = Nu_stag
 
@@ -6683,7 +6668,7 @@ mergePatchPairs
                 dr = r1 - r0
                 if dr > 1e-10:
                     dT_dr = (T1 - T0) / dr
-                    Nu = D_nozzle * abs(dT_dr) * U_ref / (alpha * 10.0) if alpha > 0 else 0.0
+                    Nu = D_nozzle * abs(dT_dr) / Delta_T if Delta_T > 0 else 0.0
                     Nu_profile.append(min(max(Nu, 0.0), 100.0))
             if Nu_profile:
                 key_quantities["nusselt_number_profile"] = Nu_profile
