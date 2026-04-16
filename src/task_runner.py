@@ -234,7 +234,7 @@ class TaskRunner:
         results: List[ComparisonResult],
         attribution_reports: List[Optional[AttributionReport]],
     ) -> List[SystematicPattern]:
-        """检测批量执行中的系统性误差模式（frequency > 0.3）。"""
+        """检测批量执行中的系统性误差模式（frequency > 0.5）。"""
         cause_counts: Dict[str, List[str]] = {}
         for case_id, attr in zip(case_ids, attribution_reports):
             if attr is None:
@@ -247,10 +247,10 @@ class TaskRunner:
         total = len(case_ids)
         for cause, affected in cause_counts.items():
             freq = len(affected) / total
-            if freq > 0.3:
-                if freq > 0.5:
+            if freq > 0.5:
+                if freq > 0.75:
                     confidence = "high"
-                elif freq > 0.3:
+                elif freq > 0.5:
                     confidence = "medium"
                 else:
                     confidence = "low"
