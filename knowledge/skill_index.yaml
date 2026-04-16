@@ -1,0 +1,128 @@
+model_routing:
+  description: Model selection and delegation rules
+  skills:
+    codex_gpt54:
+      name: Codex GPT-5.4 执行器
+      description: 通过 Codex CLI 调用 OpenAI GPT-5.4 模型。
+      type: prompt
+      source_path: ~/.claude/commands/codex-gpt54.md
+    gemini_ccr:
+      name: 'Gemini-CCR: Claude Code 通过 CCR 调用 Gemini 2.5 Flash'
+      description: 通过 Claude Code Router (CCR) 将 Claude Code 的 Anthropic 协议请求中转到 Google
+        Gemini 2.5 Flash。
+      type: prompt
+      source_path: ~/.claude/commands/gemini-ccr.md
+    glm_execute:
+      name: GLM-5.1 按需执行器
+      description: Claude Code 根据 Notion AI 的指令，按需拉起智谱 GLM-5.1 执行任务。
+      type: prompt
+      source_path: ~/.claude/commands/glm-execute.md
+    m27_codex_delegate:
+      name: M27 Codex 调度规则
+      description: '> **模型**: MiniMax-2.7 > **用途**: 定义何时必须调用 Codex GPT-5.4'
+      type: prompt
+      source_path: ~/.claude/commands/m27-codex-delegate.md
+    m27_superpowers:
+      name: MiniMax-2.7 Superpowers
+      description: '> **模型**: MiniMax-2.7-highspeed > **定位**: 开发指令中枢 + 调度中枢'
+      type: prompt
+      source_path: ~/.claude/commands/m27-superpowers.md
+    minimax_m27:
+      name: MiniMax-M2.7 执行器
+      description: 通过 `minimix.py` 调用 MiniMax-M2.7 模型（智谱 MiniMax 系列）。
+      type: prompt
+      source_path: ~/.claude/commands/minimax-m27.md
+cfd_harness:
+  description: CFD simulation harness and automation
+  skills:
+    dakota_harness:
+      name: Dakota CLI Harness Skill
+      description: This skill provides a CLI harness for **Dakota v6.23** uncertainty
+        quantification and optimization framework, installed in the `cfd-openfoam`
+        Docker c
+      type: harness
+      source_path: ~/.claude/commands/dakota-harness
+    freecad_harness:
+      name: FreeCAD CLI Harness
+      description: FreeCAD parametric CAD tool, CLI-wrapped for agent use. Runs inside
+        Docker container `cfd-openfoam`.
+      type: harness
+      source_path: ~/.claude/commands/freecad-harness
+    gmsh_harness:
+      name: Gmsh CLI Harness
+      description: Gmsh mesh generation tool, CLI-wrapped for agent use. Runs inside
+        Docker container `cfd-openfoam`.
+      type: harness
+      source_path: ~/.claude/commands/gmsh-harness
+    mps_cfd_accelerator:
+      name: MPS-CFD-Accelerator
+      description: 'Enables **Apple Silicon GPU acceleration** using MPS (Metal Performance
+        Shaders) for: - PyTorch tensor operations and neural network training/inferenc'
+      type: harness
+      source_path: ~/.claude/commands/mps-cfd-accelerator
+    openfoam_harness:
+      name: OpenFOAM Harness Skill
+      description: Provides Claude Code with agent-native access to **real OpenFOAM
+        v10** via a CLI wrapper. When the user wants to do CFD simulation work, use
+        this skil
+      type: harness
+      source_path: ~/.claude/commands/openfoam-harness
+    paraview_harness:
+      name: ParaView CLI Harness
+      description: ParaView post-processing tool (pvpython), CLI-wrapped for agent
+        use. Runs inside Docker container `cfd-openfoam` with xvfb for offscreen rendering.
+      type: harness
+      source_path: ~/.claude/commands/paraview-harness
+    su2_harness:
+      name: SU2 CLI Harness Skill
+      description: This skill provides a CLI harness for **SU2 v8.4.0** CFD solver,
+        installed in the `cfd-openfoam` Docker container at `/opt/su2/bin/`.
+      type: harness
+      source_path: ~/.claude/commands/su2-harness
+ui_systems:
+  description: UI and panel systems
+  skills:
+    vanilla_panel_ui:
+      name: Vanilla Panel UI
+      description: 借鉴 WorldMonitor 的前端架构：无 React/Vue，用原生 TypeScript + 基类继承构建高性能面板系统。
+      type: prompt
+      source_path: ~/.claude/commands/vanilla-panel-ui.md
+architecture:
+  description: System architecture and patterns
+  skills:
+    harness_architecture:
+      name: High-Reliability Harness Architecture
+      description: 'LLMs fail during long-duration tasks in two critical ways:'
+      type: harness
+      source_path: ~/.claude/commands/harness-architecture
+    multi_agent_prompt_engineering:
+      name: Multi-Agent Prompt Engineering
+      description: A pattern library for building LLM tool-use benchmarks and multi-agent
+        systems, derived from WildToolBench (ICLR 2026).
+      type: harness
+      source_path: ~/.claude/commands/multi-agent-prompt-engineering
+    multi_source_gateway:
+      name: Multi-Source Gateway
+      description: 借鉴 WorldMonitor 的 API 网关模式：统一入口 + 降级链 + 限流 + 健康熔断。
+      type: prompt
+      source_path: ~/.claude/commands/multi-source-gateway.md
+    seed_cache_serve:
+      name: Seed-Cache-Serve Architecture
+      description: 借鉴 WorldMonitor 的核心架构模式：**后台持续 Seed → Redis 缓存 → 边缘快速响应**。
+      type: prompt
+      source_path: ~/.claude/commands/seed-cache-serve.md
+uncategorized:
+  description: Other skills
+  skills:
+    everything_claude_code:
+      name: everything-claude-code
+      description: ''
+      type: harness
+      source_path: ~/.claude/commands/everything-claude-code
+    openviking:
+      name: OpenViking Context Management Skill
+      description: 'OpenViking is your **always-on context management layer**. It
+        provides:'
+      type: prompt
+      source_path: ~/.claude/commands/openviking.md
+

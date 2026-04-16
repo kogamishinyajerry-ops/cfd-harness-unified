@@ -1,0 +1,274 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cfd-harness.example.com/schemas/gold_standard_schema.json",
+  "title": "CFD Gold Standard Schema",
+  "description": "JSON Schema for validating CFD case Gold Standard YAML files. Each YAML document represents one observable quantity.",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/GoldStandardObservable"
+  },
+  "minItems": 1,
+  "definitions": {
+    "GoldStandardObservable": {
+      "type": "object",
+      "required": ["quantity", "reference_values", "tolerance", "source"],
+      "additionalProperties": true,
+      "properties": {
+        "quantity": {
+          "type": "string",
+          "description": "Canonical observable identifier",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "examples": [
+            "u_centerline",
+            "strouhal_number",
+            "nusselt_number",
+            "reattachment_length",
+            "cf_skin_friction",
+            "pressure_coefficient",
+            "primary_vortex_location"
+          ]
+        },
+        "reference_values": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Reference data points for comparison. Each entry is either a scalar value or a profile point.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "description": "Scalar reference value",
+                "required": ["value"],
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "description": "Scalar reference value"
+                  },
+                  "unit": {
+                    "type": "string",
+                    "description": "Physical unit or dimensionless indicator"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "description": "Profile reference value with coordinates",
+                "required": ["y"],
+                "properties": {
+                  "y": {
+                    "type": "number",
+                    "description": "y coordinate (cavity height normalized 0-1, or physical)"
+                  },
+                  "u": {
+                    "type": "number",
+                    "description": "x-velocity component at (y)"
+                  },
+                  "v": {
+                    "type": "number",
+                    "description": "y-velocity component at (y)"
+                  },
+                  "x": {
+                    "type": "number",
+                    "description": "x coordinate for cross-stream profiles"
+                  },
+                  "T": {
+                    "type": "number",
+                    "description": "Temperature at coordinate"
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "Generic scalar value at coordinate"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "description": "Profile reference value with x/y coordinates",
+                "required": ["x"],
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "description": "x coordinate (normalized or physical)"
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "y coordinate"
+                  },
+                  "u": {
+                    "type": "number"
+                  },
+                  "value": {
+                    "type": "number"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "tolerance": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Relative tolerance as fraction (e.g. 0.05 = 5%)"
+            },
+            {
+              "type": "object",
+              "description": "Structured tolerance specification",
+              "required": ["mode"],
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": ["RELATIVE", "ABSOLUTE", "HYBRID"]
+                },
+                "relative": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "absolute": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "absolute_floor": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "min_coverage": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 1.0
+                }
+              }
+            }
+          ]
+        },
+        "source": {
+          "type": "string",
+          "description": "Literature citation or data source",
+          "examples": [
+            "Ghia et al. 1982, J. Comput. Phys.",
+            "Williamson 1996, Annu. Rev. Fluid Mech.",
+            "Driver & Seegmiller 1985, AIAA J."
+          ]
+        },
+        "literature_doi": {
+          "type": "string",
+          "description": "DOI of the reference publication"
+        },
+        "mesh_info": {
+          "type": "object",
+          "description": "Reference mesh configuration",
+          "properties": {
+            "cells": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "type": {
+              "type": "string",
+              "enum": ["structured", "unstructured", "hybrid"]
+            },
+            "ncx": {
+              "type": "integer"
+            },
+            "ncy": {
+              "type": "integer"
+            },
+            "nz": {
+              "type": "integer"
+            }
+          }
+        },
+        "solver_info": {
+          "type": "object",
+          "description": "Reference solver configuration",
+          "properties": {
+            "name": {
+              "type": "string",
+              "enum": ["icoFoam", "simpleFoam", "pimpleFoam", "buoyantFoam", "buoyantSimpleFoam", "rhoSimpleFoam"]
+            },
+            "schemes": {
+              "type": "string"
+            },
+            "turbulence_model": {
+              "type": "string"
+            }
+          }
+        },
+        "case_info": {
+          "type": "object",
+          "description": "Case metadata",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "Re": {
+              "type": "number"
+            },
+            "Pr": {
+              "type": "number"
+            },
+            "Ra": {
+              "type": "number"
+            },
+            "flow_type": {
+              "type": "string",
+              "enum": ["INTERNAL", "EXTERNAL"]
+            },
+            "geometry_type": {
+              "type": "string"
+            },
+            "steady_state": {
+              "type": "string",
+              "enum": ["STEADY", "TRANSIENT"]
+            }
+          }
+        },
+        "solver_reuse": {
+          "type": "string",
+          "description": "Case ID of a solver-compatible reference case (e.g. same solver + turbulence model, different geometry). Enables solver reuse verification."
+        },
+        "geometry_similarity": {
+          "type": "object",
+          "description": "Geometry similarity relationships for cross-case validation",
+          "properties": {
+            "reference_case": {
+              "type": "string",
+              "description": "Case ID of a geometrically similar reference case"
+            },
+            "similarity_type": {
+              "type": "string",
+              "enum": ["SCALED", "TOPOLOGICAL", "WALL-MODELLED"]
+            },
+            "scale_factor": {
+              "type": "number",
+              "description": "Geometric scale factor if SCALED"
+            }
+          }
+        },
+        "physics_analogy": {
+          "type": "object",
+          "description": "Physics analogy for cross-case validation via dimensionless numbers",
+          "properties": {
+            "reference_case": {
+              "type": "string",
+              "description": "Case ID of a physics-analogous reference case"
+            },
+            "analogy_type": {
+              "type": "string",
+              "enum": ["SAME_RE", "SAME_RA", "SAME_PR", "SELF_SIMILAR", "WALL_RESOLVED"]
+            },
+            "dimensionless_invariant": {
+              "type": "string",
+              "description": "The dimensionless number held constant across the analogy"
+            }
+          }
+        }
+      }
+    }
+  }
+}
