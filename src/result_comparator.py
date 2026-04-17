@@ -107,13 +107,20 @@ class ResultComparator:
             expected = _v
             if expected is None:
                 continue
-            rel_err = abs(actual - expected) / (abs(expected) + 1e-12)
-            if rel_err > tolerance:
+            abs_err = abs(actual - expected)
+            # Near-zero reference: use absolute error instead of relative.
+            # When ref ≈ 0, |actual-ref|/|ref| → ∞ even for small |actual|.
+            # Fallback: |error| <= tolerance * max(|ref|, 1.0) treats near-zero like regular.
+            if abs(expected) < 1e-6:
+                err = abs_err
+            else:
+                err = abs_err / (abs(expected) + 1e-12)
+            if err > tolerance:
                 deviations.append(DeviationDetail(
                     quantity=quantity,
                     expected=expected,
                     actual=actual,
-                    relative_error=rel_err,
+                    relative_error=err,
                     tolerance=tolerance,
                 ))
             break  # 标量只比较第一个参考值
@@ -165,8 +172,12 @@ class ResultComparator:
                     continue
                 # 线性插值
                 sim_u = self._interp1d(act_axis_sorted, act_value_sorted, ref_coord)
-                rel_err = abs(sim_u - ref_u) / (abs(ref_u) + 1e-12)
-                if rel_err > tolerance:
+                abs_err = abs(sim_u - ref_u)
+                if abs(ref_u) < 1e-6:
+                    err = abs_err
+                else:
+                    err = abs_err / (abs(ref_u) + 1e-12)
+                if err > tolerance:
                     axis_name = coord_label or "coord"
                     coord_text = (
                         f"{ref_coord:.4f}" if isinstance(ref_coord, (int, float)) else str(ref_coord)
@@ -175,7 +186,7 @@ class ResultComparator:
                         quantity=f"{quantity}[{axis_name}={coord_text}]",
                         expected=ref_u,
                         actual=sim_u,
-                        relative_error=rel_err,
+                        relative_error=err,
                         tolerance=tolerance,
                     ))
         else:
@@ -183,13 +194,17 @@ class ResultComparator:
             for i, (act, ref) in enumerate(zip(actual_list, ref_scalars)):
                 if ref is None:
                     continue
-                rel_err = abs(act - ref) / (abs(ref) + 1e-12)
-                if rel_err > tolerance:
+                abs_err = abs(act - ref)
+                if abs(ref) < 1e-6:
+                    err = abs_err
+                else:
+                    err = abs_err / (abs(ref) + 1e-12)
+                if err > tolerance:
                     deviations.append(DeviationDetail(
                         quantity=f"{quantity}[{i}]",
                         expected=ref,
                         actual=act,
-                        relative_error=rel_err,
+                        relative_error=err,
                         tolerance=tolerance,
                     ))
         return deviations
