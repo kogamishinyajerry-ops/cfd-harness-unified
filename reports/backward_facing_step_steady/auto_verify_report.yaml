@@ -1,0 +1,72 @@
+case_id: backward_facing_step_steady
+timestamp: '1970-01-01T00:00:00Z'
+convergence:
+  status: CONVERGED
+  final_residual: 8.0e-06
+  target_residual: 1.0e-05
+  residual_ratio: 0.7999999999999999
+  warnings: []
+gold_standard_comparison:
+  overall: PASS
+  observables:
+  - name: reattachment_length
+    ref_value: 6.26
+    sim_value: 6.3
+    rel_error: 0.006389776357827482
+    abs_error: 0.040000000000000036
+    tolerance:
+      mode: relative
+      value: 0.1
+    within_tolerance: true
+  - name: cd_mean
+    ref_value: 2.08
+    sim_value: 2.05
+    rel_error: 0.014423076923077042
+    abs_error: 0.03000000000000025
+    tolerance:
+      mode: relative
+      value: 0.1
+    within_tolerance: true
+  - name: pressure_recovery
+    ref_value:
+      inlet: -0.9
+      outlet: 0.1
+      delta: 1.0
+    sim_value:
+      inlet: -0.88
+      outlet: 0.1
+      delta: 1.0
+    rel_error: 0.02222222222222224
+    abs_error: 0.020000000000000018
+    tolerance:
+      mode: relative
+      value: 0.1
+    within_tolerance: true
+  - name: velocity_profile_reattachment
+    ref_value:
+    - x_H: 6.0
+      y_H: 0.5
+      u_Ubulk: 0.4
+    - x_H: 6.0
+      y_H: 1.0
+      u_Ubulk: 0.85
+    - x_H: 6.0
+      y_H: 2.0
+      u_Ubulk: 1.05
+    sim_value:
+    - 0.41
+    - 0.84
+    - 1.04
+    rel_error: 0.024999999999999883
+    abs_error: 0.010000000000000009
+    tolerance:
+      mode: relative
+      value: 0.1
+    within_tolerance: true
+  warnings: []
+physics_check:
+  status: PASS
+  warnings: []
+verdict: PASS
+correction_spec_needed: false
+correction_spec: null

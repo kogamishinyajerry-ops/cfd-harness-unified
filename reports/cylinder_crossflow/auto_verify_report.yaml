@@ -1,0 +1,66 @@
+case_id: cylinder_crossflow
+timestamp: '1970-01-01T00:00:00Z'
+convergence:
+  status: CONVERGED
+  final_residual: 9.0e-06
+  target_residual: 1.0e-05
+  residual_ratio: 0.8999999999999999
+  warnings: []
+gold_standard_comparison:
+  overall: PASS
+  observables:
+  - name: strouhal_number
+    ref_value: 0.164
+    sim_value: 0.164
+    rel_error: 0.0
+    abs_error: 0.0
+    tolerance:
+      mode: relative
+      value: 0.05
+    within_tolerance: true
+  - name: cd_mean
+    ref_value: 1.33
+    sim_value: 1.31
+    rel_error: 0.015037593984962419
+    abs_error: 0.020000000000000018
+    tolerance:
+      mode: relative
+      value: 0.05
+    within_tolerance: true
+  - name: cl_rms
+    ref_value: 0.048
+    sim_value: 0.049
+    rel_error: 0.020833333333333353
+    abs_error: 0.0010000000000000009
+    tolerance:
+      mode: relative
+      value: 0.05
+    within_tolerance: true
+  - name: u_mean_centerline
+    ref_value:
+    - x_D: 1.0
+      u_Uinf: 0.83
+    - x_D: 2.0
+      u_Uinf: 0.64
+    - x_D: 3.0
+      u_Uinf: 0.55
+    - x_D: 5.0
+      u_Uinf: 0.35
+    sim_value:
+    - 0.82
+    - 0.65
+    - 0.56
+    - 0.34
+    rel_error: 0.02857142857142844
+    abs_error: 0.010000000000000009
+    tolerance:
+      mode: relative
+      value: 0.05
+    within_tolerance: true
+  warnings: []
+physics_check:
+  status: PASS
+  warnings: []
+verdict: PASS
+correction_spec_needed: false
+correction_spec: null

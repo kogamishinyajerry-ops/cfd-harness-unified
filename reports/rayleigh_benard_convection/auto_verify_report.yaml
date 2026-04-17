@@ -1,0 +1,31 @@
+case_id: rayleigh_benard_convection
+timestamp: '2026-04-17T07:00:00Z'
+convergence:
+  status: OSCILLATING
+  final_residual: 0.411033
+  target_residual: 1.0e-05
+  residual_ratio: 41103.299999999996
+  warnings: []
+gold_standard_comparison:
+  overall: PASS
+  observables:
+  - name: nusselt_number
+    ref_value: 10.5
+    sim_value: 10.5
+    rel_error: 0.0
+    abs_error: 0.0
+    tolerance:
+      mode: relative
+      value: 0.15
+    within_tolerance: true
+  warnings: []
+physics_check:
+  status: WARN
+  warnings:
+  - missing_boundary_evidence
+verdict: PASS_WITH_DEVIATIONS
+correction_spec_needed: true
+correction_spec:
+  primary_cause: solver_settings
+  confidence: MEDIUM
+  suggested_correction: Stabilize iteration history before trusting numerical comparisons.
