@@ -103,6 +103,7 @@ class ResultComparator:
             if _v is None: _v = ref.get("Cp")
             if _v is None: _v = ref.get("Cf")
             if _v is None: _v = ref.get("u_plus")
+            if _v is None: _v = ref.get("f")
             expected = _v
             if expected is None:
                 continue
@@ -140,7 +141,8 @@ class ResultComparator:
             else r.get("value") if r.get("value") is not None
             else r.get("Nu") if r.get("Nu") is not None
             else r.get("Cp") if r.get("Cp") is not None
-            else r.get("Cf")
+            else r.get("Cf") if r.get("Cf") is not None
+            else r.get("f")
             for r in reference_values
         ]
         ref_axis = reference_coords or [None for _ in reference_values]

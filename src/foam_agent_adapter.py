@@ -3112,11 +3112,15 @@ SIMPLE
 
 relaxationFactors
 {
+    fields
+    {
+        p               0.3;
+    }
     equations
     {
-        U               0.9;
-        k               0.9;
-        omega           0.9;
+        U               0.7;
+        k               0.7;
+        omega           0.7;
     }
 }
 """
