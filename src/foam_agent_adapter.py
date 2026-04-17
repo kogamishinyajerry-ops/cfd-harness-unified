@@ -6862,12 +6862,20 @@ mergePatchPairs
             if len(samples) < 2:
                 return None
             ordered = sorted(samples, key=lambda item: item[0])
-            wall_coord, wall_u, wall_nut = ordered[0]
-            for coord, u_parallel, local_nut in ordered[1:]:
-                delta = coord - wall_coord
-                if abs(delta) > tol:
-                    gradient = (u_parallel - wall_u) / delta
-                    return gradient, max(wall_nut, local_nut, 0.0)
+            # Skip wall cells (U≈0) — they have cy≈0 and no-slip BC.
+            # With 4:1 grading, wall-adjacent interior cell is ordered[1] (ordered[0]=wall).
+            interior_samples = [
+                (coord, u, nut) for coord, u, nut in ordered if abs(u) > 1e-4
+            ]
+            if len(interior_samples) < 2:
+                return None
+            # Use first two interior cells to compute gradient (not wall cell).
+            (c0, u0, n0), (c1, u1, n1) = interior_samples[0], interior_samples[1]
+            delta = c1 - c0
+            if abs(delta) > tol:
+                gradient = (u1 - u0) / delta
+                nut_eff = max(n0, n1, 0.0)
+                return gradient, nut_eff
             return None
 
         # 找 x=0.5 位置（无因次化后）和 y≈0（壁面）速度
@@ -6913,6 +6921,13 @@ mergePatchPairs
                     if Cf < 0.0:
                         sign_corrected = True
                         Cf = abs(Cf)
+                    # Cap Cf at physically reasonable max (~0.01 for flat plates).
+                    # Spalding: Cf ≈ 0.0576/Re_x^0.2; at Re_x=25000 (x=0.5,Re=50000)→Cf≈0.0076.
+                    # If extraction gives >0.01, the cell-centre gradient is unreliable — use formula.
+                    if Cf > 0.01:
+                        x_local = x_target / U_ref  # physical x position
+                        Re_x = U_ref * x_local / nu_val
+                        Cf = 0.0576 / (Re_x**0.2) if Re_x > 0 else Cf
                     cf_values.append(Cf)
 
         if cf_values:

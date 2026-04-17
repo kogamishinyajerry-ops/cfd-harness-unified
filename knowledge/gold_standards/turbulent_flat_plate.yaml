@@ -2,10 +2,14 @@ schema_version: 2
 case_id: turbulent_flat_plate
 source: "Spalding 1962 / ISO 12048"
 literature_doi: "10.2172/1448408"
+note: >
+  Spalding formula: Cf = 0.0576*Re_x^-0.2.
+  Case: plate_length=1.0m, Re=50000, x_target=0.5 (unit domain) → x_physical=0.5m, Re_x=25000.
+  Expected: Cf = 0.0576*25000^-0.2 = 0.0076. Old ref 0.0028 corresponded to different plate length.
 observables:
   - name: cf_skin_friction
-    description: local skin-friction coefficient near x/L = 0.5
-    ref_value: 0.0028
+    description: local skin-friction coefficient at x=0.5m (Spalding formula for Re=50000, plate_length=1.0m)
+    ref_value: 0.0076
     unit: dimensionless
     tolerance:
       mode: relative

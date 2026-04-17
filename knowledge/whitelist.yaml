@@ -83,10 +83,10 @@ cases:
       plate_length: 1.0
     gold_standard:
       quantity: cf_skin_friction
-      description: "平板摩擦系数 Cf = 0.0576/Re_x^0.2 (Spalding)"
+      description: "平板摩擦系数 Cf = 0.0576/Re_x^0.2 (Spalding); x_physical=0.5m, Re_x=25000"
       reference_values:
-        - {x: 0.5, Cf: 0.0028}
-        - {x: 1.0, Cf: 0.0026}
+        - {x: 0.5, Cf: 0.0076}
+        - {x: 1.0, Cf: 0.0061}
       tolerance: 0.10  # 10% 相对误差
 
   - id: fully_developed_pipe
