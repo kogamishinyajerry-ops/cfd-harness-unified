@@ -318,14 +318,13 @@ Phase 9 Status (2026-04-17):
 - EX-1/PL-1 blocked until Opus review clears D4 gate
 - SY-1: COMPLETE ✅
 
-Phase 7 T4 Fixes (post-Wave 2-3, bf6cb5a commit):
-- DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution)
-- DHC temperature fix: added omegaWallFunction BCs, div(phi,omega) scheme
-- Plane channel flow: BODY_IN_CHANNEL routing icoFoam→simpleFoam+kOmegaSST, _generate_steady_internal_channel now turbulent
-- Plane channel flow config.py: CASE_ID_TO_SOLVER updated (icoFoam→simpleFoam)
-- Gold standard expansion: 8 new cases mapped in ANCHOR_CASE_IDS, TASK_NAME_TO_CASE_ID, CASE_ID_TO_GOLD_FILE, CASE_ID_TO_SOLVER
-- 3 new gold_standard YAML files (impinging_jet, plane_channel_flow, turbulent_pipe_flow)
-- Phase 7 T4 fixes are Phase 7 runtime patches, NOT Phase 9 activation scope — PS-N sub-gate NOT required
+Phase 7 T4 Fixes (post-Wave 2-3):
+- DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅
+- DHC temperature fix: added omegaWallFunction BCs, div(phi,omega) scheme ✅
+- Plane channel flow: REVERTED — solver change to simpleFoam+kOmegaSST conflicted with laminar Poiseuille gold standard ref_value. Reverted to icoFoam laminar (whitelist.yaml already has icoFoam+laminar). DNS y+/u+ coordinate mismatch deferred to Phase 9.
+- Gold standard expansion: 8 new cases mapped in ANCHOR_CASE_IDS, TASK_NAME_TO_CASE_ID, CASE_ID_TO_GOLD_FILE, CASE_ID_TO_SOLVER ✅
+- 3 new gold_standard YAML files (impinging_jet, plane_channel_flow, turbulent_pipe_flow) ✅
+- Phase 7 T4 fixes are Phase 7 runtime patches, NOT Phase 9 activation scope — PS-N sub-gate NOT required ✅
 
 Phase 5 T1-T3 Status (completed in bf6cb5a):
 - T1 (TaskSpec Ra/Re_tau): Already done — TaskSpec already has Ra/Re_tau fields, _task_spec_from_case_id passes them

@@ -154,13 +154,10 @@ class FoamAgentExecutor:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
-                # 路由: INTERNAL (Plane Channel Flow) → simpleFoam + kOmegaSST; EXTERNAL (Circular Cylinder Wake) → pimpleFoam
+                # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam
                 if task_spec.flow_type == FlowType.INTERNAL:
-                    solver_name = "simpleFoam"
-                    turbulence_model = self._turbulence_model_for_solver(
-                        solver_name, task_spec.geometry_type, task_spec.Re
-                    )
-                    self._generate_steady_internal_channel(case_host_dir, task_spec, turbulence_model)
+                    self._generate_steady_internal_channel(case_host_dir, task_spec)
+                    solver_name = "icoFoam"
                 else:
                     solver_name = "pimpleFoam"
                     turbulence_model = self._turbulence_model_for_solver(
@@ -2375,18 +2372,16 @@ boundaryField
         )
 
 
-    def _generate_steady_internal_channel(
-        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
-    ) -> None:
-        """生成平面通道湍流 case 文件（simpleFoam + kOmegaSST）。
+    def _generate_steady_internal_channel(self, case_dir: Path, task_spec: TaskSpec) -> None:
+        """生成平面通道层流 case 文件（icoFoam + laminar, 无湍流模型）。
 
         适用于:
-        - Plane Channel Flow (BODY_IN_CHANNEL + INTERNAL, Re_tau=180)
+        - Plane Channel Flow DNS (BODY_IN_CHANNEL + INTERNAL, Re_tau=180)
 
         几何: 矩形通道 x=[-5D, 10D], y=[-D/2, D/2], z=[-D/2, D/2], D=1
         - Inlet (x=-5D): fixedValue U=(U_bulk,0,0), zeroGradient p
         - Outlet (x=10D): zeroGradient U, fixedValue p=0
-        - Walls (y=±D/2, z=±D/2): noSlip + wall functions
+        - Walls (y=±D/2, z=±D/2): noSlip
         - 2D: front/back empty
         """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
@@ -2526,7 +2521,7 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
-        # 3. system/controlDict — simpleFoam, steady-state
+        # 3. system/controlDict
         (case_dir / "system" / "controlDict").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -2545,13 +2540,14 @@ FoamFile
     object      controlDict;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-application     simpleFoam;
+application     icoFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-endTime         1000;
+endTime         50;
+deltaT          0.002;
 writeControl    timeStep;
-writeInterval   1000;
+writeInterval   25000;
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  6;
@@ -2564,7 +2560,7 @@ runTimeModifiable true;
             encoding="utf-8",
         )
 
-        # 4. system/fvSchemes — steady-state with turbulence
+        # 4. system/fvSchemes
         (case_dir / "system" / "fvSchemes").write_text(
             """\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -2585,7 +2581,7 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 ddtSchemes
 {
-    default         steadyState;
+    default         Euler;
 }
 gradSchemes
 {
@@ -2595,9 +2591,6 @@ divSchemes
 {
     default         none;
     div(phi,U)      Gauss linear;
-    div(phi,k)      Gauss upwind;
-    div(phi,omega)  Gauss upwind;
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes
 {
@@ -2608,7 +2601,7 @@ laplacianSchemes
             encoding="utf-8",
         )
 
-        # 5. system/fvSolution — SIMPLE solver for steady-state
+        # 5. system/fvSolution
         (case_dir / "system" / "fvSolution").write_text(
             """\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -2634,7 +2627,7 @@ solvers
         solver          PCG;
         preconditioner  DIC;
         tolerance       1e-06;
-        relTol          0.01;
+        relTol          0.05;
     }
     pFinal
     {
@@ -2646,28 +2639,15 @@ solvers
         solver          smoothSolver;
         smoother        GaussSeidel;
         tolerance       1e-05;
-        relTol          0.01;
-    }
-    k
-    {
-        solver          smoothSolver;
-        smoother        GaussSeidel;
-        tolerance       1e-05;
-        relTol          0.01;
-    }
-    omega
-    {
-        solver          smoothSolver;
-        smoother        GaussSeidel;
-        tolerance       1e-05;
-        relTol          0.01;
+        relTol          0.05;
     }
 }
-SIMPLE
+PISO
 {
+    nCorrectors         2;
     nNonOrthogonalCorrectors 0;
-    pRefCell        0;
-    pRefValue       0;
+    pRefCell            0;
+    pRefValue           0;
 }
 // ************************************************************************* //
 """,
@@ -2753,180 +2733,6 @@ boundaryField
     walls
     {{
         type            zeroGradient;
-    }}
-    front {{ type empty; }}
-    back  {{ type empty; }}
-}}
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
-
-        # 8. constant/turbulenceProperties
-        (case_dir / "constant" / "turbulenceProperties").write_text(
-            f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      turbulenceProperties;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType  RAS;
-
-RAS
-{{
-    RASModel      {turbulence_model};
-    turbulence    on;
-    printCoeffs   on;
-}}
-
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
-
-        # 9. 0/k — turbulent kinetic energy
-        # k = 1.5 * (I * U)^2, I = 0.05 for 5% turbulence intensity
-        k_init = 1.5 * (0.05 * U_bulk) ** 2  # = 3.75e-4
-        (case_dir / "0" / "k").write_text(
-            f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      k;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-dimensions      [0 2 -2 0 0 0 0];
-internalField   uniform {k_init};
-boundaryField
-{{
-    inlet
-    {{
-        type            fixedValue;
-        value           uniform {k_init};
-    }}
-    outlet
-    {{
-        type            zeroGradient;
-    }}
-    walls
-    {{
-        type            kqRWallFunction;
-        value           uniform {k_init};
-    }}
-    front {{ type empty; }}
-    back  {{ type empty; }}
-}}
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
-
-        # 10. 0/omega — specific dissipation rate for kOmegaSST
-        # omega = k^0.5 / (Cmu^0.25 * L), Cmu=0.09, L=0.1*D for channel
-        omega_init = (k_init ** 0.5) / (0.09 ** 0.25 * 0.1)  # ~0.044
-        (case_dir / "0" / "omega").write_text(
-            f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      omega;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-dimensions      [0 0 -1 0 0 0 0];
-internalField   uniform {omega_init};
-boundaryField
-{{
-    inlet
-    {{
-        type            fixedValue;
-        value           uniform {omega_init};
-    }}
-    outlet
-    {{
-        type            zeroGradient;
-    }}
-    walls
-    {{
-        type            omegaWallFunction;
-        value           uniform {omega_init};
-    }}
-    front {{ type empty; }}
-    back  {{ type empty; }}
-}}
-// ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
-
-        # 11. 0/nut — turbulent viscosity for wall functions
-        (case_dir / "0" / "nut").write_text(
-            f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      nut;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-dimensions      [0 2 -1 0 0 0 0];
-internalField   uniform 0;
-boundaryField
-{{
-    inlet
-    {{
-        type            calculated;
-        value           uniform 0;
-    }}
-    outlet
-    {{
-        type            calculated;
-        value           uniform 0;
-    }}
-    walls
-    {{
-        type            nutkWallFunction;
-        value           uniform 0;
     }}
     front {{ type empty; }}
     back  {{ type empty; }}

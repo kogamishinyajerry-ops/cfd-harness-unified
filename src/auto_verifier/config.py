@@ -60,7 +60,7 @@ CASE_ID_TO_SOLVER = {
     "differential_heated_cavity": "buoyantFoam",
     "naca0012_airfoil": "simpleFoam",
     "axisymmetric_impinging_jet": "simpleFoam",
-    "fully_developed_plane_channel_flow": "simpleFoam",
+    "fully_developed_plane_channel_flow": "icoFoam",
 }
 
 DEFAULT_TIMESTAMP = "1970-01-01T00:00:00Z"
