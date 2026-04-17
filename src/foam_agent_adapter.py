@@ -1772,7 +1772,7 @@ relaxationFactors
     equations
     {
         U               0.3;
-        h               0.1;
+        h               0.05;
         k               0.3;
         epsilon         0.3;
         omega           0.3;
