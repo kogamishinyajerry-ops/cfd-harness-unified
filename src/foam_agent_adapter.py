@@ -5332,13 +5332,17 @@ relaxationFactors
         # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
         # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
-        # omega = k^0.5 / (beta_star * L), L=0.1*chord  --  standard length-scale formula
-        # beta_star = 0.09, chord = 1.0
+        # Standard turbulence length-scale formula for omega:
+        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
+        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
+        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
+        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
+        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
         I_turb = 0.005
-        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5 (was 1.35e-3 with I=0.03)
+        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
         L_turb = 0.1 * chord                     # = 0.1
-        beta_star = 0.09
-        omega_init = (k_init ** 0.5) / (beta_star * L_turb)  # ≈ 0.680 (was 4.08)
+        Cmu = 0.09
+        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.069 (was 0.681)
 
         (case_dir / "0" / "U").write_text(
             f"""\

@@ -345,6 +345,8 @@ class TestFoamAgentExecutor:
             assert k_match is not None
             assert omega_match is not None
             assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
+            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(3.75e-5) / (0.5623 * 0.1) ≈ 0.109
+            assert float(omega_match.group(1)) == pytest.approx(0.109, rel=0.05)
         finally:
             shutil.rmtree(case_dir, ignore_errors=True)
 
