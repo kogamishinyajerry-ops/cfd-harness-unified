@@ -270,9 +270,13 @@ class TestChk2IndexCoverage:
         """CHK-2: Every top-level key in the index has non-empty skills dict."""
         idx_path = Path(__file__).parent.parent.parent / "knowledge" / "skill_index.yaml"
         idx = yaml.safe_load(open(idx_path))
-        for cat_key, cat_data in idx.items():
+        by_category = idx.get("by_category", idx)
+        for cat_key, cat_data in by_category.items():
             skills = cat_data.get("skills", {})
             assert isinstance(skills, dict), f"Category {cat_key} skills is not a dict"
-            # At least some categories should have skills
-        total_skills = sum(len(cat_data.get("skills", {})) for cat_data in idx.values())
+        total_skills = sum(len(cat_data.get("skills", {})) for cat_data in by_category.values())
         assert total_skills > 0, "No skills found in index"
+        by_solver_type = idx.get("by_solver_type", {})
+        if by_solver_type:
+            mirrored = sum(len(cat_data.get("skills", {})) for cat_data in by_solver_type.values())
+            assert mirrored == total_skills

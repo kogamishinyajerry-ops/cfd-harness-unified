@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .models import ComparisonResult, DeviationDetail, ExecutionResult
 
@@ -53,9 +53,17 @@ class ResultComparator:
         deviations: List[DeviationDetail] = []
 
         if isinstance(actual_value, list) and reference_values:
-            actual_y = result.key_quantities.get(f"{quantity_key}_y")
+            actual_coords, reference_coords, coord_label = self._resolve_profile_axis(
+                quantity_key, result.key_quantities, reference_values
+            )
             deviations = self._compare_vector(
-                quantity_key, actual_value, reference_values, tolerance, actual_y=actual_y
+                quantity_key,
+                actual_value,
+                reference_values,
+                tolerance,
+                actual_coords=actual_coords,
+                reference_coords=reference_coords,
+                coord_label=coord_label,
             )
         elif isinstance(actual_value, (int, float)) and reference_values:
             deviations = self._compare_scalar(quantity_key, actual_value, reference_values, tolerance)
@@ -116,11 +124,13 @@ class ResultComparator:
         actual_list: List[float],
         reference_values: List[Dict[str, Any]],
         tolerance: float,
-        actual_y: Optional[List[float]] = None,
+        actual_coords: Optional[List[float]] = None,
+        reference_coords: Optional[List[float]] = None,
+        coord_label: Optional[str] = None,
     ) -> List[DeviationDetail]:
-        """向量比较：支持 y-aware 插值比较。
+        """向量比较：支持按 profile 坐标插值比较。
 
-        如果 actual_y 提供（与 actual_list 等长），则在 Gold Standard 的 y 位置
+        如果 actual_coords 提供（与 actual_list 等长），则在 Gold Standard 的 profile 坐标位置
         对 actual_list 进行线性插值后再比较。
         否则退化为 index-based positional matching。
         """
@@ -133,30 +143,34 @@ class ResultComparator:
             else r.get("Cf")
             for r in reference_values
         ]
-        ref_ys = [r.get("y") for r in reference_values]
+        ref_axis = reference_coords or [None for _ in reference_values]
 
-        # y-aware 插值比较：只有当 actual_y 可用且 reference 有 y 坐标时才启用
+        # 坐标感知插值比较：只有当 actual_coords 可用且 reference 有同轴坐标时才启用
         use_interp = (
-            actual_y is not None
-            and len(actual_y) == len(actual_list)
-            and all(y is not None for y in ref_ys)
+            actual_coords is not None
+            and len(actual_coords) == len(actual_list)
+            and all(coord is not None for coord in ref_axis)
         )
 
         if use_interp:
-            # 构建 actual profile 并在 Gold Standard y 位置插值
-            actual_pairs = sorted(zip(actual_y, actual_list))
-            act_y_sorted = [p[0] for p in actual_pairs]
-            act_u_sorted = [p[1] for p in actual_pairs]
+            # 构建 actual profile 并在 Gold Standard 坐标位置插值
+            actual_pairs = sorted(zip(actual_coords, actual_list))
+            act_axis_sorted = [p[0] for p in actual_pairs]
+            act_value_sorted = [p[1] for p in actual_pairs]
 
-            for i, (ref_y, ref_u) in enumerate(zip(ref_ys, ref_scalars)):
+            for ref_coord, ref_u in zip(ref_axis, ref_scalars):
                 if ref_u is None:
                     continue
                 # 线性插值
-                sim_u = self._interp1d(act_y_sorted, act_u_sorted, ref_y)
+                sim_u = self._interp1d(act_axis_sorted, act_value_sorted, ref_coord)
                 rel_err = abs(sim_u - ref_u) / (abs(ref_u) + 1e-12)
                 if rel_err > tolerance:
+                    axis_name = coord_label or "coord"
+                    coord_text = (
+                        f"{ref_coord:.4f}" if isinstance(ref_coord, (int, float)) else str(ref_coord)
+                    )
                     deviations.append(DeviationDetail(
-                        quantity=f"{quantity}[y={ref_y:.4f}]",
+                        quantity=f"{quantity}[{axis_name}={coord_text}]",
                         expected=ref_u,
                         actual=sim_u,
                         relative_error=rel_err,
@@ -177,6 +191,39 @@ class ResultComparator:
                         tolerance=tolerance,
                     ))
         return deviations
+
+    @staticmethod
+    def _resolve_profile_axis(
+        quantity: str,
+        key_quantities: Dict[str, Any],
+        reference_values: List[Dict[str, Any]],
+    ) -> Tuple[Optional[List[float]], Optional[List[float]], Optional[str]]:
+        """Resolve a shared coordinate axis for profile comparison.
+
+        Supports the current y-aware centerline case plus x-based profiles such as
+        `pressure_coefficient_x` vs `x_over_c`.
+        """
+        axis_candidates = [
+            (f"{quantity}_y", "y"),
+            (f"{quantity}_x", "x"),
+            (f"{quantity}_x", "x_over_c"),
+            (f"{quantity}_x", "x_D"),
+            (f"{quantity}_x", "x_H"),
+            (f"{quantity}_x", "r_D"),
+            (f"{quantity}_x", "r"),
+        ]
+
+        for actual_key, reference_key in axis_candidates:
+            actual_coords = key_quantities.get(actual_key)
+            reference_coords = [ref.get(reference_key) for ref in reference_values]
+            if (
+                actual_coords is not None
+                and isinstance(actual_coords, list)
+                and all(coord is not None for coord in reference_coords)
+            ):
+                return actual_coords, reference_coords, reference_key
+
+        return None, None, None
 
     @staticmethod
     def _interp1d(xs: List[float], ys: List[float], x_target: float) -> float:

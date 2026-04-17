@@ -1,0 +1,10 @@
+## Attribution Analysis
+
+{% if attribution_report %}
+- Primary Cause: `{{ attribution_report.primary_cause }}`
+- Confidence: `{{ attribution_report.confidence }}`
+- Suggested Follow-up: `{{ attribution_report.suggested_correction }}`{% if auto_verify_report.verdict == "PASS" %} (not applied){% endif %}
+{% else %}
+Attribution report not yet generated.
+{% endif %}
+

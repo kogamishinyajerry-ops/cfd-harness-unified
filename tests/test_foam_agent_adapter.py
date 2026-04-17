@@ -1,7 +1,10 @@
 """tests/test_foam_agent_adapter.py — MockExecutor 和 FoamAgentExecutor 测试"""
 
 import io
+import re
+import shutil
 import tarfile
+import tempfile
 from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
@@ -20,6 +23,18 @@ def make_task(flow_type: FlowType = FlowType.INTERNAL) -> TaskSpec:
         steady_state=SteadyState.STEADY,
         compressibility=Compressibility.INCOMPRESSIBLE,
         Re=100,
+    )
+
+
+def make_airfoil_task() -> TaskSpec:
+    return TaskSpec(
+        name="NACA 0012 Airfoil External Flow",
+        geometry_type=GeometryType.AIRFOIL,
+        flow_type=FlowType.EXTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Re=3000000,
+        boundary_conditions={"angle_of_attack": 0.0, "chord_length": 1.0},
     )
 
 
@@ -199,6 +214,23 @@ class TestFoamAgentExecutor:
 
         assert result["nusselt_number"] == pytest.approx(10.5)
 
+    def test_extract_airfoil_cp_tracks_surface_profile(self):
+        task = make_airfoil_task()
+        z_01 = FoamAgentExecutor._naca0012_half_thickness(0.1)
+        z_03 = FoamAgentExecutor._naca0012_half_thickness(0.3)
+        z_07 = FoamAgentExecutor._naca0012_half_thickness(0.7)
+
+        result = FoamAgentExecutor._extract_airfoil_cp(
+            cxs=[0.1, 0.1, 0.3, 0.3, 0.7, 0.7, -1.0, 2.0],
+            czs=[z_01, -z_01, z_03, -z_03, z_07, -z_07, 0.0, 0.0],
+            p_vals=[0.5, 0.5, -0.25, -0.25, 0.0, 0.0, 0.0, 0.0],
+            task_spec=task,
+            key_quantities={},
+        )
+
+        assert result["pressure_coefficient_x"] == pytest.approx([0.1, 0.3, 0.7], abs=1e-3)
+        assert result["pressure_coefficient"] == pytest.approx([1.0, -0.5, 0.0], abs=1e-6)
+
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests
     # ------------------------------------------------------------------
@@ -249,6 +281,72 @@ class TestFoamAgentExecutor:
         assert "axis        y" in sample_file
         assert "fields" in sample_file
         assert "(U)" in sample_file
+
+    def test_generate_airfoil_flow_creates_real_surface_files(self, tmp_path):
+        executor = FoamAgentExecutor()
+        executor._generate_airfoil_flow(tmp_path, make_airfoil_task())
+
+        obj_file = tmp_path / "constant" / "geometry" / "NACA0012.obj"
+        assert obj_file.is_file()
+        assert not (tmp_path / "system" / "extrudeMeshDict").exists()
+        obj_text = obj_file.read_text()
+        assert obj_text.count("\nv ") > 100
+        assert "\nf " in obj_text
+        obj_vertices = [
+            tuple(float(value) for value in line.split()[1:])
+            for line in obj_text.splitlines()
+            if line.startswith("v ")
+        ]
+        assert obj_vertices
+        assert sorted({round(vertex[1], 6) for vertex in obj_vertices}) == [-0.001, 0.001]
+        assert max(abs(vertex[2]) for vertex in obj_vertices) > 0.05
+
+        block_mesh = (tmp_path / "system" / "blockMeshDict").read_text()
+        assert "triSurfaceMesh" in block_mesh
+        assert "project 4 7 (aerofoil)" in block_mesh
+        assert "project (" not in block_mesh
+        assert "aerofoil" in block_mesh
+        assert "leadingArc" not in block_mesh
+        assert "searchableCylinder" not in block_mesh
+        assert "(30 1 80)" in block_mesh
+        assert "(40 1 80)" in block_mesh
+        assert "simpleGrading (10 1 40)" in block_mesh
+        assert "type            empty;" in block_mesh
+
+        u_file = (tmp_path / "0" / "U").read_text()
+        assert "noSlip" in u_file
+        assert "aerofoil" in u_file
+
+    def test_generate_airfoil_flow_writes_stabilized_fvsolution_and_turbulence_init(self):
+        case_dir = Path(tempfile.mkdtemp())
+        try:
+            executor = FoamAgentExecutor()
+            executor._generate_airfoil_flow(case_dir, make_airfoil_task())
+
+            fv_solution = (case_dir / "system" / "fvSolution").read_text()
+            p_match = re.search(r"\bp\s*\{[^}]*\brelTol\s+([0-9.eE+-]+);", fv_solution, re.S)
+            assert p_match is not None
+            assert float(p_match.group(1)) == pytest.approx(0.05)
+
+            for field_name in ("U", "k", "omega"):
+                field_match = re.search(
+                    rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
+                    fv_solution,
+                    re.S,
+                )
+                assert field_match is not None
+                assert float(field_match.group(1)) == pytest.approx(0.5)
+
+            k_text = (case_dir / "0" / "k").read_text()
+            omega_text = (case_dir / "0" / "omega").read_text()
+
+            k_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", k_text)
+            omega_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", omega_text)
+            assert k_match is not None
+            assert omega_match is not None
+            assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
+        finally:
+            shutil.rmtree(case_dir, ignore_errors=True)
 
     # ------------------------------------------------------------------
     # _make_tarball() tests
@@ -423,6 +521,33 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         # SIMPLE_GRID + icoFoam → _is_lid_driven_cavity_case → _extract_ldc_centerline called
         assert result == mock_result
 
+    def test_parse_writeobjects_fields_routes_airfoil_to_cp_extractor(self, tmp_path, monkeypatch):
+        time_dir = tmp_path / "1.0"
+        time_dir.mkdir()
+        (time_dir / "Cx").write_text("1\n(\n0.300\n)\n")
+        (time_dir / "Cy").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "U").write_text("1\n(\n(1.0 0.0 0.0)\n)\n")
+        (time_dir / "p").write_text("1\n(\n0.100\n)\n")
+
+        executor = FoamAgentExecutor()
+        mock_result = {
+            "pressure_coefficient": [-0.5, 0.2],
+            "pressure_coefficient_x": [0.3, 1.0],
+        }
+        monkeypatch.setattr(
+            FoamAgentExecutor,
+            "_extract_airfoil_cp",
+            lambda *args, **kwargs: mock_result,
+        )
+
+        result = executor._parse_writeobjects_fields(
+            tmp_path,
+            "simpleFoam",
+            make_airfoil_task(),
+            {},
+        )
+        assert result == mock_result
+
     # ------------------------------------------------------------------
     # execute() Docker success path tests
     # ------------------------------------------------------------------
@@ -473,6 +598,40 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         assert result.is_mock is False
         assert result.execution_time_s > 0
         assert result.raw_output_path is not None
+
+    def test_execute_airfoil_runs_direct_2d_mesh_path(self, tmp_path, monkeypatch):
+        mock_container = MagicMock()
+        mock_container.status = "running"
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = mock_container
+        mock_docker = MagicMock()
+        mock_docker.from_env.return_value = mock_client
+
+        monkeypatch.setattr("src.foam_agent_adapter.docker", mock_docker)
+        monkeypatch.setattr("src.foam_agent_adapter._DOCKER_AVAILABLE", True)
+        monkeypatch.setattr("src.foam_agent_adapter.shutil.rmtree", MagicMock())
+
+        commands = []
+
+        def fake_docker_exec(self, command, working_dir, timeout):
+            commands.append(command)
+            return True, f"ok:{command}"
+
+        monkeypatch.setattr(FoamAgentExecutor, "_docker_exec", fake_docker_exec)
+        monkeypatch.setattr(FoamAgentExecutor, "_parse_solver_log", lambda *args, **kwargs: ({}, {}))
+        monkeypatch.setattr(FoamAgentExecutor, "_copy_postprocess_fields", lambda *args, **kwargs: None)
+
+        executor = FoamAgentExecutor(work_dir=str(tmp_path))
+        result = executor.execute(make_airfoil_task())
+
+        assert result.success is True
+        assert commands[:2] == [
+            "blockMesh",
+            "simpleFoam",
+        ]
+        assert 'transformPoints "scale=(1 0 1)"' not in commands
+        assert "extrudeMesh" not in commands
+        assert any("postProcess -funcs" in cmd for cmd in commands)
 
     def test_execute_blockmesh_failure(self, tmp_path, monkeypatch):
         """blockMesh 失败时返回 failed result。"""

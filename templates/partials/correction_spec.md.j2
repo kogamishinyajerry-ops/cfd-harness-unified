@@ -1,0 +1,14 @@
+## CorrectionSpec Record
+
+> suggest-only, not auto-applied
+
+{% if auto_verify_report.correction_spec_needed and correction_spec %}
+- Primary Cause: `{{ correction_spec.primary_cause }}`
+- Confidence: `{{ correction_spec.confidence }}`
+- Suggested Correction: `{{ correction_spec.suggested_correction }}`
+{% elif auto_verify_report.correction_spec_needed %}
+CorrectionSpec pending generation.
+{% else %}
+No deviation; CorrectionSpec not triggered.
+{% endif %}
+

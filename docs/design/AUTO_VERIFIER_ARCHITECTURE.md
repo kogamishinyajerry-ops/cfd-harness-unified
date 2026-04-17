@@ -1,186 +1,177 @@
 # AutoVerifier Architecture Design
 
 ## Status
-- Phase: 8a Planning
-- Spec: `docs/specs/AUTO_VERIFIER_SPEC.md`
-- Implementation: Pending Opus 4.6 Gate
 
-## Architecture
+- Task: `AutoVerifier 架构设计 + Opus Gate 审查包准备`
+- Phase: `8a-1`
+- Prepared on: `2026-04-17`
+- Scope of this task: design documents plus contract-aligned Gold Standard aliases
+- Code changes in this task: `none`
 
-```
+## Architecture Overview
+
+```text
 TaskRunner
-  └─► post_execute_hook (Optional[PostExecuteHook])
-       └─► AutoVerifier.__call__(task_spec, exec_result, comparison_result, correction_spec)
-            ├─► GoldStandardBundleLoader.load(case_id)
-            │    ├─► knowledge/gold_standards/{case_id}.yaml (multi-doc)
-            │    └─► KnowledgeDB.load_gold_standard() (fallback)
-            ├─► ResidualChecker.run(task_spec, exec_result, gold_bundle)
-            │    └─► CheckerReport(RESIDUAL, status, issues)
-            ├─► GoldStandardChecker.run(task_spec, exec_result, gold_bundle)
-            │    ├─► scalar comparison (strouhal, reattachment_length, nusselt_number...)
-            │    ├─► profile comparison with y-aware interpolation (u_centerline...)
-            │    └─► CheckerReport(GOLD_STANDARD, status, issues)
-            ├─► PhysicalPlausibilityChecker.run(task_spec, exec_result, gold_bundle)
-            │    └─► CheckerReport(PHYSICAL_PLAUSIBILITY, status, issues)
-            ├─► CorrectionSuggester.suggest(checker_reports)
-            │    └─► List[CorrectionSuggestion] (persisted=False, requires_human_confirmation=True)
-            └─► ReportRenderer.render(auto_verification_report)
-                 └─► markdown_report + YAML file
+  -> execute CFD
+  -> compare legacy gold standard as-is (existing behavior remains untouched)
+  -> optional post_execute_hook(...)
+       -> AutoVerifier
+            -> ContractGoldLoader
+                 -> contract alias YAML (OF-01/02/03)
+                 -> legacy multi-document YAML fallback
+            -> ResidualChecker
+            -> GoldStandardChecker
+            -> PhysicalPlausibilityChecker
+            -> VerdictAggregator
+            -> CorrectionSuggester (suggest-only)
+            -> AutoVerifyReportWriter
+                 -> reports/{case_id}/auto_verify_report.yaml
 ```
 
-## Package Layout
+## Contract Alias Map
 
-```
-src/auto_verifier/
-  __init__.py           # AutoVerifier, AutoVerificationReport, VerificationStatus, CheckerKind
-  models.py             # GoldObservable, GoldStandardBundle, VerificationIssue,
-                        # CheckerReport, CorrectionSuggestion, ToleranceSpec, ToleranceMode
-  protocols.py          # VerificationChecker (runtime_checkable Protocol)
-  gold_loader.py         # GoldStandardBundleLoader
-  tolerance_registry.py   # ToleranceRegistry (canonical observable tolerances)
-  residual_checker.py    # ResidualChecker implements VerificationChecker
-  gold_standard_checker.py  # GoldStandardChecker implements VerificationChecker
-  physical_plausibility_checker.py  # PhysicalPlausibilityChecker
-  correction_suggester.py    # CorrectionSuggester
-  report_renderer.py         # ReportRenderer
-```
+This task resolves the repo-versus-contract filename drift without touching legacy runtime files.
 
-## Core Design Decisions
+| Contract-facing file | Legacy repo source | Intent |
+| --- | --- | --- |
+| `knowledge/gold_standards/lid_driven_cavity_benchmark.yaml` | `knowledge/gold_standards/lid_driven_cavity.yaml` | Aggregate OF-01 observables into one contract YAML |
+| `knowledge/gold_standards/backward_facing_step_steady.yaml` | `knowledge/gold_standards/backward_facing_step.yaml` | Aggregate OF-02 observables into one contract YAML |
+| `knowledge/gold_standards/cylinder_crossflow.yaml` | `knowledge/gold_standards/circular_cylinder_wake.yaml` | Aggregate OF-03 observables into one contract YAML |
 
-### 1. Protocol vs ABC
+The alias files are additive shims for Phase 8 design and verification. Legacy multi-document YAML remains intact so Phase 1-7 behavior is not disturbed.
 
-Using `@runtime_checkable Protocol` instead of ABC:
+## Core Components
+
+### AutoVerifier Orchestrator
+
+- Single entry point for Phase 8 verification.
+- Runs L1, L2, and L3 in a fixed order.
+- Aggregates findings into one report object.
+- Emits correction suggestions only when the final verdict is not `PASS`.
+
+### ContractGoldLoader
+
+- Prefers contract alias YAML for OF-01/02/03.
+- Falls back to legacy Gold Standard YAML when alias files do not yet exist for a case.
+- Normalizes observables into a single internal structure:
+  - `name`
+  - `ref_value`
+  - `tolerance`
+  - `unit`
+  - `metadata`
+
+### ResidualChecker
+
+- Reads `log_file` and optional residual evidence under `postProcessing`.
+- Classifies `CONVERGED`, `OSCILLATING`, `DIVERGED`, or `UNKNOWN`.
+- Never raises on expected data gaps.
+
+### GoldStandardChecker
+
+- Compares every required observable from the contract Gold Standard file.
+- Supports scalar observables and profile/list observables.
+- Uses explicit per-observable tolerances from the contract alias YAML whenever present.
+
+### PhysicalPlausibilityChecker
+
+- Performs mass-balance, boundary-consistency, and scale sanity checks.
+- Produces `PASS`, `WARN`, or `FAIL`.
+- Can emit warnings without blocking the rest of the report.
+
+### VerdictAggregator
+
+- Combines L1, L2, and L3 results using the threshold table defined in the spec.
+- Keeps layer outputs independent so that every failure remains attributable.
+
+### CorrectionSuggester
+
+- Converts non-pass findings into structured suggestions.
+- Does not persist, replay, or mutate case configuration.
+- Always marks output as human-confirmed workflow only.
+
+## post_execute_hook Interface
+
+The gate package needs a concrete additive seam. The proposed interface is:
 
 ```python
-@runtime_checkable
-class VerificationChecker(Protocol):
-    def run(
-        self,
-        task_spec: TaskSpec,
-        exec_result: ExecutionResult,
-        gold_bundle: GoldStandardBundle,
-    ) -> CheckerReport: ...
-```
+from typing import Optional, Protocol
 
-Rationale: duck typing allows any object with the right `run()` method. ABC forces inheritance. Enables simpler testing (mock objects) and avoids diamond inheritance issues.
-
-### 2. GoldStandardBundle vs Whitelist-Only
-
-```python
-@dataclass
-class GoldStandardBundle:
-    case_id: str
-    observables: List[GoldObservable]  # one per YAML document
-    source_path: Optional[str] = None
-    used_whitelist_fallback: bool = False
-```
-
-Current `KnowledgeDB.load_gold_standard()` only reads embedded single-observable whitelist data. New `GoldStandardBundleLoader` reads full multi-document YAML files under `knowledge/gold_standards/`, enabling richer observable coverage.
-
-**Fallback chain:**
-1. Try `knowledge/gold_standards/{case_id}.yaml`
-2. Load all documents with `yaml.safe_load_all()`
-3. Convert each document to `GoldObservable`
-4. If no file, fallback to `KnowledgeDB.load_gold_standard()` wrapped as single-observable bundle
-
-### 3. Canonical Observable ID vs Display Label
-
-Each `VerificationIssue` carries both:
-- `observable_id`: `lid_driven_cavity:u_centerline` (canonical, for suggestion generation)
-- `display_label`: `u_centerline[y=0.5000]` (human-facing)
-
-Critical because `ErrorAttributor` uses rendered labels like `u_centerline[y=0.5000]`. AutoVerifier must not confuse these human-facing labels with canonical IDs.
-
-### 4. Suggest-Only Correction Policy
-
-```python
-@dataclass
-class CorrectionSuggestion:
-    suggestion_id: str
-    correction_spec: CorrectionSpec
-    source_checkers: List[CheckerKind]
-    confidence: float
-    rationale: str
-    requires_human_confirmation: bool = True
-    persisted: bool = False  # NEVER auto-set to True
-```
-
-**Critical rule**: AutoVerifier never calls `KnowledgeDB.save_correction()`. All suggestions require human confirmation.
-
-### 5. Three-Layer Verification
-
-| Layer | Purpose | Output |
-|-------|---------|--------|
-| L1 Residual | Solver convergence | CONVERGED / OSCILLATING / DIVERGED / UNKNOWN |
-| L2 Gold Standard | Numerical accuracy vs reference data | PASS / PASS_WITH_DEVIATIONS / FAIL / SKIPPED |
-| L3 Physical Plausibility | Domain sanity checks | PASS / WARN / FAIL |
-
-### 6. Additive TaskRunner Integration
-
-```python
-@runtime_checkable
 class PostExecuteHook(Protocol):
     def __call__(
         self,
-        task_spec: TaskSpec,
-        exec_result: ExecutionResult,
-        comparison_result: Optional[ComparisonResult],
-        correction_spec: Optional[CorrectionSpec],
-    ) -> Optional[AutoVerificationReport]: ...
-
-class TaskRunner:
-    def __init__(
-        self,
-        ...existing_params...,
-        post_execute_hook: Optional[PostExecuteHook] = None,
-        correction_policy: str = "legacy_auto_save",
-    ) -> None:
+        task_spec,
+        exec_result,
+        comparison_result: Optional[object],
+        correction_spec: Optional[object],
+    ) -> object:
+        ...
 ```
 
-**Backward compatibility**: existing callers with `TaskRunner()` continue to work unchanged (both default to existing behavior).
+Design rules:
 
-## Tolerance Registry
+- The hook is optional.
+- Existing `TaskRunner()` behavior remains unchanged when no hook is supplied.
+- AutoVerifier runs after execution evidence is available, not during solver runtime.
+- Suggest-only policy remains outside the legacy auto-save path until Opus approves implementation details.
 
-| Observable | Mode | Value |
-|------------|------|-------|
-| `lid_driven_cavity:u_centerline` | RELATIVE | 5% |
-| `backward_facing_step:reattachment_length` | HYBRID | 10%, floor 0.25 |
-| `circular_cylinder_wake:strouhal_number` | RELATIVE | 5% |
-| `differential_heated_cavity:nusselt_number` | RELATIVE | 15% |
-| `rayleigh_benard_convection:nusselt_number` | RELATIVE | 15% |
-| `impinging_jet:nusselt_number` | RELATIVE | 15% |
-| `turbulent_flat_plate:cf_skin_friction` | RELATIVE | 10% |
-| `plane_channel_flow:u_mean_profile` | RELATIVE | 5% |
-| `naca0012_airfoil:pressure_coefficient` | RELATIVE | 20% |
+## Data Contracts
 
-## Verdict Aggregation Logic
+### Input Contract
 
-```
-if any(L1=DIVERGED): verdict = FAIL
-elif L1=UNKNOWN and L2=FAIL: verdict = FAIL
-elif L2=PASS and L1=CONVERGED and L3=PASS: verdict = PASS
-elif L2=PASS_WITH_DEVIATIONS or L3=WARN: verdict = PASS_WITH_DEVIATIONS
-else: verdict = FAIL
-```
+- `case_id` must be one of the contract anchor cases for Phase 8a.
+- `gold_standard_file` must expose a top-level `observables` list.
+- Each `observables[]` item must include:
+  - `name`
+  - `ref_value`
+  - `tolerance`
+
+### Output Contract
+
+- The output file is `reports/{case_id}/auto_verify_report.yaml`.
+- The report must always include:
+  - `convergence`
+  - `gold_standard_comparison`
+  - `physics_check`
+  - `verdict`
+  - `correction_spec_needed`
+
+## Tolerance Resolution
+
+Resolution order is explicit to avoid silent threshold drift:
+
+1. Observable-level tolerance in the contract alias YAML.
+2. Legacy observable tolerance from the multi-document YAML source.
+3. Threshold defaults from `AUTO_VERIFIER_SPEC.md`.
+
+Anchor case defaults approved for this gate package:
+
+| Case | Observable family | Default tolerance |
+| --- | --- | --- |
+| `lid_driven_cavity_benchmark` | centerline profiles, vortex summary | `5%` |
+| `backward_facing_step_steady` | reattachment, pressure recovery, profiles | `10%` |
+| `cylinder_crossflow` | Strouhal, coefficients, wake profile | `5%` |
+
+## Boundary And Compatibility Rules
+
+- Task `8a-1` does not modify `src/`, `tests/`, `templates/`, or `reports/`.
+- Legacy Gold Standard YAML files remain untouched.
+- No auto-correction is allowed.
+- No new model dependency is introduced.
+- No existing Phase 1-7 execution path is replaced by this task.
 
 ## Testing Strategy
 
-| Test File | Coverage Target |
-|-----------|---------------|
-| `test_gold_loader.py` | GoldStandardBundleLoader multi-doc + fallback |
-| `test_residual_checker.py` | Steady/transient thresholds + missing residuals |
-| `test_gold_standard_checker.py` | Scalar + profile + compound + missing required |
-| `test_physical_plausibility_checker.py` | Generic + LDC + BFS + cylinder rules |
-| `test_correction_suggester.py` | Suggest-only + no persistence side effects |
-| `test_auto_verifier.py` | Orchestration + status aggregation + rendering |
-| `test_task_runner_integration.py` | Legacy unchanged + suggest-only no save |
+Implementation is deferred to `8a-2`, but the design package fixes the required coverage target and test inventory now:
 
-Target: branch coverage ≥ 80% for `src/auto_verifier/`.
+- Unit tests for L1, L2, L3, suggestion generation, and schema validation.
+- E2E tests for OF-01, OF-02, and OF-03 using existing Docker evidence.
+- Coverage target for `src/auto_verifier/`: `>= 80%`.
+- Forbidden-file regression check on every implementation run.
 
-## Existing Dependencies Reused
+## Gate Readiness Summary
 
-- `src/result_comparator.py`: `_compare_scalar` and `_compare_profile` logic reused in `GoldStandardChecker`
-- `src/error_attributor.py`: `ErrorAttributor.attribute()` reused in `CorrectionSuggester`
-- `src/correction_recorder.py`: `CorrectionRecorder.record()` reused in `CorrectionSuggester`
-- `knowledge/gold_standards/*.yaml`: existing Gold Standard YAML files
-- `src/models.py`: `ExecutionResult`, `TaskSpec`, `ComparisonResult`, `CorrectionSpec`
+- Contract paths are normalized without disturbing legacy files.
+- The additive integration seam is defined.
+- Tolerance ownership is explicit.
+- Suggest-only policy is locked.
+- The next step is Opus review, not implementation.

@@ -1,0 +1,15 @@
+strouhal_number: 0.164
+cd_mean: 1.31
+cl_rms: 0.049
+u_mean_centerline:
+  - 0.82
+  - 0.65
+  - 0.56
+  - 0.34
+u_mean_centerline_x_D:
+  - 1.0
+  - 2.0
+  - 3.0
+  - 5.0
+mass_flow_in: 1.0
+mass_flow_out: 0.996

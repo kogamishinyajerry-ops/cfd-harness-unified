@@ -452,6 +452,24 @@ class ErrorAttributor:
         ):
             return ("geometry_model_mismatch", 0.75)
 
+        # 2b. GEOMETRY_MODEL_MISMATCH: AIRFOIL surrogate yields Cp coordinates
+        # outside normalized chord space [0, 1], which indicates we are not
+        # sampling a real airfoil surface distribution.
+        airfoil_cp_x = exec_result.key_quantities.get("pressure_coefficient_x")
+        if (
+            task_spec.geometry_type == GeometryType.AIRFOIL
+            and airfoil_cp_x
+            and any(d.quantity.startswith("pressure_coefficient") for d in deviations)
+        ):
+            try:
+                x_min = min(airfoil_cp_x)
+                x_max = max(airfoil_cp_x)
+            except TypeError:
+                x_min = None
+                x_max = None
+            if x_min is not None and x_max is not None and (x_min < -0.1 or x_max > 1.1):
+                return ("geometry_model_mismatch", 0.85)
+
         # 3. INSUFFICIENT_TRANSIENT_SAMPLING: TRANSIENT without strouhal
         if (
             task_spec.steady_state == SteadyState.TRANSIENT
@@ -741,4 +759,3 @@ class ErrorAttributor:
                     f"flow_type ({task_spec.flow_type.value}) routing."
                 )
         return None
-

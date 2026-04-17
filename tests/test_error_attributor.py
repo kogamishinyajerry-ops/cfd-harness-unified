@@ -153,6 +153,30 @@ class TestGeometryModelMismatch:
         assert report.primary_cause == "geometry_model_mismatch"
         assert report.confidence == pytest.approx(0.75)
 
+    def test_airfoil_cp_outside_chord_space_maps_to_geometry_mismatch(self, attributor):
+        comparison = make_comparison(
+            DeviationDetail(
+                quantity="pressure_coefficient[x_over_c=0.0000]",
+                expected=1.0,
+                actual=0.0,
+                relative_error=1.0,
+            )
+        )
+
+        report = attributor.attribute(
+            make_task(geometry_type=GeometryType.AIRFOIL, flow_type=FlowType.EXTERNAL, Re=3e6),
+            make_exec_result(
+                key_quantities={
+                    "pressure_coefficient": [0.0, 0.0, 0.0],
+                    "pressure_coefficient_x": [-1.9, 0.0, 1.9],
+                }
+            ),
+            comparison,
+        )
+
+        assert report.primary_cause == "geometry_model_mismatch"
+        assert report.confidence == pytest.approx(0.85)
+
 
 class TestInsufficientTransientSampling:
     def test_transient_case_without_strouhal_maps_to_sampling_issue(self, attributor):

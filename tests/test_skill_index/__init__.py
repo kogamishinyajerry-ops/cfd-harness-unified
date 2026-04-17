@@ -1,1 +1,1 @@
-# test_skill_index package
+"""Tests for skill index dual-view loading."""

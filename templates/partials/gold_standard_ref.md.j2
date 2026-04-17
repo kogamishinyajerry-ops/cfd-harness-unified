@@ -1,0 +1,11 @@
+## Gold Standard Reference
+
+- Source: `{{ gold_standard.source }}`
+- DOI: `{{ gold_standard.literature_doi }}`
+
+| Observable | Reference | Tolerance |
+| --- | --- | --- |
+{% for observable in gold_standard.observables %}
+| `{{ observable.name }}` | `{{ format_value(observable.ref_value) }}` | `{{ observable.tolerance.mode }}={{ observable.tolerance.value }}` |
+{% endfor %}
+

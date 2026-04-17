@@ -1,0 +1,55 @@
+schema_version: 2
+case_id: backward_facing_step_steady
+legacy_case_id: backward_facing_step
+legacy_source_file: knowledge/gold_standards/backward_facing_step.yaml
+source: "Driver & Seegmiller 1985, AIAA J."
+literature_doi: "10.2514/3.9086"
+relationships:
+  solver_reuse: backward_facing_step
+  geometry_similarity:
+    reference_case: backward_facing_step
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: backward_facing_step
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re
+observables:
+  - name: reattachment_length
+    description: reattachment length normalized by step height
+    ref_value: 6.26
+    unit: Xr/H
+    tolerance:
+      mode: relative
+      value: 0.10
+  - name: cd_mean
+    description: mean drag coefficient based on step height
+    ref_value: 2.08
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+  - name: pressure_recovery
+    description: static pressure recovery from inlet to outlet
+    ref_value:
+      inlet: -0.90
+      outlet: 0.10
+      delta: 1.00
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+  - name: velocity_profile_reattachment
+    description: velocity profile near reattachment zone at x/H = 6.0
+    ref_value:
+      - x_H: 6.0
+        y_H: 0.5
+        u_Ubulk: 0.40
+      - x_H: 6.0
+        y_H: 1.0
+        u_Ubulk: 0.85
+      - x_H: 6.0
+        y_H: 2.0
+        u_Ubulk: 1.05
+    tolerance:
+      mode: relative
+      value: 0.10

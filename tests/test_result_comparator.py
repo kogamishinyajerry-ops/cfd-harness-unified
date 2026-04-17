@@ -25,6 +25,16 @@ GOLD_VECTOR = {
     "tolerance": 0.05,
 }
 
+GOLD_VECTOR_X = {
+    "quantity": "pressure_coefficient",
+    "reference_values": [
+        {"x_over_c": 0.0, "Cp": 1.0},
+        {"x_over_c": 0.5, "Cp": 0.0},
+        {"x_over_c": 1.0, "Cp": 0.2},
+    ],
+    "tolerance": 0.05,
+}
+
 
 class TestScalarComparison:
     def test_pass_exact(self):
@@ -74,6 +84,25 @@ class TestVectorComparison:
         result = make_result(u_centerline=[-0.037])
         cr = cmp.compare(result, GOLD_VECTOR)
         assert cr.passed  # 只比较重叠部分（1个点，精确匹配）
+
+    def test_pass_vector_with_x_axis_alignment(self):
+        cmp = ResultComparator()
+        result = make_result(
+            pressure_coefficient=[99.0, 1.0, 0.0, 0.2],
+            pressure_coefficient_x=[-0.5, 0.0, 0.5, 1.0],
+        )
+        cr = cmp.compare(result, GOLD_VECTOR_X)
+        assert cr.passed
+
+    def test_fail_vector_with_x_axis_alignment(self):
+        cmp = ResultComparator()
+        result = make_result(
+            pressure_coefficient=[99.0, 1.0, -0.4, 0.2],
+            pressure_coefficient_x=[-0.5, 0.0, 0.5, 1.0],
+        )
+        cr = cmp.compare(result, GOLD_VECTOR_X)
+        assert not cr.passed
+        assert cr.deviations[0].quantity == "pressure_coefficient[x_over_c=0.5000]"
 
 
 class TestEdgeCases:

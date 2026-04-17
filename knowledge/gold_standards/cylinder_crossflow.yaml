@@ -1,0 +1,51 @@
+schema_version: 2
+case_id: cylinder_crossflow
+legacy_case_id: circular_cylinder_wake
+legacy_source_file: knowledge/gold_standards/circular_cylinder_wake.yaml
+source: "Williamson 1996, Annu. Rev. Fluid Mech."
+literature_doi: "10.1146/annurev.fl.28.010196.002421"
+relationships:
+  solver_reuse: circular_cylinder_wake
+  geometry_similarity:
+    reference_case: circular_cylinder_wake
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: circular_cylinder_wake
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re
+observables:
+  - name: strouhal_number
+    description: vortex shedding Strouhal number
+    ref_value: 0.164
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.05
+  - name: cd_mean
+    description: mean drag coefficient
+    ref_value: 1.33
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.05
+  - name: cl_rms
+    description: RMS lift coefficient
+    ref_value: 0.048
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.05
+  - name: u_mean_centerline
+    description: mean centerline wake velocity deficit
+    ref_value:
+      - x_D: 1.0
+        u_Uinf: 0.83
+      - x_D: 2.0
+        u_Uinf: 0.64
+      - x_D: 3.0
+        u_Uinf: 0.55
+      - x_D: 5.0
+        u_Uinf: 0.35
+    tolerance:
+      mode: relative
+      value: 0.05

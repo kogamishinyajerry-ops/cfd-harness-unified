@@ -1,0 +1,11 @@
+## Results vs Reference
+
+- Match Rate: `{{ "%.2f"|format(match_rate * 100) }}%`
+- Verification Overall: `{{ auto_verify_report.gold_standard_comparison.overall }}`
+
+| Observable | Reference | Simulation | Direction | Within Tolerance |
+| --- | --- | --- | --- | --- |
+{% for observable in auto_verify_report.gold_standard_comparison.observables %}
+| `{{ observable.name }}` | `{{ format_value(observable.ref_value) }}` | `{{ format_value(observable.sim_value) }}` | `{{ deviation_direction(observable.ref_value if observable.ref_value is number else 0, observable.sim_value if observable.sim_value is number else 0) }}` | `{{ observable.within_tolerance }}` |
+{% endfor %}
+

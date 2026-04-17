@@ -200,7 +200,7 @@ class FoamAgentExecutor:
                 )
 
             # topoSet/createBaffles only needed for circular cylinder wake (BODY_IN_CHANNEL EXTERNAL)
-            # AIRFOIL now uses flat-plate geometry (no baffle needed)
+            # AIRFOIL uses a direct 2D blockMesh around the projected airfoil surface.
             needs_topo = (
                 task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
                 and task_spec.flow_type == FlowType.EXTERNAL
@@ -4908,27 +4908,48 @@ boundaryField
     ) -> None:
         """Generate airfoil external flow case files (simpleFoam steady k-omega SST).
 
-        Uses a flat-plate channel flow approximation (no cylinder baffle) to avoid
-        NaN residuals that occur with createBaffles + 1-cell z-depth mesh in simpleFoam.
-
-        Validates the AIRFOIL code path: turbulence modeling, key_quantities extraction.
+        Uses the tutorial six-block topology in the x-z plane, but keeps all
+        shared block vertices explicit to avoid blockMesh projection drift at
+        block interfaces. Only the airfoil boundary edges are projected onto
+        the real NACA0012 surface for Cp extraction.
         """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
         (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
 
         Re = float(task_spec.Re or 3000000)
-        chord = 1.0  # chord length
+        bc = task_spec.boundary_conditions or {}
+        chord = float(bc.get("chord_length", 1.0))
         U_inf = 1.0  # freestream velocity
         nu_val = U_inf * chord / Re
+        # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
+        # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
+        # works with the C-grid hex ordering. The adapter's previous x-y plane
+        # approach produced inside-out errors because block vertex ordering
+        # depends on z being the normal direction.
+        y_lo = -0.001
+        y_hi = 0.001
+        z_far = 2.0 * chord
+        x_min = -5.0 * chord
+        x_max = 5.0 * chord
+        x_upper = 0.3 * chord
+        z_upper = self._naca0012_half_thickness(0.3) * chord
+        x_lower = x_upper
+        z_lower = -z_upper
+        x_le = 0.0
+        x_te = chord
+        z_le = 0.0
+        z_te = 0.0
+        span = y_hi - y_lo
 
-        # Flat-plate channel: slip walls approximating airfoil surfaces
-        # (zero pressure gradient, uniform flow validation).
-        # Domain: x: [-2, 4], y: [-0.25, 0.25], z: [0, 0.1] (1-cell thick, 2D planar)
-        # NOTE: No createBaffles - uses flat_plate geometry to avoid NaN from
-        # cylinderToCell + 1-cell-z-depth + nNonOrthogonalCorrectors interaction.
+        self._write_naca0012_surface_obj(case_dir, chord, span)
+
+        # 24 explicit vertices (12 at y=y_lo, 12 at y=y_hi), aerofoil in x-z plane.
+        # Keep all shared block vertices Cartesian to avoid "Inconsistent point
+        # locations between block pair" errors from projected block interfaces.
+        # Only the aerofoil boundary edges remain projected onto the OBJ surface.
         (case_dir / "system" / "blockMeshDict").write_text(
-            """\
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -4937,70 +4958,171 @@ boundaryField
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "system";
     object      blockMeshDict;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 convertToMeters 1;
 
+geometry
+{{
+    aerofoil
+    {{
+        type            triSurfaceMesh;
+        file            "NACA0012.obj";
+    }}
+}}
+
 vertices
 (
-    (-2 -0.25 0)
-    ( 4 -0.25 0)
-    ( 4  0.25 0)
-    (-2  0.25 0)
-    (-2 -0.25 0.1)
-    ( 4 -0.25 0.1)
-    ( 4  0.25 0.1)
-    (-2  0.25 0.1)
+    // Layer y = y_lo (bottom of thin span)
+    // Explicit Cartesian vertices keep block interfaces identical across blocks.
+    ({x_lower:.6f} {y_lo:.6f} {-z_far:.6f})
+    ({x_te:.6f} {y_lo:.6f} {-z_far:.6f})
+    ({x_max:.6f} {y_lo:.6f} {-z_far:.6f})
+
+    ({x_min:.6f} {y_lo:.6f} {z_le:.6f})
+    ({x_le:.6f} {y_lo:.6f} {z_le:.6f})
+    ({x_te:.6f} {y_lo:.6f} {z_te:.6f})
+    ({x_max:.6f} {y_lo:.6f} {z_te:.6f})
+
+    ({x_lower:.6f} {y_lo:.6f} {z_lower:.6f})
+    ({x_upper:.6f} {y_lo:.6f} {z_upper:.6f})
+
+    ({x_upper:.6f} {y_lo:.6f} {z_far:.6f})
+    ({x_te:.6f} {y_lo:.6f} {z_far:.6f})
+    ({x_max:.6f} {y_lo:.6f} {z_far:.6f})
+
+    // Layer y = y_hi (top of thin span) — same z coords as bottom layer
+    ({x_lower:.6f} {y_hi:.6f} {-z_far:.6f})
+    ({x_te:.6f} {y_hi:.6f} {-z_far:.6f})
+    ({x_max:.6f} {y_hi:.6f} {-z_far:.6f})
+
+    ({x_min:.6f} {y_hi:.6f} {z_le:.6f})
+    ({x_le:.6f} {y_hi:.6f} {z_le:.6f})
+    ({x_te:.6f} {y_hi:.6f} {z_te:.6f})
+    ({x_max:.6f} {y_hi:.6f} {z_te:.6f})
+
+    ({x_lower:.6f} {y_hi:.6f} {z_lower:.6f})
+    ({x_upper:.6f} {y_hi:.6f} {z_upper:.6f})
+
+    ({x_upper:.6f} {y_hi:.6f} {z_far:.6f})
+    ({x_te:.6f} {y_hi:.6f} {z_far:.6f})
+    ({x_max:.6f} {y_hi:.6f} {z_far:.6f})
 );
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (120 100 1) simpleGrading (1 1 1)
+    // blockMesh local ordering matches the tutorial:
+    //   direction 1 = streamwise, direction 2 = thin span (1 cell), direction 3 = z-normal.
+    // simpleGrading avoids block-interface inconsistencies caused by edgeGrading.
+    hex ( 7 4 16 19 0 3 15 12)
+    (30 1 80)
+    simpleGrading (1 1 40)
+
+    hex ( 5 7 19 17 1 0 12 13)
+    (30 1 80)
+    simpleGrading (1 1 40)
+
+    hex ( 17 18 6 5 13 14 2 1)
+    (40 1 80)
+    simpleGrading (10 1 40)
+
+    hex ( 20 16 4 8 21 15 3 9)
+    (30 1 80)
+    simpleGrading (1 1 40)
+
+    hex ( 17 20 8 5 22 21 9 10)
+    (30 1 80)
+    simpleGrading (1 1 40)
+
+    hex ( 5 6 18 17 10 11 23 22)
+    (40 1 80)
+    simpleGrading (10 1 40)
 );
 
 edges
 (
+    // Aerofoil surface edges — bottom (y_lo) and top (y_hi) layers
+    project 4 7 (aerofoil)
+    project 7 5 (aerofoil)
+    project 4 8 (aerofoil)
+    project 8 5 (aerofoil)
+
+    project 16 19 (aerofoil)
+    project 19 17 (aerofoil)
+    project 16 20 (aerofoil)
+    project 20 17 (aerofoil)
 );
 
 boundary
 (
+    aerofoil
+    {{
+        type            wall;
+        faces
+        (
+            (4 7 19 16)
+            (7 5 17 19)
+            (5 8 20 17)
+            (8 4 16 20)
+        );
+    }}
     inlet
-    {
+    {{
         type            patch;
-        faces           ((0 4 7 3));
-    }
+        inGroups        (freestream);
+        faces
+        (
+            (3 0 12 15)
+            (0 1 13 12)
+            (1 2 14 13)
+            (11 10 22 23)
+            (10 9 21 22)
+            (9 3 15 21)
+        );
+    }}
     outlet
-    {
+    {{
         type            patch;
-        faces           ((1 2 6 5));
-    }
-    upper
-    {
-        type            slip;
-        faces           ((3 6 7 2));
-    }
-    lower
-    {
-        type            slip;
-        faces           ((0 1 5 4));
-    }
-    front
-    {
-        type            empty;
-        faces           ((0 3 2 1));
-    }
+        inGroups        (freestream);
+        faces
+        (
+            (2 6 18 14)
+            (6 11 23 18)
+        );
+    }}
     back
-    {
+    {{
         type            empty;
-        faces           ((4 5 6 7));
-    }
+        faces
+        (
+            (3 4 7 0)
+            (7 5 1 0)
+            (5 6 2 1)
+            (3 9 8 4)
+            (9 10 5 8)
+            (10 11 6 5)
+        );
+    }}
+    front
+    {{
+        type            empty;
+        faces
+        (
+            (15 16 19 12)
+            (19 17 13 12)
+            (17 18 14 13)
+            (15 16 20 21)
+            (20 17 22 21)
+            (17 18 23 22)
+        );
+    }}
 );
 
 mergePatchPairs
@@ -5011,9 +5133,6 @@ mergePatchPairs
 """,
             encoding="utf-8",
         )
-
-        # NOTE: No topoSetDict or createBafflesDict needed for flat-plate geometry.
-        # The AIRFOIL code path is validated via turbulence modeling + key_quantities.
 
         (case_dir / "constant" / "physicalProperties").write_text(
             f"""\
@@ -5133,13 +5252,18 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 ddtSchemes { default steadyState; }
-gradSchemes { default Gauss linear; }
+gradSchemes {
+    default         Gauss linear;
+    limited         cellLimited Gauss linear 1;
+    grad(U)         $limited;
+    grad(k)         $limited;
+    grad(omega)     $limited;
+}
 divSchemes {
-    default none;
-    div(phi,U)      bounded Gauss linearUpwind grad(U);
-    div(phi,k)      bounded Gauss limitedLinear 1;
-    div(phi,epsilon) bounded Gauss limitedLinear 1;
-    div(phi,omega)  bounded Gauss limitedLinear 1;
+    default         none;
+    div(phi,U)      bounded Gauss upwind;
+    div(phi,k)      bounded Gauss upwind;
+    div(phi,omega)  bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
@@ -5152,16 +5276,6 @@ wallDist { method meshWave; }
             encoding="utf-8",
         )
 
-        is_kepsilon = turbulence_model == "kEpsilon"
-        eps_block = ("""\
-    epsilon { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.001; }
-""") if is_kepsilon else ""
-        omega_block = ("""\
-    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
-""") if turbulence_model == "kOmegaSST" else ""
-        is_komega = turbulence_model == "kOmegaSST"
-        turb_residual = ("epsilon 1e-5;") if is_kepsilon else ("omega 1e-5;" if is_komega else "")
-        turb_relax = ("epsilon 0.5;") if is_kepsilon else ("omega 0.5;" if is_komega else "")
         fvsol = (
             """\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -5183,31 +5297,30 @@ FoamFile
 
 solvers
 {
-    p { solver GAMG; smoother GaussSeidel; tolerance 1e-7; relTol 0.001; }
+    p { solver GAMG; smoother GaussSeidel; tolerance 1e-6; relTol 0.05; }
     pFinal { $p; relTol 0; }
-    U { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
+    U { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
     UFinal { $U; relTol 0; }
-    k { solver PBiCGStab; preconditioner DILU; tolerance 1e-8; relTol 0.001; }
-"""
-            + eps_block
-            + omega_block
-            + """\
+    k { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
 }
 
 SIMPLE
 {
+    residualControl
+    {
+        p       1e-6;
+        U       1e-5;
+        k       1e-5;
+        omega   1e-5;
+    }
     nNonOrthogonalCorrectors 0;
-    residualControl { U 1e-4; p 1e-3; k 1e-5; """
-            + turb_residual
-            + """; }
 }
 
 relaxationFactors
 {
     fields { p 0.3; }
-    equations { U 0.5; k 0.5; """
-            + turb_relax
-            + """; }
+    equations { U 0.5; k 0.5; omega 0.5; }
 }
 
 // ************************************************************************* //
@@ -5216,15 +5329,16 @@ relaxationFactors
         (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
         Ux = U_inf
-        # Turbulence intensity I=0.03 (3%) for external flow
+        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
+        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
         # omega = k^0.5 / (beta_star * L), L=0.1*chord  --  standard length-scale formula
         # beta_star = 0.09, chord = 1.0
-        I_turb = 0.03
-        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 1.35e-3
+        I_turb = 0.005
+        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5 (was 1.35e-3 with I=0.03)
         L_turb = 0.1 * chord                     # = 0.1
         beta_star = 0.09
-        omega_init = (k_init ** 0.5) / (beta_star * L_turb)  # ≈ 4.08
+        omega_init = (k_init ** 0.5) / (beta_star * L_turb)  # ≈ 0.680 (was 4.08)
 
         (case_dir / "0" / "U").write_text(
             f"""\
@@ -5249,10 +5363,13 @@ dimensions      [0 1 -1 0 0 0 0];
 internalField   uniform ({Ux} 0 0);
 boundaryField
 {{
-    inlet    {{ type fixedValue; value uniform ({Ux} 0 0); }}
-    outlet   {{ type zeroGradient; }}
-    upper    {{ type slip; }}
-    lower    {{ type slip; }}
+    freestream
+    {{
+        type            freestreamVelocity;
+        freestreamValue uniform ({Ux} 0 0);
+        value           uniform ({Ux} 0 0);
+    }}
+    aerofoil {{ type noSlip; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
@@ -5285,10 +5402,13 @@ dimensions      [0 2 -2 0 0 0 0];
 internalField   uniform 0;
 boundaryField
 {
-    inlet    { type zeroGradient; }
-    outlet   { type fixedValue; value uniform 0; }
-    upper    { type zeroGradient; }
-    lower    { type zeroGradient; }
+    freestream
+    {
+        type            freestreamPressure;
+        freestreamValue uniform 0;
+        value           uniform 0;
+    }
+    aerofoil { type zeroGradient; }
     front { type empty; }
     back  { type empty; }
 }
@@ -5322,10 +5442,8 @@ dimensions      [0 2 -2 0 0 0 0];
 internalField   uniform {k_init};
 boundaryField
 {{
-    inlet    {{ type fixedValue; value uniform {k_init}; }}
-    outlet   {{ type zeroGradient; }}
-    upper    {{ type zeroGradient; }}
-    lower    {{ type zeroGradient; }}
+    freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
+    aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
@@ -5359,10 +5477,8 @@ dimensions      [0 0 -1 0 0 0 0];
 internalField   uniform {omega_init};
 boundaryField
 {{
-    inlet    {{ type fixedValue; value uniform {omega_init}; }}
-    outlet   {{ type zeroGradient; }}
-    upper    {{ type zeroGradient; }}
-    lower    {{ type zeroGradient; }}
+    freestream {{ type inletOutlet; inletValue uniform {omega_init}; value uniform {omega_init}; }}
+    aerofoil {{ type omegaWallFunction; value uniform {omega_init}; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
@@ -5372,7 +5488,7 @@ boundaryField
             encoding="utf-8",
         )
 
-        # 0/nut — turbulent viscosity (no airfoil wall function needed for slip walls)
+        # 0/nut — turbulent viscosity with wall functions on the airfoil patch
         (case_dir / "0" / "nut").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -5396,10 +5512,8 @@ dimensions      [0 2 -1 0 0 0 0];
 internalField   uniform 0.0;
 boundaryField
 {{
-    inlet    {{ type calculated; value uniform 0; }}
-    outlet   {{ type zeroGradient; }}
-    upper    {{ type zeroGradient; }}
-    lower    {{ type zeroGradient; }}
+    freestream {{ type calculated; value uniform 0; }}
+    aerofoil {{ type nutkWallFunction; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
@@ -5408,6 +5522,92 @@ boundaryField
 """,
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _naca0012_half_thickness(x_over_c: float, thickness_ratio: float = 0.12) -> float:
+        """Return the half-thickness y/c for a symmetric NACA 0012 profile."""
+        x = min(max(x_over_c, 0.0), 1.0)
+        if x in (0.0, 1.0):
+            return 0.0
+        thickness = (
+            0.2969 * math.sqrt(x)
+            - 0.1260 * x
+            - 0.3516 * x**2
+            + 0.2843 * x**3
+            - 0.1036 * x**4
+        )
+        return max(0.0, 5.0 * thickness_ratio * thickness)
+
+    @classmethod
+    def _write_naca0012_surface_obj(
+        cls,
+        case_dir: Path,
+        chord: float,
+        span: float,
+        point_count: int = 2001,
+    ) -> None:
+        """Write a thin-span NACA0012 OBJ aligned with the x-z airfoil plane."""
+        geometry_dir = case_dir / "constant" / "geometry"
+        geometry_dir.mkdir(parents=True, exist_ok=True)
+
+        xs = [
+            0.5 * chord * (1.0 - math.cos(math.pi * i / (point_count - 1)))
+            for i in range(point_count)
+        ]
+        lines = [
+            "# Wavefront OBJ file",
+            "# Regions:",
+            "#     0    airfoil",
+            "g airfoil",
+        ]
+        span_lo = -0.5 * span
+        span_hi = 0.5 * span
+
+        upper_front: List[int] = []
+        upper_back: List[int] = []
+        lower_front: List[int] = []
+        lower_back: List[int] = []
+        next_idx = 1
+
+        for x in xs:
+            z = cls._naca0012_half_thickness(x / chord) * chord
+            vertices = (
+                (x, span_lo, z),
+                (x, span_hi, z),
+                (x, span_lo, -z),
+                (x, span_hi, -z),
+            )
+            for bucket, vertex in zip(
+                (upper_front, upper_back, lower_front, lower_back), vertices
+            ):
+                lines.append(f"v {vertex[0]:.8f} {vertex[1]:.8f} {vertex[2]:.8f}")
+                bucket.append(next_idx)
+                next_idx += 1
+
+        for i in range(point_count - 1):
+            uf0, uf1 = upper_front[i], upper_front[i + 1]
+            ub0, ub1 = upper_back[i], upper_back[i + 1]
+            lf0, lf1 = lower_front[i], lower_front[i + 1]
+            lb0, lb1 = lower_back[i], lower_back[i + 1]
+
+            lines.append(f"f {uf0} {uf1} {ub1}")
+            lines.append(f"f {uf0} {ub1} {ub0}")
+            lines.append(f"f {lf0} {lb1} {lf1}")
+            lines.append(f"f {lf0} {lb0} {lb1}")
+
+        lead = (upper_front[0], upper_back[0], lower_back[0], lower_front[0])
+        trail = (
+            upper_front[-1],
+            upper_back[-1],
+            lower_back[-1],
+            lower_front[-1],
+        )
+        lines.append(f"f {lead[0]} {lead[1]} {lead[2]}")
+        lines.append(f"f {lead[0]} {lead[2]} {lead[3]}")
+        lines.append(f"f {trail[0]} {trail[2]} {trail[1]}")
+        lines.append(f"f {trail[0]} {trail[3]} {trail[2]}")
+
+        (geometry_dir / "NACA0012.obj").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _render_bfs_block_mesh_dict(
         self, task_spec: TaskSpec, H: float, channel_height: float,
@@ -5741,8 +5941,8 @@ mergePatchPairs
 
             latest_time = Path(latest_cont_dir).name
 
-            # 场文件：U 和 Cx/Cy 必选，T 可选（只在容器内存在时复制）
-            field_files = ["U", "p", "Cx", "Cy", "T"]
+            # 场文件：U 和 Cx/Cy 必选，Cz/T 按 case 需要复制。
+            field_files = ["U", "p", "Cx", "Cy", "Cz", "T"]
             host_time_dir = case_host_dir / latest_time
 
             for field_file in field_files:
@@ -6013,10 +6213,14 @@ mergePatchPairs
         # 读取场数据
         cxs = self._read_openfoam_scalar_field(cx_path)
         cys = self._read_openfoam_scalar_field(cy_path)
+        cz_path = latest_dir / "Cz"
+        czs = self._read_openfoam_scalar_field(cz_path) if cz_path.exists() else None
         u_vecs = self._read_openfoam_vector_field(u_path, len(cxs))
 
         if len(cxs) != len(cys) or len(cxs) != len(u_vecs):
             return key_quantities
+        if czs is not None and len(czs) != len(cxs):
+            czs = None
 
         geom = task_spec.geometry_type
         name_lower = task_spec.name.lower()
@@ -6080,7 +6284,11 @@ mergePatchPairs
             if p_path.exists():
                 p_vals = self._read_openfoam_scalar_field(p_path)
                 key_quantities = self._extract_airfoil_cp(
-                    cxs, cys, p_vals, task_spec, key_quantities
+                    cxs,
+                    czs if czs is not None else cys,
+                    p_vals,
+                    task_spec,
+                    key_quantities,
                 )
 
 
@@ -6596,7 +6804,7 @@ mergePatchPairs
     @staticmethod
     def _extract_airfoil_cp(
         cxs: List[float],
-        cys: List[float],
+        czs: List[float],
         p_vals: List[float],
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
@@ -6604,61 +6812,88 @@ mergePatchPairs
         """NACA Airfoil: 提取翼型表面压力系数分布 Cp。
 
         Gold Standard: Cp 分布 (x/c vs Cp)，来自 Thomas 1979 / Lada 2007
-        方法: 找 airfoil 表面（y 最小和最大处）的压力，
-        归一化为 Cp = (p - p_ref) / (0.5*rho*U_ref^2)
+        方法: 在 0<=x/c<=1 的 cell centres 中，寻找最接近 NACA0012 上/下表面的
+        近壁压力，并对对称表面做平均后得到 Cp(x/c)。
+
+        Note: Mesh now uses x-z plane (z=normal to aerofoil, y=thin span).
+        czs contains z-coordinate values from the x-z plane mesh.
         """
         if not cxs or not p_vals:
             return key_quantities
 
-        Re = float(task_spec.Re or 3e6)
         U_ref = 1.0
-        nu_val = 1.0 / Re
+        bc = task_spec.boundary_conditions or {}
+        chord = float(bc.get("chord_length", 1.0))
         rho = 1.0  # incompressible, reference density
         q_ref = 0.5 * rho * U_ref**2
+        if q_ref <= 0.0:
+            return key_quantities
 
-        # 找 airfoil 表面附近压力（y 最小 = lower surface, y 最大 = upper surface）
-        cy_min = min(cys)
-        cy_max = max(cys)
-        unique_y = sorted({round(y, 6) for y in cys})
-        if len(unique_y) >= 2:
-            dy = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
-            y_tol = max(0.6 * dy, 1e-6)
+        # czs contains z values (normal direction in x-z plane mesh)
+        unique_z = sorted({round(z, 6) for z in czs})
+        if len(unique_z) >= 2:
+            dz_min = min(
+                unique_z[i + 1] - unique_z[i]
+                for i in range(len(unique_z) - 1)
+                if unique_z[i + 1] > unique_z[i]
+            )
         else:
-            y_tol = 0.01
+            dz_min = 0.01 * chord
+
+        surface_band = max(8.0 * dz_min, 0.02 * chord)
+        search_envelope = 0.25 * chord
 
         from collections import defaultdict
-        x_lower: Dict[float, List[float]] = defaultdict(list)
-        x_upper: Dict[float, List[float]] = defaultdict(list)
 
-        for i in range(min(len(cxs), len(cys), len(p_vals))):
-            dist_lower = abs(cys[i] - cy_min)
-            dist_upper = abs(cys[i] - cy_max)
-            if dist_lower < y_tol:
-                x_lower[round(cxs[i], 4)].append(p_vals[i])
-            elif dist_upper < y_tol:
-                x_upper[round(cxs[i], 4)].append(p_vals[i])
+        upper_candidates: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+        lower_candidates: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+        farfield_pressures: List[float] = []
 
-        if x_lower or x_upper:
-            # Use pressure at approximate stagnation (cx≈0, upper surface)
-            p_ref = 0.0  # reference pressure
-            cp_values = []
+        n = min(len(cxs), len(czs), len(p_vals))
+        for i in range(n):
+            x = cxs[i]
+            z = czs[i]  # z is the normal direction in x-z plane mesh
+            p = p_vals[i]
 
-            for x_pos, p_list in sorted(x_lower.items()):
-                p_mean = sum(p_list) / len(p_list)
-                cp = (p_mean - p_ref) / q_ref if q_ref != 0 else 0.0
-                cp_values.append((x_pos, cp))
+            x_norm = x / chord if chord else 0.0
+            if (x < -0.5 * chord or x > 1.5 * chord) and abs(z) < 0.5 * chord:
+                farfield_pressures.append(p)
 
-            for x_pos, p_list in sorted(x_upper.items()):
-                p_mean = sum(p_list) / len(p_list)
-                cp = (p_mean - p_ref) / q_ref if q_ref != 0 else 0.0
-                cp_values.append((x_pos, cp))
+            if x_norm < 0.0 or x_norm > 1.0 or abs(z) > search_envelope:
+                continue
 
-            if cp_values:
-                cp_values.sort(key=lambda p: p[0])
-                cp_x = [x for x, _ in cp_values]
-                cp_vals = [c for _, c in cp_values]
-                key_quantities["pressure_coefficient"] = cp_vals
-                key_quantities["pressure_coefficient_x"] = cp_x
+            z_surface = FoamAgentExecutor._naca0012_half_thickness(x_norm) * chord
+            key = round(x_norm, 3)
+
+            if z >= 0.0:
+                upper_candidates[key].append((abs(z - z_surface), p))
+            else:
+                lower_candidates[key].append((abs(z + z_surface), p))
+
+        p_ref = (
+            sum(farfield_pressures) / len(farfield_pressures)
+            if farfield_pressures
+            else 0.0
+        )
+        cp_profile: List[Tuple[float, float]] = []
+
+        for x_key in sorted(set(upper_candidates) | set(lower_candidates)):
+            p_surface_samples: List[float] = []
+            if upper_candidates.get(x_key):
+                dist, p_upper = min(upper_candidates[x_key], key=lambda item: item[0])
+                if dist <= surface_band:
+                    p_surface_samples.append(p_upper)
+            if lower_candidates.get(x_key):
+                dist, p_lower = min(lower_candidates[x_key], key=lambda item: item[0])
+                if dist <= surface_band:
+                    p_surface_samples.append(p_lower)
+            if p_surface_samples:
+                p_surface = sum(p_surface_samples) / len(p_surface_samples)
+                cp_profile.append((x_key, (p_surface - p_ref) / q_ref))
+
+        if cp_profile:
+            key_quantities["pressure_coefficient_x"] = [x for x, _ in cp_profile]
+            key_quantities["pressure_coefficient"] = [cp for _, cp in cp_profile]
 
         return key_quantities
 

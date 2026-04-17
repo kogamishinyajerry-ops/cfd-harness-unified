@@ -1,0 +1,14 @@
+## Case Summary
+
+- Case ID: `{{ case_id }}`
+- Name: `{{ case_meta.name }}`
+- Description: `{{ case_meta.description }}`
+- Solver: `{{ case_meta.solver }}`
+- Turbulence Model: `{{ case_meta.turbulence_model }}`
+- Mesh Strategy: `{{ case_meta.mesh_strategy }}`
+- Key Parameters:
+{% for key, value in case_meta.key_parameters.items() %}
+- `{{ key }}` = `{{ value }}`
+{% endfor %}
+- Meta Source: `{{ case_meta.meta_source }}`
+

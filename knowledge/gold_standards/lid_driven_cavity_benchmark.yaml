@@ -1,0 +1,97 @@
+schema_version: 2
+case_id: lid_driven_cavity_benchmark
+legacy_case_id: lid_driven_cavity
+legacy_source_file: knowledge/gold_standards/lid_driven_cavity.yaml
+source: "Ghia et al. 1982, J. Comput. Phys."
+literature_doi: "10.1016/0021-9991(82)90058-4"
+relationships:
+  solver_reuse: lid_driven_cavity
+  geometry_similarity:
+    reference_case: lid_driven_cavity
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: lid_driven_cavity
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re
+observables:
+  - name: u_centerline
+    description: horizontal velocity along the vertical centerline
+    ref_value:
+      - y: 0.0625
+        u: -0.03717
+      - y: 0.1250
+        u: -0.04192
+      - y: 0.1875
+        u: -0.04124
+      - y: 0.2500
+        u: -0.03667
+      - y: 0.3125
+        u: -0.02799
+      - y: 0.3750
+        u: -0.01641
+      - y: 0.4375
+        u: -0.00289
+      - y: 0.5000
+        u: 0.02526
+      - y: 0.5625
+        u: 0.07156
+      - y: 0.6250
+        u: 0.11910
+      - y: 0.6875
+        u: 0.17285
+      - y: 0.7500
+        u: 0.33304
+      - y: 0.8125
+        u: 0.46687
+      - y: 0.8750
+        u: 0.65487
+      - y: 0.9375
+        u: 0.84927
+      - y: 1.0000
+        u: 1.00000
+    tolerance:
+      mode: relative
+      value: 0.05
+  - name: v_centerline
+    description: vertical velocity along the horizontal centerline
+    ref_value:
+      - y: 0.1250
+        v: -0.04939
+      - y: 0.1875
+        v: -0.06203
+      - y: 0.2500
+        v: -0.06904
+      - y: 0.3125
+        v: -0.07080
+      - y: 0.3750
+        v: -0.06629
+      - y: 0.4375
+        v: -0.05259
+      - y: 0.5000
+        v: 0.05454
+      - y: 0.5625
+        v: 0.06406
+      - y: 0.6250
+        v: 0.06920
+      - y: 0.6875
+        v: 0.06878
+      - y: 0.7500
+        v: 0.06021
+      - y: 0.8125
+        v: 0.04404
+      - y: 0.8750
+        v: 0.02429
+    tolerance:
+      mode: relative
+      value: 0.05
+  - name: primary_vortex_location
+    description: main vortex summary metrics
+    ref_value:
+      vortex_center_x: 0.5000
+      vortex_center_y: 0.7650
+      u_min:
+        value: -0.03717
+        location_y: 0.0625
+    tolerance:
+      mode: relative
+      value: 0.05
