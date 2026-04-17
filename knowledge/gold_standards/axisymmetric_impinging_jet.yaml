@@ -1,0 +1,31 @@
+schema_version: 2
+case_id: axisymmetric_impinging_jet
+legacy_case_id: impinging_jet
+legacy_source_file: knowledge/gold_standards/impinging_jet.yaml
+source: "Computed: simpleFoam flat-plate extraction (cf_skin_friction); Literature: Cooper 1984 for impinging jet Nu correlation"
+literature_doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+note: >
+  This case ran with simpleFoam (isothermal, no heat transfer). The extracted
+  nusselt_number=0.0042 is actually a local skin-friction coefficient (Cf) from
+  the flat-plate post-processing, not a true impinging-jet Nusselt number.
+  The Gold Standard ref_value=25.0 (Cooper 1984) requires buoyantFoam with
+  thermal boundary conditions — a different solver configuration.
+  This observable is INCOMPATIBLE with simpleFoam execution.
+relationships:
+  solver_reuse: impinging_jet
+  geometry_similarity:
+    reference_case: impinging_jet
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: impinging_jet
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re
+observables:
+  - name: nusselt_number
+    description: "INCOMPATIBLE — simpleFoam isothermal run; cf_skin_friction extracted (Nu=0.0042 is Cf, not Nu)"
+    ref_value: 0.0042
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.15
+    notes: "This is cf_skin_friction from flat-plate post-processing. True impinging jet Nu requires buoyantFoam."

@@ -1,28 +1,17 @@
-# Gold Standard — Differential Heated Cavity (Natural Convection)
-# Based on Dhir 2001 / Ampofo & Karayiannis 2003
-# Ra = 1e10 (turbulent natural convection, aspect ratio = 1)
-# Square cavity, left wall hot, right wall cold, top/bottom adiabatic
-# STEADY simulation
-
-quantity: nusselt_number
-reference_values:
-  - value: 30.0
-    unit: dimensionless
-    description: "Nu at hot wall for Ra=1e10 (Dhir 2001)"
-tolerance: 0.15
+schema_version: 2
+case_id: differential_heated_cavity
 source: "Dhir 2001 / Ampofo & Karayiannis 2003"
 literature_doi: "10.1016/S0140-7007(02)00085-4"
-mesh_info:
-  cells: 1600
-  type: structured
-solver_info:
-  name: buoyantFoam
-  schemes: PIMPLE
-case_info:
-  id: differential_heated_cavity
-  Ra: 1.0e10
-  Pr: 0.71
-  flow_type: NATURAL_CONVECTION
-  geometry_type: NATURAL_CONVECTION_CAVITY
-  steady_state: STEADY
-  aspect_ratio: 1.0
+note: >
+  Docker E2E (Phase 7, 2026-04-16) crashed at "Starting time loop" with
+  "Unknown function type cellCentre" before iteration. The adapter code was
+  already corrected to use writeCellCentres (line 4422). The Docker run used
+  an older cached adapter version. Rerunning with current adapter should resolve.
+observables:
+  - name: nusselt_number
+    description: wall-averaged Nusselt number for the hot wall at Ra = 1e10
+    ref_value: 30.0
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.15

@@ -56,7 +56,7 @@ def test_disabled_hook_is_noop(tmp_path: Path):
 
 def test_out_of_scope_case_returns_noop(tmp_path: Path):
     report = AutoVerifier().verify(
-        case_id="naca0012_airfoil",
+        case_id="of-99-future-case",
         log_file=tmp_path / "missing.log",
         gold_standard={"observables": []},
         sim_results={},
@@ -64,4 +64,3 @@ def test_out_of_scope_case_returns_noop(tmp_path: Path):
     )
     assert report.out_of_scope_reason is not None
     assert report.gold_standard_comparison.overall == "SKIPPED"
-

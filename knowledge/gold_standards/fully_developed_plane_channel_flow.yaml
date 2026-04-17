@@ -1,0 +1,39 @@
+schema_version: 2
+case_id: fully_developed_plane_channel_flow
+legacy_case_id: plane_channel_flow
+legacy_source_file: knowledge/gold_standards/plane_channel_flow.yaml
+source: "Kim et al. 1987 / Moser et al. 1999 (DNS); Phase 7 Docker used icoFoam laminar"
+literature_doi: "10.1017/S0022112087000892"
+note: >
+  Phase 7 Docker ran icoFoam (laminar, Re=100, 905-point mesh) — NOT DNS/turbulent.
+  The Gold Standard ref_value is DNS-quality turbulent profile (Kim 1987) which
+  requires turbulence model + much finer mesh. The laminar icoFoam cannot produce
+  the expected turbulent u+/y+ profile. This observable is INCOMPATIBLE with
+  the current solver configuration. Either: (1) Re-run with simpleFoam + kEpsilon
+  and finer mesh, or (2) Update ref_value to match laminar Poiseuille profile.
+relationships:
+  solver_reuse: plane_channel_flow
+  geometry_similarity:
+    reference_case: plane_channel_flow
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: plane_channel_flow
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re_tau
+observables:
+  - name: u_mean_profile
+    description: "INCOMPATIBLE — laminar icoFoam cannot produce DNS turbulent profile"
+    ref_value:
+      - y: 0.0
+        u: 0.0
+      - y: 0.25
+        u: 0.75
+      - y: 0.5
+        u: 1.0
+      - y: 0.75
+        u: 0.75
+      - y: 1.0
+        u: 0.0
+    tolerance:
+      mode: relative
+      value: 0.10

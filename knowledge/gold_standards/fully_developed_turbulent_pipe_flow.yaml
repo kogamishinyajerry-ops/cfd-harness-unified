@@ -1,0 +1,23 @@
+schema_version: 2
+case_id: fully_developed_turbulent_pipe_flow
+legacy_case_id: fully_developed_pipe
+legacy_source_file: knowledge/gold_standards/fully_developed_pipe.yaml
+source: "Nikuradse 1933 / Moody 1944"
+literature_doi: "10.1007/BF01314553"
+relationships:
+  solver_reuse: fully_developed_pipe
+  geometry_similarity:
+    reference_case: fully_developed_pipe
+    similarity_type: TOPOLOGICAL
+  physics_analogy:
+    reference_case: fully_developed_pipe
+    analogy_basis: legacy_alias
+    matched_dimensionless_group: Re
+observables:
+  - name: friction_factor
+    description: Darcy friction factor at Re = 50000
+    ref_value: 0.0185
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.08

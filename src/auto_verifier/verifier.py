@@ -62,7 +62,7 @@ class AutoVerifier:
                 verdict="PASS_WITH_DEVIATIONS",
                 correction_spec_needed=False,
                 correction_spec=None,
-                out_of_scope_reason="Phase 8a is frozen to OF-01/02/03 only.",
+                out_of_scope_reason="Phase 8a is frozen to the Phase 7 coverage anchor set.",
             )
             if output_path is not None:
                 self.write_report(output_path, report)
@@ -192,7 +192,7 @@ class PostExecuteHook:
                 "enabled": True,
                 "status": "out_of_scope",
                 "case_id": case_id,
-                "reason": "Phase 8a is frozen to OF-01/02/03 only.",
+                "reason": "Phase 8a is frozen to the Phase 7 coverage anchor set.",
             }
 
         raw_output_path = Path(exec_result.raw_output_path or "")

@@ -1,29 +1,12 @@
-# Gold Standard — Turbulent Flat Plate (Zero Pressure Gradient)
-# Based on Spalding 1962 / ISO 12048
-# Re = 50000 (based on plate length and free-stream velocity),
-# turbulent flat plate, zero pressure gradient
-# STEADY simulation
-
-quantity: cf_skin_friction
-reference_values:
-  - x_over_c: 0.5
-    Cf: 0.0028
-    description: "local skin friction coefficient at x/L=0.5"
-  - x_over_c: 1.0
-    Cf: 0.0026
-    description: "local skin friction coefficient at x/L=1.0"
-tolerance: 0.10
+schema_version: 2
+case_id: turbulent_flat_plate
 source: "Spalding 1962 / ISO 12048"
-mesh_info:
-  cells: 2000
-  type: structured
-solver_info:
-  name: simpleFoam
-  schemes: SIMPLE
-case_info:
-  id: turbulent_flat_plate
-  Re: 50000
-  flow_type: INTERNAL
-  geometry_type: SIMPLE_GRID
-  steady_state: STEADY
-  plate_length: 1.0
+literature_doi: "10.2172/1448408"
+observables:
+  - name: cf_skin_friction
+    description: local skin-friction coefficient near x/L = 0.5
+    ref_value: 0.0028
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10

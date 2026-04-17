@@ -13,6 +13,13 @@ ANCHOR_CASE_IDS = frozenset(
         "lid_driven_cavity_benchmark",
         "backward_facing_step_steady",
         "cylinder_crossflow",
+        "turbulent_flat_plate",
+        "fully_developed_turbulent_pipe_flow",
+        "rayleigh_benard_convection",
+        "differential_heated_cavity",
+        "naca0012_airfoil",
+        "axisymmetric_impinging_jet",
+        "fully_developed_plane_channel_flow",
     }
 )
 
@@ -20,18 +27,40 @@ TASK_NAME_TO_CASE_ID = {
     "Lid-Driven Cavity": "lid_driven_cavity_benchmark",
     "Backward-Facing Step": "backward_facing_step_steady",
     "Circular Cylinder Wake": "cylinder_crossflow",
+    "Turbulent Flat Plate (Zero Pressure Gradient)": "turbulent_flat_plate",
+    "Fully Developed Turbulent Pipe Flow": "fully_developed_turbulent_pipe_flow",
+    "Rayleigh-Benard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    "Rayleigh-Bénard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    "Differential Heated Cavity (Natural Convection)": "differential_heated_cavity",
+    "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
+    "Axisymmetric Impinging Jet (Re=10000)": "axisymmetric_impinging_jet",
+    "Fully Developed Plane Channel Flow (DNS)": "fully_developed_plane_channel_flow",
 }
 
 CASE_ID_TO_GOLD_FILE = {
     "lid_driven_cavity_benchmark": KNOWLEDGE_ROOT / "gold_standards" / "lid_driven_cavity_benchmark.yaml",
     "backward_facing_step_steady": KNOWLEDGE_ROOT / "gold_standards" / "backward_facing_step_steady.yaml",
     "cylinder_crossflow": KNOWLEDGE_ROOT / "gold_standards" / "cylinder_crossflow.yaml",
+    "turbulent_flat_plate": KNOWLEDGE_ROOT / "gold_standards" / "turbulent_flat_plate.yaml",
+    "fully_developed_turbulent_pipe_flow": KNOWLEDGE_ROOT / "gold_standards" / "fully_developed_turbulent_pipe_flow.yaml",
+    "rayleigh_benard_convection": KNOWLEDGE_ROOT / "gold_standards" / "rayleigh_benard_convection.yaml",
+    "differential_heated_cavity": KNOWLEDGE_ROOT / "gold_standards" / "differential_heated_cavity.yaml",
+    "naca0012_airfoil": KNOWLEDGE_ROOT / "gold_standards" / "naca0012_airfoil.yaml",
+    "axisymmetric_impinging_jet": KNOWLEDGE_ROOT / "gold_standards" / "axisymmetric_impinging_jet.yaml",
+    "fully_developed_plane_channel_flow": KNOWLEDGE_ROOT / "gold_standards" / "fully_developed_plane_channel_flow.yaml",
 }
 
 CASE_ID_TO_SOLVER = {
     "lid_driven_cavity_benchmark": "icoFoam",
     "backward_facing_step_steady": "simpleFoam",
     "cylinder_crossflow": "pimpleFoam",
+    "turbulent_flat_plate": "simpleFoam",
+    "fully_developed_turbulent_pipe_flow": "simpleFoam",
+    "rayleigh_benard_convection": "buoyantFoam",
+    "differential_heated_cavity": "buoyantFoam",
+    "naca0012_airfoil": "simpleFoam",
+    "axisymmetric_impinging_jet": "simpleFoam",
+    "fully_developed_plane_channel_flow": "simpleFoam",
 }
 
 DEFAULT_TIMESTAMP = "1970-01-01T00:00:00Z"
@@ -63,4 +92,3 @@ PROFILE_VALUE_KEYS = (
     "u_Uinf",
     "u_plus",
 )
-

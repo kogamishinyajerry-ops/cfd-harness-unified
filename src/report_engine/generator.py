@@ -16,6 +16,13 @@ SUPPORTED_CASE_IDS = {
     "lid_driven_cavity_benchmark",
     "backward_facing_step_steady",
     "cylinder_crossflow",
+    "turbulent_flat_plate",
+    "fully_developed_turbulent_pipe_flow",
+    "rayleigh_benard_convection",
+    "differential_heated_cavity",
+    "naca0012_airfoil",
+    "axisymmetric_impinging_jet",
+    "fully_developed_plane_channel_flow",
 }
 
 
@@ -47,7 +54,7 @@ class ReportGenerator:
                 status="noop",
                 reason=(
                     "out_of_scope: report generation is frozen to "
-                    "OF-01/OF-02/OF-03 during Phase 8b-1"
+                    "Phase 7 coverage anchors during Phase 8b-1"
                 ),
                 warnings=["out_of_scope"],
             )

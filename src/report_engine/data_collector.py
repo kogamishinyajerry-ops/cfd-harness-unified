@@ -17,6 +17,9 @@ CASE_ID_TO_WHITELIST_ID = {
     "lid_driven_cavity_benchmark": "lid_driven_cavity",
     "backward_facing_step_steady": "backward_facing_step",
     "cylinder_crossflow": "circular_cylinder_wake",
+    "fully_developed_turbulent_pipe_flow": "fully_developed_pipe",
+    "axisymmetric_impinging_jet": "impinging_jet",
+    "fully_developed_plane_channel_flow": "plane_channel_flow",
 }
 
 TOTAL_PROJECT_CASES = 15
@@ -118,4 +121,3 @@ class ReportDataCollector:
         if not path.exists():
             return None
         return yaml.safe_load(path.read_text(encoding="utf-8"))
-
