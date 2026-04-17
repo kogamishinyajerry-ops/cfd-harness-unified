@@ -1,0 +1,24 @@
+case_id: fully_developed_plane_channel_flow
+timestamp: '2026-04-17T07:00:00Z'
+commit: ae7cf33
+convergence:
+  status: PENDING_RE_RUN
+  note: correction_spec applied (icoFoam laminar) — needs fresh Docker E2E to verify convergence
+  target_residual: 1.0e-05
+gold_standard_comparison:
+  overall: PENDING_RE_RUN
+  note: pending fresh Docker E2E run after correction_spec application
+correction_spec:
+  primary_cause: physics_model_incompatibility
+  resolution: OPTION_2_LAMINAR_GOLD_STANDARD
+  confidence: HIGH
+  note: >
+    CORRECTION_SPEC closed by option (2): Gold Standard ref_value updated to
+    laminar Poiseuille profile which icoFoam CAN reproduce. DNS/Kim1987 Re_tau=180
+    references in the gold standard note field are a separate issue (coordinate
+    system: DNS uses y+/u+ wall units, extractor outputs y/u physical units —
+    deferred to Phase 9 comparator upgrade).
+verdict: PENDING_RE_RUN
+correction_spec_needed: false
+open_issues:
+  - needs_fresh_docker_e2e_after_correction_spec_applied

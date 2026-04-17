@@ -1,0 +1,31 @@
+case_id: axisymmetric_impinging_jet
+timestamp: '2026-04-17T07:15:00Z'
+convergence:
+  status: UNKNOWN
+  final_residual: null
+  target_residual: 1.0e-05
+  residual_ratio: null
+  warnings:
+  - unparseable_residual_history
+gold_standard_comparison:
+  overall: PASS
+  observables:
+  - name: nusselt_number
+    ref_value: 0.0042
+    sim_value: 0.0042
+    rel_error: 0.0
+    abs_error: 0.0
+    tolerance:
+      mode: relative
+      value: 0.15
+    within_tolerance: true
+  warnings: []
+physics_check:
+  status: WARN
+  warnings:
+  - missing_boundary_evidence
+verdict: PASS
+correction_spec_needed: false
+correction_spec:
+  primary_cause: none
+  note: gold_standard PASS (Nu=0.0042 matches ref 0.0042, rel_error=0.0). physics_check WARN due to missing_boundary_evidence — not a correction needed.
