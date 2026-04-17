@@ -42,9 +42,10 @@ class NotionClient:
         token: Optional[str] = None,
         database_ids: Optional[Dict[str, str]] = None,
     ) -> None:
-        self._token = token
+        import os
+        self._token = token or os.environ.get("NOTION_API_KEY") or os.environ.get("NOTION_TOKEN")
         self._database_ids = database_ids or {}
-        self._client = Client(auth=token, notion_version="2022-06-28") if token else None
+        self._client = Client(auth=self._token, notion_version="2022-06-28") if self._token else None
 
     # ------------------------------------------------------------------
     # 公开 API

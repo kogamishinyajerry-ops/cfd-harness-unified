@@ -1669,6 +1669,10 @@ snGradSchemes
 {
     default         corrected;
 }
+wallDist
+{
+    method          meshWave;
+}
 
 // ************************************************************************* //
 """,
@@ -1763,30 +1767,30 @@ relaxationFactors
 {
     fields
     {
-        p_rgh           0.2;
+        p_rgh           0.1;
     }
     equations
     {
-        U               0.5;
-        h               0.3;
-        k               0.5;
-        epsilon         0.5;
-        omega           0.5;
+        U               0.3;
+        h               0.1;
+        k               0.3;
+        epsilon         0.3;
+        omega           0.3;
     }
 }
 
 PIMPLE
 {
-    nOuterCorrectors 1;
-    nNonOrthogonalCorrectors 1;
+    nOuterCorrectors 80;
+    nNonOrthogonalCorrectors 2;
     pRefCell        0;
     pRefValue       0;
 
     residualControl
     {
         U       1e-5;
-        h       1e-5;
-        p_rgh   1e-4;
+        h       1e-6;
+        p_rgh   1e-5;
         k       1e-5;
         epsilon 1e-5;
         omega   1e-5;
@@ -2064,11 +2068,13 @@ boundaryField
 {{
     hot_wall
     {{
-        type            zeroGradient;
+        type            fixedValue;
+        value           uniform {T_hot};
     }}
     cold_wall
     {{
-        type            zeroGradient;
+        type            fixedValue;
+        value           uniform {T_cold};
     }}
     adiabatic_top
     {{
@@ -2229,11 +2235,8 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 11c. 0/omega — Specific dissipation rate [1/s] (required by kOmegaSST)
-        # omega = Cmu^0.25 * sqrt(k) / (kappa * L) ≈ 0.1 for low-turbulence NC
-        # Use computed value: sqrt(k_internal) / (Cmu^0.25 * L) ≈ sqrt(1e-4)/L ≈ 0.0178
+        # omega_init and omega_wall already computed at lines 1334-1343
         # --------------------------------------------------------------------------
-        omega_init = float("{omega_init:.16e}")
-        omega_wall = float("{omega_wall:.16e}")
         (case_dir / "0" / "omega").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
