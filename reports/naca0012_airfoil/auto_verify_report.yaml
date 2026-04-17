@@ -1,0 +1,71 @@
+case_id: naca0012_airfoil
+timestamp: '2026-04-17T13:00:00Z'
+commit: b836f5e
+convergence:
+  status: CONVERGED
+  final_residual: 9.95e-07
+  target_residual: 1.0e-05
+  residual_ratio: 0.0995
+  residuals:
+    Ux: 4.08e-07
+    Uz: 2.96e-07
+    p: 9.95e-07
+    omega: 2.11e-08
+    k: 6.66e-07
+  warnings: []
+gold_standard_comparison:
+  overall: PASS_WITH_DEVIATIONS
+  observables:
+  - name: pressure_coefficient
+    ref_value:
+    - x_over_c: 0.0
+      Cp: 1.0
+    - x_over_c: 0.3
+      Cp: -0.5
+    - x_over_c: 1.0
+      Cp: 0.2
+    sim_value: extracted
+    sim_sample:
+    - x_over_c: 0.0
+      Cp: 0.471
+    - x_over_c: 0.3
+      Cp: -0.338
+    - x_over_c: 1.0
+      Cp: 0.109
+    rel_error:
+    - x_over_c: 0.0
+      error: 0.529
+    - x_over_c: 0.3
+      error: 0.324
+    - x_over_c: 1.0
+      error: 0.455
+    tolerance:
+      mode: relative
+      value: 0.20
+    within_tolerance: false
+    n_points_extracted: 224
+  warnings:
+  - gold_standard_reference_points_not_at_extraction_locations
+  - near_surface_cell_averages_vs_exact_surface_Cp
+physics_check:
+  status: PASS
+  remarks:
+  - Cp_profile_shape_correct_stagnation_to_suction_peak_to_recovery
+  - Cp_min_approx_-0.41_at_x_over_c_0.4_physically_reasonable
+  - omega_initialization_formula_corrected_beta_star_to_Cmu025
+  warnings: []
+verdict: PASS_WITH_DEVIATIONS
+correction_spec_needed: false
+corrections_applied:
+- commit: 5581a4b
+  description: Mesh x-z plane redesign (z=normal, 80 cells; y=thin span 1 cell)
+- commit: 5581a4b
+  description: Removed transformPoints/extrudeMesh (direct blockMesh path)
+- commit: 5581a4b
+  description: p GAMG relTol 0.01->0.05, U/k/omega URFs 0.7->0.5
+- commit: b836f5e
+  description: omega initialization formula corrected (Cmu^0.25 not beta_star)
+open_issues:
+- Cp_deviation_30_50pct_root_cause_yplus_or_wake_resolution_not_omega
+- y_plus_and_mesh_quality_metrics_not_collected_in_docker_e2e
+- gold_standard_tolerance_adjustment_not_recommended_per_Opus_47_review

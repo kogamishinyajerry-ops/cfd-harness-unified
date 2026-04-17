@@ -1,0 +1,105 @@
+version: 1
+phase: 9
+status: D4_BASELINE_GATE_TRIGGERED
+prepared_on: "2026-04-17"
+d4_triggered_by: SY-1
+d4_triggered_at: "2026-04-17T07:10:00Z"
+d4_stop_reason: "First actual baseline measurement captured. Per D4: STOP and submit lightweight Opus review before drafting Model Routing v3.2 policy text."
+goal: >
+  Frozen replay manifest for Phase 9 model routing baseline capture.
+  This manifest defines bounded replay slices without modifying runtime code.
+
+tracks:
+  - replay_id: EX-1
+    track: execution_diagnostic
+    intent: >
+      Measure routing behavior on one bounded engineering or diagnostic slice
+      using frozen repo evidence rather than live solver mutation.
+    inputs:
+      - src/foam_agent_adapter.py
+      - docs/design/PHASE9_EXTERNAL_SOLVER_DECISION_TREE.md
+      - docs/gates/PHASE8A_OPUS_REVIEW_PACKAGE.md
+    expected_output: bounded diagnostic memo or fix-plan artifact
+    capture:
+      latency_source: command timestamps
+      token_source: provider/app usage export
+      quality_source: contract-based rubric
+      determinism_source: normalized markdown diff
+    thresholds:
+      wall_clock_latency_s_max: 300
+      quality_score_min: 4.0
+      determinism_required: true
+      scope_violation_count_max: 0
+
+  - replay_id: PL-1
+    track: planning_governance
+    intent: >
+      Measure routing behavior on one planning or governance artifact generation slice.
+    inputs:
+      - docs/design/PHASE9_EXTERNAL_SOLVER_DECISION_TREE.md
+      - docs/governance/PHASE9_MODEL_ROUTING_BASELINE_PLAN.md
+      - https://www.notion.so/45c8b97397ca46f2bef61795d9110715
+    expected_output: one planning artifact or activation-ready summary
+    capture:
+      latency_source: command timestamps
+      token_source: provider/app usage export
+      quality_source: contract-based rubric
+      determinism_source: normalized markdown diff
+    thresholds:
+      wall_clock_latency_s_max: 180
+      quality_score_min: 4.0
+      determinism_required: true
+      scope_violation_count_max: 0
+
+  - replay_id: SY-1
+    track: sync_documentation
+    intent: >
+      Measure routing behavior on a sync or documentation slice using existing reports
+      and dry-run payload generation only.
+    inputs:
+      - reports/lid_driven_cavity_benchmark/auto_verify_report.yaml
+      - reports/lid_driven_cavity_benchmark/report.md
+      - https://www.notion.so/96a6344f4a42442dabb3a96e9faadee6
+    expected_output: one dry-run sync summary or structured payload
+    capture:
+      latency_source: command timestamps
+      token_source: provider/app usage export
+      quality_source: contract-based rubric
+      determinism_source: normalized yaml/json diff
+    thresholds:
+      wall_clock_latency_s_max: 180
+      quality_score_min: 4.0
+      determinism_required: true
+      scope_violation_count_max: 0
+
+metric_glossary:
+  prompt_tokens: input tokens consumed for one replay slice
+  completion_tokens: output tokens consumed for one replay slice
+  estimated_cost_usd: derived from token counts and active pricing table
+  wall_clock_latency_s: end-to-end elapsed seconds
+  quality_score: average score from the shared 1-5 rubric
+  determinism_grade: pass/fail after normalized replay comparison
+  override_rate: percentage of slices requiring manual reroute
+  scope_violation_count: count of forbidden-path or gate-boundary violations
+
+replay_results:
+  - replay_id: SY-1
+    track: sync_documentation
+    status: baseline_captured
+    captured_at: "2026-04-17T07:10:00Z"
+    output: reports/baselines/SY-1_deterministic_replay_capture.md
+    metrics:
+      wall_clock_latency_s: DRY_RUN_NO_OP
+      quality_score: 5.0
+      determinism_grade: PASS
+      scope_violation_count: 0
+      routing_override_rate: N/A
+    phase_7_isolation: CLEAR
+    d4_gate: TRIGGERED — Opus review required before Model Routing v3.2 drafting
+
+notes:
+  - Phase 9 remains planning_only while this manifest is prepared.
+  - No replay slice may mutate src/, tests/, or knowledge runtime paths before Opus activation review.
+  - Solo Mode variance must be recorded separately from the documented v3.1 routing policy.
+  - ⚠️ D4 BASELINE GATE TRIGGERED: SY-1 first measurement complete. STOP — awaiting Opus review.
+
