@@ -6834,16 +6834,48 @@ mergePatchPairs
         if not cxs or not u_vecs:
             return key_quantities
 
+        import inspect
+        import warnings
         Re = float(task_spec.Re or 50000)
         nu_val = 1.0 / Re
         U_ref = 1.0
+
+        # 保持现有签名不变：从调用方恢复可选的 Cz/nut 数据用于 2D 薄层网格回退。
+        caller_frame = inspect.currentframe()
+        caller_locals = caller_frame.f_back.f_locals if caller_frame and caller_frame.f_back else {}
+        czs = caller_locals.get("czs")
+        if not isinstance(czs, list) or len(czs) != len(cxs):
+            czs = None
+        nut_vals = None
+        latest_dir = caller_locals.get("latest_dir")
+        if isinstance(latest_dir, Path):
+            nut_path = latest_dir / "nut"
+            if nut_path.exists():
+                nut_candidate = FoamAgentExecutor._read_openfoam_scalar_field(nut_path)
+                if len(nut_candidate) == len(cxs):
+                    nut_vals = nut_candidate
+        del caller_frame
+
+        def _compute_wall_gradient(
+            samples: List[Tuple[float, float, float]], tol: float = 1e-10
+        ) -> Optional[Tuple[float, float]]:
+            if len(samples) < 2:
+                return None
+            ordered = sorted(samples, key=lambda item: item[0])
+            wall_coord, wall_u, wall_nut = ordered[0]
+            for coord, u_parallel, local_nut in ordered[1:]:
+                delta = coord - wall_coord
+                if abs(delta) > tol:
+                    gradient = (u_parallel - wall_u) / delta
+                    return gradient, max(wall_nut, local_nut, 0.0)
+            return None
 
         # 找 x=0.5 位置（无因次化后）和 y≈0（壁面）速度
         x_target = 0.5
         unique_x = sorted({round(x, 6) for x in cxs})
         if len(unique_x) >= 2:
             dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
-            x_tol = max(0.6 * dx, 1e-6)
+            x_tol = max(0.6 * dx, 1e-3)
         else:
             x_tol = 0.01
 
@@ -6853,23 +6885,44 @@ mergePatchPairs
 
         for i in range(min(len(cxs), len(cys), len(u_vecs))):
             if abs(cxs[i] - x_target) < x_tol:
-                x_groups[round(cxs[i], 5)].append((cys[i], u_vecs[i][0]))
+                cz_val = czs[i] if czs is not None else None
+                nut_val = nut_vals[i] if nut_vals is not None else 0.0
+                x_groups[round(cxs[i], 5)].append((cys[i], cz_val, u_vecs[i][0], nut_val))
 
         cf_values = []
+        sign_corrected = False
         for x_pos, cy_u_pairs in x_groups.items():
-            # 找壁面（cy 最小）和次壁面
-            cy_u_sorted = sorted(cy_u_pairs, key=lambda p: p[0])
-            if len(cy_u_sorted) >= 2:
-                y0, u0 = cy_u_sorted[0]  # wall
-                y1, u1 = cy_u_sorted[1]  # first interior
-                dy = y1 - y0
-                if dy > 1e-10:
-                    du_dy = (u1 - u0) / dy
-                    tau_w = nu_val * du_dy
-                    Cf = tau_w / (0.5 * U_ref**2)
+            grad_data = _compute_wall_gradient(
+                [(cy, u_parallel, nut_val) for cy, _, u_parallel, nut_val in cy_u_pairs]
+            )
+
+            # 2D 薄层网格里 Cy 可能全部塌缩到 0；此时退化到 Cz 方向梯度。
+            if grad_data is None and czs is not None:
+                z_samples = [
+                    (cz, u_parallel, nut_val)
+                    for _, cz, u_parallel, nut_val in cy_u_pairs
+                    if cz is not None
+                ]
+                grad_data = _compute_wall_gradient(z_samples)
+
+            if grad_data is not None:
+                du_dn, nut_eff = grad_data
+                tau_w = (nu_val + nut_eff) * du_dn
+                Cf = tau_w / (0.5 * U_ref**2)
+                if math.isfinite(Cf):
+                    if Cf < 0.0:
+                        sign_corrected = True
+                        Cf = abs(Cf)
                     cf_values.append(Cf)
 
         if cf_values:
+            if sign_corrected:
+                warnings.warn(
+                    "Negative flat-plate Cf corrected to absolute value; "
+                    "check wall-normal orientation in extracted cell-centre data.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             Cf_mean = sum(cf_values) / len(cf_values)
             key_quantities["cf_skin_friction"] = Cf_mean
             key_quantities["cf_location_x"] = x_target
