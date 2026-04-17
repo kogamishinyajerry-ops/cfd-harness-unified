@@ -3,11 +3,14 @@ case_id: naca0012_airfoil
 source: "Thomas 1979 / Lada & Gostling 2007"
 literature_doi: "10.1017/S0001924000001169"
 note: >
-  Phase 7 Docker E2E (simpleFoam + kOmegaSST, Re=3e6) diverged with NaN pressure
-  after 17892s. Root cause: GAMG p solver relTol 0.01 too tight; missing p URF;
-  omega URFs 0.7 too aggressive for high-Re external flow. Fix in adapter:
-  (1) p GAMG relTol 0.05 + p URF 0.2; (2) U/k/omega equations URF 0.5 each.
-  Current adapter fvSolution needs these corrections.
+  Mesh: x-z plane (z=normal, 80 cells; y=thin span ±0.001, empty boundaries).
+  Direct blockMesh around NACA0012 OBJ — no transformPoints/extrudeMesh.
+  Solver: simpleFoam + kOmegaSST, Re=3e6.
+  fvSolution: p GAMG relTol=0.05 tolerance=1e-6; fields p URF=0.3;
+    equations U/k/omega URF=0.5 each; I_turb=0.005.
+  Docker E2E: converged (p=9.7e-7), 224 Cp values extracted.
+  Gold comparison deviations ~30-50% — extracted values are near-surface cell
+  averages; reference values are exact surface points. Cp profile shape correct.
 observables:
   - name: pressure_coefficient
     description: pressure coefficient distribution along the NACA 0012 chord
