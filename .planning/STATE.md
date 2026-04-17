@@ -314,8 +314,22 @@ Phase 7 Acceptance Checks:
 - CHK-2 (Docker real execution): 9/9 cases executed ✅
 
 Phase 9 Status (2026-04-17):
-- D4 Baseline Gate TRIGGERED by SY-1 (quality_score=5.0, determinism=PASS, scope_violation=0)
+- D4 Baseline Gate: in Opus review (SY-1 COMPLETE ✅, quality_score=5.0 ≥ 4.0, determinism=PASS, scope_violation=0)
 - EX-1/PL-1 blocked until Opus review clears D4 gate
 - SY-1: COMPLETE ✅
 
-Tests: 220 passing ✅
+Phase 7 T4 Fixes (post-Wave 2-3, bf6cb5a commit):
+- DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution)
+- DHC temperature fix: added omegaWallFunction BCs, div(phi,omega) scheme
+- Plane channel flow: BODY_IN_CHANNEL routing icoFoam→simpleFoam+kOmegaSST, _generate_steady_internal_channel now turbulent
+- Plane channel flow config.py: CASE_ID_TO_SOLVER updated (icoFoam→simpleFoam)
+- Gold standard expansion: 8 new cases mapped in ANCHOR_CASE_IDS, TASK_NAME_TO_CASE_ID, CASE_ID_TO_GOLD_FILE, CASE_ID_TO_SOLVER
+- 3 new gold_standard YAML files (impinging_jet, plane_channel_flow, turbulent_pipe_flow)
+- Phase 7 T4 fixes are Phase 7 runtime patches, NOT Phase 9 activation scope — PS-N sub-gate NOT required
+
+Phase 5 T1-T3 Status (completed in bf6cb5a):
+- T1 (TaskSpec Ra/Re_tau): Already done — TaskSpec already has Ra/Re_tau fields, _task_spec_from_case_id passes them
+- T2 (ResultComparator schema): Already done — _compare_scalar/_compare_vector already have Nu/Cp/Cf/u_plus fallback
+- T3 (ErrorAttributor patterns): Already done — PARAMETER_PLUMBING_MISMATCH, COMPARATOR_SCHEMA_MISMATCH, GEOMETRY_MODEL_MISMATCH, INSUFFICIENT_TRANSIENT_SAMPLING, BUOYANT_ENERGY_SETUP_INCOMPLETE all defined
+
+Tests: 221 passing ✅
