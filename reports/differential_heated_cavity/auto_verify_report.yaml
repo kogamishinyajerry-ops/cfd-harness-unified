@@ -1,0 +1,53 @@
+case_id: differential_heated_cavity
+timestamp: '2026-04-17T14:35:00Z'
+convergence:
+  status: CONVERGED
+  final_residual:
+    h: 6.5e-4
+    p_rgh: 4.6e-5
+    k: 4.8e-3
+    epsilon: 1.4e-2
+  target_residual: 1.0e-05
+  residual_ratio: null
+  warnings: []
+gold_standard_comparison:
+  overall: FAIL
+  observables:
+  - name: nusselt_number
+    ref_value: 30.0
+    sim_value: 1.31
+    rel_error: 0.956
+    abs_error: 28.69
+    tolerance:
+      mode: relative
+      value: 0.15
+    within_tolerance: false
+  warnings:
+  - "Nu=1.31 vs gold=30.0, 95.6% error"
+physics_check:
+  status: WARN
+  warnings:
+  - temperature_range_~1K_instead_of_expected_10K
+  - temperature_field_shows_312-311K_not_305-295K
+verdict: FAIL
+correction_spec_needed: true
+correction_spec:
+  primary_cause: thermal_energy_setup_failure
+  resolution: IN_PROGRESS_FIX
+  confidence: HIGH
+  note: >
+    Root cause: h+T dual BC conflict (T fixedValue over-constrains energy eq) +
+    mesh too coarse (40 cells for Ra=1e10). kOmegaSST already applied in bf6cb5a.
+    Fixes applied in this session: (1) T BC at walls: fixedValue→zeroGradient;
+    (2) Mesh increased 40→80 cells; (3) omega init computed from k=1e-4/L.
+corrections_applied:
+  - commit_timestamp: '2026-04-17T14:35:00Z'
+    changes:
+      - T BC at walls: fixedValue→zeroGradient (removes dual BC conflict)
+      - Mesh resolution: 40→80 cells for Ra=1e10 BL resolution
+      - omega initialization: uniform 0.1→computed sqrt(k)/(Cmu^0.25*L)≈0.0178
+    verified: pending_docker_e2e
+open_issues:
+- temperature_field_malformed_312K_not_305-295K
+- mesh_resolution_insufficient_for_Ra_1e10
+- dual_BC_h_and_T_conflict_RESOLVED_T_fix

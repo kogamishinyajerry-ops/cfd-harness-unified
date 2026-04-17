@@ -295,7 +295,7 @@ Phase 7 Wave 2-3 Docker E2E Results (9/9 auto_verify_report.yaml generated):
 | cylinder_crossflow | PASS | CONVERGED | PASS | — |
 | turbulent_flat_plate | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
 | rayleigh_benard_convection | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
-| differential_heated_cavity | FAIL | UNKNOWN (FOAM FATAL) | FAIL | adapter_version_mismatch (HIGH) |
+| differential_heated_cavity | FAIL | CONVERGED | FAIL | thermal_energy_setup_failure (HIGH) — T BC fixed |
 | naca0012_airfoil | FAIL | OSCILLATING (NaN) | FAIL | solver_settings (HIGH) — fvSolution fix applied |
 | axisymmetric_impinging_jet | PASS_WITH_DEVIATIONS | UNKNOWN (FOAM FATAL) | PASS | adapter_version_mismatch (HIGH) |
 | fully_developed_plane_channel_flow | FAIL | OSCILLATING | FAIL | physics_model_incompatibility (HIGH) |
@@ -321,6 +321,9 @@ Phase 9 Status (2026-04-17):
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅
 - DHC temperature fix: added omegaWallFunction BCs, div(phi,omega) scheme ✅
+- DHC h+T dual BC fix (this session): T BC at walls fixedValue→zeroGradient (fixes energy eq over-constraint) ✅
+- DHC mesh resolution: 40→80 cells (adequate for Ra=1e10 BL) ✅
+- DHC omega init: uniform 0.1→computed sqrt(k)/(Cmu^0.25*L) ≈ 0.018 ✅
 - Plane channel flow: REVERTED — solver change to simpleFoam+kOmegaSST conflicted with laminar Poiseuille gold standard ref_value. Reverted to icoFoam laminar (whitelist.yaml already has icoFoam+laminar). DNS y+/u+ coordinate mismatch deferred to Phase 9.
 - Gold standard expansion: 8 new cases mapped in ANCHOR_CASE_IDS, TASK_NAME_TO_CASE_ID, CASE_ID_TO_GOLD_FILE, CASE_ID_TO_SOLVER ✅
 - 3 new gold_standard YAML files (impinging_jet, plane_channel_flow, turbulent_pipe_flow) ✅

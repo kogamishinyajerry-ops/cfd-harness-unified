@@ -1314,7 +1314,7 @@ fields          (U);
         # Ra = g * beta * dT * L^3 / (nu * alpha)
         # g = Ra * nu * alpha / (beta * dT * L^3)
         g = Ra * nu * alpha / (beta * dT * L**3)  # gravity magnitude
-        nL = max(int(40 * L), 20)  # cells proportional to L (min 20 for small cavities)
+        nL = max(int(80 * L), 40)  # cells — 80 for Ra>=1e10 resolution requirement
         mean_T = (T_hot + T_cold) / 2.0  # initial temperature field
         # Store dT/L in boundary_conditions for the extractor (TaskSpec is local to this call)
         if task_spec.boundary_conditions is None:
@@ -1327,6 +1327,20 @@ fields          (U);
         h_hot = Cp * (T_hot - T0)       # 5025 for T_hot=305K
         h_cold = Cp * (T_cold - T0)      # -5025 for T_cold=295K
         h_internal = Cp * (mean_T - T0)   # 0 for mean_T=300K
+        # omega initialization for kOmegaSST: omega = sqrt(k)/(Cmu^0.25 * L)
+        Cmu = 0.09  # kOmegaSST constant
+        kappa = 0.41  # von Karman constant
+        k_internal = 1e-4  # matches 0/k initial value
+        omega_init = float(
+            "{omega_init:.4f}".format(
+                omega_init=math.sqrt(k_internal) / (Cmu**0.25 * max(L, 0.01))
+            )
+        )
+        omega_wall = float(
+            "{omega_wall:.4f}".format(
+                omega_wall=math.sqrt(k_internal) / (Cmu**0.25 * max(L, 0.01))
+            )
+        )
 
         # --------------------------------------------------------------------------
         # 1. system/blockMeshDict — cavity with configurable aspect ratio
@@ -2018,7 +2032,10 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 10b. 0/T — Temperature (required by buoyantFoam even with sensibleEnthalpy)
-        # buoyantFoam reads T, converts to h=Cp*(T-T0) internally, solves for h, writes T
+        # CRITICAL: With energy equation in terms of h (sensibleEnthalpy), T at walls
+        # must be zeroGradient — NOT fixedValue. Setting T fixedValue over-constrains
+        # the energy equation (solver already has h fixedValue at walls), causing T field
+        # to stay near initial mean_T with ~1K variation instead of 10K gradient.
         # --------------------------------------------------------------------------
         (case_dir / "0" / "T").write_text(
             f"""\
@@ -2047,13 +2064,11 @@ boundaryField
 {{
     hot_wall
     {{
-        type            fixedValue;
-        value           uniform {T_hot};
+        type            zeroGradient;
     }}
     cold_wall
     {{
-        type            fixedValue;
-        value           uniform {T_cold};
+        type            zeroGradient;
     }}
     adiabatic_top
     {{
@@ -2214,8 +2229,11 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 11c. 0/omega — Specific dissipation rate [1/s] (required by kOmegaSST)
-        # omega = epsilon/(k*Omega) ≈ 0.1 for low-turbulence natural convection
+        # omega = Cmu^0.25 * sqrt(k) / (kappa * L) ≈ 0.1 for low-turbulence NC
+        # Use computed value: sqrt(k_internal) / (Cmu^0.25 * L) ≈ sqrt(1e-4)/L ≈ 0.0178
         # --------------------------------------------------------------------------
+        omega_init = float("{omega_init:.16e}")
+        omega_wall = float("{omega_wall:.16e}")
         (case_dir / "0" / "omega").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -2237,29 +2255,29 @@ FoamFile
 
 dimensions      [0 0 -1 0 0 0 0];
 
-internalField   uniform 0.1;
+internalField   uniform {omega_init:.4f};
 
 boundaryField
 {{
     hot_wall
     {{
         type            omegaWallFunction;
-        value           uniform 0.1;
+        value           uniform {omega_wall:.4f};
     }}
     cold_wall
     {{
         type            omegaWallFunction;
-        value           uniform 0.1;
+        value           uniform {omega_wall:.4f};
     }}
     adiabatic_top
     {{
         type            omegaWallFunction;
-        value           uniform 0.1;
+        value           uniform {omega_wall:.4f};
     }}
     adiabatic_bottom
     {{
         type            omegaWallFunction;
-        value           uniform 0.1;
+        value           uniform {omega_wall:.4f};
     }}
     front {{ type empty; }}
     back  {{ type empty; }}
