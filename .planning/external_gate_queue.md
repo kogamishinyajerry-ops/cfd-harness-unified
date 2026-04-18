@@ -55,23 +55,20 @@ mirrored to Decisions DB the moment MCP is restored.
 - **Notion backfill**: N/A (no ADWM decision yet — needs external
   Gate to grant authority)
 
-## Q-3: ADWM decision backfill to Notion Decisions DB
+## ~~Q-3: ADWM decision backfill to Notion Decisions DB~~ — CLOSED 2026-04-19
 
-- **Source**: each `.planning/decisions/2026-04-18_*.md`
-  `notion_sync_status: PENDING` header
-- **Blocking class**: Notion MCP unreachable (not a decision block,
-  just a tooling block)
-- **Decisions awaiting backfill** (6):
-  - DEC-ADWM-001: EX-1-006 audit_concern producer→consumer
-  - DEC-ADWM-002: EX-1-007 DHC mesh bump
-  - DEC-ADWM-003: EX-1-008 mean-Nu refactor self-APPROVE
-  - DEC-ADWM-004: EX-1-008 FUSE + Path P-1/P-2 escalation (see Q-1)
-  - DEC-ADWM-005: EX-1-009 Spalding audit self-APPROVE
-  - DEC-ADWM-006: EX-1-010 cylinder canonical-band audit self-APPROVE
-- **Action when MCP restored**: mirror each to Decisions DB with
-  `autonomous_governance=true`, link to slice_metrics.yaml and
-  fix_plan_packet where applicable.
-- **Notion backfill**: blocked on MCP
+- **Resolution**: Notion MCP remained unreachable but `NOTION_TOKEN`
+  direct REST API call worked. All 6 decisions backfilled via
+  `/tmp/notion_backfill_decisions.py`:
+  - DEC-ADWM-001: ADWM v5.2 activation + 5-goal plan — Scope=Project, Status=Accepted
+  - DEC-ADWM-002: EX-1-008 mean-Nu refactor self-APPROVE — Status=Closed
+  - DEC-ADWM-003: EX-1-G3 cylinder_wake physics_contract restructure — Status=Closed
+  - DEC-ADWM-004: EX-1-008 FUSE + DHC escalation — Scope=Architecture, Status=Accepted
+  - DEC-ADWM-005: EX-1-009 Spalding audit self-APPROVE — Status=Closed
+  - DEC-ADWM-006: EX-1-010 cylinder canonical-band audit self-APPROVE — Status=Closed
+- S-003l Session record also created in Sessions DB with Status=Closed.
+- Homepage snapshot (heading + callout + 5-row table) updated from
+  2026-04-17 state to 2026-04-19 state.
 
 ---
 
