@@ -799,3 +799,46 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
             mock_container, "/tmp/log.icoFoam", Path("/tmp/log.icoFoam")
         )
         # If we get here without exception, the test passes
+
+
+class TestCylinderStrouhalExtractor:
+    def test_extract_cylinder_strouhal_records_canonical_band_shortcut(self):
+        task = TaskSpec(
+            name="cylinder",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.TRANSIENT,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100.0,
+        )
+
+        result = FoamAgentExecutor._extract_cylinder_strouhal(
+            [0.05, -0.05, 0.0, 0.0],
+            [0.0, 0.0, 0.05, -0.05],
+            [0.10, -0.10, 0.00, 0.05],
+            task,
+            {},
+        )
+
+        assert result["strouhal_number"] == pytest.approx(0.165)
+        assert result["strouhal_canonical_band_shortcut_fired"] is True
+
+    def test_extract_cylinder_strouhal_no_shortcut_flag_outside_band(self):
+        task = TaskSpec(
+            name="cylinder",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.TRANSIENT,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=400.0,
+        )
+
+        result = FoamAgentExecutor._extract_cylinder_strouhal(
+            [0.05, -0.05, 0.0, 0.0],
+            [0.0, 0.0, 0.05, -0.05],
+            [0.10, -0.10, 0.00, 0.05],
+            task,
+            {},
+        )
+
+        assert "strouhal_canonical_band_shortcut_fired" not in result

@@ -6806,6 +6806,7 @@ mergePatchPairs
 
         if canonical_st is not None:
             key_quantities["strouhal_number"] = canonical_st
+            key_quantities["strouhal_canonical_band_shortcut_fired"] = True
 
         # 找 cylinder 附近区域（cx≈0, cy≈0）
         cx_c = 0.0

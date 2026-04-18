@@ -52,6 +52,8 @@ def _resolve_audit_concern(
         kq = exec_result.key_quantities or {}
         if kq.get("cf_spalding_fallback_activated") is True:
             return f"{concern}:spalding_fallback_confirmed"
+        if kq.get("strouhal_canonical_band_shortcut_fired") is True:
+            return f"{concern}:strouhal_canonical_band_shortcut_fired"
     return concern
 
 

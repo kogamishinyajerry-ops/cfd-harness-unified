@@ -276,6 +276,18 @@ class TestAuditConcern:
             "COMPATIBLE_WITH_SILENT_PASS_HAZARD:spalding_fallback_confirmed"
         )
 
+    def test_silent_pass_hazard_enriches_with_canonical_band_shortcut_flag(self, attributor):
+        task = make_task(name="Circular Cylinder Wake")
+        exec_result = make_exec_result(
+            key_quantities={"strouhal_canonical_band_shortcut_fired": True}
+        )
+
+        report = attributor.attribute(task, exec_result, self._clean_pass())
+
+        assert report.audit_concern == (
+            "COMPATIBLE_WITH_SILENT_PASS_HAZARD:strouhal_canonical_band_shortcut_fired"
+        )
+
     def test_silent_pass_hazard_unchanged_when_spalding_fallback_not_activated(self, attributor):
         task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
         exec_result = make_exec_result(
@@ -283,6 +295,16 @@ class TestAuditConcern:
                 "cf_spalding_fallback_activated": False,
                 "cf_spalding_fallback_count": 0,
             }
+        )
+
+        report = attributor.attribute(task, exec_result, self._clean_pass())
+
+        assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+
+    def test_silent_pass_hazard_strouhal_flag_false_unchanged(self, attributor):
+        task = make_task(name="Circular Cylinder Wake")
+        exec_result = make_exec_result(
+            key_quantities={"strouhal_canonical_band_shortcut_fired": False}
         )
 
         report = attributor.attribute(task, exec_result, self._clean_pass())
