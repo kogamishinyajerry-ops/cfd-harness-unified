@@ -157,4 +157,35 @@ restored.
 Produced: 2026-04-18 by opus47-main (ADWM v5.2)
 Source of truth: `knowledge/gold_standards/*.yaml`
 Next refresh trigger: any physics_contract change OR next deep acceptance package
-Addendum trigger: G1 CHK-3 verdict + FUSE landing + G7 promotion + EX-1-009 Tier-1 line #4 closure (this file reflects post-EX-1-009 state)
+Addendum trigger: G1 CHK-3 verdict + FUSE landing + G7 promotion + EX-1-009 Tier-1 line #4 closure + EX-1-010 cylinder canonical-band closure (this file reflects post-EX-1-010 state)
+
+### EX-1-010 cylinder canonical-band Strouhal shortcut — second silent-pass hazard runtime signal
+Landed `cf17f23` (code, Execution-by: codex-gpt54) after
+`07e26d2` (FPP + DEC-ADWM-006). Producer
+(`foam_agent_adapter._extract_cylinder_strouhal`) now emits
+`strouhal_canonical_band_shortcut_fired=True` in
+`key_quantities` when `canonical_st` branch fires (Re in
+[50,200]). Consumer gains a second enrichment branch:
+`audit_concern` becomes
+`COMPATIBLE_WITH_SILENT_PASS_HAZARD:strouhal_canonical_band_shortcut_fired`
+when flag is True. No change to returned `strouhal_number`
+numeric (CHK-3 binding). Gold SHA256
+`dac44169…974b14` bit-identical (CHK-9 hard floor #1).
+
+**Regression guarantee**: existing EX-1-009 Spalding
+enrichment test still passes (CHK-11) — the two enrichment
+branches are mutually exclusive per task type.
+
+**Test suite 256→260** (+4 new). **src/ diff just 3 lines**
+(well under 40-line CHK-8 cap) — the EX-1-009 `exec_result`
+kwarg plumbing paid off: EX-1-010 required no signature
+changes.
+
+**Coverage update**: both silent-pass hazards explicitly
+documented in gold YAML `contract_status_detail` annotations
+now have paired runtime enrichment paths. Runtime-signal
+coverage of known SILENT_PASS_HAZARD hazards: 2/2 at the time
+of EX-1-010 landing.
+
+Rolling EX-1 override_rate improved to 0.200 at n=10 (was
+0.222 at n=9). All D4+/D4++ rules untriggered.

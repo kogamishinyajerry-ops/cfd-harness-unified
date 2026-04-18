@@ -1,0 +1,160 @@
+schema_version: 2
+slice_id: EX-1-010
+slice_title: "cylinder canonical-band Strouhal shortcut audit_concern wiring (producer→consumer)"
+gate_context: "ADWM v5.2 autonomous continuation; second documented silent-pass hazard (mirrors EX-1-009)"
+parent_decision: DEC-ADWM-006
+
+# ---------------------------------------------------------------
+# Physics-validity precheck (REQUIRED per D4+ verdict C2)
+# ---------------------------------------------------------------
+physics_validity_precheck:
+  performed: true
+  preconditions_enumerated:
+    - "Producer flag emission must not alter returned strouhal_number numeric (CHK-3 binding)"
+    - "Gold standard circular_cylinder_wake.yaml SHA256 must remain bit-identical (CHK-9 binding, hard floor #1)"
+    - "Existing EX-1-009 Spalding enrichment must still fire correctly (CHK-11 — no regression on first enrichment branch)"
+    - "Only SILENT_PASS_HAZARD prefix enriched; other concern classes untouched"
+  evidence_ref:
+    - "CHK-3/9 verified post-commit: gold SHA256 dac44169...974b14 bit-identical pre/post"
+    - "260 passed test suite includes existing test_silent_pass_hazard_enriches_with_spalding_fallback_flag — CHK-11 ✓"
+  verdict: PASS
+
+# ---------------------------------------------------------------
+# CHK table execution
+# ---------------------------------------------------------------
+chk_execution:
+  CHK-1:
+    description: "strouhal_canonical_band_shortcut_fired appears in key_quantities as True when Re=100"
+    binding: true
+    verdict: PASS
+    evidence: "tests/test_foam_agent_adapter.py::TestCylinderStrouhalExtractor::test_extract_cylinder_strouhal_records_canonical_band_shortcut"
+  CHK-2:
+    description: "Flag absent when Re outside [50,200]"
+    binding: true
+    verdict: PASS
+    evidence: "test_extract_cylinder_strouhal_no_shortcut_flag_outside_band asserts key NOT in result"
+  CHK-3:
+    description: "strouhal_number numeric bit-identical (0.165 in-band, solver-derived out-of-band)"
+    binding: true
+    verdict: PASS
+    evidence: "in-band test asserts strouhal_number == 0.165; out-of-band branch unchanged (no modification to that code path)"
+  CHK-4:
+    description: "_resolve_audit_concern returns ...HAZARD:strouhal_canonical_band_shortcut_fired when flag=True"
+    binding: true
+    verdict: PASS
+    evidence: "tests/test_error_attributor.py::test_silent_pass_hazard_enriches_with_canonical_band_shortcut_flag"
+  CHK-5:
+    description: "Returns bare ...HAZARD when flag=False or missing"
+    binding: true
+    verdict: PASS
+    evidence: "test_silent_pass_hazard_strouhal_flag_false_unchanged + test_circular_cylinder_wake_alias_pass_resolves_silent_pass_hazard (existing) still pass"
+  CHK-6:
+    description: "AttributionReport.audit_concern propagates enriched string end-to-end"
+    binding: true
+    verdict: PASS
+    evidence: "enrichment test asserts on report.audit_concern via attributor.attribute() — end-to-end"
+  CHK-7:
+    description: "Full test suite green"
+    binding: true
+    verdict: PASS
+    evidence: "260 passed (was 256 after EX-1-009; +4 new tests from this slice)"
+  CHK-8:
+    description: "src/ diff ≤ 40 lines"
+    binding: false
+    verdict: PASS
+    evidence: "src/error_attributor.py +2, src/foam_agent_adapter.py +1 → 3 lines ≤ 40 (massive headroom)"
+  CHK-9:
+    description: "Gold YAML bit-identical SHA256"
+    binding: true  # hard floor #1
+    verdict: PASS
+    evidence: "shasum -a 256 knowledge/gold_standards/circular_cylinder_wake.yaml → dac441697706e61177afe82c8c581986ba44677cac6d5c70538aaa3778974b14 (matches pre-dispatch baseline byte-for-byte)"
+  CHK-10:
+    description: "No new public API surface"
+    binding: true
+    verdict: PASS
+    evidence: "all changes inside private helpers + key_quantities dict keys; _resolve_audit_concern signature unchanged (exec_result kwarg pre-existed from EX-1-009)"
+  CHK-11:
+    description: "EX-1-009 Spalding enrichment still fires (no regression on first branch)"
+    binding: true
+    verdict: PASS
+    evidence: "test_silent_pass_hazard_enriches_with_spalding_fallback_flag still passes in full suite"
+
+# ---------------------------------------------------------------
+# Hard-floor audit
+# ---------------------------------------------------------------
+hard_floor_audit:
+  floor_1_gs_numeric: PASS  # SHA256 bit-identical verified post-commit
+  floor_2_禁区_dispatch: PASS  # src/ + tests/ via Codex
+  floor_7_trailer: PASS  # Execution-by: codex-gpt54 on commit cf17f23
+
+# ---------------------------------------------------------------
+# D4+ / D4++ rule activation check
+# ---------------------------------------------------------------
+d4_plus_rule_activation_check:
+  rule_1_baseline_rolling_above_030_at_n_ge_4:
+    armed: true
+    triggered: false
+    measured: 0.200  # 2 overrides / 10 slices (EX-1-002 pivot + EX-1-008 FUSE)
+  rule_2_two_consecutive_override_above_05:
+    triggered: false
+  rule_3_precheck_missing:
+    triggered: false
+  rule_4_pivot_without_enumerated_preconditions:
+    triggered: false
+  rule_5_consumer_side_separate_rolling:
+    producer_side_included: true
+    consumer_side_included: true
+    pattern: "Touches producer (adapter) AND consumer (error_attributor) in one commit — same pattern as EX-1-006/EX-1-009"
+  rule_6_mesh_refinement_wall_packing_smoke_check:
+    armed: false
+    triggered: false
+    rationale: "No simpleGrading change in this slice"
+
+# ---------------------------------------------------------------
+# Slice verdict
+# ---------------------------------------------------------------
+verdict: APPROVED
+cycle_budget_used: 1 of 2  # clean first-cycle landing; 1 budget unit held in reserve
+override_rate_single_slice: 0.0  # no pivot
+scope_violation_count: 0
+wall_clock_seconds: ~420  # Codex dispatch through commit finalization
+
+# ---------------------------------------------------------------
+# Rolling EX-1 state
+# ---------------------------------------------------------------
+rolling_ex1_state_after_ex1_010:
+  window: "EX-1-001 through EX-1-010"
+  override_history: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+  n: 10
+  rolling_override_rate: 0.200
+  all_d4plus_rules_untriggered: true
+
+# ---------------------------------------------------------------
+# Dashboard delta
+# ---------------------------------------------------------------
+dashboard_delta:
+  line_item_closed: "Second documented silent-pass hazard (cylinder canonical_st shortcut, Re in [50,200]) now has runtime signal"
+  new_runtime_signal: "strouhal_canonical_band_shortcut_fired in key_quantities (cylinder cases only)"
+  enriched_audit_concern: "COMPATIBLE_WITH_SILENT_PASS_HAZARD:strouhal_canonical_band_shortcut_fired on cylinder PASS when Re in [50,200]"
+  coverage_summary: "Both silent-pass hazards documented in gold YAML contract_status_detail now have runtime enrichment paths. Coverage of known SILENT_PASS_HAZARD runtime signals: 2/2 at the time of EX-1-010 landing."
+
+# ---------------------------------------------------------------
+# Artifacts
+# ---------------------------------------------------------------
+artifacts:
+  - reports/ex1_010_cylinder_canonical_band_audit/fix_plan_packet.md
+  - .planning/decisions/2026-04-18_ex1_010_self_approve.md (DEC-ADWM-006)
+  - reports/ex1_010_cylinder_canonical_band_audit/slice_metrics.yaml (this file)
+
+commits:
+  planning: 07e26d2  # FPP + DEC-ADWM-006 (Execution-by: opus47-main)
+  code: cf17f23      # src + tests (Execution-by: codex-gpt54)
+
+# ---------------------------------------------------------------
+# Learnings
+# ---------------------------------------------------------------
+learnings:
+  - "EX-1-009 enrichment architecture scales trivially to additional silent-pass hazards: one new if-branch per flag, one new flag emission in the corresponding producer."
+  - "Pre-existing exec_result kwarg on _resolve_audit_concern (landed in EX-1-009) removed the need for any signature change in this slice — single-line additions sufficed."
+  - "Rolling override_rate improved to 0.200 at n=10 (was 0.222 at n=9); each clean slice further confirms D4++ stability."
+  - "Total src/ diff for two full silent-pass-hazard audit wirings (EX-1-009 + EX-1-010): ~60 lines. Pattern is production-grade low-friction."
