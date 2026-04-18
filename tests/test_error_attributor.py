@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.error_attributor import ErrorAttributor
+from src.error_attributor import ErrorAttributor, _resolve_audit_concern
 from src.knowledge_db import KnowledgeDB
 from src.models import (
     ComparisonResult,
@@ -260,6 +260,14 @@ class TestAuditConcern:
         task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
         report = attributor.attribute(task, make_exec_result(), self._clean_pass())
         assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+
+    def test_circular_cylinder_wake_alias_pass_resolves_silent_pass_hazard(self, attributor):
+        task = make_task(name="Circular Cylinder Wake")
+        concern = _resolve_audit_concern(task, self._clean_pass())
+
+        assert concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern == concern
 
     def test_literature_disguise_on_pass_emits_audit_concern(self, attributor):
         task = make_task(name="Axisymmetric Impinging Jet (Re=10000)")
