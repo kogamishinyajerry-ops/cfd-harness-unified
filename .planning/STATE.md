@@ -1,14 +1,14 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T15:15"
-session: S-003b (Phase 7 Wave 3 — CLOSED with DEC-EX-A; autonomous mode active, no external Gate loop)
+last_updated: "2026-04-18T16:20"
+session: S-003b (Phase 7 Wave 3 CLOSED DEC-EX-A; Phase 8 P0+P1+P2 landed under self-Gate)
 
 # Phase Status
 
-current_phase: Phase 6 — COMPLETE ✅
-phase_status: ✅ Done (2026-04-16)
-next_phase: Phase 8 (AutoVerifier MVP)
-next_phase_status: ⏳ Pending Opus 4.6 Gate
+current_phase: Phase 8 — IN PROGRESS (self-Gate)
+phase_status: P0 ✅ P1 ✅ P2 ✅ (2026-04-18)
+next_phase: Phase 9 (Baseline D4 Gate pending) or Phase 8 hardening
+next_phase_status: ⏳ Determined by self-Gate review of Phase 8 outputs
 
 Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
 Phase 6 Notion: TBD
@@ -260,17 +260,26 @@ Model Routing v1.3 (2026-04-15):
 - Codex 比例提升至 40% (60%审查 + 40%并行开发)
 - 详见: .claude/MODEL_ROUTING.md
 
-# Phase 8 — PLANNED (Opus Gate Pending)
+# Phase 8 — IN PROGRESS (self-Gate, autonomous)
 
 Phase 8 Objective: 平台智能化 — AutoVerifier + 报告引擎 + Skills索引
 Phase 8 Notion: `df0228eb22774e3ca32b98e022165277`
+Gate mode: self-Gate under Model Routing v5.1 (external Gate loop retired 2026-04-18)
 
 Phase 8 Tasks:
-- [P0] AutoVerifier MVP 实现 — 状态: Ready (SPEC.md 已产出)
-  - docs/specs/AUTO_VERIFIER_SPEC.md ✅ (672行，Codex产出)
-  - 等待 Opus 4.6 架构审查 Gate
-- [P1] Report Template Engine — 状态: Inbox
-- [P2] Skills 双索引 + Gold Standard Schema — 状态: Inbox
+- [P0] AutoVerifier MVP 实现 — ✅ DONE (2026-04-18, commit d7c51c4)
+  - docs/specs/AUTO_VERIFIER_SPEC.md (672行，Codex产出)
+  - TaskRunner wiring: post_execute_hook Protocol + correction_policy ("legacy_auto_save" | "suggest_only")
+  - RunReport.auto_verify_report field added
+  - 9 integration tests (tests/test_auto_verifier/test_task_runner_integration.py)
+- [P1] Report Template Engine — ✅ DONE (2026-04-18, commits 018cdd5 + dcd6e92)
+  - scripts/generate_reports.py batch CLI
+  - data_collector defensive normalization (_normalize_auto_verify + _normalize_correction_spec)
+  - 9/10 whitelist cases render clean (fully_developed_turbulent_pipe_flow skipped — no auto_verify_report.yaml)
+  - 6 new tests covering default fills and resolution/note fallback
+- [P2] Skills 双索引 + Gold Standard Schema — ✅ LANDED (tests green, 36 passing)
+  - tests/test_skill_index/: 25 tests passing
+  - tests/test_gold_standard_schema/: 11 tests passing
 
 AutoVerifier MVP SPEC 核心设计:
 - 3层检查: ResidualChecker + GoldStandardChecker + PhysicalPlausibilityChecker
