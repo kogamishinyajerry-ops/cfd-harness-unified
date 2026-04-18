@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
 last_updated: "2026-04-18T17:50"
-session: S-003d (D4+ APPROVE_PATH_A applied; EX-1-003 R-A-metadata landed with C1+C2 blocking conditions bundled; physics_validity_precheck schema active; rolling EX-1 override_rate 0.333 at n=3; C4 holds PL-1 for D5)
+session: S-003e (EX-1-004 R-A-metadata continuation landed; physics_contract coverage 6/10 canonical whitelist; rolling EX-1 override_rate 0.25 at n=4, baseline rule armed but not triggered; C4 holds PL-1 for D5)
 
 # Phase Status
 
@@ -380,6 +380,18 @@ EX-1-003 (R-A-metadata, landed same commit as C1+C2, 2026-04-18):
 - Full suite: 245/245 green post-edit (loader pattern yaml.safe_load + .get() verified safe against new top-level field).
 - Artifact: reports/ex1_003_gold_standard_physics_contract/slice_metrics.yaml
 - Rolling EX-1 state (n=3): override_rate 1/3 = 0.333. Above 0.30 but within n<4 exemption per D4+ baseline rule. Next EX-1-004 determines whether rule #1 trips.
+
+EX-1-004 (R-A-metadata continuation to passing cases, 2026-04-18):
+- Slice: physics_contract added to 3 passing/deviating gold_standard YAMLs
+  - lid_driven_cavity_benchmark.yaml (COMPATIBLE — clean PASS reference)
+  - turbulent_flat_plate.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD — surfaces the Cf>0.01 Spalding-fallback branch at foam_agent_adapter.py:6924-6930 that makes the comparator self-referential when extraction fails)
+  - naca0012_airfoil.yaml (PARTIALLY_COMPATIBLE — cell-average vs exact-surface sampling, quantifiable & documented deviation direction)
+- Metrics: wall_clock=68s, quality=4.9, determinism=PASS, override=0.0, scope=0, physics_validity_precheck=pass.
+- Full suite: 245/245 green.
+- physics_contract coverage after this commit: 6/10 canonical whitelist cases annotated. Pending: backward_facing_step_steady, circular_cylinder_wake, rayleigh_benard_convection, axisymmetric_impinging_jet.
+- **Rolling EX-1 state (n=4): override_rate 1/4 = 0.25. Baseline rule armed (n>=4) but NOT triggered (0.25 ≤ 0.30). Pattern rule sequence [0.0, 1.0, 0.0, 0.0] — no two consecutive ≥ 0.5. Methodology Gate NOT armed.**
+- Notable learning: turbulent_flat_plate's silent-pass hazard was hidden in a note: field until physics_validity_precheck's evidence enumeration forced a code read at foam_agent_adapter.py:6924. This is the annotation schema's main long-term value — converting free-text tacit knowledge into auditable structured claims.
+- Artifact: reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅

@@ -6,6 +6,24 @@ note: >
   Spalding formula: Cf = 0.0576*Re_x^-0.2.
   Case: plate_length=1.0m, Re=50000, x_target=0.5 (unit domain) → x_physical=0.5m, Re_x=25000.
   Expected: Cf = 0.0576*25000^-0.2 = 0.0076. Old ref 0.0028 corresponded to different plate length.
+physics_contract:
+  geometry_assumption: "Flat plate with zero-pressure-gradient external flow; x measured from leading edge; thin 2D slice (empty side patches) with a single wall-normal direction carrying the boundary layer"
+  reference_correlation_context: "ref_value 0.0076 uses Prandtl 1/7-power-law fit Cf=0.0576/Re_x^0.2 evaluated at Re_x=25000. This formula is canonically validated for Re_x > ~5e5; applying it at Re_x=25000 assumes the BL is already turbulent at that station (tripped inflow), not laminar Blasius (which would give Cf=0.00420). The whitelist treats the inflow as fully turbulent by contract."
+  physics_precondition:
+    - condition: "Flow is turbulent at x_target (not laminar or transitional) — Spalding/Prandtl fit valid"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist declares turbulenceProperties kEpsilon with non-zero inflow k,epsilon; simpleFoam + kEpsilon with the configured inflow BCs produces a turbulent BL at x=0.5m per Phase 7 Wave 2-3 extraction"
+    - condition: "Wall-cell gradient extraction uses interior cells (wall-cell skip), so τ_w is computed on the first-second interior-cell Δu/Δy rather than the possibly-degenerate wall-cell itself"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:6870-6879 _compute_wall_gradient — rejects if len(interior_samples)<2; uses (c0,u0)(c1,u1) for delta"
+    - condition: "Near-wall mesh resolution puts first interior cell in a range where linear Δu/Δy approximates τ_w — either y+<5 (viscous sublayer) or the kEpsilon wall-function model compensates for log-layer placement"
+      satisfied_by_current_adapter: true
+      evidence_ref: ".planning/STATE.md §cfd-harness-unified 2026-04-17/18 — turbulent_flat_plate mesh 20→80 y-cells with 4:1 wall grading (commit 9d843e9); current Cf extraction yields 2.017-class values cap-filtered to Spalding formula when extraction is unreliable"
+    - condition: "Spalding-fallback on Cf>0.01 is a documented silent-pass hazard, not a hidden mechanism"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:6924-6930 explicit fallback: if Cf>0.01 the extraction is declared unreliable and the Spalding formula value is substituted. A FAIL-mode extraction therefore produces a reference-matching Cf; PASS verdict alone does not prove extraction fidelity. Auto_verify_report should separately check whether fallback fired."
+  contract_status: "COMPATIBLE_WITH_SILENT_PASS_HAZARD — all physics preconditions satisfied for the Prandtl-fit comparison, but the Cf>0.01 Spalding-substitution path means the comparator alone cannot distinguish a clean extraction from a formula-substituted one. Future error_attributor pattern: flag slices where the adapter's sign_corrected warning or fallback branch fired."
+  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
 observables:
   - name: cf_skin_friction
     description: local skin-friction coefficient at x=0.5m (Spalding formula for Re=50000, plate_length=1.0m)

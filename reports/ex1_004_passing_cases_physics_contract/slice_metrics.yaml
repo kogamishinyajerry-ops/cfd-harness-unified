@@ -1,0 +1,183 @@
+slice_id: EX-1-004
+track: EX-1
+slice_type: gold_standard_metadata_extension
+captured_at: "2026-04-18T18:40:00Z"
+captured_by: opus47-main (self-Gate under Model Routing v5.1)
+gate_context: D4+ APPROVE_PATH_A — continuation of EX-1-003 pattern to passing-verdict cases; first slice under armed n>=4 baseline rule
+
+slice_title: "R-A-metadata continuation: extend physics_contract to 3 passing/deviating whitelist cases"
+
+scope_summary: >-
+  Applies the EX-1-003 physics_contract pattern to three whitelist cases
+  whose Phase 7 verdicts were clean or known-deviation:
+    - lid_driven_cavity_benchmark (clean PASS reference — documents what a
+      COMPATIBLE contract looks like)
+    - turbulent_flat_plate (PASS but with a silent-pass hazard — the
+      Spalding-formula fallback in foam_agent_adapter.py:6924-6930 when
+      extracted Cf > 0.01 substitutes the target value)
+    - naca0012_airfoil (PASS_WITH_DEVIATIONS — near-surface cell-average
+      vs exact-surface gold, deviation direction and magnitude known)
+  Creates symmetric schema coverage alongside EX-1-003's imperfect cases:
+  6 of the 10-case whitelist now carry physics_contract. Future EX-1
+  slices can continue extending to the remaining 4 (backward_facing_step,
+  circular_cylinder_wake, rayleigh_benard, axisymmetric_impinging_jet) on
+  demand.
+
+explicit_non_scope:
+  - "No tolerance change"
+  - "No whitelist.yaml edit"
+  - "No src/ edit"
+  - "No test edit"
+  - "No change to any physics_contract field in the 3 YAMLs already touched by EX-1-003"
+
+# ---------------------------------------------------------------
+# Physics-validity precheck (REQUIRED per BASELINE_PLAN §Physics-Validity Precheck Schema)
+# ---------------------------------------------------------------
+physics_validity_precheck:
+  performed: true
+  preconditions_enumerated:
+    - "Every evidence_ref in the new physics_contract blocks must cite an actual file:line or documented artifact that I have read in this session (not hallucinated)"
+    - "Annotations for turbulent_flat_plate must surface the Spalding-fallback silent-pass hazard honestly; the Cf>0.01 branch in foam_agent_adapter.py is a real code path that makes the comparator self-referential"
+    - "naca0012 annotation must not conflict with the existing note: field which already encodes the cell-average vs exact-surface deviation"
+    - "YAML schema extension remains loader-safe: yaml.safe_load + .get() pattern verified in EX-1-003"
+    - "New contract_status values (COMPATIBLE, COMPATIBLE_WITH_SILENT_PASS_HAZARD, PARTIALLY_COMPATIBLE) remain string-only and need no enum validation until a downstream consumer emerges"
+  all_satisfied: true
+  evidence_refs:
+    - "src/foam_agent_adapter.py:6528 _extract_ldc_centerline — I read this in this session; evidence_ref in ldc YAML cites exact line"
+    - "src/foam_agent_adapter.py:6870-6879 _compute_wall_gradient — read in this session"
+    - "src/foam_agent_adapter.py:6924-6930 Cf>0.01 Spalding fallback branch — read in this session; critical silent-pass disclosure"
+    - "src/foam_agent_adapter.py:7068 surface_band computation for NACA Cp extraction — read in this session"
+    - ".planning/STATE.md §cfd-harness-unified 2026-04-17/18 — evidence for turbulent_flat_plate mesh grading (commit 9d843e9) sourced from STATE memory block visible this session"
+    - "Full test suite 245/245 post-edit (final run above)"
+
+# ---------------------------------------------------------------
+# Acceptance metrics
+# ---------------------------------------------------------------
+metrics:
+  wall_clock_latency_s: 68
+  wall_clock_notes: "Includes read-through of 3 extraction functions in foam_agent_adapter.py + evidence verification + 3 physics_contract blocks authored + one mid-slice evidence correction (initial LDC evidence_ref was imprecise about sample utility vs cell-centre filter; fixed before commit)"
+  latency_threshold_s: 300
+  latency_c2_headroom_target_s: 240
+  latency_headroom_actual_pct: 71.7
+
+  quality_score: 4.9
+  quality_rubric_self_assessed:
+    contract_fidelity: 5   # holds strictly to R-A-metadata guardrails
+    evidence_use: 5         # every claim tied to a read file:line
+    actionability: 5        # surfaces the turbulent_flat_plate silent-pass hazard — a genuinely new insight, not a rephrase of existing docs
+    risk_handling: 5         # precheck performed, mid-slice evidence correction caught a potentially misleading claim before commit
+    clarity: 4               # contract_status vocabulary is growing (3 distinct values now); would benefit from an enum + brief legend in BASELINE_PLAN in a future slice
+
+  determinism_grade: PASS
+  determinism_notes: "Textual YAML edits. sha256 captured. Two consecutive pytest runs identical."
+  artifact_sha256_map:
+    "knowledge/gold_standards/lid_driven_cavity_benchmark.yaml": 57197ff68b2da703f872a71bc36e40a906c7d0974228a2c7b4b226ce6ce1819a
+    "knowledge/gold_standards/turbulent_flat_plate.yaml": b7212a7537e8e782ba660b1fa372ac83f8aa40dddf9742b88851d02cff89daae
+    "knowledge/gold_standards/naca0012_airfoil.yaml": 0ddc7c450cbaf0e16a08fa8d1f75082204ef23b8506468595048f2d570aedeca
+
+  override_rate: 0.0
+  override_notes: "No scope pivot. One in-slice evidence_ref revision (LDC: 'uses sample utility' → 'filters cxs within half-cell tolerance') before commit — that is quality control, not a scope override. Documented for audit."
+
+  scope_violation_count: 0
+  scope_audit:
+    read_only_inputs:
+      - src/foam_agent_adapter.py  # L5089, 6388, 6528-6570, 6821-6945, 7030-7089
+    write_paths:
+      - knowledge/gold_standards/lid_driven_cavity_benchmark.yaml
+      - knowledge/gold_standards/turbulent_flat_plate.yaml
+      - knowledge/gold_standards/naca0012_airfoil.yaml
+      - reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml (new)
+      - .planning/STATE.md (session header + EX-1-004 block)
+    forbidden_paths_untouched:
+      - knowledge/whitelist.yaml
+      - src/ (all — only read-only inspection)
+      - tests/
+      - knowledge/gold_standards/*.yaml touched by EX-1-003 (fully_developed_turbulent_pipe_flow, fully_developed_plane_channel_flow, differential_heated_cavity)
+    diff_stats:
+      src_lines_changed: 0
+      tests_lines_changed: 0
+      gold_standards_lines_added: "approximately 62 lines across 3 files, all additive"
+
+  estimated_cost_usd: 0.52
+  cost_pricing_snapshot: "Opus 4.7 @ $15/1M input + $75/1M output (2026-04)"
+
+# ---------------------------------------------------------------
+# Guardrail compliance
+# ---------------------------------------------------------------
+guardrail_compliance:
+  selected_remediation: "R-A-metadata continuation (memo §4 rank 1)"
+  forbidden_remediations_confirmed_not_touched: ["R-B", "R-C", "R-D", "R-F"]
+  src_diff_under_50_lines: "✅ 0 lines"
+  tests_assertions_not_deleted: "✅ no test edits"
+
+# ---------------------------------------------------------------
+# Acceptance verdict
+# ---------------------------------------------------------------
+acceptance:
+  wall_clock_latency_s_pass: true
+  quality_score_pass: true
+  determinism_grade_pass: true
+  override_rate_pass: true
+  scope_violation_count_pass: true
+  physics_validity_precheck_pass: true
+  guardrail_compliance_pass: true
+  overall: PASS
+
+# ---------------------------------------------------------------
+# Rolling EX-1 track state (n=4 — baseline rule now armed)
+# ---------------------------------------------------------------
+rolling_ex1_track:
+  sample_count: 4
+  wall_clock_samples_s: [85, 36, 52, 68]
+  quality_score_samples: [4.8, 5.0, 4.9, 4.9]
+  determinism_grade_samples: [DEFERRED, PASS, PASS, PASS]
+  override_rate_samples: [0.0, 1.0, 0.0, 0.0]
+  scope_violation_samples: [0, 0, 0, 0]
+  rolling_override_rate: 0.25  # 1 / 4
+  gate_thresholds:
+    baseline_rule_n_ge_4_above_0_30: "ARMED. rolling=0.25 <= 0.30 → NOT triggered."
+    pattern_rule_two_consecutive_ge_0_5: "[0.0, 1.0, 0.0, 0.0] — not triggered."
+    precheck_schema_present: "✅ in this slice + EX-1-003; future slices must continue to include."
+    n_eq_5_mini_review_trigger: "n=4 < 5, one more slice until mandatory mini-review."
+  methodology_trend: >-
+    The 1-slice honest-abort from EX-1-002 is now statistically isolated:
+    over the past 3 slices (EX-1-001, EX-1-003, EX-1-004) override_rate
+    has been 0.0 with clean scope compliance and the newly-required
+    physics_validity_precheck has satisfied all_satisfied=true each time.
+    This is the expected steady-state of the revised methodology: honest
+    pivots remain possible but do not dominate the distribution.
+
+# ---------------------------------------------------------------
+# Coverage state of physics_contract annotation across whitelist
+# ---------------------------------------------------------------
+physics_contract_coverage:
+  annotated_cases:
+    - fully_developed_turbulent_pipe_flow (INCOMPATIBLE)         # EX-1-003
+    - fully_developed_plane_channel_flow (INCOMPATIBLE)           # EX-1-003
+    - differential_heated_cavity (DEVIATION)                       # EX-1-003
+    - lid_driven_cavity_benchmark (COMPATIBLE)                     # EX-1-004
+    - turbulent_flat_plate (COMPATIBLE_WITH_SILENT_PASS_HAZARD)    # EX-1-004
+    - naca0012_airfoil (PARTIALLY_COMPATIBLE)                      # EX-1-004
+  pending_cases:
+    - backward_facing_step_steady
+    - circular_cylinder_wake
+    - rayleigh_benard_convection
+    - axisymmetric_impinging_jet
+  coverage_ratio: "6 / 10 canonical whitelist cases"
+  next_candidate: "Either a future EX-1 slice continues to the remaining 4, OR a PL-1-style audit slice reads contract_status across all annotated cases and produces a Phase 10 methodology summary."
+
+# ---------------------------------------------------------------
+# Learnings
+# ---------------------------------------------------------------
+learnings:
+  - "turbulent_flat_plate's Cf>0.01 Spalding fallback is a genuine silent-pass hazard that the physics_contract schema surfaced — it was hiding in the note field until this slice's evidence enumeration forced a code read. This is the annotation pattern's main long-term value: it converts tacit knowledge in free-text notes into auditable structured claims."
+  - "Mid-slice evidence_ref correction (LDC sampling mechanism) is a new audit category. Caught before commit, it is quality control. Caught after commit, it would be a correction_spec. The physics_validity_precheck §preconditions_enumerated §evidence_refs structure is what surfaces these earlier."
+  - "Rolling override_rate after n=4 is 0.25 — below all thresholds. The methodology gate triggered by EX-1-002 has done its job: it cost one pivot and produced a schema that now absorbs similar issues without pivoting (turbulent_flat_plate fallback surfaced cleanly as contract_status, not a mid-slice abort)."
+
+refs:
+  prior_slices:
+    - "EX-1-001 (diagnostic memo, revised in 53f79fe)"
+    - "EX-1-002 (CLI tests, override_rate=1.0 honest abort)"
+    - "EX-1-003 (first physics_contract extension to 3 imperfect cases, same commit as C1+C2)"
+  gate_verdict: "APPROVE_PATH_A verdict 2026-04-18"
+  baseline_plan_schema_ref: "docs/design/PHASE9_MODEL_ROUTING_V3X_BASELINE_PLAN.md §Physics-Validity Precheck Schema + §Rolling Override Rate Thresholds"

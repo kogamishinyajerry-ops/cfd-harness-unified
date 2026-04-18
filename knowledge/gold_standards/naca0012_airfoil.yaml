@@ -11,6 +11,22 @@ note: >
   Docker E2E: converged (p=9.7e-7), 224 Cp values extracted.
   Gold comparison deviations ~30-50% — extracted values are near-surface cell
   averages; reference values are exact surface points. Cp profile shape correct.
+physics_contract:
+  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at 0° angle of attack; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported)"
+  reference_correlation_context: "Thomas 1979 / Lada 2007 ref_values are *exact surface* pressure coefficients at the tabulated x/c stations. The adapter CANNOT deliver exact-surface values — it samples a near-surface band of cell centres and averages. A shape-faithful but value-attenuated Cp distribution is the expected outcome, and the 20% tolerance + PASS_WITH_DEVIATIONS verdict reflect this."
+  physics_precondition:
+    - condition: "Flow is attached and steady at α=0° (no stall, no unsteady shedding) so a steady RANS solve is physically meaningful"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist uses simpleFoam + kOmegaSST at α=0 (symmetric airfoil, zero lift at symmetric condition); no shedding regime concerns"
+    - condition: "Mesh resolves the boundary layer sufficiently for near-wall gradients (appropriate y+ for kOmegaSST with Automatic Wall Treatment)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "kOmegaSST in OpenFOAM 2.x+ handles both low-Re (y+<1) and high-Re (y+>30) wall placement via blended omega wall function; surface_band sampling at src/foam_agent_adapter.py:7068 tolerates either"
+    - condition: "Cp extraction sampling geometry aligns with 'exact surface' gold standard"
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/foam_agent_adapter.py:7068 surface_band = max(8.0*dz_min, 0.02*chord) — the extracted Cp is averaged over a ~2% chord thick band above the surface, not the exact surface. Lines 7073-7089 split into upper/lower candidates within search_envelope=0.25*chord."
+      consequence_if_unsatisfied: "The adapter's Cp values are systematically attenuated vs the ref (magnitudes reduced ~30-50%), while the x-station *shape* of the Cp curve remains faithful. PASS_WITH_DEVIATIONS is the honest verdict. A future R-A-style slice could add a 'cell_vs_surface' kind field to each Cp observable to make the comparator aware of the sampling difference."
+  contract_status: "PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk."
+  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
 observables:
   - name: pressure_coefficient
     description: pressure coefficient distribution along the NACA 0012 chord

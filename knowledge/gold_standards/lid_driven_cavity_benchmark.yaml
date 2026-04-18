@@ -4,6 +4,21 @@ legacy_case_id: lid_driven_cavity
 legacy_source_file: knowledge/gold_standards/lid_driven_cavity.yaml
 source: "Ghia et al. 1982, J. Comput. Phys."
 literature_doi: "10.1016/0021-9991(82)90058-4"
+physics_contract:
+  geometry_assumption: "Unit square 2D cavity; top lid moves at u=1, other walls no-slip; Re defined on lid velocity and cavity side length"
+  reference_correlation_context: "Ghia 1982 provides u-centerline and v-centerline profiles plus primary-vortex location from a 129×129 FD solution at Re=100; values are *exact* at the listed y-stations, not interpolants."
+  physics_precondition:
+    - condition: "Flow is 2D incompressible laminar (Re in the steady-laminar band, ~ Re <= 1000)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist uses icoFoam at Re=100; well inside steady-laminar regime"
+    - condition: "Mesh resolution sufficient for profile comparison at reference y-stations"
+      satisfied_by_current_adapter: true
+      evidence_ref: "adapter SIMPLE_GRID generates a cavity mesh fine enough that ResultComparator's interp1d y-axis reconstruction (src/result_comparator.py:_resolve_profile_axis) reaches the 16 Ghia y-stations within 5% tolerance per Phase 7 Wave 2-3 results"
+    - condition: "Profile extraction samples along the centerline within a half-cell tolerance and interpolates to the Ghia y-stations"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:6528 _extract_ldc_centerline — filters cxs within x_tol=0.006 of x_target=0.05 (half mesh step × 1.2), averages Ux by y-row, then linearly interpolates to 17 Ghia y-stations. Small y-direction aliasing possible but within 5% tolerance per Phase 7 Wave 2-3."
+  contract_status: "COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid"
+  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
 relationships:
   solver_reuse: lid_driven_cavity
   geometry_similarity:
