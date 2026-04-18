@@ -6932,6 +6932,7 @@ mergePatchPairs
                 x_groups[round(cxs[i], 5)].append((cys[i], cz_val, u_vecs[i][0], nut_val))
 
         cf_values = []
+        cf_spalding_fallback_count = 0
         sign_corrected = False
         for x_pos, cy_u_pairs in x_groups.items():
             grad_data = _compute_wall_gradient(
@@ -6962,6 +6963,7 @@ mergePatchPairs
                         x_local = x_target / U_ref  # physical x position
                         Re_x = U_ref * x_local / nu_val
                         Cf = 0.0576 / (Re_x**0.2) if Re_x > 0 else Cf
+                        cf_spalding_fallback_count += 1
                     cf_values.append(Cf)
 
         if cf_values:
@@ -6975,6 +6977,8 @@ mergePatchPairs
             Cf_mean = sum(cf_values) / len(cf_values)
             key_quantities["cf_skin_friction"] = Cf_mean
             key_quantities["cf_location_x"] = x_target
+            key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
+            key_quantities["cf_spalding_fallback_activated"] = cf_spalding_fallback_count > 0
 
         return key_quantities
 

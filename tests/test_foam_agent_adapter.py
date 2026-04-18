@@ -250,6 +250,52 @@ class TestFoamAgentExecutor:
         assert result["pressure_coefficient_x"] == pytest.approx([0.1, 0.3, 0.7], abs=1e-3)
         assert result["pressure_coefficient"] == pytest.approx([1.0, -0.5, 0.0], abs=1e-6)
 
+    def test_extract_flat_plate_cf_records_spalding_fallback_activation(self):
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100000,
+        )
+
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=[0.5, 0.5, 0.5],
+            cys=[0.0, 1e-4, 2e-4],
+            u_vecs=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.2, 0.0, 0.0)],
+            task_spec=task,
+            key_quantities={},
+        )
+
+        expected_cf = 0.0576 / (50000**0.2)
+        assert result["cf_spalding_fallback_activated"] is True
+        assert result["cf_spalding_fallback_count"] >= 1
+        assert result["cf_skin_friction"] == pytest.approx(expected_cf)
+        assert result["cf_skin_friction"] == pytest.approx(expected_cf, rel=0.0, abs=1e-12)
+
+    def test_extract_flat_plate_cf_no_fallback_when_cf_below_threshold(self):
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100000,
+        )
+
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=[0.5, 0.5, 0.5],
+            cys=[0.0, 0.01, 0.02],
+            u_vecs=[(0.0, 0.0, 0.0), (0.01, 0.0, 0.0), (0.03, 0.0, 0.0)],
+            task_spec=task,
+            key_quantities={},
+        )
+
+        assert result["cf_spalding_fallback_activated"] is False
+        assert result["cf_spalding_fallback_count"] == 0
+        assert result["cf_skin_friction"] == pytest.approx(4e-05)
+
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests
     # ------------------------------------------------------------------

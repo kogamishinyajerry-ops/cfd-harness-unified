@@ -28,7 +28,12 @@ _AUDIT_CONCERN_STATUS_PREFIXES = (
 )
 
 
-def _resolve_audit_concern(task_spec: TaskSpec, comparison: ComparisonResult) -> Optional[str]:
+def _resolve_audit_concern(
+    task_spec: TaskSpec,
+    comparison: ComparisonResult,
+    *,
+    exec_result: Optional[ExecutionResult] = None,
+) -> Optional[str]:
     if not comparison.passed:
         return None
     case_id = TASK_NAME_TO_CASE_ID.get(task_spec.name, task_spec.name)
@@ -40,11 +45,28 @@ def _resolve_audit_concern(task_spec: TaskSpec, comparison: ComparisonResult) ->
     except (yaml.YAMLError, OSError):
         return None
     status = str((data.get("physics_contract") or {}).get("contract_status") or "")
-    return next((p for p in _AUDIT_CONCERN_STATUS_PREFIXES if status.startswith(p)), None)
+    concern = next((p for p in _AUDIT_CONCERN_STATUS_PREFIXES if status.startswith(p)), None)
+    if concern is None:
+        return None
+    if concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD" and exec_result is not None:
+        kq = exec_result.key_quantities or {}
+        if kq.get("cf_spalding_fallback_activated") is True:
+            return f"{concern}:spalding_fallback_confirmed"
+    return concern
 
 
-def _attach_audit_concern(report: AttributionReport, task_spec: TaskSpec, comparison: ComparisonResult) -> AttributionReport:
-    report.audit_concern = _resolve_audit_concern(task_spec, comparison)
+def _attach_audit_concern(
+    report: AttributionReport,
+    task_spec: TaskSpec,
+    comparison: ComparisonResult,
+    *,
+    exec_result: Optional[ExecutionResult] = None,
+) -> AttributionReport:
+    report.audit_concern = _resolve_audit_concern(
+        task_spec,
+        comparison,
+        exec_result=exec_result,
+    )
     return report
 
 logger = logging.getLogger(__name__)
@@ -359,9 +381,17 @@ class ErrorAttributor:
         if not comparison.deviations:
             solver_report = self._try_parse_solver_crash(exec_result, task_spec)
             if solver_report is not None:
-                return _attach_audit_concern(solver_report, task_spec, comparison)
+                return _attach_audit_concern(
+                    solver_report,
+                    task_spec,
+                    comparison,
+                    exec_result=exec_result,
+                )
             return _attach_audit_concern(
-                AttributionReport(chain_complete=True), task_spec, comparison
+                AttributionReport(chain_complete=True),
+                task_spec,
+                comparison,
+                exec_result=exec_result,
             )
 
         # Step 1: 定量分析
@@ -435,7 +465,12 @@ class ErrorAttributor:
             recommended_solvers=solvers,
             recommended_turbulence_models=turb_models,
         )
-        return _attach_audit_concern(report, task_spec, comparison)
+        return _attach_audit_concern(
+            report,
+            task_spec,
+            comparison,
+            exec_result=exec_result,
+        )
 
     # ------------------------------------------------------------------
     # 定量分析

@@ -261,6 +261,34 @@ class TestAuditConcern:
         report = attributor.attribute(task, make_exec_result(), self._clean_pass())
         assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
 
+    def test_silent_pass_hazard_enriches_with_spalding_fallback_flag(self, attributor):
+        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        exec_result = make_exec_result(
+            key_quantities={
+                "cf_spalding_fallback_activated": True,
+                "cf_spalding_fallback_count": 3,
+            }
+        )
+
+        report = attributor.attribute(task, exec_result, self._clean_pass())
+
+        assert report.audit_concern == (
+            "COMPATIBLE_WITH_SILENT_PASS_HAZARD:spalding_fallback_confirmed"
+        )
+
+    def test_silent_pass_hazard_unchanged_when_spalding_fallback_not_activated(self, attributor):
+        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        exec_result = make_exec_result(
+            key_quantities={
+                "cf_spalding_fallback_activated": False,
+                "cf_spalding_fallback_count": 0,
+            }
+        )
+
+        report = attributor.attribute(task, exec_result, self._clean_pass())
+
+        assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+
     def test_circular_cylinder_wake_alias_pass_resolves_silent_pass_hazard(self, attributor):
         task = make_task(name="Circular Cylinder Wake")
         concern = _resolve_audit_concern(task, self._clean_pass())
