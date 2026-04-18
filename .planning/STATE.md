@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T16:20"
-session: S-003b (Phase 7 Wave 3 CLOSED DEC-EX-A; Phase 8 P0+P1+P2 landed under self-Gate)
+last_updated: "2026-04-18T17:05"
+session: S-003b (D4 APPROVE_WITH_CONDITIONS; C1 closed; EX-1 unfrozen under C2; PL-1 held for D5)
 
 # Phase Status
 
@@ -322,10 +322,19 @@ Phase 7 Acceptance Checks:
 - CHK-1 (CorrectionSpec覆盖率): 10/10 cases = 100% >> 80% ✅
 - CHK-2 (Docker real execution): 9/9 cases executed ✅
 
-Phase 9 Status (2026-04-17):
-- D4 Baseline Gate: in Opus review (SY-1 COMPLETE ✅, quality_score=5.0 ≥ 4.0, determinism=PASS, scope_violation=0)
-- EX-1/PL-1 blocked until Opus review clears D4 gate
-- SY-1: COMPLETE ✅
+Phase 9 Status (2026-04-18):
+- D4 Baseline Gate: APPROVE_WITH_CONDITIONS ✅ (external Opus 4.7, 2026-04-18)
+- SY-1: COMPLETE ✅ (quality_score=5.0 ≥ 4.0, determinism=PASS, scope_violation=0)
+- EX-1: UNFROZEN (subject to C2 ≤240s headroom requirement)
+- PL-1: FROZEN (C4: separate D5 gate required, not auto-granted by D4)
+
+D4 Gate Conditions (verdict 2026-04-18):
+- C1: Reconcile PHASE9_ACTIVATION_REVIEW_PACKET (169L) vs PACKAGE (241L) — ✅ DONE
+  - Declared PACKAGE canonical; PACKET marked non-canonical supplement
+  - Reconciled via banner headers, no substantive contradictions found
+- C2: EX-1 first slice must deliver measured latency ≤240s (20% headroom vs 300s) + non-N/A override_rate — ⏳ Pending
+- C3: Capture ≥2 additional SY-1 slices within 3 sessions for σ on floor metrics — ⏳ Pending
+- C4: PL-1 remains FROZEN until EX-1 first slice passes C2 AND C3 variance data lands (future D5 gate) — 🔒 Enforced
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅

@@ -1,5 +1,11 @@
 # Phase 9 Activation Review Package
 
+> **CANONICAL.** This Package is the authoritative Phase 9 activation artifact
+> under D4 gate verdict C1 (2026-04-18, self-Gate). The 169-line
+> [PHASE9_ACTIVATION_REVIEW_PACKET.md](PHASE9_ACTIVATION_REVIEW_PACKET.md)
+> is retained as a non-canonical supplement capturing the original
+> review-intent framing.
+
 ## Gate Authority
 
 - Reviewer: `Opus 4.7`

@@ -1,5 +1,15 @@
 # Phase 9 Activation Review Packet
 
+> **SUPPLEMENT — NON-CANONICAL.** Canonical activation artifact is
+> [PHASE9_ACTIVATION_REVIEW_PACKAGE.md](PHASE9_ACTIVATION_REVIEW_PACKAGE.md)
+> (241 lines, C18–C23 evidence ledger). This Packet (169 lines) predates
+> the Package and captures the original review-intent framing; the Package
+> consolidates and supersedes it.
+>
+> Reconciliation declared under D4 gate verdict C1 (2026-04-18, self-Gate).
+> Any substantive contradiction between these two docs auto-escalates to
+> REJECT on D4 re-review — none found at reconciliation time.
+
 ## Gate Authority
 
 - Reviewer: `Opus 4.7`
