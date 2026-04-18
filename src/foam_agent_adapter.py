@@ -1314,7 +1314,16 @@ fields          (U);
         # Ra = g * beta * dT * L^3 / (nu * alpha)
         # g = Ra * nu * alpha / (beta * dT * L^3)
         g = Ra * nu * alpha / (beta * dT * L**3)  # gravity magnitude
-        nL = max(int(80 * L), 40)  # cells — 80 for Ra>=1e10 resolution requirement
+        # EX-1-007 B1: DHC (Ra>=1e9) needs ~2 cells in thermal BL (δ_T ~ L·Ra^-0.25).
+        # At Ra=1e10, δ_T≈3.16mm per L=1m; 256 cells + symmetric wall-packed grading
+        # ratio=6 gives first-cell ~0.0013L ≈ 1.3mm → ~2 cells in BL (predicted Nu≈16).
+        # Lower Ra (Ra=1e6 rayleigh_benard) keeps original 80-uniform mesh.
+        if Ra >= 1e9:
+            nL = max(int(256 * L), 128)
+            grading_str = "((0.5 0.5 0.1667) (0.5 0.5 6))"
+        else:
+            nL = max(int(80 * L), 40)
+            grading_str = "1"
         mean_T = (T_hot + T_cold) / 2.0  # initial temperature field
         # Store dT/L in boundary_conditions for the extractor (TaskSpec is local to this call)
         if task_spec.boundary_conditions is None:
@@ -1359,8 +1368,8 @@ fields          (U);
 );""".format(Lx=L, Ly=L)
         _blocks = """blocks
 (
-    hex (0 1 2 3 4 5 6 7) ({nLx} {nLy} 1) simpleGrading (1 1 1)
-);""".format(nLx=nL, nLy=nL)
+    hex (0 1 2 3 4 5 6 7) ({nLx} {nLy} 1) simpleGrading ({gx} {gy} 1)
+);""".format(nLx=nL, nLy=nL, gx=grading_str, gy=grading_str)
         _bnd = """boundary
 (
     hot_wall

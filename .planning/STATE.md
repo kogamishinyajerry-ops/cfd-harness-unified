@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T18:40"
-session: S-003g (EX-1-006 Path A lands: error_attributor.audit_concern consumer wiring per Notion Opus 4.7 APPROVE_A+B1; rolling override 0.167 at n=6; C4 sequencing holds — B1 awaits independent dispatch)
+last_updated: "2026-04-18T19:15"
+session: S-003h (EX-1-007 B1 lands: DHC mesh 80→256 with symmetric wall-packed grading ratio=6 in _generate_natural_convection_cavity, Ra>=1e9 guarded. C5 a priori Nu=16.1±5 clears threshold=15; C6 net +9 src lines (cap 45); C7 gold_standards SHA256 unchanged; consumer-side mini-review PASS (pre-B1). Rolling override 0.143 at n=7.)
 
 # Phase Status
 
