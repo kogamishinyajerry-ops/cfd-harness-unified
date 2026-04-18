@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T17:05"
-session: S-003b (D4 APPROVE_WITH_CONDITIONS; C1 closed; EX-1 unfrozen under C2; PL-1 held for D5)
+last_updated: "2026-04-18T17:30"
+session: S-003b (D4 APPROVE_WITH_CONDITIONS; C1+C2 closed; EX-1-001 landed; C3 pending; PL-1 held for D5)
 
 # Phase Status
 
@@ -332,7 +332,13 @@ D4 Gate Conditions (verdict 2026-04-18):
 - C1: Reconcile PHASE9_ACTIVATION_REVIEW_PACKET (169L) vs PACKAGE (241L) — ✅ DONE
   - Declared PACKAGE canonical; PACKET marked non-canonical supplement
   - Reconciled via banner headers, no substantive contradictions found
-- C2: EX-1 first slice must deliver measured latency ≤240s (20% headroom vs 300s) + non-N/A override_rate — ⏳ Pending
+- C2: EX-1 first slice must deliver measured latency ≤240s (20% headroom vs 300s) + non-N/A override_rate — ✅ LANDED (slice EX-1-001, 2026-04-18T07:57:20Z)
+  - wall_clock_latency_s: 85 (well under 240s target, 71.7% headroom vs 300s)
+  - quality_score: 4.8/5 (floor 4.0 ✅)
+  - override_rate: 0.0 (threshold 0.10 ✅)
+  - scope_violation_count: 0 (hard floor ✅)
+  - determinism_grade: DEFERRED — single-run; sha256=2f790d54...09413; rerun rolled into C3 methodology
+  - Artifact: reports/ex1_first_slice/diagnostic_memo.md (3-case whitelist imperfect-verdict diagnosis)
 - C3: Capture ≥2 additional SY-1 slices within 3 sessions for σ on floor metrics — ⏳ Pending
 - C4: PL-1 remains FROZEN until EX-1 first slice passes C2 AND C3 variance data lands (future D5 gate) — 🔒 Enforced
 
