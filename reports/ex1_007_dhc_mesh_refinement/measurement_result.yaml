@@ -1,0 +1,30 @@
+slice_id: EX-1-007
+run_type: post_commit_solver_measurement
+started_at_utc: '2026-04-18T11:50:39Z'
+ended_at_utc: '2026-04-18T12:11:22Z'
+wall_clock_seconds: 1243.8
+batch_summary:
+  total: 1
+  passed: 0
+  failed: 1
+  errors: []
+observables:
+  passed: false
+  summary: 'Quantity: nusselt_number | Tolerance: 15.0% | Failed: 1 deviation(s)'
+  deviations:
+  - quantity: nusselt_number
+    expected: 30.0
+    actual: 66.2499999999966
+    relative_error: 1.2083333333331798
+attribution:
+  primary_cause: parameter_plumbing_mismatch
+  confidence: 0.7
+  chain_complete: true
+  audit_concern: null
+c5_band_check:
+  nu_measured: 66.2499999999966
+  band:
+    low: 11.0
+    centre: 16.1
+    high: 21.0
+  verdict: ABOVE_BAND — investigate overshoot

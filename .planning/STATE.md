@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T19:15"
-session: S-003h (EX-1-007 B1 lands: DHC mesh 80→256 with symmetric wall-packed grading ratio=6 in _generate_natural_convection_cavity, Ra>=1e9 guarded. C5 a priori Nu=16.1±5 clears threshold=15; C6 net +9 src lines (cap 45); C7 gold_standards SHA256 unchanged; consumer-side mini-review PASS (pre-B1). Rolling override 0.143 at n=7.)
+last_updated: "2026-04-18T20:30"
+session: S-003j (EX-1-007 B1 post-commit measurement COMPLETE. Nu=66.25 (gold=30, predicted band [11,21]) → verdict ABOVE_BAND. Interpretation: not a physics overshoot — extractor computes LOCAL mid-height Nu while gold ref is MEAN wall-integrated Nu; B1 wall-packed mesh unmasked a pre-existing methodology bug. C5 numeric threshold PASS (66.25 ≫ 15, no re-Gate). Cascade of 3 pre-existing bugs caught and fixed: duplicate writeInterval in controlDict heredoc, extractor y_tol min→max for wall-packed meshes, midPlaneT assignment guard. New D4+ rule candidate #6 (mesh_refinement_wall_packing_smoke_check, MANDATORY). EX-1-008 candidate scoped: extractor refactor to hot_wall surface integration.)
 
 # Phase Status
 
@@ -427,6 +427,25 @@ EX-1-006 (Path A producer→consumer wiring, 2026-04-18):
 - **Known data-quality gap surfaced**: circular_cylinder_wake.yaml encodes physics_contract as YAML comments (multi-doc preservation constraint from EX-1-005), so yaml.safe_load cannot extract its contract_status. 1/10 whitelist cases silently skipped by producer→consumer channel. Documented in slice_metrics design_notes; fix deferred to future restructure slice.
 - Next slice obligations (per verdict): EX-1-007 = B1 (DHC mesh) requires (1) a priori Nu prediction in slice_metrics, (2) n=1 consumer-side mini-review before B1 commits, (3) C6 45-line cap + _generate_differential_heated_cavity single-function touched-file whitelist.
 - Artifact: reports/ex1_006_attributor_audit_concern/slice_metrics.yaml
+
+EX-1-007 (Path B1: DHC 256² wall-packed mesh, landed in 2 commits 2026-04-18):
+- Pre-commit slice (commit 54b57ab): Ra>=1e9 guard, nL=256, symmetric multi-section simpleGrading ratio=6, C5 a priori Nu prediction 16.1 ± 5, n=1 consumer-side mini-review landed.
+  - Initial grading direction ((0.5 0.5 0.1667) (0.5 0.5 6)) clustered fine cells at MIDLINE, not walls.
+- Smoke-check catch (fix-up commit 342beb0): blockMesh smoke-check harness (reports/ex1_007_dhc_mesh_refinement/run_dhc_blockmesh_check.py) flipped sections to ((0.5 0.5 6) (0.5 0.5 0.1667)) → first-cell 1.40mm at both walls (cells_in_BL ≈ 2.26, as C5 predicted). Cost: 5s smoke-check vs ~1200s wasted solver attempt.
+- Post-commit measurement (this commit bundle, 4 attempts, final wall_clock=1243.8s Docker buoyantFoam Ra=1e10 endTime=10):
+  - Nu_measured = 66.25 vs gold=30 vs predicted band [11,21] → verdict ABOVE_BAND.
+  - C5 numeric threshold PASS (66.25 ≫ 15, no re-Gate mandated).
+  - Honest interpretation: NOT a physics overshoot — methodology mismatch between LOCAL mid-height extractor and MEAN wall-integrated gold definition. B1 mesh now resolves BL (first-cell 1.40mm < δ_T 3.16mm) and thus honestly reports high local gradient; baseline 80-uniform mesh (first-cell 12.5mm ≫ δ_T) was silently reading Nu=5.85 by under-resolving physics — exactly the COMPATIBLE_WITH_SILENT_PASS_HAZARD pattern EX-1-006's audit_concern channel was built to catch.
+- Cascade of 3 pre-existing bugs uncovered and fixed in this bundle:
+  1. DUPLICATE_WRITEINTERVAL in controlDict heredoc (writeInterval 100 then 200; second won at endTime=500 by coincidence, nothing wrote at endTime=10).
+  2. EXTRACTOR_Y_TOL_MIN in _extract_nc_nusselt (min(dy) too tight for wall-packed meshes where midline cells are coarse; swapped to max).
+  3. Missing guard on midPlaneT assignment (UnboundLocalError on x_t_pairs when x_groups empty).
+- Bug 4 (EXTRACTOR_METHODOLOGY_LOCAL_VS_MEAN) scoped but deferred to EX-1-008 candidate — fixing it requires hot_wall surface integration via postProcess wallHeatFlux, which exceeds C6 scope.
+- New D4+ rule candidate #6: rule_6_mesh_refinement_wall_packing_smoke_check (MANDATORY when simpleGrading changes from uniform on wall-bounded BL observable).
+- Metrics: quality=4.8, determinism=PASS, override_rate=0.0, scope=0, physics_validity_precheck=pass, wall_clock_slice=52s (prescribed) + 1244s (post-commit measurement).
+- Full suite: 250/250 green throughout (mesh/extractor changes runtime-only; unit tests mock solver).
+- Rolling EX-1 state (n=7): override_rate 1/7 = 0.143. All D4+ rules untriggered.
+- Artifacts: reports/ex1_007_dhc_mesh_refinement/{slice_metrics.yaml (+ post-commit addendum), blockmesh_smoke_check.md, run_dhc_blockmesh_check.py, run_dhc_measurement.py, measurement_result.yaml, consumer_side_mini_review.md}
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅

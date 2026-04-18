@@ -1565,8 +1565,12 @@ RAS
         # --------------------------------------------------------------------------
         # 5. system/controlDict — buoyantSimpleFoam
         # --------------------------------------------------------------------------
-        (case_dir / "system" / "controlDict").write_text(
-            """\
+        # EX-1-007 B1: 256² wall-packed mesh at Ra=1e10 measured 70s/step; full
+        # endTime=500 (1000 steps) would take ~19h. Characteristic time τ=L/v_buoy
+        # ≈ 0.84s at Ra=1e10, so endTime=10 (~12τ) is sufficient for quasi-steady
+        # Nu extraction. 80²-uniform baseline (Ra=1e6) keeps endTime=500 unchanged.
+        _dhc_end_time = 10 if Ra >= 1e9 else 500
+        _ctrl_dict_text = """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -1598,8 +1602,6 @@ deltaT          0.5;
 
 writeControl    runTime;
 
-writeInterval   100;
-
 writeInterval   200;
 
 purgeWrite      0;
@@ -1617,7 +1619,19 @@ timePrecision   6;
 runTimeModifiable true;
 
 // ************************************************************************* //
-""",
+"""
+        # EX-1-007 B1: writeInterval must be <= endTime, else postProcess -latestTime
+        # finds no field output. Original heredoc had a duplicate writeInterval
+        # (100 then 200) — collapsed to single 200, now parameterized to endTime.
+        _write_interval = _dhc_end_time if Ra >= 1e9 else 200
+        (case_dir / "system" / "controlDict").write_text(
+            _ctrl_dict_text.replace(
+                "endTime         500;",
+                "endTime         {0};".format(_dhc_end_time),
+            ).replace(
+                "writeInterval   200;",
+                "writeInterval   {0};".format(_write_interval),
+            ),
             encoding="utf-8",
         )
 
@@ -6664,7 +6678,11 @@ mergePatchPairs
         # and take the first two interior x cells near the hot wall.
         unique_y = sorted({round(y, 6) for y in cys})
         if len(unique_y) >= 2:
-            dy_cell = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
+            # EX-1-007 B1 post-commit hotfix: for wall-packed meshes, min adjacent
+            # dy (at walls) is much smaller than midline dy; use max to keep y_tol
+            # loose enough to capture the coarse cells near y_target=L/2.
+            # Uniform meshes: min==max so behavior identical.
+            dy_cell = max(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
             y_tol = max(0.6 * dy_cell, 1e-6)
         else:
             y_tol = 0.015
@@ -6690,10 +6708,9 @@ mergePatchPairs
                 L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
                 grad_T = abs((T1 - T0) / dx)
                 key_quantities["nusselt_number"] = grad_T * L / dT_bulk
-
-        # 存储 mid-plane T profile
-        key_quantities["midPlaneT"] = [T for _, T in x_t_pairs]
-        key_quantities["midPlaneT_y"] = [x for x, _ in x_t_pairs]
+            # midPlaneT profile only stored when we actually sampled ≥2 x-cells
+            key_quantities["midPlaneT"] = [T for _, T in x_t_pairs]
+            key_quantities["midPlaneT_y"] = [x for x, _ in x_t_pairs]
 
         return key_quantities
 
