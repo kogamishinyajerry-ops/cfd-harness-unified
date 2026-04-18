@@ -1,7 +1,7 @@
-driving_model: opus47-pro (Orchestrator, Model Routing v4.0)
+driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T08:35"
-session: S-003a (Phase 7 Wave 3 — NACA0012 diagnostic v1 done, Fix Plan pending Opus Gate)
+last_updated: "2026-04-18T15:15"
+session: S-003b (Phase 7 Wave 3 — CLOSED with DEC-EX-A; autonomous mode active, no external Gate loop)
 
 # Phase Status
 
@@ -296,7 +296,7 @@ Phase 7 Wave 2-3 Docker E2E Results (9/9 auto_verify_report.yaml generated):
 | turbulent_flat_plate | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
 | rayleigh_benard_convection | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
 | differential_heated_cavity | FAIL | CONVERGED | FAIL | thermal_energy_setup_failure (HIGH) — T BC fixed |
-| naca0012_airfoil | PASS_WITH_DEVIATIONS | CONVERGED | DEVIATION (Cp 52.9%/32.4%/45.5%) | buffer_layer_yplus (HIGH) — Wave 3 diagnostic v1 done, Fix Plan pending Opus review |
+| naca0012_airfoil | PASS_WITH_DEVIATIONS (permanent, DEC-EX-A) | CONVERGED | DEVIATION (Cp 52.9%/32.4%/45.5%) | Wave 3 CLOSED 2026-04-18: Path W REJECT (geometry-locked y+_min), Path H REJECT (block-face grading discontinuity → NaN). Fuse triggered. DEC-EX-A: accept permanent deviation under blockMesh 6-block scope; snappyHexMesh rewrite deferred to Tier-1 future work. |
 | axisymmetric_impinging_jet | PASS_WITH_DEVIATIONS | UNKNOWN (FOAM FATAL) | PASS | adapter_version_mismatch (HIGH) |
 | fully_developed_plane_channel_flow | FAIL | OSCILLATING | FAIL | physics_model_incompatibility (HIGH) |
 
@@ -335,3 +335,16 @@ Phase 5 T1-T3 Status (completed in bf6cb5a):
 - T3 (ErrorAttributor patterns): Already done — PARAMETER_PLUMBING_MISMATCH, COMPARATOR_SCHEMA_MISMATCH, GEOMETRY_MODEL_MISMATCH, INSUFFICIENT_TRANSIENT_SAMPLING, BUOYANT_ENERGY_SETUP_INCOMPLETE all defined
 
 Tests: 221 passing ✅
+
+# Wave 3 Closeout (2026-04-18, autonomous self-Gate)
+
+Mode switch: external Notion Gate loop retired. Orchestrator (opus47-main) acts as both executor and Gate under Model Routing v5.1. No more manual paste-to-Notion Gate packets.
+
+NACA0012 Wave 3 final verdict: **DEC-EX-A** (PASS_WITH_DEVIATIONS permanent)
+- Cycle budget exhausted (2/2): Path W + Path H both REJECT
+- Root causes documented in reports/naca0012_airfoil/fix_plan_packet.md §G (W) + wave3_closeout_v2.md §4 (H)
+- src/ state: clean, no persistent edits beyond commits 22cd3ee, 273ef3d, b1bcf05
+- Gold standard byte-identical throughout
+- Decision path: accept known ~40% Cp deviation; snappyHexMesh rewrite (DEC-EX-C) deferred to future Tier-1 phase
+
+Next focus: Phase 8 (AutoVerifier MVP) pending, or other roadmap items.
