@@ -255,6 +255,15 @@ d4_plus_rule_candidate_6:
     would have burned absent the smoke-check).
   first_triggered_by: EX-1-007 B1 (caught grading inversion on commit 54b57ab before solver launched)
   proposed_addition_to: knowledge/correction_rules.yaml
+  # PROMOTED to D4++ active corpus on 2026-04-18 by opus47-main (ADWM v5.2
+  # self-Gate). Canonical definition now in .planning/d4_plus_rules.yaml
+  # under active_rules.rule_6_mesh_refinement_wall_packing_smoke_check.
+  # Future slices reference by name; this candidate block retained as
+  # historical record of the first-trigger event.
+  promotion_status: PROMOTED_TO_D4PP_ACTIVE_CORPUS
+  promoted_at: "2026-04-18T22:20 local"
+  promoted_by: opus47-main (ADWM v5.2 self-Gate)
+  canonical_location: .planning/d4_plus_rules.yaml
 
 ex1_008_candidate_scope:
   title: DHC extractor refactor — integrate mean Nu over hot_wall surface

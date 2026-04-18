@@ -1,0 +1,119 @@
+# D4+ / D4++ active rule corpus
+# -----------------------------------------------------------------------------
+# Source of truth for methodology-gate rules that armed during D4 verdict and
+# evolved through EX-1 series. Each slice_metrics.yaml references this corpus
+# under its `d4_plus_rule_activation_check:` block.
+#
+# Promotion semantics:
+#   D4+  — armed during D4 verdict (inline in slice_metrics.yaml); watched only
+#   D4++ — promoted to active corpus after ≥1 in-flight arming event with
+#          documented rationale; referenced-by-name from slice_metrics.yaml
+#
+# Last updated: 2026-04-18 (opus47-main, ADWM v5.2 self-Gate)
+# -----------------------------------------------------------------------------
+
+schema_version: 1
+corpus_version: 1.1
+
+promotion_log:
+  - date: 2026-04-17
+    event: D4 verdict → rules 1-4 armed (baseline)
+    by: JerryKogami D4 Gate
+  - date: 2026-04-17
+    event: rule #5 added (D4++ consumer-side separate rolling)
+    by: JerryKogami D4++ addendum
+  - date: 2026-04-18
+    event: rule #6 PROMOTED to D4++ active (mesh_refinement_wall_packing_smoke_check)
+    by: opus47-main ADWM v5.2 self-Gate
+    ref: reports/ex1_007_dhc_mesh_refinement/blockmesh_smoke_check.md
+    first_triggered_by: EX-1-007 B1 — commit 54b57ab caught grading inversion pre-solver
+    rationale: |
+      EX-1-007 B1 exposed that blockMesh's multi-section simpleGrading syntax
+      is direction-sensitive but silently accepts both orderings; checkMesh's
+      aspect-ratio report cannot distinguish wall-packed from midline-packed
+      variants. A 5-second smoke-check prevented a 30-120 minute wasted
+      solver trajectory. Rule armed and triggered within its first slice,
+      satisfying D4++ promotion criteria.
+
+active_rules:
+
+  rule_1_baseline_rolling_above_030_at_n_ge_4:
+    severity: METHODOLOGY_GATE
+    status: ACTIVE (D4+)
+    trigger: "rolling EX-1 override_rate > 0.30 at n ≥ 4"
+    action_on_trigger: "pause new EX-1 dispatch; invoke methodology mini-review before next slice"
+    exemption: "n < 4 window exempt (insufficient signal)"
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_1
+
+  rule_2_two_consecutive_override_above_05:
+    severity: METHODOLOGY_GATE
+    status: ACTIVE (D4+)
+    trigger: "two consecutive slice override_rate values ≥ 0.5"
+    action_on_trigger: "invoke pivot-root-cause review before next slice"
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_2
+
+  rule_3_precheck_missing:
+    severity: STRUCTURAL_GATE
+    status: ACTIVE (D4+)
+    trigger: "slice_metrics.yaml without physics_validity_precheck block"
+    action_on_trigger: "reject slice commit until precheck block present"
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_3
+
+  rule_4_pivot_without_enumerated_preconditions:
+    severity: STRUCTURAL_GATE
+    status: ACTIVE (D4+)
+    trigger: "scope pivot (change in remediation strategy) without updating physics_validity_precheck.preconditions_enumerated"
+    action_on_trigger: "reject pivot; require enumerated preconditions for new scope"
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_4
+
+  rule_5_consumer_side_separate_rolling:
+    severity: METHODOLOGY_GATE
+    status: ACTIVE (D4++)
+    trigger: "mixed producer/consumer slices in rolling window"
+    action_on_trigger: "track producer-side and consumer-side override_rate separately; threshold 0.30 applies independently"
+    added_by: D4++ addendum (2026-04-17)
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_5_consumer_side_separate_rolling
+
+  rule_6_mesh_refinement_wall_packing_smoke_check:
+    severity: MANDATORY
+    status: ACTIVE (D4++) — PROMOTED 2026-04-18
+    trigger: "simpleGrading changes from uniform (grading=1) on a wall-bounded BL observable (Nu, Cf, wall heat flux, y+, skin friction)"
+    action_on_trigger: |
+      BEFORE launching the solver:
+        1. Run blockMesh on the candidate mesh
+        2. Run checkMesh and inspect min-volume cell location
+        3. Assert min-volume cell sits adjacent to the BL-bearing wall,
+           NOT adjacent to the opposite wall or midline
+        4. If assertion fails, invert simpleGrading ratio and repeat
+    exemption: "uniform grading (grading=1) retained — no direction ambiguity"
+    rationale: |
+      blockMesh's multi-section simpleGrading syntax is direction-sensitive
+      but silently accepts both orderings. Only cell-location (min-volume
+      near wall vs near midline) distinguishes them — invisible to
+      checkMesh's aspect-ratio report. Cost: ~5s vs 30-120 min wasted
+      solver time.
+    first_triggered_by: EX-1-007 B1 (commit 54b57ab caught grading inversion pre-solver)
+    reference_artifacts:
+      - reports/ex1_007_dhc_mesh_refinement/blockmesh_smoke_check.md
+      - reports/ex1_007_dhc_mesh_refinement/run_dhc_blockmesh_check.py
+    consumer_pattern: |
+      slice_metrics.yaml should add under d4_plus_rule_activation_check:
+          rule_6_mesh_refinement_wall_packing_smoke_check:
+            armed: <bool>    # true if slice touches simpleGrading
+            triggered: <bool>
+            smoke_check_ran: <bool>
+            smoke_check_artifact: <path-to-evidence>
+    current_state_ref: slice_metrics.yaml > d4_plus_rule_activation_check > rule_6_mesh_refinement_wall_packing_smoke_check
+
+# -----------------------------------------------------------------------------
+# Candidate rules (not yet promoted)
+# -----------------------------------------------------------------------------
+
+candidate_rules:
+  # (empty — rule 6 promoted above; no new candidates outstanding)
+
+# -----------------------------------------------------------------------------
+# Rule-retirement log (none yet)
+# -----------------------------------------------------------------------------
+
+retired_rules: []
