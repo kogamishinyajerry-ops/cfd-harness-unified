@@ -1,0 +1,153 @@
+schema_version: 2
+slice_id: EX-1-009
+slice_title: "Spalding-fallback audit_concern wiring (producer→consumer)"
+gate_context: "ADWM v5.2 autonomous continuation; dashboard Tier-1 remediation line #4"
+parent_decision: DEC-ADWM-005
+
+# ---------------------------------------------------------------
+# Physics-validity precheck (REQUIRED per D4+ verdict C2)
+# ---------------------------------------------------------------
+physics_validity_precheck:
+  performed: true
+  preconditions_enumerated:
+    - "Producer flag emission must not alter returned cf_skin_friction numeric (CHK-3 binding)"
+    - "Gold standard turbulent_flat_plate.yaml SHA256 must remain bit-identical (CHK-9 binding, hard floor #1)"
+    - "Consumer enrichment must be backwards-compatible when exec_result is None or flag is absent (CHK-5 binding)"
+    - "Only SILENT_PASS_HAZARD prefix should be enriched; DISGUISED_AS_COMPATIBLE must NOT be (separate concern class)"
+  evidence_ref:
+    - "CHK-3/9 verified post-commit: gold SHA256 b7212a75...89daae matches pre-dispatch baseline"
+    - "256 passed test suite includes existing test_silent_pass_hazard_on_pass_emits_audit_concern (default exec_result path) — backwards compat proven"
+  verdict: PASS
+
+# ---------------------------------------------------------------
+# CHK table execution
+# ---------------------------------------------------------------
+chk_execution:
+  CHK-1:
+    description: "cf_spalding_fallback_activated appears in key_quantities when Cf>0.01 synthesized"
+    binding: true
+    verdict: PASS
+    evidence: "tests/test_foam_agent_adapter.py::test_extract_flat_plate_cf_records_spalding_fallback_activation"
+  CHK-2:
+    description: "cf_spalding_fallback_count >= 1 when fallback fires; == 0 when not"
+    binding: true
+    verdict: PASS
+    evidence: "same adapter test pair covers both branches"
+  CHK-3:
+    description: "cf_skin_friction numeric bit-identical to prior behavior"
+    binding: true
+    verdict: PASS
+    evidence: "test_extract_flat_plate_cf_records_spalding_fallback_activation asserts cf_skin_friction == 0.0576/Re_x^0.2 (no offset from prior behavior); no-fallback path asserts existing gradient-based value preserved"
+  CHK-4:
+    description: "_resolve_audit_concern returns enriched suffix when flag=True"
+    binding: true
+    verdict: PASS
+    evidence: "tests/test_error_attributor.py::test_silent_pass_hazard_enriches_with_spalding_fallback_flag"
+  CHK-5:
+    description: "_resolve_audit_concern returns bare prefix when flag=False or missing"
+    binding: true
+    verdict: PASS
+    evidence: "tests/test_error_attributor.py::test_silent_pass_hazard_unchanged_when_spalding_fallback_not_activated + existing test_silent_pass_hazard_on_pass_emits_audit_concern (default exec_result, no kq)"
+  CHK-6:
+    description: "AttributionReport.audit_concern string propagates enriched form"
+    binding: true
+    verdict: PASS
+    evidence: "enrichment test asserts on report.audit_concern (end-to-end via attributor.attribute)"
+  CHK-7:
+    description: "Full test suite green"
+    binding: true
+    verdict: PASS
+    evidence: "256 passed (was 252 pre-slice; +4 new tests from this slice)"
+  CHK-8:
+    description: "src/ diff ≤ 60 lines"
+    binding: false
+    verdict: PASS
+    evidence: "src/error_attributor.py +44/-9, src/foam_agent_adapter.py +4/-0 → 57 lines ≤ 60"
+  CHK-9:
+    description: "Gold YAML bit-identical SHA256"
+    binding: true (hard floor #1)
+    verdict: PASS
+    evidence: "shasum -a 256 knowledge/gold_standards/turbulent_flat_plate.yaml → b7212a7537e8e782ba660b1fa372ac83f8aa40dddf9742b88851d02cff89daae (matches pre-dispatch baseline byte-for-byte)"
+  CHK-10:
+    description: "No new public API surface"
+    binding: true
+    verdict: PASS
+    evidence: "exec_result is keyword-only default-None parameter extension; all changes to private helpers + key_quantities dict keys"
+
+# ---------------------------------------------------------------
+# Hard-floor audit
+# ---------------------------------------------------------------
+hard_floor_audit:
+  floor_1_gs_numeric: PASS  # SHA256 bit-identical verified
+  floor_2_禁区_dispatch: PASS  # src/ + tests/ via Codex
+  floor_7_trailer: PASS  # Execution-by: codex-gpt54 on commit 7b0cd29
+
+# ---------------------------------------------------------------
+# D4+ rule activation check
+# ---------------------------------------------------------------
+d4_plus_rule_activation_check:
+  rule_1_baseline_rolling_above_030_at_n_ge_4:
+    armed: true
+    triggered: false
+    measured: 0.222  # 2 overrides / 9 slices (EX-1-002 pivot + EX-1-008 FUSE)
+  rule_2_two_consecutive_override_above_05:
+    triggered: false
+  rule_3_precheck_missing:
+    triggered: false
+  rule_4_pivot_without_enumerated_preconditions:
+    triggered: false
+  rule_5_consumer_side_separate_rolling:
+    producer_side_included: true
+    consumer_side_included: true
+    pattern: "This slice touches BOTH producer (adapter) AND consumer (error_attributor) in one commit, similar to EX-1-006"
+  rule_6_mesh_refinement_wall_packing_smoke_check:
+    armed: false
+    triggered: false
+    rationale: "No simpleGrading change in this slice"
+
+# ---------------------------------------------------------------
+# Slice verdict
+# ---------------------------------------------------------------
+verdict: APPROVED
+cycle_budget_used: 1 of 2  # clean first-cycle landing; 1 budget unit held in reserve
+override_rate_single_slice: 0.0  # no pivot
+scope_violation_count: 0
+wall_clock_seconds: ~600  # includes Codex planning, code gen, and commit finalization
+
+# ---------------------------------------------------------------
+# Rolling EX-1 state
+# ---------------------------------------------------------------
+rolling_ex1_state_after_ex1_009:
+  window: "EX-1-001 through EX-1-009"
+  override_history: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]  # EX-1-002 pivot, EX-1-008 FUSE
+  n: 9
+  rolling_override_rate: 0.222
+  all_d4plus_rules_untriggered: true
+
+# ---------------------------------------------------------------
+# Dashboard delta
+# ---------------------------------------------------------------
+dashboard_delta:
+  line_item_closed: "Tier-1 future — Cf>0.01 Spalding substitution audit (case #4)"
+  new_runtime_signal: "cf_spalding_fallback_activated + cf_spalding_fallback_count in key_quantities"
+  enriched_audit_concern: "COMPATIBLE_WITH_SILENT_PASS_HAZARD:spalding_fallback_confirmed on PASS runs where fallback fired"
+
+# ---------------------------------------------------------------
+# Artifacts
+# ---------------------------------------------------------------
+artifacts:
+  - reports/ex1_009_spalding_fallback_audit/fix_plan_packet.md
+  - .planning/decisions/2026-04-18_ex1_009_self_approve.md (DEC-ADWM-005)
+  - reports/ex1_009_spalding_fallback_audit/slice_metrics.yaml (this file)
+
+commits:
+  planning: dddb7e8  # FPP + DEC-ADWM-005 (Execution-by: opus47-main)
+  code: 7b0cd29      # src + tests (Execution-by: codex-gpt54)
+
+# ---------------------------------------------------------------
+# Learnings
+# ---------------------------------------------------------------
+learnings:
+  - "Producer→consumer enrichment pattern from G3 is reusable: flag emission in adapter + kwarg extension in consumer closes silent-pass hazards without changing numeric returns"
+  - "Truth-emission (not behavior change) slices are the safest way to close silent-pass hazards under hard floor #1"
+  - "Keyword-only optional parameter pattern preserves backwards compat for all existing test paths"
