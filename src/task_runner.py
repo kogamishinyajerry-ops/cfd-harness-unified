@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
@@ -28,6 +28,13 @@ from .result_comparator import ResultComparator
 from .correction_recorder import CorrectionRecorder
 from .error_attributor import ErrorAttributor
 
+PostExecuteHook = Callable[
+    [TaskSpec, ExecutionResult, Optional[ComparisonResult], Optional[CorrectionSpec]],
+    Any,
+]
+
+CORRECTION_POLICIES = ("legacy_auto_save", "suggest_only")
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +46,7 @@ class RunReport:
     comparison_result: Optional[ComparisonResult]
     correction_spec: Optional[CorrectionSpec]
     summary: str
+    auto_verify_report: Any = None  # AutoVerifyReport or hook-returned status dict, when hook configured
 
 
 class TaskRunner:
@@ -55,7 +63,13 @@ class TaskRunner:
         notion_client: Optional[NotionClient] = None,
         knowledge_db: Optional[KnowledgeDB] = None,
         deviation_threshold: float = 0.10,
+        post_execute_hook: Optional[PostExecuteHook] = None,
+        correction_policy: str = "legacy_auto_save",
     ) -> None:
+        if correction_policy not in CORRECTION_POLICIES:
+            raise ValueError(
+                f"correction_policy must be one of {CORRECTION_POLICIES}, got {correction_policy!r}"
+            )
         # Precedence: explicit executor kwarg > EXECUTOR_MODE env var > MockExecutor
         if executor is not None:
             self._executor: CFDExecutor = executor
@@ -74,6 +88,8 @@ class TaskRunner:
         self._comparator = ResultComparator(threshold=deviation_threshold)
         self._recorder = CorrectionRecorder()
         self._attributor = ErrorAttributor(knowledge_db=self._db)
+        self._post_execute_hook = post_execute_hook
+        self._correction_policy = correction_policy
 
     # ------------------------------------------------------------------
     # 公开接口
@@ -97,15 +113,31 @@ class TaskRunner:
             comparison = self._comparator.compare(exec_result, gold)
             logger.info("Comparison passed=%s", comparison.passed)
 
-            # 4. 如有偏差 → 生成 CorrectionSpec
+            # 4. 如有偏差 → 生成 CorrectionSpec (saved only under legacy_auto_save policy)
             if not comparison.passed:
                 correction = self._recorder.record(task_spec, exec_result, comparison)
-                self._db.save_correction(correction)
+                if self._correction_policy == "legacy_auto_save":
+                    self._db.save_correction(correction)
+                else:
+                    logger.info(
+                        "correction_policy=%s: CorrectionSpec built but not persisted",
+                        self._correction_policy,
+                    )
 
-        # 5. 生成摘要
+        # 5. AutoVerifier post-execute hook (SPEC §INT-1, additive)
+        auto_verify_report: Any = None
+        if self._post_execute_hook is not None:
+            try:
+                auto_verify_report = self._post_execute_hook(
+                    task_spec, exec_result, comparison, correction
+                )
+            except Exception:  # noqa: BLE001 - hook is optional, must not kill run
+                logger.exception("post_execute_hook raised; continuing without verify report")
+
+        # 6. 生成摘要
         summary = self._build_summary(exec_result, comparison, correction)
 
-        # 6. 回写 Notion（Notion 未配置时静默跳过）
+        # 7. 回写 Notion（Notion 未配置时静默跳过）
         try:
             self._notion.write_execution_result(task_spec, exec_result, summary)
         except NotImplementedError:
@@ -117,6 +149,7 @@ class TaskRunner:
             comparison_result=comparison,
             correction_spec=correction,
             summary=summary,
+            auto_verify_report=auto_verify_report,
         )
 
     def run_all(self) -> List[RunReport]:
