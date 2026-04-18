@@ -1315,12 +1315,13 @@ fields          (U);
         # g = Ra * nu * alpha / (beta * dT * L^3)
         g = Ra * nu * alpha / (beta * dT * L**3)  # gravity magnitude
         # EX-1-007 B1: DHC (Ra>=1e9) needs ~2 cells in thermal BL (δ_T ~ L·Ra^-0.25).
-        # At Ra=1e10, δ_T≈3.16mm per L=1m; 256 cells + symmetric wall-packed grading
-        # ratio=6 gives first-cell ~0.0013L ≈ 1.3mm → ~2 cells in BL (predicted Nu≈16).
+        # Symmetric wall-packing: first half expansion=6 (small cells at wall x=0),
+        # second half expansion=1/6 (small cells at wall x=L). Midline cells large.
+        # blockMesh smoke-check verified min cell ≈ 1.4mm, max ≈ 8.4mm, aspect=6.
         # Lower Ra (Ra=1e6 rayleigh_benard) keeps original 80-uniform mesh.
         if Ra >= 1e9:
             nL = max(int(256 * L), 128)
-            grading_str = "((0.5 0.5 0.1667) (0.5 0.5 6))"
+            grading_str = "((0.5 0.5 6) (0.5 0.5 0.1667))"
         else:
             nL = max(int(80 * L), 40)
             grading_str = "1"
