@@ -11,6 +11,19 @@ note: >
   The Gold Standard ref_value=25.0 (Cooper 1984) requires buoyantFoam with
   thermal boundary conditions — a different solver configuration.
   This observable is INCOMPATIBLE with simpleFoam execution.
+physics_contract:
+  geometry_assumption: "Axisymmetric jet of diameter D impinging normal to a heated flat plate at stand-off distance H/D ~ 2-6; Cooper 1984 correlation requires thermal BCs on the plate"
+  reference_correlation_context: "Cooper 1984 Nu(r/D) correlation for impinging-jet heat transfer gives peak Nu ~ 25 in the stagnation zone at Re ~ 2.3e4. The ref_value in this YAML is **not** the true Cooper Nu (which is ~25); it is the adapter-observed Cf=0.0042 from a flat-plate extraction. The YAML's note: field is the existing disclosure of this mismatch."
+  physics_precondition:
+    - condition: "Solver has a thermal solve with plate at T_hot, jet inflow at T_cold (or equivalent) so a temperature gradient can be extracted at the plate"
+      satisfied_by_current_adapter: false
+      evidence_ref: "whitelist declares simpleFoam which is isothermal; no energy equation solved. Adapter has _generate_impinging_jet (src/foam_agent_adapter.py:4257+) that sets up a buoyantFoam-path case, but the whitelist configuration takes a simpleFoam path that never invokes this generator for the thermal observable."
+      consequence_if_unsatisfied: "No Nu can be computed from the solver output; the value stored as 'nusselt_number' is a flat-plate Cf borrowed from the skin-friction extractor path. PASS against ref_value=0.0042 only proves the adapter is self-consistent, not that the physics is correct."
+    - condition: "The ref_value in this YAML encodes the adapter's actual extraction (Cf=0.0042), NOT the literature Nu (~25)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "YAML top-level `source` field explicitly calls out 'Computed: simpleFoam flat-plate extraction (cf_skin_friction)'. The Phase 7 gold revision (bf6cb5a and surrounding) replaced the Cooper Nu=25 with the Cf=0.0042 to make the comparison self-consistent under the isothermal solver. This is an honest remediation, but it means PASS on this case demonstrates extraction self-consistency only."
+  contract_status: "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — the observable is called nusselt_number but stores a cf_skin_friction value. No solver change is required to PASS, and no solver change will make it agree with the literature Nu=25 either without a different thermal setup. Future R-A-relabel slice could rename the observable to 'cf_skin_friction_at_plate' and update ref_value to match a Cf correlation; that would be a physics-valid remediation but is out of the current bounded-metadata scope."
+  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice)"
 relationships:
   solver_reuse: impinging_jet
   geometry_similarity:

@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
 last_updated: "2026-04-18T17:50"
-session: S-003e (EX-1-004 R-A-metadata continuation landed; physics_contract coverage 6/10 canonical whitelist; rolling EX-1 override_rate 0.25 at n=4, baseline rule armed but not triggered; C4 holds PL-1 for D5)
+session: S-003f (EX-1-005 completes 10/10 canonical whitelist physics_contract coverage + mandatory n=5 methodology mini-review; rolling override_rate 0.20 at n=5, all gates untriggered; 2nd silent-pass hazard surfaced (circular_cylinder_wake Strouhal hardcode); C4 holds PL-1 for D5)
 
 # Phase Status
 
@@ -392,6 +392,20 @@ EX-1-004 (R-A-metadata continuation to passing cases, 2026-04-18):
 - **Rolling EX-1 state (n=4): override_rate 1/4 = 0.25. Baseline rule armed (n>=4) but NOT triggered (0.25 ≤ 0.30). Pattern rule sequence [0.0, 1.0, 0.0, 0.0] — no two consecutive ≥ 0.5. Methodology Gate NOT armed.**
 - Notable learning: turbulent_flat_plate's silent-pass hazard was hidden in a note: field until physics_validity_precheck's evidence enumeration forced a code read at foam_agent_adapter.py:6924. This is the annotation schema's main long-term value — converting free-text tacit knowledge into auditable structured claims.
 - Artifact: reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml
+
+EX-1-005 (R-A-metadata completion + mandatory n=5 mini-review, 2026-04-18):
+- Slice: physics_contract added to remaining 4 canonical whitelist YAMLs
+  - backward_facing_step_steady.yaml (COMPATIBLE)
+  - circular_cylinder_wake.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD — **new finding: src/foam_agent_adapter.py:6766-6774 hardcodes canonical_st=0.165 for any Re in [50,200], bypassing solver output for the whitelist Re=100 case**)
+  - rayleigh_benard_convection.yaml (COMPATIBLE at Ra=1e6; contrast with DHC Ra=1e10 DEVIATION)
+  - axisymmetric_impinging_jet.yaml (INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — ref_value=0.0042 is the adapter's Cf, not the Cooper Nu=25; honest but makes PASS vacuous)
+- Metrics: wall_clock=95s (60% headroom vs C2 240s), quality=4.9, determinism=PASS, override=0.0, scope=0, physics_validity_precheck=pass.
+- Full suite: 245/245 green.
+- **10/10 canonical whitelist physics_contract coverage reached.** Distribution: 3 COMPATIBLE / 2 COMPATIBLE_WITH_SILENT_PASS_HAZARD / 1 PARTIALLY_COMPATIBLE / 1 DEVIATION / 2 INCOMPATIBLE / 1 INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE.
+- **3/10 Phase-7-PASS verdicts are not fully physics-backed** (turbulent_flat_plate silent-pass, circular_cylinder_wake Strouhal shortcut, axisymmetric_impinging_jet observable name swap). Future reports should report both verdict-PASS count AND contract-status-weighted count.
+- **Mandatory n=5 mini-review performed** and landed same commit: reports/ex1_005_whitelist_coverage_and_mini_review/methodology_mini_review.md. Rank-by-rank audit of memo §4 confirms annotations remain self-consistent; no memo revision required at this checkpoint. All 4 D4+ rolling-rate rules untriggered.
+- Rolling EX-1 state (n=5): override_rate 1/5 = 0.20. Methodology regime installed by D4+ is reducing, not inducing, pivots — expected steady-state.
+- Artifacts: reports/ex1_005_whitelist_coverage_and_mini_review/{methodology_mini_review.md, slice_metrics.yaml}
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅

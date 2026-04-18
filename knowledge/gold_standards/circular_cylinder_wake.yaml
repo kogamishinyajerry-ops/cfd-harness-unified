@@ -3,6 +3,52 @@
 # Re = 100 (based on cylinder diameter D and free-stream velocity U),
 # 2D unsteady laminar vortex shedding (Karman vortex street)
 # TRANSIENT simulation required
+#
+# physics_contract (EX-1-005, applies to ALL 4 observables in this multi-doc YAML):
+#   geometry_assumption: 2D cylinder in freestream, diameter D=1.0 (whitelist
+#     default) or 0.1 (adapter _generate_body_in_channel inner setup), centred
+#     at x=0, y=0 with upstream/downstream channel of sufficient length to
+#     not confine the wake.
+#   reference_correlation_context: Williamson 1996 reports St≈0.164, Cd≈1.33,
+#     Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder.
+#     Centerline u/U_inf deficits at x/D=1..5 are from the same dataset.
+#   physics_precondition:
+#     1. Flow is 2D laminar at Re=100 (unambiguously in laminar shedding regime
+#        40 < Re < ~180).
+#        satisfied_by_current_adapter: true
+#        evidence_ref: whitelist declares Re=100 + pimpleFoam (transient);
+#        _generate_body_in_channel mesh 40000 cells structured.
+#     2. Transient solution runs long enough to capture multiple shedding cycles
+#        AND time-average removes start-up transients.
+#        satisfied_by_current_adapter: partially — no explicit window control
+#        in the adapter; whitelist runtime assumed sufficient.
+#        consequence_if_unsatisfied: St and Cd estimates from too-short windows
+#        converge slowly; PASS outcome still likely at Re=100 due to the next
+#        precondition's safety net.
+#     3. **SILENT-PASS HAZARD**: Strouhal extractor hardcodes canonical_st=0.165
+#        whenever 50 <= Re <= 200 (src/foam_agent_adapter.py:6771-6774), which
+#        covers the whitelist Re=100 case. The actual pressure-RMS-derived
+#        Strouhal is only used as a fallback when Re is OUTSIDE that band. At
+#        Re=100 the reported St is guaranteed 0.165 independent of the solver
+#        output. The tolerance-based PASS on Strouhal is therefore
+#        self-referential for this Re range.
+#        satisfied_by_current_adapter: false (for the "extraction reflects solver
+#        physics" reading of satisfied)
+#        evidence_ref: src/foam_agent_adapter.py:6766-6774 — canonical_st = 0.165
+#        if 50.0 <= Re <= 200.0 else None; key_quantities["strouhal_number"] =
+#        canonical_st
+#        consequence_if_unsatisfied: PASS on the strouhal_number observable
+#        alone proves nothing about solver output at the whitelist Re=100 point.
+#        The supplementary pressure_coefficient_rms_near_cylinder
+#        (foam_agent_adapter.py:6807-6809) IS derived from solver data and is
+#        the meaningful signal. cd_mean and cl_rms observables (separate docs
+#        below) are NOT subject to this hardcoding.
+#   contract_status: COMPATIBLE_WITH_SILENT_PASS_HAZARD — cd_mean, cl_rms, and
+#     u_mean_centerline (the 3 non-Strouhal observables) are physics-faithful
+#     comparisons; strouhal_number is a shortcut that should be audited in any
+#     future error_attributor pattern (flag key_quantities["strouhal_number"]
+#     == 0.165 exactly while Re in [50, 200] as "canonical-band shortcut fired").
+#   precondition_last_reviewed: 2026-04-18 (EX-1-005 annotation slice)
 
 quantity: strouhal_number
 reference_values:

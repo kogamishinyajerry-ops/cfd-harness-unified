@@ -4,6 +4,21 @@ legacy_case_id: backward_facing_step
 legacy_source_file: knowledge/gold_standards/backward_facing_step.yaml
 source: "Driver & Seegmiller 1985, AIAA J."
 literature_doi: "10.2514/3.9086"
+physics_contract:
+  geometry_assumption: "Backward-facing step with step height H=1, inlet upstream length -1, outlet at x=8 (domain x∈[-1,8], y∈[0,3] in step-height units)"
+  reference_correlation_context: "Driver & Seegmiller 1985 report Xr/H=6.26±0.2 at Reh≈37500 with k-ε RANS; velocity profiles at reattachment x/H=6 come from the same experimental dataset."
+  physics_precondition:
+    - condition: "Flow is separated and reattaches inside the measurement domain (reattachment_x < 8·H)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist configures domain x∈[-1,8·H]; Xr≈6.26 sits at the interior — reattachment zero-crossing extractor at src/foam_agent_adapter.py:6591-6634 finds it within the sampling range"
+    - condition: "Zero-crossing of Ux at y=0.5·H is a valid reattachment proxy (attached flow vs reverse flow bifurcation at mid-height of the step)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:6601-6629 — y_target=0.5, y_tol=0.15, Ux sign-change x1→x2 with linear interpolant; standard BFS post-processing convention"
+    - condition: "Mesh resolves the shear layer separating from the step corner enough to produce a physical Ux(x) sign change"
+      satisfied_by_current_adapter: true
+      evidence_ref: "Phase 7 Wave 2-3 verdict PASS with Xr deviation <10% per whitelist tolerance"
+  contract_status: "COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid"
+  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice)"
 relationships:
   solver_reuse: backward_facing_step
   geometry_similarity:

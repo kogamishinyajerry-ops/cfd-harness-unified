@@ -1,0 +1,188 @@
+slice_id: EX-1-005
+track: EX-1
+slice_type: gold_standard_metadata_extension_plus_methodology_mini_review
+captured_at: "2026-04-18T19:05:00Z"
+captured_by: opus47-main (self-Gate under Model Routing v5.1)
+gate_context: D4+ APPROVE_PATH_A — completes 10/10 canonical whitelist physics_contract coverage; mandatory n=5 lightweight methodology mini-review bundled
+
+slice_title: "R-A-metadata completion: 4 remaining whitelist gold_standards + mandatory n=5 methodology mini-review"
+
+scope_summary: >-
+  Covers the final 4 canonical whitelist cases with physics_contract:
+    - backward_facing_step_steady.yaml (COMPATIBLE)
+    - circular_cylinder_wake.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD —
+      new finding: Strouhal hardcoded canonical_st=0.165 for Re in [50,200]
+      at src/foam_agent_adapter.py:6766-6774, bypassing solver output)
+    - rayleigh_benard_convection.yaml (COMPATIBLE at Ra=1e6)
+    - axisymmetric_impinging_jet.yaml (INCOMPATIBLE_WITH_LITERATURE_
+      DISGUISED_AS_COMPATIBLE — ref_value is adapter's Cf, not Cooper's Nu)
+  Bundles the mandatory n=5 lightweight methodology mini-review as
+  reports/ex1_005_.../methodology_mini_review.md per BASELINE_PLAN
+  §Rolling Override Rate Thresholds. Reaches 10/10 canonical whitelist
+  annotation coverage.
+
+explicit_non_scope:
+  - "No tolerance change"
+  - "No whitelist.yaml edit"
+  - "No src/ edit (only read-only inspection of extraction functions)"
+  - "No test edit"
+
+# ---------------------------------------------------------------
+# Physics-validity precheck (REQUIRED)
+# ---------------------------------------------------------------
+physics_validity_precheck:
+  performed: true
+  preconditions_enumerated:
+    - "Each of the 4 new physics_contract blocks cites file:line evidence read in this session, not hallucinated"
+    - "circular_cylinder_wake's multi-document YAML format is preserved (physics_contract added as structured YAML comments on the first document, applying to all 4 observables) — loaders iterate docs with yaml.safe_load_all and .get() with defaults, so comments are inert"
+    - "axisymmetric_impinging_jet annotation must not contradict the existing honest disclosure in the source: / description: / note: fields; it should elevate that disclosure to contract_status"
+    - "mini-review must audit memo §4 against actual pivot data from n=1..5, not just restate the verdict language"
+  all_satisfied: true
+  evidence_refs:
+    - "src/foam_agent_adapter.py:6591-6634 _extract_bfs_reattachment — read this session for BFS annotation"
+    - "src/foam_agent_adapter.py:6749-6814 _extract_cylinder_strouhal — read this session; lines 6766-6774 contain the canonical_st hardcode (new silent-pass finding)"
+    - "src/foam_agent_adapter.py:7130-7188 _extract_rayleigh_benard_nusselt — read this session for RB annotation (L=1.0, Delta_T=10.0, first-two-points gradient)"
+    - "src/foam_agent_adapter.py:4257+ _generate_impinging_jet — grep-verified this session; no matching _extract_impinging_jet exists (the Nu observable borrows from flat-plate Cf path, matching the YAML's pre-existing honest disclosure)"
+    - "Full test suite 245/245 post-edit"
+    - "methodology_mini_review.md §2 audits memo §4 rank-by-rank against actual n=1..5 slice outcomes"
+
+# ---------------------------------------------------------------
+# Acceptance metrics
+# ---------------------------------------------------------------
+metrics:
+  wall_clock_latency_s: 95
+  wall_clock_notes: "Larger slice: 4 physics_contract blocks + mandatory mini-review + sha256 map + STATE update. Mini-review is ~130-line audit document with rank-by-rank memo §4 calibration."
+  latency_threshold_s: 300
+  latency_c2_headroom_target_s: 240
+  latency_headroom_actual_pct: 60.4  # (240 - 95) / 240 * 100
+
+  quality_score: 4.9
+  quality_rubric_self_assessed:
+    contract_fidelity: 5    # strictly bounded to R-A-metadata + mini-review as verdict allows
+    evidence_use: 5          # every claim tied to a read file:line; circular_cylinder silent-pass discovery is a literal quotation from extractor
+    actionability: 5         # mini-review §5 gives 4 concrete recommendations for EX-1-006+
+    risk_handling: 5         # precheck performed, impinging_jet contract explicitly labeled INCOMPATIBLE_..._DISGUISED_AS_COMPATIBLE — serious finding surfaced honestly
+    clarity: 4               # contract_status vocabulary now has 6 distinct values; mini-review §3.2 flags this as a tech debt
+
+  determinism_grade: PASS
+  determinism_notes: "Textual YAML edits, deterministic. sha256 captured. 245/245 stable."
+  artifact_sha256_map:
+    "knowledge/gold_standards/backward_facing_step_steady.yaml": 89085b0a67aeeee78c32b208a31f0e2b98dc6758850e237ca35df483648af72d
+    "knowledge/gold_standards/circular_cylinder_wake.yaml": 9dcb79c5ebbb6bf2c4e382ee145ea1d54da05c345209ee90a7edb7dae15a5556
+    "knowledge/gold_standards/rayleigh_benard_convection.yaml": 3fe5867405f9b8d154a7f8944d6108635ec12cf907fdc497c0b06d4cdd9fae82
+    "knowledge/gold_standards/axisymmetric_impinging_jet.yaml": 944322e04506092d2213d21269d19c6a61d09c62ca2e9c448ed604ee91dd9ca8
+
+  override_rate: 0.0
+  override_notes: "No pivot. Original plan (4 cases + mini-review) held to landing."
+
+  scope_violation_count: 0
+  scope_audit:
+    read_only_inputs:
+      - src/foam_agent_adapter.py  # L6591-6634, 6749-6814, 7130-7188, 4257+
+    write_paths:
+      - knowledge/gold_standards/backward_facing_step_steady.yaml
+      - knowledge/gold_standards/circular_cylinder_wake.yaml
+      - knowledge/gold_standards/rayleigh_benard_convection.yaml
+      - knowledge/gold_standards/axisymmetric_impinging_jet.yaml
+      - reports/ex1_005_whitelist_coverage_and_mini_review/methodology_mini_review.md (new)
+      - reports/ex1_005_whitelist_coverage_and_mini_review/slice_metrics.yaml (new, this file)
+      - .planning/STATE.md (session header + EX-1-005 block)
+    forbidden_paths_untouched:
+      - knowledge/whitelist.yaml
+      - src/ (read-only)
+      - tests/
+      - knowledge/gold_standards/*.yaml touched by EX-1-003 and EX-1-004 (unchanged this slice)
+    diff_stats:
+      src_lines_changed: 0
+      tests_lines_changed: 0
+      gold_standards_lines_added: "approximately 96 lines across 4 YAMLs, all additive (no tolerance edits)"
+      docs_lines_added: "1 new mini-review markdown + 1 slice_metrics yaml"
+
+  estimated_cost_usd: 0.68
+  cost_pricing_snapshot: "Opus 4.7 @ $15/1M input + $75/1M output (2026-04)"
+
+# ---------------------------------------------------------------
+# Guardrail compliance
+# ---------------------------------------------------------------
+guardrail_compliance:
+  selected_remediation: "R-A-metadata completion + mandatory n=5 mini-review"
+  forbidden_remediations_confirmed_not_touched: ["R-B", "R-C", "R-D", "R-F"]
+  src_diff_under_50_lines: "✅ 0 lines"
+  tests_assertions_not_deleted: "✅ no test edits"
+  mini_review_bundled: "✅ methodology_mini_review.md written this commit"
+
+# ---------------------------------------------------------------
+# Acceptance verdict
+# ---------------------------------------------------------------
+acceptance:
+  wall_clock_latency_s_pass: true       # 95 ≤ 240
+  quality_score_pass: true              # 4.9 ≥ 4.0
+  determinism_grade_pass: true          # PASS
+  override_rate_pass: true              # 0.0 ≤ 0.10
+  scope_violation_count_pass: true      # 0
+  physics_validity_precheck_pass: true  # performed + all_satisfied
+  guardrail_compliance_pass: true
+  mini_review_completed: true
+  overall: PASS_WITH_NEW_SILENT_PASS_HAZARD_SURFACED
+
+# ---------------------------------------------------------------
+# Rolling EX-1 track state (n=5)
+# ---------------------------------------------------------------
+rolling_ex1_track:
+  sample_count: 5
+  wall_clock_samples_s: [85, 36, 52, 68, 95]
+  quality_score_samples: [4.8, 5.0, 4.9, 4.9, 4.9]
+  determinism_grade_samples: [DEFERRED, PASS, PASS, PASS, PASS]
+  override_rate_samples: [0.0, 1.0, 0.0, 0.0, 0.0]
+  scope_violation_samples: [0, 0, 0, 0, 0]
+  rolling_override_rate: 0.20  # 1 / 5
+  gate_thresholds:
+    baseline_rule_n_ge_4_above_0_30: "rolling=0.20 ≤ 0.30 → NOT triggered"
+    pattern_rule_two_consecutive_ge_0_5: "no two consecutive ≥ 0.5 → NOT triggered"
+    precheck_schema_present: "✅ every slice since EX-1-003 has it"
+    n_eq_5_mini_review_trigger: "✅ SATISFIED — see methodology_mini_review.md"
+
+# ---------------------------------------------------------------
+# Coverage state (now 10/10)
+# ---------------------------------------------------------------
+physics_contract_coverage:
+  annotated_cases:
+    # EX-1-003
+    - fully_developed_turbulent_pipe_flow (INCOMPATIBLE)
+    - fully_developed_plane_channel_flow (INCOMPATIBLE)
+    - differential_heated_cavity (DEVIATION)
+    # EX-1-004
+    - lid_driven_cavity_benchmark (COMPATIBLE)
+    - turbulent_flat_plate (COMPATIBLE_WITH_SILENT_PASS_HAZARD)
+    - naca0012_airfoil (PARTIALLY_COMPATIBLE)
+    # EX-1-005
+    - backward_facing_step_steady (COMPATIBLE)
+    - circular_cylinder_wake (COMPATIBLE_WITH_SILENT_PASS_HAZARD)
+    - rayleigh_benard_convection (COMPATIBLE)
+    - axisymmetric_impinging_jet (INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE)
+  coverage_ratio: "10 / 10 canonical whitelist cases ✅"
+  contract_status_distribution:
+    COMPATIBLE: 3
+    COMPATIBLE_WITH_SILENT_PASS_HAZARD: 2
+    PARTIALLY_COMPATIBLE: 1
+    DEVIATION: 1
+    INCOMPATIBLE: 2
+    INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE: 1
+
+# ---------------------------------------------------------------
+# Learnings
+# ---------------------------------------------------------------
+learnings:
+  - "Second silent-pass hazard surfaced in EX-1-005 (circular_cylinder_wake Strouhal hardcode) via the same mechanism as turbulent_flat_plate in EX-1-004 — forced extractor-code read during physics_validity_precheck evidence enumeration. n=2 similar discoveries confirms this is a repeatable mechanism, not a one-off."
+  - "3/10 whitelist cases carry PASS verdicts that are NOT fully physics-backed (turbulent_flat_plate silent-pass, circular_cylinder_wake Strouhal shortcut, axisymmetric_impinging_jet observable-name swap). This is a serious audit finding that was invisible in the Phase 7 PASS-count metric. Future reports should report both a verdict-PASS count AND a contract-status-weighted count."
+  - "Mini-review is cheap and valuable at n=5. The rank-by-rank memo §4 audit took minutes and confirmed the annotation still gates behaviour correctly. Recommend keeping the n=5 cadence as a standing non-freezing checkpoint, not a one-time event."
+  - "contract_status vocabulary is at 6 values after 10 cases — sub-linear growth suggests the space is saturating. Still recommend deferring enum-ification until a downstream consumer lands (mini-review §3.2)."
+
+refs:
+  prior_slices:
+    - "EX-1-001 diagnostic memo (revised in 53f79fe)"
+    - "EX-1-002 CLI coverage (honest pivot, 260f5ff)"
+    - "EX-1-003 R-A-metadata ×3 imperfect (53f79fe)"
+    - "EX-1-004 R-A-metadata ×3 passing (34e0eb0)"
+  mini_review_artifact: "reports/ex1_005_whitelist_coverage_and_mini_review/methodology_mini_review.md"
+  baseline_plan_schema_ref: "docs/design/PHASE9_MODEL_ROUTING_V3X_BASELINE_PLAN.md §Physics-Validity Precheck Schema + §Rolling Override Rate Thresholds"

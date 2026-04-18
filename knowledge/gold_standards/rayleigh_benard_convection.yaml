@@ -6,6 +6,21 @@ note: >
   Docker E2E (Phase 7, 2026-04-16) ran with buoyantFoam, Boussinesq, Ra=1e6.
   Convergence OSCILLATING but final Nu=10.5 matches ref 10.5 exactly (rel_error=0.0).
   Gold standard comparison PASS within tolerance.
+physics_contract:
+  geometry_assumption: "2D rectangular cavity heated from below, cooled from above, periodic or insulated side walls; Boussinesq approximation; Prandtl number Pr=0.71 (air)"
+  reference_correlation_context: "Chaivat 2006 reports Nu≈10.5 at Ra=1e6 in the laminar turbulent-onset regime. At Ra=1e6 the flow is in the weakly turbulent / soft-turbulence band, mostly resolvable on a moderate mesh without dedicated wall functions."
+  physics_precondition:
+    - condition: "Ra is in a regime the solver and mesh can resolve without BL wall functions (Ra=1e6 is the realistic upper limit for ~80-cell mid-grid Boussinesq solves)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "Docker E2E 2026-04-16 produced Nu=10.5 matching ref exactly; convergence OSCILLATING but Nu-value stable. STATE.md §Known Limitations confirms this contrasts with DHC Ra=1e10 which does NOT satisfy this precondition."
+    - condition: "Nu extraction takes the bottom-wall temperature gradient on a mid-plane slice (x=midpoint) and computes Nu = |grad_T|·L/ΔT"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:7130-7188 _extract_rayleigh_benard_nusselt — filters cxs within x_tol of midpoint, groups by y, takes first two y-stations (closest to bottom wall) for gradient; L=1.0, Delta_T=10.0 hardcoded matching adapter's _generate_rayleigh_benard boundary conditions"
+    - condition: "Delta_T=10 and L=1 hardcoded values match the adapter's generator"
+      satisfied_by_current_adapter: true
+      evidence_ref: "Both _extract_rayleigh_benard_nusselt and _generate_rayleigh_benard use the same hot/cold wall ΔT and cavity height; mismatch between them would break Nu calibration. No known mismatch as of Phase 7 T4."
+  contract_status: "COMPATIBLE — all preconditions satisfied at Ra=1e6. NOT transferable to Ra≥1e9 without mesh refinement (see differential_heated_cavity physics_contract for the high-Ra regime)."
+  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice)"
 observables:
   - name: nusselt_number
     description: mean Nusselt number for Rayleigh-Benard convection at Ra = 1e6
