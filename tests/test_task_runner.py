@@ -51,39 +51,53 @@ def mock_db(tmp_path):
     return KnowledgeDB(knowledge_dir=tmp_path)
 
 
+@pytest.fixture
+def stub_notion():
+    """Unconfigured NotionClient stub — raises NotImplementedError for any API call.
+
+    TaskRunner swallows NotImplementedError from write_execution_result and
+    list_pending_tasks, so injecting this keeps tests hermetic regardless of
+    whether NOTION_TOKEN is set in the dev environment.
+    """
+    client = MagicMock()
+    client.write_execution_result.side_effect = NotImplementedError("Notion not configured")
+    client.list_pending_tasks.side_effect = NotImplementedError("Notion not configured")
+    return client
+
+
 class TestRunTask:
-    def test_returns_run_report(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_returns_run_report(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert isinstance(report, RunReport)
 
-    def test_exec_result_is_mock(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_exec_result_is_mock(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert report.execution_result.is_mock
 
-    def test_comparison_runs_when_gold_exists(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_comparison_runs_when_gold_exists(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert report.comparison_result is not None
 
-    def test_no_comparison_when_no_gold(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_no_comparison_when_no_gold(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task(name="Unknown Task"))
         assert report.comparison_result is None
 
-    def test_summary_not_empty(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_summary_not_empty(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert len(report.summary) > 0
 
-    def test_notion_write_skipped_gracefully(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_notion_write_skipped_gracefully(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         # Notion not configured → should not raise
         report = runner.run_task(make_task())
         assert report is not None
 
-    def test_correction_generated_on_deviation(self, mock_db):
+    def test_correction_generated_on_deviation(self, mock_db, stub_notion):
         # 返回偏差很大的结果
         class BadExecutor:
             def execute(self, task_spec):
@@ -91,11 +105,11 @@ class TestRunTask:
                     success=True, is_mock=True,
                     key_quantities={"u_centerline": [9999.0]},  # way off
                 )
-        runner = TaskRunner(executor=BadExecutor(), knowledge_db=mock_db)
+        runner = TaskRunner(executor=BadExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert report.correction_spec is not None
 
-    def test_no_correction_when_pass(self, mock_db):
+    def test_no_correction_when_pass(self, mock_db, stub_notion):
         # 返回精确匹配的结果
         class PerfectExecutor:
             def execute(self, task_spec):
@@ -103,14 +117,14 @@ class TestRunTask:
                     success=True, is_mock=True,
                     key_quantities={"u_centerline": [0.025]},
                 )
-        runner = TaskRunner(executor=PerfectExecutor(), knowledge_db=mock_db)
+        runner = TaskRunner(executor=PerfectExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         report = runner.run_task(make_task())
         assert report.correction_spec is None
 
 
 class TestRunAll:
-    def test_run_all_no_notion(self, mock_db):
-        runner = TaskRunner(executor=MockExecutor(), knowledge_db=mock_db)
+    def test_run_all_no_notion(self, mock_db, stub_notion):
+        runner = TaskRunner(executor=MockExecutor(), notion_client=stub_notion, knowledge_db=mock_db)
         # Notion not configured → empty list
         reports = runner.run_all()
         assert reports == []

@@ -96,7 +96,9 @@ class TestWriteExecutionResult:
 
 
 class TestClientInit:
-    def test_raises_without_token(self):
+    def test_raises_without_token(self, monkeypatch):
+        monkeypatch.delenv("NOTION_TOKEN", raising=False)
+        monkeypatch.delenv("NOTION_API_KEY", raising=False)
         client = NotionClient(token=None)
         assert client._client is None
 
