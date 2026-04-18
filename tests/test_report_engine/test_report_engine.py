@@ -215,6 +215,61 @@ def test_out_of_scope_case_returns_noop(tmp_path: Path):
     assert not output.exists()
 
 
+def test_normalize_auto_verify_fills_defaults():
+    collector = ReportDataCollector()
+    report = collector._normalize_auto_verify({})
+    assert report["gold_standard_comparison"]["overall"] == "SKIPPED"
+    assert report["gold_standard_comparison"]["observables"] == []
+    assert report["gold_standard_comparison"]["warnings"] == []
+    assert report["convergence"]["status"] == "UNKNOWN"
+    assert report["convergence"]["target_residual"] == 1e-5
+    assert report["physics_check"]["status"] == "UNKNOWN"
+    assert report["physics_check"]["warnings"] == []
+    assert report["verdict"] == "UNKNOWN"
+    assert report["correction_spec_needed"] is False
+
+
+def test_normalize_auto_verify_preserves_existing():
+    collector = ReportDataCollector()
+    original = {
+        "gold_standard_comparison": {"overall": "PASS", "observables": [{"name": "u"}]},
+        "convergence": {"status": "CONVERGED", "final_residual": 1e-7},
+        "verdict": "PASS",
+    }
+    report = collector._normalize_auto_verify(original)
+    assert report["gold_standard_comparison"]["overall"] == "PASS"
+    assert report["gold_standard_comparison"]["observables"] == [{"name": "u"}]
+    assert report["convergence"]["final_residual"] == 1e-7
+    assert report["verdict"] == "PASS"
+
+
+def test_normalize_correction_spec_none():
+    assert ReportDataCollector._normalize_correction_spec(None) is None
+
+
+def test_normalize_correction_spec_resolution_fallback():
+    spec = ReportDataCollector._normalize_correction_spec(
+        {"resolution": "increase mesh density"}
+    )
+    assert spec["primary_cause"] == "unknown"
+    assert spec["confidence"] == "LOW"
+    assert spec["suggested_correction"] == "increase mesh density"
+
+
+def test_normalize_correction_spec_note_fallback():
+    spec = ReportDataCollector._normalize_correction_spec({"note": "see §4"})
+    assert spec["suggested_correction"] == "see §4"
+
+
+def test_normalize_correction_spec_preserves_explicit():
+    spec = ReportDataCollector._normalize_correction_spec(
+        {"primary_cause": "mesh", "confidence": "HIGH", "suggested_correction": "refine"}
+    )
+    assert spec["primary_cause"] == "mesh"
+    assert spec["confidence"] == "HIGH"
+    assert spec["suggested_correction"] == "refine"
+
+
 def test_forbidden_anchor_paths_unchanged(repo_root: Path):
     protected = [
         repo_root / "src" / "auto_verifier" / "verifier.py",
