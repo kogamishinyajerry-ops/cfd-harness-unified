@@ -129,7 +129,32 @@ current state lives in the addendum above.
 
 ---
 
+### EX-1-009 Spalding-fallback audit_concern wiring — Tier-1 remediation line #4 CLOSED
+Landed `7b0cd29` (code, Execution-by: codex-gpt54) +
+`7610918` (slice_metrics.yaml). Producer
+(`foam_agent_adapter._extract_flat_plate_cf`) now emits
+`cf_spalding_fallback_activated` + `cf_spalding_fallback_count`
+in `key_quantities` when Cf>0.01 branch fires. Consumer
+(`error_attributor._resolve_audit_concern`) enriches
+`audit_concern` to
+`COMPATIBLE_WITH_SILENT_PASS_HAZARD:spalding_fallback_confirmed`
+when flag is True on a PASS run. No change to returned
+`cf_skin_friction` numeric (CHK-3 binding). Gold SHA256
+bit-identical (CHK-9 hard floor #1). Test suite 252→256
+(all PASS). Pattern mirrors G3 cylinder_wake producer→consumer
+wiring; clean first-cycle landing (1 of 2 budget units used).
+Rolling EX-1 override_rate stable at 0.222 (n=9).
+
+**Tier-1 future remediation table delta**: case #4
+(turbulent_flat_plate Cf>0.01 Spalding substitution audit)
+now has RUNTIME signal distinguishing runs where fallback
+actually fired from clean-extraction runs. Static
+contract_status unchanged; runtime audit transparency
+restored.
+
+---
+
 Produced: 2026-04-18 by opus47-main (ADWM v5.2)
 Source of truth: `knowledge/gold_standards/*.yaml`
 Next refresh trigger: any physics_contract change OR next deep acceptance package
-Addendum trigger: G1 CHK-3 verdict + FUSE landing + G7 promotion (this file now reflects post-S-003l-close state)
+Addendum trigger: G1 CHK-3 verdict + FUSE landing + G7 promotion + EX-1-009 Tier-1 line #4 closure (this file reflects post-EX-1-009 state)
