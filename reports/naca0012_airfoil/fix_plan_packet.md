@@ -269,6 +269,122 @@ consistent with the as-built wall-treatment contract. COND-1 → PASS.
 All four conditions now closed; awaiting final Gate APPROVE before dispatching
 the blockMeshDict edit to Codex.
 
+## §G Post-Fix Results (2026-04-18, 2-phase dispatch)
+
+### §G.1 Execution Record
+
+- Phase A: Codex applied §A.1 unified diff to `src/foam_agent_adapter.py` L5177-L5199
+  (`12+/12-`, 24 lines). Phase-A CHK-A1..A6 all PASS; `src/` left dirty.
+- Phase B: Orchestrator (opus47-main) ran `/tmp/run_naca0012_keepcase.py` on host
+  Python 3 with shutil.rmtree monkey-patch. NACA0012 Docker E2E success
+  (`success=True, is_mock=False, elapsed=19.7s`). Preserved case:
+  `/tmp/cfd-harness-cases/ldc_51585_1776491271745`.
+  Docker `checkMesh` + `simpleFoam -postProcess -func yPlus` + TaskRunner-level
+  ComparisonResult collected from host. Artifacts:
+    - `reports/naca0012_airfoil/artifacts/checkmesh_postfix.log`
+    - `reports/naca0012_airfoil/artifacts/yplus_postfix.csv`
+- Phase C: did NOT occur. Because post-fix CHK-3/5/6/7/12/13 FAIL (see §G.2),
+  dispatch contract forbids commit. Orchestrator reverted src/ via
+  `git checkout -- src/foam_agent_adapter.py`. No src/ change persisted.
+
+### §G.2 CHK Verdict Table
+
+| Check | Threshold | Pre-fix | Post-fix | Verdict |
+|---|---|---:|---:|:---:|
+| CHK-1  | checkMesh "Mesh OK" | OK | OK | **PASS** |
+| CHK-2  | non-ortho ≤ 71° hard / ≤ 70° soft | 68.95° | 68.91° | **PASS** (no warn) |
+| CHK-3  | y+_min ≥ 30.0 | 22.30 | 23.61 | **FAIL** (−6.39 from target) |
+| CHK-4  | y+_max ≤ 300.0 | 138.88 | 200.69 | PASS |
+| CHK-5  | Cp rel_err @ x/c=0.0 ≤ 35% | 52.9% | 42.14% | **FAIL** (−7.14 from pass) |
+| CHK-6  | Cp rel_err @ x/c=0.3 ≤ 30% | 32.4% | 32.17% | **FAIL** (marginal, −2.17 from pass) |
+| CHK-7  | Cp rel_err @ x/c=1.0 ≤ 35% | 45.5% | 44.79% | **FAIL** (−9.79 from pass) |
+| CHK-8  | gold-std yaml byte-identical | — | sha256 identical | PASS |
+| CHK-9  | src diff ≤ 50 lines | — | 24 lines | PASS |
+| CHK-10 | pytest ≥ 211 pass | 211 | 211 | PASS (10 pre-existing notion-env fails) |
+| CHK-11 | 9-case checkMesh smoke | — | not run (FAIL already triggered) | N/A |
+| CHK-12 | buffer-band face count == 0 | 10/120 | **12/120** | **FAIL** (worsened by +2) |
+| CHK-13 | Cp 3-pt avg rel_err ≤ 28% | 43.6% | 39.7% | **FAIL** (−11.7 from pass) |
+
+**6 of 13 CHK fail → REJECT per contract. No commit created.**
+
+### §G.3 Post-Fix Mesh / y+ / Cp Evidence
+
+checkmesh_postfix.log (quote):
+- cells: 15600 (pre-fix 16000, −400 from N_z 80→78)
+- hexahedra: 15600
+- aerofoil: 120 faces (unchanged)
+- max aspect ratio: **74.3374** (pre-fix 108.35 — improved)
+- max skewness: **1.02707** (pre-fix 1.12683 — improved)
+- max non-orthogonality: **68.9106** (pre-fix 68.9527 — marginally improved)
+- verdict: "Mesh OK"
+
+yplus_postfix.csv (n=120):
+- min = **23.6085** (pre-fix 22.3036; lift factor 1.0585×)
+- max = **200.687**  (pre-fix 138.876; lift factor 1.4451×)
+- median = **162.7435** (pre-fix 112.933; lift factor 1.4410×)
+- mean = **142.6213** (pre-fix 104.332; lift factor 1.3670×)
+- band split: **12/108/0/0** (pre-fix 10/110/0/0)
+
+Cp comparison (vs gold standard tolerance 20%):
+- x/c=0.0: actual Cp=0.5786, expected 1.0000, rel_err=**42.14%** (pre-fix 52.9%)
+- x/c=0.3: actual Cp=−0.3391, expected −0.5000, rel_err=**32.17%** (pre-fix 32.4%)
+- x/c=1.0: actual Cp=0.1104, expected 0.2000, rel_err=**44.79%** (pre-fix 45.5%)
+- 3-point avg = **39.7%** (pre-fix 43.6%)
+
+### §G.4 Root-Cause Analysis of Fix Under-Performance
+
+Mean y+ lift factor matches a priori prediction (1.37× measured vs 1.46× predicted;
+~6% gap attributable to the −2 cells in N_z and local geometric effects).
+However, the y+_min face did NOT lift proportionally:
+- predicted: 22.30 × 1.4575 = **32.51**
+- measured: **23.61**
+- under-performance: measured lift 1.059× vs predicted 1.4575× (27% shortfall)
+
+**Mechanism**: The y+_min face sits at the leading-edge projection onto
+NACA0012.obj (x/c ≈ 0). At that location the first-cell wall-normal thickness
+is not determined by the far-field edge grading alone, but by the OBJ surface
+projection curvature and the block-corner geometry. The uniform dir3 grading
+retune lifts the far-field-dominated cells (shown by the 1.44× median/max lift)
+but leaves the LE-projection-dominated cells mostly unchanged.
+
+Additional observation: buffer-band count INCREASED from 10 to 12. This happens
+because the new coarser first cell moves 2 additional faces (previously just
+above y+=30) into the buffer band, while the LE cluster is structurally stuck
+below 30. The fix moved the boundary in the wrong direction for the tail of
+the distribution.
+
+Cp improvements (3-pt avg 43.6% → 39.7%, ~10% rel_err reduction at x/c=0.0)
+are real but small, consistent with the ~16% of faces still in or near buffer
+layer. A priori estimate assumed 0% buffer; achieved 10%.
+
+### §G.5 Recommended Next Paths (for Gate review)
+
+Uniform dir3 grading alone cannot simultaneously satisfy CHK-3 (y+_min ≥ 30)
+without either (a) making the far-field cells much coarser (violating y+_max ≤ 300
+at the pressure-peak faces) or (b) changing the block topology to decouple
+LE-adjacent cells from wake cells.
+
+Candidate paths for next Gate cycle:
+- **W1-revised**: non-uniform z-direction — split each block's grading into
+  zones (near-wall fine, mid-span stretched). OpenFOAM supports this via
+  multi-grading blocks. Est. 40-60 src/ lines. Would allow LE-specific lift.
+- **L (low-Re rewrite)**: abandon wall-function, target y+ < 1 everywhere.
+  Requires both mesh refinement (N_z 80 → ~300 with aggressive wall grading)
+  AND wall BC rewrites (kqRWallFunction → kLowReWallFunction;
+  nutkWallFunction → nutLowReWallFunction; omegaWallFunction with LRN switch).
+  Large scope (~150+ src/ lines, multi-phase Gate).
+- **H (hybrid topology)**: O-grid LE cap + C-grid wake. Major rewrite of
+  _generate_airfoil_flow; several hundred lines. Separate Tier 1 Gate.
+- **EX (accept current)**: accept 39.7% avg rel_err as known limitation,
+  document in gold_standards/ as `known_deviations` — but this requires
+  tolerance annotation change, which is a separate Gate trigger anyway.
+
+Recommended next action: escalate to Notion Opus 4.7 Gate for Wave 3 verdict
+and path selection. This Fix Plan Draft is insufficient; a new Fix Plan
+Packet under W1-revised or L is required.
+
 ## §E Applicability Note
 
-No `src/` apply in this round. This packet is a draft for independent Gate review. Apply is deferred until Gate returns `APPROVE` or `APPROVE WITH CONDITIONS`.
+Phase A (Codex apply) executed and reverted per contract. No src/ change
+persisted. Post-fix evidence captured in `reports/naca0012_airfoil/artifacts/`.
+Wave 3 closeout escalated to Gate.
