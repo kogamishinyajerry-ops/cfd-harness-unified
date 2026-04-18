@@ -1,7 +1,7 @@
-driving_model: minimax-m2.7-highspeed
+driving_model: opus47-pro (Orchestrator, Model Routing v4.0)
 tier: T3-Orchestrator
-last_updated: "2026-04-15T18:00"
-session: S-002g (Phase 6 COMPLETE — 5/5 Docker E2E PASS)
+last_updated: "2026-04-18T08:35"
+session: S-003a (Phase 7 Wave 3 — NACA0012 diagnostic v1 done, Fix Plan pending Opus Gate)
 
 # Phase Status
 
@@ -296,7 +296,7 @@ Phase 7 Wave 2-3 Docker E2E Results (9/9 auto_verify_report.yaml generated):
 | turbulent_flat_plate | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
 | rayleigh_benard_convection | PASS_WITH_DEVIATIONS | OSCILLATING | PASS | solver_settings (MEDIUM) |
 | differential_heated_cavity | FAIL | CONVERGED | FAIL | thermal_energy_setup_failure (HIGH) — T BC fixed |
-| naca0012_airfoil | FAIL | OSCILLATING (NaN) | FAIL | solver_settings (HIGH) — fvSolution fix applied |
+| naca0012_airfoil | PASS_WITH_DEVIATIONS | CONVERGED | DEVIATION (Cp 52.9%/32.4%/45.5%) | buffer_layer_yplus (HIGH) — Wave 3 diagnostic v1 done, Fix Plan pending Opus review |
 | axisymmetric_impinging_jet | PASS_WITH_DEVIATIONS | UNKNOWN (FOAM FATAL) | PASS | adapter_version_mismatch (HIGH) |
 | fully_developed_plane_channel_flow | FAIL | OSCILLATING | FAIL | physics_model_incompatibility (HIGH) |
 
