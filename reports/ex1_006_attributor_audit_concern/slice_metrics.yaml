@@ -1,0 +1,154 @@
+slice_id: EX-1-006
+slice_type: producer_consumer_wiring
+track: EX-1
+gate_verdict_source: "Notion Opus 4.7 APPROVE_A+B1 (2026-04-18, post-n=5 mini-review)"
+approved_path: A
+session_date: "2026-04-18"
+
+scope:
+  action: |
+    Wire src/error_attributor.ErrorAttributor to read physics_contract.contract_status
+    from the gold_standard YAML resolved via TASK_NAME_TO_CASE_ID → CASE_ID_TO_GOLD_FILE.
+    Emit audit_concern tag on the returned AttributionReport only on PASS verdicts whose
+    contract_status prefix matches a silent-pass-hazard class. FAIL path is guaranteed
+    audit_concern=None.
+  producer_side: "physics_contract block on gold_standard YAMLs (R-A-metadata, landed EX-1-003..005)"
+  consumer_side: "ErrorAttributor.attribute() return site — this slice"
+  touched_files:
+    - src/error_attributor.py
+    - tests/test_error_attributor.py
+  untouched_files:
+    - src/models.py  # honored denylist; used setattr-on-dataclass pattern (see design_notes)
+    - src/result_comparator.py  # honored denylist
+    - knowledge/gold_standards/**  # read-only consumption; SHA256 identical
+    - all src/foam_agent_adapter.py::_generate_* functions  # honored denylist
+    - PL-1 paths  # honored C4 freeze
+
+6d_acceptance:
+  wall_clock_latency_s: 78
+  wall_clock_headroom_vs_c2_240s_pct: 67.5
+  quality_score: 4.9
+  quality_breakdown:
+    contract_fidelity: 5  # cites specific YAML fields and line-numbers; honors 8 verdict conditions
+    evidence_use: 5        # 3 tests map to real whitelist YAMLs; FAIL regression covers audit_concern=None
+    actionability: 5       # AttributionReport consumers now have a readable concern tag
+    risk_handling: 5       # denylist (models.py) respected; setattr keeps dataclass field set intact
+    clarity: 4             # setattr instead of dataclass field is the one trade-off that reduces discoverability
+  determinism_grade: PASS
+  override_rate: 0.0
+  scope_violation_count: 0
+  physics_validity_precheck:
+    performed: true
+    preconditions_enumerated: true
+    all_satisfied: true
+    evidence_refs:
+      - "src/error_attributor.py:_resolve_audit_concern — reads task_spec.name → TASK_NAME_TO_CASE_ID → CASE_ID_TO_GOLD_FILE; yaml.safe_load; extracts physics_contract.contract_status prefix"
+      - "knowledge/gold_standards/turbulent_flat_plate.yaml:9-26 — physics_contract.contract_status='COMPATIBLE_WITH_SILENT_PASS_HAZARD — ...' (landed EX-1-004)"
+      - "knowledge/gold_standards/axisymmetric_impinging_jet.yaml:14-26 — contract_status='INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — ...' (landed EX-1-005)"
+      - "knowledge/gold_standards/lid_driven_cavity_benchmark.yaml — contract_status starts 'COMPATIBLE — ...' (no audit_concern, control case)"
+
+verdict_conditions_compliance:
+  c1_pure_additive:
+    status: PASS
+    evidence: |
+      No existing ErrorAttributor branch's return type / field set / test assertions modified.
+      audit_concern attached to returned AttributionReport via setattr (see design_notes).
+      All 8 pre-existing tests (TestErrorTypes..TestChainComplete) unchanged and green.
+  c2_three_mapping_tests_plus_fail_regression:
+    status: PASS
+    tests:
+      - name: TestAuditConcern::test_silent_pass_hazard_on_pass_emits_audit_concern
+        covers: "(a) COMPATIBLE_WITH_SILENT_PASS_HAZARD + PASS → audit_concern set"
+      - name: TestAuditConcern::test_literature_disguise_on_pass_emits_audit_concern
+        covers: "(b) INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE + PASS → audit_concern set"
+      - name: TestAuditConcern::test_plain_compatible_on_pass_yields_none
+        covers: "(c) COMPATIBLE + PASS → audit_concern is None"
+      - name: TestAuditConcern::test_fail_path_never_emits_audit_concern
+        covers: "regression — FAIL path audit_concern=None; chain_complete still True; primary_cause unchanged"
+      - name: TestAuditConcern::test_unknown_task_name_yields_none
+        covers: "bonus robustness — unknown TaskSpec.name → audit_concern=None (no exception)"
+  c3_src_line_cap_35:
+    status: PASS
+    measured_net_src_lines: 31
+    buffer: 4
+    method: "git show HEAD:src/error_attributor.py | wc -l vs wc -l src/error_attributor.py"
+  c4_independent_commit_pre_b1:
+    status: PASS
+    note: "This slice commits A alone. B1 (DHC mesh bump) awaits a separate dispatch per C4 sequencing."
+
+design_notes:
+  setattr_vs_dataclass_field:
+    observation: |
+      Verdict has a direct tension: C1 requires audit_concern as 'Optional 新字段形式挂载',
+      but next_slice_scope_guardrails denies src/models.py (where AttributionReport lives).
+    resolution: |
+      Use setattr(report, 'audit_concern', ...) on the returned instance.
+      Dataclass is not frozen, so attribute assignment is legal.
+      Respects BOTH: models.py unchanged, attr readable as report.audit_concern.
+    trade-off: |
+      dataclasses.asdict() does not serialize audit_concern (only declared fields).
+      Downstream consumers that want YAML/JSON persistence need explicit serialization.
+      Promote to first-class AttributionReport field when D5 unfreezes models.py editing.
+  circular_cylinder_wake_data_quality_gap:
+    observation: |
+      circular_cylinder_wake.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD) encodes
+      physics_contract as structured YAML **comments** on the first of 4 documents,
+      not as a structured top-level field. yaml.safe_load therefore cannot read it;
+      _resolve_audit_concern returns None for this case even though the verdict
+      would be audit-worthy on a clean PASS.
+    implication: |
+      1/10 whitelist cases (circular_cylinder_wake) is silently skipped by the
+      producer→consumer channel. This is a data-format gap introduced in EX-1-005
+      (multi-doc YAML preservation constraint), NOT a bug in this slice.
+    recommendation: |
+      Future EX-1 slice (R-A-metadata-restructure) can convert cylinder_wake's
+      comment-form physics_contract to a structured field. Outside current scope.
+  test_file_vs_directory:
+    observation: |
+      Verdict allows 'tests/test_error_attributor/**' as a path pattern, suggesting
+      a directory. The pre-existing file is tests/test_error_attributor.py (flat).
+    resolution: |
+      Appended TestAuditConcern class to the existing file. pytest cannot collect
+      both a file and directory at tests/test_error_attributor — a file-vs-dir
+      split would be architecturally impossible without moving the existing file.
+      No existing test assertions modified (C1 preserved).
+
+rolling_ex1_state_after_this_slice:
+  window: "EX-1-001 through EX-1-006"
+  override_history: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+  n: 6
+  rolling_override_rate: 0.1667
+  d4plus_rule_triggers:
+    rule_1_baseline_rolling_above_030_at_n_ge_4:
+      armed: true
+      triggered: false
+      measured: 0.1667
+      threshold: 0.30
+    rule_2_two_consecutive_override_above_05:
+      triggered: false
+    rule_3_precheck_missing:
+      triggered: false
+    rule_4_pivot_without_enumerated_preconditions:
+      triggered: false
+  new_rule_5_consumer_side_separate_rolling:
+    note: "Per verdict methodology triggers — consumer-side override_rate is tracked separately from producer-side rolling."
+    consumer_side_slices: 1  # this slice
+    consumer_side_override_rate: 0.0
+    threshold: 0.30
+
+next_slice_obligations:
+  - "EX-1-007 = B1 (DHC mesh 80 → 256 + wall-grading 4-6). Before its commit:"
+  - "  1. C5 (B1-specific): declare a priori Nu prediction + prediction method in EX-1-007 slice_metrics.yaml. If predicted Nu < 15 → STOP and re-Gate."
+  - "  2. Verdict methodology trigger: mandatory n=1 consumer-side mini-review — verify audit_concern fires on ≥1 real case post-A, without polluting any FAIL attribution."
+  - "  3. C6 (B1-specific): ≤45 src lines, touched file whitelist = src/foam_agent_adapter.py::_generate_differential_heated_cavity + corresponding pytest fixture only."
+  - "  4. knowledge/gold_standards/**.yaml SHA256 must remain identical (no tolerance tuning)."
+
+artifacts:
+  slice_metrics: reports/ex1_006_attributor_audit_concern/slice_metrics.yaml
+  source_diff: src/error_attributor.py
+  test_file: tests/test_error_attributor.py (TestAuditConcern class, 5 tests added)
+
+pytest_full_suite:
+  before_slice: "245 passed"
+  after_slice: "250 passed"  # +5 new audit_concern tests, 0 regressions
+  runtime_s: 4.11

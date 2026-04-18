@@ -241,3 +241,55 @@ class TestChainComplete:
         report = attributor.attribute(make_task(), make_exec_result(), comparison)
 
         assert report.chain_complete is True
+
+
+class TestAuditConcern:
+    """EX-1-006 Path A — producer→consumer wiring.
+
+    ErrorAttributor reads physics_contract.contract_status from the gold
+    standard YAML resolved via TASK_NAME_TO_CASE_ID and attaches an
+    audit_concern tag to the returned AttributionReport. The tag is
+    orthogonal to verdict: never emitted on FAIL paths, never mutates
+    primary_cause / confidence / secondary_causes.
+    """
+
+    def _clean_pass(self):
+        return ComparisonResult(passed=True, deviations=[], summary="PASS")
+
+    def test_silent_pass_hazard_on_pass_emits_audit_concern(self, attributor):
+        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+
+    def test_literature_disguise_on_pass_emits_audit_concern(self, attributor):
+        task = make_task(name="Axisymmetric Impinging Jet (Re=10000)")
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern == "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE"
+
+    def test_plain_compatible_on_pass_yields_none(self, attributor):
+        task = make_task(name="Lid-Driven Cavity")
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern is None
+
+    def test_fail_path_never_emits_audit_concern(self, attributor):
+        """Regression: even on a silent-pass-hazard case, FAIL verdict → audit_concern None."""
+        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        comparison = make_comparison(
+            DeviationDetail(
+                quantity="cf_skin_friction",
+                expected=0.0076,
+                actual=0.002,
+                relative_error=0.74,
+            )
+        )
+        report = attributor.attribute(task, make_exec_result(), comparison)
+        assert report.audit_concern is None
+        # Verdict-side attribution link unaffected by producer→consumer wiring
+        assert report.chain_complete is True
+        assert report.primary_cause != "unknown"
+
+    def test_unknown_task_name_yields_none(self, attributor):
+        """Robustness: case_id lookup miss → None (no exception)."""
+        task = make_task(name="not-a-whitelist-case")
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern is None

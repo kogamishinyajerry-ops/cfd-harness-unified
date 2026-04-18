@@ -7,6 +7,9 @@ import re
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
+from .auto_verifier.config import CASE_ID_TO_GOLD_FILE, TASK_NAME_TO_CASE_ID
 from .knowledge_db import KnowledgeDB
 from .models import (
     AttributionReport,
@@ -18,6 +21,31 @@ from .models import (
     SteadyState,
     TaskSpec,
 )
+
+_AUDIT_CONCERN_STATUS_PREFIXES = (
+    "COMPATIBLE_WITH_SILENT_PASS_HAZARD",
+    "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE",
+)
+
+
+def _resolve_audit_concern(task_spec: TaskSpec, comparison: ComparisonResult) -> Optional[str]:
+    if not comparison.passed:
+        return None
+    case_id = TASK_NAME_TO_CASE_ID.get(task_spec.name, task_spec.name)
+    gold_path = CASE_ID_TO_GOLD_FILE.get(case_id)
+    if gold_path is None or not gold_path.exists():
+        return None
+    try:
+        data = yaml.safe_load(gold_path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+    status = str((data.get("physics_contract") or {}).get("contract_status") or "")
+    return next((p for p in _AUDIT_CONCERN_STATUS_PREFIXES if status.startswith(p)), None)
+
+
+def _attach_audit_concern(report: AttributionReport, task_spec: TaskSpec, comparison: ComparisonResult) -> AttributionReport:
+    report.audit_concern = _resolve_audit_concern(task_spec, comparison)
+    return report
 
 logger = logging.getLogger(__name__)
 
@@ -331,8 +359,10 @@ class ErrorAttributor:
         if not comparison.deviations:
             solver_report = self._try_parse_solver_crash(exec_result, task_spec)
             if solver_report is not None:
-                return solver_report
-            return AttributionReport(chain_complete=True)
+                return _attach_audit_concern(solver_report, task_spec, comparison)
+            return _attach_audit_concern(
+                AttributionReport(chain_complete=True), task_spec, comparison
+            )
 
         # Step 1: 定量分析
         max_err, worst_qty = self._find_worst_deviation(comparison.deviations)
@@ -389,7 +419,7 @@ class ErrorAttributor:
             task_spec.geometry_type.value, []
         )
 
-        return AttributionReport(
+        report = AttributionReport(
             chain_complete=True,
             max_relative_error=max_err,
             worst_quantity=worst_qty,
@@ -405,6 +435,7 @@ class ErrorAttributor:
             recommended_solvers=solvers,
             recommended_turbulence_models=turb_models,
         )
+        return _attach_audit_concern(report, task_spec, comparison)
 
     # ------------------------------------------------------------------
     # 定量分析

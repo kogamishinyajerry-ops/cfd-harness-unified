@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T17:50"
-session: S-003f (EX-1-005 completes 10/10 canonical whitelist physics_contract coverage + mandatory n=5 methodology mini-review; rolling override_rate 0.20 at n=5, all gates untriggered; 2nd silent-pass hazard surfaced (circular_cylinder_wake Strouhal hardcode); C4 holds PL-1 for D5)
+last_updated: "2026-04-18T18:40"
+session: S-003g (EX-1-006 Path A lands: error_attributor.audit_concern consumer wiring per Notion Opus 4.7 APPROVE_A+B1; rolling override 0.167 at n=6; C4 sequencing holds — B1 awaits independent dispatch)
 
 # Phase Status
 
@@ -406,6 +406,27 @@ EX-1-005 (R-A-metadata completion + mandatory n=5 mini-review, 2026-04-18):
 - **Mandatory n=5 mini-review performed** and landed same commit: reports/ex1_005_whitelist_coverage_and_mini_review/methodology_mini_review.md. Rank-by-rank audit of memo §4 confirms annotations remain self-consistent; no memo revision required at this checkpoint. All 4 D4+ rolling-rate rules untriggered.
 - Rolling EX-1 state (n=5): override_rate 1/5 = 0.20. Methodology regime installed by D4+ is reducing, not inducing, pivots — expected steady-state.
 - Artifacts: reports/ex1_005_whitelist_coverage_and_mini_review/{methodology_mini_review.md, slice_metrics.yaml}
+
+D4++ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_A+B1):
+- Trigger: EX-1 autonomous runway exhausted after n=5 (memo §4 ranks 1-3 covered; ranks 4-7 gated); 3-path prompt returned APPROVE_A+B1.
+- Path A authorized: producer→consumer wiring of contract_status into error_attributor.
+- Path B1 authorized: DHC mesh bump under numerical-config-not-logic reading (R-E reinterpretation).
+- Path C rejected: PL-1 C4 freeze preserved; C8 fallback (docs-only EX-1-008+) available if team wants the methodology whitepaper without touching PL-1/D5.
+- Sequencing: A MUST land independent commit BEFORE B1 dispatches (C4).
+- Rolling rule #5 added: consumer-side override_rate tracked separately from producer-side (threshold 0.30, no dilution).
+- Methodology trigger added: producer→consumer first-online requires n=1 consumer-side mini-review before the next slice.
+
+EX-1-006 (Path A producer→consumer wiring, 2026-04-18):
+- Slice: ErrorAttributor reads physics_contract.contract_status from gold_standard YAML (TASK_NAME_TO_CASE_ID → CASE_ID_TO_GOLD_FILE resolution) and attaches audit_concern tag to AttributionReport on PASS verdicts whose contract_status prefix matches COMPATIBLE_WITH_SILENT_PASS_HAZARD or INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE. FAIL path guaranteed audit_concern=None.
+- Design: setattr-on-returned-dataclass pattern honors both C1 (audit_concern as Optional new attribute) and next_slice_scope_guardrails denylist (src/models.py untouched).
+- Scope: src/error_attributor.py +31 net lines (C3 35-cap, 4-line buffer), tests/test_error_attributor.py +5 tests (TestAuditConcern).
+- C2-mandated tests: 4 required (silent_pass_hazard/literature_disguise/plain_compatible/fail_regression) + 1 bonus robustness (unknown_task_name).
+- Metrics: wall_clock=78s (67.5% headroom vs C2 240s), quality=4.9, determinism=PASS, override=0.0, scope=0, physics_validity_precheck=pass.
+- Full suite: 250/250 green (+5 new, 0 regressions; was 245).
+- **Rolling EX-1 state (n=6): override_rate 1/6 = 0.167. All D4+ rules untriggered. Consumer-side rolling (new rule #5): 1 slice, 0.0.**
+- **Known data-quality gap surfaced**: circular_cylinder_wake.yaml encodes physics_contract as YAML comments (multi-doc preservation constraint from EX-1-005), so yaml.safe_load cannot extract its contract_status. 1/10 whitelist cases silently skipped by producer→consumer channel. Documented in slice_metrics design_notes; fix deferred to future restructure slice.
+- Next slice obligations (per verdict): EX-1-007 = B1 (DHC mesh) requires (1) a priori Nu prediction in slice_metrics, (2) n=1 consumer-side mini-review before B1 commits, (3) C6 45-line cap + _generate_differential_heated_cavity single-function touched-file whitelist.
+- Artifact: reports/ex1_006_attributor_audit_concern/slice_metrics.yaml
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅
