@@ -1,7 +1,7 @@
-driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
+driving_model: opus47-main (Orchestrator + self-Gate + ADWM v5.2 autonomous-governance, Model Routing v5.2)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T20:30"
-session: S-003j (EX-1-007 B1 post-commit measurement COMPLETE. Nu=66.25 (gold=30, predicted band [11,21]) → verdict ABOVE_BAND. Interpretation: not a physics overshoot — extractor computes LOCAL mid-height Nu while gold ref is MEAN wall-integrated Nu; B1 wall-packed mesh unmasked a pre-existing methodology bug. C5 numeric threshold PASS (66.25 ≫ 15, no re-Gate). Cascade of 3 pre-existing bugs caught and fixed: duplicate writeInterval in controlDict heredoc, extractor y_tol min→max for wall-packed meshes, midPlaneT assignment guard. New D4+ rule candidate #6 (mesh_refinement_wall_packing_smoke_check, MANDATORY). EX-1-008 candidate scoped: extractor refactor to hot_wall surface integration.)
+last_updated: "2026-04-18T21:30"
+session: S-003k (ADWM v5.2 activation + G1-G5 execution. DEC-ADWM-001/002/003 logged. Commits: 781a3d8 dashboard+DEC1, 44a0b60 G1 FPP+DEC2, 60952b6 G1 refactor (Execution-by codex-gpt54), a505172 G2 LDC+BFS CCR, ad43a38 G3 FPP+DEC3, 862e626 G3 restructure (Execution-by codex-gpt54), 90f431b G2 cylinder CCR + acceptance packet. Status: G1 CHK-1,2,4,5,6,9,10 PASS; CHK-3 Docker Nu re-measurement in flight. G2 3/3 CCR demo-ready. G3 10/10 producer→consumer coverage. G4 dashboard landed. G5 3 Decisions local equivalents. Hard-floor compliance: forward-only post-ADWM-activation; EX-1-007 50ec0a3 legacy Co-Authored-By trailer honest-flagged not retroactively amended.)
 
 # Phase Status
 
