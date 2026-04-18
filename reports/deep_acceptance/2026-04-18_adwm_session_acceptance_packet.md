@@ -125,7 +125,60 @@ Conditions (b) AND (c) both met → this packet formally triggered.
 
 ---
 
+## §8 FUSE record addendum (post-measurement, 2026-04-18T22:10)
+
+**CHK-3 outcome: REJECT.** B1 256² mesh re-measurement returned
+Nu = 77.82, outside target band [25, 35]. Per fix_plan_packet.md §4
+COND-3, cycle 1 is REJECTED. Refactor commit `60952b6` stands
+(algorithm correct; the existing synthetic-data test locks mean-
+over-y behavior at Nu = 10.5).
+
+**Cycle 2: FUSED (not dispatched).** DEC-ADWM-004 records the
+reasoning: Option B (snGrad-over-patch) would land HIGHER than
+Option C's 77.82 (more accurate approximation of wall heat flux →
+closer to literature 100-160 for Ra=1e10 2D DHC), progressively
+FURTHER from gold `ref_value=30`. Cycle 2 cannot close a
+gold-reference accuracy question. Budget accounting: 1 used, 1
+FUSED.
+
+**Escalation prepared for external Gate:**
+- Path P-1: gold correction (re-source Ra=1e10 2D DHC reference;
+  likely 100-160 range; tolerance widening).
+- Path P-2: regime downgrade (Ra=1e10 → 1e6 whitelist pivot;
+  Nu ≈ 10-20 well-documented and resolvable on 80-uniform mesh).
+
+Both paths require hard-floor-#1 numeric edits → out of ADWM
+authority → deferred.
+
+**Within-authority narrative update landed:**
+- `knowledge/gold_standards/differential_heated_cavity.yaml`
+  `physics_contract.contract_status` and `precondition_last_reviewed`
+  updated. `ref_value=30.0` and `tolerance=0.15` grep-verified
+  unchanged (hard floor #1 compliant).
+- Commit `5e06ab4`, `Execution-by: codex-gpt54`.
+
+## §9 Session final deliverables
+
+| Layer | Status |
+|---|---|
+| G1 EX-1-008 refactor | LANDED (60952b6); CHK-1,2,4,5,6,9,10 PASS; CHK-3 REJECT → FUSE |
+| G2 Case Completion Reports | 2/3 demo-ready (LDC + BFS); cylinder pending future G6 figure pipeline |
+| G3 circular_cylinder_wake restructure | LANDED (ad43a38 + Codex follow-up); producer→consumer 10/10 |
+| G4 contract dashboard | LANDED (781a3d8) |
+| G5 Decisions log | 4 records (DEC-ADWM-001/002/003/004); Notion PENDING |
+| FUSE record | LANDED (f121e0f + 5e06ab4) |
+
+**Contract-weighted PASS count delta:** 3/10 → 3/10 (DHC stays
+DEVIATION; narrative now honest about methodology-precondition-#3
+satisfaction + gold-accuracy escalation).
+
+**Session depth-acceptance conditions (b)+(c)+(f) now all met**
+((f) = cycle-2 fuse invocation triggered during this packet window).
+
+---
+
 Signed: opus47-main (ADWM v5.2 self-Gate)
-Packet close-out criterion: G1 CHK-3 verdict reached + final commit
-tally locked. If CHK-3 enters cycle-2 fuse, packet updates with
-addendum §8 fuse-record.
+Packet close-out: 2026-04-18T22:10 local. Final commit tally locked
+(7 ADWM-window commits). Next window inherits: external-Gate
+verdict on P-1 vs P-2, G6 figure pipeline slice, D4++ rule #6
+promotion candidacy, Notion backfill replay.
