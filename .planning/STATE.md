@@ -441,7 +441,7 @@ EX-1-007 (Path B1: DHC 256² wall-packed mesh, landed in 2 commits 2026-04-18):
   2. EXTRACTOR_Y_TOL_MIN in _extract_nc_nusselt (min(dy) too tight for wall-packed meshes where midline cells are coarse; swapped to max).
   3. Missing guard on midPlaneT assignment (UnboundLocalError on x_t_pairs when x_groups empty).
 - Bug 4 (EXTRACTOR_METHODOLOGY_LOCAL_VS_MEAN) scoped but deferred to EX-1-008 candidate — fixing it requires hot_wall surface integration via postProcess wallHeatFlux, which exceeds C6 scope.
-- New D4+ rule candidate #6: rule_6_mesh_refinement_wall_packing_smoke_check (MANDATORY when simpleGrading changes from uniform on wall-bounded BL observable).
+- New D4+ rule candidate #6: rule_6_mesh_refinement_wall_packing_smoke_check (MANDATORY when simpleGrading changes from uniform on wall-bounded BL observable). **PROMOTED to D4++ active on 2026-04-18 per G7 slice (commit 9c89fdb); canonical definition now lives in `.planning/d4_plus_rules.yaml` under `active_rules.rule_6_*`. Future slice_metrics.yaml files reference it by name via the `consumer_pattern:` template.**
 - Metrics: quality=4.8, determinism=PASS, override_rate=0.0, scope=0, physics_validity_precheck=pass, wall_clock_slice=52s (prescribed) + 1244s (post-commit measurement).
 - Full suite: 250/250 green throughout (mesh/extractor changes runtime-only; unit tests mock solver).
 - Rolling EX-1 state (n=7): override_rate 1/7 = 0.143. All D4+ rules untriggered.
