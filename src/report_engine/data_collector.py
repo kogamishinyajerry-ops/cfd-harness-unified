@@ -29,23 +29,29 @@ class ReportDataCollector:
     """Load report data with graceful degradation on missing optional inputs."""
 
     def collect(self, case_id: str) -> ReportContext:
-        auto_verify_report = self._load_auto_verify(case_id)
+        auto_verify_report = self._normalize_auto_verify(self._load_auto_verify(case_id))
         gold_standard = self._load_gold_standard(case_id)
         case_meta = self._load_case_meta(case_id)
         attribution_report = self._load_optional_yaml(REPORTS_ROOT / case_id / "attribution_report.yaml")
         correction_spec = self._load_optional_yaml(REPORTS_ROOT / case_id / "correction_spec.yaml")
         if correction_spec is None:
             correction_spec = auto_verify_report.get("correction_spec")
+        correction_spec = self._normalize_correction_spec(correction_spec)
 
         if attribution_report is None and auto_verify_report.get("correction_spec") is not None:
+            src = auto_verify_report["correction_spec"]
             attribution_report = {
-                "primary_cause": auto_verify_report["correction_spec"].get("primary_cause", "unknown"),
-                "confidence": auto_verify_report["correction_spec"].get("confidence", "LOW"),
-                "suggested_correction": auto_verify_report["correction_spec"].get(
+                "primary_cause": src.get("primary_cause", "unknown"),
+                "confidence": src.get("confidence", "LOW"),
+                "suggested_correction": src.get(
                     "suggested_correction",
-                    "No suggestion available.",
+                    src.get("resolution") or src.get("note", "No suggestion available."),
                 ),
             }
+        elif attribution_report is not None:
+            attribution_report.setdefault("primary_cause", "unknown")
+            attribution_report.setdefault("confidence", "LOW")
+            attribution_report.setdefault("suggested_correction", "No suggestion available.")
 
         return ReportContext(
             case_id=case_id,
@@ -121,3 +127,36 @@ class ReportDataCollector:
         if not path.exists():
             return None
         return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _normalize_auto_verify(report: Dict[str, Any]) -> Dict[str, Any]:
+        """Defend Jinja StrictUndefined against schema drift in hand-written reports."""
+        comparison = report.setdefault("gold_standard_comparison", {})
+        comparison.setdefault("overall", "SKIPPED")
+        comparison.setdefault("observables", [])
+        comparison.setdefault("warnings", [])
+        convergence = report.setdefault("convergence", {})
+        convergence.setdefault("status", "UNKNOWN")
+        convergence.setdefault("final_residual", None)
+        convergence.setdefault("target_residual", 1e-5)
+        convergence.setdefault("residual_ratio", None)
+        convergence.setdefault("warnings", [])
+        physics = report.setdefault("physics_check", {})
+        physics.setdefault("status", "UNKNOWN")
+        physics.setdefault("warnings", [])
+        report.setdefault("verdict", "UNKNOWN")
+        report.setdefault("correction_spec_needed", report.get("verdict") not in ("PASS", "UNKNOWN", None))
+        return report
+
+    @staticmethod
+    def _normalize_correction_spec(spec: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if spec is None:
+            return None
+        spec.setdefault("primary_cause", "unknown")
+        spec.setdefault("confidence", "LOW")
+        if "suggested_correction" not in spec:
+            spec["suggested_correction"] = spec.get("resolution") or spec.get(
+                "note",
+                "No suggestion available.",
+            )
+        return spec
