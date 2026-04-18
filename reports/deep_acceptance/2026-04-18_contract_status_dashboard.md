@@ -68,6 +68,68 @@ G2 slice will author Case Completion Reports for these three.
 
 ---
 
+## Post-snapshot events (2026-04-18T22:25 addendum)
+
+Appended after dashboard close-out at 20:55. Recorded events, not
+a full re-snapshot:
+
+### Case #3 / #5 silent-skip — RESOLVED
+G3 slice landed (`ad43a38` + `862e626`, Execution-by: codex-gpt54).
+`circular_cylinder_wake.yaml` physics_contract promoted from
+comment block to structured top-level field; alias file
+`cylinder_crossflow.yaml` mirrored. Consumer now emits
+`audit_concern='COMPATIBLE_WITH_SILENT_PASS_HAZARD'` on every
+cylinder-wake PASS. **Producer→Consumer channel coverage now
+10/10** (was 9/10).
+
+### Case #7 DHC — refactor landed, CHK-3 REJECT, FUSE cycle 2
+- EX-1-008 mean-Nu refactor landed (`60952b6`,
+  Execution-by: codex-gpt54). `_extract_nc_nusselt` now returns
+  mean-over-y wall-adjacent gradient (methodology precondition
+  #3 SATISFIED).
+- Post-refactor B1 256² re-measurement: **Nu=77.82** (vs pre-
+  refactor local-mid-height 66.25). Outside fix_plan_packet
+  target band [25, 35] → CHK-3 REJECT.
+- **Cycle 2 FUSED** per DEC-ADWM-004 (`f121e0f`). Option B
+  snGrad would land HIGHER (closer to literature 100-160),
+  further from gold ref_value=30. Cannot close a gold-accuracy
+  question with cycle 2.
+- Narrative-only `physics_contract.contract_status` update
+  landed (`5e06ab4`, Execution-by: codex-gpt54). Hard floor #1
+  compliant: `ref_value=30.0` and `tolerance=0.15` grep-verified
+  unchanged.
+- **Escalation to external Gate**: Path P-1 (gold correction to
+  Ra=1e10 literature range 100-160 + tolerance widening) or
+  Path P-2 (regime downgrade to Ra=1e6 where Nu≈10-20 is
+  resolvable on 80-uniform). Both require hard-floor-#1 numeric
+  edits → out of ADWM authority.
+- Case #7 contract_status remains **DEVIATION** (narrative
+  honest about precondition #3 now satisfied).
+
+### G2 Case Completion Reports — 3/3 档1 demo-ready
+Landed `a505172` (LDC + BFS) and `90f431b` (cylinder_crossflow).
+Each CCR carries 9-section format with §8 visualization-status
+(honest NOT GENERATED) and §9 error-correction-narrative.
+
+### G7 D4+ rule #6 → D4++ active corpus
+Landed `9c89fdb`. New `.planning/d4_plus_rules.yaml`
+consolidates rules 1-6 as authoritative reference. Rule #6
+(`mesh_refinement_wall_packing_smoke_check`) promoted from EX-
+1-007 slice-local candidate after satisfying D4++ criteria (≥1
+in-flight arming event with documented rationale —
+commit 54b57ab caught grading inversion pre-solver).
+
+### Summary distribution delta
+Share counts unchanged (the narrative edit did not reclassify
+DHC). Case-level headline row for #7 should read post-FUSE:
+"PASS_WITH_DEVIATIONS (refactor landed; CHK-3 Nu=77.82
+REJECT; FUSE cycle 2; escalated to external Gate)" —
+dashboard row 32 retained verbatim as historical record;
+current state lives in the addendum above.
+
+---
+
 Produced: 2026-04-18 by opus47-main (ADWM v5.2)
 Source of truth: `knowledge/gold_standards/*.yaml`
 Next refresh trigger: any physics_contract change OR next deep acceptance package
+Addendum trigger: G1 CHK-3 verdict + FUSE landing + G7 promotion (this file now reflects post-S-003l-close state)
