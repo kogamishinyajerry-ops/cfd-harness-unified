@@ -90,7 +90,7 @@ forbidden_files:
 ### A.4 Acceptance Checks
 
 CHK-1: `docker exec ... checkMesh` prints `Mesh OK`
-CHK-2: max non-orthogonality delta `<= +2.0 deg` from current `68.9527`; if new max `>= 71.0` => `REJ`
+CHK-2 (revised per Gate COND-4): hard fail if new max non-orthogonality `> 71.0 deg`; soft warn if `> 70.0 deg` (annotate in commit message but do not reject); baseline current `68.9527`
 CHK-3: aerofoil `y+ min >= 30.0` (no buffer-band faces)
 CHK-4: aerofoil `y+ max <= 300.0` (no log-law overshoot)
 CHK-5: `Cp rel_err at x/c=0.0 <= 25%` target / `<= 35%` pass; current baseline `52.9%`
@@ -100,6 +100,8 @@ CHK-8: `knowledge/gold_standards/naca0012_airfoil.yaml` byte-identical pre/post
 CHK-9: `src` diff `<= 50` lines by `wc -l` on unified diff body
 CHK-10: `pytest tests/` => `>= 211` pass, no new failures
 CHK-11: all other 9 whitelist cases smoke-rerun `checkMesh` verdict unchanged: `ldc`, `bfs`, `cylinder`, `turbulent_flat_plate`, `plane_channel`, `impinging_jet`, `rayleigh_benard`, `DHC`, `pipe`
+CHK-12 (per Gate COND-2): buffer-band face count on aerofoil patch == `0` (strict equality; count faces with `y+ < 30` from post-fix `yplus_profile.csv`)
+CHK-13 (per Gate COND-3): Cp three-point average relative error `(|err_0| + |err_0.3| + |err_1.0|) / 3` ≤ `20%` target / ≤ `28%` pass; current baseline average = `(52.9 + 32.4 + 45.5) / 3 = 43.6%`
 
 ### A.5 Reject Conditions
 
@@ -239,6 +241,33 @@ Answer: `Execution-by: codex-gpt54` + `Gate-approve: thread://41cc6894-2bed-814f
 
 Q8: buffer-layer hypothesis evidence strength?
 Answer: direct measurement. The packet relies on 120 real aerofoil wall-face samples, with 10 measured in the buffer band and concentrated at face indices matching the LE location. Combined with the provided Menter 1994 and NASA TMR wall-function framing, the evidence strength is STRONG, not speculative.
+
+## §F Gate COND-1..4 Closure Record (2026-04-18)
+
+### §F.1 COND-1 — wall BC type verification (PASS)
+
+Preserved case: `/tmp/cfd-harness-cases/ldc_1720_1776471699394/0/{k,omega,nut}`.
+Aerofoil wall patch `type` fields (raw, verbatim):
+
+- `0/k`:     `aerofoil { type kqRWallFunction;  value uniform 3.7500000000000003e-05; }`
+- `0/omega`: `aerofoil { type omegaWallFunction; value uniform 0.11180339887498948; }`
+- `0/nut`:   `aerofoil { type nutkWallFunction;  value uniform 0; }`
+
+Interpretation: all three are standard high-Re wall-function variants. No
+low-Re form detected (no `kLowReWallFunction`, no `nutLowReWallFunction`, no
+`omegaWallFunction` with low-Re switch, no `fixedValue=0` on `k`). The
+Fix Plan direction (path W: push `y+_min ≥ 30` while staying `≤ 300`) is
+consistent with the as-built wall-treatment contract. COND-1 → PASS.
+
+### §F.2 COND-2/3/4 — CHK revisions (applied in §A.4)
+
+- COND-2: CHK-12 added (buffer-band face count == 0, strict)
+- COND-3: CHK-13 added (Cp three-point avg rel_err ≤ 20% target / ≤ 28% pass;
+  baseline avg = 43.6%)
+- COND-4: CHK-2 split into hard-fail (`>71°`) / soft-warn (`>70°`)
+
+All four conditions now closed; awaiting final Gate APPROVE before dispatching
+the blockMeshDict edit to Codex.
 
 ## §E Applicability Note
 
