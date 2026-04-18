@@ -13,8 +13,21 @@ physics_contract:
     - condition: "Solver supports buoyancy-driven flow with Boussinesq density coupling"
       satisfied_by_current_adapter: true
       evidence_ref: "simpleBuoyantFoam with Boussinesq + omegaWallFunction BCs (Phase 7 T4 fixes, STATE.md §Phase 7 T4 Fixes)"
-  contract_status: "DEVIATION — precondition #1 unmet but in a *quantifiable-under-prediction* way. Landing R-E (mesh bump 80→256) narrows the gap but unlikely to fully close. EX-1-001 §4 rank 2 recommends bounded R-E; alternative R-F (Ra downgrade to 1e6) requires tolerance/reference edit which is out of scope."
-  precondition_last_reviewed: "2026-04-18 (EX-1-003 annotation slice, post D4+ methodology gate)"
+  contract_status: >
+    DEVIATION — precondition #1 (mesh resolves thermal BL at Ra=1e10) unmet;
+    precondition #3 (extractor methodology aligned to gold reference definition)
+    now SATISFIED as of EX-1-008 commit 60952b6 (mean-over-y wall-adjacent
+    gradient). Post-refactor measurement Nu=77.82 on B1 256² mesh (still
+    under-resolved). The remaining gap to gold ref_value=30.0 is split into:
+    (i) residual BL under-resolution (adds an expected increment from 78 →
+    140-160 range at 1000-cell wall-normal fully resolved), and (ii) a
+    gold-reference accuracy question — literature values for Ra=1e10 2D DHC
+    span 100-160, suggesting the gold ref_value may itself be inconsistent
+    with the stated Ra. See DEC-ADWM-004 FUSE record (.planning/decisions/
+    2026-04-18_ex1_008_fuse.md) for external-Gate escalation package. Path
+    P-1 (gold correction) and Path P-2 (regime downgrade to Ra=1e6) both
+    deferred to external Gate.
+  precondition_last_reviewed: "2026-04-18 (EX-1-008 CHK-3 REJECT + FUSE cycle 2 per DEC-ADWM-004; methodology precondition #3 SATISFIED, #1 still unmet, gold-accuracy escalated)"
 note: >
   Docker E2E (Phase 7, 2026-04-16) crashed at "Starting time loop" with
   "Unknown function type cellCentre" before iteration. The adapter code was
