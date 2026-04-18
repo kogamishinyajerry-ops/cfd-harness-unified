@@ -1,8 +1,8 @@
 slice_id: EX-1-007
 run_type: post_commit_solver_measurement
-started_at_utc: '2026-04-18T11:50:39Z'
-ended_at_utc: '2026-04-18T12:11:22Z'
-wall_clock_seconds: 1243.8
+started_at_utc: '2026-04-18T13:25:53Z'
+ended_at_utc: '2026-04-18T13:47:10Z'
+wall_clock_seconds: 1276.6
 batch_summary:
   total: 1
   passed: 0
@@ -14,15 +14,15 @@ observables:
   deviations:
   - quantity: nusselt_number
     expected: 30.0
-    actual: 66.2499999999966
-    relative_error: 1.2083333333331798
+    actual: 77.82142857142871
+    relative_error: 1.5940476190475708
 attribution:
   primary_cause: parameter_plumbing_mismatch
   confidence: 0.7
   chain_complete: true
   audit_concern: null
 c5_band_check:
-  nu_measured: 66.2499999999966
+  nu_measured: 77.82142857142871
   band:
     low: 11.0
     centre: 16.1

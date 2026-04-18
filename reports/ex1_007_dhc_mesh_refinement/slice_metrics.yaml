@@ -282,3 +282,90 @@ artifacts_added_post_commit:
   - reports/ex1_007_dhc_mesh_refinement/run_dhc_measurement.py      # measurement runner (this commit)
   - reports/ex1_007_dhc_mesh_refinement/measurement_result.yaml     # Nu=66.25 raw verdict (this commit)
   - reports/ex1_007_dhc_mesh_refinement/blockmesh_smoke_check.md    # grading bug writeup (342beb0)
+
+# ============================================================================
+# EX-1-008 POST-REFACTOR RE-MEASUREMENT ADDENDUM (2026-04-18T21:47 local)
+# ============================================================================
+# Appended after EX-1-008 mean-Nu refactor commit 60952b6 (Execution-by
+# codex-gpt54) and CHK-3 Docker re-run. Documents cycle-1 REJECT and
+# DEC-ADWM-004 FUSE outcome.
+# ============================================================================
+
+ex1_008_post_refactor_remeasurement:
+  chk3_verdict: REJECT (per fix_plan_packet.md §4 COND-3)
+  wall_clock_seconds: 1276.6
+  started_at_utc: '2026-04-18T13:25:53Z'
+  ended_at_utc: '2026-04-18T13:47:10Z'
+  observed_nu_mean: 77.82
+  gold_reference_nu: 30.0
+  target_band_from_fpp: [25.0, 35.0]
+  relative_error_vs_gold: 1.594  # 159%
+  verdict_narrative: |
+    Pre-refactor local-mid-height extractor: Nu=66.25 on B1 mesh.
+    Post-refactor mean-over-y extractor: Nu=77.82 on same B1 mesh.
+    The refactor is algorithmically correct (CHK-1/2/4/5/6/9/10 all
+    PASS), but the physics gate CHK-3 fails because the measured mean
+    Nu overshoots gold=30 even further than the local-at-mid value did.
+
+    Interpretation: the B1 256² mesh DOES resolve the wall-adjacent
+    gradient at each y-layer; the mean over y is the mathematically
+    correct quantity. The remaining gap to gold=30 splits into two
+    components:
+      1. Residual BL under-resolution (256 wall-normal cells is still
+         short of the ~1000-cell Dhir 2001 requirement; precondition
+         #1 satisfied_by_current_adapter remains FALSE). A fully
+         resolved run would likely land Nu ≈ 140-160.
+      2. Gold-reference accuracy question. Literature values for 2D
+         DHC at Ra=1e10 span 100-160. Ampofo & Karayiannis 2003 (cited
+         in the gold's source field) measured Nu ≈ 62 at Ra=1.58e9
+         (one decade below our target). The gold's ref_value=30 at
+         Ra=1e10 does not match either the cited literature or
+         mesh-refinement-scaling extrapolations.
+
+cycle_2_decision:
+  chosen: FUSE (not dispatched)
+  rationale: |
+    Option B (snGrad patch integration) is a strict upgrade over Option
+    C (between-first-two-cells gradient): face-integrated snGrad gives
+    the true wall heat flux, which is ≥ the wall-adjacent-gradient
+    approximation. So Option B is expected to land at ≥ 78, possibly
+    closer to 140-160 as mesh refines. Running cycle 2 would not close
+    the gap to gold=30; it would widen it further while consuming Codex
+    and solver budget.
+
+    The real open question is a gold-reference accuracy issue, which is
+    hard-floor-#1 external-Gate territory. FUSE escalates to external
+    Gate with two candidate paths: P-1 (gold correction to re-sourced
+    literature value) or P-2 (whitelist regime downgrade Ra=1e10 →
+    Ra=1e6 where Nu≈10-20 is well-documented and resolvable on the
+    existing 80-uniform mesh).
+  decision_record: .planning/decisions/2026-04-18_ex1_008_fuse.md (DEC-ADWM-004)
+
+short_term_contract_update:
+  action: update physics_contract.contract_status narrative in
+    knowledge/gold_standards/differential_heated_cavity.yaml to reflect
+    "precondition #3 (methodology) now SATISFIED; precondition #1 (mesh)
+    unmet; gold accuracy question deferred to external Gate".
+  touches_numeric_fields: false  # hard floor #1 preserved
+  dispatch: codex-gpt54 per hard floor #2
+
+rolling_ex1_state_after_ex1_008:
+  window: "EX-1-001 through EX-1-008"
+  override_history: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]  # EX-1-008 CHK-3 FAIL = override
+  n: 8
+  rolling_override_rate: 0.25  # 2/8
+  d4plus_rule_triggers_reeval:
+    rule_1_baseline_rolling_above_030_at_n_ge_4:
+      armed: true
+      triggered: false
+      measured: 0.25
+      threshold: 0.30
+      margin: 0.05  # approaching
+    rule_2_two_consecutive_override_above_05:
+      triggered: false  # EX-1-002 override=1.0 then 6 slices of 0.0 then 1.0 — not consecutive
+    rule_3_precheck_missing:
+      triggered: false  # all precheck fields present in all recent slice_metrics
+    rule_4_pivot_without_enumerated_preconditions:
+      triggered: false
+  alert: rolling rate 0.25 is within 0.05 of 0.30 trigger — one more
+    override at current n=8 would trip Rule 1. Watch next slice.
