@@ -6669,48 +6669,55 @@ mergePatchPairs
 
         侧加热腔体（hot_wall at x=0, cold_wall at x=L）：
         Nu = (∂T/∂x)_wall * L / (T_hot - T_cold)
-        在 y=L/2（半高处）取水平温度剖面，用近壁（x≈0）第一、二个单元格的温度梯度。
+        取整段热壁高度上各 y-layer 的近壁温度梯度平均值；midPlaneT 仍保留 y=L/2 剖面。
         """
         if not cxs or not cys or not t_vals:
             return key_quantities
 
-        # Side-heated cavity: use the horizontal temperature profile at y ≈ L/2
-        # and take the first two interior x cells near the hot wall.
+        from collections import defaultdict
+
+        x_hot = min(cxs)
+        y_target = 0.5 * (min(cys) + max(cys))
         unique_y = sorted({round(y, 6) for y in cys})
         if len(unique_y) >= 2:
-            # EX-1-007 B1 post-commit hotfix: for wall-packed meshes, min adjacent
-            # dy (at walls) is much smaller than midline dy; use max to keep y_tol
-            # loose enough to capture the coarse cells near y_target=L/2.
-            # Uniform meshes: min==max so behavior identical.
+            # EX-1-007 B1 hotfix: use max adjacent dy so the preserved mid-plane
+            # visualization slice still finds the coarse center cells on wall-packed meshes.
             dy_cell = max(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
             y_tol = max(0.6 * dy_cell, 1e-6)
         else:
             y_tol = 0.015
-
-        from collections import defaultdict
-
-        y_target = 0.5 * (min(cys) + max(cys))
-        x_groups: Dict[float, List[float]] = defaultdict(list)
+        y_layers: Dict[float, Dict[float, List[float]]] = defaultdict(lambda: defaultdict(list))
 
         for i in range(min(len(cxs), len(cys), len(t_vals))):
-            if abs(cys[i] - y_target) < y_tol:
-                xr = round(cxs[i], 4)
-                x_groups[xr].append(t_vals[i])
+            y_layers[round(cys[i], 6)][round(cxs[i], 4)].append(t_vals[i])
 
-        if len(x_groups) >= 2:
-            x_t_pairs = [(xr, sum(x_groups[xr]) / len(x_groups[xr])) for xr in sorted(x_groups)]
-            x0, T0 = x_t_pairs[0]
-            x1, T1 = x_t_pairs[1]
+        layer_profiles: Dict[float, List[Tuple[float, float]]] = {}
+        wall_gradients: List[float] = []
+        for yr, x_groups in y_layers.items():
+            x_t_pairs = [(xr, sum(ts) / len(ts)) for xr, ts in sorted(x_groups.items())]
+            layer_profiles[yr] = x_t_pairs
+            if len(x_t_pairs) < 2:
+                continue
+            near_hot = sorted(x_t_pairs, key=lambda pair: (abs(pair[0] - x_hot), pair[0]))
+            x0, T0 = near_hot[0]
+            x1, T1 = near_hot[1]
             dx = x1 - x0
             if abs(dx) > 1e-10:
-                bc = task_spec.boundary_conditions or {}
-                dT_bulk = float(bc.get("dT", 10.0))
-                L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
-                grad_T = abs((T1 - T0) / dx)
-                key_quantities["nusselt_number"] = grad_T * L / dT_bulk
-            # midPlaneT profile only stored when we actually sampled ≥2 x-cells
-            key_quantities["midPlaneT"] = [T for _, T in x_t_pairs]
-            key_quantities["midPlaneT_y"] = [x for x, _ in x_t_pairs]
+                wall_gradients.append(abs((T1 - T0) / dx))
+
+        if wall_gradients:
+            bc = task_spec.boundary_conditions or {}
+            dT_bulk = float(bc.get("dT", 10.0))
+            L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
+            key_quantities["nusselt_number"] = (sum(wall_gradients) / len(wall_gradients)) * L / dT_bulk
+
+        if layer_profiles:
+            mid_candidates = [yr for yr in layer_profiles if abs(yr - y_target) < y_tol]
+            mid_y = min(mid_candidates or list(layer_profiles), key=lambda yr: abs(yr - y_target))
+            mid_profile = layer_profiles[mid_y]
+            if len(mid_profile) >= 2:
+                key_quantities["midPlaneT"] = [T for _, T in mid_profile]
+                key_quantities["midPlaneT_y"] = [x for x, _ in mid_profile]
 
         return key_quantities
 

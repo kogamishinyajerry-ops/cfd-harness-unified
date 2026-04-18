@@ -208,11 +208,30 @@ class TestFoamAgentExecutor:
         )
         cxs = [0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95]
         cys = [0.05, 0.05, 0.05, 0.05, 0.05, 0.50, 0.50, 0.50, 0.50, 0.50, 0.95, 0.95, 0.95, 0.95, 0.95]
-        t_vals = [304.90, 299.60, 300.00, 295.35, 295.05, 305.00, 299.75, 300.01, 295.25, 295.00, 304.95, 299.65, 300.02, 295.30, 295.02]
+        t_vals = [305.00, 299.75, 300.01, 295.25, 295.00, 305.00, 299.75, 300.01, 295.25, 295.00, 305.00, 299.75, 300.01, 295.25, 295.00]
 
         result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
 
         assert result["nusselt_number"] == pytest.approx(10.5)
+
+    def test_extract_nc_nusselt_averages_gradient_over_y_for_wall_packed_mesh(self):
+        task = TaskSpec(
+            name="nc-cavity",
+            geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+            flow_type=FlowType.NATURAL_CONVECTION,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            boundary_conditions={"dT": 10.0, "L": 2.0, "aspect_ratio": 2.0},
+        )
+        cxs = [0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95]
+        cys = [0.10, 0.10, 0.10, 0.10, 0.10, 0.50, 0.50, 0.50, 0.50, 0.50, 0.90, 0.90, 0.90, 0.90, 0.90]
+        t_vals = [305.00, 304.90, 300.20, 295.20, 295.00, 305.00, 304.85, 300.10, 295.10, 295.00, 305.00, 304.80, 300.00, 295.00, 294.90]
+
+        result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
+
+        assert result["nusselt_number"] == pytest.approx(1.5 * 2.0 / 10.0)
+        assert result["midPlaneT"] == pytest.approx([305.0, 304.85, 300.1, 295.1, 295.0])
+        assert result["midPlaneT_y"] == pytest.approx([0.05, 0.15, 1.0, 1.85, 1.95])
 
     def test_extract_airfoil_cp_tracks_surface_profile(self):
         task = make_airfoil_task()
