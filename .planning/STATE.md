@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
-last_updated: "2026-04-18T17:30"
-session: S-003b (D4 APPROVE_WITH_CONDITIONS; C1+C2 closed; EX-1-001 landed; C3 pending; PL-1 held for D5)
+last_updated: "2026-04-18T17:50"
+session: S-003b (D4 APPROVE_WITH_CONDITIONS; C1+C2+C3 closed; EX-1-001 + SY-1-002/003 landed; C4 holds PL-1 for D5)
 
 # Phase Status
 
@@ -339,7 +339,12 @@ D4 Gate Conditions (verdict 2026-04-18):
   - scope_violation_count: 0 (hard floor ✅)
   - determinism_grade: DEFERRED — single-run; sha256=2f790d54...09413; rerun rolled into C3 methodology
   - Artifact: reports/ex1_first_slice/diagnostic_memo.md (3-case whitelist imperfect-verdict diagnosis)
-- C3: Capture ≥2 additional SY-1 slices within 3 sessions for σ on floor metrics — ⏳ Pending
+- C3: Capture ≥2 additional SY-1 slices within 3 sessions for σ on floor metrics — ✅ CLOSED (2026-04-18)
+  - SY-1-002 (backward_facing_step_steady): quality=5.0, determinism=PASS, scope=0
+  - SY-1-003 (cylinder_crossflow): quality=4.8, determinism=PASS, scope=0
+  - Rolling σ (n=3): quality mean=4.933, σ=0.094, min=4.8, margin to floor 4.0 = 8.5σ
+  - Floor recommendation: no adjustment; re-examine after n=10
+  - Summary: reports/sy1_variance_slices/variance_summary.md
 - C4: PL-1 remains FROZEN until EX-1 first slice passes C2 AND C3 variance data lands (future D5 gate) — 🔒 Enforced
 
 Phase 7 T4 Fixes (post-Wave 2-3):

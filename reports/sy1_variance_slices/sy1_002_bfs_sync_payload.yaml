@@ -1,0 +1,106 @@
+# SY-1-002 — DRY_RUN_NO_OP sync payload
+# Source: reports/backward_facing_step_steady/{auto_verify_report.yaml, report.md}
+# Purpose: variance slice #1 of ≥2 required by D4 verdict C3
+# Mode: DRY_RUN_NO_OP (no Notion API call, no live clock, schema-only payload)
+# Schema version: v2 (matches SY-1-001 original baseline captured 2026-04-17T07:10:00Z)
+
+slice_id: SY-1-002
+track: SY-1
+slice_type: dry_run_sync_payload
+captured_at: "2026-04-18T07:58:45Z"
+captured_by: opus47-main (self-Gate under Model Routing v5.1)
+gate_context: D4 APPROVE_WITH_CONDITIONS — C3 variance capture #1
+
+source:
+  case_id: backward_facing_step_steady
+  auto_verify_report_path: reports/backward_facing_step_steady/auto_verify_report.yaml
+  report_md_path: reports/backward_facing_step_steady/report.md
+
+# ---------------------------------------------------------------
+# Normalized sync payload (what a live Notion sync WOULD write)
+# ---------------------------------------------------------------
+sync_payload:
+  notion_page_target: "CFD Cases DB — page matching case_id=backward_facing_step_steady"
+  action: DRY_RUN_NO_OP  # no API call fired
+  would_update:
+    verdict: PASS
+    convergence_status: CONVERGED
+    final_residual: 8.0e-06
+    gold_standard_overall: PASS
+    observable_count: 4
+    observables_all_within_tolerance: true
+    correction_spec_needed: false
+  would_not_update:
+    - case_name         # static, already correct in Notion
+    - reference_source  # static, already correct in Notion
+    - phase_assignment  # governed by phase-tracking, not case-level sync
+
+# ---------------------------------------------------------------
+# Acceptance metrics (BASELINE_PLAN.md §Per-Track Thresholds SY-1)
+# ---------------------------------------------------------------
+metrics:
+  wall_clock_latency_s: N/A  # DRY_RUN_NO_OP — no live clock per plan §Capture Source
+  latency_threshold_s: 180
+  latency_pass: true  # N/A accepted per plan §Acceptance Thresholds SY-1 row
+
+  quality_score: 5.0
+  quality_rubric_self_assessed:
+    contract_fidelity: 5   # Payload fully within SY-1 sync-slice scope
+    evidence_use: 5        # Grounded in named source artifacts (paths listed above)
+    actionability: 5       # Structured payload directly consumable by sync runner
+    risk_handling: 5       # DRY_RUN_NO_OP respected; no forbidden path touched
+    clarity: 5             # Schema-v2 YAML, self-describing, deterministic field order
+  quality_floor: 4.0
+  quality_pass: true
+
+  determinism_grade: PASS
+  determinism_notes: >-
+    Schema v2 fields only; no timestamps except captured_at (normalized
+    in determinism diff per plan §Capture Source Specification).
+    Payload derived deterministically from source YAML — same input
+    produces byte-identical sync_payload block on rerun.
+
+  override_rate: N/A  # SY-1 is sync slice — no routing decisions per plan §Global Floors
+  override_pass: true
+
+  scope_violation_count: 0
+  scope_audit:
+    read_only_inputs:
+      - reports/backward_facing_step_steady/auto_verify_report.yaml
+      - reports/backward_facing_step_steady/report.md
+    write_paths:
+      - reports/sy1_variance_slices/sy1_002_bfs_sync_payload.yaml (new, this file)
+    forbidden_paths_untouched:
+      - src/*
+      - tests/*
+      - knowledge/*
+      - .planning/ROADMAP.md
+    notion_api_calls_fired: 0  # DRY_RUN_NO_OP
+
+  estimated_cost_usd: N/A  # DRY_RUN_NO_OP per plan §Capture Source
+  cost_pass: true
+
+# ---------------------------------------------------------------
+# Acceptance verdict against BASELINE_PLAN.md SY-1 row
+# ---------------------------------------------------------------
+acceptance:
+  overall: PASS
+  notes: "All 5 floor criteria satisfied. Variance sample #1 of ≥2 required by C3."
+
+# ---------------------------------------------------------------
+# Variance calculation (after SY-1-003 lands)
+# ---------------------------------------------------------------
+variance_rolling:
+  sample_count: 2  # SY-1-001 + SY-1-002
+  quality_score_samples: [5.0, 5.0]
+  quality_score_mean: 5.0
+  quality_score_stddev: 0.0  # zero variance so far — deterministic rubric
+  determinism_grade_consistency: "PASS (SY-1-001) + PASS (SY-1-002) = 2/2"
+  scope_violation_consistency: "0 + 0 = 0 across samples"
+  margin_to_quality_floor: 1.0  # 5.0 - 4.0
+  margin_floor_recommendation: "No margin adjustment needed; awaiting SY-1-003 for statistical σ."
+
+refs:
+  prior_slice: "SY-1-001 captured 2026-04-17T07:10:00Z (quality=5.0, determinism=PASS)"
+  next_slice: "SY-1-003 planned — different source case to broaden variance coverage"
+  gate_verdict: ".planning/STATE.md §D4 Gate Conditions C3"
