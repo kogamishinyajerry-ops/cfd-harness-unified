@@ -2,6 +2,19 @@ schema_version: 2
 case_id: differential_heated_cavity
 source: "Dhir 2001 / Ampofo & Karayiannis 2003"
 literature_doi: "10.1016/S0140-7007(02)00085-4"
+physics_contract:
+  geometry_assumption: "Square 2D cavity, opposing vertical walls at T_hot and T_cold, adiabatic top/bottom walls, Boussinesq approximation"
+  reference_correlation_context: "Nu=30 at Ra=1e10 is for turbulent natural-convection regime where the thermal boundary-layer thickness δ/L ~ Ra^-0.25 ≈ 3.2e-3 requires 5+ cells inside the BL per wall; roughly 500–1000 wall-normal cells with strong wall grading."
+  physics_precondition:
+    - condition: "Mesh resolves the thermal boundary layer at target Ra"
+      satisfied_by_current_adapter: false
+      evidence_ref: "Phase 7 Wave 2–3 delivered Nu=5.85 at 80 cells wall-normal (mesh bumped from 40 during T4); full BL resolution would need ~500-1000 cells per direction; STATE.md §Known Limitations flags this as DHC (Ra=1e10) needs ~1000 cells for BL"
+      consequence_if_unsatisfied: "Measured Nu is under-predicted by an order of magnitude (5.85 vs 30) — verdict is correctly PASS_WITH_DEVIATIONS, not a false PASS. This is a value-deviation class failure, not a schema-false-pass class failure (contrast with plane_channel_flow R-C)."
+    - condition: "Solver supports buoyancy-driven flow with Boussinesq density coupling"
+      satisfied_by_current_adapter: true
+      evidence_ref: "simpleBuoyantFoam with Boussinesq + omegaWallFunction BCs (Phase 7 T4 fixes, STATE.md §Phase 7 T4 Fixes)"
+  contract_status: "DEVIATION — precondition #1 unmet but in a *quantifiable-under-prediction* way. Landing R-E (mesh bump 80→256) narrows the gap but unlikely to fully close. EX-1-001 §4 rank 2 recommends bounded R-E; alternative R-F (Ra downgrade to 1e6) requires tolerance/reference edit which is out of scope."
+  precondition_last_reviewed: "2026-04-18 (EX-1-003 annotation slice, post D4+ methodology gate)"
 note: >
   Docker E2E (Phase 7, 2026-04-16) crashed at "Starting time loop" with
   "Unknown function type cellCentre" before iteration. The adapter code was

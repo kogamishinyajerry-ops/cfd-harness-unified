@@ -1,0 +1,176 @@
+slice_id: EX-1-003
+track: EX-1
+slice_type: gold_standard_metadata_extension
+captured_at: "2026-04-18T18:20:00Z"
+captured_by: opus47-main (self-Gate under Model Routing v5.1)
+gate_context: D4+ APPROVE_PATH_A — first EX-1 slice under the new physics-validity-precheck schema (C1+C2 blocking conditions bundled in same commit)
+
+slice_title: "R-A-metadata: extend 3 imperfect-verdict gold_standard YAMLs with physics_contract annotation"
+
+# ---------------------------------------------------------------
+# What this slice does (and does NOT do)
+# ---------------------------------------------------------------
+scope_summary: >-
+  Adds a top-level `physics_contract` block to 3 gold_standard YAMLs for the
+  whitelist cases with imperfect Phase 7 Wave 2-3 verdicts:
+    - fully_developed_turbulent_pipe_flow (FAIL, rank 3 R-A target)
+    - fully_developed_plane_channel_flow (FAIL, rank 4 R-C target — documented as NOT satisfiable)
+    - differential_heated_cavity (PASS_WITH_DEVIATIONS, rank 2 R-E target)
+  Each `physics_contract` enumerates geometry_assumption,
+  reference_correlation_context, and a list of physics_precondition entries
+  with `satisfied_by_current_adapter`, evidence_ref, and consequence_if_unsatisfied.
+  Tolerance values and reference observable values are UNCHANGED. No code
+  (src/) modified. No whitelist.yaml modified.
+
+explicit_non_scope:
+  - "No tolerance change (gold ref_value / tolerance fields untouched)"
+  - "No whitelist.yaml relabel (R-A-relabel is a different, higher-scope slice)"
+  - "No solver config / adapter mesh constant change"
+  - "No comparator or attribution logic change"
+  - "No test additions (loader uses .get() with defaults, no behavior change to assert)"
+
+# ---------------------------------------------------------------
+# Physics-validity precheck (REQUIRED per D4+ verdict C2, BASELINE_PLAN.md §Physics-Validity Precheck Schema)
+# ---------------------------------------------------------------
+physics_validity_precheck:
+  performed: true
+  preconditions_enumerated:
+    - "YAML schema extension must not break existing gold_standard loaders (yaml.safe_load + .get() pattern)"
+    - "New top-level field `physics_contract` must not collide with any currently-accessed key in src/"
+    - "Annotation content must be derivable from existing evidence (memo, STATE.md, whitelist.yaml, known physics) without introducing new unverified claims"
+  all_satisfied: true
+  evidence_refs:
+    - "src/auto_verifier/gold_standard_comparator.py:16 — observables = gold_standard.get('observables', []); reads only 'observables' key"
+    - "src/result_comparator.py:33-84 — reads only 'quantity', 'reference_values', 'tolerance', 'id'; no collision with 'physics_contract'"
+    - "src/auto_verifier/verifier.py:106,164,203 — all use yaml.safe_load; PyYAML tolerates unknown top-level keys by default"
+    - "Full test suite (245/245) passes post-edit, confirming no runtime regression"
+    - "All 3 new physics_contract blocks cite specific file:line evidence in evidence_ref entries (see YAMLs)"
+
+# ---------------------------------------------------------------
+# Acceptance metrics
+# ---------------------------------------------------------------
+metrics:
+  wall_clock_latency_s: 52  # memo revision + schema doc + 3 YAML edits + test verify
+  wall_clock_notes: "Includes C1 memo revision + C2 BASELINE_PLAN schema addition + 3 YAML physics_contract blocks + pytest verification"
+  latency_threshold_s: 300
+  latency_c2_headroom_target_s: 240
+  latency_headroom_actual_pct: 78.3  # (240 - 52) / 240 * 100
+
+  quality_score: 4.9
+  quality_rubric_self_assessed:
+    contract_fidelity: 5   # exactly the R-A-metadata scope verdict approved; C1+C2 bundled per C1 blocking rule
+    evidence_use: 5         # every precondition cites a concrete src:line or gold-std observation
+    actionability: 5        # physics_contract is machine-readable; future error_attributor can key off contract_status
+    risk_handling: 5        # precheck performed, all_satisfied=true, no tolerance touched, suite verified green
+    clarity: 4              # memo §4 table is information-dense; a first-time reader may need the legend in §6 re-stated inline (minor)
+
+  determinism_grade: PASS
+  determinism_notes: >-
+    YAML edits are textual, byte-deterministic. sha256 captured below.
+    Two consecutive pytest runs produce identical 245/245.
+  artifact_sha256_map:
+    "reports/ex1_first_slice/diagnostic_memo.md (post C1 revision)": c24a92363b47ef83a00a95c0cc07284d03ae072d3f33df2a86190abbc8bdcf59
+    "knowledge/gold_standards/fully_developed_turbulent_pipe_flow.yaml": 3844797e56bdd9ef9b43c66e54122dee0ff469e4c0421f5377ef241f9f11d65a
+    "knowledge/gold_standards/fully_developed_plane_channel_flow.yaml": 0850cbbb9d2ed4f50c753fbdb5e8a43930acf54d0a4df59c91f50ff858c35920
+    "knowledge/gold_standards/differential_heated_cavity.yaml": cd0dc51d9fe222a5029cc1fc912f1115fad6471d1d5317dd7f5698ee3142a475
+
+  override_rate: 0.0
+  override_notes: "No mid-slice pivot. R-A-metadata scope held from plan to land."
+
+  scope_violation_count: 0
+  scope_audit:
+    read_only_inputs:
+      - src/auto_verifier/gold_standard_comparator.py   # verified .get('observables') pattern
+      - src/auto_verifier/verifier.py                   # verified yaml.safe_load pattern
+      - src/result_comparator.py                        # verified no collision with 'physics_contract' key
+      - src/auto_verifier/schemas.py                    # verified dataclass field list
+      - knowledge/whitelist.yaml                        # re-read for precondition evidence
+    write_paths:
+      - reports/ex1_first_slice/diagnostic_memo.md                        # C1 §4 revision (in-place)
+      - docs/design/PHASE9_MODEL_ROUTING_V3X_BASELINE_PLAN.md              # C2 schema addition (in-place)
+      - knowledge/gold_standards/fully_developed_turbulent_pipe_flow.yaml  # physics_contract added (extension field)
+      - knowledge/gold_standards/fully_developed_plane_channel_flow.yaml   # physics_contract added
+      - knowledge/gold_standards/differential_heated_cavity.yaml           # physics_contract added
+      - reports/ex1_003_gold_standard_physics_contract/slice_metrics.yaml  # new, this file
+      - .planning/STATE.md                                                  # session header + EX-1-003 block
+    forbidden_paths_untouched:
+      - knowledge/whitelist.yaml                       # read-only per guardrail
+      - src/foam_agent_adapter.py                      # not touched
+      - src/result_comparator.py                       # not touched
+      - src/task_runner.py                             # not touched
+      - src/knowledge_db.py                            # not touched
+      - tests/                                         # not touched (no new tests required per precheck #3)
+    diff_stats:
+      src_lines_changed: 0
+      tests_lines_changed: 0
+      knowledge_gold_standards_lines_added: "approximately 48 lines across 3 files (all additive, no tolerance edits)"
+
+  estimated_cost_usd: 0.42
+  cost_pricing_snapshot: "Opus 4.7 @ $15/1M input + $75/1M output (2026-04)"
+
+# ---------------------------------------------------------------
+# Guardrail compliance (D4+ verdict next_slice_scope_guardrails)
+# ---------------------------------------------------------------
+guardrail_compliance:
+  selected_remediation: "R-A-metadata (memo §4 rank 1, precondition-satisfiable today)"
+  forbidden_remediations_confirmed_not_touched: ["R-B", "R-C", "R-D", "R-F"]
+  touched_files_whitelist_check:
+    knowledge_gold_standards_yaml: "✅ extension fields only, no tolerance change"
+    docs: "✅ BASELINE_PLAN.md schema doc addition (C2 blocking)"
+    reports_ex1_003: "✅ slice artifact dir"
+    src_schema_only: "✅ read-only inspection for precheck, no writes"
+  src_diff_under_50_lines: "✅ 0 lines (no src/ writes)"
+  tests_assertions_not_deleted: "✅ no test edits"
+
+# ---------------------------------------------------------------
+# Acceptance verdict
+# ---------------------------------------------------------------
+acceptance:
+  wall_clock_latency_s_pass: true       # 52 ≤ 240 (C2 headroom met, 78% margin)
+  quality_score_pass: true              # 4.9 ≥ 4.0
+  determinism_grade_pass: true          # PASS
+  override_rate_pass: true              # 0.0 ≤ 0.10
+  scope_violation_count_pass: true      # 0 ≤ 0
+  physics_validity_precheck_pass: true  # performed=true AND all_satisfied=true
+  guardrail_compliance_pass: true
+  overall: PASS
+  overall_notes: >-
+    Clean 6/6 pass. First EX-1 slice under the new D4+ physics-validity-
+    precheck regime. Rolling EX-1 override_rate after this slice:
+    1 pivot (EX-1-002) / 3 slices = 0.333 — still above 0.30 rolling
+    threshold BUT within the n<4 exemption window; will be re-evaluated
+    after EX-1-004. Per D4+ rule #1, n>=4 with rolling > 0.30 triggers
+    methodology Gate; current n=3.
+
+# ---------------------------------------------------------------
+# Rolling EX-1 track state (running across 001, 002, 003)
+# ---------------------------------------------------------------
+rolling_ex1_track:
+  sample_count: 3
+  wall_clock_samples_s: [85, 36, 52]
+  quality_score_samples: [4.8, 5.0, 4.9]
+  determinism_grade_samples: [DEFERRED, PASS, PASS]   # 001 deferred, rolled into C3 methodology
+  override_rate_samples: [0.0, 1.0, 0.0]
+  scope_violation_samples: [0, 0, 0]
+  rolling_override_rate: 0.333   # 1 / 3
+  gate_thresholds:
+    baseline_rule_n_ge_4_above_0_30: "n=3 < 4, rule not yet armed"
+    pattern_rule_two_consecutive_ge_0_5: "[0.0, 1.0, 0.0] — no two consecutive ≥ 0.5; not triggered"
+    precheck_schema_present: "this slice has it; future slices must also include"
+    n_eq_5_mini_review_trigger: "n=3 < 5, pending"
+
+# ---------------------------------------------------------------
+# Learnings
+# ---------------------------------------------------------------
+learnings:
+  - "physics_contract as top-level YAML extension is a cheap, high-leverage way to encode tacit gold-standard assumptions. Future error_attributor patterns could read contract_status to auto-classify INCOMPATIBLE vs DEVIATION without re-deriving physics judgment."
+  - "The D4+ physics_validity_precheck schema is useful even for non-physics slices (e.g. documentation): the precheck enumerates 'what could silently make this slice wrong' and forces an evidence link for each."
+  - "Bundling C1 + C2 + EX-1-003 in one commit (per D4+ verdict C1 blocking rule) prevents a race where a future EX-1 slice could land without the schema in place."
+
+refs:
+  prior_slices:
+    - "EX-1-001 (reports/ex1_first_slice/) — diagnostic memo (post-C1 revised in this commit)"
+    - "EX-1-002 (reports/ex1_002_cli_tests/) — CLI coverage, honest R-C abort (override_rate=1.0)"
+  gate_verdict: "Notion Opus 4.7 APPROVE_PATH_A (2026-04-18)"
+  baseline_plan_schema_ref: "docs/design/PHASE9_MODEL_ROUTING_V3X_BASELINE_PLAN.md §Physics-Validity Precheck Schema"
+  memo_revised: "reports/ex1_first_slice/diagnostic_memo.md §4 (revised table with physics_precondition column)"

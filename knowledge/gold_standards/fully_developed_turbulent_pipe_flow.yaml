@@ -4,6 +4,19 @@ legacy_case_id: fully_developed_pipe
 legacy_source_file: knowledge/gold_standards/fully_developed_pipe.yaml
 source: "Nikuradse 1933 / Moody 1944"
 literature_doi: "10.1007/BF01314553"
+physics_contract:
+  geometry_assumption: "Circular pipe, axisymmetric, cross-section area = π·D²/4"
+  reference_correlation_context: "Blasius f = 0.0791·Re^-0.25 is a smooth-pipe empirical fit valid for 4000 < Re < 1e5; Moody diagram extrapolates higher Re via Nikuradse sand-grain roughness."
+  physics_precondition:
+    - condition: "Adapter solver operates on a circular cross-section (not rectangular duct)"
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/foam_agent_adapter.py uses SIMPLE_GRID → rectangular block domain; no _generate_pipe_flow helper present"
+      consequence_if_unsatisfied: "Any computed Darcy-Weisbach f is a duct friction factor, not a pipe friction factor; comparison to Blasius is a unit-consistent but physics-inconsistent PASS/FAIL."
+    - condition: "Flow is fully developed (∂u/∂x = 0 in streamwise direction)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist periodic BC + sufficient L/D per whitelist.yaml:92-110"
+  contract_status: "INCOMPATIBLE — precondition #1 unmet; see reports/ex1_first_slice/diagnostic_memo.md §2.1 (R-A) and §4 rank 3 for remediation options"
+  precondition_last_reviewed: "2026-04-18 (EX-1-003 annotation slice, post D4+ methodology gate)"
 relationships:
   solver_reuse: fully_developed_pipe
   geometry_similarity:

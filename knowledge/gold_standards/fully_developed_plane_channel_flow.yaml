@@ -4,6 +4,20 @@ legacy_case_id: plane_channel_flow
 legacy_source_file: knowledge/gold_standards/plane_channel_flow.yaml
 source: "Kim et al. 1987 / Moser et al. 1999 (DNS); Phase 7 Docker used icoFoam laminar"
 literature_doi: "10.1017/S0022112087000892"
+physics_contract:
+  geometry_assumption: "Two parallel plates, half-channel height h, streamwise- and spanwise-periodic"
+  reference_correlation_context: "Kim/Moser DNS provides u+(y+) curves at Re_tau=180. u_tau is a physically-realized friction velocity derived from the statistically converged wall shear in a turbulence-resolving simulation; u_tau = 1 in Re_tau=180 dimensionless form is a byproduct of that physics, not a definition."
+  physics_precondition:
+    - condition: "Solver resolves turbulence (DNS, LES, or RANS with y+ < 1 wall resolution)"
+      satisfied_by_current_adapter: false
+      evidence_ref: "whitelist.yaml:133-154 declares icoFoam + laminar; Phase 7 T4 reverted simpleFoam+kOmegaSST attempt (STATE.md:327) because the swap conflicted with the laminar-Poiseuille gold ref_value kept for that solver path"
+      consequence_if_unsatisfied: "A laminar Poiseuille profile projected through u+ = u/u_tau where u_tau is synthesized from Re_tau definition yields a curve that *algebraically* overlays DNS data but encodes no turbulence physics. Any PASS is a false PASS. This is the precondition that caused the EX-1-002 R-C pivot — see reports/ex1_002_cli_tests/slice_metrics.yaml §override_history."
+    - condition: "Mesh resolution sufficient for turbulence scales at target Re_tau"
+      satisfied_by_current_adapter: false
+      evidence_ref: "905-point mesh per STATE.md; DNS at Re_tau=180 typically needs >=128³"
+      consequence_if_unsatisfied: "Even with a turbulence-resolving solver, coarse mesh would not reproduce DNS statistics."
+  contract_status: "INCOMPATIBLE — preconditions #1 and #2 unmet; remediation requires R-D (DNS-capable solver + mesh swap) which sits behind a D5-equivalent gate per EX-1-001 memo §4 rank 7. R-C alone is physics-invalid."
+  precondition_last_reviewed: "2026-04-18 (EX-1-003 annotation slice, post D4+ methodology gate)"
 note: >
   Phase 7 Docker ran icoFoam (laminar, Re=100, 905-point mesh) — NOT DNS/turbulent.
   The Gold Standard ref_value is DNS-quality turbulent profile (Kim 1987) which

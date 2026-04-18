@@ -80,12 +80,21 @@ This suggests the Phase 10+ roadmap direction should include a **gold_standard c
 
 ## 4. Actionable Next Steps (NOT executed in this slice)
 
-Ranked by scope-safety:
+> **Amendment (2026-04-18, post EX-1-002 pivot):** This section was originally ranked by "scope-safety" alone. EX-1-002 exposed a methodology gap: a remediation can be *schema-bounded* (minimal code surface) yet require *physics-validity preconditions* that are not met by the current adapter. Landing such a remediation produces mathematically consistent but physically meaningless results. The table below adds a **`physics_precondition`** column that every remediation MUST declare before implementation. Any remediation with an unmet precondition must EITHER satisfy the precondition first OR be reclassified to a higher-scope category.
 
-1. **R-C (comparator u+/y+ normalization)** — `src/result_comparator.py`, no gold_standard edit, no adapter edit. Safest. Requires a gated task.
-2. **R-E (DHC mesh bump)** — `src/foam_agent_adapter.py` internal constant. Safe but won't fully close the gap.
-3. **R-A (pipe → duct relabel)** — touches `knowledge/gold_standards/`. Requires a Notion-AI–approved plan packet.
-4. **R-B / R-D / R-F** — geometry/solver expansion. Requires D5-equivalent gate.
+Revised ranking (scope-safety × precondition-satisfiability):
+
+| rank | id | summary | code surface | `physics_precondition` | status vs current adapter |
+|---|---|---|---|---|---|
+| 1 | **R-A-metadata** | Extend `knowledge/gold_standards/*.yaml` with `physics_contract` annotation block (geometry_assumption, reference_correlation_context, precondition). Extension fields only, tolerance unchanged. | data-only; no `src/` edit | `none` (pure documentation of existing contract) | ✅ satisfiable today |
+| 2 | **R-E-mesh** | Bump DHC adapter `ncx/ncy` 80→256 + wall-grading 4–6. Adapter-internal constant only. | `src/foam_agent_adapter.py` mesh constants | Adapter must already generate a DHC geometry with `simpleBuoyantFoam` that supports non-uniform grading — verified in Phase 7 T4. Runtime budget tolerates ~5–10× solver time. | ✅ satisfiable today |
+| 3 | **R-A-relabel** | Relabel whitelist `fully_developed_turbulent_pipe_flow` → `duct_flow` with Darcy duct f. | `knowledge/whitelist.yaml` + new `knowledge/gold_standards/duct_flow.yaml` | Current adapter's SIMPLE_GRID is genuinely a rectangular duct, so a duct correlation is physically valid. No missing precondition — but changes physics contract, requires explicit Decision annotation. | ✅ satisfiable; higher scope than R-A-metadata |
+| 4 | **R-C (comparator u+/y+ normalization)** | Add u+/y+ projection in `ResultComparator` using `u_tau = nu · Re_tau / half_channel_height`. | `src/result_comparator.py` only | **UNMET**: formula presumes a DNS-valid run where `u_tau` is a physically realized friction velocity. Current whitelist uses `icoFoam laminar` (Phase 7 T4 revert). Implementing R-C on a laminar solver produces a number that *algebraically matches* the DNS target form while encoding no turbulence physics — a false PASS. *See EX-1-002 slice_metrics §override_history for the pivot that exposed this.* | ❌ NOT satisfiable until solver swap (R-D) or adapter gains a true DNS path |
+| 5 | **R-F (DHC Ra downgrade)** | Swap DHC gold from Ra=1e10 to Ra=1e6 (laminar regime, Nu≈8.8). | `knowledge/gold_standards/differential_heated_cavity.yaml` (tolerance-touching) | Adapter delivers laminar-accurate natural convection at Ra=1e6. Satisfiable — but gold tolerance edit is out of scope of bounded remediations by policy. | ✅ physics-satisfiable; ❌ policy-scope |
+| 6 | **R-B (CIRCULAR_PIPE geometry)** | Add `CIRCULAR_PIPE` geometry type + `_generate_pipe_flow` in adapter. | `src/foam_agent_adapter.py` large surface | Requires mesh-tool decision (snappyHexMesh vs cfMesh vs m4); crosses Phase 9 Branch-B external-surface boundary. | ⚠️ requires D5-equivalent gate before precondition can even be assessed |
+| 7 | **R-D (DNS-capable solver swap)** | Swap `icoFoam laminar` → `pimpleFoam` + fine grid 128×128×128 for plane channel. | whole-track: solver + mesh + comparator + runtime budget | Docker runtime budget, mesh generation at fine scale, validation dataset — all open questions. This is the correct fix for R-C's unmet precondition but is its own gated initiative. | ⚠️ requires D5-equivalent gate |
+
+**Ordering rule going forward:** EX-1-003 and any EX-1 slice may select from ranks 1–3 (all precondition-satisfiable, bounded scope). Ranks 4–7 require the preconditions to be satisfied *first* by earlier slices or gates; attempting to land them directly is what produces the `override_rate=1.0` honest-abort observed in EX-1-002.
 
 ## 5. Scope Discipline Verification
 

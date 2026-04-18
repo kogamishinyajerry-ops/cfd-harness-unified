@@ -1,7 +1,7 @@
 driving_model: opus47-main (Orchestrator + self-Gate, Model Routing v5.1)
 tier: T3-Orchestrator
 last_updated: "2026-04-18T17:50"
-session: S-003c (D4 APPROVE_WITH_CONDITIONS; C1+C2+C3 closed; EX-1-001/002 + SY-1-002/003 landed; EX-1 rolling override_rate=0.5 flagged; C4 holds PL-1 for D5)
+session: S-003d (D4+ APPROVE_PATH_A applied; EX-1-003 R-A-metadata landed with C1+C2 blocking conditions bundled; physics_validity_precheck schema active; rolling EX-1 override_rate 0.333 at n=3; C4 holds PL-1 for D5)
 
 # Phase Status
 
@@ -357,6 +357,29 @@ EX-1-002 (post-C3, autonomous follow-on slice, 2026-04-18):
 - Rolling EX-1 override_rate (n=2): 1 pivot / 2 slices = 0.5 — **exceeds 0.30 rolling threshold from EX-1-002 slice_metrics.yaml recommendation**
 - Methodology implication: EX-1-001 memo §4 (R-C) should be amended to caveat "requires physics-validity precondition" before next EX-1 remediation slice. If rolling override_rate across next 2 EX-1 slices (EX-1-003, EX-1-004) stays ≥0.30, gate EX-1 methodology before continuing autonomous EX-1 track.
 - Artifact: reports/ex1_002_cli_tests/slice_metrics.yaml (full honest metrics + learnings)
+
+D4+ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_PATH_A):
+- Trigger: EX-1-002 honest pivot (override_rate=1.0) exposed methodology gap — R-A..R-F in EX-1-001 memo §4 conflated "schema-bounded" with "physics-valid".
+- Blocking conditions C1+C2 required to land same commit as next EX-1 slice:
+  - C1: memo §4 physics_precondition column ✅ (diagnostic_memo.md sha256 updated to c24a9236...)
+  - C2: physics_validity_precheck schema in BASELINE_PLAN.md ✅ (§Physics-Validity Precheck Schema)
+- New rolling override_rate rules (OR-combined for methodology Gate trigger):
+  1. rolling > 0.30 at n>=4 (baseline)
+  2. two consecutive slices with override_rate >= 0.5 (pattern)
+  3. EX-1 commit without physics_validity_precheck in slice_metrics.yaml (blocking)
+  4. pivot without enumerated abandoned preconditions in memo or metrics (behavioral)
+- n=5 clean slices → mandatory lightweight methodology mini-review (non-freezing)
+
+EX-1-003 (R-A-metadata, landed same commit as C1+C2, 2026-04-18):
+- Slice: physics_contract annotation added to 3 imperfect-verdict gold_standard YAMLs
+  - fully_developed_turbulent_pipe_flow.yaml (contract_status=INCOMPATIBLE)
+  - fully_developed_plane_channel_flow.yaml (contract_status=INCOMPATIBLE; documents why R-C is not physics-satisfiable)
+  - differential_heated_cavity.yaml (contract_status=DEVIATION)
+- Scope: tolerance unchanged, whitelist.yaml unchanged, src/ unchanged, tests/ unchanged.
+- Metrics: wall_clock=52s (78% C2 headroom), quality=4.9, determinism=PASS, override_rate=0.0, scope=0, physics_validity_precheck=pass.
+- Full suite: 245/245 green post-edit (loader pattern yaml.safe_load + .get() verified safe against new top-level field).
+- Artifact: reports/ex1_003_gold_standard_physics_contract/slice_metrics.yaml
+- Rolling EX-1 state (n=3): override_rate 1/3 = 0.333. Above 0.30 but within n<4 exemption per D4+ baseline rule. Next EX-1-004 determines whether rule #1 trips.
 
 Phase 7 T4 Fixes (post-Wave 2-3):
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅
