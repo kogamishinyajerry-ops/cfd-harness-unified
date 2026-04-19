@@ -1,13 +1,13 @@
 driving_model: opus47-main (Orchestrator + self-Gate + ADWM v5.2 autonomous-governance, Model Routing v5.2)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T00:55"
-session: S-003n ACTIVE (visual acceptance delivery hardening on `codex/visual-acceptance-sync`, based on `088e2a3`). Current hardening scope: canonical HTML + timestamped snapshot + machine-readable manifest + deep acceptance package + control-plane sync repair. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). **Important blocker**: joint Codex↔Claude signoff is not yet available because Computer Use access to Claude APP (`com.anthropic.claudefordesktop`) is currently denied; do not treat this window as fully co-signed until that approval is restored.
+last_updated: "2026-04-20T01:22"
+session: S-003o CLOSED (visual acceptance delivery hardening + reproducible bundle sync on `codex/visual-acceptance-sync`, landed as `1c188b3`). Delivery surface is now locked to canonical HTML + timestamped snapshot + machine-readable manifest + deep acceptance package, and GitHub PR #1 plus Notion Canonical Doc / Session / task pointers have all been updated to the same batch. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). **Important blocker remains**: joint Codex↔Claude signoff is still unavailable because Computer Use access to Claude APP (`com.anthropic.claudefordesktop`) is denied; treat this package as Codex-signed and externally synced, not fully co-signed.
 
 # Phase Status
 
-current_phase: Phase 8 — IN PROGRESS (delivery hardening)
-phase_status: P0 ✅ P1 ✅ P2 ✅ + reporting hardening in progress (2026-04-20)
-next_phase: Phase 9 (planning-only) after Phase 8 hardening closeout
+current_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync)
+phase_status: P0 ✅ P1 ✅ P2 ✅ + reporting hardening + GitHub/Notion sync complete (2026-04-20)
+next_phase: Phase 9 (planning-only)
 next_phase_status: 🔒 Hold Phase 9 activation; keep Q-1/Q-2 frozen and visible until a fresh activation review clears them
 
 Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
