@@ -22,22 +22,23 @@ def _load_module():
 def test_visual_acceptance_render_contains_delivery_sections():
     result = VisualAcceptanceReportGenerator().render()
     assert result.case_count == 5
-    assert result.chart_count == 10
-    assert "Visual Acceptance Report" in result.html
-    assert "Known Open Contract Items" in result.html
+    assert result.chart_count == 15
+    assert "可视化验收报告" in result.html
+    assert "验收基线与未决事项" in result.html
     assert "Q-1" in result.html
     assert "Q-2" in result.html
-    assert "Trial Runbook" in result.html
-    assert "CAD Pre-Processing" in result.html
-    assert "CFD Post-Processing" in result.html
-    assert "CAD / Pre-Processing Lens" in result.html
-    assert "CFD / Post-Processing Lens" in result.html
-    assert "Trial Checklist" in result.html
-    assert "NACA 0012 Airfoil External Flow" in result.html
-    assert "Differential Heated Cavity" in result.html
-    assert result.html.count("<svg") >= 10
+    assert "试用验收路径" in result.html
+    assert "真实 CAD / 前处理渲染" in result.html
+    assert "科研级 CFD 后处理" in result.html
+    assert "文献 / Benchmark 对比" in result.html
+    assert "NACA0012 翼型外流" in result.html
+    assert "差分加热方腔自然对流" in result.html
+    assert "DHC gold-reference 准确性仍待裁决" in result.html
+    assert result.html.count("<img") >= 15
+    assert "<svg" not in result.html
+    assert "data:image/png;base64" in result.html
     assert 'href="../lid_driven_cavity_benchmark/case_completion_report.md"' in result.html
-    assert 'href="#case-naca0012_airfoil"' in result.html
+    assert 'id="case-naca0012_airfoil"' in result.html
     assert "reports/reports/" not in result.html
 
 
@@ -46,7 +47,10 @@ def test_visual_acceptance_generate_writes_output(tmp_path: Path):
     result = VisualAcceptanceReportGenerator().generate(output_path=output)
     assert output.is_file()
     assert result.output_path == str(output)
-    assert "wake-centerline deficit" in output.read_text(encoding="utf-8")
+    html = output.read_text(encoding="utf-8")
+    assert "圆柱绕流卡门涡街" in html
+    assert "真实 PNG 图板" in html
+    assert "Nu = 77.82" in html
 
 
 def test_visual_acceptance_cli_default(capsys):
