@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visual Acceptance Report · cfd-harness-unified</title>
+<style>
+:root {
+  --bg: #0b0d10;
+  --bg-alt: #12161b;
+  --bg-card: #181d24;
+  --border: #262c36;
+  --fg: #e6e8eb;
+  --fg-dim: #9aa3ad;
+  --fg-mute: #6b7580;
+  --accent: #4aa3ff;
+  --accent-soft: rgba(74, 163, 255, 0.14);
+  --ok: #3fb950;
+  --warn: #d29922;
+  --fail: #f85149;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(circle at top, #121925 0%, var(--bg) 52%);
+  color: var(--fg);
+  font-family: var(--sans);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+body { padding: 40px 24px 80px; }
+.wrap { max-width: 1280px; margin: 0 auto; }
+.hero {
+  padding: 28px 32px;
+  border: 1px solid rgba(74, 163, 255, 0.28);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(74, 163, 255, 0.14), rgba(248, 81, 73, 0.06)),
+    rgba(12, 16, 22, 0.88);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+.eyebrow {
+  color: var(--fg-mute);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  margin: 12px 0 8px;
+  font-size: 38px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+.hero p {
+  margin: 0;
+  max-width: 980px;
+  color: var(--fg-dim);
+  font-size: 16px;
+}
+.hero-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(18, 22, 27, 0.88);
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.pill.ok { color: var(--ok); border-color: rgba(63, 185, 80, 0.35); background: rgba(63, 185, 80, 0.08); }
+.pill.warn { color: var(--warn); border-color: rgba(210, 153, 34, 0.35); background: rgba(210, 153, 34, 0.08); }
+.pill.fail { color: var(--fail); border-color: rgba(248, 81, 73, 0.35); background: rgba(248, 81, 73, 0.08); }
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 40px;
+}
+.summary-card {
+  padding: 18px 18px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(17, 21, 28, 0.92);
+}
+.summary-card .label {
+  color: var(--fg-mute);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.summary-card .value {
+  margin-top: 8px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.summary-card .note {
+  margin-top: 4px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+h2 {
+  margin: 42px 0 16px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(17, 21, 28, 0.92);
+}
+th, td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: rgba(18, 22, 27, 0.95);
+  color: var(--fg-mute);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  font-weight: 500;
+}
+td {
+  color: var(--fg-dim);
+  font-size: 14px;
+}
+td strong { color: var(--fg); }
+.mono { font-family: var(--mono); }
+
+.case-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+.case-card {
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 22%),
+    rgba(17, 21, 28, 0.94);
+}
+.case-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.case-head p {
+  margin: 8px 0 0;
+  color: var(--fg-dim);
+}
+.case-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.case-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+.subcard {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(10, 13, 18, 0.62);
+}
+.subcard h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.metric {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(18, 22, 27, 0.92);
+  border: 1px solid var(--border);
+}
+.metric .label {
+  color: var(--fg-mute);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.metric .value {
+  margin-top: 6px;
+  color: var(--fg);
+  font-size: 18px;
+  font-weight: 650;
+}
+.metric .detail {
+  margin-top: 4px;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+
+.artifact-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.artifact {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(17, 21, 28, 0.92);
+}
+.artifact a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.artifact a:hover { text-decoration: underline; }
+.artifact .path {
+  margin-top: 8px;
+  color: var(--fg-mute);
+  font-size: 12px;
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.footer {
+  margin-top: 40px;
+  color: var(--fg-mute);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .summary-grid,
+  .artifact-list,
+  .metric-grid,
+  .case-grid {
+    grid-template-columns: 1fr;
+  }
+  body { padding-inline: 16px; }
+  .hero { padding: 24px; }
+  .hero h1 { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<section class="hero">
+<div class="eyebrow">Phase 8/9 Delivery Surface · Notion-guided acceptance synthesis</div>
+<h1>Visual Acceptance Report</h1>
+<p>This dashboard upgrades the existing Markdown-only evidence chain into a visual artifact: CAD pre-processing assumptions are surfaced as geometry previews, CFD post-processing observables are rendered as inline SVG charts, and the highest-signal acceptance cases are grouped on a single delivery page.</p>
+<div class="hero-meta"><span class="pill ok">Grounded against Phase 8/9 report-engine context</span><span class="pill ok">Single-file HTML deliverable</span><span class="pill warn">No long CFD reruns required</span><span class="pill fail">DHC external-Gate ambiguity remains explicit</span></div>
+</section>
+<section class="summary-grid">
+<div class="summary-card"><div class="label">CASES RENDERED</div><div class="value">5</div><div class="note">Core delivery deck across CAD + CFD surfaces</div></div>
+<div class="summary-card ok"><div class="label">CLEAN PASS</div><div class="value">3</div><div class="note">Physics-valid, no deviation caveat</div></div>
+<div class="summary-card warn"><div class="label">PASS WITH DEVIATIONS</div><div class="value">1</div><div class="note">Shape-faithful but not fully contract-clean</div></div>
+<div class="summary-card fail"><div class="label">FAIL / ESCALATED</div><div class="value">1</div><div class="note">Gold-reference ambiguity kept visible</div></div>
+</section>
+<h2>Readiness Matrix</h2>
+<table>
+<thead><tr><th>Case</th><th>Verdict</th><th>Convergence / Physics</th><th>Contract Status</th><th>Visual Focus</th></tr></thead>
+<tbody>
+<tr><td><strong>Lid-Driven Cavity</strong><br><span class="mono">lid_driven_cavity_benchmark</span></td><td><span class="pill ok">PASS</span></td><td>CONVERGED / PASS</td><td>COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid</td><td>Geometry + observable overlay</td></tr>
+<tr><td><strong>Backward-Facing Step</strong><br><span class="mono">backward_facing_step_steady</span></td><td><span class="pill ok">PASS</span></td><td>CONVERGED / PASS</td><td>COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid</td><td>Geometry + observable overlay</td></tr>
+<tr><td><strong>Circular Cylinder Wake</strong><br><span class="mono">cylinder_crossflow</span></td><td><span class="pill ok">PASS</span></td><td>CONVERGED / PASS</td><td>COMPATIBLE_WITH_SILENT_PASS_HAZARD</td><td>Geometry + observable overlay</td></tr>
+<tr><td><strong>NACA 0012 Airfoil External Flow</strong><br><span class="mono">naca0012_airfoil</span></td><td><span class="pill warn">PASS_WITH_DEVIATIONS</span></td><td>CONVERGED / PASS</td><td>PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk.</td><td>CAD + post-processing</td></tr>
+<tr><td><strong>Differential Heated Cavity (Natural Convection)</strong><br><span class="mono">differential_heated_cavity</span></td><td><span class="pill fail">FAIL</span></td><td>CONVERGED / PASS</td><td>DEVIATION — precondition #1 (mesh resolves thermal BL at Ra=1e10) unmet; precondition #3 (extractor methodology aligned to gold reference definition) now SATISFIED as of EX-1-008 commit 60952b6 (mean-over-y wall-adjacent gradient). Post-refactor measurement Nu=77.82 on B1 256² mesh (still under-resolved). The remaining gap to gold ref_value=30.0 is split into: (i) residual BL under-resolution (adds an expected increment from 78 → 140-160 range at 1000-cell wall-normal fully resolved), and (ii) a gold-reference accuracy question — literature values for Ra=1e10 2D DHC span 100-160, suggesting the gold ref_value may itself be inconsistent with the stated Ra. See DEC-ADWM-004 FUSE record (.planning/decisions/ 2026-04-18_ex1_008_fuse.md) for external-Gate escalation package. Path P-1 (gold correction) and Path P-2 (regime downgrade to Ra=1e6) both deferred to external Gate.
+</td><td>Mesh / Nu escalation visibility</td></tr>
+</tbody></table>
+<h2>Case Deck</h2>
+<div class="case-list">
+<article class="case-card"><div class="case-head"><div><h3>Lid-Driven Cavity</h3><p>Ghia et al. 1982</p><div class="case-meta"><span class="pill ok">PASS</span><span class="pill ok">PASS</span><span class="pill ok">COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid</span></div></div><div class="pill">lid_driven_cavity_benchmark</div></div><div class="case-grid"><div class="subcard"><h4>CAD Pre-Processing</h4><svg viewBox="0 0 320 220" role="img" aria-label="Lid-driven cavity geometry"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><rect x="78" y="40" width="150" height="150" fill="#18212c" stroke="#6b7580" stroke-width="2" /><line x1="78" y1="40" x2="228" y2="40" stroke="#4aa3ff" stroke-width="4" /><path d="M110 28 L150 28 M150 28 L142 20 M150 28 L142 36" stroke="#4aa3ff" stroke-width="3" fill="none" /><text x="154" y="20" text-anchor="middle" fill="#9aa3ad" font-size="12">moving lid u=1</text><text x="154" y="208" text-anchor="middle" fill="#9aa3ad" font-size="12">unit square cavity</text></svg></div><div class="subcard"><h4>CFD Post-Processing · u-centerline overlay</h4><svg viewBox="0 0 640 320" role="img" aria-label="Ghia 1982 vs harness"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><line x1="54" y1="18.0" x2="624" y2="18.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="22.0" text-anchor="end" fill="#9aa3ad" font-size="11">1.13</text><line x1="54" y1="83.0" x2="624" y2="83.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="87.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.80</text><line x1="54" y1="148.0" x2="624" y2="148.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="152.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.48</text><line x1="54" y1="213.0" x2="624" y2="213.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="217.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.16</text><line x1="54" y1="278.0" x2="624" y2="278.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="282.0" text-anchor="end" fill="#9aa3ad" font-size="11">-0.17</text><line x1="54" y1="278" x2="624" y2="278" stroke="#6b7580" stroke-width="1.2" /><line x1="54" y1="18" x2="54" y2="278" stroke="#6b7580" stroke-width="1.2" /><polyline fill="none" stroke="#4aa3ff" stroke-width="2.4" points="54.0,251.9 92.0,252.8 130.0,252.7 168.0,251.8 206.0,250.0 244.0,247.7 282.0,245.0 320.0,239.3 358.0,230.0 396.0,220.4 434.0,209.6 472.0,177.4 510.0,150.4 548.0,112.6 586.0,73.5 624.0,43.2" /><polyline fill="none" stroke="#3fb950" stroke-width="2.4" points="54.0,251.8 92.0,252.8 130.0,252.7 168.0,251.7 206.0,249.9 244.0,247.6 282.0,245.0 320.0,239.3 358.0,230.1 396.0,220.6 434.0,209.8 472.0,177.6 510.0,150.6 548.0,112.8 586.0,73.7 624.0,43.4" /><circle cx="54.0" cy="251.9" r="3.2" fill="#4aa3ff" /><circle cx="92.0" cy="252.8" r="3.2" fill="#4aa3ff" /><circle cx="130.0" cy="252.7" r="3.2" fill="#4aa3ff" /><circle cx="168.0" cy="251.8" r="3.2" fill="#4aa3ff" /><circle cx="206.0" cy="250.0" r="3.2" fill="#4aa3ff" /><circle cx="244.0" cy="247.7" r="3.2" fill="#4aa3ff" /><circle cx="282.0" cy="245.0" r="3.2" fill="#4aa3ff" /><circle cx="320.0" cy="239.3" r="3.2" fill="#4aa3ff" /><circle cx="358.0" cy="230.0" r="3.2" fill="#4aa3ff" /><circle cx="396.0" cy="220.4" r="3.2" fill="#4aa3ff" /><circle cx="434.0" cy="209.6" r="3.2" fill="#4aa3ff" /><circle cx="472.0" cy="177.4" r="3.2" fill="#4aa3ff" /><circle cx="510.0" cy="150.4" r="3.2" fill="#4aa3ff" /><circle cx="548.0" cy="112.6" r="3.2" fill="#4aa3ff" /><circle cx="586.0" cy="73.5" r="3.2" fill="#4aa3ff" /><circle cx="624.0" cy="43.2" r="3.2" fill="#4aa3ff" /><circle cx="54.0" cy="251.8" r="3.2" fill="#3fb950" /><circle cx="92.0" cy="252.8" r="3.2" fill="#3fb950" /><circle cx="130.0" cy="252.7" r="3.2" fill="#3fb950" /><circle cx="168.0" cy="251.7" r="3.2" fill="#3fb950" /><circle cx="206.0" cy="249.9" r="3.2" fill="#3fb950" /><circle cx="244.0" cy="247.6" r="3.2" fill="#3fb950" /><circle cx="282.0" cy="245.0" r="3.2" fill="#3fb950" /><circle cx="320.0" cy="239.3" r="3.2" fill="#3fb950" /><circle cx="358.0" cy="230.1" r="3.2" fill="#3fb950" /><circle cx="396.0" cy="220.6" r="3.2" fill="#3fb950" /><circle cx="434.0" cy="209.8" r="3.2" fill="#3fb950" /><circle cx="472.0" cy="177.6" r="3.2" fill="#3fb950" /><circle cx="510.0" cy="150.6" r="3.2" fill="#3fb950" /><circle cx="548.0" cy="112.8" r="3.2" fill="#3fb950" /><circle cx="586.0" cy="73.7" r="3.2" fill="#3fb950" /><circle cx="624.0" cy="43.4" r="3.2" fill="#3fb950" /><text x="339.0" y="312" text-anchor="middle" fill="#9aa3ad" font-size="11">y</text><text x="16" y="148.0" text-anchor="middle" fill="#9aa3ad" font-size="11" transform="rotate(-90 16 148.0)">u</text><g><line x1="20" y1="18" x2="44" y2="18" stroke="#4aa3ff" stroke-width="2.4" /><text x="50" y="22" fill="#9aa3ad" font-size="11">Ghia 1982</text><line x1="20" y1="38" x2="44" y2="38" stroke="#3fb950" stroke-width="2.4" /><text x="50" y="42" fill="#9aa3ad" font-size="11">harness</text></g></svg><div class="metric-grid"><div class="metric"><div class="label">u rel error</div><div class="value">2.50%</div><div class="detail">Vertical centerline vs Ghia 1982</div></div><div class="metric"><div class="label">v rel error</div><div class="value">1.19%</div><div class="detail">Horizontal centerline vs Ghia 1982</div></div><div class="metric"><div class="label">vortex center</div><div class="value">(0.5005, 0.7640)</div><div class="detail">Primary vortex location from harness extraction</div></div></div></div></div><div class="subcard" style="margin-top: 14px;"><h4>Acceptance Notes</h4><ul><li>Profile overlays stay inside the 5% band; this is the cleanest verifier-grade PASS.</li><li>Centerline extraction is interpolation-aware, not index-locked.</li></ul><div class="pill" style="margin-top: 12px;"><a href="../lid_driven_cavity_benchmark/case_completion_report.md" style="color: inherit; text-decoration: none;">Open supporting artifact</a></div></div></article>
+<article class="case-card"><div class="case-head"><div><h3>Backward-Facing Step</h3><p>Driver &amp; Seegmiller 1985</p><div class="case-meta"><span class="pill ok">PASS</span><span class="pill ok">PASS</span><span class="pill ok">COMPATIBLE — all preconditions satisfied; clean PASS is physics-valid</span></div></div><div class="pill">backward_facing_step_steady</div></div><div class="case-grid"><div class="subcard"><h4>CAD Pre-Processing</h4><svg viewBox="0 0 320 220" role="img" aria-label="Backward-facing step geometry"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><path d="M30 150 H85 V105 H290 V150 Z" fill="#18212c" stroke="#6b7580" stroke-width="2" /><path d="M30 150 V80 H85" stroke="#4aa3ff" stroke-width="3" fill="none" /><text x="64" y="170" fill="#9aa3ad" font-size="12">step</text><text x="188" y="92" fill="#9aa3ad" font-size="12">reattachment profile at x/H=6</text><path d="M36 128 L66 128 M66 128 L58 120 M66 128 L58 136" stroke="#4aa3ff" stroke-width="2.5" fill="none" /></svg></div><div class="subcard"><h4>CFD Post-Processing · reattachment velocity profile</h4><svg viewBox="0 0 640 320" role="img" aria-label="Driver &amp; Seegmiller vs harness"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><line x1="54" y1="18.0" x2="624" y2="18.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="22.0" text-anchor="end" fill="#9aa3ad" font-size="11">1.13</text><line x1="54" y1="83.0" x2="624" y2="83.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="87.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.93</text><line x1="54" y1="148.0" x2="624" y2="148.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="152.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.73</text><line x1="54" y1="213.0" x2="624" y2="213.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="217.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.52</text><line x1="54" y1="278.0" x2="624" y2="278.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="282.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.32</text><line x1="54" y1="278" x2="624" y2="278" stroke="#6b7580" stroke-width="1.2" /><line x1="54" y1="18" x2="54" y2="278" stroke="#6b7580" stroke-width="1.2" /><polyline fill="none" stroke="#4aa3ff" stroke-width="2.4" points="54.0,252.8 244.0,107.7 624.0,43.2" /><polyline fill="none" stroke="#3fb950" stroke-width="2.4" points="54.0,249.6 244.0,110.9 624.0,46.4" /><circle cx="54.0" cy="252.8" r="3.2" fill="#4aa3ff" /><circle cx="244.0" cy="107.7" r="3.2" fill="#4aa3ff" /><circle cx="624.0" cy="43.2" r="3.2" fill="#4aa3ff" /><circle cx="54.0" cy="249.6" r="3.2" fill="#3fb950" /><circle cx="244.0" cy="110.9" r="3.2" fill="#3fb950" /><circle cx="624.0" cy="46.4" r="3.2" fill="#3fb950" /><text x="339.0" y="312" text-anchor="middle" fill="#9aa3ad" font-size="11">y / H</text><text x="16" y="148.0" text-anchor="middle" fill="#9aa3ad" font-size="11" transform="rotate(-90 16 148.0)">u / Ubulk</text><g><line x1="20" y1="18" x2="44" y2="18" stroke="#4aa3ff" stroke-width="2.4" /><text x="50" y="22" fill="#9aa3ad" font-size="11">Driver &amp; Seegmiller</text><line x1="20" y1="38" x2="44" y2="38" stroke="#3fb950" stroke-width="2.4" /><text x="50" y="42" fill="#9aa3ad" font-size="11">harness</text></g></svg><div class="metric-grid"><div class="metric"><div class="label">Xr / H</div><div class="value">6.30</div><div class="detail">ref 6.26</div></div><div class="metric"><div class="label">Cd mean</div><div class="value">2.05</div><div class="detail">ref 2.08</div></div><div class="metric"><div class="label">pressure delta</div><div class="value">1.00</div><div class="detail">inlet -0.88 → outlet 0.10</div></div></div></div></div><div class="subcard" style="margin-top: 14px;"><h4>Acceptance Notes</h4><ul><li>Reattachment proxy is visible rather than hidden inside scalar-only YAML.</li><li>Pressure recovery and drag stay aligned with the same experimental regime.</li></ul><div class="pill" style="margin-top: 12px;"><a href="../backward_facing_step_steady/case_completion_report.md" style="color: inherit; text-decoration: none;">Open supporting artifact</a></div></div></article>
+<article class="case-card"><div class="case-head"><div><h3>Circular Cylinder Wake</h3><p>Williamson 1996</p><div class="case-meta"><span class="pill ok">PASS</span><span class="pill ok">PASS</span><span class="pill warn">COMPATIBLE_WITH_SILENT_PASS_HAZARD</span></div></div><div class="pill">cylinder_crossflow</div></div><div class="case-grid"><div class="subcard"><h4>CAD Pre-Processing</h4><svg viewBox="0 0 320 220" role="img" aria-label="Cylinder crossflow geometry"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><rect x="24" y="70" width="272" height="84" fill="#18212c" stroke="#6b7580" stroke-width="2" rx="10" /><circle cx="108" cy="112" r="22" fill="#12161b" stroke="#4aa3ff" stroke-width="3" /><path d="M32 112 H84 M84 112 L76 104 M84 112 L76 120" stroke="#3fb950" stroke-width="2.5" fill="none" /><path d="M132 112 C174 84, 216 140, 262 112" stroke="#f85149" stroke-width="2.5" fill="none" opacity="0.8" /><text x="206" y="92" fill="#9aa3ad" font-size="12">wake centerline samples</text></svg></div><div class="subcard"><h4>CFD Post-Processing · wake-centerline deficit</h4><svg viewBox="0 0 640 320" role="img" aria-label="Williamson 1996 vs harness"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><line x1="54" y1="18.0" x2="624" y2="18.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="22.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.89</text><line x1="54" y1="83.0" x2="624" y2="83.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="87.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.74</text><line x1="54" y1="148.0" x2="624" y2="148.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="152.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.58</text><line x1="54" y1="213.0" x2="624" y2="213.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="217.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.43</text><line x1="54" y1="278.0" x2="624" y2="278.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="282.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.28</text><line x1="54" y1="278" x2="624" y2="278" stroke="#6b7580" stroke-width="1.2" /><line x1="54" y1="18" x2="54" y2="278" stroke="#6b7580" stroke-width="1.2" /><polyline fill="none" stroke="#4aa3ff" stroke-width="2.4" points="54.0,43.2 196.5,124.5 339.0,163.0 624.0,248.6" /><polyline fill="none" stroke="#3fb950" stroke-width="2.4" points="54.0,47.4 196.5,120.2 339.0,158.7 624.0,252.8" /><circle cx="54.0" cy="43.2" r="3.2" fill="#4aa3ff" /><circle cx="196.5" cy="124.5" r="3.2" fill="#4aa3ff" /><circle cx="339.0" cy="163.0" r="3.2" fill="#4aa3ff" /><circle cx="624.0" cy="248.6" r="3.2" fill="#4aa3ff" /><circle cx="54.0" cy="47.4" r="3.2" fill="#3fb950" /><circle cx="196.5" cy="120.2" r="3.2" fill="#3fb950" /><circle cx="339.0" cy="158.7" r="3.2" fill="#3fb950" /><circle cx="624.0" cy="252.8" r="3.2" fill="#3fb950" /><text x="339.0" y="312" text-anchor="middle" fill="#9aa3ad" font-size="11">x / D</text><text x="16" y="148.0" text-anchor="middle" fill="#9aa3ad" font-size="11" transform="rotate(-90 16 148.0)">u / Uinf</text><g><line x1="20" y1="18" x2="44" y2="18" stroke="#4aa3ff" stroke-width="2.4" /><text x="50" y="22" fill="#9aa3ad" font-size="11">Williamson 1996</text><line x1="20" y1="38" x2="44" y2="38" stroke="#3fb950" stroke-width="2.4" /><text x="50" y="42" fill="#9aa3ad" font-size="11">harness</text></g></svg><div class="metric-grid"><div class="metric"><div class="label">Strouhal</div><div class="value">0.164</div><div class="detail">ref 0.164</div></div><div class="metric"><div class="label">Cd mean</div><div class="value">1.31</div><div class="detail">ref 1.33</div></div><div class="metric"><div class="label">Cl rms</div><div class="value">0.049</div><div class="detail">ref 0.048</div></div></div></div></div><div class="subcard" style="margin-top: 14px;"><h4>Acceptance Notes</h4><ul><li>Wake-centerline deficit is solver-derived; Strouhal remains tagged as a shortcut hazard.</li><li>This card makes the silent-pass caveat visible without discarding the otherwise strong PASS.</li></ul><div class="pill" style="margin-top: 12px;"><a href="../cylinder_crossflow/case_completion_report.md" style="color: inherit; text-decoration: none;">Open supporting artifact</a></div></div></article>
+<article class="case-card"><div class="case-head"><div><h3>NACA 0012 Airfoil External Flow</h3><p>Thomas 1979 / Lada &amp; Gostling 2007</p><div class="case-meta"><span class="pill warn">PASS_WITH_DEVIATIONS</span><span class="pill warn">PASS_WITH_DEVIATIONS</span><span class="pill warn">PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk.</span></div></div><div class="pill">naca0012_airfoil</div></div><div class="case-grid"><div class="subcard"><h4>CAD Pre-Processing</h4><svg viewBox="0 0 320 220" role="img" aria-label="NACA0012 CAD preview"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><rect x="18" y="30" width="284" height="152" fill="none" stroke="#6b7580" stroke-width="1.5" rx="10" /><polygon points="54.0,104.0 57.5,98.4 61.1,96.3 64.6,94.8 68.1,93.6 71.7,92.6 75.2,91.8 78.7,91.2 82.3,90.6 85.8,90.1 89.3,89.7 92.9,89.4 96.4,89.1 99.9,88.9 103.5,88.7 107.0,88.6 110.5,88.5 114.1,88.4 117.6,88.4 121.1,88.4 124.7,88.5 128.2,88.5 131.7,88.6 135.3,88.8 138.8,88.9 142.3,89.1 145.9,89.3 149.4,89.5 152.9,89.7 156.5,90.0 160.0,90.3 163.5,90.5 167.1,90.8 170.6,91.2 174.1,91.5 177.7,91.8 181.2,92.2 184.7,92.5 188.3,92.9 191.8,93.3 195.3,93.7 198.9,94.1 202.4,94.6 205.9,95.0 209.5,95.4 213.0,95.9 216.5,96.4 220.1,96.8 223.6,97.3 227.1,97.8 230.7,98.3 234.2,98.8 237.7,99.4 241.3,99.9 244.8,100.5 248.3,101.0 251.9,101.6 255.4,102.2 258.9,102.8 262.5,103.4 266.0,104.0 266.0,120.0 262.5,120.6 258.9,121.2 255.4,121.8 251.9,122.4 248.3,123.0 244.8,123.5 241.3,124.1 237.7,124.6 234.2,125.2 230.7,125.7 227.1,126.2 223.6,126.7 220.1,127.2 216.5,127.6 213.0,128.1 209.5,128.6 205.9,129.0 202.4,129.4 198.9,129.9 195.3,130.3 191.8,130.7 188.3,131.1 184.7,131.5 181.2,131.8 177.7,132.2 174.1,132.5 170.6,132.8 167.1,133.2 163.5,133.5 160.0,133.7 156.5,134.0 152.9,134.3 149.4,134.5 145.9,134.7 142.3,134.9 138.8,135.1 135.3,135.2 131.7,135.4 128.2,135.5 124.7,135.5 121.1,135.6 117.6,135.6 114.1,135.6 110.5,135.5 107.0,135.4 103.5,135.3 99.9,135.1 96.4,134.9 92.9,134.6 89.3,134.3 85.8,133.9 82.3,133.4 78.7,132.8 75.2,132.2 71.7,131.4 68.1,130.4 64.6,129.2 61.1,127.7 57.5,125.6 54.0,120.0" fill="rgba(74,163,255,0.10)" /><polygon points="54.0,112.0 57.5,106.4 61.1,104.3 64.6,102.8 68.1,101.6 71.7,100.6 75.2,99.8 78.7,99.2 82.3,98.6 85.8,98.1 89.3,97.7 92.9,97.4 96.4,97.1 99.9,96.9 103.5,96.7 107.0,96.6 110.5,96.5 114.1,96.4 117.6,96.4 121.1,96.4 124.7,96.5 128.2,96.5 131.7,96.6 135.3,96.8 138.8,96.9 142.3,97.1 145.9,97.3 149.4,97.5 152.9,97.7 156.5,98.0 160.0,98.3 163.5,98.5 167.1,98.8 170.6,99.2 174.1,99.5 177.7,99.8 181.2,100.2 184.7,100.5 188.3,100.9 191.8,101.3 195.3,101.7 198.9,102.1 202.4,102.6 205.9,103.0 209.5,103.4 213.0,103.9 216.5,104.4 220.1,104.8 223.6,105.3 227.1,105.8 230.7,106.3 234.2,106.8 237.7,107.4 241.3,107.9 244.8,108.5 248.3,109.0 251.9,109.6 255.4,110.2 258.9,110.8 262.5,111.4 266.0,112.0 266.0,112.0 262.5,112.6 258.9,113.2 255.4,113.8 251.9,114.4 248.3,115.0 244.8,115.5 241.3,116.1 237.7,116.6 234.2,117.2 230.7,117.7 227.1,118.2 223.6,118.7 220.1,119.2 216.5,119.6 213.0,120.1 209.5,120.6 205.9,121.0 202.4,121.4 198.9,121.9 195.3,122.3 191.8,122.7 188.3,123.1 184.7,123.5 181.2,123.8 177.7,124.2 174.1,124.5 170.6,124.8 167.1,125.2 163.5,125.5 160.0,125.7 156.5,126.0 152.9,126.3 149.4,126.5 145.9,126.7 142.3,126.9 138.8,127.1 135.3,127.2 131.7,127.4 128.2,127.5 124.7,127.5 121.1,127.6 117.6,127.6 114.1,127.6 110.5,127.5 107.0,127.4 103.5,127.3 99.9,127.1 96.4,126.9 92.9,126.6 89.3,126.3 85.8,125.9 82.3,125.4 78.7,124.8 75.2,124.2 71.7,123.4 68.1,122.4 64.6,121.2 61.1,119.7 57.5,117.6 54.0,112.0" fill="#18212c" stroke="#4aa3ff" stroke-width="2.4" /><text x="160" y="22" text-anchor="middle" fill="#9aa3ad" font-size="12">blockMesh farfield domain × near-surface extraction band</text><text x="42" y="198" fill="#9aa3ad" font-size="11">x/c = 0</text><text x="252" y="198" fill="#9aa3ad" font-size="11">x/c = 1</text></svg></div><div class="subcard"><h4>CFD Post-Processing · Cp sample vs gold</h4><svg viewBox="0 0 640 320" role="img" aria-label="gold vs cell-band sample"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><line x1="54" y1="18.0" x2="624" y2="18.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="22.0" text-anchor="end" fill="#9aa3ad" font-size="11">-0.68</text><line x1="54" y1="83.0" x2="624" y2="83.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="87.0" text-anchor="end" fill="#9aa3ad" font-size="11">-0.21</text><line x1="54" y1="148.0" x2="624" y2="148.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="152.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.25</text><line x1="54" y1="213.0" x2="624" y2="213.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="217.0" text-anchor="end" fill="#9aa3ad" font-size="11">0.72</text><line x1="54" y1="278.0" x2="624" y2="278.0" stroke="rgba(154,163,173,0.18)" stroke-width="1" /><text x="44" y="282.0" text-anchor="end" fill="#9aa3ad" font-size="11">1.18</text><line x1="54" y1="278" x2="624" y2="278" stroke="#6b7580" stroke-width="1.2" /><line x1="54" y1="18" x2="54" y2="278" stroke="#6b7580" stroke-width="1.2" /><polyline fill="none" stroke="#4aa3ff" stroke-width="2.4" points="54.0,252.8 111.0,71.1 225.0,43.2 339.0,85.1 453.0,113.1 624.0,141.0" /><polyline fill="none" stroke="#3fb950" stroke-width="2.4" points="54.0,178.9 225.0,65.8 624.0,128.3" /><circle cx="54.0" cy="252.8" r="3.2" fill="#4aa3ff" /><circle cx="111.0" cy="71.1" r="3.2" fill="#4aa3ff" /><circle cx="225.0" cy="43.2" r="3.2" fill="#4aa3ff" /><circle cx="339.0" cy="85.1" r="3.2" fill="#4aa3ff" /><circle cx="453.0" cy="113.1" r="3.2" fill="#4aa3ff" /><circle cx="624.0" cy="141.0" r="3.2" fill="#4aa3ff" /><circle cx="54.0" cy="178.9" r="3.2" fill="#3fb950" /><circle cx="225.0" cy="65.8" r="3.2" fill="#3fb950" /><circle cx="624.0" cy="128.3" r="3.2" fill="#3fb950" /><text x="339.0" y="312" text-anchor="middle" fill="#9aa3ad" font-size="11">x / c</text><text x="16" y="148.0" text-anchor="middle" fill="#9aa3ad" font-size="11" transform="rotate(-90 16 148.0)">Cp</text><g><line x1="20" y1="18" x2="44" y2="18" stroke="#4aa3ff" stroke-width="2.4" /><text x="50" y="22" fill="#9aa3ad" font-size="11">gold</text><line x1="20" y1="38" x2="44" y2="38" stroke="#3fb950" stroke-width="2.4" /><text x="50" y="42" fill="#9aa3ad" font-size="11">cell-band sample</text></g></svg><div class="metric-grid"><div class="metric"><div class="label">samples extracted</div><div class="value">224</div><div class="detail">Near-surface pressure points binned into Cp profile</div></div><div class="metric"><div class="label">worst rel error</div><div class="value">52.9%</div><div class="detail">Expected attenuation vs exact-surface gold</div></div><div class="metric"><div class="label">sampling mode</div><div class="value">cell-band</div><div class="detail">Current extractor averages near-surface cell centres</div></div></div></div></div><div class="subcard" style="margin-top: 14px;"><h4>Acceptance Notes</h4><ul><li>CAD preview mirrors the adapter&#x27;s NACA0012 pre-processing assumptions.</li><li>Cp values are shape-faithful but magnitude-attenuated because extraction uses near-surface cells.</li></ul><div class="pill" style="margin-top: 12px;"><a href="../naca0012_airfoil/report.md" style="color: inherit; text-decoration: none;">Open supporting artifact</a></div></div></article>
+<article class="case-card"><div class="case-head"><div><h3>Differential Heated Cavity (Natural Convection)</h3><p>Dhir 2001 / Ampofo &amp; Karayiannis 2003</p><div class="case-meta"><span class="pill fail">FAIL</span><span class="pill fail">FAIL</span><span class="pill fail">DEVIATION — precondition #1 (mesh resolves thermal BL at Ra=1e10) unmet; precondition #3 (extractor methodology aligned to gold reference definition) now SATISFIED as of EX-1-008 commit 60952b6 (mean-over-y wall-adjacent gradient). Post-refactor measurement Nu=77.82 on B1 256² mesh (still under-resolved). The remaining gap to gold ref_value=30.0 is split into: (i) residual BL under-resolution (adds an expected increment from 78 → 140-160 range at 1000-cell wall-normal fully resolved), and (ii) a gold-reference accuracy question — literature values for Ra=1e10 2D DHC span 100-160, suggesting the gold ref_value may itself be inconsistent with the stated Ra. See DEC-ADWM-004 FUSE record (.planning/decisions/ 2026-04-18_ex1_008_fuse.md) for external-Gate escalation package. Path P-1 (gold correction) and Path P-2 (regime downgrade to Ra=1e6) both deferred to external Gate.
+</span></div></div><div class="pill">differential_heated_cavity</div></div><div class="case-grid"><div class="subcard"><h4>CAD Pre-Processing</h4><svg viewBox="0 0 320 220" role="img" aria-label="Differential heated cavity geometry"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><rect x="88" y="34" width="144" height="144" fill="#18212c" stroke="#6b7580" stroke-width="2" /><line x1="88" y1="34" x2="88" y2="178" stroke="#f85149" stroke-width="5" /><line x1="232" y1="34" x2="232" y2="178" stroke="#4aa3ff" stroke-width="5" /><line x1="88" y1="34" x2="232" y2="34" stroke="#9aa3ad" stroke-width="3" stroke-dasharray="5 5" /><line x1="88" y1="178" x2="232" y2="178" stroke="#9aa3ad" stroke-width="3" stroke-dasharray="5 5" /><text x="74" y="108" text-anchor="end" fill="#f85149" font-size="12">hot</text><text x="246" y="108" fill="#4aa3ff" font-size="12">cold</text><text x="160" y="202" text-anchor="middle" fill="#9aa3ad" font-size="12">mean-Nu vs gold ambiguity</text></svg></div><div class="subcard"><h4>CFD Post-Processing · Nu bullet chart</h4><svg viewBox="0 0 640 220" role="img" aria-label="DHC Nusselt bullet chart"><rect width="100%" height="100%" fill="#0f141b" rx="12" /><rect x="54" y="92" width="568" height="20" fill="rgba(154,163,173,0.12)" rx="10" /><rect x="123.8" y="92" width="63.5" height="20" fill="rgba(74,163,255,0.20)" rx="10" /><line x1="244.4" y1="82" x2="244.4" y2="122" stroke="#4aa3ff" stroke-width="3" /><circle cx="547.9" cy="102.0" r="8" fill="#f85149" /><text x="244.4" y="76" text-anchor="middle" fill="#4aa3ff" font-size="11">gold 30.0</text><text x="547.9" y="64" text-anchor="middle" fill="#f85149" font-size="11">measured 77.82</text><text x="155.5" y="156" text-anchor="middle" fill="#9aa3ad" font-size="11">band 11.0–21.0</text><line x1="54.0" y1="118" x2="54.0" y2="126" stroke="#6b7580" stroke-width="1" /><text x="54.0" y="140" text-anchor="middle" fill="#9aa3ad" font-size="11">0</text><line x1="196.0" y1="118" x2="196.0" y2="126" stroke="#6b7580" stroke-width="1" /><text x="196.0" y="140" text-anchor="middle" fill="#9aa3ad" font-size="11">22</text><line x1="338.0" y1="118" x2="338.0" y2="126" stroke="#6b7580" stroke-width="1" /><text x="338.0" y="140" text-anchor="middle" fill="#9aa3ad" font-size="11">45</text><line x1="480.0" y1="118" x2="480.0" y2="126" stroke="#6b7580" stroke-width="1" /><text x="480.0" y="140" text-anchor="middle" fill="#9aa3ad" font-size="11">67</text><line x1="622.0" y1="118" x2="622.0" y2="126" stroke="#6b7580" stroke-width="1" /><text x="622.0" y="140" text-anchor="middle" fill="#9aa3ad" font-size="11">89</text><text x="338.0" y="208" text-anchor="middle" fill="#9aa3ad" font-size="11">Nusselt number</text></svg><div class="metric-grid"><div class="metric"><div class="label">Nu measured</div><div class="value">77.82</div><div class="detail">gold ref 30.00</div></div><div class="metric"><div class="label">band verdict</div><div class="value">ABOVE_BAND</div><div class="detail">band 11.0–21.0</div></div><div class="metric"><div class="label">verdict</div><div class="value">FAIL</div><div class="detail">Converged numerically, failed against gold</div></div></div></div></div><div class="subcard" style="margin-top: 14px;"><h4>Acceptance Notes</h4><ul><li>This is the only FAIL card; the report makes the gold-reference ambiguity visually explicit.</li><li>The detailed standalone DHC HTML remains the deep-dive artifact for this escalation path.</li></ul><div class="pill" style="margin-top: 12px;"><a href="../differential_heated_cavity/report.html" style="color: inherit; text-decoration: none;">Open supporting artifact</a></div></div></article>
+</div>
+<h2>Supporting Artifacts</h2>
+<div class="artifact-list">
+<div class="artifact"><strong>Lid-Driven Cavity</strong><div style="margin-top: 8px; color: var(--fg-dim);"><span class="pill ok">PASS</span></div><div class="path"><a href="../lid_driven_cavity_benchmark/case_completion_report.md">reports/lid_driven_cavity_benchmark/case_completion_report.md</a></div></div>
+<div class="artifact"><strong>Backward-Facing Step</strong><div style="margin-top: 8px; color: var(--fg-dim);"><span class="pill ok">PASS</span></div><div class="path"><a href="../backward_facing_step_steady/case_completion_report.md">reports/backward_facing_step_steady/case_completion_report.md</a></div></div>
+<div class="artifact"><strong>Circular Cylinder Wake</strong><div style="margin-top: 8px; color: var(--fg-dim);"><span class="pill ok">PASS</span></div><div class="path"><a href="../cylinder_crossflow/case_completion_report.md">reports/cylinder_crossflow/case_completion_report.md</a></div></div>
+<div class="artifact"><strong>NACA 0012 Airfoil External Flow</strong><div style="margin-top: 8px; color: var(--fg-dim);"><span class="pill warn">PASS_WITH_DEVIATIONS</span></div><div class="path"><a href="../naca0012_airfoil/report.md">reports/naca0012_airfoil/report.md</a></div></div>
+<div class="artifact"><strong>Differential Heated Cavity (Natural Convection)</strong><div style="margin-top: 8px; color: var(--fg-dim);"><span class="pill fail">FAIL</span></div><div class="path"><a href="../differential_heated_cavity/report.html">reports/differential_heated_cavity/report.html</a></div></div>
+</div>
+<div class="footer">Generated from repo artifacts only · cases=5 · inline geometry+chart panels=10 · output=reports/deep_acceptance/visual_acceptance_report.html</div>
+</div>
+</body>
+</html>

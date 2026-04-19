@@ -2,6 +2,6 @@
 
 from .data_collector import ReportDataCollector
 from .generator import ReportGenerator
+from .visual_acceptance import VisualAcceptanceReportGenerator
 
-__all__ = ["ReportGenerator", "ReportDataCollector"]
-
+__all__ = ["ReportGenerator", "ReportDataCollector", "VisualAcceptanceReportGenerator"]

@@ -26,3 +26,11 @@ class RenderResult:
     reason: Optional[str] = None
     output_path: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
+
+
+@dataclass
+class VisualAcceptanceResult:
+    html: str
+    case_count: int
+    chart_count: int
+    output_path: Optional[str] = None
