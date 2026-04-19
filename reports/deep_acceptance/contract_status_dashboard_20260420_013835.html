@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10-case Physics Contract Dashboard · CFD Harness OS</title>
+  <style>
+:root {
+  --bg: #07111c;
+  --bg-alt: #0d1828;
+  --card: rgba(10, 21, 37, 0.9);
+  --panel: rgba(13, 24, 40, 0.92);
+  --border: rgba(110, 166, 221, 0.18);
+  --fg: #e8eef7;
+  --fg-dim: #a9b8cb;
+  --fg-mute: #73859d;
+  --accent: #7dc9ff;
+  --ok: #79e3aa;
+  --warn: #ffd27d;
+  --danger: #ff879a;
+  --mono: "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: "SF Pro Display", "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+  --shadow: 0 22px 72px rgba(0, 0, 0, 0.34);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(125, 201, 255, 0.14), transparent 24%),
+    radial-gradient(circle at 86% 10%, rgba(121, 227, 170, 0.08), transparent 20%),
+    linear-gradient(180deg, #050d17 0%, #091320 45%, #08111b 100%);
+  color: var(--fg);
+  font-family: var(--sans);
+}
+body { padding: 34px 18px 74px; }
+.wrap { max-width: 1480px; margin: 0 auto; }
+.hero,
+.section-card,
+.case-card,
+.summary-card,
+.distribution-card,
+.gate-card {
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(16, 32, 54, 0.88), rgba(9, 18, 31, 0.94));
+  box-shadow: var(--shadow);
+}
+.hero {
+  padding: 32px 32px 28px;
+  background:
+    linear-gradient(135deg, rgba(19, 54, 96, 0.92), rgba(9, 18, 31, 0.92)),
+    linear-gradient(135deg, rgba(125, 201, 255, 0.16), rgba(121, 227, 170, 0.08));
+}
+.eyebrow,
+.label,
+.section-label,
+th,
+.footer {
+  color: var(--fg-mute);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  margin: 14px 0 12px;
+  font-size: clamp(40px, 5vw, 68px);
+  line-height: 0.96;
+  letter-spacing: -0.05em;
+}
+.hero p,
+.section-lead,
+.case-card p,
+td,
+.lane-note,
+.artifact-link {
+  color: var(--fg-dim);
+  line-height: 1.7;
+}
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.pill,
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(7, 16, 27, 0.55);
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.pill.ok,
+.status-pill.ok { color: var(--ok); border-color: rgba(121, 227, 170, 0.28); background: rgba(121, 227, 170, 0.08); }
+.pill.warn,
+.status-pill.warn { color: var(--warn); border-color: rgba(255, 210, 125, 0.28); background: rgba(255, 210, 125, 0.08); }
+.pill.fail,
+.status-pill.fail { color: var(--danger); border-color: rgba(255, 135, 154, 0.32); background: rgba(255, 135, 154, 0.08); }
+.summary-grid,
+.distribution-grid,
+.version-grid,
+.lane-grid,
+.case-grid,
+.gate-grid {
+  display: grid;
+  gap: 16px;
+}
+.summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: 22px; }
+.distribution-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 20px; }
+.version-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 22px; }
+.lane-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.case-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.summary-card,
+.distribution-card,
+.section-card,
+.case-card,
+.gate-card {
+  padding: 18px 18px 16px;
+}
+.summary-card .value,
+.distribution-card .value {
+  margin-top: 10px;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.summary-card .note,
+.distribution-card .note {
+  margin-top: 8px;
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.version-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(125, 201, 255, 0.18);
+  background: rgba(7, 16, 27, 0.42);
+}
+.version-card .value {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.section-block { margin-top: 40px; }
+h2 {
+  margin: 10px 0 14px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+h3 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(8, 16, 28, 0.82);
+}
+th, td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(110, 166, 221, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+td strong { color: var(--fg); }
+.case-card h3 { margin-bottom: 8px; }
+.case-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.case-subtitle {
+  color: var(--fg-mute);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.case-callout {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(7, 16, 27, 0.46);
+}
+.lane-card {
+  padding: 20px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(13, 24, 40, 0.92), rgba(8, 16, 28, 0.95));
+}
+.lane-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+.lane-list li {
+  margin: 10px 0;
+  color: var(--fg-dim);
+}
+.footer {
+  margin-top: 42px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(110, 166, 221, 0.16);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+@media (max-width: 1220px) {
+  .summary-grid,
+  .distribution-grid,
+  .version-grid,
+  .lane-grid,
+  .case-grid,
+  .gate-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  body { padding: 16px 12px 54px; }
+  .hero, .summary-card, .distribution-card, .section-card, .case-card, .gate-card { border-radius: 22px; }
+  .hero h1 { font-size: 38px; }
+}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Phase 8 Delivery Surface · 10-case physics contract lens</div>
+      <h1>10-case Physics Contract Dashboard</h1>
+      <p>这张页面把 10 个 canonical whitelist case 的物理契约状态、runtime silent-pass hazard、PENDING_RE_RUN 留白，以及 Q-1/Q-2 外部门控放到一张中文科研级总览里。它不是替代 5-case visual acceptance，而是补上“全项目 physics truth surface”的上帝视角。</p>
+      <div class="pill-row">
+        <span class="pill ok">源数据直驱</span>
+        <span class="pill ok">10 个 canonical cases</span>
+        <span class="pill warn">2 个 runtime hazard</span>
+        <span class="pill fail">Q-1 / Q-2 仍冻结</span>
+      </div>
+      <div class="summary-grid">
+        <article class="summary-card">
+          <div class="label">Canonical Cases</div>
+          <div class="value">10</div>
+          <div class="note">直接由 whitelist + gold_standards + auto_verify truth source 汇总。</div>
+        </article>
+        <article class="summary-card">
+          <div class="label">Clean Demo-ready</div>
+          <div class="value">2</div>
+          <div class="note">既是 PASS，又是 COMPATIBLE，适合对外演示时充当 physics-backed anchor。</div>
+        </article>
+        <article class="summary-card">
+          <div class="label">Runtime Hazard</div>
+          <div class="value">2</div>
+          <div class="note">不是假阳性，但仍需把 shortcut / fallback 风险持续暴露给读者。</div>
+        </article>
+        <article class="summary-card">
+          <div class="label">Structural / Gate Blockers</div>
+          <div class="value">4</div>
+          <div class="note">包括 DHC 外部门控、pipe/duct 几何错位，以及 literature-observable 错配。</div>
+        </article>
+        <article class="summary-card">
+          <div class="label">Open Gates</div>
+          <div class="value">2</div>
+          <div class="note">Q-1 DHC gold-reference / Q-2 duct-flow relabel 继续冻结，不在这轮里越权修改。</div>
+        </article>
+      </div>
+      <div class="version-grid">
+        <div class="version-card">
+          <div class="label">Generated</div>
+          <div class="value">2026-04-20 01:38:35</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Head SHA</div>
+          <div class="value">3128a63</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Canonical / Snapshot</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260420_013835.html</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Manifest / Linked Surfaces</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard_manifest.json<br>visual_acceptance_report.html<br>2026-04-18_contract_status_dashboard.md</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-label">Status Distribution</div>
+      <h2>物理契约状态分布</h2>
+      <p class="section-lead">这里看的是 physics contract，不是 UI 层的 PASS 绿点。一个 case 可以在 auto_verify 上 PASS，但只要 observable 命名、几何假设或 runtime shortcut 让文献比较失真，它就不能被当成“完全科学可信”的 clean pass。</p>
+      <div class="distribution-grid">
+        
+        <article class="distribution-card">
+          <div class="label">COMPATIBLE</div>
+          <div class="value">3</div>
+          <div class="note">所有关键 precondition 成立，PASS 可以被当作 physics-valid 结果读。</div>
+          <div class="pill-row"><span class="status-pill ok">Compatible</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">COMPATIBLE_WITH_SILENT_PASS_HAZARD</div>
+          <div class="value">2</div>
+          <div class="note">结果本身有价值，但必须把 runtime shortcut/fallback 的 caveat 一起展示。</div>
+          <div class="pill-row"><span class="status-pill warn">Silent-pass hazard</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">INCOMPATIBLE</div>
+          <div class="value">2</div>
+          <div class="note">几何、solver 或 comparator 前提未满足，继续调参没有意义。</div>
+          <div class="pill-row"><span class="status-pill warn">Incompatible</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">DEVIATION</div>
+          <div class="value">1</div>
+          <div class="note">不是 clean pass，也不是结构性错位；往往需要治理级判断来解释 remaining gap。</div>
+          <div class="pill-row"><span class="status-pill fail">Deviation</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE</div>
+          <div class="value">1</div>
+          <div class="note">最危险的类型：表面 PASS，但 observable 和 literature 根本不是一回事。</div>
+          <div class="pill-row"><span class="status-pill warn">Observable mismatch</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">PARTIALLY_COMPATIBLE</div>
+          <div class="value">1</div>
+          <div class="note">偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。</div>
+          <div class="pill-row"><span class="status-pill warn">Partially compatible</span></div>
+        </article>
+        
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-label">Gate Boundary</div>
+      <h2>冻结的治理边界</h2>
+      <div class="gate-grid">
+        <article class="gate-card">
+          <div class="label">Q-1</div>
+          <h3>DHC gold-reference 仍需 external Gate</h3>
+          <p>DHC 的 extractor 方法学已经修正到 mean-over-y，但当前测量 <strong>Nu=77.82</strong> 与 gold <strong>30.0</strong> 的冲突，实质上是 gold 语义与工况匹配问题，不是继续盲修 solver 就能解决的问题。</p>
+          <p class="artifact-link"><a href="../differential_heated_cavity/report.html">打开 DHC narrative report</a></p>
+        </article>
+        <article class="gate-card">
+          <div class="label">Q-2</div>
+          <h3>pipe ↔ duct relabel 仍冻结</h3>
+          <p>`fully_developed_turbulent_pipe_flow` 当前 physics contract 已明示 geometry mismatch。要变成 physics-valid，需要 whitelist / gold / naming 一起改，这不是这轮 delivery/dashboard 开发可以越权落地的事。</p>
+          <p class="artifact-link"><a href="../../.planning/external_gate_queue.md">查看 external gate queue</a></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-label">Portfolio Lanes</div>
+      <h2>按交付语义分组</h2>
+      <p class="section-lead">如果你要把 10 个 case 带进 demo、scientific review 或治理讨论，最好先按这里的三条 lane 分流：哪些能当 physics-backed baseline，哪些可以展示但必须保留 caveat，哪些根本不该被包装成“只差一点”的问题。</p>
+      <div class="lane-grid">
+        
+        <article class="lane-card">
+          <div class="label">Lane A · Physics-backed Demo</div>
+          <div class="lane-note">这些 case 可以作为对外 demo 或验收 anchor，但依旧应该引用 benchmark 与 source path。</div>
+          <ul class="lane-list">
+            <li><strong>方腔顶盖驱动流</strong> · 中心线 benchmark 与主涡核位置都已稳定，适合当作 physics-backed anchor。</li><li><strong>后台阶分离再附着</strong> · 再附着长度与速度剖面已对齐，是另一条可信的内部流锚点。</li>
+          </ul>
+        </article>
+        
+
+        <article class="lane-card">
+          <div class="label">Lane B · 可展示但必须带 caveat</div>
+          <div class="lane-note">这些 case 不是不能展示，而是展示时必须把 runtime hazard 或已知偏差一起抬到台面上。</div>
+          <ul class="lane-list">
+            <li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
+          </ul>
+        </article>
+        
+
+        <article class="lane-card">
+          <div class="label">Lane C · 治理 / 结构阻塞</div>
+          <div class="lane-note">这些 case 目前的主要问题不是“再调一点参数”，而是 physics contract / governance 语义还没闭环。</div>
+          <ul class="lane-list">
+            <li><strong>全发展湍流管流</strong> · 当前 adapter 还是矩形 duct，不是 circular pipe；这是物理类别错配，不是调参问题。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · 当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</li><li><strong>轴对称冲击射流</strong> · 报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</li>
+          </ul>
+        </article>
+        
+      </div>
+    </section>
+
+    <section class="section-block section-card">
+      <div class="section-label">Case Matrix</div>
+      <h2>全量 10-case matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>算例</th>
+            <th>Auto Verify</th>
+            <th>Physics Contract</th>
+            <th>当前最重要的观测</th>
+            <th>下一步</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+          <tr>
+            <td><strong>方腔顶盖驱动流</strong><br><span class="case-subtitle">lid_driven_cavity_benchmark</span></td>
+            <td><span class="status-pill ok">PASS</span><br>PASS</td>
+            <td><span class="status-pill ok">COMPATIBLE</span><br>COMPATIBLE</td>
+            <td>u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</td>
+            <td>继续作为 demo baseline，无需治理动作。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>后台阶分离再附着</strong><br><span class="case-subtitle">backward_facing_step_steady</span></td>
+            <td><span class="status-pill ok">PASS</span><br>PASS</td>
+            <td><span class="status-pill ok">COMPATIBLE</span><br>COMPATIBLE</td>
+            <td>Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</td>
+            <td>维持为 demo-ready case；后续只在保留场更丰富时补图，不动 physics contract。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>圆柱绕流卡门涡街</strong><br><span class="case-subtitle">cylinder_crossflow</span></td>
+            <td><span class="status-pill ok">PASS</span><br>PASS</td>
+            <td><span class="status-pill warn">COMPATIBLE_WITH_SILENT_PASS_HAZARD</span><br>Strouhal 通过 canonical-band shortcut 可能被伪确认；Cd / Cl_rms / wake deficit 则仍有物理含义。</td>
+            <td>St=0.164, Cd=1.31, Cl_rms=0.049；其中 Strouhal 这一格仍需把 shortcut 风险一起展示。</td>
+            <td>保持 PASS 但继续暴露 shortcut；不要把 Strouhal 写成无条件 physics-faithful。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>湍流平板边界层</strong><br><span class="case-subtitle">turbulent_flat_plate</span></td>
+            <td><span class="status-pill ok">PASS</span><br>PASS</td>
+            <td><span class="status-pill warn">COMPATIBLE_WITH_SILENT_PASS_HAZARD</span><br>Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</td>
+            <td>Cf=0.00760037，对 Spalding 相关式几乎零误差，但 fallback 路径必须持续透明。</td>
+            <td>保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>全发展湍流管流</strong><br><span class="case-subtitle">fully_developed_turbulent_pipe_flow</span></td>
+            <td><span class="status-pill fail">NO_RUNTIME_REPORT</span><br>NO_RUNTIME_REPORT</td>
+            <td><span class="status-pill fail">INCOMPATIBLE</span><br>当前矩形 duct 几何与 circular pipe literature 不匹配；继续调 solver 不能修复这个类别错误。</td>
+            <td>当前没有 materialized auto_verify_report；但 geometry mismatch 已足够判定 physics-incompatible。</td>
+            <td>等待 Q-2 外部门控，决定是否 relabel 为 duct flow。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>差分加热方腔自然对流</strong><br><span class="case-subtitle">differential_heated_cavity</span></td>
+            <td><span class="status-pill fail">FAIL</span><br>FAIL</td>
+            <td><span class="status-pill fail">DEVIATION</span><br>extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</td>
+            <td>Nu=77.82 vs gold 30.0；当前冲突已经明确进入 Q-1 external gate。</td>
+            <td>保持 Q-1 显式开放，等待 gold correction 或 regime downgrade 的 Gate 选择。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>平面通道流 DNS</strong><br><span class="case-subtitle">fully_developed_plane_channel_flow</span></td>
+            <td><span class="status-pill warn">PENDING_RE_RUN</span><br>PENDING_RE_RUN</td>
+            <td><span class="status-pill fail">INCOMPATIBLE</span><br>当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。</td>
+            <td>PENDING_RE_RUN；laminar comparator patch 已落地，但 fresh Docker E2E 尚未补齐。</td>
+            <td>继续保持 structural blocker 语义，不把 PENDING_RE_RUN 伪装成恢复完成。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>轴对称冲击射流</strong><br><span class="case-subtitle">axisymmetric_impinging_jet</span></td>
+            <td><span class="status-pill ok">PASS</span><br>PASS</td>
+            <td><span class="status-pill fail">INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE</span><br>observable 命名与 literature 目标不一致，最容易造成“数值 PASS 但科学含义错位”的误读。</td>
+            <td>当前 report 记录 PASS on 0.0042，但 literature target 实际是 Nu=25，不是同一个 observable。</td>
+            <td>只有在 observable / literature 重新对齐后，才能恢复科学上的可比性。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>NACA0012 翼型外流</strong><br><span class="case-subtitle">naca0012_airfoil</span></td>
+            <td><span class="status-pill warn">PASS_WITH_DEVIATIONS</span><br>PASS_WITH_DEVIATIONS</td>
+            <td><span class="status-pill warn">PARTIALLY_COMPATIBLE</span><br>偏差集中在前缘与近壁分辨；风险在于被 UI 误读成“只差一点的 clean PASS”。</td>
+            <td>Cp 前缘误差 52.9%，中弦误差 32.4%，属于可量化但不应包装成 clean PASS 的偏差。</td>
+            <td>保持 PASS_WITH_DEVIATIONS 叙事；后续优先改 mesh/y+，不是改文案。</td>
+          </tr>
+        
+
+          <tr>
+            <td><strong>Rayleigh-Benard 自然对流</strong><br><span class="case-subtitle">rayleigh_benard_convection</span></td>
+            <td><span class="status-pill warn">PASS_WITH_DEVIATIONS</span><br>PASS</td>
+            <td><span class="status-pill ok">COMPATIBLE</span><br>COMPATIBLE</td>
+            <td>Nu=10.5 at Ra=1e6；当前 compatible，但不能被拿来替代高-Ra 腔体论证。</td>
+            <td>继续作为低-Ra 参考，不把它当作 DHC 高-Ra 论证替身。</td>
+          </tr>
+        
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section-block">
+      <div class="section-label">Per-case Cards</div>
+      <h2>逐案科研解读</h2>
+      <div class="case-grid">
+        
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>方腔顶盖驱动流</h3>
+              <div class="case-subtitle">Lid-driven cavity · clean textbook baseline</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill ok">PASS</span>
+              <span class="status-pill ok">Compatible</span>
+            </div>
+          </div>
+          <p>中心线 benchmark 与主涡核位置都已稳定，适合当作 physics-backed anchor。</p>
+          <div class="case-callout"><strong>当前观测：</strong> u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</div>
+          <div class="case-callout"><strong>风险说明：</strong> COMPATIBLE</div>
+          <div class="case-callout"><strong>下一步：</strong> 继续作为 demo baseline，无需治理动作。</div>
+          <div class="pill-row">
+            <span class="pill">Physics-backed demo</span>
+            <span class="pill">Ghia et al. 1982, J. Comput. Phys.</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/lid_driven_cavity_benchmark.yaml">gold standard</a> · <a href="../lid_driven_cavity_benchmark/auto_verify_report.yaml">runtime report</a> · <a href="../lid_driven_cavity_benchmark/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>后台阶分离再附着</h3>
+              <div class="case-subtitle">Backward-facing step · separation / reattachment anchor</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill ok">PASS</span>
+              <span class="status-pill ok">Compatible</span>
+            </div>
+          </div>
+          <p>再附着长度与速度剖面已对齐，是另一条可信的内部流锚点。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</div>
+          <div class="case-callout"><strong>风险说明：</strong> COMPATIBLE</div>
+          <div class="case-callout"><strong>下一步：</strong> 维持为 demo-ready case；后续只在保留场更丰富时补图，不动 physics contract。</div>
+          <div class="pill-row">
+            <span class="pill">Physics-backed demo</span>
+            <span class="pill">Driver &amp; Seegmiller 1985, AIAA J.</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/backward_facing_step_steady.yaml">gold standard</a> · <a href="../backward_facing_step_steady/auto_verify_report.yaml">runtime report</a> · <a href="../backward_facing_step_steady/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>圆柱绕流卡门涡街</h3>
+              <div class="case-subtitle">Cylinder crossflow · PASS with runtime shortcut caveat</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill ok">PASS</span>
+              <span class="status-pill warn">Silent-pass hazard</span>
+            </div>
+          </div>
+          <p>Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</p>
+          <div class="case-callout"><strong>当前观测：</strong> St=0.164, Cd=1.31, Cl_rms=0.049；其中 Strouhal 这一格仍需把 shortcut 风险一起展示。</div>
+          <div class="case-callout"><strong>风险说明：</strong> Strouhal 通过 canonical-band shortcut 可能被伪确认；Cd / Cl_rms / wake deficit 则仍有物理含义。</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 PASS 但继续暴露 shortcut；不要把 Strouhal 写成无条件 physics-faithful。</div>
+          <div class="pill-row">
+            <span class="pill">Caveat-required</span>
+            <span class="pill">Williamson 1996, Annu. Rev. Fluid Mech.</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/cylinder_crossflow.yaml">gold standard</a> · <a href="../cylinder_crossflow/auto_verify_report.yaml">runtime report</a> · <a href="../cylinder_crossflow/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>湍流平板边界层</h3>
+              <div class="case-subtitle">Turbulent flat plate · PASS with fallback transparency</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill ok">PASS</span>
+              <span class="status-pill warn">Silent-pass hazard</span>
+            </div>
+          </div>
+          <p>Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Cf=0.00760037，对 Spalding 相关式几乎零误差，但 fallback 路径必须持续透明。</div>
+          <div class="case-callout"><strong>风险说明：</strong> Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</div>
+          <div class="case-callout"><strong>下一步：</strong> 保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。</div>
+          <div class="pill-row">
+            <span class="pill">Caveat-required</span>
+            <span class="pill">Spalding 1962 / ISO 12048</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/turbulent_flat_plate.yaml">gold standard</a> · <a href="../turbulent_flat_plate/auto_verify_report.yaml">runtime report</a> · <a href="../turbulent_flat_plate/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>全发展湍流管流</h3>
+              <div class="case-subtitle">Turbulent pipe flow · geometry mismatch blocker</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill fail">NO_RUNTIME_REPORT</span>
+              <span class="status-pill fail">Incompatible</span>
+            </div>
+          </div>
+          <p>当前 adapter 还是矩形 duct，不是 circular pipe；这是物理类别错配，不是调参问题。</p>
+          <div class="case-callout"><strong>当前观测：</strong> 当前没有 materialized auto_verify_report；但 geometry mismatch 已足够判定 physics-incompatible。</div>
+          <div class="case-callout"><strong>风险说明：</strong> 当前矩形 duct 几何与 circular pipe literature 不匹配；继续调 solver 不能修复这个类别错误。</div>
+          <div class="case-callout"><strong>下一步：</strong> 等待 Q-2 外部门控，决定是否 relabel 为 duct flow。</div>
+          <div class="pill-row">
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Nikuradse 1933 / Moody 1944</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/fully_developed_turbulent_pipe_flow.yaml">gold standard</a> · <a href="../fully_developed_turbulent_pipe_flow/auto_verify_report.yaml">runtime report</a> · <a href="../ex1_first_slice/diagnostic_memo.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>差分加热方腔自然对流</h3>
+              <div class="case-subtitle">DHC · external-gate physics conflict</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill fail">FAIL</span>
+              <span class="status-pill fail">Deviation</span>
+            </div>
+          </div>
+          <p>测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Nu=77.82 vs gold 30.0；当前冲突已经明确进入 Q-1 external gate。</div>
+          <div class="case-callout"><strong>风险说明：</strong> extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 Q-1 显式开放，等待 gold correction 或 regime downgrade 的 Gate 选择。</div>
+          <div class="pill-row">
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Dhir 2001 / Ampofo &amp; Karayiannis 2003</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/differential_heated_cavity.yaml">gold standard</a> · <a href="../differential_heated_cavity/auto_verify_report.yaml">runtime report</a> · <a href="../differential_heated_cavity/report.html">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>平面通道流 DNS</h3>
+              <div class="case-subtitle">Plane channel flow · comparator / solver mismatch</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill warn">PENDING_RE_RUN</span>
+              <span class="status-pill fail">Incompatible</span>
+            </div>
+          </div>
+          <p>当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</p>
+          <div class="case-callout"><strong>当前观测：</strong> PENDING_RE_RUN；laminar comparator patch 已落地，但 fresh Docker E2E 尚未补齐。</div>
+          <div class="case-callout"><strong>风险说明：</strong> 当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。</div>
+          <div class="case-callout"><strong>下一步：</strong> 继续保持 structural blocker 语义，不把 PENDING_RE_RUN 伪装成恢复完成。</div>
+          <div class="pill-row">
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Kim et al. 1987 / Moser et al. 1999 (DNS); Phase 7 Docker used icoFoam laminar</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/fully_developed_plane_channel_flow.yaml">gold standard</a> · <a href="../fully_developed_plane_channel_flow/auto_verify_report.yaml">runtime report</a> · <a href="../fully_developed_plane_channel_flow/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>轴对称冲击射流</h3>
+              <div class="case-subtitle">Impinging jet · literature-observable mismatch</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill ok">PASS</span>
+              <span class="status-pill fail">Observable mismatch</span>
+            </div>
+          </div>
+          <p>报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</p>
+          <div class="case-callout"><strong>当前观测：</strong> 当前 report 记录 PASS on 0.0042，但 literature target 实际是 Nu=25，不是同一个 observable。</div>
+          <div class="case-callout"><strong>风险说明：</strong> observable 命名与 literature 目标不一致，最容易造成“数值 PASS 但科学含义错位”的误读。</div>
+          <div class="case-callout"><strong>下一步：</strong> 只有在 observable / literature 重新对齐后，才能恢复科学上的可比性。</div>
+          <div class="pill-row">
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Computed: simpleFoam flat-plate extraction (cf_skin_friction); Literature: Cooper 1984 for impinging jet Nu correlation</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/axisymmetric_impinging_jet.yaml">gold standard</a> · <a href="../axisymmetric_impinging_jet/auto_verify_report.yaml">runtime report</a> · <a href="../axisymmetric_impinging_jet/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>NACA0012 翼型外流</h3>
+              <div class="case-subtitle">NACA0012 · quantified deviation, not a clean pass</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill warn">PASS_WITH_DEVIATIONS</span>
+              <span class="status-pill warn">Partially compatible</span>
+            </div>
+          </div>
+          <p>偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Cp 前缘误差 52.9%，中弦误差 32.4%，属于可量化但不应包装成 clean PASS 的偏差。</div>
+          <div class="case-callout"><strong>风险说明：</strong> 偏差集中在前缘与近壁分辨；风险在于被 UI 误读成“只差一点的 clean PASS”。</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 PASS_WITH_DEVIATIONS 叙事；后续优先改 mesh/y+，不是改文案。</div>
+          <div class="pill-row">
+            <span class="pill">Caveat-required</span>
+            <span class="pill">Thomas 1979 / Lada &amp; Gostling 2007</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/naca0012_airfoil.yaml">gold standard</a> · <a href="../naca0012_airfoil/auto_verify_report.yaml">runtime report</a> · <a href="../naca0012_airfoil/report.md">deep evidence</a></p>
+        </article>
+        
+
+        <article class="case-card">
+          <div class="case-meta">
+            <div>
+              <div class="label">Case</div>
+              <h3>Rayleigh-Benard 自然对流</h3>
+              <div class="case-subtitle">RBC · compatible only in its current low-Ra regime</div>
+            </div>
+            <div class="pill-row">
+              <span class="status-pill warn">PASS_WITH_DEVIATIONS</span>
+              <span class="status-pill ok">Compatible</span>
+            </div>
+          </div>
+          <p>Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Nu=10.5 at Ra=1e6；当前 compatible，但不能被拿来替代高-Ra 腔体论证。</div>
+          <div class="case-callout"><strong>风险说明：</strong> COMPATIBLE</div>
+          <div class="case-callout"><strong>下一步：</strong> 继续作为低-Ra 参考，不把它当作 DHC 高-Ra 论证替身。</div>
+          <div class="pill-row">
+            <span class="pill">Caveat-required</span>
+            <span class="pill">Chaivat et al. 2006</span>
+          </div>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/rayleigh_benard_convection.yaml">gold standard</a> · <a href="../rayleigh_benard_convection/auto_verify_report.yaml">runtime report</a> · <a href="../rayleigh_benard_convection/report.md">deep evidence</a></p>
+        </article>
+        
+      </div>
+    </section>
+
+    <div class="footer">
+      <span>Generated · 2026-04-20 01:38:35</span>
+      <span>Head · 3128a63</span>
+      <span>Source · knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml + reports/*/auto_verify_report.yaml</span>
+      <span><a href="visual_acceptance_report.html">Open 5-case visual acceptance report</a></span>
+      <span><a href="2026-04-18_contract_status_dashboard.md">Open historical markdown snapshot</a></span>
+    </div>
+  </div>
+</body>
+</html>

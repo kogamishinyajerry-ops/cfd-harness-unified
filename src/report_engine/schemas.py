@@ -42,3 +42,18 @@ class VisualAcceptanceResult:
     head_sha: Optional[str] = None
     branch_name: Optional[str] = None
     manifest: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ContractDashboardResult:
+    html: str
+    case_count: int
+    output_path: Optional[str] = None
+    canonical_path: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    manifest_path: Optional[str] = None
+    generated_at: Optional[str] = None
+    head_sha: Optional[str] = None
+    branch_name: Optional[str] = None
+    summary_counts: Dict[str, int] = field(default_factory=dict)
+    manifest: Dict[str, Any] = field(default_factory=dict)
