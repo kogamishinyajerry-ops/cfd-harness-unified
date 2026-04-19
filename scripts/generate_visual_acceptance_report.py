@@ -28,9 +28,13 @@ def main(argv: list[str]) -> int:
     result = VisualAcceptanceReportGenerator().generate(case_ids=requested)
     print(
         "OK    visual_acceptance_report"
-        f"  -> {result.output_path or DEFAULT_OUTPUT_PATH}"
+        f"  canonical={result.output_path or DEFAULT_OUTPUT_PATH}"
+        f"  snapshot={result.snapshot_path}"
+        f"  manifest={result.manifest_path}"
+        f"  package={result.package_path}"
+        f"  head={result.head_sha}"
         f"  cases={result.case_count}"
-        f" charts={result.chart_count}"
+        f"  charts={result.chart_count}"
     )
     return 0
 

@@ -1,14 +1,14 @@
 driving_model: opus47-main (Orchestrator + self-Gate + ADWM v5.2 autonomous-governance, Model Routing v5.2)
 tier: T3-Orchestrator
-last_updated: "2026-04-19T00:45"
-session: S-003l CLOSED (user invoked pause + Github/Notion sync + homepage cleanup at 2026-04-19T00:30). ADWM v5.2 autonomous continuation covering G1 FUSE + G2 CCRs + G3 audit wiring + G7 D4++ promotion + EX-1-009 Spalding audit + EX-1-010 cylinder canonical-band audit + external-Gate queue index. Total cumulative S-003l commits: 17. All 17 pushed to origin/main (commit 570fbc8 head). **Notion synced via REST API (MCP was unreachable; NOTION_TOKEN direct-call worked)**: 6 decisions backfilled to Decisions DB (DEC-ADWM-001..006); S-003l Session record created in Sessions DB with Status=Closed; homepage snapshot (heading, callout, 5-row table) refreshed from 2026-04-17 state to 2026-04-19 state. **Coverage state frozen at session close**: 2/2 documented SILENT_PASS_HAZARD runtime signals wired (3 gold YAMLs); 10/10 whitelist cases have physics_contract annotation; rolling EX-1 override_rate 0.200 at n=10; all D4+/D4++ rules untriggered. Next window inherits: external-Gate queue `.planning/external_gate_queue.md` items Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 (Notion backfill) now CLOSED.
+last_updated: "2026-04-20T00:55"
+session: S-003n ACTIVE (visual acceptance delivery hardening on `codex/visual-acceptance-sync`, based on `088e2a3`). Current hardening scope: canonical HTML + timestamped snapshot + machine-readable manifest + deep acceptance package + control-plane sync repair. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). **Important blocker**: joint Codex↔Claude signoff is not yet available because Computer Use access to Claude APP (`com.anthropic.claudefordesktop`) is currently denied; do not treat this window as fully co-signed until that approval is restored.
 
 # Phase Status
 
-current_phase: Phase 8 — IN PROGRESS (self-Gate)
-phase_status: P0 ✅ P1 ✅ P2 ✅ (2026-04-18)
-next_phase: Phase 9 (Baseline D4 Gate pending) or Phase 8 hardening
-next_phase_status: ⏳ Determined by self-Gate review of Phase 8 outputs
+current_phase: Phase 8 — IN PROGRESS (delivery hardening)
+phase_status: P0 ✅ P1 ✅ P2 ✅ + reporting hardening in progress (2026-04-20)
+next_phase: Phase 9 (planning-only) after Phase 8 hardening closeout
+next_phase_status: 🔒 Hold Phase 9 activation; keep Q-1/Q-2 frozen and visible until a fresh activation review clears them
 
 Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
 Phase 6 Notion: TBD

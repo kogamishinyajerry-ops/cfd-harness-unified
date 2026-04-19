@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-20T01:18:28",
+  "head_sha": "088e2a3",
+  "branch_name": "codex/visual-acceptance-sync",
+  "canonical_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report.html",
+  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report_20260420_011828.html",
+  "manifest_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report_manifest.json",
+  "package_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/20260420_011828_visual_acceptance_package.md",
+  "case_count": 5,
+  "image_panel_count": 15,
+  "open_gate_refs": [
+    "Q-1:.planning/external_gate_queue.md#q-1",
+    "Q-2:.planning/external_gate_queue.md#q-2"
+  ]
+}

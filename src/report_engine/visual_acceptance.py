@@ -6,7 +6,9 @@ from base64 import b64encode
 from dataclasses import dataclass
 from datetime import datetime
 from html import escape
+import json
 from pathlib import Path
+import subprocess
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import yaml  # type: ignore[import-untyped]
@@ -23,6 +25,10 @@ DEFAULT_CASE_IDS: Tuple[str, ...] = (
 )
 DEFAULT_OUTPUT_PATH = REPORTS_ROOT / "deep_acceptance" / "visual_acceptance_report.html"
 ASSET_ROOT = REPORTS_ROOT / "deep_acceptance" / "assets"
+OPEN_GATE_REFS: Tuple[str, ...] = (
+    "Q-1:.planning/external_gate_queue.md#q-1",
+    "Q-2:.planning/external_gate_queue.md#q-2",
+)
 
 _CSS = """
 :root {
@@ -122,6 +128,25 @@ body { padding: 36px 20px 80px; }
 .pill.ok { color: var(--ok); border-color: rgba(110, 231, 168, 0.3); background: rgba(110, 231, 168, 0.08); }
 .pill.warn { color: var(--warn); border-color: rgba(255, 204, 122, 0.3); background: rgba(255, 204, 122, 0.08); }
 .pill.fail { color: var(--danger); border-color: rgba(255, 122, 144, 0.3); background: rgba(255, 122, 144, 0.08); }
+.version-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+.version-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(116, 198, 255, 0.18);
+  background: rgba(7, 16, 27, 0.44);
+}
+.version-card .value {
+  margin-top: 8px;
+  color: var(--fg);
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+}
 
 .summary-grid,
 .gate-grid,
@@ -349,7 +374,8 @@ a:hover { text-decoration: underline; }
   .gate-grid,
   .metric-grid,
   .artifact-grid,
-  .case-grid {
+  .case-grid,
+  .version-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -385,14 +411,46 @@ class VisualAcceptanceReportGenerator:
     def __init__(self, collector: Optional[ReportDataCollector] = None) -> None:
         self.collector = collector or ReportDataCollector()
 
-    def render(self, case_ids: Sequence[str] = DEFAULT_CASE_IDS) -> VisualAcceptanceResult:
+    def render(
+        self,
+        case_ids: Sequence[str] = DEFAULT_CASE_IDS,
+        canonical_path: Optional[Path] = None,
+        snapshot_path: Optional[Path] = None,
+        manifest_path: Optional[Path] = None,
+        package_path: Optional[Path] = None,
+        generated_at: Optional[datetime] = None,
+        head_sha: Optional[str] = None,
+        branch_name: Optional[str] = None,
+    ) -> VisualAcceptanceResult:
+        generated_at = generated_at or datetime.now()
+        canonical_target = canonical_path or DEFAULT_OUTPUT_PATH
+        snapshot_target = snapshot_path or self._snapshot_path(canonical_target, generated_at)
+        manifest_target = manifest_path or self._manifest_path(canonical_target)
+        package_target = package_path or self._package_path(canonical_target.parent, generated_at)
+        resolved_head_sha = head_sha or self._git_value("rev-parse", "--short", "HEAD") or "unknown"
+        resolved_branch_name = branch_name or self._git_value("branch", "--show-current") or "unknown"
         contexts = [self.collector.collect(case_id) for case_id in case_ids]
         images_embedded = self._count_existing_images(case_ids)
-        html = self._render_html(contexts)
+        html = self._render_html(
+            contexts,
+            generated_at=generated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            head_sha=resolved_head_sha,
+            canonical_path=self._display_path(canonical_target),
+            snapshot_path=self._display_path(snapshot_target),
+            manifest_path=self._display_path(manifest_target),
+            package_path=self._display_path(package_target),
+        )
         return VisualAcceptanceResult(
             html=html,
             case_count=len(contexts),
             chart_count=images_embedded,
+            canonical_path=str(canonical_target),
+            snapshot_path=str(snapshot_target),
+            manifest_path=str(manifest_target),
+            package_path=str(package_target),
+            generated_at=generated_at.isoformat(timespec="seconds"),
+            head_sha=resolved_head_sha,
+            branch_name=resolved_branch_name,
         )
 
     def generate(
@@ -400,15 +458,39 @@ class VisualAcceptanceReportGenerator:
         output_path: Optional[Path] = None,
         case_ids: Sequence[str] = DEFAULT_CASE_IDS,
     ) -> VisualAcceptanceResult:
-        result = self.render(case_ids=case_ids)
         target = output_path or DEFAULT_OUTPUT_PATH
+        generated_at = datetime.now()
+        snapshot_target = self._snapshot_path(target, generated_at)
+        manifest_target = self._manifest_path(target)
+        package_target = self._package_path(target.parent, generated_at)
+        result = self.render(
+            case_ids=case_ids,
+            canonical_path=target,
+            snapshot_path=snapshot_target,
+            manifest_path=manifest_target,
+            package_path=package_target,
+            generated_at=generated_at,
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(result.html, encoding="utf-8")
+        snapshot_target.write_text(result.html, encoding="utf-8")
+        manifest = self._manifest_payload(result)
+        manifest_target.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        package_target.write_text(self._render_package(case_ids, result), encoding="utf-8")
         result.output_path = str(target)
+        result.manifest = manifest
         return result
 
-    def _render_html(self, contexts: Sequence[ReportContext]) -> str:
-        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    def _render_html(
+        self,
+        contexts: Sequence[ReportContext],
+        generated_at: str,
+        head_sha: str,
+        canonical_path: str,
+        snapshot_path: str,
+        manifest_path: str,
+        package_path: str,
+    ) -> str:
         clean_pass_count = sum(1 for ctx in contexts if ctx.auto_verify_report.get("verdict") == "PASS")
         deviations_count = sum(
             1 for ctx in contexts if ctx.auto_verify_report.get("verdict") == "PASS_WITH_DEVIATIONS"
@@ -437,6 +519,24 @@ class VisualAcceptanceReportGenerator:
         <span class="pill ok">中文交付</span>
         <span class="pill warn">Q-1 / Q-2 仍待外部门控</span>
         <span class="pill fail">DHC 仍为 FAIL but explained</span>
+      </div>
+      <div class="version-grid">
+        <div class="version-card">
+          <div class="label">生成时间</div>
+          <div class="value">{escape(generated_at)}</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Head SHA</div>
+          <div class="value">{escape(head_sha)}</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Canonical</div>
+          <div class="value">{escape(canonical_path)}</div>
+        </div>
+        <div class="version-card">
+          <div class="label">Snapshot / Manifest / Package</div>
+          <div class="value">{escape(snapshot_path)}<br>{escape(manifest_path)}<br>{escape(package_path)}</div>
+        </div>
       </div>
     </section>
 
@@ -537,8 +637,12 @@ class VisualAcceptanceReportGenerator:
 
     <div class="footer">
       <span>生成时间 · {escape(generated_at)}</span>
+      <span>Head · {escape(head_sha)}</span>
       <span>生成器 · src/report_engine/visual_acceptance.py</span>
-      <span>输出 · reports/deep_acceptance/visual_acceptance_report.html</span>
+      <span>Canonical · {escape(canonical_path)}</span>
+      <span>Snapshot · {escape(snapshot_path)}</span>
+      <span>Manifest · {escape(manifest_path)}</span>
+      <span>Package · {escape(package_path)}</span>
     </div>
   </div>
 </body>
@@ -914,3 +1018,97 @@ class VisualAcceptanceReportGenerator:
             return 77.82
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         return float(data.get("c5_band_check", {}).get("nu_measured", 77.82))
+
+    def _manifest_payload(self, result: VisualAcceptanceResult) -> Dict[str, Any]:
+        return {
+            "generated_at": result.generated_at,
+            "head_sha": result.head_sha,
+            "branch_name": result.branch_name,
+            "canonical_path": str(Path(result.canonical_path or result.output_path or DEFAULT_OUTPUT_PATH)),
+            "snapshot_path": str(Path(result.snapshot_path or self._snapshot_path(DEFAULT_OUTPUT_PATH, datetime.now()))),
+            "manifest_path": str(Path(result.manifest_path or self._manifest_path(DEFAULT_OUTPUT_PATH))),
+            "package_path": str(Path(result.package_path or self._package_path(DEFAULT_OUTPUT_PATH.parent, datetime.now()))),
+            "case_count": result.case_count,
+            "image_panel_count": result.chart_count,
+            "open_gate_refs": list(OPEN_GATE_REFS),
+        }
+
+    def _render_package(self, case_ids: Sequence[str], result: VisualAcceptanceResult) -> str:
+        branch_name = result.branch_name or "unknown"
+        review_surface = "PR #1 draft" if branch_name == "codex/visual-acceptance-sync" else "PR pending"
+        contexts = [self.collector.collect(case_id) for case_id in case_ids]
+        asset_rows = []
+        for ctx in contexts:
+            info = self._presentation(ctx.case_id)
+            asset_paths = ", ".join(f"reports/deep_acceptance/assets/{image}" for image in info.images)
+            asset_rows.append(f"| `{ctx.case_id}` | {ctx.auto_verify_report.get('verdict', 'UNKNOWN')} | {asset_paths} |")
+
+        return "\n".join(
+            [
+                f"# Visual Acceptance Delivery Package — {result.generated_at}",
+                "",
+                "## 1. Delivery pointers",
+                "",
+                f"- Branch: `{branch_name}`",
+                f"- Head: `{result.head_sha}`",
+                f"- Review surface: {review_surface}",
+                f"- Canonical report: `{self._display_path(Path(result.canonical_path or DEFAULT_OUTPUT_PATH))}`",
+                f"- Snapshot report: `{self._display_path(Path(result.snapshot_path or self._snapshot_path(DEFAULT_OUTPUT_PATH, datetime.now())))}`",
+                f"- Manifest: `{self._display_path(Path(result.manifest_path or self._manifest_path(DEFAULT_OUTPUT_PATH)))}`",
+                f"- Package: `{self._display_path(Path(result.package_path or self._package_path(DEFAULT_OUTPUT_PATH.parent, datetime.now())))}`",
+                "",
+                "## 2. 5-case report asset inventory",
+                "",
+                "| Case | Verdict | PNG assets |",
+                "|---|---|---|",
+                *asset_rows,
+                "",
+                "## 3. Frozen external gates",
+                "",
+                "- `Q-1` DHC gold-reference accuracy remains external-gated; no gold/tolerance edits were made in this package.",
+                "- `Q-2` R-A-relabel remains external-gated; no whitelist relabel or new duct-flow gold was introduced.",
+                "",
+                "## 4. Scientific boundary",
+                "",
+                "- This package upgrades delivery surfaces, reproducibility, and control-plane traceability only.",
+                "- It does not claim DHC is fixed, and it does not relabel pipe/duct physics contracts.",
+                "- The main report remains PNG-only on geometry/CFD/benchmark panels; no SVG geometry placeholders are reintroduced.",
+                "",
+                "## 5. Signoff state",
+                "",
+                "- Codex conclusion: `READY_FOR_ACCEPTANCE_PACKAGE` after local report-generation/test verification.",
+                "- Claude APP conclusion: `PENDING` — Computer Use access to `com.anthropic.claudefordesktop` was denied at package generation time, so joint signoff is blocked pending approval restoration.",
+                "",
+            ]
+        ) + "\n"
+
+    def _snapshot_path(self, canonical_path: Path, generated_at: datetime) -> Path:
+        stamp = generated_at.strftime("%Y%m%d_%H%M%S")
+        return canonical_path.with_name(f"{canonical_path.stem}_{stamp}{canonical_path.suffix}")
+
+    def _manifest_path(self, canonical_path: Path) -> Path:
+        return canonical_path.with_name(f"{canonical_path.stem}_manifest.json")
+
+    def _package_path(self, output_dir: Path, generated_at: datetime) -> Path:
+        stamp = generated_at.strftime("%Y%m%d_%H%M%S")
+        return output_dir / f"{stamp}_visual_acceptance_package.md"
+
+    def _display_path(self, path: Path) -> str:
+        try:
+            return str(path.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(path)
+
+    def _git_value(self, *args: str) -> str:
+        try:
+            completed = subprocess.run(
+                ["git", *args],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return ""
+        return completed.stdout.strip()

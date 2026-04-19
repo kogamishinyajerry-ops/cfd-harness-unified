@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,12 @@ def test_visual_acceptance_render_contains_delivery_sections():
     assert 'href="../lid_driven_cavity_benchmark/case_completion_report.md"' in result.html
     assert 'id="case-naca0012_airfoil"' in result.html
     assert "reports/reports/" not in result.html
+    assert "Head SHA" in result.html
+    assert "Snapshot / Manifest / Package" in result.html
+    assert result.head_sha
+    assert result.snapshot_path
+    assert result.manifest_path
+    assert result.package_path
 
 
 def test_visual_acceptance_generate_writes_output(tmp_path: Path):
@@ -47,6 +54,24 @@ def test_visual_acceptance_generate_writes_output(tmp_path: Path):
     result = VisualAcceptanceReportGenerator().generate(output_path=output)
     assert output.is_file()
     assert result.output_path == str(output)
+    assert result.snapshot_path
+    assert Path(result.snapshot_path).is_file()
+    assert result.manifest_path
+    manifest_path = Path(result.manifest_path)
+    assert manifest_path.is_file()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["branch_name"] == result.branch_name
+    assert manifest["canonical_path"] == str(output)
+    assert manifest["snapshot_path"] == str(Path(result.snapshot_path))
+    assert manifest["manifest_path"] == str(manifest_path)
+    assert manifest["package_path"] == str(Path(result.package_path))
+    assert manifest["head_sha"] == result.head_sha
+    assert any(ref.startswith("Q-1") for ref in manifest["open_gate_refs"])
+    assert any(ref.startswith("Q-2") for ref in manifest["open_gate_refs"])
+    assert result.package_path
+    package_text = Path(result.package_path).read_text(encoding="utf-8")
+    assert "Visual Acceptance Delivery Package" in package_text
+    assert "Claude APP conclusion: `PENDING`" in package_text
     html = output.read_text(encoding="utf-8")
     assert "圆柱绕流卡门涡街" in html
     assert "真实 PNG 图板" in html
@@ -59,6 +84,9 @@ def test_visual_acceptance_cli_default(capsys):
     captured = capsys.readouterr()
     assert code == 0
     assert "OK    visual_acceptance_report" in captured.out
+    assert "snapshot=" in captured.out
+    assert "manifest=" in captured.out
+    assert "package=" in captured.out
     assert "cases=5" in captured.out
 
 
