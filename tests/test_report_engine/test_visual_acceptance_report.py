@@ -24,12 +24,20 @@ def test_visual_acceptance_render_contains_delivery_sections():
     assert result.case_count == 5
     assert result.chart_count == 10
     assert "Visual Acceptance Report" in result.html
+    assert "Known Open Contract Items" in result.html
+    assert "Q-1" in result.html
+    assert "Q-2" in result.html
+    assert "Trial Runbook" in result.html
     assert "CAD Pre-Processing" in result.html
     assert "CFD Post-Processing" in result.html
+    assert "CAD / Pre-Processing Lens" in result.html
+    assert "CFD / Post-Processing Lens" in result.html
+    assert "Trial Checklist" in result.html
     assert "NACA 0012 Airfoil External Flow" in result.html
     assert "Differential Heated Cavity" in result.html
     assert result.html.count("<svg") >= 10
     assert 'href="../lid_driven_cavity_benchmark/case_completion_report.md"' in result.html
+    assert 'href="#case-naca0012_airfoil"' in result.html
     assert "reports/reports/" not in result.html
 
 

@@ -259,6 +259,77 @@ td strong { color: var(--fg); }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
+.runbook-grid,
+.process-grid {
+  display: grid;
+  gap: 14px;
+}
+.runbook-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 6px;
+}
+.process-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+.runbook-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 28%),
+    rgba(17, 21, 28, 0.94);
+}
+.runbook-card .stage {
+  color: var(--fg-mute);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.runbook-card p {
+  margin: 10px 0 0;
+  color: var(--fg-dim);
+  font-size: 14px;
+}
+.runbook-card a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.runbook-card a:hover { text-decoration: underline; }
+.compact-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--fg-dim);
+}
+.compact-list li + li { margin-top: 8px; }
+.compact-list strong { color: var(--fg); }
+.advisory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0 6px;
+}
+.advisory-card {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(210, 153, 34, 0.28);
+  background:
+    linear-gradient(180deg, rgba(210, 153, 34, 0.08), transparent 36%),
+    rgba(17, 21, 28, 0.94);
+}
+.advisory-card .tag {
+  color: var(--warn);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.advisory-card p {
+  margin: 10px 0 0;
+  color: var(--fg-dim);
+  font-size: 14px;
+}
 .artifact {
   padding: 16px;
   border-radius: 14px;
@@ -287,8 +358,11 @@ td strong { color: var(--fg); }
 
 @media (max-width: 980px) {
   .summary-grid,
+  .advisory-grid,
   .artifact-list,
+  .runbook-grid,
   .metric-grid,
+  .process-grid,
   .case-grid {
     grid-template-columns: 1fr;
   }
@@ -301,6 +375,7 @@ td strong { color: var(--fg); }
 
 @dataclass
 class _VisualCase:
+    section_id: str
     case_id: str
     case_name: str
     verdict: str
@@ -314,6 +389,11 @@ class _VisualCase:
     geometry_svg: str
     metrics: List[Tuple[str, str, str]]
     notes: List[str]
+    runbook_stage: str
+    runbook_summary: str
+    cad_lens: List[str]
+    cfd_lens: List[str]
+    trial_checks: List[str]
     report_path: str
 
 
@@ -404,7 +484,9 @@ class VisualAcceptanceReportGenerator:
         else:
             raise ValueError(f"Unsupported visual acceptance case: {case_id}")
 
+        stage, summary, cad_lens, cfd_lens, trial_checks = self._experience_lens(case_id, context)
         return _VisualCase(
+            section_id=f"case-{case_id}",
             case_id=case_id,
             case_name=context.case_meta.get("name", case_id),
             verdict=verdict,
@@ -418,6 +500,11 @@ class VisualAcceptanceReportGenerator:
             geometry_svg=geometry_svg,
             metrics=metrics,
             notes=notes,
+            runbook_stage=stage,
+            runbook_summary=summary,
+            cad_lens=cad_lens,
+            cfd_lens=cfd_lens,
+            trial_checks=trial_checks,
             report_path=report_path,
         )
 
@@ -426,6 +513,8 @@ class VisualAcceptanceReportGenerator:
         with_deviations = sum(case.verdict == "PASS_WITH_DEVIATIONS" for case in cases)
         failed = sum(case.verdict == "FAIL" for case in cases)
         chart_count = sum(2 for _ in cases)
+        open_item_cards = "\n".join(self._open_item_card(item) for item in self._open_contract_items())
+        runbook_cards = "\n".join(self._runbook_card(case) for case in cases)
         matrix_rows = "\n".join(self._matrix_row(case) for case in cases)
         case_cards = "\n".join(self._case_card(case, output_path=output_path) for case in cases)
         artifact_cards = "\n".join(self._artifact_card(case, output_path=output_path) for case in cases)
@@ -463,6 +552,15 @@ class VisualAcceptanceReportGenerator:
             f"{self._summary_card('PASS WITH DEVIATIONS', str(with_deviations), 'Shape-faithful but not fully contract-clean', tone='warn')}\n"
             f"{self._summary_card('FAIL / ESCALATED', str(failed), 'Gold-reference ambiguity kept visible', tone='fail')}\n"
             "</section>\n"
+            "<h2>Known Open Contract Items</h2>\n"
+            "<p>These items stay deliberately visible during visual acceptance so Kogami can separate deck quality from unresolved governance or gold-reference closure work.</p>\n"
+            "<div class=\"advisory-grid\">\n"
+            f"{open_item_cards}\n"
+            "</div>\n"
+            "<h2>Trial Runbook</h2>\n"
+            "<div class=\"runbook-grid\">\n"
+            f"{runbook_cards}\n"
+            "</div>\n"
             "<h2>Readiness Matrix</h2>\n"
             "<table>\n"
             "<thead><tr><th>Case</th><th>Verdict</th><th>Convergence / Physics</th><th>Contract Status</th><th>Visual Focus</th></tr></thead>\n"
@@ -523,6 +621,7 @@ class VisualAcceptanceReportGenerator:
         artifact_href = escape(self._artifact_href(case.report_path, output_path))
         return (
             "<article class=\"case-card\">"
+            f"<a id=\"{escape(case.section_id)}\"></a>"
             "<div class=\"case-head\">"
             "<div>"
             f"<h3>{escape(case.case_name)}</h3>"
@@ -546,12 +645,64 @@ class VisualAcceptanceReportGenerator:
             f"<div class=\"metric-grid\">{metrics}</div>"
             "</div>"
             "</div>"
+            "<div class=\"process-grid\">"
+            f"{self._lens_card('CAD / Pre-Processing Lens', case.cad_lens)}"
+            f"{self._lens_card('CFD / Post-Processing Lens', case.cfd_lens)}"
+            f"{self._lens_card('Trial Checklist', case.trial_checks)}"
+            "</div>"
             "<div class=\"subcard\" style=\"margin-top: 14px;\">"
             "<h4>Acceptance Notes</h4>"
             f"<ul>{notes}</ul>"
             f"<div class=\"pill\" style=\"margin-top: 12px;\"><a href=\"{artifact_href}\" style=\"color: inherit; text-decoration: none;\">Open supporting artifact</a></div>"
             "</div>"
             "</article>"
+        )
+
+    def _runbook_card(self, case: _VisualCase) -> str:
+        return (
+            "<div class=\"runbook-card\">"
+            f"<div class=\"stage\">{escape(case.runbook_stage)}</div>"
+            f"<h3 style=\"margin-top: 10px;\">{escape(case.case_name)}</h3>"
+            f"{self._pill(case.verdict, case.verdict)}"
+            f"<p>{escape(case.runbook_summary)}</p>"
+            f"<p><a href=\"#{escape(case.section_id)}\">Jump to case deck</a></p>"
+            "</div>"
+        )
+
+    @staticmethod
+    def _open_contract_items() -> Sequence[Tuple[str, str, str]]:
+        return (
+            (
+                "Q-1",
+                "DHC gold-reference accuracy",
+                "Differential Heated Cavity remains an explicit FAIL until the external Gate chooses Path P-1 vs P-2 and resolves why measured Nu stays far above the current gold target.",
+            ),
+            (
+                "Q-2",
+                "R-A relabel (pipe_flow -> duct_flow)",
+                "The relabel is still open, so contract-status totals should be read as provisional. The visual deck can still be trialed, but naming/governance closure is not claimed finished.",
+            ),
+        )
+
+    @staticmethod
+    def _open_item_card(item: Tuple[str, str, str]) -> str:
+        item_id, title, description = item
+        return (
+            "<div class=\"advisory-card\">"
+            f"<div class=\"tag\">{escape(item_id)}</div>"
+            f"<h3 style=\"margin-top: 10px;\">{escape(title)}</h3>"
+            f"<p>{escape(description)}</p>"
+            "</div>"
+        )
+
+    @staticmethod
+    def _lens_card(title: str, items: Sequence[str]) -> str:
+        body = "".join(f"<li>{escape(item)}</li>" for item in items)
+        return (
+            "<div class=\"subcard\">"
+            f"<h4>{escape(title)}</h4>"
+            f"<ul class=\"compact-list\">{body}</ul>"
+            "</div>"
         )
 
     def _artifact_card(self, case: _VisualCase, output_path: Path) -> str:
@@ -770,6 +921,132 @@ class VisualAcceptanceReportGenerator:
         path = REPORTS_ROOT / "ex1_007_dhc_mesh_refinement" / "measurement_result.yaml"
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return data["c5_band_check"]
+
+    def _experience_lens(
+        self,
+        case_id: str,
+        context: ReportContext,
+    ) -> Tuple[str, str, List[str], List[str], List[str]]:
+        solver = context.case_meta.get("solver", "unknown")
+        turbulence = context.case_meta.get("turbulence_model", "unknown")
+        mesh_strategy = self._mesh_strategy(case_id, context)
+        key_parameters = context.case_meta.get("key_parameters", {})
+
+        if case_id == "lid_driven_cavity_benchmark":
+            return (
+                "Start Here",
+                "Use this clean laminar PASS as the baseline visual trust check before moving to noisier wake or thermal cases.",
+                [
+                    f"Solver stack: {solver} with {turbulence} flow assumptions.",
+                    f"Mesh posture: {mesh_strategy}.",
+                    f"Operating point: Re={key_parameters.get('Re', 'n/a')} unit-square cavity with moving lid.",
+                ],
+                [
+                    "Primary observable: u/v centerline overlays against Ghia 1982.",
+                    "Comparison mode: interpolation-aware profiles plus primary-vortex location.",
+                    "Risk posture: minimal; this is the least caveated verifier-grade surface.",
+                ],
+                [
+                    "Confirm the harness profile stays visually glued to the gold curve over the full centerline.",
+                    "Check the vortex-center metric card after reading the overlay, not before.",
+                    "Use this card to calibrate what a 'good' PASS should look like in the rest of the deck.",
+                ],
+            )
+        if case_id == "backward_facing_step_steady":
+            return (
+                "Pressure Recovery",
+                "This is the best steady separated-flow card for Kogami to judge whether geometry and recovery metrics stay coherent together.",
+                [
+                    f"Solver stack: {solver} with {turbulence} closure for separated internal flow.",
+                    f"Mesh posture: {mesh_strategy}.",
+                    f"Operating point: Re={key_parameters.get('Re', 'n/a')} with expansion_ratio={key_parameters.get('expansion_ratio', 'n/a')}.",
+                ],
+                [
+                    "Primary observable: reattachment velocity profile.",
+                    "Comparison mode: profile shape plus scalar reattachment-length and pressure-recovery checks.",
+                    "Risk posture: low; the visual layer makes reattachment behavior easy to spot without diving into YAML.",
+                ],
+                [
+                    "Inspect whether the velocity profile shape matches before reading the scalar Xr/H badge.",
+                    "Use the pressure-delta metric as the second confidence signal, not the first.",
+                    "Treat this as the internal-flow counterpart to the lid-driven cavity baseline.",
+                ],
+            )
+        if case_id == "cylinder_crossflow":
+            return (
+                "Wake Readout",
+                "This card is the best bluff-body experience slice: it looks strong visually, but still exposes the silent-pass caveat honestly.",
+                [
+                    f"Solver stack: {solver} with {turbulence} in an external wake setup.",
+                    f"Mesh posture: {mesh_strategy}.",
+                    f"Operating point: Re={key_parameters.get('Re', 'n/a')} circular-cylinder shedding regime.",
+                ],
+                [
+                    "Primary observable: wake-centerline velocity deficit.",
+                    "Comparison mode: solver-derived wake samples plus scalar Strouhal/Cd/Cl badges.",
+                    "Risk posture: medium; the Strouhal shortcut remains a known audit concern and is intentionally visible.",
+                ],
+                [
+                    "Read the wake curve first; it should feel physically plausible even before you inspect the badges.",
+                    "Use the Strouhal badge to verify that the shortcut hazard is still called out, not hidden.",
+                    "This is the best card for testing whether the acceptance layer stays honest under a 'looks good but caveated' case.",
+                ],
+            )
+        if case_id == "naca0012_airfoil":
+            return (
+                "CAD-to-Cp Chain",
+                "This is the strongest CAD pre-processing story in the deck because the geometry preview and Cp extraction caveat are both visible on one card.",
+                [
+                    f"Solver stack: {solver} with {turbulence} for external airfoil flow.",
+                    f"Mesh posture: {mesh_strategy}.",
+                    f"Operating point: Re={key_parameters.get('Re', 'n/a')}, AoA={key_parameters.get('angle_of_attack', 'n/a')} deg, chord={key_parameters.get('chord_length', 'n/a')} m.",
+                ],
+                [
+                    "Primary observable: pressure-coefficient profile.",
+                    "Comparison mode: near-surface cell-band sampling against surface gold points.",
+                    "Risk posture: medium; shape fidelity is good, but magnitude attenuation is still visible and expected.",
+                ],
+                [
+                    "Inspect whether the CAD preview and the Cp curve tell the same aerodynamic story.",
+                    "Expect shape agreement first and magnitude agreement second; the current extractor is intentionally not over-claimed.",
+                    "Use this card as the trial surface for CAD pre-processing credibility.",
+                ],
+            )
+        if case_id == "differential_heated_cavity":
+            return (
+                "Escalation Lane",
+                "Keep this last in the trial sequence: it is the honest FAIL card that proves the deck does not hide hard thermal/gold-reference ambiguity.",
+                [
+                    f"Solver stack: {solver} with {turbulence} for buoyant natural convection.",
+                    f"Mesh posture: {mesh_strategy}.",
+                    f"Operating point: Ra={key_parameters.get('Ra', 'n/a')}, Pr={key_parameters.get('Pr', 'n/a')}, aspect_ratio={key_parameters.get('aspect_ratio', 'n/a')}.",
+                ],
+                [
+                    "Primary observable: mean Nusselt number against thermal gold reference.",
+                    "Comparison mode: bullet-chart framing of measured Nu, target gold, and expected band.",
+                    "Risk posture: high but honest; the failure is a gold-reference / methodology escalation, not a hidden numerical shrug.",
+                ],
+                [
+                    "Read this card as proof that the acceptance layer surfaces unresolved thermal issues instead of blending them into a PASS.",
+                    "Check the band verdict and FAIL badge together; they should tell one consistent story.",
+                    "Use the supporting artifact link if you want the deep-dive DHC escalation narrative after the main deck review.",
+                ],
+            )
+        raise ValueError(f"Unsupported visual acceptance case: {case_id}")
+
+    @staticmethod
+    def _mesh_strategy(case_id: str, context: ReportContext) -> str:
+        value = context.case_meta.get("mesh_strategy")
+        if value and value != "[DATA MISSING]":
+            return str(value)
+        fallbacks = {
+            "lid_driven_cavity_benchmark": "structured square cavity grid with centerline extraction support",
+            "backward_facing_step_steady": "block-structured step channel tuned for reattachment sampling",
+            "cylinder_crossflow": "2D-in-3D wake channel with cylinder obstacle and centerline probe path",
+            "naca0012_airfoil": "blockMesh farfield plus near-surface cell band for Cp extraction",
+            "differential_heated_cavity": "wall-bounded natural-convection cavity mesh with thermal-boundary focus",
+        }
+        return fallbacks.get(case_id, "mesh strategy not recorded")
 
     @staticmethod
     def _line_chart_svg(
