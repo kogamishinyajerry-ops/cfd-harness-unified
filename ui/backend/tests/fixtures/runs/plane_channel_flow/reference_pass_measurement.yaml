@@ -1,30 +1,27 @@
 # Reference-pass run for plane_channel_flow (turbulent channel, Re_tau=180).
-# The "做对" scenario is a DNS-grade run: fine mesh (128³ or better),
-# pimpleFoam + LES sub-grid, statistics averaged over ≥20 eddy turnovers,
-# full u+(y+) profile reconstructed. Gold quantity is u_mean_profile
-# (Kim/Moser 1987/1999); adapter currently exposes U_max_approx as the
-# comparable scalar — reference_pass lands at 1.095 (gold 1.10 ± 5%).
-# NOT equivalent to full-profile PASS; see real_incident for the honest
-# scalar-fallback caveat.
+# DNS-grade: Kim 1987 / Moser 1999 u+(y+) near-wall anchor at y+=5 is
+# u+=5.4. Fine mesh (≥128³) + sub-grid scale model + long averaging
+# window reproduces this to within a percent. Gold anchor u+=5.4 ± 5%
+# → run value u+=5.32 lands at -1.5% → comfortably PASS.
 run_metadata:
   run_id: reference_pass
-  label_zh: 参考通过 · DNS 网格 U_max 标量
-  label_en: Reference pass (DNS-grade U_max scalar)
+  label_zh: 参考通过 · DNS 网格 u+ @ y+=5
+  label_en: Reference pass (DNS-grade u+ at y+=5)
   description_zh: >-
-    Re_τ=180，128³ DNS 网格，pimpleFoam + LES，>20 eddy turnover 统计。
-    U_max=1.095（gold 1.10 ± 5%）→ PASS。这只是标量值 PASS，**不代表**
-    剖面 u+(y+) 与 Kim 1987 一致——要真做对需要把 adapter 的剖面采样器
-    接上来。real_incident 诚实地记录了这个退化。
+    Re_τ=180，128³ DNS 网格，pimpleFoam + LES SGS，>20 eddy turnover 统计。
+    y+=5 处 u+=5.32，相对 Kim 1987 gold 5.4 偏 -1.5%，5% 容差内 PASS。
+    这是 channel flow 唯一有意义的 "做对"——剖面采样器必须真正取到
+    viscous sublayer 的值，不是用 U_bulk 标量糊过去。
   category: reference
   expected_verdict: PASS
 case_id: plane_channel_flow
 source: dns_grade_simulation_synthetic
 measurement:
-  value: 1.095
+  value: 5.32
   unit: dimensionless
-  run_id: synth_channel_dns_umax
+  run_id: synth_channel_dns_uplus_y5
   commit_sha: null
   measured_at: null
-  quantity: U_max_approx
+  quantity: u_plus_at_yplus_5
 audit_concerns: []
 decisions_trail: []

@@ -371,9 +371,12 @@ def gen_backward_facing_step():
     fig, ax = plt.subplots(figsize=(5.6, 3.8), facecolor=DARK_BG)
     ax.plot(Re, Xr, color=ACCENT, linewidth=1.6, label="Armaly 1983 + Driver 1985 envelope")
     ax.axhspan(5.96, 6.56, color=PASS, alpha=0.15, label="±5% tolerance band (gold 6.26)")
-    ax.axhline(6.26, color=PASS, linewidth=1.4, linestyle="--", label="Gold Xr/H = 6.26 (Driver 1985)")
-    ax.scatter([7600], [6.1], color=FAIL, s=50, zorder=5, edgecolor="black",
-               label="欠分辨 run: 5.1 (-18%)")
+    ax.axhline(6.26, color=PASS, linewidth=1.4, linestyle="--", label="Gold Xr/H = 6.26 (Driver 1985, Re_h=37500)")
+    # Teaching anchors at Re=7600 (the whitelist / fixtures Re). The
+    # under_resolved fixture measures Xr/H = 5.1, which sits clearly
+    # below the tolerance band at any turbulent Re.
+    ax.scatter([7600], [5.1], color=FAIL, s=50, zorder=5, edgecolor="black",
+               label="under_resolved: 5.1 (-18%)")
     ax.scatter([7600], [6.28], color=PASS, s=50, zorder=5, edgecolor="black",
                label="reference_pass: 6.28 (+0.3%)")
     _setup_axes(ax, "Reattachment length Xr/H · Armaly + Driver 1985",

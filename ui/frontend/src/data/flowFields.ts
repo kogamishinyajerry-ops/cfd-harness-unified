@@ -81,9 +81,9 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
     {
       src: "/flow-fields/backward_facing_step/xr_vs_re.png",
       caption_zh:
-        "Xr/H(Re_h) · Armaly 1983 + Driver 1985 · gold 6.26 @ Re=7600 + MVP reference_pass / under_resolved 标注",
+        "Xr/H(Re_h) · Armaly 1983 低 Re 段 + Driver 1985 Re_h=37500 湍流平台 · 教学 run 在 Re=7600 处标注",
       provenance:
-        "Armaly 1983 low-Re regime + Driver & Seegmiller 1985 Xr/H=6.26 at Re_h=37500 turbulent plateau; envelope interpolation with MVP teaching-run anchor points overlaid.",
+        "Armaly 1983 low-Re regime + Driver & Seegmiller 1985 Xr/H=6.26 at Re_h=37500 turbulent plateau; envelope interpolation with MVP teaching-run anchor points at Re=7600 overlaid.",
     },
   ],
   naca0012_airfoil: [

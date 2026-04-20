@@ -109,13 +109,32 @@ def _load_gold_standard(case_id: str) -> dict[str, Any] | None:
         refs = doc.get("reference_values") or []
         ref_value: float | None = None
         unit = ""
+        # Scan each reference_values entry for the first non-zero scalar
+        # anchor under any known key. (First entry of a profile is often
+        # a trivial u_plus=0 at y_plus=0 — picking the next non-zero
+        # entry makes the contract engine produce meaningful PASS/FAIL
+        # instead of collapsing deviation to 0.)
+        scalar_keys = (
+            "value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp", "Re_D", "St",
+            "u_plus",
+        )
         if refs and isinstance(refs[0], dict):
-            first_ref = refs[0]
-            unit = first_ref.get("unit", "") or ""
-            for scalar_key in (
-                "value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp", "Re_D", "St",
-            ):
-                val = first_ref.get(scalar_key)
+            unit = refs[0].get("unit", "") or ""
+        for entry in refs:
+            if not isinstance(entry, dict):
+                continue
+            for scalar_key in scalar_keys:
+                val = entry.get(scalar_key)
+                if isinstance(val, (int, float)) and float(val) != 0.0:
+                    ref_value = float(val)
+                    break
+            if ref_value is not None:
+                break
+        # Fallback: if every entry was zero, accept the first scalar we
+        # can find (even zero) to preserve prior behaviour.
+        if ref_value is None and refs and isinstance(refs[0], dict):
+            for scalar_key in scalar_keys:
+                val = refs[0].get(scalar_key)
                 if isinstance(val, (int, float)):
                     ref_value = float(val)
                     break

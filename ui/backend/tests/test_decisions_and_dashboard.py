@@ -83,9 +83,14 @@ def test_dashboard_has_cases_and_summary():
     body = client.get("/api/dashboard").json()
     assert body["summary"]["total_cases"] == len(body["cases"])
     assert body["summary"]["total_cases"] >= 10
-    # At least one HAZARD and one FAIL from Phase 0 fixtures.
+    # Post DEC-V61-024 Option A: reference_pass runs are curated for
+    # every case, so the default distribution lands at 8 PASS · 2 HAZARD.
+    # HAZARD cases (cylinder + NACA) persist because silent-pass hazards
+    # / profile-quantity preconditions remain armed; FAIL cases default
+    # out to zero because every case now has a curated PASS-or-HAZARD
+    # reference run. The FAIL semantics still live on the non-default
+    # under_resolved / wrong_model runs, surfaced via `run_id=...`.
     assert body["summary"]["hazard_cases"] >= 1
-    assert body["summary"]["fail_cases"] >= 1
 
 
 def test_dashboard_includes_gate_queue_and_timeline():

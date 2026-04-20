@@ -49,7 +49,13 @@ def test_case_detail_differential_heated_cavity(client: TestClient) -> None:
 
 
 def test_validation_report_dhc_is_fail_with_hazard(client: TestClient) -> None:
-    response = client.get("/api/validation-report/differential_heated_cavity")
+    # Pin to the real_incident run: after DEC-V61-024 Option A, DHC has
+    # a reference_pass curated run (Nu=8.75 de Vahl Davis Ra=1e6) that
+    # now serves as the default. The Nu=77.82/FAIL case-study narrative
+    # lives on the real_incident fixture (Ra=1e10 regime-mismatch lesson).
+    response = client.get(
+        "/api/validation-report/differential_heated_cavity?run_id=real_incident"
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["measurement"]["value"] == pytest.approx(77.82)
