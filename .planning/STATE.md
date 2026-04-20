@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T03:00"
+last_updated: "2026-04-21T03:45"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -638,6 +638,19 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 - **Codex review arc economics**: 3 rounds, cumulative 288,056 tokens. Diminishing returns documented on round 3. PR-5c.3 skipped 4th review per DEC-V61-016 rationale.
 - **v6.1 autonomous_governance counter**: 12 → **14** (DEC-V61-016 + DEC-V61-017 both autonomous). Deep past hard-floor-4 threshold ≥10. Hard-floor-4 formal retrospective is overdue — can roll into post-PR-5d cleanup.
 - **Phase 5 sequence final status**: 3/4 main + 3/3 Codex-review fixes (5c.1 + 5c.2 + 5c.3). Only **PR-5d Screen 6 UI** remains. All 5 open design questions resolved (Kogami "全部接受" 2026-04-21). PR-5d ready to start.
+- **⚠️ Phase 5 PR-5d LANDED but CHANGES_REQUIRED (2026-04-21T03:40)** — PR #18 merged `320bed1012ea55be73ef4cda77118d0dfe66e7bb`. FastAPI route + Screen 6 React page + V&V40 checklist + 16 route tests. Frontend tsc clean. 325 passed + 1 skipped regression. **BUT post-merge Codex GPT-5.4 xhigh 4th-round review: `CHANGES_REQUIRED`** — 2 HIGH findings + 1 MEDIUM. DEC-V61-018 Notion page `348c6894-2bed-81f1-aa6b-db993c3fde2f`, Status=Proposed.
+  - **HIGH #1**: POST signs empty-evidence bundles (no run_output, no measurement, no verdict); accepts nonexistent case_id (test blesses it). In regulated-review context, a signed "audit package" with no evidence is a misleading artifact.
+  - **HIGH #2**: `build_manifest()` auto-stamps `generated_at` per call. Two identical POSTs 1s apart → different ZIP hash + different HMAC. **Violates DEC-V61-013 byte-reproducibility contract.**
+  - **MEDIUM**: V&V40 checklist overstates FDA alignment; product-specific summary, not faithful to FDA 2023 CM&S guidance; references manifest fields absent from current skeleton bundles.
+  - Non-blocking: path-traversal guard sound, HMAC secret handling clean, FileResponse correct, frontend state handling OK, python 3.9 pyproject mismatch is pre-existing.
+- **⚠️ Phase 5 is NOT complete** until PR-5d.1 closes HIGH #1 + HIGH #2. Requires Kogami decision between X1 (fix in PR-5d.1, ~140 LOC, recommended), X2 (revert + v2), X3 (feature-flag dry-run), X4 (defer).
+- **Codex review arc final tally (rounds 1-4)**:
+  - PR-5c: APPROVED_WITH_NOTES · 117,588 tokens
+  - PR-5c.1: APPROVED_WITH_NOTES · 76,152 tokens
+  - PR-5c.2: APPROVED_WITH_NOTES · 94,316 tokens
+  - **PR-5d: CHANGES_REQUIRED · 143,521 tokens** ← highest-value round, caught semantic issues the module-level reviews couldn't see
+  - **Cumulative: 431,577 tokens**. Counter discipline earned its keep: 4th review caught real regressions self-signed review would miss.
+- **v6.1 autonomous_governance counter**: 14 → **15**. Further Phase 5 work (PR-5d.1) will bump to 16.
 
 ---
 
