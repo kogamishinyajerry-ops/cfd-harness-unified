@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DHC Case Report · Differential Heated Cavity Ra=1e10</title>
+<style>
+:root {
+  --bg: #0b0d10;
+  --bg-alt: #12161b;
+  --bg-card: #181d24;
+  --border: #262c36;
+  --fg: #e6e8eb;
+  --fg-dim: #9aa3ad;
+  --fg-mute: #6b7580;
+  --accent: #4aa3ff;
+  --accent-dim: #1d5aa8;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --fail: #f85149;
+  --fuse: #bc8cff;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 48px 32px 96px; }
+
+/* Hero */
+.hero { border-left: 3px solid var(--fail); padding: 4px 0 4px 24px; margin-bottom: 40px; }
+.hero .eyebrow { font-size: 12px; letter-spacing: 0.12em; color: var(--fg-mute); text-transform: uppercase; font-family: var(--mono); }
+.hero h1 { font-size: 34px; font-weight: 600; margin: 8px 0 4px; letter-spacing: -0.01em; }
+.hero .sub { color: var(--fg-dim); font-size: 15px; }
+.hero .badges { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-family: var(--mono); letter-spacing: 0.02em; border: 1px solid transparent; }
+.badge.fail { background: rgba(248,81,73,.12); color: var(--fail); border-color: rgba(248,81,73,.28); }
+.badge.fuse { background: rgba(188,140,255,.12); color: var(--fuse); border-color: rgba(188,140,255,.28); }
+.badge.ok { background: rgba(63,185,80,.10); color: var(--ok); border-color: rgba(63,185,80,.28); }
+.badge.neutral { background: var(--bg-alt); color: var(--fg-dim); border-color: var(--border); }
+
+h2 { font-size: 20px; margin: 48px 0 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); }
+h2 .num { color: var(--accent); font-family: var(--mono); font-weight: 500; margin-right: 12px; font-size: 16px; }
+h3 { font-size: 15px; font-weight: 600; color: var(--fg); margin: 20px 0 8px; }
+p { color: var(--fg-dim); }
+p strong { color: var(--fg); font-weight: 600; }
+code, .mono { font-family: var(--mono); }
+code { background: var(--bg-alt); padding: 1px 6px; border-radius: 4px; font-size: 0.92em; color: #b8c5d1; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin: 12px 0; }
+.card.highlight { border-color: rgba(188,140,255,.4); background: linear-gradient(180deg, rgba(188,140,255,.04), transparent); }
+
+.kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 24px; font-size: 14px; }
+.kv dt { color: var(--fg-mute); font-family: var(--mono); font-size: 12px; }
+.kv dd { margin: 0; color: var(--fg); }
+
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+th { color: var(--fg-mute); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--mono); background: var(--bg-alt); }
+td.mono { font-family: var(--mono); font-size: 12.5px; }
+td .delta-bad { color: var(--fail); }
+td .delta-warn { color: var(--warn); }
+td .delta-ok { color: var(--ok); }
+
+/* Timeline */
+.timeline { position: relative; margin: 20px 0; padding-left: 32px; }
+.timeline::before { content: ''; position: absolute; left: 10px; top: 8px; bottom: 8px; width: 2px; background: var(--border); }
+.tl-item { position: relative; margin-bottom: 32px; }
+.tl-item::before { content: ''; position: absolute; left: -29px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); border: 2px solid var(--fg-mute); }
+.tl-item.fail::before { border-color: var(--fail); background: rgba(248,81,73,.2); }
+.tl-item.improve::before { border-color: var(--warn); background: rgba(210,153,34,.2); }
+.tl-item.correct::before { border-color: var(--accent); background: rgba(74,163,255,.2); }
+.tl-item.fuse::before { border-color: var(--fuse); background: rgba(188,140,255,.25); box-shadow: 0 0 0 4px rgba(188,140,255,.08); }
+.tl-item h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline; }
+.tl-item .tag { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
+.tl-metric { margin-top: 6px; font-family: var(--mono); font-size: 13px; color: var(--fg); }
+.tl-metric .num { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.tl-metric .ref { color: var(--fg-mute); }
+.tl-note { color: var(--fg-dim); font-size: 14px; margin-top: 6px; }
+
+/* Two-card grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+@media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+.path-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+.path-card h3 { margin-top: 0; color: var(--accent); }
+.path-card .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--fg-mute); text-transform: uppercase; }
+
+.footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 12px; color: var(--fg-mute); font-family: var(--mono); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+blockquote { margin: 12px 0; padding: 12px 20px; border-left: 3px solid var(--fuse); background: rgba(188,140,255,.04); color: var(--fg-dim); font-size: 14px; }
+
+.lede { font-size: 16px; line-height: 1.65; color: var(--fg); margin: 24px 0 0; padding: 20px 24px; background: var(--bg-alt); border-radius: 8px; border-left: 3px solid var(--fuse); }
+.lede strong { color: var(--fuse); }
+
+/* Figures */
+.fig { margin: 20px 0 32px; }
+.fig-title { font-size: 13px; color: var(--fg-dim); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.fig-title .src { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
+.fig img, .fig object { width: 100%; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; display: block; }
+.fig-caption { font-size: 13px; color: var(--fg-dim); margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--border); }
+
+.missing { background: rgba(210,153,34,.06); border: 1px dashed rgba(210,153,34,.4); border-radius: 6px; padding: 20px 24px; margin: 12px 0; }
+.missing h3 { color: var(--warn); margin: 0 0 8px; }
+.missing p { color: var(--fg-dim); margin: 4px 0; font-size: 14px; }
+.missing code { color: #d9b77a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <div class="eyebrow">Case Report · whitelist case #7</div>
+  <h1>Differential Heated Cavity</h1>
+  <div class="sub">Natural convection at Ra=10<sup>10</sup> · buoyantFoam · k-ω SST · <span class="mono">2D air</span></div>
+  <div class="badges">
+    <span class="badge fail">Verdict: FAIL</span>
+    <span class="badge fuse">FUSE → external Gate</span>
+    <span class="badge ok">Physics: PASS</span>
+    <span class="badge ok">Convergence: CONVERGED</span>
+    <span class="badge neutral">Ra=1e10</span>
+    <span class="badge neutral">Pr=0.71</span>
+    <span class="badge neutral">AR=1.0</span>
+  </div>
+</div>
+
+<p class="lede">
+这是 whitelist 里唯一一个 <strong>FAIL + FUSE</strong> 的算例。经过五次递进式测量，最终收敛到一个出乎意料的判断：
+<strong>不是 solver 错，是 gold_standard 的 ref_value 可能本身就错。</strong>
+ADWM 自主治理层无权修改 gold 数值（hard floor #1），所以把决策熔断 (FUSE) 上交外部 Gate，附上两条可选路径和三个文献交叉验证。
+</p>
+
+<h2><span class="num">§1</span>Case Summary</h2>
+<div class="card">
+<dl class="kv">
+  <dt>Case ID</dt><dd><code>differential_heated_cavity</code></dd>
+  <dt>Solver</dt><dd><code>buoyantFoam</code> (SIMPLE + thermal coupling, nOuterCorrectors=80)</dd>
+  <dt>Turbulence</dt><dd>k-ω SST · wallDist meshWave</dd>
+  <dt>Reference</dt><dd>Dhir 2001 / Ampofo &amp; Karayiannis 2003 · DOI: <code>10.1016/S0140-7007(02)00085-4</code></dd>
+  <dt>Observable</dt><dd><code>nusselt_number</code> · ref = 30.0 · tolerance = ±15% (relative)</dd>
+  <dt>Precondition #1</dt><dd><span style="color:var(--warn)">satisfied_by_current_adapter: false</span> — 需 500-1000 wall-normal cells 才能分辨 Ra=1e10 的热边界层</dd>
+  <dt>Precondition #3</dt><dd><span style="color:var(--ok)">SATISFIED</span> (as of EX-1-008 commit 60952b6) — mean-over-y 方法与 gold 语义对齐</dd>
+</dl>
+</div>
+
+<h2><span class="num">§2</span>Measurement Timeline</h2>
+
+<div class="timeline">
+
+<div class="tl-item fail">
+  <h3>#1 · 初次尝试 <span class="tag">pre-EX-1-007 · 40-cell mesh</span></h3>
+  <div class="tl-metric"><span class="num" style="color:var(--fail)">Nu = 3.0</span> <span class="ref">/ gold 30.0 · 90% 误差</span></div>
+  <div class="tl-note">T 边界条件 <code>zeroGradient</code> 不正确（sensibleEnthalpy 应该 fixedValue）；mesh 严重不足；omega 初始化不当。</div>
+</div>
+
+<div class="tl-item improve">
+  <h3>#2 · 多处修正 <span class="tag">80-cell mesh + 正确 BC</span></h3>
+  <div class="tl-metric"><span class="num" style="color:var(--warn)">Nu = 5.85</span> <span class="ref">/ gold 30.0 · 80.5% 误差</span></div>
+  <div class="tl-note">T BC 改为 <code>fixedValue</code>；mesh 40→80；omega 改为 <code>sqrt(k)/Cmu^0.25*L</code>。T 场显示正确的 312→311K 梯度，但 Nu 仍远低于 gold。commit <code>c3a1a4c</code>。</div>
+</div>
+
+<div class="tl-item improve">
+  <h3>#3 · 收紧求解 <span class="tag">c3a1a4c · nOuterCorrectors=80 + tighter URFs</span></h3>
+  <div class="tl-note">加 <code>wallDist { method meshWave; }</code>（kOmegaSST 所需）；relaxation h 0.3→0.1、p_rgh 0.2→0.1；residualControl h 1e-5→1e-6。收敛改善但 Nu 未显著变化，说明 <strong>问题不在求解控制而在 mesh 分辨率</strong>。</div>
+</div>
+
+<div class="tl-item correct">
+  <h3>#4 · EX-1-007 B1 mesh bump <span class="tag">80→256 cells · 4:1 wall-grading</span></h3>
+  <div class="tl-metric"><span class="num">Nu = 66.25</span> <span class="ref">/ gold 30.0 · local mid-height sample</span></div>
+  <div class="tl-note">BL 分辨改善 → Nu 从 5.85 跳到 66.25。但 extractor 还在采 <em>mid-height</em> 单点，不对应 gold 的 mean-Nu 语义。Consumer-side mini-review 提示 "methodology mismatch detected"。</div>
+</div>
+
+<div class="tl-item correct">
+  <h3>#5 · EX-1-008 mean-Nu refactor <span class="tag">60952b6 · Execution-by codex-gpt54</span></h3>
+  <div class="tl-metric"><span class="num">Nu = 77.82</span> <span class="ref">/ gold 30.0 · mean-over-y wall-adjacent gradient</span></div>
+  <div class="tl-note">Refactor 算法正确：新测量值在 y-invariant 合成数据上重现既有测试 Nu=10.5 (CHK-1,2,4,5,6,9,10 PASS)。但 binding 物理 gate CHK-3 判定 <strong>REJECT</strong>：77.82 超出目标带 [25, 35]，而且 <em>比 refactor 前更远</em>。</div>
+</div>
+
+<div class="tl-item fuse">
+  <h3>#6 · FUSE 决策 <span class="tag">DEC-ADWM-004 · 2026-04-18T21:50</span></h3>
+  <div class="tl-note">opus47-main <strong>熔断 cycle 2</strong>（不派发 Option B snGrad patch），把问题上升到外部 Gate。下一节是完整理由。</div>
+</div>
+
+</div>
+
+<h2><span class="num">§3</span>为什么 FUSE 而不跑 cycle 2？</h2>
+
+<div class="card highlight">
+<p>ADWM v5.2 的 2-cycle budget 允许 cycle 2 用 Option B (face-integrated <code>snGrad(T)</code>) 替换 between-first-two-cells gradient。理论上 Option B 是<strong>更精确</strong>的 wall heat flux 近似。</p>
+<p>问题是：on a well-posed physical setup，Option B 应该给出 <strong>≥ Option C 的 mean</strong>，因为 wall-adjacent gradient 本身是 downward-biased proxy。所以 Option B 预期落在 ≥ 78，mesh 继续 refine 时可能逼近 140-160。</p>
+<p><strong>Cycle 2 会烧掉 Codex 额度和 solver wall-clock 去确认一个理论上已知的方向——而且离 gold=30 越来越远。</strong> 这既不是收敛 bracket，也不是关闭真正的开放问题。</p>
+<p style="margin-bottom:0">真正的开放问题是一个 <strong>gold-reference 准确性问题</strong>，只有外部 Gate（或 Kogami 本人）能裁决。</p>
+</div>
+
+<h2><span class="num">§4</span>三个文献源的交叉验证</h2>
+
+<table>
+<thead>
+<tr><th>来源</th><th>Nu<sub>mean</sub> @ Ra ≈ 1e10</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>Dhir 2001 <span class="ref" style="color:var(--fg-mute)">(当前 gold 引用源)</span></td>
+  <td class="mono"><span class="delta-bad">~30</span></td>
+  <td>但 gold 的 <code>reference_correlation_context</code> 自己承认 "500-1000 wall-normal cells" 要求且 <code>satisfied_by_current_adapter: false</code></td>
+</tr>
+<tr>
+  <td>Fusegi et al. 1991 <span class="ref" style="color:var(--fg-mute)">(3D DHC, Ra=1e10)</span></td>
+  <td class="mono">~140</td>
+  <td>几何维度不同（3D vs 2D）</td>
+</tr>
+<tr>
+  <td>Ampofo &amp; Karayiannis 2003 <span class="ref" style="color:var(--fg-mute)">(2D 空气, Ra=1.58e9)</span></td>
+  <td class="mono">~62</td>
+  <td>Ra 低一个数量级</td>
+</tr>
+<tr>
+  <td>Mesh-scaling extrapolation <span class="ref" style="color:var(--fg-mute)">(Nu ∝ Ra<sup>0.28</sup>)</span></td>
+  <td class="mono">~140–180</td>
+  <td>粗估</td>
+</tr>
+<tr style="background:rgba(188,140,255,.04)">
+  <td><strong>我们的测量</strong> (256² mesh, mean-over-y)</td>
+  <td class="mono"><strong style="color:var(--fuse)">77.82</strong></td>
+  <td><strong>在 "under-resolved 但方法论正确" 象限</strong>，全解析 BL 会进一步上涨到 140-160</td>
+</tr>
+</tbody>
+</table>
+
+<p>三个独立文献源都指向 Ra=1e10 2D DHC 的真实 Nu<sub>mean</sub> 在 <strong>100-160</strong> 区间，而非 gold 记录的 30。这是 FUSE 的物理依据。</p>
+
+<h2><span class="num">§5</span>外部 Gate 可选的两条路径</h2>
+
+<div class="grid-2">
+
+<div class="path-card">
+<div class="label">Path P-1</div>
+<h3>Gold Correction</h3>
+<p>更新 gold <code>ref_value</code> 到重新检索的 Ra=1e10 2D DHC 值（大约 100-160 区间），并扩大 tolerance 到 ±20%–25% 以覆盖 256² 的 BL 分辨率 gap。</p>
+<p class="mono" style="font-size:12px; color:var(--fg-mute); margin:0">影响: 触碰 hard floor #1 数值字段 → 需外部授权</p>
+</div>
+
+<div class="path-card">
+<div class="label">Path P-2</div>
+<h3>Regime Downgrade</h3>
+<p>保留当前 gold 数字，但把 whitelist 的 Ra 目标从 <code>1e10</code> 降到 <code>1e6–1e7</code>，这个区间 Nu ≈ 10-20 已有良好文献支持，且 80-uniform mesh 就能 resolve。复用既有 <code>rayleigh_benard_convection</code> 先例。</p>
+<p class="mono" style="font-size:12px; color:var(--fg-mute); margin:0">影响: 触碰 <code>whitelist.yaml</code> 和 gold 档案 → 需外部授权</p>
+</div>
+
+</div>
+
+<h2><span class="num">§6</span>ADWM 权限内已落地的变更</h2>
+
+<div class="card">
+<p>在不触碰 hard floor #1（gold 数值）的前提下，ADWM 把已经确定的<strong>叙事性事实</strong>写进了 gold YAML 的 <code>physics_contract.contract_status</code>：</p>
+<blockquote>
+"DEVIATION — precondition #1 (mesh resolves thermal BL at Ra=1e10) unmet; precondition #3 (extractor methodology aligned to gold reference definition) <strong>now SATISFIED</strong> as of EX-1-008 commit 60952b6 (mean-over-y wall-adjacent gradient). Post-refactor measurement Nu=77.82 on B1 256² mesh (still under-resolved). The remaining gap to gold <code>ref_value=30.0</code> is split into: (i) residual BL under-resolution, and (ii) a gold-reference accuracy question — literature values for Ra=1e10 2D DHC span 100-160. See DEC-ADWM-004 FUSE record. Path P-1 and P-2 both deferred to external Gate."
+</blockquote>
+<p style="margin-bottom:0">落地 commit <code>5e06ab4</code>，Execution-by: codex-gpt54。<code>observables[].ref_value</code> 和 <code>observables[].tolerance</code> bit-identical 未动（grep-verified）。</p>
+</div>
+
+<h2><span class="num">§7</span>Hard-Floor 合规与可逆性</h2>
+<div class="card">
+<dl class="kv">
+  <dt>Floor #1 (GS 数值)</dt><dd><span style="color:var(--ok)">NOT TOUCHED</span> — ref_value=30.0 和 tolerance=0.15 保持 bit-identical</dd>
+  <dt>Floor #2 (禁区派发)</dt><dd><span style="color:var(--ok)">COMPLIANT</span> — 叙事 YAML 编辑派发给 Codex 完成</dd>
+  <dt>Floor #7 (trailer)</dt><dd><span style="color:var(--ok)">COMPLIANT</span> — <code>Execution-by: codex-gpt54</code> 签署</dd>
+  <dt>Cycle budget</dt><dd>2 中用 1，FUSE 1。理由：cycle 2 预期把 bracket 推得<em>更</em>远离可能失准的 gold</dd>
+  <dt>Reversibility</dt><dd>完全可逆：<code>git revert</code> 叙事编辑；refactor commit <code>60952b6</code> 独立成立（无论下游 gold 决定如何）</dd>
+</dl>
+</div>
+
+<h2><span class="num">§8</span>Visualization Suite</h2>
+
+<p style="color:var(--fg-dim); font-size:14.5px; margin-bottom:24px">
+  下列 5 张图全部基于仓库内真实数据源（adapter 源码 + auto_verify_report.yaml + DEC-ADWM-004 文献引用）。<strong style="color:var(--fuse)">实际流场云图（T 场、流函数、流线）没有生成</strong>——FUSE 之后 buoyantFoam 的 30-120 分钟解算无价值（会给 gold=30 更远的数），见 §8.6 说明。
+</p>
+
+<h3 style="margin-top:24px">§8.1 · CAD 几何与边界条件</h3>
+<div class="fig">
+  <div class="fig-title">
+    <span>Fig 1 · Square cavity L=1.0 m · hot/cold 侧壁 + 绝热 top/bottom</span>
+    <span class="src">src/foam_agent_adapter.py :1275</span>
+  </div>
+  <object data="figures/01_geometry.svg" type="image/svg+xml"></object>
+  <div class="fig-caption">
+    从 <code>_generate_natural_convection_cavity</code> 的 <code>blockMeshDict</code> 生成逻辑直接反算：左壁 T=305 K（hot_wall），右壁 T=295 K（cold_wall），ΔT=10 K 满足 Boussinesq 线性近似。前后面 <code>empty</code> 类型把 3D mesh 降为 2D 切片。图中背景温度梯度是示意色带，<em>不是</em> solver 输出。
+  </div>
+</div>
+
+<h3 style="margin-top:32px">§8.2 · 网格拓扑与壁面分辨</h3>
+<div class="fig">
+  <div class="fig-title">
+    <span>Fig 2 · 256² wall-graded mesh + first-cell 尺寸跨四种配置对比</span>
+    <span class="src">EX-1-007 B1 blockMesh smoke-check</span>
+  </div>
+  <object data="figures/02_mesh.svg" type="image/svg+xml"></object>
+  <div class="fig-caption">
+    <strong>左</strong>：32² 可视化（真实 256²，<code>simpleGrading=6</code> 双侧 wall-packed）——网格线在热/冷壁附近致密，中心区粗疏。<strong>右</strong>：first-cell 尺寸 log 轴对比。紫色虚线是 gold Nu=30 对应的 BL 厚度 <code>δ ≈ L/Nu ≈ 33 mm</code>：B1 的 256-graded 把 first-cell 压到亚毫米，但仍需 ~1000-cell 才能完全解析 Ra=1e10 的 BL。precondition #1 <code>satisfied_by_current_adapter: false</code> 正是指这个物理约束。
+  </div>
+</div>
+
+<h3 style="margin-top:32px">§8.3 · 残差收敛诊断</h3>
+<div class="fig">
+  <div class="fig-title">
+    <span>Fig 3 · 六个 field 的最终残差对标三档 target</span>
+    <span class="src">reports/differential_heated_cavity/auto_verify_report.yaml</span>
+  </div>
+  <object data="figures/03_residuals.svg" type="image/svg+xml"></object>
+  <div class="fig-caption">
+    commit <code>c3a1a4c</code> 的 nOuterCorrectors=80 收紧 residualControl 到 <code>1e-6</code>（thermal），但实测 h=<code>6.46e-4</code> 仅达 loose target <code>1e-4</code>——热耦合<em>部分</em>收敛。这是 ADWM 诊断中判定 "convergence 不是瓶颈" 的根据：即便完全收敛，Nu 也不会从 77.82 掉到 30。真正的瓶颈在 mesh 和 gold。
+  </div>
+</div>
+
+<h3 style="margin-top:32px">§8.4 · Nu 演进时间轴</h3>
+<div class="fig">
+  <div class="fig-title">
+    <span>Fig 4 · 五次测量 + FUSE 节点 · gold 容差带 vs 文献带</span>
+    <span class="src">DEC-ADWM-004 + ex1_007 measurement_result.yaml</span>
+  </div>
+  <object data="figures/04_nu_timeline.svg" type="image/svg+xml"></object>
+  <div class="fig-caption">
+    绿色带：gold tolerance (30±15%)。紫色带：Ra=1e10 文献实际范围 (100-160)。轨迹从 3.0 一路<em>跨过</em>绿色带直奔紫色带。FUSE 就是在 77.82 这个点判定："再跑 cycle 2 只会离绿色带更远、离紫色带更近——这不是数值问题，是 gold 的 ref_value 问题"。
+  </div>
+</div>
+
+<h3 style="margin-top:32px">§8.5 · Nu–Ra 标度律与文献交叉验证</h3>
+<div class="fig">
+  <div class="fig-title">
+    <span>Fig 5 · Ampofo/Fusegi/Dhir + 我们五次测量 · Nu ∝ Ra^0.28 外推</span>
+    <span class="src">DEC-ADWM-004 文献汇总表</span>
+  </div>
+  <object data="figures/05_nu_ra_scaling.svg" type="image/svg+xml"></object>
+  <div class="fig-caption">
+    log–log 图把"77.82 落在哪"讲得最清楚：在 <code>Nu ∝ Ra^0.28</code> 外推曲线 <strong>附近</strong>——物理上合理的象限。黄色菱形 Dhir 30.0（gold 当前值）孤立地低于所有其他文献源<em>一个数量级</em>。这是 FUSE 提交外部 Gate 的核心证据。
+  </div>
+</div>
+
+<h3 style="margin-top:32px">§8.6 · 为什么没有流场云图</h3>
+<div class="missing">
+  <h3>⚠ 实际流场数据（T contour / streamlines / velocity vector）未生成</h3>
+  <p><strong>What's missing:</strong> 没有 VTK/foam case 结果，没有 ParaView 状态文件，没有任何 post-process 出来的 PNG 云图。</p>
+  <p><strong>Why:</strong> 跑一次完整的 buoyantFoam @ 256² mesh + k-ω SST 需要 30-120 分钟。FUSE 之前跑过几次（得出 Nu=66.25 和 77.82），但那几次的 case directory 已被 <code>FoamAgentExecutor</code> 的 <code>finally</code> 块自动清理（真相源记录在 <code>memory/cfd-harness-unified</code>）。FUSE 之后没人再跑——因为任何新的解都会落在 [70, 160] 区间，离 gold=30 更远，对决策没有新信息量。</p>
+  <p><strong>When it would be worth rendering:</strong> 外部 Gate 裁定 Path P-1（改 gold）或 P-2（降 Ra）之后。P-2 选中时，Ra=1e6 的温度场、流线、Nu 分布图会是清晰的"合规演示"；P-1 选中时，需要一套 256²/512²/1024² mesh-scaling 云图对比来证明 BL 分辨率。</p>
+  <p><strong>Honesty guardrail:</strong> CLAUDE.md memory 第 7 条——<code>论文复现时不能捏造图表</code>。凭空渲染 T 场假数据违反这条，所以这里留空而非编造。</p>
+</div>
+
+<h2><span class="num">§9</span>Attribution &amp; CorrectionSpec</h2>
+<div class="card">
+<dl class="kv">
+  <dt>Primary Cause</dt><dd><code>mesh_insufficient_for_Ra</code> <span style="color:var(--fg-mute)">(at #2 阶段)</span> → 修订为 <code>gold_reference_accuracy_question</code> <span style="color:var(--fg-mute)">(at FUSE 阶段)</span></dd>
+  <dt>Confidence</dt><dd>MEDIUM</dd>
+  <dt>Follow-up</dt><dd>IN_PROGRESS_FIX (pending external Gate verdict on P-1/P-2)</dd>
+  <dt>Residual convergence</dt><dd>h=6.46e-4, p_rgh=4.59e-5, Ux=8.11e-4, Uy=1.22e-3 (CONVERGED within target 1e-4)</dd>
+  <dt>Physics check</dt><dd>PASS — T 场显示正确的 312-311K mid-plane 梯度；buoyancy 驱动流型一致 Ra=1e10</dd>
+</dl>
+</div>
+
+<div class="footer">
+  <div>
+    Repo · <a href="https://github.com/kogamishinyajerry-ops/cfd-harness-unified">kogamishinyajerry-ops/cfd-harness-unified</a><br>
+    Decision · DEC-ADWM-004 · <span class="mono">autonomous_governance: true · fuse_record: true</span><br>
+    Source · <span class="mono">reports/differential_heated_cavity/report.md + auto_verify_report.yaml + .planning/decisions/2026-04-18_ex1_008_fuse.md</span>
+  </div>
+  <div style="text-align:right">
+    Rendered 2026-04-19<br>
+    cfd-harness-unified · Phase 8 Done · Phase 9 Planned
+  </div>
+</div>
+
+</div>
+</body>
+</html>

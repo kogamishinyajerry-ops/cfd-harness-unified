@@ -3,6 +3,8 @@
 import io
 import re
 import shutil
+import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -36,6 +38,24 @@ def make_airfoil_task() -> TaskSpec:
         Re=3000000,
         boundary_conditions={"angle_of_attack": 0.0, "chord_length": 1.0},
     )
+
+
+def test_foam_agent_adapter_compiles_with_deprecation_warnings_as_errors():
+    repo_root = Path(__file__).resolve().parents[1]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-Werror::DeprecationWarning",
+            "-m",
+            "py_compile",
+            str(repo_root / "src" / "foam_agent_adapter.py"),
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 class TestMockExecutor:
