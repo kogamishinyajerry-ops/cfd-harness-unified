@@ -3,22 +3,22 @@
 # scripts/p2_acceptance_run.py. DEC-V61-019 + RETRO-V61-001 context.
 # NOT a curated fixture — regenerate by re-running the driver.
 
-case_id: turbulent_flat_plate
+case_id: plane_channel_flow
 source: p2_acceptance_solver_run
 measurement:
-  value: 0.007600365566051871
+  value: 1.112475
   unit: dimensionless
-  run_id: p2_acc_turbulent_flat_plate_b8be73a
+  run_id: p2_acc_plane_channel_flow_b8be73a
   commit_sha: b8be73a
-  measured_at: '2026-04-20T13:29:29Z'
-  quantity: cf_skin_friction
-  extraction_source: comparator_deviation
+  measured_at: '2026-04-20T13:28:57Z'
+  quantity: U_max_approx
+  extraction_source: key_quantities_fallback
   solver_success: true
-  comparator_passed: false
+  comparator_passed: true
 audit_concerns:
 - concern_type: CONTRACT_STATUS
-  summary: 'Quantity: cf_skin_friction | Tolerance: 10.0% | Failed: 1 deviation(s)'
-  detail: 'Quantity: cf_skin_friction | Tolerance: 10.0% | Failed: 1 deviation(s)'
+  summary: 'Quantity: u_mean_profile | Tolerance: 5.0% | PASS'
+  detail: 'Quantity: u_mean_profile | Tolerance: 5.0% | PASS'
   decision_refs:
   - DEC-V61-019
   - RETRO-V61-001

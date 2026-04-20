@@ -1,0 +1,90 @@
+{
+  "main_sha": "b8be73a",
+  "started_at": "2026-04-20T13:30:01Z",
+  "cases": [
+    {
+      "case_id": "lid_driven_cavity",
+      "elapsed_s": 8.215771249961108,
+      "exec_success": true,
+      "is_mock": false,
+      "verdict": "FAIL",
+      "quantity": "u_centerline[y=0.0625]",
+      "value": -0.0156513325,
+      "source_note": "comparator_deviation",
+      "error_message": null,
+      "residuals_keys": [
+        "Ux",
+        "Uy",
+        "p"
+      ]
+    },
+    {
+      "case_id": "backward_facing_step",
+      "elapsed_s": 6.802925541996956,
+      "exec_success": true,
+      "is_mock": false,
+      "verdict": "FAIL",
+      "quantity": "reattachment_length",
+      "value": -5.380732049366224,
+      "source_note": "comparator_deviation",
+      "error_message": null,
+      "residuals_keys": [
+        "Ux",
+        "Uy",
+        "p",
+        "epsilon",
+        "k"
+      ]
+    },
+    {
+      "case_id": "plane_channel_flow",
+      "elapsed_s": 415.525555041153,
+      "exec_success": true,
+      "is_mock": false,
+      "verdict": "PASS",
+      "quantity": "U_max_approx",
+      "value": 1.112475,
+      "source_note": "key_quantities_fallback",
+      "error_message": null,
+      "residuals_keys": [
+        "Ux",
+        "Uy",
+        "p"
+      ]
+    },
+    {
+      "case_id": "turbulent_flat_plate",
+      "elapsed_s": 32.32030741684139,
+      "exec_success": true,
+      "is_mock": false,
+      "verdict": "FAIL",
+      "quantity": "cf_skin_friction",
+      "value": 0.007600365566051871,
+      "source_note": "comparator_deviation",
+      "error_message": null,
+      "residuals_keys": [
+        "Ux",
+        "p",
+        "omega",
+        "k"
+      ]
+    },
+    {
+      "case_id": "duct_flow",
+      "elapsed_s": 32.194165375083685,
+      "exec_success": true,
+      "is_mock": false,
+      "verdict": "FAIL",
+      "quantity": "cf_skin_friction",
+      "value": 0.007600365566051871,
+      "source_note": "key_quantities_fallback",
+      "error_message": null,
+      "residuals_keys": [
+        "Ux",
+        "p",
+        "omega",
+        "k"
+      ]
+    }
+  ]
+}

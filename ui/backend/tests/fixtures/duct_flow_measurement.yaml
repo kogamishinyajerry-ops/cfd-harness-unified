@@ -3,22 +3,26 @@
 # scripts/p2_acceptance_run.py. DEC-V61-019 + RETRO-V61-001 context.
 # NOT a curated fixture — regenerate by re-running the driver.
 
-case_id: turbulent_flat_plate
+case_id: duct_flow
 source: p2_acceptance_solver_run
 measurement:
   value: 0.007600365566051871
   unit: dimensionless
-  run_id: p2_acc_turbulent_flat_plate_b8be73a
+  run_id: p2_acc_duct_flow_b8be73a
   commit_sha: b8be73a
-  measured_at: '2026-04-20T13:29:29Z'
+  measured_at: '2026-04-20T13:30:01Z'
   quantity: cf_skin_friction
-  extraction_source: comparator_deviation
+  extraction_source: key_quantities_fallback
   solver_success: true
   comparator_passed: false
 audit_concerns:
 - concern_type: CONTRACT_STATUS
-  summary: 'Quantity: cf_skin_friction | Tolerance: 10.0% | Failed: 1 deviation(s)'
-  detail: 'Quantity: cf_skin_friction | Tolerance: 10.0% | Failed: 1 deviation(s)'
+  summary: 'Quantity ''friction_factor'' not found in execution result (tried aliases:
+    (''f'', ''fDarcy'', ''darcy_f'', ''darcyFrictionFactor''); available scalar keys:
+    [''cf_skin_friction'', ''cf_spalding_fallback_activated'', ''cf_spalding_fallback_count''])'
+  detail: 'Quantity ''friction_factor'' not found in execution result (tried aliases:
+    (''f'', ''fDarcy'', ''darcy_f'', ''darcyFrictionFactor''); available scalar keys:
+    [''cf_skin_friction'', ''cf_spalding_fallback_activated'', ''cf_spalding_fallback_count''])'
   decision_refs:
   - DEC-V61-019
   - RETRO-V61-001
