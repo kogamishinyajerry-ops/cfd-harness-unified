@@ -22,6 +22,7 @@ import pytest
 from src.audit_package import (
     DOMAIN_TAG,
     HMAC_ENV_VAR,
+    HmacLegacyKeyWarning,
     HmacSecretMissing,
     get_hmac_secret_from_env,
     read_sidecar,
@@ -306,7 +307,7 @@ class TestGetHmacSecretFromEnv:
 
 
 class TestM3LegacyMigrationWarning:
-    """PR-5c.2 per Codex M3: DeprecationWarning for un-prefixed values that
+    """PR-5c.2 per Codex M3: HmacLegacyKeyWarning for un-prefixed values that
     look like plausible base64 output of a binary-key generator.
 
     Warning is a migration aid — pre-PR-5c.1 deployments used un-prefixed
@@ -321,7 +322,7 @@ class TestM3LegacyMigrationWarning:
             base64.b64encode(b"\x01" * 32).decode("ascii"),  # 44 chars, padded
         )
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 1
         msg = str(warn_list[0].message)
         assert "base64:" in msg
@@ -334,7 +335,7 @@ class TestM3LegacyMigrationWarning:
             base64.b64encode(b"sixteen-bytes-key").decode("ascii"),  # 24 chars
         )
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 1
 
     def test_no_warning_when_text_prefix_used(self, monkeypatch, recwarn):
@@ -344,7 +345,7 @@ class TestM3LegacyMigrationWarning:
             "text:" + base64.b64encode(b"\x01" * 32).decode("ascii"),
         )
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 0
 
     def test_no_warning_when_base64_prefix_used(self, monkeypatch, recwarn):
@@ -354,21 +355,21 @@ class TestM3LegacyMigrationWarning:
             "base64:" + base64.b64encode(b"\x01" * 32).decode("ascii"),
         )
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 0
 
     def test_no_warning_on_short_plain_text(self, monkeypatch, recwarn):
         """Short plain passwords don't satisfy the ≥24-char + valid-base64 probe."""
         monkeypatch.setenv(HMAC_ENV_VAR, "dev-secret")
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 0
 
     def test_no_warning_on_plain_with_special_chars(self, monkeypatch, recwarn):
         """Special chars (not in base64 alphabet) → no warning."""
         monkeypatch.setenv(HMAC_ENV_VAR, "my-super-secret-key-with-dashes-!@#")
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 0
 
     def test_no_warning_on_urlsafe_base64(self, monkeypatch, recwarn):
@@ -379,14 +380,14 @@ class TestM3LegacyMigrationWarning:
         if "-" in urlsafe or "_" in urlsafe:
             monkeypatch.setenv(HMAC_ENV_VAR, urlsafe)
             get_hmac_secret_from_env()
-            warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+            warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
             assert len(warn_list) == 0
 
     def test_warning_detects_unpadded_rejected(self, monkeypatch, recwarn):
         """Unpadded base64 (not length % 4 == 0) → no warning (would fail probe)."""
         monkeypatch.setenv(HMAC_ENV_VAR, "abcdefghij")  # 10 chars, not % 4
         get_hmac_secret_from_env()
-        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        warn_list = [w for w in recwarn if issubclass(w.category, HmacLegacyKeyWarning)]
         assert len(warn_list) == 0
 
 
