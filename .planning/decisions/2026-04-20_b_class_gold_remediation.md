@@ -13,9 +13,9 @@ reversibility: fully-reversible-by-pr-revert
   158/158 regression held green before and after. Reversal loses three
   gold improvements but gains back Q-1 open state. No dependent
   artifacts are invalidated by reversal.)
-notion_sync_status: PENDING
-github_pr_url: null
-github_merge_sha: null
+notion_sync_status: synced 2026-04-20T21:25 (https://www.notion.so/348c68942bed816d8ebec369963791c2) — Decisions DB page created with Scope=Project, Status=Accepted, Canonical Follow-up=PR #6 URL, body covers per-case decisions + honest miscalculation catch + Q-1 closure
+github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/6
+github_merge_sha: 912b2ce124581ecb9afd1ada4528c6da913da979
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
 external_gate_approval: Kogami approved 2026-04-20 via direct session instruction ("全都按你推荐来" → "按这个修正计划执行"). Gate decision surface from `.planning/gates/Q-new_whitelist_remediation.md`; per-case A/P/C/D selection:
   Case 4: A (Blasius laminar substitution)
