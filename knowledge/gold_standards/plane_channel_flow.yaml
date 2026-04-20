@@ -13,11 +13,11 @@ reference_values:
     u_plus: 5.4
     description: "near-wall point (Kim 1987 DNS)"
   - y_plus: 30.0
-    u_plus: 14.5
-    description: "logarithmic region (Kim 1987 DNS)"
+    u_plus: 13.5
+    description: "log-law region: (1/0.41)·ln(30)+5.2 = 13.49 ≈ 13.5 (Moser 1999 Re_τ=180 DNS). Gate Q-new Case 8 Path A, DEC-V61-006. Previous 14.5 was ~7% high."
   - y_plus: 100.0
     u_plus: 22.8
-    description: "channel center (Kim 1987 DNS)"
+    description: "channel center (Kim 1987 DNS) — NOTE: 22.8 looks anomalous vs log-law ~16.4 and Moser centerline ~18.3; out of audit §5.2 scope, queued for follow-up"
 tolerance: 0.05
 source: "Kim et al. 1987 / Moser et al. 1999"
 literature_doi: "10.1017/S0022112087000892"

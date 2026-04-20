@@ -73,25 +73,30 @@ cases:
       tolerance: 0.05  # 5% 相对误差
 
   - id: turbulent_flat_plate
-    name: "Turbulent Flat Plate (Zero Pressure Gradient)"
-    reference: "Spalart & Allmaras 1992 / ISO 12048"
-    doi: "10.2172/1448408"
+    name: "Laminar Flat Plate (Zero Pressure Gradient, Re_x ≤ 5e4)"  # Name retained for case_id stability; physics is laminar Blasius
+    reference: "Blasius 1908 / Schlichting Boundary Layer Theory (7th ed.) Ch.7"
+    doi: "10.1007/978-3-662-52919-5"
     flow_type: INTERNAL
     geometry_type: SIMPLE_GRID
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
     solver: simpleFoam
-    turbulence_model: k-omega SST
+    # Re=50000, plate_length=1.0 → Re_x=25000 at x=0.5, Re_x=50000 at x=1.0. Both are
+    # deep in the laminar regime (transition on smooth plate ~Re_x=3e5–5e5). k-ω SST
+    # with Spalding-fit gold 0.0076/0.0061 was physically incorrect. Flipped to
+    # Blasius Cf=0.664/√Re_x which is the canonical laminar similarity solution.
+    # Gate Q-new Case 4 · Path A approved by Kogami 2026-04-20. (DEC-V61-006)
+    turbulence_model: laminar
     parameters:
       Re: 50000
       plate_length: 1.0
     gold_standard:
       quantity: cf_skin_friction
-      description: "平板摩擦系数 Cf = 0.0576/Re_x^0.2 (Spalding); x_physical=0.5m, Re_x=25000"
+      description: "平板摩擦系数 Cf = 0.664/√Re_x (Blasius laminar similarity); x=0.5→Re_x=25000, x=1.0→Re_x=50000"
       reference_values:
-        - {x: 0.5, Cf: 0.0076}
-        - {x: 1.0, Cf: 0.0061}
-      tolerance: 0.10  # 10% 相对误差
+        - {x: 0.5, Cf: 0.00420}   # Blasius: 0.664 / √25000 = 0.00420
+        - {x: 1.0, Cf: 0.00297}   # Blasius: 0.664 / √50000 = 0.00297
+      tolerance: 0.10  # 10% relative — Blasius is exact analytically; 10% covers mesh + numerical dissipation
 
   - id: fully_developed_pipe
     name: "Fully Developed Turbulent Pipe Flow"
@@ -114,25 +119,32 @@ cases:
       tolerance: 0.08  # 8% 相对误差
 
   - id: differential_heated_cavity
-    name: "Differential Heated Cavity (Natural Convection)"
-    reference: "Dhir 2001 / Ampofo & Karayiannis 2003"
-    doi: "10.1016/S0140-7007(02)00085-4"
+    name: "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)"
+    reference: "de Vahl Davis 1983 / Dhir 2001"
+    doi: "10.1002/fld.1650030305"
     flow_type: NATURAL_CONVECTION
     geometry_type: NATURAL_CONVECTION_CAVITY
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
     solver: buoyantFoam
-    turbulence_model: k-omega SST
+    # Previous state: Ra=1e10 with Nu=30 gold (turbulent SST). Audit + Q-1 established
+    # Ra=1e10 requires ~1000 wall-normal cells for BL resolution (infeasible at current
+    # adapter 80-cell wall-normal), AND Nu=30 was inconsistent with literature (100-325).
+    # Gate Q-new Case 6 · Path P-2 approved by Kogami 2026-04-20: downgrade Ra to 1e6,
+    # the canonical de Vahl Davis 1983 benchmark where Nu_avg=8.800 is both well-
+    # documented (within 0.2% across multiple DNS studies) AND resolvable on 40-80
+    # wall-normal cells. This closes Q-1 with P-2. (DEC-V61-006)
+    turbulence_model: laminar  # Ra=1e6 is fully-laminar steady-convective regime
     parameters:
-      Ra: 10000000000  # Ra = 1e10 (Turbulent natural convection)
+      Ra: 1000000  # Ra = 1e6 (de Vahl Davis 1983 canonical benchmark)
       aspect_ratio: 1.0
       Pr: 0.71
     gold_standard:
       quantity: nusselt_number
-      description: "顶壁-底壁努塞尔数 Nu"
+      description: "方腔热壁平均努塞尔数 Nu_avg (de Vahl Davis 1983 benchmark, Ra=1e6, Pr=0.71, AR=1.0)"
       reference_values:
-        - {Ra: 1e10, Nu: 30.0}
-      tolerance: 0.15  # 15% 相对误差
+        - {Ra: 1e6, Nu: 8.8}   # de Vahl Davis 1983: Nu_avg = 8.800
+      tolerance: 0.10  # 10% — benchmark is highly resolved; adapter mesh resolution is the dominant uncertainty
 
   - id: plane_channel_flow
     name: "Fully Developed Plane Channel Flow (DNS)"
@@ -149,13 +161,19 @@ cases:
       half_channel_height: 1.0
     gold_standard:
       quantity: u_mean_profile
-      description: "无量纲速度分布 u+ vs y+ (DNS 直接数值模拟)"
+      description: "无量纲速度分布 u+ vs y+ (Moser 1999 Re_τ=180 DNS; log-law κ=0.41 B=5.2)"
       reference_values:
         - {y_plus: 0.0, u_plus: 0.0}
         - {y_plus: 5.0, u_plus: 5.4}
-        - {y_plus: 30.0, u_plus: 14.5}
+        # Gate Q-new Case 8 · Path A approved by Kogami 2026-04-20:
+        # log-law (1/0.41)·ln(30)+5.2 = 13.49 ≈ 13.5. Previous 14.5 off by ~7%.
+        # (DEC-V61-006)
+        - {y_plus: 30.0, u_plus: 13.5}
+        # NOTE: y_plus=100 value 22.8 also looks anomalous (log-law gives ~16.4,
+        # Moser Re_τ=180 centerline u+≈18.3). Out of audit §5.2 scope; noted for
+        # follow-up audit pass.
         - {y_plus: 100.0, u_plus: 22.8}
-      tolerance: 0.05  # 5% 相对误差
+      tolerance: 0.05  # 5% 相对误差 (Moser DNS numerical uncertainty)
 
   - id: impinging_jet
     name: "Axisymmetric Impinging Jet (Re=10000)"
@@ -171,9 +189,15 @@ cases:
       Re: 10000
       nozzle_diameter: 0.05
       h_over_d: 2.0  # 喷口到板面距离 / 直径
+    # Gate Q-new Case 9 · HOLD per Kogami 2026-04-20: audit flagged Nu@r/d=0 = 25 vs
+    # Behnad 2013 ~110-130, but 4-5× discrepancy is too large to edit without reading
+    # Behnad et al. 2013 (DOI 10.1016/j.ijheatfluidflow.2013.03.003) directly and
+    # confirming (Re=10000, h/d=2) was the configuration cited. Possible mis-match:
+    # confined-jet vs free-jet, different h/d, different Re. Literature re-source
+    # pending. Values below are provisional; may change in future DEC.
     gold_standard:
       quantity: nusselt_number
-      description: "冲击面局部努塞尔数分布"
+      description: "冲击面局部努塞尔数分布 (PROVISIONAL — Gate Q-new Case 9 hold)"
       reference_values:
         - {r_over_d: 0.0, Nu: 25.0}
         - {r_over_d: 1.0, Nu: 12.0}
@@ -220,9 +244,15 @@ cases:
       Ra: 1000000
       Pr: 0.71
       aspect_ratio: 2.0
+    # Gate Q-new Case 10 · HOLD per Kogami 2026-04-20: initial audit claimed Chaivat
+    # correlation gives 7.2 at Ra=1e6, but recompute shows 0.229·(1e6)^0.269 = 9.4,
+    # putting current 10.5 only 11.5% off (within 15% tolerance). Small discrepancy,
+    # possibly using a different Chaivat correlation variant than the description
+    # states. Chaivat 2006 (DOI 10.1016/j.ijheatmasstransfer.2005.07.039) paper
+    # re-read pending before any edit. Values below retained.
     gold_standard:
       quantity: nusselt_number
-      description: "水平层自然对流 Nu = 0.229*Ra^0.269 (当 Ra=1e6)"
+      description: "水平层自然对流 Nu (PROVISIONAL — Gate Q-new Case 10 hold; see comment)"
       reference_values:
         - {Ra: 1e6, Nu: 10.5}
       tolerance: 0.15  # 15% 相对误差
