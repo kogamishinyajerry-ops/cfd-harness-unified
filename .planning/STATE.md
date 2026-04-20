@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T05:30"
+last_updated: "2026-04-21T08:30"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -746,3 +746,56 @@ that directory is new and is NOT part of the legacy `tests/` 禁区.
 
 See `docs/ui_roadmap.md` for per-phase acceptance, non-goals, risks,
 and rollback plans.
+
+## 2026-04-21 Evening/Night — Phase 6 tech-debt sweep (Claude Opus 4.7 1M, S-005 kickoff)
+
+Phase 6 context: after Phase 5 Honestly Complete (e4c9bd8), this session cleared
+the queued tech-debt items from `.planning/handoffs/2026-04-21_session_end_kickoff.md`
+under user instruction "其他你的建议项，全部按优先级完成" (second-solver explicitly excluded).
+
+**Completed (10 PRs merged on main)**:
+
+| PR | SHA | Scope |
+|---|---|---|
+| #21 | 67b129e | P6-TD-001 — BFS reattachment x>0 physical-plausibility guard |
+| #22 | 36e3249 | P6-TD-002 — duct_flow dispatch guard (Codex round 8 CHANGES_REQUIRED, resolved by PR #27) |
+| #23 | aed95d4 | L3 — generated_at → build_fingerprint cross-file rename |
+| #24 | b66335e | datetime.utcnow() → timezone-aware now(timezone.utc) |
+| #25 | 3e6e765 | test_validation_report gold/measurement drift assertions |
+| #26 | 87d7658 | PR #21 round-7 Low follow-ups (static-method test coverage + stale docstring) |
+| #27 | 7bbbeb2 | PR #22 round-8 CHANGES_REQUIRED fix — canonical `_is_duct_flow_case()` helper + fail-closed + integration test |
+| #28 | 829c953 | L-PR20-2 — narrow docker error-branch coverage (_DOCKER_AVAILABLE=False, real NotFound, MagicMock type-guard) |
+| #29 | c27f4fd | PR #23 round-9 Note #2 — manifest-layer legacy-key-absence assertion |
+| #30 | 25fd65d | L2 — canonical JSON spec doc (7 reference test vectors, signature framing, verifier checklist) |
+
+**DECs filed (3)**: DEC-V61-021 (BFS), DEC-V61-022 (duct), DEC-V61-023 (L3). All three
+Notion-sync-pending — frontmatter verdicts captured: 021 APPROVED_WITH_NOTES,
+022 CHANGES_REQUIRED → RESOLVED by PR #27, 023 APPROVED_WITH_NOTES.
+
+**Codex rounds run (3)**: Round 7 (PR #21) APPROVED_WITH_NOTES · Round 8 (PR #22)
+CHANGES_REQUIRED · Round 9 (PR #23) APPROVED_WITH_NOTES. All reports committed
+under `reports/codex_tool_reports/`.
+
+**New retrospective**: RETRO-V61-002 (incident) — small-scope retro for PR #22
+CHANGES_REQUIRED per RETRO-V61-001 bundle D rule. Documents dispatcher review
+checklist + self-estimate calibration for future dispatcher-touching PRs.
+
+**Regression**: 104/104 test_foam_agent_adapter.py · 6/6 test_validation_report.py ·
+113/113 test_audit_package/ · full matrix unchanged pre-existing failures
+(contract_dashboard + error_attributor + gold_standard_schema, confirmed orthogonal
+via `git stash` baseline comparison).
+
+**Counter under new v6.1 governance (pure telemetry)**: advanced from 1 → 11 over
+this session. Well below the 20-threshold arc retro. All within autonomous scope.
+
+**禁区 compliance**: src/foam_agent_adapter.py touched (>5 LOC → Codex triggered in
+all applicable rounds). knowledge/gold_standards/** + knowledge/whitelist.yaml
+NOT TOUCHED. All 10 PRs merged as regular merge commits (留痕 > 聪明).
+
+**Session main HEAD at close**: `25fd65d` (PR #30 merge).
+
+Pending items (unclosed, queued for next session):
+- M2 — sidecar v2 with kid/alg/domain metadata + rotation runbook (Medium scope, deferred by size)
+- P6-TD-003 — implement `_extract_duct_friction_factor` targeting Darcy-Weisbach `f=0.0185` gold (requires second solver per user exclusion — held)
+- foam_agent_adapter.py 7000-line refactor (Medium-Large; out of scope this session)
+- Notion sync for DEC-V61-021/022/023 + RETRO-V61-002 (requires Notion MCP; deferred)
