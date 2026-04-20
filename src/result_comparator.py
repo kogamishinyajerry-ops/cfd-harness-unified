@@ -10,6 +10,66 @@ from .models import ComparisonResult, DeviationDetail, ExecutionResult
 logger = logging.getLogger(__name__)
 
 
+# Canonical → aliases map for the ACTUAL side of comparison.
+#
+# Problem: gold_standards declare quantities by canonical name (e.g. "friction_factor"),
+# but the solver / postProcessing layer writes under various historical names
+# ("f", "fDarcy", etc.). Without this table, ResultComparator returned
+# "Quantity 'friction_factor' not found in execution result" and flagged the
+# correction as COMPARATOR_SCHEMA_MISMATCH (see knowledge/corrections/ —
+# 4× pipe friction_factor, 6× u_mean_profile, etc.).
+#
+# Governance: this is *naming-layer* infrastructure (src/ turf, autonomous per
+# DEC-V61-003). Does NOT modify knowledge/gold_standards/ or knowledge/whitelist.yaml.
+# Each alias set should be defensible from published solver/postProcessing
+# conventions — do not paper over real physics mismatches here.
+CANONICAL_ALIASES: Dict[str, Tuple[str, ...]] = {
+    # Darcy friction factor: solver may emit "f" (single letter),
+    # "fDarcy" (OpenFOAM turbulence function object), or "fFanning" (4× smaller).
+    # Do NOT include fFanning here — unit conversion is not an alias.
+    "friction_factor":    ("f", "fDarcy", "darcy_f", "darcyFrictionFactor"),
+    # Skin friction: OpenFOAM wallShearStress function object typically yields "Cf".
+    "cf_skin_friction":   ("Cf", "cf", "skin_friction", "skinFriction"),
+    # Pressure coefficient: Cp / cp / p_coeff all seen in the wild.
+    "pressure_coefficient": ("Cp", "cp", "p_coeff", "pressureCoefficient"),
+    # Nusselt: averaged over a patch is often "Nu_avg" / "averageNu".
+    "nusselt_number":     ("Nu", "Nu_avg", "Nu_mean", "averageNu", "nu_avg"),
+    # Strouhal: sometimes derived post-run and named "St" or "strouhal".
+    "strouhal_number":    ("St", "strouhal", "shedding_St"),
+    # Reattachment length in BFS: case-specific shorthand.
+    "reattachment_length": ("Xr_over_H", "reattachment_x", "xr_H"),
+    # Lid-driven cavity u-profile: legacy sampleDict set name "uCenterline".
+    # (adapter already does this rename for LDC specifically — redundancy is safe
+    # and covers solvers that bypass the adapter's case-specific branch.)
+    "u_centerline":       ("uCenterline", "U_centerline", "u_profile_centerline"),
+    # DNS channel u+ profile.
+    "u_mean_profile":     ("u_plus", "u_plus_profile", "u_plus_mean", "uPlusProfile"),
+}
+
+
+def _lookup_with_alias(
+    key_quantities: Dict[str, Any],
+    canonical: str,
+) -> Tuple[Optional[Any], Optional[str]]:
+    """Return (value, key_used). Canonical name wins; fall through aliases.
+
+    Returns (None, None) when no match — caller should report the *canonical*
+    name in error messages so users see what gold expected, not what adapter emitted.
+    """
+    direct = key_quantities.get(canonical)
+    if direct is not None:
+        return direct, canonical
+    for alias in CANONICAL_ALIASES.get(canonical, ()):
+        if alias in key_quantities:
+            value = key_quantities[alias]
+            if value is not None:
+                logger.debug(
+                    "ResultComparator: resolved %r via alias %r", canonical, alias
+                )
+                return value, alias
+    return None, None
+
+
 class ResultComparator:
     """对比 ExecutionResult 与 Gold Standard
 
@@ -35,17 +95,27 @@ class ResultComparator:
             logger.warning("Gold standard missing 'quantity' key, skipping comparison")
             return ComparisonResult(passed=True, summary="No gold standard quantity defined")
 
-        actual_value = result.key_quantities.get(quantity_key)
+        # Alias-aware lookup: canonical name → fallback aliases (see CANONICAL_ALIASES).
+        # resolved_key is the *actual* key under which the value was stored; we use
+        # it for axis resolution below (so "Cp" as alias still finds "Cp_x" companion).
+        actual_value, resolved_key = _lookup_with_alias(result.key_quantities, quantity_key)
         if actual_value is None:
             deviation = DeviationDetail(
                 quantity=quantity_key,
                 expected=gold.get("reference_values"),
                 actual=None,
             )
+            # Include available keys in the summary to help debug adapter-vs-gold
+            # naming drift without grepping logs.
+            available = sorted(k for k in result.key_quantities.keys() if not k.endswith(("_x", "_y", "_z")))
             return ComparisonResult(
                 passed=False,
                 deviations=[deviation],
-                summary=f"Quantity '{quantity_key}' not found in execution result",
+                summary=(
+                    f"Quantity '{quantity_key}' not found in execution result "
+                    f"(tried aliases: {CANONICAL_ALIASES.get(quantity_key, ())}; "
+                    f"available scalar keys: {available})"
+                ),
             )
 
         tolerance = gold.get("tolerance", self._default_threshold)
@@ -53,8 +123,12 @@ class ResultComparator:
         deviations: List[DeviationDetail] = []
 
         if isinstance(actual_value, list) and reference_values:
+            # Axis resolution uses the *resolved* key name so a canonical-vs-alias
+            # mismatch on the value side doesn't then break companion coord lookup.
+            # E.g. canonical="pressure_coefficient" resolved via alias="Cp" still
+            # looks up "Cp_x" correctly here.
             actual_coords, reference_coords, coord_label = self._resolve_profile_axis(
-                quantity_key, result.key_quantities, reference_values
+                resolved_key or quantity_key, result.key_quantities, reference_values
             )
             deviations = self._compare_vector(
                 quantity_key,

@@ -62,6 +62,78 @@ except ImportError:
     docker = None  # type: ignore
 
 
+# ---------------------------------------------------------------------------
+# Parameter plumbing pre-run assertion (P-B C2)
+# ---------------------------------------------------------------------------
+# Motivation: knowledge/corrections/ records 12 PARAMETER_PLUMBING_MISMATCH
+# events on DHC/Rayleigh-Bénard where solver silently executed at a fallback
+# Ra instead of the whitelist-declared Ra, producing Nu values 50-90% off and
+# looking indistinguishable from a physics bug in the deviation report.
+#
+# Rather than trust that task_spec.Ra flows correctly to every downstream
+# file (blockMesh, physicalProperties, g, BC files), we parse the generated
+# OpenFOAM dict files back from disk and recompute the effective Ra (or Re
+# for internal channel flows). If the round-tripped value drifts > 1% from
+# what task_spec declares, we raise loudly before burning CPU on a bogus run.
+#
+# Guards only the two highest-risk case builders: natural-convection cavity
+# (where Ra is derived from g, beta, dT, L, nu, Pr — five values that must
+# all plumb through) and steady internal channel (where Re → nu via Re=1/nu
+# in inlet-U=1 convention). Other builders take Re as a direct velocity
+# input and are less prone to silent drift.
+
+class ParameterPlumbingError(RuntimeError):
+    """Case-file round-trip verification failed — a declared parameter did
+    not survive the write pipeline. Raised BEFORE solver launch so operators
+    debug a 50ms regex failure instead of a 70s-per-step solver run that
+    silently hits the wrong operating point.
+    """
+
+
+_DICT_SCALAR_RE = re.compile(
+    r"^\s*(?P<key>[A-Za-z_][A-Za-z_0-9]*)"
+    r"(?:\s+\[[\d\s\-]+\])?"              # optional OpenFOAM dimensions
+    r"\s+(?P<value>-?\d+(?:\.\d+)?(?:[eE][\-+]?\d+)?)\s*;",
+    re.MULTILINE,
+)
+
+
+def _parse_dict_scalar(text: str, key: str) -> Optional[float]:
+    """Extract a top-level scalar assignment from an OpenFOAM dict file.
+
+    Matches both ``Pr 0.71;`` and ``nu [0 2 -1 0 0 0 0] 1e-5;`` forms.
+    Returns the numeric value or None if not found.
+    """
+    for match in _DICT_SCALAR_RE.finditer(text):
+        if match.group("key") == key:
+            try:
+                return float(match.group("value"))
+            except ValueError:
+                return None
+    return None
+
+
+_G_VECTOR_RE = re.compile(
+    r"value\s*(?:\[[\d\s\-]+\])?\s*\(\s*"
+    r"(-?\d+(?:\.\d+)?(?:[eE][\-+]?\d+)?)\s+"
+    r"(-?\d+(?:\.\d+)?(?:[eE][\-+]?\d+)?)\s+"
+    r"(-?\d+(?:\.\d+)?(?:[eE][\-+]?\d+)?)"
+    r"\s*\)\s*;"
+)
+
+
+def _parse_g_magnitude(text: str) -> Optional[float]:
+    """Extract |g| from a ``constant/g`` file's ``value (gx gy gz);``."""
+    match = _G_VECTOR_RE.search(text)
+    if match is None:
+        return None
+    try:
+        gx, gy, gz = (float(match.group(i)) for i in (1, 2, 3))
+    except ValueError:
+        return None
+    return math.sqrt(gx * gx + gy * gy + gz * gz)
+
+
 class FoamAgentExecutor:
     """通过 Docker + OpenFOAM 执行真实仿真的 FoamAgentExecutor。
 
@@ -2416,6 +2488,141 @@ boundaryField
             encoding="utf-8",
         )
 
+        # -- P-B C2: post-write plumbing verification -----------------------
+        # Round-trip the written dict files and confirm the declared Ra
+        # survived. Raises ParameterPlumbingError BEFORE the solver starts.
+        declared_Ra = float(task_spec.Ra or task_spec.Re or 1e10)
+        self._verify_buoyant_case_plumbing(
+            case_dir=case_dir,
+            declared_Ra=declared_Ra,
+            declared_Pr=Pr,
+            declared_L=L,
+            declared_dT=dT,
+            declared_beta=beta,
+        )
+
+    # ------------------------------------------------------------------
+    # P-B C2: parameter plumbing verifiers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _verify_buoyant_case_plumbing(
+        case_dir: Path,
+        declared_Ra: float,
+        declared_Pr: float,
+        declared_L: float,
+        declared_dT: float,
+        declared_beta: float,
+        tolerance: float = 0.01,
+    ) -> None:
+        """Parse back ``constant/physicalProperties`` and ``constant/g`` from
+        a natural-convection-cavity case dir, recompute the effective
+        Rayleigh number from on-disk values, and assert it matches
+        ``declared_Ra`` within ``tolerance`` (1% default).
+
+        Catches silent regressions where a parameter (g, beta, mu, Pr, L)
+        plumbs through to one derived quantity but not the file that the
+        solver actually reads.
+        """
+        props_path = case_dir / "constant" / "physicalProperties"
+        g_path = case_dir / "constant" / "g"
+        if not props_path.exists():
+            raise ParameterPlumbingError(
+                f"physicalProperties missing at {props_path} — generator skipped write"
+            )
+        if not g_path.exists():
+            raise ParameterPlumbingError(
+                f"constant/g missing at {g_path} — gravity was not written"
+            )
+
+        props_text = props_path.read_text(encoding="utf-8")
+        g_text = g_path.read_text(encoding="utf-8")
+
+        beta = _parse_dict_scalar(props_text, "beta")
+        Cp = _parse_dict_scalar(props_text, "Cp")
+        mu = _parse_dict_scalar(props_text, "mu")
+        Pr = _parse_dict_scalar(props_text, "Pr")
+        g_mag = _parse_g_magnitude(g_text)
+
+        missing = [
+            name for name, val in (
+                ("beta", beta), ("Cp", Cp), ("mu", mu), ("Pr", Pr), ("|g|", g_mag),
+            ) if val is None
+        ]
+        if missing:
+            raise ParameterPlumbingError(
+                f"Could not parse {missing} from case files under {case_dir}. "
+                f"physicalProperties format may have drifted from the regex."
+            )
+
+        # rho0=1 in Boussinesq formulation we emit → nu == mu. alpha = nu / Pr.
+        nu = mu
+        alpha = nu / Pr
+        Ra_effective = g_mag * beta * declared_dT * (declared_L ** 3) / (nu * alpha)
+
+        if declared_Ra <= 0:
+            raise ParameterPlumbingError(
+                f"declared Ra={declared_Ra} is not positive — upstream task_spec bug"
+            )
+        rel_err = abs(Ra_effective - declared_Ra) / declared_Ra
+        if rel_err > tolerance:
+            raise ParameterPlumbingError(
+                "Buoyant case plumbing drift: declared Ra={:g}, but files on disk "
+                "encode Ra_effective={:g} (rel_err={:.2%}, tol={:.2%}). "
+                "Disk values: beta={:.4e}, mu(=nu)={:.4e}, Pr={:.4f}, |g|={:.4e}, "
+                "dT={:.4f}, L={:.4f}. Fix the generator or update the declared "
+                "parameters in the whitelist.".format(
+                    declared_Ra, Ra_effective, rel_err, tolerance,
+                    beta, mu, Pr, g_mag, declared_dT, declared_L,
+                )
+            )
+        if abs(Pr - declared_Pr) / max(declared_Pr, 1e-12) > tolerance:
+            raise ParameterPlumbingError(
+                "Pr plumbing drift: declared Pr={:g}, file encodes Pr={:g}".format(
+                    declared_Pr, Pr,
+                )
+            )
+
+    @staticmethod
+    def _verify_internal_channel_plumbing(
+        case_dir: Path,
+        declared_Re: float,
+        tolerance: float = 0.01,
+    ) -> None:
+        """Parse back ``constant/physicalProperties`` from a plane-channel
+        case and assert ``Re_effective = 1/nu`` matches ``declared_Re``.
+
+        The convention U_bulk=1 m/s means Re = 1/nu — any drift here means
+        the solver sees a different Reynolds number than what the whitelist
+        declared.
+        """
+        props_path = case_dir / "constant" / "physicalProperties"
+        if not props_path.exists():
+            raise ParameterPlumbingError(
+                f"physicalProperties missing at {props_path}"
+            )
+        nu = _parse_dict_scalar(props_path.read_text(encoding="utf-8"), "nu")
+        if nu is None:
+            raise ParameterPlumbingError(
+                f"Could not parse 'nu' from {props_path}. Format may have drifted."
+            )
+        if nu <= 0:
+            raise ParameterPlumbingError(
+                f"Disk encodes non-positive nu={nu} — case will blow up"
+            )
+        Re_effective = 1.0 / nu
+        if declared_Re <= 0:
+            raise ParameterPlumbingError(
+                f"declared Re={declared_Re} is not positive — upstream task_spec bug"
+            )
+        rel_err = abs(Re_effective - declared_Re) / declared_Re
+        if rel_err > tolerance:
+            raise ParameterPlumbingError(
+                "Internal channel plumbing drift: declared Re={:g}, disk encodes "
+                "Re_effective={:g} (1/nu where nu={:.4e}, rel_err={:.2%}, "
+                "tol={:.2%}). Fix the generator.".format(
+                    declared_Re, Re_effective, nu, rel_err, tolerance,
+                )
+            )
 
     def _generate_steady_internal_channel(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """生成平面通道层流 case 文件（icoFoam + laminar, 无湍流模型）。
@@ -2786,6 +2993,10 @@ boundaryField
 """,
             encoding="utf-8",
         )
+
+        # -- P-B C2: post-write plumbing verification -----------------------
+        # Confirm the nu we wrote to disk round-trips to the declared Re.
+        self._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=Re)
 
     def _generate_steady_internal_flow(
         self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kEpsilon"
