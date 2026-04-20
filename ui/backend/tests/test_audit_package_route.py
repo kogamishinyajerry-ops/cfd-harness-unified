@@ -32,9 +32,11 @@ class TestBuildAuditPackage:
         # Top-level keys
         for key in (
             "bundle_id", "manifest_id", "case_id", "run_id", "generated_at",
-            "pdf_available", "downloads", "vv40_checklist", "signature_hex",
+            "pdf_available", "downloads", "evidence_summary", "signature_hex",
         ):
             assert key in body, f"missing key {key}"
+        # Legacy name must not leak (PR-5d.1 rename per Codex MEDIUM).
+        assert "vv40_checklist" not in body
         assert body["case_id"] == "duct_flow"
         assert body["run_id"] == "r1"
         assert body["manifest_id"] == "duct_flow-r1"
@@ -66,11 +68,15 @@ class TestBuildAuditPackage:
         else:
             assert dl["bundle_pdf"] is None
 
-    def test_vv40_checklist_has_eight_areas(self, client):
+    def test_evidence_summary_has_eight_areas(self, client):
+        """Renamed from test_vv40_checklist_has_eight_areas per Codex PR-5d
+        MEDIUM finding — the 8-row table is a product-specific summary,
+        not a faithful FDA/ASME V&V40 template.
+        """
         resp = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
-        checklist = resp.json()["vv40_checklist"]
-        assert len(checklist) == 8
-        for item in checklist:
+        summary = resp.json()["evidence_summary"]
+        assert len(summary) == 8
+        for item in summary:
             assert "area" in item
             assert "description" in item
             assert "manifest_fields" in item

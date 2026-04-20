@@ -9,7 +9,10 @@ export interface AuditPackageDownloadUrls {
   bundle_sig: string;
 }
 
-export interface AuditPackageVvChecklistItem {
+// Renamed from AuditPackageVvChecklistItem per Codex PR-5d MEDIUM finding:
+// the 8-row table is a product-specific summary, not a faithful rendering
+// of the FDA/ASME V&V40 framework.
+export interface AuditPackageEvidenceItem {
   area: string;
   description: string;
   manifest_fields: string[];
@@ -26,6 +29,6 @@ export interface AuditPackageBuildResponse {
   pdf_available: boolean;
   pdf_error: string | null;
   downloads: AuditPackageDownloadUrls;
-  vv40_checklist: AuditPackageVvChecklistItem[];
+  evidence_summary: AuditPackageEvidenceItem[];
   signature_hex: string;
 }
