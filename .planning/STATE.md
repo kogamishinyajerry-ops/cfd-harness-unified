@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T02:15"
+last_updated: "2026-04-21T03:00"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -626,6 +626,18 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - 🔒 **L2 QUEUED**: canonical JSON spec publication (docs PR)
 - **v6.1 autonomous_governance counter**: 11 → **12**. Codex post-merge pattern holds across 2 consecutive PRs (PR-5c + PR-5c.1). Pattern demonstrably sustainable. Token costs: 117,588 + 76,152 = 193,740 for this security-review arc.
 - **Phase 5 PR sequence status**: 3/4 main PRs landed (5a + 5b + 5c) + 1/1 post-review fix (5c.1). PR-5d (Screen 6 UI) remains the last main-sequence PR. PR-5c.2 (docs-only M3 mitigation) is ~5 LOC and can land alongside PR-5d or before.
+- **Phase 5 PR-5c.2 + PR-5c.3 LANDED (2026-04-21T02:55)** — M3 fully closed.
+  - **PR-5c.2** (DEC-V61-016 · merge `87264bc1`): Runtime guard `_looks_like_legacy_base64` + migration docstring + edge tests (URL-safe/unpadded/CRLF/BOM/trailing whitespace). 11 new tests. Codex 3rd-round review: APPROVED_WITH_NOTES — flagged `DeprecationWarning` as silenced by default. Notion `348c6894-2bed-8130-9326-dbf19543fb24`. Report `reports/codex_tool_reports/2026-04-21_pr5c2_m3_review.md` (token 94,316).
+  - **PR-5c.3** (DEC-V61-017 · merge `7e6f5732`): Warning class fix — `DeprecationWarning` → custom `HmacLegacyKeyWarning(UserWarning)`. Closes M3 fully. **No 4th Codex review** (verbatim rec #2, mechanical, atomic). Notion `348c6894-2bed-81b9-8712-c83d104a9c97`.
+- **Codex findings ledger FINAL for signing module**:
+  - ✅ M1 CLOSED (PR-5c.1 · DEC-V61-015)
+  - ✅ L1 CLOSED (PR-5c.1 · DEC-V61-015)
+  - ✅ M3 CLOSED (PR-5c.2+5c.3 · DEC-V61-016+017)
+  - 🔒 M2 QUEUED — sidecar v2 + rotation runbook (governance DEC, needs Kogami design)
+  - 🔒 L2 QUEUED — canonical JSON spec publication (docs PR)
+- **Codex review arc economics**: 3 rounds, cumulative 288,056 tokens. Diminishing returns documented on round 3. PR-5c.3 skipped 4th review per DEC-V61-016 rationale.
+- **v6.1 autonomous_governance counter**: 12 → **14** (DEC-V61-016 + DEC-V61-017 both autonomous). Deep past hard-floor-4 threshold ≥10. Hard-floor-4 formal retrospective is overdue — can roll into post-PR-5d cleanup.
+- **Phase 5 sequence final status**: 3/4 main + 3/3 Codex-review fixes (5c.1 + 5c.2 + 5c.3). Only **PR-5d Screen 6 UI** remains. All 5 open design questions resolved (Kogami "全部接受" 2026-04-21). PR-5d ready to start.
 
 ---
 
