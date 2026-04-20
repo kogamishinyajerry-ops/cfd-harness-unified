@@ -27,6 +27,15 @@ Routes (Phase 0..4 — Path B MVP, per DEC-V61-002 + DEC-V61-003):
 
     Phase 4 — Dashboard
         GET    /api/dashboard                      → Screen 1 aggregate
+
+    Phase 5 — Audit Package Builder (Screen 6)
+        POST   /api/cases/{id}/runs/{rid}/audit-package/build
+                                                    → build + sign a bundle
+        GET    /api/audit-packages/{bundle_id}/manifest.json
+        GET    /api/audit-packages/{bundle_id}/bundle.zip
+        GET    /api/audit-packages/{bundle_id}/bundle.html
+        GET    /api/audit-packages/{bundle_id}/bundle.pdf
+        GET    /api/audit-packages/{bundle_id}/bundle.sig
 """
 
 from __future__ import annotations
@@ -35,6 +44,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ui.backend.routes import (
+    audit_package,
     case_editor,
     cases,
     dashboard,
@@ -46,11 +56,12 @@ from ui.backend.routes import (
 
 app = FastAPI(
     title="CFD Harness UI Backend",
-    version="0.4.0-phase-1-to-4",
+    version="0.5.0-phase-5",
     description=(
         "Path-B UI MVP — Agentic V&V-first workbench. "
-        "Phase 0..4 surfaces: Validation Report, Case Editor, Decisions "
-        "Queue, Run Monitor, Dashboard. See docs/product_thesis.md."
+        "Phase 0..5 surfaces: Validation Report, Case Editor, Decisions "
+        "Queue, Run Monitor, Dashboard, Audit Package Builder. "
+        "See docs/product_thesis.md + .planning/phase5_audit_package_builder_kickoff.md."
     ),
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
@@ -72,3 +83,4 @@ app.include_router(validation.router,   prefix="/api", tags=["validation"])
 app.include_router(decisions.router,    prefix="/api", tags=["decisions"])
 app.include_router(run_monitor.router,  prefix="/api", tags=["runs"])
 app.include_router(dashboard.router,    prefix="/api", tags=["dashboard"])
+app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])

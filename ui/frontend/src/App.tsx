@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 
 import { Layout } from "@/components/Layout";
+import { AuditPackagePage } from "@/pages/AuditPackagePage";
 import { CaseEditorPage } from "@/pages/CaseEditorPage";
 import { CaseListPage } from "@/pages/CaseListPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -8,8 +9,9 @@ import { DecisionsQueuePage } from "@/pages/DecisionsQueuePage";
 import { RunMonitorPage } from "@/pages/RunMonitorPage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 
-// Path B · Phase 0..4 MVP routes. Phase 5 (audit package) is still
-// disabled in the left nav pending Q-1 / Q-2 external-Gate resolution.
+// Path B · Phase 0..5 MVP routes. Phase 5 (Audit Package Builder)
+// unblocked 2026-04-20 by DEC-V61-006 (Q-1 closed, Case 6 Path P-2)
+// and DEC-V61-011 (Q-2 closed, duct_flow rename).
 export default function App() {
   return (
     <Routes>
@@ -21,6 +23,7 @@ export default function App() {
         <Route path="/decisions" element={<DecisionsQueuePage />} />
         <Route path="/runs" element={<RunMonitorPage />} />
         <Route path="/runs/:caseId" element={<RunMonitorPage />} />
+        <Route path="/audit-package" element={<AuditPackagePage />} />
         <Route path="*" element={<DashboardPage />} />
       </Route>
     </Routes>
