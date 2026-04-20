@@ -24,10 +24,34 @@ Module layout (implemented across PR-5a → PR-5d):
 PR-5a public surface:
 - :func:`build_manifest` — assemble the deterministic dict
 - :data:`SCHEMA_VERSION` — manifest schema version integer
+
+PR-5b public surface:
+- :func:`serialize_zip` / :func:`serialize_zip_bytes` — byte-reproducible zip
+- :func:`render_html` — deterministic HTML render (no external CDN)
+- :func:`serialize_pdf` — optional weasyprint-backed PDF (may raise
+  :class:`PdfBackendUnavailable` when native libs missing)
+- :func:`is_pdf_backend_available` — non-raising availability probe
 """
 
 from __future__ import annotations
 
 from .manifest import SCHEMA_VERSION, build_manifest
+from .serialize import (
+    PdfBackendUnavailable,
+    is_pdf_backend_available,
+    render_html,
+    serialize_pdf,
+    serialize_zip,
+    serialize_zip_bytes,
+)
 
-__all__ = ["SCHEMA_VERSION", "build_manifest"]
+__all__ = [
+    "SCHEMA_VERSION",
+    "build_manifest",
+    "PdfBackendUnavailable",
+    "is_pdf_backend_available",
+    "render_html",
+    "serialize_pdf",
+    "serialize_zip",
+    "serialize_zip_bytes",
+]
