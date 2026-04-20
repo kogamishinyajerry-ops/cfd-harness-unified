@@ -8,13 +8,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 KNOWLEDGE_ROOT = REPO_ROOT / "knowledge"
 REPORTS_ROOT = REPO_ROOT / "reports"
 
+# Q-2 Path A (DEC-V61-011): `fully_developed_turbulent_pipe_flow` renamed to
+# `duct_flow` to match the actual rectangular-duct geometry the adapter emits.
+# Old task name mappings retained (to `duct_flow` canonical) for backwards
+# compat with any cached TaskSpec / test fixture still using pre-rename strings.
 ANCHOR_CASE_IDS = frozenset(
     {
         "lid_driven_cavity_benchmark",
         "backward_facing_step_steady",
         "cylinder_crossflow",
         "turbulent_flat_plate",
-        "fully_developed_turbulent_pipe_flow",
+        "duct_flow",
         "rayleigh_benard_convection",
         "differential_heated_cavity",
         "naca0012_airfoil",
@@ -28,10 +32,13 @@ TASK_NAME_TO_CASE_ID = {
     "Backward-Facing Step": "backward_facing_step_steady",
     "Circular Cylinder Wake": "cylinder_crossflow",
     "Turbulent Flat Plate (Zero Pressure Gradient)": "turbulent_flat_plate",
-    "Fully Developed Turbulent Pipe Flow": "fully_developed_turbulent_pipe_flow",
+    # Q-2 Path A rename: new canonical name + legacy aliases
+    "Fully Developed Turbulent Square-Duct Flow": "duct_flow",
+    "Fully Developed Turbulent Pipe Flow": "duct_flow",          # pre-rename legacy
     "Rayleigh-Benard Convection (Ra=10^6)": "rayleigh_benard_convection",
     "Rayleigh-Bénard Convection (Ra=10^6)": "rayleigh_benard_convection",
     "Differential Heated Cavity (Natural Convection)": "differential_heated_cavity",
+    "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
     "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
     "Axisymmetric Impinging Jet (Re=10000)": "axisymmetric_impinging_jet",
     "Fully Developed Plane Channel Flow (DNS)": "fully_developed_plane_channel_flow",
@@ -42,7 +49,7 @@ CASE_ID_TO_GOLD_FILE = {
     "backward_facing_step_steady": KNOWLEDGE_ROOT / "gold_standards" / "backward_facing_step_steady.yaml",
     "cylinder_crossflow": KNOWLEDGE_ROOT / "gold_standards" / "cylinder_crossflow.yaml",
     "turbulent_flat_plate": KNOWLEDGE_ROOT / "gold_standards" / "turbulent_flat_plate.yaml",
-    "fully_developed_turbulent_pipe_flow": KNOWLEDGE_ROOT / "gold_standards" / "fully_developed_turbulent_pipe_flow.yaml",
+    "duct_flow": KNOWLEDGE_ROOT / "gold_standards" / "duct_flow.yaml",
     "rayleigh_benard_convection": KNOWLEDGE_ROOT / "gold_standards" / "rayleigh_benard_convection.yaml",
     "differential_heated_cavity": KNOWLEDGE_ROOT / "gold_standards" / "differential_heated_cavity.yaml",
     "naca0012_airfoil": KNOWLEDGE_ROOT / "gold_standards" / "naca0012_airfoil.yaml",
@@ -55,7 +62,7 @@ CASE_ID_TO_SOLVER = {
     "backward_facing_step_steady": "simpleFoam",
     "cylinder_crossflow": "pimpleFoam",
     "turbulent_flat_plate": "simpleFoam",
-    "fully_developed_turbulent_pipe_flow": "simpleFoam",
+    "duct_flow": "simpleFoam",
     "rayleigh_benard_convection": "buoyantFoam",
     "differential_heated_cavity": "buoyantFoam",
     "naca0012_airfoil": "simpleFoam",

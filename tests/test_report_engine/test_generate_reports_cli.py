@@ -61,16 +61,17 @@ class TestDefaultRun:
 
 class TestSkipBehavior:
     def test_skips_case_without_auto_verify_report(self, cli, capsys):
-        # fully_developed_turbulent_pipe_flow is in SUPPORTED_CASE_IDS
-        # but has no reports/*/auto_verify_report.yaml — expected SKIP path.
+        # duct_flow is in SUPPORTED_CASE_IDS (post-Q-2-Path-A rename from
+        # fully_developed_turbulent_pipe_flow) but has no
+        # reports/*/auto_verify_report.yaml — expected SKIP path.
         code = cli.main([
             "generate_reports.py",
-            "fully_developed_turbulent_pipe_flow",
+            "duct_flow",
         ])
         captured = capsys.readouterr()
         # Zero rendered, one skipped → exit code 1 per main() contract
         assert code == 1
-        assert "SKIP  fully_developed_turbulent_pipe_flow" in captured.out
+        assert "SKIP  duct_flow" in captured.out
         assert "Rendered 0 / 1" in captured.out
 
 

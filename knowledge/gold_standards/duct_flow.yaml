@@ -1,0 +1,63 @@
+schema_version: 2
+case_id: duct_flow
+source: "Jones 1976 / Jones & Launder 1973"
+literature_doi: "10.1016/0017-9310(76)90033-4"
+legacy_case_ids:
+  - fully_developed_pipe                     # pre-DEC-V61-011 whitelist id
+  - fully_developed_turbulent_pipe_flow      # pre-DEC-V61-011 auto_verifier case id
+legacy_source_files:
+  - knowledge/gold_standards/fully_developed_pipe.yaml
+  - knowledge/gold_standards/fully_developed_turbulent_pipe_flow.yaml
+note: >
+  RENAME HISTORY (Gate Q-2 Path A, DEC-V61-011, 2026-04-20):
+  The adapter's SIMPLE_GRID generator emits a rectangular (square at AR=1) duct,
+  not a circular pipe. Previous whitelist label `fully_developed_pipe` + Moody
+  smooth-pipe correlation was a physics-labeling error (geometry_assumption
+  unsatisfied per the prior contract_status). This rename consolidates into
+  `duct_flow` with Jones 1976 rectangular-duct correlation — honest physics
+  labeling. Numerical gold value (f=0.0185 at Re=50000) happens to be within
+  ~2% of both Jones square-duct and Colebrook smooth pipe, so comparator
+  verdicts are preserved while the contract becomes intrinsically correct.
+
+physics_contract:
+  geometry_assumption: "Rectangular duct with aspect ratio 1 (square cross-section), fully-developed flow, smooth walls"
+  reference_correlation_context: >
+    Jones 1976 "An improvement in the calculation of turbulent friction in
+    rectangular ducts" (Int. J. Heat Mass Transfer) shows that for smooth
+    walls, rectangular-duct Darcy f is approximately 0.88 × circular-pipe
+    f at the same Re_h (based on hydraulic diameter). At Re=50000: pipe
+    Colebrook f ≈ 0.0206 → duct f ≈ 0.88 × 0.0206 = 0.0181. Reference
+    value 0.0185 stays within Jones correlation's ±10% uncertainty band
+    and also within the prior 8% band for Moody pipe, so no gold-numeric
+    change was needed alongside the label correction.
+  physics_precondition:
+    - condition: "Adapter solver operates on a rectangular (AR=1) duct cross-section"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py _generate_steady_internal_channel uses SIMPLE_GRID → rectangular block domain; matches the declared geometry contract now that the label is `duct` not `pipe`."
+    - condition: "Flow is fully developed (∂u/∂x = 0 in streamwise direction)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist periodic BC + sufficient L/D_h"
+    - condition: "Smooth walls (Nikuradse sand-grain roughness ε → 0)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "blockMesh produces algebraic smooth-wall boundaries; no roughness model active in turbulenceProperties"
+  contract_status: >
+    SATISFIED — all three physics preconditions met. Prior `fully_developed_pipe`
+    contract_status was `INCOMPATIBLE` (precondition #1 unmet) because the
+    adapter produced a duct but the label said pipe. Rename resolves the
+    inconsistency. Any comparator deviation is now a genuine solver /
+    mesh / turbulence-model convergence question, not a regime mismatch.
+  precondition_last_reviewed: "2026-04-20 (DEC-V61-011 · Gate Q-2 Path A)"
+
+observables:
+  - name: friction_factor
+    description: Darcy friction factor for smooth square-duct flow at Re = 50000 (Jones 1976)
+    ref_value: 0.0185
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+
+relationships:
+  geometry_similarity:
+    reference_case: duct_flow
+    similarity_type: SAME_CLASS

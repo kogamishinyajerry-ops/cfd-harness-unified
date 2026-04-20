@@ -17,7 +17,9 @@ CASE_ID_TO_WHITELIST_ID = {
     "lid_driven_cavity_benchmark": "lid_driven_cavity",
     "backward_facing_step_steady": "backward_facing_step",
     "cylinder_crossflow": "circular_cylinder_wake",
-    "fully_developed_turbulent_pipe_flow": "fully_developed_pipe",
+    # Q-2 Path A (DEC-V61-011): whitelist id renamed `fully_developed_pipe` → `duct_flow`
+    # and auto_verifier case id unified to `duct_flow` (no separate long/short forms).
+    "duct_flow": "duct_flow",
     "axisymmetric_impinging_jet": "impinging_jet",
     "fully_developed_plane_channel_flow": "plane_channel_flow",
 }
