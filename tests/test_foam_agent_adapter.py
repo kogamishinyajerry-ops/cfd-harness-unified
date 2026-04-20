@@ -688,6 +688,95 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         )
         assert result == mock_result
 
+    def test_parse_writeobjects_fields_skips_flat_plate_extractor_for_duct_flow(self, tmp_path, monkeypatch):
+        """P6-TD-002: duct_flow (SIMPLE_GRID + Re>=2300 + hydraulic_diameter)
+        must NOT dispatch to _extract_flat_plate_cf. Without this guard, the
+        Spalding fallback at Re_x=0.5*Re returns a parameter-independent Cf
+        identical to any other SIMPLE_GRID case sharing the same Re — §5d
+        Part-2 observed TFP and duct_flow both returning 0.007600365566051871
+        (both Re=50000). The guard emits a producer flag instead of calling
+        the wrong extractor.
+        """
+        time_dir = tmp_path / "1.0"
+        time_dir.mkdir()
+        (time_dir / "Cx").write_text("1\n(\n0.500\n)\n")
+        (time_dir / "Cy").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "U").write_text("1\n(\n(1.0 0.0 0.0)\n)\n")
+
+        duct_task = TaskSpec(
+            name="Fully Developed Turbulent Square-Duct Flow",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+            boundary_conditions={
+                "hydraulic_diameter": 0.1,
+                "aspect_ratio": 1.0,
+            },
+        )
+        executor = FoamAgentExecutor()
+
+        # If the guard fails, this would be called and return a Spalding
+        # fallback Cf. Mock it to raise so test fails LOUDLY if dispatch
+        # regressed.
+        def _should_not_run(*args, **kwargs):
+            raise AssertionError(
+                "P6-TD-002 regression: duct_flow dispatched to "
+                "_extract_flat_plate_cf (should be guarded by "
+                "hydraulic_diameter presence check)"
+            )
+        monkeypatch.setattr(
+            FoamAgentExecutor, "_extract_flat_plate_cf", _should_not_run
+        )
+
+        result = executor._parse_writeobjects_fields(
+            tmp_path, "simpleFoam", duct_task, {}
+        )
+        # Flat-plate extractor NOT called → no cf_skin_friction published.
+        assert "cf_skin_friction" not in result
+        # Producer flag set for downstream audit.
+        assert result.get("duct_flow_extractor_missing") is True
+        assert result.get("duct_flow_hydraulic_diameter") == 0.1
+
+    def test_parse_writeobjects_fields_still_routes_flat_plate_without_hydraulic_diameter(
+        self, tmp_path, monkeypatch
+    ):
+        """P6-TD-002 regression protection: the new guard must NOT break
+        normal flat-plate dispatch. A TaskSpec without hydraulic_diameter
+        still hits _extract_flat_plate_cf."""
+        time_dir = tmp_path / "1.0"
+        time_dir.mkdir()
+        (time_dir / "Cx").write_text("1\n(\n0.500\n)\n")
+        (time_dir / "Cy").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "U").write_text("1\n(\n(1.0 0.0 0.0)\n)\n")
+
+        flat_plate_task = TaskSpec(
+            name="Turbulent Flat Plate",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+            boundary_conditions={"plate_length": 1.0},
+        )
+
+        called = {"yes": False}
+        def _spy(*args, **kwargs):
+            called["yes"] = True
+            return {"cf_skin_friction": 0.0076, "cf_spalding_fallback_activated": True}
+        monkeypatch.setattr(FoamAgentExecutor, "_extract_flat_plate_cf", _spy)
+
+        executor = FoamAgentExecutor()
+        result = executor._parse_writeobjects_fields(
+            tmp_path, "simpleFoam", flat_plate_task, {}
+        )
+        # Dispatch still fires for flat plate.
+        assert called["yes"] is True
+        assert result["cf_skin_friction"] == pytest.approx(0.0076)
+        # No duct producer flag on flat plate.
+        assert "duct_flow_extractor_missing" not in result
+
     # ------------------------------------------------------------------
     # execute() Docker success path tests
     # ------------------------------------------------------------------

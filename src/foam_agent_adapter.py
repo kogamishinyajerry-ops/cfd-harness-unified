@@ -7023,10 +7023,39 @@ mergePatchPairs
                 )
 
         # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
-        elif geom == GeometryType.SIMPLE_GRID and task_spec.Re is not None and task_spec.Re >= 2300:
+        # P6-TD-002 guard: exclude duct_flow (also SIMPLE_GRID + Re>=2300 but
+        # has `hydraulic_diameter` — canonical observable is Darcy-Weisbach
+        # friction_factor, NOT skin-friction Cf). Before this guard, duct_flow
+        # fell through to _extract_flat_plate_cf and the Spalding fallback
+        # (0.0576/Re_x^0.2 with Re_x=0.5*Re) returned a Cf that depends only
+        # on Re — identical to 10 decimal places for any case sharing Re with
+        # flat plate. §5d Part-2 acceptance observed TFP and duct_flow both
+        # returning cf=0.007600365566051871 (Re=50000 for both). Skip with a
+        # producer flag so downstream audit sees "no measurement" + explicit
+        # reason rather than a misleading shared Spalding reference.
+        elif (
+            geom == GeometryType.SIMPLE_GRID
+            and task_spec.Re is not None
+            and task_spec.Re >= 2300
+            and "hydraulic_diameter" not in (task_spec.boundary_conditions or {})
+        ):
             key_quantities = self._extract_flat_plate_cf(
                 cxs, cys, u_vecs, task_spec, key_quantities
             )
+        elif (
+            geom == GeometryType.SIMPLE_GRID
+            and task_spec.Re is not None
+            and task_spec.Re >= 2300
+            and "hydraulic_diameter" in (task_spec.boundary_conditions or {})
+        ):
+            # Duct flow detected via parameter shape; no dedicated extractor
+            # yet (queued as P6-TD-003). Emit producer flag so audit surfaces
+            # can distinguish "duct with missing measurement" from "flat plate
+            # with successful Spalding fallback".
+            key_quantities["duct_flow_extractor_missing"] = True
+            key_quantities["duct_flow_hydraulic_diameter"] = (
+                task_spec.boundary_conditions or {}
+            ).get("hydraulic_diameter")
 
         # Impinging Jet: IMPINGING_JET -> nusselt_number
         elif geom == GeometryType.IMPINGING_JET:
