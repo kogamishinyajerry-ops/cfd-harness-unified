@@ -799,3 +799,51 @@ Pending items (unclosed, queued for next session):
 - P6-TD-003 — implement `_extract_duct_friction_factor` targeting Darcy-Weisbach `f=0.0185` gold (requires second solver per user exclusion — held)
 - foam_agent_adapter.py 7000-line refactor (Medium-Large; out of scope this session)
 - Notion sync for DEC-V61-021/022/023 + RETRO-V61-002 (requires Notion MCP; deferred)
+
+## 2026-04-21 Late Night — /learn commercial-demo deepening (Claude Opus 4.7 1M, S-006)
+
+Session scope: per user directive "做商业级 demo，受众是想做 CFD 的学生", deepened `/learn`
+from "10 UNKNOWN cards" into a pedagogical catalog with story. Three PRs landed:
+
+| PR | SHA | Scope |
+|---|---|---|
+| #31 | e940c1c | `/learn` student-facing demo shell (10 canonical CFD problems as visual catalog) |
+| #32 | 52c376a | multi-run architecture (RunDescriptor/RunListResponse, URL-addressable Compare tab) |
+| #33 | f633348 | **this session's main drop** — 9 teaching-run fixtures + run-distribution pills (engine-driven, not curator-hint) + 8 real flow-field PNGs (Ghia/Blasius/Williamson/Spalding/Grossmann-Lohse/Cooper provenance) |
+
+**DEC filed (1)**: DEC-V61-024 (teaching runs + badges + flow-fields).
+Frontmatter: `autonomous_governance: true`, `codex_verdict: CHANGES_REQUIRED → RESOLVED`,
+`external_gate_self_estimated_pass_rate: 90%`, `notion_sync_status: pending`.
+
+**Codex round run (1)**: Round 10 (PR #33 pre-merge) CHANGES_REQUIRED with 2 HIGH findings,
+both fixed verbatim in `55b1a88`:
+1. `verdict_counts` was aggregated from `expected_verdict` curator hint → pill could lie
+   about contract engine output (e.g. `reference_pass` run labeled PASS despite
+   silent-pass hazard armed by gold). Fix: per-run `_derive_contract_status` evaluation.
+2. `impinging_jet` flow-field PNG showed Baughn Re=23750 Nu≈110 regime but case was
+   rescaled to Cooper Re=10000 Nu=25 family → physical inconsistency. Fix: PNG
+   regenerated with Cooper 1984 anchors + factor overlays matching wrong_model (+52%)
+   and real_incident (+8%) fixtures.
+
+**Default contract distribution** (after fixes): **4 PASS · 3 HAZARD · 3 FAIL** across
+10 cases · 20 runs. Every case now has ≥1 curated run.
+
+**Counter (v6.1 pure telemetry)**: 11 → 12.
+
+**禁区 compliance**: `src/**`, repo-root `tests/**`, `knowledge/gold_standards/**`,
+`knowledge/whitelist.yaml` all untouched. All work in `ui/backend/`, `ui/frontend/`,
+`scripts/flow-field-gen/`, `.planning/decisions/`.
+
+**Session main HEAD at close**: `f633348` (PR #33 merge).
+
+Pending items (unclosed, queued for next session):
+- **A-class deepening** (next session focus per user direction): remaining 4 cases
+  (duct_flow / DHC / plane_channel_flow / rayleigh_benard_convection) need teaching
+  runs; remaining 4 cases (duct/DHC/BFS/NACA) need flow-field PNGs; interactive
+  mesh-density demo; OpenFOAM case export bundle.
+- **Notion sync backlog** (now 5 items, token expired mid-session): DEC-V61-021,
+  V61-022, V61-023, RETRO-V61-002, V61-024. User re-auth required at
+  `mcp__claude_ai_Notion` before sync can resume.
+- M2 sidecar v2 + rotation runbook (carried from S-005).
+- foam_agent_adapter.py refactor (carried from S-005).
+- P6-TD-003 held on user second-solver exclusion.
