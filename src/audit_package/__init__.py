@@ -37,6 +37,10 @@ PR-5c public surface (HMAC signing):
 - :func:`get_hmac_secret_from_env` — read ``CFD_HARNESS_HMAC_SECRET``
 - :func:`write_sidecar` / :func:`read_sidecar` — ``.sig`` file I/O
 - :class:`HmacSecretMissing` — env-var-unset error with rotation hint
+- :class:`HmacLegacyKeyWarning` — PR-5c.3 (DEC-V61-017) operator-visible
+  UserWarning subclass fired when un-prefixed env value looks like legacy
+  binary-key base64; allows targeted filter via
+  ``warnings.simplefilter("ignore", HmacLegacyKeyWarning)``.
 - :data:`HMAC_ENV_VAR` / :data:`DOMAIN_TAG` — public constants
 """
 
@@ -54,6 +58,7 @@ from .serialize import (
 from .sign import (
     DOMAIN_TAG,
     HMAC_ENV_VAR,
+    HmacLegacyKeyWarning,
     HmacSecretMissing,
     get_hmac_secret_from_env,
     read_sidecar,
@@ -76,6 +81,7 @@ __all__ = [
     # PR-5c
     "DOMAIN_TAG",
     "HMAC_ENV_VAR",
+    "HmacLegacyKeyWarning",
     "HmacSecretMissing",
     "get_hmac_secret_from_env",
     "read_sidecar",

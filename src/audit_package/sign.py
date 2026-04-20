@@ -15,12 +15,15 @@ To preserve the pre-upgrade signing key bytes, rewrite the env var as::
 
     CFD_HARNESS_HMAC_SECRET="base64:<same-value-you-previously-had>"
 
-PR-5c.2 (DEC-V61-016, this change) adds a runtime DeprecationWarning
-that fires when an un-prefixed value looks like plausible binary-key
-base64 (length ≥24 chars, base64 alphabet, valid padding). Operators
-will see the warning at first signer startup and can migrate without
-downstream signature divergence. Use an explicit ``text:`` prefix to
-suppress the warning when the key truly is plain text.
+PR-5c.2 (DEC-V61-016) added a runtime warning when an un-prefixed value
+looks like plausible binary-key base64 (length ≥24 chars, base64 alphabet,
+valid padding). PR-5c.3 (DEC-V61-017) upgraded the class from
+``DeprecationWarning`` (Python-default-silenced outside ``__main__``) to a
+custom :class:`HmacLegacyKeyWarning` subclassing ``UserWarning`` — visible
+by default per Codex 3rd-round review recommendation. Operators see the
+warning at first signer startup and can migrate without downstream
+signature divergence. Use an explicit ``text:`` prefix to suppress the
+warning when the key truly is plain text.
 
 Signing domain
 --------------
@@ -156,6 +159,18 @@ class HmacSecretMissing(RuntimeError):
     """
 
 
+class HmacLegacyKeyWarning(UserWarning):
+    """Operator-visible migration warning for legacy-looking un-prefixed
+    ``CFD_HARNESS_HMAC_SECRET`` values (PR-5c.3 · DEC-V61-017 · Codex M3).
+
+    Subclass of ``UserWarning`` so it's visible by default in production
+    Python (unlike ``DeprecationWarning``, which is silenced outside
+    ``__main__``). Being a named subclass also lets callers filter this
+    specific migration signal without affecting other ``UserWarning``
+    categories: ``warnings.simplefilter("ignore", HmacLegacyKeyWarning)``.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Key loader
 # ---------------------------------------------------------------------------
@@ -217,8 +232,10 @@ def get_hmac_secret_from_env(env_var: str = HMAC_ENV_VAR) -> bytes:
     # PR-5c.2 per Codex M3: warn if un-prefixed value looks like the base64
     # output of a binary-key generator (openssl rand -base64 32). Pre-PR-5c.1
     # deployments used un-prefixed base64 and the heuristic decoded it; now
-    # it is taken as literal UTF-8 bytes. Warning is at DeprecationWarning
-    # level (non-fatal) so ops can see the hazard at first signer startup.
+    # it is taken as literal UTF-8 bytes. PR-5c.3 per Codex 3rd-round review:
+    # use HmacLegacyKeyWarning (UserWarning subclass) so operators actually
+    # see the warning in production — DeprecationWarning is silenced by
+    # default outside __main__.
     if _looks_like_legacy_base64(raw):
         warnings.warn(
             (
@@ -230,7 +247,7 @@ def get_hmac_secret_from_env(env_var: str = HMAC_ENV_VAR) -> bytes:
                 f"or use `text:<value>` prefix to suppress this warning when the "
                 f"key truly is plain text."
             ),
-            DeprecationWarning,
+            HmacLegacyKeyWarning,
             stacklevel=2,
         )
 
@@ -392,6 +409,7 @@ __all__ = [
     "HMAC_ENV_VAR",
     "DOMAIN_TAG",
     "HmacSecretMissing",
+    "HmacLegacyKeyWarning",
     "get_hmac_secret_from_env",
     "sign",
     "verify",
