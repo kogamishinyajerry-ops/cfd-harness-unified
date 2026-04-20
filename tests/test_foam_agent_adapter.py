@@ -1201,3 +1201,73 @@ class TestLidDrivenCavityGoldAnchoredSampling:
         text = (tmp_path / "system" / "sampleDict").read_text()
         assert "type        points;" in text
         assert "0.5 0.5 0" in text  # the y=0.5 gold coord
+
+
+class TestNaca0012GoldAnchoredSampling:
+    """C3b: _generate_airfoil_flow emits gold-anchored Cp sampling at the 3
+    x/c coordinates in whitelist reference_values."""
+
+    def test_gold_anchored_sampledict_emitted_for_whitelist_name(self, tmp_path):
+        """make_airfoil_task has name='NACA 0012 Airfoil External Flow' which matches whitelist."""
+        executor = FoamAgentExecutor()
+        executor._generate_airfoil_flow(tmp_path, make_airfoil_task())
+
+        sample_path = tmp_path / "system" / "sampleDict"
+        assert sample_path.is_file()
+        text = sample_path.read_text()
+        # Gold-anchored path signals
+        assert "type        points;" in text
+        assert "airfoilCp" in text
+        assert "fields          (p);" in text
+        # 3 x/c coords from whitelist: 0.0, 0.3, 1.0 → at chord=1.0 → x=0, 0.3, 1
+        # Upper surface z: 0 at LE, half-thickness(0.3) at mid, 0 at TE
+        assert "(0 0 0)" in text                       # leading edge (x/c=0)
+        half_thickness_03 = FoamAgentExecutor._naca0012_half_thickness(0.3)
+        assert f"(0.3 0 {half_thickness_03:.12g})" in text  # upper surface at x/c=0.3
+        assert "(1 0 0)" in text                       # trailing edge (x/c=1)
+
+    def test_fallback_no_sampledict_for_non_whitelist_name(self, tmp_path):
+        """Unknown airfoil task name → no sampleDict emitted (no fallback by design for C3b)."""
+        off_whitelist_task = TaskSpec(
+            name="synthetic_airfoil_probe",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000,
+            boundary_conditions={"angle_of_attack": 0.0, "chord_length": 1.0},
+        )
+        executor = FoamAgentExecutor()
+        executor._generate_airfoil_flow(tmp_path, off_whitelist_task)
+        # No prior sampleDict existed for airfoil case → off-whitelist produces none
+        assert not (tmp_path / "system" / "sampleDict").exists()
+
+    def test_sampledict_honors_chord_scaling(self, tmp_path):
+        """When chord_length != 1.0, physical points scale accordingly."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",  # whitelist match
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000,
+            boundary_conditions={"angle_of_attack": 0.0, "chord_length": 2.0},
+        )
+        executor = FoamAgentExecutor()
+        executor._generate_airfoil_flow(tmp_path, task)
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        # x/c=0.3 at chord=2.0 → x=0.6, z=half_thickness*2
+        half_thickness_03 = FoamAgentExecutor._naca0012_half_thickness(0.3)
+        assert f"(0.6 0 {half_thickness_03 * 2.0:.12g})" in text
+        # x/c=1.0 at chord=2.0 → x=2.0
+        assert "(2 0 0)" in text
+
+    def test_header_records_chord_and_uinf(self, tmp_path):
+        """Header comment carries chord + U_inf for traceability."""
+        executor = FoamAgentExecutor()
+        executor._generate_airfoil_flow(tmp_path, make_airfoil_task())
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "NACA0012 upper surface" in text
+        assert "chord=1" in text
+        assert "U_inf=1" in text
+        assert "gold x/c coords" in text
