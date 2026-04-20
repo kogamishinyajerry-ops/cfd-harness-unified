@@ -31,6 +31,13 @@ PR-5b public surface:
 - :func:`serialize_pdf` — optional weasyprint-backed PDF (may raise
   :class:`PdfBackendUnavailable` when native libs missing)
 - :func:`is_pdf_backend_available` — non-raising availability probe
+
+PR-5c public surface (HMAC signing):
+- :func:`sign` / :func:`verify` — HMAC-SHA256 over (manifest, zip_bytes, key)
+- :func:`get_hmac_secret_from_env` — read ``CFD_HARNESS_HMAC_SECRET``
+- :func:`write_sidecar` / :func:`read_sidecar` — ``.sig`` file I/O
+- :class:`HmacSecretMissing` — env-var-unset error with rotation hint
+- :data:`HMAC_ENV_VAR` / :data:`DOMAIN_TAG` — public constants
 """
 
 from __future__ import annotations
@@ -44,14 +51,35 @@ from .serialize import (
     serialize_zip,
     serialize_zip_bytes,
 )
+from .sign import (
+    DOMAIN_TAG,
+    HMAC_ENV_VAR,
+    HmacSecretMissing,
+    get_hmac_secret_from_env,
+    read_sidecar,
+    sign,
+    verify,
+    write_sidecar,
+)
 
 __all__ = [
+    # PR-5a
     "SCHEMA_VERSION",
     "build_manifest",
+    # PR-5b
     "PdfBackendUnavailable",
     "is_pdf_backend_available",
     "render_html",
     "serialize_pdf",
     "serialize_zip",
     "serialize_zip_bytes",
+    # PR-5c
+    "DOMAIN_TAG",
+    "HMAC_ENV_VAR",
+    "HmacSecretMissing",
+    "get_hmac_secret_from_env",
+    "read_sidecar",
+    "sign",
+    "verify",
+    "write_sidecar",
 ]
