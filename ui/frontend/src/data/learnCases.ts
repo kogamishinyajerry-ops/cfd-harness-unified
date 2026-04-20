@@ -118,7 +118,7 @@ export const LEARN_CASES: LearnCase[] = [
     common_pitfall_zh: `周期边界条件是这个算例的核心，但很多新手会漏掉"driving pressure gradient"这一项——少了这一项流动就会慢慢停下来，而不是稳态维持。`,
   },
   {
-    id: "axisymmetric_impinging_jet",
+    id: "impinging_jet",
     displayName: "Axisymmetric Impinging Jet",
     headline_zh: `冲击射流传热`,
     headline_en: "Impingement heat transfer",

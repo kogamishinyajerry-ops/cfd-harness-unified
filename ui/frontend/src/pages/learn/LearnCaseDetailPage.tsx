@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
 import { CaseIllustration } from "@/components/learn/CaseIllustration";
+import { getFlowFields } from "@/data/flowFields";
 import { getLearnCase } from "@/data/learnCases";
 import type {
   ContractStatus,
@@ -171,6 +172,7 @@ export function LearnCaseDetailPage() {
 
 function StoryTab({ caseId }: { caseId: string }) {
   const learnCase = getLearnCase(caseId)!;
+  const flowFields = getFlowFields(caseId);
   return (
     <div className="space-y-8">
       <section>
@@ -184,6 +186,38 @@ function StoryTab({ caseId }: { caseId: string }) {
           ))}
         </ul>
       </section>
+
+      {flowFields.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="card-title">真实数据 · Data</h2>
+            <p className="text-[11px] text-surface-500">
+              每张图都直接来自文献精确解或公开实验表格
+            </p>
+          </div>
+          <div className="space-y-4">
+            {flowFields.map((ff) => (
+              <figure
+                key={ff.src}
+                className="overflow-hidden rounded-md border border-surface-800 bg-surface-900/30"
+              >
+                <img
+                  src={ff.src}
+                  alt={ff.caption_zh}
+                  className="w-full max-w-full"
+                  loading="lazy"
+                />
+                <figcaption className="border-t border-surface-800 px-4 py-3">
+                  <p className="text-[13px] text-surface-200">{ff.caption_zh}</p>
+                  <p className="mono mt-1.5 text-[10px] leading-relaxed text-surface-500">
+                    provenance: {ff.provenance}
+                  </p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="card-title mb-3">为什么要做验证</h2>

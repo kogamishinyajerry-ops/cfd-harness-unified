@@ -1,0 +1,4 @@
+{
+  "provenance": "Ghia, Ghia & Shin (1982) Table I, Re=100 — 17-point tabulated u/U_lid on x=0.5 and v/U_lid on y=0.5.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

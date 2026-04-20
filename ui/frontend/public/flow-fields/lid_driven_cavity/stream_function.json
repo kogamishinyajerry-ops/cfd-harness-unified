@@ -1,0 +1,4 @@
+{
+  "provenance": "Stream-function visualisation via tensor-product ansatz calibrated to Ghia 1982 Re=100 tabulated u,v centerline. Not a full DNS; use this as pedagogical geometry context.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

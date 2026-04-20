@@ -1,0 +1,32 @@
+# Wrong-model teaching run for circular_cylinder_wake.
+#
+# At Re=200, using a laminar solver (no turbulence model at all) with
+# insufficient time resolution will still capture vortex shedding, but
+# with the wrong frequency — typical published bias is -10 to -15%.
+# Alternatively, RANS with k-ε on a nominally transitional Re can give
+# wildly incorrect St.
+run_metadata:
+  run_id: wrong_model
+  label_zh: 错模型 · laminar 在 Re=200
+  label_en: Wrong model (laminar solver at transitional Re)
+  description_zh: >-
+    Re=200 正好落在层流和湍流的过渡区。用纯 laminar 不加任何湍流修正时，
+    涡脱仍然会出现，但频率偏低约 12%——因为不能正确处理细小尺度耗散。
+    换成 k-ε 又会有别的偏差。这里模型选择的"代价"是可测量的。
+  category: wrong_model
+  expected_verdict: FAIL
+case_id: circular_cylinder_wake
+source: model_choice_literature_typical
+measurement:
+  value: 0.146
+  unit: dimensionless
+  run_id: synth_cyl_laminar_re200
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Laminar 在 Re=200 过渡区 → St 0.146 vs 0.164 gold (-11%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

@@ -1,0 +1,31 @@
+# Under-resolved teaching run for backward_facing_step.
+#
+# Coarse mesh misses the separation point. Typical consequence: reported
+# reattachment length too short by 15-25% (the recirculation bubble
+# appears to "pinch off" earlier because the near-wall recirculation
+# region is poorly captured). Armaly et al. 1983 grid studies document
+# exactly this bias.
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · 稀疏网格
+  label_en: Under-resolved (sparse mesh near separation)
+  description_zh: >-
+    台阶后的分离点需要局部加密——如果不加，回流区的形状被错误抹平，
+    reattachment 看起来提前发生。典型偏差 -18% 左右，落在 10% 容差带外。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: backward_facing_step
+source: grid_refinement_synthetic
+measurement:
+  value: 5.1
+  unit: Xr/H
+  run_id: synth_bfs_coarse_re38000
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Coarse mesh under-resolves separation bubble; Xr/H ≈ 5.1 vs 6.26 gold (-18%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

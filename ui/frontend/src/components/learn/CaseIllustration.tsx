@@ -465,7 +465,7 @@ const ILLUSTRATIONS: Record<string, (p: IllustrationProps) => ReactNode> = {
   circular_cylinder_wake: CircularCylinderWake,
   turbulent_flat_plate: TurbulentFlatPlate,
   plane_channel_flow: PlaneChannelFlow,
-  axisymmetric_impinging_jet: AxisymmetricImpingingJet,
+  impinging_jet: AxisymmetricImpingingJet,
   naca0012_airfoil: NacaAirfoil,
   rayleigh_benard_convection: RayleighBenard,
   differential_heated_cavity: DifferentialHeatedCavity,

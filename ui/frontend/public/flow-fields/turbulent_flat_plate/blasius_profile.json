@@ -1,0 +1,4 @@
+{
+  "provenance": "Blasius (1908) similarity solution — numerical integration of 2f''' + f f'' = 0 with BCs f(0)=f'(0)=0, f'(∞)=1. Shooting on f''(0) converges to 0.33206.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

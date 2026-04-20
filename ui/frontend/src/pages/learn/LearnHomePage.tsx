@@ -1,7 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { api } from "@/api/client";
 import { CaseIllustration } from "@/components/learn/CaseIllustration";
 import { LEARN_CASES, type LearnCase } from "@/data/learnCases";
+import type { CaseIndexEntry } from "@/types/validation";
 
 // Student-facing catalog. No marketing hero — a three-line intro, then
 // the 10 cases as visual cards. Each card leads with a line-art SVG of
@@ -21,6 +24,16 @@ const DIFFICULTY_DOT: Record<LearnCase["difficulty"], string> = {
 };
 
 export function LearnHomePage() {
+  // Pull live case index so we can surface the run distribution badge per
+  // card. When the backend is down the catalog still renders from static
+  // LEARN_CASES metadata — just without badges.
+  const { data: cases } = useQuery<CaseIndexEntry[]>({
+    queryKey: ["cases"],
+    queryFn: api.listCases,
+    retry: false,
+  });
+  const indexById = new Map((cases ?? []).map((c) => [c.case_id, c]));
+
   return (
     <div className="mx-auto max-w-6xl px-6 pt-10 pb-16">
       {/* Intro — deliberately short. Teach, don't sell. */}
@@ -52,7 +65,7 @@ export function LearnHomePage() {
         <ul className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {LEARN_CASES.map((c) => (
             <li key={c.id}>
-              <CatalogCard caseData={c} />
+              <CatalogCard caseData={c} indexEntry={indexById.get(c.id)} />
             </li>
           ))}
         </ul>
@@ -61,7 +74,31 @@ export function LearnHomePage() {
   );
 }
 
-function CatalogCard({ caseData }: { caseData: LearnCase }) {
+function RunDistributionPill({ summary }: { summary: CaseIndexEntry["run_summary"] }) {
+  if (!summary || summary.total === 0) return null;
+  const counts = summary.verdict_counts;
+  const chips: { label: string; color: string }[] = [];
+  if (counts.PASS) chips.push({ label: `${counts.PASS} PASS`, color: "text-contract-pass" });
+  if (counts.HAZARD) chips.push({ label: `${counts.HAZARD} HAZARD`, color: "text-contract-hazard" });
+  if (counts.FAIL) chips.push({ label: `${counts.FAIL} FAIL`, color: "text-contract-fail" });
+  if (counts.UNKNOWN) chips.push({ label: `${counts.UNKNOWN} UNKNOWN`, color: "text-surface-500" });
+  return (
+    <div className="flex flex-wrap items-baseline gap-2 text-[11px]">
+      <span className="mono text-surface-400">{summary.total} runs ·</span>
+      {chips.map((c, i) => (
+        <span key={i} className={`mono ${c.color}`}>{c.label}</span>
+      ))}
+    </div>
+  );
+}
+
+function CatalogCard({
+  caseData,
+  indexEntry,
+}: {
+  caseData: LearnCase;
+  indexEntry: CaseIndexEntry | undefined;
+}) {
   return (
     <Link
       to={`/learn/cases/${caseData.id}`}
@@ -91,6 +128,11 @@ function CatalogCard({ caseData }: { caseData: LearnCase }) {
         <p className="text-[13px] leading-relaxed text-surface-400 line-clamp-2">
           {caseData.teaser_zh}
         </p>
+        {indexEntry && indexEntry.run_summary.total > 0 && (
+          <div className="pt-1">
+            <RunDistributionPill summary={indexEntry.run_summary} />
+          </div>
+        )}
         <div className="mt-auto flex items-center justify-between pt-2">
           <span className="mono text-[11px] text-surface-500">
             {caseData.canonical_ref}

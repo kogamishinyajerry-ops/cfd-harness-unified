@@ -1,0 +1,4 @@
+{
+  "provenance": "Baughn & Shimizu (1989) experimental Nu(r/D) digitised, plus typical k-ε overprediction at stagnation (~55%) and k-ω SST residual bias (~10%). Real validation ground truth for any impingement CFD.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

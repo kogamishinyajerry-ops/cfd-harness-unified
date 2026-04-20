@@ -1,0 +1,32 @@
+# Real-incident run for naca0012_airfoil.
+#
+# Typical first-attempt CFD result: insufficient far-field distance
+# (only 8 chords instead of 15+) compresses the effective freestream
+# and under-predicts lift. Published mesh-convergence studies (e.g.,
+# Mittal & Tezduyar 1995) document a ~8-12% Cl underestimate under
+# these conditions.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · 远场边界太近
+  label_en: Real incident (far-field boundary too close)
+  description_zh: >-
+    远场只放了 8 倍弦长（应该 ≥15），环流效应让升力系数被压低 ~10%。
+    网格无关性测试抓不到这个问题——因为网格本身没错，错的是计算域尺寸。
+    这是航空 CFD 入门最容易栽的坑。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: naca0012_airfoil
+source: literature_typical_incident
+measurement:
+  value: 0.480
+  unit: dimensionless
+  run_id: synth_naca_shortfar_aoa5
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Far-field boundary at 8 chord-lengths; -10% Cl bias vs Ladson reference.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

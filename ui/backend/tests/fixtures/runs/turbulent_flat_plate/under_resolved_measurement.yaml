@@ -1,0 +1,30 @@
+# Under-resolved teaching run for turbulent_flat_plate (laminar contract).
+#
+# Coarse mesh in wall-normal direction: y+ cell 1 far from 1; first few
+# cells miss the real viscous sublayer gradient. Cf systematically high
+# (~15-20%) on the near-x region where BL is thinnest. The same issue
+# afflicts early CFD tutorials that use 20-cell wall-normal meshes.
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · y+ 距壁太远
+  label_en: Under-resolved (y+ too far from wall)
+  description_zh: >-
+    Cf 对第一层网格的 y+ 非常敏感。如果第一层网格在 y+=5 以外，壁面速度
+    梯度被高估，Cf 系统性偏高 ~18%。这是 CFD 入门最常见的网格错误。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: turbulent_flat_plate
+source: grid_refinement_synthetic
+measurement:
+  value: 0.00496
+  unit: dimensionless
+  run_id: synth_tfp_coarse_yplus
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'First-cell y+ ≈ 8; wall gradient overestimated. Cf 0.00496 vs 0.00420 gold (+18%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

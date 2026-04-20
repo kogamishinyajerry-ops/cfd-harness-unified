@@ -1,0 +1,4 @@
+{
+  "provenance": "Grossmann & Lohse (2000) piecewise regime predictions for Nu(Ra). Classical Ra^(1/4) matches Ra≤10⁸; hard turbulence Ra^(1/3) takes over above 10⁹. Typical experimental values at Ra=10¹⁰ span 100-160.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

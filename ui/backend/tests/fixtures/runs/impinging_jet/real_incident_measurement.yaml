@@ -1,0 +1,29 @@
+# Real-incident reference run for impinging_jet (Re=10000, H/D=2).
+# k-omega SST: driven at Re=10000, returns Nu@stagnation around 27 against
+# the (provisional) gold of 25 — about +8% residual stagnation bias.
+# Within 15% tolerance → PASS, but glued to the upper edge.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实运行 · k-ω SST 驻点 Nu
+  label_en: Real run (k-omega SST stagnation Nu)
+  description_zh: >-
+    k-ω SST 在 Re=10000 下驻点 Nu 约 27，相对 Cooper 1984 gold 值 25
+    偏 +8%。落在 15% 容差带内——PASS，但紧贴上界。想真正做对需要
+    Reynolds-stress 或 v²-f 模型。
+  category: real_incident
+  expected_verdict: PASS
+case_id: impinging_jet
+source: model_choice_literature_typical
+measurement:
+  value: 27.0
+  unit: dimensionless
+  run_id: synth_jet_sst_stagnation
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: 'Residual +8% stagnation Nu bias — passes tolerance but not model-free.'
+    detail: null
+    decision_refs: []
+decisions_trail: []
