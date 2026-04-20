@@ -214,7 +214,7 @@ def render_html(manifest: Dict[str, Any]) -> str:
     decisions) so two identical manifests produce identical HTML bytes.
     """
     manifest_id = _esc(manifest.get("manifest_id") or "UNKNOWN")
-    generated_at = _esc(manifest.get("generated_at") or "")
+    build_fingerprint = _esc(manifest.get("build_fingerprint") or "")
     schema_version = _esc(manifest.get("schema_version") or "")
 
     git = manifest.get("git") or {}
@@ -275,7 +275,7 @@ def render_html(manifest: Dict[str, Any]) -> str:
 <body>
 <h1>Audit Package Manifest</h1>
 <p class="meta"><strong>Manifest ID:</strong> <code>{manifest_id}</code><br>
-<strong>Schema:</strong> v{schema_version} &middot; <strong>Generated:</strong> {generated_at}</p>
+<strong>Schema:</strong> v{schema_version} &middot; <strong>Build fingerprint:</strong> <code>{build_fingerprint}</code></p>
 
 <h2>Git provenance</h2>
 <table>

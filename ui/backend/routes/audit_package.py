@@ -164,13 +164,16 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     except HmacSecretMissing as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Stable generated_at (Codex PR-5d HIGH #2): derive from inputs so two
-    # identical POSTs produce byte-identical ZIPs and HMAC signatures. The
-    # repo's git SHAs in the manifest still pin repo state, so the bundle
-    # still differs when the repo changes — but not when only wall-clock
-    # time changes. This preserves the byte-reproducibility contract
-    # documented in docs/ui_roadmap.md:220-223 and docs/ui_design.md:376-378.
-    generated_at = hashlib.sha256(
+    # Stable build_fingerprint (DEC-V61-019 L3 rename of generated_at):
+    # derive from inputs so two identical POSTs produce byte-identical ZIPs
+    # and HMAC signatures. The repo's git SHAs in the manifest still pin
+    # repo state, so the bundle still differs when the repo changes — but
+    # not when only wall-clock time changes. This preserves the byte-
+    # reproducibility contract (docs/ui_roadmap.md:220-223,
+    # docs/ui_design.md:376-378). Previously this field was named
+    # `generated_at`, misleading reviewers who reasonably expected a
+    # wall-clock timestamp but got an opaque 16-hex token.
+    build_fingerprint = hashlib.sha256(
         f"{case_id}|{run_id}".encode("utf-8")
     ).hexdigest()[:16]
 
@@ -180,7 +183,7 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     manifest = build_manifest(
         case_id=case_id,
         run_id=run_id,
-        generated_at=generated_at,
+        build_fingerprint=build_fingerprint,
     )
 
     # Stage.
@@ -241,7 +244,7 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
         manifest_id=manifest["manifest_id"],
         case_id=case_id,
         run_id=run_id,
-        generated_at=manifest["generated_at"],
+        build_fingerprint=manifest["build_fingerprint"],
         git_repo_commit_sha=manifest["git"].get("repo_commit_sha"),
         comparator_verdict=manifest["measurement"].get("comparator_verdict"),
         pdf_available=pdf_available,

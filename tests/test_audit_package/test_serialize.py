@@ -30,7 +30,7 @@ def _synthetic_manifest() -> dict:
     return {
         "schema_version": 1,
         "manifest_id": "duct_flow-r1",
-        "generated_at": "2026-04-21T00:30:00Z",
+        "build_fingerprint": "2026-04-21T00:30:00Z",
         "git": {
             "repo_commit_sha": "b69fa34000000000000000000000000000000000",
             "whitelist_commit_sha": "947661ef00000000000000000000000000000000",
@@ -184,7 +184,7 @@ class TestZipBytesDeterministic:
         minimal = {
             "schema_version": 1,
             "manifest_id": "x-y",
-            "generated_at": "2026-04-21T00:00:00Z",
+            "build_fingerprint": "2026-04-21T00:00:00Z",
             "git": {},
             "case": {"id": "x", "legacy_ids": [], "whitelist_entry": None, "gold_standard": None},
             "run": {"run_id": "y", "status": "no_run_output"},

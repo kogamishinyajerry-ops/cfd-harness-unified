@@ -132,7 +132,10 @@ function BuildResult({ result }: { result: AuditPackageBuildResponse }) {
         <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
           <KV k="Manifest ID" v={<code className="mono">{result.manifest_id}</code>} />
           <KV k="Bundle ID" v={<code className="mono">{result.bundle_id}</code>} />
-          <KV k="Generated at" v={result.generated_at} />
+          <KV
+            k="Build fingerprint"
+            v={<code className="mono text-[11px]">{result.build_fingerprint}</code>}
+          />
           <KV
             k="Verdict"
             v={

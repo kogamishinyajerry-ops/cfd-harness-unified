@@ -23,7 +23,9 @@ export interface AuditPackageBuildResponse {
   manifest_id: string;
   case_id: string;
   run_id: string;
-  generated_at: string;
+  // Renamed from generated_at per DEC-V61-019 L3: deterministic 16-hex
+  // hash fragment derived from (case_id, run_id), not a wall-clock time.
+  build_fingerprint: string;
   git_repo_commit_sha: string | null;
   comparator_verdict: string | null;
   pdf_available: boolean;

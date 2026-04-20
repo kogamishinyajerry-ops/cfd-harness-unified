@@ -42,7 +42,7 @@ def _synthetic_manifest() -> dict:
     return {
         "schema_version": 1,
         "manifest_id": "duct_flow-sig-test",
-        "generated_at": "2026-04-21T01:15:00Z",
+        "build_fingerprint": "2026-04-21T01:15:00Z",
         "git": {
             "repo_commit_sha": "1670daf0" + "0" * 32,
             "whitelist_commit_sha": "947661ef" + "0" * 32,
