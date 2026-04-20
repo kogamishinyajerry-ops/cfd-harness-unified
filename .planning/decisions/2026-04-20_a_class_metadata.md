@@ -12,9 +12,9 @@ reversibility: fully-reversible-by-pr-revert
   knowledge/whitelist.yaml. No reference_values change. No schema
   change. No test surface change. One `git revert -m 1 <merge-sha>`
   restores pre-edit state.)
-notion_sync_status: PENDING
-github_pr_url: null
-github_merge_sha: null
+notion_sync_status: synced 2026-04-20T20:50 (https://www.notion.so/348c68942bed8170b92de338eb8c4b1c) — Decisions DB page created with Scope=Project, Status=Accepted, Canonical Follow-up=PR #5 URL
+github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/5
+github_merge_sha: d850cb2c92d55fa44db03f93beb5c3c3bdd39246
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
 external_gate_self_estimated_pass_rate: 92%
   (turbulence_model is explicitly listed in DEC-V61-003 §8 as an
