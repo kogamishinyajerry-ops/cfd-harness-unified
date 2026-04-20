@@ -170,6 +170,90 @@ class TestFoamAgentExecutor:
         assert isinstance(FoamAgentExecutor(), CFDExecutor)
 
     # ------------------------------------------------------------------
+    # L-PR20-2: narrow coverage for the four execute() error branches
+    # per DEC-V61-020 / PR #20 Codex round-6 follow-up
+    # ------------------------------------------------------------------
+
+    def test_execute_sdk_not_installed_returns_install_hint(self, monkeypatch):
+        """_DOCKER_AVAILABLE=False branch: error hint must name the optional
+        dep group (cfd-real-solver) and quote the version specifier so the
+        command works in zsh/bash (L-PR20-1 fix regression guard)."""
+        monkeypatch.setattr("src.foam_agent_adapter._DOCKER_AVAILABLE", False)
+        executor = FoamAgentExecutor()
+        result = executor.execute(make_task())
+        assert result.success is False
+        assert result.is_mock is False
+        assert "Docker Python SDK not installed" in result.error_message
+        assert "cfd-real-solver" in result.error_message
+        # L-PR20-1: version specifier must be single-quoted so shells parse it.
+        assert "'docker>=7.0'" in result.error_message
+
+    def test_execute_real_not_found_dispatches_to_start_container_hint(
+        self, monkeypatch
+    ):
+        """When docker.errors.NotFound IS a real class subclass of
+        DockerException, the dispatcher must emit the 'not found → docker
+        start' hint (not the generic unavailable message)."""
+        class FakeDockerException(Exception):
+            pass
+        class FakeNotFound(FakeDockerException):
+            pass
+
+        mock_docker = MagicMock()
+        mock_docker.errors.DockerException = FakeDockerException
+        mock_docker.errors.NotFound = FakeNotFound
+        mock_docker.from_env.side_effect = FakeNotFound(
+            "No such container: cfd-openfoam"
+        )
+
+        import sys as _sys
+        monkeypatch.setitem(_sys.modules, "docker", mock_docker)
+        monkeypatch.setitem(_sys.modules, "docker.errors", mock_docker.errors)
+        monkeypatch.setattr("src.foam_agent_adapter._DOCKER_AVAILABLE", True)
+        monkeypatch.setattr("src.foam_agent_adapter.docker", mock_docker)
+
+        executor = FoamAgentExecutor()
+        result = executor.execute(make_task())
+        assert result.success is False
+        assert "not found" in result.error_message
+        assert "docker start" in result.error_message
+
+    def test_execute_magicmock_notfound_falls_through_to_generic_hint(
+        self, monkeypatch
+    ):
+        """When docker.errors.NotFound is a MagicMock attribute rather than
+        a real class (the common mocking pattern), isinstance() against it
+        would normally raise TypeError. The type-guard must detect the
+        non-class attribute and route to the generic 'unavailable' branch
+        instead of crashing. Regression guard for the type-guard fix
+        shipped alongside DEC-V61-020."""
+        class FakeDockerException(Exception):
+            pass
+
+        mock_docker = MagicMock()
+        mock_docker.errors.DockerException = FakeDockerException
+        # mock_docker.errors.NotFound is auto-created as a MagicMock attr
+        # (NOT a class) — exactly the scenario the type-guard defends.
+        mock_docker.from_env.side_effect = FakeDockerException(
+            "generic daemon error"
+        )
+
+        import sys as _sys
+        monkeypatch.setitem(_sys.modules, "docker", mock_docker)
+        monkeypatch.setitem(_sys.modules, "docker.errors", mock_docker.errors)
+        monkeypatch.setattr("src.foam_agent_adapter._DOCKER_AVAILABLE", True)
+        monkeypatch.setattr("src.foam_agent_adapter.docker", mock_docker)
+
+        executor = FoamAgentExecutor()
+        result = executor.execute(make_task())
+        assert result.success is False
+        # Generic branch — does NOT claim the container was specifically
+        # 'not found', because the MagicMock attribute couldn't be used
+        # in isinstance() dispatch.
+        assert "generic daemon error" in result.error_message
+        assert "unavailable" in result.error_message
+
+    # ------------------------------------------------------------------
     # _fail() tests
     # ------------------------------------------------------------------
 
