@@ -1,7 +1,7 @@
-driving_model: opus47-main (Orchestrator + self-Gate + ADWM v5.2 autonomous-governance, Model Routing v5.2)
+driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T01:22"
-session: S-003o CLOSED (visual acceptance delivery hardening + reproducible bundle sync on `codex/visual-acceptance-sync`, landed as `1c188b3`). Delivery surface is now locked to canonical HTML + timestamped snapshot + machine-readable manifest + deep acceptance package, and GitHub PR #1 plus Notion Canonical Doc / Session / task pointers have all been updated to the same batch. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). **Important blocker remains**: joint Codex↔Claude signoff is still unavailable because Computer Use access to Claude APP (`com.anthropic.claudefordesktop`) is denied; treat this package as Codex-signed and externally synced, not fully co-signed.
+last_updated: "2026-04-20T11:30"
+session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill queue continues — MCP last probed UNREACHABLE 2026-04-19T00:12; v6.1 Decisions DB entries are landing locally to `.planning/decisions/` until MCP is restored. Previous "Computer Use to Claude APP denied" blocker is structurally dissolved by v6.1 — the APP itself is now the driver, there is no external Claude to be proxied-into.
 
 # Phase Status
 
@@ -477,3 +477,85 @@ NACA0012 Wave 3 final verdict: **DEC-EX-A** (PASS_WITH_DEVIATIONS permanent)
 - Decision path: accept known ~40% Cp deviation; snappyHexMesh rewrite (DEC-EX-C) deferred to future Tier-1 phase
 
 Next focus: Phase 8 (AutoVerifier MVP) pending, or other roadmap items.
+
+# EX-1 Slice Progression (post-STATE.md gap; fills 008 → 010 + G3)
+
+STATE.md lines 419-448 were last updated at EX-1-007 (commit 342beb0). Slices 008-010 and a parallel G3 restructure track have landed since. Catch-up recorded here so Kogami (and the next driver hand-off) can follow the causal chain without cross-referencing commit history.
+
+## EX-1-008 (B1-continuation on DHC; `fuse` verdict, 2026-04-18)
+
+- Goal: measure DHC Nu on the EX-1-007 wall-packed 256² mesh with the new mean-over-y extractor (precondition #3 SATISFIED).
+- Measurement: Nu_measured = 77.82 on hot-wall, mean over y ∈ [0.1·L, 0.9·L]. vs gold `ref_value=30.0`, vs EX-1-007 predicted band [11, 21]. Verdict: ABOVE_BAND by ~2.6×.
+- Honest interpretation: the gold reference itself is **inconsistent with stated Ra=1e10** — 2D Ra=1e10 DHC literature sits in 100-160 range (de Vahl Davis extrapolated + LES benchmarks). Current `ref_value=30.0` appears to have been copied from a Ra=1e6 configuration and never rebased.
+- Cycle 2 FUSED (DEC-ADWM-004, `.planning/decisions/2026-04-18_ex1_008_fuse.md`): Option B (snGrad switch) rejected because it would move Nu HIGHER, not lower, and cannot close a gold-accuracy question by construction. Escalated to external Gate queue as **Q-1** with two decision paths P-1 (update gold to 100-160 + widen tolerance) vs P-2 (downgrade whitelist target to Ra=1e6-1e7).
+- Narrative-only mitigation landed: `knowledge/gold_standards/differential_heated_cavity.yaml` physics_contract.contract_status narrative updated (commit 5e06ab4) to record precondition #3 SATISFIED. Numeric `ref_value` / `tolerance` fields UNCHANGED (hard floor #1 respected).
+- Metrics: CHK-3 REJECT, full suite 250/250 green, override_rate=1.0 (fuse = forced pivot), physics_validity_precheck=pass.
+- Artifact: `reports/ex1_008_dhc_mean_nu/fix_plan_packet.md`
+- Rolling EX-1 state (n=8): override_rate 2/8 = 0.250. Still below rule-1 0.30 threshold but trending up from n=7 (0.143).
+
+## G3 restructure (parallel track, cylinder multi-doc YAML preservation, 2026-04-18)
+
+- Context: EX-1-006 exposed that `circular_cylinder_wake.yaml` encodes physics_contract as YAML comments to preserve multi-document structure; yaml.safe_load cannot read comment-based contract_status, silently skipping 1/10 whitelist cases in the producer→consumer audit channel.
+- G3 scope: restructure the file to yaml-parseable contract_status while preserving multi-document anchor/alias structure. Self-approved as DEC-ADWM-G3 (`.planning/decisions/2026-04-18_ex1_g3_self_approve.md`).
+- Result: 10/10 whitelist coverage for producer→consumer channel reinstated.
+- Metrics: wall_clock_slice=61s, override=0.0, determinism=PASS.
+- Artifact: `reports/ex1_g3_cylinder_restructure/fix_plan_packet.md`
+
+## EX-1-009 (Spalding-fallback producer→consumer wiring, 2026-04-18)
+
+- Slice: `turbulent_flat_plate` COMPATIBLE_WITH_SILENT_PASS_HAZARD (per EX-1-004). Hazard: when Cf extraction fails, adapter falls back to Spalding wall-function analytic form at `src/foam_agent_adapter.py:6924-6930`, making the comparator self-referential (adapter generates the answer it's supposed to match).
+- Producer: adds `spalding_fallback_fired` boolean to `key_quantities` when fallback path taken.
+- Consumer: ErrorAttributor enriches `audit_concern` tag with `:spalding_fallback_fired` suffix when flag is True on SILENT_PASS_HAZARD run.
+- Full dispatch (DEC-ADWM-005): Codex produced the `src/foam_agent_adapter.py` + `src/error_attributor.py` + `tests/test_error_attributor.py` diff; opus47-main finalized the commit (7b0cd29) due to Codex sandbox git-commit block.
+- Metrics: 11/11 CHK PASS first-cycle (clean land, no pivots), override=0.0, quality=5.0, full suite 250→251 green (+1 targeted test).
+- Artifact: `reports/ex1_009_spalding_fallback_audit/slice_metrics.yaml`
+- Rolling EX-1 state (n=9): override_rate 2/9 = 0.222. All D4+ rules untriggered.
+
+## EX-1-010 (cylinder canonical-band Strouhal-shortcut audit, 2026-04-18)
+
+- Slice: mirror of EX-1-009 for the second SILENT_PASS_HAZARD. `src/foam_agent_adapter.py:6800-6808` hardcodes `strouhal_number = 0.165` for any Re ∈ [50, 200], bypassing solver output for the whitelist Re=100 case.
+- Producer: records `strouhal_canonical_band_shortcut_fired` boolean.
+- Consumer: `audit_concern` enriched with `:strouhal_canonical_band_shortcut_fired` suffix when flag True on SILENT_PASS_HAZARD run.
+- Full dispatch (DEC-ADWM-006): Codex produced the diff; opus47-main finalized commit cf17f23 + 1bd4d67 (slice_metrics landing).
+- Metrics: 10/10 CHK PASS first-cycle, override=0.0, quality=5.0, full suite 251→252 green (+1 targeted test).
+- Artifact: `reports/ex1_010_cylinder_canonical_band_audit/slice_metrics.yaml`
+- **Rolling EX-1 state (n=10): override_rate 2/10 = 0.200**. Matches takeover-prompt snapshot value. Rule-1 armed at n≥4 but not triggered (0.200 ≤ 0.30). Rule-2 not triggered (no two consecutive ≥0.5). Rule-5 consumer-side: 3 slices (006, 009, 010), all override=0.0.
+
+## Visual-Acceptance Delivery Hardening (S-003o, commits 1a65c3d → 83252ef, closed 2026-04-20T01:22)
+
+- 10-case contract dashboard + visual-acceptance HTML bundle + machine-readable manifest + deep-acceptance package all landed on branch `codex/visual-acceptance-sync`.
+- Bundle lives at: `reports/deep_acceptance/contract_status_dashboard_<ts>.html` (canonical + snapshot pair), `reports/deep_acceptance/visual_acceptance_report_<ts>.html`, `reports/deep_acceptance/<ts>_visual_acceptance_package.md`.
+- **Iteration audit (v6.1 cutover inventory)**: S-003o generated ~21 duplicate `*_visual_acceptance_package.md` files in the 01:11 → 01:38 hardening window while converging on the final output schema. All untracked (gitignored from HEAD) and functionally benign — no live loop / no scheduled-task spam. Decision: leave in-place for now; any follow-up archive pass is a self-routed reports/** cleanup, not v6.1-blocking.
+
+# v6.1 Takeover Landing (S-003p — 2026-04-20, claude-opus47-app sole primary driver)
+
+## Model-routing cutover summary
+
+- v6.0 Codex-primary-driving-Claude co-primary pair: RETIRED
+- v5.2 ADWM self-Gate autonomous-governance block: SUPERSEDED
+- v5.1 external-Notion-Gate-retired announcement: SUPERSEDED
+- Active regime: **v6.1 Claude 主导 · Codex 工具化** (Sole Primary Driver + Heterogeneous Code Tool on demand)
+- Trailer convention now: `Execution-by: claude-opus47-app` (+ optional `Codex-tool-diff: <sha>` for 禁区 touches, + optional `Gate-approve: <url>` for GS tolerance touches)
+- Retired / forbidden trailers: `codex-gpt54-xhigh` (v6.0), `claude-opus47-via-computer-use` (v6.0), `Co-signed: ...` (v6.0 double-sign), `opus47-main` / `opus47-pro` / `m27-helper` (older).
+
+## v6.1 infrastructure bootstrap (this session)
+
+- `.planning/STATE.md` header + tail reconciled to v6.1 (this block).
+- `reports/codex_tool_reports/` directory created (README.md + .gitkeep) — will host per-invocation TASK EXECUTION REPORT audit trails per v6.1 留痕 discipline.
+- `.planning/decisions/2026-04-20_v61_cutover.md` landed as v6.1 DEC-V61-001 (autonomous_governance=true, claude_signoff=yes, codex_tool_invoked=false, reversibility=fully-reversible-by-document-edit).
+
+## autonomous_governance accounting (v6.1 counter reset)
+
+The v6.1 hard-floor-4 trigger `Decisions DB autonomous_governance: true ≥ 10` counts only v6.1-era entries. Pre-v6.1 ADWM self-Gate entries (DEC-ADWM-001 through DEC-ADWM-G3/-006) accumulated under v5.2 methodology-gate semantics and are **not** retroactively promoted. v6.1 counter starts at DEC-V61-001 = 1.
+
+Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): 7+ local autonomous-governance entries (ADWM activation + 008 fuse + 008/009/010 self-approve + G3 self-approve + adwm_session_acceptance_packet). All have `notion_sync_status: PENDING` and should be mirrored when MCP is restored.
+
+## Post-cutover TODO queue (ordered, self-routed unless marked)
+
+1. **[self]** Verify tests still green (`pytest -q`) and report baseline against takeover-prompt snapshot "245/245 harness". Current code has advanced through EX-1-009/010 targeted-test additions; expected baseline 252/252 or similar.
+2. **[self]** Decide whether to merge `codex/visual-acceptance-sync` (branch with 13 unique commits and a fresh 10-case dashboard) back into `main`, or leave as demo-sync branch.
+3. **[self]** Run `git status` pruning review on 57 untracked `reports/deep_acceptance/*` files. Archive duplicates into a dated subfolder rather than delete, preserving audit trail per 留痕 > 聪明.
+4. **[STOP-FOR-GATE when Notion MCP restored]** Q-1 DHC gold Path P-1/P-2 (hard floor #1).
+5. **[STOP-FOR-GATE when Notion MCP restored]** Q-2 R-A-relabel pipe_flow → duct_flow (whitelist.yaml 成员 — hard floor #2 vicinity; needs Gate even though it's not a tolerance edit).
+6. **[self]** Q-3 Notion backfill — enumerate pre-v6.1 pending decisions + DEC-V61-001 in a single mirror batch when MCP comes back.
+7. **[self]** Phase 9 activation remains frozen pending D5 gate (per D4 C4 + PL-1 freeze).
