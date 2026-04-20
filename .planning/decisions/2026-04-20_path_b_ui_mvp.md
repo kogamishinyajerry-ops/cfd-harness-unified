@@ -12,7 +12,10 @@ reversibility: fully-reversible-by-branch-revert
    is one `git revert -m 1 <merge-sha>`. No src/ · tests/ · knowledge/
    gold_standards/ touch; no whitelist membership change; no DB-schema
    migration.)
-notion_sync_status: PENDING (will mirror to Decisions DB after Phase 0 PR merges)
+notion_sync_status: synced 2026-04-20T18:45 (https://www.notion.so/348c68942bed81bf8352e992e2d712a0) — mirrored ahead of PR #2 per Kogami's "Notion + GitHub sync" directive. Canonical Follow-up updated with PR #2 (https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/2) + merge SHA 6ae6d0b5 at 2026-04-20T21:12.
+github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/2
+github_merge_sha: 6ae6d0b54052f2fd1e3b47767f6b6a8afac822d7
+github_merge_method: merge (regular merge commit — 留痕 > 聪明)
 external_gate_self_estimated_pass_rate: 92%
   (Kogami's takeover prompt explicitly granted "全权交给你决策开发至 MVP 完成";
    Path B is the narrower and more defensible of the two paths surfaced in

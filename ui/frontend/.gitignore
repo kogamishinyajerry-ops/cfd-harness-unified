@@ -7,6 +7,10 @@ yarn.lock
 # Build outputs
 dist/
 dist-ssr/
+dist.stale.*/
+
+# Vite live-reload timestamps (fuse sandbox artifact)
+vite.config.ts.timestamp-*.mjs
 
 # Environment
 .env

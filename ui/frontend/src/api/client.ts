@@ -7,11 +7,29 @@ import type {
   CaseIndexEntry,
   ValidationReport,
 } from "@/types/validation";
+import type {
+  CaseYamlLintResult,
+  CaseYamlPayload,
+  CaseYamlSaveResult,
+} from "@/types/editor";
+import type {
+  DashboardResponse,
+  DecisionsQueueResponse,
+  RunCheckpointsResponse,
+} from "@/types/decisions";
 
-async function getJson<T>(path: string): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(path, {
-    method: "GET",
-    headers: { Accept: "application/json" },
+    method: init?.method ?? "GET",
+    headers: {
+      Accept: "application/json",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers ?? {}),
+    },
+    body: init?.body,
     credentials: "same-origin",
   });
   if (!response.ok) {
@@ -32,12 +50,48 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  health: () => getJson<{ status: string; version: string }>("/api/health"),
-  listCases: () => getJson<CaseIndexEntry[]>("/api/cases"),
+  // Phase 0
+  health: () => request<{ status: string; version: string }>("/api/health"),
+  listCases: () => request<CaseIndexEntry[]>("/api/cases"),
   getCase: (caseId: string) =>
-    getJson<CaseDetail>(`/api/cases/${encodeURIComponent(caseId)}`),
+    request<CaseDetail>(`/api/cases/${encodeURIComponent(caseId)}`),
   getValidationReport: (caseId: string) =>
-    getJson<ValidationReport>(
+    request<ValidationReport>(
       `/api/validation-report/${encodeURIComponent(caseId)}`,
     ),
+
+  // Phase 1
+  getCaseYaml: (caseId: string) =>
+    request<CaseYamlPayload>(
+      `/api/cases/${encodeURIComponent(caseId)}/yaml`,
+    ),
+  putCaseYaml: (payload: CaseYamlPayload) =>
+    request<CaseYamlSaveResult>(
+      `/api/cases/${encodeURIComponent(payload.case_id)}/yaml`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  lintCaseYaml: (payload: CaseYamlPayload) =>
+    request<CaseYamlLintResult>(
+      `/api/cases/${encodeURIComponent(payload.case_id)}/yaml/lint`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  revertCaseYaml: (caseId: string) =>
+    request<CaseYamlPayload>(
+      `/api/cases/${encodeURIComponent(caseId)}/yaml`,
+      { method: "DELETE" },
+    ),
+
+  // Phase 2
+  listDecisions: () => request<DecisionsQueueResponse>("/api/decisions"),
+
+  // Phase 3
+  getRunCheckpoints: (caseId: string) =>
+    request<RunCheckpointsResponse>(
+      `/api/runs/${encodeURIComponent(caseId)}/checkpoints`,
+    ),
+  runStreamUrl: (caseId: string) =>
+    `/api/runs/${encodeURIComponent(caseId)}/stream`,
+
+  // Phase 4
+  getDashboard: () => request<DashboardResponse>("/api/dashboard"),
 };
