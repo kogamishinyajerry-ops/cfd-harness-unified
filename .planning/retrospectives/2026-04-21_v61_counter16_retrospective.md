@@ -287,6 +287,6 @@ Kogami reply: **"D，Q1～Q5由你推荐决定"** — adopts bundle D, delegates
 - `~/CLAUDE.md` §"v6.1 自主治理规则" — new section (replaces implicit ADWM v5.2 counter discipline)
 - `.planning/STATE.md` — counter reset to 0 at 2026-04-21T04:55
 - `.planning/retrospectives/2026-04-21_v61_counter16_retrospective.md` — this file, status DECIDED
-- Notion Decisions DB — retrospective mirrored as its own page for auditability
+- Notion Decisions DB — retrospective mirrored at https://www.notion.so/348c68942bed819185f1fa3351e89ace (Scope=Project, Status=Accepted)
 
 **Phase 6 kicks off at counter=0 + new governance active.**
