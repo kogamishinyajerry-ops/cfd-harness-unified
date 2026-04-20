@@ -33,23 +33,30 @@ length-extension / concatenation-collision ambiguity.
 Key management
 --------------
 The HMAC secret is read from the environment variable
-``CFD_HARNESS_HMAC_SECRET``. The value may be either:
+``CFD_HARNESS_HMAC_SECRET``. The value MUST use one of the explicit
+encoding prefixes (PR-5c.1 per Codex M1 — resolves base64-vs-plain
+ambiguity that could desynchronize signer and external verifiers):
 
-- **base64-encoded** — preferred for high-entropy binary keys. The helper
-  auto-decodes.
-- **plain text** — acceptable for ad-hoc / dev keys. Encoded as UTF-8.
+- ``base64:<padded-standard-base64>`` — for high-entropy binary keys.
+  Generate via ``openssl rand -base64 32`` and set as
+  ``CFD_HARNESS_HMAC_SECRET="base64:<output>"``.
+- ``text:<utf-8-string>`` — for ad-hoc / dev keys.
+- **un-prefixed** — treated as ``text:`` (UTF-8 plain). Deliberately
+  non-ambiguous: a user-visible string is always its literal bytes.
 
-If neither works (empty value), :class:`HmacSecretMissing` is raised with
-an install/rotation hint. **A secret is never written to stdout, logs, or
-manifests.**
+If the prefix is malformed or the value is empty, :class:`HmacSecretMissing`
+is raised with an install/rotation hint. **A secret is never written to
+stdout, logs, or manifests.**
 
 Rotation procedure (documented for ops):
 
 1. Generate new random key: ``openssl rand -base64 32``
-2. Set new env var for the signer service (e.g., UI backend).
+2. Set new env var as ``CFD_HARNESS_HMAC_SECRET="base64:<new-key>"`` for
+   the signer service (e.g., UI backend).
 3. Previously-signed bundles remain verifiable by whoever holds the **old**
    key — sidecars don't bind to a specific key ID in v1. If per-key rotation
-   tracking is required, upgrade to a key-id sidecar field in a future DEC.
+   tracking is required, upgrade to a key-id sidecar field in a future DEC
+   (Codex M2 follow-up).
 4. New bundles will sign with the new key.
 
 Constant-time compare
@@ -65,6 +72,7 @@ import binascii
 import hashlib
 import hmac
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -73,6 +81,16 @@ from .serialize import _canonical_json
 HMAC_ENV_VAR = "CFD_HARNESS_HMAC_SECRET"
 DOMAIN_TAG = b"cfd-harness-audit-v1|"
 _HASH_ALGO = hashlib.sha256
+
+# PR-5c.1 per Codex L1: sidecar .sig files must contain exactly 64 lowercase
+# or uppercase hex chars. Stricter validation fails fast at write + read
+# boundaries instead of deferring to verify().
+_HEX_SIG_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+# PR-5c.1 per Codex M1: explicit encoding prefixes for CFD_HARNESS_HMAC_SECRET.
+# Un-prefixed values are UTF-8 plain text (no heuristic base64 decode).
+_ENV_PREFIX_BASE64 = "base64:"
+_ENV_PREFIX_TEXT = "text:"
 
 
 class HmacSecretMissing(RuntimeError):
@@ -88,37 +106,60 @@ class HmacSecretMissing(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def get_hmac_secret_from_env(env_var: str = HMAC_ENV_VAR) -> bytes:
-    """Read the HMAC secret from the environment.
+    """Read the HMAC secret from the environment with an explicit encoding prefix.
 
-    Tries base64-decode first (standard for high-entropy binary keys);
-    falls back to UTF-8 plain text if base64 decode fails.
+    Value format (PR-5c.1 per Codex M1):
+
+    - ``base64:<padded-standard-base64>`` → base64-decoded to bytes.
+    - ``text:<utf-8-string>`` → UTF-8-encoded to bytes.
+    - un-prefixed → treated as UTF-8 plain text (no heuristic base64 decode).
+
+    This eliminates the base64-vs-plain ambiguity that the prior heuristic
+    could introduce between the signer and any future external (bash/Go/
+    Rust) verifier.
 
     Raises
     ------
     HmacSecretMissing
-        When the env var is unset or empty. The error message includes an
-        actionable rotation hint.
+        When the env var is unset, whitespace-only, or has a malformed
+        ``base64:`` payload. The error message includes an actionable
+        rotation hint.
     """
     raw = os.environ.get(env_var, "").strip()
     if not raw:
         raise HmacSecretMissing(
             f"{env_var} is not set. Generate a fresh key with "
-            "`openssl rand -base64 32` and export it as an environment "
-            "variable before signing. See src/audit_package/sign.py module "
-            "docstring for the rotation procedure."
+            "`openssl rand -base64 32` and export as "
+            f'`{env_var}="base64:<output>"` (or `text:<string>` for plain-text '
+            "dev keys). Un-prefixed values are treated as UTF-8 plain. See "
+            "src/audit_package/sign.py module docstring for the rotation procedure."
         )
-    # Try base64 first. Accept only strings whose length % 4 is 0 and only
-    # contain base64-alphabet chars — prevents accidentally stripping plain
-    # secrets to nonsense.
-    try:
-        if len(raw) % 4 == 0 and all(
-            c.isalnum() or c in "+/=" for c in raw
-        ):
-            decoded = base64.b64decode(raw, validate=True)
-            if decoded:
-                return decoded
-    except (binascii.Error, ValueError):
-        pass
+
+    if raw.startswith(_ENV_PREFIX_BASE64):
+        payload = raw[len(_ENV_PREFIX_BASE64):]
+        try:
+            decoded = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise HmacSecretMissing(
+                f"{env_var} has `base64:` prefix but payload failed to decode: {e}. "
+                "Ensure the payload is padded standard base64 (try "
+                "`openssl rand -base64 32` for a fresh 256-bit key)."
+            )
+        if not decoded:
+            raise HmacSecretMissing(
+                f"{env_var} has `base64:` prefix but decoded payload is empty."
+            )
+        return decoded
+
+    if raw.startswith(_ENV_PREFIX_TEXT):
+        payload = raw[len(_ENV_PREFIX_TEXT):]
+        if not payload:
+            raise HmacSecretMissing(
+                f"{env_var} has `text:` prefix but payload is empty."
+            )
+        return payload.encode("utf-8")
+
+    # Un-prefixed → literal UTF-8 bytes. No heuristic base64 decode.
     return raw.encode("utf-8")
 
 
@@ -221,20 +262,43 @@ def verify(
 def write_sidecar(signature: str, sig_path: Path) -> None:
     """Write a signature to a ``.sig`` sidecar file.
 
-    File format v1: a single line containing the hex digest + `\\n`. No
-    JSON wrapper — keeps the format trivially verifiable with ``cat`` /
+    File format v1: a single line containing the 64-char hex digest + ``\\n``.
+    No JSON wrapper — keeps the format trivially verifiable with ``cat`` /
     ``shasum`` + the documented procedure.
+
+    PR-5c.1 per Codex L1: strict hex-shape validation on write. A caller
+    that produces a malformed signature should fail at write time rather
+    than persist junk that verify() would later reject.
+
+    Raises
+    ------
+    ValueError
+        When the signature is not exactly 64 hex characters (case-
+        insensitive). Empty string, wrong length, multi-line, or
+        non-hex content all fail.
     """
+    stripped = signature.strip() if signature else ""
+    if not _HEX_SIG_RE.match(stripped):
+        raise ValueError(
+            f"signature must be exactly 64 hex chars; got {len(stripped)} "
+            f"chars. Sidecar write refused to prevent corrupt audit artifacts."
+        )
     sig_path.parent.mkdir(parents=True, exist_ok=True)
-    sig_path.write_text(signature.strip() + "\n", encoding="utf-8")
+    sig_path.write_text(stripped + "\n", encoding="utf-8")
 
 
 def read_sidecar(sig_path: Path) -> Optional[str]:
     """Read a signature from a ``.sig`` sidecar file.
 
-    Returns the stripped hex digest, or None if the file is missing /
-    empty / unreadable. Callers treat None as "no signature" — do not
-    confuse with "verify False".
+    Returns the validated hex digest, or None if the file is missing,
+    empty, unreadable, or has malformed content (wrong length, non-hex
+    characters, multi-line). Callers treat None as "no signature" — do
+    not confuse with "verify False".
+
+    PR-5c.1 per Codex L1: strict hex-shape validation on read prevents
+    a malformed sidecar from being passed to verify(), where it would
+    silently return False and make the operator wonder whether the
+    signature failed tamper-check vs. was never well-formed.
     """
     if not sig_path.is_file():
         return None
@@ -242,7 +306,11 @@ def read_sidecar(sig_path: Path) -> Optional[str]:
         text = sig_path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
-    return text or None
+    if not text:
+        return None
+    if not _HEX_SIG_RE.match(text):
+        return None
+    return text
 
 
 __all__ = [
