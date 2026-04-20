@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T22:30"
+last_updated: "2026-04-20T23:15"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -598,6 +598,10 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   All three reuse shared helpers (`_load_gold_reference_values`, `_emit_gold_anchored_points_sampledict`) introduced by C3a. Design-doc Option B (simpler `sets+points`) chosen over Option A (function-objects) for C3b/C3c with explicit reasoning recorded — both can be upgraded in a future result-harvest refactor. Regression 179/179 green (158 baseline + 21 new C3 tests). v6.1 autonomous_governance counter now at 7 (DEC-V61-001 through DEC-V61-009, minus -002 Path B which preceded counter start) — still 3 slots below hard-floor-4 threshold of ≥10.
 - **§5d dashboard validation — BLOCKED**: Docker daemon not running on host; UI backend lacks `POST /api/cases/:id/run` endpoint. Needs either (a) Docker + OpenFOAM container startup, or (b) Phase 5 roadmap work. Currently held.
 - **DEC-V61-007 slot reassignment note**: originally earmarked for Case 9/10 literature re-source but that remains HOLD (PDFs inaccessible per user 2026-04-20); slot now used for C3a instead.
+- **Result-harvest refactor LANDED (2026-04-20T23:00)**: PR #10 merged `efb74707`. Reads postProcessing/sets/ output from C3 generators and OVERWRITES the legacy cell-based extractor's `u_centerline` / `pressure_coefficient` / `nusselt_number` keys when sampleDict output is present. Backwards-compatible no-op when absent. C3 initiative complete end-to-end (generator-side DEC-V61-007/008/009 + harvest-side DEC-V61-010). Regression 196/196 green. DEC-V61-010 Notion page `348c6894-2bed-81079ccad679ee023781`.
+- **Q-2 R-A-relabel gate filed (2026-04-20T23:05)**: `.planning/gates/Q-2_r_a_relabel.md` with 4-path decision surface (A/B/C/D). Audit recommends Path A (rename `fully_developed_pipe` → `duct_flow`, new Jones-duct correlation). external_gate_queue.md Q-2 entry updated to reference new gate doc. Blocks Phase 5 per DEC-V61-002.
+- **Phase 5 kickoff plan written (2026-04-20T23:10)**: `.planning/phase5_audit_package_builder_kickoff.md` — 4-PR decomposition (PR-5a manifest / 5b serialize / 5c sign / 5d UI), ~1400 LOC estimate, 5 open design questions, dependency graph, handoff instructions. NOT implementing Phase 5 in this session — deferred to dedicated session after Q-2 resolves.
+- **v6.1 autonomous_governance counter**: 7 → **8** (DEC-V61-010 added). Still 2 slots below hard-floor-4 threshold of ≥10.
 
 ---
 

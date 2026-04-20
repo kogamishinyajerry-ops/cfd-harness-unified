@@ -49,6 +49,7 @@ reviewer rather than hidden.
 
 ## Q-2: R-A-relabel (fully_developed_turbulent_pipe_flow → duct_flow)
 
+- **Full gate request (2026-04-20T23:05)**: `.planning/gates/Q-2_r_a_relabel.md` — formal 4-path decision surface (A/B/C/D), audit recommendation Path A, Phase 5 interaction notes.
 - **Source**: `reports/ex1_first_slice/diagnostic_memo.md` §R-A-relabel
   (rank 3 remediation) + `reports/ex1_005_whitelist_coverage_and_mini_review/methodology_mini_review.md`
   §R-A-relabel rank-3 note
