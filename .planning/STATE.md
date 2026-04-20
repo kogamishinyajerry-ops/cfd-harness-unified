@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T04:40"
+last_updated: "2026-04-21T04:55"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -667,6 +667,15 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 - **Codex review arc Phase 5 cumulative**: 117,588 + 76,152 + 94,316 + 143,521 + 95,221 = **526,798 tokens** across 5 rounds. Round 4 was the highest-value round (caught semantic HIGH findings module-level review couldn't see). Round 5 was validation-only and produced a clean APPROVED_WITH_NOTES.
 - **v6.1 autonomous_governance counter**: 15 → **16**. 5th consecutive Codex post-merge review on Phase 5. Hard-floor-4 retrospective is **overdue** — should land before Phase 6 scoping.
 - **✅ Phase 5 sequence COMPLETE (honest)**: 4/4 main sequence landed (5a + 5b + 5c + 5d) + 4/4 Codex-review fixes (5c.1 + 5c.2 + 5c.3 + 5d.1). All 3 originally-flagged HIGH/MEDIUM findings closed and round-5 confirmed. Screen 6 Audit Package Builder is production-ready modulo the three remaining queued items (M2 sidecar v2 · L2 canonical JSON spec · L3 generated_at rename), none of which block Phase 5 ship. **Next scoping decision**: P1 counter-16 retrospective OR P2 Docker dashboard validation OR Phase 6 kickoff.
+- **✅ RETRO-V61-001 DECIDED (2026-04-21T04:55)** — Kogami chose bundle D + delegated Q1-Q5 to Claude. v6.1 governance rules updated in `~/CLAUDE.md` §"v6.1 自主治理规则":
+  - **Q1 · counter reset 16 → 0** at retro close. Phase 6 starts at counter=0.
+  - **Q2 · hybrid model**: hard-floor-4 stop-signal **retired**. Counter = pure telemetry. Retrospectives mandatory on phase-close OR counter≥20 OR any `CHANGES_REQUIRED` verdict.
+  - **Q3 · 3 new Codex triggers codified**: security-sensitive operator endpoints; byte-reproducibility-sensitive paths; ≥3-file API schema renames.
+  - **Q4 · verbatim exception** tightened to 5-of-5 hard criteria (diff-level verbatim match + ≤20 LOC + ≤2 files + no public API change + PR body cites round + finding ID).
+  - **Q5 · external-gate DECs** (V61-006, V61-011) stay N/A in counter but always listed in retros.
+  - **NEW rule**: `self_estimated_pass_rate ≤70%` → mandatory **pre-merge** Codex review (not post-merge). DEC-V61-018's 60% would have triggered this.
+  - Retrospective doc: `.planning/retrospectives/2026-04-21_v61_counter16_retrospective.md` (status: DECIDED)
+- **v6.1 autonomous_governance counter (post-retro)**: 16 → **0**. Phase 6 work will increment from 0 under the new risk-tier-driven governance.
 
 ---
 

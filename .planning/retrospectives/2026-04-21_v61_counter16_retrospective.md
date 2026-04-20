@@ -2,9 +2,10 @@
 retrospective_id: RETRO-V61-001
 timestamp: 2026-04-21T04:50 local
 scope: v6.1 autonomous_governance arc from cutover (DEC-V61-001) through PR-5d.1 closure (DEC-V61-019). Counter progression 0 → 16 across 19 DECs. Hard-floor-4 threshold ≥10 was crossed at DEC-V61-012 (PR-5a, Phase 5 kickoff). This retrospective was self-flagged as overdue in the handoff doc at counter=15 and is landed at counter=16 per user request P1.
-status: DRAFT — awaits Kogami decision across recommendation options A/B/C/D
+status: DECIDED — Kogami chose bundle D (2026-04-21T04:55) and delegated Q1-Q5 to Claude. Codification landed in `~/CLAUDE.md` §"v6.1 自主治理规则".
 author: Claude Opus 4.7 (1M context) — analytical
-decided_by: Kogami (pending)
+decided_by: Kogami (verbatim: "D，Q1～Q5由你推荐决定"); Q1-Q5 resolved by Claude per recommendations below.
+ratification: 2026-04-21T04:55 local
 ---
 
 # v6.1 Counter-16 Retrospective · Autonomous Governance Arc
@@ -263,15 +264,29 @@ These should roll forward regardless of which option is chosen:
 - **`foam_agent_adapter.py` 7000-line monolith** — refactor after API
   freeze — tech debt
 
-## Kogami decision required
+## Ratified decision (2026-04-21T04:55)
 
-Reply with one of:
+Kogami reply: **"D，Q1～Q5由你推荐决定"** — adopts bundle D, delegates Q1-Q5 to Claude's recommendations.
 
-- `D` — adopt the recommendation bundle as-is
-- `D+notes: <changes>` — adopt D with modifications
-- `A` / `B` / `C` — choose a different path from Q2
-- `reset` — reset counter but keep existing threshold semantics
-- `status quo` — retrospective ack'd, no rule changes
+**Resolved per recommendations**:
 
-I will then update `~/CLAUDE.md` + STATE.md + possibly the
-handoff doc to reflect the chosen governance for Phase 6+ work.
+- **Q1 · Reset counter to 0** at this retrospective (arc-close semantic). Next counter increment begins at Phase 6 (or the first post-retro autonomous DEC).
+- **Q2 · Option D (hybrid)** — threshold retired as stop-signal; counter becomes pure telemetry; retrospectives required on phase-close OR counter ≥ 20 OR any `CHANGES_REQUIRED` verdict (incident retro, small-scope).
+- **Q3 · Codify 3 new Codex triggers** (added to `~/CLAUDE.md` §"v6.1 自主治理规则 · Codex-per-risky-PR baseline"):
+  1. Security-sensitive operator endpoints (signing, auth)
+  2. Byte-reproducibility-sensitive paths (canonical manifest, HMAC, zip serialize)
+  3. ≥3-file API schema renames (even "mechanical" ones)
+- **Q4 · Tighten verbatim-exception rule** to 5-of-5 hard criteria (added to `~/CLAUDE.md` §"Verbatim exception"): diff-level verbatim match + ≤20 LOC + ≤2 files + no public API change + PR body cites round + finding ID.
+- **Q5 · External-gate DEC accounting** — `autonomous_governance: false` DECs do NOT increment counter but MUST be listed in every retro's counter table (marked N/A).
+
+**New operational rules**:
+- `external_gate_self_estimated_pass_rate ≤ 70%` → **mandatory pre-merge Codex review** (not post-merge). DEC-V61-018's 60% self-estimate would have triggered this under the new rule.
+- Counter is displayed in STATE.md but carries no stop-signal semantics.
+
+**Updated files**:
+- `~/CLAUDE.md` §"v6.1 自主治理规则" — new section (replaces implicit ADWM v5.2 counter discipline)
+- `.planning/STATE.md` — counter reset to 0 at 2026-04-21T04:55
+- `.planning/retrospectives/2026-04-21_v61_counter16_retrospective.md` — this file, status DECIDED
+- Notion Decisions DB — retrospective mirrored as its own page for auditability
+
+**Phase 6 kicks off at counter=0 + new governance active.**
