@@ -257,6 +257,130 @@ fields          ({fields_text});
     )
 
 
+# ---------------------------------------------------------------------------
+# Gold-anchored sampleDict result parsing (C3 result-harvest side)
+# ---------------------------------------------------------------------------
+# Motivation: C3 generators (DEC-V61-007/008/009) emit `type points` sampleDicts
+# at exact gold coordinates. When the solver runs, these produce files under
+# `postProcessing/sets/<time>/<setName>_<field>.xy` containing the solver's
+# output sampled AT the gold points — no interpolation. The existing
+# _extract_* methods in FoamAgentExecutor work on volume-cell snapshots
+# (writeCellCentres output) and interpolate onto gold coords. Parsing the
+# sampleDict output directly gives a more accurate value.
+#
+# This module-level parser + loader is paired with per-case populators on
+# FoamAgentExecutor (below in the class) that overwrite the standard
+# comparator keys (u_centerline / pressure_coefficient / nusselt_number)
+# with sampleDict-sourced values when available. If no postProcessing/sets/
+# output exists (MOCK executor, failed run, pre-C3 cache), the cell-based
+# extractors' output is preserved — backwards compatible.
+
+
+def _parse_openfoam_raw_points_output(text: str) -> List[Tuple[Tuple[float, ...], Tuple[float, ...]]]:
+    """Parse a `setFormat raw` sample output file.
+
+    Supports common variants:
+    - 3D coord rows: `x y z v0 [v1 v2 ...]` (typical for type=points output)
+    - Distance-column rows: `distance v0 [v1 v2 ...]` (type=uniform / type=sets with axis)
+
+    Returns a list of (coords_tuple, values_tuple). Callers reconcile
+    coord shape (3 for xyz, 1 for distance).
+
+    Rules:
+    - Lines starting with `#` are skipped (comments).
+    - Empty lines are skipped.
+    - Lines that don't parse as all-float are skipped.
+    - Lines with exactly 3 floats are treated as distance + 2 field values
+      (unusual case), not x/y/z.
+    - Lines with ≥4 floats: first 3 are (x, y, z), remainder are values.
+    """
+    result: List[Tuple[Tuple[float, ...], Tuple[float, ...]]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        try:
+            floats = [float(p) for p in parts]
+        except ValueError:
+            continue
+        if len(floats) >= 4:
+            coords = tuple(floats[:3])
+            values = tuple(floats[3:])
+        elif len(floats) >= 2:
+            coords = (floats[0],)
+            values = tuple(floats[1:])
+        else:
+            continue
+        result.append((coords, values))
+    return result
+
+
+def _try_load_sampledict_output(
+    case_dir: Path,
+    set_name: str,
+    field: str,
+) -> Optional[List[Tuple[Tuple[float, ...], Tuple[float, ...]]]]:
+    """Find the latest `postProcessing/sets/<time>/<setName>_<field>.xy` file
+    under case_dir and parse it. Returns None on any missing file / parse
+    failure — absence is not an error at this layer (MOCK runs, legacy
+    pre-C3 case cache, etc., all legitimately have no sampling output).
+
+    Time-directory selection: picks the largest numeric-named dir. Some
+    OpenFOAM versions write `sets/<setName>/<time>/` instead of
+    `sets/<time>/<setName>_<field>.xy`; both layouts are tried.
+    """
+    pp_root = case_dir / "postProcessing" / "sets"
+    if not pp_root.is_dir():
+        return None
+
+    # Layout A: postProcessing/sets/<time>/<setName>_<field>.xy
+    # Layout B: postProcessing/sets/<setName>/<time>/<field>
+    layout_a_times: List[Tuple[float, Path]] = []
+    for item in pp_root.iterdir():
+        if item.is_dir():
+            try:
+                layout_a_times.append((float(item.name), item))
+            except ValueError:
+                pass
+
+    candidates: List[Path] = []
+    if layout_a_times:
+        _, latest = max(layout_a_times, key=lambda x: x[0])
+        primary = latest / f"{set_name}_{field}.xy"
+        if primary.exists():
+            candidates.append(primary)
+        # Fallback glob — some OF versions use other extensions
+        for glob_path in latest.glob(f"{set_name}*"):
+            if glob_path.is_file() and glob_path not in candidates:
+                candidates.append(glob_path)
+
+    layout_b_root = pp_root / set_name
+    if layout_b_root.is_dir():
+        b_times: List[Tuple[float, Path]] = []
+        for item in layout_b_root.iterdir():
+            if item.is_dir():
+                try:
+                    b_times.append((float(item.name), item))
+                except ValueError:
+                    pass
+        if b_times:
+            _, latest_b = max(b_times, key=lambda x: x[0])
+            for glob_path in latest_b.glob(f"*{field}*"):
+                if glob_path.is_file() and glob_path not in candidates:
+                    candidates.append(glob_path)
+
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        points = _parse_openfoam_raw_points_output(text)
+        if points:
+            return points
+    return None
+
+
 class FoamAgentExecutor:
     """通过 Docker + OpenFOAM 执行真实仿真的 FoamAgentExecutor。
 
@@ -6896,6 +7020,12 @@ mergePatchPairs
                     key_quantities,
                 )
 
+        # C3 result-harvest side: overwrite standard keys with gold-anchored
+        # sampleDict output when present. No-op for MOCK / pre-C3 cases.
+        if task_spec is not None:
+            key_quantities = self._try_populate_from_c3_sampledict(
+                case_dir, task_spec, key_quantities, solver_name
+            )
 
         return key_quantities
 
@@ -6971,6 +7101,175 @@ mergePatchPairs
             return False
         name_key = task_spec.name.lower().replace("-", "_").replace(" ", "_")
         return "lid" in name_key and "cavity" in name_key
+
+    @staticmethod
+    # ------------------------------------------------------------------
+    # C3 result-harvest side: gold-anchored sampleDict → comparator keys
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _populate_ldc_centerline_from_sampledict(
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """If postProcessing/sets/.../uCenterline_U.xy is present, overwrite
+        `u_centerline` with Ux values at the gold y-points.
+
+        Output ordering follows ascending y (matches whitelist sort).
+        Idempotent when output is absent — legacy cell-based extractor's
+        value survives unchanged.
+        """
+        points = _try_load_sampledict_output(case_dir, "uCenterline", "U")
+        if not points:
+            return key_quantities
+        try:
+            sorted_pts = sorted(
+                points,
+                key=lambda p: p[0][1] if len(p[0]) >= 2 else p[0][0],
+            )
+            u_values = [float(p[1][0]) for p in sorted_pts]
+        except (IndexError, ValueError, TypeError):
+            return key_quantities
+        if not u_values:
+            return key_quantities
+        key_quantities["u_centerline"] = u_values
+        key_quantities["u_centerline_source"] = "sampleDict_direct"
+        # Preserve companion y-axis for comparator visibility
+        try:
+            y_values = [
+                float(p[0][1]) if len(p[0]) >= 2 else float(p[0][0])
+                for p in sorted_pts
+            ]
+            key_quantities["u_centerline_y"] = y_values
+        except (IndexError, ValueError, TypeError):
+            pass
+        return key_quantities
+
+    @staticmethod
+    def _populate_naca_cp_from_sampledict(
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """If postProcessing/sets/.../airfoilCp_p.xy is present, overwrite
+        `pressure_coefficient` with Cp = (p - p_inf) / (0.5·ρ·U_inf²).
+
+        For incompressible simpleFoam, OpenFOAM's `p` field is kinematic
+        (p/ρ), so we use q_ref = 0.5·U_inf² with ρ treated as 1.0. p_inf
+        is taken as 0 gauge — matches the 0/p internalField uniform 0.
+        """
+        points = _try_load_sampledict_output(case_dir, "airfoilCp", "p")
+        if not points:
+            return key_quantities
+        bc = task_spec.boundary_conditions or {}
+        chord = float(bc.get("chord_length", 1.0))
+        U_inf = 1.0
+        rho = 1.0  # kinematic pressure convention
+        q_ref = 0.5 * rho * U_inf * U_inf
+        if q_ref <= 0.0 or chord <= 0.0:
+            return key_quantities
+        cp_entries: List[Dict[str, float]] = []
+        for coords, values in points:
+            if len(coords) < 3 or not values:
+                continue
+            try:
+                x = float(coords[0])
+                p = float(values[0])
+            except (ValueError, TypeError):
+                continue
+            x_over_c = x / chord
+            cp = p / q_ref
+            cp_entries.append({"x_over_c": x_over_c, "Cp": cp})
+        if not cp_entries:
+            return key_quantities
+        # Sort by x/c for consistent comparator ordering
+        cp_entries.sort(key=lambda entry: entry["x_over_c"])
+        key_quantities["pressure_coefficient"] = cp_entries
+        key_quantities["pressure_coefficient_source"] = "sampleDict_direct"
+        return key_quantities
+
+    @staticmethod
+    def _populate_ij_nusselt_from_sampledict(
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """If postProcessing/sets/.../plateProbes_T.xy is present, derive
+        Nu from T at the probe points 1mm above the impingement plate.
+
+        Nu = |T_probe - T_plate| · D / (Δz · ΔT_ref)
+
+        where ΔT_ref = T_inlet - T_plate = 20K and Δz = 0.001m match the
+        generator constants (see _generate_impinging_jet). The stagnation
+        probe (smallest r) populates `nusselt_number`; the full profile
+        populates `nusselt_number_profile`.
+
+        Sign convention: absolute value — Nu is a magnitude in all common
+        impinging-jet conventions, regardless of heat-flux direction.
+        """
+        points = _try_load_sampledict_output(case_dir, "plateProbes", "T")
+        if not points:
+            return key_quantities
+        D_nozzle = 0.05  # matches generator default
+        T_plate = 290.0
+        T_inlet = 310.0
+        delta_T_ref = T_inlet - T_plate
+        delta_z = 0.001
+        if delta_T_ref <= 0.0 or delta_z <= 0.0:
+            return key_quantities
+        try:
+            sorted_pts = sorted(points, key=lambda p: p[0][0])
+        except (IndexError, TypeError):
+            return key_quantities
+        nu_profile: List[float] = []
+        for coords, values in sorted_pts:
+            if not values:
+                continue
+            try:
+                T_probe = float(values[0])
+            except (ValueError, TypeError):
+                continue
+            d_T = abs(T_probe - T_plate)
+            nu_local = (d_T * D_nozzle) / (delta_z * delta_T_ref)
+            nu_local = min(max(nu_local, 0.0), 500.0)  # clamp runaway
+            nu_profile.append(nu_local)
+        if not nu_profile:
+            return key_quantities
+        key_quantities["nusselt_number"] = nu_profile[0]  # stagnation (smallest r)
+        key_quantities["nusselt_number_profile"] = nu_profile
+        key_quantities["nusselt_number_source"] = "sampleDict_direct"
+        return key_quantities
+
+    def _try_populate_from_c3_sampledict(
+        self,
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+        solver_name: str,
+    ) -> Dict[str, Any]:
+        """Dispatcher called at the end of _extract_case_results.
+
+        Runs after the volume-cell extractors so that when a C3 sampleDict
+        output is present, it OVERWRITES the interpolated value. When no
+        output exists (MOCK executor, pre-C3 case, failed run), the
+        volume-cell value stays. Dispatch by case identity (LDC / NACA /
+        IJ) — all other cases are untouched.
+        """
+        name_lower = (task_spec.name or "").lower()
+        if self._is_lid_driven_cavity_case(task_spec, solver_name):
+            key_quantities = self._populate_ldc_centerline_from_sampledict(
+                case_dir, task_spec, key_quantities
+            )
+        if task_spec.geometry_type == GeometryType.AIRFOIL or "airfoil" in name_lower or "naca" in name_lower:
+            key_quantities = self._populate_naca_cp_from_sampledict(
+                case_dir, task_spec, key_quantities
+            )
+        if task_spec.geometry_type == GeometryType.IMPINGING_JET or "impinging" in name_lower:
+            key_quantities = self._populate_ij_nusselt_from_sampledict(
+                case_dir, task_spec, key_quantities
+            )
+        return key_quantities
 
     @staticmethod
     def _extract_ldc_centerline(
