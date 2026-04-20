@@ -1,9 +1,14 @@
 // Phase 5 · Screen 6 · Audit Package Builder
-// DEC-V61-018 · PR-5d
+// DEC-V61-018 · PR-5d (+ PR-5d.1 Codex follow-up)
 //
 // Per-case "Build audit package" trigger → POST to backend → display
 // bundle_id, download links for manifest / zip / html / pdf / sig, the
-// FDA V&V40 checklist mapping, and the signature hex.
+// internal V&V evidence-summary mapping, and the signature hex.
+//
+// Note: the evidence-summary table is NOT a faithful FDA/ASME V&V40
+// template — it's a product-specific summary of which manifest fields
+// cover which V&V concerns. Labelling was corrected in PR-5d.1 to avoid
+// implying FDA coverage the artifact does not provide.
 //
 // Non-goals for PR-5d:
 // - Async progress streaming (SSE) — deferred to PR-5e.
@@ -43,10 +48,11 @@ export function AuditPackagePage() {
           Audit Package Builder
         </h1>
         <p className="mt-1 text-sm text-surface-400">
-          One-click export of a signed V&amp;V evidence bundle for regulatory
-          review (FDA V&amp;V40, aerospace airworthiness, nuclear
-          licensing). Each bundle pins git commit SHAs so the reviewer can
-          reconstruct the exact repo state that produced the signature.
+          One-click export of a signed V&amp;V evidence bundle. Each bundle
+          pins git commit SHAs so the reviewer can reconstruct the exact
+          repo state that produced the signature. The internal evidence
+          summary below is a product-specific mapping — it is not a
+          substitute for a formal FDA/ASME V&amp;V40 credibility template.
         </p>
       </header>
 
@@ -173,11 +179,16 @@ function BuildResult({ result }: { result: AuditPackageBuildResponse }) {
         </ul>
       </div>
 
-      {/* V&V40 checklist */}
+      {/* Internal V&V evidence summary (PR-5d.1 — renamed per Codex MEDIUM) */}
       <div className="card p-4">
-        <div className="mb-3 text-xs uppercase tracking-wider text-surface-400">
-          FDA V&amp;V40 credibility-evidence mapping
+        <div className="mb-1 text-xs uppercase tracking-wider text-surface-400">
+          Internal V&amp;V evidence summary
         </div>
+        <p className="mb-3 text-[11px] text-surface-500">
+          Not a substitute for a formal FDA/ASME V&amp;V40 template.
+          Fields scoped to run artifacts (run.inputs, run.outputs.*,
+          measurement.*) are empty in skeleton bundles.
+        </p>
         <table className="w-full text-sm">
           <thead className="text-left text-[10px] uppercase tracking-wider text-surface-400">
             <tr>
@@ -186,7 +197,7 @@ function BuildResult({ result }: { result: AuditPackageBuildResponse }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-700">
-            {result.vv40_checklist.map((item) => (
+            {result.evidence_summary.map((item) => (
               <tr key={item.area}>
                 <td className="px-2 py-2 align-top">
                   <div className="text-surface-100">{item.area}</div>

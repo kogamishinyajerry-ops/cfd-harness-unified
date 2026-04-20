@@ -32,9 +32,11 @@ class TestBuildAuditPackage:
         # Top-level keys
         for key in (
             "bundle_id", "manifest_id", "case_id", "run_id", "generated_at",
-            "pdf_available", "downloads", "vv40_checklist", "signature_hex",
+            "pdf_available", "downloads", "evidence_summary", "signature_hex",
         ):
             assert key in body, f"missing key {key}"
+        # Legacy name must not leak (PR-5d.1 rename per Codex MEDIUM).
+        assert "vv40_checklist" not in body
         assert body["case_id"] == "duct_flow"
         assert body["run_id"] == "r1"
         assert body["manifest_id"] == "duct_flow-r1"
@@ -66,22 +68,61 @@ class TestBuildAuditPackage:
         else:
             assert dl["bundle_pdf"] is None
 
-    def test_vv40_checklist_has_eight_areas(self, client):
+    def test_evidence_summary_has_eight_areas(self, client):
+        """Renamed from test_vv40_checklist_has_eight_areas per Codex PR-5d
+        MEDIUM finding — the 8-row table is a product-specific summary,
+        not a faithful FDA/ASME V&V40 template.
+        """
         resp = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
-        checklist = resp.json()["vv40_checklist"]
-        assert len(checklist) == 8
-        for item in checklist:
+        summary = resp.json()["evidence_summary"]
+        assert len(summary) == 8
+        for item in summary:
             assert "area" in item
             assert "description" in item
             assert "manifest_fields" in item
             assert isinstance(item["manifest_fields"], list)
 
-    def test_unknown_case_id_still_builds_skeleton(self, client):
-        """Unknown case → manifest.whitelist_entry=None but build succeeds."""
+    def test_unknown_case_id_returns_404(self, client):
+        """Unknown case_id → 404 (Codex PR-5d HIGH #1).
+
+        Signing a bundle that references a case not in the whitelist would
+        produce a misleading artifact — no gold reference, no validation
+        contract. The route must refuse rather than sign a hollow bundle.
+        """
         resp = client.post("/api/cases/nonexistent_case/runs/r1/audit-package/build")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["manifest_id"] == "nonexistent_case-r1"
+        assert resp.status_code == 404
+        assert "unknown case_id" in resp.json()["detail"]
+
+    def test_identical_posts_produce_byte_identical_zip(self, client):
+        """Two POSTs with same (case_id, run_id) → same ZIP SHA-256 + same
+        HMAC signature (Codex PR-5d HIGH #2 — byte-reproducibility).
+
+        The bundle_id differs (uuid4 per request), but the signed zip
+        content must not — regulators need to re-derive the signature
+        deterministically from inputs, not race wall-clock time.
+        """
+        import hashlib
+
+        r1 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        r2 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        assert r1.status_code == 200 and r2.status_code == 200
+
+        b1, b2 = r1.json(), r2.json()
+        # generated_at is derived from (case_id, run_id) → must match.
+        assert b1["generated_at"] == b2["generated_at"]
+        # Signature comes from canonical manifest + zip bytes → must match.
+        assert b1["signature_hex"] == b2["signature_hex"]
+
+        zip1 = client.get(b1["downloads"]["bundle_zip"]).content
+        zip2 = client.get(b2["downloads"]["bundle_zip"]).content
+        assert hashlib.sha256(zip1).hexdigest() == hashlib.sha256(zip2).hexdigest()
+
+    def test_different_run_ids_produce_different_bundles(self, client):
+        """Sanity guard: distinct run_ids still diverge (no hash collision)."""
+        r1 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        r2 = client.post("/api/cases/duct_flow/runs/r2/audit-package/build")
+        assert r1.json()["generated_at"] != r2.json()["generated_at"]
+        assert r1.json()["signature_hex"] != r2.json()["signature_hex"]
 
     def test_missing_hmac_secret_returns_500(self, client, monkeypatch):
         monkeypatch.delenv("CFD_HARNESS_HMAC_SECRET", raising=False)

@@ -24,8 +24,17 @@ class AuditPackageDownloadUrls(BaseModel):
     bundle_sig: str = Field(..., description="HMAC-SHA256 hex signature sidecar (.sig)")
 
 
-class AuditPackageVvChecklistItem(BaseModel):
-    """One FDA V&V40 credibility-evidence area + manifest-field mapping."""
+class AuditPackageEvidenceItem(BaseModel):
+    """One internal evidence-summary area + manifest-field mapping.
+
+    This is a product-specific summary table; it is NOT a faithful
+    rendering of the FDA/ASME V&V40 framework, which structures credibility
+    around preliminary steps, credibility evidence categories, and
+    credibility factors/goals. A future PR will align this to the guidance
+    template. Per-row manifest_fields may reference data that is only
+    populated when run artifacts are attached — skeleton (no-run) bundles
+    will show empty values for run.inputs / run.outputs / measurement.*.
+    """
 
     area: str
     description: str
@@ -53,7 +62,14 @@ class AuditPackageBuildResponse(BaseModel):
         ),
     )
     downloads: AuditPackageDownloadUrls
-    vv40_checklist: List[AuditPackageVvChecklistItem]
+    evidence_summary: List[AuditPackageEvidenceItem] = Field(
+        ...,
+        description=(
+            "Internal evidence-summary mapping from manifest fields to "
+            "V&V concerns. NOT a faithful FDA/ASME V&V40 template — renamed "
+            "from `vv40_checklist` per Codex PR-5d MEDIUM finding."
+        ),
+    )
     signature_hex: str = Field(
         ...,
         description=(

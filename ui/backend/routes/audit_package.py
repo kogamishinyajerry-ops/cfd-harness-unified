@@ -33,6 +33,7 @@ Non-goals (queued for post-PR-5d):
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -55,8 +56,9 @@ from src.audit_package import (
 from ui.backend.schemas.audit_package import (
     AuditPackageBuildResponse,
     AuditPackageDownloadUrls,
-    AuditPackageVvChecklistItem,
+    AuditPackageEvidenceItem,
 )
+from ui.backend.services.validation_report import load_case_detail
 
 router = APIRouter()
 
@@ -67,15 +69,23 @@ _STAGING_ROOT = _REPO_ROOT / "ui" / "backend" / ".audit_package_staging"
 
 
 # ---------------------------------------------------------------------------
-# V&V40 checklist mapping
+# Internal evidence-summary mapping (NOT a formal V&V40 template)
 # ---------------------------------------------------------------------------
-# FDA V&V40 guidance (Verification & Validation of computational models used
-# in medical devices) defines 8 credibility-evidence areas. For each, we map
-# which manifest field(s) carry the evidence. This is auditor-facing — the
-# UI renders this list so reviewers can see at a glance which fields cover
-# which V&V40 requirement.
+# 8 product-specific V&V concerns + which manifest fields carry the
+# supporting evidence. Renamed from `_VV40_CHECKLIST` per Codex PR-5d
+# MEDIUM finding: the FDA 2023 CM&S guidance
+# (https://www.fda.gov/media/154985/download) structures credibility around
+# preliminary steps, credibility evidence categories, and credibility
+# factors/goals — NOT this 8-row list. A future PR will align to the
+# guidance template; until then, the UI labels this "Internal V&V evidence
+# summary" to avoid implying FDA coverage the artifact does not provide.
+#
+# Some rows reference manifest fields (run.inputs, run.outputs.*,
+# measurement.*) that are populated only when run artifacts are attached.
+# Skeleton bundles (MOCK / no-run) will show those fields as empty — the
+# UI should make that absence visible rather than imply it was provided.
 
-_VV40_CHECKLIST: List[Dict[str, Any]] = [
+_EVIDENCE_SUMMARY: List[Dict[str, Any]] = [
     {
         "area": "Applicability Justification",
         "description": "Context of use and intended scope for the computational model",
@@ -137,11 +147,32 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     Synchronous for v1 — build is typically < 5s. Async / progress
     streaming is a follow-up (PR-5e).
     """
+    # Whitelist gate (Codex PR-5d HIGH #1): refuse to sign a bundle for a
+    # case id that isn't in knowledge/whitelist.yaml. A signed "audit
+    # package" referencing an unknown case would be misleading to regulatory
+    # reviewers — no gold reference, no validation contract, no provenance.
+    # load_case_detail returns None for unknown ids.
+    if load_case_detail(case_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown case_id: {case_id!r} (not in knowledge/whitelist.yaml)",
+        )
+
     # Load HMAC secret. Missing → 500 with actionable error.
     try:
         hmac_key = get_hmac_secret_from_env()
     except HmacSecretMissing as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Stable generated_at (Codex PR-5d HIGH #2): derive from inputs so two
+    # identical POSTs produce byte-identical ZIPs and HMAC signatures. The
+    # repo's git SHAs in the manifest still pin repo state, so the bundle
+    # still differs when the repo changes — but not when only wall-clock
+    # time changes. This preserves the byte-reproducibility contract
+    # documented in docs/ui_roadmap.md:220-223 and docs/ui_design.md:376-378.
+    generated_at = hashlib.sha256(
+        f"{case_id}|{run_id}".encode("utf-8")
+    ).hexdigest()[:16]
 
     # Build manifest (run_output_dir=None for MOCK / not-yet-solved runs).
     # When we wire real solver output in a future PR, the caller will
@@ -149,6 +180,7 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     manifest = build_manifest(
         case_id=case_id,
         run_id=run_id,
+        generated_at=generated_at,
     )
 
     # Stage.
@@ -215,8 +247,8 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
         pdf_available=pdf_available,
         pdf_error=pdf_error,
         downloads=downloads,
-        vv40_checklist=[
-            AuditPackageVvChecklistItem(**item) for item in _VV40_CHECKLIST
+        evidence_summary=[
+            AuditPackageEvidenceItem(**item) for item in _EVIDENCE_SUMMARY
         ],
         signature_hex=signature,
     )
