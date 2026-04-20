@@ -676,12 +676,15 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - **NEW rule**: `self_estimated_pass_rate ≤70%` → mandatory **pre-merge** Codex review (not post-merge). DEC-V61-018's 60% would have triggered this.
   - Retrospective doc: `.planning/retrospectives/2026-04-21_v61_counter16_retrospective.md` (status: DECIDED)
 - **v6.1 autonomous_governance counter (post-retro)**: 16 → **0**. Phase 6 work will increment from 0 under the new risk-tier-driven governance.
-- **§5d Part-2 acceptance kickoff (2026-04-21T05:30)** — 5-case real-solver batch starting:
-  - Option C-corrected chosen by Kogami: run LDC + BFS + plane_channel + TFP + duct_flow via FoamAgentExecutor; auto-write `ui/backend/tests/fixtures/{case}_measurement.yaml` from extracted comparator results; restart backend; verify Screens 4/5 populate with real-solver-derived contract_status.
-  - **PR #20 merged** `b8be73a` — first PR under new v6.1 governance (counter 0 → **1**). Declared `docker>=7.0` as `cfd-real-solver` optional dep + fixed misleading error messages in `src/foam_agent_adapter.py` (three error paths now distinguish missing-SDK / NotFound / DockerException / generic init). Self-estimate 92%. Codex round 6 post-merge review queued.
-  - Driver: `scripts/p2_acceptance_run.py` · raw log: `reports/post_phase5_acceptance/2026-04-21_part2_raw_results.json` · final report: `reports/post_phase5_acceptance/2026-04-21_part2_solver_runs.md` (pending batch completion).
-  - Docker container: `cfd-openfoam` up (image `cfd-workbench/openfoam-v10:arm64`, mount `/tmp/cfd-harness-cases`, simpleFoam in PATH).
-  - UI backend on :8000 (HMAC secret set), Vite frontend on :5174 (port 5173 occupied by unrelated process).
+- **§5d Part-2 acceptance COMPLETE (2026-04-21T05:45)** — 5-case real-solver batch finished in 8 min wall-clock (commit `85fa4e5`):
+  - Option C-corrected chosen by Kogami: 5 cases (LDC + BFS + plane_channel + TFP + duct_flow) via FoamAgentExecutor; 5 auto-generated measurement fixtures landed under `ui/backend/tests/fixtures/`; backend restarted; Screens 4/5 now render real-solver-derived data for 7/10 cases (was 3/10).
+  - Dashboard status mix: {2 FAIL · 1 HAZARD · 7 UNKNOWN} → {6 FAIL · 1 HAZARD · 3 UNKNOWN}.
+  - Solver results: 1 PASS (plane_channel_flow, 415s) + 4 FAIL (LDC 8s, BFS 7s, TFP 32s, duct_flow 32s). FAILs reflect quick-resolution acceptance runs (ncx=40 ncy=20 defaults), NOT regressions from historical PASS baselines which used higher resolution.
+  - **⚠️ TFP fixture was OVERWRITTEN** (previously curated per DEC-ADWM-005 Spalding-fallback audit wiring). Curated version preserved in git at `a02c3a2^`. Flagged for Kogami restore/merge decision in Part-2 report.
+  - **2 new P6 tech-debt items**: P6-TD-001 (BFS reattachment_length extractor returns physically-impossible negative value); P6-TD-002 (TFP + duct_flow both yield identical Spalding-fallback Cf, suggesting case-parameter independence).
+  - **PR #20 merged** `b8be73a` — first PR under new v6.1 governance (counter 0 → 1). Declared `docker>=7.0` as `cfd-real-solver` optional dep + fixed misleading error messages in `src/foam_agent_adapter.py` (three error paths now distinguish missing-SDK / NotFound / DockerException / generic init). Self-estimate 92%. Codex round 6 post-merge review queued.
+  - Driver: `scripts/p2_acceptance_run.py` · raw log: `reports/post_phase5_acceptance/2026-04-21_part2_raw_results.json` · Part-1 report: `2026-04-21_ui_infra_validation.md` · Part-2 report: `2026-04-21_part2_solver_runs.md`.
+  - v6.1 counter under new governance: **2** (PR #20 = 1, Part-2 artifacts commit = 2).
 
 ---
 
