@@ -498,13 +498,23 @@ def list_cases() -> list[CaseIndexEntry]:
             )
         else:
             status = "UNKNOWN"
-        # Run distribution for the catalog-card badge.
+        # Run distribution for the catalog-card badge. Evaluate every run
+        # through the actual contract engine — never report `expected_verdict`,
+        # which is only a curator hint and can drift from the live contract
+        # (e.g. a `PASS`-hinted run whose gold arms a silent-pass hazard).
         runs = list_runs(cid)
         verdict_counts: dict[str, int] = {}
         for r in runs:
-            verdict_counts[r.expected_verdict] = (
-                verdict_counts.get(r.expected_verdict, 0) + 1
-            )
+            run_doc = _load_run_measurement(cid, r.run_id)
+            run_audits = _make_audit_concerns(gs, run_doc)
+            run_measurement = _make_measurement(run_doc)
+            if gs_ref is not None:
+                run_status, *_ = _derive_contract_status(
+                    gs_ref, run_measurement, preconditions, run_audits
+                )
+            else:
+                run_status = "UNKNOWN"
+            verdict_counts[run_status] = verdict_counts.get(run_status, 0) + 1
         run_summary = RunSummary(total=len(runs), verdict_counts=verdict_counts)
         out.append(
             CaseIndexEntry(

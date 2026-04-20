@@ -72,9 +72,9 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
     {
       src: "/flow-fields/impinging_jet/nu_radial.png",
       caption_zh:
-        "Nu(r/D) · H/D=2, Re=23750 · Baughn 1989 实验 vs. k-ε 驻点过高 vs. k-ω SST 较好",
+        "Nu(r/D) · H/D=2, Re=10000 · Cooper 1984 实验 vs. k-ε 驻点过高 (+52%) vs. k-ω SST (+8%)",
       provenance:
-        "Baughn & Shimizu (1989) experimental digitised; k-ε overprediction ~55% at stagnation from typical RANS-benchmark literature.",
+        "Cooper 1984 / Behnad 2013 anchors Nu(0)=25, Nu(1)=12; k-ε +52% and k-ω SST +8% overlays match this case's wrong_model and real_incident teaching runs.",
     },
   ],
 };

@@ -1,4 +1,4 @@
 {
-  "provenance": "Baughn & Shimizu (1989) experimental Nu(r/D) digitised, plus typical k-ε overprediction at stagnation (~55%) and k-ω SST residual bias (~10%). Real validation ground truth for any impingement CFD.",
+  "provenance": "Cooper 1984 / Behnad 2013 anchors at Re=10000, H/D=2: Nu(0)=25, Nu(1)=12. Overlay shows typical k-ε stagnation overprediction (~+52%) and k-ω SST residual bias (~+8%) matching this commit's real_incident and wrong_model teaching runs.",
   "generator": "scripts/flow-field-gen/generate_contours.py"
 }
