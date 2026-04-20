@@ -230,26 +230,56 @@ class TestHmacInputFraming:
 # ---------------------------------------------------------------------------
 
 class TestGetHmacSecretFromEnv:
-    def test_reads_plain_text_key(self, monkeypatch):
+    """PR-5c.1 per Codex M1: explicit `base64:` / `text:` / un-prefixed.
+    Un-prefixed values are UTF-8 plain-text, never heuristically base64-decoded."""
+
+    def test_un_prefixed_treated_as_utf8_plain_text(self, monkeypatch):
         monkeypatch.setenv(HMAC_ENV_VAR, "plain-text-secret")
         assert get_hmac_secret_from_env() == b"plain-text-secret"
 
-    def test_decodes_base64_key(self, monkeypatch):
+    def test_base64_prefix_decoded(self, monkeypatch):
         raw = b"binary key bytes" * 2  # 32 bytes
-        monkeypatch.setenv(HMAC_ENV_VAR, base64.b64encode(raw).decode("ascii"))
+        monkeypatch.setenv(HMAC_ENV_VAR, "base64:" + base64.b64encode(raw).decode("ascii"))
         assert get_hmac_secret_from_env() == raw
 
-    def test_plain_text_that_happens_to_parse_as_base64_is_not_misread(self, monkeypatch):
-        # "hello==" is valid base64 (decodes to bytes) but also makes sense as plain.
-        # Our loader will base64-decode if the string is valid base64; this behavior is
-        # documented. Test: the decoded bytes should be what base64 gives.
-        monkeypatch.setenv(HMAC_ENV_VAR, "aGVsbG8=")  # base64 of "hello"
-        assert get_hmac_secret_from_env() == b"hello"
+    def test_text_prefix_utf8_encoded(self, monkeypatch):
+        monkeypatch.setenv(HMAC_ENV_VAR, "text:dev-key-via-explicit-prefix")
+        assert get_hmac_secret_from_env() == b"dev-key-via-explicit-prefix"
 
-    def test_plain_text_with_special_chars_not_base64_decoded(self, monkeypatch):
-        """Non-base64 chars → fall through to UTF-8 plain-text."""
+    def test_un_prefixed_base64_looking_string_is_literal(self, monkeypatch):
+        """Critical M1 test: 'aGVsbG8=' un-prefixed → literal 8 bytes, NOT decoded."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "aGVsbG8=")
+        # Pre-PR-5c.1 behavior: b"hello" (heuristic base64 decode)
+        # Post-PR-5c.1 behavior: b"aGVsbG8=" (literal bytes, no ambiguity)
+        assert get_hmac_secret_from_env() == b"aGVsbG8="
+
+    def test_text_prefix_preserves_base64_looking_payload(self, monkeypatch):
+        """`text:aGVsbG8=` → b'aGVsbG8=' literally (explicit text override)."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "text:aGVsbG8=")
+        assert get_hmac_secret_from_env() == b"aGVsbG8="
+
+    def test_un_prefixed_special_chars_utf8_encoded(self, monkeypatch):
         monkeypatch.setenv(HMAC_ENV_VAR, "secret!@#$%^")
         assert get_hmac_secret_from_env() == b"secret!@#$%^"
+
+    def test_base64_prefix_malformed_payload_raises(self, monkeypatch):
+        monkeypatch.setenv(HMAC_ENV_VAR, "base64:not-valid-!!!")
+        with pytest.raises(HmacSecretMissing) as exc_info:
+            get_hmac_secret_from_env()
+        assert "base64:" in str(exc_info.value)
+        assert "decode" in str(exc_info.value).lower()
+
+    def test_base64_prefix_empty_payload_raises(self, monkeypatch):
+        monkeypatch.setenv(HMAC_ENV_VAR, "base64:")
+        with pytest.raises(HmacSecretMissing) as exc_info:
+            get_hmac_secret_from_env()
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_text_prefix_empty_payload_raises(self, monkeypatch):
+        monkeypatch.setenv(HMAC_ENV_VAR, "text:")
+        with pytest.raises(HmacSecretMissing) as exc_info:
+            get_hmac_secret_from_env()
+        assert "empty" in str(exc_info.value).lower()
 
     def test_missing_env_raises(self, monkeypatch):
         monkeypatch.delenv(HMAC_ENV_VAR, raising=False)
@@ -257,6 +287,7 @@ class TestGetHmacSecretFromEnv:
             get_hmac_secret_from_env()
         assert "openssl rand" in str(exc_info.value)
         assert HMAC_ENV_VAR in str(exc_info.value)
+        assert "base64:" in str(exc_info.value)  # format hint
 
     def test_empty_env_raises(self, monkeypatch):
         monkeypatch.setenv(HMAC_ENV_VAR, "")
@@ -270,7 +301,7 @@ class TestGetHmacSecretFromEnv:
 
     def test_alternate_env_var_name(self, monkeypatch):
         """Custom env var name (for testing / multi-tenant)."""
-        monkeypatch.setenv("MY_KEY", "secret")
+        monkeypatch.setenv("MY_KEY", "text:secret")
         assert get_hmac_secret_from_env(env_var="MY_KEY") == b"secret"
 
 
@@ -279,8 +310,16 @@ class TestGetHmacSecretFromEnv:
 # ---------------------------------------------------------------------------
 
 class TestSidecarIO:
+    """PR-5c.1 per Codex L1: strict hex-shape validation on write + read."""
+
     def test_roundtrip_write_then_read(self, tmp_path):
-        sig = "a" * 64
+        sig = "a" * 64  # valid hex
+        sig_path = tmp_path / "bundle.zip.sig"
+        write_sidecar(sig, sig_path)
+        assert read_sidecar(sig_path) == sig
+
+    def test_roundtrip_uppercase_hex_preserved(self, tmp_path):
+        sig = "ABCDEF0123456789" * 4  # 64 chars, all valid hex
         sig_path = tmp_path / "bundle.zip.sig"
         write_sidecar(sig, sig_path)
         assert read_sidecar(sig_path) == sig
@@ -292,8 +331,33 @@ class TestSidecarIO:
 
     def test_write_strips_and_adds_newline(self, tmp_path):
         sig_path = tmp_path / "out.sig"
-        write_sidecar("  abc123  ", sig_path)
-        assert sig_path.read_text() == "abc123\n"
+        sig = "f" * 64
+        write_sidecar(f"  {sig}  ", sig_path)
+        assert sig_path.read_text() == sig + "\n"
+
+    def test_write_rejects_empty(self, tmp_path):
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("", tmp_path / "out.sig")
+
+    def test_write_rejects_wrong_length(self, tmp_path):
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("abc123", tmp_path / "out.sig")
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("a" * 63, tmp_path / "out.sig")
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("a" * 65, tmp_path / "out.sig")
+
+    def test_write_rejects_non_hex_chars(self, tmp_path):
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("g" * 64, tmp_path / "out.sig")
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar("a" * 63 + "!", tmp_path / "out.sig")
+
+    def test_write_rejects_multiline_even_if_hex(self, tmp_path):
+        # Multi-line content fails match (regex has no MULTILINE flag).
+        sig_with_newline = "a" * 63 + "\na"
+        with pytest.raises(ValueError, match="64 hex chars"):
+            write_sidecar(sig_with_newline, tmp_path / "out.sig")
 
     def test_read_missing_returns_none(self, tmp_path):
         assert read_sidecar(tmp_path / "nonexistent.sig") is None
@@ -303,26 +367,63 @@ class TestSidecarIO:
         sig_path.write_text("   \n\n")
         assert read_sidecar(sig_path) is None
 
+    def test_read_malformed_returns_none(self, tmp_path):
+        """Non-hex / wrong length / multiline files → None (not raise)."""
+        for bad in (
+            "g" * 64,           # non-hex
+            "a" * 63,           # short
+            "a" * 65,           # long
+            "abc123",           # way short
+            "a" * 32 + "\n" + "b" * 32,  # multi-line even if all hex
+        ):
+            sig_path = tmp_path / "bad.sig"
+            sig_path.write_text(bad)
+            assert read_sidecar(sig_path) is None, f"expected None for {bad!r}"
+
 
 # ---------------------------------------------------------------------------
 # End-to-end: sign + write sidecar + read sidecar + verify
 # ---------------------------------------------------------------------------
 
 class TestEndToEnd:
-    def test_full_workflow(self, tmp_path, monkeypatch):
-        """Full cycle mimicking operator / CI usage."""
-        monkeypatch.setenv(HMAC_ENV_VAR, base64.b64encode(b"operator-key" * 3).decode("ascii"))
+    def test_full_workflow_with_base64_prefix(self, tmp_path, monkeypatch):
+        """Full cycle mimicking operator using explicit base64: prefix."""
+        monkeypatch.setenv(
+            HMAC_ENV_VAR,
+            "base64:" + base64.b64encode(b"operator-key" * 3).decode("ascii"),
+        )
         key = get_hmac_secret_from_env()
         m = _synthetic_manifest()
         zb = serialize_zip_bytes(m)
         sig = sign(m, zb, key)
-        # Persist
         sig_path = tmp_path / "bundle.zip.sig"
         write_sidecar(sig, sig_path)
-        # Consumer reads back
         loaded_sig = read_sidecar(sig_path)
         assert loaded_sig is not None
         assert verify(m, zb, loaded_sig, key) is True
+
+    def test_full_workflow_with_text_prefix(self, tmp_path, monkeypatch):
+        """Dev workflow with explicit text: prefix."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "text:dev-secret")
+        key = get_hmac_secret_from_env()
+        m = _synthetic_manifest()
+        zb = serialize_zip_bytes(m)
+        sig = sign(m, zb, key)
+        sig_path = tmp_path / "bundle.zip.sig"
+        write_sidecar(sig, sig_path)
+        assert verify(m, zb, read_sidecar(sig_path), key) is True
+
+    def test_full_workflow_un_prefixed_utf8(self, tmp_path, monkeypatch):
+        """Un-prefixed env var → literal UTF-8 bytes (no base64 heuristic)."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "plain-dev-secret")
+        key = get_hmac_secret_from_env()
+        assert key == b"plain-dev-secret"
+        m = _synthetic_manifest()
+        zb = serialize_zip_bytes(m)
+        sig = sign(m, zb, key)
+        sig_path = tmp_path / "bundle.zip.sig"
+        write_sidecar(sig, sig_path)
+        assert verify(m, zb, read_sidecar(sig_path), key) is True
 
     def test_sidecar_read_then_verify_detects_tamper(self, tmp_path, monkeypatch):
         monkeypatch.setenv(HMAC_ENV_VAR, "secret")
@@ -332,7 +433,20 @@ class TestEndToEnd:
         sig = sign(m, zb, key)
         sig_path = tmp_path / "bundle.zip.sig"
         write_sidecar(sig, sig_path)
-        # Attacker edits the sig
+        # Attacker overwrites with valid-shape but wrong content
         sig_path.write_text("0" * 64 + "\n")
         tampered = read_sidecar(sig_path)
         assert verify(m, zb, tampered, key) is False
+
+    def test_sidecar_malformed_blocks_verify(self, tmp_path, monkeypatch):
+        """PR-5c.1 L1: a malformed sidecar now returns None, not garbage."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "secret")
+        key = get_hmac_secret_from_env()
+        m = _synthetic_manifest()
+        zb = serialize_zip_bytes(m)
+        sig_path = tmp_path / "malformed.sig"
+        sig_path.write_text("not-a-valid-signature\n")
+        loaded = read_sidecar(sig_path)
+        assert loaded is None
+        # verify() must reject None / empty signatures
+        assert verify(m, zb, loaded or "", key) is False
