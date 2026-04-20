@@ -87,6 +87,19 @@ reviewer rather than hidden.
 
 ---
 
+## Q-new: Whitelist B-class gold-value remediation (5 cases)
+
+- **Source**: `.planning/gates/Q-new_whitelist_remediation.md` (full rationale + per-case audit evidence)
+- **Filed**: 2026-04-20T20:55 by claude-opus47-app under handoff §7 stop rule #3 ("触 knowledge/whitelist.yaml reference_values 必须走 gate")
+- **Upstream**: DEC-V61-004 (C1+C2 infra fixes) · DEC-V61-005 (A-class metadata)
+- **Blocking class**: Hard floor #3 — `knowledge/whitelist.yaml` `reference_values` + tolerance edits required (禁区 #3)
+- **Summary**: 5 cases have gold values that appear inconsistent with their stated reference literature per `docs/whitelist_audit.md` §5.2 — Turbulent Flat Plate (Re_x=25k is laminar, needs Blasius), DHC Ra=1e10 (Nu=30 vs literature 120-325), Plane Channel (u+@y+=30 = 14.5 vs Moser 13.5), Impinging Jet (Nu@r/d=0 = 25 vs Behnad ~115), Rayleigh-Bénard Ra=1e6 (Nu=10.5 vs Chaivat 7.2).
+- **Relation to Q-1**: DHC Ra=1e10 subset overlaps Q-1 completely. This gate **subsumes Q-1** — a single Kogami decision on DHC closes both.
+- **Requested action**: per-case A/B/C/D decision (see gate doc). If approved: lands as PR #6 + DEC-V61-006 + Notion mirror + whitelist_audit.md §5.2 changelog.
+- **Autonomy status**: **EXPLICITLY STOPPED**. Claude will not edit reference_values until Gate approval.
+
+---
+
 ## Meta
 
 - Adding to this queue: append a new `## Q-N:` section. Keep each to
@@ -108,3 +121,6 @@ Updated: 2026-04-20 by claude-opus47-app (post Phase 1..4 landing per
 DEC-V61-003 — Case Editor + Decisions Queue + Run Monitor + Dashboard
 now live on feat/ui-mvp-phase-1-to-4; Q-1/Q-2 remain the sole
 blockers for Phase 5 Audit Package Builder critical path)
+Updated: 2026-04-20 by claude-opus47-app (C-class infra + A-class
+metadata landed per DEC-V61-004/005; Q-new filed for B-class gold
+remediation 5-case package — subsumes Q-1; STOP until Kogami decision)
