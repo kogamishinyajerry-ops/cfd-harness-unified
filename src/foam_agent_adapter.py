@@ -6883,9 +6883,15 @@ mergePatchPairs
                                 else:
                                     reattachment_x = x1
                                 break
-                        if reattachment_x is not None:
+                        # P6-TD-001: same physical-plausibility guard as
+                        # _extract_bfs_reattachment — reject upstream (x ≤ 0)
+                        # detections from under-converged solvers.
+                        if reattachment_x is not None and reattachment_x > 0:
                             H = 1.0  # step height
                             key_quantities["reattachment_length"] = reattachment_x / H
+                        elif reattachment_x is not None:
+                            key_quantities["reattachment_detection_upstream_artifact"] = True
+                            key_quantities["reattachment_detection_rejected_x"] = reattachment_x
                     # 清理中间数据
                     for k in list(key_quantities.keys()):
                         if k.startswith("wallProfile"):
@@ -7398,9 +7404,21 @@ mergePatchPairs
                     reattachment_x = x1
                 break
 
-        if reattachment_x is not None:
+        # P6-TD-001: physical-plausibility sanity check.
+        # BFS mesh domain is x ∈ [-1, 8] with step at x=0. A reattachment
+        # point must be downstream of the step (x > 0). Under-converged
+        # runs produce noisy Ux signs upstream (inflow region) that can
+        # fire the zero-crossing detector at a non-physical x < 0. Emit
+        # a producer flag so downstream audit surfaces can distinguish
+        # "no detection" from "detection in unreachable region" rather
+        # than silently publishing garbage like reattachment_length/H =
+        # -5.38 (observed in §5d Part-2 acceptance).
+        if reattachment_x is not None and reattachment_x > 0:
             H = 1.0  # step height
             key_quantities["reattachment_length"] = reattachment_x / H
+        elif reattachment_x is not None:
+            key_quantities["reattachment_detection_upstream_artifact"] = True
+            key_quantities["reattachment_detection_rejected_x"] = reattachment_x
 
         return key_quantities
 
