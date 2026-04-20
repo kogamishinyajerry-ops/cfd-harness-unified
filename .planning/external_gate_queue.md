@@ -4,10 +4,11 @@ Single entry point for decisions deferred from ADWM v5.2 autonomous
 governance to external Gate review. Each item points to full rationale
 rather than duplicating it.
 
-**Queue state as of**: 2026-04-19 (post-EX-1-010)
-**Notion MCP status**: UNREACHABLE (last probe 2026-04-19T00:12 —
-`not_found_error`). Items marked `Notion backfill PENDING` will be
-mirrored to Decisions DB the moment MCP is restored.
+**Queue state as of**: 2026-04-20 (post v6.1 cutover · post Q-3 completion)
+**Notion MCP status**: ONLINE (last probe 2026-04-20T12:20 —
+`notion-get-users` returned the workspace user record). Q-3 officially
+closed by DEC-V61-001 Decisions DB mirror; earlier 6 ADWM entries
+remained valid from the 2026-04-19 direct-REST backfill batch.
 
 ---
 
@@ -30,7 +31,7 @@ mirrored to Decisions DB the moment MCP is restored.
 - **Current state**: narrative `physics_contract.contract_status`
   updated 2026-04-18 (commit 5e06ab4) to record EX-1-008 precondition
   #3 SATISFIED (mean-over-y extractor). Numeric fields unchanged.
-- **Notion backfill**: PENDING (DEC-ADWM-004)
+- **Notion backfill**: COMPLETE (DEC-ADWM-004 synced 2026-04-19 to [page 346c6894…b255](https://www.notion.so/346c68942bed8106b2bfc8457384b255); confirmed by re-probe 2026-04-20T12:20)
 
 ## Q-2: R-A-relabel (fully_developed_turbulent_pipe_flow → duct_flow)
 
@@ -55,11 +56,11 @@ mirrored to Decisions DB the moment MCP is restored.
 - **Notion backfill**: N/A (no ADWM decision yet — needs external
   Gate to grant authority)
 
-## ~~Q-3: ADWM decision backfill to Notion Decisions DB~~ — CLOSED 2026-04-19
+## ~~Q-3: Autonomous-governance decision backfill to Notion Decisions DB~~ — CLOSED 2026-04-19 / RE-CLOSED 2026-04-20
 
-- **Resolution**: Notion MCP remained unreachable but `NOTION_TOKEN`
-  direct REST API call worked. All 6 decisions backfilled via
-  `/tmp/notion_backfill_decisions.py`:
+- **Resolution 2026-04-19** (ADWM batch): Notion MCP was unreachable but
+  `NOTION_TOKEN` direct REST API call worked. All 6 ADWM decisions
+  backfilled via `/tmp/notion_backfill_decisions.py`:
   - DEC-ADWM-001: ADWM v5.2 activation + 5-goal plan — Scope=Project, Status=Accepted
   - DEC-ADWM-002: EX-1-008 mean-Nu refactor self-APPROVE — Status=Closed
   - DEC-ADWM-003: EX-1-G3 cylinder_wake physics_contract restructure — Status=Closed
@@ -67,8 +68,12 @@ mirrored to Decisions DB the moment MCP is restored.
   - DEC-ADWM-005: EX-1-009 Spalding audit self-APPROVE — Status=Closed
   - DEC-ADWM-006: EX-1-010 cylinder canonical-band audit self-APPROVE — Status=Closed
 - S-003l Session record also created in Sessions DB with Status=Closed.
-- Homepage snapshot (heading + callout + 5-row table) updated from
+  Homepage snapshot (heading + callout + 5-row table) updated from
   2026-04-17 state to 2026-04-19 state.
+- **Re-closure 2026-04-20** (v6.1 cutover): DEC-V61-001 mirrored to
+  Decisions DB at [page 348c6894…b6aef](https://www.notion.so/348c68942bed8192b936f9fe2cbb6aef)
+  via MCP (Notion MCP back online). All 7 local decision frontmatters
+  now carry `notion_sync_status: synced <date> (<DB url>)`.
 
 ---
 
@@ -84,3 +89,5 @@ mirrored to Decisions DB the moment MCP is restored.
 
 Produced: 2026-04-19 by opus47-main (ADWM v5.2 autonomous continuation;
 post-EX-1-010 landing)
+Updated: 2026-04-20 by claude-opus47-app (v6.1 Sole Primary Driver;
+post v6.1 cutover landing + Q-3 re-closure after MCP restoration)

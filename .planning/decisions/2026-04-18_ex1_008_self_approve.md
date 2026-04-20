@@ -3,7 +3,7 @@ decision_id: DEC-ADWM-002
 timestamp: 2026-04-18T21:05 local
 autonomous_governance: true
 reversibility: reversible (single-commit revert)
-notion_sync_status: PENDING
+notion_sync_status: synced 2026-04-19 (Decisions DB page https://www.notion.so/346c68942bed814ba573c8ac7bdb4901; confirmed by re-probe 2026-04-20T12:20)
 ---
 
 # DEC-ADWM-002: Self-APPROVE EX-1-008 Fix Plan Packet, dispatch Codex

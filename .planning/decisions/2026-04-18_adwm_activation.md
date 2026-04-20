@@ -3,7 +3,7 @@ decision_id: DEC-ADWM-001
 timestamp: 2026-04-18T20:45 local
 autonomous_governance: true
 reversibility: reversible
-notion_sync_status: PENDING (MCP server not found)
+notion_sync_status: synced 2026-04-19 (Decisions DB page https://www.notion.so/346c68942bed8171a795c5a85fbabe4e; confirmed by re-probe 2026-04-20T12:20)
 ---
 
 # DEC-ADWM-001: Accept ADWM v5.2 activation and commit to 5-goal plan
