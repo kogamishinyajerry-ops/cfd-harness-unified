@@ -14,6 +14,8 @@ from src.foam_agent_adapter import (
     FoamAgentExecutor,
     MockExecutor,
     ParameterPlumbingError,
+    _emit_gold_anchored_points_sampledict,
+    _load_gold_reference_values,
     _parse_dict_scalar,
     _parse_g_magnitude,
 )
@@ -1039,3 +1041,163 @@ class TestInternalChannelPlumbingVerification:
             )
             with pytest.raises(ParameterPlumbingError, match="non-positive nu"):
                 ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
+
+
+# ---------------------------------------------------------------------------
+# C3 — Gold-anchored sampleDict helpers
+# ---------------------------------------------------------------------------
+
+class TestLoadGoldReferenceValues:
+    """_load_gold_reference_values — whitelist lookup behavior."""
+
+    def test_returns_values_for_lid_driven_cavity_id(self):
+        """Real whitelist entry 'lid_driven_cavity' has 5 reference_values."""
+        values = _load_gold_reference_values("lid_driven_cavity")
+        assert values is not None
+        assert len(values) == 5
+        y_values = [rv["y"] for rv in values if "y" in rv]
+        assert y_values == [0.0625, 0.1250, 0.5000, 0.7500, 1.0000]
+
+    def test_returns_values_for_lid_driven_cavity_display_name(self):
+        """Matching on case.name (not just case.id) also works."""
+        values = _load_gold_reference_values("Lid-Driven Cavity")
+        assert values is not None
+        assert len(values) == 5
+
+    def test_returns_none_for_unknown_name(self):
+        """Synthetic test names (not in whitelist) → None, no error."""
+        assert _load_gold_reference_values("test") is None
+        assert _load_gold_reference_values("") is None
+
+    def test_returns_none_when_whitelist_missing(self, tmp_path):
+        """Nonexistent whitelist_path → None."""
+        missing = tmp_path / "nope.yaml"
+        assert _load_gold_reference_values("anything", whitelist_path=missing) is None
+
+    def test_returns_none_for_malformed_whitelist(self, tmp_path):
+        """Unparseable YAML → None, no raise."""
+        bad = tmp_path / "bad.yaml"
+        bad.write_text("cases: [this is : broken yaml :: [")
+        assert _load_gold_reference_values("x", whitelist_path=bad) is None
+
+    def test_returns_none_when_reference_values_empty(self, tmp_path):
+        """Whitelist entry with empty reference_values → None."""
+        wl = tmp_path / "wl.yaml"
+        wl.write_text(
+            "cases:\n"
+            "  - id: empty_case\n"
+            "    name: Empty\n"
+            "    gold_standard:\n"
+            "      reference_values: []\n"
+        )
+        assert _load_gold_reference_values("empty_case", whitelist_path=wl) is None
+
+
+class TestEmitGoldAnchoredPointsSampleDict:
+    """_emit_gold_anchored_points_sampledict — dict file emission."""
+
+    def test_writes_system_sampledict_with_all_points(self, tmp_path):
+        (tmp_path / "system").mkdir()
+        points = [(0.5, 0.0625, 0.0), (0.5, 0.5, 0.0), (0.5, 1.0, 0.0)]
+        _emit_gold_anchored_points_sampledict(
+            tmp_path,
+            set_name="uCenterline",
+            physical_points=points,
+            fields=["U"],
+            axis="y",
+        )
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "uCenterline" in text
+        assert "type        points;" in text
+        assert "axis        y" in text
+        assert "fields          (U);" in text
+        # All 3 points present
+        assert "0.5 0.0625 0" in text
+        assert "0.5 0.5 0" in text
+        assert "0.5 1 0" in text
+
+    def test_multiple_fields_emitted(self, tmp_path):
+        (tmp_path / "system").mkdir()
+        _emit_gold_anchored_points_sampledict(
+            tmp_path,
+            set_name="probes",
+            physical_points=[(0.0, 0.0, 0.0)],
+            fields=["U", "p", "T"],
+        )
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "(U p T)" in text
+
+    def test_raises_on_empty_points(self, tmp_path):
+        (tmp_path / "system").mkdir()
+        with pytest.raises(ValueError, match="must not be empty"):
+            _emit_gold_anchored_points_sampledict(
+                tmp_path, set_name="x", physical_points=[], fields=["U"]
+            )
+
+    def test_header_comment_included(self, tmp_path):
+        (tmp_path / "system").mkdir()
+        _emit_gold_anchored_points_sampledict(
+            tmp_path,
+            set_name="probes",
+            physical_points=[(0.0, 0.0, 0.0)],
+            fields=["U"],
+            header_comment="LDC 5 gold y-coords (Ghia 1982)",
+        )
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "Ghia 1982" in text
+
+
+class TestLidDrivenCavityGoldAnchoredSampling:
+    """End-to-end: _generate_lid_driven_cavity emits gold-anchored sampling
+    when task_spec.name matches the whitelist LDC entry."""
+
+    def _make_ldc_task(self, name):
+        return TaskSpec(
+            name=name,
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+
+    def test_gold_anchored_path_emits_explicit_points_for_whitelist_id(self, tmp_path):
+        """task_spec.name='lid_driven_cavity' → sampleDict has 5 y-coords from whitelist."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_lid_driven_cavity(tmp_path, self._make_ldc_task("lid_driven_cavity"))
+
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "type        points;" in text
+        # All 5 Ghia y-coords present
+        for y in (0.0625, 0.125, 0.5, 0.75, 1.0):
+            assert f"0.5 {y:g} 0" in text, f"missing y={y} in sampleDict"
+        # Uniform fallback markers absent
+        assert "type        uniform;" not in text
+        assert "nPoints     16;" not in text
+        # Existing test expectations hold (regression guard)
+        assert "uCenterline" in text
+        assert "axis        y" in text
+        assert "(U)" in text
+
+    def test_fallback_uniform_path_for_non_whitelist_name(self, tmp_path):
+        """task_spec.name='test' (not in whitelist) → uniform 16-point fallback."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_lid_driven_cavity(tmp_path, self._make_ldc_task("test"))
+
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "type        uniform;" in text
+        assert "nPoints     16;" in text
+        # Gold-anchored path absent
+        assert "type        points;" not in text
+
+    def test_whitelist_display_name_also_matches(self, tmp_path):
+        """task_spec.name='Lid-Driven Cavity' (display name) also triggers gold-anchored path."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_lid_driven_cavity(tmp_path, self._make_ldc_task("Lid-Driven Cavity"))
+
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "type        points;" in text
+        assert "0.5 0.5 0" in text  # the y=0.5 gold coord

@@ -134,6 +134,129 @@ def _parse_g_magnitude(text: str) -> Optional[float]:
     return math.sqrt(gx * gx + gy * gy + gz * gz)
 
 
+# ---------------------------------------------------------------------------
+# Gold-anchored sampleDict helpers (P-B C3)
+# ---------------------------------------------------------------------------
+# Motivation: case generators previously emitted `type uniform` sampleDicts
+# with arbitrary nPoints. Solver output lands on a regular grid that doesn't
+# coincide with `gold_standard.reference_values` coordinates, forcing the
+# comparator to interpolate or nearest-neighbor-lookup. This introduces a
+# sampling-grid error term indistinguishable from solver error in the final
+# verdict.
+#
+# C3 replaces uniform sampling with explicit `type points` sets anchored to
+# the exact coordinates in `knowledge/whitelist.yaml`. Solver samples AT the
+# gold points; comparator lookup is exact. Paired with C1 alias layer this
+# closes the full sampling-location mismatch channel.
+#
+# Per docs/c3_sampling_strategy_design.md the roll-out is per-case (LDC /
+# NACA / Impinging Jet), each with a different function-object choice based
+# on the physical quantity being sampled. These two helpers are the shared
+# abstraction used by all three generators.
+
+
+_DEFAULT_WHITELIST_PATH = Path(__file__).resolve().parent.parent / "knowledge" / "whitelist.yaml"
+
+
+def _load_gold_reference_values(
+    task_name: str,
+    *,
+    whitelist_path: Optional[Path] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Load `gold_standard.reference_values` for the named case from whitelist.
+
+    Matches on either `case.id` or `case.name` (whichever equals task_name).
+    Returns None when the whitelist file is missing, unreadable, the case
+    isn't present, or reference_values is empty. Callers decide fallback
+    behavior — absence is not an error at this layer (many test fixtures
+    use synthetic task names not in whitelist).
+    """
+    import yaml  # local import to avoid module-load cost when unused
+
+    path = whitelist_path or _DEFAULT_WHITELIST_PATH
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+
+    for case in data.get("cases", []):
+        if case.get("id") == task_name or case.get("name") == task_name:
+            gold = case.get("gold_standard") or {}
+            values = gold.get("reference_values")
+            if isinstance(values, list) and values:
+                return values
+            return None
+    return None
+
+
+def _emit_gold_anchored_points_sampledict(
+    case_dir: Path,
+    set_name: str,
+    physical_points: List[Tuple[float, float, float]],
+    fields: List[str],
+    *,
+    axis: str = "xyz",
+    header_comment: str = "",
+) -> None:
+    """Write `system/sampleDict` with a single `type points` set.
+
+    For C3 gold-anchored sampling: the points passed in should be the exact
+    physical-coord locations at which the gold_standard reference_values
+    were measured, so solver output lands on the comparison grid without
+    any interpolation error.
+
+    Parameters:
+        case_dir: OpenFOAM case directory (system/ must exist)
+        set_name: name of the sampling set (e.g., "uCenterline")
+        physical_points: list of (x, y, z) tuples in case coordinates
+        fields: OpenFOAM field names to sample (e.g., ["U"])
+        axis: output-file sort axis — "xyz" (raw order) or "y"/"x"/"z"
+        header_comment: optional extra comment line in the dict header
+    """
+    if not physical_points:
+        raise ValueError("physical_points must not be empty")
+    points_text = "\n".join(
+        f"            ({px:.12g} {py:.12g} {pz:.12g})"
+        for (px, py, pz) in physical_points
+    )
+    fields_text = " ".join(fields)
+    extra = f"|  {header_comment}\n" if header_comment else ""
+    (case_dir / "system" / "sampleDict").write_text(
+        f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+|  sampleDict - gold-anchored point sampling (C3)                          |
+{extra}\\*---------------------------------------------------------------------------*/
+type            sets;
+libs            ("libsampling.so");
+
+interpolationScheme cellPoint;
+
+setFormat       raw;
+
+sets
+(
+    {set_name}
+    {{
+        type        points;
+        axis        {axis};
+        ordered     on;
+        points
+        (
+{points_text}
+        );
+    }}
+);
+
+fields          ({fields_text});
+
+// ************************************************************************* //
+""",
+        encoding="utf-8",
+    )
+
+
 class FoamAgentExecutor:
     """通过 Docker + OpenFOAM 执行真实仿真的 FoamAgentExecutor。
 
@@ -677,9 +800,26 @@ boundaryField
             encoding="utf-8",
         )
 
-        # 8. system/sampleDict — 提取 mid-plane velocity profile (Ghia 1982)
-        (case_dir / "system" / "sampleDict").write_text(
-            """\
+        # 8. system/sampleDict — gold-anchored centerline u profile (Ghia 1982)
+        # C3 (docs/c3_sampling_strategy_design.md §3.1): when the task_spec
+        # name matches a whitelist case with reference_values, emit explicit
+        # points at the exact gold y-coords. Else fall back to uniform 16
+        # points for test fixtures / off-whitelist contexts.
+        gold_values = _load_gold_reference_values(task_spec.name) or []
+        y_values = [float(rv["y"]) for rv in gold_values if isinstance(rv, dict) and "y" in rv]
+        if y_values:
+            physical_points = [(0.5, y, 0.0) for y in y_values]
+            _emit_gold_anchored_points_sampledict(
+                case_dir,
+                set_name="uCenterline",
+                physical_points=physical_points,
+                fields=["U"],
+                axis="y",
+                header_comment=f"LDC centerline x=0.5, {len(y_values)} gold y-coords (Ghia 1982)",
+            )
+        else:
+            (case_dir / "system" / "sampleDict").write_text(
+                """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 |  sampleDict - extract velocity profile for Gold Standard comparison      |
 \\*---------------------------------------------------------------------------*/
@@ -706,8 +846,8 @@ fields          (U);
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
+                encoding="utf-8",
+            )
 
     def _generate_backward_facing_step(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """生成 Backward-Facing Step 最小 OpenFOAM case 文件。
