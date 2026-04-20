@@ -57,6 +57,7 @@ from ui.backend.schemas.audit_package import (
     AuditPackageDownloadUrls,
     AuditPackageVvChecklistItem,
 )
+from ui.backend.services.validation_report import load_case_detail
 
 router = APIRouter()
 
@@ -137,6 +138,17 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     Synchronous for v1 — build is typically < 5s. Async / progress
     streaming is a follow-up (PR-5e).
     """
+    # Whitelist gate (Codex PR-5d HIGH #1): refuse to sign a bundle for a
+    # case id that isn't in knowledge/whitelist.yaml. A signed "audit
+    # package" referencing an unknown case would be misleading to regulatory
+    # reviewers — no gold reference, no validation contract, no provenance.
+    # load_case_detail returns None for unknown ids.
+    if load_case_detail(case_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown case_id: {case_id!r} (not in knowledge/whitelist.yaml)",
+        )
+
     # Load HMAC secret. Missing → 500 with actionable error.
     try:
         hmac_key = get_hmac_secret_from_env()

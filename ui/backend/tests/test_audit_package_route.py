@@ -76,12 +76,16 @@ class TestBuildAuditPackage:
             assert "manifest_fields" in item
             assert isinstance(item["manifest_fields"], list)
 
-    def test_unknown_case_id_still_builds_skeleton(self, client):
-        """Unknown case → manifest.whitelist_entry=None but build succeeds."""
+    def test_unknown_case_id_returns_404(self, client):
+        """Unknown case_id → 404 (Codex PR-5d HIGH #1).
+
+        Signing a bundle that references a case not in the whitelist would
+        produce a misleading artifact — no gold reference, no validation
+        contract. The route must refuse rather than sign a hollow bundle.
+        """
         resp = client.post("/api/cases/nonexistent_case/runs/r1/audit-package/build")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["manifest_id"] == "nonexistent_case-r1"
+        assert resp.status_code == 404
+        assert "unknown case_id" in resp.json()["detail"]
 
     def test_missing_hmac_secret_returns_500(self, client, monkeypatch):
         monkeypatch.delenv("CFD_HARNESS_HMAC_SECRET", raising=False)
