@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T03:45"
+last_updated: "2026-04-21T04:30"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -651,6 +651,14 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - **PR-5d: CHANGES_REQUIRED · 143,521 tokens** ← highest-value round, caught semantic issues the module-level reviews couldn't see
   - **Cumulative: 431,577 tokens**. Counter discipline earned its keep: 4th review caught real regressions self-signed review would miss.
 - **v6.1 autonomous_governance counter**: 14 → **15**. Further Phase 5 work (PR-5d.1) will bump to 16.
+- **✅ Phase 5 PR-5d.1 LANDED (2026-04-21T04:30)** — PR #19 merged `ca9fe0e525a92e8b52ea32092e228b0bf7ace73e` per DEC-V61-019. Three verbatim Codex-recommended fixes close the `CHANGES_REQUIRED` verdict on PR-5d:
+  - **HIGH #1 CLOSED**: `ui/backend/routes/audit_package.py` now gates POST on `load_case_detail(case_id) is not None`; unknown case_id → `HTTPException(404, "unknown case_id: ...")`. Test `test_unknown_case_id_still_builds_skeleton` replaced with `test_unknown_case_id_returns_404`.
+  - **HIGH #2 CLOSED**: `generated_at` is now deterministic — `hashlib.sha256(f"{case_id}|{run_id}".encode())[:16]` passed as kwarg to `build_manifest`. Two identical POSTs produce byte-identical ZIP + identical HMAC signature. Tests `test_identical_posts_produce_byte_identical_zip` + `test_different_run_ids_produce_different_bundles` added.
+  - **MEDIUM CLOSED**: Schema field `vv40_checklist` → `evidence_summary` (Python class `AuditPackageVvChecklistItem` → `AuditPackageEvidenceItem`, TypeScript interface + field renamed). UI heading "FDA V&V40 credibility-evidence mapping" → "Internal V&V evidence summary" with disclaimer noting it's not a V&V40 substitute. Page-level header description trimmed to remove FDA/aerospace/nuclear licensing claims the skeleton bundle shape does not support.
+  - Diff scope: 139 LOC across 5 files (3 backend + 2 frontend). Regression 327 passed + 1 skipped (baseline 325 + 2 new byte-repro tests). `npx tsc --noEmit` clean.
+  - **Codex round 5 review queued** (post-merge) to confirm closure before Phase 5 ships at 4/4. If APPROVED → Phase 5 complete; if CHANGES_REQUIRED → PR-5d.2 mechanical pattern.
+- **v6.1 autonomous_governance counter**: 15 → **16**. 5th consecutive Codex post-merge review on Phase 5. Hard-floor-4 retrospective is **overdue** — should land before Phase 6 scoping.
+- **Phase 5 sequence status**: 4/4 main sequence landed (5a + 5b + 5c + 5d) + 4/4 Codex-review fixes (5c.1 + 5c.2 + 5c.3 + 5d.1). **Phase 5 is honestly complete pending Codex round 5 verdict** on PR-5d.1. Next scoping decision: P1 counter retrospective OR P2 Docker dashboard validation OR Phase 6 kickoff.
 
 ---
 
