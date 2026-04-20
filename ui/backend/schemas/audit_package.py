@@ -48,7 +48,15 @@ class AuditPackageBuildResponse(BaseModel):
     manifest_id: str
     case_id: str
     run_id: str
-    generated_at: str
+    build_fingerprint: str = Field(
+        ...,
+        description=(
+            "Deterministic 16-hex identifier derived from (case_id, run_id). "
+            "Renamed from `generated_at` per DEC-V61-019 L3 finding: the "
+            "value is an opaque hash, not a wall-clock timestamp, so the "
+            "old name misled reviewers."
+        ),
+    )
     git_repo_commit_sha: Optional[str]
     comparator_verdict: Optional[str] = Field(
         None, description="PASS | FAIL | HAZARD | None (no comparator run recorded)"

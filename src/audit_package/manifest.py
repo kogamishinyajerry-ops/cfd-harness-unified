@@ -311,7 +311,7 @@ def build_manifest(
     measurement: Optional[Dict[str, Any]] = None,
     comparator_verdict: Optional[str] = None,
     audit_concerns: Optional[Sequence[Dict[str, Any]]] = None,
-    generated_at: Optional[str] = None,
+    build_fingerprint: Optional[str] = None,
     solver_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Assemble the audit-package manifest for a single case + run.
@@ -337,9 +337,16 @@ def build_manifest(
     measurement, comparator_verdict, audit_concerns
         Populated by the caller from the comparator's output. All optional;
         defaults to a skeleton with None/empty.
-    generated_at
-        Override the manifest timestamp. Tests inject a fixed value for
-        byte-stability assertions.
+    build_fingerprint
+        Deterministic identifier for this manifest. Renamed from
+        ``generated_at`` per Codex round-5 L3 finding
+        (DEC-V61-019): the value is derived from inputs rather than
+        wall-clock time, so ``generated_at`` was a misleading label.
+        When None, defaults to an ISO-UTC timestamp (fallback for legacy
+        callers that did not yet switch to deterministic derivation).
+        Production callers should pass a deterministic string
+        (e.g., ``sha256(case_id|run_id)[:16]``) to preserve byte
+        reproducibility.
     solver_name
         When known (typically from whitelist), recorded at ``run.solver``
         even if ``run_output_dir`` is None.
@@ -409,7 +416,7 @@ def build_manifest(
     manifest: Dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "manifest_id": f"{case_id}-{run_id}",
-        "generated_at": generated_at or _default_now_utc(),
+        "build_fingerprint": build_fingerprint or _default_now_utc(),
         "git": git_section,
         "case": {
             "id": case_id,

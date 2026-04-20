@@ -240,12 +240,12 @@ class TestBuildManifestIntegration:
         manifest = build_manifest(
             case_id="duct_flow",
             run_id="abc123",
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
             solver_name="simpleFoam",
         )
         assert manifest["schema_version"] == SCHEMA_VERSION
         assert manifest["manifest_id"] == "duct_flow-abc123"
-        assert manifest["generated_at"] == "2026-04-20T23:55:00Z"
+        assert manifest["build_fingerprint"] == "2026-04-20T23:55:00Z"
         assert manifest["case"]["id"] == "duct_flow"
         assert manifest["case"]["whitelist_entry"]["parameters"]["Re"] == 50000
         assert manifest["case"]["gold_standard"]["case_id"] == "duct_flow"
@@ -265,7 +265,7 @@ class TestBuildManifestIntegration:
             case_id="duct_flow",
             run_id="run_xyz",
             run_output_dir=run_dir,
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
         )
         assert manifest["run"]["status"] == "output_present"
         assert "inputs" in manifest["run"]
@@ -285,14 +285,14 @@ class TestBuildManifestIntegration:
             measurement={"friction_factor": 0.0183, "source": "sampleDict_direct"},
             comparator_verdict="PASS",
             audit_concerns=[{"code": "FB-SPALDING", "severity": "INFO"}],
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
         )
         assert manifest["measurement"]["key_quantities"]["friction_factor"] == 0.0183
         assert manifest["measurement"]["comparator_verdict"] == "PASS"
         assert manifest["measurement"]["audit_concerns"][0]["code"] == "FB-SPALDING"
 
     def test_byte_stable_across_two_invocations(self, tmp_path, monkeypatch):
-        """Two identical calls with same generated_at → byte-identical JSON."""
+        """Two identical calls with same build_fingerprint → byte-identical JSON."""
         repo = _synth_repo(tmp_path)
         monkeypatch.setattr("src.audit_package.manifest._REPO_ROOT", repo)
         monkeypatch.setattr("src.audit_package.manifest._WHITELIST_PATH", repo / "knowledge" / "whitelist.yaml")
@@ -301,7 +301,7 @@ class TestBuildManifestIntegration:
         kwargs = dict(
             case_id="duct_flow",
             run_id="stable",
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
             measurement={"friction_factor": 0.0185},
             comparator_verdict="PASS",
         )
@@ -329,7 +329,7 @@ class TestBuildManifestIntegration:
         manifest = build_manifest(
             case_id="duct_flow",
             run_id="dt",
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
         )
         ids = [entry["decision_id"] for entry in manifest["decision_trail"]]
         # gold.legacy_case_ids triggers pickup of the fully_developed_pipe DEC too
@@ -345,7 +345,7 @@ class TestBuildManifestIntegration:
         manifest = build_manifest(
             case_id="totally_unknown_case",
             run_id="r1",
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
         )
         assert manifest["case"]["whitelist_entry"] is None
         assert manifest["case"]["gold_standard"] is None
@@ -361,7 +361,7 @@ class TestBuildManifestIntegration:
         manifest = build_manifest(
             case_id="duct_flow",
             run_id="r1",
-            generated_at="2026-04-20T23:55:00Z",
+            build_fingerprint="2026-04-20T23:55:00Z",
         )
         assert "fully_developed_pipe" in manifest["case"]["legacy_ids"]
         assert "fully_developed_turbulent_pipe_flow" in manifest["case"]["legacy_ids"]

@@ -31,12 +31,14 @@ class TestBuildAuditPackage:
         body = resp.json()
         # Top-level keys
         for key in (
-            "bundle_id", "manifest_id", "case_id", "run_id", "generated_at",
+            "bundle_id", "manifest_id", "case_id", "run_id", "build_fingerprint",
             "pdf_available", "downloads", "evidence_summary", "signature_hex",
         ):
             assert key in body, f"missing key {key}"
-        # Legacy name must not leak (PR-5d.1 rename per Codex MEDIUM).
+        # Legacy names must not leak (PR-5d.1 evidence_summary rename per
+        # Codex MEDIUM; DEC-V61-019 L3 generated_at → build_fingerprint rename).
         assert "vv40_checklist" not in body
+        assert "generated_at" not in body
         assert body["case_id"] == "duct_flow"
         assert body["run_id"] == "r1"
         assert body["manifest_id"] == "duct_flow-r1"
@@ -108,8 +110,8 @@ class TestBuildAuditPackage:
         assert r1.status_code == 200 and r2.status_code == 200
 
         b1, b2 = r1.json(), r2.json()
-        # generated_at is derived from (case_id, run_id) → must match.
-        assert b1["generated_at"] == b2["generated_at"]
+        # build_fingerprint is derived from (case_id, run_id) → must match.
+        assert b1["build_fingerprint"] == b2["build_fingerprint"]
         # Signature comes from canonical manifest + zip bytes → must match.
         assert b1["signature_hex"] == b2["signature_hex"]
 
@@ -121,7 +123,7 @@ class TestBuildAuditPackage:
         """Sanity guard: distinct run_ids still diverge (no hash collision)."""
         r1 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
         r2 = client.post("/api/cases/duct_flow/runs/r2/audit-package/build")
-        assert r1.json()["generated_at"] != r2.json()["generated_at"]
+        assert r1.json()["build_fingerprint"] != r2.json()["build_fingerprint"]
         assert r1.json()["signature_hex"] != r2.json()["signature_hex"]
 
     def test_missing_hmac_secret_returns_500(self, client, monkeypatch):
