@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* Thin scrollbars on dark surfaces */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(90 108 130 / 0.5);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(127 143 164 / 0.7);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-md border border-surface-700 bg-surface-900 shadow-card;
+  }
+
+  .card-header {
+    @apply border-b border-surface-700 px-4 py-3;
+  }
+
+  .card-title {
+    @apply text-xs font-semibold uppercase tracking-[0.12em] text-surface-300;
+  }
+
+  .mono {
+    @apply font-mono text-[0.95em];
+  }
+}

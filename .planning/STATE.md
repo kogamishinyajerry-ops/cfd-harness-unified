@@ -1,14 +1,19 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T11:30"
-session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill queue continues — MCP last probed UNREACHABLE 2026-04-19T00:12; v6.1 Decisions DB entries are landing locally to `.planning/decisions/` until MCP is restored. Previous "Computer Use to Claude APP denied" blocker is structurally dissolved by v6.1 — the APP itself is now the driver, there is no external Claude to be proxied-into.
+last_updated: "2026-04-20T18:20"
+session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
 
-current_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync)
-phase_status: P0 ✅ P1 ✅ P2 ✅ + reporting hardening + GitHub/Notion sync complete (2026-04-20)
-next_phase: Phase 9 (planning-only)
-next_phase_status: 🔒 Hold Phase 9 activation; keep Q-1/Q-2 frozen and visible until a fresh activation review clears them
+current_phase: **Path B — Phase 0 UI MVP** (backend + Screen 4 shell) — IN PROGRESS
+phase_status: ui/backend ✅ (7/7 pytest green) · ui/frontend ✅ (tsc -b clean, vite build 223KB js gz 70KB) · Screen 4 three canonical cases wired (DHC FAIL · cylinder HAZARD · TFP HAZARD) · docs/product_thesis.md + docs/ui_design.md + docs/ui_roadmap.md landed · DEC-V61-002 drafted
+next_phase: Path B — Phase 1 (Case Editor)
+next_phase_status: 🔒 Blocked on Phase 0 PR #2 merge + Notion mirror of DEC-V61-002
+
+legacy_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync; 2026-04-20)
+legacy_next_phase_hold: Phase 9 planning-only review is SUPERSEDED by Path B phase plan; Q-1 / Q-2 remain visible in external_gate_queue.md and do not block Path B phases 0..4 (will re-enter at Phase 5 audit-package-signing gate if still open).
+
+Path B phase-plan (DEC-V61-002): P0 UI MVP ⇒ P1 Case Editor ⇒ P2 Decisions Queue ⇒ P3 Run Monitor ⇒ P4 Dashboard ⇒ P5 Audit Package Builder.
 
 Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
 Phase 6 Notion: TBD
@@ -571,3 +576,64 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 7. **[self]** Phase 9 activation remains frozen pending D5 gate (per D4 C4 + PL-1 freeze).
 8. **[via-codex-tool]** Fix `tests/test_report_engine/test_generate_reports_cli.py` hermeticity. Current test writes to the **real** `reports/deep_acceptance/` directory instead of the `temp_reports` tmp_path fixture defined in `tests/test_report_engine/conftest.py`. Every `pytest` run pollutes 6-8 fresh files AND overwrites the 4 tracked canonical deliverables. Discovered during v6.1 cutover Step B. Codex dispatch scope: `tests/test_report_engine/test_generate_reports_cli.py` only; CHK matrix must include "no new file appears under real `reports/deep_acceptance/` after a clean test run" + "4 canonical deliverable files are byte-identical to HEAD after test run".
 9. **[via-codex-tool]** Fix `tests/test_*/conftest.py` sys.path injection to use `REPO_ROOT` instead of `REPO_ROOT / "src"`, eliminating the circular-import footgun that blocks 4 tests from running in non-macOS / Linux-native Python environments. Codex dispatch scope: 4 conftest files (`test_skill_index`, `test_report_engine`, `test_notion_sync`, `test_auto_verifier`); CHK matrix: full suite green on Linux python3.10 with PYTHONPATH unset + host macOS .venv suite still green.
+
+---
+
+# Path B — Phase 0 UI MVP (2026-04-20)
+
+**Decision anchor**: `.planning/decisions/2026-04-20_path_b_ui_mvp.md` (DEC-V61-002).
+**Roadmap anchor**: `docs/ui_roadmap.md` (P0..P5 + post-MVP P6..P10).
+**Branch**: `feat/ui-mvp-phase-0` (forked from `main` at merge-SHA
+`dbffd8af8229671b3945516b0a41f328af18ee1e`).
+
+## Deliverables landing in Phase 0
+
+| Artifact | Status | Location |
+|---|---|---|
+| Product thesis | ✅ | `docs/product_thesis.md` |
+| UI design spec | ✅ | `docs/ui_design.md` |
+| UI roadmap (6 phases + post-MVP) | ✅ | `docs/ui_roadmap.md` |
+| DEC-V61-002 formal decision | ✅ | `.planning/decisions/2026-04-20_path_b_ui_mvp.md` |
+| FastAPI backend (read-only src/ wrap) | ✅ | `ui/backend/` — 7/7 pytest green |
+| Backend schemas (Pydantic v2) | ✅ | `ui/backend/schemas/validation.py` |
+| Backend routes (`/health`, `/cases`, `/validation-report`) | ✅ | `ui/backend/routes/` |
+| Measurement fixtures (3 canonical cases) | ✅ | `ui/backend/tests/fixtures/` |
+| Vite + React 18 + TS + Tailwind frontend | ✅ | `ui/frontend/` — tsc clean, vite build 222.8 KB js |
+| Screen 4 Validation Report | ✅ | `ui/frontend/src/pages/ValidationReportPage.tsx` |
+| Design primitives (PassFailChip, BandChart, AuditConcernList, PreconditionList, DecisionsTrail) | ✅ | `ui/frontend/src/components/` |
+
+## Phase-0 gate criteria (DEC-V61-002)
+
+1. ✅ Backend tests green (7/7) without touching 三禁区.
+2. ✅ Frontend tsc -b + vite build both clean.
+3. ✅ Three canonical cases render end-to-end with correct three-state
+   contract status (DHC = FAIL w/ 159% deviation; cylinder = HAZARD armed
+   silent-pass; TFP = HAZARD armed Spalding fallback).
+4. ✅ No mutation of `src/**`, `tests/**`, `knowledge/gold_standards/**`,
+   or `knowledge/whitelist.yaml`.
+5. ⏳ PR #2 opened + merged (regular merge commit, 留痕 > 聪明).
+6. ⏳ DEC-V61-002 mirrored to Notion Decisions DB.
+
+## 禁区 compliance (this phase)
+
+- `src/` — NOT TOUCHED.
+- `tests/` (at repo root) — NOT TOUCHED.
+- `knowledge/whitelist.yaml` — NOT TOUCHED (read-only via backend).
+- `knowledge/gold_standards/**` — NOT TOUCHED (read-only via backend).
+
+The FastAPI backend and its tests live under `ui/backend/tests/` —
+that directory is new and is NOT part of the legacy `tests/` 禁区.
+
+## Path-B phase horizon
+
+| Phase | Scope | Branch | Gate focus |
+|---|---|---|---|
+| P0 | Backend + Screen 4 Validation Report | `feat/ui-mvp-phase-0` | this commit |
+| P1 | Case Editor (Monaco + monaco-yaml + whitelist schema validation) | `feat/ui-mvp-phase-1` | editor must refuse edits that violate 禁区 invariants |
+| P2 | Decisions Queue (DEC-XXX authoring + Notion sync) | `feat/ui-mvp-phase-2` | two-way Notion mirror integrity |
+| P3 | Run Monitor (WebSocket residual streaming + VTK.js) | `feat/ui-mvp-phase-3` | reconnect / backpressure |
+| P4 | Dashboard (Plotly KPI tiles + regression wall) | `feat/ui-mvp-phase-4` | data-freshness badges |
+| P5 | Audit Package Builder (weasyprint PDF + SHA-256 manifest) | `feat/ui-mvp-phase-5` | **external Gate** — commercial signing review |
+
+See `docs/ui_roadmap.md` for per-phase acceptance, non-goals, risks,
+and rollback plans.

@@ -1,0 +1,54 @@
+# Phase 0 concept-of-proof fixture for Screen 4.
+# Sources: DEC-ADWM-002 / DEC-ADWM-004 (EX-1-008 cycle 1 landing; FUSE record).
+# Nu=77.82 on B1 256² mesh, post-refactor mean-over-y methodology. Literature
+# for Ra=1e10 2D DHC spans 100-160; gold ref_value=30.0 is escalated via Q-1.
+#
+# This fixture lives in ui/backend/ and is touched only by the UI backend;
+# the authoritative DHC gold_standard remains knowledge/gold_standards/
+# differential_heated_cavity.yaml (UNTOUCHED — hard floor #1).
+
+case_id: differential_heated_cavity
+source: fixture
+measurement:
+  value: 77.82
+  unit: dimensionless
+  run_id: dhc_b1_256_20260418
+  commit_sha: 60952b6
+  measured_at: "2026-04-18T21:45:00"
+
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: >-
+      Boundary-layer under-resolution at Ra=1e10 on 256² mesh;
+      precondition #1 unsatisfied.
+    detail: >-
+      Thermal BL thickness δ/L ~ Ra^-0.25 ≈ 3.2e-3 requires ~500–1000
+      wall-normal cells for full resolution. Current 256² mesh under-
+      resolves the BL, leading to a systematic under-prediction of Nu
+      relative to the fully-resolved limit. See DEC-ADWM-004 for
+      external-Gate escalation package (Path P-1 gold correction vs.
+      P-2 regime downgrade to Ra=1e6).
+    decision_refs:
+      - DEC-ADWM-002
+      - DEC-ADWM-004
+  - concern_type: DEVIATION
+    summary: >-
+      Measured Nu=77.82 is closer to literature Ra=1e10 values (100-160)
+      than to the gold ref_value=30.0.
+    detail: >-
+      Ampofo & Karayiannis 2003 reports Nu~62 at Ra=1.58e9 (one decade
+      lower); Fusegi 1991 3D DHC reports Nu~140 at Ra=1e10. The current
+      ref_value=30.0 may be inconsistent with the stated Ra=1e10. Gold
+      correction is Path P-1 in Q-1 external-Gate queue.
+    decision_refs:
+      - DEC-ADWM-004
+
+decisions_trail:
+  - decision_id: DEC-ADWM-002
+    date: "2026-04-18"
+    title: "EX-1-008 G1 Fix Plan Packet self-APPROVE (mean-over-y Nu refactor)"
+    autonomous: true
+  - decision_id: DEC-ADWM-004
+    date: "2026-04-18"
+    title: "FUSE cycle 2; escalate DHC gold accuracy to external Gate (Q-1)"
+    autonomous: true
