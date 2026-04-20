@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T01:05"
+last_updated: "2026-04-21T01:40"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -610,6 +610,13 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 - **Phase 5 PR-5b LANDED (2026-04-21T01:00)**: Serialize module per DEC-V61-013. PR #13 merged `abfdfbec0d238cd5ddee9e3bb7cf2d49fbe428f5`. New file `src/audit_package/serialize.py` with byte-reproducible zip (ZipInfo.date_time=(1980,1,1,0,0,0), fixed permissions, sorted order, deterministic compression — asserted via SHA-256 equality across two invocations); deterministic semantic HTML render (bundled CSS, zero CDN, html.escape user fields, verdict styling); guarded weasyprint PDF (`is_pdf_backend_available()` non-raising bool probe + `PdfBackendUnavailable` with platform-specific install hints). On host: weasyprint native libs present, PDF renders to `%PDF`-prefixed files. 29 new tests across 5 classes. Regression 251 passed + 1 skipped. DEC-V61-013 Notion page `348c6894-2bed-81f2-a3ff-c6c8ee088ee6`.
 - **⚠️ v6.1 autonomous_governance counter: 9 → 10 — HARD-FLOOR-4 THRESHOLD REACHED**. Per `CLAUDE.md` discipline, driver **STOPS** before PR-5c for Kogami ping + Codex tool review invocation strategy. PR-5c (HMAC signing) is security-critical regardless of counter; Codex review is strongly recommended. After PR-5c lands, counter = 11 — continue review discipline through PR-5d.
 - **5 open design questions resolved**: all defaults accepted by Kogami 2026-04-21 ("全部接受"). PDF=weasyprint (validated on host), HMAC key=env var `CFD_HARNESS_HMAC_SECRET` + docs, V&V40=all 8 regions, export mode=single-case for Phase 5 / batch for Phase 6, demo=each PR produces sample artifact.
+- **Phase 5 PR-5c LANDED + Codex review complete (2026-04-21T01:35)**: HMAC sign/verify per DEC-V61-014. PR #14 merged `8d397d3d118996a83bdd58cb5eb8352cf8dbfce1`. New file `src/audit_package/sign.py` with HMAC-SHA256 over DOMAIN_TAG || sha256(manifest) || sha256(zip) framing, constant-time `hmac.compare_digest`, base64-or-plain env-var key loader, v1 sidecar .sig. 33 new tests across 8 classes. Post-merge **Codex GPT-5.4 xhigh review**: `APPROVED_WITH_NOTES` — 0 critical/high, 2 medium + 2 low queued. Report at `reports/codex_tool_reports/2026-04-21_pr5c_hmac_review.md` (token cost 117,588). First v6.1 post-merge tool-review precedent in this repo. DEC-V61-014 Notion page `348c6894-2bed-811e-9f39-d406fb2ad991`. Regression 284 passed + 1 skipped.
+- **Codex findings queued**:
+  - **M1** (mechanical, PR-5c.1): `CFD_HARNESS_HMAC_SECRET` explicit `base64:`/`text:` prefix instead of heuristic
+  - **L1** (mechanical, PR-5c.1): Sidecar hex validation `^[0-9a-fA-F]{64}$`
+  - **M2** (governance DEC): Sidecar v2 with `kid`/`alg`/`domain` metadata + formal rotation runbook (verifier keyring retention, rotation ledger, multi-signer story, compromise procedure)
+  - **L2** (docs PR or Phase 5 PR-5d): Canonical JSON spec publication for external verifiers
+- **v6.1 autonomous_governance counter**: 10 → **11**. Hard-floor-4 discipline honored for PR-5c. PR-5d should follow same pattern (post-merge Codex review) OR Kogami should run formal counter-reset retrospective.
 
 ---
 
