@@ -1,0 +1,27 @@
+# Reference-pass run for plane_channel_flow (turbulent channel, Re_tau=180).
+# DNS-grade: Kim 1987 / Moser 1999 u+(y+) near-wall anchor at y+=5 is
+# u+=5.4. Fine mesh (≥128³) + sub-grid scale model + long averaging
+# window reproduces this to within a percent. Gold anchor u+=5.4 ± 5%
+# → run value u+=5.32 lands at -1.5% → comfortably PASS.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · DNS 网格 u+ @ y+=5
+  label_en: Reference pass (DNS-grade u+ at y+=5)
+  description_zh: >-
+    Re_τ=180，128³ DNS 网格，pimpleFoam + LES SGS，>20 eddy turnover 统计。
+    y+=5 处 u+=5.32，相对 Kim 1987 gold 5.4 偏 -1.5%，5% 容差内 PASS。
+    这是 channel flow 唯一有意义的 "做对"——剖面采样器必须真正取到
+    viscous sublayer 的值，不是用 U_bulk 标量糊过去。
+  category: reference
+  expected_verdict: PASS
+case_id: plane_channel_flow
+source: dns_grade_simulation_synthetic
+measurement:
+  value: 5.32
+  unit: dimensionless
+  run_id: synth_channel_dns_uplus_y5
+  commit_sha: null
+  measured_at: null
+  quantity: u_plus_at_yplus_5
+audit_concerns: []
+decisions_trail: []

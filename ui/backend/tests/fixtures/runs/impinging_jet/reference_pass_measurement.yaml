@@ -1,0 +1,28 @@
+# Reference-pass run for impinging_jet (Re=10000, H/D=2).
+# The "做对" scenario: k-ω SST + Kato-Launder correction (or equivalent
+# stagnation-TKE limiter) lands peak Nu within 2% of Cooper 1984 gold
+# 25.0. This is the reference behavior one should expect from a
+# properly-chosen turbulence model — not a fluke, not a lucky tolerance
+# hit, but a principled model choice reproducing the literature anchor.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · k-ω SST + 驻点 TKE 修正
+  label_en: Reference pass (k-omega SST + stagnation-TKE correction)
+  description_zh: >-
+    k-ω SST + Kato-Launder 修正（或等价的驻点 TKE 限制器）给出 Nu=25.2 vs
+    Cooper 1984 gold 25.0（+0.8%）。15% 容差内 PASS。这才是"原理性做对"
+    —— real_incident 的 Nu=27（+8%，PASS 紧贴上界）是 SST 裸跑的典型
+    残差；要**真**对齐需要 Kato-Launder 或者切 v²-f / Reynolds-stress。
+  category: reference
+  expected_verdict: PASS
+case_id: impinging_jet
+source: sst_with_kato_launder_synthetic
+measurement:
+  value: 25.2
+  unit: dimensionless
+  run_id: synth_jet_sst_kato_launder
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns: []
+decisions_trail: []

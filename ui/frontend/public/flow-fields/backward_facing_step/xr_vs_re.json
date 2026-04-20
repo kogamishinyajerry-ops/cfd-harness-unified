@@ -1,0 +1,4 @@
+{
+  "provenance": "Armaly 1983 (low Re) + Driver & Seegmiller 1985 (Re=37500, Xr/H=6.26) reattachment envelope. Teaching runs at Re=7600 (this commit's whitelist) land on the turbulent plateau — reference_pass on-target, under_resolved ~-18% from coarse recirculation mesh.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

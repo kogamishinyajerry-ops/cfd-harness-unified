@@ -1,0 +1,30 @@
+# Reference-pass run for naca0012_airfoil at Re=3e6, α=0°.
+# Ladson 1987 / Thomas 1979 exact surface Cp at leading edge is 1.0
+# (stagnation point). A mesh-converged, large-domain (40 chords
+# far-field), kOmegaSST transition-SST simulation samples Cp in the
+# near-surface cell band and averages to 0.98 at x/c≈0 (-2% shape
+# attenuation from cell-center averaging, as documented in the gold
+# standard's reference_correlation_context).
+# Gold tol=20% → PASS with plenty of margin.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · 远场 40 弦 + transition-SST
+  label_en: Reference pass (40-chord far-field, transition-SST model)
+  description_zh: >-
+    40 弦远场 + transition-SST + 210k 结构化 C-网格 + Re=3×10⁶。Cp 前缘
+    值 0.98（stagnation 理论 1.0，cell-center 平均引入 -2% 衰减 — 这是
+    gold 文档里明确允许的提取误差）。20% 容差内 PASS，shape 也对。这是
+    外流 CFD "做对" 的最低门槛。
+  category: reference
+  expected_verdict: PASS
+case_id: naca0012_airfoil
+source: ladson_1987_mesh_converged
+measurement:
+  value: 0.98
+  unit: dimensionless
+  run_id: synth_naca_conv_aoa0
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns: []
+decisions_trail: []

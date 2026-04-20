@@ -1,0 +1,33 @@
+# Wrong-model run for naca0012_airfoil at Re=3e6, α=0°.
+# Using fully-laminar solver at Re=3×10⁶ (transition onset at x/c≈0.02
+# for smooth NACA 0012). Laminar BL stays attached artificially, Cp
+# distribution collapses to thin-airfoil theory, and the stagnation
+# peak is over-sharpened to Cp≈1.3 (versus physical 1.0 with proper
+# turbulent BL displacement effect).
+# Gold Cp_leading_edge=1.0 ± 20% → Cp=1.3 is outside (+30%) → FAIL.
+run_metadata:
+  run_id: wrong_model
+  label_zh: 错模型 · 层流在 Re=3×10⁶
+  label_en: Wrong model (laminar at Re=3e6)
+  description_zh: >-
+    Re=3×10⁶ 的 NACA 0012 在 x/c≈2% 处就开始转捩。用 simpleFoam + laminar
+    忽略这件事 → BL 保持层流附着 → Cp 前缘过尖到 1.3（物理应为 1.0，
+    湍流位移厚度钝化了 peak）。gold 1.0 ± 20% → FAIL。学生教训：外流
+    Re > 10⁵ 就必须带转捩/湍流模型。
+  category: wrong_model
+  expected_verdict: FAIL
+case_id: naca0012_airfoil
+source: model_choice_literature_typical
+measurement:
+  value: 1.3
+  unit: dimensionless
+  run_id: synth_naca_laminar_aoa0
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Laminar solver at Re=3e6 (transition onset x/c≈0.02). Cp_le=1.3 vs gold 1.0 (+30%). Displacement thickness missing.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

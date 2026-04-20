@@ -1,0 +1,30 @@
+# Under-resolved run for duct_flow. Coarse near-wall mesh (first-cell
+# y+ ≈ 80, well outside log layer) collapses wall shear and drops the
+# friction factor by ~16%. Gold f=0.0185 ± 10% → f=0.0155 is outside
+# tolerance → FAIL. Classic beginner mistake: use a uniform grid and
+# wonder why f is "always too low".
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · 近壁单元太粗
+  label_en: Under-resolved (wall cell y+ >> 30)
+  description_zh: >-
+    均匀 20×20 网格 → 第一层 y+≈80，log 律失效，壁面剪切被低估。
+    f=0.0155 vs gold 0.0185 (-16%)。学生第一反应是"加总单元数"，
+    正确答案是"沿壁加密"——wall-grading 4:1 比均匀 4× 分辨率更省钱。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: duct_flow
+source: under_resolved_mesh_typical
+measurement:
+  value: 0.0155
+  unit: dimensionless
+  run_id: synth_duct_coarse_mesh
+  commit_sha: null
+  measured_at: null
+  quantity: friction_factor
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Uniform 20×20 grid → y+≈80 at wall; f=0.0155 vs gold 0.0185 (-16%). Log-layer under-resolved.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

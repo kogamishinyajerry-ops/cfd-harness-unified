@@ -1,0 +1,4 @@
+{
+  "provenance": "Colebrook smooth-pipe equation solved iteratively then corrected to square-duct per Jones 1976 (f_duct ≈ 0.88·f_pipe, hydraulic-diameter basis). Gold anchor 0.0185 at Re=50000 within ±10%; reference_pass on-target, under_resolved -16% from log-layer under-resolution.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

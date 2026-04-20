@@ -1,0 +1,4 @@
+{
+  "provenance": "de Vahl Davis 1983 Table IV Nu at Ra ∈ {1e3,1e4,1e5,1e6} (laminar natural convection); Berkovsky-Polevikov scaling overlay. Reference_pass at Ra=1e6 sits -0.6% of gold; under_resolved drops 20% when thermal BL under-resolved.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

@@ -1,0 +1,27 @@
+# Reference-pass run for duct_flow (square duct, Re=50000).
+# Idealised solver output: steady-state fully-developed flow with
+# properly-resolved wall layer (y+<1 first cell, structured grading).
+# Jones 1976 correlation predicts f=0.0181; literature DNS/experimental
+# scatter keeps the number inside 0.018-0.019 at Re=50000.
+# Gold ref_value=0.0185, tol=10% → this run lands at 0.0187 (+1.1%).
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · 方管摩擦因子良好
+  label_en: Reference pass (square duct friction factor)
+  description_zh: >-
+    y+≈0.8 的近壁网格 + 周期边界 + 充分发展段。Jones 1976 方管修正给出
+    f≈0.0181，本 run f=0.0187（+1.1%），落在 10% 容差带正中。这才是
+    "做对"的样子——不是数字恰好，而是物理/几何/网格/经验公式都自洽。
+  category: reference
+  expected_verdict: PASS
+case_id: duct_flow
+source: idealised_well_resolved_run
+measurement:
+  value: 0.0187
+  unit: dimensionless
+  run_id: synth_duct_wellposed
+  commit_sha: null
+  measured_at: null
+  quantity: friction_factor
+audit_concerns: []
+decisions_trail: []
