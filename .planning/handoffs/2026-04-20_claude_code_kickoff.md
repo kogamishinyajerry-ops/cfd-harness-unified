@@ -349,3 +349,16 @@ Notion 心跳:         .planning/STATE.md
 ```
 
 完事儿 —— 冲。
+
+---
+
+接棒确认: Claude Code (Opus 4.7) @ 2026-04-20T20:10
+第一步: `rm -f .git/*.lock` (3 locks cleared: HEAD.lock, index.lock, ORIG_HEAD.lock) → `git checkout feat/c-class-infra-fixes` → 158/158 regression green
+已清 lock: yes
+
+Session outcome (see `.planning/handoffs/2026-04-20_claude_code_mid_session_stop.md` for full detail):
+- PR #4 merged (b402f166) — C1+C2+audit — DEC-V61-004 Notion-synced
+- PR #5 merged (d850cb2c) — A-class metadata — DEC-V61-005 Notion-synced
+- Q-new gate filed (a8259c5) — B-class 5-case package subsumes Q-1 — STOP awaiting Kogami per-case decision
+- C3 (§5a) deferred to dedicated design session — per-case sampling strategy needs thought
+- §5d validation run awaiting Kogami call: mid-state now, or post-PR-6?
