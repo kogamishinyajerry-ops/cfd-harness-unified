@@ -1,0 +1,38 @@
+# Phase 0 fixture for Screen 4.
+# Sources: DEC-ADWM-005 (EX-1-009 Spalding fallback audit wiring).
+# Cf at Re=50000 via k-ω SST; Spalding fallback at Cf>0.01 substitution
+# flag now emitted in key_quantities; consumer enriches audit_concern
+# with `:spalding_fallback_confirmed` suffix when the flag is True on a
+# PASS run.
+
+case_id: turbulent_flat_plate
+source: fixture
+measurement:
+  value: 0.0070
+  unit: dimensionless
+  run_id: tfp_re50k_20260418
+  commit_sha: 07e26d2
+  measured_at: "2026-04-18T22:30:00"
+
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: >-
+      Spalding fallback substitution armed for Cf>0.01; producer flag
+      `cf_spalding_fallback_activated` asserted on this run.
+    detail: >-
+      src/foam_agent_adapter.py:6924-6930 substitutes a Spalding
+      log-law value for Cf when the raw solver-derived number
+      exceeds 0.01. EX-1-009 (DEC-ADWM-005) added producer flag
+      emission + consumer enrichment so the audit_concern is
+      suffixed with `:spalding_fallback_confirmed` for reviewer
+      transparency. Measurement Cf=0.0070 is within tolerance ±10%
+      of Spalding reference 0.0076 but the source is fallback, not
+      direct extraction.
+    decision_refs:
+      - DEC-ADWM-005
+
+decisions_trail:
+  - decision_id: DEC-ADWM-005
+    date: "2026-04-18"
+    title: "EX-1-009 Spalding fallback audit wiring self-APPROVE"
+    autonomous: true

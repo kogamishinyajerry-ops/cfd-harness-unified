@@ -4,11 +4,21 @@ Single entry point for decisions deferred from ADWM v5.2 autonomous
 governance to external Gate review. Each item points to full rationale
 rather than duplicating it.
 
-**Queue state as of**: 2026-04-20 (post v6.1 cutover · post Q-3 completion)
+**Queue state as of**: 2026-04-20 (post v6.1 cutover · post Q-3 completion
+· post Path-B election per DEC-V61-002)
 **Notion MCP status**: ONLINE (last probe 2026-04-20T12:20 —
 `notion-get-users` returned the workspace user record). Q-3 officially
 closed by DEC-V61-001 Decisions DB mirror; earlier 6 ADWM entries
 remained valid from the 2026-04-19 direct-REST backfill batch.
+
+**Path-B interaction** (2026-04-20): Q-1 (DHC gold accuracy) and Q-2
+(R-A-relabel) remain OPEN but do NOT block Path-B phases P0..P4. They
+re-enter the critical path at Path-B **Phase 5 Audit-Package Builder**,
+because the commercial signing review cannot emit signed audit
+packages while two known gold-accuracy / whitelist-correctness issues
+are unresolved. Until then, the Phase-0 UI surfaces them in Screen 4's
+`AuditConcern` list and `DecisionsTrail` — they are visible to every
+reviewer rather than hidden.
 
 ---
 
@@ -91,3 +101,6 @@ Produced: 2026-04-19 by opus47-main (ADWM v5.2 autonomous continuation;
 post-EX-1-010 landing)
 Updated: 2026-04-20 by claude-opus47-app (v6.1 Sole Primary Driver;
 post v6.1 cutover landing + Q-3 re-closure after MCP restoration)
+Updated: 2026-04-20 by claude-opus47-app (Path-B election per
+DEC-V61-002 — Q-1/Q-2 reclassified as Phase-5 blockers, not Phase-0..4
+blockers; added interaction-note to header)

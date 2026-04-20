@@ -1,0 +1,37 @@
+# Phase 0 fixture for Screen 4.
+# Sources: DEC-ADWM-006 (EX-1-010 canonical-band audit wiring).
+# Strouhal at Re=100 via k-ω SST with canonical-band shortcut
+# (Re ∈ [50,200] → St=0.165 hardcoded). Producer flag
+# `strouhal_canonical_band_shortcut_fired=true` marks the silent-pass
+# hazard; consumer enriches audit_concern with the :shortcut_fired suffix.
+
+case_id: circular_cylinder_wake
+source: fixture
+measurement:
+  value: 0.165
+  unit: dimensionless
+  run_id: cyl_re100_20260418
+  commit_sha: cf17f23
+  measured_at: "2026-04-18T23:15:00"
+
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: >-
+      Canonical-band shortcut armed at Re=100; returned
+      strouhal_number=0.165 is hardcoded, not solver-derived.
+    detail: >-
+      src/foam_agent_adapter.py:6800-6808 applies a hardcoded St=0.165
+      when Re ∈ [50, 200]. Producer flag
+      `strouhal_canonical_band_shortcut_fired=true` now emitted in
+      key_quantities (EX-1-010), consumer suffixes the audit concern
+      with `:strouhal_canonical_band_shortcut_fired` so reviewers can
+      distinguish runs where the shortcut fired from runs where
+      extraction was solver-derived.
+    decision_refs:
+      - DEC-ADWM-006
+
+decisions_trail:
+  - decision_id: DEC-ADWM-006
+    date: "2026-04-18"
+    title: "EX-1-010 canonical-band shortcut audit wiring self-APPROVE"
+    autonomous: true

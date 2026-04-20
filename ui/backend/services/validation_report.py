@@ -1,0 +1,451 @@
+"""Validation-report assembly — reads YAML, builds the Screen 4 payload.
+
+Phase 0 scope:
+    - list_cases()              → GET /api/cases
+    - load_case_detail(id)      → GET /api/cases/{id}
+    - build_validation_report() → GET /api/validation-report/{id}
+
+Phase 0 measurement sourcing strategy (in order):
+    1. ui/backend/tests/fixtures/{case_id}_measurement.yaml
+       (committed alongside the backend for deterministic demo data)
+    2. None (returns MeasuredValue=None; UI renders "no run yet")
+
+Phase 3 will extend this to pull from reports/**/slice_metrics.yaml
+once live-run streaming is integrated.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from ui.backend.schemas.validation import (
+    AuditConcern,
+    CaseDetail,
+    CaseIndexEntry,
+    ContractStatus,
+    DecisionLink,
+    GoldStandardReference,
+    MeasuredValue,
+    Precondition,
+    ValidationReport,
+)
+
+
+# ---------------------------------------------------------------------------
+# Path resolution (repo-root relative)
+# ---------------------------------------------------------------------------
+# Layout:
+#   <repo>/
+#     knowledge/whitelist.yaml
+#     knowledge/gold_standards/{case_id}.yaml
+#     ui/backend/services/validation_report.py  ← this file
+#     ui/backend/tests/fixtures/{case_id}_measurement.yaml
+_HERE = Path(__file__).resolve()
+REPO_ROOT = _HERE.parents[3]
+WHITELIST_PATH = REPO_ROOT / "knowledge" / "whitelist.yaml"
+GOLD_STANDARDS_DIR = REPO_ROOT / "knowledge" / "gold_standards"
+FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+
+
+# ---------------------------------------------------------------------------
+# YAML loaders (cached — Phase 0 content is stable during a server lifetime)
+# ---------------------------------------------------------------------------
+@lru_cache(maxsize=1)
+def _load_whitelist() -> dict[str, dict[str, Any]]:
+    """Return {case_id: case_def} from knowledge/whitelist.yaml."""
+    if not WHITELIST_PATH.exists():
+        return {}
+    with WHITELIST_PATH.open("r", encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh) or {}
+    cases = doc.get("cases", [])
+    out: dict[str, dict[str, Any]] = {}
+    for entry in cases:
+        cid = entry.get("id")
+        if cid:
+            out[cid] = entry
+    return out
+
+
+def _load_gold_standard(case_id: str) -> dict[str, Any] | None:
+    """Read knowledge/gold_standards/{case_id}.yaml if present.
+
+    Two on-disk shapes are supported:
+        (A) Single document with top-level `observables: [{name, ref_value,
+            tolerance, ...}]` + `physics_contract: {...}`
+            (e.g. differential_heated_cavity, turbulent_flat_plate).
+        (B) Multi-document — each YAML doc pins one quantity with
+            top-level `quantity / reference_values / tolerance`; the
+            first doc typically carries `physics_contract`
+            (e.g. circular_cylinder_wake, lid_driven_cavity).
+
+    Both shapes are normalised to (A)'s schema before returning, so
+    downstream code only ever sees a single `observables: [...]`.
+    """
+    candidate = GOLD_STANDARDS_DIR / f"{case_id}.yaml"
+    if not candidate.exists():
+        return None
+    with candidate.open("r", encoding="utf-8") as fh:
+        docs = [d for d in yaml.safe_load_all(fh) if d]
+    if not docs:
+        return None
+
+    # Shape A — already has observables[] ⇒ return as-is.
+    if len(docs) == 1 and isinstance(docs[0].get("observables"), list):
+        return docs[0]
+
+    # Shape B — synthesise an observables[] by flattening each doc.
+    primary = docs[0]
+    observables: list[dict[str, Any]] = []
+    for doc in docs:
+        quantity = doc.get("quantity")
+        if not quantity:
+            continue
+        refs = doc.get("reference_values") or []
+        ref_value: float | None = None
+        unit = ""
+        if refs and isinstance(refs[0], dict):
+            first_ref = refs[0]
+            unit = first_ref.get("unit", "") or ""
+            for scalar_key in (
+                "value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp", "Re_D", "St",
+            ):
+                val = first_ref.get(scalar_key)
+                if isinstance(val, (int, float)):
+                    ref_value = float(val)
+                    break
+        observables.append(
+            {
+                "name": quantity,
+                "ref_value": ref_value if ref_value is not None else 0.0,
+                "unit": unit,
+                "tolerance": doc.get("tolerance"),
+                "description": (refs[0].get("description") if refs and isinstance(refs[0], dict) else None),
+            }
+        )
+    return {
+        "observables": observables,
+        "physics_contract": primary.get("physics_contract") or {},
+        "source": primary.get("source"),
+        "literature_doi": primary.get("literature_doi"),
+        "schema_version": primary.get("schema_version"),
+        "case_id": primary.get("case_info", {}).get("id") or case_id,
+    }
+
+
+def _load_fixture_measurement(case_id: str) -> dict[str, Any] | None:
+    """Read ui/backend/tests/fixtures/{case_id}_measurement.yaml if present."""
+    candidate = FIXTURE_DIR / f"{case_id}_measurement.yaml"
+    if not candidate.exists():
+        return None
+    with candidate.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+# ---------------------------------------------------------------------------
+# Mappers — YAML dict → Pydantic schema
+# ---------------------------------------------------------------------------
+def _tolerance_scalar(value: Any) -> float | None:
+    """Normalise tolerance-shaped YAML (scalar OR {mode, value} dict)."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, dict):
+        inner = value.get("value")
+        if isinstance(inner, (int, float)):
+            return float(inner)
+    return None
+
+
+def _make_gold_reference(
+    case: dict[str, Any],
+    gs_doc: dict[str, Any] | None,
+) -> GoldStandardReference | None:
+    """Extract the anchor ref_value + tolerance from either the
+    whitelist `gold_standard` block or the gold_standards/*.yaml
+    `observables[*]` (preferring the one matching the whitelist
+    `gold_standard.quantity` to stay quantity-faithful)."""
+    citation = case.get("reference") or (gs_doc or {}).get("source", "")
+    doi = case.get("doi") or (gs_doc or {}).get("literature_doi")
+    wl_gs = case.get("gold_standard") or {}
+    target_quantity = wl_gs.get("quantity")
+
+    # Prefer matching observable from gold_standards/*.yaml.
+    if gs_doc:
+        observables = gs_doc.get("observables") or []
+        ob: dict[str, Any] | None = None
+        if target_quantity:
+            for candidate in observables:
+                if candidate.get("name") == target_quantity:
+                    ob = candidate
+                    break
+        if ob is None and observables:
+            ob = observables[0]
+        if ob is not None:
+            tolerance = _tolerance_scalar(ob.get("tolerance"))
+            if tolerance is None:
+                tolerance = _tolerance_scalar(wl_gs.get("tolerance"))
+            if tolerance is None:
+                tolerance = 0.1  # conservative default
+            ref_value = ob.get("ref_value")
+            if not isinstance(ref_value, (int, float)):
+                ref_value = 0.0
+            return GoldStandardReference(
+                quantity=ob.get("name") or target_quantity or "unknown",
+                ref_value=float(ref_value),
+                unit=ob.get("unit", "") or "",
+                tolerance_pct=float(tolerance),
+                citation=citation or "",
+                doi=doi,
+            )
+
+    # Fallback: synthesize from whitelist.yaml `gold_standard` inline.
+    refs = wl_gs.get("reference_values") or []
+    if not refs:
+        return None
+    first = refs[0]
+    if not isinstance(first, dict):
+        return None
+    value: float | None = None
+    for key in ("value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp"):
+        if key in first and isinstance(first[key], (int, float)):
+            value = float(first[key])
+            break
+    if value is None:
+        return None
+    tol = _tolerance_scalar(wl_gs.get("tolerance")) or 0.1
+    return GoldStandardReference(
+        quantity=wl_gs.get("quantity", "unknown"),
+        ref_value=value,
+        unit=first.get("unit", "") or "",
+        tolerance_pct=tol,
+        citation=citation or "",
+        doi=doi,
+    )
+
+
+def _make_preconditions(gs_doc: dict[str, Any] | None) -> list[Precondition]:
+    if not gs_doc:
+        return []
+    physics_contract = gs_doc.get("physics_contract") or {}
+    rows = physics_contract.get("physics_precondition") or []
+    out: list[Precondition] = []
+    for row in rows:
+        out.append(
+            Precondition(
+                condition=row.get("condition", ""),
+                satisfied=bool(row.get("satisfied_by_current_adapter", False)),
+                evidence_ref=row.get("evidence_ref"),
+                consequence_if_unsatisfied=row.get("consequence_if_unsatisfied"),
+            )
+        )
+    return out
+
+
+def _make_audit_concerns(
+    gs_doc: dict[str, Any] | None,
+    measurement_doc: dict[str, Any] | None,
+) -> list[AuditConcern]:
+    out: list[AuditConcern] = []
+    # (1) Contract-status narrative from gold_standards → top-level concern.
+    if gs_doc:
+        status_narrative = (
+            (gs_doc.get("physics_contract") or {}).get("contract_status") or ""
+        ).strip()
+        if status_narrative:
+            out.append(
+                AuditConcern(
+                    concern_type="CONTRACT_STATUS",
+                    summary=(
+                        status_narrative.splitlines()[0][:240]
+                        if status_narrative
+                        else ""
+                    ),
+                    detail=status_narrative,
+                    decision_refs=_extract_decision_refs(status_narrative),
+                )
+            )
+    # (2) Measurement-level audit concerns (fixture or slice_metrics).
+    if measurement_doc:
+        for concern in measurement_doc.get("audit_concerns", []) or []:
+            out.append(
+                AuditConcern(
+                    concern_type=concern.get("concern_type", "UNKNOWN"),
+                    summary=concern.get("summary", ""),
+                    detail=concern.get("detail"),
+                    decision_refs=concern.get("decision_refs", []) or [],
+                )
+            )
+    return out
+
+
+def _extract_decision_refs(text: str) -> list[str]:
+    """Pull DEC-ADWM-00N / DEC-V61-00N tokens out of narrative text."""
+    import re
+
+    return sorted(set(re.findall(r"DEC-(?:ADWM|V61)-\d{3}", text)))
+
+
+def _make_decisions_trail(
+    measurement_doc: dict[str, Any] | None,
+) -> list[DecisionLink]:
+    if not measurement_doc:
+        return []
+    out: list[DecisionLink] = []
+    for row in measurement_doc.get("decisions_trail", []) or []:
+        out.append(
+            DecisionLink(
+                decision_id=row.get("decision_id", ""),
+                date=row.get("date", ""),
+                title=row.get("title", ""),
+                autonomous=bool(row.get("autonomous", False)),
+            )
+        )
+    return out
+
+
+def _derive_contract_status(
+    gs_ref: GoldStandardReference,
+    measurement: MeasuredValue | None,
+    preconditions: list[Precondition],
+    audit_concerns: list[AuditConcern],
+) -> tuple[ContractStatus, float | None, bool | None, float, float]:
+    """Compute the three-state contract status + tolerance bounds.
+
+    Returns (status, deviation_pct, within_tolerance, lower, upper)."""
+    lower = gs_ref.ref_value * (1.0 - gs_ref.tolerance_pct)
+    upper = gs_ref.ref_value * (1.0 + gs_ref.tolerance_pct)
+
+    if measurement is None:
+        return ("UNKNOWN", None, None, lower, upper)
+
+    deviation_pct = 0.0
+    if gs_ref.ref_value != 0.0:
+        deviation_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
+
+    within = lower <= measurement.value <= upper
+    precondition_fails = any(not p.satisfied for p in preconditions)
+    has_silent_pass_hazard = any(
+        "SILENT_PASS_HAZARD" in c.concern_type or "SILENT_PASS_HAZARD" in (c.summary or "")
+        or "SILENT_PASS_HAZARD" in (c.detail or "")
+        for c in audit_concerns
+    )
+
+    if not within:
+        return ("FAIL", deviation_pct, within, lower, upper)
+    if precondition_fails or has_silent_pass_hazard:
+        return ("HAZARD", deviation_pct, within, lower, upper)
+    return ("PASS", deviation_pct, within, lower, upper)
+
+
+def _make_measurement(doc: dict[str, Any] | None) -> MeasuredValue | None:
+    if not doc:
+        return None
+    m = doc.get("measurement") or {}
+    if "value" not in m:
+        return None
+    return MeasuredValue(
+        value=float(m["value"]),
+        unit=m.get("unit", "") or "",
+        source=doc.get("source", "fixture"),
+        run_id=m.get("run_id"),
+        commit_sha=m.get("commit_sha"),
+        measured_at=m.get("measured_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public service functions
+# ---------------------------------------------------------------------------
+def list_cases() -> list[CaseIndexEntry]:
+    whitelist = _load_whitelist()
+    out: list[CaseIndexEntry] = []
+    for cid, case in whitelist.items():
+        gs = _load_gold_standard(cid)
+        measurement_doc = _load_fixture_measurement(cid)
+        gs_ref = _make_gold_reference(case, gs)
+        preconditions = _make_preconditions(gs)
+        audit_concerns = _make_audit_concerns(gs, measurement_doc)
+        measurement = _make_measurement(measurement_doc)
+        if gs_ref is not None:
+            status, *_ = _derive_contract_status(
+                gs_ref, measurement, preconditions, audit_concerns
+            )
+        else:
+            status = "UNKNOWN"
+        out.append(
+            CaseIndexEntry(
+                case_id=cid,
+                name=case.get("name", cid),
+                flow_type=case.get("flow_type", "UNKNOWN"),
+                geometry_type=case.get("geometry_type", "UNKNOWN"),
+                turbulence_model=case.get("turbulence_model", "UNKNOWN"),
+                has_gold_standard=gs is not None,
+                has_measurement=measurement is not None,
+                contract_status=status,
+            )
+        )
+    return out
+
+
+def load_case_detail(case_id: str) -> CaseDetail | None:
+    whitelist = _load_whitelist()
+    case = whitelist.get(case_id)
+    if case is None:
+        return None
+    gs = _load_gold_standard(case_id)
+    gs_ref = _make_gold_reference(case, gs)
+    preconditions = _make_preconditions(gs)
+    narrative = None
+    if gs:
+        narrative = (gs.get("physics_contract") or {}).get("contract_status")
+        if isinstance(narrative, str):
+            narrative = narrative.strip() or None
+    return CaseDetail(
+        case_id=case_id,
+        name=case.get("name", case_id),
+        reference=case.get("reference"),
+        doi=case.get("doi"),
+        flow_type=case.get("flow_type", "UNKNOWN"),
+        geometry_type=case.get("geometry_type", "UNKNOWN"),
+        compressibility=case.get("compressibility"),
+        steady_state=case.get("steady_state"),
+        solver=case.get("solver"),
+        turbulence_model=case.get("turbulence_model", "UNKNOWN"),
+        parameters=case.get("parameters") or {},
+        gold_standard=gs_ref,
+        preconditions=preconditions,
+        contract_status_narrative=narrative,
+    )
+
+
+def build_validation_report(case_id: str) -> ValidationReport | None:
+    case_detail = load_case_detail(case_id)
+    if case_detail is None or case_detail.gold_standard is None:
+        return None
+    gs = _load_gold_standard(case_id)
+    measurement_doc = _load_fixture_measurement(case_id)
+    measurement = _make_measurement(measurement_doc)
+    preconditions = case_detail.preconditions
+    audit_concerns = _make_audit_concerns(gs, measurement_doc)
+    decisions_trail = _make_decisions_trail(measurement_doc)
+    status, deviation, within, lower, upper = _derive_contract_status(
+        case_detail.gold_standard, measurement, preconditions, audit_concerns
+    )
+    return ValidationReport(
+        case=case_detail,
+        gold_standard=case_detail.gold_standard,
+        measurement=measurement,
+        contract_status=status,
+        deviation_pct=deviation,
+        within_tolerance=within,
+        tolerance_lower=lower,
+        tolerance_upper=upper,
+        audit_concerns=audit_concerns,
+        preconditions=preconditions,
+        decisions_trail=decisions_trail,
+    )
