@@ -589,6 +589,49 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         assert key_quantities["reattachment_length"] == pytest.approx(2.4167, abs=0.01)
         # wallProfile_x was used for the calculation, then cleaned up
         assert "wallProfile_x" not in key_quantities
+        # P6-TD-001: no upstream-artifact flag on a valid detection
+        assert "reattachment_detection_upstream_artifact" not in key_quantities
+
+    def test_bfs_reattachment_rejects_upstream_detection_with_producer_flag(self, tmp_path):
+        """P6-TD-001: under-converged solver produces Ux zero-crossing at
+        x < 0 (upstream of step at x=0). Extractor must reject the garbage
+        detection and emit a producer flag rather than publish a negative
+        reattachment_length (which is physically meaningless and would
+        mislead regulatory reviewers). Real incident: §5d Part-2 acceptance
+        run produced reattachment_length = -5.38."""
+        log_path = tmp_path / "log.simpleFoam"
+        log_path.write_text("Solving for Ux, Initial residual = 0.001\n")
+        post_dir = tmp_path / "postProcessing"
+        sets_dir = post_dir / "sets"
+        time_dir = sets_dir / "10"  # low iteration count = under-converged
+        time_dir.mkdir(parents=True)
+        # Ux signs that make the scanner fire at negative x (noise pattern
+        # seen when the solver hasn't converged: free-stream region has
+        # mixed-sign Ux upstream of the step).
+        raw_content = (
+            "-8.0 0.5 0.0 -1.0 0.0 0.0\n"
+            "-5.0 0.5 0.0 -0.5 0.0 0.0\n"
+            "-4.5 0.5 0.0  0.1 0.0 0.0\n"  # zero-crossing at x ≈ -4.58
+            "-4.0 0.5 0.0  1.0 0.0 0.0\n"
+        )
+        (time_dir / "U_wallProfile").write_text(raw_content)
+
+        bfs_task = TaskSpec(
+            name="Backward-Facing Step",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        executor = FoamAgentExecutor()
+        _, key_quantities = executor._parse_solver_log(log_path, "simpleFoam", bfs_task)
+        # reattachment_length was NOT published (physical-plausibility guard)
+        assert "reattachment_length" not in key_quantities
+        # Producer flag tells downstream audit this wasn't a valid detection
+        assert key_quantities.get("reattachment_detection_upstream_artifact") is True
+        rejected = key_quantities.get("reattachment_detection_rejected_x")
+        assert rejected is not None and rejected < 0
 
     def test_parse_writeobjects_fields_extracts_ldc_from_icofoam_fields(self, tmp_path, monkeypatch):
         """icoFoam + SIMPLE_GRID 走 LDC 路由（_is_lid_driven_cavity_case 检测到）。"""
