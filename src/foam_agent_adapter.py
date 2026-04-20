@@ -424,7 +424,7 @@ class FoamAgentExecutor:
                 "Docker Python SDK not installed. Real-solver execution "
                 "requires the cfd-real-solver optional deps. Install with: "
                 "`.venv/bin/pip install -e '.[cfd-real-solver]'` (or "
-                "`pip install docker>=7.0`). "
+                "`pip install 'docker>=7.0'`). "
                 "MockExecutor remains available for unit-test paths "
                 "(EXECUTOR_MODE=mock).",
                 time.monotonic() - t0,
