@@ -781,9 +781,12 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         )
         # Flat-plate extractor NOT called → no cf_skin_friction published.
         assert "cf_skin_friction" not in result
-        # Producer flag set for downstream audit.
-        assert result.get("duct_flow_extractor_missing") is True
+        # Producer flag set for downstream audit. Round-8 rename:
+        # duct_flow_extractor_missing → duct_flow_extractor_pending so the
+        # flag reads as "planned-but-unimplemented" rather than "malformed".
+        assert result.get("duct_flow_extractor_pending") is True
         assert result.get("duct_flow_hydraulic_diameter") == 0.1
+        assert "duct_flow_hydraulic_diameter_missing" not in result
 
     def test_parse_writeobjects_fields_still_routes_flat_plate_without_hydraulic_diameter(
         self, tmp_path, monkeypatch
@@ -821,7 +824,69 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         assert called["yes"] is True
         assert result["cf_skin_friction"] == pytest.approx(0.0076)
         # No duct producer flag on flat plate.
+        assert "duct_flow_extractor_pending" not in result
         assert "duct_flow_extractor_missing" not in result
+
+    def test_parse_writeobjects_fields_routes_duct_by_name_without_hydraulic_diameter(
+        self, tmp_path, monkeypatch
+    ):
+        """P6-TD-002 round-8 correction (Codex CHANGES_REQUIRED Blocking):
+        the list_whitelist_cases() constructor path leaves `hydraulic_diameter`
+        under `parameters` (not merged into `boundary_conditions`).
+
+        The dispatcher MUST still route duct-identified tasks away from the
+        flat-plate extractor, even when hydraulic_diameter is absent from
+        boundary_conditions. Fail-closed via duct_flow_hydraulic_diameter_missing
+        flag rather than silently falling through to Spalding Cf."""
+        time_dir = tmp_path / "1.0"
+        time_dir.mkdir()
+        (time_dir / "Cx").write_text("1\n(\n0.500\n)\n")
+        (time_dir / "Cy").write_text("1\n(\n0.050\n)\n")
+        (time_dir / "U").write_text("1\n(\n(1.0 0.0 0.0)\n)\n")
+
+        duct_task_no_bc = TaskSpec(
+            name="Fully Developed Turbulent Square-Duct Flow",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+            boundary_conditions={},
+        )
+
+        def _should_not_run(*args, **kwargs):
+            raise AssertionError(
+                "duct-named task fell through to flat-plate extractor"
+            )
+        monkeypatch.setattr(
+            FoamAgentExecutor, "_extract_flat_plate_cf", _should_not_run
+        )
+
+        executor = FoamAgentExecutor()
+        result = executor._parse_writeobjects_fields(
+            tmp_path, "simpleFoam", duct_task_no_bc, {}
+        )
+        assert "cf_skin_friction" not in result
+        assert result.get("duct_flow_extractor_pending") is True
+        assert result.get("duct_flow_hydraulic_diameter_missing") is True
+
+    def test_is_duct_flow_case_integrates_with_knowledge_db(self):
+        """Integration coverage for the canonical construction path.
+        KnowledgeDB.list_whitelist_cases() does NOT merge `parameters`
+        into `boundary_conditions`, so the dispatcher must detect duct
+        via name. Regression-protect against the Codex round-8 blocker."""
+        from src.knowledge_db import KnowledgeDB
+        db = KnowledgeDB()
+        cases = db.list_whitelist_cases()
+        duct_specs = [
+            s for s in cases
+            if "duct" in s.name.lower() or "pipe_flow" in s.name.lower()
+        ]
+        assert duct_specs, "whitelist must contain at least one duct case"
+        for spec in duct_specs:
+            assert FoamAgentExecutor._is_duct_flow_case(spec), (
+                f"duct spec {spec.name!r} not detected by name — round-8 regression"
+            )
 
     # ------------------------------------------------------------------
     # execute() Docker success path tests
