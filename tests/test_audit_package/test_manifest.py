@@ -253,6 +253,12 @@ class TestBuildManifestIntegration:
         assert manifest["run"]["solver"] == "simpleFoam"
         assert manifest["measurement"]["key_quantities"] == {}
         assert manifest["measurement"]["comparator_verdict"] is None
+        # L3 rename drift detection (Codex round 9 Note #2): the renamed
+        # field must be present AND the legacy key must be absent from the
+        # manifest dict itself. This catches a future regression that
+        # reintroduces `generated_at` into manifest.json while the route
+        # response stays clean.
+        assert "generated_at" not in manifest
 
     def test_manifest_with_run_output_has_inputs_and_outputs(self, tmp_path, monkeypatch):
         repo = _synth_repo(tmp_path)
