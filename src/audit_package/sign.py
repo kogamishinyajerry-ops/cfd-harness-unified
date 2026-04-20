@@ -1,6 +1,27 @@
 """HMAC-SHA256 signing + verification for audit-package bundles
 (Phase 5 · PR-5c · DEC-V61-014).
 
+⚠️ UPGRADE NOTE FROM PR-5c → PR-5c.1 (DEC-V61-015, Codex M3)
+------------------------------------------------------------
+If your pre-PR-5c.1 deployment used ``CFD_HARNESS_HMAC_SECRET`` set to
+a **bare base64 string without any prefix** (e.g., ``aGVsbG8=``, or the
+output of ``openssl rand -base64 32``), PR-5c.1 will reinterpret that
+same value as literal UTF-8 bytes instead of base64-decoding it. New
+signatures produced after the upgrade will therefore NOT match the old
+key — verification of freshly signed bundles against your existing
+key material will silently diverge.
+
+To preserve the pre-upgrade signing key bytes, rewrite the env var as::
+
+    CFD_HARNESS_HMAC_SECRET="base64:<same-value-you-previously-had>"
+
+PR-5c.2 (DEC-V61-016, this change) adds a runtime DeprecationWarning
+that fires when an un-prefixed value looks like plausible binary-key
+base64 (length ≥24 chars, base64 alphabet, valid padding). Operators
+will see the warning at first signer startup and can migrate without
+downstream signature divergence. Use an explicit ``text:`` prefix to
+suppress the warning when the key truly is plain text.
+
 Signing domain
 --------------
 An audit-package signature binds together **two** artifacts:
@@ -73,6 +94,7 @@ import hashlib
 import hmac
 import os
 import re
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -91,6 +113,39 @@ _HEX_SIG_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 # Un-prefixed values are UTF-8 plain text (no heuristic base64 decode).
 _ENV_PREFIX_BASE64 = "base64:"
 _ENV_PREFIX_TEXT = "text:"
+
+# PR-5c.2 per Codex M3: detect un-prefixed values that look like they were
+# intended as base64 binary keys. 24+ base64 alphabet chars with valid padding
+# is extremely unlikely for a human-chosen plain text password but typical for
+# 16-byte+ random binary keys. On match, emit DeprecationWarning so operators
+# upgrading from PR-5c catch the migration hazard at first signer startup.
+_LEGACY_BASE64_PROBE = re.compile(r"^[A-Za-z0-9+/]{22,}={0,2}$")
+_LEGACY_BASE64_MIN_LEN = 24  # base64 of 16 random bytes → 24 chars incl. padding
+
+
+def _looks_like_legacy_base64(raw: str) -> bool:
+    """Heuristic for Codex M3 migration warning.
+
+    True when ``raw``:
+    - has length ≥ 24 (would decode to ≥16 bytes — plausible binary key)
+    - uses only standard base64 alphabet (no URL-safe chars) + ``=`` padding
+    - length is a multiple of 4 (valid base64 framing)
+    - actually decodes without error
+
+    Plain-text passwords almost never satisfy all four; output of ``openssl
+    rand -base64 32`` always does. The warning is a false-positive on
+    dense-alphabet plain-text keys, but operators can silence it by
+    switching to an explicit ``text:`` prefix.
+    """
+    if len(raw) < _LEGACY_BASE64_MIN_LEN or len(raw) % 4 != 0:
+        return False
+    if not _LEGACY_BASE64_PROBE.match(raw):
+        return False
+    try:
+        base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    return True
 
 
 class HmacSecretMissing(RuntimeError):
@@ -158,6 +213,26 @@ def get_hmac_secret_from_env(env_var: str = HMAC_ENV_VAR) -> bytes:
                 f"{env_var} has `text:` prefix but payload is empty."
             )
         return payload.encode("utf-8")
+
+    # PR-5c.2 per Codex M3: warn if un-prefixed value looks like the base64
+    # output of a binary-key generator (openssl rand -base64 32). Pre-PR-5c.1
+    # deployments used un-prefixed base64 and the heuristic decoded it; now
+    # it is taken as literal UTF-8 bytes. Warning is at DeprecationWarning
+    # level (non-fatal) so ops can see the hazard at first signer startup.
+    if _looks_like_legacy_base64(raw):
+        warnings.warn(
+            (
+                f"{env_var} appears to hold an un-prefixed base64 string. "
+                f"PR-5c.1 treats this as literal UTF-8 bytes, not decoded bytes. "
+                f"If you upgraded from PR-5c, your new signatures will NOT match "
+                f"the pre-upgrade key. Rewrite the value as "
+                f'`{env_var}="base64:<same-value>"` to preserve binary-key bytes, '
+                f"or use `text:<value>` prefix to suppress this warning when the "
+                f"key truly is plain text."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Un-prefixed → literal UTF-8 bytes. No heuristic base64 decode.
     return raw.encode("utf-8")
