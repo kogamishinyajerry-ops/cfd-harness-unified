@@ -33,6 +33,7 @@ Non-goals (queued for post-PR-5d):
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -155,12 +156,23 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     except HmacSecretMissing as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    # Stable generated_at (Codex PR-5d HIGH #2): derive from inputs so two
+    # identical POSTs produce byte-identical ZIPs and HMAC signatures. The
+    # repo's git SHAs in the manifest still pin repo state, so the bundle
+    # still differs when the repo changes — but not when only wall-clock
+    # time changes. This preserves the byte-reproducibility contract
+    # documented in docs/ui_roadmap.md:220-223 and docs/ui_design.md:376-378.
+    generated_at = hashlib.sha256(
+        f"{case_id}|{run_id}".encode("utf-8")
+    ).hexdigest()[:16]
+
     # Build manifest (run_output_dir=None for MOCK / not-yet-solved runs).
     # When we wire real solver output in a future PR, the caller will
     # supply a concrete run_output_dir pointing at the solver case dir.
     manifest = build_manifest(
         case_id=case_id,
         run_id=run_id,
+        generated_at=generated_at,
     )
 
     # Stage.

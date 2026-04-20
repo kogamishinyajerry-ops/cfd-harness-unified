@@ -87,6 +87,37 @@ class TestBuildAuditPackage:
         assert resp.status_code == 404
         assert "unknown case_id" in resp.json()["detail"]
 
+    def test_identical_posts_produce_byte_identical_zip(self, client):
+        """Two POSTs with same (case_id, run_id) → same ZIP SHA-256 + same
+        HMAC signature (Codex PR-5d HIGH #2 — byte-reproducibility).
+
+        The bundle_id differs (uuid4 per request), but the signed zip
+        content must not — regulators need to re-derive the signature
+        deterministically from inputs, not race wall-clock time.
+        """
+        import hashlib
+
+        r1 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        r2 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        assert r1.status_code == 200 and r2.status_code == 200
+
+        b1, b2 = r1.json(), r2.json()
+        # generated_at is derived from (case_id, run_id) → must match.
+        assert b1["generated_at"] == b2["generated_at"]
+        # Signature comes from canonical manifest + zip bytes → must match.
+        assert b1["signature_hex"] == b2["signature_hex"]
+
+        zip1 = client.get(b1["downloads"]["bundle_zip"]).content
+        zip2 = client.get(b2["downloads"]["bundle_zip"]).content
+        assert hashlib.sha256(zip1).hexdigest() == hashlib.sha256(zip2).hexdigest()
+
+    def test_different_run_ids_produce_different_bundles(self, client):
+        """Sanity guard: distinct run_ids still diverge (no hash collision)."""
+        r1 = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
+        r2 = client.post("/api/cases/duct_flow/runs/r2/audit-package/build")
+        assert r1.json()["generated_at"] != r2.json()["generated_at"]
+        assert r1.json()["signature_hex"] != r2.json()["signature_hex"]
+
     def test_missing_hmac_secret_returns_500(self, client, monkeypatch):
         monkeypatch.delenv("CFD_HARNESS_HMAC_SECRET", raising=False)
         resp = client.post("/api/cases/duct_flow/runs/r1/audit-package/build")
