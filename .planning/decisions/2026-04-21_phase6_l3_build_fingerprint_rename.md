@@ -7,7 +7,7 @@ claude_signoff: yes
 codex_tool_invoked: true
 codex_diff_hash: aed95d4<FULL_SHA_TO_CONFIRM>
 codex_tool_report_path: reports/codex_tool_reports/2026-04-21_pr23_build_fingerprint_review.md
-codex_verdict: pending (round 9 queued after rounds 7+8)
+codex_verdict: APPROVED_WITH_NOTES (round 9; 0 blocking + 2 notes. Note #1: "build_fingerprint" acceptable given docstrings explain derivation — keep "build_id" as conservative alternative if needed later. Note #2: route-level negative assertion doesn't cover manifest-layer drift — applied verbatim fix adding `assert "generated_at" not in manifest` in test_manifest.py::TestBuildManifestIntegration::test_minimal_mock_manifest_without_run_output.)
 counter_status: "v6.1 autonomous_governance counter 3 → 4."
 reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 <merge>` restores the `generated_at` name. No
