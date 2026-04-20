@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T21:30"
+last_updated: "2026-04-20T22:30"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -591,6 +591,13 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 - **§5a C3 sampleDict auto-gen DEFERRED**: per-case sampling strategy (LDC centerline points vs IJ Nu wall-heatflux vs NACA Cp surface patch) needs dedicated design session — each case requires different OpenFOAM function-object. LDC's existing hardcoded sampleDict (uniform 16 points) is a known bug but downstream comparator copes via nearest-neighbor; no correctness regression from deferral.
 - **§5c B-class gold remediation NEXT (STOP POINT)**: external gate required for 5 cases. Must write `.planning/gates/Q-new_whitelist_remediation.md` + append to `external_gate_queue.md` + ping Kogami. DO NOT auto-merge.
 - **§5c B-class GATE APPROVED + PR #6 LANDED (2026-04-20T21:25)**: Kogami approved "全都按推荐来". Pre-flight audit re-verification caught Case 10 miscalculation (actual Chaivat=9.4 not 7.2) → de-escalated to 3 edits + 2 holds. **Cases 4/6/8 landed** via PR #6 (merge `912b2ce1`): Case 4 Blasius laminar Cf=0.00420/0.00297; Case 6 Ra 1e10→1e6, Nu 30→8.8 (de Vahl Davis 1983, **Q-1 closed**); Case 8 u+@y+=30 14.5→13.5 (Moser log-law). **Cases 9/10 held** pending Behnad 2013 + Chaivat 2006 re-source. DEC-V61-006 Notion-synced (page `348c6894-2bed-816d-8ebe-c369963791c2`). Regression 158/158 green. External-gate queue: 2 open → 1 open (only Q-2 R-A-relabel remains).
+- **§5a C3 design + implementation COMPLETE (2026-04-20T22:30)**: Design doc `docs/c3_sampling_strategy_design.md` landed (commit `5408ede`). Three implementation PRs merged:
+  - **C3a** · LDC 5-point centerline — DEC-V61-007 · PR #7 · merge `f0264a13` · Notion `348c6894-2bed-819c-b241-ef53d17200c3`
+  - **C3b** · NACA 3 upper-surface Cp probes — DEC-V61-008 · PR #8 · merge `11b356ac` · Notion `348c6894-2bed-8119-9a97-c008e93eb419`
+  - **C3c** · IJ 2-point plate Nu probes — DEC-V61-009 · PR #9 · merge `7e22545b` · Notion `348c6894-2bed-8103-9961-f45fedef00aa`
+  All three reuse shared helpers (`_load_gold_reference_values`, `_emit_gold_anchored_points_sampledict`) introduced by C3a. Design-doc Option B (simpler `sets+points`) chosen over Option A (function-objects) for C3b/C3c with explicit reasoning recorded — both can be upgraded in a future result-harvest refactor. Regression 179/179 green (158 baseline + 21 new C3 tests). v6.1 autonomous_governance counter now at 7 (DEC-V61-001 through DEC-V61-009, minus -002 Path B which preceded counter start) — still 3 slots below hard-floor-4 threshold of ≥10.
+- **§5d dashboard validation — BLOCKED**: Docker daemon not running on host; UI backend lacks `POST /api/cases/:id/run` endpoint. Needs either (a) Docker + OpenFOAM container startup, or (b) Phase 5 roadmap work. Currently held.
+- **DEC-V61-007 slot reassignment note**: originally earmarked for Case 9/10 literature re-source but that remains HOLD (PDFs inaccessible per user 2026-04-20); slot now used for C3a instead.
 
 ---
 
