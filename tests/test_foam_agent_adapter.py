@@ -1271,3 +1271,66 @@ class TestNaca0012GoldAnchoredSampling:
         assert "chord=1" in text
         assert "U_inf=1" in text
         assert "gold x/c coords" in text
+
+
+class TestImpingingJetGoldAnchoredSampling:
+    """C3c: _generate_impinging_jet emits gold-anchored Nu sampling at the
+    r/d coordinates in whitelist reference_values. Sampling infrastructure
+    only — Nu derivation from (T, U) probes is a follow-up refactor (gold
+    values themselves on HOLD per Gate Q-new Case 9)."""
+
+    def _make_ij_task(self, name):
+        return TaskSpec(
+            name=name,
+            geometry_type=GeometryType.IMPINGING_JET,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=10000,
+        )
+
+    def test_gold_anchored_sampledict_emitted_for_whitelist_id(self, tmp_path):
+        """task_spec.name='impinging_jet' (whitelist id) triggers gold-anchored path."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_impinging_jet(tmp_path, self._make_ij_task("impinging_jet"))
+
+        sample_path = tmp_path / "system" / "sampleDict"
+        assert sample_path.is_file()
+        text = sample_path.read_text()
+        assert "type        points;" in text
+        assert "plateProbes" in text
+        assert "fields          (T U);" in text
+        # Whitelist has r/d=0 and r/d=1; D=0.05 → points at (0, 0, 0.001) and (0.05, 0, 0.001)
+        assert "(0 0 0.001)" in text
+        assert "(0.05 0 0.001)" in text
+
+    def test_gold_anchored_sampledict_emitted_for_whitelist_display_name(self, tmp_path):
+        """Display name 'Axisymmetric Impinging Jet (Re=10000)' also triggers."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_impinging_jet(
+                tmp_path, self._make_ij_task("Axisymmetric Impinging Jet (Re=10000)")
+            )
+
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "plateProbes" in text
+        assert "(0 0 0.001)" in text
+
+    def test_fallback_no_sampledict_for_non_whitelist_name(self, tmp_path):
+        """Unknown task name → no sampleDict (consistent with C3b airfoil behavior)."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_impinging_jet(tmp_path, self._make_ij_task("synthetic_ij"))
+        assert not (tmp_path / "system" / "sampleDict").exists()
+
+    def test_header_records_physical_constants(self, tmp_path):
+        """Header carries D, T_inlet, T_plate for downstream Nu derivation."""
+        with patch("src.foam_agent_adapter.shutil.rmtree"):
+            executor = FoamAgentExecutor()
+            executor._generate_impinging_jet(tmp_path, self._make_ij_task("impinging_jet"))
+        text = (tmp_path / "system" / "sampleDict").read_text()
+        assert "D=0.05" in text
+        assert "T_inlet=310" in text
+        assert "T_plate=290" in text
+        assert "Nu derivation" in text  # TODO marker for follow-up
