@@ -1,0 +1,8 @@
+# User-authored case drafts (Phase 1 Case Editor writes here). Never
+# commit these — they're user data, not source.
+user_drafts/
+
+# Python build artifacts
+__pycache__/
+*.pyc
+.pytest_cache/

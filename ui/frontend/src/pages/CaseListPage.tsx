@@ -62,12 +62,24 @@ export function CaseListPage() {
                   <td className="px-4 py-3">
                     <PassFailChip status={c.contract_status} size="sm" />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
                     <Link
                       className="text-xs text-surface-200 underline-offset-2 hover:text-surface-100 hover:underline"
                       to={`/cases/${encodeURIComponent(c.case_id)}/report`}
                     >
-                      View Report →
+                      Report
+                    </Link>
+                    <Link
+                      className="text-xs text-surface-200 underline-offset-2 hover:text-surface-100 hover:underline"
+                      to={`/cases/${encodeURIComponent(c.case_id)}/edit`}
+                    >
+                      Edit
+                    </Link>
+                    <Link
+                      className="text-xs text-surface-200 underline-offset-2 hover:text-surface-100 hover:underline"
+                      to={`/runs/${encodeURIComponent(c.case_id)}`}
+                    >
+                      Run
                     </Link>
                   </td>
                 </tr>

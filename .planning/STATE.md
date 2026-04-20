@@ -5,10 +5,11 @@ session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acce
 
 # Phase Status
 
-current_phase: **Path B — Phase 0 UI MVP** (backend + Screen 4 shell) — IN PROGRESS
-phase_status: ui/backend ✅ (7/7 pytest green) · ui/frontend ✅ (tsc -b clean, vite build 223KB js gz 70KB) · Screen 4 three canonical cases wired (DHC FAIL · cylinder HAZARD · TFP HAZARD) · docs/product_thesis.md + docs/ui_design.md + docs/ui_roadmap.md landed · DEC-V61-002 drafted
-next_phase: Path B — Phase 1 (Case Editor)
-next_phase_status: 🔒 Blocked on Phase 0 PR #2 merge + Notion mirror of DEC-V61-002
+current_phase: **Path B — Phase 1..4 UI MVP** (Case Editor + Decisions Queue + Run Monitor + Dashboard) — LANDED on feat/ui-mvp-phase-1-to-4, DEC-V61-003 drafted, PR #3 pending
+phase_status: ui/backend ✅ (21/21 pytest green — case_editor 6, decisions/run_monitor/dashboard 8, existing 7) · ui/frontend ✅ (tsc --noEmit clean, vite build ~232KB js gz / ~4KB css gz, 122 modules) · CodeMirror 6 YAML editor + 4-col Kanban + SSE residual streaming + 10-case matrix Dashboard all wired · scripts/start-ui-dev.sh + README UI quickstart + pyproject [ui] dep group landed · Phase 0 PR #2 merged as 6ae6d0b5 · DEC-V61-002 Notion-mirrored
+next_phase: Path B — Phase 5 (Audit Package Builder)
+next_phase_status: 🔒 BLOCKED on external Gate — Q-1 (DHC gold accuracy) + Q-2 (R-A-relabel pipe→duct) must resolve before signed audit packages can emit (per DEC-V61-002 + DEC-V61-003)
+autonomous_governance_counter_v61: 3 (DEC-V61-001 cutover + DEC-V61-002 Path B + DEC-V61-003 Phase 1..4) · hard-floor-4 threshold ≥ 10 still has 7 slots of runway
 
 legacy_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync; 2026-04-20)
 legacy_next_phase_hold: Phase 9 planning-only review is SUPERSEDED by Path B phase plan; Q-1 / Q-2 remain visible in external_gate_queue.md and do not block Path B phases 0..4 (will re-enter at Phase 5 audit-package-signing gate if still open).

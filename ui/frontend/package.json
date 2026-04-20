@@ -1,23 +1,27 @@
 {
   "name": "cfd-harness-ui-frontend",
   "private": true,
-  "version": "0.1.0-phase0",
+  "version": "0.4.0-phase-1-to-4",
   "type": "module",
-  "description": "CFD Harness UI — Phase 0 Screen 4 (Validation Report). Agentic V&V-first workbench (Path B, per DEC-V61-002).",
+  "description": "CFD Harness UI — Path B MVP. Phases 0..4: Validation Report, Case Editor, Decisions Queue, Run Monitor, Dashboard (per DEC-V61-002 + DEC-V61-003).",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@codemirror/lang-yaml": "^6.1.1",
     "@tanstack/react-query": "^5.56.2",
+    "@uiw/react-codemirror": "^4.23.6",
+    "js-yaml": "^4.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.19.17",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",

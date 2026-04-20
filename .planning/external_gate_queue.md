@@ -104,3 +104,7 @@ post v6.1 cutover landing + Q-3 re-closure after MCP restoration)
 Updated: 2026-04-20 by claude-opus47-app (Path-B election per
 DEC-V61-002 — Q-1/Q-2 reclassified as Phase-5 blockers, not Phase-0..4
 blockers; added interaction-note to header)
+Updated: 2026-04-20 by claude-opus47-app (post Phase 1..4 landing per
+DEC-V61-003 — Case Editor + Decisions Queue + Run Monitor + Dashboard
+now live on feat/ui-mvp-phase-1-to-4; Q-1/Q-2 remain the sole
+blockers for Phase 5 Audit Package Builder critical path)
