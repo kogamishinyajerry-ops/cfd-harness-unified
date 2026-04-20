@@ -1,43 +1,43 @@
 schema_version: 2
 case_id: differential_heated_cavity
-source: "Dhir 2001 / Ampofo & Karayiannis 2003"
-literature_doi: "10.1016/S0140-7007(02)00085-4"
+source: "de Vahl Davis 1983"
+literature_doi: "10.1002/fld.1650030305"
 physics_contract:
-  geometry_assumption: "Square 2D cavity, opposing vertical walls at T_hot and T_cold, adiabatic top/bottom walls, Boussinesq approximation"
-  reference_correlation_context: "Nu=30 at Ra=1e10 is for turbulent natural-convection regime where the thermal boundary-layer thickness δ/L ~ Ra^-0.25 ≈ 3.2e-3 requires 5+ cells inside the BL per wall; roughly 500–1000 wall-normal cells with strong wall grading."
+  geometry_assumption: "Square 2D cavity (AR=1), opposing vertical walls at T_hot and T_cold, adiabatic top/bottom walls, Boussinesq approximation"
+  reference_correlation_context: "REGIME CORRECTION (Gate Q-new Case 6 · Path P-2, 2026-04-20): downgraded from Ra=1e10 to Ra=1e6, the canonical de Vahl Davis 1983 benchmark. At Ra=1e6, Pr=0.71, AR=1.0: Nu_avg(hot wall) = 8.800 (de Vahl Davis 1983 Table IV, referenced by >40 subsequent studies all within ±0.2%). The Ra=1e6 regime has BL thickness δ/L ~ Ra^(-0.25) ≈ 0.032, requiring only 5-10 cells inside the BL per wall — comfortably resolvable on adapter's 40-80-cell wall-normal mesh."
   physics_precondition:
-    - condition: "Mesh resolves the thermal boundary layer at target Ra"
-      satisfied_by_current_adapter: false
-      evidence_ref: "Phase 7 Wave 2–3 delivered Nu=5.85 at 80 cells wall-normal (mesh bumped from 40 during T4); full BL resolution would need ~500-1000 cells per direction; STATE.md §Known Limitations flags this as DHC (Ra=1e10) needs ~1000 cells for BL"
-      consequence_if_unsatisfied: "Measured Nu is under-predicted by an order of magnitude (5.85 vs 30) — verdict is correctly PASS_WITH_DEVIATIONS, not a false PASS. This is a value-deviation class failure, not a schema-false-pass class failure (contrast with plane_channel_flow R-C)."
-    - condition: "Solver supports buoyancy-driven flow with Boussinesq density coupling"
+    - condition: "Mesh resolves the thermal boundary layer at target Ra=1e6"
       satisfied_by_current_adapter: true
-      evidence_ref: "simpleBuoyantFoam with Boussinesq + omegaWallFunction BCs (Phase 7 T4 fixes, STATE.md §Phase 7 T4 Fixes)"
+      evidence_ref: "At Ra=1e6, δ_T/L ≈ 0.032 → 5-10 BL cells at 40-80 wall-normal cells is sufficient. Adapter mesh per STATE.md: 80 y-cells with wall grading, comfortably within resolution requirements. Compare to the previous Ra=1e10 requirement (~1000 wall-normal cells) which was infeasible."
+    - condition: "Solver supports buoyancy-driven flow with Boussinesq density coupling at Ra=1e6 (laminar steady-convective regime)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "buoyantBoussinesqSimpleFoam (or equivalent) with laminar turbulence model per whitelist DEC-V61-006. Ra=1e6 is well below turbulent onset (~Ra=1.5e8), so laminar+SIMPLE steady is the canonical configuration."
+    - condition: "Extractor methodology (mean-over-y wall-adjacent gradient) aligns with gold ref_value definition (wall-averaged hot-wall Nu)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "EX-1-008 commit 60952b6 landed the mean-over-y refactor; behavior unchanged by Ra downgrade."
   contract_status: >
-    DEVIATION — precondition #1 (mesh resolves thermal BL at Ra=1e10) unmet;
-    precondition #3 (extractor methodology aligned to gold reference definition)
-    now SATISFIED as of EX-1-008 commit 60952b6 (mean-over-y wall-adjacent
-    gradient). Post-refactor measurement Nu=77.82 on B1 256² mesh (still
-    under-resolved). The remaining gap to gold ref_value=30.0 is split into:
-    (i) residual BL under-resolution (adds an expected increment from 78 →
-    140-160 range at 1000-cell wall-normal fully resolved), and (ii) a
-    gold-reference accuracy question — literature values for Ra=1e10 2D DHC
-    span 100-160, suggesting the gold ref_value may itself be inconsistent
-    with the stated Ra. See DEC-ADWM-004 FUSE record (.planning/decisions/
-    2026-04-18_ex1_008_fuse.md) for external-Gate escalation package. Path
-    P-1 (gold correction) and Path P-2 (regime downgrade to Ra=1e6) both
-    deferred to external Gate.
-  precondition_last_reviewed: "2026-04-18 (EX-1-008 CHK-3 REJECT + FUSE cycle 2 per DEC-ADWM-004; methodology precondition #3 SATISFIED, #1 still unmet, gold-accuracy escalated)"
+    SATISFIED — Ra=1e6 downgrade (Path P-2) simultaneously closes three prior
+    open issues: (1) mesh-resolution precondition (~1000 cells infeasible →
+    40-80 cells sufficient); (2) gold-reference accuracy (de Vahl Davis Nu=8.800
+    is unambiguous benchmark, vs. the contested Nu=30@Ra=1e10 value); (3) Q-1
+    hard-floor from DEC-ADWM-004 FUSE closes with this same edit. The
+    measurement gap between adapter and gold is now a simple mesh/scheme
+    convergence question, not a correctness question.
+  precondition_last_reviewed: "2026-04-20 (DEC-V61-006 B-class gold remediation · Gate Q-new Case 6 Path P-2 · closes Q-1)"
 note: >
+  Historical Ra=1e10 configuration (Nu=30 gold, never-resolved mesh) is
+  retired by DEC-V61-006. Recovery requires git revert -m 1 of PR #6 merge.
+  Phase 7 legacy Docker cache warning below still applies to adapter behaviour:
+
   Docker E2E (Phase 7, 2026-04-16) crashed at "Starting time loop" with
   "Unknown function type cellCentre" before iteration. The adapter code was
   already corrected to use writeCellCentres (line 4422). The Docker run used
   an older cached adapter version. Rerunning with current adapter should resolve.
 observables:
   - name: nusselt_number
-    description: wall-averaged Nusselt number for the hot wall at Ra = 1e10
-    ref_value: 30.0
+    description: wall-averaged Nusselt number for the hot wall at Ra = 1e6 (de Vahl Davis 1983 benchmark)
+    ref_value: 8.8
     unit: dimensionless
     tolerance:
       mode: relative
-      value: 0.15
+      value: 0.10

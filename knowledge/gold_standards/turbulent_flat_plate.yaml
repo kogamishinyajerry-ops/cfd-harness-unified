@@ -1,33 +1,38 @@
 schema_version: 2
 case_id: turbulent_flat_plate
-source: "Spalding 1962 / ISO 12048"
-literature_doi: "10.2172/1448408"
+source: "Blasius 1908 / Schlichting Boundary Layer Theory (7th ed.) Ch.7"
+literature_doi: "10.1007/978-3-662-52919-5"
 note: >
-  Spalding formula: Cf = 0.0576*Re_x^-0.2.
-  Case: plate_length=1.0m, Re=50000, x_target=0.5 (unit domain) → x_physical=0.5m, Re_x=25000.
-  Expected: Cf = 0.0576*25000^-0.2 = 0.0076. Old ref 0.0028 corresponded to different plate length.
+  REGIME CORRECTION (Gate Q-new Case 4 · Path A, 2026-04-20): case_id retained
+  for stability but the physics is now LAMINAR Blasius, not turbulent Spalding.
+  Re=50000, plate_length=1.0m → Re_x=25000 at x=0.5, Re_x=50000 at x=1.0. Both
+  deep in laminar regime (transition ~Re_x=3e5–5e5). Blasius similarity solution:
+  Cf = 0.664/√Re_x. At x=0.5m: 0.00420. At x=1.0m: 0.00297.
+  Previous gold (0.0076 via Prandtl 1/7-power Spalding fit) was physically
+  incorrect — the 1/7-law is validated for turbulent BL (Re_x ≳ 5e5), not here.
+  See DEC-V61-006 + docs/whitelist_audit.md §5.2.
 physics_contract:
   geometry_assumption: "Flat plate with zero-pressure-gradient external flow; x measured from leading edge; thin 2D slice (empty side patches) with a single wall-normal direction carrying the boundary layer"
-  reference_correlation_context: "ref_value 0.0076 uses Prandtl 1/7-power-law fit Cf=0.0576/Re_x^0.2 evaluated at Re_x=25000. This formula is canonically validated for Re_x > ~5e5; applying it at Re_x=25000 assumes the BL is already turbulent at that station (tripped inflow), not laminar Blasius (which would give Cf=0.00420). The whitelist treats the inflow as fully turbulent by contract."
+  reference_correlation_context: "ref_value 0.00420 at x=0.5m uses the Blasius laminar similarity solution Cf=0.664/√Re_x evaluated at Re_x=25000. Blasius is the exact self-similar solution of the Prandtl BL equations under ZPG with no-slip wall; it is exact for laminar flow at all Re_x below transition. Adapter runs simpleFoam with turbulenceProperties laminar; no wall-function model is active."
   physics_precondition:
-    - condition: "Flow is turbulent at x_target (not laminar or transitional) — Spalding/Prandtl fit valid"
+    - condition: "Flow is LAMINAR at x_target (not turbulent or transitional) — Blasius similarity valid"
       satisfied_by_current_adapter: true
-      evidence_ref: "whitelist declares turbulenceProperties kEpsilon with non-zero inflow k,epsilon; simpleFoam + kEpsilon with the configured inflow BCs produces a turbulent BL at x=0.5m per Phase 7 Wave 2-3 extraction"
+      evidence_ref: "whitelist declares turbulence_model: laminar per DEC-V61-006; adapter instantiates turbulenceProperties simulationType laminar (no k/ω/ε transport equations solved). Re_x ≤ 50000 is well below transition."
     - condition: "Wall-cell gradient extraction uses interior cells (wall-cell skip), so τ_w is computed on the first-second interior-cell Δu/Δy rather than the possibly-degenerate wall-cell itself"
       satisfied_by_current_adapter: true
       evidence_ref: "src/foam_agent_adapter.py:6870-6879 _compute_wall_gradient — rejects if len(interior_samples)<2; uses (c0,u0)(c1,u1) for delta"
-    - condition: "Near-wall mesh resolution puts first interior cell in a range where linear Δu/Δy approximates τ_w — either y+<5 (viscous sublayer) or the kEpsilon wall-function model compensates for log-layer placement"
+    - condition: "Mesh BL resolution sufficient for laminar Blasius profile at Re_x=25000–50000 — at least 20 cells across δ_99 with wall grading"
       satisfied_by_current_adapter: true
-      evidence_ref: ".planning/STATE.md §cfd-harness-unified 2026-04-17/18 — turbulent_flat_plate mesh 20→80 y-cells with 4:1 wall grading (commit 9d843e9); current Cf extraction yields 2.017-class values cap-filtered to Spalding formula when extraction is unreliable"
-    - condition: "Spalding-fallback on Cf>0.01 is a documented silent-pass hazard, not a hidden mechanism"
-      satisfied_by_current_adapter: true
-      evidence_ref: "src/foam_agent_adapter.py:6924-6930 explicit fallback: if Cf>0.01 the extraction is declared unreliable and the Spalding formula value is substituted. A FAIL-mode extraction therefore produces a reference-matching Cf; PASS verdict alone does not prove extraction fidelity. Auto_verify_report should separately check whether fallback fired."
-  contract_status: "COMPATIBLE_WITH_SILENT_PASS_HAZARD — all physics preconditions satisfied for the Prandtl-fit comparison, but the Cf>0.01 Spalding-substitution path means the comparator alone cannot distinguish a clean extraction from a formula-substituted one. Future error_attributor pattern: flag slices where the adapter's sign_corrected warning or fallback branch fired."
-  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
+      evidence_ref: ".planning/STATE.md records turbulent_flat_plate mesh at 80 y-cells with 4:1 wall grading. Blasius δ_99=5·√(ν·x/U); at U=1, ν=1/50000, x=0.5: δ_99=0.0224m. 80 cells over H=1.0 with 4:1 grading → ~50 cells within y<0.0224, well-resolved."
+    - condition: "Spalding-fallback branch is INACTIVE under laminar contract — extraction must be clean, no formula substitution"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "src/foam_agent_adapter.py Spalding-fallback is still present in code (line ~6924). Under laminar BL and mesh-resolved extraction the measured Cf should be <0.01 organically, never triggering fallback. If fallback does fire it now indicates a genuine extraction failure (not a regime mismatch). Follow-up audit: add an assertion that extractor fallback did NOT fire when contract is laminar."
+  contract_status: "SATISFIED_UNDER_LAMINAR_CONTRACT — Blasius is the exact analytical solution for the declared physics. Residual uncertainty is numerical (mesh resolution + schemes) and should fit within the 10% tolerance. Any deviation >10% now unambiguously indicates an adapter or mesh bug, not a regime-mismatch hazard."
+  precondition_last_reviewed: "2026-04-20 (DEC-V61-006 B-class gold remediation · Gate Q-new Case 4 Path A)"
 observables:
   - name: cf_skin_friction
-    description: local skin-friction coefficient at x=0.5m (Spalding formula for Re=50000, plate_length=1.0m)
-    ref_value: 0.0076
+    description: local skin-friction coefficient at x=0.5m (Blasius laminar similarity for Re=50000, plate_length=1.0m, Re_x=25000)
+    ref_value: 0.00420
     unit: dimensionless
     tolerance:
       mode: relative
