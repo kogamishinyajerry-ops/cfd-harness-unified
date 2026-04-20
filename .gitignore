@@ -34,3 +34,6 @@ Launch CFD UI.command
 # Keep these out of git history — regenerable, and the test-induced-pollution
 # surface that produces them is tracked as a follow-up Codex-dispatch fix.
 reports/deep_acceptance/_archive_*/
+
+# Phase 5 audit-package builder staging dir (regenerable per build request).
+ui/backend/.audit_package_staging/

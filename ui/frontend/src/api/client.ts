@@ -17,6 +17,7 @@ import type {
   DecisionsQueueResponse,
   RunCheckpointsResponse,
 } from "@/types/decisions";
+import type { AuditPackageBuildResponse } from "@/types/audit_package";
 
 async function request<T>(
   path: string,
@@ -94,4 +95,11 @@ export const api = {
 
   // Phase 4
   getDashboard: () => request<DashboardResponse>("/api/dashboard"),
+
+  // Phase 5 — Audit Package Builder (Screen 6)
+  buildAuditPackage: (caseId: string, runId: string) =>
+    request<AuditPackageBuildResponse>(
+      `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}/audit-package/build`,
+      { method: "POST", body: "{}" },
+    ),
 };

@@ -1,8 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-// Phase 0..4 shell. Left rail exposes live screens for every phase
-// landed so far. Phase 5 (Audit Package Builder) remains disabled
-// until Q-1 / Q-2 are externally unblocked per DEC-V61-002.
+// Phase 0..5 shell. Left rail exposes live screens for every phase
+// landed. Phase 5 (Audit Package Builder · Screen 6) unblocked
+// 2026-04-20 by Q-1 closure (DEC-V61-006) + Q-2 closure (DEC-V61-011).
 
 interface NavItem {
   label: string;
@@ -18,8 +18,8 @@ const NAV: NavItem[] = [
   { label: "Runs", to: "/runs", enabled: true, phaseLabel: "Phase 3" },
   {
     label: "Audit Package",
-    to: "#",
-    enabled: false,
+    to: "/audit-package",
+    enabled: true,
     phaseLabel: "Phase 5",
   },
 ];
@@ -36,7 +36,7 @@ export function Layout() {
             V&amp;V Workbench
           </h1>
           <p className="mt-0.5 text-[10px] text-surface-500">
-            Path B · Phase 0..4 MVP
+            Path B · Phase 0..5 MVP
           </p>
         </div>
         <nav className="space-y-0.5">
