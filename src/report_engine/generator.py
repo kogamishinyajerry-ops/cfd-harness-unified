@@ -17,7 +17,7 @@ SUPPORTED_CASE_IDS = {
     "backward_facing_step_steady",
     "cylinder_crossflow",
     "turbulent_flat_plate",
-    "fully_developed_turbulent_pipe_flow",
+    "duct_flow",  # Q-2 Path A (DEC-V61-011) rename of fully_developed_turbulent_pipe_flow
     "rayleigh_benard_convection",
     "differential_heated_cavity",
     "naca0012_airfoil",

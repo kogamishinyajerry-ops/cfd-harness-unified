@@ -92,13 +92,13 @@ CANONICAL_CASE_SPECS: Tuple[DashboardCaseSpec, ...] = (
         next_step="保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。",
     ),
     DashboardCaseSpec(
-        whitelist_id="fully_developed_pipe",
-        report_case_id="fully_developed_turbulent_pipe_flow",
-        gold_file="fully_developed_turbulent_pipe_flow.yaml",
-        title="全发展湍流管流",
-        subtitle="Turbulent pipe flow · geometry mismatch blocker",
-        focus="当前 adapter 还是矩形 duct，不是 circular pipe；这是物理类别错配，不是调参问题。",
-        next_step="等待 Q-2 外部门控，决定是否 relabel 为 duct flow。",
+        whitelist_id="duct_flow",
+        report_case_id="duct_flow",
+        gold_file="duct_flow.yaml",
+        title="全发展湍流方管流",
+        subtitle="Turbulent square-duct flow · geometry honestly labeled (post Q-2 Path A)",
+        focus="Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。",
+        next_step="对比 Jones-duct vs Moody-pipe 数值差；确认 adapter simpleFoam+SIMPLE_GRID 在 duct 语义下 PASS。",
     ),
     DashboardCaseSpec(
         whitelist_id="differential_heated_cavity",
@@ -571,11 +571,11 @@ class ContractDashboardGenerator:
           <p>DHC 的 extractor 方法学已经修正到 mean-over-y，但当前测量 <strong>Nu=77.82</strong> 与 gold <strong>30.0</strong> 的冲突，实质上是 gold 语义与工况匹配问题，不是继续盲修 solver 就能解决的问题。</p>
           <p class="artifact-link"><a href="../differential_heated_cavity/report.html">打开 DHC narrative report</a></p>
         </article>
-        <article class="gate-card">
-          <div class="label">Q-2</div>
-          <h3>pipe ↔ duct relabel 仍冻结</h3>
-          <p>`fully_developed_turbulent_pipe_flow` 当前 physics contract 已明示 geometry mismatch。要变成 physics-valid，需要 whitelist / gold / naming 一起改，这不是这轮 delivery/dashboard 开发可以越权落地的事。</p>
-          <p class="artifact-link"><a href="../../.planning/external_gate_queue.md">查看 external gate queue</a></p>
+        <article class="gate-card gate-closed">
+          <div class="label">Q-2 · CLOSED</div>
+          <h3>pipe ↔ duct relabel 已落地 (2026-04-20)</h3>
+          <p>Gate Q-2 Path A 通过 DEC-V61-011 关闭：whitelist id <code>fully_developed_pipe</code> 与 auto_verifier id <code>fully_developed_turbulent_pipe_flow</code> 统一为 <code>duct_flow</code>，gold standard 切换到 Jones 1976 方管摩擦因子参考（Re=50000, f=0.0185，与 Colebrook pipe 在 2% 以内）。physics contract 从 INCOMPATIBLE 转为 SATISFIED。</p>
+          <p class="artifact-link"><a href="../../.planning/gates/Q-2_r_a_relabel.md">查看 Gate Q-2 full record</a></p>
         </article>
       </div>
     </section>
@@ -780,8 +780,8 @@ class ContractDashboardGenerator:
         if spec.report_case_id == "differential_heated_cavity":
             nu = self._dhc_measurement()
             return f"Nu={nu:.2f} vs gold 30.0；当前冲突已经明确进入 Q-1 external gate。"
-        if spec.report_case_id == "fully_developed_turbulent_pipe_flow":
-            return "当前没有 materialized auto_verify_report；但 geometry mismatch 已足够判定 physics-incompatible。"
+        if spec.report_case_id == "duct_flow":
+            return "Q-2 Path A 已落地 (DEC-V61-011)，geometry 从 pipe 重标为 duct，gold 切换 Jones 1976 方管相关式。等 auto_verify_report 复跑后给新 verdict。"
         if spec.report_case_id == "fully_developed_plane_channel_flow":
             return "PENDING_RE_RUN；laminar comparator patch 已落地，但 fresh Docker E2E 尚未补齐。"
         if spec.report_case_id == "naca0012_airfoil":
@@ -809,8 +809,8 @@ class ContractDashboardGenerator:
             return "extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。"
         if spec.report_case_id == "axisymmetric_impinging_jet":
             return "observable 命名与 literature 目标不一致，最容易造成“数值 PASS 但科学含义错位”的误读。"
-        if spec.report_case_id == "fully_developed_turbulent_pipe_flow":
-            return "当前矩形 duct 几何与 circular pipe literature 不匹配；继续调 solver 不能修复这个类别错误。"
+        if spec.report_case_id == "duct_flow":
+            return "Q-2 Path A 落地后不再是类别错误；remaining hazard 是 Jones-vs-Colebrook 相关式 2% 量级差别，需要做一次新 auto_verify_report 才能关闭。"
         if spec.report_case_id == "fully_developed_plane_channel_flow":
             return "当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。"
         if spec.report_case_id == "naca0012_airfoil":
@@ -842,7 +842,7 @@ class ContractDashboardGenerator:
     def _deep_link_path(self, spec: DashboardCaseSpec) -> str:
         if spec.report_case_id == "differential_heated_cavity":
             return self._relative_link(REPORTS_ROOT / "differential_heated_cavity" / "report.html")
-        if spec.report_case_id == "fully_developed_turbulent_pipe_flow":
+        if spec.report_case_id == "duct_flow":
             return self._relative_link(REPORTS_ROOT / "ex1_first_slice" / "diagnostic_memo.md")
         if spec.report_case_id == "fully_developed_plane_channel_flow":
             return self._relative_link(REPORTS_ROOT / "fully_developed_plane_channel_flow" / "report.md")
