@@ -18,6 +18,8 @@ from src.foam_agent_adapter import (
     _load_gold_reference_values,
     _parse_dict_scalar,
     _parse_g_magnitude,
+    _parse_openfoam_raw_points_output,
+    _try_load_sampledict_output,
 )
 from src.models import (
     CFDExecutor, Compressibility, FlowType, GeometryType,
@@ -1334,3 +1336,253 @@ class TestImpingingJetGoldAnchoredSampling:
         assert "T_inlet=310" in text
         assert "T_plate=290" in text
         assert "Nu derivation" in text  # TODO marker for follow-up
+
+
+# ---------------------------------------------------------------------------
+# C3 result-harvest side: parse sampleDict output → comparator keys
+# ---------------------------------------------------------------------------
+
+class TestParseOpenFoamRawPointsOutput:
+    """Module-level parser for OpenFOAM setFormat raw output."""
+
+    def test_3d_coord_rows_with_vector_field(self):
+        text = (
+            "# x y z U_x U_y U_z\n"
+            "0.5 0.0625 0 -0.037 0 0\n"
+            "0.5 0.1250 0 -0.042 0 0\n"
+            "0.5 0.5000 0 0.025 0 0\n"
+        )
+        out = _parse_openfoam_raw_points_output(text)
+        assert len(out) == 3
+        assert out[0] == ((0.5, 0.0625, 0.0), (-0.037, 0.0, 0.0))
+        assert out[2][0] == (0.5, 0.5, 0.0)
+        assert out[2][1][0] == 0.025
+
+    def test_3d_coord_rows_with_scalar_field(self):
+        text = (
+            "0 0 0 290.0\n"
+            "0.05 0 0 293.5\n"
+        )
+        out = _parse_openfoam_raw_points_output(text)
+        assert len(out) == 2
+        assert out[0] == ((0.0, 0.0, 0.0), (290.0,))
+        assert out[1] == ((0.05, 0.0, 0.0), (293.5,))
+
+    def test_distance_column_mode(self):
+        """Some sets emit `distance value` pairs (no xyz)."""
+        text = "0.0 1.2\n0.5 2.4\n1.0 3.6\n"
+        out = _parse_openfoam_raw_points_output(text)
+        assert len(out) == 3
+        assert out[0] == ((0.0,), (1.2,))
+
+    def test_comments_and_blanks_skipped(self):
+        text = (
+            "# header comment\n"
+            "\n"
+            "0.5 0.0625 0 -0.037 0 0\n"
+            "  # another comment\n"
+            "   \n"
+            "0.5 0.1250 0 -0.042 0 0\n"
+        )
+        out = _parse_openfoam_raw_points_output(text)
+        assert len(out) == 2
+
+    def test_malformed_lines_skipped_not_raise(self):
+        text = (
+            "0.5 0.0625 0 -0.037 0 0\n"
+            "this is garbage\n"
+            "0.5 0.1250 0 -0.042 0 0\n"
+        )
+        out = _parse_openfoam_raw_points_output(text)
+        assert len(out) == 2
+
+    def test_empty_input_returns_empty(self):
+        assert _parse_openfoam_raw_points_output("") == []
+        assert _parse_openfoam_raw_points_output("# only comments\n") == []
+
+
+class TestTryLoadSampleDictOutput:
+    """Path discovery under postProcessing/sets/."""
+
+    def _mk_raw_file(self, case_dir, time, set_name, field, text):
+        """Helper: populate layout A postProcessing/sets/<time>/<set>_<field>.xy."""
+        time_dir = case_dir / "postProcessing" / "sets" / str(time)
+        time_dir.mkdir(parents=True, exist_ok=True)
+        (time_dir / f"{set_name}_{field}.xy").write_text(text)
+
+    def test_returns_none_when_no_postprocessing(self, tmp_path):
+        assert _try_load_sampledict_output(tmp_path, "anything", "x") is None
+
+    def test_picks_latest_time_dir(self, tmp_path):
+        self._mk_raw_file(tmp_path, 100, "uC", "U", "0.5 0.1 0 -0.04 0 0\n")
+        self._mk_raw_file(tmp_path, 200, "uC", "U", "0.5 0.1 0 -0.07 0 0\n")
+        self._mk_raw_file(tmp_path, 150, "uC", "U", "0.5 0.1 0 -0.05 0 0\n")
+        out = _try_load_sampledict_output(tmp_path, "uC", "U")
+        assert out is not None
+        # Latest (t=200) should be picked
+        assert out[0][1][0] == -0.07
+
+    def test_returns_none_for_unknown_set_name(self, tmp_path):
+        self._mk_raw_file(tmp_path, 100, "uC", "U", "0.5 0.1 0 -0.04 0 0\n")
+        assert _try_load_sampledict_output(tmp_path, "other", "U") is None
+
+    def test_handles_empty_file_returns_none(self, tmp_path):
+        self._mk_raw_file(tmp_path, 100, "uC", "U", "# header only\n")
+        assert _try_load_sampledict_output(tmp_path, "uC", "U") is None
+
+
+class TestPopulateLdcFromSampleDict:
+    """LDC u_centerline overwrite from sampleDict."""
+
+    def _mk_ldc_output(self, tmp_path, y_u_pairs, time=1000):
+        d = tmp_path / "postProcessing" / "sets" / str(time)
+        d.mkdir(parents=True, exist_ok=True)
+        body = "\n".join(f"0.5 {y} 0 {u} 0 0" for y, u in y_u_pairs)
+        (d / "uCenterline_U.xy").write_text(body + "\n")
+
+    def test_overwrites_u_centerline_when_output_present(self, tmp_path):
+        self._mk_ldc_output(
+            tmp_path,
+            [(0.0625, -0.03717), (0.125, -0.04192), (0.5, 0.02526),
+             (0.75, 0.33304), (1.0, 1.0)],
+        )
+        task = TaskSpec(
+            name="lid_driven_cavity",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        out = FoamAgentExecutor._populate_ldc_centerline_from_sampledict(
+            tmp_path, task, {"u_centerline": [99.0, 99.0]}  # stale legacy value
+        )
+        assert out["u_centerline"] == [-0.03717, -0.04192, 0.02526, 0.33304, 1.0]
+        assert out["u_centerline_source"] == "sampleDict_direct"
+        assert out["u_centerline_y"] == [0.0625, 0.125, 0.5, 0.75, 1.0]
+
+    def test_noop_when_output_missing(self, tmp_path):
+        original = {"u_centerline": [0.1, 0.2, 0.3]}
+        out = FoamAgentExecutor._populate_ldc_centerline_from_sampledict(
+            tmp_path, TaskSpec(name="x", geometry_type=GeometryType.SIMPLE_GRID,
+                               flow_type=FlowType.INTERNAL,
+                               steady_state=SteadyState.STEADY,
+                               compressibility=Compressibility.INCOMPRESSIBLE),
+            original,
+        )
+        assert out is original  # identity — no mutation when no sampleDict
+
+
+class TestPopulateNacaCpFromSampleDict:
+    """NACA Cp conversion from sampleDict `p` values."""
+
+    def _mk_naca_output(self, tmp_path, x_p_pairs, time=2000):
+        d = tmp_path / "postProcessing" / "sets" / str(time)
+        d.mkdir(parents=True, exist_ok=True)
+        # For NACA the z-coord is the airfoil half-thickness at x/c; use 0 for LE/TE
+        body = "\n".join(f"{x} 0 0 {p}" for x, p in x_p_pairs)
+        (d / "airfoilCp_p.xy").write_text(body + "\n")
+
+    def test_overwrites_pressure_coefficient_with_cp_conversion(self, tmp_path):
+        # With U_inf=1, rho=1, q_ref=0.5. So Cp = p / 0.5 = 2*p
+        self._mk_naca_output(
+            tmp_path,
+            [(0.0, 0.5), (0.3, -0.25), (1.0, 0.1)],
+        )
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000,
+            boundary_conditions={"angle_of_attack": 0.0, "chord_length": 1.0},
+        )
+        out = FoamAgentExecutor._populate_naca_cp_from_sampledict(
+            tmp_path, task, {}
+        )
+        cp = out["pressure_coefficient"]
+        # Sorted by x/c
+        assert [entry["x_over_c"] for entry in cp] == [0.0, 0.3, 1.0]
+        # Cp = 2·p: 2·0.5=1.0, 2·-0.25=-0.5, 2·0.1=0.2
+        assert cp[0]["Cp"] == pytest.approx(1.0)
+        assert cp[1]["Cp"] == pytest.approx(-0.5)
+        assert cp[2]["Cp"] == pytest.approx(0.2)
+        assert out["pressure_coefficient_source"] == "sampleDict_direct"
+
+    def test_chord_scaling_in_x_over_c(self, tmp_path):
+        """When chord=2, x=0.6 in sampleDict → x/c=0.3."""
+        self._mk_naca_output(tmp_path, [(0.6, -0.25)])
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000,
+            boundary_conditions={"chord_length": 2.0},
+        )
+        out = FoamAgentExecutor._populate_naca_cp_from_sampledict(
+            tmp_path, task, {}
+        )
+        assert out["pressure_coefficient"][0]["x_over_c"] == pytest.approx(0.3)
+
+
+class TestPopulateIjNusseltFromSampleDict:
+    """Impinging Jet Nu derivation from wall-adjacent T probes."""
+
+    def _mk_ij_output(self, tmp_path, x_T_pairs, time=1000):
+        d = tmp_path / "postProcessing" / "sets" / str(time)
+        d.mkdir(parents=True, exist_ok=True)
+        body = "\n".join(f"{x} 0 0.001 {T}" for x, T in x_T_pairs)
+        (d / "plateProbes_T.xy").write_text(body + "\n")
+
+    def test_stagnation_nusselt_computed_from_smallest_r(self, tmp_path):
+        # T_plate=290, T_inlet=310, ΔT_ref=20, D=0.05, Δz=0.001
+        # Probe at r=0 with T=300 → Nu = |300-290|·0.05 / (0.001·20) = 10·2.5 = 25
+        self._mk_ij_output(tmp_path, [(0.0, 300.0), (0.05, 295.0)])
+        task = TaskSpec(
+            name="impinging_jet",
+            geometry_type=GeometryType.IMPINGING_JET,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=10000,
+        )
+        out = FoamAgentExecutor._populate_ij_nusselt_from_sampledict(
+            tmp_path, task, {}
+        )
+        assert out["nusselt_number"] == pytest.approx(25.0)
+        # Profile: [25, |295-290|·2.5 = 12.5]
+        assert out["nusselt_number_profile"][0] == pytest.approx(25.0)
+        assert out["nusselt_number_profile"][1] == pytest.approx(12.5)
+        assert out["nusselt_number_source"] == "sampleDict_direct"
+
+    def test_nu_clamped_to_500_on_runaway(self, tmp_path):
+        """Absurd T_probe delta (1000K) → clamped to 500 not infinity."""
+        self._mk_ij_output(tmp_path, [(0.0, 1290.0)])
+        task = TaskSpec(
+            name="impinging_jet",
+            geometry_type=GeometryType.IMPINGING_JET,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+        )
+        out = FoamAgentExecutor._populate_ij_nusselt_from_sampledict(
+            tmp_path, task, {}
+        )
+        assert out["nusselt_number"] == 500.0
+
+    def test_noop_when_output_missing(self, tmp_path):
+        task = TaskSpec(
+            name="impinging_jet",
+            geometry_type=GeometryType.IMPINGING_JET,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+        )
+        original = {"nusselt_number": 15.0}
+        out = FoamAgentExecutor._populate_ij_nusselt_from_sampledict(
+            tmp_path, task, original
+        )
+        assert out["nusselt_number"] == 15.0  # untouched
