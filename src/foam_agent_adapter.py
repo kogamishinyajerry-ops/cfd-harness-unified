@@ -5431,6 +5431,43 @@ boundaryField
 """,
             encoding="utf-8",
         )
+
+        # system/sampleDict — gold-anchored Nu sampling (C3c).
+        # docs/c3_sampling_strategy_design.md §3.3 Option B: probe at
+        # z=1mm above the impingement plate (plate at z=0), one point per
+        # r/d in whitelist reference_values. Fields (T U) so downstream
+        # harvester can derive Nu via finite-difference wall-gradient
+        # estimate (or upgrade to wallHeatFlux function-object in a
+        # follow-up once Case 9 gold values stabilize per Gate Q-new HOLD).
+        #
+        # NOTE: Case 9 gold values (Nu@r/d=0=25, r/d=1=12) are on HOLD
+        # pending Behnad 2013 paper re-read (DEC-V61-006 · Gate Q-new
+        # Case 9 C-verdict). The r_over_d COORDINATES are valid; only the
+        # Nu reference numbers are provisional. This sampling infrastructure
+        # is orthogonal and stable across any Nu-value correction.
+        gold_values = _load_gold_reference_values(task_spec.name) or []
+        rod_values = [
+            float(rv["r_over_d"])
+            for rv in gold_values
+            if isinstance(rv, dict) and "r_over_d" in rv
+        ]
+        if rod_values:
+            probe_z = 0.001  # 1mm above plate (plate at z=0)
+            physical_points = [(rod * D, 0.0, probe_z) for rod in rod_values]
+            _emit_gold_anchored_points_sampledict(
+                case_dir,
+                set_name="plateProbes",
+                physical_points=physical_points,
+                fields=["T", "U"],
+                axis="x",
+                header_comment=(
+                    f"Impinging jet plate probes at z={probe_z}m above plate "
+                    f"(plate z=0), {len(rod_values)} gold r/d coords (D={D:g}m, "
+                    f"T_inlet={T_inlet:g}K, T_plate={T_plate:g}K; "
+                    f"Nu derivation via wall-gradient post-processing TBD)"
+                ),
+            )
+
     def _generate_airfoil_flow(
         self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
     ) -> None:
