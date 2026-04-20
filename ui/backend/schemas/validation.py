@@ -53,6 +53,18 @@ class RunDescriptor(BaseModel):
     )
 
 
+class RunSummary(BaseModel):
+    """Per-case run distribution — rendered as a small pill on catalog cards.
+
+    `total` counts every curated run (reference/real_incident/under_resolved/
+    wrong_model). `verdict_counts` breaks those down by expected_verdict,
+    letting the UI show "3 runs · 1 PASS · 2 FAIL" without refetching all
+    validation-reports."""
+
+    total: int = 0
+    verdict_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class CaseIndexEntry(BaseModel):
     """One row of GET /api/cases."""
 
@@ -63,6 +75,7 @@ class CaseIndexEntry(BaseModel):
     turbulence_model: str
     has_gold_standard: bool
     has_measurement: bool
+    run_summary: RunSummary = Field(default_factory=RunSummary)
     contract_status: ContractStatus
 
 

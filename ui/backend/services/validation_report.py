@@ -32,6 +32,7 @@ from ui.backend.schemas.validation import (
     MeasuredValue,
     Precondition,
     RunDescriptor,
+    RunSummary,
     ValidationReport,
 )
 
@@ -479,7 +480,14 @@ def list_cases() -> list[CaseIndexEntry]:
     out: list[CaseIndexEntry] = []
     for cid, case in whitelist.items():
         gs = _load_gold_standard(cid)
-        measurement_doc = _load_fixture_measurement(cid)
+        # Use the same default-run resolution as build_validation_report so
+        # the catalog contract_status matches what the Compare tab shows on
+        # first click (reference_pass preferred → student's first impression
+        # is PASS when curated).
+        default_run_id = _pick_default_run_id(cid)
+        measurement_doc = (
+            _load_run_measurement(cid, default_run_id) if default_run_id else None
+        )
         gs_ref = _make_gold_reference(case, gs)
         preconditions = _make_preconditions(gs)
         audit_concerns = _make_audit_concerns(gs, measurement_doc)
@@ -490,6 +498,24 @@ def list_cases() -> list[CaseIndexEntry]:
             )
         else:
             status = "UNKNOWN"
+        # Run distribution for the catalog-card badge. Evaluate every run
+        # through the actual contract engine — never report `expected_verdict`,
+        # which is only a curator hint and can drift from the live contract
+        # (e.g. a `PASS`-hinted run whose gold arms a silent-pass hazard).
+        runs = list_runs(cid)
+        verdict_counts: dict[str, int] = {}
+        for r in runs:
+            run_doc = _load_run_measurement(cid, r.run_id)
+            run_audits = _make_audit_concerns(gs, run_doc)
+            run_measurement = _make_measurement(run_doc)
+            if gs_ref is not None:
+                run_status, *_ = _derive_contract_status(
+                    gs_ref, run_measurement, preconditions, run_audits
+                )
+            else:
+                run_status = "UNKNOWN"
+            verdict_counts[run_status] = verdict_counts.get(run_status, 0) + 1
+        run_summary = RunSummary(total=len(runs), verdict_counts=verdict_counts)
         out.append(
             CaseIndexEntry(
                 case_id=cid,
@@ -499,6 +525,7 @@ def list_cases() -> list[CaseIndexEntry]:
                 turbulence_model=case.get("turbulence_model", "UNKNOWN"),
                 has_gold_standard=gs is not None,
                 has_measurement=measurement is not None,
+                run_summary=run_summary,
                 contract_status=status,
             )
         )

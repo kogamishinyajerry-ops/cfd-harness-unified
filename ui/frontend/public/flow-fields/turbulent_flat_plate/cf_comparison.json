@@ -1,0 +1,4 @@
+{
+  "provenance": "Cf(x) from three sources: Blasius analytical (0.664/√Re_x) vs. a mesh-starvation envelope vs. the Spalding engineering correlation (wrong regime). The gap between gold and Spalding at Re_x=25000 is the real +81% incident.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

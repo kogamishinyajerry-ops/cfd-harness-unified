@@ -1,0 +1,32 @@
+# Real-incident run for rayleigh_benard_convection.
+#
+# At Ra=10^7, a typical first-attempt run using Boussinesq + moderate
+# mesh gives Nu around 14.5 against Grossmann-Lohse's ~16.5 — 12% low.
+# Root cause: the thermal boundary layer at the hot plate is thinner
+# than 5 cells in a default mesh, so the wall temperature gradient is
+# truncated.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · 热边界层欠分辨
+  label_en: Real incident (thermal BL under-resolved at Ra=10^7)
+  description_zh: >-
+    Ra=10⁷ 时热边界层厚度 δ_T ~ 5×10⁻³ 腔高。默认网格（~60 cells）对应
+    第一层 ~1.7×10⁻² 腔高——远粗于 δ_T。壁面温度梯度被截断，Nu 低估 12%。
+    这是对流问题永恒的陷阱：网格敏感度集中在最薄的边界层里。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: rayleigh_benard_convection
+source: literature_typical_incident
+measurement:
+  value: 14.5
+  unit: dimensionless
+  run_id: synth_rb_coarse_ra1e7
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Thermal BL δ_T < first cell height; Nu 14.5 vs Grossmann-Lohse 16.5 (-12%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

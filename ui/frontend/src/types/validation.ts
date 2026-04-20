@@ -18,6 +18,11 @@ export interface RunDescriptor {
   expected_verdict: ContractStatus;
 }
 
+export interface RunSummary {
+  total: number;
+  verdict_counts: Partial<Record<ContractStatus, number>>;
+}
+
 export interface CaseIndexEntry {
   case_id: string;
   name: string;
@@ -27,6 +32,7 @@ export interface CaseIndexEntry {
   has_gold_standard: boolean;
   has_measurement: boolean;
   contract_status: ContractStatus;
+  run_summary: RunSummary;
 }
 
 export interface GoldStandardReference {

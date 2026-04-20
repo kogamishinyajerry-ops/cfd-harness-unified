@@ -1,0 +1,4 @@
+{
+  "provenance": "Williamson (1996) review eqn (1) for mode A shedding: St = 0.2175 - 5.1064/Re in Re ∈ [49, 180]; saturates around 0.21 at higher Re. Overlay shows the canonical-band shortcut zone our adapter used to fall into.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

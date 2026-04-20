@@ -1,0 +1,36 @@
+# Wrong-model teaching run for impinging_jet (Re=10000, H/D=2).
+#
+# Impingement heat transfer is famously poorly predicted by standard
+# k-ε. Turbulent kinetic energy is overproduced at the stagnation
+# point (Kato-Launder correction addresses this but isn't the default),
+# which inflates eddy thermal diffusivity and thus Nu. Published
+# overprediction: +40% to +60% near r/D=0.
+#
+# Against the (provisional) gold of Nu=25, k-ε lands around 38 (+52%)
+# → FAIL. Classroom takeaway: picking k-ε here isn't a bug, it's a
+# well-known model-fitness failure; you should know before you pick it.
+run_metadata:
+  run_id: wrong_model
+  label_zh: 错模型 · 标准 k-ε 预测 Nu
+  label_en: Wrong model (standard k-epsilon over-predicts Nu)
+  description_zh: >-
+    冲击射流的驻点传热是 RANS 出名的"打脸"问题。标准 k-ε 在驻点过度产生
+    湍动能 TKE，涡粘过高，Nu 被系统高估 40-60%。相对 gold Nu=25，
+    这里落在 ~38（+52%），直接 FAIL。这不是 bug，是模型固有限制。
+  category: wrong_model
+  expected_verdict: FAIL
+case_id: impinging_jet
+source: model_choice_literature_typical
+measurement:
+  value: 38.0
+  unit: dimensionless
+  run_id: synth_jet_keps_stagnation
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'k-epsilon 驻点 TKE 过产生 → Nu ≈ 38 vs gold 25 (+52%). 模型选错的经典 symptom.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

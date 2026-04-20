@@ -1,0 +1,31 @@
+# Under-resolved teaching run for circular_cylinder_wake.
+#
+# Coarse grid around the cylinder misses the Kármán shedding frequency —
+# the wake structure is smeared, the pressure signal FFT peak is at a
+# slightly different frequency. Published studies (e.g., Norberg 2003)
+# show ~3-8% St bias on coarse meshes.
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · 近柱网格不够
+  label_en: Under-resolved (cylinder-proximal mesh sparse)
+  description_zh: >-
+    涡脱频率对近柱网格最敏感。如果网格没能捕捉到前驻点附近的快速几何变化，
+    wake 结构被平滑化，FFT 主频偏低。典型偏差 -5% 左右——足够落出 5% 容差
+    但仍在 HAZARD 附近徘徊，教学上演示"临界案例"。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: circular_cylinder_wake
+source: grid_refinement_synthetic
+measurement:
+  value: 0.1495
+  unit: dimensionless
+  run_id: synth_cyl_coarse_re200
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Cylinder-proximal mesh too coarse; St 0.1495 vs 0.164 gold (-8.8%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

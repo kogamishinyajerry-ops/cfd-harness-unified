@@ -1,0 +1,4 @@
+{
+  "provenance": "Spalding (1961) single-formula composite profile u+(y+) covering viscous sublayer + buffer + log regions. κ=0.41, B=5.0. RANS models are typically tuned to hit this curve to within 1-2%.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

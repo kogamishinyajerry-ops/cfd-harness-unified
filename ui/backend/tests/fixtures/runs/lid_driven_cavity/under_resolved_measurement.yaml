@@ -1,0 +1,35 @@
+# Under-resolved teaching run for lid_driven_cavity.
+#
+# Pedagogical construction: a coarse 32x32 grid on the [0,1]² cavity
+# resolves the primary vortex poorly near the bottom-left corner where
+# u_x at y=0.0625 is small and sensitive to discretization. Published
+# grid-refinement studies (e.g., Ghia 1982 Tab III) show ~20-35%
+# underestimate on this probe at 32² vs the 129² reference.
+#
+# This fixture's value (-0.029) is a typical 32² outcome, reproducing
+# the magnitude of the error without pretending to be a specific real run.
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · 32² 粗网格
+  label_en: Under-resolved (32x32 coarse grid)
+  description_zh: >-
+    同样的 solver、同样的物理，只是网格太粗。y=0.0625 附近 u_x 本来就小，
+    网格不够细时离散误差在这里最大，测到的值系统性比 gold 小 ~22%。
+    结果落在 5% 容差带外——HAZARD/FAIL 都取决于你是否把它当 silent-pass。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: lid_driven_cavity
+source: grid_refinement_synthetic
+measurement:
+  value: -0.029
+  unit: dimensionless
+  run_id: synth_ldc_32x32_re100
+  commit_sha: null
+  measured_at: null
+  quantity: u_centerline[y=0.0625]
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '32² grid under-resolves near-wall velocity; Δ ≈ -22% vs Ghia 129² reference.'
+    detail: null
+    decision_refs: []
+decisions_trail: []
