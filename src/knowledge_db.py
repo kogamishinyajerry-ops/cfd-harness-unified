@@ -217,7 +217,9 @@ class KnowledgeDB:
 
     def save_correction(self, correction: CorrectionSpec) -> Path:
         """把 CorrectionSpec 序列化为 YAML 文件，返回文件路径"""
-        ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y%m%dT%H%M%S%fZ"
+        )
         safe_name = (correction.task_spec_name or "unknown").replace(" ", "_").lower()
         filename = f"{ts}_{safe_name}_{correction.error_type.value}.yaml"
         path = self._corrections_dir / filename

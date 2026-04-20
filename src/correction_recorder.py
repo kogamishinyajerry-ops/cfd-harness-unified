@@ -73,7 +73,10 @@ class CorrectionRecorder:
             fix_action=fix_action,
             needs_replay=True,
             task_spec_name=task_spec.name,
-            created_at=datetime.datetime.utcnow().isoformat() + "Z",
+            created_at=datetime.datetime.now(datetime.timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat()
+            + "Z",
             attribution=attribution,
         )
 
