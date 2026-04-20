@@ -633,6 +633,52 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         rejected = key_quantities.get("reattachment_detection_rejected_x")
         assert rejected is not None and rejected < 0
 
+    def test_extract_bfs_reattachment_static_rejects_upstream_detection(self):
+        """P6-TD-001 coverage gap follow-up (Codex round 7 Low #1): the
+        guard lives in both _parse_solver_log and the static extractor
+        called from _parse_writeobjects_fields. This test exercises the
+        static path directly — same Ux zero-crossing pattern at x≈-4.58
+        that §5d Part-2 produced via writeObjects fields. Must reject."""
+        cxs = [-8.0, -5.0, -4.5, -4.0]
+        cys = [0.5, 0.5, 0.5, 0.5]
+        u_vecs = [(-1.0, 0.0, 0.0), (-0.5, 0.0, 0.0), (0.1, 0.0, 0.0), (1.0, 0.0, 0.0)]
+        bfs_task = TaskSpec(
+            name="Backward-Facing Step",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        result = FoamAgentExecutor._extract_bfs_reattachment(
+            cxs, cys, u_vecs, bfs_task, {}
+        )
+        assert "reattachment_length" not in result
+        assert result.get("reattachment_detection_upstream_artifact") is True
+        rejected = result.get("reattachment_detection_rejected_x")
+        assert rejected is not None and rejected < 0
+
+    def test_extract_bfs_reattachment_static_accepts_valid_downstream_detection(self):
+        """P6-TD-001 positive-case companion: valid downstream Ux zero-
+        crossing produces reattachment_length without the artifact flag."""
+        cxs = [0.5, 1.5, 2.5, 3.5]
+        cys = [0.5, 0.5, 0.5, 0.5]
+        u_vecs = [(-0.4, 0.0, 0.0), (-0.1, 0.0, 0.0), (0.2, 0.0, 0.0), (0.8, 0.0, 0.0)]
+        bfs_task = TaskSpec(
+            name="Backward-Facing Step",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+        )
+        result = FoamAgentExecutor._extract_bfs_reattachment(
+            cxs, cys, u_vecs, bfs_task, {}
+        )
+        assert "reattachment_length" in result
+        assert result["reattachment_length"] > 0
+        assert "reattachment_detection_upstream_artifact" not in result
+
     def test_parse_writeobjects_fields_extracts_ldc_from_icofoam_fields(self, tmp_path, monkeypatch):
         """icoFoam + SIMPLE_GRID 走 LDC 路由（_is_lid_driven_cavity_case 检测到）。"""
         time_dir = tmp_path / "1.0"
