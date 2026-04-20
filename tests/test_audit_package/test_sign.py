@@ -305,6 +305,91 @@ class TestGetHmacSecretFromEnv:
         assert get_hmac_secret_from_env(env_var="MY_KEY") == b"secret"
 
 
+class TestM3LegacyMigrationWarning:
+    """PR-5c.2 per Codex M3: DeprecationWarning for un-prefixed values that
+    look like plausible base64 output of a binary-key generator.
+
+    Warning is a migration aid — pre-PR-5c.1 deployments used un-prefixed
+    base64 and the heuristic decoded it; now it is taken as literal UTF-8.
+    Operators must rewrite as `base64:<value>` to preserve key bytes.
+    """
+
+    def test_warns_on_unprefixed_openssl_rand_base64_output(self, monkeypatch, recwarn):
+        """Simulated `openssl rand -base64 32` (44 chars, padded) → warns."""
+        monkeypatch.setenv(
+            HMAC_ENV_VAR,
+            base64.b64encode(b"\x01" * 32).decode("ascii"),  # 44 chars, padded
+        )
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 1
+        msg = str(warn_list[0].message)
+        assert "base64:" in msg
+        assert "PR-5c.1" in msg
+
+    def test_warns_on_short_but_plausible_binary_key(self, monkeypatch, recwarn):
+        """16-byte key = 24 base64 chars (minimum threshold) → warns."""
+        monkeypatch.setenv(
+            HMAC_ENV_VAR,
+            base64.b64encode(b"sixteen-bytes-key").decode("ascii"),  # 24 chars
+        )
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 1
+
+    def test_no_warning_when_text_prefix_used(self, monkeypatch, recwarn):
+        """Explicit text: prefix → no warning even for base64-shaped payload."""
+        monkeypatch.setenv(
+            HMAC_ENV_VAR,
+            "text:" + base64.b64encode(b"\x01" * 32).decode("ascii"),
+        )
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 0
+
+    def test_no_warning_when_base64_prefix_used(self, monkeypatch, recwarn):
+        """Explicit base64: prefix → no warning."""
+        monkeypatch.setenv(
+            HMAC_ENV_VAR,
+            "base64:" + base64.b64encode(b"\x01" * 32).decode("ascii"),
+        )
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 0
+
+    def test_no_warning_on_short_plain_text(self, monkeypatch, recwarn):
+        """Short plain passwords don't satisfy the ≥24-char + valid-base64 probe."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "dev-secret")
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 0
+
+    def test_no_warning_on_plain_with_special_chars(self, monkeypatch, recwarn):
+        """Special chars (not in base64 alphabet) → no warning."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "my-super-secret-key-with-dashes-!@#")
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 0
+
+    def test_no_warning_on_urlsafe_base64(self, monkeypatch, recwarn):
+        """URL-safe base64 uses - and _, not in standard alphabet → no warning."""
+        # urlsafe_b64encode of 32 random bytes likely contains - or _
+        urlsafe = base64.urlsafe_b64encode(b"\xff" * 32).decode("ascii")
+        # Only warn if this happens to contain - or _ (most do)
+        if "-" in urlsafe or "_" in urlsafe:
+            monkeypatch.setenv(HMAC_ENV_VAR, urlsafe)
+            get_hmac_secret_from_env()
+            warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+            assert len(warn_list) == 0
+
+    def test_warning_detects_unpadded_rejected(self, monkeypatch, recwarn):
+        """Unpadded base64 (not length % 4 == 0) → no warning (would fail probe)."""
+        monkeypatch.setenv(HMAC_ENV_VAR, "abcdefghij")  # 10 chars, not % 4
+        get_hmac_secret_from_env()
+        warn_list = [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
+        assert len(warn_list) == 0
+
+
 # ---------------------------------------------------------------------------
 # Sidecar I/O
 # ---------------------------------------------------------------------------
@@ -379,6 +464,27 @@ class TestSidecarIO:
             sig_path = tmp_path / "bad.sig"
             sig_path.write_text(bad)
             assert read_sidecar(sig_path) is None, f"expected None for {bad!r}"
+
+    def test_read_tolerates_crlf_line_endings(self, tmp_path):
+        """Windows CRLF after the hex digest → accepted (strip handles it)."""
+        sig = "c" * 64
+        sig_path = tmp_path / "crlf.sig"
+        sig_path.write_bytes((sig + "\r\n").encode("ascii"))
+        assert read_sidecar(sig_path) == sig
+
+    def test_read_rejects_bom_prefix(self, tmp_path):
+        """UTF-8 BOM before hex → regex fails → None (not bypass)."""
+        sig = "d" * 64
+        sig_path = tmp_path / "bom.sig"
+        sig_path.write_bytes(b"\xef\xbb\xbf" + sig.encode("ascii"))
+        assert read_sidecar(sig_path) is None
+
+    def test_read_tolerates_trailing_whitespace(self, tmp_path):
+        """Trailing spaces/tabs stripped before regex match."""
+        sig = "e" * 64
+        sig_path = tmp_path / "ws.sig"
+        sig_path.write_text(sig + "   \t \n")
+        assert read_sidecar(sig_path) == sig
 
 
 # ---------------------------------------------------------------------------
