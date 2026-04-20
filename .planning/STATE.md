@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T04:30"
+last_updated: "2026-04-21T04:40"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -657,8 +657,16 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - **MEDIUM CLOSED**: Schema field `vv40_checklist` → `evidence_summary` (Python class `AuditPackageVvChecklistItem` → `AuditPackageEvidenceItem`, TypeScript interface + field renamed). UI heading "FDA V&V40 credibility-evidence mapping" → "Internal V&V evidence summary" with disclaimer noting it's not a V&V40 substitute. Page-level header description trimmed to remove FDA/aerospace/nuclear licensing claims the skeleton bundle shape does not support.
   - Diff scope: 139 LOC across 5 files (3 backend + 2 frontend). Regression 327 passed + 1 skipped (baseline 325 + 2 new byte-repro tests). `npx tsc --noEmit` clean.
   - **Codex round 5 review queued** (post-merge) to confirm closure before Phase 5 ships at 4/4. If APPROVED → Phase 5 complete; if CHANGES_REQUIRED → PR-5d.2 mechanical pattern.
+- **✅ Codex round 5 LANDED (2026-04-21T04:35)** — Verdict `APPROVED_WITH_NOTES` · 95,221 tokens · report `reports/codex_tool_reports/2026-04-21_pr5d1_closure_review.md`. Critical/High/Medium findings: **NONE**. All three PR-5d findings confirmed closed (HIGH #1 whitelist gate, HIGH #2 byte-repro, MEDIUM V&V40 rename). One new **L3 Low/Informational** finding queued: `generated_at` is now a deterministic 16-hex hash fragment but the field is still labelled as a timestamp in API/UI/docs. Mitigation options (path A rename to `build_fingerprint` OR path B split into signed-fingerprint + unsigned-wall-time) documented in DEC-V61-019; neither blocks Phase 5 ship.
+- **Codex findings ledger FINAL for Phase 5 (rounds 1-5)**:
+  - ✅ M1 CLOSED (PR-5c.1) · ✅ L1 CLOSED (PR-5c.1) · ✅ M3 CLOSED (PR-5c.2+5c.3)
+  - ✅ HIGH #1 CLOSED (PR-5d.1 round 5 confirmed) · ✅ HIGH #2 CLOSED (PR-5d.1 round 5 confirmed) · ✅ MEDIUM CLOSED (PR-5d.1 round 5 confirmed)
+  - 🔒 M2 QUEUED (sidecar v2 + kid/alg/domain — governance DEC)
+  - 🔒 L2 QUEUED (canonical JSON spec publication)
+  - 🔒 **L3 NEW-QUEUED** (generated_at field semantics — rename OR split)
+- **Codex review arc Phase 5 cumulative**: 117,588 + 76,152 + 94,316 + 143,521 + 95,221 = **526,798 tokens** across 5 rounds. Round 4 was the highest-value round (caught semantic HIGH findings module-level review couldn't see). Round 5 was validation-only and produced a clean APPROVED_WITH_NOTES.
 - **v6.1 autonomous_governance counter**: 15 → **16**. 5th consecutive Codex post-merge review on Phase 5. Hard-floor-4 retrospective is **overdue** — should land before Phase 6 scoping.
-- **Phase 5 sequence status**: 4/4 main sequence landed (5a + 5b + 5c + 5d) + 4/4 Codex-review fixes (5c.1 + 5c.2 + 5c.3 + 5d.1). **Phase 5 is honestly complete pending Codex round 5 verdict** on PR-5d.1. Next scoping decision: P1 counter retrospective OR P2 Docker dashboard validation OR Phase 6 kickoff.
+- **✅ Phase 5 sequence COMPLETE (honest)**: 4/4 main sequence landed (5a + 5b + 5c + 5d) + 4/4 Codex-review fixes (5c.1 + 5c.2 + 5c.3 + 5d.1). All 3 originally-flagged HIGH/MEDIUM findings closed and round-5 confirmed. Screen 6 Audit Package Builder is production-ready modulo the three remaining queued items (M2 sidecar v2 · L2 canonical JSON spec · L3 generated_at rename), none of which block Phase 5 ship. **Next scoping decision**: P1 counter-16 retrospective OR P2 Docker dashboard validation OR Phase 6 kickoff.
 
 ---
 

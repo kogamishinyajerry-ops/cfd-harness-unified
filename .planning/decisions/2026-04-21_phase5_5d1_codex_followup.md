@@ -7,24 +7,26 @@ claude_signoff: yes
 codex_tool_invoked: true
 codex_diff_hash: ca9fe0e525a92e8b52ea32092e228b0bf7ace73e
 codex_tool_report_path: reports/codex_tool_reports/2026-04-21_pr5d1_closure_review.md
-codex_verdict: pending (round 5 running — 2026-04-21T04:30 local)
+codex_verdict: APPROVED_WITH_NOTES (2026-04-21T04:35 local · 95,221 tokens)
 counter_status: "v6.1 autonomous_governance counter 15 → 16. 5th consecutive Codex post-merge review across Phase 5 (PR-5c, 5c.1, 5c.2, 5d, 5d.1). Overdue retrospective still owed — see P1 in new_session_kickoff."
 reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 ca9fe0e` restores PR-5d's unsafe-sign-anything
   semantics + wall-clock-stamped manifest + V&V40 label. Staging dir
   structure unchanged; no migration cost either direction.)
-notion_sync_status: pending (queued after Codex round 5 verdict lands)
+notion_sync_status: pending-sync (round 5 verdict landed; Notion mirror queued)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/19
 github_merge_sha: ca9fe0e525a92e8b52ea32092e228b0bf7ace73e
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
 external_gate_self_estimated_pass_rate: 90%
-  (All three changes are verbatim implementations of Codex round-4
-  `Suggested fix` bullets. 327/1skip regression + TypeScript clean.
-  Residual 10% risk: Codex round 5 may flag an edge case in the
-  deterministic-generated_at derivation — e.g., cross-case confusion
-  if a case_id literally contains `|`, or insufficient entropy of a
-  16-hex-char prefix for collision resistance. Low probability but
-  not zero.)
+  (Self-estimate held. Codex round 5 returned APPROVED_WITH_NOTES with
+  Critical/High/Medium all NONE. One Low/Informational note recorded:
+  `generated_at` is now a deterministic hash fragment, but the field
+  is still labelled as a timestamp in API/UI/docs. Queued as tech
+  debt for a future rename to `build_fingerprint` or a real UTC
+  timestamp carried outside the signed canonical payload. Codex
+  explicitly confirmed the `|` delimiter collision concern is benign
+  under the current whitelist and that full-manifest signatures still
+  bind integrity regardless of the 16-hex prefix.)
 supersedes: null
 superseded_by: null
 upstream: DEC-V61-018 (PR-5d — this DEC closes all three Codex findings)
@@ -122,23 +124,67 @@ Pre-existing deprecation warnings (`datetime.datetime.utcnow()` in
 predate PR-5d.1 and are queued as P4 tech-debt in the new-session
 kickoff.
 
-## Codex findings ledger (Phase 5 · rounds 1-4 → close after round 5)
+## Codex findings ledger (Phase 5 FINAL · rounds 1-5)
 
 | ID | PR | Severity | Status | Resolution |
 |---|---|---|---|---|
-| HIGH #1 (unknown case_id) | PR-5d → 5d.1 | High | ✅ CLOSED (pending round 5 confirm) | Whitelist 404 gate |
-| HIGH #2 (byte-repro) | PR-5d → 5d.1 | High | ✅ CLOSED (pending round 5 confirm) | Deterministic generated_at |
-| MEDIUM (V&V40 label) | PR-5d → 5d.1 | Medium | ✅ CLOSED (pending round 5 confirm) | Evidence-summary rename |
+| HIGH #1 (unknown case_id) | PR-5d → 5d.1 | High | ✅ **CLOSED** (round 5 confirmed) | Whitelist 404 gate |
+| HIGH #2 (byte-repro) | PR-5d → 5d.1 | High | ✅ **CLOSED** (round 5 confirmed) | Deterministic generated_at |
+| MEDIUM (V&V40 label) | PR-5d → 5d.1 | Medium | ✅ **CLOSED** (round 5 confirmed) | Evidence-summary rename |
 | M1 (env-var prefix) | PR-5c → 5c.1 | Medium | ✅ CLOSED earlier | Explicit prefix contract |
 | M2 (sidecar v2) | PR-5c | Medium | 🔒 QUEUED | Governance DEC — kid/alg/domain metadata |
 | M3 (legacy migration) | PR-5c.1 → 5c.2 | Medium | ✅ CLOSED earlier | Docs-only migration note |
 | L1 (sidecar hex shape) | PR-5c → 5c.1 | Low | ✅ CLOSED earlier | ^[0-9a-fA-F]{64}$ regex |
 | L2 (canonical JSON spec) | PR-5c | Low | 🔒 QUEUED | Public spec doc |
+| **L3** (generated_at semantics) | **PR-5d.1 → future** | **Low** | **🔒 NEW — QUEUED** | **Rename to `build_fingerprint`, or move human-readable UTC timestamp outside signed canonical payload** |
 
-Cumulative Codex token cost across Phase 5: **~475k** (117k + 76k + 94k
-+ 143k + round 5 pending). Round 4 was the highest-value review;
-rounds 1-3 surfaced the HMAC-module findings; round 5 confirms semantic
-closure at the operator-facing layer.
+Cumulative Codex token cost across Phase 5 rounds 1-5:
+117,588 + 76,152 + 94,316 + 143,521 + 95,221 = **526,798 tokens**.
+
+Round 4 (PR-5d) was the highest-value review — caught the semantic
+HIGH findings that module-level rounds 1-3 couldn't see. Round 5
+(PR-5d.1) was smaller-scope validation that the HIGH/MEDIUM closure
+held and exposed only one Low/Informational follow-up item (L3 above).
+
+## Codex round 5 · Low finding detail
+
+> PR-5d.1 preserves byte reproducibility by replacing `generated_at`
+> with a deterministic hash fragment, but the API/manifest/UI still
+> present that field as a timestamp.
+
+Evidence locations (per round-5 report):
+- `ui/backend/routes/audit_package.py:167-175` — route computes
+  `hashlib.sha256(f"{case_id}|{run_id}")[:16]`
+- `src/audit_package/manifest.py:340-342` / `409-413` — `build_manifest`
+  emits the kwarg verbatim in a field semantically named "timestamp"
+- `ui/frontend/src/pages/AuditPackagePage.tsx:133-136` — UI label
+  reads "Generated at" for a value that is now opaque hex
+- `docs/ui_design.md:376-378` — design doc still describes timestamps
+  as canonicalized UTC values
+
+Why it matters: reviewers or downstream consumers will reasonably read
+`generated_at` as a wall-clock build time. Current values are opaque
+tokens like `a843980d36d97c10`.
+
+**L3 mitigation paths (not applied in PR-5d.1, queued):**
+
+A. **Rename the field end-to-end** to `build_fingerprint` or
+   `deterministic_build_id`. Touches backend schema + route + tests +
+   frontend types + frontend page label + manifest.py kwarg signature.
+   ~25 LOC. Breaks any external consumers that depend on the current
+   `generated_at` JSON key — OK for Phase 5 (no external consumers
+   exist yet).
+
+B. **Carry a real UTC timestamp outside the signed canonical payload.**
+   Add `build_wall_time: str` field in the response + UI that is NOT
+   part of `canonical_manifest_bytes()` input to HMAC. The signed
+   `generated_at` stays as the deterministic fingerprint. Two humans
+   reading the bundle still get a real timestamp; signatures stay
+   byte-reproducible. ~40 LOC and more architectural.
+
+Path B is more faithful to what "Generated at" means in human terms,
+but adds a second metadata field. Path A is simpler and honest.
+Decision deferred to Kogami; neither blocks Phase 5 shipping.
 
 ## Scope self-attestation
 
