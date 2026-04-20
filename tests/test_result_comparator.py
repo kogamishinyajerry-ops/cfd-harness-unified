@@ -124,3 +124,121 @@ class TestEdgeCases:
         result = make_result(strouhal_number=0.165)
         cr = cmp.compare(result, GOLD_SCALAR)
         assert "strouhal_number" in cr.summary
+
+
+class TestFieldAliases:
+    """Actual-side alias expansion — see CANONICAL_ALIASES.
+
+    Motivation: knowledge/corrections/ shows 14+ COMPARATOR_SCHEMA_MISMATCH
+    events where the solver emitted a valid result but under a different field
+    name than the gold standard declared. Each test below mirrors a real
+    historical failure.
+    """
+
+    def test_friction_factor_resolved_via_f_alias(self):
+        """Pipe flow: gold=friction_factor, solver emits 'f' (4 real corrections)."""
+        cmp = ResultComparator()
+        gold = {
+            "quantity": "friction_factor",
+            "reference_values": [{"value": 0.0211}],
+            "tolerance": 0.08,
+        }
+        # Solver emits under "f" (OpenFOAM shorthand)
+        result = make_result(f=0.0211)
+        cr = cmp.compare(result, gold)
+        assert cr.passed, f"expected pass via alias, summary={cr.summary}"
+
+    def test_friction_factor_resolved_via_fDarcy_alias(self):
+        """Pipe flow: solver emits under 'fDarcy'."""
+        cmp = ResultComparator()
+        gold = {"quantity": "friction_factor", "reference_values": [{"value": 0.0211}], "tolerance": 0.08}
+        result = make_result(fDarcy=0.0211)
+        cr = cmp.compare(result, gold)
+        assert cr.passed
+
+    def test_pressure_coefficient_resolved_via_Cp_alias_with_companion_axis(self):
+        """NACA 0012: gold=pressure_coefficient, solver emits Cp + Cp_x arrays.
+
+        Critically: after alias resolution, the companion-axis lookup must
+        find "Cp_x" (not "pressure_coefficient_x") — this was the regression
+        path where alias worked but axis resolution re-broke.
+        """
+        cmp = ResultComparator()
+        gold = {
+            "quantity": "pressure_coefficient",
+            "reference_values": [
+                {"x_over_c": 0.0, "Cp": 1.0},
+                {"x_over_c": 0.5, "Cp": 0.0},
+                {"x_over_c": 1.0, "Cp": 0.15},
+            ],
+            "tolerance": 0.10,
+        }
+        result = make_result(
+            Cp=[1.0, 0.0, 0.15],
+            Cp_x=[0.0, 0.5, 1.0],
+        )
+        cr = cmp.compare(result, gold)
+        assert cr.passed, f"axis resolution failed after alias: summary={cr.summary}"
+
+    def test_nusselt_resolved_via_Nu_avg_alias(self):
+        """Impinging jet / cavity: gold=nusselt_number, solver emits Nu_avg."""
+        cmp = ResultComparator()
+        gold = {"quantity": "nusselt_number", "reference_values": [{"Nu": 25.0}], "tolerance": 0.15}
+        result = make_result(Nu_avg=24.5)
+        cr = cmp.compare(result, gold)
+        assert cr.passed
+
+    def test_canonical_wins_over_alias_when_both_present(self):
+        """If a solver output contains both canonical and alias keys,
+        canonical takes priority — this prevents silent downgrades when
+        the adapter is upgraded to emit both during a transition."""
+        cmp = ResultComparator()
+        gold = {"quantity": "friction_factor", "reference_values": [{"value": 0.0211}], "tolerance": 0.08}
+        result = make_result(friction_factor=0.0211, f=0.999)  # canonical correct, alias deliberately wrong
+        cr = cmp.compare(result, gold)
+        assert cr.passed
+
+    def test_alias_miss_produces_diagnostic_summary(self):
+        """When neither canonical nor any alias is present, the failure
+        summary must name the tried aliases and available keys — so the
+        operator debugging a correction file knows what to look for."""
+        cmp = ResultComparator()
+        gold = {"quantity": "friction_factor", "reference_values": [{"value": 0.02}], "tolerance": 0.05}
+        result = make_result(weird_unknown_field=0.02, Re=50000)
+        cr = cmp.compare(result, gold)
+        assert not cr.passed
+        assert "friction_factor" in cr.summary
+        # tried aliases surfaced
+        assert "fDarcy" in cr.summary or "darcy_f" in cr.summary
+        # available keys surfaced
+        assert "Re" in cr.summary or "weird_unknown_field" in cr.summary
+
+    def test_unknown_canonical_has_no_aliases(self):
+        """A canonical quantity not in the alias table must still fail cleanly,
+        not raise — this guards against future schemas breaking the lookup."""
+        cmp = ResultComparator()
+        gold = {"quantity": "bogus_novel_quantity", "reference_values": [{"value": 1.0}], "tolerance": 0.05}
+        result = make_result(some_field=1.0)
+        cr = cmp.compare(result, gold)
+        assert not cr.passed
+        assert "bogus_novel_quantity" in cr.summary
+
+    def test_u_centerline_via_uCenterline_legacy_alias(self):
+        """Backstop for LDC cases bypassing the adapter's explicit rename."""
+        cmp = ResultComparator()
+        gold = {
+            "quantity": "u_centerline",
+            "reference_values": [
+                {"y": 0.0, "u": 0.0},
+                {"y": 0.5, "u": -0.06205},
+                {"y": 1.0, "u": 1.0},
+            ],
+            "tolerance": 0.05,
+        }
+        # No adapter rename; raw sampleDict key
+        result = make_result(
+            uCenterline=[0.0, -0.06205, 1.0],
+            uCenterline_y=[0.0, 0.5, 1.0],
+        )
+        cr = cmp.compare(result, gold)
+        assert cr.passed, f"legacy LDC alias failed: {cr.summary}"

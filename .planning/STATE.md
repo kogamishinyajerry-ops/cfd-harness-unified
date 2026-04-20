@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T18:20"
+last_updated: "2026-04-20T20:15"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -577,6 +577,16 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 7. **[self]** Phase 9 activation remains frozen pending D5 gate (per D4 C4 + PL-1 freeze).
 8. **[via-codex-tool]** Fix `tests/test_report_engine/test_generate_reports_cli.py` hermeticity. Current test writes to the **real** `reports/deep_acceptance/` directory instead of the `temp_reports` tmp_path fixture defined in `tests/test_report_engine/conftest.py`. Every `pytest` run pollutes 6-8 fresh files AND overwrites the 4 tracked canonical deliverables. Discovered during v6.1 cutover Step B. Codex dispatch scope: `tests/test_report_engine/test_generate_reports_cli.py` only; CHK matrix must include "no new file appears under real `reports/deep_acceptance/` after a clean test run" + "4 canonical deliverable files are byte-identical to HEAD after test run".
 9. **[via-codex-tool]** Fix `tests/test_*/conftest.py` sys.path injection to use `REPO_ROOT` instead of `REPO_ROOT / "src"`, eliminating the circular-import footgun that blocks 4 tests from running in non-macOS / Linux-native Python environments. Codex dispatch scope: 4 conftest files (`test_skill_index`, `test_report_engine`, `test_notion_sync`, `test_auto_verifier`); CHK matrix: full suite green on Linux python3.10 with PYTHONPATH unset + host macOS .venv suite still green.
+
+## 2026-04-20 Afternoon — C-class infra fixes C1+C2 landed
+
+- **Handoff received**: Cowork (Opus 4.6 sandbox) → Claude Code (Opus 4.7 local, full git/shell). See `.planning/handoffs/2026-04-20_claude_code_kickoff.md`.
+- **Commit `fbb5d22`** on `feat/c-class-infra-fixes`: C1 (ResultComparator alias layer) + C2 (foam_agent_adapter ParameterPlumbingError + round-trip verifier) + `docs/whitelist_audit.md` (342 lines) + launcher port-bump + .gitignore.
+- **PR #4 opened**: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/4
+- **Regression**: 158/158 green (adapter 56 + comparator 20 + task_runner + e2e_mock + correction_recorder + knowledge_db + auto_verifier).
+- **Autonomy**: DEC-V61-003 turf (src/ tests/ docs/ scripts/ .planning/). No touches to `knowledge/gold_standards/` or `whitelist.yaml` reference_values.
+- **Next**: merge PR #4 → C3 sampleDict auto-gen (autonomous) → A-class metadata corrections (autonomous) → B-class gold remediation (external gate).
+- **DEC-V61-004** to be mirrored to Notion Decisions DB.
 
 ---
 

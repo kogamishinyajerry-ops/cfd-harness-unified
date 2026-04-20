@@ -27,6 +27,9 @@ env/
 # OS
 .DS_Store
 
+# Local-only macOS double-click launcher (regenerable; per-user convenience).
+Launch CFD UI.command
+
 # Quarantined report iterations (see reports/deep_acceptance/_archive_*/README.md).
 # Keep these out of git history — regenerable, and the test-induced-pollution
 # surface that produces them is tracked as a follow-up Codex-dispatch fix.

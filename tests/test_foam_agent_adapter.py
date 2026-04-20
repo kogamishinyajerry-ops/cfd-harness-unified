@@ -10,7 +10,13 @@ import tempfile
 from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
-from src.foam_agent_adapter import FoamAgentExecutor, MockExecutor
+from src.foam_agent_adapter import (
+    FoamAgentExecutor,
+    MockExecutor,
+    ParameterPlumbingError,
+    _parse_dict_scalar,
+    _parse_g_magnitude,
+)
 from src.models import (
     CFDExecutor, Compressibility, FlowType, GeometryType,
     SteadyState, TaskSpec,
@@ -862,3 +868,174 @@ class TestCylinderStrouhalExtractor:
         )
 
         assert "strouhal_canonical_band_shortcut_fired" not in result
+
+
+# ---------------------------------------------------------------------------
+# P-B C2: parameter plumbing pre-run assertion
+# ---------------------------------------------------------------------------
+
+def _make_nc_spec(Ra: float, aspect_ratio: float) -> TaskSpec:
+    return TaskSpec(
+        name=f"nc-Ra{Ra:g}",
+        geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+        flow_type=FlowType.NATURAL_CONVECTION,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Ra=Ra,
+        boundary_conditions={"aspect_ratio": aspect_ratio, "Pr": 0.71},
+    )
+
+
+class TestParameterPlumbingParsers:
+    """Regex helpers must tolerate both OpenFOAM dict forms we emit."""
+
+    def test_parse_scalar_with_dimensions(self):
+        text = "nu              [0 2 -1 0 0 0 0] 1.234e-05;\n"
+        assert _parse_dict_scalar(text, "nu") == pytest.approx(1.234e-5)
+
+    def test_parse_scalar_without_dimensions(self):
+        text = "    Pr              0.71;\n    Cp   1005.0;\n"
+        assert _parse_dict_scalar(text, "Pr") == pytest.approx(0.71)
+        assert _parse_dict_scalar(text, "Cp") == pytest.approx(1005.0)
+
+    def test_parse_scalar_missing_key_returns_none(self):
+        text = "Pr 0.71;\n"
+        assert _parse_dict_scalar(text, "beta") is None
+
+    def test_parse_g_vector_magnitude(self):
+        text = "value           (0 -9.81 0);\n"
+        assert _parse_g_magnitude(text) == pytest.approx(9.81)
+
+    def test_parse_g_vector_missing_returns_none(self):
+        assert _parse_g_magnitude("no vector here") is None
+
+
+class TestBuoyantCasePlumbingVerification:
+    """Natural convection cavity: Ra must survive the write pipeline intact."""
+
+    def test_rayleigh_benard_ra_1e6_round_trip_passes(self):
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            # Does not raise — verifier is called internally on success.
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            assert (case_dir / "constant" / "physicalProperties").exists()
+            assert (case_dir / "constant" / "g").exists()
+
+    def test_dhc_ra_1e10_round_trip_passes(self):
+        spec = _make_nc_spec(Ra=1e10, aspect_ratio=1.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+
+    def test_tampered_gravity_raises_plumbing_error(self):
+        """If someone bumps |g| post-write, Ra_effective drifts — detect it."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0)
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            ex._generate_natural_convection_cavity(case_dir, spec)
+            g_path = case_dir / "constant" / "g"
+            tampered = g_path.read_text().replace(
+                "value           (0 -", "value           (0 -100"
+            )
+            g_path.write_text(tampered)
+            with pytest.raises(ParameterPlumbingError) as ei:
+                ex._verify_buoyant_case_plumbing(
+                    case_dir=case_dir,
+                    declared_Ra=1e6,
+                    declared_Pr=0.71,
+                    declared_L=2.0,
+                    declared_dT=10.0,
+                    declared_beta=1.0 / 300.0,
+                )
+            assert "Ra_effective" in str(ei.value)
+            assert "declared Ra=1e+06" in str(ei.value)
+
+    def test_tampered_pr_raises_plumbing_error(self):
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0)
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            ex._generate_natural_convection_cavity(case_dir, spec)
+            props_path = case_dir / "constant" / "physicalProperties"
+            props_path.write_text(
+                props_path.read_text().replace("Pr              0.71", "Pr              7.1")
+            )
+            with pytest.raises(ParameterPlumbingError) as ei:
+                ex._verify_buoyant_case_plumbing(
+                    case_dir=case_dir,
+                    declared_Ra=1e6,
+                    declared_Pr=0.71,
+                    declared_L=2.0,
+                    declared_dT=10.0,
+                    declared_beta=1.0 / 300.0,
+                )
+            # Either the Ra drift catches it first, or the Pr check does — both are valid
+            assert "plumbing" in str(ei.value).lower()
+
+    def test_missing_props_file_raises(self):
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            case_dir.mkdir(parents=True)
+            (case_dir / "constant").mkdir()
+            with pytest.raises(ParameterPlumbingError, match="physicalProperties missing"):
+                ex._verify_buoyant_case_plumbing(
+                    case_dir=case_dir,
+                    declared_Ra=1e6, declared_Pr=0.71, declared_L=2.0,
+                    declared_dT=10.0, declared_beta=1.0 / 300.0,
+                )
+
+
+class TestInternalChannelPlumbingVerification:
+    """Plane channel flow: Re must survive the 1/nu round trip."""
+
+    def _make_spec(self, Re: float) -> TaskSpec:
+        return TaskSpec(
+            name="plane-channel",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=Re,
+        )
+
+    def test_re_5600_round_trip_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec(5600))
+            assert (case_dir / "constant" / "physicalProperties").exists()
+
+    def test_tampered_nu_raises_plumbing_error(self):
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            ex._generate_steady_internal_channel(case_dir, self._make_spec(5600))
+            props = case_dir / "constant" / "physicalProperties"
+            # Rewrite nu to 1e-3 (→ Re_effective=1000, way off declared 5600)
+            props.write_text(
+                props.read_text().replace("0.00017857142857142857", "0.001")
+            )
+            with pytest.raises(ParameterPlumbingError, match="Re_effective"):
+                ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
+
+    def test_missing_props_raises(self):
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            case_dir.mkdir()
+            (case_dir / "constant").mkdir()
+            with pytest.raises(ParameterPlumbingError, match="physicalProperties missing"):
+                ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
+
+    def test_zero_nu_is_rejected(self):
+        ex = FoamAgentExecutor()
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            (case_dir / "constant").mkdir(parents=True)
+            (case_dir / "constant" / "physicalProperties").write_text(
+                "transportModel Newtonian;\nnu [0 2 -1 0 0 0 0] 0.0;\n"
+            )
+            with pytest.raises(ParameterPlumbingError, match="non-positive nu"):
+                ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
