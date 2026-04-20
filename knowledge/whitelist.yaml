@@ -58,7 +58,11 @@ cases:
     compressibility: INCOMPRESSIBLE
     steady_state: TRANSIENT
     solver: pimpleFoam
-    turbulence_model: k-omega SST
+    # Re=100 is in the laminar 2D Karman vortex shedding regime (Williamson 1996:
+    # 3D transition ~Re=190). k-omega SST over-dissipates the wake → under-predicts
+    # St; laminar is physically correct. A-class metadata correction per
+    # docs/whitelist_audit.md §3. reference_values untouched. (DEC-V61-005)
+    turbulence_model: laminar
     parameters:
       Re: 100
     gold_standard:
@@ -207,7 +211,11 @@ cases:
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
     solver: buoyantFoam
-    turbulence_model: k-omega SST
+    # Ra=1e6 is steady-convective (fully turbulent onset ~Ra=1.5e8 for moderate Pr).
+    # k-omega SST over-dissipates at this Ra → under-predicts Nu. Chaivat correlation
+    # Nu=0.229*Ra^0.269 assumes laminar steady regime. A-class metadata correction per
+    # docs/whitelist_audit.md §3. reference_values untouched. (DEC-V61-005)
+    turbulence_model: laminar
     parameters:
       Ra: 1000000
       Pr: 0.71
