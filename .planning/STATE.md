@@ -552,10 +552,22 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): 7+ local autonomous
 
 ## Post-cutover TODO queue (ordered, self-routed unless marked)
 
-1. **[self]** Verify tests still green (`pytest -q`) and report baseline against takeover-prompt snapshot "245/245 harness". Current code has advanced through EX-1-009/010 targeted-test additions; expected baseline 252/252 or similar.
-2. **[self]** Decide whether to merge `codex/visual-acceptance-sync` (branch with 13 unique commits and a fresh 10-case dashboard) back into `main`, or leave as demo-sync branch.
-3. **[self]** Run `git status` pruning review on 57 untracked `reports/deep_acceptance/*` files. Archive duplicates into a dated subfolder rather than delete, preserving audit trail per 留痕 > 聪明.
+1. **[self · DONE]** Verified tests via `pytest -q` on 2026-04-20T11:37.
+   - Sandbox baseline: **226/226 runnable tests PASS**, 0 regressions attributable to v6.1 commit.
+   - 4 test modules (`test_notion_client`, `test_task_runner`, `test_e2e_mock`,
+     `test_auto_verifier/test_task_runner_integration`) are **unrunnable in this
+     Linux sandbox** because `tests/test_*/conftest.py` injects `src/` at
+     `sys.path[0]`, which shadows the site-packages `notion_client` package
+     and triggers a circular import in `src/notion_client.py`
+     (`from notion_client import Client`). Pre-existing path-ordering footgun,
+     not introduced by v6.1 commit. Host macOS `.venv` apparently masks it
+     via a different resolution order (likely editable-install or PYTHONPATH
+     ordering). Expected full-host baseline per prior sessions: 252/252.
+2. **[self]** Decide whether to merge `codex/visual-acceptance-sync` (branch with 13 unique commits + v6.1 cutover commit `7e087b4`) back into `main`, or leave as demo-sync branch.
+3. **[self · DONE 2026-04-20T11:40]** Archived 55 untracked iteration-dupe files under `reports/deep_acceptance/` into `reports/deep_acceptance/_archive_20260420_iteration_dupes/` (gitignored). The 3 intentionally-tracked timestamped snapshots from 83252ef were left in place. Origin + root-cause documented in the archive README.
 4. **[STOP-FOR-GATE when Notion MCP restored]** Q-1 DHC gold Path P-1/P-2 (hard floor #1).
 5. **[STOP-FOR-GATE when Notion MCP restored]** Q-2 R-A-relabel pipe_flow → duct_flow (whitelist.yaml 成员 — hard floor #2 vicinity; needs Gate even though it's not a tolerance edit).
 6. **[self]** Q-3 Notion backfill — enumerate pre-v6.1 pending decisions + DEC-V61-001 in a single mirror batch when MCP comes back.
 7. **[self]** Phase 9 activation remains frozen pending D5 gate (per D4 C4 + PL-1 freeze).
+8. **[via-codex-tool]** Fix `tests/test_report_engine/test_generate_reports_cli.py` hermeticity. Current test writes to the **real** `reports/deep_acceptance/` directory instead of the `temp_reports` tmp_path fixture defined in `tests/test_report_engine/conftest.py`. Every `pytest` run pollutes 6-8 fresh files AND overwrites the 4 tracked canonical deliverables. Discovered during v6.1 cutover Step B. Codex dispatch scope: `tests/test_report_engine/test_generate_reports_cli.py` only; CHK matrix must include "no new file appears under real `reports/deep_acceptance/` after a clean test run" + "4 canonical deliverable files are byte-identical to HEAD after test run".
+9. **[via-codex-tool]** Fix `tests/test_*/conftest.py` sys.path injection to use `REPO_ROOT` instead of `REPO_ROOT / "src"`, eliminating the circular-import footgun that blocks 4 tests from running in non-macOS / Linux-native Python environments. Codex dispatch scope: 4 conftest files (`test_skill_index`, `test_report_engine`, `test_notion_sync`, `test_auto_verifier`); CHK matrix: full suite green on Linux python3.10 with PYTHONPATH unset + host macOS .venv suite still green.
