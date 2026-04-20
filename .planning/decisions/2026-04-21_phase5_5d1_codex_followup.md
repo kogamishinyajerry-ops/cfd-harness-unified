@@ -13,7 +13,7 @@ reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 ca9fe0e` restores PR-5d's unsafe-sign-anything
   semantics + wall-clock-stamped manifest + V&V40 label. Staging dir
   structure unchanged; no migration cost either direction.)
-notion_sync_status: pending-sync (round 5 verdict landed; Notion mirror queued)
+notion_sync_status: synced 2026-04-21T04:45 (https://www.notion.so/348c68942bed81099cf8d582589e4a45) — Decisions DB page created Status=Accepted, Scope=Phase, Canonical Follow-up=PR #19 URL, L3 finding recorded in body
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/19
 github_merge_sha: ca9fe0e525a92e8b52ea32092e228b0bf7ace73e
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
