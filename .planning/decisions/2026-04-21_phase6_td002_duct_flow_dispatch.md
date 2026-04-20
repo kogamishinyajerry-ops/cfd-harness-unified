@@ -7,7 +7,7 @@ claude_signoff: yes
 codex_tool_invoked: true
 codex_diff_hash: 36e3249<FULL_SHA_TO_CONFIRM>
 codex_tool_report_path: reports/codex_tool_reports/2026-04-21_pr22_duct_dispatch_review.md
-codex_verdict: pending (round 8 queued to run after round 7)
+codex_verdict: CHANGES_REQUIRED → RESOLVED by PR #27 (round 8; 1 Blocking finding on fragile dispatcher signal — `hydraulic_diameter` in `boundary_conditions` is not invariant across TaskSpec constructor paths. PR #27 (merge `7bbbeb2`) replaced with canonical name-based `_is_duct_flow_case()` helper + fail-closed `duct_flow_hydraulic_diameter_missing` flag + integration test using KnowledgeDB.list_whitelist_cases(). Naming note from round 8 also applied: `duct_flow_extractor_missing` → `duct_flow_extractor_pending`.)
 counter_status: "v6.1 autonomous_governance counter 2 → 3."
 reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 <merge>` restores the original flat-plate
