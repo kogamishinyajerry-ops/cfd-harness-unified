@@ -1,0 +1,31 @@
+# Reference-pass run for lid_driven_cavity.
+#
+# Provenance: Ghia, Ghia & Shin (1982). "High-Re Solutions for Incompressible
+# Flow Using the Navier-Stokes Equations and a Multigrid Method."
+# J. Comput. Phys. 48: 387-411. Table I, Re=100 column.
+#
+# At y = 0.0625 on the vertical centerline, Ghia reports u/U_lid = -0.03717.
+# This reference_pass fixture equals the gold ref value to demonstrate what
+# "your solver produced correct numbers" looks like. The 0.00 deviation is
+# intentional — Ghia's digits ARE what the gold is derived from.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考运行 · 对齐 Ghia 1982
+  label_en: Reference run (Ghia 1982 aligned)
+  description_zh: >-
+    用 Ghia 1982 的 Re=100 表格数据直接作为测量值。这代表一个"如果你的 solver
+    没有 bug、网格也足够、收敛判据也到位"的理想结果。你会看到偏差为 0%，容差带
+    正中央。
+  category: reference
+  expected_verdict: PASS
+case_id: lid_driven_cavity
+source: literature_reference
+measurement:
+  value: -0.03717
+  unit: dimensionless
+  run_id: reference_ghia_re100_y0p0625
+  commit_sha: null
+  measured_at: null
+  quantity: u_centerline[y=0.0625]
+audit_concerns: []
+decisions_trail: []

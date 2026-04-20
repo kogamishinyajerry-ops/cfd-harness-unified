@@ -1,0 +1,30 @@
+# Reference-pass run for backward_facing_step.
+#
+# Provenance: Driver & Seegmiller (1985). "Features of a Reattaching
+# Turbulent Shear Layer in Divergent Channel Flow." AIAA J. 23 (2): 163-171.
+# Xr/H = 6.26 at Re_H ≈ 38000.
+#
+# Synthetic reference sets measurement = gold with a tiny +0.5% numerical
+# margin to look realistic (a real solver will never produce exact digits).
+# 0.5% is well inside the 10% tolerance band so the verdict is PASS.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考运行 · 对齐 Driver-Seegmiller 1985
+  label_en: Reference run (Driver & Seegmiller 1985 aligned)
+  description_zh: >-
+    一个合格 solver 在足够网格 + 合适湍流模型下能产出的 reattachment 长度。
+    数值上相对 gold 偏 +0.5%——真实 solver 不会给到整数位对齐，这点小偏差
+    是正常的数值误差。
+  category: reference
+  expected_verdict: PASS
+case_id: backward_facing_step
+source: literature_reference
+measurement:
+  value: 6.29
+  unit: Xr/H
+  run_id: reference_driver_seegmiller_re38000
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns: []
+decisions_trail: []

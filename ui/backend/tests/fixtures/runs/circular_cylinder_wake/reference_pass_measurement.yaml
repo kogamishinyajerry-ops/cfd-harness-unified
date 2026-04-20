@@ -1,0 +1,31 @@
+# Reference-pass run for circular_cylinder_wake.
+#
+# Provenance: Williamson (1996). "Vortex Dynamics in the Cylinder Wake."
+# Annu. Rev. Fluid Mech. 28: 477-539. For Re ∈ [200, 5000], St ≈ 0.18-0.21.
+# Gold value in our whitelist: 0.164 (a conservative lower-Re mode-A value).
+#
+# Reference synth: measurement = 0.166 (+1.2% dev, inside 5% tolerance → PASS).
+# HAZARD framing on the real case comes from the canonical-band shortcut
+# flag (DEC-ADWM-006), which is a *solver-specific* concern — a clean
+# reference run that doesn't fire the shortcut still renders PASS here.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考运行 · 对齐 Williamson 1996
+  label_en: Reference run (Williamson 1996 aligned)
+  description_zh: >-
+    在无 canonical-band shortcut 的前提下，solver 直接从压强信号 FFT 得到的
+    涡脱频率。这条 run 展示"正常"的 Strouhal 数出现方式——如果你的代码通过
+    "落在标准窄带里就通过"取巧，再回去看 real_incident run 会看到 HAZARD。
+  category: reference
+  expected_verdict: PASS
+case_id: circular_cylinder_wake
+source: literature_reference
+measurement:
+  value: 0.166
+  unit: dimensionless
+  run_id: reference_williamson_re200_fft_derived
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns: []
+decisions_trail: []

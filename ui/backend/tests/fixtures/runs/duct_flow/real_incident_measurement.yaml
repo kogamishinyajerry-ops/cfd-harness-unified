@@ -1,0 +1,42 @@
+# Real-incident run for duct_flow. §5d Part-2 acceptance observed that
+# duct_flow and turbulent_flat_plate both returned cf=0.007600365566
+# to 10 decimals. Root cause: both cases share Re=50000 and the
+# Spalding fallback is parameter-coupled to Re only — it returns
+# identical values regardless of geometry. Fixed by P6-TD-002 + round-8
+# correction (PRs #22 + #27); duct_flow now emits producer flags instead
+# of a misleading Cf.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · 方管误用 Cf 分支
+  label_en: Real incident (duct mis-routed to flat-plate Cf)
+  description_zh: >-
+    方管和平板共享 Re=50000 时，Spalding fallback 给出两边一模一样的 Cf。
+    方管的真正观察量应该是 Darcy friction factor f，不是 Cf。这是跨几何
+    的"经验公式意外兼容"——工具正确、数字对齐、物理全错。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: duct_flow
+source: p2_acceptance_solver_run
+measurement:
+  value: 0.007600365566051871
+  unit: dimensionless
+  run_id: p2_acc_duct_flow_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:30:01Z'
+  quantity: cf_skin_friction
+  extraction_source: key_quantities_fallback
+  solver_success: true
+  comparator_passed: false
+audit_concerns:
+  - concern_type: CONTRACT_STATUS
+    summary: >-
+      Quantity 'friction_factor' not found; adapter returned 'cf_skin_friction'
+      via Spalding fallback. Rescue routed via P6-TD-002/003.
+    detail: null
+    decision_refs:
+      - DEC-V61-022
+decisions_trail:
+  - decision_id: DEC-V61-022
+    date: '2026-04-21'
+    title: P6-TD-002 duct_flow dispatch guard
+    autonomous: true

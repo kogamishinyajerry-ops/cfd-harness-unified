@@ -1,0 +1,61 @@
+# Real-incident run for turbulent_flat_plate.
+#
+# Source: §5d Part-2 acceptance batch (2026-04-20). The solver ran
+# simpleFoam with `turbulenceProperties laminar` — matching the declared
+# contract — but the extractor triggered the Spalding fallback because
+# y+ wasn't low enough and the wall-cell value wasn't trustworthy. The
+# Spalding engineering correlation is parameter-coupled to Re only; at
+# Re=50000 it returns 0.0576 / (0.5*50000)^0.2 = 0.00760365566 regardless
+# of regime.
+#
+# This run is intentionally a FAIL on the current gold (0.00420 Blasius).
+# The value is correct FOR THE SPALDING CORRELATION, but semantically
+# wrong for Re_x=25000 laminar flow. The teaching angle: a solver can
+# converge and still be "wrong" because an engineering shortcut
+# substituted for the real physics.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · Spalding fallback 触发
+  label_en: Real incident (Spalding fallback activated)
+  description_zh: >-
+    2026-04-20 §5d 验收批次真实产出。表面上求解器跑完了，但壁面近点的 Cf
+    被 Spalding 经验公式替换——这个公式只看 Re，不看网格质量。结果是"工程上
+    看似合理，物理上 81% 偏差"。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: turbulent_flat_plate
+source: p2_acceptance_solver_run
+measurement:
+  value: 0.007600365566051871
+  unit: dimensionless
+  run_id: p2_acc_turbulent_flat_plate_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:21:54Z'
+  quantity: cf_skin_friction
+  extraction_source: comparator_deviation
+  solver_success: true
+  comparator_passed: false
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: >-
+      Spalding fallback correlation活跃 (cf_spalding_fallback_activated=true)；
+      该公式只依赖 Re，在低 Re_x 层流 contract 下系统偏高。
+    detail: >-
+      Spalding: Cf = 0.0576 / Re_x^0.2 at Re_x=0.5*Re=25000 给出 0.00760;
+      Blasius 层流精确解在同一 Re_x 给出 0.00420.
+    decision_refs:
+      - DEC-ADWM-005
+      - DEC-V61-019
+  - concern_type: DEVIATION
+    summary: '测量 0.00760 vs gold 0.00420 · 81% deviation · 超出 10% 容差带'
+    detail: null
+    decision_refs: []
+decisions_trail:
+  - decision_id: DEC-ADWM-005
+    date: '2026-04-17'
+    title: Spalding fallback producer/consumer wiring
+    autonomous: true
+  - decision_id: DEC-V61-019
+    date: '2026-04-21'
+    title: PR-5d.1 Codex closure + TFP gold remediation to Blasius
+    autonomous: true

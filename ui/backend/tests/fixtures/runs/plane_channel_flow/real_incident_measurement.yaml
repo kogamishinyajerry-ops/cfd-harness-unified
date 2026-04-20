@@ -1,0 +1,38 @@
+# Real-incident run for plane_channel_flow. §5d Part-2 reports
+# comparator_passed=true at 5% tolerance, but the quantity returned
+# is `U_max_approx` (a scalar shortcut) whereas the gold expects
+# `u_mean_profile` (a vector). The comparison happens on a fallback
+# scalar extraction, so the PASS is partial.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实运行 · 标量退化比较
+  label_en: Real run (scalar-fallback comparison)
+  description_zh: >-
+    Channel flow 的 gold 是整条 u_mean(y+) 剖面（向量），但 adapter 当前
+    只能输出 U_max 标量。后端降级为标量比较，因此能 PASS，但没有真正
+    验证剖面形状。要真正通过需要 DNS-grade 剖面采样——未来 run。
+  category: real_incident
+  expected_verdict: PASS
+case_id: plane_channel_flow
+source: p2_acceptance_solver_run
+measurement:
+  value: 1.112475
+  unit: dimensionless
+  run_id: p2_acc_plane_channel_flow_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:28:57Z'
+  quantity: U_max_approx
+  extraction_source: key_quantities_fallback
+  solver_success: true
+  comparator_passed: true
+audit_concerns:
+  - concern_type: CONTRACT_STATUS
+    summary: 'Quantity: u_mean_profile | Tolerance: 5.0% | PASS (scalar fallback)'
+    detail: 'Quantity: u_mean_profile | Tolerance: 5.0% | PASS'
+    decision_refs:
+      - DEC-V61-019
+decisions_trail:
+  - decision_id: DEC-V61-019
+    date: '2026-04-21'
+    title: PR-5d.1 Codex closure (HIGH+MED)
+    autonomous: true

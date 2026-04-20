@@ -1,0 +1,64 @@
+# Real-incident run for differential_heated_cavity.
+#
+# The ONLY curated run for DHC. There is no reference_pass run because
+# the declared contract (Ra=1e10) is fundamentally under-resolvable on
+# our whitelist mesh — producing a "PASS" fixture at Ra=1e10 would
+# require either a 1000-layer grid (not in the MVP) or a lie.
+#
+# Instead we preserve this as a teaching case-study: the solver runs
+# fine, the extractor works, you get a plausible Nu=77.82 — and the
+# regime-consistency rule catches that 77.82 belongs to Ra~1e10 literature
+# (100-160 range) not Ra=1e6 gold (8.8). FAIL here IS the lesson.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实案例 · Ra 声明与网格能力不匹配
+  label_en: Real case study (Ra declaration vs mesh capability mismatch)
+  description_zh: >-
+    这个案例没有 reference_pass——不是因为工具造不出来，而是因为在声明
+    Ra=10¹⁰ 下我们现有的网格物理上就算不对。规则引擎把这标成 FAIL 不是
+    刁难，是真实地告诉你："你选的 Ra 和你投入的算力对不上。算出一个数
+    不等于算对了。"
+  category: real_incident
+  expected_verdict: FAIL
+case_id: differential_heated_cavity
+source: p2_acceptance_solver_run
+measurement:
+  value: 77.82
+  unit: dimensionless
+  run_id: p2_acc_dhc_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:21:54Z'
+  quantity: nusselt_number
+  extraction_source: wall_averaged_gradient
+  solver_success: true
+  comparator_passed: false
+audit_concerns:
+  - concern_type: CONTRACT_STATUS
+    summary: >-
+      SATISFIED — Ra=1e6 downgrade (Path P-2) simultaneously closes three
+      prior open issues: (1) mesh-resolution precondition (~1000 cells
+      infeasible 40-80 cells sufficient); (2) gold-reference accuracy
+      (de Vahl Davis Nu=8.800 is unambiguous at Ra=1e6).
+    detail: null
+    decision_refs:
+      - DEC-V61-006
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: 'Boundary-layer under-resolution at Ra=1e10 on 256² mesh; precondition #1 unsatisfied.'
+    detail: null
+    decision_refs:
+      - DEC-ADWM-004
+  - concern_type: DEVIATION
+    summary: >-
+      Measured Nu=77.82 is closer to literature Ra=1e10 values (100-160)
+      than to the gold ref_value=30.0.
+    detail: null
+    decision_refs: []
+decisions_trail:
+  - decision_id: DEC-ADWM-002
+    date: '2026-04-17'
+    title: EX-1-008 G1 Fix Plan Packet self-APPROVE (mean-over-y Nu refactor)
+    autonomous: true
+  - decision_id: DEC-ADWM-004
+    date: '2026-04-18'
+    title: FUSE cycle 2; escalate DHC gold accuracy to external Gate (Q-1)
+    autonomous: false

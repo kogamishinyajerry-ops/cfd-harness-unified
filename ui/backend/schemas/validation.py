@@ -18,6 +18,41 @@ HAZARD (within tolerance but a silent-pass hazard is armed), FAIL
 no measurement is available yet."""
 
 
+RunCategory = Literal[
+    "reference",
+    "real_incident",
+    "under_resolved",
+    "wrong_model",
+]
+"""Run category for multi-run validation demos:
+- reference: a run that SHOULD pass — curated from literature exact solutions
+  or published tables. Lets students see what "done right" looks like.
+- real_incident: the actual measurement our adapter produced in a specific
+  production incident. Preserved for auditability / decision traceability.
+- under_resolved: a run deliberately using insufficient mesh / short settle
+  time / low y+ — a teaching run that demonstrates why resolution matters.
+- wrong_model: a run using a physically-inappropriate turbulence / physics
+  model — demonstrates why model selection matters.
+"""
+
+
+class RunDescriptor(BaseModel):
+    """One row of GET /api/cases/{id}/runs — lightweight list entry."""
+
+    run_id: str = Field(..., description="stable id within the case")
+    label_zh: str = Field(..., description="human label, Chinese primary")
+    label_en: str = Field("", description="optional English label")
+    description_zh: str = Field(
+        "",
+        description="what this run represents (what was curated/broken/observed)",
+    )
+    category: RunCategory
+    expected_verdict: ContractStatus = Field(
+        "UNKNOWN",
+        description="hint only — actual verdict is computed from the measurement",
+    )
+
+
 class CaseIndexEntry(BaseModel):
     """One row of GET /api/cases."""
 
