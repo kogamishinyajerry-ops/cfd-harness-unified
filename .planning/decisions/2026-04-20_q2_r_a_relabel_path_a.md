@@ -12,9 +12,9 @@ reversibility: fully-reversible-by-pr-revert
   the old whitelist id + Moody pipe description, and the pre-rename
   consumer code. Corrections directory is out of scope — old case
   ids in historical correction YAMLs are immutable evidence.)
-notion_sync_status: PENDING
-github_pr_url: null
-github_merge_sha: null
+notion_sync_status: synced 2026-04-20T23:50 (https://www.notion.so/348c68942bed8172a22fd333ea1e937e) — Decisions DB page created with Scope=Project, Status=Accepted, Canonical Follow-up=PR #11 URL
+github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/11
+github_merge_sha: 947661efe7d12b9bb47af1515baaa648807abc46
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
 external_gate_approval: Kogami approved Path A 2026-04-20 (session `"决定 Q-2 path（我推荐 A）"` confirming audit recommendation in `.planning/gates/Q-2_r_a_relabel.md`).
 supersedes: null  # Gate Q-2 subsumed; see `external_gate_queue.md` Q-2 entry

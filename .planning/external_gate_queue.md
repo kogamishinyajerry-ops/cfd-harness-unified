@@ -47,7 +47,11 @@ reviewer rather than hidden.
 
 </details>
 
-## Q-2: R-A-relabel (fully_developed_turbulent_pipe_flow → duct_flow)
+## ~~Q-2: R-A-relabel (fully_developed_turbulent_pipe_flow → duct_flow)~~ — CLOSED 2026-04-20
+
+**Closure**: Gate Q-2 Path A approved by Kogami. PR #11 merged `947661efe7d12b9bb47af1515baaa648807abc46`. Whitelist id `fully_developed_pipe` + auto_verifier id `fully_developed_turbulent_pipe_flow` unified to `duct_flow`. Gold switched to Jones 1976 rectangular-duct correlation. physics_contract_status: INCOMPATIBLE → SATISFIED. Consumer code updated (auto_verifier/config.py + report_engine 3 files + 1 test). See DEC-V61-011.
+
+<details><summary>Historical record (for trace)</summary>
 
 - **Full gate request (2026-04-20T23:05)**: `.planning/gates/Q-2_r_a_relabel.md` — formal 4-path decision surface (A/B/C/D), audit recommendation Path A, Phase 5 interaction notes.
 - **Source**: `reports/ex1_first_slice/diagnostic_memo.md` §R-A-relabel
@@ -70,6 +74,9 @@ reviewer rather than hidden.
   create + whitelist edit + test updates; no src/ logic change)
 - **Notion backfill**: N/A (no ADWM decision yet — needs external
   Gate to grant authority)
+- **Decision (2026-04-20)**: Kogami approved Path A. Landed per DEC-V61-011. Scope ended up larger than 1-2 cycles estimate because of auto_verifier/report_engine consumer-code touches that weren't visible at gate-filing time — still under a single PR (#11).
+
+</details>
 
 ## ~~Q-3: Autonomous-governance decision backfill to Notion Decisions DB~~ — CLOSED 2026-04-19 / RE-CLOSED 2026-04-20
 
@@ -142,3 +149,7 @@ Updated: 2026-04-20 by claude-opus47-app (Q-new Kogami-approved 3 of
 5 cases — PR #6 merged 912b2ce1 per DEC-V61-006; Q-1 + Q-new PARTIALLY
 CLOSED; only Q-2 R-A-relabel remains open; Cases 9+10 queued for
 future literature re-source → potential DEC-V61-007)
+Updated: 2026-04-20 by claude-opus47-app (Q-2 CLOSED via Path A per
+DEC-V61-011 · PR #11 merged 947661ef · external-gate queue is now
+EMPTY; Phase 5 Audit Package Builder fully unblocked; Cases 9+10
+Behnad/Chaivat re-source remains HOLD pending paper access)

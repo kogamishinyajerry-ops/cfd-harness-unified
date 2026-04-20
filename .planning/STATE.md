@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-20T23:15"
+last_updated: "2026-04-20T23:55"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -602,6 +602,9 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 - **Q-2 R-A-relabel gate filed (2026-04-20T23:05)**: `.planning/gates/Q-2_r_a_relabel.md` with 4-path decision surface (A/B/C/D). Audit recommends Path A (rename `fully_developed_pipe` → `duct_flow`, new Jones-duct correlation). external_gate_queue.md Q-2 entry updated to reference new gate doc. Blocks Phase 5 per DEC-V61-002.
 - **Phase 5 kickoff plan written (2026-04-20T23:10)**: `.planning/phase5_audit_package_builder_kickoff.md` — 4-PR decomposition (PR-5a manifest / 5b serialize / 5c sign / 5d UI), ~1400 LOC estimate, 5 open design questions, dependency graph, handoff instructions. NOT implementing Phase 5 in this session — deferred to dedicated session after Q-2 resolves.
 - **v6.1 autonomous_governance counter**: 7 → **8** (DEC-V61-010 added). Still 2 slots below hard-floor-4 threshold of ≥10.
+- **Q-2 CLOSED + PR #11 LANDED (2026-04-20T23:50)**: Gate Q-2 Path A approved by Kogami. Merge `947661efe7d12b9bb47af1515baaa648807abc46`. Whitelist id `fully_developed_pipe` + auto_verifier id `fully_developed_turbulent_pipe_flow` unified to `duct_flow`. Gold standard switched from Moody/Blasius pipe correlation to Jones 1976 rectangular-duct at Re=50000 (f=0.0185, within 2% of both — comparator verdict preserved). physics_contract_status INCOMPATIBLE → SATISFIED. Consumer code updated across `src/auto_verifier/config.py` + `src/report_engine/{data_collector,generator,contract_dashboard}.py` + `tests/test_report_engine/test_generate_reports_cli.py`. Two legacy gold YAMLs deleted, one new `duct_flow.yaml` created with legacy_case_ids + legacy_source_files traceability fields. DEC-V61-011 Notion page `348c6894-2bed-8172-a22f-d333ea1e937e`. Regression: 196/196 core matrix + 9/9 report_engine CLI tests green. `autonomous_governance: false` (gate-approved).
+- **External-gate queue state**: 1 open → **0 open**. Phase 5 Audit Package Builder critical path fully unblocked per DEC-V61-002 constraint. Cases 9+10 literature re-source remains HOLD pending PDF access (orthogonal to Phase 5 signing).
+- **v6.1 autonomous_governance counter**: 8 (unchanged — DEC-V61-011 is gate-approved, not autonomous). Hard-floor-4 threshold ≥10 still has 2 slots of runway.
 
 ---
 
