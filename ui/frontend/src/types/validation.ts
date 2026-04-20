@@ -3,6 +3,21 @@
 
 export type ContractStatus = "PASS" | "HAZARD" | "FAIL" | "UNKNOWN";
 
+export type RunCategory =
+  | "reference"
+  | "real_incident"
+  | "under_resolved"
+  | "wrong_model";
+
+export interface RunDescriptor {
+  run_id: string;
+  label_zh: string;
+  label_en: string;
+  description_zh: string;
+  category: RunCategory;
+  expected_verdict: ContractStatus;
+}
+
 export interface CaseIndexEntry {
   case_id: string;
   name: string;

@@ -1,0 +1,42 @@
+# Real-incident run for circular_cylinder_wake.
+#
+# Preserved from legacy fixture. The solver hit the canonical-band
+# shortcut at Re=100 — the adapter hardcodes St=0.165 for Re ∈ [50, 200]
+# instead of deriving it from pressure-signal FFT. The value "passes"
+# tolerance but is armed as HAZARD because no actual vortex-shedding
+# measurement was made. Classic silent-pass hazard.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · canonical-band 取巧
+  label_en: Real incident (canonical-band shortcut armed)
+  description_zh: >-
+    Re=100 的这个运行其实没有真正从 FFT 测到涡脱频率——adapter 在 Re 落入
+    [50, 200] 时直接套用 St=0.165。数值"命中"gold，但是通过的是"取巧"
+    路径。这就是 silent-pass hazard 的教科书例子：数字对上了，物理没算。
+  category: real_incident
+  expected_verdict: HAZARD
+case_id: circular_cylinder_wake
+source: fixture
+measurement:
+  value: 0.165
+  unit: dimensionless
+  run_id: cyl_re100_20260418
+  commit_sha: cf17f23
+  measured_at: '2026-04-18T23:15:00'
+  quantity: strouhal_number
+audit_concerns:
+  - concern_type: COMPATIBLE_WITH_SILENT_PASS_HAZARD
+    summary: >-
+      Canonical-band shortcut armed at Re=100; returned
+      strouhal_number=0.165 is hardcoded, not solver-derived.
+    detail: >-
+      src/foam_agent_adapter.py 在 Re ∈ [50, 200] 时返回硬编码 St=0.165。
+      Producer flag strouhal_canonical_band_shortcut_fired=true 已在 adapter
+      侧发出，consumer 会以 :shortcut_fired 后缀扩充 audit concern。
+    decision_refs:
+      - DEC-ADWM-006
+decisions_trail:
+  - decision_id: DEC-ADWM-006
+    date: '2026-04-18'
+    title: EX-1-010 cylinder canonical-band Strouhal-shortcut audit
+    autonomous: true

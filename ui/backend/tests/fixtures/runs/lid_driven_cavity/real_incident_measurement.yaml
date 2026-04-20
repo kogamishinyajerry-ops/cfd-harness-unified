@@ -1,0 +1,46 @@
+# Real-incident run for lid_driven_cavity from §5d Part-2 batch.
+#
+# Preserved from the legacy fixture. The solver converged but the
+# reported deviation is for u_centerline[y=0.0625]=-0.01565 vs gold
+# -0.03717 — roughly 58% below target. Root cause was insufficient
+# grid refinement near the bottom-left corner where u_x is small and
+# sensitive to discretization. The ValidationReport shows this as FAIL
+# with 5 deviations across the profile vector, of which y=0.0625 is one.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · 网格不足导致 u_centerline 偏离
+  label_en: Real incident (grid-insufficient u_centerline drift)
+  description_zh: >-
+    真实 §5d 批次运行。在底角附近 u_x 本来就小，网格不够精细时这个量对
+    discretization error 特别敏感——5 个采样点里 5 个都越过了 5% 容差。
+    这解释了为什么 LDC 虽然看似"简单"，还是能把不熟练的 CFD user 绊倒。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: lid_driven_cavity
+source: p2_acceptance_solver_run
+measurement:
+  value: -0.0156513325
+  unit: dimensionless
+  run_id: p2_acc_lid_driven_cavity_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:21:54Z'
+  quantity: u_centerline[y=0.0625]
+  extraction_source: comparator_deviation
+  solver_success: true
+  comparator_passed: false
+audit_concerns:
+  - concern_type: CONTRACT_STATUS
+    summary: 'Quantity: u_centerline | Tolerance: 5.0% | Failed: 5 deviation(s)'
+    detail: 'Quantity: u_centerline | Tolerance: 5.0% | Failed: 5 deviation(s)'
+    decision_refs:
+      - DEC-V61-019
+      - RETRO-V61-001
+decisions_trail:
+  - decision_id: DEC-V61-019
+    date: '2026-04-21'
+    title: PR-5d.1 Codex closure (HIGH+MED)
+    autonomous: true
+  - decision_id: RETRO-V61-001
+    date: '2026-04-21'
+    title: v6.1 governance retrospective (bundle D)
+    autonomous: true

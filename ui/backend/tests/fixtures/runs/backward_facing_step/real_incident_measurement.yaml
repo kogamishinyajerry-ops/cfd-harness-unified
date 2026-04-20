@@ -1,0 +1,45 @@
+# Real-incident run for backward_facing_step. §5d Part-2 acceptance batch
+# produced reattachment_length = -5.38 — physically impossible (reattachment
+# must be downstream of the step at x > 0). Root cause: under-converged
+# solver produced noisy Ux zero-crossing upstream of the step. Fixed
+# retroactively by P6-TD-001 guard (PR #21), but the original measurement
+# is preserved here as the real incident that motivated the fix.
+run_metadata:
+  run_id: real_incident
+  label_zh: 真实故障 · 零速交点落在台阶上游
+  label_en: Real incident (upstream zero-crossing artifact)
+  description_zh: >-
+    真实跑的 BFS 欠收敛时 Ux 信号在入口段出现假零交点。提取器以前会把这个
+    x≈-5.38 当成 reattachment length 发布，结果是一个物理不可能的负数。
+    这个 fixture 保留事件原貌——P6-TD-001 修复之后这种数值会被直接拒绝
+    并以 producer flag 形式标记。
+  category: real_incident
+  expected_verdict: FAIL
+case_id: backward_facing_step
+source: p2_acceptance_solver_run
+measurement:
+  value: -5.380732049366224
+  unit: dimensionless
+  run_id: p2_acc_backward_facing_step_b8be73a
+  commit_sha: b8be73a
+  measured_at: '2026-04-20T13:22:01Z'
+  quantity: reattachment_length
+  extraction_source: comparator_deviation
+  solver_success: true
+  comparator_passed: false
+audit_concerns:
+  - concern_type: CONTRACT_STATUS
+    summary: 'Quantity: reattachment_length | Tolerance: 10.0% | Failed: 1 deviation(s)'
+    detail: 'Quantity: reattachment_length | Tolerance: 10.0% | Failed: 1 deviation(s)'
+    decision_refs:
+      - DEC-V61-021
+  - concern_type: DEVIATION
+    summary: 'Reported Xr/H = -5.38 is non-physical (step at x=0, reattachment must be downstream)'
+    detail: null
+    decision_refs:
+      - DEC-V61-021
+decisions_trail:
+  - decision_id: DEC-V61-021
+    date: '2026-04-21'
+    title: P6-TD-001 BFS reattachment upstream-artifact guard
+    autonomous: true

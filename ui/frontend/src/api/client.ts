@@ -5,6 +5,7 @@
 import type {
   CaseDetail,
   CaseIndexEntry,
+  RunDescriptor,
   ValidationReport,
 } from "@/types/validation";
 import type {
@@ -56,9 +57,15 @@ export const api = {
   listCases: () => request<CaseIndexEntry[]>("/api/cases"),
   getCase: (caseId: string) =>
     request<CaseDetail>(`/api/cases/${encodeURIComponent(caseId)}`),
-  getValidationReport: (caseId: string) =>
-    request<ValidationReport>(
-      `/api/validation-report/${encodeURIComponent(caseId)}`,
+  getValidationReport: (caseId: string, runId?: string) => {
+    const q = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
+    return request<ValidationReport>(
+      `/api/validation-report/${encodeURIComponent(caseId)}${q}`,
+    );
+  },
+  listCaseRuns: (caseId: string) =>
+    request<RunDescriptor[]>(
+      `/api/cases/${encodeURIComponent(caseId)}/runs`,
     ),
 
   // Phase 1

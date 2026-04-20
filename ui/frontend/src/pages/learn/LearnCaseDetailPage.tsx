@@ -5,7 +5,12 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import { CaseIllustration } from "@/components/learn/CaseIllustration";
 import { getLearnCase } from "@/data/learnCases";
-import type { ContractStatus, ValidationReport } from "@/types/validation";
+import type {
+  ContractStatus,
+  RunCategory,
+  RunDescriptor,
+  ValidationReport,
+} from "@/types/validation";
 
 // Student-facing case detail. Four tabs:
 //   Story    — default. physics, canonical reference, why validation matters
@@ -56,13 +61,28 @@ export function LearnCaseDetailPage() {
   };
 
   const learnCase = caseId ? getLearnCase(caseId) : undefined;
+  const runId = searchParams.get("run") || undefined;
 
   const { data: report, error } = useQuery<ValidationReport, ApiError>({
-    queryKey: ["validation-report", caseId],
-    queryFn: () => api.getValidationReport(caseId!),
+    queryKey: ["validation-report", caseId, runId ?? "default"],
+    queryFn: () => api.getValidationReport(caseId!, runId),
     enabled: !!caseId,
     retry: false,
   });
+
+  const { data: runs } = useQuery<RunDescriptor[], ApiError>({
+    queryKey: ["case-runs", caseId],
+    queryFn: () => api.listCaseRuns(caseId!),
+    enabled: !!caseId,
+    retry: false,
+  });
+
+  const setRunId = (nextRun: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (nextRun) params.set("run", nextRun);
+    else params.delete("run");
+    setSearchParams(params, { replace: true });
+  };
 
   if (!caseId || !learnCase) {
     return (
@@ -131,7 +151,16 @@ export function LearnCaseDetailPage() {
 
       {/* Tab panels */}
       {tab === "story" && <StoryTab caseId={caseId} />}
-      {tab === "compare" && <CompareTab caseId={caseId} report={report} error={error} />}
+      {tab === "compare" && (
+        <CompareTab
+          caseId={caseId}
+          report={report}
+          error={error}
+          runs={runs ?? []}
+          activeRunId={runId}
+          onSelectRun={setRunId}
+        />
+      )}
       {tab === "run" && <RunTab caseId={caseId} />}
       {tab === "advanced" && <AdvancedTab caseId={caseId} report={report} />}
     </div>
@@ -192,19 +221,43 @@ function StoryTab({ caseId }: { caseId: string }) {
 
 // --- Compare tab --------------------------------------------------------------
 
+const RUN_CATEGORY_LABEL: Record<RunCategory, string> = {
+  reference: "参考运行",
+  real_incident: "真实故障",
+  under_resolved: "欠分辨",
+  wrong_model: "错模型",
+};
+
+const RUN_CATEGORY_COLOR: Record<RunCategory, string> = {
+  reference: "bg-emerald-900/40 text-emerald-200 border-emerald-800/60",
+  real_incident: "bg-amber-900/30 text-amber-200 border-amber-800/50",
+  under_resolved: "bg-orange-900/30 text-orange-200 border-orange-800/50",
+  wrong_model: "bg-rose-900/30 text-rose-200 border-rose-800/50",
+};
+
 function CompareTab({
   caseId,
   report,
   error,
+  runs,
+  activeRunId,
+  onSelectRun,
 }: {
   caseId: string;
   report: ValidationReport | undefined;
   error: ApiError | null;
+  runs: RunDescriptor[];
+  activeRunId: string | undefined;
+  onSelectRun: (runId: string | null) => void;
 }) {
   const learnCase = getLearnCase(caseId)!;
 
   if (error) {
-    return <ErrorCallout message={`后端没有为 ${caseId} 返回验证报告 (${error.status})`} />;
+    return (
+      <ErrorCallout
+        message={`后端没有为 ${caseId} 返回验证报告 (${error.status})`}
+      />
+    );
   }
   if (!report) {
     return <SkeletonCallout message="正在从后端取回验证报告…" />;
@@ -212,8 +265,64 @@ function CompareTab({
 
   const { gold_standard, measurement, contract_status, deviation_pct, tolerance_lower, tolerance_upper } = report;
 
+  // Which run is currently shown. If `activeRunId` is not set, the
+  // backend resolved the default (first reference run, then fallback).
+  // Highlight whichever run actually matches the loaded measurement.
+  const resolvedRun = runs.find((r) => r.run_id === measurement?.run_id)
+    ?? runs.find((r) => activeRunId ? r.run_id === activeRunId : r.category === "reference")
+    ?? runs[0];
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Run selector — only rendered when the case has curated runs */}
+      {runs.length > 0 && (
+        <section className="rounded-lg border border-surface-800 bg-surface-900/30 px-4 py-3">
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-surface-500">
+              选择一条 run
+            </p>
+            <p className="text-[11px] text-surface-500">
+              换一条运行 → 验证结果会不同 · 这就是"做对"和"数字碰巧对上"的区别
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {runs.map((run) => {
+              const isActive =
+                (resolvedRun && resolvedRun.run_id === run.run_id) ||
+                activeRunId === run.run_id;
+              return (
+                <button
+                  key={run.run_id}
+                  onClick={() => onSelectRun(run.run_id)}
+                  className={`rounded-md border px-3 py-1.5 text-left text-[12px] transition-colors ${
+                    isActive
+                      ? "border-sky-500 bg-sky-950/40 text-surface-100"
+                      : "border-surface-700 bg-surface-900/40 text-surface-300 hover:border-surface-600"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${RUN_CATEGORY_COLOR[run.category]}`}
+                    >
+                      {RUN_CATEGORY_LABEL[run.category]}
+                    </span>
+                    <span className="font-medium">{run.label_zh}</span>
+                  </div>
+                  <p className="mono mt-0.5 text-[10px] text-surface-500">
+                    run_id={run.run_id} · 预期={run.expected_verdict}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {resolvedRun?.description_zh && (
+            <p className="mt-3 text-[12px] leading-relaxed text-surface-400">
+              {resolvedRun.description_zh}
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Verdict line */}
       <section className="rounded-lg border border-surface-800 bg-surface-900/40 px-5 py-4">
         <div className="flex items-baseline justify-between">

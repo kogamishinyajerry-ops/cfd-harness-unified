@@ -31,6 +31,7 @@ from ui.backend.schemas.validation import (
     GoldStandardReference,
     MeasuredValue,
     Precondition,
+    RunDescriptor,
     ValidationReport,
 )
 
@@ -137,12 +138,115 @@ def _load_gold_standard(case_id: str) -> dict[str, Any] | None:
 
 
 def _load_fixture_measurement(case_id: str) -> dict[str, Any] | None:
-    """Read ui/backend/tests/fixtures/{case_id}_measurement.yaml if present."""
+    """Read the legacy single-run fixture if present.
+
+    Legacy path: ui/backend/tests/fixtures/{case_id}_measurement.yaml
+    This is the pre-multi-run layout and is still honored for back-compat.
+    If a multi-run directory exists at fixtures/runs/{case_id}/, those runs
+    are preferred (see _list_runs + _load_run_measurement).
+    """
     candidate = FIXTURE_DIR / f"{case_id}_measurement.yaml"
     if not candidate.exists():
         return None
     with candidate.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh)
+
+
+RUNS_DIR = FIXTURE_DIR / "runs"
+
+
+def _list_run_files(case_id: str) -> list[Path]:
+    """Return run fixture paths under fixtures/runs/{case_id}/ sorted by
+    run_id ascending. Empty list if the directory doesn't exist.
+    """
+    case_dir = RUNS_DIR / case_id
+    if not case_dir.is_dir():
+        return []
+    return sorted(case_dir.glob("*_measurement.yaml"))
+
+
+def _run_id_from_path(p: Path) -> str:
+    # lid_driven_cavity/reference_pass_measurement.yaml → reference_pass
+    return p.stem.removesuffix("_measurement")
+
+
+def list_runs(case_id: str) -> list[RunDescriptor]:
+    """Enumerate curated + legacy runs for a case.
+
+    Ordering:
+    1. Multi-run fixtures under fixtures/runs/{case_id}/ in alphabetical
+       run_id order (reference_* tends to sort before real_incident etc.
+       by design).
+    2. Legacy {case_id}_measurement.yaml is exposed as run_id='legacy'
+       only when the multi-run dir is empty. Once any curated run is
+       added for a case, the legacy file is shadowed (kept on disk for
+       back-compat + git history).
+    """
+    runs: list[RunDescriptor] = []
+    for path in _list_run_files(case_id):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                doc = yaml.safe_load(fh) or {}
+        except Exception:
+            continue
+        md = doc.get("run_metadata") or {}
+        run_id = md.get("run_id") or _run_id_from_path(path)
+        runs.append(
+            RunDescriptor(
+                run_id=run_id,
+                label_zh=md.get("label_zh") or run_id.replace("_", " "),
+                label_en=md.get("label_en", "") or "",
+                description_zh=md.get("description_zh", "") or "",
+                category=md.get("category", "reference"),
+                expected_verdict=md.get("expected_verdict", "UNKNOWN"),
+            )
+        )
+    if runs:
+        return runs
+
+    legacy = _load_fixture_measurement(case_id)
+    if legacy is not None:
+        runs.append(
+            RunDescriptor(
+                run_id="legacy",
+                label_zh=legacy.get("run_label_zh") or "历史测量",
+                label_en="Legacy fixture",
+                description_zh=(
+                    legacy.get("run_description_zh")
+                    or "来自 §5d 验收批次的原始测量值，保留作审计追溯用。"
+                ),
+                category="real_incident",
+                expected_verdict="UNKNOWN",
+            )
+        )
+    return runs
+
+
+def _load_run_measurement(case_id: str, run_id: str) -> dict[str, Any] | None:
+    """Load a specific run's measurement doc. Falls back to legacy fixture
+    when run_id=='legacy'."""
+    if run_id == "legacy":
+        return _load_fixture_measurement(case_id)
+    candidate = RUNS_DIR / case_id / f"{run_id}_measurement.yaml"
+    if not candidate.exists():
+        return None
+    with candidate.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def _pick_default_run_id(case_id: str) -> str | None:
+    """Default run resolution rule: prefer the first 'reference' category
+    run (so the default validation-report shows a PASS narrative), else
+    fall back to the first run of any category, else 'legacy' if a
+    legacy fixture is on disk."""
+    runs = list_runs(case_id)
+    for r in runs:
+        if r.category == "reference":
+            return r.run_id
+    if runs:
+        return runs[0].run_id
+    # No curated runs, no legacy fixture either
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +421,14 @@ def _derive_contract_status(
     """Compute the three-state contract status + tolerance bounds.
 
     Returns (status, deviation_pct, within_tolerance, lower, upper)."""
-    lower = gs_ref.ref_value * (1.0 - gs_ref.tolerance_pct)
-    upper = gs_ref.ref_value * (1.0 + gs_ref.tolerance_pct)
+    # For negative ref_values the naive (1-tol)*ref > (1+tol)*ref, so
+    # take min/max to keep `lower` as the numerically smaller bound.
+    # This matters for LDC where u_centerline can be negative near the
+    # bottom-left corner (Ghia Re=100 at y=0.0625 gives u/U = -0.03717).
+    bound_a = gs_ref.ref_value * (1.0 - gs_ref.tolerance_pct)
+    bound_b = gs_ref.ref_value * (1.0 + gs_ref.tolerance_pct)
+    lower = min(bound_a, bound_b)
+    upper = max(bound_a, bound_b)
 
     if measurement is None:
         return ("UNKNOWN", None, None, lower, upper)
@@ -327,7 +437,10 @@ def _derive_contract_status(
     if gs_ref.ref_value != 0.0:
         deviation_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
 
-    within = lower <= measurement.value <= upper
+    # Tolerance test in deviation space (sign-invariant + consistent with
+    # the percentage shown in the UI). `within_tolerance` matches when
+    # |deviation| <= tolerance_pct expressed as a percentage.
+    within = abs(deviation_pct) <= gs_ref.tolerance_pct * 100.0
     precondition_fails = any(not p.satisfied for p in preconditions)
     has_silent_pass_hazard = any(
         "SILENT_PASS_HAZARD" in c.concern_type or "SILENT_PASS_HAZARD" in (c.summary or "")
@@ -423,12 +536,39 @@ def load_case_detail(case_id: str) -> CaseDetail | None:
     )
 
 
-def build_validation_report(case_id: str) -> ValidationReport | None:
+def build_validation_report(
+    case_id: str,
+    run_id: str | None = None,
+) -> ValidationReport | None:
+    """Build the Screen-4 validation report for a case.
+
+    Run resolution:
+    - If `run_id` is None, resolves to the first 'reference' run (so
+      default view shows PASS narrative where curated), falling back to
+      any curated run, then to the legacy {case_id}_measurement.yaml
+      fixture.
+    - If `run_id` is provided but doesn't exist, returns None (treat
+      as 404 at the route layer).
+    """
     case_detail = load_case_detail(case_id)
     if case_detail is None or case_detail.gold_standard is None:
         return None
     gs = _load_gold_standard(case_id)
-    measurement_doc = _load_fixture_measurement(case_id)
+
+    # Resolve which run's measurement to load.
+    if run_id is None:
+        resolved_run_id = _pick_default_run_id(case_id)
+    else:
+        resolved_run_id = run_id
+
+    if resolved_run_id is None:
+        # No fixture at all for this case — report renders with measurement=None.
+        measurement_doc = None
+    else:
+        measurement_doc = _load_run_measurement(case_id, resolved_run_id)
+        if measurement_doc is None and run_id is not None:
+            # User explicitly asked for an unknown run_id.
+            return None
     measurement = _make_measurement(measurement_doc)
     preconditions = case_detail.preconditions
     audit_concerns = _make_audit_concerns(gs, measurement_doc)

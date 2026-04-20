@@ -1,0 +1,34 @@
+# Reference-pass run for turbulent_flat_plate (laminar-contract).
+#
+# Provenance: Blasius (1908). Re_x = 25000 at x=0.5m, U=0.5m/s, ν=1e-5 m²/s:
+# Cf = 0.664 / sqrt(Re_x) = 0.664 / sqrt(25000) = 0.004198.
+# Whitelist gold ref_value rounds to 0.00420.
+#
+# Reference run delivers Cf = 0.00423 (+0.7% dev, deep inside 10% tolerance
+# band → PASS). This is what a correctly-meshed laminar simpleFoam run
+# on x=0.5m would yield if it respected the exact similarity profile.
+#
+# Contrast with real_incident run which produced 0.00760 via Spalding
+# fallback (+81% dev → FAIL) because the extractor under-converged and the
+# engineering correlation was activated out-of-regime.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考运行 · 对齐 Blasius 相似解
+  label_en: Reference run (Blasius similarity aligned)
+  description_zh: >-
+    Blasius Cf = 0.664/√Re_x 在 Re_x=25000 精确给出 0.00420。这条 run 的
+    测量值 0.00423（+0.7% 数值误差）就是"solver 网格足够 + 相似性假设
+    真的满足"时该看到的结果。
+  category: reference
+  expected_verdict: PASS
+case_id: turbulent_flat_plate
+source: literature_reference
+measurement:
+  value: 0.00423
+  unit: dimensionless
+  run_id: reference_blasius_re_x_25000
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns: []
+decisions_trail: []
