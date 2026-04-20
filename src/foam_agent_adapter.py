@@ -6055,6 +6055,42 @@ boundaryField
             encoding="utf-8",
         )
 
+        # system/sampleDict — gold-anchored Cp sampling (C3b).
+        # docs/c3_sampling_strategy_design.md §3.2 Option B: sample p at
+        # upper-surface points for each x_over_c in whitelist reference_values.
+        # NACA0012 is symmetric at AoA=0 (current adapter does not implement
+        # non-zero AoA), so upper-surface sampling captures the full Cp
+        # distribution; lower surface would mirror. cellPoint interpolation at
+        # wall points extrapolates from first interior cell — standard for
+        # wall-pressure extraction in OpenFOAM.
+        gold_values = _load_gold_reference_values(task_spec.name) or []
+        xoc_values = [
+            float(rv["x_over_c"])
+            for rv in gold_values
+            if isinstance(rv, dict) and "x_over_c" in rv
+        ]
+        if xoc_values:
+            physical_points = [
+                (
+                    xoc * chord,
+                    0.0,  # mid-span (y thin slab)
+                    FoamAgentExecutor._naca0012_half_thickness(xoc) * chord,
+                )
+                for xoc in xoc_values
+            ]
+            _emit_gold_anchored_points_sampledict(
+                case_dir,
+                set_name="airfoilCp",
+                physical_points=physical_points,
+                fields=["p"],
+                axis="x",
+                header_comment=(
+                    f"NACA0012 upper surface, {len(xoc_values)} gold x/c coords "
+                    f"(chord={chord:g}); Cp = (p - p_inf) / (0.5*U_inf^2), "
+                    f"U_inf={U_inf:g}, p_inf=0 gauge"
+                ),
+            )
+
     @staticmethod
     def _naca0012_half_thickness(x_over_c: float, thickness_ratio: float = 0.12) -> float:
         """Return the half-thickness y/c for a symmetric NACA 0012 profile."""
