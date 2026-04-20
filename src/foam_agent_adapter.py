@@ -7402,7 +7402,10 @@ mergePatchPairs
         key_quantities: Dict[str, Any],
     ) -> Dict[str, Any]:
         """BFS: 从 y=0.5 (normalized) wall profile 找 Ux 零交点计算再附着长度。"""
-        # BFS mesh: step at x=0, step height H=1, domain x∈[-1,8], y∈[0,3]
+        # BFS mesh: step at x=0, step height H=1. Domain bounds depend on
+        # which generator path: _render_bfs_block_mesh_dict uses [-10H, 30H]
+        # while sampleDict probes [-1, 12]. The guard below only relies on
+        # the convention that x > 0 is downstream of the step.
         # y=0.5 normalized = y_actual = 0.5*H = 0.5 (in mesh coords)
         y_target = 0.5
         y_tol = 0.15  # capture wall BL region
