@@ -418,35 +418,59 @@ class FoamAgentExecutor:
     def execute(self, task_spec: TaskSpec) -> ExecutionResult:
         t0 = time.monotonic()
 
-        # 1. 检查 Docker 是否可用
+        # 1. Python docker SDK available?
         if not _DOCKER_AVAILABLE:
             return self._fail(
-                "foam-agent not found in PATH. "
-                "Install Foam-Agent (https://github.com/csml-rpi/Foam-Agent) "
-                "and ensure it is accessible.",
+                "Docker Python SDK not installed. Real-solver execution "
+                "requires the cfd-real-solver optional deps. Install with: "
+                "`.venv/bin/pip install -e '.[cfd-real-solver]'` (or "
+                "`pip install docker>=7.0`). "
+                "MockExecutor remains available for unit-test paths "
+                "(EXECUTOR_MODE=mock).",
                 time.monotonic() - t0,
             )
 
-        # 2. 初始化 Docker client 并确认容器运行中
+        # 2. Docker daemon reachable and container running?
         try:
             self._docker_client = docker.from_env()
             container = self._docker_client.containers.get(self._container_name)
             if container.status != "running":
                 raise docker.errors.DockerException(
-                    f"Container '{self._container_name}' is not running (status={container.status})."
+                    f"Container '{self._container_name}' is not running "
+                    f"(status={container.status})."
                 )
         except docker.errors.DockerException as exc:
+            # `docker.errors.NotFound` is a subclass of DockerException; use
+            # isinstance dispatch so tests that mock only DockerException
+            # don't trip on a missing/non-class NotFound attribute.
+            not_found_cls = getattr(docker.errors, "NotFound", None)
+            try:
+                is_not_found = (
+                    isinstance(not_found_cls, type)
+                    and isinstance(exc, not_found_cls)
+                )
+            except TypeError:
+                is_not_found = False
+            if is_not_found:
+                return self._fail(
+                    f"Docker container '{self._container_name}' not found. "
+                    "Start it with: "
+                    f"`docker start {self._container_name}` "
+                    "(or create one from image "
+                    "`cfd-workbench/openfoam-v10:arm64` mounted at "
+                    "/tmp/cfd-harness-cases).",
+                    time.monotonic() - t0,
+                )
             return self._fail(
-                f"foam-agent not found in PATH. "
-                "Install Foam-Agent (https://github.com/csml-rpi/Foam-Agent) "
-                "and ensure it is accessible.",
+                f"Docker daemon or container '{self._container_name}' "
+                f"unavailable: {exc}. Verify `docker info` works and the "
+                "container is started.",
                 time.monotonic() - t0,
             )
         except Exception as exc:
             return self._fail(
-                f"foam-agent not found in PATH. "
-                "Install Foam-Agent (https://github.com/csml-rpi/Foam-Agent) "
-                "and ensure it is accessible.",
+                f"Unexpected error initialising Docker client / container: "
+                f"{exc!r}",
                 time.monotonic() - t0,
             )
 

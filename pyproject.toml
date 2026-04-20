@@ -31,6 +31,16 @@ ui = [
     "pydantic>=2.8",
     "httpx>=0.27",   # used by fastapi.testclient
 ]
+cfd-real-solver = [
+    # FoamAgentExecutor requires the Docker SDK to drive the cfd-openfoam
+    # container. Previously this dependency was implicit — the adapter
+    # guarded on `_DOCKER_AVAILABLE` but emitted a misleading error pointing
+    # at Foam-Agent instead of the missing Python package. Declared here as
+    # an optional group so MOCK-mode unit tests stay lean and the real-
+    # solver path has a documented install command.
+    # Install: `.venv/bin/pip install -e '.[cfd-real-solver]'`
+    "docker>=7.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
