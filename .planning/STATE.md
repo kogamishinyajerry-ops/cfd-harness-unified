@@ -1,6 +1,6 @@
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
-last_updated: "2026-04-21T01:40"
+last_updated: "2026-04-21T02:15"
 session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
 
 # Phase Status
@@ -617,6 +617,15 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - **M2** (governance DEC): Sidecar v2 with `kid`/`alg`/`domain` metadata + formal rotation runbook (verifier keyring retention, rotation ledger, multi-signer story, compromise procedure)
   - **L2** (docs PR or Phase 5 PR-5d): Canonical JSON spec publication for external verifiers
 - **v6.1 autonomous_governance counter**: 10 → **11**. Hard-floor-4 discipline honored for PR-5c. PR-5d should follow same pattern (post-merge Codex review) OR Kogami should run formal counter-reset retrospective.
+- **Phase 5 PR-5c.1 LANDED + second Codex review (2026-04-21T02:10)**: Mechanical fixes for Codex M1 + L1 per DEC-V61-015. PR #15 merged `db83764b55fe78048aaaeed3c325552f7b5bfb54`. Env-var `CFD_HARNESS_HMAC_SECRET` now uses explicit `base64:` / `text:` / un-prefixed-as-plain-text contract (M1 closed). Sidecar `write_sidecar` + `read_sidecar` enforce `^[0-9a-fA-F]{64}$` (L1 closed). 14 new/modified tests. Post-merge **Codex GPT-5.4 second-round review**: `APPROVED_WITH_NOTES` — M1+L1 correct, one new **M3 queued** (legacy migration hazard: un-prefixed base64 silently becomes literal UTF-8; no error fires; signatures diverge). Report at `reports/codex_tool_reports/2026-04-21_pr5c1_codex_followup_review.md` (token 76,152). Notion DEC-V61-015 page `348c6894-2bed-811a-b9b0-e2715b443efa`. Regression 298 passed + 1 skipped.
+- **Codex findings ledger (Phase 5 running tally)**:
+  - ✅ **M1 CLOSED** (PR-5c.1): explicit env-var prefix
+  - ✅ **L1 CLOSED** (PR-5c.1): sidecar hex regex
+  - 🔒 **M2 QUEUED**: sidecar v2 with kid/alg/domain + formal rotation runbook (governance DEC)
+  - 🔒 **M3 NEW-QUEUED**: legacy migration hazard → PR-5c.2 docs-only fix + optional runtime DeprecationWarning guard
+  - 🔒 **L2 QUEUED**: canonical JSON spec publication (docs PR)
+- **v6.1 autonomous_governance counter**: 11 → **12**. Codex post-merge pattern holds across 2 consecutive PRs (PR-5c + PR-5c.1). Pattern demonstrably sustainable. Token costs: 117,588 + 76,152 = 193,740 for this security-review arc.
+- **Phase 5 PR sequence status**: 3/4 main PRs landed (5a + 5b + 5c) + 1/1 post-review fix (5c.1). PR-5d (Screen 6 UI) remains the last main-sequence PR. PR-5c.2 (docs-only M3 mitigation) is ~5 LOC and can land alongside PR-5d or before.
 
 ---
 
