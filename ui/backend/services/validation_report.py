@@ -297,29 +297,52 @@ def _make_gold_reference(
             if tolerance is None:
                 tolerance = 0.1  # conservative default
             ref_value = ob.get("ref_value")
-            if not isinstance(ref_value, (int, float)):
-                ref_value = 0.0
-            return GoldStandardReference(
-                quantity=ob.get("name") or target_quantity or "unknown",
-                ref_value=float(ref_value),
-                unit=ob.get("unit", "") or "",
-                tolerance_pct=float(tolerance),
-                citation=citation or "",
-                doi=doi,
-            )
+            if isinstance(ref_value, (int, float)):
+                return GoldStandardReference(
+                    quantity=ob.get("name") or target_quantity or "unknown",
+                    ref_value=float(ref_value),
+                    unit=ob.get("unit", "") or "",
+                    tolerance_pct=float(tolerance),
+                    citation=citation or "",
+                    doi=doi,
+                )
+            # Profile-shaped ref_value (list of {x, y/value} dicts) — fall
+            # through to wl_gs.reference_values scanning below, which picks
+            # the first non-zero scalar anchor (Cp at stagnation, etc.) so
+            # the contract engine can produce meaningful PASS/FAIL on
+            # cases like naca0012_airfoil whose gold is a Cp profile.
 
     # Fallback: synthesize from whitelist.yaml `gold_standard` inline.
     refs = wl_gs.get("reference_values") or []
     if not refs:
         return None
-    first = refs[0]
-    if not isinstance(first, dict):
-        return None
     value: float | None = None
-    for key in ("value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp"):
-        if key in first and isinstance(first[key], (int, float)):
-            value = float(first[key])
+    # Scan entries for the first non-zero scalar under any known key.
+    # (First entry of a profile is often a trivial anchor like u_plus=0
+    # at y_plus=0; skipping-to-first-nonzero gives the engine a
+    # pedagogically meaningful ref.)
+    value_keys = ("value", "Cf", "f", "Nu", "u", "u_Uinf", "Cp", "u_plus")
+    first = refs[0]
+    for entry in refs:
+        if not isinstance(entry, dict):
+            continue
+        for key in value_keys:
+            if key in entry and isinstance(entry[key], (int, float)):
+                if float(entry[key]) != 0.0:
+                    value = float(entry[key])
+                    first = entry
+                    break
+        if value is not None:
             break
+    # If every entry is zero (or none match), fall back to the very first
+    # dict's first matching key (even if zero) to preserve prior behavior.
+    if value is None:
+        if not isinstance(first, dict):
+            return None
+        for key in value_keys:
+            if key in first and isinstance(first[key], (int, float)):
+                value = float(first[key])
+                break
     if value is None:
         return None
     tol = _tolerance_scalar(wl_gs.get("tolerance")) or 0.1

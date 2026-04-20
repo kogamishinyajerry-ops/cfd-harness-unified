@@ -77,6 +77,42 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
         "Cooper 1984 / Behnad 2013 anchors Nu(0)=25, Nu(1)=12; k-ε +52% and k-ω SST +8% overlays match this case's wrong_model and real_incident teaching runs.",
     },
   ],
+  backward_facing_step: [
+    {
+      src: "/flow-fields/backward_facing_step/xr_vs_re.png",
+      caption_zh:
+        "Xr/H(Re_h) · Armaly 1983 + Driver 1985 · gold 6.26 @ Re=7600 + MVP reference_pass / under_resolved 标注",
+      provenance:
+        "Armaly 1983 low-Re regime + Driver & Seegmiller 1985 Xr/H=6.26 at Re_h=37500 turbulent plateau; envelope interpolation with MVP teaching-run anchor points overlaid.",
+    },
+  ],
+  naca0012_airfoil: [
+    {
+      src: "/flow-fields/naca0012_airfoil/cp_distribution.png",
+      caption_zh:
+        "Cp(x/c) · NACA 0012, Re=3×10⁶, α=0° · Ladson 1987 exact-surface + reference_pass + wrong_model laminar 三线对比",
+      provenance:
+        "Thomas 1979 / Ladson 1987 exact-surface Cp at 6 tabulated stations; quartic polynomial fit for shape context; reference_pass -2% stagnation attenuation (cell averaging), laminar wrong_model over-sharpens Cp_le to 1.3 (missing BL displacement).",
+    },
+  ],
+  differential_heated_cavity: [
+    {
+      src: "/flow-fields/differential_heated_cavity/nu_ra_scaling.png",
+      caption_zh:
+        "Nu(Ra) · 差热腔 · de Vahl Davis 1983 Table IV + Berkovsky-Polevikov 标度 + MVP runs @ Ra=10⁶",
+      provenance:
+        "de Vahl Davis 1983 Table IV Nu at Ra ∈ {1e3,1e4,1e5,1e6} (laminar natural convection); Berkovsky-Polevikov Nu~0.142·Ra^0.30 overlay. Reference_pass -0.6% of gold; under_resolved -20% from truncated wall gradient.",
+    },
+  ],
+  duct_flow: [
+    {
+      src: "/flow-fields/duct_flow/f_vs_re.png",
+      caption_zh:
+        "Darcy f(Re_h) · 方管 vs 圆管 · Jones 1976 方管修正 · gold 0.0185 @ Re=50000 +  teaching runs",
+      provenance:
+        "Colebrook smooth-pipe equation iteratively solved; Jones 1976 square-duct correction f_duct ≈ 0.88·f_pipe on hydraulic-diameter basis. Reference_pass on-target, under_resolved -16% from log-layer under-resolution (y+ ≈ 80).",
+    },
+  ],
 };
 
 export function getFlowFields(caseId: string): FlowFieldAsset[] {

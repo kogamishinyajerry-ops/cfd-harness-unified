@@ -1,0 +1,4 @@
+{
+  "provenance": "Thomas 1979 / Ladson 1987 exact-surface Cp at 6 tabulated stations, quartic interpolant for shape context. SST reference_pass -2% stagnation (cell averaging); laminar wrong_model over-sharpens Cp_le to 1.3 (missing displacement thickness).",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}

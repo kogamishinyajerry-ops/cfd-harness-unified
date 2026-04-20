@@ -1,0 +1,33 @@
+# Reference-pass run for differential_heated_cavity.
+# Per DEC-V61-006 the gold is now de Vahl Davis 1983 at Ra=1e6
+# (Nu_avg=8.800, wall-averaged hot-wall Nu), not the contested Ra=1e10
+# target. At Ra=1e6 the thermal BL is δ_T/L ~ 0.032 — 5-10 cells inside
+# a 40-80 wall-normal grid is sufficient. Buoyant Boussinesq simpleFoam
+# with y-graded mesh reproduces Nu=8.75 (-0.6% vs gold) → comfortably
+# inside 10% tolerance → PASS.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · de Vahl Davis Ra=1e6
+  label_en: Reference pass (de Vahl Davis 1983 Ra=1e6 benchmark)
+  description_zh: >-
+    de Vahl Davis 1983 的 Ra=10⁶ 基准 · Nu_avg=8.80 · 40 条经后续文献复核
+    的研究全部落在 ±0.2%。本 run 用 80×80 壁加密网格 + 稳态 buoyantFoam
+    给出 Nu=8.75（-0.6%）。这才是 DHC 该有的 "做对"——不是往 Ra=10¹⁰ 冲，
+    而是选一个你能算对的 Ra。
+  category: reference
+  expected_verdict: PASS
+case_id: differential_heated_cavity
+source: de_vahl_davis_1983_table_iv
+measurement:
+  value: 8.75
+  unit: dimensionless
+  run_id: synth_dhc_ra1e6_benchmark
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns: []
+decisions_trail:
+  - decision_id: DEC-V61-006
+    date: '2026-04-20'
+    title: DHC Ra downgrade 1e10 → 1e6 (Q-new Path P-2)
+    autonomous: false

@@ -1,0 +1,32 @@
+# Wrong-model run for rayleigh_benard_convection at Ra=1e7.
+# Using a fully laminar solver at Ra=10⁷ (onset of turbulence is
+# Ra~1.5e4 in RB; by 10⁷ the rolls have fully transitioned to
+# soft turbulence). Laminar model suppresses the turbulent heat
+# transport → Nu collapses to ~Ra^(1/4)/3 ≈ 6.0, a ~43% underprediction.
+# Gold 10.5 ± 15% → FAIL.
+run_metadata:
+  run_id: wrong_model
+  label_zh: 错模型 · 层流求解器在 Ra=10⁷
+  label_en: Wrong model (laminar solver above turbulent onset)
+  description_zh: >-
+    Ra=10⁷ 远高于 RB 湍流 onset（Ra_c≈1.5×10⁴）。用层流 buoyantFoam 忽略
+    湍流输运 → Nu=6.0 vs gold 10.5 (-43%)。这不是 bug，是"**算法选错了
+    regime**"。经典学生失误：看到 steady laminar 比 LES 便宜 100×，忘了
+    问 "这个 Ra 还 laminar 吗？"
+  category: wrong_model
+  expected_verdict: FAIL
+case_id: rayleigh_benard_convection
+source: model_choice_literature_typical
+measurement:
+  value: 6.0
+  unit: dimensionless
+  run_id: synth_rb_laminar_ra1e7
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: 'Laminar solver at Ra=10^7 (above turbulent onset Ra_c≈1.5e4). Nu=6.0 vs gold 10.5 (-43%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

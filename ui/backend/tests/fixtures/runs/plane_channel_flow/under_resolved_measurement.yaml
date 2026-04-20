@@ -1,0 +1,32 @@
+# Under-resolved run for plane_channel_flow. Coarse 32³ mesh (one-third
+# of the minimum DNS requirement) + RANS k-omega-SST substituted for
+# LES. Log-layer resolved but the viscous sublayer is wiped out; u_tau
+# is over-predicted by ~8%, which drops U_max_approx to 1.02 → outside
+# 5% tolerance → FAIL. Classic "channel flow as if it were a pipe"
+# mistake.
+run_metadata:
+  run_id: under_resolved
+  label_zh: 欠分辨 · 32³ 网格 + RANS 替代 LES
+  label_en: Under-resolved (32^3 mesh, RANS instead of LES)
+  description_zh: >-
+    32³ 网格——只够 log 层用，viscous sublayer 完全糊掉。RANS k-ω SST 补位，
+    u_τ 偏高 8%，U_max=1.02 vs gold 1.10 (-7.3%)，超出 5% 容差 FAIL。
+    这里"做错"不是网格本身，而是 **用错了算法族**：channel 的统计结果
+    本质上要 eddy-resolving，不是时均。
+  category: under_resolved
+  expected_verdict: FAIL
+case_id: plane_channel_flow
+source: under_resolved_mesh_typical
+measurement:
+  value: 1.02
+  unit: dimensionless
+  run_id: synth_channel_rans_coarse
+  commit_sha: null
+  measured_at: null
+  quantity: U_max_approx
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '32^3 mesh + RANS surrogate; U_max=1.02 vs gold 1.10 (-7.3%). Viscous sublayer unresolved.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

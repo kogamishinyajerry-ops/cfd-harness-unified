@@ -1,0 +1,30 @@
+# Reference-pass run for plane_channel_flow (turbulent channel, Re_tau=180).
+# The "做对" scenario is a DNS-grade run: fine mesh (128³ or better),
+# pimpleFoam + LES sub-grid, statistics averaged over ≥20 eddy turnovers,
+# full u+(y+) profile reconstructed. Gold quantity is u_mean_profile
+# (Kim/Moser 1987/1999); adapter currently exposes U_max_approx as the
+# comparable scalar — reference_pass lands at 1.095 (gold 1.10 ± 5%).
+# NOT equivalent to full-profile PASS; see real_incident for the honest
+# scalar-fallback caveat.
+run_metadata:
+  run_id: reference_pass
+  label_zh: 参考通过 · DNS 网格 U_max 标量
+  label_en: Reference pass (DNS-grade U_max scalar)
+  description_zh: >-
+    Re_τ=180，128³ DNS 网格，pimpleFoam + LES，>20 eddy turnover 统计。
+    U_max=1.095（gold 1.10 ± 5%）→ PASS。这只是标量值 PASS，**不代表**
+    剖面 u+(y+) 与 Kim 1987 一致——要真做对需要把 adapter 的剖面采样器
+    接上来。real_incident 诚实地记录了这个退化。
+  category: reference
+  expected_verdict: PASS
+case_id: plane_channel_flow
+source: dns_grade_simulation_synthetic
+measurement:
+  value: 1.095
+  unit: dimensionless
+  run_id: synth_channel_dns_umax
+  commit_sha: null
+  measured_at: null
+  quantity: U_max_approx
+audit_concerns: []
+decisions_trail: []
