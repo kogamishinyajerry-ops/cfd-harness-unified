@@ -57,7 +57,7 @@ reversibility: fully-reversible-by-pr-revert
   (Single atomic commit. Revert restores Phase 7a-only state. Renderer
   and report service are additive; no existing code path changed
   behaviorally outside of LearnCaseDetailPage adding a new section.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-032-Phase-7b-7c-MVP-7f-MVP-scientific-grade-CFD-vs-gold-reporting-349c68942bed81949a64d2f806580c6e)
 github_pr_url: null (direct-to-main per Phase 7a precedent)
 github_merge_sha: pending
 github_merge_method: direct commit on main
@@ -204,7 +204,7 @@ Round 4: APPROVED.
 - [x] Phase 7f frontend ScientificComparisonReportSection embedded
 - [x] Codex 4 rounds → APPROVED
 - [x] 114/114 pytest green
-- [ ] Atomic git commit
-- [ ] Notion sync DEC-V61-032
-- [ ] ROADMAP Phase 7b/7c/7f status markers
-- [ ] STATE.md S-009 entry
+- [x] Atomic git commit (df8e0e2)
+- [x] Notion sync DEC-V61-032 (https://www.notion.so/DEC-V61-032-Phase-7b-7c-MVP-7f-MVP-scientific-grade-CFD-vs-gold-reporting-349c68942bed81949a64d2f806580c6e)
+- [x] ROADMAP Phase 7b/7c/7f status markers (done in commit df8e0e2)
+- [x] STATE.md S-009 entry (done in commit df8e0e2)
