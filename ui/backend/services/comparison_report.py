@@ -42,7 +42,23 @@ _RENDERS_ROOT = _REPO_ROOT / "reports" / "phase5_renders"
 _GOLD_ROOT = _REPO_ROOT / "knowledge" / "gold_standards"
 _FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 
-_REPORT_SUPPORTED_CASES = frozenset({"lid_driven_cavity"})
+# DEC-V61-034 Tier C: gold-overlay MVP cases get the full 8-section report;
+# visual-only cases get a reduced 3-section report (Metadata + Contour + Residuals)
+# — real OpenFOAM evidence without the per-case gold-overlay plumbing.
+# _REPORT_SUPPORTED_CASES is the union; gate membership checks use this.
+_GOLD_OVERLAY_CASES = frozenset({"lid_driven_cavity"})
+_VISUAL_ONLY_CASES = frozenset({
+    "backward_facing_step",
+    "plane_channel_flow",
+    "turbulent_flat_plate",
+    "circular_cylinder_wake",
+    "impinging_jet",
+    "naca0012_airfoil",
+    "rayleigh_benard_convection",
+    "differential_heated_cavity",
+    "duct_flow",
+})
+_REPORT_SUPPORTED_CASES = _GOLD_OVERLAY_CASES | _VISUAL_ONLY_CASES
 
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES)),
@@ -310,11 +326,79 @@ def _get_commit_sha() -> str:
 # ---------------------------------------------------------------------------
 
 
+def _build_visual_only_context(
+    case_id: str, run_label: str, timestamp: str, artifact_dir: Path,
+) -> dict:
+    """Tier C reduced context (DEC-V61-034): real contour + residuals PNGs from
+    the captured OpenFOAM artifacts, no gold overlay / verdict / GCI. The
+    frontend + template detect ``visual_only: True`` and suppress the
+    gold-dependent sections.
+    """
+    renders_manifest = _load_renders_manifest(case_id, run_label)
+    renders_dir = _RENDERS_ROOT / case_id / timestamp
+
+    def _rel(key: str, default: str = "") -> str:
+        candidate: Optional[str] = None
+        if renders_manifest:
+            raw = renders_manifest.get("outputs", {}).get(key)
+            if isinstance(raw, str):
+                validated = _safe_rel_under(raw, _RENDERS_ROOT)
+                if validated:
+                    candidate = validated
+        if candidate is None and default:
+            guess = renders_dir / default
+            if guess.is_file():
+                try:
+                    rel = str(guess.resolve().relative_to(_REPO_ROOT.resolve()))
+                    if _safe_rel_under(rel, _RENDERS_ROOT):
+                        candidate = rel
+                except ValueError:
+                    pass
+        return candidate or ""
+
+    renders = {
+        "contour_png_rel": _rel("contour_u_magnitude_png", "contour_u_magnitude.png"),
+        "residuals_png_rel": _rel("residuals_png", "residuals.png"),
+    }
+
+    # Detect solver name from which log.<solver> file exists in artifact dir.
+    solver = "unknown"
+    for cand in ("simpleFoam", "icoFoam", "pimpleFoam", "buoyantFoam"):
+        if (artifact_dir / f"log.{cand}").is_file():
+            solver = cand
+            break
+    commit_sha = _get_commit_sha()
+
+    return {
+        "visual_only": True,
+        "case_id": case_id,
+        "run_label": run_label,
+        "timestamp": timestamp,
+        "renders": renders,
+        "solver": solver,
+        "commit_sha": commit_sha,
+        "verdict": None,
+        "verdict_gradient": "#64748b 0%, #94a3b8 100%",
+        "subtitle": (
+            "Visual-only mode (DEC-V61-034 Tier C): real OpenFOAM field + "
+            "residual evidence captured; per-case gold-overlay plumbing pending "
+            "Phase 7c Sprint 2 (Tier B)."
+        ),
+        "paper": None,
+        "metrics": None,
+        "gci": None,
+        "grid_convergence": None,
+        "deviations": None,
+        "residual_info": None,
+        "tolerance_percent": None,
+    }
+
+
 def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dict:
     """Assemble all template variables. Raises ReportError on missing data."""
     if case_id not in _REPORT_SUPPORTED_CASES:
         raise ReportError(
-            f"case_id={case_id!r} not in Phase 7c MVP scope. "
+            f"case_id={case_id!r} not in Phase 7 report scope. "
             f"Supported: {sorted(_REPORT_SUPPORTED_CASES)}."
         )
 
@@ -334,6 +418,10 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
         raise ReportError(f"artifact dir escapes fields root: {artifact_dir}")
     if not artifact_dir.is_dir():
         raise ReportError(f"artifact dir missing: {artifact_dir}")
+
+    # Tier C: visual-only cases skip gold-overlay / verdict / GCI assembly.
+    if case_id in _VISUAL_ONLY_CASES:
+        return _build_visual_only_context(case_id, run_label, timestamp, artifact_dir)
 
     # Load + compute
     gold_y, gold_u, gold_doc = _load_ldc_gold()

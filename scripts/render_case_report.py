@@ -62,7 +62,24 @@ plt.rcParams.update({
 })
 
 # Phase 7a opt-in mirror — matches scripts/phase5_audit_run.py::_PHASE7A_OPTED_IN.
-RENDER_SUPPORTED_CASES = frozenset({"lid_driven_cavity"})
+# GOLD_OVERLAY_CASES get the full 5-renderer treatment (profile overlay + deviation
+# + Plotly JSON + residuals + 2D contour). VISUAL_ONLY_CASES (Tier C per DEC-V61-034)
+# get only contour + residuals — every case shows real OpenFOAM evidence even
+# when per-case gold-overlay plumbing is not yet wired. RENDER_SUPPORTED_CASES is
+# the union (legacy name retained for test_audit_package_route.py references).
+GOLD_OVERLAY_CASES = frozenset({"lid_driven_cavity"})
+VISUAL_ONLY_CASES = frozenset({
+    "backward_facing_step",
+    "plane_channel_flow",
+    "turbulent_flat_plate",
+    "circular_cylinder_wake",
+    "impinging_jet",
+    "naca0012_airfoil",
+    "rayleigh_benard_convection",
+    "differential_heated_cavity",
+    "duct_flow",
+})
+RENDER_SUPPORTED_CASES = GOLD_OVERLAY_CASES | VISUAL_ONLY_CASES
 
 
 class RenderError(Exception):
@@ -292,28 +309,119 @@ def render_profile_plotly_json(
     return out
 
 
+def _parse_residuals_from_log(log_path: Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Fallback: parse initial residuals per iteration out of the solver log.
+
+    Tier C (DEC-V61-034) — when the `residuals` functionObject was not emitted
+    into controlDict (case generators that pre-date Phase 7a), OpenFOAM still
+    writes one `Solving for X, Initial residual = <val>, ...` line per field
+    per iteration into the solver log. Extract by regex so every captured run
+    gets a residuals plot regardless of controlDict shape.
+    """
+    if not log_path.is_file():
+        raise RenderError(f"solver log missing: {log_path}")
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    # Iteration boundaries marked by `Time = <iter>` or `Time = <iter>s` lines.
+    # simpleFoam / buoyantFoam steady-state writes `Time = 35s`; pimpleFoam
+    # transient writes `Time = 0.0125`. Accept both forms.
+    iter_re = re.compile(r"^Time\s*=\s*([0-9.eE+\-]+)s?\s*$", re.MULTILINE)
+    # Per-field lines: `Solving for Ux, Initial residual = 1.23e-05, ...`
+    solving_re = re.compile(
+        r"Solving for (\w+), Initial residual = ([0-9.eE+\-]+)"
+    )
+    # Walk the log sequentially; for each `Time = N` marker, collect all
+    # `Solving for X` lines up to the next marker.
+    per_iter: list[tuple[float, dict[str, float]]] = []
+    pos = 0
+    time_matches = list(iter_re.finditer(text))
+    if not time_matches:
+        raise RenderError(f"no 'Time =' markers in solver log: {log_path}")
+    for i, m in enumerate(time_matches):
+        try:
+            t = float(m.group(1))
+        except ValueError:
+            continue
+        start = m.end()
+        end = time_matches[i + 1].start() if i + 1 < len(time_matches) else len(text)
+        seg = text[start:end]
+        field_data: dict[str, float] = {}
+        for sm in solving_re.finditer(seg):
+            field, val = sm.group(1), sm.group(2)
+            try:
+                # Only record the FIRST Initial residual per field per iter
+                # (simpleFoam solves a field once per iteration).
+                if field not in field_data:
+                    field_data[field] = float(val)
+            except ValueError:
+                pass
+        if field_data:
+            per_iter.append((t, field_data))
+    if not per_iter:
+        raise RenderError(f"no 'Solving for X' lines in solver log: {log_path}")
+    iters = np.array([t for t, _ in per_iter])
+    # Collect union of field names; pad missing entries with NaN.
+    all_fields: set[str] = set()
+    for _, fd in per_iter:
+        all_fields.update(fd.keys())
+    fields: dict[str, np.ndarray] = {}
+    for f in sorted(all_fields):
+        series = np.array([fd.get(f, np.nan) for _, fd in per_iter], dtype=float)
+        fields[f] = series
+    return iters, fields
+
+
+def _find_latest_solver_log(artifact_dir: Path) -> Optional[Path]:
+    for logname in ("log.simpleFoam", "log.icoFoam", "log.pimpleFoam", "log.buoyantFoam"):
+        p = artifact_dir / logname
+        if p.is_file():
+            return p
+    return None
+
+
 def render_residuals_png(
     case_id: str,
     artifact_dir: Path,
     renders_dir: Path,
 ) -> Path:
-    """Matplotlib PNG: log-y residual convergence for Ux, Uy, p."""
+    """Matplotlib PNG: log-y residual convergence for Ux, Uy, p (+ T, k, epsilon for
+    turbulent / buoyant cases).
+
+    Prefers `residuals.csv` from the Phase 7a `residuals` functionObject. When
+    that file is absent (cases whose generator does not yet emit the
+    functionObject block), falls back to parsing the solver log — every
+    captured run has a log, so the plot is always renderable.
+    """
     csv = artifact_dir / "residuals.csv"
-    if not csv.is_file():
-        raise RenderError(f"residuals.csv missing: {csv}")
-    iters, fields = _load_residuals_csv(csv)
+    if csv.is_file():
+        iters, fields = _load_residuals_csv(csv)
+    else:
+        log_path = _find_latest_solver_log(artifact_dir)
+        if log_path is None:
+            raise RenderError(
+                f"neither residuals.csv nor solver log found in {artifact_dir}"
+            )
+        iters, fields = _parse_residuals_from_log(log_path)
 
     fig, ax = plt.subplots()
-    palette = {"Ux": "#1f77b4", "Uy": "#2ca02c", "p": "#d62728"}
-    for name, series in fields.items():
-        color = palette.get(name, "#7f7f7f")
+    # Fixed palette for common fields; auto-assign from Tab10 for any others
+    # (k, epsilon, omega, T, alphat, h, nut) so buoyant/turbulent cases plot.
+    palette = {
+        "Ux": "#1f77b4", "Uy": "#2ca02c", "Uz": "#17becf",
+        "p": "#d62728", "p_rgh": "#ff7f0e", "T": "#9467bd",
+        "k": "#8c564b", "epsilon": "#e377c2", "omega": "#bcbd22",
+    }
+    tab_fallback = plt.cm.tab10.colors
+    for i, (name, series) in enumerate(sorted(fields.items())):
+        color = palette.get(name, tab_fallback[i % len(tab_fallback)])
         # Use NaN-safe masking so iter-0 'N/A' doesn't break log plot.
         mask = np.isfinite(series) & (series > 0)
+        if mask.sum() == 0:
+            continue
         ax.semilogy(iters[mask], series[mask], color=color, label=name)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Initial residual (log)")
     ax.set_title(f"{case_id} — solver residual convergence")
-    ax.legend(loc="upper right", frameon=False)
+    ax.legend(loc="upper right", frameon=False, fontsize=9)
     out = renders_dir / "residuals.png"
     fig.savefig(out)
     plt.close(fig)
@@ -376,18 +484,115 @@ def _find_latest_vtk(artifact_dir: Path) -> Optional[Path]:
     return candidates[-1] if candidates else None
 
 
+def _render_structured_contour(
+    case_id: str, Ux: np.ndarray, Uy: np.ndarray, Cx: np.ndarray, Cy: np.ndarray,
+    out: Path,
+) -> Optional[Path]:
+    """Fast path for structured square grids (LDC). Returns Path on success, None on fail."""
+    n = Ux.shape[0]
+    side = int(round(n ** 0.5))
+    if side * side != n:
+        return None
+    order = np.lexsort((Cx, Cy))
+    try:
+        Ux_r = Ux[order].reshape(side, side)
+        Uy_r = Uy[order].reshape(side, side)
+        x = Cx[order].reshape(side, side)
+        y = Cy[order].reshape(side, side)
+    except ValueError:
+        return None
+    mag = np.sqrt(Ux_r ** 2 + Uy_r ** 2)
+    lid = max(float(y.max()), 1e-12)
+    xn, yn = x / lid, y / lid
+    x_min, x_max = float(xn.min()), float(xn.max())
+    y_min, y_max = float(yn.min()), float(yn.max())
+    x1d = np.linspace(x_min, x_max, side)
+    y1d = np.linspace(y_min, y_max, side)
+    fig, ax = plt.subplots(figsize=(6.5, 6))
+    cf = ax.contourf(x1d, y1d, mag, levels=20, cmap="viridis")
+    ax.streamplot(x1d, y1d, Ux_r, Uy_r, density=1.1, color="white",
+                  linewidth=0.6, arrowsize=0.8)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x / L")
+    ax.set_ylabel("y / L")
+    ax.set_title(f"{case_id} — |U| contour + streamlines")
+    cbar = fig.colorbar(cf, ax=ax, fraction=0.045, pad=0.04)
+    cbar.set_label("|U|")
+    fig.savefig(out)
+    plt.close(fig)
+    return out
+
+
+def _render_unstructured_contour(
+    case_id: str, Ux: np.ndarray, Uy: np.ndarray, Cx: np.ndarray, Cy: np.ndarray,
+    out: Path,
+) -> Path:
+    """Robust fallback for unstructured / non-square meshes (BFS, cylinder wake,
+    airfoil, impinging jet, channel, etc.). Uses matplotlib.tri.Triangulation on
+    the raw cell-centroid cloud to render a filled |U| contour. Streamlines are
+    skipped (they need a regular grid); instead, a sparse velocity-arrow overlay
+    gives a sense of the vector field.
+
+    Handles divergent / diverged solutions robustly: clips |U| to a finite
+    percentile range so matplotlib doesn't choke on inf / extreme values
+    (common when a solver fails to converge and emits garbage last-iter fields).
+    """
+    import matplotlib.tri as mtri
+    with np.errstate(over="ignore", invalid="ignore"):
+        mag = np.sqrt(Ux ** 2 + Uy ** 2)
+    # Replace non-finite with 0 for triangulation + clip the tail at the 99th
+    # percentile of finite values so one runaway cell doesn't saturate colormap.
+    finite = np.isfinite(mag)
+    if not finite.any():
+        mag = np.zeros_like(mag)
+    else:
+        vmax = float(np.nanpercentile(mag[finite], 99.0))
+        if not np.isfinite(vmax) or vmax <= 0:
+            vmax = 1.0
+        mag = np.where(finite, np.clip(mag, 0.0, vmax), 0.0)
+        Ux = np.where(np.isfinite(Ux), np.clip(Ux, -vmax, vmax), 0.0)
+        Uy = np.where(np.isfinite(Uy), np.clip(Uy, -vmax, vmax), 0.0)
+    # Guard against degenerate z-variance: if mesh is truly 2D, Cz has tiny spread.
+    triang = mtri.Triangulation(Cx, Cy)
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    try:
+        cf = ax.tricontourf(triang, mag, levels=20, cmap="viridis")
+    except Exception:
+        # Final fallback: plain scatter-mag map (no triangulation needed)
+        sc = ax.scatter(Cx, Cy, c=mag, s=6, cmap="viridis")
+        cf = sc
+    # Sparse quiver: ~40 arrows on a decimated lattice so large meshes stay readable.
+    n = len(Cx)
+    stride = max(1, int(np.sqrt(n) / 8))
+    idx = np.arange(0, n, stride)
+    ax.quiver(
+        Cx[idx], Cy[idx], Ux[idx], Uy[idx],
+        color="white", alpha=0.8, scale=None, width=0.0025,
+        headwidth=3.5, headlength=4.0,
+    )
+    ax.set_aspect("equal")
+    ax.set_xlabel("x [m]")
+    ax.set_ylabel("y [m]")
+    ax.set_title(f"{case_id} — |U| contour (unstructured tricontour + quiver)")
+    cbar = fig.colorbar(cf, ax=ax, fraction=0.03, pad=0.02)
+    cbar.set_label("|U| [m/s]")
+    fig.savefig(out)
+    plt.close(fig)
+    return out
+
+
 def render_contour_u_magnitude_png(
     case_id: str,
     artifact_dir: Path,
     renders_dir: Path,
 ) -> Path:
-    """2D U-magnitude contour + streamlines from the real VTK volume (Phase 7b polish).
+    """2D U-magnitude contour from the real VTK volume.
 
-    Phase 7b polish (2026-04-21): parse the actual OpenFOAM volume VTK via PyVista,
-    project onto a 129×129 XY grid (LDC is pseudo-2D, one cell thick in z),
-    compute |U| = sqrt(Ux² + Uy²), render contourf + streamlines via matplotlib.
-
-    Fallback to the old 1D centerline strip if PyVista/VTK parsing fails.
+    Three-tier rendering path (tries each, falls through on failure):
+    1. Structured grid: LDC-style square mesh → contourf + streamplot (publication quality).
+    2. Unstructured: tricontourf on raw cell centroids + sparse quiver overlay —
+       works for BFS, cylinder wake, airfoil, impinging jet, channel, etc.
+    3. Centerline strip: final fallback when VTK parse fails outright.
     """
     out = renders_dir / "contour_u_magnitude.png"
     vtk_path = _find_latest_vtk(artifact_dir)
@@ -396,59 +601,31 @@ def render_contour_u_magnitude_png(
             import pyvista as pv
             pv.OFF_SCREEN = True
             mesh = pv.read(str(vtk_path))
-            # Cell-centered U vector and cell centroid coords.
             cd = mesh.cell_data
             if "U" not in cd or "Cx" not in cd or "Cy" not in cd:
                 raise RenderError(f"VTK missing U/Cx/Cy: {vtk_path}")
             U = np.asarray(cd["U"])
             Cx = np.asarray(cd["Cx"])
             Cy = np.asarray(cd["Cy"])
-            n = U.shape[0]
-            # LDC: 129×129 uniform → infer grid dim from n.
-            side = int(round(n ** 0.5))
-            if side * side != n:
-                raise RenderError(f"VTK cell count {n} not square grid")
-            # Sort by (y, x) to pack into (side, side) array.
-            order = np.lexsort((Cx, Cy))
-            Ux = U[order, 0].reshape(side, side)
-            Uy = U[order, 1].reshape(side, side)
-            x = Cx[order].reshape(side, side)
-            y = Cy[order].reshape(side, side)
-            mag = np.sqrt(Ux ** 2 + Uy ** 2)
-            # Normalize coords to y/L domain.
-            lid = max(float(y.max()), 1e-12)
-            xn = x / lid
-            yn = y / lid
-
-            # streamplot needs 1D evenly-spaced vectors. OpenFOAM VTK cell
-            # centers have tiny float-precision jitter; rebuild from bounds.
-            x_min, x_max = float(xn.min()), float(xn.max())
-            y_min, y_max = float(yn.min()), float(yn.max())
-            x1d = np.linspace(x_min, x_max, side)
-            y1d = np.linspace(y_min, y_max, side)
-            fig, ax = plt.subplots(figsize=(6.5, 6))
-            cf = ax.contourf(x1d, y1d, mag, levels=20, cmap="viridis")
-            ax.streamplot(x1d, y1d, Ux, Uy, density=1.1, color="white",
-                          linewidth=0.6, arrowsize=0.8)
-            ax.set_aspect("equal")
-            ax.set_xlabel("x / L")
-            ax.set_ylabel("y / L")
-            ax.set_title(
-                f"{case_id} — |U| contour + streamlines (Phase 7b polish)\n"
-                f"129×129 mesh, simpleFoam steady, Re=100"
-            )
-            cbar = fig.colorbar(cf, ax=ax, fraction=0.045, pad=0.04)
-            cbar.set_label("|U| / U_lid")
-            fig.savefig(out)
-            plt.close(fig)
-            return out
-        except Exception as e:  # noqa: BLE001 — fall back to MVP strip
-            print(f"[render] [WARN] VTK parse failed ({e}); falling back to centerline strip",
+            Ux = U[:, 0]
+            Uy = U[:, 1]
+            # Try structured-grid path first (fast, publication-style).
+            result = _render_structured_contour(case_id, Ux, Uy, Cx, Cy, out)
+            if result is not None:
+                return result
+            # Fall through to unstructured tricontour.
+            return _render_unstructured_contour(case_id, Ux, Uy, Cx, Cy, out)
+        except Exception as e:  # noqa: BLE001 — try minimal fallback
+            print(f"[render] [WARN] VTK contour failed ({e}); trying sample-strip fallback",
                   file=sys.stderr)
 
-    # Fallback — Phase 7b MVP behavior (1D strip) if VTK parse fails.
-    latest = _latest_sample_iter(artifact_dir)
-    y_sim, u_sim = _load_sample_xy(latest / "uCenterline.xy")
+    # Minimal fallback — only works if sample/{iter}/uCenterline.xy exists
+    # (LDC-only). Other cases without VTK or sample will raise.
+    try:
+        latest = _latest_sample_iter(artifact_dir)
+        y_sim, u_sim = _load_sample_xy(latest / "uCenterline.xy")
+    except Exception as e:  # noqa: BLE001
+        raise RenderError(f"no VTK and no sample fallback available: {e}")
     y_norm = y_sim / max(y_sim.max(), 1e-12)
     fig, ax = plt.subplots(figsize=(4, 6))
     strip = np.tile(u_sim.reshape(-1, 1), (1, 20))
@@ -459,9 +636,9 @@ def render_contour_u_magnitude_png(
     )
     ax.set_xlabel("(tile axis)")
     ax.set_ylabel("y / L")
-    ax.set_title(f"{case_id} — U_x centerline slice (VTK parse failed, MVP fallback)")
+    ax.set_title(f"{case_id} — centerline slice (VTK parse failed, MVP fallback)")
     cbar = fig.colorbar(im, ax=ax, fraction=0.08, pad=0.04)
-    cbar.set_label("U_x / U_lid")
+    cbar.set_label("U_x")
     fig.savefig(out)
     plt.close(fig)
     return out
@@ -473,25 +650,38 @@ def render_contour_u_magnitude_png(
 
 
 def render_all(case_id: str, run_label: str = "audit_real_run") -> dict:
-    """Render all 7b MVP figures for a given case/run. Returns {name: path, ...}."""
+    """Render figures for a given case/run. Returns {name: path, ...}.
+
+    GOLD_OVERLAY_CASES (LDC today) get the full 5-renderer treatment (profile
+    vs gold, pointwise deviation, Plotly JSON, residuals, contour).
+    VISUAL_ONLY_CASES (Tier C fan-out, DEC-V61-034) get just residuals +
+    contour — real OpenFOAM evidence without requiring per-case gold-overlay
+    plumbing.
+    """
     if case_id not in RENDER_SUPPORTED_CASES:
         raise RenderError(
             f"case_id={case_id!r} not opted-in for Phase 7b rendering. "
-            f"Supported: {sorted(RENDER_SUPPORTED_CASES)}. "
-            f"Other cases unlock in Phase 7c Sprint-2."
+            f"Supported: {sorted(RENDER_SUPPORTED_CASES)}."
         )
     timestamp = _resolve_run_timestamp(case_id, run_label)
     artifact_dir = _artifact_dir(case_id, timestamp)
     renders_dir = _renders_dir(case_id, timestamp)
 
     outputs: dict[str, Path] = {}
-    renderers = [
-        ("profile_png", render_profile_png),
-        ("profile_plotly_json", render_profile_plotly_json),
-        ("residuals_png", render_residuals_png),
-        ("pointwise_deviation_png", render_pointwise_deviation_png),
-        ("contour_u_magnitude_png", render_contour_u_magnitude_png),
-    ]
+    if case_id in GOLD_OVERLAY_CASES:
+        renderers = [
+            ("profile_png", render_profile_png),
+            ("profile_plotly_json", render_profile_plotly_json),
+            ("residuals_png", render_residuals_png),
+            ("pointwise_deviation_png", render_pointwise_deviation_png),
+            ("contour_u_magnitude_png", render_contour_u_magnitude_png),
+        ]
+    else:
+        # Tier C — visual-only mode.
+        renderers = [
+            ("residuals_png", render_residuals_png),
+            ("contour_u_magnitude_png", render_contour_u_magnitude_png),
+        ]
     errors: dict[str, str] = {}
     for name, fn in renderers:
         try:

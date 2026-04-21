@@ -1,0 +1,11 @@
+{
+  "case_id": "backward_facing_step",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T125637Z",
+  "renders_dir_rel": "reports/phase5_renders/backward_facing_step/20260421T125637Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/backward_facing_step/20260421T125637Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/backward_facing_step/20260421T125637Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

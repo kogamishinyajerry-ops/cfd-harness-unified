@@ -93,6 +93,50 @@ def get_comparison_report_pdf(case_id: str, run_label: str) -> FileResponse:
     )
 
 
+@router.get(
+    "/cases/{case_id}/runs/{run_label}/renders/{filename:path}",
+    tags=["comparison-report"],
+)
+def get_render_file(case_id: str, run_label: str, filename: str) -> FileResponse:
+    """Serve a render PNG / Plotly JSON for a given case/run — used by the
+    Tier C (DEC-V61-034) visual-only branch on the /learn page.
+
+    Path traversal defense: re-resolve the composed path and verify it stays
+    under ``reports/phase5_renders/{case_id}/`` — belt-and-suspenders on top of
+    _validate_segment + the filename:path converter.
+    """
+    from ui.backend.services.comparison_report import _RENDERS_ROOT, _load_run_manifest, _validated_timestamp  # noqa: PLC0415
+
+    _validate_ids(case_id, run_label)
+    # Disallow obvious traversal in filename (the segment validator runs on
+    # case_id/run_label only; filename comes through the :path converter).
+    if ".." in filename.split("/") or filename.startswith("/") or "\\" in filename:
+        raise HTTPException(status_code=404, detail="invalid filename")
+
+    # Resolve the timestamped renders dir via the per-run manifest.
+    try:
+        run_manifest = _load_run_manifest(case_id, run_label)
+    except ReportError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    ts = _validated_timestamp(run_manifest.get("timestamp"))
+    if ts is None:
+        raise HTTPException(status_code=404, detail="invalid run manifest timestamp")
+
+    target = (_RENDERS_ROOT / case_id / ts / filename)
+    try:
+        resolved = target.resolve(strict=True)
+        resolved.relative_to((_RENDERS_ROOT / case_id).resolve())
+    except (ValueError, OSError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="render not found")
+    # MIME guess — only images/JSON expected here.
+    media = "application/octet-stream"
+    if filename.endswith(".png"):
+        media = "image/png"
+    elif filename.endswith(".json"):
+        media = "application/json"
+    return FileResponse(resolved, media_type=media, filename=resolved.name)
+
+
 @router.post(
     "/cases/{case_id}/runs/{run_label}/comparison-report/build",
     tags=["comparison-report"],

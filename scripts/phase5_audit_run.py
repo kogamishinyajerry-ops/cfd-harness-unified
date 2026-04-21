@@ -135,10 +135,14 @@ def _write_field_artifacts_run_manifest(
     return manifest
 
 
-# Codex round 1 MED #3 (2026-04-21): gate Phase 7a metadata injection to
-# case-ids whose case generators actually emit the functions{} block. Other 9
-# cases stay silent until Phase 7c Sprint-2 rolls their generators forward.
-_PHASE7A_OPTED_IN: frozenset[str] = frozenset({"lid_driven_cavity"})
+# DEC-V61-034 Tier C: opt in all 10 whitelist cases for Phase 7a field
+# capture. The executor's _capture_field_artifacts runs foamToVTK + stages
+# VTK / residuals / solver log for ANY case regardless of whether its
+# generator emits the controlDict functions{} block (residuals are
+# log-parsed in the renderer when the functionObject wasn't emitted).
+# LDC still gets the full gold-overlay report via its sample block; the
+# other 9 cases flow through Tier C visual-only rendering (contour + residuals).
+_PHASE7A_OPTED_IN: frozenset[str] = frozenset(ALL_CASES)
 
 
 def _audit_fixture_doc(

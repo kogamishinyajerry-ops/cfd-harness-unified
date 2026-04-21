@@ -1244,38 +1244,47 @@ function SkeletonCallout({ message }: { message: string }) {
 // --- Phase 7f: Scientific CFD-vs-Gold comparison report section -----------
 
 type ComparisonReportContext = {
+  // Shared across both modes.
   case_id: string;
-  case_display_name: string;
+  case_display_name?: string;
   run_label: string;
   timestamp: string;
-  verdict: "PASS" | "PARTIAL" | "FAIL" | string;
-  verdict_subtitle: string;
-  metrics: {
+  // Tier C marker: if true, this is a visual-only reduced context with
+  // no gold-overlay / verdict / metrics / paper. Renders still populated.
+  visual_only?: boolean;
+  // Full (LDC gold-overlay) fields:
+  verdict: "PASS" | "PARTIAL" | "FAIL" | string | null;
+  verdict_subtitle?: string;
+  subtitle?: string;
+  metrics?: {
     max_dev_pct: number;
     l2: number;
     linf: number;
     rms: number;
     n_pass: number;
     n_total: number;
-  };
-  paper: {
+  } | null;
+  paper?: {
     title: string;
     source: string;
     doi?: string;
     short: string;
     gold_count: number;
     tolerance_pct: number;
-  };
+  } | null;
   renders: {
-    profile_png_rel: string;
-    pointwise_png_rel: string;
+    profile_png_rel?: string;
+    pointwise_png_rel?: string;
     contour_png_rel: string;
     residuals_png_rel: string;
   };
-  meta: {
+  meta?: {
     commit_sha: string;
     report_generated_at: string;
   };
+  // Visual-only top-level fields:
+  solver?: string;
+  commit_sha?: string;
 };
 
 function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
@@ -1317,6 +1326,58 @@ function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
   }
   if (!data) return null;
 
+  // DEC-V61-034 Tier C: visual-only branch. No verdict card / iframe; just
+  // show the real contour + residuals PNGs directly so every case has real
+  // OpenFOAM evidence on the /learn page.
+  if (data.visual_only) {
+    // Serve PNGs via the /api route (with path-containment defense) rather
+    // than raw /reports paths — keeps the visible URL under the signed API
+    // surface and avoids needing a FastAPI StaticFiles mount.
+    const renderUrl = (rel: string | undefined, basename: string) => {
+      if (!rel) return null;
+      return `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runLabel)}/renders/${basename}`;
+    };
+    const contourUrl = renderUrl(data.renders.contour_png_rel, "contour_u_magnitude.png");
+    const residualsUrl = renderUrl(data.renders.residuals_png_rel, "residuals.png");
+    return (
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="card-title">科研级 CFD 仿真结果 (Visual-only)</h2>
+          <p className="text-[11px] text-surface-500">
+            实际 OpenFOAM 真跑 · {data.solver ?? "solver"} · {data.commit_sha ?? ""}
+          </p>
+        </div>
+        <div className="mb-3 rounded-md border border-surface-700 bg-surface-900/40 p-3 text-[12px] text-surface-300">
+          {data.subtitle ?? "Visual-only mode — gold-overlay verdict pending Phase 7c Sprint 2."}
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {contourUrl && (
+            <div className="rounded-md border border-surface-800 bg-white p-2">
+              <div className="mb-1 text-[11px] font-semibold text-surface-500 px-1">
+                |U| 速度幅值云图
+              </div>
+              <img src={contourUrl} alt={`${caseId} |U| contour`} className="w-full" />
+            </div>
+          )}
+          {residualsUrl && (
+            <div className="rounded-md border border-surface-800 bg-white p-2">
+              <div className="mb-1 text-[11px] font-semibold text-surface-500 px-1">
+                残差收敛历史 (log scale)
+              </div>
+              <img src={residualsUrl} alt={`${caseId} residuals`} className="w-full" />
+            </div>
+          )}
+          {!contourUrl && !residualsUrl && (
+            <p className="text-[12px] text-surface-500">
+              (artifact capture empty — re-run phase5 audit script for this case)
+            </p>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  // Gold-overlay mode (LDC today). Verdict card + iframe 8-section report.
   const verdictColor =
     data.verdict === "PASS"
       ? "bg-contract-pass/15 border-contract-pass/40 text-contract-pass"
@@ -1330,6 +1391,9 @@ function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
   const reportPdfUrl = `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
     runLabel,
   )}/comparison-report.pdf`;
+
+  // Defensive: if gold-overlay shape is missing fields, bail silently.
+  if (!data.metrics || !data.meta) return null;
 
   return (
     <section>
