@@ -960,8 +960,10 @@ external Gate.
   one-click-away**.
 - **Default distribution**: 8 PASS · 2 HAZARD · 0 FAIL.
 - **v6.1 counter**: **15** (well below 20 arc-retro threshold).
-- **Codex rounds this session**: 10, 11, 12 CHANGES_REQUIRED → RESOLVED;
-  13 blocked by infrastructure, queued post-merge.
+- **Codex rounds this session**: 10, 11, 12, 13 all CHANGES_REQUIRED → RESOLVED
+  (round 13 ran post-merge on a different account after user fixed CLI infra;
+  3 findings applied in `7f242f3` — monotonicity regression test +
+  |deviation|-monotonicity fixture adjustments + DHC description drift).
 - **API endpoints**: 24 total (+1 new `/api/cases/{id}/export`).
 - **External gate queue**: 1 open (Q-4 BFS Re-mismatch), 0 blocking Phase 0..4.
 
@@ -972,8 +974,6 @@ Pending items (unclosed, queued for next session):
 - **Notion sync backlog** (8 items, token still expired): DEC-V61-021,
   V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026, V61-027. User re-auth required at
   `mcp__claude_ai_Notion` before sync can resume.
-- **Codex round 13 post-merge**: run once CLI infrastructure recovers.
-  Prompt saved at `/tmp/codex_review_pr36.txt` for easy replay.
 - **Engineering-quality residual**: under_resolved/wrong_model values are
   defensibly-in-family but not grid-convergence-backed. Acceptable for
   teaching catalog; NOT for regulatory audit package.
