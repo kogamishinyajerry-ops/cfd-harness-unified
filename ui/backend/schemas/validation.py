@@ -23,6 +23,7 @@ RunCategory = Literal[
     "real_incident",
     "under_resolved",
     "wrong_model",
+    "grid_convergence",
 ]
 """Run category for multi-run validation demos:
 - reference: a run that SHOULD pass — curated from literature exact solutions
@@ -33,6 +34,10 @@ RunCategory = Literal[
   time / low y+ — a teaching run that demonstrates why resolution matters.
 - wrong_model: a run using a physically-inappropriate turbulence / physics
   model — demonstrates why model selection matters.
+- grid_convergence: a run at a specific mesh density within a convergence
+  sweep (run_id convention `mesh_<N>` — e.g. `mesh_20`, `mesh_80`). These
+  feed the interactive mesh-density slider; individually they're coarse /
+  fine snapshots, collectively they demonstrate asymptotic convergence.
 """
 
 

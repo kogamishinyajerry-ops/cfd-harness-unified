@@ -1,0 +1,27 @@
+# Grid-convergence run for BFS — 20 cells in the recirculation zone.
+# Eddy viscosity over-diffuses the shear layer, causing premature
+# reattachment at Xr/H≈4.8 (-23% vs Driver 1985 gold 6.26).
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20 cells · 粗糙
+  label_en: Mesh 20 recirculation cells (coarse)
+  description_zh: >-
+    再循环区只有 20 cells。Shear layer 被 k-ε 涡粘过度扩散，提前 reattach
+    到 Xr/H=4.8 vs Driver 1985 gold 6.26 (-23%)。10% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: backward_facing_step
+source: grid_convergence_study_synthetic
+measurement:
+  value: 4.8
+  unit: step_heights
+  run_id: grid_bfs_n20
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20 recirculation cells; Xr/H=4.8 vs Driver 1985 gold 6.26 (-23%). Shear-layer over-diffused.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

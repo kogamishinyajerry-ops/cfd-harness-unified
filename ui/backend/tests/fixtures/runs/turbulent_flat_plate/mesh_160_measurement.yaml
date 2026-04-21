@@ -1,0 +1,23 @@
+# Grid-convergence run for TFP — 160 wall-normal cells, denser wall packing.
+# Cf=0.00423 (+0.7%). Asymptotic regime; Richardson extrapolation to h→0
+# would nearly recover Blasius exact.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160 y-cells · 过收敛
+  label_en: Mesh 160 wall-normal cells (asymptotic)
+  description_zh: >-
+    160 条壁法向 cell，更密的壁面加密。Cf=0.00423（+0.7%）。5% 容差内 PASS。
+    相对 80 条改进可忽略——到这里你在测 scheme 误差，不是 mesh。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: turbulent_flat_plate
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.00423
+  unit: dimensionless
+  run_id: grid_tfp_n160
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns: []
+decisions_trail: []

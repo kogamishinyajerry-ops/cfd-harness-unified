@@ -1,0 +1,24 @@
+# Grid-convergence run for TFP — 80 wall-normal cells + 4:1 wall grading.
+# First cell y+ < 1 → viscous sublayer resolved. Cf=0.00436 (+3.8%).
+# Inside 5% tolerance → PASS. This matches the whitelist's actual config.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80 y-cells + 4:1 加密 · 收敛
+  label_en: Mesh 80 wall-normal cells + 4:1 grading (converged)
+  description_zh: >-
+    80 条壁法向 cell + 4:1 壁面加密（whitelist 实际配置）。第一层 y+<1，
+    viscous sublayer 完全分辨。Cf=0.00436（+3.8%）落在 5% 容差内 PASS。
+    这是"做对"的最低资源——再细只为 Richardson 外推做验证。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: turbulent_flat_plate
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.00436
+  unit: dimensionless
+  run_id: grid_tfp_n80
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns: []
+decisions_trail: []

@@ -1,0 +1,22 @@
+# Grid-convergence run for BFS — 160 recirculation cells.
+# Xr/H=6.25 (-0.2%). Asymptotic convergence to Driver 1985 gold 6.26.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160 cells · 过收敛
+  label_en: Mesh 160 recirculation cells (asymptotic)
+  description_zh: >-
+    160 cells。Xr/H=6.25 vs gold 6.26 (-0.2%)。10% 容差内 PASS。再加密
+    也不会变，到这里 mesh 不再是误差来源。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: backward_facing_step
+source: grid_convergence_study_synthetic
+measurement:
+  value: 6.25
+  unit: step_heights
+  run_id: grid_bfs_n160
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns: []
+decisions_trail: []
