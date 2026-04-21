@@ -42,7 +42,7 @@ reversibility: fully-reversible-by-pr-revert
   (Single commit. `git revert` restores the Phase 0 synthesized gold
   and the prior mesh_N fixtures. All Phase 5a/5b/5c downstream stays
   coherent after revert.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-030-Q-5-closure-LDC-gold-re-transcribed-from-Ghia-1982-349c68942bed81ce92e0c9fffc294576)
 github_pr_url: null (direct-to-main per external-gate pattern)
 github_merge_sha: pending
 github_merge_method: direct commit on main
@@ -140,4 +140,4 @@ Strikethrough Q-5 in `.planning/external_gate_queue.md` as CLOSED 2026-04-21. Pa
 - [x] Q-5 strikethrough in external_gate_queue.md
 - [ ] STATE.md update with Q-5 closure
 - [ ] Atomic git commit + push
-- [ ] Notion sync DEC-V61-030
+- [x] Notion sync DEC-V61-030 (https://www.notion.so/DEC-V61-030-Q-5-closure-LDC-gold-re-transcribed-from-Ghia-1982-349c68942bed81ce92e0c9fffc294576)
