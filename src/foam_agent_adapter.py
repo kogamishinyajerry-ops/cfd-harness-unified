@@ -936,6 +936,10 @@ boundaryField
     {
         type            noSlip;
     }
+    bottom
+    {
+        type            noSlip;
+    }
     frontAndBack
     {
         type            empty;
@@ -982,6 +986,10 @@ boundaryField
         type            zeroGradient;
     }
     wall2
+    {
+        type            zeroGradient;
+    }
+    bottom
     {
         type            zeroGradient;
     }
@@ -6571,12 +6579,17 @@ boundary
         type            wall;
         faces           ((1 2 6 5));
     }}
+    bottom
+    {{
+        type            wall;
+        faces           ((0 1 5 4));
+    }}
     frontAndBack
     {{
         type            empty;
         faces
         (
-            (0 1 5 4)
+            (0 3 2 1)
             (4 5 6 7)
         );
     }}
