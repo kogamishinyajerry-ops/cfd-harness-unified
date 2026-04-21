@@ -42,7 +42,7 @@ reversibility: fully-reversible-by-pr-revert
   only rendered in case-export README and /learn metadata.)
 notion_sync_status: pending
 github_pr_url: null (direct-to-main per external-gate auth pattern)
-github_merge_sha: pending
+github_merge_sha: 900287b
 github_merge_method: direct commit on main (external-gate-authorized
   三禁区 edit that does not change ref_value; no PR review ritual
   required beyond Kogami's Path A selection)
