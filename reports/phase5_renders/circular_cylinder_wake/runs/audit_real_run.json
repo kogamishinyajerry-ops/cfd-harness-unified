@@ -1,0 +1,11 @@
+{
+  "case_id": "circular_cylinder_wake",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T150630Z",
+  "renders_dir_rel": "reports/phase5_renders/circular_cylinder_wake/20260421T150630Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/circular_cylinder_wake/20260421T150630Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/circular_cylinder_wake/20260421T150630Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

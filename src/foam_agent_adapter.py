@@ -6906,24 +6906,35 @@ mergePatchPairs
             artifact_dir.mkdir(parents=True, exist_ok=True)
 
             # (a) foamToVTK — -allPatches merges patches into a single file.
+            #     -noFaceZones: DEC-V61-034 Tier C, circular_cylinder_wake uses
+            #     createBaffles which leaves a cylinderBaffleZone faceZone; OF10
+            #     foamToVTK SEGVs when interpolating surfScalarField phi onto
+            #     the post-baffle faceZone (flux pointer inconsistent with
+            #     split owner/neighbour patches of the same name). -noFaceZones
+            #     skips the faceZone write, which is not required downstream
+            #     (the cylinder wall is already emitted as a regular patch).
+            #     No-op for the 9 cases that don't use faceZones.
             #     Fallback without -allPatches if it trips empty-patch
             #     assertions (07a-RESEARCH.md §3.2).
             ok, log = self._docker_exec(
-                "foamToVTK -latestTime -noZero -allPatches",
+                "foamToVTK -latestTime -noZero -allPatches -noFaceZones",
                 case_cont_dir,
                 120,
             )
             if not ok:
                 print(
-                    f"[WARN] foamToVTK -allPatches failed, retrying without: {log[:200]}",
+                    # Tail slice: SEGV stack traces + OF error strings are at
+                    # end-of-log, not the banner. 200-char head truncation
+                    # hid the cylinder_wake SEGV for a full diagnosis cycle.
+                    f"[WARN] foamToVTK -allPatches failed, retrying without: {log[-400:]}",
                     file=_sys.stderr,
                 )
                 ok, log = self._docker_exec(
-                    "foamToVTK -latestTime -noZero", case_cont_dir, 120,
+                    "foamToVTK -latestTime -noZero -noFaceZones", case_cont_dir, 120,
                 )
             if not ok:
                 print(
-                    f"[WARN] foamToVTK failed, field capture skipped: {log[:200]}",
+                    f"[WARN] foamToVTK failed, field capture skipped: {log[-400:]}",
                     file=_sys.stderr,
                 )
                 return None
