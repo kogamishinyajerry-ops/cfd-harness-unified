@@ -45,7 +45,7 @@ reversibility: fully-reversible-by-pr-revert
   66ac478 dispatcher fix, c7248ff momentumTransport, 002a6fb blockMesh
   bottom wall, 1f87718 extractor x_tol, + this DEC's closing src edits.
   `git revert -m 1` on each restores Phase 5a state.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-029-Phase-5b-LDC-simpleFoam-migration-infrastructure-complete-Q-5-filed-349c68942bed816897f8dff2dd21c9b3)
 github_pr_url: null (direct-to-main, 5 sequential src commits + closing commit)
 github_merge_sha: pending (will be backfilled post-commit)
 github_merge_method: sequential direct commits on main (per Phase 5b
