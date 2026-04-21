@@ -53,10 +53,10 @@ reversibility: fully-reversible-by-pr-revert
   manifest-only audit packages. Revert safe because include_phase7 default
   True but returns None when no artifacts exist — non-opted-in cases
   unaffected either way.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-033-Phase-7b-polish-7d-GCI-7e-L4-signed-zip-Phase-7-Sprint-1-closure-349c68942bed81c3b131e125f225c946)
 github_pr_url: null (direct-to-main per Phase 7a + 7bc precedent)
-github_merge_sha: pending
-github_merge_method: direct commit on main
+github_merge_sha: 4399427 (feat) + afb2e5e (docs)
+github_merge_method: direct commit on main (2 commits, pushed 2026-04-21)
 external_gate_self_estimated_pass_rate: 0.45
   (Higher than DEC-V61-032's 0.35 because: (a) I already learned the
   path-containment pattern from 3 Codex rounds; (b) both the timestamp
