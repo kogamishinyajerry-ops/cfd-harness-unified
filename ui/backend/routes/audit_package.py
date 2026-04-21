@@ -58,7 +58,10 @@ from ui.backend.schemas.audit_package import (
     AuditPackageDownloadUrls,
     AuditPackageEvidenceItem,
 )
-from ui.backend.services.validation_report import load_case_detail
+from ui.backend.services.validation_report import (  # noqa: SLF001
+    _load_run_measurement,
+    load_case_detail,
+)
 
 router = APIRouter()
 
@@ -177,13 +180,27 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
         f"{case_id}|{run_id}".encode("utf-8")
     ).hexdigest()[:16]
 
-    # Build manifest (run_output_dir=None for MOCK / not-yet-solved runs).
-    # When we wire real solver output in a future PR, the caller will
-    # supply a concrete run_output_dir pointing at the solver case dir.
+    # Wire audit-real-run fixture data into the manifest when available.
+    # Phase 5a: when run_id identifies an audit_real_run measurement (captured
+    # by scripts/phase5_audit_run.py), pull its measurement + verdict +
+    # audit_concerns into the manifest so the signed bundle reflects the
+    # actual solver output rather than a skeleton.
+    run_doc = _load_run_measurement(case_id, run_id) or {}
+    measurement_doc = run_doc.get("measurement") or None
+    audit_concerns_doc = run_doc.get("audit_concerns") or None
+    comparator_verdict_doc: str | None = None
+    if measurement_doc is not None:
+        comparator_verdict_doc = (
+            "PASS" if measurement_doc.get("comparator_passed") else "FAIL"
+        )
+
     manifest = build_manifest(
         case_id=case_id,
         run_id=run_id,
         build_fingerprint=build_fingerprint,
+        measurement=measurement_doc,
+        comparator_verdict=comparator_verdict_doc,
+        audit_concerns=audit_concerns_doc,
     )
 
     # Stage.

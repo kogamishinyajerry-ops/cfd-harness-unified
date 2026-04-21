@@ -232,3 +232,56 @@ class TestEndToEndSignAndVerify:
         tampered = bytes([zip_bytes[0] ^ 1]) + zip_bytes[1:]
         key = b"route-test-dev-secret"
         assert verify(manifest, tampered, sig_text, key) is False
+
+
+class TestAuditRealRunWiring:
+    """Phase 5a: real-solver fixture data wires into the signed manifest."""
+
+    def test_audit_real_run_populates_measurement(self, client):
+        """When run_id=audit_real_run, the manifest carries real solver data,
+        not a skeleton."""
+        import json
+
+        resp = client.post(
+            "/api/cases/lid_driven_cavity/runs/audit_real_run/audit-package/build"
+        )
+        assert resp.status_code == 200
+        bid = resp.json()["bundle_id"]
+        manifest = json.loads(
+            client.get(f"/api/audit-packages/{bid}/manifest.json").content
+        )
+        # measurement section must be populated from the audit fixture
+        m = manifest.get("measurement", {})
+        assert m.get("comparator_verdict") in {"PASS", "FAIL"}, (
+            f"audit_real_run must land a verdict; got {m.get('comparator_verdict')!r}"
+        )
+        kq = m.get("key_quantities", {})
+        assert "value" in kq, "measurement.key_quantities missing 'value'"
+        assert "quantity" in kq, "measurement.key_quantities missing 'quantity'"
+        assert kq.get("solver_success") is True, (
+            "real-solver fixture should report solver_success=True"
+        )
+        # audit_concerns must flow through
+        concerns = m.get("audit_concerns", [])
+        assert concerns, "audit_real_run should surface audit_concerns"
+        concern_types = {c.get("concern_type") for c in concerns}
+        assert "CONTRACT_STATUS" in concern_types
+
+    def test_unknown_run_id_still_builds_with_empty_measurement(self, client):
+        """Back-compat: non-audit run_ids still produce a valid (signed) bundle
+        with an empty measurement section — old behavior preserved."""
+        import json
+
+        resp = client.post(
+            "/api/cases/lid_driven_cavity/runs/no_such_run_xyz/audit-package/build"
+        )
+        assert resp.status_code == 200
+        bid = resp.json()["bundle_id"]
+        manifest = json.loads(
+            client.get(f"/api/audit-packages/{bid}/manifest.json").content
+        )
+        m = manifest.get("measurement", {})
+        assert m.get("key_quantities") == {}, (
+            "skeleton manifest should have empty key_quantities"
+        )
+        assert m.get("comparator_verdict") is None
