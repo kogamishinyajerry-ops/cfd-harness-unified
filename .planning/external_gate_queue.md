@@ -22,6 +22,42 @@ reviewer rather than hidden.
 
 ---
 
+## Q-5: LDC (lid_driven_cavity) gold-standard reference values do not match Ghia 1982
+
+**Raised**: 2026-04-21 via Phase 5b Plan 02 real-solver run + Codex round CHANGES_REQUIRED.
+**Blocking class**: hard floor #3 — `knowledge/gold_standards/` edit required (三禁区 #3).
+
+**Summary**: The gold file `knowledge/gold_standards/lid_driven_cavity.yaml` cites "Ghia et al. 1982" but its `reference_values` array does NOT match Ghia 1982 Table I Re=100 u-centerline data. Our Phase 5b simpleFoam real-solver run at Re=100 produces a profile that closely matches the actual Ghia 1982 paper (u=-0.209 at y=0.5, min at y=0.44 of -0.212), but fails the comparator at 16 of 17 points because the gold reference values are incorrect.
+
+**Cross-check table (Ghia 1982 Table I Re=100 column vs our gold file vs simpleFoam run):**
+
+| y | Gold file says | Ghia 1982 actual | Our sim (simpleFoam 129×129) | Gold matches Ghia? |
+|---|---|---|---|---|
+| 0.0000 | (implicit 0) | 0 | -0.003 | ✓ |
+| 0.0625 | -0.03717 | -0.04192 (y=0.0625 exactly) | -0.042 | ✗ (gold cites y=0.0547 value at y=0.0625) |
+| 0.1250 | -0.04192 | ~-0.074 (interp) | -0.077 | ✗ |
+| 0.5000 | **+0.02526** | **-0.20581** | **-0.209** | ✗ sign-wrong |
+| 0.7500 | +0.33304 | ~+0.003 (interp) | +0.027 | ✗ |
+| 0.9375 | 0.84927 | ~0.62 (interp) | 0.597 | ✗ |
+| 1.0000 | 1.00000 | 1.0 | 0.974 (cell-adjacent) | ✓ |
+
+Gold values are monotone-increasing through y=0.5 (crosses zero at y~0.47), but actual Ghia Re=100 profile is monotone-DECREASING through y=0.45 (minimum), then crosses zero at y~0.73.
+
+**How this escaped until now**: Gold file was synthesized in Phase 0 (commit `fc21f47d` 2026-04-13) and never cross-verified against the actual paper. All pre-Phase-5a runs were mocked/synthesized fixtures that happened to match the (wrong) gold. Phase 5a's real-solver run correctly FAILED the comparator but was interpreted as "physics not converged" rather than "gold is wrong". Phase 5b's simpleFoam migration surfaced the mismatch unambiguously: our real simulation matches Ghia, the gold doesn't.
+
+**Options** (for external Gate to choose):
+
+- **Path A — replace gold with actual Ghia 1982 Table I Re=100 values**. Re-transcribe the 17 y-points from Ghia's Table I column 2 (Re=100). Interpolate uniformly if needed. All existing teaching fixtures (reference_pass, under_resolved, wrong_model, grid_convergence mesh_20/40/80/160) will need their `u_centerline` values regenerated to match the new gold (they're currently self-consistent with the wrong gold). Impact: ~10 fixture files regenerated from the same (correct) real-solver output; `audit_real_run` PASSes immediately.
+- **Path B — keep gold as-is, document as "illustrative non-canonical" reference**. Low-honesty; preserves teaching fixtures but tells students the validation contract is fake. Violates the commercial audit-package promise.
+- **Path C — escalate to paper re-source + independent DNS validation**. Overkill; Ghia 1982 is canonical and its Re=100 values are cited in hundreds of papers; no dispute in the literature.
+- **Path D — hold Phase 5b at infrastructure-complete; file Q-5; no action on gold yet**. Honest interim; Phase 5b is closed with simpleFoam migration verified against actual Ghia while the gold is fixed out-of-band.
+
+**Gate request**: Kogami to pick A/B/C/D. Path A is the correct long-term fix and the least-effort path to Phase 5b PASS. Path D is the right interim posture if Path A is out of scope for this conversation.
+
+**Upstream**: Phase 5b Plan 01 + Plan 02 (commits 0d85c98, 66ac478, c7248ff, 002a6fb, 1f87718).
+
+---
+
 ## ~~Q-4: BFS (backward_facing_step) Re-mismatch between whitelist and gold literature~~ — CLOSED 2026-04-21
 
 **Closure**: Kogami selected **Path A (re-source)** from the A/B/C/D menu. Executed per DEC-V61-028:

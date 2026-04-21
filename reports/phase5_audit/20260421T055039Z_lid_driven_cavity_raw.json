@@ -1,0 +1,10 @@
+{
+  "case_id": "lid_driven_cavity",
+  "measured_at": "2026-04-21T05:50:39Z",
+  "duration_s": 4.642,
+  "solver_success": false,
+  "key_quantities": {},
+  "comparator_passed": null,
+  "comparator_summary": null,
+  "deviations": []
+}

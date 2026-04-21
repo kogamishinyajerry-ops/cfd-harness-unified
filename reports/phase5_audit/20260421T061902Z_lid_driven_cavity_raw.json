@@ -1,0 +1,71 @@
+{
+  "case_id": "lid_driven_cavity",
+  "measured_at": "2026-04-21T06:19:02Z",
+  "duration_s": 22.514,
+  "solver_success": true,
+  "key_quantities": {
+    "U_residual_magnitude": 1.4008010175913637e-05,
+    "u_centerline": [
+      -0.00292911,
+      -0.041668262500000004,
+      -0.07651677500000001,
+      -0.10892143750000001,
+      -0.14079575,
+      -0.17143793750000003,
+      -0.197225625,
+      -0.211972625,
+      -0.208633,
+      -0.18213393749999995,
+      -0.1318544999999999,
+      -0.061252374999999935,
+      0.026644375,
+      0.1391738750000001,
+      0.3094921250000002,
+      0.596738625,
+      0.974469
+    ],
+    "u_centerline_y": [
+      0.0,
+      0.0625,
+      0.125,
+      0.1875,
+      0.25,
+      0.3125,
+      0.375,
+      0.4375,
+      0.5,
+      0.5625,
+      0.625,
+      0.6875,
+      0.75,
+      0.8125,
+      0.875,
+      0.9375,
+      1.0
+    ]
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity: u_centerline | Tolerance: 5.0% | Failed: 4 deviation(s)",
+  "deviations": [
+    {
+      "quantity": "u_centerline[y=0.0625]",
+      "actual": -0.041668262500000004,
+      "expected": -0.03717
+    },
+    {
+      "quantity": "u_centerline[y=0.1250]",
+      "actual": -0.07651677500000001,
+      "expected": -0.04192
+    },
+    {
+      "quantity": "u_centerline[y=0.5000]",
+      "actual": -0.208633,
+      "expected": 0.02526
+    },
+    {
+      "quantity": "u_centerline[y=0.7500]",
+      "actual": 0.026644375000000005,
+      "expected": 0.33304
+    }
+  ]
+}

@@ -517,8 +517,11 @@ class FoamAgentExecutor:
                 self._generate_impinging_jet(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
-                # lid_driven_cavity 用专用 laminar generator (simpleFoam, Phase 5b migration)
-                if "lid" in task_spec.name.lower() or task_spec.Re is not None and task_spec.Re < 2300:
+                # LDC: canonical name match, no Re-heuristic (Codex MEDIUM: the
+                # `Re < 2300` fallback was too broad — any SIMPLE_GRID laminar
+                # case would get routed through the cavity generator, silent
+                # wrong-physics risk).
+                if self._is_lid_driven_cavity_case(task_spec, "simpleFoam"):
                     self._generate_lid_driven_cavity(case_host_dir, task_spec)
                     solver_name = "simpleFoam"
                 else:
@@ -7236,13 +7239,14 @@ mergePatchPairs
 
     @staticmethod
     def _is_lid_driven_cavity_case(task_spec: TaskSpec, solver_name: str) -> bool:
-        """Detect if task is a Lid-Driven Cavity case (covers icoFoam + SIMPLE_GRID).
+        """Detect if task is a Lid-Driven Cavity case by canonical name.
 
-        The icoFoam + SIMPLE_GRID route was previously missed because the routing
-        only checked name/Re heuristics and did not explicitly detect icoFoam solver.
+        Phase 5b (post-Codex MEDIUM): removed the `solver_name == "icoFoam"`
+        back-compat shortcut — it was solver-specific and would misclassify
+        any future SIMPLE_GRID laminar case routed through icoFoam as LDC.
+        LDC is now identified strictly by canonical name match (matches both
+        the icoFoam legacy route and the simpleFoam Phase 5b route).
         """
-        if task_spec.geometry_type == GeometryType.SIMPLE_GRID and solver_name == "icoFoam":
-            return True
         if task_spec.geometry_type not in (GeometryType.SIMPLE_GRID, GeometryType.CUSTOM):
             return False
         name_key = task_spec.name.lower().replace("-", "_").replace(" ", "_")

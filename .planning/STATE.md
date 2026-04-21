@@ -985,3 +985,23 @@ Pending items (unclosed, queued for next session):
 - M2 sidecar v2 + rotation runbook (carried from S-005).
 - foam_agent_adapter.py refactor (carried from S-005).
 - P6-TD-003 held on user second-solver exclusion.
+
+---
+
+## 2026-04-21 Evening — Phase 5b LDC simpleFoam migration (DEC-V61-029, S-007)
+
+**Landed**: simpleFoam infrastructure migration complete across 6 src commits (0d85c98 plan-01 baseline, 66ac478 dispatcher, c7248ff momentumTransport, 002a6fb blockMesh frontAndBack, 1f87718 extractor x_tol mesh-derived, plus closing commit with 2 Codex MEDIUM fixes). Real-solver end-to-end verified: simpleFoam converges in ~1024 SIMPLE iterations, produces Ghia 1982 Re=100 physics (u=-0.209 at y=0.5, min at y=0.44 of -0.212).
+
+**Surprise finding**: Plan 02 comparator FAIL revealed `knowledge/gold_standards/lid_driven_cavity.yaml` reference values do NOT match actual Ghia 1982 Table I. Gold cites Ghia but values are incorrect (u=+0.025 at y=0.5 vs Ghia's -0.206). Filed as **Q-5** in external_gate_queue.md. Phase 5b PASS verdict blocked on gold re-transcription (Path A recommended).
+
+**Codex round 14**: CHANGES_REQUIRED → PARTIALLY_RESOLVED. HIGH (x_tol) fixed in 1f87718; MED 1+2 (dispatcher too-broad, classifier solver-coupled) fixed inline; MED 3 (_docker_exec timeout not enforced) deferred as cross-cutting tech debt.
+
+**Counter**: v6.1 autonomous_governance 15 → 16. Arc-retro threshold (20) still has 4 slots of runway.
+
+**Phase 5b scope delta**: LDC sub-phase infrastructure COMPLETE; PASS verdict BLOCKED on Q-5. Remaining 7 FAIL cases (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC) queued for Phase 5c..5j per-case sub-phases; each MUST cross-check gold values against cited paper as first step (LDC lesson learned).
+
+**Open items** (post-Phase-5b):
+- Q-5 external-gate decision (Kogami picks A/B/C/D).
+- DEC-V61-029 Notion sync (direct-REST fallback available; MCP still unauthorized).
+- 7 remaining FAIL-case sub-phases.
+- _docker_exec timeout enforcement (Codex MED 3, cross-cutting).
