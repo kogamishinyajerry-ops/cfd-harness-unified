@@ -77,6 +77,13 @@ class TaskSpec:
     boundary_conditions: Dict[str, Any] = field(default_factory=dict)
     description: str = ""
     notion_task_id: Optional[str] = None
+    # Phase 7a — optional per-run metadata bag. Currently carries the
+    # driver-authored `phase7a_timestamp` (and `phase7a_case_id`) so
+    # FoamAgentExecutor._capture_field_artifacts can stage OpenFOAM field
+    # artifacts into reports/phase5_fields/{case_id}/{timestamp}/ before the
+    # finally-block tears down the case dir. Default-None keeps the
+    # dataclass backward-compatible for all 79/79 existing tests.
+    metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass

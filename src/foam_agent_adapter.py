@@ -596,6 +596,27 @@ class FoamAgentExecutor:
             # postProcess 写出到 latestTime 目录，需要复制回 host 才能解析
             self._copy_postprocess_fields(container, case_cont_dir, case_host_dir)
 
+            # 7.5. [Phase 7a] Stage field artifacts (VTK + sample CSV + residuals)
+            #      BEFORE the finally-block tears down case_host_dir.
+            #      Best-effort: any failure MUST NOT fail the run — comparator
+            #      scalar extraction below still needs to succeed.
+            _phase7a_ts: Optional[str] = None
+            _phase7a_cid: Optional[str] = None
+            try:
+                _md = getattr(task_spec, "metadata", None) or {}
+                _phase7a_ts = _md.get("phase7a_timestamp")
+                _phase7a_cid = _md.get("phase7a_case_id") or task_spec.name
+            except Exception:
+                _phase7a_ts = None
+            if _phase7a_ts and _phase7a_cid:
+                self._capture_field_artifacts(
+                    container,
+                    case_cont_dir,
+                    case_host_dir,
+                    _phase7a_cid,
+                    _phase7a_ts,
+                )
+
             # 8. 解析 log 文件
             log_path = case_host_dir / f"log.{solver_name}"
             residuals, key_quantities = self._parse_solver_log(log_path, solver_name, task_spec)
@@ -639,6 +660,71 @@ class FoamAgentExecutor:
         if geometry_type == GeometryType.SIMPLE_GRID and Re is not None and Re < 2300:
             return "laminar"
         return "kOmegaSST"
+
+    @staticmethod
+    def _emit_phase7a_function_objects(turbulence_model: str = "laminar") -> str:
+        """Phase 7a — return the controlDict `functions{}` block as a raw string.
+
+        Called from each case generator that opts into Phase 7a field capture.
+        For LDC (laminar) yPlus is omitted; for turbulent cases the yPlus block
+        is activated. Sample coordinates are in post-convertToMeters space
+        (LDC: convertToMeters=0.1, so y-axis 0.0→0.1 spans the full cavity).
+
+        See .planning/phases/07a-field-capture/07a-RESEARCH.md §2.2 for the
+        function-object reference. `writeControl timeStep; writeInterval 500;`
+        is correct for steady simpleFoam per research validation
+        (`runTime` is transient-only — user ratification #2).
+        """
+        y_plus_block = ""
+        if turbulence_model and turbulence_model != "laminar":
+            y_plus_block = (
+                "\n    yPlus\n"
+                "    {\n"
+                "        type            yPlus;\n"
+                '        libs            ("libfieldFunctionObjects.so");\n'
+                "        writeControl    writeTime;\n"
+                "    }\n"
+            )
+
+        return (
+            "\nfunctions\n"
+            "{\n"
+            "    sample\n"
+            "    {\n"
+            "        type            sets;\n"
+            '        libs            ("libsampling.so");\n'
+            "        writeControl    timeStep;\n"
+            "        writeInterval   500;\n"
+            "\n"
+            "        interpolationScheme cellPoint;\n"
+            "        setFormat       raw;\n"
+            "\n"
+            "        fields          (U p);\n"
+            "\n"
+            "        sets\n"
+            "        {\n"
+            "            uCenterline\n"
+            "            {\n"
+            "                type        uniform;\n"
+            "                axis        y;\n"
+            "                start       (0.05 0.0   0.005);\n"
+            "                end         (0.05 0.1   0.005);\n"
+            "                nPoints     129;\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "\n"
+            "    residuals\n"
+            "    {\n"
+            "        type            residuals;\n"
+            '        libs            ("libutilityFunctionObjects.so");\n'
+            "        writeControl    timeStep;\n"
+            "        writeInterval   1;\n"
+            "        fields          (U p);\n"
+            "    }\n"
+            f"{y_plus_block}"
+            "}\n"
+        )
 
     def _generate_lid_driven_cavity(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """生成 Lid-Driven Cavity 最小 OpenFOAM case 文件。"""
@@ -713,9 +799,8 @@ simulationType  laminar;
             encoding="utf-8",
         )
 
-        # 3. system/controlDict
-        (case_dir / "system" / "controlDict").write_text(
-            """\
+        # 3. system/controlDict (Phase 7a: functions{} block injected before fence)
+        _controldict_head = """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -762,9 +847,15 @@ timeFormat      general;
 timePrecision   6;
 
 runTimeModifiable true;
-
-// ************************************************************************* //
-""",
+"""
+        _controldict_tail = "\n// ************************************************************************* //\n"
+        # LDC is laminar per constant/momentumTransport emitted above; pass through
+        # turbulence_model kwarg so the helper suppresses the yPlus block. Future
+        # turbulent generators (Phase 7c Sprint-2) will pass their own model string.
+        (case_dir / "system" / "controlDict").write_text(
+            _controldict_head
+            + self._emit_phase7a_function_objects(turbulence_model="laminar")
+            + _controldict_tail,
             encoding="utf-8",
         )
 
@@ -6774,6 +6865,147 @@ mergePatchPairs
         except Exception as e:
             import sys as _sys
             print(f"[WARN] _copy_postprocess_fields failed: {e}", file=_sys.stderr)
+
+    # ------------------------------------------------------------------
+    # Phase 7a — field-artifact staging (VTK + sample CSV + residuals)
+    # ------------------------------------------------------------------
+
+    def _capture_field_artifacts(
+        self,
+        container: Any,
+        case_cont_dir: str,
+        case_host_dir: Path,
+        case_id: str,
+        timestamp: str,
+    ) -> Optional[Path]:
+        """Phase 7a — stage OpenFOAM field artifacts out of the container
+        before the finally-block tears down case_host_dir.
+
+        Mirrors _copy_postprocess_fields. Runs foamToVTK inside the container,
+        then uses docker `get_archive` to pull VTK/, postProcessing/sample/,
+        and postProcessing/residuals/ wholesale via a single tar stream.
+        Also copies log.<solver> from the host case dir (already on host).
+
+        Returns the host-side artifact_dir on success, None on failure.
+        Never raises — field capture is best-effort and must not fail the run
+        (comparator scalar extraction still needs to succeed downstream).
+        """
+        import io as _io
+        import sys as _sys
+        import tarfile as _tarfile
+
+        repo_root = Path(__file__).resolve().parents[1]
+        artifact_dir = repo_root / "reports" / "phase5_fields" / case_id / timestamp
+        try:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+
+            # (a) foamToVTK — -allPatches merges patches into a single file.
+            #     Fallback without -allPatches if it trips empty-patch
+            #     assertions (07a-RESEARCH.md §3.2).
+            ok, log = self._docker_exec(
+                "foamToVTK -latestTime -noZero -allPatches",
+                case_cont_dir,
+                120,
+            )
+            if not ok:
+                print(
+                    f"[WARN] foamToVTK -allPatches failed, retrying without: {log[:200]}",
+                    file=_sys.stderr,
+                )
+                ok, log = self._docker_exec(
+                    "foamToVTK -latestTime -noZero", case_cont_dir, 120,
+                )
+            if not ok:
+                print(
+                    f"[WARN] foamToVTK failed, field capture skipped: {log[:200]}",
+                    file=_sys.stderr,
+                )
+                return None
+
+            # (b) Tar + get_archive the three subtrees. Missing subtrees are
+            #     fine (e.g. postProcessing/residuals only exists if the
+            #     residuals function object was emitted).
+            for sub in ("VTK", "postProcessing/sample", "postProcessing/residuals"):
+                src_in_cont = f"{case_cont_dir}/{sub}"
+                probe = container.exec_run(
+                    cmd=["bash", "-c", f'[ -e "{src_in_cont}" ] && echo y || echo n'],
+                )
+                if probe.output.decode().strip() != "y":
+                    continue
+                try:
+                    bits, _ = container.get_archive(src_in_cont)
+                    buf = _io.BytesIO(b"".join(bits))
+                    with _tarfile.open(fileobj=buf) as tar:
+                        tar.extractall(path=artifact_dir)
+                except Exception as e:  # noqa: BLE001
+                    print(
+                        f"[WARN] staging {sub} failed: {e!r}", file=_sys.stderr,
+                    )
+
+            # (c) log.<solver> — already on host after _docker_exec.
+            for logname in (
+                "log.simpleFoam",
+                "log.icoFoam",
+                "log.buoyantFoam",
+                "log.pimpleFoam",
+            ):
+                src = case_host_dir / logname
+                if src.is_file():
+                    (artifact_dir / logname).write_bytes(src.read_bytes())
+                    break
+
+            # (d) Derive residuals.csv from postProcessing/residuals/0/residuals.dat
+            #     if present. Per user ratification #3 — structured ASCII,
+            #     no log regex.
+            residuals_dat_candidates = list(
+                artifact_dir.glob("postProcessing/residuals/*/residuals.dat")
+            )
+            if residuals_dat_candidates:
+                try:
+                    self._emit_residuals_csv(
+                        residuals_dat_candidates[0],
+                        artifact_dir / "residuals.csv",
+                    )
+                except Exception as e:  # noqa: BLE001
+                    print(
+                        f"[WARN] residuals.csv derivation failed: {e!r}",
+                        file=_sys.stderr,
+                    )
+
+            return artifact_dir
+        except Exception as e:  # noqa: BLE001
+            print(
+                f"[WARN] _capture_field_artifacts failed: {e!r}", file=_sys.stderr,
+            )
+            return None
+
+    @staticmethod
+    def _emit_residuals_csv(dat_path: Path, csv_path: Path) -> None:
+        """Convert OpenFOAM v10 residuals function-object output to CSV.
+
+        The .dat format is whitespace-separated with a header line starting
+        with `#`. We passthrough as CSV (comma-separated) with an explicit
+        header — downstream tools (Phase 7b render pipeline) consume this.
+        """
+        lines = dat_path.read_text(encoding="utf-8").splitlines()
+        header: Optional[List[str]] = None
+        rows: List[List[str]] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                tokens = line.lstrip("#").split()
+                if tokens:
+                    header = tokens
+                continue
+            rows.append(line.split())
+        if not header or not rows:
+            return
+        with csv_path.open("w", encoding="utf-8") as fh:
+            fh.write(",".join(header) + "\n")
+            for r in rows:
+                fh.write(",".join(r) + "\n")
 
     # ------------------------------------------------------------------
     # Log parsing

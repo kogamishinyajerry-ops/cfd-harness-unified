@@ -43,6 +43,7 @@ from src.task_runner import TaskRunner  # noqa: E402
 
 RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 RAW_DIR = REPO_ROOT / "reports" / "phase5_audit"
+FIELDS_DIR = REPO_ROOT / "reports" / "phase5_fields"
 
 ALL_CASES = [
     "lid_driven_cavity",
@@ -90,7 +91,46 @@ def _primary_scalar(report) -> tuple[str | None, float | None, str]:
     return None, None, "no_numeric_quantity"
 
 
-def _audit_fixture_doc(case_id: str, report, commit_sha: str) -> dict:
+def _phase7a_timestamp() -> str:
+    """Shared timestamp format — matches _write_raw_capture."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _write_field_artifacts_run_manifest(
+    case_id: str, run_label: str, timestamp: str
+) -> "Path | None":
+    """Write reports/phase5_fields/{case_id}/runs/{run_label}.json so the
+    backend route can resolve run_label -> timestamp directory in O(1).
+
+    Returns the manifest Path on success, None if the artifact dir never
+    materialized (e.g. foamToVTK failed or the case is not Phase-7a opted-in).
+    """
+    artifact_dir = FIELDS_DIR / case_id / timestamp
+    if not artifact_dir.is_dir():
+        print(
+            f"[audit] [WARN] field artifact dir missing, skipping manifest: {artifact_dir}",
+            flush=True,
+        )
+        return None
+    runs_dir = FIELDS_DIR / case_id / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    manifest = runs_dir / f"{run_label}.json"
+    payload = {
+        "run_label": run_label,
+        "timestamp": timestamp,
+        "case_id": case_id,
+        "artifact_dir_rel": str(artifact_dir.relative_to(REPO_ROOT)),
+    }
+    manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _audit_fixture_doc(
+    case_id: str,
+    report,
+    commit_sha: str,
+    field_artifacts_ref: "dict | None" = None,
+) -> dict:
     quantity, value, source_note = _primary_scalar(report)
     comp = report.comparison_result
     passed = comp.passed if comp else False
@@ -159,6 +199,12 @@ def _audit_fixture_doc(case_id: str, report, commit_sha: str) -> dict:
                 }
             )
 
+    # Phase 7a — field artifacts reference (manifest path only; NO timestamps
+    # in the YAML itself so byte-repro stays green per 07a-RESEARCH.md §3.1).
+    # The manifest at the referenced path contains the timestamp.
+    if field_artifacts_ref is not None:
+        doc["field_artifacts"] = field_artifacts_ref
+
     return doc
 
 
@@ -210,15 +256,41 @@ def _write_raw_capture(case_id: str, report, duration_s: float) -> Path:
 def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
     t0 = time.monotonic()
     print(f"[audit] {case_id} → start", flush=True)
+
+    # Phase 7a — author the single shared timestamp up front; the executor-side
+    # _capture_field_artifacts writes to reports/phase5_fields/{case_id}/{ts}/.
+    ts = _phase7a_timestamp()
     try:
         spec = runner._task_spec_from_case_id(case_id)
+        # Opt-in signalling to FoamAgentExecutor. Other 9 cases' controlDicts
+        # do NOT yet emit Phase 7a function objects, but the executor guards
+        # on the metadata keys — staging runs best-effort.
+        if spec.metadata is None:
+            spec.metadata = {}
+        spec.metadata["phase7a_timestamp"] = ts
+        spec.metadata["phase7a_case_id"] = case_id
         report = runner.run_task(spec)
     except Exception as e:  # noqa: BLE001
         print(f"[audit] {case_id} EXCEPTION: {e!r}")
         return {"case_id": case_id, "ok": False, "error": repr(e)}
 
     dt = time.monotonic() - t0
-    doc = _audit_fixture_doc(case_id, report, commit_sha)
+
+    # Phase 7a — write per-run manifest + build field_artifacts_ref dict iff
+    # the artifact dir materialized (best-effort, must not block audit doc).
+    run_label = "audit_real_run"
+    manifest_path = _write_field_artifacts_run_manifest(case_id, run_label, ts)
+    field_artifacts_ref: "dict | None" = None
+    if manifest_path is not None:
+        field_artifacts_ref = {
+            "manifest_path_rel": str(manifest_path.relative_to(REPO_ROOT)),
+            "run_label": run_label,
+            # Deliberately NO timestamp string here (byte-repro): resolve via manifest.
+        }
+
+    doc = _audit_fixture_doc(
+        case_id, report, commit_sha, field_artifacts_ref=field_artifacts_ref,
+    )
     fixture_path = _write_audit_fixture(case_id, doc)
     raw_path = _write_raw_capture(case_id, report, dt)
     verdict = doc["run_metadata"]["expected_verdict"]
@@ -230,6 +302,9 @@ def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
         "verdict": verdict,
         "fixture": str(fixture_path.relative_to(REPO_ROOT)),
         "raw": str(raw_path.relative_to(REPO_ROOT)),
+        "field_artifacts_manifest": (
+            str(manifest_path.relative_to(REPO_ROOT)) if manifest_path else None
+        ),
     }
 
 
