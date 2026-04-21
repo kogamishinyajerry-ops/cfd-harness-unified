@@ -1150,3 +1150,36 @@ Pending items (unclosed, queued for next session):
 - 7f ✅ MVP COMPLETE (this DEC, LDC only); 9 other cases unlock with 7c Sprint 2
 
 **Delivery statement**: Phase 7 Sprint 1 complete. User-visible scientific-grade evidence surface (the original deep-acceptance ask) delivered for LDC. Honest residuals documented in DEC §"Honest residuals". Ready for user verification at http://127.0.0.1:5174/learn/lid_driven_cavity.
+
+## 2026-04-21 Late Night — Phase 7 closure (Sprint 1 complete + 7b polish + 7d + 7e) (DEC-V61-033, S-010)
+
+**User directive**: "接着推进，把你发现的剩余收口项都完成" — autonomous push through the three DEC-V61-032 deferrals.
+
+**Landed**:
+- **7b polish**: scripts/render_case_report.py parses OpenFOAM volume VTK via PyVista, reshapes 129×129 cell-centered (U, Cx, Cy), renders matplotlib contourf + streamplot. LDC /learn page now shows a publication-style cavity flow with the primary vortex + ~3 streamline whorls (was 1D strip).
+- **7d**: ui/backend/services/grid_convergence.py (NEW, ~260 LOC) Celik 2008 + Roache 1994 Richardson GCI with degenerate-case branches (oscillating / precision / overflow / zero-order). comparison_report.html.j2 §7 GCI sub-table. LDC live: p_obs=1.00, GCI_32=5.68%, asymptotic_range_ok=True.
+- **7e**: src/audit_package/{manifest,serialize}.py L4 canonical schema — embeds VTK + PNGs + PDF + residuals + samples + log (14 files, 1.97 MB). Byte-reproducibility preserved: identical SHA256 + HMAC across two consecutive POST build calls. docs/specs/audit_package_canonical_L4.md supersedes L3.
+
+**Codex arc** (2 rounds):
+- Round 1: CHANGES_REQUIRED — CRITICAL (serialize hardcoded repo_root ignored build_manifest's repo_root kwarg; manifest advertised 5 phase7 entries while zip had 0; test masked via monkeypatch), IMPORTANT (non-uniform-r GCI OverflowError uncaught past ValueError/ZeroDivisionError), MISLEADING (p_obs=0.0 fell through with note="ok").
+- Round 2: **APPROVED_WITH_COMMENTS** — all 3 findings closed. Non-blocking comment: build_manifest(repo_root=X) not fully hermetic because knowledge/whitelist + gold + decisions still use module-level roots (pre-existing, out of scope for this DEC).
+
+**Self-pass-rate calibration**: estimated 0.45, actual CHANGES_REQUIRED once then APPROVED. Honest.
+
+**Counter**: v6.1 autonomous_governance 18 → 19.
+
+**Test baseline**: 114/114 pre-7bde → 129/129 post-initial-implementation → **132/132 post-round-1-fixes** (+18 net since DEC-V61-032: 8 Phase 7e tests, 9 GCI tests, 1 repo_root mismatch hazard test, -0 removed).
+
+**Phase 7 status** (updated from DEC-V61-032 snapshot):
+- 7a ✅ COMPLETE (DEC-V61-031)
+- 7b ✅ COMPLETE — MVP (DEC-V61-032) + polish (DEC-V61-033)
+- 7c Sprint 1 ✅ COMPLETE (DEC-V61-032); Sprint 2 fan-out still queued
+- 7d ✅ COMPLETE (DEC-V61-033)
+- 7e ✅ COMPLETE (DEC-V61-033)
+- 7f ✅ MVP COMPLETE (DEC-V61-032); 9 other cases unlock with 7c Sprint 2
+
+**Phase 7 Sprint 1 verdict**: DELIVERABLE. Remaining work (7c Sprint 2 × 9 cases) requires OpenFOAM integration runs × 9 + per-case adapter opt-in edits — distinct scope, unblocked, available for execution when user requests.
+
+**Git**: commit 4399427 pushed to main (12 files, +7788/-23).
+
+**Next**: Notion sync DEC-V61-033 (Decisions DB).
