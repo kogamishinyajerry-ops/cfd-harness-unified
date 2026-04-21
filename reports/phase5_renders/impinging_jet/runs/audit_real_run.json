@@ -1,0 +1,11 @@
+{
+  "case_id": "impinging_jet",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T142307Z",
+  "renders_dir_rel": "reports/phase5_renders/impinging_jet/20260421T142307Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/impinging_jet/20260421T142307Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/impinging_jet/20260421T142307Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

@@ -9,7 +9,7 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit b8069eb）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 547002a）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
@@ -19,9 +19,9 @@ source: phase5_audit_run_foam_agent
 measurement:
   value: 0.0041666666666358085
   unit: dimensionless
-  run_id: audit_impinging_jet_b8069eb
-  commit_sha: b8069eb
-  measured_at: '2026-04-21T03:47:02Z'
+  run_id: audit_impinging_jet_547002a
+  commit_sha: 547002a
+  measured_at: '2026-04-21T14:25:39Z'
   quantity: nusselt_number
   extraction_source: comparator_deviation
   solver_success: true
@@ -42,3 +42,6 @@ decisions_trail:
   date: '2026-04-21'
   title: Phase 5a audit pipeline — real-solver fixtures
   autonomous: true
+field_artifacts:
+  manifest_path_rel: reports/phase5_fields/impinging_jet/runs/audit_real_run.json
+  run_label: audit_real_run

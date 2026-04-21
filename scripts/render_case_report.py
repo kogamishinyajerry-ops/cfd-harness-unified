@@ -552,15 +552,20 @@ def _render_unstructured_contour(
         mag = np.where(finite, np.clip(mag, 0.0, vmax), 0.0)
         Ux = np.where(np.isfinite(Ux), np.clip(Ux, -vmax, vmax), 0.0)
         Uy = np.where(np.isfinite(Uy), np.clip(Uy, -vmax, vmax), 0.0)
-    # Guard against degenerate z-variance: if mesh is truly 2D, Cz has tiny spread.
-    triang = mtri.Triangulation(Cx, Cy)
     fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    # Attempt Delaunay triangulation; qhull fails on degenerate/collinear
+    # geometries (e.g. NACA0012 after a solver divergence — all cells end up
+    # at boundary or coincident). Fall through to scatter on failure.
+    cf = None
     try:
+        triang = mtri.Triangulation(Cx, Cy)
         cf = ax.tricontourf(triang, mag, levels=20, cmap="viridis")
-    except Exception:
-        # Final fallback: plain scatter-mag map (no triangulation needed)
-        sc = ax.scatter(Cx, Cy, c=mag, s=6, cmap="viridis")
-        cf = sc
+    except Exception as e:
+        print(f"[render] [WARN] tricontourf failed ({e}); using scatter fallback",
+              file=sys.stderr)
+    if cf is None:
+        # Plain scatter-mag map — always works, no triangulation.
+        cf = ax.scatter(Cx, Cy, c=mag, s=8, cmap="viridis", edgecolors="none")
     # Sparse quiver: ~40 arrows on a decimated lattice so large meshes stay readable.
     n = len(Cx)
     stride = max(1, int(np.sqrt(n) / 8))
@@ -581,6 +586,30 @@ def _render_unstructured_contour(
     return out
 
 
+def _pick_2d_plane(
+    Cx: np.ndarray, Cy: np.ndarray, Cz: np.ndarray, U: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str, str]:
+    """Return (axis1, axis2, vel1, vel2, label1, label2) for the 2D plane with
+    non-degenerate coordinate variance. Pseudo-2D CFD cases are typically one
+    cell thick in ONE of {x, y, z}; pick the two non-degenerate axes.
+
+    Fallback: (Cx, Cy) if all three look non-degenerate.
+    """
+    def _span(arr: np.ndarray) -> float:
+        arr = arr[np.isfinite(arr)]
+        if arr.size == 0:
+            return 0.0
+        return float(arr.max() - arr.min())
+
+    spans = [(_span(Cx), "x", Cx, U[:, 0]),
+             (_span(Cy), "y", Cy, U[:, 1]),
+             (_span(Cz), "z", Cz, U[:, 2])]
+    # Sort descending; pick the top two.
+    spans.sort(key=lambda s: s[0], reverse=True)
+    (_, l1, c1, v1), (_, l2, c2, v2) = spans[0], spans[1]
+    return c1, c2, v1, v2, l1, l2
+
+
 def render_contour_u_magnitude_png(
     case_id: str,
     artifact_dir: Path,
@@ -592,7 +621,11 @@ def render_contour_u_magnitude_png(
     1. Structured grid: LDC-style square mesh → contourf + streamplot (publication quality).
     2. Unstructured: tricontourf on raw cell centroids + sparse quiver overlay —
        works for BFS, cylinder wake, airfoil, impinging jet, channel, etc.
-    3. Centerline strip: final fallback when VTK parse fails outright.
+    3. Scatter: final fallback when Delaunay triangulation fails (e.g. NACA0012
+       after solver divergence → singular/collinear geometry).
+
+    Auto-detects the 2D plane — not all cases are in the x-y plane (NACA0012
+    uses x-z, some use y-z); picks the two axes with non-degenerate variance.
     """
     out = renders_dir / "contour_u_magnitude.png"
     vtk_path = _find_latest_vtk(artifact_dir)
@@ -607,14 +640,16 @@ def render_contour_u_magnitude_png(
             U = np.asarray(cd["U"])
             Cx = np.asarray(cd["Cx"])
             Cy = np.asarray(cd["Cy"])
-            Ux = U[:, 0]
-            Uy = U[:, 1]
+            Cz = np.asarray(cd["Cz"]) if "Cz" in cd else np.zeros_like(Cx)
+            # Auto-pick the 2D plane with non-degenerate variance so that
+            # cases meshed in x-z (NACA0012) or y-z still produce a contour.
+            ax1, ax2, vel1, vel2, _, _ = _pick_2d_plane(Cx, Cy, Cz, U)
             # Try structured-grid path first (fast, publication-style).
-            result = _render_structured_contour(case_id, Ux, Uy, Cx, Cy, out)
+            result = _render_structured_contour(case_id, vel1, vel2, ax1, ax2, out)
             if result is not None:
                 return result
             # Fall through to unstructured tricontour.
-            return _render_unstructured_contour(case_id, Ux, Uy, Cx, Cy, out)
+            return _render_unstructured_contour(case_id, vel1, vel2, ax1, ax2, out)
         except Exception as e:  # noqa: BLE001 — try minimal fallback
             print(f"[render] [WARN] VTK contour failed ({e}); trying sample-strip fallback",
                   file=sys.stderr)

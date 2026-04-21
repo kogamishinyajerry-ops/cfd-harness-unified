@@ -1,0 +1,11 @@
+{
+  "case_id": "differential_heated_cavity",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T131052Z",
+  "renders_dir_rel": "reports/phase5_renders/differential_heated_cavity/20260421T131052Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/differential_heated_cavity/20260421T131052Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/differential_heated_cavity/20260421T131052Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}
