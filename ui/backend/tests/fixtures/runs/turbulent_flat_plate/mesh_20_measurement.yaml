@@ -8,7 +8,7 @@ run_metadata:
   description_zh: >-
     20 条壁法向 cell（均匀）。第一层 y+≈50，远在 viscous sublayer 外。
     Spalding fallback 拉回到 log 层，Cf=0.00650 vs Blasius 0.00420 (+55%)。
-    远远超出 5% 容差 FAIL。
+    远远超出 10% 容差 FAIL。
   category: grid_convergence
   expected_verdict: FAIL
 case_id: turbulent_flat_plate

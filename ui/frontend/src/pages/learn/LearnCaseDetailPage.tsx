@@ -716,7 +716,8 @@ function MeshTab({ caseId }: { caseId: string }) {
               相对 gold 偏差
             </p>
             <p className="mono mt-1 text-2xl text-surface-100">
-              {activeReport?.deviation_pct == null
+              {activeReport?.deviation_pct == null ||
+              !Number.isFinite(activeReport.deviation_pct)
                 ? "—"
                 : `${activeReport.deviation_pct >= 0 ? "+" : ""}${activeReport.deviation_pct.toFixed(1)}%`}
             </p>
@@ -778,8 +779,10 @@ function ConvergenceSparkline({
   const padX = 40;
   const padY = 20;
 
-  const values = series.map((s) => s.value).filter((v): v is number => v != null);
-  if (goldRef == null || values.length === 0) {
+  const values = series
+    .map((s) => s.value)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (goldRef == null || !Number.isFinite(goldRef) || values.length === 0) {
     return (
       <div className="h-[180px] rounded border border-surface-800 bg-surface-950/40 p-3 text-[11px] text-surface-500">
         等待后端数据…
@@ -806,7 +809,11 @@ function ConvergenceSparkline({
   const lowerY = tolPct != null ? toY(goldRef * (1 - tolPct)) : null;
 
   const points = series
-    .map((s) => (s.value == null ? null : `${toX(s.idx)},${toY(s.value)}`))
+    .map((s) =>
+      s.value == null || !Number.isFinite(s.value)
+        ? null
+        : `${toX(s.idx)},${toY(s.value)}`,
+    )
     .filter((p): p is string => p != null)
     .join(" ");
 
@@ -854,7 +861,7 @@ function ConvergenceSparkline({
         />
         {/* density anchor points */}
         {series.map((s) => {
-          if (s.value == null) return null;
+          if (s.value == null || !Number.isFinite(s.value)) return null;
           const cx = toX(s.idx);
           const cy = toY(s.value);
           const r = s.idx === activeIdx ? 6 : 4;
@@ -886,7 +893,7 @@ function ConvergenceSparkline({
 }
 
 function formatNumber(v: number | undefined): string {
-  if (v == null) return "—";
+  if (v == null || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
   if (abs === 0) return "0";
   if (abs < 0.001) return v.toExponential(2);

@@ -6,7 +6,7 @@ run_metadata:
   label_en: Mesh 40 wall-normal cells (transitional)
   description_zh: >-
     40 条壁法向 cell。第一层 y+≈25，触到 buffer 层但未入 sublayer。
-    Cf=0.00520 (+24%)。5% 容差外 FAIL。
+    Cf=0.00520 (+24%)。10% 容差外 FAIL。
   category: grid_convergence
   expected_verdict: FAIL
 case_id: turbulent_flat_plate

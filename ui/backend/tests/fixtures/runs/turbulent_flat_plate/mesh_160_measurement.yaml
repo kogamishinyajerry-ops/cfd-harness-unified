@@ -6,7 +6,7 @@ run_metadata:
   label_zh: 网格 160 y-cells · 过收敛
   label_en: Mesh 160 wall-normal cells (asymptotic)
   description_zh: >-
-    160 条壁法向 cell，更密的壁面加密。Cf=0.00423（+0.7%）。5% 容差内 PASS。
+    160 条壁法向 cell，更密的壁面加密。Cf=0.00423（+0.7%）。10% 容差内 PASS。
     相对 80 条改进可忽略——到这里你在测 scheme 误差，不是 mesh。
   category: grid_convergence
   expected_verdict: PASS
