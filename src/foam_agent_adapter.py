@@ -7427,16 +7427,28 @@ mergePatchPairs
     ) -> Dict[str, Any]:
         """LDC: 提取 x=0.5 中心线速度剖面，对应 Ghia 1982 标准值。
 
-        Cavity mesh: x∈[0,0.1], y∈[0,0.1], z∈[0,0.1]
+        Cavity mesh: x∈[0,0.1], y∈[0,0.1]
         Ghia 1982 标准: x_norm=0.5 → x_actual=0.05m
-        网格 x-cell centers: 0.0025, 0.0075, ..., 0.0975 (步长 0.005)
-        目标 x=0.05 落在 cells 9-10 (cx=0.0475 和 0.0525)，取平均
+        Mesh-derived tolerance: selects the pair of cells straddling x=0.05,
+        so the averaged profile reflects the true centerline. Prior hardcoded
+        tolerance (0.006) was half-cell-width for the legacy 20x20 mesh and
+        silently averaged a thick slab on the Phase 5b 129x129 mesh
+        (Codex round HIGH finding 2026-04-21).
         """
         # x=0.05m = normalized x=0.5
         x_target = 0.05
-        x_tol = 0.006  # 半格宽 0.0025 × 1.2
 
         from collections import defaultdict
+        unique_cxs = sorted({round(cx, 6) for cx in cxs})
+        if len(unique_cxs) >= 2:
+            dx_typical = min(
+                unique_cxs[i + 1] - unique_cxs[i]
+                for i in range(len(unique_cxs) - 1)
+            )
+        else:
+            dx_typical = 0.005  # fallback for degenerate mesh
+        x_tol = 0.6 * dx_typical  # strictly narrower than one full cell width
+
         y_groups: Dict[float, List[float]] = defaultdict(list)
 
         for i in range(len(cxs)):
