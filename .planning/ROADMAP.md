@@ -50,7 +50,7 @@
   - [ ] 07a-03-PLAN.md — Integration + Codex review + DEC-V61-031 + atomic commit
 
 ### Phase 7b: Render pipeline (Sprint 1, ~2 days)
-- Status: Planned
+- Status: COMPLETE (DEC-V61-032, 2026-04-21). `scripts/render_case_report.py` produces 5 outputs per LDC run (profile sim-vs-Ghia overlay + color-coded deviation bar + residuals log + contour centerline slice + Plotly interactive JSON). 3.1MB VTK not-yet-parsed → full 2D contour deferred to 7b polish. LDC-only via RENDER_SUPPORTED_CASES opt-in.
 - Goal: New `scripts/render_case_report.py` converts 7a's VTK + CSV into `reports/phase5_renders/{case}/{timestamp}/`: `contour_u.png`, `contour_p.png`, `streamline.png`, `profile_u_centerline.html` (Plotly JSON), `residuals.png`.
 - Required outputs:
   - matplotlib for 2D contours (CI-reproducible); PyVista headless (`PYVISTA_OFF_SCREEN=1`) for 3D streamlines
@@ -60,7 +60,7 @@
 - Constraints: new script, no src/ touch → autonomous_governance allowed. Add `pyvista`, `plotly`, `matplotlib` to `pyproject.toml` [render] extra.
 
 ### Phase 7c: CFD-vs-gold comparison report template (Sprint 1 MVP + Sprint 2 fan-out, ~3 days)
-- Status: Planned — **core deliverable, the "說服力" centerpiece**
+- Status: **SPRINT 1 COMPLETE (LDC MVP)** — DEC-V61-032, 2026-04-21. 8-section Jinja2 HTML template + WeasyPrint PDF (622 KB, PDF 1.7) + 4-endpoint backend route + 15 unit/route tests (10 route + 7 service, all CI-safe via synthetic_tree monkeypatch fixture). Codex 4 rounds → APPROVED. Sprint 2 fan-out to 9 other cases deferred.
 - Goal: Per-case HTML + WeasyPrint PDF report with 8 sections:
   1. Verdict card (PASS / FAIL + L2 / L∞ / RMS / max |dev|%)
   2. Paper citation block (Ghia 1982 / Le-Moin-Kim 1997 / etc. + Figure/Table + native tabulation)
@@ -98,7 +98,7 @@
 - Constraints: **Byte-reproducibility-sensitive path → Codex mandatory** per RETRO-V61-001 new trigger #2. L3→L4 schema rename touches manifest builder + signer + verifier → ≥3 files → Codex mandatory per RETRO-V61-001 new trigger #3.
 
 ### Phase 7f: Frontend render consumption (Sprint 2, ~1 day)
-- Status: Planned
+- Status: **MVP COMPLETE (LDC)** — DEC-V61-032, 2026-04-21. `LearnCaseDetailPage.tsx::ScientificComparisonReportSection` fetches `/api/cases/{id}/runs/audit_real_run/comparison-report/context`, renders verdict card + metrics grid + iframe embed of HTML report + "Open in new window" + "Download PDF" buttons. Graceful 404→hide / 5xx→error banner distinction (Codex round 1 MED fix). iframe `sandbox=""` strict. Fan-out to 9 other cases deferred to 7c Sprint 2.
 - Goal: Replace static placeholder flow-field PNGs in `/learn/{case}` with live fetches from 7a's `/api/runs/{run_id}/field-artifacts` + 7b's `/api/runs/{run_id}/renders`.
 - Required outputs:
   - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx` flow-field block fetches real renders; falls back to reference-run renders if the slider mesh has no artifacts yet

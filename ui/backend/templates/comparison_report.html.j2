@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>CFD vs Gold — {{ case_id }}</title>
+<style>
+  body { font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+         color: #1f2937; max-width: 960px; margin: 2em auto; padding: 0 1.5em;
+         line-height: 1.55; }
+  h1 { color: #111; border-bottom: 3px solid #1f77b4; padding-bottom: 0.3em; }
+  h2 { color: #1f77b4; margin-top: 2em; font-size: 1.3em; }
+  .verdict-card { background: linear-gradient(135deg, {{ verdict_gradient }});
+                  color: white; padding: 1em 1.5em; border-radius: 10px; margin: 1em 0 2em 0;
+                  box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .verdict-card .verdict { font-size: 2em; font-weight: bold; letter-spacing: 1px; }
+  .verdict-card .sub { font-size: 0.95em; opacity: 0.92; margin-top: 0.3em; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1em; margin-top: 1em; }
+  .metric { background: rgba(255,255,255,0.15); padding: 0.6em 0.8em; border-radius: 6px; }
+  .metric-label { font-size: 0.75em; opacity: 0.85; text-transform: uppercase; }
+  .metric-value { font-size: 1.3em; font-weight: bold; margin-top: 0.2em; }
+  .paper-cite { background: #f9fafb; border-left: 4px solid #374151;
+                padding: 0.8em 1em; margin: 1em 0; font-size: 0.92em; }
+  .paper-cite .title { font-weight: 600; color: #111; }
+  .paper-cite .doi { font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em; color: #6b7280; }
+  figure { margin: 1.5em 0; text-align: center; }
+  figure img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; }
+  figcaption { font-size: 0.88em; color: #6b7280; margin-top: 0.5em; font-style: italic; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.92em; }
+  th, td { padding: 0.5em 0.8em; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  th { background: #f9fafb; font-weight: 600; color: #374151; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.pass { color: #059669; font-weight: bold; }
+  td.fail { color: #dc2626; font-weight: bold; }
+  td.warn { color: #d97706; font-weight: bold; }
+  .mono { font-family: 'SF Mono', Consolas, monospace; font-size: 0.88em;
+          background: #f3f4f6; padding: 0.1em 0.4em; border-radius: 3px; }
+  .residual-block { background: #fff7ed; border-left: 4px solid #f97316;
+                    padding: 0.8em 1em; margin: 1em 0; font-size: 0.9em; }
+  footer { margin-top: 3em; padding-top: 1em; border-top: 1px solid #e5e7eb;
+           font-size: 0.82em; color: #9ca3af; }
+</style>
+</head>
+<body>
+
+<h1>CFD vs Gold — {{ case_display_name }}</h1>
+<p style="color:#6b7280; margin-top:-0.5em;">
+  Case ID: <span class="mono">{{ case_id }}</span> ·
+  Run: <span class="mono">{{ run_label }}</span> ·
+  Timestamp: <span class="mono">{{ timestamp }}</span>
+</p>
+
+<!-- Section 1 — Verdict card -->
+<div class="verdict-card">
+  <div class="verdict">{{ verdict }}</div>
+  <div class="sub">{{ verdict_subtitle }}</div>
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">max |dev|</div>
+         <div class="metric-value">{{ '%.2f'|format(metrics.max_dev_pct) }}%</div></div>
+    <div class="metric"><div class="metric-label">L² norm</div>
+         <div class="metric-value">{{ '%.4f'|format(metrics.l2) }}</div></div>
+    <div class="metric"><div class="metric-label">L∞ norm</div>
+         <div class="metric-value">{{ '%.4f'|format(metrics.linf) }}</div></div>
+    <div class="metric"><div class="metric-label">RMS</div>
+         <div class="metric-value">{{ '%.4f'|format(metrics.rms) }}</div></div>
+  </div>
+</div>
+
+<!-- Section 2 — Paper citation -->
+<h2>2. 参考文献 (Gold standard)</h2>
+<div class="paper-cite">
+  <div class="title">{{ paper.title }}</div>
+  <div>{{ paper.source }}</div>
+  {% if paper.doi %}<div class="doi">DOI: {{ paper.doi }}</div>{% endif %}
+  <div style="margin-top:0.6em; font-size:0.88em;">
+    Gold sample count: <strong>{{ paper.gold_count }}</strong> points ·
+    Tolerance: <strong>±{{ '%.1f'|format(paper.tolerance_pct) }}%</strong>
+  </div>
+</div>
+
+<!-- Section 3 — Profile overlay -->
+<h2>3. 中心线 profile 叠合对比</h2>
+<figure>
+  <img src="{{ renders.profile_png_rel }}" alt="U centerline profile overlay">
+  <figcaption>simpleFoam 实线 vs {{ paper.short }} 离散点，x=0.5 垂直中心线。</figcaption>
+</figure>
+
+<!-- Section 4 — Pointwise deviation heatmap -->
+<h2>4. 逐点偏差分布 (5% 容差)</h2>
+<figure>
+  <img src="{{ renders.pointwise_png_rel }}" alt="Pointwise deviation bar chart">
+  <figcaption>
+    沿 y/L 的逐 gold 点 |dev|%，绿色 &lt; 5% PASS，黄色 5-10% WARN，红色 &gt; 10% FAIL。
+    {{ metrics.n_pass }}/{{ metrics.n_total }} 点通过 5% 容差。
+  </figcaption>
+</figure>
+
+<!-- Section 5 — Full 2D field contour -->
+<h2>5. 流场 contour (中心线切片)</h2>
+<figure>
+  <img src="{{ renders.contour_png_rel }}" alt="U magnitude contour slice">
+  <figcaption>
+    {{ contour_caption }}
+  </figcaption>
+</figure>
+
+<!-- Section 6 — Residual convergence -->
+<h2>6. 残差收敛历史</h2>
+<figure>
+  <img src="{{ renders.residuals_png_rel }}" alt="Residual log convergence">
+  <figcaption>
+    SIMPLE 迭代下 U_x / U_y / p 初始残差对数。收敛到
+    {{ '%.1e'|format(residual_info.final_ux) if residual_info.final_ux else 'N/A' }}
+    （Ux 终值）经 {{ residual_info.total_iter }} 次迭代。
+  </figcaption>
+</figure>
+
+{% if residual_info.note %}
+<div class="residual-block">{{ residual_info.note }}</div>
+{% endif %}
+
+<!-- Section 7 — Grid convergence -->
+<h2>7. 网格收敛 (mesh_20 → mesh_160)</h2>
+{% if grid_conv %}
+<table>
+  <thead>
+    <tr><th>Mesh</th><th>u(y=0.0625)</th><th>|dev|% vs gold</th><th>verdict</th></tr>
+  </thead>
+  <tbody>
+    {% for row in grid_conv %}
+    <tr>
+      <td class="mono">{{ row.mesh }}</td>
+      <td class="num">{{ '%.4f'|format(row.value) }}</td>
+      <td class="num">{{ '%.2f'|format(row.dev_pct) }}%</td>
+      <td class="{{ row.verdict_class }}">{{ row.verdict }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p style="color:#6b7280; font-size:0.88em; margin-top:0.5em;">
+  单调收敛: {{ grid_conv_note }} · Richardson p_obs (观察阶数) 延后到 Phase 7d。
+</p>
+{% else %}
+<p style="color:#9ca3af; font-style:italic;">网格收敛数据暂未加载。</p>
+{% endif %}
+
+<!-- Section 8 — Solver metadata -->
+<h2>8. 求解器元数据</h2>
+<table>
+  <tbody>
+    <tr><th>OpenFOAM</th><td class="mono">{{ meta.openfoam_version }}</td></tr>
+    <tr><th>Solver</th><td class="mono">{{ meta.solver }}</td></tr>
+    <tr><th>Docker image</th><td class="mono">{{ meta.docker_image }}</td></tr>
+    <tr><th>Commit SHA</th><td class="mono">{{ meta.commit_sha }}</td></tr>
+    <tr><th>Mesh</th><td class="mono">{{ meta.mesh }}</td></tr>
+    <tr><th>Tolerance</th><td class="mono">{{ meta.tolerance }}</td></tr>
+    <tr><th>Schemes</th><td class="mono">{{ meta.schemes }}</td></tr>
+    <tr><th>Report generated</th><td class="mono">{{ meta.report_generated_at }}</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Report generated by Phase 7c comparison_report pipeline (DEC-V61-032, {{ meta.report_generated_at[:10] }}).
+  CFD harness unified · cfd-harness-unified @ <span class="mono">{{ meta.commit_sha }}</span>
+</footer>
+
+</body>
+</html>

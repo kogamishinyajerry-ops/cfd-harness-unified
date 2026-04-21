@@ -359,6 +359,11 @@ function StoryTab({ caseId }: { caseId: string }) {
         </section>
       )}
 
+      {/* Phase 7f — live CFD-vs-Gold comparison report (if the case has a real
+          audit_real_run artifact set from Phase 7a). Gracefully hidden for
+          cases not yet opted-in. */}
+      <ScientificComparisonReportSection caseId={caseId} />
+
       <section>
         <h2 className="card-title mb-3">为什么要做验证</h2>
         <p className="text-[14px] leading-relaxed text-surface-200">
@@ -1233,5 +1238,179 @@ function SkeletonCallout({ message }: { message: string }) {
     <div className="rounded-md border border-surface-800 bg-surface-900/30 p-4 text-[13px] text-surface-400">
       {message}
     </div>
+  );
+}
+
+// --- Phase 7f: Scientific CFD-vs-Gold comparison report section -----------
+
+type ComparisonReportContext = {
+  case_id: string;
+  case_display_name: string;
+  run_label: string;
+  timestamp: string;
+  verdict: "PASS" | "PARTIAL" | "FAIL" | string;
+  verdict_subtitle: string;
+  metrics: {
+    max_dev_pct: number;
+    l2: number;
+    linf: number;
+    rms: number;
+    n_pass: number;
+    n_total: number;
+  };
+  paper: {
+    title: string;
+    source: string;
+    doi?: string;
+    short: string;
+    gold_count: number;
+    tolerance_pct: number;
+  };
+  renders: {
+    profile_png_rel: string;
+    pointwise_png_rel: string;
+    contour_png_rel: string;
+    residuals_png_rel: string;
+  };
+  meta: {
+    commit_sha: string;
+    report_generated_at: string;
+  };
+};
+
+function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
+  const runLabel = "audit_real_run";
+  const { data, isLoading, error } = useQuery<ComparisonReportContext, ApiError>({
+    queryKey: ["comparison-report-ctx", caseId, runLabel],
+    queryFn: async () => {
+      const resp = await fetch(
+        `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
+          runLabel,
+        )}/comparison-report/context`,
+        { credentials: "same-origin" },
+      );
+      if (!resp.ok) throw new ApiError(resp.status, await resp.text());
+      return (await resp.json()) as ComparisonReportContext;
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) return null; // quiet during fetch
+  // Codex round 1 MED (2026-04-21): distinguish 404/400 (case not opted-in
+  // → silent hide) from 5xx / malformed JSON / network errors (show banner
+  // so regressions are visible, not silently swallowed).
+  if (error) {
+    const status = error instanceof ApiError ? error.status : 0;
+    if (status === 404 || status === 400) return null; // case not opted-in
+    return (
+      <section>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="card-title">科研级 CFD vs Gold 验证报告</h2>
+          <p className="text-[11px] text-surface-500">报告服务暂不可用</p>
+        </div>
+        <ErrorCallout
+          message={`无法加载对比报告 (HTTP ${status || "network"}): ${error.message.slice(0, 200)}`}
+        />
+      </section>
+    );
+  }
+  if (!data) return null;
+
+  const verdictColor =
+    data.verdict === "PASS"
+      ? "bg-contract-pass/15 border-contract-pass/40 text-contract-pass"
+      : data.verdict === "PARTIAL"
+      ? "bg-yellow-500/10 border-yellow-500/40 text-yellow-300"
+      : "bg-contract-fail/15 border-contract-fail/40 text-contract-fail";
+
+  const reportHtmlUrl = `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
+    runLabel,
+  )}/comparison-report`;
+  const reportPdfUrl = `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
+    runLabel,
+  )}/comparison-report.pdf`;
+
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="card-title">科研级 CFD vs Gold 验证报告</h2>
+        <p className="text-[11px] text-surface-500">
+          实际 OpenFOAM 真跑 · 8 sections · {data.meta.commit_sha}
+        </p>
+      </div>
+
+      <div
+        className={`mb-4 rounded-md border p-4 ${verdictColor}`}
+        role="status"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85">
+              Verdict
+            </div>
+            <div className="mt-1 text-[22px] font-bold leading-tight">
+              {data.verdict}
+            </div>
+            <div className="mt-1 text-[12px] text-surface-200">
+              {data.verdict_subtitle}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-right text-[12px]">
+            <div>
+              <div className="text-surface-400">max |dev|</div>
+              <div className="mono text-surface-100">
+                {data.metrics.max_dev_pct.toFixed(2)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-surface-400">n_pass</div>
+              <div className="mono text-surface-100">
+                {data.metrics.n_pass} / {data.metrics.n_total}
+              </div>
+            </div>
+            <div>
+              <div className="text-surface-400">L²</div>
+              <div className="mono text-surface-100">
+                {data.metrics.l2.toFixed(4)}
+              </div>
+            </div>
+            <div>
+              <div className="text-surface-400">L∞</div>
+              <div className="mono text-surface-100">
+                {data.metrics.linf.toFixed(4)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2 text-[12px]">
+        <a
+          href={reportHtmlUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded border border-surface-700 bg-surface-800/60 px-3 py-1.5 text-surface-200 hover:bg-surface-700/60"
+        >
+          ↗ 新窗口打开完整报告
+        </a>
+        <a
+          href={reportPdfUrl}
+          download
+          className="rounded border border-surface-700 bg-surface-800/60 px-3 py-1.5 text-surface-200 hover:bg-surface-700/60"
+        >
+          ↓ 下载 PDF
+        </a>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-surface-800 bg-white">
+        <iframe
+          title="CFD vs Gold comparison report"
+          src={reportHtmlUrl}
+          className="h-[1400px] w-full border-0"
+          sandbox=""
+        />
+      </div>
+    </section>
   );
 }

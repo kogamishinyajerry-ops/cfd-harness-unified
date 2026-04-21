@@ -1115,3 +1115,38 @@ Pending items (unclosed, queued for next session):
 - Phase 7d/7e/7f (GCI + signed-zip + frontend live fetch) Sprint 2.
 - Phase 5c..5j per-case sub-phases still queued (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC).
 - Phase 7c Sprint-2 will exercise yPlus stub on turbulent cases (first real yPlus emission).
+
+---
+
+## 2026-04-21 Night (continued) — Phase 7b + 7c-MVP + 7f-MVP delivery push (DEC-V61-032, S-009)
+
+**User directive**: "根据你的规划，一直推进下去，直至你觉得完备，可以交付给我了". Autonomous push through Phase 7b (render pipeline) + Phase 7c Sprint 1 MVP (8-section CFD vs Gold report) + Phase 7f MVP (frontend live embed). 7d (GCI) and 7e (L4 signed-zip) explicitly deferred — they don't change what the user sees.
+
+**Landed**:
+- `scripts/render_case_report.py` (~400 LOC, matplotlib + plotly + numpy) — 5 outputs per LDC run: profile sim-vs-Ghia overlay, color-coded deviation bar, log-y residuals, centerline slice, Plotly interactive JSON. All real OpenFOAM artifacts from DEC-V61-031 integration run (20260421T082340Z, 8 files).
+- `ui/backend/services/comparison_report.py` (~370 LOC) + `templates/comparison_report.html.j2` (~160 lines) + `routes/comparison_report.py` (~115 LOC, 4 endpoints).
+- `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx` +162 LOC — `ScientificComparisonReportSection` component embeds live 8-section report on `/learn/{case}` with verdict card + PDF download.
+
+**User visible delta**: visit `/learn/lid_driven_cavity` → Story tab now shows real OpenFOAM-produced evidence (verdict PARTIAL 11/17 PASS at 5% tolerance; profile sim curve matching Ghia 1982 red dots; color-coded pointwise deviation bar chart; residual convergence 1.0 → 1e-5 log plot; grid convergence table with monotone mesh_20→160 values). PDF download link produces 622 KB print-ready audit document.
+
+**Codex arc** (4 rounds):
+- Round 1: CHANGES_REQUIRED — HIGH (manifest-path containment × 3 surfaces), MED (frontend silent 404/5xx conflation), LOW (CI-safe test coverage).
+- Round 2: CHANGES_REQUIRED — MED (containment-before-import + OSError→503 missing), LOW (route 200-path).
+- Round 3: CHANGES_REQUIRED — MED (POST /build only caught ImportError, not OSError).
+- Round 4: **APPROVED**.
+
+**Self-pass-rate calibration**: estimated 0.35, actual 0.0 over 3 rounds then APPROVED. Honest. RETRO-V61-002 datapoint: filesystem-backed rendering / report pipelines default 0.30-0.40 pass-rate; plan for 2-3 Codex rounds minimum.
+
+**Counter**: v6.1 autonomous_governance 17 → 18.
+
+**Test baseline**: 97/97 pre-7bc → **114/114 post-7bc** (+17 new: 7 service + 10 route tests, all CI-safe via synthetic_tree monkeypatch fixture that builds a minimal artifact tree in tmp_path without needing real OpenFOAM).
+
+**Phase 7 status**:
+- 7a ✅ COMPLETE (DEC-V61-031)
+- 7b ✅ COMPLETE (this DEC)
+- 7c Sprint 1 ✅ COMPLETE (this DEC, LDC MVP); Sprint 2 fan-out queued for other 9 cases
+- 7d ⏸ DEFERRED — Richardson GCI numerics; doesn't change user-visible report shape
+- 7e ⏸ DEFERRED — L4 signed-zip embedding; PDF available via dedicated endpoint meanwhile
+- 7f ✅ MVP COMPLETE (this DEC, LDC only); 9 other cases unlock with 7c Sprint 2
+
+**Delivery statement**: Phase 7 Sprint 1 complete. User-visible scientific-grade evidence surface (the original deep-acceptance ask) delivered for LDC. Honest residuals documented in DEC §"Honest residuals". Ready for user verification at http://127.0.0.1:5174/learn/lid_driven_cavity.
