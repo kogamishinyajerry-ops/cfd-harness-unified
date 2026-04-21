@@ -84,7 +84,16 @@ export function ValidationReportPage() {
             )}
           </p>
         </div>
-        <PassFailChip status={data.contract_status} size="lg" />
+        <div className="flex flex-col items-end gap-2">
+          <PassFailChip status={data.contract_status} size="lg" />
+          <Link
+            to={`/audit-package?case=${encodeURIComponent(caseDetail.case_id)}&run=audit_real_run`}
+            className="rounded-sm border border-accent-600/50 bg-accent-600/10 px-3 py-1.5 text-xs font-medium text-accent-300 hover:border-accent-500 hover:bg-accent-600/20"
+            title="Build signed audit package from the real-solver audit_real_run fixture"
+          >
+            签名审计包 ↓
+          </Link>
+        </div>
       </header>
 
       {/* Top row: measurement/ref card + band chart */}

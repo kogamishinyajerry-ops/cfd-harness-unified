@@ -224,6 +224,16 @@ export function LearnCaseDetailPage() {
             </span>
           </a>
           <Link
+            to={`/audit-package?case=${encodeURIComponent(caseId ?? "")}&run=audit_real_run`}
+            className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-amber-700/60 hover:bg-surface-900 hover:text-amber-300"
+            title="Build a signed audit package from the real-solver audit_real_run fixture (HMAC-signed zip + manifest + html + pdf + sig)"
+          >
+            <span>签名审计包</span>
+            <span className="mono text-surface-600 group-hover:text-amber-400">
+              HMAC ↓
+            </span>
+          </Link>
+          <Link
             to={`/cases/${caseId}/report`}
             className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-sky-700/60 hover:bg-surface-900 hover:text-sky-300"
             title="Switch to the evidence-heavy audit surface (Validation Report, Decisions Queue, Audit Package)"

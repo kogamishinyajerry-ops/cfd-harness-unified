@@ -17,20 +17,31 @@
 // - Batch export across cases — Phase 6 per DEC-V61-002.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { api } from "@/api/client";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { CaseIndexEntry } from "@/types/validation";
 
 export function AuditPackagePage() {
+  const [params] = useSearchParams();
   const { data: cases } = useQuery<CaseIndexEntry[]>({
     queryKey: ["cases"],
     queryFn: api.listCases,
   });
 
-  const [caseId, setCaseId] = useState<string>("");
-  const [runId, setRunId] = useState<string>("mock-run-1");
+  // Deep-link prefill: /audit-package?case=lid_driven_cavity&run=audit_real_run.
+  // Default run_id is "audit_real_run" (Phase 5a canonical real-solver fixture).
+  const [caseId, setCaseId] = useState<string>(params.get("case") ?? "");
+  const [runId, setRunId] = useState<string>(params.get("run") ?? "audit_real_run");
+
+  useEffect(() => {
+    const c = params.get("case");
+    const r = params.get("run");
+    if (c) setCaseId(c);
+    if (r) setRunId(r);
+  }, [params]);
 
   const buildMutation = useMutation<AuditPackageBuildResponse, Error, void>({
     mutationFn: () => api.buildAuditPackage(caseId, runId),
