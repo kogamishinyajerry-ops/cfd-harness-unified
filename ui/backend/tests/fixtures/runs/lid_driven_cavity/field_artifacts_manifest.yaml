@@ -1,0 +1,14 @@
+# Phase 7a expected-artifact manifest — AUTO-VERIFIED by
+# ui/backend/tests/test_field_artifacts_route.py
+run_label: audit_real_run
+expected_artifacts:
+  - filename: lid_driven_cavity_2000.vtk
+    kind: vtk
+    min_size_bytes: 500
+    max_size_bytes: 2500000
+  - filename: uCenterline_U_p.xy
+    kind: csv
+    min_size_bytes: 500
+  - filename: residuals.csv
+    kind: residual_log
+    min_size_bytes: 100

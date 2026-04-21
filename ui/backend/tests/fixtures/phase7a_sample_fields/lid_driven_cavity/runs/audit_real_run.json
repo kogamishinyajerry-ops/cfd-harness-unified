@@ -1,0 +1,6 @@
+{
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T000000Z",
+  "case_id": "lid_driven_cavity",
+  "artifact_dir_rel": "ui/backend/tests/fixtures/phase7a_sample_fields/lid_driven_cavity/20260421T000000Z"
+}

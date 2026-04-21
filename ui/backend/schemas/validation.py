@@ -197,3 +197,54 @@ class ValidationReport(BaseModel):
     audit_concerns: list[AuditConcern] = Field(default_factory=list)
     preconditions: list[Precondition] = Field(default_factory=list)
     decisions_trail: list[DecisionLink] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 7a — Field Artifacts
+# ---------------------------------------------------------------------------
+
+FieldArtifactKind = Literal["vtk", "csv", "residual_log"]
+"""Kind of artifact surfaced by GET /api/runs/{run_id}/field-artifacts.
+
+- vtk: OpenFOAM foamToVTK output (binary, ~1 MB/case for 129x129 LDC)
+- csv: sampled profile data (e.g. uCenterline_U_p.xy from OpenFOAM `sets`
+  function object)
+- residual_log: residuals.csv (derived from OpenFOAM `residuals` function
+  object .dat output) or raw log.<solver>
+
+Phase 7a captures these per audit_real_run; Phase 7b renders them to PNG/HTML.
+"""
+
+
+class FieldArtifact(BaseModel):
+    """A single field artifact captured by Phase 7a.
+
+    Paths are served via GET /api/runs/{run_id}/field-artifacts/{filename}
+    (separate download endpoint; this struct carries metadata).
+    """
+
+    kind: FieldArtifactKind
+    filename: str = Field(..., description="Basename only; no directory segments.")
+    url: str = Field(
+        ...,
+        description="Download URL under /api/runs/{run_id}/field-artifacts/{filename}",
+    )
+    sha256: str = Field(
+        ...,
+        pattern=r"^[0-9a-f]{64}$",
+        description="Lowercase hex SHA256 of file bytes.",
+    )
+    size_bytes: int = Field(..., ge=0)
+
+
+class FieldArtifactsResponse(BaseModel):
+    """Response for GET /api/runs/{run_id}/field-artifacts."""
+
+    run_id: str
+    case_id: str
+    run_label: str
+    timestamp: str = Field(
+        ...,
+        description="YYYYMMDDTHHMMSSZ UTC — resolved via per-run manifest.",
+    )
+    artifacts: list[FieldArtifact]

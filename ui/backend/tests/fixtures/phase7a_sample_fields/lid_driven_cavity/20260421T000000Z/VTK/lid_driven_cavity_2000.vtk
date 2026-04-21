@@ -1,0 +1,39 @@
+# vtk DataFile Version 2.0
+Phase7a LDC stub fixture -- DO NOT USE FOR SCIENCE
+ASCII
+DATASET UNSTRUCTURED_GRID
+POINTS 8 float
+0 0 0
+1 0 0
+0 1 0
+1 1 0
+0 0 1
+1 0 1
+0 1 1
+1 1 1
+CELLS 1 9
+8 0 1 3 2 4 5 7 6
+CELL_TYPES 1
+12
+POINT_DATA 8
+SCALARS U float 3
+LOOKUP_TABLE default
+0 0 0
+1 0 0
+0 0 0
+1 0 0
+0 0 0
+1 0 0
+0 0 0
+1 0 0
+SCALARS p float 1
+LOOKUP_TABLE default
+0
+0
+0
+0
+0
+0
+0
+0
+# padding: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
