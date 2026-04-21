@@ -55,11 +55,17 @@ def get_field_artifacts(run_id: str) -> FieldArtifactsResponse:
 
 
 @router.get(
-    "/runs/{run_id}/field-artifacts/{filename}",
+    "/runs/{run_id}/field-artifacts/{filename:path}",
     tags=["field-artifacts"],
 )
 def download_field_artifact(run_id: str, filename: str) -> FileResponse:
-    """Serve a single field artifact file. Traversal-safe."""
+    """Serve a single field artifact file. Traversal-safe.
+
+    The `{filename:path}` converter allows POSIX sub-paths like
+    `sample/500/uCenterline.xy` (Codex round 1 HIGH #1 fix — 3 sample
+    iteration dirs had basename collision). Traversal is defended in
+    resolve_artifact_path.
+    """
     path = resolve_artifact_path(run_id, filename)  # raises HTTPException(404)
     return FileResponse(
         path,

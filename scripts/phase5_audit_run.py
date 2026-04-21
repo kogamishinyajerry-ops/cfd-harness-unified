@@ -102,13 +102,23 @@ def _write_field_artifacts_run_manifest(
     """Write reports/phase5_fields/{case_id}/runs/{run_label}.json so the
     backend route can resolve run_label -> timestamp directory in O(1).
 
-    Returns the manifest Path on success, None if the artifact dir never
-    materialized (e.g. foamToVTK failed or the case is not Phase-7a opted-in).
+    Returns the manifest Path on success, None if the artifact dir is absent
+    OR empty. Codex round 1 MED #3 (2026-04-21): require a NON-empty artifact
+    set — an empty directory from a failed foamToVTK must not produce a
+    bogus manifest that the route will then 404-through.
     """
     artifact_dir = FIELDS_DIR / case_id / timestamp
     if not artifact_dir.is_dir():
         print(
             f"[audit] [WARN] field artifact dir missing, skipping manifest: {artifact_dir}",
+            flush=True,
+        )
+        return None
+    # Count usable leaf files (foamToVTK output, samples, residuals).
+    usable = [p for p in artifact_dir.rglob("*") if p.is_file()]
+    if not usable:
+        print(
+            f"[audit] [WARN] field artifact dir empty, skipping manifest: {artifact_dir}",
             flush=True,
         )
         return None
@@ -123,6 +133,12 @@ def _write_field_artifacts_run_manifest(
     }
     manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+# Codex round 1 MED #3 (2026-04-21): gate Phase 7a metadata injection to
+# case-ids whose case generators actually emit the functions{} block. Other 9
+# cases stay silent until Phase 7c Sprint-2 rolls their generators forward.
+_PHASE7A_OPTED_IN: frozenset[str] = frozenset({"lid_driven_cavity"})
 
 
 def _audit_fixture_doc(
@@ -259,16 +275,16 @@ def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
 
     # Phase 7a — author the single shared timestamp up front; the executor-side
     # _capture_field_artifacts writes to reports/phase5_fields/{case_id}/{ts}/.
+    # Codex round 1 MED #3: only inject metadata for opted-in cases — other 9
+    # case generators do not emit Phase 7a function objects yet.
     ts = _phase7a_timestamp()
     try:
         spec = runner._task_spec_from_case_id(case_id)
-        # Opt-in signalling to FoamAgentExecutor. Other 9 cases' controlDicts
-        # do NOT yet emit Phase 7a function objects, but the executor guards
-        # on the metadata keys — staging runs best-effort.
-        if spec.metadata is None:
-            spec.metadata = {}
-        spec.metadata["phase7a_timestamp"] = ts
-        spec.metadata["phase7a_case_id"] = case_id
+        if case_id in _PHASE7A_OPTED_IN:
+            if spec.metadata is None:
+                spec.metadata = {}
+            spec.metadata["phase7a_timestamp"] = ts
+            spec.metadata["phase7a_case_id"] = case_id
         report = runner.run_task(spec)
     except Exception as e:  # noqa: BLE001
         print(f"[audit] {case_id} EXCEPTION: {e!r}")
@@ -277,9 +293,14 @@ def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
     dt = time.monotonic() - t0
 
     # Phase 7a — write per-run manifest + build field_artifacts_ref dict iff
-    # the artifact dir materialized (best-effort, must not block audit doc).
+    # the case is opted-in AND the artifact dir materialized with non-empty
+    # contents (best-effort, must not block audit doc). MED #3 gating above.
     run_label = "audit_real_run"
-    manifest_path = _write_field_artifacts_run_manifest(case_id, run_label, ts)
+    manifest_path = (
+        _write_field_artifacts_run_manifest(case_id, run_label, ts)
+        if case_id in _PHASE7A_OPTED_IN
+        else None
+    )
     field_artifacts_ref: "dict | None" = None
     if manifest_path is not None:
         field_artifacts_ref = {

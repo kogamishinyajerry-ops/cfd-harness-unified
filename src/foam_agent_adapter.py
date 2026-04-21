@@ -701,17 +701,23 @@ class FoamAgentExecutor:
             "\n"
             "        fields          (U p);\n"
             "\n"
+            # OpenFOAM 10 sampledSets requires `sets (...)` list-form and
+            # inner `type lineUniform;` (not `type uniform;`). Dict-form +
+            # `uniform` parses via foamDictionary but crashes at runtime with
+            # "Attempt to return dictionary entry as a primitive" inside
+            # Foam::functionObjects::sampledSets::read. Verified against
+            # /opt/openfoam10/etc/caseDicts/postProcessing/graphs/graphUniform.cfg.
             "        sets\n"
-            "        {\n"
+            "        (\n"
             "            uCenterline\n"
             "            {\n"
-            "                type        uniform;\n"
+            "                type        lineUniform;\n"
             "                axis        y;\n"
             "                start       (0.05 0.0   0.005);\n"
             "                end         (0.05 0.1   0.005);\n"
             "                nPoints     129;\n"
             "            }\n"
-            "        }\n"
+            "        );\n"
             "    }\n"
             "\n"
             "    residuals\n"
@@ -6954,11 +6960,13 @@ mergePatchPairs
                     (artifact_dir / logname).write_bytes(src.read_bytes())
                     break
 
-            # (d) Derive residuals.csv from postProcessing/residuals/0/residuals.dat
-            #     if present. Per user ratification #3 — structured ASCII,
-            #     no log regex.
+            # (d) Derive residuals.csv from residuals/0/residuals.dat if present.
+            #     Per user ratification #3 — structured ASCII, no log regex.
+            #     NOTE: container.get_archive('.../postProcessing/residuals')
+            #     tar-extracts under basename `residuals/`, not the full
+            #     `postProcessing/residuals/` path. Same applies to `sample/`.
             residuals_dat_candidates = list(
-                artifact_dir.glob("postProcessing/residuals/*/residuals.dat")
+                artifact_dir.glob("residuals/*/residuals.dat")
             )
             if residuals_dat_candidates:
                 try:

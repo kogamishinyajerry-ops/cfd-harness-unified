@@ -1,0 +1,175 @@
+=== integration evidence started 2026-04-21T08:19:21Z ===
+Docker: cfd-openfoam running. Python 3.12.13. reports/ exists.
+[audit] commit: 1cc18b2 · cases: ['lid_driven_cavity']
+[audit] lid_driven_cavity → start
+[audit] [WARN] field artifact dir missing, skipping manifest: /Users/Zhuanz/Desktop/cfd-harness-unified/reports/phase5_fields/lid_driven_cavity/20260421T081923Z
+[audit] lid_driven_cavity → FAIL · 5.2s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+lid_driven_cavity                      FAIL  5.2s
+ls: reports/phase5_fields/: No such file or directory
+{
+  "case_id": "lid_driven_cavity",
+  "measured_at": "2026-04-21T08:19:29Z",
+  "duration_s": 5.215,
+  "solver_success": false,
+  "key_quantities": {},
+  "comparator_passed": null,
+  "comparator_summary": null,
+  "deviations": []
+}# Phase 5a audit-real-run fixture — AUTO-GENERATED, DO NOT HAND-EDIT.
+# Regenerate via:
+#   EXECUTOR_MODE=foam_agent .venv/bin/python scripts/phase5_audit_run.py lid_driven_cavity
+# This fixture backs the signed audit package. Byte-identity across
+# re-runs (modulo timestamp + commit_sha) is enforced by
+# test_phase5_byte_repro.py.
+
+run_metadata:
+  run_id: audit_real_run
+  label_zh: 真实 solver 审计运行
+  label_en: Real solver audit run
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 1cc18b2）。这是 audit package
+    背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
+    bug；会进入 audit_concerns 随包交付给审查方。
+  category: audit_real_run
+  expected_verdict: FAIL
+case_id: lid_driven_cavity
+source: phase5_audit_run_foam_agent
+measurement:
+  value: 0.0
+  unit: dimensionless
+  run_id: audit_lid_driven_cavity_1cc18b2
+  commit_sha: 1cc18b2
+  measured_at: '2026-04-21T08:19:29Z'
+  quantity: null
+  extraction_source: no_numeric_quantity
+  solver_success: false
+  comparator_passed: false
+audit_concerns: []
+decisions_trail:
+- decision_id: DEC-V61-028
+  date: '2026-04-21'
+  title: Phase 5a audit pipeline — real-solver fixtures
+  autonomous: true
+
+=== Rule 1 fix applied: sets list-form + lineUniform in _emit_phase7a_function_objects ===
+Re-running integration after fix...
+[audit] commit: 1cc18b2 · cases: ['lid_driven_cavity']
+[audit] lid_driven_cavity → start
+[audit] lid_driven_cavity → FAIL · 26.9s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+lid_driven_cavity                      FAIL  26.9s
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/log.simpleFoam
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/residuals/0/residuals.dat
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/sample/0/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/sample/1000/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/sample/500/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/VTK/allPatches/allPatches_1024.vtk
+reports/phase5_fields/lid_driven_cavity/20260421T082238Z/VTK/ldc_58582_1776759758257_1024.vtk
+reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json
+total 960
+drwxr-xr-x@ 6 Zhuanz  staff     192  4月 21 16:23 .
+drwxr-xr-x@ 4 Zhuanz  staff     128  4月 21 16:23 ..
+-rw-r--r--@ 1 Zhuanz  staff  490582  4月 21 16:23 log.simpleFoam
+drwxrwxrwx@ 3 Zhuanz  staff      96  1月  1  1970 residuals
+drwxrwxrwx@ 5 Zhuanz  staff     160  1月  1  1970 sample
+drwxr-xr-x@ 4 Zhuanz  staff     128  4月 21 16:23 VTK
+{
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T082238Z",
+  "case_id": "lid_driven_cavity",
+  "artifact_dir_rel": "reports/phase5_fields/lid_driven_cavity/20260421T082238Z"
+}
+
+=== Rule 1 fix 2 applied: residuals glob path fix (postProcessing/residuals/ → residuals/) ===
+[audit] commit: 1cc18b2 · cases: ['lid_driven_cavity']
+[audit] lid_driven_cavity → start
+[audit] lid_driven_cavity → FAIL · 27.4s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+lid_driven_cavity                      FAIL  27.4s
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/log.simpleFoam
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/residuals.csv
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/residuals/0/residuals.dat
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/0/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/1000/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/500/uCenterline.xy
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK/allPatches/allPatches_1024.vtk
+reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK/ldc_59058_1776759820768_1024.vtk
+reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json
+=== counts ===
+vtk count:    2
+csv/xy count: 4
+residuals.csv present: YES
+log.simpleFoam present: YES
+OK: 8 files, 2 vtk(s), ts=20260421T082340Z
+Time,Ux,Uy,p
+0,N/A,N/A
+1,1.000000e+00,9.978487e-01,1.000000e+00
+2,1.384928e-01,3.533043e-01,6.813317e-01
+3,8.100985e-02,2.572957e-01,4.885017e-01
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0 -- /Users/Zhuanz/Desktop/cfd-harness-unified/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collecting ... collected 12 items
+
+ui/backend/tests/test_phase5_byte_repro.py::test_at_least_one_audit_fixture_exists PASSED [  8%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[backward_facing_step] PASSED [ 16%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[circular_cylinder_wake] PASSED [ 25%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[differential_heated_cavity] PASSED [ 33%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[duct_flow] PASSED [ 41%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[impinging_jet] PASSED [ 50%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[lid_driven_cavity] PASSED [ 58%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[naca0012_airfoil] PASSED [ 66%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[plane_channel_flow] PASSED [ 75%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[rayleigh_benard_convection] PASSED [ 83%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[turbulent_flat_plate] PASSED [ 91%]
+ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixtures_nondeterministic_fields_are_isolated PASSED [100%]
+
+============================== 12 passed in 0.03s ==============================
+==================================== ERRORS ====================================
+________ ERROR collecting ui/backend/tests/test_audit_package_route.py _________
+ImportError while importing test module '/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_audit_package_route.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui/backend/tests/test_audit_package_route.py:11: in <module>
+    from ui.backend.main import app
+E   ModuleNotFoundError: No module named 'ui'
+=========================== short test summary info ============================
+ERROR ui/backend/tests/test_audit_package_route.py
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.16s ===============================
+ui/backend/tests/test_case_editor.py ......                              [ 28%]
+ui/backend/tests/test_case_export.py .............                       [ 43%]
+ui/backend/tests/test_decisions_and_dashboard.py ........                [ 52%]
+ui/backend/tests/test_field_artifacts_route.py ...........               [ 64%]
+ui/backend/tests/test_grid_convergence_monotonicity.py ..........        [ 75%]
+ui/backend/tests/test_health.py .                                        [ 76%]
+ui/backend/tests/test_phase5_byte_repro.py ............                  [ 90%]
+ui/backend/tests/test_validation_report.py .........                     [100%]
+
+============================= 90 passed in 24.21s ==============================
+{"run_id":"lid_driven_cavity__audit_real_run","case_id":"lid_driven_cavity","run_label":"audit_real_run","timestamp":"20260421T082340Z","artifacts":[{"kind":"vtk","filename":"allPatches_1024.vtk","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/allPatches_1024.vtk","sha256":"a6113287904d744a524ef401ec7f5f389e0c8842988d8ba1df3e9c10f9f376dc","size_bytes":45784},{"kind":"vtk","filename":"ldc_59058_1776759820768_1024.vtk","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/ldc_59058_1776759820768_1024.vtk","sha256":"bd454c0b561e06a6e41f601cf38773d8236d3b254d2e612ccd3c7b4d459da0c6","size_bytes":3155888},{"kind":"csv","filename":"uCenterline.xy","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/uCenterline.xy","sha256":"c537678e916036fe0845a0452605e0ddee8c2bfd7a96eaa808dd73f59aa619cf","size_bytes":9099},{"kind":"csv","filename":"uCenterline.xy","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/uCenterline.xy","sha256":"bc95a829b8e5c40a935692125daa76681050e7eaa03f8c509467616b73a0f461","size_bytes":9099},{"kind":"csv","filename":"uCenterline.xy","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/uCenterline.xy","sha256":"6ba22156053d470b18da7eaab0eb35ab974267c941d8693963d4d596112f9369","size_bytes":9099},{"kind":"residual_log","filename":"log.simpleFoam","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/log.simpleFoam","sha256":"a6f33f3c4f6cd94f7c0f9e2313d4e38115f051668d0086e0abfff28efd80af7f","size_bytes":490559},{"kind":"residual_log","filename":"residuals.csv","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/residuals.csv","sha256":"bd734927184e0afd5467eeb1de045d9deed32164d880f345c3beb1669528238e","size_bytes":43972},{"kind":"residual_log","filename":"residuals.dat","url":"/api/runs/lid_driven_cavity__audit_real_run/field-artifacts/residuals.dat","sha256":"9e0b4a90a3acacc07414fbc3227e808fbcfa6d4a9192e6ab7bf3ff86db70256f","size_bytes":55394}]}
+--http_status=200
+download_status=200
+Time,Ux,Uy,p
+0,N/A,N/A
+1,1.000000e+00,9.978487e-01,1.000000e+00
+
+traversal_status=404
+
+vtk_download_status=200
+=== uvicorn stopped ===
+=== integration Task 1 complete 2026-04-21T08:25:52Z ===
+ui/backend/tests/test_health.py .                                        [ 76%]
+ui/backend/tests/test_phase5_byte_repro.py ............                  [ 90%]
+ui/backend/tests/test_validation_report.py .........                     [100%]
+
+============================= 90 passed in 23.99s ==============================

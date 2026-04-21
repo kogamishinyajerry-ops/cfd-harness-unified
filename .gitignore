@@ -37,3 +37,9 @@ reports/deep_acceptance/_archive_*/
 
 # Phase 5 audit-package builder staging dir (regenerable per build request).
 ui/backend/.audit_package_staging/
+
+# Phase 7a — Field post-processing capture (DEC-V61-031, 2026-04-21)
+# Large VTK blobs from real OpenFOAM runs (typically 1-10 MB each).
+# Keep the per-run manifest JSON so the backend route stays resolvable,
+# but exclude the timestamped artifact tree under each case.
+reports/phase5_fields/*/20*/

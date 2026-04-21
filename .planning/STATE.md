@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-21T08:09:47.414Z"
+last_updated: "2026-04-21T08:17:39.182Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
@@ -1084,3 +1084,34 @@ Pending items (unclosed, queued for next session):
 - 7 remaining FAIL-case sub-phases (Phase 5c..5j). **Mandatory first step for each**: cross-check the whitelist gold against the cited paper (LDC lesson learned).
 - _docker_exec timeout enforcement (Codex MED 3, cross-cutting tech debt).
 - Optional Phase 5b-sub-2: graded blockMesh + native-y extractor to close the remaining 6 LDC audit FAILs (physical residuals, not bugs).
+
+---
+
+## 2026-04-21 Night — Phase 7a Field post-processing capture (DEC-V61-031, S-008)
+
+**Landed**: First sub-phase of Phase 7 (scientific-grade CFD reporting). 3 waves — adapter controlDict functions{} + executor foamToVTK capture + driver per-run manifest (Wave 1, commit 8bf2cfb); backend route + Pydantic schemas + run_id parser + SHA256-cached service + 11 pytest (Wave 2, commit f507b9e); Codex 3-round closure + DEC + atomic Wave-3 fixes.
+
+**Real OpenFOAM integration run**: `scripts/phase5_audit_run.py lid_driven_cavity` in `cfd-openfoam` Docker container produces 8 artifacts at `reports/phase5_fields/lid_driven_cavity/20260421T082340Z/` — VTK volume (3.1 MB) + boundary + sample profiles at 3 iterations + residuals.csv + residuals.dat + log.simpleFoam. `GET /api/runs/lid_driven_cavity__audit_real_run/field-artifacts` returns 200 with 8 unique subpath URLs + matching SHA256.
+
+**Codex arc (3 rounds)**:
+- Round 1: CHANGES_REQUIRED — 2 HIGH (URL basename collision on `sample/{0,500,1000}/uCenterline.xy`, run_id path-traversal via `..__pwn` / `%2e%2e__pwn`) + 1 MED (Phase 7a metadata over-applied beyond LDC) + 1 LOW (SHA cache uses float `st_mtime` not `st_mtime_ns`).
+- Round 2: CHANGES_REQUIRED — 1 HIGH (list endpoint missed timestamp validation that download had; malicious manifest `timestamp='../../outside'` enumerated outside files).
+- Round 3: APPROVED_WITH_COMMENTS — 2 non-blocking (non-object manifest → 500, out-of-dir symlinks → 500); both fixed in same pass.
+- Fix strategy: extracted `_resolve_artifact_dir()` shared validator; enforced `^\d{8}T\d{6}Z$` timestamp shape gate; strict identifier regex on case_id + run_label; POSIX relative path in manifest.filename + `{filename:path}` FastAPI converter.
+
+**Self-pass-rate calibration**: estimated 0.75, actual first-round 0.0. Insight for RETRO-V61-002: src/ + backend multi-file + path-traversal surfaces should default to 0.50, not 0.75. Codex caught 2 real security issues (URL collision + run_id traversal) that automated testing missed.
+
+**Counter**: v6.1 autonomous_governance 16 → 17 (first increment since RETRO-V61-001 reset).
+
+**Test baseline**: 79/79 pre-7a → **97/97 post-7a** (+18 new field_artifacts tests: manifest, download, subpath, 4 traversal variants, non-object manifest, symlink escape, ordering, SHA format, sizes). `test_phase5_byte_repro.py` 12/12 green — `field_artifacts` key is manifest-ref only (no embedded timestamp) so subset-check stays byte-repro-safe.
+
+**Phase 7a delta**: field data infrastructure landed; `/validation-report/*` still shows scalar-only tables until Phase 7b renders + Phase 7c 8-section scientific template + Phase 7f frontend live-fetch close the user-facing gap.
+
+**Open items** (post-Phase-7a):
+
+- DEC-V61-031 Notion sync pending.
+- Phase 7b (render pipeline matplotlib + PyVista headless) queued as next natural step for Sprint 1 depth-first continuation.
+- Phase 7c (CFD-vs-gold 8-section report template, THE "說服力" centerpiece) queued after 7b.
+- Phase 7d/7e/7f (GCI + signed-zip + frontend live fetch) Sprint 2.
+- Phase 5c..5j per-case sub-phases still queued (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC).
+- Phase 7c Sprint-2 will exercise yPlus stub on turbulent cases (first real yPlus emission).
