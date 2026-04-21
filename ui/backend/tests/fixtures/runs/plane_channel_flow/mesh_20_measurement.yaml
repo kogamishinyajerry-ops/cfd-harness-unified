@@ -1,0 +1,25 @@
+# Grid-convergence run for plane channel — 20³ RANS (too coarse for DNS).
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20³ + RANS · 粗糙
+  label_en: Mesh 20³ + RANS (coarse)
+  description_zh: >-
+    20³ mesh + RANS k-ω SST 冒充 DNS。viscous sublayer 完全糊。
+    u+(y+=5)=4.1 vs Kim/Moser 5.4 (-24%)。5% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: plane_channel_flow
+source: grid_convergence_study_synthetic
+measurement:
+  value: 4.1
+  unit: dimensionless
+  run_id: grid_channel_n20
+  commit_sha: null
+  measured_at: null
+  quantity: u_plus_at_yplus_5
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20³ RANS; u+(y+=5)=4.1 vs gold 5.4 (-24%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

@@ -1,0 +1,26 @@
+# Grid-convergence run for cylinder wake — 40 azimuthal cells.
+# St=0.152 (-7.3%), still outside 5% tolerance.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40 周向 · 过渡
+  label_en: Mesh 40 cylinder-azimuthal cells (transitional)
+  description_zh: >-
+    40 周向 cells。BL 开始成形但 shear layer 仍粗。St=0.152 (-7.3%)。
+    5% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: circular_cylinder_wake
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.152
+  unit: dimensionless
+  run_id: grid_cyl_n40
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40 azimuthal cells; St=0.152 vs gold 0.164 (-7.3%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

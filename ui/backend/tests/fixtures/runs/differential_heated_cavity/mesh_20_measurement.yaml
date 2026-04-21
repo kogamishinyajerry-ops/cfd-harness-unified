@@ -1,0 +1,25 @@
+# Grid-convergence run for DHC Ra=1e6 — 20² uniform.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20² 均匀 · 粗糙
+  label_en: Mesh 20² uniform (coarse)
+  description_zh: >-
+    Ra=10⁶, 20² uniform。第一层 0.05L 远粗于 δ_T/L≈0.032。
+    Nu=7.05 vs de Vahl Davis 8.80 (-20%)。10% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: differential_heated_cavity
+source: grid_convergence_study_synthetic
+measurement:
+  value: 7.05
+  unit: dimensionless
+  run_id: grid_dhc_n20
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20² uniform; Nu=7.05 vs gold 8.80 (-20%). BL under-resolved.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

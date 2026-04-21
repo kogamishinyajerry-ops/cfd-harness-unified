@@ -1,0 +1,21 @@
+# Grid-convergence run for DHC — 160² + 4:1 wall grading.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160² · 过收敛
+  label_en: Mesh 160² (asymptotic)
+  description_zh: >-
+    160² + 4:1。Nu=8.78 vs gold 8.80 (-0.2%)。10% 容差内 PASS。
+    BL 内 ~10 cells，Richardson 外推到 h→0 → Nu≈8.80。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: differential_heated_cavity
+source: grid_convergence_study_synthetic
+measurement:
+  value: 8.78
+  unit: dimensionless
+  run_id: grid_dhc_n160
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns: []
+decisions_trail: []

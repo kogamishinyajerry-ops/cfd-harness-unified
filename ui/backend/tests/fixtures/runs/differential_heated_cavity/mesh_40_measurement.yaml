@@ -1,0 +1,25 @@
+# Grid-convergence run for DHC — 40² + 1.5:1 wall grading.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40² + 1.5:1 加密 · 过渡
+  label_en: Mesh 40² + 1.5:1 grading (transitional)
+  description_zh: >-
+    40² + 1.5:1 加密。第一层 ~δ_T/3。Nu=8.0 vs gold 8.80 (-9.1%)。
+    10% 容差内但紧贴边界——实际仍 FAIL (boundary 激活 HAZARD/FAIL 差异)。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: differential_heated_cavity
+source: grid_convergence_study_synthetic
+measurement:
+  value: 7.9
+  unit: dimensionless
+  run_id: grid_dhc_n40
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40² + 1.5:1 grading; Nu=7.9 vs gold 8.80 (-10.2%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

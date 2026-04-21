@@ -1,0 +1,25 @@
+# Grid-convergence run for impinging_jet — 20 radial cells in stagnation region.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20 径向 · 粗糙
+  label_en: Mesh 20 radial cells in stagnation region (coarse)
+  description_zh: >-
+    驻点区径向只有 20 cells，第一层 y+≈15。壁面热流被严重截断。
+    Nu_stag=15.5 vs Cooper 1984 25.0 (-38%)。15% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: impinging_jet
+source: grid_convergence_study_synthetic
+measurement:
+  value: 15.5
+  unit: dimensionless
+  run_id: grid_jet_n20
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20 radial cells; Nu=15.5 vs Cooper gold 25.0 (-38%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

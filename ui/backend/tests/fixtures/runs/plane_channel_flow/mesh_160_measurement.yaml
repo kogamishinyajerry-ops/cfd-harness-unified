@@ -1,0 +1,21 @@
+# Grid-convergence run for plane channel — 160³ DNS.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160³ DNS · 过收敛
+  label_en: Mesh 160³ DNS (asymptotic)
+  description_zh: >-
+    160³ DNS（Kim 1987 标准）。u+(y+=5)=5.38 vs 5.4 (-0.4%)。
+    5% 容差内 PASS。再加密进入 Kolmogorov scale 零用。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: plane_channel_flow
+source: grid_convergence_study_synthetic
+measurement:
+  value: 5.38
+  unit: dimensionless
+  run_id: grid_channel_n160
+  commit_sha: null
+  measured_at: null
+  quantity: u_plus_at_yplus_5
+audit_concerns: []
+decisions_trail: []

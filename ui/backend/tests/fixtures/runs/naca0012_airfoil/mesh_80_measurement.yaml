@@ -1,0 +1,21 @@
+# Grid-convergence run for NACA 0012 — 80 surface + 40-chord far-field + transition-SST.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80 表面 + 40-弦远场 · 收敛
+  label_en: Mesh 80 surface + 40-chord + transition-SST (converged)
+  description_zh: >-
+    80 表面 cells + 40-弦远场 + transition-SST（whitelist 实际配置）。
+    Cp_le=0.98 vs 1.0 (-2%，cell-center averaging 残差)。20% 容差内 PASS。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: naca0012_airfoil
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.98
+  unit: dimensionless
+  run_id: grid_naca_n80
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns: []
+decisions_trail: []

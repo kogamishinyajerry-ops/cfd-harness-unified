@@ -1,0 +1,21 @@
+# Grid-convergence run for duct_flow — 80² + 4:1 wall grading (y+<1).
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80² + 4:1 加密 · 收敛
+  label_en: Mesh 80² + 4:1 grading (converged)
+  description_zh: >-
+    80² + 4:1 壁加密，第一层 y+<1。viscous sublayer 完全分辨。
+    f=0.0187 vs 0.0185 (+1.1%)。10% 容差内 PASS。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: duct_flow
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.0187
+  unit: dimensionless
+  run_id: grid_duct_n80
+  commit_sha: null
+  measured_at: null
+  quantity: friction_factor
+audit_concerns: []
+decisions_trail: []

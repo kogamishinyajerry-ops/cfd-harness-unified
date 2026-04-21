@@ -1,0 +1,25 @@
+# Grid-convergence run for duct_flow — 40×40 with mild wall grading.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40² + 2:1 加密 · 过渡
+  label_en: Mesh 40² + 2:1 grading (transitional)
+  description_zh: >-
+    40² + 2:1 壁加密，第一层 y+≈20。f=0.0165 vs 0.0185 (-11%)。
+    10% 容差外 FAIL（仅超 1%）。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: duct_flow
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.0165
+  unit: dimensionless
+  run_id: grid_duct_n40
+  commit_sha: null
+  measured_at: null
+  quantity: friction_factor
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40² + 2:1 grading; f=0.0165 vs 0.0185 (-11%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

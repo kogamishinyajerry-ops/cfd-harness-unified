@@ -46,6 +46,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ui.backend.routes import (
     audit_package,
     case_editor,
+    case_export,
     cases,
     dashboard,
     decisions,
@@ -84,3 +85,4 @@ app.include_router(decisions.router,    prefix="/api", tags=["decisions"])
 app.include_router(run_monitor.router,  prefix="/api", tags=["runs"])
 app.include_router(dashboard.router,    prefix="/api", tags=["dashboard"])
 app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])
+app.include_router(case_export.router,  prefix="/api", tags=["case-export"])
