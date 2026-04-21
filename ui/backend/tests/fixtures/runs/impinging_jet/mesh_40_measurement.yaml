@@ -1,0 +1,25 @@
+# Grid-convergence run for impinging_jet — 40 radial cells + 2:1 wall packing.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40 径向 + 2:1 加密 · 过渡
+  label_en: Mesh 40 radial + 2:1 wall packing (transitional)
+  description_zh: >-
+    40 径向 cells + 2:1 壁加密，第一层 y+≈5。Nu_stag=21.0 vs 25.0 (-16%)。
+    15% 容差外，仅超 1% → FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: impinging_jet
+source: grid_convergence_study_synthetic
+measurement:
+  value: 21.0
+  unit: dimensionless
+  run_id: grid_jet_n40
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40 radial + 2:1 grading; Nu=21.0 vs gold 25.0 (-16%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

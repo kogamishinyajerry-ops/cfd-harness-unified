@@ -1,0 +1,21 @@
+# Grid-convergence run for impinging_jet — 80 radial + 4:1 wall packing (y+<1).
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80 径向 + 4:1 加密 · 收敛
+  label_en: Mesh 80 radial + 4:1 wall packing (converged)
+  description_zh: >-
+    80 径向 cells + 4:1 壁加密（whitelist 4800 cells 实际配置），y+<1。
+    k-ω SST + Kato-Launder 修正。Nu_stag=25.2 vs 25.0 (+0.8%)。15% 容差内 PASS。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: impinging_jet
+source: grid_convergence_study_synthetic
+measurement:
+  value: 25.2
+  unit: dimensionless
+  run_id: grid_jet_n80
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns: []
+decisions_trail: []

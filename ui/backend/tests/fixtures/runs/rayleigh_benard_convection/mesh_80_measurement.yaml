@@ -1,0 +1,21 @@
+# Grid-convergence run for RBC — 80² + 4:1 wall packing.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80² + 4:1 加密 · 收敛
+  label_en: Mesh 80² + 4:1 grading (converged)
+  description_zh: >-
+    80² + 4:1 壁加密（whitelist 配置）。δ_T 内 ~5 cells。
+    Nu=10.8 vs 10.5 (+2.9%)。15% 容差内 PASS。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: rayleigh_benard_convection
+source: grid_convergence_study_synthetic
+measurement:
+  value: 10.8
+  unit: dimensionless
+  run_id: grid_rb_n80
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns: []
+decisions_trail: []

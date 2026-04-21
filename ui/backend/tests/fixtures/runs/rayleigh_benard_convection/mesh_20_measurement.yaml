@@ -1,0 +1,25 @@
+# Grid-convergence run for RBC Ra=1e7 — 20² uniform.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20² 均匀 · 粗糙
+  label_en: Mesh 20² uniform (coarse)
+  description_zh: >-
+    Ra=10⁷, 20² uniform。第一层厚 0.05L 远粗于 δ_T~0.031L。
+    Nu=6.8 vs Grossmann-Lohse 10.5 (-35%)。15% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: rayleigh_benard_convection
+source: grid_convergence_study_synthetic
+measurement:
+  value: 6.8
+  unit: dimensionless
+  run_id: grid_rb_n20
+  commit_sha: null
+  measured_at: null
+  quantity: nusselt_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20² uniform; Nu=6.8 vs gold 10.5 (-35%). Thermal BL unresolved.'
+    detail: null
+    decision_refs: []
+decisions_trail: []

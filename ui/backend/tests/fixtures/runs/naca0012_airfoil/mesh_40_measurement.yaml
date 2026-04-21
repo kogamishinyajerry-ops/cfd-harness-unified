@@ -1,0 +1,25 @@
+# Grid-convergence run for NACA 0012 — 40 surface + 15-chord far-field.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40 表面 + 15-弦远场 · 过渡
+  label_en: Mesh 40 surface + 15-chord far-field (transitional)
+  description_zh: >-
+    40 表面 cells + 15-弦远场。驻点 averaging 减弱但仍存在。
+    Cp_le=0.75 (-25%)。20% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: naca0012_airfoil
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.75
+  unit: dimensionless
+  run_id: grid_naca_n40
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40 surface + 15-chord; Cp_le=0.75 vs gold 1.0 (-25%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

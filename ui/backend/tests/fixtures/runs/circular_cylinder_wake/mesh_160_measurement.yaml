@@ -1,0 +1,22 @@
+# Grid-convergence run for cylinder wake — 160 azimuthal cells.
+# St=0.1635 (-0.3%), asymptotic regime.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160 周向 · 过收敛
+  label_en: Mesh 160 cylinder-azimuthal cells (asymptotic)
+  description_zh: >-
+    160 周向 cells + 细尾流。St=0.1635 (-0.3%)。5% 容差内 PASS。
+    再加密不动 St，在测 temporal discretization 误差。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: circular_cylinder_wake
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.1635
+  unit: dimensionless
+  run_id: grid_cyl_n160
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns: []
+decisions_trail: []

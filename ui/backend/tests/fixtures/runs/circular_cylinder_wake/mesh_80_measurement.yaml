@@ -1,0 +1,22 @@
+# Grid-convergence run for cylinder wake — 80 azimuthal cells.
+# St=0.162 (-1.2%), inside 5% tolerance → PASS.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80 周向 · 收敛
+  label_en: Mesh 80 cylinder-azimuthal cells (converged)
+  description_zh: >-
+    80 周向 cells + 40k total（whitelist 实际配置）。BL 分辨到位，
+    shedding frequency 稳定。St=0.162 (-1.2%)。5% 容差内 PASS。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: circular_cylinder_wake
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.162
+  unit: dimensionless
+  run_id: grid_cyl_n80
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns: []
+decisions_trail: []

@@ -1,0 +1,25 @@
+# Grid-convergence run for plane channel — 40³ hybrid RANS/LES.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40³ 混合 · 过渡
+  label_en: Mesh 40³ hybrid (transitional)
+  description_zh: >-
+    40³ 混合 RANS/LES。log 层开始出现，但 sublayer 仍被 RANS 填补。
+    u+(y+=5)=4.9 vs 5.4 (-9.3%)。5% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: plane_channel_flow
+source: grid_convergence_study_synthetic
+measurement:
+  value: 4.9
+  unit: dimensionless
+  run_id: grid_channel_n40
+  commit_sha: null
+  measured_at: null
+  quantity: u_plus_at_yplus_5
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40³ hybrid RANS/LES; u+(y+=5)=4.9 vs gold 5.4 (-9.3%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

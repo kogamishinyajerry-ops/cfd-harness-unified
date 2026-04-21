@@ -22,6 +22,26 @@ reviewer rather than hidden.
 
 ---
 
+## Q-4: BFS (backward_facing_step) Re-mismatch between whitelist and gold literature
+
+**Raised**: 2026-04-21 via DEC-V61-026 Codex round 12 MED-3 finding, carried forward here by DEC-V61-027.
+**Blocking class**: hard floor #1 — gold-standard coherence. Touches `knowledge/gold_standards/backward_facing_step.yaml` (Reynolds-number reconciliation) and potentially `knowledge/whitelist.yaml` (if Re bump is chosen) — both 禁区 under v6.1 governance.
+
+**Summary**: The BFS gold anchor `Xr/H=6.26` is cited from Driver & Seegmiller 1985, but that paper's experimental Re_H≈36000 (turbulent regime), while the whitelist runs this case at Re=7600 (laminar/transitional by the Armaly 1983 regime map). The numbers happen to be in the same family (~6 step heights), which is why PASS verdicts have been observed, but the gold's reference_correlation_context over-claims literature fidelity at the adapter's actual Reynolds number.
+
+**Options** (for external Gate to choose):
+
+- **Path A — re-source gold to a Re=7600-consistent anchor**. At Re_h=7600 the BFS is in Armaly's low-Re regime where Xr/h ranges 4-5 (not 6.26). Would require editing `gold_standards/backward_facing_step.yaml` ref_value + source citation. Impact: default contract_status flips for every BFS run against any measurement previously near 6.26 (reference_pass FAIL, real_incident possibly PASS, etc).
+- **Path B — bump whitelist to Re=36000 to match Driver & Seegmiller**. Would require editing `whitelist.yaml` parameters.Re + adapter mesh sizing. Impact: changes what the harness actually runs; existing fixtures' physical plausibility narratives would need review.
+- **Path C — add reference_correlation_context note to the existing gold documenting the Re-mismatch honestly, keeping ref_value=6.26 but lowering its authoritative weight**. Least-invasive; preserves all existing test expectations and fixtures. But fundamentally dishonest: we'd be claiming an external-literature anchor while acknowledging it doesn't match our regime.
+- **Path D — hold**. Document the mismatch in `/learn` narrative (shipped in DEC-V61-027, PR #36) and leave the gold unchanged pending paper re-source.
+
+**Gate request**: Kogami to pick A/B/C/D. Path A is most faithful but most disruptive; Path D is least disruptive and now has student-facing narrative coverage so the mismatch isn't hidden.
+
+**Learn-side mitigation shipped in PR #36**: `learnCases.ts::backward_facing_step.why_validation_matters_zh` now includes a ⚠️ block acknowledging the Re=7600 vs Re=36000 mismatch. Students see the caveat whether or not the external Gate ever acts.
+
+---
+
 ## ~~Q-1: DHC (differential_heated_cavity) gold-reference accuracy~~ — CLOSED 2026-04-20
 
 **Closure**: Resolved by DEC-V61-006 Path P-2 adoption (one of the two paths DEC-ADWM-004 FUSE itself named). Ra 1e10→1e6, Nu 30→8.8 (de Vahl Davis 1983). PR #6 merged `912b2ce1`. See `.planning/decisions/2026-04-20_b_class_gold_remediation.md` Case 6.

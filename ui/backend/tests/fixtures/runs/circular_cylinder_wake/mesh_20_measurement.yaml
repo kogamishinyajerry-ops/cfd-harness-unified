@@ -1,0 +1,27 @@
+# Grid-convergence run for cylinder wake — 20 azimuthal cells around cylinder.
+# Coarse boundary layer + short wake resolution → shedding frequency
+# undershoots Williamson 1996 gold St=0.164 by ~15%.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20 周向 · 粗糙
+  label_en: Mesh 20 cylinder-azimuthal cells (coarse)
+  description_zh: >-
+    圆柱周向只有 20 cells，尾流区 H/D 方向仅 40 cells。BL + shear layer
+    都糊掉，脱落频率降低 → St=0.140 vs Williamson 0.164 (-15%)。5% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: circular_cylinder_wake
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.140
+  unit: dimensionless
+  run_id: grid_cyl_n20
+  commit_sha: null
+  measured_at: null
+  quantity: strouhal_number
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20 azimuthal cells; St=0.140 vs Williamson 1996 0.164 (-15%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

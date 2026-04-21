@@ -1,0 +1,25 @@
+# Grid-convergence run for NACA 0012 — 20 surface cells per side.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20 表面 · 粗糙
+  label_en: Mesh 20 surface cells (coarse)
+  description_zh: >-
+    每弦向 20 surface cells + 8-弦远场。驻点 cell 覆盖半径 ~5% chord，
+    过度平均 → Cp_le=0.65 (-35%)。20% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: naca0012_airfoil
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.65
+  unit: dimensionless
+  run_id: grid_naca_n20
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20 surface cells + 8-chord far-field; Cp_le=0.65 vs gold 1.0 (-35%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

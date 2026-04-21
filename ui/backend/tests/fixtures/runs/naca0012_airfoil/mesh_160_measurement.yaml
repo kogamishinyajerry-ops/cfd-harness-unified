@@ -1,0 +1,21 @@
+# Grid-convergence run for NACA 0012 — 160 surface + 40-chord + denser LE packing.
+run_metadata:
+  run_id: mesh_160
+  label_zh: 网格 160 表面 · 过收敛
+  label_en: Mesh 160 surface (asymptotic)
+  description_zh: >-
+    160 表面 cells + 前缘 4× 加密。Cp_le=0.995 (-0.5%)。20% 容差内 PASS。
+    cell-center vs face-center 差异消失。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: naca0012_airfoil
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.995
+  unit: dimensionless
+  run_id: grid_naca_n160
+  commit_sha: null
+  measured_at: null
+  quantity: Cp_leading_edge
+audit_concerns: []
+decisions_trail: []

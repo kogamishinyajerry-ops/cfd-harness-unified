@@ -33,8 +33,9 @@ const TABS: { id: TabId; label_zh: string; label_en: string }[] = [
   { id: "advanced", label_zh: "进阶", label_en: "Advanced" },
 ];
 
-// Cases that have a curated grid-convergence sweep (4 meshes each).
-// If a case isn't in this list, the Mesh tab renders an empty state.
+// Cases with a curated grid-convergence sweep (4 meshes each). Every
+// case in the /learn catalog now has one. If a new case is added,
+// author 4 mesh_N fixtures and register its density labels here.
 const GRID_CONVERGENCE_CASES: Record<
   string,
   { meshLabel: string; densities: { id: string; label: string; n: number }[] }
@@ -64,6 +65,69 @@ const GRID_CONVERGENCE_CASES: Record<
       { id: "mesh_40", label: "40 cells", n: 40 },
       { id: "mesh_80", label: "80 cells", n: 80 },
       { id: "mesh_160", label: "160 cells", n: 160 },
+    ],
+  },
+  circular_cylinder_wake: {
+    meshLabel: "azimuthal cells around cylinder",
+    densities: [
+      { id: "mesh_20", label: "20 azim", n: 20 },
+      { id: "mesh_40", label: "40 azim", n: 40 },
+      { id: "mesh_80", label: "80 azim", n: 80 },
+      { id: "mesh_160", label: "160 azim", n: 160 },
+    ],
+  },
+  duct_flow: {
+    meshLabel: "cross-section cells",
+    densities: [
+      { id: "mesh_20", label: "20² uniform", n: 400 },
+      { id: "mesh_40", label: "40² + 2:1", n: 1600 },
+      { id: "mesh_80", label: "80² + 4:1", n: 6400 },
+      { id: "mesh_160", label: "160²", n: 25600 },
+    ],
+  },
+  differential_heated_cavity: {
+    meshLabel: "square cavity N×N + wall grading",
+    densities: [
+      { id: "mesh_20", label: "20² uniform", n: 400 },
+      { id: "mesh_40", label: "40² + 1.5:1", n: 1600 },
+      { id: "mesh_80", label: "80² + 4:1", n: 6400 },
+      { id: "mesh_160", label: "160² + 4:1", n: 25600 },
+    ],
+  },
+  plane_channel_flow: {
+    meshLabel: "isotropic cubed cells",
+    densities: [
+      { id: "mesh_20", label: "20³ RANS", n: 8000 },
+      { id: "mesh_40", label: "40³ hybrid", n: 64000 },
+      { id: "mesh_80", label: "80³ WR-LES", n: 512000 },
+      { id: "mesh_160", label: "160³ DNS", n: 4096000 },
+    ],
+  },
+  impinging_jet: {
+    meshLabel: "radial cells in stagnation region",
+    densities: [
+      { id: "mesh_20", label: "20 rad", n: 20 },
+      { id: "mesh_40", label: "40 rad + 2:1", n: 40 },
+      { id: "mesh_80", label: "80 rad + 4:1", n: 80 },
+      { id: "mesh_160", label: "160 rad", n: 160 },
+    ],
+  },
+  naca0012_airfoil: {
+    meshLabel: "surface cells per side",
+    densities: [
+      { id: "mesh_20", label: "20 surf + 8-chord", n: 20 },
+      { id: "mesh_40", label: "40 surf + 15-chord", n: 40 },
+      { id: "mesh_80", label: "80 surf + 40-chord", n: 80 },
+      { id: "mesh_160", label: "160 surf", n: 160 },
+    ],
+  },
+  rayleigh_benard_convection: {
+    meshLabel: "square cavity + wall packing",
+    densities: [
+      { id: "mesh_20", label: "20² uniform", n: 400 },
+      { id: "mesh_40", label: "40² + 2:1", n: 1600 },
+      { id: "mesh_80", label: "80² + 4:1", n: 6400 },
+      { id: "mesh_160", label: "160² + 4:1", n: 25600 },
     ],
   },
 };
@@ -138,8 +202,8 @@ export function LearnCaseDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 pt-8 pb-16">
-      {/* Breadcrumb + Pro Workbench switch */}
-      <nav className="mb-6 flex items-center justify-between text-[12px] text-surface-500">
+      {/* Breadcrumb + case-export + Pro Workbench switch */}
+      <nav className="mb-6 flex items-center justify-between gap-3 text-[12px] text-surface-500">
         <div>
           <Link to="/learn" className="hover:text-surface-300">
             目录
@@ -147,16 +211,29 @@ export function LearnCaseDetailPage() {
           <span className="mx-2 text-surface-700">/</span>
           <span className="mono text-surface-400">{caseId}</span>
         </div>
-        <Link
-          to={`/cases/${caseId}/report`}
-          className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-sky-700/60 hover:bg-surface-900 hover:text-sky-300"
-          title="Switch to the evidence-heavy audit surface (Validation Report, Decisions Queue, Audit Package)"
-        >
-          <span>进入专业工作台</span>
-          <span className="mono text-surface-600 group-hover:text-sky-400">
-            Pro Workbench →
-          </span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/cases/${caseId}/export`}
+            download={`${caseId}_reference.zip`}
+            className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-emerald-700/60 hover:bg-surface-900 hover:text-emerald-300"
+            title="Download a reference bundle: gold standard YAML, validation contract, reproduction README"
+          >
+            <span>下载参考包</span>
+            <span className="mono text-surface-600 group-hover:text-emerald-400">
+              .zip ↓
+            </span>
+          </a>
+          <Link
+            to={`/cases/${caseId}/report`}
+            className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-sky-700/60 hover:bg-surface-900 hover:text-sky-300"
+            title="Switch to the evidence-heavy audit surface (Validation Report, Decisions Queue, Audit Package)"
+          >
+            <span>进入专业工作台</span>
+            <span className="mono text-surface-600 group-hover:text-sky-400">
+              Pro Workbench →
+            </span>
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
