@@ -702,7 +702,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     icoFoam;
+application     simpleFoam;
 
 startFrom       startTime;
 
@@ -710,9 +710,9 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         10;
+endTime         2000;
 
-deltaT          0.005;
+deltaT          1;
 
 writeControl    timeStep;
 
@@ -759,7 +759,7 @@ FoamFile
 
 ddtSchemes
 {
-    default         Euler;
+    default         steadyState;
 }
 
 gradSchemes
@@ -770,12 +770,28 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      Gauss linear;
+    div(phi,U)      bounded Gauss limitedLinearV 1;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 
 laplacianSchemes
 {
     default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+wallDist
+{
+    method          meshWave;
 }
 
 // ************************************************************************* //
@@ -807,16 +823,10 @@ solvers
 {
     p
     {
-        solver          PCG;
-        preconditioner  DIC;
+        solver          GAMG;
         tolerance       1e-06;
-        relTol          0.05;
-    }
-
-    pFinal
-    {
-        $p;
-        relTol          0;
+        relTol          0.1;
+        smoother        GaussSeidel;
     }
 
     U
@@ -824,16 +834,34 @@ solvers
         solver          smoothSolver;
         smoother        GaussSeidel;
         tolerance       1e-05;
-        relTol          0.05;
+        relTol          0.1;
+        nSweeps         1;
     }
 }
 
-PISO
+SIMPLE
 {
-    nCorrectors         2;
     nNonOrthogonalCorrectors 0;
-    pRefCell            0;
-    pRefValue           0;
+    consistent      yes;
+    pRefCell        0;
+    pRefValue       0;
+    residualControl
+    {
+        p               1e-5;
+        U               1e-5;
+    }
+}
+
+relaxationFactors
+{
+    equations
+    {
+        U               0.9;
+    }
+    fields
+    {
+        p               0.3;
+    }
 }
 
 // ************************************************************************* //
@@ -880,13 +908,9 @@ boundaryField
     {
         type            noSlip;
     }
-    wall3
+    frontAndBack
     {
-        type            noSlip;
-    }
-    wall4
-    {
-        type            noSlip;
+        type            empty;
     }
 }
 
@@ -933,13 +957,9 @@ boundaryField
     {
         type            zeroGradient;
     }
-    wall3
+    frontAndBack
     {
-        type            zeroGradient;
-    }
-    wall4
-    {
-        type            zeroGradient;
+        type            empty;
     }
 }
 
@@ -6499,7 +6519,7 @@ vertices
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (20 20 1) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) (129 129 1) simpleGrading (1 1 1)
 );
 
 edges
@@ -6523,15 +6543,14 @@ boundary
         type            wall;
         faces           ((1 2 6 5));
     }}
-    wall3
+    frontAndBack
     {{
-        type            wall;
-        faces           ((0 1 5 4));
-    }}
-    wall4
-    {{
-        type            wall;
-        faces           ((4 5 6 7));
+        type            empty;
+        faces
+        (
+            (0 1 5 4)
+            (4 5 6 7)
+        );
     }}
 );
 
