@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
@@ -23,14 +23,50 @@ import type {
 // from that single record so the student can flip between them without
 // re-fetching.
 
-type TabId = "story" | "compare" | "run" | "advanced";
+type TabId = "story" | "compare" | "mesh" | "run" | "advanced";
 
 const TABS: { id: TabId; label_zh: string; label_en: string }[] = [
   { id: "story", label_zh: "故事", label_en: "Story" },
   { id: "compare", label_zh: "对比", label_en: "Compare" },
+  { id: "mesh", label_zh: "网格", label_en: "Mesh" },
   { id: "run", label_zh: "运行", label_en: "Run" },
   { id: "advanced", label_zh: "进阶", label_en: "Advanced" },
 ];
+
+// Cases that have a curated grid-convergence sweep (4 meshes each).
+// If a case isn't in this list, the Mesh tab renders an empty state.
+const GRID_CONVERGENCE_CASES: Record<
+  string,
+  { meshLabel: string; densities: { id: string; label: string; n: number }[] }
+> = {
+  lid_driven_cavity: {
+    meshLabel: "uniform grid N×N",
+    densities: [
+      { id: "mesh_20", label: "20²", n: 400 },
+      { id: "mesh_40", label: "40²", n: 1600 },
+      { id: "mesh_80", label: "80²", n: 6400 },
+      { id: "mesh_160", label: "160²", n: 25600 },
+    ],
+  },
+  turbulent_flat_plate: {
+    meshLabel: "wall-normal cells",
+    densities: [
+      { id: "mesh_20", label: "20 y-cells", n: 20 },
+      { id: "mesh_40", label: "40 y-cells", n: 40 },
+      { id: "mesh_80", label: "80 y-cells + 4:1", n: 80 },
+      { id: "mesh_160", label: "160 y-cells", n: 160 },
+    ],
+  },
+  backward_facing_step: {
+    meshLabel: "recirculation cells",
+    densities: [
+      { id: "mesh_20", label: "20 cells", n: 20 },
+      { id: "mesh_40", label: "40 cells", n: 40 },
+      { id: "mesh_80", label: "80 cells", n: 80 },
+      { id: "mesh_160", label: "160 cells", n: 160 },
+    ],
+  },
+};
 
 const STATUS_TEXT: Record<ContractStatus, string> = {
   PASS: "对齐黄金标准",
@@ -47,7 +83,11 @@ const STATUS_CLASS: Record<ContractStatus, string> = {
 };
 
 const isTabId = (v: string | null): v is TabId =>
-  v === "story" || v === "compare" || v === "run" || v === "advanced";
+  v === "story" ||
+  v === "compare" ||
+  v === "mesh" ||
+  v === "run" ||
+  v === "advanced";
 
 export function LearnCaseDetailPage() {
   const { caseId } = useParams<{ caseId: string }>();
@@ -98,13 +138,25 @@ export function LearnCaseDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 pt-8 pb-16">
-      {/* Breadcrumb */}
-      <nav className="mb-6 text-[12px] text-surface-500">
-        <Link to="/learn" className="hover:text-surface-300">
-          目录
+      {/* Breadcrumb + Pro Workbench switch */}
+      <nav className="mb-6 flex items-center justify-between text-[12px] text-surface-500">
+        <div>
+          <Link to="/learn" className="hover:text-surface-300">
+            目录
+          </Link>
+          <span className="mx-2 text-surface-700">/</span>
+          <span className="mono text-surface-400">{caseId}</span>
+        </div>
+        <Link
+          to={`/cases/${caseId}/report`}
+          className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-sky-700/60 hover:bg-surface-900 hover:text-sky-300"
+          title="Switch to the evidence-heavy audit surface (Validation Report, Decisions Queue, Audit Package)"
+        >
+          <span>进入专业工作台</span>
+          <span className="mono text-surface-600 group-hover:text-sky-400">
+            Pro Workbench →
+          </span>
         </Link>
-        <span className="mx-2 text-surface-700">/</span>
-        <span className="mono text-surface-400">{caseId}</span>
       </nav>
 
       {/* Hero */}
@@ -162,6 +214,7 @@ export function LearnCaseDetailPage() {
           onSelectRun={setRunId}
         />
       )}
+      {tab === "mesh" && <MeshTab caseId={caseId} />}
       {tab === "run" && <RunTab caseId={caseId} />}
       {tab === "advanced" && <AdvancedTab caseId={caseId} report={report} />}
     </div>
@@ -260,6 +313,7 @@ const RUN_CATEGORY_LABEL: Record<RunCategory, string> = {
   real_incident: "真实故障",
   under_resolved: "欠分辨",
   wrong_model: "错模型",
+  grid_convergence: "网格收敛",
 };
 
 const RUN_CATEGORY_COLOR: Record<RunCategory, string> = {
@@ -267,6 +321,7 @@ const RUN_CATEGORY_COLOR: Record<RunCategory, string> = {
   real_incident: "bg-amber-900/30 text-amber-200 border-amber-800/50",
   under_resolved: "bg-orange-900/30 text-orange-200 border-orange-800/50",
   wrong_model: "bg-rose-900/30 text-rose-200 border-rose-800/50",
+  grid_convergence: "bg-sky-900/30 text-sky-200 border-sky-800/50",
 };
 
 function CompareTab({
@@ -544,6 +599,307 @@ function ToleranceBand({
       )}
     </div>
   );
+}
+
+// --- Mesh tab (interactive grid-convergence slider) --------------------------
+
+function MeshTab({ caseId }: { caseId: string }) {
+  const sweep = GRID_CONVERGENCE_CASES[caseId];
+
+  // Unconditionally create state + queries so the hook call count stays
+  // stable regardless of whether this case has a sweep. (React will
+  // throw if hook count varies between renders.)
+  const densities = sweep?.densities ?? [];
+  const [idx, setIdx] = useState(densities.length > 1 ? 2 : 0);
+
+  const reports = useQueries({
+    queries: densities.map((d) => ({
+      queryKey: ["validation-report", caseId, d.id],
+      queryFn: () => api.getValidationReport(caseId, d.id),
+      enabled: !!caseId,
+      retry: false,
+      staleTime: 60_000,
+    })),
+  });
+
+  if (!sweep) {
+    return (
+      <div className="rounded-md border border-surface-800 bg-surface-900/40 p-6">
+        <p className="card-title mb-2">网格收敛演示尚未为此案例准备</p>
+        <p className="text-[13px] leading-relaxed text-surface-400">
+          这个案例目前只有一套默认网格的 fixture。目前有网格收敛 sweep 的案例：
+          <span className="mono ml-1 text-surface-300">
+            {Object.keys(GRID_CONVERGENCE_CASES).join(" · ")}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  const active = reports[idx];
+  const activeReport = active?.data as ValidationReport | undefined;
+  const activeDensity = densities[idx];
+  const loading = reports.some((r) => r.isLoading);
+
+  // Map each density to its (value, verdict) — used for the sparkline.
+  const series = reports.map((r, i) => {
+    const rep = r.data as ValidationReport | undefined;
+    return {
+      idx: i,
+      label: densities[i].label,
+      value: rep?.measurement?.value,
+      status: rep?.contract_status ?? "UNKNOWN",
+    };
+  });
+
+  const goldRef = activeReport?.gold_standard?.ref_value;
+  const tol = activeReport?.gold_standard?.tolerance_pct;
+  const unit = activeReport?.gold_standard?.unit ?? "";
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-md border border-surface-800 bg-surface-900/40 p-6">
+        <div className="mb-4 flex items-baseline justify-between">
+          <div>
+            <h2 className="card-title">网格收敛演示 · Grid Convergence</h2>
+            <p className="mt-1 text-[12px] text-surface-500">
+              拖动滑块，实时看 {activeReport?.gold_standard?.quantity ?? "key quantity"} 如何随网格密度逼近 gold 值。
+            </p>
+          </div>
+          <span className="mono text-[11px] text-surface-500">
+            sweep: {sweep.meshLabel}
+          </span>
+        </div>
+
+        {/* Density slider */}
+        <div className="mb-6">
+          <div className="mb-2 flex justify-between text-[11px] text-surface-500">
+            {densities.map((d, i) => (
+              <button
+                key={d.id}
+                onClick={() => setIdx(i)}
+                className={`rounded-sm px-1.5 py-0.5 transition-colors ${
+                  i === idx ? "bg-sky-900/50 text-sky-200" : "hover:text-surface-300"
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={densities.length - 1}
+            step={1}
+            value={idx}
+            onChange={(e) => setIdx(Number(e.target.value))}
+            className="w-full accent-sky-500"
+            aria-label="mesh density"
+          />
+        </div>
+
+        {/* Active value card */}
+        <div className="mb-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-surface-500">
+              测量值
+            </p>
+            <p className="mono mt-1 text-2xl text-surface-100">
+              {loading || active?.data == null
+                ? "—"
+                : formatNumber(activeReport?.measurement?.value)}
+              {unit ? <span className="ml-1 text-[11px] text-surface-500">{unit}</span> : null}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-surface-500">
+              相对 gold 偏差
+            </p>
+            <p className="mono mt-1 text-2xl text-surface-100">
+              {activeReport?.deviation_pct == null ||
+              !Number.isFinite(activeReport.deviation_pct)
+                ? "—"
+                : `${activeReport.deviation_pct >= 0 ? "+" : ""}${activeReport.deviation_pct.toFixed(1)}%`}
+            </p>
+          </div>
+          <div
+            className={`rounded-md border px-3 py-1.5 text-[12px] font-medium ${
+              activeReport
+                ? STATUS_CLASS[activeReport.contract_status]
+                : "text-surface-400"
+            }`}
+          >
+            {activeReport ? STATUS_TEXT[activeReport.contract_status] : "加载中…"}
+          </div>
+        </div>
+
+        {/* Sparkline — convergence trend */}
+        <ConvergenceSparkline
+          series={series}
+          goldRef={goldRef}
+          tolPct={tol}
+          activeIdx={idx}
+        />
+
+        {/* Density description */}
+        <div className="mt-4 text-[12px] leading-relaxed text-surface-400">
+          <span className="mono text-surface-300">{activeDensity.label}</span>
+          <span className="mx-2 text-surface-700">·</span>
+          <span className="mono text-surface-500">{activeDensity.n} cells</span>
+          <span className="mx-2 text-surface-700">·</span>
+          <span className="mono text-surface-500">run_id: {activeDensity.id}</span>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-surface-800/60 bg-surface-900/20 p-5 text-[12px] leading-relaxed text-surface-400">
+        <p className="mb-1 font-medium text-surface-300">读图指南</p>
+        <p>
+          网格收敛的基本要求：随 h → 0 你应该看到测量值**单调**逼近 gold（或至少一条光滑曲线），
+          且相邻两级之间的变化随 h 的某个幂次衰减（Richardson extrapolation 就是在测这个幂次）。
+          如果测量值在粗网格处大幅震荡、或 "看起来收敛了但其实离 gold 还很远"——那是 scheme 精度问题，不是 mesh。
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function ConvergenceSparkline({
+  series,
+  goldRef,
+  tolPct,
+  activeIdx,
+}: {
+  series: { idx: number; label: string; value: number | undefined; status: ContractStatus }[];
+  goldRef: number | undefined;
+  tolPct: number | undefined;
+  activeIdx: number;
+}) {
+  const W = 600;
+  const H = 180;
+  const padX = 40;
+  const padY = 20;
+
+  const values = series
+    .map((s) => s.value)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (goldRef == null || !Number.isFinite(goldRef) || values.length === 0) {
+    return (
+      <div className="h-[180px] rounded border border-surface-800 bg-surface-950/40 p-3 text-[11px] text-surface-500">
+        等待后端数据…
+      </div>
+    );
+  }
+  const allVals = [...values, goldRef];
+  if (tolPct != null) {
+    allVals.push(goldRef * (1 + tolPct), goldRef * (1 - tolPct));
+  }
+  const yMin = Math.min(...allVals);
+  const yMax = Math.max(...allVals);
+  const yRange = yMax - yMin || Math.abs(goldRef) * 0.2 || 1;
+  const yPad = yRange * 0.15;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+
+  const xStep = series.length > 1 ? (W - 2 * padX) / (series.length - 1) : 0;
+  const toX = (i: number) => padX + i * xStep;
+  const toY = (v: number) => padY + (H - 2 * padY) * (1 - (v - yLo) / (yHi - yLo));
+
+  const goldY = toY(goldRef);
+  const upperY = tolPct != null ? toY(goldRef * (1 + tolPct)) : null;
+  const lowerY = tolPct != null ? toY(goldRef * (1 - tolPct)) : null;
+
+  const points = series
+    .map((s) =>
+      s.value == null || !Number.isFinite(s.value)
+        ? null
+        : `${toX(s.idx)},${toY(s.value)}`,
+    )
+    .filter((p): p is string => p != null)
+    .join(" ");
+
+  const statusColor: Record<ContractStatus, string> = {
+    PASS: "#4ade80",
+    HAZARD: "#fbbf24",
+    FAIL: "#f87171",
+    UNKNOWN: "#9ca3af",
+  };
+
+  return (
+    <div className="rounded border border-surface-800 bg-surface-950/40 p-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img">
+        {/* tolerance band */}
+        {upperY != null && lowerY != null && (
+          <rect
+            x={padX - 6}
+            y={Math.min(upperY, lowerY)}
+            width={W - 2 * padX + 12}
+            height={Math.abs(upperY - lowerY)}
+            fill="#4ade80"
+            opacity={0.08}
+          />
+        )}
+        {/* gold line */}
+        <line
+          x1={padX - 6}
+          x2={W - padX + 6}
+          y1={goldY}
+          y2={goldY}
+          stroke="#4ade80"
+          strokeWidth={1.4}
+          strokeDasharray="4 3"
+        />
+        <text x={W - padX + 10} y={goldY + 3} fontSize="10" fill="#4ade80">
+          gold {formatNumber(goldRef)}
+        </text>
+        {/* connecting line */}
+        <polyline
+          points={points}
+          fill="none"
+          stroke="#60a5fa"
+          strokeWidth={1.5}
+          opacity={0.6}
+        />
+        {/* density anchor points */}
+        {series.map((s) => {
+          if (s.value == null || !Number.isFinite(s.value)) return null;
+          const cx = toX(s.idx);
+          const cy = toY(s.value);
+          const r = s.idx === activeIdx ? 6 : 4;
+          return (
+            <g key={s.idx}>
+              <circle
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill={statusColor[s.status]}
+                stroke="#0a0e14"
+                strokeWidth={1.5}
+              />
+              <text
+                x={cx}
+                y={H - 4}
+                textAnchor="middle"
+                fontSize="10"
+                fill={s.idx === activeIdx ? "#e5e7eb" : "#6b7280"}
+              >
+                {s.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function formatNumber(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const abs = Math.abs(v);
+  if (abs === 0) return "0";
+  if (abs < 0.001) return v.toExponential(2);
+  if (abs < 1) return v.toFixed(4);
+  if (abs < 100) return v.toFixed(3);
+  return v.toFixed(1);
 }
 
 // --- Run tab ------------------------------------------------------------------

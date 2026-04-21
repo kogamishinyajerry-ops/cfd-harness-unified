@@ -1,0 +1,25 @@
+# Grid-convergence run for BFS — 40 recirculation cells.
+# Shear layer thinned; Xr/H=5.5 (-12%). Still outside 10% tolerance.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40 cells · 过渡
+  label_en: Mesh 40 recirculation cells (transitional)
+  description_zh: >-
+    40 cells。Shear layer 开始成形但仍偏薄，Xr/H=5.5 (-12%)。10% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: backward_facing_step
+source: grid_convergence_study_synthetic
+measurement:
+  value: 5.5
+  unit: step_heights
+  run_id: grid_bfs_n40
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40 recirculation cells; Xr/H=5.5 vs gold 6.26 (-12%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

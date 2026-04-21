@@ -1,0 +1,27 @@
+# Grid-convergence run for LDC — 40² uniform grid.
+# Secondary vortex barely captured; u_centerline -0.042 (+13% deviation).
+# Still outside 5% tolerance.
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40² · 过渡
+  label_en: Mesh 40² (transitional)
+  description_zh: >-
+    40² 网格。Secondary vortex 勉强能看到结构；u_centerline=-0.042，
+    相对 Ghia -0.03717 偏 +13%。5% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: lid_driven_cavity
+source: grid_convergence_study_synthetic
+measurement:
+  value: -0.042
+  unit: dimensionless
+  run_id: grid_ldc_n40
+  commit_sha: null
+  measured_at: null
+  quantity: u_centerline[y=0.0625]
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40² grid; u_centerline=-0.042 vs Ghia -0.03717 (+13%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

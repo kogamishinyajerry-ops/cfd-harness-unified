@@ -1,0 +1,28 @@
+# Grid-convergence run for TFP — 20 wall-normal cells (uniform).
+# First cell y+ ~ 50 (well outside viscous sublayer). Wall shear
+# reconstruction via Spalding fallback over-predicts Cf by +55%.
+run_metadata:
+  run_id: mesh_20
+  label_zh: 网格 20 y-cells · 粗糙
+  label_en: Mesh 20 wall-normal cells (coarse)
+  description_zh: >-
+    20 条壁法向 cell（均匀）。第一层 y+≈50，远在 viscous sublayer 外。
+    Spalding fallback 拉回到 log 层，Cf=0.00650 vs Blasius 0.00420 (+55%)。
+    远远超出 10% 容差 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: turbulent_flat_plate
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.0065
+  unit: dimensionless
+  run_id: grid_tfp_n20
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '20 y-cells; first y+≈50; Cf=0.00650 vs Blasius 0.00420 (+55%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

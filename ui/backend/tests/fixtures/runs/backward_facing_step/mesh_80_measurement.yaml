@@ -1,0 +1,23 @@
+# Grid-convergence run for BFS — 80 recirculation cells + streamwise packing.
+# Xr/H=6.1 (-2.6%). Inside 10% tolerance → PASS. First mesh where the
+# shear layer and secondary vortex under the step are both resolved.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80 cells · 收敛
+  label_en: Mesh 80 recirculation cells (converged)
+  description_zh: >-
+    80 cells + 流向加密。Shear layer + step-下方次级涡都分辨到位。
+    Xr/H=6.1 (-2.6%) 落在 10% 容差内 PASS。这是 BFS 的"够用"分辨率。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: backward_facing_step
+source: grid_convergence_study_synthetic
+measurement:
+  value: 6.1
+  unit: step_heights
+  run_id: grid_bfs_n80
+  commit_sha: null
+  measured_at: null
+  quantity: reattachment_length
+audit_concerns: []
+decisions_trail: []

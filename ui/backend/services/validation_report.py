@@ -190,17 +190,31 @@ def _run_id_from_path(p: Path) -> str:
     return p.stem.removesuffix("_measurement")
 
 
+_CATEGORY_ORDER: dict[str, int] = {
+    "reference": 0,
+    "real_incident": 1,
+    "under_resolved": 2,
+    "wrong_model": 3,
+    "grid_convergence": 4,
+}
+
+
 def list_runs(case_id: str) -> list[RunDescriptor]:
     """Enumerate curated + legacy runs for a case.
 
-    Ordering:
-    1. Multi-run fixtures under fixtures/runs/{case_id}/ in alphabetical
-       run_id order (reference_* tends to sort before real_incident etc.
-       by design).
-    2. Legacy {case_id}_measurement.yaml is exposed as run_id='legacy'
-       only when the multi-run dir is empty. Once any curated run is
-       added for a case, the legacy file is shadowed (kept on disk for
-       back-compat + git history).
+    Ordering (pedagogical, stable across filesystem locales):
+    1. `reference` first — students see "what done right looks like"
+       at the top.
+    2. `real_incident` next — actual production measurement, auditable
+       reality.
+    3. `under_resolved` / `wrong_model` — teaching variants.
+    4. `grid_convergence` last — mesh-sweep runs live behind the Mesh
+       tab and don't belong in the Compare run-picker's first page of
+       attention.
+    Within a category, sort by run_id ascending (mesh_20 before
+    mesh_160 via zero-padded numeric comparison for `mesh_N` ids).
+    Legacy `{case_id}_measurement.yaml` is exposed as run_id='legacy'
+    only when the multi-run dir is empty.
     """
     runs: list[RunDescriptor] = []
     for path in _list_run_files(case_id):
@@ -222,6 +236,19 @@ def list_runs(case_id: str) -> list[RunDescriptor]:
             )
         )
     if runs:
+        def _sort_key(r: RunDescriptor) -> tuple[int, int, str]:
+            cat_rank = _CATEGORY_ORDER.get(r.category, 99)
+            # Numeric-aware secondary sort for mesh_N ids so mesh_20 sits
+            # before mesh_160 instead of lexicographic (`mesh_160` < `mesh_20`).
+            if r.run_id.startswith("mesh_"):
+                try:
+                    n = int(r.run_id.split("_", 1)[1])
+                except ValueError:
+                    n = 0
+                return (cat_rank, n, r.run_id)
+            return (cat_rank, 0, r.run_id)
+
+        runs.sort(key=_sort_key)
         return runs
 
     legacy = _load_fixture_measurement(case_id)

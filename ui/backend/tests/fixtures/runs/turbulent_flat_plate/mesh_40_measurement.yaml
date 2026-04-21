@@ -1,0 +1,26 @@
+# Grid-convergence run for TFP — 40 wall-normal cells (uniform).
+# First cell y+ ~ 25, just barely outside buffer layer. Cf=0.00520 (+24%).
+run_metadata:
+  run_id: mesh_40
+  label_zh: 网格 40 y-cells · 过渡
+  label_en: Mesh 40 wall-normal cells (transitional)
+  description_zh: >-
+    40 条壁法向 cell。第一层 y+≈25，触到 buffer 层但未入 sublayer。
+    Cf=0.00520 (+24%)。10% 容差外 FAIL。
+  category: grid_convergence
+  expected_verdict: FAIL
+case_id: turbulent_flat_plate
+source: grid_convergence_study_synthetic
+measurement:
+  value: 0.0052
+  unit: dimensionless
+  run_id: grid_tfp_n40
+  commit_sha: null
+  measured_at: null
+  quantity: cf_skin_friction
+audit_concerns:
+  - concern_type: DEVIATION
+    summary: '40 y-cells; first y+≈25; Cf=0.00520 vs Blasius 0.00420 (+24%).'
+    detail: null
+    decision_refs: []
+decisions_trail: []

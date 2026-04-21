@@ -1,0 +1,24 @@
+# Grid-convergence run for LDC — 80² uniform grid.
+# Secondary vortex cleanly resolved; u_centerline -0.038 (+2.2%).
+# Inside 5% tolerance → PASS. This is the "sweet spot" where adding
+# more cells no longer changes the answer meaningfully.
+run_metadata:
+  run_id: mesh_80
+  label_zh: 网格 80² · 收敛
+  label_en: Mesh 80² (converged)
+  description_zh: >-
+    80² 网格。Secondary vortex 清晰；u_centerline=-0.038，相对
+    Ghia -0.03717 偏 +2.2%。5% 容差内 PASS。这是 LDC 的"够用"分辨率。
+  category: grid_convergence
+  expected_verdict: PASS
+case_id: lid_driven_cavity
+source: grid_convergence_study_synthetic
+measurement:
+  value: -0.038
+  unit: dimensionless
+  run_id: grid_ldc_n80
+  commit_sha: null
+  measured_at: null
+  quantity: u_centerline[y=0.0625]
+audit_concerns: []
+decisions_trail: []

@@ -7,7 +7,8 @@ export type RunCategory =
   | "reference"
   | "real_incident"
   | "under_resolved"
-  | "wrong_model";
+  | "wrong_model"
+  | "grid_convergence";
 
 export interface RunDescriptor {
   run_id: string;

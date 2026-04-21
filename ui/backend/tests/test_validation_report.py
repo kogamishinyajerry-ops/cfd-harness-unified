@@ -142,6 +142,18 @@ def test_case_runs_endpoint_lists_reference_pass_first(client: TestClient) -> No
     categories = {r["run_id"]: r["category"] for r in runs}
     assert categories["reference_pass"] == "reference"
     assert categories["real_incident"] == "real_incident"
+    # Pedagogical ordering: reference before real_incident before
+    # teaching variants before grid_convergence. Also: mesh_N runs
+    # sorted numerically, not lexicographically (mesh_20 before mesh_160).
+    order = [r["run_id"] for r in runs]
+    assert order.index("reference_pass") < order.index("real_incident")
+    assert order.index("real_incident") < order.index("under_resolved")
+    mesh_runs = [r for r in order if r.startswith("mesh_")]
+    assert mesh_runs == ["mesh_20", "mesh_40", "mesh_80", "mesh_160"]
+    # Grid-convergence runs must sit after the teaching variants so the
+    # Compare run-picker doesn't open on mesh_20.
+    for mesh_id in mesh_runs:
+        assert order.index("under_resolved") < order.index(mesh_id)
 
 
 def test_unknown_case_returns_404(client: TestClient) -> None:
