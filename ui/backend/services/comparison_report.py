@@ -538,8 +538,24 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
 
 
 def render_report_html(case_id: str, run_label: str = "audit_real_run") -> str:
-    """Return the full HTML string for the comparison report."""
+    """Return the full HTML string for the comparison report.
+
+    Visual-only cases (DEC-V61-034 Tier C) have no gold-overlay data to render
+    in the 8-section template — they expose their renders (contour + residuals
+    PNG) via the JSON context + /renders/ route instead. Requesting the HTML
+    report for a visual-only case raises ReportError which the route layer
+    maps to 404 (Codex round 1 CR finding: prevents template UndefinedError
+    500 on dereferencing `metrics.max_dev_pct` / `paper.title`).
+    """
     ctx = build_report_context(case_id, run_label)
+    if ctx.get("visual_only"):
+        raise ReportError(
+            f"case_id={case_id!r} is in Tier C visual-only mode — no 8-section "
+            f"HTML/PDF report is produced. Use the JSON context at "
+            f"/api/cases/{case_id}/runs/{run_label}/comparison-report/context "
+            f"plus /api/cases/{case_id}/runs/{run_label}/renders/{{filename}} "
+            f"to retrieve the contour + residuals renders directly."
+        )
     tmpl = _env.get_template("comparison_report.html.j2")
     return tmpl.render(**ctx)
 
@@ -563,6 +579,16 @@ def render_report_pdf(case_id: str, run_label: str = "audit_real_run",
     reports_root = (_REPO_ROOT / "reports" / "phase5_reports").resolve()
     if output_path is None:
         ctx = build_report_context(case_id, run_label)
+        # Codex round 1 CR (DEC-V61-034): visual-only cases have no PDF to
+        # render. Raise BEFORE weasyprint import so environments without
+        # native libs also fail-closed with ReportError → 404 at the route,
+        # not OSError → 503.
+        if ctx.get("visual_only"):
+            raise ReportError(
+                f"case_id={case_id!r} is in Tier C visual-only mode — no PDF "
+                f"report is produced. Use the /renders/{{filename}} route for "
+                f"contour + residuals PNG retrieval."
+            )
         ts = ctx["timestamp"]  # already validated by build_report_context
         out_dir = reports_root / case_id / ts
         out_dir.mkdir(parents=True, exist_ok=True)

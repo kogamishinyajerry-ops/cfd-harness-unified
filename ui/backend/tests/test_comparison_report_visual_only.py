@@ -161,6 +161,59 @@ def test_visual_only_context_rejects_tampered_timestamp(tmp_path, monkeypatch) -
         build_report_context(case, "audit_real_run")
 
 
+def test_render_report_html_raises_for_visual_only(tmp_path, monkeypatch) -> None:
+    """Codex round 1 CR (2026-04-21): render_report_html on a visual-only case
+    must raise ReportError (→ 404), NOT 500 from template dereferencing
+    None metrics/paper fields.
+    """
+    from ui.backend.services.comparison_report import render_report_html
+    case = "backward_facing_step"
+    _plant_run_manifest(tmp_path, case)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    with pytest.raises(ReportError, match="visual-only"):
+        render_report_html(case, "audit_real_run")
+
+
+def test_render_report_pdf_raises_for_visual_only(tmp_path, monkeypatch) -> None:
+    """PDF path runs through render_report_html internally, so the same
+    ReportError guard fires; nothing else downstream can crash."""
+    from ui.backend.services.comparison_report import render_report_pdf
+    case = "plane_channel_flow"
+    _plant_run_manifest(tmp_path, case)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    with pytest.raises(ReportError, match="visual-only"):
+        render_report_pdf(case, "audit_real_run")
+
+
+def test_route_html_returns_404_for_visual_only(client) -> None:
+    """End-to-end: GET /api/cases/BFS/runs/audit_real_run/comparison-report
+    returns 404 (via ReportError) for visual-only case, NOT 500."""
+    resp = client.get(
+        "/api/cases/backward_facing_step/runs/audit_real_run/comparison-report",
+    )
+    assert resp.status_code == 404, f"expected 404, got {resp.status_code}: {resp.text[:200]}"
+
+
 def test_gold_overlay_case_not_affected_by_visual_only_branch(tmp_path, monkeypatch) -> None:
     """LDC does NOT take the visual_only branch — existing gold-overlay flow
     preserved. This test ensures the dispatch check is case-set membership,

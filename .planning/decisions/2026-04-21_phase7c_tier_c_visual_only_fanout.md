@@ -26,11 +26,15 @@ autonomous_governance: true
   all changes contained to phase5_audit_run.py + render_case_report.py +
   comparison_report.{py,route} + LearnCaseDetailPage.tsx.)
 claude_signoff: yes
-codex_tool_invoked: TBD
-codex_rounds: TBD
-codex_round_1_verdict: TBD
-codex_verdict: TBD
-codex_tool_report_path: []
+codex_tool_invoked: true
+codex_rounds: 1
+codex_round_1_verdict: CHANGES_REQUIRED
+codex_round_1_findings:
+  - CRITICAL: visual-only cases 500 on /comparison-report HTML + /comparison-report.pdf + /comparison-report/build endpoints. build_report_context returns visual_only=True with metrics=None / paper=None, but render_report_html() rendered the gold-overlay Jinja template unconditionally, dereferencing metrics.max_dev_pct and paper.title → UndefinedError → 500. Fix (Option A per Codex) applied — raise ReportError in render_report_html and render_report_pdf for visual-only cases (before weasyprint import in PDF path) → routes map to 404. Added 3 tests covering the new 404 behavior. 10/10 visual-only tests pass; 142/142 total.
+codex_round_2_verdict: pending
+codex_verdict: CHANGES_REQUIRED → fix applied, round 2 verification pending
+codex_tool_report_path:
+  - reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md
 counter_status: |
   v6.1 autonomous_governance counter 19 → 20.
   (Triggers RETRO-V61-001 retrospective cadence rule #2 "counter ≥ 20 →
