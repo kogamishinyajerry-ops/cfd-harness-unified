@@ -53,7 +53,7 @@ reversibility: partially-reversible-by-pr-revert
   (Single atomic commit covers Wave 1+2+3 code + tests + DEC. Revert restores
   Phase 5a-only state. Integration artifacts under reports/phase5_fields/
   are gitignored so revert does not affect them.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-031-Phase-7a-Field-post-processing-capture-LDC-MVP-349c68942bed81e2a90af03669957fb0)
 github_pr_url: null (direct-to-main per Phase 5b precedent)
 github_merge_sha: pending
 github_merge_method: direct commit on main
@@ -168,5 +168,5 @@ to the other 9 whitelist cases.
 - [x] DEC-V61-031 drafted
 - [ ] Atomic Wave 3 commit (Codex fixes + DEC + STATE + ROADMAP + .gitignore)
 - [ ] Push to origin/main
-- [ ] Notion sync DEC-V61-031
-- [ ] ROADMAP Phase 7a → COMPLETE marker
+- [x] Notion sync DEC-V61-031 (https://www.notion.so/DEC-V61-031-Phase-7a-Field-post-processing-capture-LDC-MVP-349c68942bed81e2a90af03669957fb0)
+- [x] ROADMAP Phase 7a → COMPLETE marker (done in Wave 3 commit 0f74095)
