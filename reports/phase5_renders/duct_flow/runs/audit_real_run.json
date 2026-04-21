@@ -1,0 +1,11 @@
+{
+  "case_id": "duct_flow",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T131015Z",
+  "renders_dir_rel": "reports/phase5_renders/duct_flow/20260421T131015Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/duct_flow/20260421T131015Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/duct_flow/20260421T131015Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

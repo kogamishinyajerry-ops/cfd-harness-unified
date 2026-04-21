@@ -1,0 +1,14 @@
+{
+  "case_id": "lid_driven_cavity",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T082340Z",
+  "renders_dir_rel": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z",
+  "outputs": {
+    "profile_png": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z/profile_u_centerline.png",
+    "profile_plotly_json": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z/profile_u_centerline.plotly.json",
+    "residuals_png": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z/residuals.png",
+    "pointwise_deviation_png": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z/pointwise_deviation.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/lid_driven_cavity/20260421T082340Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

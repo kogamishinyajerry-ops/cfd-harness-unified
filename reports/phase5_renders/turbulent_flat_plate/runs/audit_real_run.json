@@ -1,0 +1,11 @@
+{
+  "case_id": "turbulent_flat_plate",
+  "run_label": "audit_real_run",
+  "timestamp": "20260421T130909Z",
+  "renders_dir_rel": "reports/phase5_renders/turbulent_flat_plate/20260421T130909Z",
+  "outputs": {
+    "residuals_png": "reports/phase5_renders/turbulent_flat_plate/20260421T130909Z/residuals.png",
+    "contour_u_magnitude_png": "reports/phase5_renders/turbulent_flat_plate/20260421T130909Z/contour_u_magnitude.png"
+  },
+  "errors": {}
+}

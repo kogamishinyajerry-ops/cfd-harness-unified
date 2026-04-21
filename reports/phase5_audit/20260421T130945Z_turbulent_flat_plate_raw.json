@@ -1,0 +1,21 @@
+{
+  "case_id": "turbulent_flat_plate",
+  "measured_at": "2026-04-21T13:09:45Z",
+  "duration_s": 35.759,
+  "solver_success": true,
+  "key_quantities": {
+    "cf_skin_friction": 0.007600365566051871,
+    "cf_location_x": 0.5,
+    "cf_spalding_fallback_count": 2,
+    "cf_spalding_fallback_activated": true
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity: cf_skin_friction | Tolerance: 10.0% | Failed: 1 deviation(s)",
+  "deviations": [
+    {
+      "quantity": "cf_skin_friction",
+      "actual": 0.007600365566051871,
+      "expected": 0.0042
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "case_id": "plane_channel_flow",
+  "measured_at": "2026-04-21T13:09:09Z",
+  "duration_s": 426.228,
+  "solver_success": true,
+  "key_quantities": {
+    "U_max_approx": 1.112475,
+    "u_mean_profile": [
+      0.5799709656396772,
+      0.9244468415020561,
+      0.9908042877368031,
+      0.9993078496145982,
+      1.0,
+      1.0,
+      0.9993078496145982,
+      0.9908042877368031,
+      0.9244468415020561,
+      0.5799709656396772
+    ],
+    "u_mean_profile_y": [
+      -0.45,
+      -0.35,
+      -0.25,
+      -0.15,
+      -0.05,
+      0.05,
+      0.15,
+      0.25,
+      0.35,
+      0.45
+    ]
+  },
+  "comparator_passed": true,
+  "comparator_summary": "Quantity: u_mean_profile | Tolerance: 5.0% | PASS",
+  "deviations": []
+}
