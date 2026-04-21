@@ -1,0 +1,39 @@
+# Phase 5a audit-real-run fixture — AUTO-GENERATED, DO NOT HAND-EDIT.
+# Regenerate via:
+#   EXECUTOR_MODE=foam_agent .venv/bin/python scripts/phase5_audit_run.py circular_cylinder_wake
+# This fixture backs the signed audit package. Byte-identity across
+# re-runs (modulo timestamp + commit_sha) is enforced by
+# test_phase5_byte_repro.py.
+
+run_metadata:
+  run_id: audit_real_run
+  label_zh: 真实 solver 审计运行
+  label_en: Real solver audit run
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit b8069eb）。这是 audit package
+    背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
+    bug；会进入 audit_concerns 随包交付给审查方。
+  category: audit_real_run
+  expected_verdict: PASS
+case_id: circular_cylinder_wake
+source: phase5_audit_run_foam_agent
+measurement:
+  value: 4.93502e-06
+  unit: dimensionless
+  run_id: audit_circular_cylinder_wake_b8069eb
+  commit_sha: b8069eb
+  measured_at: '2026-04-21T03:20:16Z'
+  quantity: U_max_approx
+  extraction_source: key_quantities_fallback
+  solver_success: true
+  comparator_passed: true
+audit_concerns:
+- concern_type: CONTRACT_STATUS
+  summary: 'Quantity: strouhal_number | Tolerance: 5.0% | PASS'
+  detail: 'Quantity: strouhal_number | Tolerance: 5.0% | PASS'
+  decision_refs:
+  - DEC-V61-028
+decisions_trail:
+- decision_id: DEC-V61-028
+  date: '2026-04-21'
+  title: Phase 5a audit pipeline — real-solver fixtures
+  autonomous: true

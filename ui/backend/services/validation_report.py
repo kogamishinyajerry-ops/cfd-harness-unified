@@ -192,10 +192,11 @@ def _run_id_from_path(p: Path) -> str:
 
 _CATEGORY_ORDER: dict[str, int] = {
     "reference": 0,
-    "real_incident": 1,
-    "under_resolved": 2,
-    "wrong_model": 3,
-    "grid_convergence": 4,
+    "audit_real_run": 1,
+    "real_incident": 2,
+    "under_resolved": 3,
+    "wrong_model": 4,
+    "grid_convergence": 5,
 }
 
 

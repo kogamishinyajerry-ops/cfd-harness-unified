@@ -1,0 +1,25 @@
+{
+  "case_id": "backward_facing_step",
+  "measured_at": "2026-04-21T03:19:52Z",
+  "duration_s": 6.677,
+  "solver_success": true,
+  "key_quantities": {
+    "U_residual_magnitude": 0.04415056582423378,
+    "reattachment_detection_upstream_artifact": true,
+    "reattachment_detection_rejected_x": -5.380732049366224
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity 'reattachment_length' not found in execution result (tried aliases: ('Xr_over_H', 'reattachment_x', 'xr_H'); available scalar keys: ['U_residual_magnitude', 'reattachment_detection_upstream_artifact'])",
+  "deviations": [
+    {
+      "quantity": "reattachment_length",
+      "actual": null,
+      "expected": [
+        {
+          "value": 6.26,
+          "unit": "Xr/H"
+        }
+      ]
+    }
+  ]
+}

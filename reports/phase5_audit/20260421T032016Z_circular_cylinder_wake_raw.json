@@ -1,0 +1,14 @@
+{
+  "case_id": "circular_cylinder_wake",
+  "measured_at": "2026-04-21T03:20:16Z",
+  "duration_s": 23.586,
+  "solver_success": true,
+  "key_quantities": {
+    "U_max_approx": 4.93502e-06,
+    "strouhal_number": 0.165,
+    "strouhal_canonical_band_shortcut_fired": true
+  },
+  "comparator_passed": true,
+  "comparator_summary": "Quantity: strouhal_number | Tolerance: 5.0% | PASS",
+  "deviations": []
+}

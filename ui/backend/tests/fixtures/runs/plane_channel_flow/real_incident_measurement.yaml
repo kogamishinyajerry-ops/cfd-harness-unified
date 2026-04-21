@@ -1,18 +1,22 @@
-# Real-incident run for plane_channel_flow. §5d Part-2 reports
-# comparator_passed=true at 5% tolerance, but the quantity returned
-# is `U_max_approx` (a scalar shortcut) whereas the gold expects
-# `u_mean_profile` (a vector). The comparison happens on a fallback
-# scalar extraction, so the PASS is partial.
+# Real-incident run for plane_channel_flow. §5d Part-2 originally
+# reported comparator_passed=true at 5% tolerance, but the quantity
+# returned is `U_max_approx` (scalar shortcut) whereas the gold expects
+# `u_mean_profile` (vector). Post DEC-V61-025 engine fix, the contract
+# engine correctly flags this as a quantity mismatch → FAIL. This is the
+# intended behavior: a scalar fallback cannot validate a profile-shaped
+# gold, and silently PASSing would be a silent-pass hazard.
 run_metadata:
   run_id: real_incident
-  label_zh: 真实运行 · 标量退化比较
-  label_en: Real run (scalar-fallback comparison)
+  label_zh: 真实运行 · 标量退化比较 (FAIL — 引擎正确识别 quantity 不匹配)
+  label_en: Real run (scalar-fallback comparison — correctly FAILs)
   description_zh: >-
     Channel flow 的 gold 是整条 u_mean(y+) 剖面（向量），但 adapter 当前
-    只能输出 U_max 标量。后端降级为标量比较，因此能 PASS，但没有真正
-    验证剖面形状。要真正通过需要 DNS-grade 剖面采样——未来 run。
+    只能输出 U_max 标量。引擎修复后（DEC-V61-025）正确识别这是 quantity
+    不匹配，判 FAIL——这是预期行为：scalar fallback 不能验证 profile-shaped
+    gold，静默 PASS 反而是 silent-pass hazard。要真通过需要 DNS-grade
+    剖面采样，会在 Phase 5b 真值化时补上。
   category: real_incident
-  expected_verdict: PASS
+  expected_verdict: FAIL
 case_id: plane_channel_flow
 source: p2_acceptance_solver_run
 measurement:

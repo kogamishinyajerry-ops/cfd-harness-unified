@@ -1,0 +1,10 @@
+{
+  "case_id": "rayleigh_benard_convection",
+  "measured_at": "2026-04-21T04:12:43Z",
+  "duration_s": 1525.775,
+  "solver_success": false,
+  "key_quantities": {},
+  "comparator_passed": null,
+  "comparator_summary": null,
+  "deviations": []
+}

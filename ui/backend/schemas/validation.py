@@ -24,6 +24,7 @@ RunCategory = Literal[
     "under_resolved",
     "wrong_model",
     "grid_convergence",
+    "audit_real_run",
 ]
 """Run category for multi-run validation demos:
 - reference: a run that SHOULD pass — curated from literature exact solutions
@@ -38,6 +39,12 @@ RunCategory = Literal[
   sweep (run_id convention `mesh_<N>` — e.g. `mesh_20`, `mesh_80`). These
   feed the interactive mesh-density slider; individually they're coarse /
   fine snapshots, collectively they demonstrate asymptotic convergence.
+- audit_real_run: a measurement produced by an actual OpenFOAM solver run
+  via FoamAgentExecutor — not curated, not synthesized. Audit-grade
+  evidence. Distinguished from real_incident: incidents are historical
+  artifacts preserved for decision traceability, audit_real_run are the
+  current-authoritative solver outputs that back the signed audit
+  package. One per case per commit. Phase 5a onward.
 """
 
 

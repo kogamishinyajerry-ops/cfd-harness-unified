@@ -1,0 +1,24 @@
+{
+  "case_id": "duct_flow",
+  "measured_at": "2026-04-21T03:21:20Z",
+  "duration_s": 32.135,
+  "solver_success": true,
+  "key_quantities": {
+    "duct_flow_extractor_pending": true,
+    "duct_flow_hydraulic_diameter": 0.1
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity 'friction_factor' not found in execution result (tried aliases: ('f', 'fDarcy', 'darcy_f', 'darcyFrictionFactor'); available scalar keys: ['duct_flow_extractor_pending', 'duct_flow_hydraulic_diameter'])",
+  "deviations": [
+    {
+      "quantity": "friction_factor",
+      "actual": null,
+      "expected": [
+        {
+          "Re": 50000,
+          "f": 0.0185
+        }
+      ]
+    }
+  ]
+}
