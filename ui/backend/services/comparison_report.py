@@ -576,19 +576,19 @@ def render_report_pdf(case_id: str, run_label: str = "audit_real_run",
     # Codex round 2 MED: run containment FIRST, before WeasyPrint import so we
     # fail-closed on traversal even on systems where WeasyPrint native libs are
     # unavailable.
+    # DEC-V61-034 Codex R2 comment: build context + visual-only guard BEFORE
+    # the output_path branch so caller-supplied output_path callers also hit
+    # the guard (avoids importing weasyprint only to have render_report_html
+    # raise downstream).
+    ctx = build_report_context(case_id, run_label)
+    if ctx.get("visual_only"):
+        raise ReportError(
+            f"case_id={case_id!r} is in Tier C visual-only mode — no PDF "
+            f"report is produced. Use the /renders/{{filename}} route for "
+            f"contour + residuals PNG retrieval."
+        )
     reports_root = (_REPO_ROOT / "reports" / "phase5_reports").resolve()
     if output_path is None:
-        ctx = build_report_context(case_id, run_label)
-        # Codex round 1 CR (DEC-V61-034): visual-only cases have no PDF to
-        # render. Raise BEFORE weasyprint import so environments without
-        # native libs also fail-closed with ReportError → 404 at the route,
-        # not OSError → 503.
-        if ctx.get("visual_only"):
-            raise ReportError(
-                f"case_id={case_id!r} is in Tier C visual-only mode — no PDF "
-                f"report is produced. Use the /renders/{{filename}} route for "
-                f"contour + residuals PNG retrieval."
-            )
         ts = ctx["timestamp"]  # already validated by build_report_context
         out_dir = reports_root / case_id / ts
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -27,14 +27,17 @@ autonomous_governance: true
   comparison_report.{py,route} + LearnCaseDetailPage.tsx.)
 claude_signoff: yes
 codex_tool_invoked: true
-codex_rounds: 1
+codex_rounds: 2
 codex_round_1_verdict: CHANGES_REQUIRED
 codex_round_1_findings:
-  - CRITICAL: visual-only cases 500 on /comparison-report HTML + /comparison-report.pdf + /comparison-report/build endpoints. build_report_context returns visual_only=True with metrics=None / paper=None, but render_report_html() rendered the gold-overlay Jinja template unconditionally, dereferencing metrics.max_dev_pct and paper.title → UndefinedError → 500. Fix (Option A per Codex) applied — raise ReportError in render_report_html and render_report_pdf for visual-only cases (before weasyprint import in PDF path) → routes map to 404. Added 3 tests covering the new 404 behavior. 10/10 visual-only tests pass; 142/142 total.
-codex_round_2_verdict: pending
-codex_verdict: CHANGES_REQUIRED → fix applied, round 2 verification pending
+  - CRITICAL: visual-only cases 500 on /comparison-report HTML + /comparison-report.pdf + /comparison-report/build endpoints. build_report_context returns visual_only=True with metrics=None / paper=None, but render_report_html() rendered the gold-overlay Jinja template unconditionally, dereferencing metrics.max_dev_pct and paper.title → UndefinedError → 500. Fix (Option A per Codex) applied — raise ReportError in render_report_html and render_report_pdf for visual-only cases (before weasyprint import in PDF path) → routes map to 404. Added 3 tests covering the new 404 behavior.
+codex_round_2_verdict: APPROVED_WITH_COMMENTS
+codex_round_2_findings:
+  - NON-BLOCKING: visual-only guard in render_report_pdf was inside the `output_path is None` branch, so caller-supplied output_path callers would skip the guard. Not a route issue (routes always pass None) but a service invariant gap. Tightening applied — ctx + guard hoisted above the branch so both call paths hit the guard.
+codex_verdict: APPROVED_WITH_COMMENTS (after 2 rounds; 1 CR→fix→approved, 1 non-blocking nit→fix→invariant tightened)
 codex_tool_report_path:
   - reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md
+  - reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round2.md
 counter_status: |
   v6.1 autonomous_governance counter 19 → 20.
   (Triggers RETRO-V61-001 retrospective cadence rule #2 "counter ≥ 20 →
@@ -46,7 +49,7 @@ reversibility: fully-reversible-by-pr-revert
   switch; no existing gold-overlay behavior changes. Artifacts under
   reports/phase5_fields/*/ and reports/phase5_renders/*/ remain valid
   evidence regardless of code-level revert.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-034-Phase-7c-Sprint-2-Tier-C-visual-only-fan-out-to-9-non-LDC-cases-349c68942bed81e0a3c4cc37a2242fd1)
 github_pr_url: null (direct-to-main per Phase 7a + 7bc + 7bde precedent)
 github_merge_sha: 4ee3fc2 (infrastructure) + a70796a (batch 1) + 02cd686 (batch 2 + 2D-plane fix)
 github_merge_method: 3 commits direct-to-main
