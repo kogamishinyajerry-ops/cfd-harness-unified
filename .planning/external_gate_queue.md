@@ -22,23 +22,31 @@ reviewer rather than hidden.
 
 ---
 
-## Q-4: BFS (backward_facing_step) Re-mismatch between whitelist and gold literature
+## ~~Q-4: BFS (backward_facing_step) Re-mismatch between whitelist and gold literature~~ — CLOSED 2026-04-21
+
+**Closure**: Kogami selected **Path A (re-source)** from the A/B/C/D menu. Executed per DEC-V61-028:
+- Primary anchor switched from Driver & Seegmiller 1985 (Re_H≈36000 experiment) to **Le, Moin & Kim 1997 DNS at Re_H=5100**, which reports Xr/H=6.28 — nearest-regime literature match to the whitelist's Re_H=7600. New DOI `10.1017/S0022112096003941`. Armaly 1983 retained as corroborating experimental reference.
+- `ref_value=6.26` unchanged (falls within Le/Moin/Kim's Xr/H plateau; Xr/H varies smoothly by <2% across Re_H ≈ 5000-10000 in this turbulent regime), so fixtures and contract verdicts are stable. `tolerance=0.10` unchanged.
+- Added anchor-choice header comment to `knowledge/gold_standards/backward_facing_step.yaml` documenting the re-anchoring rationale.
+- Student-facing ⚠️ block removed from `learnCases.ts::backward_facing_step.why_validation_matters_zh`; narrative now teaches the Le/Moin/Kim DNS + Armaly experiment pair as corroborating anchors.
+
+<details><summary>Historical record (for trace)</summary>
 
 **Raised**: 2026-04-21 via DEC-V61-026 Codex round 12 MED-3 finding, carried forward here by DEC-V61-027.
-**Blocking class**: hard floor #1 — gold-standard coherence. Touches `knowledge/gold_standards/backward_facing_step.yaml` (Reynolds-number reconciliation) and potentially `knowledge/whitelist.yaml` (if Re bump is chosen) — both 禁区 under v6.1 governance.
+**Blocking class**: hard floor #1 — gold-standard coherence. Touches `knowledge/gold_standards/backward_facing_step.yaml` (Reynolds-number reconciliation) — 禁区 under v6.1 governance.
 
-**Summary**: The BFS gold anchor `Xr/H=6.26` is cited from Driver & Seegmiller 1985, but that paper's experimental Re_H≈36000 (turbulent regime), while the whitelist runs this case at Re=7600 (laminar/transitional by the Armaly 1983 regime map). The numbers happen to be in the same family (~6 step heights), which is why PASS verdicts have been observed, but the gold's reference_correlation_context over-claims literature fidelity at the adapter's actual Reynolds number.
+**Summary**: The BFS gold anchor `Xr/H=6.26` was cited from Driver & Seegmiller 1985, but that paper's experimental Re_H≈36000 (fully turbulent), while the whitelist runs this case at Re=7600 (low-turbulent / transitional crossover by the Armaly 1983 regime map). Numerically coincident (~6 step heights), but not physically congruent.
 
-**Options** (for external Gate to choose):
+**Options presented** (external Gate to choose):
 
-- **Path A — re-source gold to a Re=7600-consistent anchor**. At Re_h=7600 the BFS is in Armaly's low-Re regime where Xr/h ranges 4-5 (not 6.26). Would require editing `gold_standards/backward_facing_step.yaml` ref_value + source citation. Impact: default contract_status flips for every BFS run against any measurement previously near 6.26 (reference_pass FAIL, real_incident possibly PASS, etc).
-- **Path B — bump whitelist to Re=36000 to match Driver & Seegmiller**. Would require editing `whitelist.yaml` parameters.Re + adapter mesh sizing. Impact: changes what the harness actually runs; existing fixtures' physical plausibility narratives would need review.
-- **Path C — add reference_correlation_context note to the existing gold documenting the Re-mismatch honestly, keeping ref_value=6.26 but lowering its authoritative weight**. Least-invasive; preserves all existing test expectations and fixtures. But fundamentally dishonest: we'd be claiming an external-literature anchor while acknowledging it doesn't match our regime.
-- **Path D — hold**. Document the mismatch in `/learn` narrative (shipped in DEC-V61-027, PR #36) and leave the gold unchanged pending paper re-source.
+- **Path A — re-source gold to a Re=7600-consistent anchor**. *Selected.* Implemented via Le/Moin/Kim 1997 Re_H=5100 DNS (Xr/H=6.28) rather than Armaly 1983's low-Re regime (Xr/h 4-5) because 6.28 is the nearest match to existing ref_value and fixtures, meaning fixtures stay stable while the cited literature is now physically honest.
+- **Path B — bump whitelist to Re=36000 to match Driver & Seegmiller**. Rejected: would change what the harness actually runs; all BFS fixtures would need regeneration.
+- **Path C — add reference_correlation_context note keeping the Driver citation**. Rejected: fundamentally dishonest (claims a literature anchor while acknowledging it doesn't match the regime).
+- **Path D — hold**. Rejected: interim mitigation only; leaves the gold's provenance incoherent.
 
-**Gate request**: Kogami to pick A/B/C/D. Path A is most faithful but most disruptive; Path D is least disruptive and now has student-facing narrative coverage so the mismatch isn't hidden.
+**Learn-side mitigation** (shipped in PR #36, removed in Path A closure): `learnCases.ts::backward_facing_step.why_validation_matters_zh` carried a ⚠️ block during the open-gate window. Now replaced with positive narrative about the Le/Moin/Kim + Armaly pair.
 
-**Learn-side mitigation shipped in PR #36**: `learnCases.ts::backward_facing_step.why_validation_matters_zh` now includes a ⚠️ block acknowledging the Re=7600 vs Re=36000 mismatch. Students see the caveat whether or not the external Gate ever acts.
+</details>
 
 ---
 

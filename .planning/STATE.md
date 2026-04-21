@@ -965,15 +965,17 @@ external Gate.
   3 findings applied in `7f242f3` — monotonicity regression test +
   |deviation|-monotonicity fixture adjustments + DHC description drift).
 - **API endpoints**: 24 total (+1 new `/api/cases/{id}/export`).
-- **External gate queue**: 1 open (Q-4 BFS Re-mismatch), 0 blocking Phase 0..4.
+- **External gate queue**: **0 open** (Q-4 CLOSED 2026-04-21 via Path A / DEC-V61-028 — BFS gold re-sourced to Le, Moin & Kim 1997 DNS at Re_H=5100, Xr/H=6.28 matches our 6.26 inside tolerance; Armaly 1983 retained as corroborating experiment).
 
 Pending items (unclosed, queued for next session):
 - **A-class Phase 3** (optional): mesh-convergence sweep for remaining 7
-  cases (would need literature-sourced scalar anchors for each), OpenFOAM
-  case-export bundle, BFS gold re-sourcing to Reynolds-consistent anchor.
-- **Notion sync backlog** (8 items, token still expired): DEC-V61-021,
-  V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026, V61-027. User re-auth required at
-  `mcp__claude_ai_Notion` before sync can resume.
+  cases (would need literature-sourced scalar anchors for each) — ✅ LANDED
+  in DEC-V61-027. OpenFOAM case-export bundle — ✅ LANDED in V61-027. BFS
+  gold re-sourcing — ✅ LANDED in DEC-V61-028.
+- **Notion sync backlog** (9 items, MCP still requires Claude Desktop re-auth):
+  DEC-V61-021, V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026,
+  V61-027, **V61-028**. NOTION_TOKEN is fixed in `~/.zshrc`; direct-REST
+  fallback via the `notion-sync-cfd-harness` skill works if MCP stays down.
 - **Engineering-quality residual**: under_resolved/wrong_model values are
   defensibly-in-family but not grid-convergence-backed. Acceptable for
   teaching catalog; NOT for regulatory audit package.
