@@ -271,6 +271,29 @@ def _load_grid_convergence(case_id: str, gold_y: list[float], gold_u: list[float
     return rows, note
 
 
+def _gci_to_template_dict(gci: Any) -> dict:
+    """Flatten a RichardsonGCI dataclass into a JSON-serializable dict for the template."""
+    return {
+        "coarse_label": gci.coarse.label,
+        "coarse_n": gci.coarse.n_cells_1d,
+        "coarse_value": gci.coarse.value,
+        "medium_label": gci.medium.label,
+        "medium_n": gci.medium.n_cells_1d,
+        "medium_value": gci.medium.value,
+        "fine_label": gci.fine.label,
+        "fine_n": gci.fine.n_cells_1d,
+        "fine_value": gci.fine.value,
+        "r_21": gci.r_21,
+        "r_32": gci.r_32,
+        "p_obs": gci.p_obs,
+        "f_extrapolated": gci.f_extrapolated,
+        "gci_21_pct": gci.gci_21 * 100 if gci.gci_21 is not None else None,
+        "gci_32_pct": gci.gci_32 * 100 if gci.gci_32 is not None else None,
+        "asymptotic_range_ok": gci.asymptotic_range_ok,
+        "note": gci.note,
+    }
+
+
 def _get_commit_sha() -> str:
     try:
         r = subprocess.run(
@@ -321,6 +344,16 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
 
     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
+    # Phase 7d: Richardson extrapolation + GCI over the finest 3 meshes.
+    try:
+        from ui.backend.services.grid_convergence import compute_gci_from_fixtures
+        gci = compute_gci_from_fixtures(case_id, fixture_root=_FIXTURE_ROOT)
+    except (ValueError, ImportError, OverflowError, ArithmeticError):
+        # Pathological mesh triples can still raise from deep math — the
+        # grid_convergence module already catches these internally on the
+        # documented branches, but belt-and-suspenders keeps report
+        # generation from 500'ing on a numerical corner we did not predict.
+        gci = None
 
     # Verdict logic: all-pass OR tolerance met.
     is_all_pass = metrics["n_pass"] == metrics["n_total"] and metrics["n_total"] > 0
@@ -396,11 +429,13 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
         "paper": paper,
         "renders": renders,
         "contour_caption": (
-            "Phase 7b MVP — 沿 x=0.5 中心线的 U_x 条带切片，后续 7b-polish 会用 VTK 体数据生成完整 2D contour。"
+            "2D |U| contour + streamlines 由 OpenFOAM VTK 体数据渲染（Phase 7b polish）。"
+            "白色流线显示 LDC Re=100 的主涡结构；黄色高 |U| 区沿 lid 剪切层分布。"
         ),
         "residual_info": residual_info,
         "grid_conv": grid_conv_rows,
         "grid_conv_note": grid_note,
+        "gci": _gci_to_template_dict(gci) if gci is not None else None,
         "meta": {
             "openfoam_version": "v10",
             "solver": "simpleFoam (SIMPLE, laminar)",

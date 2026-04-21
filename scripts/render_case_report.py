@@ -364,39 +364,104 @@ def render_pointwise_deviation_png(
     return out
 
 
+def _find_latest_vtk(artifact_dir: Path) -> Optional[Path]:
+    """Return the highest-iteration VTK volume file (not the allPatches one)."""
+    vtk_root = artifact_dir / "VTK"
+    if not vtk_root.is_dir():
+        return None
+    # Volume VTK files are at VTK/*.vtk (direct children); boundary data is under VTK/allPatches/.
+    candidates = sorted(
+        p for p in vtk_root.glob("*.vtk") if p.is_file()
+    )
+    return candidates[-1] if candidates else None
+
+
 def render_contour_u_magnitude_png(
     case_id: str,
     artifact_dir: Path,
     renders_dir: Path,
 ) -> Path:
-    """LDC MVP contour: uses the sample/{iter}/uCenterline.xy which is a 1D profile
-    along x=0.5 centerline. For a true 2D contour we'd need to parse the full VTK
-    volume, which requires the `vtk` package — deferred to Phase 7b polish.
+    """2D U-magnitude contour + streamlines from the real VTK volume (Phase 7b polish).
 
-    Instead, render a stylized 1D heatmap strip showing U_x(y) along the centerline.
-    This is honestly labeled as "centerline slice" not "full field contour".
+    Phase 7b polish (2026-04-21): parse the actual OpenFOAM volume VTK via PyVista,
+    project onto a 129×129 XY grid (LDC is pseudo-2D, one cell thick in z),
+    compute |U| = sqrt(Ux² + Uy²), render contourf + streamlines via matplotlib.
+
+    Fallback to the old 1D centerline strip if PyVista/VTK parsing fails.
     """
+    out = renders_dir / "contour_u_magnitude.png"
+    vtk_path = _find_latest_vtk(artifact_dir)
+    if vtk_path is not None:
+        try:
+            import pyvista as pv
+            pv.OFF_SCREEN = True
+            mesh = pv.read(str(vtk_path))
+            # Cell-centered U vector and cell centroid coords.
+            cd = mesh.cell_data
+            if "U" not in cd or "Cx" not in cd or "Cy" not in cd:
+                raise RenderError(f"VTK missing U/Cx/Cy: {vtk_path}")
+            U = np.asarray(cd["U"])
+            Cx = np.asarray(cd["Cx"])
+            Cy = np.asarray(cd["Cy"])
+            n = U.shape[0]
+            # LDC: 129×129 uniform → infer grid dim from n.
+            side = int(round(n ** 0.5))
+            if side * side != n:
+                raise RenderError(f"VTK cell count {n} not square grid")
+            # Sort by (y, x) to pack into (side, side) array.
+            order = np.lexsort((Cx, Cy))
+            Ux = U[order, 0].reshape(side, side)
+            Uy = U[order, 1].reshape(side, side)
+            x = Cx[order].reshape(side, side)
+            y = Cy[order].reshape(side, side)
+            mag = np.sqrt(Ux ** 2 + Uy ** 2)
+            # Normalize coords to y/L domain.
+            lid = max(float(y.max()), 1e-12)
+            xn = x / lid
+            yn = y / lid
+
+            # streamplot needs 1D evenly-spaced vectors. OpenFOAM VTK cell
+            # centers have tiny float-precision jitter; rebuild from bounds.
+            x_min, x_max = float(xn.min()), float(xn.max())
+            y_min, y_max = float(yn.min()), float(yn.max())
+            x1d = np.linspace(x_min, x_max, side)
+            y1d = np.linspace(y_min, y_max, side)
+            fig, ax = plt.subplots(figsize=(6.5, 6))
+            cf = ax.contourf(x1d, y1d, mag, levels=20, cmap="viridis")
+            ax.streamplot(x1d, y1d, Ux, Uy, density=1.1, color="white",
+                          linewidth=0.6, arrowsize=0.8)
+            ax.set_aspect("equal")
+            ax.set_xlabel("x / L")
+            ax.set_ylabel("y / L")
+            ax.set_title(
+                f"{case_id} — |U| contour + streamlines (Phase 7b polish)\n"
+                f"129×129 mesh, simpleFoam steady, Re=100"
+            )
+            cbar = fig.colorbar(cf, ax=ax, fraction=0.045, pad=0.04)
+            cbar.set_label("|U| / U_lid")
+            fig.savefig(out)
+            plt.close(fig)
+            return out
+        except Exception as e:  # noqa: BLE001 — fall back to MVP strip
+            print(f"[render] [WARN] VTK parse failed ({e}); falling back to centerline strip",
+                  file=sys.stderr)
+
+    # Fallback — Phase 7b MVP behavior (1D strip) if VTK parse fails.
     latest = _latest_sample_iter(artifact_dir)
     y_sim, u_sim = _load_sample_xy(latest / "uCenterline.xy")
     y_norm = y_sim / max(y_sim.max(), 1e-12)
-
     fig, ax = plt.subplots(figsize=(4, 6))
-    # Tile the 1D profile horizontally to make a strip heatmap visible.
     strip = np.tile(u_sim.reshape(-1, 1), (1, 20))
     im = ax.imshow(
-        strip,
-        aspect="auto",
-        origin="lower",
+        strip, aspect="auto", origin="lower",
         extent=[0, 1, float(y_norm.min()), float(y_norm.max())],
-        cmap="RdBu_r",
-        vmin=-1.0, vmax=1.0,
+        cmap="RdBu_r", vmin=-1.0, vmax=1.0,
     )
     ax.set_xlabel("(tile axis)")
     ax.set_ylabel("y / L")
-    ax.set_title(f"{case_id} — U_x centerline slice\n(Phase 7b MVP — full 2D VTK contour\ndeferred to 7b-polish)")
+    ax.set_title(f"{case_id} — U_x centerline slice (VTK parse failed, MVP fallback)")
     cbar = fig.colorbar(im, ax=ax, fraction=0.08, pad=0.04)
     cbar.set_label("U_x / U_lid")
-    out = renders_dir / "contour_u_magnitude.png"
     fig.savefig(out)
     plt.close(fig)
     return out

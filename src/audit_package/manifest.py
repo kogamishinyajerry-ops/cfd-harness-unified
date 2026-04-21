@@ -33,6 +33,7 @@ Non-goals for PR-5a:
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -301,6 +302,146 @@ def _extract_first_heading(text: str) -> Optional[str]:
 # Public builder
 # ---------------------------------------------------------------------------
 
+# --- Phase 7e (DEC-V61-033, L4): embed Phase 7 artifacts into signed zip ---
+
+# Deterministic YYYYMMDDTHHMMSSZ shape for run timestamps (mirrors 7a/7b/7c gates).
+import re as _re
+_PHASE7_TIMESTAMP_RE = _re.compile(r"^\d{8}T\d{6}Z$")
+
+
+def _sha256_of_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _collect_phase7_artifacts(
+    case_id: str, run_id: str, repo_root: Path
+) -> Optional[Dict[str, Any]]:
+    """Collect Phase 7a/7b/7c artifacts for (case, run) into a manifest section.
+
+    Returns dict with ``entries`` = sorted list of {zip_path, disk_path, sha256,
+    size_bytes} dicts + ``schema_level: "L4"``. Returns None when no Phase 7
+    artifacts exist for this run.
+
+    Byte-reproducibility preserved:
+    - Disk paths derive from deterministic timestamp folders.
+    - SHA256 of each file is stable.
+    - Entry list is sorted by ``zip_path``.
+    - Manifest embeds hashes, not bytes — serialize.py then reads the files.
+
+    Security: timestamp values read from Phase 7a/7b manifests are validated
+    against _PHASE7_TIMESTAMP_RE (defense-in-depth against manifest tampering,
+    mirrors Phase 7a `_TIMESTAMP_RE` + Phase 7c `_resolve_artifact_dir`).
+    """
+    import json as _json
+    fields_root = repo_root / "reports" / "phase5_fields" / case_id
+    renders_root = repo_root / "reports" / "phase5_renders" / case_id
+    reports_root = repo_root / "reports" / "phase5_reports" / case_id
+
+    entries: List[Dict[str, Any]] = []
+
+    def _add(path: Path, zip_path: str) -> None:
+        """Add a file to entries list if it exists, validates under a sanctioned root."""
+        if not path.is_file():
+            return
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, FileNotFoundError):
+            return
+        # Every zip entry must resolve under one of the three Phase 7 roots.
+        ok = False
+        for root in (fields_root, renders_root, reports_root):
+            try:
+                resolved.relative_to(root.resolve())
+                ok = True
+                break
+            except (ValueError, OSError):
+                continue
+        if not ok:
+            return
+        entries.append({
+            "zip_path": zip_path,
+            "disk_path_rel": str(path.relative_to(repo_root)),
+            "sha256": _sha256_of_file(path),
+            "size_bytes": path.stat().st_size,
+        })
+
+    # Phase 7a — field artifacts (VTK + sample + residuals).
+    f_manifest = fields_root / "runs" / f"{run_id}.json"
+    if f_manifest.is_file():
+        try:
+            f_data = _json.loads(f_manifest.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            f_data = None
+        if isinstance(f_data, dict):
+            ts = f_data.get("timestamp")
+            if isinstance(ts, str) and _PHASE7_TIMESTAMP_RE.match(ts):
+                case_ts_dir = fields_root / ts
+                if case_ts_dir.is_dir():
+                    for p in sorted(case_ts_dir.rglob("*")):
+                        if not p.is_file():
+                            continue
+                        try:
+                            rel = p.resolve().relative_to(case_ts_dir.resolve()).as_posix()
+                        except (ValueError, OSError):
+                            continue
+                        # Skip huge non-essential files to keep zip sane.
+                        if p.suffix.lower() == ".vtk" and p.stat().st_size > 50 * 1024 * 1024:
+                            continue
+                        _add(p, f"phase7/field_artifacts/{rel}")
+
+    # Phase 7b — renders.
+    r_manifest = renders_root / "runs" / f"{run_id}.json"
+    if r_manifest.is_file():
+        try:
+            r_data = _json.loads(r_manifest.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            r_data = None
+        if isinstance(r_data, dict):
+            ts = r_data.get("timestamp")
+            if isinstance(ts, str) and _PHASE7_TIMESTAMP_RE.match(ts):
+                r_ts_dir = renders_root / ts
+                if r_ts_dir.is_dir():
+                    for p in sorted(r_ts_dir.rglob("*")):
+                        if not p.is_file():
+                            continue
+                        try:
+                            rel = p.resolve().relative_to(r_ts_dir.resolve()).as_posix()
+                        except (ValueError, OSError):
+                            continue
+                        _add(p, f"phase7/renders/{rel}")
+
+    # Phase 7c — HTML + PDF comparison report. Report dir is keyed by the
+    # same timestamp (7c service writes under reports/phase5_reports/{case}/{ts}/).
+    # Pull the timestamp from the 7a manifest (authoritative).
+    if f_manifest.is_file():
+        try:
+            f_data = _json.loads(f_manifest.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            f_data = None
+        if isinstance(f_data, dict):
+            ts = f_data.get("timestamp")
+            if isinstance(ts, str) and _PHASE7_TIMESTAMP_RE.match(ts):
+                pdf = reports_root / ts / f"{run_id}_comparison_report.pdf"
+                if pdf.is_file():
+                    _add(pdf, "phase7/comparison_report.pdf")
+
+    if not entries:
+        return None
+
+    entries.sort(key=lambda d: d["zip_path"])
+    return {
+        "schema_level": "L4",
+        "canonical_spec": "docs/specs/audit_package_canonical_L4.md",
+        "entries": entries,
+        "total_files": len(entries),
+        "total_bytes": sum(e["size_bytes"] for e in entries),
+    }
+
+
 def build_manifest(
     *,
     case_id: str,
@@ -313,6 +454,7 @@ def build_manifest(
     audit_concerns: Optional[Sequence[Dict[str, Any]]] = None,
     build_fingerprint: Optional[str] = None,
     solver_name: Optional[str] = None,
+    include_phase7: bool = True,
 ) -> Dict[str, Any]:
     """Assemble the audit-package manifest for a single case + run.
 
@@ -428,4 +570,11 @@ def build_manifest(
         "measurement": measurement_section,
         "decision_trail": decision_trail,
     }
+    # Phase 7e (DEC-V61-033): L4 schema — embed Phase 7 artifacts (field
+    # captures, renders, comparison report PDF) into the signed zip.
+    # Only attached when include_phase7=True AND artifacts exist for this run.
+    if include_phase7:
+        phase7 = _collect_phase7_artifacts(case_id, run_id, repo_root)
+        if phase7 is not None:
+            manifest["phase7"] = phase7
     return manifest

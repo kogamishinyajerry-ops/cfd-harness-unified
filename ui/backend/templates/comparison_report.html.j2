@@ -137,8 +137,51 @@
   </tbody>
 </table>
 <p style="color:#6b7280; font-size:0.88em; margin-top:0.5em;">
-  单调收敛: {{ grid_conv_note }} · Richardson p_obs (观察阶数) 延后到 Phase 7d。
+  单调收敛: {{ grid_conv_note }}
 </p>
+
+{% if gci %}
+<h3 style="font-size:1.05em; margin-top:1.2em; color:#374151;">Richardson extrapolation + GCI (Celik 2008, Roache 1994)</h3>
+<table>
+  <tbody>
+    <tr><th>3-grid input</th><td class="mono">
+      {{ gci.coarse_label }} (N={{ gci.coarse_n }}) = {{ '%.4f'|format(gci.coarse_value) }},
+      {{ gci.medium_label }} (N={{ gci.medium_n }}) = {{ '%.4f'|format(gci.medium_value) }},
+      {{ gci.fine_label }} (N={{ gci.fine_n }}) = {{ '%.4f'|format(gci.fine_value) }}
+    </td></tr>
+    <tr><th>Refinement ratios</th><td class="mono">r₂₁ = {{ '%.3f'|format(gci.r_21) }}, r₃₂ = {{ '%.3f'|format(gci.r_32) }}</td></tr>
+    <tr><th>Observed order p_obs</th><td class="mono">
+      {% if gci.p_obs is not none %}{{ '%.4f'|format(gci.p_obs) }}{% else %}undefined ({{ gci.note }}){% endif %}
+    </td></tr>
+    <tr><th>Richardson f_h→0</th><td class="mono">
+      {% if gci.f_extrapolated is not none %}{{ '%.6f'|format(gci.f_extrapolated) }}{% else %}n/a{% endif %}
+    </td></tr>
+    <tr><th>GCI₂₁ (coarse→medium)</th><td class="mono">
+      {% if gci.gci_21_pct is not none %}{{ '%.3f'|format(gci.gci_21_pct) }}%{% else %}n/a{% endif %}
+    </td></tr>
+    <tr><th>GCI₃₂ (medium→fine)</th><td class="mono">
+      {% if gci.gci_32_pct is not none %}<strong>{{ '%.3f'|format(gci.gci_32_pct) }}%</strong>{% else %}n/a{% endif %}
+      <span style="color:#6b7280; margin-left:0.5em; font-size:0.85em;">
+        ← 最细网格解的数值不确定度带
+      </span>
+    </td></tr>
+    <tr><th>Asymptotic range</th><td>
+      {% if gci.asymptotic_range_ok %}
+        <span style="color:#059669; font-weight:600;">✓ within asymptotic range</span>
+      {% elif gci.asymptotic_range_ok is false %}
+        <span style="color:#d97706;">⚠ not yet asymptotic — {{ gci.note }}</span>
+      {% else %}
+        <span style="color:#9ca3af;">n/a</span>
+      {% endif %}
+    </td></tr>
+  </tbody>
+</table>
+<p style="color:#6b7280; font-size:0.82em; margin-top:0.4em; font-style:italic;">
+  Fs=1.25 (3-grid safety factor). Reference: Celik et al. 2008 "Procedure for
+  Estimation and Reporting of Uncertainty Due to Discretization in CFD Applications",
+  J. Fluids Eng. 130(7), ASME V&V 20 standard.
+</p>
+{% endif %}
 {% else %}
 <p style="color:#9ca3af; font-style:italic;">网格收敛数据暂未加载。</p>
 {% endif %}

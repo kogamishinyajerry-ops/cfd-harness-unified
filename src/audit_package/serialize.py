@@ -91,7 +91,21 @@ def _fixed_zipinfo(name: str, *, is_dir: bool = False) -> zipfile.ZipInfo:
     return info
 
 
-def _zip_entries_from_manifest(manifest: Dict[str, Any]) -> Dict[str, bytes]:
+def _default_repo_root() -> Path:
+    """Resolve the real repo root from this file's location.
+
+    Used when the caller does not pass ``repo_root`` explicitly — matches
+    the default ``_REPO_ROOT`` computed in ``src.audit_package.manifest``
+    so the two modules agree on the filesystem prefix for ``phase7``
+    artifact paths.
+    """
+    return Path(__file__).resolve().parents[2]
+
+
+def _zip_entries_from_manifest(
+    manifest: Dict[str, Any],
+    repo_root: Optional[Path] = None,
+) -> Dict[str, bytes]:
     """Lay out the zip entries as ``{path: bytes}`` before writing.
 
     Layout:
@@ -102,9 +116,16 @@ def _zip_entries_from_manifest(manifest: Dict[str, Any]) -> Dict[str, bytes]:
     - ``run/inputs/<path>`` — each verbatim solver input file.
     - ``run/outputs/solver_log_tail.txt`` — solver log tail (if present).
     - ``decisions/DEC-*.txt`` — one-line pointer per decision-trail entry.
+    - ``phase7/*`` — on-disk Phase 7 artifacts declared by
+      ``manifest["phase7"]["entries"]``. Paths are resolved relative to
+      ``repo_root`` (callers must pass the same ``repo_root`` that
+      ``build_manifest`` used, else phase7 entries will be silently
+      dropped because the containment check will fail).
 
     All paths are POSIX-style; no leading slash; no Windows separators.
     """
+    if repo_root is None:
+        repo_root = _default_repo_root()
     entries: Dict[str, bytes] = {}
 
     entries["manifest.json"] = _canonical_json(manifest)
@@ -138,16 +159,56 @@ def _zip_entries_from_manifest(manifest: Dict[str, Any]) -> Dict[str, bytes]:
         body = f"decision_id: {did}\ntitle: {title}\nrelative_path: {path}\n"
         entries[f"decisions/{did}.txt"] = body.encode("utf-8")
 
+    # Phase 7e (DEC-V61-033, L4): embed Phase 7 artifacts if manifest carries
+    # the phase7 section. Each entry's file is read verbatim and SHA256 has
+    # already been pre-computed by the manifest builder — zip is byte-stable
+    # as long as the source files on disk are byte-stable (they are: fixed
+    # OpenFOAM output, deterministic renders, deterministic PDF per input).
+    phase7 = manifest.get("phase7")
+    if isinstance(phase7, dict):
+        repo_root_resolved = repo_root.resolve()
+        phase7_entries = phase7.get("entries") or []
+        for entry in phase7_entries:
+            if not isinstance(entry, dict):
+                continue
+            zip_path = entry.get("zip_path")
+            disk_rel = entry.get("disk_path_rel")
+            if not isinstance(zip_path, str) or not isinstance(disk_rel, str):
+                continue
+            disk_path = repo_root / disk_rel
+            if not disk_path.is_file():
+                continue
+            try:
+                # Defense-in-depth: ensure resolved path stays under repo root.
+                resolved = disk_path.resolve(strict=True)
+                resolved.relative_to(repo_root_resolved)
+            except (ValueError, OSError, FileNotFoundError):
+                continue
+            try:
+                entries[zip_path] = resolved.read_bytes()
+            except OSError:
+                continue
+
     return entries
 
 
-def serialize_zip_bytes(manifest: Dict[str, Any]) -> bytes:
+def serialize_zip_bytes(
+    manifest: Dict[str, Any],
+    repo_root: Optional[Path] = None,
+) -> bytes:
     """Build the audit-package zip as bytes, byte-identical across calls.
 
-    The function is pure: same input → same bytes. This is the property
-    PR-5c's HMAC signature depends on.
+    The function is pure: same (manifest, repo_root) → same bytes. This
+    is the property PR-5c's HMAC signature depends on.
+
+    ``repo_root`` must match the value passed to
+    :func:`src.audit_package.manifest.build_manifest` when the manifest's
+    ``phase7`` section was populated — the two modules agree on where
+    ``disk_path_rel`` entries resolve. When ``None``, both sides default
+    to the real repo root derived from ``__file__`` location, which is
+    the production configuration.
     """
-    entries = _zip_entries_from_manifest(manifest)
+    entries = _zip_entries_from_manifest(manifest, repo_root=repo_root)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", allowZip64=False) as zf:
         for path in sorted(entries.keys()):
@@ -156,10 +217,14 @@ def serialize_zip_bytes(manifest: Dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
-def serialize_zip(manifest: Dict[str, Any], output_path: Path) -> None:
+def serialize_zip(
+    manifest: Dict[str, Any],
+    output_path: Path,
+    repo_root: Optional[Path] = None,
+) -> None:
     """Write the byte-reproducible zip to ``output_path`` (overwrites)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(serialize_zip_bytes(manifest))
+    output_path.write_bytes(serialize_zip_bytes(manifest, repo_root=repo_root))
 
 
 # ---------------------------------------------------------------------------
