@@ -876,11 +876,59 @@ or `wrong_model`) — intentional pedagogical framing.
 
 **Session main HEAD at close**: `0fba4be` (PR #34 merge).
 
+## 2026-04-21 Late Night — Option A Phase 2 (same session continued)
+
+User directive: *"do 1 + 3 together"* — interactive mesh-density slider + Pro
+Workbench tab wiring. Landed as PR #35 (`5d54d48`).
+
+**New feature**: 5th tab `Mesh` on LearnCaseDetailPage. Student drags across
+4 mesh densities (mesh_20 / mesh_40 / mesh_80 / mesh_160) and sees the
+measurement / deviation / verdict / tolerance-band position animate live.
+Backed by `useQueries` parallel fetch + SVG `ConvergenceSparkline`.
+
+**New runs**: 12 fixtures (3 cases × 4 densities) under new `grid_convergence`
+RunCategory. Literature-backed sweeps:
+- LDC u_centerline @ y=0.0625: Ghia 1982 gold, values {-0.048→-0.0375}
+- TFP Cf @ x=0.5: Blasius gold, values {0.0065→0.00423}
+- BFS Xr/H: repo gold 6.26, values {4.8→6.25}
+
+**Pro Workbench link**: top-right on every case detail page → `/cases/:id/report`.
+
+**DEC filed (1)**: DEC-V61-026 (`.planning/decisions/2026-04-21_phase6_td026_learn_mesh_slider.md`).
+
+**Codex round run (1)**: Round 12 (PR #35 pre-merge) CHANGES_REQUIRED with
+3 MEDIUM + 1 LOW findings, all fixed in commit `32a2893`:
+1. `list_runs()` filename-lex order → mesh_160 sorted before reference_pass.
+   Fix: explicit pedagogical category order + numeric-aware mesh_N secondary.
+2. TFP fixtures claimed "5% 容差" but gold is ±10%. Fix: copy updated.
+3. BFS narrative over-claimed Driver 1985 convergence despite whitelist
+   Re=7600 ≠ Driver Re_H≈36000. Fix: relabel as "repo gold" with explicit
+   Reynolds-mismatch note.
+4. NaN handling in ConvergenceSparkline + formatNumber. Fix: `Number.isFinite`
+   guards.
+
+**Counter (v6.1 pure telemetry)**: 13 → 14.
+
+**禁区 compliance**: no writes to `src/**`, repo-root `tests/**`,
+`knowledge/gold_standards/**`, `knowledge/whitelist.yaml`. All work in
+`ui/backend/`, `ui/frontend/`, `.planning/decisions/`.
+
+**Session main HEAD at close**: `5d54d48` (PR #35 merge) + STATE update.
+
+## End-of-session state (S-006)
+
+- **Demo depth**: 10 cases · 43 runs · 10 flow-field PNGs · 3 interactive
+  mesh-convergence demos · Pro Workbench one-click-away on every case.
+- **Default distribution**: 8 PASS · 2 HAZARD · 0 FAIL.
+- **v6.1 counter**: 14 (well below 20 arc-retro threshold).
+- **Codex rounds this session**: 10, 11, 12 — all CHANGES_REQUIRED → RESOLVED.
+
 Pending items (unclosed, queued for next session):
-- **A-class Phase 2** (optional): interactive mesh-density demo, OpenFOAM
-  case-export bundle, Advanced-tab Pro Workbench wiring.
-- **Notion sync backlog** (6 items, token still expired): DEC-V61-021,
-  V61-022, V61-023, RETRO-V61-002, V61-024, V61-025. User re-auth required at
+- **A-class Phase 3** (optional): mesh-convergence sweep for remaining 7
+  cases (would need literature-sourced scalar anchors for each), OpenFOAM
+  case-export bundle, BFS gold re-sourcing to Reynolds-consistent anchor.
+- **Notion sync backlog** (7 items, token still expired): DEC-V61-021,
+  V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026. User re-auth required at
   `mcp__claude_ai_Notion` before sync can resume.
 - **Engineering-quality residual**: under_resolved/wrong_model values are
   defensibly-in-family but not grid-convergence-backed. Acceptable for
