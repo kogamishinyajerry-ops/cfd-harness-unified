@@ -517,10 +517,10 @@ class FoamAgentExecutor:
                 self._generate_impinging_jet(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
-                # lid_driven_cavity 用专用 laminar generator (icoFoam)
+                # lid_driven_cavity 用专用 laminar generator (simpleFoam, Phase 5b migration)
                 if "lid" in task_spec.name.lower() or task_spec.Re is not None and task_spec.Re < 2300:
                     self._generate_lid_driven_cavity(case_host_dir, task_spec)
-                    solver_name = "icoFoam"
+                    solver_name = "simpleFoam"
                 else:
                     solver_name = "simpleFoam"
                     turbulence_model = self._turbulence_model_for_solver(
@@ -529,7 +529,7 @@ class FoamAgentExecutor:
                     self._generate_steady_internal_flow(case_host_dir, task_spec, turbulence_model)
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
-                solver_name = "icoFoam"
+                solver_name = "simpleFoam"
 
             # 5. 执行 blockMesh
             blockmesh_ok, blockmesh_log = self._docker_exec(
