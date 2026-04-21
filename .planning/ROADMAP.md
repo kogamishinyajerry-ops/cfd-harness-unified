@@ -45,7 +45,7 @@
   - pytest coverage: new fixture asserts VTK + CSV + residual.log presence for LDC
 - Constraints: Codex mandatory (三禁区 #1 + adapter >5 LOC). Must not regress 79/79 pytest.
 - **Plans:** 3 plans
-  - [ ] 07a-01-PLAN.md — Adapter + driver edits (controlDict functions{} + _capture_field_artifacts + driver timestamp + manifest)
+  - [x] 07a-01-PLAN.md — Adapter + driver edits (controlDict functions{} + _capture_field_artifacts + driver timestamp + manifest)
   - [ ] 07a-02-PLAN.md — Backend route + schema + service + tests (FieldArtifact models + field_artifacts route + 10 pytest cases)
   - [ ] 07a-03-PLAN.md — Integration + Codex review + DEC-V61-031 + atomic commit
 

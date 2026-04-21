@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.6.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-04-21T08:09:47.414Z"
+progress:
+  total_phases: 7
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 1
+  percent: 33
+---
+
 driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
 tier: T3-Orchestrator
 last_updated: "2026-04-21T08:30"
@@ -24,16 +38,19 @@ Phase 6 Notion: TBD
 Phase 3 Notion: `341c6894-2bed-81b8-baa2-eccd49f4993a`
 
 Opus Gate: ⚠️ APPROVED WITH CONDITIONS (2026-04-13) — CFDJerry (T0 proxy)
+
 - Blocking Conditions: C1+C2 DONE
 - Non-blocking (Phase 4 scope): C3 (归因链 P0), C4 (3 Docker E2E), C5 (DB cleanup)
 
 Success Criteria:
+
 1. task_runner E2E 闭环验证 (10 cases 全量执行) — ✅ DONE
 2. CorrectionSpec 自动生成率 >80% — ⚠️ 70% Mock / >80% expected Docker
 3. 知识库自我进化验证 — ✅ DONE (versioning confirmed)
 4. 误差自动归因链验证 — ⏳ Deferred to Phase 4 P1
 
 Phase 3 Tasks:
+
 - [P0] 全量E2E闭环验证 — ✅ Done (10/10 executed, 3/10 passed)
 - [P0] CorrectionSpec 进化机制 — ✅ Done (versioning confirmed, LDC 3 versions)
 - [P1] 误差自动归因链 — ⏳ Ready (deferred to Phase 4)
@@ -54,15 +71,18 @@ Phase 3 E2E Results (MockExecutor):
 **TOTAL** | **10/10** | **3/10** | **7** |
 
 CorrectionSpec 70% Root Cause (Session S-002c):
+
 - 6/7: key_mismatch (flow_type preset vs case-specific quantity)
 - 1/7: value_deviation (LDC preset vs Ghia 1982 reference)
 
 Phase 4 Conditions (from Gate):
+
 - C3: 误差自动归因链 → Phase 4 P0 (no deferral)
 - C4: 3 Docker E2E (LDC/BFS/NC Cavity)
 - C5: Phases DB cleanup (Phase 3 Gate archived ✅)
 
 Phase 4 Conditions (from Gate):
+
 - C3: 误差自动归因链 ✅ DONE (AttributionReport + ErrorAttributor)
 - C4: 3 Docker E2E ✅ DONE (T2-D implemented: sampleDict + postProcessing解析)
 - C5: Phases DB cleanup ✅ DONE
@@ -72,6 +92,7 @@ Phase 4 Conditions (from Gate):
 Phase 4 Objective: 误差自动归因链 + 真实 Docker E2E 验证
 
 Phase 4 Tasks (Gate Conditions):
+
 - [P0] 误差自动归因链 — ✅ DONE (AttributionReport dataclass + ErrorAttributor engine)
 - [P0] 3 Docker E2E (LDC/BFS/NC Cavity) — ✅ DONE
   - LDC: postProcess writeObjects+writeCellCentres 提取 uCenterline → u_centerline 映射
@@ -97,6 +118,7 @@ Phase 4 B1 Evidence Chain (LDC Re=100 Docker):
 | AttributionReport | ✅ | chain_complete=True, primary=mesh, conf=50% |
 
 Phase 4 B1 Root Cause (BFS/NC Cavity 同理):
+
 - 20×20 mesh 太粗：Re=100 需要更密网格捕捉 secondary vortex
 - 修正: nu bug → Re=100 物理量提取正确, u_max≈0.61 合理 (应为 1.0)
 - 剩余误差: mesh 分辨率不足 (AttributionReport 建议 ncx/ncy 加倍)
@@ -106,6 +128,7 @@ Phase 4 B1 Root Cause (BFS/NC Cavity 同理):
 Opus Gate: ✅ APPROVED (2026-04-13) — 5/5 criteria, 10/10 tasks, 103 tests
 
 Success Criteria:
+
 1. ✅ 10+ 成功案例配置模板入库 (10 cases in whitelist.yaml)
 2. ✅ 知识库覆盖 3+ geometry 类型 (6 geometry types)
 3. ✅ 每条含完整 geometry→turbulence→BC→mesh→result 链路 (10 chains enriched with solver/turbulence_model)
@@ -113,12 +136,14 @@ Success Criteria:
 5. ✅ CorrectionSpec 自动生成 E2E 验证 (Done)
 
 Phase 2 Tasks:
+
 - Backward-Facing Step (Grid Refinement Study) [P1] ✅ Done
 - NACA 0012 Airfoil External Flow [P1] ✅ Done
 - Verify CorrectionSpec Auto-Generation [P1] ✅ Done
 - Natural Convection Cavity (Dhir 2001) [P2] ✅ Done
 
 Phase 2 完成项:
+
 - FoamAgentExecutor BFS support ✅ — single-block rectangular channel, ncx/ncy parameterizable
 - FoamAgentExecutor NATURAL_CONVECTION_CAVITY ✅ — buoyantSimpleFoam, 3.97s execution
 - Knowledge Query API ✅ — query_cases, get_execution_chain, list_turbulence_models, list_solver_for_geometry
@@ -127,14 +152,17 @@ Phase 2 完成项:
 - FoamAgentExecutor ncx/ncy 参数化 ✅ — 网格无关性研究可用
 
 Phase 2 剩余工作:
+
 - T2-D: Add OpenFOAM sample utility for u_centerline / Xr extraction — ✅ DONE (Phase 4 T2-D, postProcess替代方案)
 
 # Phase 1 — COMPLETE
 
 Opus Gate: ✅ APPROVED (2026-04-13)
+
 - E2E 闭环: Lid-Driven Cavity + Circular Cylinder Wake ✅
 - CorrectionSpec 自动生成: ✅ 已测试
 - D-001: Deferred to Phase 2+ (internal token sufficient)
+
 # Code Health
 
 tests_passing: 121
@@ -165,6 +193,7 @@ S-002: Phase 2 启动 — Full Benchmark Suite
 # Next Action
 
 Phase 6 COMPLETE (2026-04-16T20:53):
+
 - ✅ turbulent_flat_plate: Docker E2E PASS, cf_skin_friction=0.0027, Gold Std PASS
 - ✅ plane_channel_flow: Docker E2E PASS, u_mean_profile, Gold Std PASS
 - ✅ rayleigh_benard_convection: FIXED + Docker E2E PASS, nusselt_number=10.5
@@ -174,6 +203,7 @@ Phase 6 COMPLETE (2026-04-16T20:53):
 - ⏳ Phase 8 AutoVerifier: SPEC.md ✅, 等待 Opus 4.6 Gate 架构审查
 
 Phase 4 B1 完成 (2026-04-13):
+
 - ✅ nu bug fixed: nu=0.1/Re (was 0.01 hardcoded)
 - ✅ y-aware interpolation in ResultComparator
 - ✅ LDC Docker E2E 完整证据链: 7.8s exec → u_centerline[17pts] → ComparisonResult → AttributionReport
@@ -183,6 +213,7 @@ Phase 4 B1 完成 (2026-04-13):
 Phase 4 C4: BFS + NC Cavity Docker E2E 待验证
 
 Phase 4 C4 Verification (S-002c 续):
+
 - NC Cavity: ✅ Docker E2E SUCCESS (buoyantFoam + Boussinesq, 11s, success=True)
   - 根因: perfectGas/hConst 热力学配置与 buoyantFoam 不兼容
   - 修复: → Boussinesq approximation (equationOfState Boussinesq, rho0=1.177, beta=3e-3)
@@ -203,11 +234,13 @@ Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
 Phase 5 Objective: 多案例交叉验证 + 知识体系加固
 
 Phase 5 Tasks:
+
 - [T1] 多案例批量E2E验证 — ✅ Done (目标>80%通过率: 9/9 pipeline pass, 4/9 Gold Standard Mock)
 - [T2] Gold Standard覆盖率提升 — ✅ Done (8/10 YAML → 10/10 YAML 建设中)
 - [T3] 误差模式自动归类 — ✅ Done (2026-04-15)
 
 Phase 5 T3 Implementation (2026-04-15):
+
 - src/error_attributor.py: 5 new ErrorTypes wired into error_type_scores + structured deviation matcher
   - COMPARATOR_SCHEMA_MISMATCH (actual=None) → 0.8 confidence
   - GEOMETRY_MODEL_MISMATCH (reattachment_length on BFS/SIMPLE_GRID) → 0.75
@@ -220,6 +253,7 @@ Phase 5 T3 Implementation (2026-04-15):
 - 120 tests passing (was 104)
 
 Phase 5 Gaps:
+
 - Gold Standard 数值通过率 44% (仅 Mock 模式)
 - Docker 真实执行尚未全量覆盖
 - 2 个新 Gold Standard YAML 待写入 (naca0012_airfoil, fully_developed_pipe)
@@ -230,6 +264,7 @@ Phase 6 Objective: Docker 真实执行全量覆盖 + Gold Standard 数值验证
 Phase 6 Notion: TBD
 
 Phase 6 Tasks:
+
 - [T1] 5 case Docker E2E — 4/5 ✅ DONE (2026-04-16)
   - ✅ turbulent_flat_plate: Docker E2E PASS, cf_skin_friction=0.0027, Gold Std PASS (tolerance 10%)
   - ✅ plane_channel_flow: Docker E2E PASS, u_mean_profile extracted, Gold Std PASS (tolerance 5%)
@@ -259,9 +294,11 @@ Phase 6 Docker E2E Results (2026-04-16):
 Phase 6 COMPLETE: 5/5 cases done ✅ (2026-04-16)
 
 Phase 6 T1 Additional Result:
+
 - ✅ impinging_jet: Docker E2E PASS, nusselt_number=0.0042, 156.9s
 
 Model Routing v1.3 (2026-04-15):
+
 - GLM-5.1 移除分工表
 - Codex 比例提升至 40% (60%审查 + 40%并行开发)
 - 详见: .claude/MODEL_ROUTING.md
@@ -273,6 +310,7 @@ Phase 8 Notion: `df0228eb22774e3ca32b98e022165277`
 Gate mode: self-Gate under Model Routing v5.1 (external Gate loop retired 2026-04-18)
 
 Phase 8 Tasks:
+
 - [P0] AutoVerifier MVP 实现 — ✅ DONE (2026-04-18, commit d7c51c4)
   - docs/specs/AUTO_VERIFIER_SPEC.md (672行，Codex产出)
   - TaskRunner wiring: post_execute_hook Protocol + correction_policy ("legacy_auto_save" | "suggest_only")
@@ -288,6 +326,7 @@ Phase 8 Tasks:
   - tests/test_gold_standard_schema/: 11 tests passing
 
 AutoVerifier MVP SPEC 核心设计:
+
 - 3层检查: ResidualChecker + GoldStandardChecker + PhysicalPlausibilityChecker
 - Protocol 契约: VerificationChecker
 - 新增模型: AutoVerificationReport, CheckerReport, VerificationIssue, CorrectionSuggestion, GoldStandardBundle
@@ -316,6 +355,7 @@ Phase 7 Wave 2-3 Docker E2E Results (9/9 auto_verify_report.yaml generated):
 | fully_developed_plane_channel_flow | FAIL | OSCILLATING | FAIL | physics_model_incompatibility (HIGH) |
 
 Phase 7 T4 Fixes Applied (2026-04-17):
+
 - differential_heated_cavity.yaml: case_id 互换bug修复 (原与rayleigh_benard_convection互换)
 - rayleigh_benard_convection.yaml: case_id 互换bug修复
 - fully_developed_plane_channel_flow.yaml: 添加incompatibility note (icoFoam laminar vs DNS Gold Standard)
@@ -325,16 +365,19 @@ Phase 7 T4 Fixes Applied (2026-04-17):
 - foam_agent_adapter.py line 5381: naca0012_airfoil equation URFs U/k/omega 0.7→0.5
 
 Phase 7 Acceptance Checks:
+
 - CHK-1 (CorrectionSpec覆盖率): 10/10 cases = 100% >> 80% ✅
 - CHK-2 (Docker real execution): 9/9 cases executed ✅
 
 Phase 9 Status (2026-04-18):
+
 - D4 Baseline Gate: APPROVE_WITH_CONDITIONS ✅ (external Opus 4.7, 2026-04-18)
 - SY-1: COMPLETE ✅ (quality_score=5.0 ≥ 4.0, determinism=PASS, scope_violation=0)
 - EX-1: UNFROZEN (subject to C2 ≤240s headroom requirement)
 - PL-1: FROZEN (C4: separate D5 gate required, not auto-granted by D4)
 
 D4 Gate Conditions (verdict 2026-04-18):
+
 - C1: Reconcile PHASE9_ACTIVATION_REVIEW_PACKET (169L) vs PACKAGE (241L) — ✅ DONE
   - Declared PACKAGE canonical; PACKET marked non-canonical supplement
   - Reconciled via banner headers, no substantive contradictions found
@@ -354,6 +397,7 @@ D4 Gate Conditions (verdict 2026-04-18):
 - C4: PL-1 remains FROZEN until EX-1 first slice passes C2 AND C3 variance data lands (future D5 gate) — 🔒 Enforced
 
 EX-1-002 (post-C3, autonomous follow-on slice, 2026-04-18):
+
 - Slice: Hermetic test coverage for scripts/generate_reports.py CLI (committed in Phase 8 P1 018cdd5 without direct tests)
 - Artifact: tests/test_report_engine/test_generate_reports_cli.py (9 tests, 245/245 full suite green)
 - sha256: 5319c3fa0b29936a213a977bd5a4b79ebc0ba074632b1877f2ea293016211ea6
@@ -365,6 +409,7 @@ EX-1-002 (post-C3, autonomous follow-on slice, 2026-04-18):
 - Artifact: reports/ex1_002_cli_tests/slice_metrics.yaml (full honest metrics + learnings)
 
 D4+ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_PATH_A):
+
 - Trigger: EX-1-002 honest pivot (override_rate=1.0) exposed methodology gap — R-A..R-F in EX-1-001 memo §4 conflated "schema-bounded" with "physics-valid".
 - Blocking conditions C1+C2 required to land same commit as next EX-1 slice:
   - C1: memo §4 physics_precondition column ✅ (diagnostic_memo.md sha256 updated to c24a9236...)
@@ -377,6 +422,7 @@ D4+ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_PATH_A):
 - n=5 clean slices → mandatory lightweight methodology mini-review (non-freezing)
 
 EX-1-003 (R-A-metadata, landed same commit as C1+C2, 2026-04-18):
+
 - Slice: physics_contract annotation added to 3 imperfect-verdict gold_standard YAMLs
   - fully_developed_turbulent_pipe_flow.yaml (contract_status=INCOMPATIBLE)
   - fully_developed_plane_channel_flow.yaml (contract_status=INCOMPATIBLE; documents why R-C is not physics-satisfiable)
@@ -388,6 +434,7 @@ EX-1-003 (R-A-metadata, landed same commit as C1+C2, 2026-04-18):
 - Rolling EX-1 state (n=3): override_rate 1/3 = 0.333. Above 0.30 but within n<4 exemption per D4+ baseline rule. Next EX-1-004 determines whether rule #1 trips.
 
 EX-1-004 (R-A-metadata continuation to passing cases, 2026-04-18):
+
 - Slice: physics_contract added to 3 passing/deviating gold_standard YAMLs
   - lid_driven_cavity_benchmark.yaml (COMPATIBLE — clean PASS reference)
   - turbulent_flat_plate.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD — surfaces the Cf>0.01 Spalding-fallback branch at foam_agent_adapter.py:6924-6930 that makes the comparator self-referential when extraction fails)
@@ -400,6 +447,7 @@ EX-1-004 (R-A-metadata continuation to passing cases, 2026-04-18):
 - Artifact: reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml
 
 EX-1-005 (R-A-metadata completion + mandatory n=5 mini-review, 2026-04-18):
+
 - Slice: physics_contract added to remaining 4 canonical whitelist YAMLs
   - backward_facing_step_steady.yaml (COMPATIBLE)
   - circular_cylinder_wake.yaml (COMPATIBLE_WITH_SILENT_PASS_HAZARD — **new finding: src/foam_agent_adapter.py:6766-6774 hardcodes canonical_st=0.165 for any Re in [50,200], bypassing solver output for the whitelist Re=100 case**)
@@ -414,6 +462,7 @@ EX-1-005 (R-A-metadata completion + mandatory n=5 mini-review, 2026-04-18):
 - Artifacts: reports/ex1_005_whitelist_coverage_and_mini_review/{methodology_mini_review.md, slice_metrics.yaml}
 
 D4++ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_A+B1):
+
 - Trigger: EX-1 autonomous runway exhausted after n=5 (memo §4 ranks 1-3 covered; ranks 4-7 gated); 3-path prompt returned APPROVE_A+B1.
 - Path A authorized: producer→consumer wiring of contract_status into error_attributor.
 - Path B1 authorized: DHC mesh bump under numerical-config-not-logic reading (R-E reinterpretation).
@@ -423,6 +472,7 @@ D4++ Methodology Gate (Notion Opus 4.7 verdict 2026-04-18, APPROVE_A+B1):
 - Methodology trigger added: producer→consumer first-online requires n=1 consumer-side mini-review before the next slice.
 
 EX-1-006 (Path A producer→consumer wiring, 2026-04-18):
+
 - Slice: ErrorAttributor reads physics_contract.contract_status from gold_standard YAML (TASK_NAME_TO_CASE_ID → CASE_ID_TO_GOLD_FILE resolution) and attaches audit_concern tag to AttributionReport on PASS verdicts whose contract_status prefix matches COMPATIBLE_WITH_SILENT_PASS_HAZARD or INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE. FAIL path guaranteed audit_concern=None.
 - Design: setattr-on-returned-dataclass pattern honors both C1 (audit_concern as Optional new attribute) and next_slice_scope_guardrails denylist (src/models.py untouched).
 - Scope: src/error_attributor.py +31 net lines (C3 35-cap, 4-line buffer), tests/test_error_attributor.py +5 tests (TestAuditConcern).
@@ -435,6 +485,7 @@ EX-1-006 (Path A producer→consumer wiring, 2026-04-18):
 - Artifact: reports/ex1_006_attributor_audit_concern/slice_metrics.yaml
 
 EX-1-007 (Path B1: DHC 256² wall-packed mesh, landed in 2 commits 2026-04-18):
+
 - Pre-commit slice (commit 54b57ab): Ra>=1e9 guard, nL=256, symmetric multi-section simpleGrading ratio=6, C5 a priori Nu prediction 16.1 ± 5, n=1 consumer-side mini-review landed.
   - Initial grading direction ((0.5 0.5 0.1667) (0.5 0.5 6)) clustered fine cells at MIDLINE, not walls.
 - Smoke-check catch (fix-up commit 342beb0): blockMesh smoke-check harness (reports/ex1_007_dhc_mesh_refinement/run_dhc_blockmesh_check.py) flipped sections to ((0.5 0.5 6) (0.5 0.5 0.1667)) → first-cell 1.40mm at both walls (cells_in_BL ≈ 2.26, as C5 predicted). Cost: 5s smoke-check vs ~1200s wasted solver attempt.
@@ -454,6 +505,7 @@ EX-1-007 (Path B1: DHC 256² wall-packed mesh, landed in 2 commits 2026-04-18):
 - Artifacts: reports/ex1_007_dhc_mesh_refinement/{slice_metrics.yaml (+ post-commit addendum), blockmesh_smoke_check.md, run_dhc_blockmesh_check.py, run_dhc_measurement.py, measurement_result.yaml, consumer_side_mini_review.md}
 
 Phase 7 T4 Fixes (post-Wave 2-3):
+
 - DHC kOmegaSST: turbulenceProperties RASModel kEpsilon→kOmegaSST, omega init (0/omega + divSchemes + fvSolution) ✅
 - DHC temperature fix: added omegaWallFunction BCs, div(phi,omega) scheme ✅
 - DHC h+T dual BC fix (this session): T BC at walls fixedValue→zeroGradient (fixes energy eq over-constraint) ✅
@@ -465,6 +517,7 @@ Phase 7 T4 Fixes (post-Wave 2-3):
 - Phase 7 T4 fixes are Phase 7 runtime patches, NOT Phase 9 activation scope — PS-N sub-gate NOT required ✅
 
 Phase 5 T1-T3 Status (completed in bf6cb5a):
+
 - T1 (TaskSpec Ra/Re_tau): Already done — TaskSpec already has Ra/Re_tau fields, _task_spec_from_case_id passes them
 - T2 (ResultComparator schema): Already done — _compare_scalar/_compare_vector already have Nu/Cp/Cf/u_plus fallback
 - T3 (ErrorAttributor patterns): Already done — PARAMETER_PLUMBING_MISMATCH, COMPARATOR_SCHEMA_MISMATCH, GEOMETRY_MODEL_MISMATCH, INSUFFICIENT_TRANSIENT_SAMPLING, BUOYANT_ENERGY_SETUP_INCOMPLETE all defined
@@ -476,6 +529,7 @@ Tests: 245 passing ✅ (post EX-1-002: +9 CLI coverage, hermetic notion_client /
 Mode switch: external Notion Gate loop retired. Orchestrator (opus47-main) acts as both executor and Gate under Model Routing v5.1. No more manual paste-to-Notion Gate packets.
 
 NACA0012 Wave 3 final verdict: **DEC-EX-A** (PASS_WITH_DEVIATIONS permanent)
+
 - Cycle budget exhausted (2/2): Path W + Path H both REJECT
 - Root causes documented in reports/naca0012_airfoil/fix_plan_packet.md §G (W) + wave3_closeout_v2.md §4 (H)
 - src/ state: clean, no persistent edits beyond commits 22cd3ee, 273ef3d, b1bcf05
@@ -569,6 +623,7 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
      not introduced by v6.1 commit. Host macOS `.venv` apparently masks it
      via a different resolution order (likely editable-install or PYTHONPATH
      ordering). Expected full-host baseline per prior sessions: 252/252.
+
 2. **[self]** Decide whether to merge `codex/visual-acceptance-sync` (branch with 13 unique commits + v6.1 cutover commit `7e087b4`) back into `main`, or leave as demo-sync branch.
 3. **[self · DONE 2026-04-20T11:40]** Archived 55 untracked iteration-dupe files under `reports/deep_acceptance/` into `reports/deep_acceptance/_archive_20260420_iteration_dupes/` (gitignored). The 3 intentionally-tracked timestamped snapshots from 83252ef were left in place. Origin + root-cause documented in the archive README.
 4. **[STOP-FOR-GATE]** Q-1 DHC gold Path P-1/P-2 (hard floor #1). Notion MCP now reachable (2026-04-20T12:20 probe) so Kogami can trigger this directly.
@@ -596,6 +651,7 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
   - **C3b** · NACA 3 upper-surface Cp probes — DEC-V61-008 · PR #8 · merge `11b356ac` · Notion `348c6894-2bed-8119-9a97-c008e93eb419`
   - **C3c** · IJ 2-point plate Nu probes — DEC-V61-009 · PR #9 · merge `7e22545b` · Notion `348c6894-2bed-8103-9961-f45fedef00aa`
   All three reuse shared helpers (`_load_gold_reference_values`, `_emit_gold_anchored_points_sampledict`) introduced by C3a. Design-doc Option B (simpler `sets+points`) chosen over Option A (function-objects) for C3b/C3c with explicit reasoning recorded — both can be upgraded in a future result-harvest refactor. Regression 179/179 green (158 baseline + 21 new C3 tests). v6.1 autonomous_governance counter now at 7 (DEC-V61-001 through DEC-V61-009, minus -002 Path B which preceded counter start) — still 3 slots below hard-floor-4 threshold of ≥10.
+
 - **§5d dashboard validation — BLOCKED**: Docker daemon not running on host; UI backend lacks `POST /api/cases/:id/run` endpoint. Needs either (a) Docker + OpenFOAM container startup, or (b) Phase 5 roadmap work. Currently held.
 - **DEC-V61-007 slot reassignment note**: originally earmarked for Case 9/10 literature re-source but that remains HOLD (PDFs inaccessible per user 2026-04-20); slot now used for C3a instead.
 - **Result-harvest refactor LANDED (2026-04-20T23:00)**: PR #10 merged `efb74707`. Reads postProcessing/sets/ output from C3 generators and OVERWRITES the legacy cell-based extractor's `u_centerline` / `pressure_coefficient` / `nusselt_number` keys when sampleDict output is present. Backwards-compatible no-op when absent. C3 initiative complete end-to-end (generator-side DEC-V61-007/008/009 + harvest-side DEC-V61-010). Regression 196/196 green. DEC-V61-010 Notion page `348c6894-2bed-81079ccad679ee023781`.
@@ -718,8 +774,10 @@ Pre-v6.1 backlog count (for Q-3 Notion backfill visibility): **Q-3 CLOSED 2026-0
 3. ✅ Three canonical cases render end-to-end with correct three-state
    contract status (DHC = FAIL w/ 159% deviation; cylinder = HAZARD armed
    silent-pass; TFP = HAZARD armed Spalding fallback).
+
 4. ✅ No mutation of `src/**`, `tests/**`, `knowledge/gold_standards/**`,
    or `knowledge/whitelist.yaml`.
+
 5. ⏳ PR #2 opened + merged (regular merge commit, 留痕 > 聪明).
 6. ⏳ DEC-V61-002 mirrored to Notion Decisions DB.
 
@@ -795,6 +853,7 @@ NOT TOUCHED. All 10 PRs merged as regular merge commits (留痕 > 聪明).
 **Session main HEAD at close**: `25fd65d` (PR #30 merge).
 
 Pending items (unclosed, queued for next session):
+
 - M2 — sidecar v2 with kid/alg/domain metadata + rotation runbook (Medium scope, deferred by size)
 - P6-TD-003 — implement `_extract_duct_friction_factor` targeting Darcy-Weisbach `f=0.0185` gold (requires second solver per user exclusion — held)
 - foam_agent_adapter.py 7000-line refactor (Medium-Large; out of scope this session)
@@ -817,9 +876,11 @@ Frontmatter: `autonomous_governance: true`, `codex_verdict: CHANGES_REQUIRED →
 
 **Codex round run (1)**: Round 10 (PR #33 pre-merge) CHANGES_REQUIRED with 2 HIGH findings,
 both fixed verbatim in `55b1a88`:
+
 1. `verdict_counts` was aggregated from `expected_verdict` curator hint → pill could lie
    about contract engine output (e.g. `reference_pass` run labeled PASS despite
    silent-pass hazard armed by gold). Fix: per-run `_derive_contract_status` evaluation.
+
 2. `impinging_jet` flow-field PNG showed Baughn Re=23750 Nu≈110 regime but case was
    rescaled to Cooper Re=10000 Nu=25 family → physical inconsistency. Fix: PNG
    regenerated with Cooper 1984 anchors + factor overlays matching wrong_model (+52%)
@@ -844,7 +905,9 @@ cases (duct / DHC / BFS / NACA) that had no flow-field visual.
 
 **11 new fixtures** (6 reference_pass, 3 under_resolved, 2 wrong_model) +
 **4 new flow-field PNGs** (Armaly/Driver / Ladson / de Vahl Davis / Colebrook+Jones)
+
 + **engine fix** in `_load_gold_standard` shape-B synthesis to handle
+
 profile-quantity reference_values (previously collapsed to ref=0.0 and
 silently forced PASS on u_plus/Cp profile cases).
 
@@ -852,13 +915,16 @@ silently forced PASS on u_plus/Cp profile cases).
 
 **Codex round run (1)**: Round 11 (PR #34 pre-merge) CHANGES_REQUIRED with
 2 HIGH + 1 MEDIUM findings, all fixed verbatim in commit `6335c8d`:
+
 1. Backend pytest red (2/42 fails) — DHC test + dashboard test drifted
    against new default distribution. Fix: pin DHC test to
    `run_id=real_incident`; relax dashboard `fail_cases>=1` assertion.
+
 2. plane_channel teaching fixtures silently PASSed everything — shape-B
    synthesis collapsed `u_mean_profile` to ref=0.0. Fix: scan ALL
    reference_values entries for non-zero scalar; expanded key set to
    include `u_plus`.
+
 3. BFS figure plotted under_resolved marker at 6.1 but labeled "5.1
    (-18%)"; frontend caption bound Driver gold to Re=7600. Fix: marker
    to 5.1, regenerate PNG, caption cites Re_h=37500 provenance.
@@ -888,6 +954,7 @@ Backed by `useQueries` parallel fetch + SVG `ConvergenceSparkline`.
 
 **New runs**: 12 fixtures (3 cases × 4 densities) under new `grid_convergence`
 RunCategory. Literature-backed sweeps:
+
 - LDC u_centerline @ y=0.0625: Ghia 1982 gold, values {-0.048→-0.0375}
 - TFP Cf @ x=0.5: Blasius gold, values {0.0065→0.00423}
 - BFS Xr/H: repo gold 6.26, values {4.8→6.25}
@@ -898,12 +965,15 @@ RunCategory. Literature-backed sweeps:
 
 **Codex round run (1)**: Round 12 (PR #35 pre-merge) CHANGES_REQUIRED with
 3 MEDIUM + 1 LOW findings, all fixed in commit `32a2893`:
+
 1. `list_runs()` filename-lex order → mesh_160 sorted before reference_pass.
    Fix: explicit pedagogical category order + numeric-aware mesh_N secondary.
+
 2. TFP fixtures claimed "5% 容差" but gold is ±10%. Fix: copy updated.
 3. BFS narrative over-claimed Driver 1985 convergence despite whitelist
    Re=7600 ≠ Driver Re_H≈36000. Fix: relabel as "repo gold" with explicit
    Reynolds-mismatch note.
+
 4. NaN handling in ConvergenceSparkline + formatNumber. Fix: `Number.isFinite`
    guards.
 
@@ -958,30 +1028,37 @@ external Gate.
 - **Demo depth**: 10 cases · **71 runs** · 10 flow-field PNGs · **10 interactive
   mesh-convergence demos** · Pro Workbench one-click-away · **case-export bundle
   one-click-away**.
+
 - **Default distribution**: 8 PASS · 2 HAZARD · 0 FAIL.
 - **v6.1 counter**: **15** (well below 20 arc-retro threshold).
 - **Codex rounds this session**: 10, 11, 12, 13 all CHANGES_REQUIRED → RESOLVED
   (round 13 ran post-merge on a different account after user fixed CLI infra;
   3 findings applied in `7f242f3` — monotonicity regression test +
   |deviation|-monotonicity fixture adjustments + DHC description drift).
+
 - **API endpoints**: 24 total (+1 new `/api/cases/{id}/export`).
 - **External gate queue**: **0 open** (Q-4 CLOSED 2026-04-21 via Path A / DEC-V61-028 — BFS gold re-sourced to Le, Moin & Kim 1997 DNS at Re_H=5100, Xr/H=6.28 matches our 6.26 inside tolerance; Armaly 1983 retained as corroborating experiment).
 
 Pending items (unclosed, queued for next session):
+
 - **A-class Phase 3** (optional): mesh-convergence sweep for remaining 7
   cases (would need literature-sourced scalar anchors for each) — ✅ LANDED
   in DEC-V61-027. OpenFOAM case-export bundle — ✅ LANDED in V61-027. BFS
   gold re-sourcing — ✅ LANDED in DEC-V61-028.
+
 - **Notion sync backlog** (9 items, MCP still requires Claude Desktop re-auth):
   DEC-V61-021, V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026,
   V61-027, **V61-028**. NOTION_TOKEN is fixed in `~/.zshrc`; direct-REST
   fallback via the `notion-sync-cfd-harness` skill works if MCP stays down.
+
 - **Engineering-quality residual**: under_resolved/wrong_model values are
   defensibly-in-family but not grid-convergence-backed. Acceptable for
   teaching catalog; NOT for regulatory audit package.
+
 - **Plane_channel real_incident narrative drift**: post engine fix, its
   `expected_verdict: PASS` no longer matches actual (FAIL on quantity mismatch).
   Left as historical artifact; consider relabeling in a future commit.
+
 - M2 sidecar v2 + rotation runbook (carried from S-005).
 - foam_agent_adapter.py refactor (carried from S-005).
 - P6-TD-003 held on user second-solver exclusion.
@@ -1001,6 +1078,7 @@ Pending items (unclosed, queued for next session):
 **Phase 5b scope delta**: LDC sub-phase infrastructure COMPLETE; PASS verdict BLOCKED on Q-5. Remaining 7 FAIL cases (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC) queued for Phase 5c..5j per-case sub-phases; each MUST cross-check gold values against cited paper as first step (LDC lesson learned).
 
 **Open items** (post-Phase-5b):
+
 - ~~Q-5 external-gate decision~~ — CLOSED 2026-04-21 via Path A (DEC-V61-030). LDC gold re-transcribed from Ghia 1982; audit now 11/17 PASS.
 - DEC-V61-029 Notion sync ✓ (done). DEC-V61-030 Notion sync pending.
 - 7 remaining FAIL-case sub-phases (Phase 5c..5j). **Mandatory first step for each**: cross-check the whitelist gold against the cited paper (LDC lesson learned).
