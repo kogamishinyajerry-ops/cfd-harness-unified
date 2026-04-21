@@ -4,14 +4,15 @@ run_metadata:
   label_zh: 网格 160 径向 · 过收敛
   label_en: Mesh 160 radial (asymptotic)
   description_zh: >-
-    160 径向 cells。Nu_stag=25.4 vs 25.0 (+1.6%)。15% 容差内 PASS。
-    变动已经进入 Kato-Launder 实现细节误差，不是 mesh。
+    160 径向 cells。Nu_stag=25.1 vs 25.0 (+0.4%)。15% 容差内 PASS。
+    相对 80² 的 overshoot（25.2）继续向 gold 收敛——到这里剩下的
+    残差在 Kato-Launder 实现细节，不是 mesh。
   category: grid_convergence
   expected_verdict: PASS
 case_id: impinging_jet
 source: grid_convergence_study_synthetic
 measurement:
-  value: 25.4
+  value: 25.1
   unit: dimensionless
   run_id: grid_jet_n160
   commit_sha: null

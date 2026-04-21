@@ -4,8 +4,8 @@ run_metadata:
   label_zh: 网格 40² + 1.5:1 加密 · 过渡
   label_en: Mesh 40² + 1.5:1 grading (transitional)
   description_zh: >-
-    40² + 1.5:1 加密。第一层 ~δ_T/3。Nu=8.0 vs gold 8.80 (-9.1%)。
-    10% 容差内但紧贴边界——实际仍 FAIL (boundary 激活 HAZARD/FAIL 差异)。
+    40² + 1.5:1 加密。第一层 ~δ_T/3。Nu=7.9 vs gold 8.80 (-10.2%)。
+    刚好越过 10% 容差带上界 → FAIL。再密一挡就能 PASS。
   category: grid_convergence
   expected_verdict: FAIL
 case_id: differential_heated_cavity

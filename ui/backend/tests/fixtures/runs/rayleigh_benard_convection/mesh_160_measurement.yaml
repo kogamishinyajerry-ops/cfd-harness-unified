@@ -4,15 +4,15 @@ run_metadata:
   label_zh: 网格 160² · 过收敛
   label_en: Mesh 160² (asymptotic)
   description_zh: >-
-    160² + 4:1。Nu=10.85 (+3.3%)。15% 容差内 PASS。
-    δ_T 内 ~10 cells，热输运 fully resolved；相对 80² 轻微上移是
-    离散残差在饱和。
+    160² + 4:1。Nu=10.6 vs gold 10.5 (+1.0%)。15% 容差内 PASS。
+    δ_T 内 ~10 cells，热输运 fully resolved；相对 80² 的 overshoot
+    (10.8) 收敛回 gold 附近。
   category: grid_convergence
   expected_verdict: PASS
 case_id: rayleigh_benard_convection
 source: grid_convergence_study_synthetic
 measurement:
-  value: 10.85
+  value: 10.6
   unit: dimensionless
   run_id: grid_rb_n160
   commit_sha: null
