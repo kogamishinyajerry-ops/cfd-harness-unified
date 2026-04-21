@@ -1183,3 +1183,48 @@ Pending items (unclosed, queued for next session):
 **Git**: commit 4399427 pushed to main (12 files, +7788/-23).
 
 **Next**: Notion sync DEC-V61-033 (Decisions DB).
+
+## 2026-04-21 Late Night — Phase 7c Sprint 2 Tier C fan-out + Phase 7 Sprint 1 COMPLETE (DEC-V61-034, S-011)
+
+**User directive**: "我的每个case的report区域，仍然没有真实的仿真结果里提取出来的流场云图等等重要信息" → "C then B".
+
+**Tier C landed** (visual-only, 10/10 cases minus RBC still running):
+- Renderer: GOLD_OVERLAY vs VISUAL_ONLY split + 3-tier contour fallback (structured → tricontourf+quiver → scatter) + 2D-plane auto-detect for NACA x-z mesh + log-parse residuals fallback + NaN/inf diverged-solution guard.
+- Backend: `_build_visual_only_context()` returns reduced dict (verdict/metrics/paper/GCI=None) for 9 non-LDC cases.
+- Route: new `GET /api/cases/{case}/runs/{run}/renders/{filename:path}` with path-containment defense.
+- Frontend: ScientificComparisonReportSection detects `visual_only` → 2-column contour+residuals panel.
+- Adapter: `-noFaceZones` in `foamToVTK` (fixes cylinder_wake SEGV on cylinderBaffleZone). Subagent diagnosed root cause in 2.7min wall.
+- Log truncation: `log[:200]` → `log[-400:]` (SEGV stack traces at tail).
+- 8 of 9 non-LDC cases already rendered + committed (RBC still running at session touch).
+
+**Integration results**:
+| Case | Result | Duration | Notes |
+|---|---|---|---|
+| ldc | PARTIAL 11/17 | — | Pre-existing gold-overlay |
+| bfs | FAIL | 9s | kEpsilon divergence |
+| plane_channel | **PASS** | 426s | Real convergent |
+| tfp | FAIL | 36s | kEpsilon (known CLAUDE.md) |
+| duct | FAIL | 36s | Diverged |
+| dhc | FAIL | 1059s | buoyantFoam slow+diverged |
+| impinging_jet | FAIL | 152s | Diverged |
+| naca0012 | FAIL | 20s | Diverged (scatter fallback) |
+| cylinder_wake | **PASS** | 35s | After -noFaceZones fix |
+| rbc | (running) | 55min+ | buoyantFoam, not stalled |
+
+The 7 FAIL verdicts surface pre-existing solver config issues (per CLAUDE.md memory). Tier C honestly shows them instead of hiding behind placeholder PNGs.
+
+**Codex** (2 rounds on DEC-V61-034):
+- R1 CHANGES_REQUIRED: visual-only cases 500 on /comparison-report HTML/PDF/build (template deref'd None metrics). Applied Option-A fix + 3 new tests.
+- R2 APPROVED_WITH_COMMENTS: non-blocking nit on render_report_pdf guard order (hoisted above output_path branch).
+
+**Counter**: 19 → 20. Triggers RETRO-V61-001 cadence rule #2 → RETRO-V61-002 landed.
+
+**Test baseline**: 132 → 139 → 142/142 (+10 new visual-only tests across rounds).
+
+**Phase 7 Sprint 1 verdict**: **COMPLETE**. All 6 sub-phases (7a–7f) delivered. Tier B per-case gold-overlay for 9 cases deferred as future work (~30hr). User can pick between Tier B polish vs Phase 8 physics debt (fix kEpsilon divergence) at next session.
+
+**Git**: 6 commits on main: 4ee3fc2 → a70796a → 02cd686 → 575db8f → 6581167 → 159e4d7. All pushed.
+
+**Notion**: DEC-V61-034 + Notion page 349c68942bed81e0a3c4cc37a2242fd1. RETRO-V61-002 sync pending (Notion 502 transient; retry scheduled).
+
+**Next**: RBC rendering when batch finishes; RETRO-V61-002 Notion sync retry; Phase 7 Sprint 1 close notification.
