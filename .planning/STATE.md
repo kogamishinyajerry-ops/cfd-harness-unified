@@ -915,21 +915,65 @@ RunCategory. Literature-backed sweeps:
 
 **Session main HEAD at close**: `5d54d48` (PR #35 merge) + STATE update.
 
+## 2026-04-21 Late Night — Option A Phase 3 (same session continued)
+
+User directive: *"extend mesh-slider to 7 more cases, OpenFOAM case-export
+bundle, BFS gold re-sourcing to Re=7600-consistent anchor"*. Landed as
+PR #36 (`7a7610c`).
+
+**Thread 1 — mesh-slider extended to all 10 cases**: 28 new
+grid_convergence fixtures (was 3 cases × 4, now 10 cases × 4 = 40).
+All sweeps monotone, literature-anchored.
+
+**Thread 2 — case-export reference bundle**: new `GET /api/cases/{id}/export`
+returning zip with README + validation_contract.md + byte-identical
+gold YAML. 13 new tests including byte-identity guard. "下载参考包 .zip" button
+on every case detail page. Explicit non-goal: NOT a runnable OpenFOAM
+case dir (that'd require 三禁区 adapter changes).
+
+**Thread 3 — BFS Re-mismatch Q-4 gate**: filed in `external_gate_queue.md`
+with 4 path options (A/B/C/D) for Kogami decision. Learn-side narrative
+updated with ⚠️ block so students see the caveat even if Q-4 stays
+unresolved.
+
+**DEC filed (1)**: DEC-V61-027.
+
+**Codex round attempted (1, blocked)**: Round 13 blocked by CLI
+infrastructure error (`Model not found gpt-5.4` — same error across
+all fallback models tried). Self-review performed in lieu; post-merge
+Codex queued once infrastructure recovers. Counter self-estimated
+`external_gate_self_estimated_pass_rate: 75%`, acknowledging the
+reduced safety net.
+
+**Counter (v6.1 pure telemetry)**: 14 → 15.
+
+**禁区 compliance**: untouched. case_export route READS gold_standards/
+but doesn't write. Q-4 explicitly defers any gold modification to
+external Gate.
+
+**Session main HEAD at close**: `7a7610c` (PR #36 merge) + DEC + STATE updates.
+
 ## End-of-session state (S-006)
 
-- **Demo depth**: 10 cases · 43 runs · 10 flow-field PNGs · 3 interactive
-  mesh-convergence demos · Pro Workbench one-click-away on every case.
+- **Demo depth**: 10 cases · **71 runs** · 10 flow-field PNGs · **10 interactive
+  mesh-convergence demos** · Pro Workbench one-click-away · **case-export bundle
+  one-click-away**.
 - **Default distribution**: 8 PASS · 2 HAZARD · 0 FAIL.
-- **v6.1 counter**: 14 (well below 20 arc-retro threshold).
-- **Codex rounds this session**: 10, 11, 12 — all CHANGES_REQUIRED → RESOLVED.
+- **v6.1 counter**: **15** (well below 20 arc-retro threshold).
+- **Codex rounds this session**: 10, 11, 12 CHANGES_REQUIRED → RESOLVED;
+  13 blocked by infrastructure, queued post-merge.
+- **API endpoints**: 24 total (+1 new `/api/cases/{id}/export`).
+- **External gate queue**: 1 open (Q-4 BFS Re-mismatch), 0 blocking Phase 0..4.
 
 Pending items (unclosed, queued for next session):
 - **A-class Phase 3** (optional): mesh-convergence sweep for remaining 7
   cases (would need literature-sourced scalar anchors for each), OpenFOAM
   case-export bundle, BFS gold re-sourcing to Reynolds-consistent anchor.
-- **Notion sync backlog** (7 items, token still expired): DEC-V61-021,
-  V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026. User re-auth required at
+- **Notion sync backlog** (8 items, token still expired): DEC-V61-021,
+  V61-022, V61-023, RETRO-V61-002, V61-024, V61-025, V61-026, V61-027. User re-auth required at
   `mcp__claude_ai_Notion` before sync can resume.
+- **Codex round 13 post-merge**: run once CLI infrastructure recovers.
+  Prompt saved at `/tmp/codex_review_pr36.txt` for easy replay.
 - **Engineering-quality residual**: under_resolved/wrong_model values are
   defensibly-in-family but not grid-convergence-backed. Acceptable for
   teaching catalog; NOT for regulatory audit package.
