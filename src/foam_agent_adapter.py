@@ -682,6 +682,34 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
+        # 2b. constant/momentumTransport — laminar (OpenFOAM 10 simpleFoam requirement)
+        # Re=100 LDC is laminar; simpleFoam (OpenFOAM 10) mandates this file at case bring-up.
+        (case_dir / "constant" / "momentumTransport").write_text(
+            """\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      momentumTransport;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType  laminar;
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
         # 3. system/controlDict
         (case_dir / "system" / "controlDict").write_text(
             """\
