@@ -4,14 +4,14 @@ run_metadata:
   label_zh: 网格 160² · 过收敛
   label_en: Mesh 160² (asymptotic)
   description_zh: >-
-    160² + 4:1 加密。f=0.0186 (+0.5%)。10% 容差内 PASS。
-    收敛到位，加密无效。
+    160² + 4:1 加密。f=0.0188 (+1.6%)。10% 容差内 PASS。
+    相对 80² 轻微上移（数值离散误差在饱和），到这里加密主要在测 scheme。
   category: grid_convergence
   expected_verdict: PASS
 case_id: duct_flow
 source: grid_convergence_study_synthetic
 measurement:
-  value: 0.0186
+  value: 0.0188
   unit: dimensionless
   run_id: grid_duct_n160
   commit_sha: null
