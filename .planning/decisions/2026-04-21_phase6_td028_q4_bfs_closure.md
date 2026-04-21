@@ -40,7 +40,7 @@ reversibility: fully-reversible-by-pr-revert
   original ⚠️ learn narrative, and Q-4 open state. No downstream
   consumer touches the Le/Moin/Kim citation string at runtime — it's
   only rendered in case-export README and /learn metadata.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-028-Q-4-closure-BFS-gold-re-sourced-to-Le-Moin-Kim-1997-DNS-349c68942bed8189a7e7f1af27ebefa0)
 github_pr_url: null (direct-to-main per external-gate auth pattern)
 github_merge_sha: 900287b
 github_merge_method: direct commit on main (external-gate-authorized

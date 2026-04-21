@@ -40,7 +40,7 @@ reversibility: fully-reversible-by-pr-revert
   (_load_gold_standard scalar scan extended by 3 LOC), 2 test updates
   (pin DHC to real_incident, relax dashboard fail_cases assertion).
   `git revert -m 1 <merge>` restores prior distribution 4P/3H/3F.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-025-learn-full-coverage-deepening-gold-synthesis-fix-349c68942bed81d29d5eceab3a263310)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/34
 github_merge_sha: 0fba4be
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

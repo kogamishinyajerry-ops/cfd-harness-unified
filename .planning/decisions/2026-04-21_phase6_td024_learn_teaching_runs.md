@@ -40,7 +40,7 @@ reversibility: fully-reversible-by-pr-revert
   additive; schema change (`run_summary` field on `CaseIndexEntry`) is
   backward-compatible — frontend tolerates absence via default empty
   dict. Flow-field PNGs live under `public/` and are cosmetic.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-024-Teaching-runs-run-distribution-badges-real-flow-field-visuals-349c68942bed81b3a9f3c116559eefbf)
 github_pr_url: <pending — not yet opened>
 github_merge_sha: <to-fill-after-merge>
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

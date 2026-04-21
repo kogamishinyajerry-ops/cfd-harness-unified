@@ -13,7 +13,7 @@ reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 <merge>` restores the original flat-plate
   dispatch for duct_flow. Fixtures produced by the §5d Part-2 batch
   were already in git at that point; they don't depend on this PR.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-022-P6-TD-002-duct_flow-dispatch-guard-349c68942bed818ab52df137841b1cf9)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/22
 github_merge_sha: <to-fill-after-merge>
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

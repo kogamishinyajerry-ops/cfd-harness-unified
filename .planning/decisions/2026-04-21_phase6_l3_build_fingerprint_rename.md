@@ -12,7 +12,7 @@ counter_status: "v6.1 autonomous_governance counter 3 → 4."
 reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 <merge>` restores the `generated_at` name. No
   behavior change; only identifier renaming.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-023-L3-generated_at-build_fingerprint-rename-349c68942bed81a0ae90c60c49d2fa8d)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/23
 github_merge_sha: <to-fill-after-merge>
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

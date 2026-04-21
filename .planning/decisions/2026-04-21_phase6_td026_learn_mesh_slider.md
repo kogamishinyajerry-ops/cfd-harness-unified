@@ -38,7 +38,7 @@ reversibility: fully-reversible-by-pr-revert
   component addition + sort logic. `git revert -m 1 <merge>` restores
   prior state cleanly. Hook-count stability in `MeshTab` verified by
   Codex — `useQueries({queries: []})` is safe when no sweep exists.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-026-interactive-mesh-density-slider-Pro-Workbench-entry-349c68942bed813b8bfcd58015acff46)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/35
 github_merge_sha: 5d54d48
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

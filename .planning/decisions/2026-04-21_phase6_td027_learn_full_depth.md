@@ -52,7 +52,7 @@ reversibility: fully-reversible-by-pr-revert
   (Two commits. Main commit 13b96ca: additive fixtures + new route +
   new tests + 1-line Q-4 append to gate queue. Fix commit ac713fa:
   2-fixture numeric tweak. `git revert -m 1 <merge>` restores prior.)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-027-learn-mesh-slider-full-coverage-case-export-BFS-Q-4-349c68942bed8103b3add9aea7bee9e9)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/36
 github_merge_sha: 7a7610c
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)

@@ -12,7 +12,7 @@ counter_status: "v6.1 autonomous_governance counter 1 → 2 (under new telemetry
 reversibility: fully-reversible-by-pr-revert
   (One `git revert -m 1 67b129e` restores the unsafe publish-any-x
   behavior. No cross-dependency with other PRs.)
-notion_sync_status: pending (Codex round 7 verdict awaiting)
+notion_sync_status: synced 2026-04-21 (https://www.notion.so/DEC-V61-021-P6-TD-001-BFS-reattachment-upstream-artifact-guard-349c68942bed8122be66c4e995a7c0fa)
 github_pr_url: https://github.com/kogamishinyajerry-ops/cfd-harness-unified/pull/21
 github_merge_sha: 67b129e29b27518be7c3e6f0d8f4d6e4e5a95f6b
 github_merge_method: merge (regular merge commit — 留痕 > 聪明)
