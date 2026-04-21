@@ -1001,7 +1001,8 @@ Pending items (unclosed, queued for next session):
 **Phase 5b scope delta**: LDC sub-phase infrastructure COMPLETE; PASS verdict BLOCKED on Q-5. Remaining 7 FAIL cases (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC) queued for Phase 5c..5j per-case sub-phases; each MUST cross-check gold values against cited paper as first step (LDC lesson learned).
 
 **Open items** (post-Phase-5b):
-- Q-5 external-gate decision (Kogami picks A/B/C/D).
-- DEC-V61-029 Notion sync (direct-REST fallback available; MCP still unauthorized).
-- 7 remaining FAIL-case sub-phases.
-- _docker_exec timeout enforcement (Codex MED 3, cross-cutting).
+- ~~Q-5 external-gate decision~~ — CLOSED 2026-04-21 via Path A (DEC-V61-030). LDC gold re-transcribed from Ghia 1982; audit now 11/17 PASS.
+- DEC-V61-029 Notion sync ✓ (done). DEC-V61-030 Notion sync pending.
+- 7 remaining FAIL-case sub-phases (Phase 5c..5j). **Mandatory first step for each**: cross-check the whitelist gold against the cited paper (LDC lesson learned).
+- _docker_exec timeout enforcement (Codex MED 3, cross-cutting tech debt).
+- Optional Phase 5b-sub-2: graded blockMesh + native-y extractor to close the remaining 6 LDC audit FAILs (physical residuals, not bugs).

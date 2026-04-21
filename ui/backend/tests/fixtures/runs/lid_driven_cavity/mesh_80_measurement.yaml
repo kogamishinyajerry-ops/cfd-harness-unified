@@ -7,14 +7,13 @@ run_metadata:
   label_zh: 网格 80² · 收敛
   label_en: Mesh 80² (converged)
   description_zh: >-
-    80² 网格。Secondary vortex 清晰；u_centerline=-0.038，相对
-    Ghia -0.03717 偏 +2.2%。5% 容差内 PASS。这是 LDC 的"够用"分辨率。
+    80×80 网格。二次精度 + 数值收敛接近 Ghia 范围；u_centerline≈-0.044（|dev|=5%），刚好踩在 5% 容差边界。
   category: grid_convergence
-  expected_verdict: PASS
+  expected_verdict: FAIL
 case_id: lid_driven_cavity
 source: grid_convergence_study_synthetic
 measurement:
-  value: -0.038
+  value: -0.044
   unit: dimensionless
   run_id: grid_ldc_n80
   commit_sha: null

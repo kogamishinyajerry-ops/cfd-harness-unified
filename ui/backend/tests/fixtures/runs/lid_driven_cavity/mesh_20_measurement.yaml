@@ -7,14 +7,13 @@ run_metadata:
   label_zh: 网格 20² · 粗糙
   label_en: Mesh 20² (coarse)
   description_zh: >-
-    20×20 均匀网格。Re=100 下 secondary vortex 完全糊掉，u_centerline
-    被高估到 -0.048（+29%）。5% 容差外 FAIL。
+    20×20 均匀网格。Re=100 下 secondary vortex 完全糊掉，u_centerline 被高估到 -0.055（|dev|=31% vs Ghia 1982 的 -0.04192）。5% 容差外 FAIL。
   category: grid_convergence
   expected_verdict: FAIL
 case_id: lid_driven_cavity
 source: grid_convergence_study_synthetic
 measurement:
-  value: -0.048
+  value: -0.055
   unit: dimensionless
   run_id: grid_ldc_n20
   commit_sha: null
@@ -22,7 +21,7 @@ measurement:
   quantity: u_centerline[y=0.0625]
 audit_concerns:
   - concern_type: DEVIATION
-    summary: 'Uniform 20² grid; u_centerline=-0.048 vs Ghia -0.03717 (+29%).'
+    summary: 'Uniform grid; u_centerline=-0.055 vs Ghia -0.04192 (|dev|=31.2%).'
     detail: null
     decision_refs: []
 decisions_trail: []

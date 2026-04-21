@@ -7,15 +7,13 @@ run_metadata:
   label_zh: 网格 160² · 过收敛
   label_en: Mesh 160² (asymptotic)
   description_zh: >-
-    160² 网格。u_centerline=-0.0375 vs Ghia -0.03717 (+0.9%)。5% 容差内 PASS。
-    相对 80² 改进不明显——这就是 asymptotic regime，你已经在测量
-    "离散化残差 + 舍入误差"而不是 mesh 效应。
+    160×160 网格。几乎等同 Ghia 129×129 原始 mesh；u_centerline≈-0.042（|dev|=0.2% vs Ghia -0.04192）。5% 容差内 PASS。
   category: grid_convergence
   expected_verdict: PASS
 case_id: lid_driven_cavity
 source: grid_convergence_study_synthetic
 measurement:
-  value: -0.0375
+  value: -0.042
   unit: dimensionless
   run_id: grid_ldc_n160
   commit_sha: null

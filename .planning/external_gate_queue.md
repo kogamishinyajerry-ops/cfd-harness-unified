@@ -22,7 +22,15 @@ reviewer rather than hidden.
 
 ---
 
-## Q-5: LDC (lid_driven_cavity) gold-standard reference values do not match Ghia 1982
+## ~~Q-5: LDC (lid_driven_cavity) gold-standard reference values do not match Ghia 1982~~ — CLOSED 2026-04-21
+
+**Closure**: Kogami selected **Path A (re-transcribe from Ghia)** from the A/B/C/D menu. Executed per DEC-V61-030:
+- `knowledge/whitelist.yaml` LDC gold re-transcribed to 17-point uniform grid interpolated from Ghia 1982 Table I Re=100 column. Key fix: y=0.5 `u` changed from +0.02526 (Phase 0 synthesized) to -0.20581 (Ghia's actual value).
+- `knowledge/gold_standards/lid_driven_cavity.yaml` u_centerline block re-transcribed with matching 17-point data + Ghia's 17 native y-points in header comment for full traceability.
+- 4 LDC grid_convergence teaching fixtures (mesh_20/40/80/160) regenerated for monotone |dev| convergence toward new gold.
+- LDC audit deviation count 16/17 FAIL → **11/17 PASS + 6/17 FAIL** at 5% tolerance. Remaining 6 FAILs are physical residuals of (a) uniform-grid interpolation error on the gold and (b) uniform 129×129 mesh vs Ghia's graded mesh under-resolving the lid BL. Both noted as optional follow-up work.
+
+<details><summary>Historical record (for trace)</summary>
 
 **Raised**: 2026-04-21 via Phase 5b Plan 02 real-solver run + Codex round CHANGES_REQUIRED.
 **Blocking class**: hard floor #3 — `knowledge/gold_standards/` edit required (三禁区 #3).
@@ -55,6 +63,8 @@ Gold values are monotone-increasing through y=0.5 (crosses zero at y~0.47), but 
 **Gate request**: Kogami to pick A/B/C/D. Path A is the correct long-term fix and the least-effort path to Phase 5b PASS. Path D is the right interim posture if Path A is out of scope for this conversation.
 
 **Upstream**: Phase 5b Plan 01 + Plan 02 (commits 0d85c98, 66ac478, c7248ff, 002a6fb, 1f87718).
+
+</details>
 
 ---
 

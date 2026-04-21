@@ -1,51 +1,81 @@
 # Gold Standard — Lid-Driven Cavity
-# Based on Ghia et al. 1982, J. Comput. Phys. 47, 387-411
-# Re = 100, square cavity, lid-driven top wall (u=1.0), all other walls no-slip (u=0)
-# Steady-state, incompressible, structured grid
+# Based on Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table I.
+# Re = 100, square cavity, lid-driven top wall (u=1.0), all other walls no-slip (u=0).
+# Steady-state, incompressible, structured grid.
+#
+# Q-5 Path A closure (2026-04-21, DEC-V61-030):
+#   The prior u_centerline reference_values claimed Ghia 1982 authorship
+#   but did NOT match the paper (old gold: u=+0.025 at y=0.5; Ghia actual:
+#   -0.20581). Values were synthesized in Phase 0 (commit fc21f47d) without
+#   cross-verifying the source. Phase 5a real-solver run first surfaced the
+#   mismatch; Phase 5b confirmed simpleFoam produces genuine Ghia physics.
+#   These values are now interpolated from Ghia 1982 Table I (Re=100 column)
+#   to the harness's uniform 17-point y grid.
+#
+# Ghia 1982 Table I native (non-uniform) y points for Re=100:
+#   0.0000  u=0.00000            | 0.5000  u=-0.20581 (matches target)
+#   0.0547  u=-0.03717           | 0.6172  u=-0.13641
+#   0.0625  u=-0.04192 (matches) | 0.7344  u=+0.00332 (u crosses zero)
+#   0.0703  u=-0.04775           | 0.8516  u=+0.23151
+#   0.1016  u=-0.06434           | 0.9531  u=+0.68717
+#   0.1719  u=-0.10150           | 0.9609  u=+0.73722
+#   0.2813  u=-0.15662           | 0.9688  u=+0.78871
+#   0.4531  u=-0.21090 (min)     | 0.9766  u=+0.84123
+#                                | 1.0000  u=+1.00000 (lid BC)
+#
+# v_centerline and primary_vortex_location blocks below are NOT corrected in
+# this commit (Q-5 scope is u_centerline only). Both sections have suspected
+# schema/value issues (v_centerline appears to be Ghia Table II indexed by x
+# but labelled "y"; primary_vortex_location has vortex_center_y=0.7650 which
+# disagrees with Ghia's Re=100 primary vortex at (0.6172, 0.7344)). These are
+# not currently exercised by the audit-run comparator; flagged as follow-up
+# work in Phase 5c (NON-LDC) or a dedicated audit pass.
 
 quantity: u_centerline
 reference_values:
+  - y: 0.0000
+    u: 0.00000
   - y: 0.0625
-    u: -0.03717
-  - y: 0.1250
     u: -0.04192
+  - y: 0.1250
+    u: -0.07671
   - y: 0.1875
-    u: -0.04124
+    u: -0.10936
   - y: 0.2500
-    u: -0.03667
+    u: -0.14085
   - y: 0.3125
-    u: -0.02799
+    u: -0.16648
   - y: 0.3750
-    u: -0.01641
+    u: -0.18622
   - y: 0.4375
-    u: -0.00289
+    u: -0.20597
   - y: 0.5000
-    u: 0.02526
+    u: -0.20581
   - y: 0.5625
-    u: 0.07156
+    u: -0.16880
   - y: 0.6250
-    u: 0.11910
+    u: -0.12711
   - y: 0.6875
-    u: 0.17285
+    u: -0.05260
   - y: 0.7500
-    u: 0.33304
+    u: 0.03369
   - y: 0.8125
-    u: 0.46687
+    u: 0.15538
   - y: 0.8750
-    u: 0.65487
+    u: 0.33656
   - y: 0.9375
-    u: 0.84927
+    u: 0.61714
   - y: 1.0000
     u: 1.00000
 tolerance: 0.05
-source: "Ghia et al. 1982, J. Comput. Phys."
+source: "Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table I Re=100 column, linearly interpolated to uniform 17-point y grid"
 literature_doi: "10.1016/0021-9991(82)90058-4"
 mesh_info:
-  cells: 64800
+  cells: 16641  # 129×129 (Ghia mesh) — updated from Phase 0 placeholder 64800
   type: structured
 solver_info:
-  name: icoFoam
-  schemes: PISO
+  name: simpleFoam  # Phase 5b migration from icoFoam (transient PISO) to simpleFoam (steady SIMPLE)
+  schemes: SIMPLE
 case_info:
   id: lid_driven_cavity
   Re: 100

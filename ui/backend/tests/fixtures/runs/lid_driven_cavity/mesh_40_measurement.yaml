@@ -6,14 +6,13 @@ run_metadata:
   label_zh: 网格 40² · 过渡
   label_en: Mesh 40² (transitional)
   description_zh: >-
-    40² 网格。Secondary vortex 勉强能看到结构；u_centerline=-0.042，
-    相对 Ghia -0.03717 偏 +13%。5% 容差外 FAIL。
+    40×40 网格。一次精度格式下数值扩散仍主导；u_centerline≈-0.048（|dev|=14.5%）。5% 容差外 FAIL。
   category: grid_convergence
   expected_verdict: FAIL
 case_id: lid_driven_cavity
 source: grid_convergence_study_synthetic
 measurement:
-  value: -0.042
+  value: -0.048
   unit: dimensionless
   run_id: grid_ldc_n40
   commit_sha: null

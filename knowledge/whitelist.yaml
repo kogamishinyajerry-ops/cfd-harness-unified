@@ -19,14 +19,33 @@ cases:
       top_wall_u: 1.0
       other_walls_u: 0.0
     gold_standard:
+      # Q-5 Path A closure (2026-04-21, DEC-V61-030): re-transcribed from Ghia
+      # 1982 Table I Re=100 after the Phase 0 synthesized values failed external
+      # cross-check (prior gold said u=+0.025 at y=0.5; Ghia actual is -0.20581).
+      # Source: Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 Table I col 2.
+      # Values on the uniform 17-point y grid are interpolated linearly from
+      # Ghia's 17 native non-uniform y points. Matches knowledge/gold_standards/
+      # lid_driven_cavity.yaml header comment for full-table traceability.
       quantity: u_centerline
-      description: "沿垂直中线的 u 速度分布（y=0.5 处）"
+      description: "Ghia 1982 Re=100 u velocity along vertical centerline (x=0.5), uniform 17-point y grid"
       reference_values:
-        - {y: 0.0625, u: -0.03717}
-        - {y: 0.1250, u: -0.04192}
-        - {y: 0.5000, u: 0.02526}
-        - {y: 0.7500, u: 0.33304}
-        - {y: 1.0000, u: 1.00000}
+        - {y: 0.0000, u:  0.00000}
+        - {y: 0.0625, u: -0.04192}
+        - {y: 0.1250, u: -0.07671}
+        - {y: 0.1875, u: -0.10936}
+        - {y: 0.2500, u: -0.14085}
+        - {y: 0.3125, u: -0.16648}
+        - {y: 0.3750, u: -0.18622}
+        - {y: 0.4375, u: -0.20597}
+        - {y: 0.5000, u: -0.20581}
+        - {y: 0.5625, u: -0.16880}
+        - {y: 0.6250, u: -0.12711}
+        - {y: 0.6875, u: -0.05260}
+        - {y: 0.7500, u:  0.03369}
+        - {y: 0.8125, u:  0.15538}
+        - {y: 0.8750, u:  0.33656}
+        - {y: 0.9375, u:  0.61714}
+        - {y: 1.0000, u:  1.00000}
       tolerance: 0.05  # 5% 相对误差
 
   - id: backward_facing_step
