@@ -1,21 +1,32 @@
 # Gold Standard — Backward-Facing Step
-# Primary anchor: Le, Moin & Kim 1997, J. Fluid Mech. 330, 349-374 (DNS).
-# Corroborating: Armaly et al. 1983, J. Fluid Mech. 127, 473-496 (experiment).
+# Corroborating literature:
+#   - Le, Moin & Kim 1997, J. Fluid Mech. 330, 349-374 — DNS at Re_H=5100
+#     with expansion ratio 1.2, reports Xr/H=6.28.
+#   - Driver & Seegmiller 1985, AIAA J. 23(2), 163-171 — experiment at
+#     Re_H≈37500 fully-turbulent, reports Xr/H=6.26.
+#   - Armaly et al. 1983, J. Fluid Mech. 127, 473-496 — laminar→
+#     transitional experimental envelope.
 #
-# Anchor choice (Gate Q-4 Path A closure, 2026-04-21):
+# Anchor choice (DEC-V61-046 round-3 R2-M2, 2026-04-23):
 #   The whitelist runs this case at Re_H=7600 (bulk-velocity/step-height
-#   Reynolds number). In that regime Le/Moin/Kim's Re_H=5100 DNS gives
-#   Xr/H = 6.28 — nearest-regime literature value. The earlier anchor
-#   (Driver & Seegmiller 1985 Re_H≈36000 fully-turbulent experiment,
-#   Xr/H=6.26) was dropped because it cited turbulent-regime data for a
-#   transitional-regime run. Numerically similar (~6.2) but not
-#   physically congruent.
+#   Reynolds number), in the post-transition regime where both literature
+#   anchors above (5100 DNS, 37500 experiment) bracket the plateau within
+#   the declared 10% tolerance. The stored reference_values[].value=6.26
+#   is retained for whitelist continuity — it is within 0.3% of the
+#   Le/Moin/Kim 6.28 and matches the Driver & Seegmiller experimental
+#   number exactly, which is how the harness started. It is therefore a
+#   BLENDED engineering anchor rather than a pure Le/Moin/Kim number.
+#   The comparator's 10% tolerance absorbs the 0.02 literature spread
+#   without papering over the real sensitivity: the post-transition
+#   plateau is "weakly Re-sensitive", not a tight <2% claim, and the
+#   remaining drift depends on expansion ratio, inlet BL state, and 2D/3D
+#   effects that the adapter's 2D-empty patch treatment does not model.
 # Expansion ratio 1.125, incompressible, steady.
 # INTERNAL flow over a backward-facing step.
 
 physics_contract:
   geometry_assumption: "Backward-facing step, step height H=1, channel_height=1.125·H (expansion ratio 1.125), 2D with empty front/back (SIMPLE_GRID adapter path); upstream/downstream channel lengths per whitelist defaults."
-  reference_correlation_context: "Le, Moin & Kim 1997 DNS at Re_H=5100 reports Xr/H=6.28 for a BFS with expansion ratio 1.2 (closest published DNS to our regime). Our whitelist runs at Re_H=7600, which sits in the post-transition regime where Xr/H is weakly Re-sensitive relative to the declared 10% tolerance (literature shows Xr/H saturating above Re≈5000 into a slow plateau; the exact 5100→7600 drift is not a tight 2% number and depends on expansion ratio, inlet BL state, and 2D/3D effects). Gate Q-4 Path A closure (DEC-V61-028, 2026-04-21) switched the anchor from Driver & Seegmiller 1985 Re_H≈36000 (turbulent experiment) to Le/Moin/Kim 5100 DNS for closer-regime match."
+  reference_correlation_context: "The stored reference_values[].value=6.26 is a blended engineering anchor (see header block). Le/Moin/Kim 1997 DNS at Re_H=5100 reports 6.28; Driver & Seegmiller 1985 experiment at Re_H≈37500 reports 6.26; both bracket the post-transition plateau at our whitelist Re_H=7600 well inside the 10% tolerance band. The anchor is cited as Le/Moin/Kim because their DNS is the closer-regime literature; the 0.02 numerical offset vs the stored 6.26 is treated as within-tolerance rather than as a pure-DNS claim. No tight <2% sensitivity claim is made — the plateau is qualitative, and the residual drift depends on expansion ratio (1.2 DNS vs 1.125 adapter), inlet BL state, and the 2D-empty-patch simplification of the adapter path."
   physics_precondition:
     - condition: "Re_H sits in the post-transition regime where Xr/H is weakly Re-sensitive (7600 adapter vs 5100 reference, drift absorbed by 10% tolerance)"
       satisfied_by_current_adapter: partial
@@ -36,9 +47,9 @@ quantity: reattachment_length
 reference_values:
   - value: 6.26
     unit: Xr/H
-    description: "reattachment length normalized by step height H (Le/Moin/Kim 1997 DNS at Re_H=5100 reports 6.28; our whitelist Re_H=7600 sits in the same turbulent-regime plateau where Xr/H varies smoothly by <2%)"
+    description: "reattachment length normalized by step height H — blended engineering anchor at Re_H=7600 (see YAML header 'Anchor choice' block). Brackets: Le/Moin/Kim 1997 DNS @ Re_H=5100 reports 6.28; Driver & Seegmiller 1985 experiment @ Re_H≈37500 reports 6.26. Stored value 6.26 kept for whitelist continuity; the 0.02 literature spread is inside the 10% tolerance band."
 tolerance: 0.10
-source: "Le, Moin & Kim 1997, J. Fluid Mech. (DNS at Re_H=5100)"
+source: "Le, Moin & Kim 1997, J. Fluid Mech. (DNS at Re_H=5100; blended with Driver & Seegmiller 1985 Xr/H=6.26 for whitelist continuity — see gold-file header for anchor rationale)"
 literature_doi: "10.1017/S0022112096003941"
 mesh_info:
   cells: 36000

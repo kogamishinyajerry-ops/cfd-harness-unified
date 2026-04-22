@@ -63,7 +63,7 @@ export const LEARN_CASES: LearnCase[] = [
       `Reattachment length 随 Re 变化，不是单调的`,
       `低 Re 时解析稳态；高 Re 时需要非稳态/湍流建模`,
     ],
-    why_validation_matters_zh: `反附着长度 L/h 是这个问题唯一的"外部可测量"。Le, Moin & Kim 1997 的 DNS（Re_H=5100）给出 Xr/H=6.28，Armaly 1983 的实验在同一 Re 段交叉验证。你的代码如果把 L/h 算偏太多，八成是分离点附近网格不够、或者湍流模型不合适——这是验证比自检更有用的典型场景。本仓库在 Re_H=7600 下对标 Xr/H=6.26，落在 Le/Moin/Kim DNS 同一湍流平台区内（Re_H ≈ 5000-10000 这段 Xr/H 对 Re 的敏感度 <2%）。`,
+    why_validation_matters_zh: `反附着长度 L/h 是这个问题唯一的"外部可测量"。两个文献共同锚定这个值：Le/Moin/Kim 1997 DNS 在 Re_H=5100 给出 Xr/H=6.28，Driver & Seegmiller 1985 实验在 Re_H≈37500 给出 6.26——我们在 Re_H=7600 的 post-transition 平台区里，两个数把我们的 tolerance 带从两侧夹住。本仓库把 6.26 作为一个融合的 engineering anchor 保留（见 gold-file header），0.02 的差距由 10% 容差吸收，而不是一个紧致的<2%声明——真实的 Re 敏感度取决于扩张比、入口边界层、以及 2D/3D 效应，adapter 走的是 2D empty-patch 这条简化路径。`,
     common_pitfall_zh: `在 Re=100 左右就容易出现的物理伪像：如果解欠收敛，零速交点会落在台阶上游（x<0），对应回流区"穿墙"——这物理上不可能。我们在采集器里加了 x>0 的保险。`,
   },
   {
