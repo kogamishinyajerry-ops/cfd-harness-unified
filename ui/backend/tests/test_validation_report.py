@@ -11,11 +11,247 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ui.backend.main import app
+from ui.backend.schemas.validation import (
+    AuditConcern,
+    GoldStandardReference,
+    MeasuredValue,
+    Precondition,
+)
+from ui.backend.services.validation_report import _derive_contract_status
 
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     return TestClient(app)
+
+
+def _sample_gold_reference() -> GoldStandardReference:
+    return GoldStandardReference(
+        quantity="reattachment_length",
+        ref_value=1.0,
+        unit="dimensionless",
+        tolerance_pct=0.05,
+        citation="Driver 1985",
+    )
+
+
+def _sample_measurement(value: float) -> MeasuredValue:
+    return MeasuredValue(
+        value=value,
+        unit="dimensionless",
+        source="fixture",
+        quantity="reattachment_length",
+        extraction_source="comparator_deviation",
+    )
+
+
+def _sample_preconditions() -> list[Precondition]:
+    return [
+        Precondition(
+            condition="mesh resolution adequate",
+            satisfied=True,
+            evidence_ref="reports/phase5_audit/lid_driven_cavity",
+        )
+    ]
+
+
+def test_hazard_tier_continuity_not_converged_forces_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            )
+        ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_residuals_above_target_forces_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="RESIDUALS_ABOVE_TARGET",
+                summary="Ux=1e-2 > target 1e-3",
+            )
+        ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_bounding_recurrent_forces_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="BOUNDING_RECURRENT",
+                summary="omega bounded in 40% of final iterations",
+            )
+        ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_no_residual_progress_forces_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="NO_RESIDUAL_PROGRESS",
+                summary="Ux plateaued over final 50 iterations",
+            )
+        ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hard_fail_precedes_hazard_tier() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="VELOCITY_OVERFLOW",
+                summary="|U|_max exceeded 100*U_ref",
+            ),
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            ),
+        ],
+    )
+
+    assert status == "FAIL"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_no_concerns_in_band_stays_pass_regression() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [],
+    )
+
+    assert status == "PASS"
+    assert within_tolerance is True
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_out_of_band_still_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.25),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            ),
+            AuditConcern(
+                concern_type="COMPATIBLE_WITH_SILENT_PASS_HAZARD",
+                summary="legacy silent-pass hazard remains armed",
+            ),
+        ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(25.0)
+
+
+def test_resolve_u_ref_lid_driven_cavity() -> None:
+    from types import SimpleNamespace
+
+    from scripts.phase5_audit_run import _resolve_u_ref
+
+    u_ref, resolved = _resolve_u_ref(
+        SimpleNamespace(
+            boundary_conditions={"lid_velocity_u": 1.0},
+            flow_type="INTERNAL",
+        ),
+        "lid_driven_cavity",
+    )
+
+    assert u_ref == pytest.approx(1.0)
+    assert resolved is True
+
+
+def test_resolve_u_ref_backward_facing_step() -> None:
+    from types import SimpleNamespace
+
+    from scripts.phase5_audit_run import _resolve_u_ref
+
+    u_ref, resolved = _resolve_u_ref(
+        SimpleNamespace(boundary_conditions={}, flow_type="INTERNAL"),
+        "backward_facing_step",
+    )
+
+    assert u_ref == pytest.approx(44.2)
+    assert resolved is True
+
+
+def test_resolve_u_ref_unknown_case_fallback() -> None:
+    from scripts.phase5_audit_run import _resolve_u_ref
+
+    u_ref, resolved = _resolve_u_ref(None, "unknown_case_xyz")
+
+    assert u_ref == pytest.approx(1.0)
+    assert resolved is False
+
+
+def test_audit_fixture_doc_stamps_u_ref_unresolved_warn() -> None:
+    from types import SimpleNamespace
+
+    from scripts.phase5_audit_run import _audit_fixture_doc, _resolve_u_ref
+
+    u_ref, resolved = _resolve_u_ref(None, "unknown_case_xyz")
+    report = SimpleNamespace(
+        comparison_result=None,
+        execution_result=SimpleNamespace(
+            success=True,
+            key_quantities={"probe_value": 1.23},
+        ),
+        task_spec=None,
+    )
+
+    doc = _audit_fixture_doc(
+        "unknown_case_xyz",
+        report,
+        "deadbee",
+        phase7a_timestamp=None,
+        u_ref=u_ref,
+        u_ref_resolved=resolved,
+    )
+
+    concern = next(
+        c for c in doc["audit_concerns"] if c["concern_type"] == "U_REF_UNRESOLVED"
+    )
+    assert "default U_ref=1.0" in concern["summary"]
 
 
 def test_cases_index_contains_ten_entries(client: TestClient) -> None:

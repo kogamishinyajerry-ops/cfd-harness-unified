@@ -241,6 +241,60 @@ def test_a2_never_returns_fail_only_hazard(tmp_path: Path) -> None:
     assert a2.verdict == "HAZARD"  # was FAIL pre-fix
 
 
+def test_attest_and_verdict_integration_continuity_hazard(tmp_path: Path) -> None:
+    from ui.backend.schemas.validation import (
+        AuditConcern,
+        GoldStandardReference,
+        MeasuredValue,
+    )
+    from ui.backend.services.validation_report import _derive_contract_status
+
+    log = _write_log(
+        tmp_path,
+        (
+            "Time = 1\n"
+            "time step continuity errors : sum local = 5e-04, global = 1e-06, cumulative = 1e-06\n"
+            "smoothSolver:  Solving for Ux, Initial residual = 1e-06, Final residual = 1e-07, No Iterations 2\n"
+            "ExecutionTime = 1 s\n"
+            "End\n"
+        ),
+    )
+    attestation = ca.attest(log, case_id="lid_driven_cavity")
+
+    assert attestation.overall == "ATTEST_HAZARD"
+    a2 = next(c for c in attestation.checks if c.check_id == "A2")
+    assert a2.verdict == "HAZARD"
+
+    concerns = [
+        AuditConcern(
+            concern_type=concern.concern_type,
+            summary=concern.summary,
+            detail=concern.detail,
+            decision_refs=["DEC-V61-038"],
+        )
+        for concern in attestation.concerns
+    ]
+    status, _, within_tolerance, _, _ = _derive_contract_status(
+        GoldStandardReference(
+            quantity="u_centerline",
+            ref_value=-0.2058,
+            unit="dimensionless",
+            tolerance_pct=0.05,
+            citation="Ghia 1982",
+        ),
+        MeasuredValue(
+            value=-0.2050,
+            source="fixture",
+            quantity="u_centerline",
+        ),
+        [],
+        concerns,
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+
+
 def test_load_thresholds_defaults() -> None:
     thresholds = load_thresholds()
     assert isinstance(thresholds, Thresholds)
