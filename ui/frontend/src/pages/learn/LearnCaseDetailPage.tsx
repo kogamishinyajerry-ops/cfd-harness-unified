@@ -394,6 +394,27 @@ function StoryTab({
         </p>
       </section>
 
+      {/* DEC-V61-048 round-1 batch 4 (flagship deep-dive) — physical
+          intuition narrative for the 3 lowest-scoring cases (LDC, RBC,
+          duct). Codex B-axis: even with lineage + teaching cards +
+          runbook + troubleshooting, these cases still lacked "what does
+          this flow actually look like standing inside it, and how does
+          it change across regimes". Populated only for flagship cases
+          — optional field, rendered only when present. Paragraphs split
+          on \n\n for readability. */}
+      {learnCase.physics_intuition_zh && (
+        <section>
+          <h2 className="card-title mb-3">物理直觉 · Physical intuition</h2>
+          <div className="space-y-3 rounded-md border border-indigo-900/40 bg-indigo-950/10 p-4">
+            {learnCase.physics_intuition_zh.split("\n\n").map((para, i) => (
+              <p key={i} className="text-[13.5px] leading-relaxed text-surface-100">
+                {para}
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <h2 className="card-title mb-3 text-amber-300">常见陷阱</h2>
         <div className="rounded-md border border-amber-900/40 bg-amber-950/20 px-4 py-3">
