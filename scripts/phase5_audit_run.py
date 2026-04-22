@@ -45,6 +45,10 @@ from src.comparator_gates import (  # noqa: E402
     check_all_gates,
     violation_to_audit_concern_dict,
 )
+from src.convergence_attestor import (  # noqa: E402
+    attest,
+    check_to_audit_concern_dict,
+)
 
 RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 RAW_DIR = REPO_ROOT / "reports" / "phase5_audit"
@@ -344,20 +348,46 @@ def _audit_fixture_doc(
         ],
     }
 
-    # DEC-V61-036b G3/G4/G5: run post-extraction physics gates against the
-    # captured field artifacts + solver log. Each violation is injected as
-    # an audit_concerns[] entry with a concern_type the verdict engine
-    # recognizes as a hard-FAIL trigger. Non-blocking on missing artifacts
-    # — gates skip gracefully when the log/VTK is unavailable.
+    # DEC-V61-036b G3/G4/G5 + DEC-V61-038 A1..A6: run pre-extraction
+    # attestor THEN post-extraction physics gates against the captured
+    # field artifacts + solver log. Attestor checks convergence process;
+    # gates check final-state sanity. Both emit audit_concerns[] entries
+    # that the verdict engine hard-FAILs on. Non-blocking on missing
+    # artifacts — both skip gracefully when log/VTK is unavailable.
     if phase7a_timestamp is not None:
         artifact_dir = FIELDS_DIR / case_id / phase7a_timestamp
         solver_log: "Path | None" = None
         if artifact_dir.is_dir():
-            # Solver log filename is "log.{solver_name}"; scan for any match.
             log_candidates = sorted(artifact_dir.glob("log.*"))
             if log_candidates:
                 solver_log = log_candidates[0]
         vtk_dir = artifact_dir / "VTK" if artifact_dir.is_dir() else None
+
+        # DEC-V61-038 attestor — runs first, records overall verdict on the
+        # fixture for UI display + injects HAZARD/FAIL checks as concerns.
+        try:
+            attestation = attest(solver_log)
+            doc["attestation"] = {
+                "overall": attestation.overall,
+                "checks": [
+                    {
+                        "check_id": c.check_id,
+                        "verdict": c.verdict,
+                        "concern_type": c.concern_type,
+                        "summary": c.summary,
+                    }
+                    for c in attestation.checks
+                ],
+            }
+            for c in attestation.concerns:
+                doc["audit_concerns"].append(check_to_audit_concern_dict(c))
+        except Exception as exc:  # noqa: BLE001 — never crash the audit
+            print(
+                f"[audit] [WARN] attestor failed on {case_id}: {exc!r}",
+                flush=True,
+            )
+
+        # DEC-V61-036b gates — post-extraction physics checks.
         try:
             gate_violations = check_all_gates(
                 log_path=solver_log,
