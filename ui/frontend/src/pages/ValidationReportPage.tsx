@@ -123,9 +123,15 @@ export function ValidationReportPage() {
 
             <dt className="text-surface-400">Measurement</dt>
             <dd className="mono text-surface-100">
-              {measurement
-                ? `${measurement.value} ${measurement.unit}`
-                : "— (no run)"}
+              {/* DEC-V61-036 G1: measurement.value may be null when the
+                  extractor could not locate the gold's target quantity —
+                  render a clear "missing-target-quantity" indicator
+                  instead of the literal string "null dimensionless". */}
+              {!measurement
+                ? "— (no run)"
+                : measurement.value === null
+                  ? `— (${measurement.quantity ?? "target quantity"} not extracted)`
+                  : `${measurement.value} ${measurement.unit}`}
             </dd>
 
             <dt className="text-surface-400">Deviation</dt>

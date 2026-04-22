@@ -122,6 +122,54 @@ def test_g1_value_none_forces_fail(client: TestClient) -> None:
     assert within is None
 
 
+def test_g1_profile_quantity_bracketed_deviation_is_honest() -> None:
+    """DEC-V61-036 G1 round 2 (Codex BLOCKER B1): when the gold's quantity
+    is a profile (e.g., `u_centerline`), the comparator emits deviations
+    named `u_centerline[y=0.3750]`, not `u_centerline`. The driver must
+    match the bracketed form as an honest extraction, NOT falsely fall
+    through to `no_numeric_quantity` and hard-FAIL the case.
+    """
+    import types
+
+    from scripts.phase5_audit_run import _primary_scalar
+
+    # Fake ComparisonResult with a profile deviation.
+    fake_dev = types.SimpleNamespace(
+        quantity="u_centerline[y=0.3750]", actual=0.12345, expected=0.16486
+    )
+    fake_comp = types.SimpleNamespace(deviations=[fake_dev], passed=False, summary="")
+    fake_exec = types.SimpleNamespace(key_quantities={"u_centerline": [0.1, 0.2, 0.3]})
+    fake_report = types.SimpleNamespace(
+        comparison_result=fake_comp, execution_result=fake_exec
+    )
+    quantity, value, src = _primary_scalar(fake_report, expected_quantity="u_centerline")
+    assert quantity == "u_centerline[y=0.3750]"
+    assert value == pytest.approx(0.12345)
+    assert src == "comparator_deviation"
+
+
+def test_g1_profile_quantity_list_value_accepted_when_no_deviations() -> None:
+    """When the comparator produced NO deviations (profile fully within
+    tolerance) but key_quantities has a list for the gold's quantity, the
+    driver must accept it as an honest extraction and record a
+    `key_quantities_profile_sample` source — NOT hard-FAIL."""
+    import types
+
+    from scripts.phase5_audit_run import _primary_scalar
+
+    fake_comp = types.SimpleNamespace(deviations=[], passed=True, summary="")
+    fake_exec = types.SimpleNamespace(
+        key_quantities={"u_centerline": [0.111, 0.222, 0.333]}
+    )
+    fake_report = types.SimpleNamespace(
+        comparison_result=fake_comp, execution_result=fake_exec
+    )
+    quantity, value, src = _primary_scalar(fake_report, expected_quantity="u_centerline")
+    assert quantity == "u_centerline[0]"
+    assert value == pytest.approx(0.111)
+    assert src == "key_quantities_profile_sample"
+
+
 def test_g1_measurement_quantity_field_propagates(client: TestClient) -> None:
     """DEC-V61-036 added MeasuredValue.quantity + extraction_source fields.
     Verify they surface in the API response for downstream UI use."""

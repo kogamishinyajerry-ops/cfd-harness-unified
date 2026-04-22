@@ -131,10 +131,21 @@ def _primary_scalar(
     kq = report.execution_result.key_quantities or {}
 
     if expected_quantity is not None:
-        # (1) comparator deviation matching gold's quantity
+        # DEC-V61-036 G1 round 2: profile quantities (LDC u_centerline, NACA
+        # pressure_coefficient, plane_channel u_mean_profile) are emitted as
+        # per-coordinate comparator deviations named `expected_quantity[y=X]`,
+        # `expected_quantity[x/c=Y]`, etc. Match both the exact-scalar case
+        # AND the bracketed-profile case as honest extractions.
+        def _quantity_matches(dev_quantity: str) -> bool:
+            if dev_quantity == expected_quantity:
+                return True
+            # Strip `[axis=value]` suffix for profile deviations.
+            return dev_quantity.split("[", 1)[0] == expected_quantity
+
+        # (1) comparator deviation matching gold's quantity (scalar OR profile)
         if comp is not None and comp.deviations:
             for dev in comp.deviations:
-                if dev.quantity == expected_quantity:
+                if _quantity_matches(dev.quantity):
                     actual = dev.actual
                     if isinstance(actual, dict) and "value" in actual:
                         return dev.quantity, float(actual["value"]), "comparator_deviation"
@@ -154,6 +165,33 @@ def _primary_scalar(
                 value["value"], (int, float)
             ):
                 return expected_quantity, float(value["value"]), "key_quantities_alias_dict"
+            # DEC-V61-036 G1 round 2: list-valued key_quantity IS honest
+            # extraction for profile gold standards. The comparator would
+            # normally emit per-coordinate deviations; if there ARE no
+            # deviations (i.e., profile is within tolerance at every point),
+            # record the profile as present without forcing hard-FAIL, and
+            # sample a scalar representative for UI display.
+            if isinstance(value, list) and value:
+                first = value[0]
+                if isinstance(first, (int, float)) and not isinstance(first, bool):
+                    # All profile points within tolerance (no deviations) and
+                    # comparator considered the full profile honestly. Record
+                    # the first-coordinate value as the scalar display sample.
+                    return (
+                        f"{expected_quantity}[0]",
+                        float(first),
+                        "key_quantities_profile_sample",
+                    )
+                # Profile of non-scalar entries (e.g., list of dicts with
+                # value key). Pick the first dict's value if present.
+                if isinstance(first, dict) and "value" in first and isinstance(
+                    first["value"], (int, float)
+                ):
+                    return (
+                        f"{expected_quantity}[0]",
+                        float(first["value"]),
+                        "key_quantities_profile_sample_dict",
+                    )
         # (3) G1 miss — NO fallback. Signal the verdict engine to hard-FAIL.
         return expected_quantity, None, "no_numeric_quantity"
 

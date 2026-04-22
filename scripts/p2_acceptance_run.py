@@ -115,9 +115,16 @@ def _extract_primary_measurement(
     kq = report.execution_result.key_quantities or {}
 
     if expected_quantity is not None:
+        # DEC-V61-036 G1 round 2: profile-quantity support — see
+        # phase5_audit_run._primary_scalar for full discussion.
+        def _quantity_matches(dev_quantity: str) -> bool:
+            if dev_quantity == expected_quantity:
+                return True
+            return dev_quantity.split("[", 1)[0] == expected_quantity
+
         if comp is not None and comp.deviations:
             for dev in comp.deviations:
-                if dev.quantity == expected_quantity:
+                if _quantity_matches(dev.quantity):
                     actual = dev.actual
                     if isinstance(actual, dict) and "value" in actual:
                         return dev.quantity, float(actual["value"]), "comparator_deviation"
@@ -136,6 +143,22 @@ def _extract_primary_measurement(
                 value["value"], (int, float)
             ):
                 return expected_quantity, float(value["value"]), "key_quantities_alias_dict"
+            if isinstance(value, list) and value:
+                first = value[0]
+                if isinstance(first, (int, float)) and not isinstance(first, bool):
+                    return (
+                        f"{expected_quantity}[0]",
+                        float(first),
+                        "key_quantities_profile_sample",
+                    )
+                if isinstance(first, dict) and "value" in first and isinstance(
+                    first["value"], (int, float)
+                ):
+                    return (
+                        f"{expected_quantity}[0]",
+                        float(first["value"]),
+                        "key_quantities_profile_sample_dict",
+                    )
         return expected_quantity, None, "no_numeric_quantity"
 
     # Legacy path (no expected_quantity): preserved for backward compat.

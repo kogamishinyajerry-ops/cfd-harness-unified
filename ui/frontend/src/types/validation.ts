@@ -67,12 +67,20 @@ export interface DecisionLink {
 }
 
 export interface MeasuredValue {
-  value: number;
+  // DEC-V61-036 G1: value is null when the extractor could not locate the
+  // gold's target quantity (MISSING_TARGET_QUANTITY concern is also emitted).
+  value: number | null;
   unit: string;
   source: string;
   run_id: string | null;
   commit_sha: string | null;
   measured_at: string | null;
+  // DEC-V61-036 G1: the canonical quantity name the extractor targeted.
+  quantity?: string | null;
+  // DEC-V61-036 G1: one of "comparator_deviation" / "key_quantities_direct"
+  // / "key_quantities_alias:<key>" / "key_quantities_profile_sample" /
+  // "key_quantities_fallback" (legacy) / "no_numeric_quantity".
+  extraction_source?: string | null;
 }
 
 export interface CaseDetail {

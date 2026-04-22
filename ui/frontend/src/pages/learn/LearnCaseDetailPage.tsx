@@ -862,7 +862,7 @@ function ConvergenceSparkline({
   tolPct,
   activeIdx,
 }: {
-  series: { idx: number; label: string; value: number | undefined; status: ContractStatus }[];
+  series: { idx: number; label: string; value: number | null | undefined; status: ContractStatus }[];
   goldRef: number | undefined;
   tolPct: number | undefined;
   activeIdx: number;
@@ -985,7 +985,7 @@ function ConvergenceSparkline({
   );
 }
 
-function formatNumber(v: number | undefined): string {
+function formatNumber(v: number | undefined | null): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
   if (abs === 0) return "0";

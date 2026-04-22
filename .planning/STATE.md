@@ -1228,3 +1228,39 @@ The 7 FAIL verdicts surface pre-existing solver config issues (per CLAUDE.md mem
 **Notion**: DEC-V61-034 + Notion page 349c68942bed81e0a3c4cc37a2242fd1. RETRO-V61-002 sync pending (Notion 502 transient; retry scheduled).
 
 **Next**: RBC rendering when batch finishes; RETRO-V61-002 Notion sync retry; Phase 7 Sprint 1 close notification.
+
+---
+
+# Phase 8 Sprint 1 — PASS-washing remediation (2026-04-22)
+
+**Trigger**: user's 2026-04-22 deep CFD review surfaced that the audit_real_run
+verdicts were showing curated / silently-substituted numbers instead of honest
+solver-in-the-loop measurements. DEC-V61-035 already flipped the default run
+from `reference` to `audit_real_run` (surfacing the honesty), and this sprint
+closes the structural gaps the review named.
+
+**Sprint plan** (sub-DECs split from user's 5 listed integrity issues):
+- **DEC-V61-036** Hard comparator gates, split into G1/G2-G6 sub-DECs
+  - **G1 (LANDED a9d0831)**: missing-target-quantity — closes the
+    "first-numeric key_quantities fallback" PASS-washing path in both
+    `scripts/phase5_audit_run.py::_primary_scalar` and
+    `scripts/p2_acceptance_run.py::_extract_primary_measurement`. Forces
+    hard-FAIL with MISSING_TARGET_QUANTITY concern. Retroactive trigger on
+    legacy `extraction_source: key_quantities_fallback` marker so existing
+    on-disk fixtures are gated without regeneration. 4 cases flip to FAIL:
+    BFS, cylinder_wake, duct_flow, plane_channel_flow.
+  - G2-G6 (pending): unit mismatch, velocity overflow, turbulence negativity,
+    continuity divergence, stuck residuals.
+- **DEC-V61-037** Per-case validation plots (8 cases implementable + 1 blocked)
+- **DEC-V61-038** Convergence attestor A1-A6 (pre-extraction)
+- **DEC-V61-039** LDC verdict reconciliation (PARTIAL vs FAIL)
+- **DEC-V61-040** UI 3-tier semantics
+- **DEC-V61-041** Cylinder shedding FFT (split from 037 — needs runtime extension + forceCoeffs FO + retire canonical-band hardcode)
+
+**Counter**: 21 → 22 (DEC-V61-036 G1 landed). Next retro at 30.
+
+**Codex per DEC**: user explicitly requested senior-CFD-reviewer per-case
+validation pattern. G1 pre-merge review launched 2026-04-22 12:xx with
+per-case fixture sanity-check ask.
+
+**Test baseline**: 142 → 150 (+8 G1 tests in test_g1_missing_target_quantity.py).
