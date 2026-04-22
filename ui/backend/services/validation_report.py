@@ -771,6 +771,16 @@ def build_validation_report(
     status, deviation, within, lower, upper = _derive_contract_status(
         case_detail.gold_standard, measurement, preconditions, audit_concerns
     )
+    # DEC-V61-039: reconcile with comparison_report's pointwise profile
+    # verdict. For LDC (the only current gold-overlay case) 11/17 profile
+    # points pass → PARTIAL, while scalar contract_status is PASS. Surfacing
+    # both honestly lets the UI explain the split-brain rather than hiding
+    # the profile-level truth behind a scalar PASS. Non-blocking: if the
+    # comparison_report service is absent or the case is not gold-overlay,
+    # profile_verdict stays None.
+    profile_verdict, profile_pass, profile_total = _compute_profile_verdict(
+        case_id, resolved_run_id
+    )
     return ValidationReport(
         case=case_detail,
         gold_standard=case_detail.gold_standard,
@@ -783,4 +793,48 @@ def build_validation_report(
         audit_concerns=audit_concerns,
         preconditions=preconditions,
         decisions_trail=decisions_trail,
+        profile_verdict=profile_verdict,
+        profile_pass_count=profile_pass,
+        profile_total_count=profile_total,
+    )
+
+
+def _compute_profile_verdict(
+    case_id: str, run_label: str | None
+) -> tuple[str | None, int | None, int | None]:
+    """DEC-V61-039: compute pointwise profile verdict from comparison_report.
+
+    Returns (verdict, pass_count, total_count). All three None when:
+      - case is not gold-overlay (not LDC),
+      - no sample data available for the run,
+      - comparison_report service raises (guarded).
+
+    Currently only LDC has the uCenterline sample pipeline wired. When
+    DEC-V61-037 per-case plots land, other cases will emit their own
+    profile samples and become gold-overlay too.
+    """
+    if run_label is None:
+        return (None, None, None)
+    try:
+        from ui.backend.services import comparison_report as cr
+
+        # Only LDC is currently in the gold-overlay set (DEC-V61-034). Other
+        # cases are visual-only or scalar; profile_verdict stays None for
+        # them. Reaching into the module-private set keeps this DEC tight —
+        # if the set expands later, the verdict surfaces automatically.
+        if case_id not in getattr(cr, "_GOLD_OVERLAY_CASES", set()):
+            return (None, None, None)
+        ctx = cr.build_report_context(case_id, run_label)
+    except Exception:  # noqa: BLE001
+        return (None, None, None)
+    if not ctx or ctx.get("visual_only"):
+        return (None, None, None)
+    verdict = ctx.get("verdict")
+    metrics = ctx.get("metrics") or {}
+    if verdict not in ("PASS", "PARTIAL", "FAIL"):
+        return (None, None, None)
+    return (
+        verdict,
+        metrics.get("n_pass"),
+        metrics.get("n_total"),
     )

@@ -66,6 +66,15 @@ export interface DecisionLink {
   autonomous: boolean;
 }
 
+// DEC-V61-039: profile_verdict + pointwise counts surfaced alongside
+// contract_status so the UI can explain split-brain (LDC audit_real_run
+// → scalar FAIL, profile PARTIAL 11/17).
+export interface ValidationReportExtras {
+  profile_verdict: "PASS" | "PARTIAL" | "FAIL" | null;
+  profile_pass_count: number | null;
+  profile_total_count: number | null;
+}
+
 export interface MeasuredValue {
   // DEC-V61-036 G1: value is null when the extractor could not locate the
   // gold's target quantity (MISSING_TARGET_QUANTITY concern is also emitted).
@@ -100,7 +109,7 @@ export interface CaseDetail {
   contract_status_narrative: string | null;
 }
 
-export interface ValidationReport {
+export interface ValidationReport extends ValidationReportExtras {
   case: CaseDetail;
   gold_standard: GoldStandardReference;
   measurement: MeasuredValue | null;

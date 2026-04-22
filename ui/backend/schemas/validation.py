@@ -207,6 +207,30 @@ class ValidationReport(BaseModel):
     audit_concerns: list[AuditConcern] = Field(default_factory=list)
     preconditions: list[Precondition] = Field(default_factory=list)
     decisions_trail: list[DecisionLink] = Field(default_factory=list)
+    # DEC-V61-039: surface the profile-level pointwise verdict alongside
+    # the scalar contract_status. For gold-overlay cases (currently only
+    # LDC) the comparison_report service computes PASS/PARTIAL/FAIL from
+    # point-in-tolerance counts — that answer differs from scalar
+    # contract_status when the scalar happens to hit a passing profile
+    # point but other points fail (LDC: 11/17 points pass → PARTIAL).
+    # Including both verdicts lets the UI honestly surface the split-brain
+    # instead of picking one and hiding the other.
+    profile_verdict: Literal["PASS", "PARTIAL", "FAIL"] | None = Field(
+        None,
+        description=(
+            "Pointwise profile verdict for gold-overlay cases; None when "
+            "no profile comparison is available (scalar-only cases or "
+            "visual-only runs)."
+        ),
+    )
+    profile_pass_count: int | None = Field(
+        None,
+        description=(
+            "Number of gold reference points within tolerance band. None "
+            "when profile_verdict is None."
+        ),
+    )
+    profile_total_count: int | None = None
 
 
 # ---------------------------------------------------------------------------
