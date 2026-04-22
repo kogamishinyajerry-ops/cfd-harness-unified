@@ -40,8 +40,12 @@ export function Layout() {
           <h1 className="mt-0.5 text-sm font-semibold text-surface-100">
             V&amp;V Workbench
           </h1>
-          <p className="mt-0.5 text-[10px] text-surface-500">
-            Path B · Phase 0..5 MVP
+          {/* DEC-V61-046 round-1 R1-N1: buyer-readable bridge copy instead of
+              the internal-language "Path B · Phase 0..5 MVP" (which reads as
+              governance-speak to someone arriving from /learn). Internal
+              phase provenance moved to the sidebar footer. */}
+          <p className="mt-0.5 text-[10px] leading-snug text-surface-500">
+            Evidence workbench for reviewers, auditors, and team leads.
           </p>
         </div>
         <nav className="space-y-0.5">
@@ -83,9 +87,9 @@ export function Layout() {
             ),
           )}
         </nav>
-        <footer className="mt-8 border-t border-surface-800 px-2 pt-4 text-[10px] text-surface-500">
+        <footer className="mt-8 border-t border-surface-800 px-2 pt-4 text-[10px] leading-snug text-surface-500">
           Path B · agentic V&amp;V workbench<br />
-          DEC-V61-002 · DEC-V61-003
+          Phase 0..5 MVP · DEC-V61-002 / 003
         </footer>
       </aside>
       <main className="flex-1 overflow-y-auto">

@@ -20,6 +20,11 @@ export function LearnLayout() {
             </span>
           </Link>
           <nav className="flex items-center gap-6 text-[13px]">
+            {/* DEC-V61-046 round-1 R1-M5: removed two placeholder nav
+                items ("学习路径" / "文献") that previously fired window.alert
+                "即将上线". Placeholders in a buyer-facing top-nav read as
+                "demo not finished". Will re-introduce when the pages are
+                actually built (currently not scoped). */}
             <NavLink
               to="/learn"
               end
@@ -31,31 +36,11 @@ export function LearnLayout() {
             >
               案例目录
             </NavLink>
-            <a
-              href="#"
-              className="text-surface-500"
-              onClick={(e) => {
-                e.preventDefault();
-                window.alert("学习路径即将上线：按难度、按物理场分类的导读");
-              }}
-            >
-              学习路径
-            </a>
-            <a
-              href="#"
-              className="text-surface-500"
-              onClick={(e) => {
-                e.preventDefault();
-                window.alert("参考文献视图即将上线：每个经典案例背后的原始论文");
-              }}
-            >
-              文献
-            </a>
             <span className="h-4 w-px bg-surface-700" aria-hidden />
             <Link
               to="/pro"
               className="text-[11px] uppercase tracking-[0.16em] text-surface-400 hover:text-surface-200"
-              title="Pro workbench: audit packages, decisions, run monitor"
+              title="Pro workbench: audit packages, decisions, run monitor — for reviewers and audit teams"
             >
               Pro Workbench →
             </Link>
