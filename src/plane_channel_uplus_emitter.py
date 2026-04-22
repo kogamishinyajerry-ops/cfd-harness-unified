@@ -222,10 +222,13 @@ def compute_normalized_profile(
     double-normalization (documented here so a future buoyantFoam
     port doesn't accidentally repeat the fix).
 
-    Half-channel fold: for a channel at y ∈ [y_bottom, y_top], each
-    cell's wall-distance is the smaller of its distance to either wall.
-    We then keep only cells whose y+ ≤ Re_tau (past centerline is
-    the reflected half; keeping both would double-count).
+    Half-channel fold (Codex DEC-V61-043 round-1 FLAG closure): we
+    keep ONLY the lower half (y ≤ centerline), using y_wall =
+    |y − y_bottom|. Points past centerline are dropped outright
+    rather than folded — folding-without-dedup produced duplicate
+    y_plus entries, and folding-with-average would silently mask any
+    upper/lower asymmetry. If a case ever develops real asymmetry,
+    it should emit two separate profiles.
 
     Returns a frozen dataclass with tuples so it can be safely cached.
     """
