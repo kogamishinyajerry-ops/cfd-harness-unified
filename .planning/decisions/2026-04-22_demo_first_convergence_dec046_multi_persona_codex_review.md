@@ -23,8 +23,8 @@ autonomous_governance: true
 autonomous_governance_counter_v61: 33 (33rd +1 entry since RETRO-V61-001 counter reset)
 external_gate_self_estimated_pass_rate: 0.70
 codex_tool_report_path: .planning/reviews/round_2_findings.md (11.5 KB, authored 2026-04-23; round_1_findings.md retained for arc audit)
-notion_sync_status: synced 2026-04-23T00:10 (Status=Accepted, round-1 summary appended as page children; https://www.notion.so/DEC-V61-046-Demo-first-convergence-3-persona-Codex-iteration-34ac68942bed81fa909dd8315a7bf7dd, page_id=34ac6894-2bed-81fa-909d-d8315a7bf7dd)
-github_sync_status: pushed (61140c4 on origin/main 2026-04-23T00:05; includes 4 remediation batches + round-log update)
+notion_sync_status: synced 2026-04-23T00:35 (round-2 remediation summary appended; Status still Accepted; https://www.notion.so/DEC-V61-046-Demo-first-convergence-3-persona-Codex-iteration-34ac68942bed81fa909dd8315a7bf7dd, page_id=34ac6894-2bed-81fa-909d-d8315a7bf7dd)
+github_sync_status: pushed (ba5390b on origin/main 2026-04-23T00:32; round-2 batches 5+6 + round-log update)
 related:
   - DEC-V61-035 (flip default run audit_real_run; underpins this round's dashboard distribution)
   - DEC-V61-036 G1/G3/G4/G5 (gates)
@@ -130,8 +130,8 @@ Notion sync.
 - **New commits**: c87a354, f6d1743 (local).
 - **Test suite**: 789 → 791 passed / 2 skipped (+2 new tri-state tests, 0 regressions).
 - **Frontend**: typecheck clean; build 1.33s; bundle unchanged 803 KB / 259 KB gzip.
-- **Notion sync**: pending (to update after push).
-- **GitHub sync**: pending (to push).
+- **GitHub sync**: pushed 2026-04-23T00:32 — batches 5+6 + round-log update landed on origin/main (c87a354, f6d1743, ba5390b).
+- **Notion sync**: synced 2026-04-23T00:35 — round-2 remediation summary appended as page children (4 blocks covering batches 5+6 + deferral acceptance + round-3 next-step note).
 
 ### Round 3 — TBD
 Codex re-review after round-2 remediation. Expected: R3-B1 tri-state and R2-M2 blended-anchor fix verified; R1-N2 (browser title) + R1-N3 (audit-bridge context) judged as nits not blockers. Ideal outcome: consolidated APPROVE or APPROVE_WITH_COMMENTS with deferrals intact.
