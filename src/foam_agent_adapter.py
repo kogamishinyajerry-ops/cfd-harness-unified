@@ -7699,11 +7699,18 @@ mergePatchPairs
                 p_inf=p_inf,
             )
         except AirfoilSurfaceSamplerError as exc:
-            # Corruption: fail loud via a clearly-labelled extractor
-            # concern. Downstream DEC-036 G1 will flag
-            # MISSING_TARGET_QUANTITY at the comparator since
-            # pressure_coefficient is not overwritten.
+            # Codex DEC-V61-044 round-1 BLOCKER closure: FO corruption
+            # MUST invalidate the upstream band-averaged scalar so
+            # DEC-V61-036 G1 MISSING_TARGET_QUANTITY fires at the
+            # comparator — don't let the stale legacy value stand.
             key_quantities["pressure_coefficient_emitter_error"] = str(exc)
+            for stale in (
+                "pressure_coefficient",
+                "pressure_coefficient_x",
+                "pressure_coefficient_profile",
+                "pressure_coefficient_source",
+            ):
+                key_quantities.pop(stale, None)
             return key_quantities
         if emitted is not None:
             key_quantities.update(emitted)
@@ -7718,7 +7725,11 @@ mergePatchPairs
         q_ref = 0.5 * rho * U_inf * U_inf
         if q_ref <= 0.0 or chord <= 0.0:
             return key_quantities
-        cp_entries: List[Dict[str, float]] = []
+        # Codex DEC-V61-044 round-1 FLAG closure: emit as parallel
+        # scalar + axis lists (not list[dict]). The comparator treats
+        # pressure_coefficient as numeric vector data and would
+        # TypeError on list[dict].
+        cp_pairs: List[Tuple[float, float]] = []
         for coords, values in points:
             if len(coords) < 3 or not values:
                 continue
@@ -7727,13 +7738,12 @@ mergePatchPairs
                 p = float(values[0])
             except (ValueError, TypeError):
                 continue
-            x_over_c = x / chord
-            cp = p / q_ref
-            cp_entries.append({"x_over_c": x_over_c, "Cp": cp})
-        if not cp_entries:
+            cp_pairs.append((x / chord, p / q_ref))
+        if not cp_pairs:
             return key_quantities
-        cp_entries.sort(key=lambda entry: entry["x_over_c"])
-        key_quantities["pressure_coefficient"] = cp_entries
+        cp_pairs.sort(key=lambda pair: pair[0])
+        key_quantities["pressure_coefficient"] = [cp for _, cp in cp_pairs]
+        key_quantities["pressure_coefficient_x"] = [x for x, _ in cp_pairs]
         key_quantities["pressure_coefficient_source"] = "sampleDict_direct"
         return key_quantities
 

@@ -233,7 +233,9 @@ def test_emit_cp_profile_returns_none_when_absent(tmp_path: Path) -> None:
 
 def test_emit_cp_profile_produces_comparator_shape(tmp_path: Path) -> None:
     """End-to-end: write synthetic FO output, emit, verify keys match
-    the comparator-expected schema."""
+    the comparator-expected schema. Codex round-1 BLOCKER closure: TE
+    scalar MUST appear in the comparator-facing arrays (gold has an
+    x/c=1.0 anchor that would otherwise be missed)."""
     rows = [
         (0.0, 0.001, 0.0, 0.5),     # stagnation, shared between sides
         (0.0, -0.001, 0.0, 0.5),    # dup
@@ -248,10 +250,9 @@ def test_emit_cp_profile_produces_comparator_shape(tmp_path: Path) -> None:
     result = emit_cp_profile(tmp_path, chord=1.0, U_inf=1.0)
     assert result is not None
     assert result["pressure_coefficient_source"] == "surface_fo_direct"
-    # Upper-surface Cp list (x/c in {0, 0.3} — TE goes to trailing_edge
-    # bucket, z=0 point goes to upper).
-    assert result["pressure_coefficient_x"] == [0.0, 0.3]
-    assert result["pressure_coefficient"] == pytest.approx([1.0, -0.5])
+    # Scalar list: upper {0.0, 0.3} + TE (averaged to one x/c=1.0 entry).
+    assert result["pressure_coefficient_x"] == [0.0, 0.3, 1.0]
+    assert result["pressure_coefficient"] == pytest.approx([1.0, -0.5, 0.2])
     # Full profile includes lower + TE too.
     profile = result["pressure_coefficient_profile"]
     sides = {p["side"] for p in profile}

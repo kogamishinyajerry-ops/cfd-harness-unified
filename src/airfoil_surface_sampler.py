@@ -232,15 +232,25 @@ def emit_cp_profile(
             "points — likely aerofoil patch emitted no faces. Verify "
             "blockMesh patch naming (British spelling `aerofoil`)."
         )
-    # Build the gold-aligned scalar list (upper surface only, AoA=0 gold
-    # assumes symmetric so upper ≈ lower; keeping upper preserves the
-    # stagnation Cp=1 anchor). Downstream comparator uses
-    # pressure_coefficient_x as the axis column.
+    # Build the gold-aligned scalar list (upper surface + trailing edge).
+    # Gold has anchors at x/c ∈ {0, 0.3, 1.0}; dropping trailing_edge
+    # would miss the x/c=1.0 anchor (Codex DEC-V61-044 round-1 BLOCKER
+    # closure). TE faces (x/c > 0.995) are averaged below — their
+    # upper/lower z-sign ambiguity means a single scalar is the
+    # physically-meaningful summary.
     upper = [p for p in cp_points if p.side == "upper"]
+    te = [p for p in cp_points if p.side == "trailing_edge"]
     upper.sort(key=lambda p: p.x_over_c)
+    scalar_list: List[Tuple[float, float]] = [
+        (p.x_over_c, p.Cp) for p in upper
+    ]
+    if te:
+        te_avg_x = sum(p.x_over_c for p in te) / len(te)
+        te_avg_Cp = sum(p.Cp for p in te) / len(te)
+        scalar_list.append((te_avg_x, te_avg_Cp))
     return {
-        "pressure_coefficient": [p.Cp for p in upper],
-        "pressure_coefficient_x": [p.x_over_c for p in upper],
+        "pressure_coefficient": [Cp for _, Cp in scalar_list],
+        "pressure_coefficient_x": [x for x, _ in scalar_list],
         "pressure_coefficient_profile": [
             {"x_over_c": p.x_over_c, "Cp": p.Cp, "side": p.side}
             for p in cp_points
