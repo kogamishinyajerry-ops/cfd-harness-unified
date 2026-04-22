@@ -1257,10 +1257,47 @@ closes the structural gaps the review named.
 - **DEC-V61-040** UI 3-tier semantics
 - **DEC-V61-041** Cylinder shedding FFT (split from 037 — needs runtime extension + forceCoeffs FO + retire canonical-band hardcode)
 
-**Counter**: 21 → 22 (DEC-V61-036 G1 landed). Next retro at 30.
+**Counter**: 21 → 22 (DEC-V61-036 G1 `a9d0831` + round-2 `b3ed913`) → 23
+(DEC-V61-036b `1fedfd6` + Codex-nits `c3afe93`) → 24 (DEC-V61-038
+attestor `7f29a64`). Next retro at 30.
 
 **Codex per DEC**: user explicitly requested senior-CFD-reviewer per-case
-validation pattern. G1 pre-merge review launched 2026-04-22 12:xx with
-per-case fixture sanity-check ask.
+validation pattern.
+- G1 round 1: CHANGES_REQUIRED (B1 profile-quantity blocker + B2 deferred to G2)
+- G1 round 2: APPROVED_WITH_COMMENTS on `b3ed913`
+- G3/G4/G5 round 1: APPROVED_WITH_COMMENTS on `1fedfd6`; 2 nits applied in `c3afe93`:
+  (a) `within_tolerance=None` under hard-FAIL (was confusingly True),
+  (b) NaN/Inf-safe token parsing (was silently skipping worst overflow).
+- DEC-038 attestor review: running as of 2026-04-22 11:10 local.
 
-**Test baseline**: 142 → 150 (+8 G1 tests in test_g1_missing_target_quantity.py).
+**Live attestor+gates matrix on 10 current audit_real_run fixtures** (verified
+against `reports/phase5_fields/*`):
+```
+case                         attestor          gates
+lid_driven_cavity            ATTEST_PASS       []
+backward_facing_step         ATTEST_FAIL       [G3,G4,G5]
+circular_cylinder_wake       ATTEST_FAIL       [G4,G5]
+turbulent_flat_plate         ATTEST_HAZARD     [G3,G4,G5]
+duct_flow                    ATTEST_HAZARD     [G3,G4,G5]
+differential_heated_cavity   ATTEST_PASS       []
+plane_channel_flow           ATTEST_PASS       []  ← DEC-036c G2 territory (u+/y+)
+impinging_jet                ATTEST_HAZARD     []  ← Nu extractor bug
+naca0012_airfoil             ATTEST_PASS       []  ← tolerance band too loose
+rayleigh_benard_convection   ATTEST_PASS       []  ← Nu extractor bug
+```
+
+LDC stays clean across attestor + gates — the gold-overlay reference
+hasn't been destabilised. 5 cases (LDC/DHC/plane_channel/NACA/RBC) show
+ATTEST_PASS but Codex physics audit says they physically FAIL — those
+are comparator/extractor bugs (DEC-036c G2 + case-specific fix DECs)
+not convergence bugs.
+
+**Test baseline**: 142 → 150 (G1) → 166 (G3/G4/G5) → 168 (Codex nits)
+→ 184 (DEC-038 attestor). All green.
+
+**Still queued** in Phase 8 Sprint 1:
+- DEC-V61-036c G2: unit/profile canonicalization + plane_channel u+/y+ comparator fix
+- DEC-V61-037: 8 per-case validation plots (FO refactor + renderers)
+- DEC-V61-039: LDC verdict reconciliation (PARTIAL vs FAIL)
+- DEC-V61-040: UI 3-tier semantics (reference / audit_real_run / visual_only)
+- DEC-V61-041: cylinder Strouhal FFT (split from 037, needs forceCoeffs FO + runtime)
