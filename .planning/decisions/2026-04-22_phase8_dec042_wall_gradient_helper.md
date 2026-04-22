@@ -179,8 +179,9 @@ suite.
 Direct API check shows fail-closed behavior fires correctly:
 - NC extractor without BC metadata → no nusselt_number emitted.
 - IJ extractor without BC metadata → no nusselt_number emitted.
-- Both emit `_*_wall_gradient_missing_bc_metadata = True` marker for
-  debuggability.
+- Neither leaks extractor-internal diagnostic keys into key_quantities
+  (Codex round-1 FLAG 1 closure). Absence of nusselt_number IS the
+  signal; DEC-036 G1 MISSING_TARGET_QUANTITY fires at the comparator.
 
 ## Counter + Codex
 

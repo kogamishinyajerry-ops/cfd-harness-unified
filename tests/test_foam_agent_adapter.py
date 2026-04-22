@@ -1940,8 +1940,14 @@ class TestPopulateIjNusseltFromSampleDict:
         assert out["nusselt_number_profile"][1] == pytest.approx(12.5)
         assert out["nusselt_number_source"] == "sampleDict_direct"
 
-    def test_nu_clamped_to_500_on_runaway(self, tmp_path):
-        """Absurd T_probe delta (1000K) → clamped to 500 not infinity."""
+    def test_nu_runaway_surfaces_unphysical_magnitude_flag(self, tmp_path):
+        """DEC-V61-042 round-1 FLAG 3: previously the sampleDict path
+        silently clamped runaway Nu to 500 — hiding solver divergence
+        behind a benign-looking value. Now it returns the raw Nu and
+        surfaces `nusselt_number_unphysical_magnitude=True` so the
+        downstream comparator/UI can treat it honestly."""
+        # T_probe=1290K vs T_plate=290K, ΔT=20K, D=0.05, Δz=0.001
+        # → Nu = |1290−290|·0.05 / (0.001·20) = 2500
         self._mk_ij_output(tmp_path, [(0.0, 1290.0)])
         task = TaskSpec(
             name="impinging_jet",
@@ -1953,7 +1959,8 @@ class TestPopulateIjNusseltFromSampleDict:
         out = FoamAgentExecutor._populate_ij_nusselt_from_sampledict(
             tmp_path, task, {}
         )
-        assert out["nusselt_number"] == 500.0
+        assert out["nusselt_number"] == pytest.approx(2500.0)
+        assert out.get("nusselt_number_unphysical_magnitude") is True
 
     def test_noop_when_output_missing(self, tmp_path):
         task = TaskSpec(
