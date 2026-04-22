@@ -570,16 +570,18 @@ def _derive_contract_status(
         c.concern_type in _HARD_FAIL_CONCERNS for c in audit_concerns
     )
     if measurement.value is None or has_hard_fail:
-        # Return None deviation/within when there is no trustable scalar; for
-        # G3/G4/G5 with a valid measurement.value we still return the
-        # computed deviation so the UI can surface it as supplementary info.
+        # Codex DEC-036b round-1 feedback: when a hard-fail concern fires,
+        # the scalar measurement cannot be trusted even if it happens to lie
+        # in the tolerance band. Returning `within_tolerance=True` under a
+        # FAIL verdict rendered as "Within band: yes" while status was FAIL,
+        # which is materially confusing. Null the `within` flag whenever
+        # the verdict is hard-failed — the UI now renders "—" in that column.
         if measurement.value is None:
             return ("FAIL", None, None, lower, upper)
         dev_pct = 0.0
         if gs_ref.ref_value != 0.0:
             dev_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
-        within = abs(dev_pct) <= gs_ref.tolerance_pct * 100.0
-        return ("FAIL", dev_pct, within, lower, upper)
+        return ("FAIL", dev_pct, None, lower, upper)
 
     deviation_pct = 0.0
     if gs_ref.ref_value != 0.0:

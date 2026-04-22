@@ -18,10 +18,34 @@ See the accompanying DEC file for ground-truth evidence from the BFS run
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+
+def _exceeds_threshold(value: Optional[float], threshold: float) -> bool:
+    """True when value is NaN, ±inf, OR finite-and-above threshold.
+
+    Codex DEC-036b round-1 feedback: plain `value > threshold` returns False
+    for NaN, which would silently pass the worst blowup mode. NaN and +inf
+    must fire the gate unconditionally.
+    """
+    if value is None:
+        return False
+    if math.isnan(value) or math.isinf(value):
+        return True
+    return value > threshold
+
+
+def _abs_exceeds_threshold(value: Optional[float], threshold: float) -> bool:
+    """|value| > threshold with NaN/Inf guard (same semantics as above)."""
+    if value is None:
+        return False
+    if math.isnan(value) or math.isinf(value):
+        return True
+    return abs(value) > threshold
 
 # ---------------------------------------------------------------------------
 # Thresholds (tunable via per-case override in future; seeded from Codex
@@ -71,21 +95,48 @@ class LogStats:
 # Log parsing
 # ---------------------------------------------------------------------------
 
+# Codex DEC-036b round-1 feedback: token classes below must also accept
+# `nan` / `inf` (case-insensitive). When OpenFOAM's floating-point output
+# overflows past double range it prints `nan` or `-inf`, and if the regex
+# rejected those tokens, the worst blowup mode would silently bypass the
+# gates. Each token class is `[\deE+.\-]+|nan|[+\-]?inf` (case-folded).
+_NUM_TOKEN = r"(?:[\deE+.\-]+|[nN][aA][nN]|[+\-]?[iI][nN][fF])"
+
 _CONTINUITY_RE = re.compile(
-    r"time step continuity errors\s*:\s*sum local\s*=\s*([\deE+.\-]+)\s*,"
-    r"\s*global\s*=\s*[\deE+.\-]+\s*,"
-    r"\s*cumulative\s*=\s*([\deE+.\-]+)"
+    r"time step continuity errors\s*:\s*sum local\s*=\s*(" + _NUM_TOKEN + r")\s*,"
+    r"\s*global\s*=\s*" + _NUM_TOKEN + r"\s*,"
+    r"\s*cumulative\s*=\s*(" + _NUM_TOKEN + r")"
 )
 
 # Matches "bounding k, min: -1.23 max: 4.56 average: 0.1" — the comma+space
 # between min and max varies across OF versions; regex tolerates both.
 _BOUNDING_RE = re.compile(
-    r"bounding\s+(k|epsilon|omega|nuTilda|nut)\s*,\s*"
-    r"min\s*:\s*([\deE+.\-]+)\s*,?\s*"
-    r"max\s*:\s*([\deE+.\-]+)"
+    r"bounding\s+(k|epsilon|omega|nuTilda|nut|nuSgs)\s*,\s*"
+    r"min\s*:\s*(" + _NUM_TOKEN + r")\s*,?\s*"
+    r"max\s*:\s*(" + _NUM_TOKEN + r")"
 )
 
-_FATAL_RE = re.compile(r"FOAM FATAL (IO )?ERROR|floating point exception")
+
+def _parse_foam_number(tok: str) -> Optional[float]:
+    """Parse a numeric token that may be `nan`, `inf`, `-inf`, or a
+    regular finite float. Returns float (nan/inf allowed — callers compare
+    against thresholds and NaN/Inf naturally fail any comparison, which
+    is the intended "this value is catastrophically bad" signal)."""
+    try:
+        return float(tok)
+    except (ValueError, TypeError):
+        return None
+
+# Tightened to avoid false-positive on the benign startup line
+# `sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE)` which
+# announces FPE trapping capability, not an actual exception. The real
+# fatal markers are FOAM FATAL (IO )?ERROR + stack-trace frames.
+_FATAL_RE = re.compile(
+    r"FOAM FATAL (IO )?ERROR|"
+    r"#\d+\s+Foam::error::printStack|"
+    r"^Floating point exception",
+    re.MULTILINE,
+)
 
 
 def parse_solver_log(log_path: Path) -> LogStats:
@@ -107,23 +158,21 @@ def parse_solver_log(log_path: Path) -> LogStats:
         for line in fh:
             m = _CONTINUITY_RE.search(line)
             if m:
-                try:
-                    last_continuity = (float(m.group(1)), float(m.group(2)))
-                except ValueError:
-                    pass
+                sl = _parse_foam_number(m.group(1))
+                cum = _parse_foam_number(m.group(2))
+                if sl is not None and cum is not None:
+                    last_continuity = (sl, cum)
                 continue
             m = _BOUNDING_RE.search(line)
             if m:
                 field_name = m.group(1)
-                try:
-                    field_min = float(m.group(2))
-                    field_max = float(m.group(3))
+                field_min = _parse_foam_number(m.group(2))
+                field_max = _parse_foam_number(m.group(3))
+                if field_min is not None and field_max is not None:
                     last_bounding[field_name] = {
                         "min": field_min,
                         "max": field_max,
                     }
-                except ValueError:
-                    pass
                 continue
             if _FATAL_RE.search(line):
                 stats.fatal_detected = True
@@ -213,7 +262,7 @@ def _check_g3_velocity_overflow(
     if vtk_dir is not None:
         u_max = read_final_velocity_max(vtk_dir)
 
-    if u_max is not None and u_max > threshold:
+    if u_max is not None and _exceeds_threshold(u_max, threshold):
         violations.append(
             GateViolation(
                 gate_id="G3",
@@ -241,7 +290,7 @@ def _check_g3_velocity_overflow(
         eps_bound = log_stats.bounding_last.get("epsilon")
         if eps_bound is not None:
             eps_max = eps_bound.get("max")
-            if eps_max is not None and eps_max > G3_EPSILON_PROXY_MAX:
+            if _exceeds_threshold(eps_max, G3_EPSILON_PROXY_MAX):
                 violations.append(
                     GateViolation(
                         gate_id="G3",
@@ -278,7 +327,10 @@ def _check_g4_turbulence_negativity(
     for field_name, bounds in log_stats.bounding_last.items():
         f_min = bounds.get("min")
         f_max = bounds.get("max")
-        if f_min is not None and f_min < 0.0:
+        # NaN → treat as "catastrophically wrong" → fire gate.
+        if f_min is not None and (
+            math.isnan(f_min) or math.isinf(f_min) or f_min < 0.0
+        ):
             violations.append(
                 GateViolation(
                     gate_id="G4",
@@ -302,7 +354,7 @@ def _check_g4_turbulence_negativity(
                 )
             )
             continue
-        if f_max is not None and f_max > G4_TURBULENCE_MAX_OVERFLOW:
+        if _exceeds_threshold(f_max, G4_TURBULENCE_MAX_OVERFLOW):
             violations.append(
                 GateViolation(
                     gate_id="G4",
@@ -340,7 +392,7 @@ def _check_g5_continuity_divergence(
     sum_local = log_stats.final_continuity_sum_local
     cumulative = log_stats.final_continuity_cumulative
 
-    if sum_local is not None and sum_local > G5_SUM_LOCAL_MAX:
+    if _exceeds_threshold(sum_local, G5_SUM_LOCAL_MAX):
         violations.append(
             GateViolation(
                 gate_id="G5",
@@ -365,7 +417,7 @@ def _check_g5_continuity_divergence(
         )
         return violations  # sum_local already FAILs; don't double-flag
 
-    if cumulative is not None and abs(cumulative) > G5_CUMULATIVE_ABS_MAX:
+    if _abs_exceeds_threshold(cumulative, G5_CUMULATIVE_ABS_MAX):
         violations.append(
             GateViolation(
                 gate_id="G5",

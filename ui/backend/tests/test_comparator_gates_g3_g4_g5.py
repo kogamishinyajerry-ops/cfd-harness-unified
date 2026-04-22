@@ -168,6 +168,32 @@ def test_g3_passes_on_clean_ldc_log(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# NaN/Inf safety (Codex DEC-036b round-1 nit)
+# ---------------------------------------------------------------------------
+
+def test_g5_fires_on_nan_sum_local(tmp_path: Path) -> None:
+    """OpenFOAM overflowed → prints `nan` for continuity; gate must fire."""
+    content = (
+        "time step continuity errors : "
+        "sum local = nan, global = 0.01, cumulative = -0.5\n"
+    )
+    log = _write_log(tmp_path, content)
+    violations = cg.check_all_gates(log_path=log, vtk_dir=None, U_ref=1.0)
+    g5 = [v for v in violations if v.gate_id == "G5"]
+    assert len(g5) == 1, f"expected G5 on nan sum_local, got {violations}"
+
+
+def test_g4_fires_on_inf_k_max(tmp_path: Path) -> None:
+    """+inf in bounding line must fire G4 (not silently skip)."""
+    content = "bounding k, min: 1e-5 max: inf average: 1e+20\n"
+    log = _write_log(tmp_path, content)
+    violations = cg.check_all_gates(log_path=log, vtk_dir=None, U_ref=1.0)
+    g4 = [v for v in violations if v.gate_id == "G4"]
+    assert len(g4) == 1
+    assert g4[0].evidence["field"] == "k"
+
+
+# ---------------------------------------------------------------------------
 # BFS integration — all three gates fire on the real BFS audit log
 # ---------------------------------------------------------------------------
 
@@ -227,9 +253,11 @@ def test_validation_report_hard_fails_on_velocity_overflow_concern() -> None:
         gs, m, preconditions=[], audit_concerns=concerns
     )
     # DEC-V61-036b: VELOCITY_OVERFLOW overrides a "within band" comparator PASS.
+    # Codex round-1 nit applied: within_tolerance is nulled when hard-fail
+    # concern fires, so the UI doesn't render "Within band: yes" under FAIL.
     assert status == "FAIL"
     assert deviation == pytest.approx(0.0, abs=1e-9)
-    assert within is True  # value IS inside band, but verdict is still FAIL
+    assert within is None  # nulled per Codex nit (value IS inside band, but trust is null)
 
 
 def test_validation_report_hard_fails_on_continuity_diverged() -> None:
