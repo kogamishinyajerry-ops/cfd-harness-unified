@@ -257,11 +257,31 @@ class TestAuditConcern:
         return ComparisonResult(passed=True, deviations=[], summary="PASS")
 
     def test_silent_pass_hazard_on_pass_emits_audit_concern(self, attributor):
-        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        # Gate Q-new Case 4 Path A (2026-04-20) promoted the TFP gold from
+        # `COMPATIBLE_WITH_SILENT_PASS_HAZARD` to `SATISFIED_UNDER_LAMINAR_CONTRACT`
+        # (Blasius is the exact analytical solution — no runtime shortcut
+        # hazard lives there anymore). So TFP no longer emits the tag.
+        # Circular Cylinder Wake is still the canonical silent-pass-hazard
+        # case (canonical Strouhal band shortcut lives there).
+        task = make_task(name="Circular Cylinder Wake")
         report = attributor.attribute(task, make_exec_result(), self._clean_pass())
         assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
 
+    def test_silent_pass_hazard_tfp_no_longer_emitted_post_laminar_contract(self, attributor):
+        # Regression guard for the DEC-Q-new-Case-4 Path A rename: TFP under
+        # the laminar (Blasius) contract must NOT emit the silent-pass-hazard
+        # tag, even on clean-PASS, because the physics contract says there's
+        # no runtime shortcut to flag.
+        task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
+        report = attributor.attribute(task, make_exec_result(), self._clean_pass())
+        assert report.audit_concern is None
+
     def test_silent_pass_hazard_enriches_with_spalding_fallback_flag(self, attributor):
+        # Spalding fallback is still a TFP-only adapter artifact, but after
+        # Q-new Case 4 Path A the TFP gold no longer carries SILENT_PASS_HAZARD,
+        # so the enrichment is inert (audit_concern stays None). This test
+        # pins that the enrichment doesn't resurrect a tag that the gold
+        # contract deliberately retired.
         task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
         exec_result = make_exec_result(
             key_quantities={
@@ -272,9 +292,7 @@ class TestAuditConcern:
 
         report = attributor.attribute(task, exec_result, self._clean_pass())
 
-        assert report.audit_concern == (
-            "COMPATIBLE_WITH_SILENT_PASS_HAZARD:spalding_fallback_confirmed"
-        )
+        assert report.audit_concern is None
 
     def test_silent_pass_hazard_enriches_with_canonical_band_shortcut_flag(self, attributor):
         task = make_task(name="Circular Cylinder Wake")
@@ -289,6 +307,10 @@ class TestAuditConcern:
         )
 
     def test_silent_pass_hazard_unchanged_when_spalding_fallback_not_activated(self, attributor):
+        # Post Q-new Case 4: TFP laminar contract ⇒ no audit_concern tag.
+        # The sibling "not_activated" test is still meaningful because it
+        # guards against enrichment-by-default: even when fallback flags
+        # are false, we shouldn't invent a tag the contract said to drop.
         task = make_task(name="Turbulent Flat Plate (Zero Pressure Gradient)")
         exec_result = make_exec_result(
             key_quantities={
@@ -299,7 +321,7 @@ class TestAuditConcern:
 
         report = attributor.attribute(task, exec_result, self._clean_pass())
 
-        assert report.audit_concern == "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
+        assert report.audit_concern is None
 
     def test_silent_pass_hazard_strouhal_flag_false_unchanged(self, attributor):
         task = make_task(name="Circular Cylinder Wake")

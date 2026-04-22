@@ -29,13 +29,22 @@ def test_contract_dashboard_render_contains_core_sections():
     assert "Q-1" in result.html
     assert "Q-2" in result.html
     assert "方腔顶盖驱动流" in result.html
-    assert "全发展湍流管流" in result.html
+    # DEC-V61-011 (Gate Q-2 Path A, 2026-04-20): pipe → square-duct rename.
+    # The canonical title is now "全发展湍流方管流" (Jones 1976 square-duct
+    # correlation). "全发展湍流管流" was a physics-mislabel for a circular pipe.
+    assert "全发展湍流方管流" in result.html
     assert "轴对称冲击射流" in result.html
     assert "Observable mismatch" in result.html
     assert "visual_acceptance_report.html" in result.html
+    # Contract-class distribution drifts case-by-case as gold YAMLs are
+    # reclassified (DEC-V61-011 duct rename, Q-new Case 4 TFP laminar
+    # promotion, DEC-V61-040 UNKNOWN surface). Pin current (2026-04-22)
+    # distribution so accidental re-classification is caught, but leave
+    # room for UNKNOWN to emerge — which is itself a post-DEC-040 signal.
     assert result.summary_counts["COMPATIBLE"] == 3
-    assert result.summary_counts["COMPATIBLE_WITH_SILENT_PASS_HAZARD"] == 2
-    assert result.summary_counts["INCOMPATIBLE"] == 2
+    assert result.summary_counts["COMPATIBLE_WITH_SILENT_PASS_HAZARD"] == 1
+    assert result.summary_counts["INCOMPATIBLE"] == 1
+    assert result.summary_counts.get("UNKNOWN", 0) >= 1  # DEC-V61-040 UNKNOWN surface
 
 
 def test_contract_dashboard_generate_writes_output(tmp_path: Path):
@@ -58,7 +67,10 @@ def test_contract_dashboard_generate_writes_output(tmp_path: Path):
     assert any(ref.startswith("Q-2") for ref in manifest["open_gate_refs"])
     html = output.read_text(encoding="utf-8")
     assert "PENDING_RE_RUN" in html
-    assert "materialized auto_verify_report" in html
+    # Post-DEC-V61-011 the "materialized auto_verify_report" shibboleth was
+    # removed; pin the lasting invariant instead — dashboard must surface
+    # its auto_verify_report.yaml provenance.
+    assert "auto_verify_report.yaml" in html
 
 
 def test_contract_dashboard_cli_default(capsys):

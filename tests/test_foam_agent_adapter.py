@@ -1151,18 +1151,24 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         mock_container.status = "running"
 
         def exec_run_side_effect(cmd, **kwargs):
-            # Determine which command based on cmd content
+            # Determine which command based on cmd content.
+            #
+            # SOLVER ROUTING UPDATE: the default make_task() (SIMPLE_GRID +
+            # INTERNAL + Re=100) now routes through the lid-driven-cavity
+            # detection path (`_is_lid_driven_cavity_case` → simpleFoam) per
+            # foam_agent_adapter.py ~L530. The previous `SIMPLE_GRID + Re<2300
+            # → icoFoam` fallback was deliberately narrowed in the Phase 8
+            # sprint work to stop misrouting laminar cavity to pimpleFoam's
+            # kinematic solver. Mocking `simpleFoam` for solver failure keeps
+            # the test covering "solver non-zero exit bubbles up as failure".
             cmd_str = str(cmd) if not isinstance(cmd, str) else cmd
             if isinstance(cmd, list):
                 cmd_str = " ".join(str(c) for c in cmd)
             if "blockMesh" in cmd_str and "source" in cmd_str:
-                # blockMesh command - succeeds
                 return MagicMock(exit_code=0)
-            elif "icoFoam" in cmd_str and "source" in cmd_str:
-                # icoFoam command - fails (SIMPLE_GRID Re<2300 routes here)
+            elif "simpleFoam" in cmd_str and "source" in cmd_str:
                 return MagicMock(exit_code=1, output=b"solver error")
             else:
-                # mkdir/chmod commands - succeed
                 return MagicMock(exit_code=0)
 
         mock_container.exec_run.side_effect = exec_run_side_effect
@@ -1181,7 +1187,7 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         result = executor.execute(make_task())
 
         assert result.success is False
-        assert "icoFoam failed" in result.error_message
+        assert "simpleFoam failed" in result.error_message
 
     def test_execute_mkdir_failure(self, tmp_path, monkeypatch):
         """case 目录创建失败时返回 failed result。"""
@@ -1451,18 +1457,26 @@ class TestLoadGoldReferenceValues:
     """_load_gold_reference_values — whitelist lookup behavior."""
 
     def test_returns_values_for_lid_driven_cavity_id(self):
-        """Real whitelist entry 'lid_driven_cavity' has 5 reference_values."""
+        """Real whitelist entry 'lid_driven_cavity' exposes the full Ghia 1982
+        u_centerline reference table. The gold YAML was expanded from a
+        5-point subsample to the full 17-point canonical table when the
+        profile comparator (DEC-V61-029 / DEC-V61-045 attestor-first
+        pipeline) started using per-y interpolation. Pin the current
+        shape + canonical endpoints so any future corruption is caught."""
         values = _load_gold_reference_values("lid_driven_cavity")
         assert values is not None
-        assert len(values) == 5
+        assert len(values) == 17
         y_values = [rv["y"] for rv in values if "y" in rv]
-        assert y_values == [0.0625, 0.1250, 0.5000, 0.7500, 1.0000]
+        # Endpoints and a few signature interior points from Ghia 1982 Table I.
+        assert y_values[0] == 0.0
+        assert y_values[-1] == 1.0
+        assert 0.5 in y_values
 
     def test_returns_values_for_lid_driven_cavity_display_name(self):
         """Matching on case.name (not just case.id) also works."""
         values = _load_gold_reference_values("Lid-Driven Cavity")
         assert values is not None
-        assert len(values) == 5
+        assert len(values) == 17
 
     def test_returns_none_for_unknown_name(self):
         """Synthetic test names (not in whitelist) → None, no error."""
