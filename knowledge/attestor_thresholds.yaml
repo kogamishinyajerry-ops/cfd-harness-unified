@@ -1,0 +1,95 @@
+# Convergence Attestor Thresholds — per-case override registry
+#
+# Referenced by: src/convergence_attestor.py (loader added per DEC-V61-045 Track 1)
+# Specified by: DEC-V61-038 §3 Per-case thresholds
+# Remediation: Codex DEC-038 CA-004 (YAML absent) + CA-005 (A3 field-agnostic)
+#
+# Tier semantics:
+# - A1 (solver_exit_clean):   always FAIL
+# - A2 (continuity_floor):    HAZARD default; per-case promote_to_fail list can raise
+# - A3 (residual_floor):      HAZARD default; per-field + per-case thresholds
+# - A4 (iteration_cap):       always FAIL
+# - A5 (bounding_recurrence): HAZARD default
+# - A6 (no_progress):         HAZARD default; per-case decade-window override
+#
+# Schema version: 1 (additive-only changes; bump on breaking change)
+
+schema_version: 1
+
+defaults:
+  # A2: global sum_local floor (incompressible steady target)
+  continuity_floor: 1.0e-4
+
+  # A3: fallback residual floor if field not in residual_floor_per_field
+  residual_floor: 1.0e-3
+
+  # A3: per-field targets (CA-005 fix — field-aware thresholding)
+  # Unknown fields fall back to residual_floor above.
+  residual_floor_per_field:
+    Ux: 1.0e-3
+    Uy: 1.0e-3
+    Uz: 1.0e-3
+    p: 1.0e-3
+    p_rgh: 1.0e-2     # buoyant/multiphase pressure plateaus one decade higher
+    k: 1.0e-3
+    epsilon: 1.0e-3
+    omega: 1.0e-3
+    nuTilda: 1.0e-3
+    h: 1.0e-3         # buoyant enthalpy
+    T: 1.0e-3
+
+  # A4: consecutive-capped-block count before FAIL
+  iteration_cap_detector_count: 3
+
+  # A5: bounding-recurrence window + trigger fraction
+  bounding_recurrence_frac_threshold: 0.30
+  bounding_recurrence_window: 50
+
+  # A6: no-progress window (outer-step residuals) + min decade-of-decay required
+  # CA-006 fix: criterion is <= 1.0 decade (not < 1.0) for "stuck"
+  no_progress_decade_frac: 1.0
+  no_progress_window: 50
+
+# Per-case overrides. Missing keys inherit from defaults.
+# Case IDs must match task_spec.task_id (snake_case whitelist IDs).
+per_case:
+
+  impinging_jet:
+    # Stagnation region p_rgh plateaus higher; DEC-038 expected behavior:
+    # A4 FAIL (1000-iter cap) carries the verdict; A6 should NOT fire.
+    residual_floor_per_field:
+      p_rgh: 5.0e-3
+    # A6 disabled (legitimate inner-solve repeats look like stuck outer-step
+    # residuals under old per-solve semantics; see CA-005 fix in Track 8)
+    promote_to_fail: []
+
+  rayleigh_benard_convection:
+    # Oscillatory instability — residuals don't decay monotonically.
+    residual_floor_per_field:
+      h: 2.0e-3
+      p_rgh: 2.0e-3
+    no_progress_decade_frac: 0.3  # legitimate oscillation tolerance
+    promote_to_fail: []
+
+  circular_cylinder_wake:
+    # Unsteady pimpleFoam — per-step continuity wobble normal.
+    continuity_floor: 1.0e-3
+    promote_to_fail: []
+
+  differential_heated_cavity:
+    # Buoyant-simple at Ra=1e10; BL-coupled residuals plateau higher.
+    residual_floor_per_field:
+      h: 1.0e-2
+      p_rgh: 1.0e-2
+    promote_to_fail: []
+
+  # Steady canonical cases inherit all defaults (no override needed):
+  # - lid_driven_cavity (laminar; A5 N/A by construction)
+  # - backward_facing_step (kEpsilon; DEC expectation: broken fixture → FAIL)
+  # - turbulent_flat_plate (SST; DEC expectation: broken fixture → FAIL)
+  # - plane_channel_flow (DNS log-style; standard floors apply)
+  # - naca0012_airfoil (steady SA; standard floors)
+  # - duct_flow (steady kEpsilon; DEC expectation: broken fixture → FAIL)
+
+# Forward-compat: additional keys under defaults or per_case are non-breaking.
+# Loader should warn on unknown top-level keys, accept unknown nested keys.
