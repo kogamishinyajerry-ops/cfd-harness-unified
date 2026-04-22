@@ -1268,20 +1268,22 @@ validation pattern.
 - G3/G4/G5 round 1: APPROVED_WITH_COMMENTS on `1fedfd6`; 2 nits applied in `c3afe93`:
   (a) `within_tolerance=None` under hard-FAIL (was confusingly True),
   (b) NaN/Inf-safe token parsing (was silently skipping worst overflow).
-- DEC-038 attestor review: running as of 2026-04-22 11:10 local.
+- DEC-038 attestor round 1: CHANGES_REQUIRED on `7f29a64` (A4 BLOCKER: missed p_rgh+DICPCG + counted lines not blocks)
+- DEC-038 attestor round 2: APPROVED_WITH_COMMENTS on `eb51dcf` (fixes + A2/G5 split-brain + ATTEST_NOT_APPLICABLE)
+- DEC-038 attestor nit: PBiCGStab regex ordering `9716dd4`. Closed 2026-04-22 11:32.
 
 **Live attestor+gates matrix on 10 current audit_real_run fixtures** (verified
 against `reports/phase5_fields/*`):
 ```
 case                         attestor          gates
 lid_driven_cavity            ATTEST_PASS       []
-backward_facing_step         ATTEST_FAIL       [G3,G4,G5]
-circular_cylinder_wake       ATTEST_FAIL       [G4,G5]
+backward_facing_step         ATTEST_HAZARD     [G3,G4,G5]  ← G5 hard-FAILs contract
+circular_cylinder_wake       ATTEST_HAZARD     [G4,G5]     ← G5 hard-FAILs contract
 turbulent_flat_plate         ATTEST_HAZARD     [G3,G4,G5]
 duct_flow                    ATTEST_HAZARD     [G3,G4,G5]
 differential_heated_cavity   ATTEST_PASS       []
 plane_channel_flow           ATTEST_PASS       []  ← DEC-036c G2 territory (u+/y+)
-impinging_jet                ATTEST_HAZARD     []  ← Nu extractor bug
+impinging_jet                ATTEST_FAIL       []  ← A4 p_rgh cap (post-round-2 fix)
 naca0012_airfoil             ATTEST_PASS       []  ← tolerance band too loose
 rayleigh_benard_convection   ATTEST_PASS       []  ← Nu extractor bug
 ```
@@ -1293,7 +1295,7 @@ are comparator/extractor bugs (DEC-036c G2 + case-specific fix DECs)
 not convergence bugs.
 
 **Test baseline**: 142 → 150 (G1) → 166 (G3/G4/G5) → 168 (Codex nits)
-→ 184 (DEC-038 attestor). All green.
+→ 184 (DEC-038 attestor) → 190 (DEC-038 round 2 regression tests). All green.
 
 **Still queued** in Phase 8 Sprint 1:
 - DEC-V61-036c G2: unit/profile canonicalization + plane_channel u+/y+ comparator fix
