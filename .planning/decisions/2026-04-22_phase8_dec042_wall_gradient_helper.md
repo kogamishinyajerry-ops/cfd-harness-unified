@@ -162,17 +162,19 @@ that helper.
 
 ## Live verification
 
-```
-$ .venv/bin/python -m pytest tests/test_wall_gradient.py \
-    tests/test_dec042_extractor_integration.py \
-    tests/test_foam_agent_adapter.py -k "nc_nusselt" \
-    ui/backend/tests/ -q
+Post-commit fabd70a + round-1 fixes:
 
-Added: 17 new green tests (11 stencil + 5 integration + 1
-fail-closed). Touched: 2 existing NC-Nu tests (now linear-exact).
-Pre-existing failures unrelated to DEC-042 remain (6 tests in
-test_error_attributor / test_foam_agent_adapter / test_report_engine).
 ```
+tests/test_wall_gradient.py ....................... 11 passed
+tests/test_dec042_extractor_integration.py ........  5 passed
+tests/test_foam_agent_adapter.py -k nc_nusselt .....  3 passed
+ui/backend/tests/ ..................................201 passed
+```
+
+Added 16 new green tests in DEC-042 (11 stencil + 5 integration).
+Two legacy NC-Nu tests rewritten to pass BC metadata + use
+linear-exact profiles. No regressions against pre-existing green
+suite.
 
 Direct API check shows fail-closed behavior fires correctly:
 - NC extractor without BC metadata → no nusselt_number emitted.

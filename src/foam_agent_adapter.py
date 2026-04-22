@@ -7624,11 +7624,18 @@ mergePatchPairs
         points = _try_load_sampledict_output(case_dir, "plateProbes", "T")
         if not points:
             return key_quantities
-        D_nozzle = 0.05  # matches generator default
-        T_plate = 290.0
-        T_inlet = 310.0
-        delta_T_ref = T_inlet - T_plate
-        delta_z = 0.001
+        # DEC-V61-042 round-1 FLAG: read BC metadata from task_spec
+        # instead of hard-coding T_plate=290/T_inlet=310/D=0.05 — keeps
+        # this dormant second measurement path consistent with the
+        # primary _extract_jet_nusselt, so if the sampleDict path is
+        # ever reactivated (DEC-V61-044 plans to wire it into
+        # controlDict functions{}) it uses the same ground truth.
+        bc = task_spec.boundary_conditions or {}
+        D_nozzle = bc.get("D_nozzle", 0.05)
+        T_plate = bc.get("T_plate", 290.0)
+        T_inlet = bc.get("T_inlet", 310.0)
+        delta_T_ref = float(T_inlet) - float(T_plate)
+        delta_z = 0.001  # probe offset above the plate; matches sampleDict generator
         if delta_T_ref <= 0.0 or delta_z <= 0.0:
             return key_quantities
         try:
@@ -7643,15 +7650,19 @@ mergePatchPairs
                 T_probe = float(values[0])
             except (ValueError, TypeError):
                 continue
-            d_T = abs(T_probe - T_plate)
-            nu_local = (d_T * D_nozzle) / (delta_z * delta_T_ref)
-            nu_local = min(max(nu_local, 0.0), 500.0)  # clamp runaway
+            d_T = abs(T_probe - float(T_plate))
+            nu_local = (d_T * float(D_nozzle)) / (delta_z * delta_T_ref)
             nu_profile.append(nu_local)
         if not nu_profile:
             return key_quantities
         key_quantities["nusselt_number"] = nu_profile[0]  # stagnation (smallest r)
         key_quantities["nusselt_number_profile"] = nu_profile
         key_quantities["nusselt_number_source"] = "sampleDict_direct"
+        # DEC-V61-042 round-1 FLAG (consistency with volume-cell path):
+        # surface a HAZARD flag on unphysical magnitudes instead of
+        # silently clamping to [0, 500].
+        if not (0.0 <= nu_profile[0] <= 500.0):
+            key_quantities["nusselt_number_unphysical_magnitude"] = True
         return key_quantities
 
     def _try_populate_from_c3_sampledict(
@@ -7854,7 +7865,10 @@ mergePatchPairs
         bc_type = bc.get("wall_bc_type")
         if wall_coord_hot is None or T_hot_wall is None or bc_type is None:
             # Generator did not plumb wall metadata — fail closed.
-            key_quantities["_nc_wall_gradient_missing_bc_metadata"] = True
+            # Do NOT leak into key_quantities (Codex DEC-042 round-1 FLAG:
+            # measurement state must not carry extractor-internal flags).
+            # The absence of nusselt_number is the signal; DEC-036 G1
+            # picks it up as MISSING_TARGET_QUANTITY at the comparator.
             return key_quantities
 
         from collections import defaultdict
@@ -8214,12 +8228,13 @@ mergePatchPairs
             wall_coord_plate is None or T_plate is None or T_inlet is None
             or bc_type is None or D_nozzle is None
         ):
-            key_quantities["_ij_wall_gradient_missing_bc_metadata"] = True
+            # Fail closed — absence of nusselt_number is the signal.
+            # (Codex DEC-042 round-1 FLAG: don't leak extractor-internal
+            # state into measurement key_quantities.)
             return key_quantities
 
         Delta_T = float(T_inlet) - float(T_plate)
         if abs(Delta_T) < 1e-10:
-            key_quantities["_ij_wall_gradient_zero_delta_t"] = True
             return key_quantities
 
         from collections import defaultdict
@@ -8267,10 +8282,7 @@ mergePatchPairs
             # sign of grad depends on cold-plate hot-jet orientation; take |·|.
             Nu = float(D_nozzle) * abs(grad) / Delta_T
             sorted_r.append(r_key)
-            # Cap at a generous physical upper bound to guard against wildly
-            # diverged runs producing astronomical gradients; Codex can
-            # promote this to fail-closed in a future DEC.
-            Nu_profile.append(min(max(Nu, 0.0), 500.0))
+            Nu_profile.append(Nu)
 
         if Nu_profile:
             # Stagnation Nu at r ≈ 0 is the first (smallest r) bin.
@@ -8278,6 +8290,16 @@ mergePatchPairs
             key_quantities["nusselt_number_source"] = "wall_gradient_stencil_3pt"
             key_quantities["nusselt_number_profile"] = Nu_profile
             key_quantities["nusselt_number_profile_r"] = sorted_r
+            # DEC-V61-042 round-1 FLAG: previous code silently clamped
+            # Nu to [0, 500]. Clamping hides runaway — e.g. a diverged
+            # solver producing spurious 1e6 gradients would masquerade
+            # as a benign 500. Instead, surface a HAZARD flag when a
+            # physically implausible value appears so the UI and
+            # comparator can treat it honestly. The threshold is
+            # generous (500× gold stag Nu≈25) — any hit is a red flag.
+            Nu_stag = Nu_profile[0]
+            if not (0.0 <= Nu_stag <= 500.0):
+                key_quantities["nusselt_number_unphysical_magnitude"] = True
 
         return key_quantities
 

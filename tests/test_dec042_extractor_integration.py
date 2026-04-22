@@ -48,7 +48,10 @@ def test_nc_extractor_fails_closed_without_bc_metadata() -> None:
         key_quantities=key_quantities,
     )
     assert "nusselt_number" not in result
-    assert result.get("_nc_wall_gradient_missing_bc_metadata") is True
+    # Internal state (why) must not leak into measurement output — the
+    # absence of nusselt_number IS the signal (picked up as
+    # MISSING_TARGET_QUANTITY by DEC-V61-036 G1 at the comparator).
+    assert not any(k.startswith("_") for k in result)
 
 
 def test_nc_extractor_uses_3point_stencil_with_metadata() -> None:
@@ -98,7 +101,7 @@ def test_ij_extractor_fails_closed_without_bc_metadata() -> None:
         key_quantities=key_quantities,
     )
     assert "nusselt_number" not in result
-    assert result.get("_ij_wall_gradient_missing_bc_metadata") is True
+    assert not any(k.startswith("_") for k in result)
 
 
 def test_ij_extractor_wall_normal_stencil_recovers_known_gradient() -> None:

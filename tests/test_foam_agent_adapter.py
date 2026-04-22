@@ -361,8 +361,10 @@ class TestFoamAgentExecutor:
 
         result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
 
+        # Absence of nusselt_number is the signal (DEC-036 G1 fires at the
+        # comparator). No extractor-internal flags leak into key_quantities.
         assert "nusselt_number" not in result
-        assert result.get("_nc_wall_gradient_missing_bc_metadata") is True
+        assert not any(k.startswith("_") for k in result)
 
     def test_extract_nc_nusselt_averages_gradient_over_y_for_wall_packed_mesh(self):
         """DEC-V61-042: verify per-y-layer averaging. Each layer has a
