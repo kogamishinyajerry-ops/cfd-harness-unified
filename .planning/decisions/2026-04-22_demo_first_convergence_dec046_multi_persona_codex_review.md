@@ -55,12 +55,63 @@ Notion sync.
 
 ## Round log (to be updated per round)
 
-### Round 1 — 2026-04-22T23:25, in flight
+### Round 1 — 2026-04-22T23:25 → T23:57 (remediation landed)
 - **Codex exec PID**: 20548 (log at `.planning/reviews/round_1_codex.log`)
 - **Prompt**: `.planning/reviews/round_1_prompt.md`
-- **Output target**: `.planning/reviews/round_1_findings.md`
-- **Expected personas**: 3 sequential (commercial / CFD / code review)
-- **Status**: codex actively reading source files; findings file pending
+- **Findings**: `.planning/reviews/round_1_findings.md` (31 KB)
+- **Verdict**: CHANGES_REQUIRED on all 3 personas, 0 blockers, ~15 MAJOR/MINOR
+- **Findings addressed** (4 atomic commits):
+  - Batch 1 (factual) `6c53986` — R2-M1 LDC precondition #4/#5 split to explicit
+    false; R2-M2 BFS "<2% plateau" → regime-level wording; R2-N1 LDC
+    "DNS-quality shoulder" → "Ghia high-resolution reference shoulder"; R2-M3
+    plane_channel mesh labels WR-LES/DNS → honest "80³/160³ cells"; R2-M4
+    impinging_jet A4 iter-cap surfaced as symptom not root cause; R3-M2 BFS
+    turbulence model corrected kOmegaSST → kEpsilon per actual adapter code.
+  - Batch 2 (dashboard) `fa7d96d` — R3-M1 source-of-truth unified: 5
+    DashboardCaseSpec entries retargeted `gold_file` to canonical yamls
+    (LDC_benchmark→LDC, BFS_steady→BFS, plane_channel, impinging_jet,
+    cylinder_crossflow→circular_cylinder_wake). report_case_id kept legacy
+    because on-disk run fixtures live at legacy paths; gold-side parity
+    now holds. R2-M7 same root fix. +2 new tests: gold_file parity invariant
+    + `_normalize_contract_class` direct prefix pin.
+  - Batch 3 (learn UX) `6911611` — R1-M1/M4 hero rewritten buyer-facing +
+    bilingual (AI-CFD workbench + 3-strip differentiation); R1-M2 + R2-M7
+    new PhysicsContractPanel at top of Story tab surfacing contract_status
+    + preconditions [✓]/[~]/[✗]; R1-M3 buyer CTA strip (GitHub / Pro / pilot
+    mailto); R1-M5 two placeholder-alert nav items removed; R1-N1 sidebar
+    tagline buyer-readable. R2-M6 "V&V40" wording softened to "inspired by,
+    not equivalent".
+  - Batch 4 (robustness) `93e84cf` — R3-N2 `_precondition_marker` helper
+    extracted, 14 input shapes covered; R3-N3 +2 tests including live [✗]
+    render from LDC explicit-false preconditions; R3-N4 two docstring drifts
+    about reference-first fixed to audit_real_run-first; R3-N5 ui/frontend/README
+    5173 → 5180.
+- **Findings deferred** (recorded here with rationale, surfaced as backlog):
+  - **R2-M5 contract_status taxonomy refactor** — split base_verdict /
+    scope_qualifier / hazard_flags into three fields. Architectural change
+    rippling through dashboard + export + typescript types + 10 YAMLs +
+    tests. Defer to a dedicated DEC (followup from round N+k). Current
+    long-prefix strings are readable and covered by `.startswith()` so no
+    active drift risk.
+  - **R2-M8 Spalding-fallback hard-hazard** — promote fallback activation
+    from internal `cf_spalding_fallback_activated` flag to first-class
+    AuditConcern emission for laminar TFP. Requires foam_agent_adapter
+    change + concern-code plumbing across attestor/comparator. Defer:
+    current fallback path is documented `partial` in TFP gold precondition
+    #4 with explicit follow-up audit note, not silently active.
+- **New commits**: 6c53986, fa7d96d, 6911611, 93e84cf (all on main, local).
+- **Test suite**: 784 → 789 passed / 2 skipped (+5 new, 0 regressions).
+- **Schema validator**: 15/15 PASS.
+- **Frontend**: typecheck clean; build 1.34s.
+- **Notion sync**: pending (to update after push).
+- **GitHub sync**: pending (to push).
+
+### Round 2 — TBD
+Codex re-review after the round-1 remediation is pushed. Expected: check
+batch 1-4 changes landed correctly; surface any new findings introduced
+by the remediation; ideally verdict escalates to APPROVE_WITH_COMMENTS or
+APPROVE. R2-M5 / R2-M8 deferral rationale should be accepted (or codex
+re-raises if insufficient).
 
 ### Round N+1 — template
 (Fill after round N codex APPROVE or CHANGES_REQUIRED)
