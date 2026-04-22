@@ -46,17 +46,20 @@ from src.comparator_gates import parse_solver_log
 
 A2_CONTINUITY_FLOOR = 1.0e-4           # incompressible steady; G5 fires at 1e-2
 A3_RESIDUAL_FLOOR = 1.0e-3             # initial residual of any field
-A4_ITERATION_CAP_PATTERNS = (
-    # Capture pressure-solver `No Iterations N`. The pre-text between the
-    # solver header and `No Iterations` includes "Initial residual = X,
-    # Final residual = Y," — use `.+?` non-greedy and require the full
-    # pattern on one line.
-    re.compile(r"GAMG:\s+Solving for p,.+?No Iterations\s+(\d+)"),
-    re.compile(r"PCG:\s+Solving for p,.+?No Iterations\s+(\d+)"),
-    re.compile(r"BiCGStab:.+?No Iterations\s+(\d+)"),
+# Codex DEC-038 round-1 BLOCKER 1: A4 regex must cover every pressure
+# solver + every pressure field name seen in the real audit logs.
+# - Solver types: GAMG, PCG, DICPCG, PBiCG, DILUPBiCGStab
+# - Pressure field names: p (incompressible), p_rgh (buoyant), pd
+# - Multi-corrector PIMPLE loops emit multiple pressure solves per Time=
+#   block; A4 must track BLOCKS not LINES (BLOCKER 2) so consecutive-hit
+#   semantics match the DEC's "3 consecutive time steps" intent.
+A4_PRESSURE_FIELD_RE = re.compile(
+    r"(?:GAMG|PCG|DICPCG|PBiCG|DILUPBiCGStab|smoothSolver)\s*:\s*"
+    r"Solving for\s+(p(?:_rgh|d)?)\s*,"
+    r".+?No Iterations\s+(\d+)"
 )
 A4_ITERATION_CAP_VALUES = (1000, 999, 998)  # solver-reported caps
-A4_CONSECUTIVE = 3                     # how many consecutive hits = FAIL
+A4_CONSECUTIVE = 3                     # how many consecutive time-step blocks = FAIL
 
 A5_BOUNDING_WINDOW = 50                # last N iterations to inspect
 A5_BOUNDING_RECURRENCE_FRAC = 0.30     # ≥ 30% of window bounded = HAZARD
@@ -65,7 +68,12 @@ A6_PROGRESS_WINDOW = 50
 A6_PROGRESS_DECADE_FRAC = 1.0          # need > 1 decade decay over window
 
 
-AttestVerdict = Literal["ATTEST_PASS", "ATTEST_HAZARD", "ATTEST_FAIL"]
+AttestVerdict = Literal[
+    "ATTEST_PASS",
+    "ATTEST_HAZARD",
+    "ATTEST_FAIL",
+    "ATTEST_NOT_APPLICABLE",  # no log available (reference/visual_only tiers)
+]
 CheckVerdict = Literal["PASS", "HAZARD", "FAIL"]
 
 
@@ -133,23 +141,39 @@ def _parse_residual_timeline(log_path: Path) -> dict[str, list[float]]:
     return timeline
 
 
-def _parse_iteration_caps(log_path: Path) -> list[int]:
-    """Return a list of pressure-solver iteration counts per time step.
+def _parse_iteration_caps_per_block(log_path: Path) -> list[int]:
+    """Return per-`Time = ...` block the MAX pressure-solver iteration count
+    seen inside that block.
 
-    Used by A4 to detect repeated cap-hits.
+    Codex DEC-038 round-1 BLOCKER 2: A4 must count consecutive TIME STEPS
+    (outer iterations), not consecutive solve lines — PIMPLE multi-corrector
+    loops emit ≥2 pressure solves per block and the prior line-based count
+    would false-fire after 1.5 blocks. Returns one entry per block; a
+    block's count is the worst (max) pressure iteration count seen in it.
+    Blocks with no pressure solve get -1 (skipped by A4).
     """
-    counts: list[int] = []
+    per_block_max: list[int] = []
+    current_max: int = -1
+    seen_any = False
     with log_path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
-            for pattern in A4_ITERATION_CAP_PATTERNS:
-                m = pattern.search(line)
-                if m:
-                    try:
-                        counts.append(int(m.group(1)))
-                    except ValueError:
-                        pass
-                    break
-    return counts
+            if _TIME_STEP_RE.match(line):
+                if seen_any:
+                    per_block_max.append(current_max)
+                current_max = -1
+                seen_any = True
+                continue
+            m = A4_PRESSURE_FIELD_RE.search(line)
+            if m:
+                try:
+                    count = int(m.group(2))
+                except ValueError:
+                    continue
+                if count > current_max:
+                    current_max = count
+        if seen_any:
+            per_block_max.append(current_max)
+    return per_block_max
 
 
 def _parse_bounding_lines_per_step(log_path: Path) -> list[set[str]]:
@@ -212,7 +236,14 @@ def _check_a2_continuity_floor(log_path: Path) -> AttestorCheck:
             detail="",
         )
     if sl > A2_CONTINUITY_FLOOR:
-        verdict: CheckVerdict = "FAIL" if sl > 1e-2 else "HAZARD"
+        # Codex DEC-038 round-1 A2/G5 split-brain comment: A2 stays strictly
+        # HAZARD here to avoid conflict with G5, which hard-FAILs
+        # `sum_local > 1e-2` on the gate side. Keeping A2 as HAZARD means
+        # the attestor tier is purely diagnostic; the FAIL call belongs to
+        # the gate layer. Previously A2 returned FAIL for >1e-2, but the
+        # verdict engine did not hard-FAIL on CONTINUITY_NOT_CONVERGED, so
+        # the semantics split across layers. Now A2 is always HAZARD-tier.
+        verdict: CheckVerdict = "HAZARD"
         return AttestorCheck(
             check_id="A2",
             concern_type="CONTINUITY_NOT_CONVERGED",
@@ -275,44 +306,46 @@ def _check_a3_residual_floor(log_path: Path) -> AttestorCheck:
 
 
 def _check_a4_iteration_cap(log_path: Path) -> AttestorCheck:
-    counts = _parse_iteration_caps(log_path)
-    if not counts:
+    per_block = _parse_iteration_caps_per_block(log_path)
+    # Drop blocks with no pressure solve (current_max == -1).
+    blocks_with_solves = [b for b in per_block if b >= 0]
+    if not blocks_with_solves:
         return AttestorCheck(
             check_id="A4", concern_type="SOLVER_ITERATION_CAP", verdict="PASS",
             summary="no pressure solver iteration counts in log",
             detail="",
         )
     consecutive = 0
-    for c in counts:
-        if c in A4_ITERATION_CAP_VALUES or c >= 1000:
+    for b_max in blocks_with_solves:
+        if b_max in A4_ITERATION_CAP_VALUES or b_max >= 1000:
             consecutive += 1
             if consecutive >= A4_CONSECUTIVE:
                 return AttestorCheck(
                     check_id="A4", concern_type="SOLVER_ITERATION_CAP",
                     verdict="FAIL",
                     summary=(
-                        f"pressure solver hit {c} iterations in "
-                        f"≥ {A4_CONSECUTIVE} consecutive steps"
+                        f"pressure solver hit {b_max} iterations in "
+                        f"≥ {A4_CONSECUTIVE} consecutive time-step blocks"
                     )[:240],
                     detail=(
                         "DEC-V61-038 A4: pressure-velocity solver loop is "
-                        f"hitting its iteration cap (~{c}) in at least "
-                        f"{A4_CONSECUTIVE} consecutive outer iterations. "
-                        "SIMPLE/PISO coupling has effectively failed — the "
-                        "solver is burning CPU without reducing the residual. "
-                        "Hard FAIL."
+                        f"hitting its iteration cap (~{b_max}) in at least "
+                        f"{A4_CONSECUTIVE} consecutive time-step blocks "
+                        "(Time = ... dividers). SIMPLE/PISO/PIMPLE coupling "
+                        "has effectively failed — the solver is burning CPU "
+                        "without reducing the residual. Hard FAIL."
                     )[:2000],
                     evidence={
-                        "consecutive_cap_hits": consecutive,
-                        "final_cap_value": c,
-                        "total_steps": len(counts),
+                        "consecutive_cap_blocks": consecutive,
+                        "final_cap_value": b_max,
+                        "total_blocks": len(blocks_with_solves),
                     },
                 )
         else:
             consecutive = 0
     return AttestorCheck(
         check_id="A4", concern_type="SOLVER_ITERATION_CAP", verdict="PASS",
-        summary=f"pressure solver peaked at {max(counts)} iterations",
+        summary=f"pressure solver peaked at {max(blocks_with_solves)} iterations",
         detail="",
     )
 
@@ -443,11 +476,14 @@ def math_log10(x: float) -> float:
 def attest(log_path: Optional[Path]) -> AttestationResult:
     """Run A1..A6 against a solver log; aggregate into an AttestationResult.
 
-    When log_path is None or absent, returns ATTEST_PASS with no checks
-    (attestor is a log-based tool; absent log = no signal).
+    Codex DEC-038 round-1 comment C: distinguish "clean PASS" (log was
+    read, all checks pass) from "not applicable" (no log available).
+    Returns overall="ATTEST_NOT_APPLICABLE" when log_path is None or
+    absent — downstream can surface this as "no convergence evidence"
+    instead of misreading it as "convergence verified".
     """
     if log_path is None or not log_path.is_file():
-        return AttestationResult(overall="ATTEST_PASS", checks=[])
+        return AttestationResult(overall="ATTEST_NOT_APPLICABLE", checks=[])
 
     checks = [
         _check_a1_solver_crash(log_path),

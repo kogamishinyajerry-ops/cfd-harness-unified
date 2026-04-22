@@ -84,7 +84,10 @@ def test_a2_hazard_between_floors(tmp_path: Path) -> None:
     assert a2.verdict == "HAZARD"
 
 
-def test_a2_fail_above_g5_floor(tmp_path: Path) -> None:
+def test_a2_hazard_above_g5_floor_after_split_brain_fix(tmp_path: Path) -> None:
+    """Codex DEC-038 round-1 A2/G5 split-brain fix: A2 no longer returns
+    FAIL even for sum_local > 1e-2. That FAIL call belongs to G5 at the
+    gate layer. A2 stays strictly HAZARD-tier."""
     content = (
         "time step continuity errors : "
         "sum local = 0.5, global = 0.01, cumulative = 0.1\n"
@@ -92,7 +95,7 @@ def test_a2_fail_above_g5_floor(tmp_path: Path) -> None:
     log = _write_log(tmp_path, content)
     result = ca.attest(log)
     a2 = next(c for c in result.checks if c.check_id == "A2")
-    assert a2.verdict == "FAIL"
+    assert a2.verdict == "HAZARD"  # was FAIL pre-fix
 
 
 # ---------------------------------------------------------------------------
@@ -127,15 +130,113 @@ def test_a3_hazard_when_final_residual_above_floor(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def test_a4_fails_on_consecutive_cap_hits(tmp_path: Path) -> None:
-    content = "\n".join(
-        ["GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, "
-         "No Iterations 1000"] * 5
+    """5 consecutive Time= blocks each with a capped GAMG p solve → FAIL.
+
+    Codex round-1 BLOCKER 2: measurement unit changed from consecutive
+    lines to consecutive TIME STEPS. Each `Time =` divider opens a new
+    block, so this test now needs Time= dividers.
+    """
+    content = "".join(
+        f"Time = {i}\nGAMG:  Solving for p, Initial residual = 0.9, "
+        "Final residual = 0.5, No Iterations 1000\n"
+        for i in range(5)
     )
     log = _write_log(tmp_path, content)
     result = ca.attest(log)
     a4 = next(c for c in result.checks if c.check_id == "A4")
     assert a4.verdict == "FAIL"
-    assert a4.evidence["consecutive_cap_hits"] >= 3
+    assert a4.evidence["consecutive_cap_blocks"] >= 3
+
+
+def test_a4_fails_on_p_rgh_buoyant_log(tmp_path: Path) -> None:
+    """Codex DEC-038 round-1 BLOCKER 1: impinging_jet stuck solver is
+    `GAMG: Solving for p_rgh` in log.buoyantFoam — A4 regex must match
+    p_rgh (not just `p,`) to catch the real impinging_jet case.
+    """
+    content = "\n".join(
+        [f"Time = {i}s\nGAMG:  Solving for p_rgh, Initial residual = 0.7, "
+         "Final residual = 0.5, No Iterations 1000"
+         for i in range(5)]
+    )
+    log = _write_log(tmp_path, content)
+    result = ca.attest(log)
+    a4 = next(c for c in result.checks if c.check_id == "A4")
+    assert a4.verdict == "FAIL", f"got {a4.verdict}: {a4.summary}"
+
+
+def test_a4_fails_on_dicpcg_p_rgh(tmp_path: Path) -> None:
+    """DHC uses DICPCG: Solving for p_rgh. Same regex coverage requirement."""
+    content = "\n".join(
+        [f"Time = {i*0.5}s\nDICPCG:  Solving for p_rgh, Initial residual = 0.8, "
+         "Final residual = 0.6, No Iterations 1000"
+         for i in range(1, 6)]
+    )
+    log = _write_log(tmp_path, content)
+    result = ca.attest(log)
+    a4 = next(c for c in result.checks if c.check_id == "A4")
+    assert a4.verdict == "FAIL"
+
+
+def test_a4_multi_corrector_pimple_counts_blocks_not_lines(tmp_path: Path) -> None:
+    """Codex DEC-038 round-1 BLOCKER 2: PIMPLE emits multiple pressure
+    solves per Time= block. A4 must count BLOCKS, not LINES — 2 cap-hits
+    within the same block should count as 1 toward consecutive threshold,
+    not 2. Here 2 blocks × 2 cap-hits = 4 lines but only 2 blocks, so
+    consecutive=2 < 3 → PASS. A 3rd capped block is needed to FAIL.
+    """
+    # 2 capped blocks — should NOT fire (need 3 consecutive blocks).
+    content = (
+        "Time = 1s\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+        "Time = 2s\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+    )
+    log = _write_log(tmp_path, content)
+    result = ca.attest(log)
+    a4 = next(c for c in result.checks if c.check_id == "A4")
+    assert a4.verdict == "PASS", f"2 blocks should not fire A4 (threshold=3); got {a4.verdict}"
+
+
+def test_a4_fires_after_three_consecutive_blocks(tmp_path: Path) -> None:
+    """3 consecutive capped blocks → FAIL, regardless of per-block count."""
+    content = "".join(
+        f"Time = {i}s\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.7, Final residual = 0.5, No Iterations 1000\n"
+        for i in range(1, 4)
+    )
+    log = _write_log(tmp_path, content)
+    result = ca.attest(log)
+    a4 = next(c for c in result.checks if c.check_id == "A4")
+    assert a4.verdict == "FAIL"
+    assert a4.evidence["consecutive_cap_blocks"] == 3
+
+
+def test_attestor_not_applicable_when_log_missing(tmp_path: Path) -> None:
+    """Codex DEC-038 round-1 comment C: missing log → ATTEST_NOT_APPLICABLE,
+    distinct from ATTEST_PASS. DEC-V61-040 UI tiers will surface this
+    explicitly for reference/visual_only runs that have no solver log.
+    """
+    result = ca.attest(None)
+    assert result.overall == "ATTEST_NOT_APPLICABLE"
+    result = ca.attest(tmp_path / "missing.log")
+    assert result.overall == "ATTEST_NOT_APPLICABLE"
+
+
+def test_a2_never_returns_fail_only_hazard(tmp_path: Path) -> None:
+    """Codex DEC-038 round-1 comment A7: A2 stays HAZARD-tier to avoid
+    split-brain with G5. Even sum_local=0.5 returns HAZARD from A2 (G5
+    is responsible for the FAIL call at the gate layer)."""
+    content = (
+        "time step continuity errors : "
+        "sum local = 0.5, global = 0.01, cumulative = 0.1\n"
+    )
+    log = _write_log(tmp_path, content)
+    result = ca.attest(log)
+    a2 = next(c for c in result.checks if c.check_id == "A2")
+    assert a2.verdict == "HAZARD"  # was FAIL pre-fix
 
 
 def test_a4_passes_on_sparse_cap_hits(tmp_path: Path) -> None:
@@ -249,14 +350,25 @@ def test_attestor_ldc_real_log_is_pass() -> None:
     )
 
 
-def test_attestor_bfs_real_log_is_fail() -> None:
+def test_attestor_bfs_real_log_is_hazard_plus_gate_fail() -> None:
     """BFS solver exploded (Codex audit: k≈1e30, ε≈1e30, sum_local≈1e18).
-    Attestor must ATTEST_FAIL via A2 (continuity floor)."""
+
+    Post DEC-038 round-1 A2/G5 split-brain fix: attestor alone returns
+    ATTEST_HAZARD (A2 HAZARD + A3 HAZARD + A5 HAZARD — no FAIL-tier check
+    fires because A4 is clean, A1 is clean). The FAIL contract status
+    comes from the G5 gate at the gate layer catching sum_local > 1e-2.
+
+    This test asserts the attestor HAZARD verdict; contract-FAIL coverage
+    lives in test_comparator_gates_g3_g4_g5.py::test_gates_fire_on_real_bfs_audit_log.
+    """
     log = _resolve_latest_log("backward_facing_step")
     if log is None:
         pytest.skip("BFS phase7a log absent")
     result = ca.attest(log)
-    assert result.overall == "ATTEST_FAIL"
-    # A2 should be the FAIL driver (sum_local=5.25e+18 > 1e-2).
+    assert result.overall == "ATTEST_HAZARD", f"got {result.overall}"
+    # Multiple HAZARD-tier concerns should be present.
+    hazard_checks = [c for c in result.checks if c.verdict == "HAZARD"]
+    assert len(hazard_checks) >= 2
+    # A2 in particular must fire (sum_local=5.25e+18).
     a2 = next(c for c in result.checks if c.check_id == "A2")
-    assert a2.verdict == "FAIL"
+    assert a2.verdict == "HAZARD"
