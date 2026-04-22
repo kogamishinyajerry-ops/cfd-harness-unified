@@ -1,18 +1,19 @@
 ---
 decision_id: DEC-V61-048
 title: 10-case 深度阅读价值评审 · senior CFD reviewer deep-dive · per-case 内容升级
-status: IN_PROGRESS (batches 1-3 landed · batch 4 pending)
+status: AWAITING_USER_READ (all 4 batches landed · exit gate is user subjective pedagogy read)
 commits_in_scope:
   - fb83f0d feat(learn): DEC-V61-048 batch 1 — benchmark lineage + next-reading ladder (all 10 cases)
   - e8a2632 feat(learn): DEC-V61-048 batch 2 — TeachingCard 2.0 (10 cases × 4 cards)
   - 80e1c12 feat(learn): DEC-V61-048 batch 3 — reproducibility runbook + troubleshooting (10 cases)
+  - 12de4fe feat(learn): DEC-V61-048 batch 4 — flagship physics-intuition deep-dive (LDC/RBC/duct)
 codex_verdict: DEEP_DIVE_COMPLETE (round 1 findings landed; no codex round 2 per DEC design — exit gate is user subjective read)
 autonomous_governance: true
 autonomous_governance_counter_v61: 35
 external_gate_self_estimated_pass_rate: 0.45
 codex_tool_report_path: .planning/reviews/case_deep_dive_round_1_findings.md
-notion_sync_status: synced 2026-04-23T01:42 (page_id=34ac6894-2bed-8101-b25a-f43a96f8207c, Status=Proposed, https://www.notion.so/DEC-V61-048-10-case-senior-CFD-reviewer-deep-dive-per-case-34ac68942bed8101b25af43a96f8207c) · batches 2+3 children append pending (batch 2 done)
-github_sync_status: pushed (fb83f0d + e8a2632 + 80e1c12 on origin/main)
+notion_sync_status: synced 2026-04-23T01:42 + batches 2/3/4 children append done (page_id=34ac6894-2bed-8101-b25a-f43a96f8207c, Status=Proposed → will flip to Done on user acceptance)
+github_sync_status: pushed (fb83f0d + e8a2632 + 80e1c12 + 12de4fe on origin/main)
 related:
   - DEC-V61-046 (demo-first convergence · hero + honesty + tri-state · APPROVE_WITH_COMMENTS)
   - DEC-V61-047 (2-persona pedagogy · narrative truth + teaching cards · APPROVE_WITH_COMMENTS)
