@@ -327,12 +327,18 @@ function StoryTab({ caseId }: { caseId: string }) {
         </ul>
       </section>
 
+      {/* Phase 7f + DEC-V61-034: live CFD-vs-Gold comparison report with real
+          OpenFOAM contour + residuals. Positioned BEFORE literature-reference
+          block so the reader sees simulation output first. Gracefully hidden
+          for cases not yet opted-in. */}
+      <ScientificComparisonReportSection caseId={caseId} />
+
       {flowFields.length > 0 && (
         <section>
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="card-title">真实数据 · Data</h2>
+            <h2 className="card-title">文献参考图 · Literature reference</h2>
             <p className="text-[11px] text-surface-500">
-              每张图都直接来自文献精确解或公开实验表格
+              每张图都直接来自文献精确解或公开实验表格（对照基准）
             </p>
           </div>
           <div className="space-y-4">
@@ -358,11 +364,6 @@ function StoryTab({ caseId }: { caseId: string }) {
           </div>
         </section>
       )}
-
-      {/* Phase 7f — live CFD-vs-Gold comparison report (if the case has a real
-          audit_real_run artifact set from Phase 7a). Gracefully hidden for
-          cases not yet opted-in. */}
-      <ScientificComparisonReportSection caseId={caseId} />
 
       <section>
         <h2 className="card-title mb-3">为什么要做验证</h2>
@@ -1342,13 +1343,18 @@ function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
     return (
       <section>
         <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="card-title">科研级 CFD 仿真结果 (Visual-only)</h2>
+          <h2 className="card-title">
+            仿真结果云图 · OpenFOAM Simulation Fields
+          </h2>
           <p className="text-[11px] text-surface-500">
             实际 OpenFOAM 真跑 · {data.solver ?? "solver"} · {data.commit_sha ?? ""}
           </p>
         </div>
-        <div className="mb-3 rounded-md border border-surface-700 bg-surface-900/40 p-3 text-[12px] text-surface-300">
-          {data.subtitle ?? "Visual-only mode — gold-overlay verdict pending Phase 7c Sprint 2."}
+        <div className="mb-3 rounded-md border border-sky-700/40 bg-sky-950/30 p-3 text-[12px] text-surface-200">
+          <span className="font-semibold text-sky-300">真实仿真输出</span>
+          ：下方 |U| 速度云图 + 残差曲线来自实际 OpenFOAM 求解器运行，
+          不是占位图。
+          {data.subtitle ? ` ${data.subtitle}` : ""}
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {contourUrl && (
