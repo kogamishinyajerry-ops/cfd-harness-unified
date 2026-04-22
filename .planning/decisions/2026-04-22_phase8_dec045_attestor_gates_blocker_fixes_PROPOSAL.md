@@ -1,6 +1,16 @@
 ---
 decision_id: DEC-V61-045
-status: PROPOSAL (awaiting Kogami scope approval before execution)
+status: IN_PROGRESS (Waves 1+2 landed 2026-04-22 per Kogami A2+b approval; Waves 3+4 deferred to Sprint 2)
+waves_landed:
+  - wave_1_A: 61c7cd1 (convergence_attestor loader + A1 exit + CA-005/006/007)
+  - wave_1_B: 9e6f30f (comparator_gates VTK reader fix)
+  - wave_1_C: 49ba6e5 (21 new tests for Wave 1)
+  - wave_2_D: 396cefe (HAZARD tier in _derive_contract_status + U_ref plumb)
+  - wave_2_E: ad0bad2 (12 new tests for Wave 2)
+  - codex_verify: CV-S003q-01 VERIFIED @ ad0bad2 (233 passed + 1 skipped)
+waves_deferred:
+  - wave_3: TaskRunner reorder (attestor pre-comparator); deferred to Sprint 2
+  - wave_4: A6 outer-iter semantics + per-case promote_to_fail; deferred to Sprint 2
 timestamp: 2026-04-22T19:20 local
 scope: |
   Phase 8 Sprint 1 follow-up — fix 8 Codex blockers across DEC-036b
