@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
+import { AttestorBadge } from "@/components/AttestorBadge";
+import { AttestorPanel } from "@/components/AttestorPanel";
 import { AuditConcernList } from "@/components/AuditConcernList";
 import { BandChart } from "@/components/BandChart";
 import { DecisionsTrail } from "@/components/DecisionsTrail";
@@ -85,7 +87,26 @@ export function ValidationReportPage() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <PassFailChip status={data.contract_status} size="lg" />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PassFailChip status={data.contract_status} size="lg" />
+            {/* DEC-V61-040: attestor verdict sits next to scalar contract so
+                users see both independently. */}
+            {data.attestation && (
+              <AttestorBadge overall={data.attestation.overall} size="lg" />
+            )}
+          </div>
+          {/* DEC-V61-039: pointwise profile verdict for gold-overlay cases. */}
+          {data.profile_verdict !== null && (
+            <span
+              className="mono text-[11px] text-surface-400"
+              title="Gold-overlay pointwise profile verdict — separate from scalar contract"
+            >
+              profile: {data.profile_verdict}
+              {data.profile_pass_count !== null &&
+                data.profile_total_count !== null &&
+                ` (${data.profile_pass_count}/${data.profile_total_count})`}
+            </span>
+          )}
           <Link
             to={`/audit-package?case=${encodeURIComponent(caseDetail.case_id)}&run=audit_real_run`}
             className="rounded-sm border border-accent-600/50 bg-accent-600/10 px-3 py-1.5 text-xs font-medium text-accent-300 hover:border-accent-500 hover:bg-accent-600/20"
@@ -191,6 +212,11 @@ export function ValidationReportPage() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <AuditConcernList concerns={data.audit_concerns} />
         <PreconditionList preconditions={data.preconditions} />
+      </section>
+      {/* DEC-V61-040: attestor per-check breakdown — full-width below the
+          2-col concern/precondition grid. */}
+      <section className="mt-4">
+        <AttestorPanel attestation={data.attestation} />
       </section>
       <section className="mt-4">
         <DecisionsTrail decisions={data.decisions_trail} />

@@ -48,3 +48,36 @@ decisions_trail:
 field_artifacts:
   manifest_path_rel: reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json
   run_label: audit_real_run
+# DEC-V61-040: solver-iteration attestor verdict, lifted into the API via
+# ValidationReport.attestation. LDC converges cleanly — no solver-level
+# concerns — so every A-check is PASS and overall is ATTEST_PASS. The
+# scalar contract still FAILs because the comparator picked the wrong
+# profile point for the scalar (DEC-V61-036/039 split-brain).
+attestation:
+  overall: ATTEST_PASS
+  checks:
+  - check_id: A1
+    verdict: PASS
+    concern_type: null
+    summary: no FOAM FATAL ERROR / stack-trace tokens detected
+  - check_id: A2
+    verdict: PASS
+    concern_type: null
+    summary: final residuals within A3 floor (1e-2) or no progress concern
+  - check_id: A3
+    verdict: PASS
+    concern_type: null
+    summary: all residuals at or below floor 1.0e-02
+  - check_id: A4
+    verdict: PASS
+    concern_type: null
+    summary: no pressure-loop iteration cap hits in ≥3 consecutive time steps
+  - check_id: A5
+    verdict: PASS
+    concern_type: null
+    summary: Time= block counter matched simulation span
+  - check_id: A6
+    verdict: PASS
+    concern_type: null
+    summary: no bounding/recurrent turbulence markers above floor
+

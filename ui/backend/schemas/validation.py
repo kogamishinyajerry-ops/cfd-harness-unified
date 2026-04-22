@@ -12,6 +12,37 @@ from pydantic import BaseModel, Field
 
 
 ContractStatus = Literal["PASS", "HAZARD", "FAIL", "UNKNOWN"]
+
+
+# DEC-V61-040: surface DEC-V61-038 attestor verdict + per-check breakdown.
+# The attestor is written into the fixture at audit-fixture time but was
+# never threaded through the API until now. "ATTEST_NOT_APPLICABLE" covers
+# the case where no solver log is available (reference/visual_only tiers).
+AttestVerdict = Literal[
+    "ATTEST_PASS", "ATTEST_HAZARD", "ATTEST_FAIL", "ATTEST_NOT_APPLICABLE"
+]
+
+
+class AttestorCheck(BaseModel):
+    """Single A1..A6 check outcome. concern_type matches the string the
+    verdict engine uses for hard-FAIL detection (SOLVER_CRASH_LOG,
+    SOLVER_ITERATION_CAP, CONTINUITY_NOT_CONVERGED, RESIDUALS_ABOVE_TARGET,
+    BOUNDING_RECURRENT, NO_RESIDUAL_PROGRESS)."""
+
+    check_id: str
+    verdict: Literal["PASS", "HAZARD", "FAIL"]
+    concern_type: str | None = None
+    summary: str = ""
+
+
+class AttestorVerdict(BaseModel):
+    """Aggregate attestor result: overall verdict + per-check breakdown.
+
+    Mirrors src.convergence_attestor.AttestationResult at the API boundary.
+    """
+
+    overall: AttestVerdict
+    checks: list[AttestorCheck] = Field(default_factory=list)
 """Three-state semantics: PASS (within tolerance, no hazard armed),
 HAZARD (within tolerance but a silent-pass hazard is armed), FAIL
 (outside tolerance OR contract precondition unmet). UNKNOWN when
@@ -231,6 +262,12 @@ class ValidationReport(BaseModel):
         ),
     )
     profile_total_count: int | None = None
+    # DEC-V61-040: solver-iteration attestor verdict (A1..A6). Null when the
+    # fixture lacks an `attestation` block (pre-DEC-038 fixtures or
+    # visual_only/reference tiers where no solver log exists). The API
+    # preserves the verdict verbatim from the fixture so the UI can render
+    # the per-check breakdown without recomputing.
+    attestation: AttestorVerdict | None = None
 
 
 # ---------------------------------------------------------------------------

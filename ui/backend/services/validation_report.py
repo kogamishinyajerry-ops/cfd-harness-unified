@@ -23,6 +23,8 @@ from typing import Any
 import yaml
 
 from ui.backend.schemas.validation import (
+    AttestorCheck,
+    AttestorVerdict,
     AuditConcern,
     CaseDetail,
     CaseIndexEntry,
@@ -613,6 +615,45 @@ def _derive_contract_status(
     return ("PASS", deviation_pct, within, lower, upper)
 
 
+def _make_attestation(
+    doc: dict[str, Any] | None,
+) -> AttestorVerdict | None:
+    """DEC-V61-040: lift `attestation` block from the fixture into the API.
+
+    The attestor runs at audit-fixture time (see scripts/phase5_audit_run.py)
+    and writes `{overall, checks[]}` onto the measurement doc. Reference /
+    visual_only runs that lack a solver log have no attestation block; for
+    those we surface ATTEST_NOT_APPLICABLE so the UI can distinguish "no
+    solver evidence" from "attestor said clean PASS".
+    """
+    if not doc:
+        return None
+    block = doc.get("attestation")
+    if not isinstance(block, dict):
+        return None
+    overall = block.get("overall")
+    if overall not in ("ATTEST_PASS", "ATTEST_HAZARD", "ATTEST_FAIL",
+                       "ATTEST_NOT_APPLICABLE"):
+        return None
+    checks_raw = block.get("checks") or []
+    checks: list[AttestorCheck] = []
+    for entry in checks_raw:
+        if not isinstance(entry, dict):
+            continue
+        verdict = entry.get("verdict")
+        if verdict not in ("PASS", "HAZARD", "FAIL"):
+            continue
+        checks.append(
+            AttestorCheck(
+                check_id=entry.get("check_id", ""),
+                verdict=verdict,
+                concern_type=entry.get("concern_type"),
+                summary=entry.get("summary", "") or "",
+            )
+        )
+    return AttestorVerdict(overall=overall, checks=checks)
+
+
 def _make_measurement(doc: dict[str, Any] | None) -> MeasuredValue | None:
     if not doc:
         return None
@@ -781,6 +822,7 @@ def build_validation_report(
     profile_verdict, profile_pass, profile_total = _compute_profile_verdict(
         case_id, resolved_run_id
     )
+    attestation = _make_attestation(measurement_doc)
     return ValidationReport(
         case=case_detail,
         gold_standard=case_detail.gold_standard,
@@ -796,6 +838,7 @@ def build_validation_report(
         profile_verdict=profile_verdict,
         profile_pass_count=profile_pass,
         profile_total_count=profile_total,
+        attestation=attestation,
     )
 
 

@@ -73,6 +73,29 @@ export interface ValidationReportExtras {
   profile_verdict: "PASS" | "PARTIAL" | "FAIL" | null;
   profile_pass_count: number | null;
   profile_total_count: number | null;
+  // DEC-V61-040: solver-iteration attestor verdict (A1..A6). Null when the
+  // fixture lacks an attestation block (pre-DEC-038 fixtures or visual_only
+  // runs with no solver log).
+  attestation: AttestorVerdict | null;
+}
+
+// DEC-V61-040: A1..A6 attestor surface.
+export type AttestVerdict =
+  | "ATTEST_PASS"
+  | "ATTEST_HAZARD"
+  | "ATTEST_FAIL"
+  | "ATTEST_NOT_APPLICABLE";
+
+export interface AttestorCheck {
+  check_id: string;
+  verdict: "PASS" | "HAZARD" | "FAIL";
+  concern_type: string | null;
+  summary: string;
+}
+
+export interface AttestorVerdict {
+  overall: AttestVerdict;
+  checks: AttestorCheck[];
 }
 
 export interface MeasuredValue {
