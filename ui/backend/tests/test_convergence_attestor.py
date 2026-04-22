@@ -26,6 +26,41 @@ def _write_log(tmp_path: Path, content: str) -> Path:
     return p
 
 
+def _make_audit_fixture_report(tmp_path: Path, log_content: str) -> SimpleNamespace:
+    from src.models import ComparisonResult, DeviationDetail
+
+    log = _write_log(tmp_path, log_content)
+    execution_result = SimpleNamespace(
+        success=True,
+        exit_code=0,
+        raw_output_path=str(tmp_path),
+        key_quantities={"u_centerline": [-0.0415]},
+    )
+    comparison_result = ComparisonResult(
+        passed=True,
+        deviations=[
+            DeviationDetail(
+                quantity="u_centerline[y=0.0625]",
+                expected=-0.04192,
+                actual=-0.0415,
+                relative_error=0.0100,
+                tolerance=0.05,
+            )
+        ],
+        summary="within tolerance",
+    )
+    return SimpleNamespace(
+        comparison_result=comparison_result,
+        execution_result=execution_result,
+        task_spec=None,
+        attestation=ca.attest(
+            log,
+            execution_result=execution_result,
+            case_id="lid_driven_cavity",
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # A1 solver_exit_clean
 # ---------------------------------------------------------------------------
@@ -392,6 +427,54 @@ def test_a3_per_field_threshold_impinging_jet_p_rgh(tmp_path: Path) -> None:
     assert impinging.verdict == "HAZARD"
     assert impinging.evidence["thresholds_by_field"]["p_rgh"] == pytest.approx(5e-3)
     assert default.verdict == "PASS"
+
+
+def test_audit_fixture_doc_recomputes_expected_verdict_to_hazard(tmp_path: Path) -> None:
+    from scripts.phase5_audit_run import _audit_fixture_doc
+
+    report = _make_audit_fixture_report(
+        tmp_path,
+        (
+            "Time = 1\n"
+            "time step continuity errors : "
+            "sum local = 5e-04, global = 1e-06, cumulative = 1e-06\n"
+            "ExecutionTime = 1 s\n"
+            "End\n"
+        ),
+    )
+
+    doc = _audit_fixture_doc("lid_driven_cavity", report, commit_sha="deadbee")
+
+    assert doc["run_metadata"]["expected_verdict"] == "HAZARD"
+    assert doc["run_metadata"]["actual_verdict"] == "HAZARD"
+
+
+def test_audit_fixture_doc_recomputes_to_fail_on_hard_concern(tmp_path: Path) -> None:
+    from scripts.phase5_audit_run import _audit_fixture_doc
+
+    report = _make_audit_fixture_report(
+        tmp_path,
+        "Time = 1\nFOAM FATAL ERROR: missing dict\nExiting\n",
+    )
+
+    doc = _audit_fixture_doc("lid_driven_cavity", report, commit_sha="deadbee")
+
+    assert doc["run_metadata"]["expected_verdict"] == "FAIL"
+    assert doc["run_metadata"]["actual_verdict"] == "FAIL"
+
+
+def test_audit_fixture_doc_clean_run_stays_pass_regression(tmp_path: Path) -> None:
+    from scripts.phase5_audit_run import _audit_fixture_doc
+
+    report = _make_audit_fixture_report(
+        tmp_path,
+        "Time = 1\nExecutionTime = 1 s\nEnd\n",
+    )
+
+    doc = _audit_fixture_doc("lid_driven_cavity", report, commit_sha="deadbee")
+
+    assert doc["run_metadata"]["expected_verdict"] == "PASS"
+    assert doc["run_metadata"]["actual_verdict"] == "PASS"
 
 
 # ---------------------------------------------------------------------------
