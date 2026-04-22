@@ -3,27 +3,27 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-21T08:17:39.182Z"
+last_updated: "2026-04-22T18:55 local"
 progress:
-  total_phases: 7
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 2
-  percent: 67
+  total_phases: 9
+  completed_phases: 8
+  total_plans: 18
+  completed_plans: 18
+  percent: 89
 ---
 
-driving_model: claude-opus47-app (Sole Primary Driver under Model Routing v6.1; Codex GPT-5.4-xhigh demoted to Heterogeneous Code Tool, invoked on demand for the three-禁区 src/ · tests/ · knowledge/gold_standards/ perimeter. Notion Gate retained only for 4 hard-floor守护者 duties.)
+driving_model: claude-code-opus47 (Main Driver under Model Routing v6.2 · CLI-based · 2026-04-22 takeover from v6.1 claude-opus47-app). Subagent discipline: >5 turns / >40k tokens / >3 files / >500 LOC → fresh subagent dispatch. Codex GPT-5.4-xhigh: Joint Dev Peer with 3 invocation modes — (§A) 禁区 diff generator; (§B) independent key-claim verifier [NEW — anti-deception]; (§C) milestone joint reviewer. Notion Gate: 5 hard-floor guards (+1 new: heterogeneous verification failure).
 tier: T3-Orchestrator
-last_updated: "2026-04-21T08:30"
-session: S-003p OPEN (v6.1 takeover landing + state reconciliation + visual-acceptance iteration audit + Path B UI-MVP Phase 0). Supersedes S-003o. v6.1 cutover: joint Codex↔Claude co-primary (v6.0) retired; Claude APP is now sole primary driver with codex-as-tool access pattern. Hard boundaries remain frozen: Q-1 (DHC gold Path P-1/P-2) and Q-2 (R-A-relabel pipe_flow→duct_flow). Q-3 Notion backfill CLOSED 2026-04-19 / re-closed 2026-04-20 (MCP online). **2026-04-20 pivot — Path B elected (DEC-V61-002)**: project reframes from R&D-harness to Agentic V&V-first commercial workbench; 6-phase MVP begins with Phase 0 (FastAPI backend + Vite/React frontend + Screen 4 Validation Report). Phase 9 "fresh activation review" hold is superseded — Phase 9 scope rolls into the Path-B phase plan.
+last_updated: "2026-04-22T18:55 local"
+session: S-003q OPEN (v6.2 takeover 2026-04-22). Supersedes S-003p. v6.2 cutover: Claude Code CLI main-driven (v6.1 APP retired), /agents Team + Subagent native capability added, Codex post-mortem verification added. **First-action slice**: 5 DEC codex_verdict reconciliation — 036/036c/039 backfill from commit-msg evidence (committed 17f7f14), 036b/038 Codex re-run in progress (pre-merge per RETRO-V61-001). Phase 8 Sprint 1 PASS-washing cleanup in flight (DEC-V61-036..044 landed); Phase 5 Audit Package Builder done; Phases 0-7 complete; external_gate_queue EMPTY.
 
 # Phase Status
 
-current_phase: **Path B — Phase 1..4 UI MVP** (Case Editor + Decisions Queue + Run Monitor + Dashboard) — LANDED on feat/ui-mvp-phase-1-to-4, DEC-V61-003 drafted, PR #3 pending
-phase_status: ui/backend ✅ (21/21 pytest green — case_editor 6, decisions/run_monitor/dashboard 8, existing 7) · ui/frontend ✅ (tsc --noEmit clean, vite build ~232KB js gz / ~4KB css gz, 122 modules) · CodeMirror 6 YAML editor + 4-col Kanban + SSE residual streaming + 10-case matrix Dashboard all wired · scripts/start-ui-dev.sh + README UI quickstart + pyproject [ui] dep group landed · Phase 0 PR #2 merged as 6ae6d0b5 · DEC-V61-002 Notion-mirrored
-next_phase: Path B — Phase 5 (Audit Package Builder)
-next_phase_status: 🔒 BLOCKED on external Gate — Q-1 (DHC gold accuracy) + Q-2 (R-A-relabel pipe→duct) must resolve before signed audit packages can emit (per DEC-V61-002 + DEC-V61-003)
-autonomous_governance_counter_v61: 3 (DEC-V61-001 cutover + DEC-V61-002 Path B + DEC-V61-003 Phase 1..4) · hard-floor-4 threshold ≥ 10 still has 7 slots of runway
+current_phase: **Phase 8 — Sprint 1 PASS-washing cleanup** (hard gates G1/G2/G3/G4/G5 + convergence attestor A1..A6 + LDC verdict split reconciliation). Bulk of module work landed 2026-04-22; governance tail-wag (codex_verdict reconciliation) underway.
+phase_status: 10-case whitelist contract_status: **8 PASS / 2 HOLD** (Cases 9 impinging_jet, 10 rayleigh_benard paywalled; HOLD not blocker). Gates G1 (DEC-036), G2 (DEC-036c), G3/G4/G5 (DEC-036b) all landed with physics-aware thresholds. Convergence attestor (DEC-038) landed with per-case YAML thresholds. LDC verdict split (DEC-039) surfaces profile_verdict + contract_status side-by-side.
+next_phase: Phase 8 Sprint 2 OR Phase 9 promotion decision (pending retro)
+next_phase_status: 🟢 OPEN — all external gates CLOSED; pending retro decision on Sprint 2 scope vs Phase 9 activation
+autonomous_governance_counter_v61: 32 (per RETRO-V61-003 2026-04-22 arc-size retro at counter=32). RETRO-V61-001 reset 16→0 counter baseline; current arc spans DEC-V61-017..044 across Phase 5d / Phase 8 Sprint 1. Next cadence retro at counter=40 per RETRO-V61-003.
 
 legacy_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync; 2026-04-20)
 legacy_next_phase_hold: Phase 9 planning-only review is SUPERSEDED by Path B phase plan; Q-1 / Q-2 remain visible in external_gate_queue.md and do not block Path B phases 0..4 (will re-enter at Phase 5 audit-package-signing gate if still open).
