@@ -621,28 +621,54 @@ def _make_attestation(
     """DEC-V61-040: lift `attestation` block from the fixture into the API.
 
     The attestor runs at audit-fixture time (see scripts/phase5_audit_run.py)
-    and writes `{overall, checks[]}` onto the measurement doc. Reference /
-    visual_only runs that lack a solver log have no attestation block; for
-    those we surface ATTEST_NOT_APPLICABLE so the UI can distinguish "no
-    solver evidence" from "attestor said clean PASS".
+    and writes `{overall, checks[]}` onto the measurement doc. Two states:
+
+    - Block absent (legacy fixtures, reference / visual_only tiers with no
+      solver log): returns None. The UI renders "no solver log available".
+    - Block present with `overall: ATTEST_NOT_APPLICABLE`: returns a verdict
+      object with that overall — a first-class "we looked and nothing to
+      assert" state, per Codex DEC-040 round-1 CFD opinion (Q4b).
+
+    Malformed blocks fail loudly (ValueError) rather than silently returning
+    None — an audit-evidence path should never hide fixture corruption.
+    This closes Codex round-1 FLAG on lenient parsing.
     """
     if not doc:
         return None
     block = doc.get("attestation")
+    if block is None:
+        return None
     if not isinstance(block, dict):
-        return None
+        raise ValueError(
+            f"attestation must be a mapping, got {type(block).__name__}"
+        )
     overall = block.get("overall")
-    if overall not in ("ATTEST_PASS", "ATTEST_HAZARD", "ATTEST_FAIL",
-                       "ATTEST_NOT_APPLICABLE"):
-        return None
+    valid_overalls = (
+        "ATTEST_PASS", "ATTEST_HAZARD", "ATTEST_FAIL", "ATTEST_NOT_APPLICABLE"
+    )
+    if overall not in valid_overalls:
+        raise ValueError(
+            f"attestation.overall must be one of {valid_overalls}, "
+            f"got {overall!r}"
+        )
     checks_raw = block.get("checks") or []
+    if not isinstance(checks_raw, list):
+        raise ValueError(
+            f"attestation.checks must be a list, got {type(checks_raw).__name__}"
+        )
     checks: list[AttestorCheck] = []
     for entry in checks_raw:
         if not isinstance(entry, dict):
-            continue
+            raise ValueError(
+                f"attestation.checks[] entry must be a mapping, "
+                f"got {type(entry).__name__}"
+            )
         verdict = entry.get("verdict")
         if verdict not in ("PASS", "HAZARD", "FAIL"):
-            continue
+            raise ValueError(
+                f"attestation.checks[{entry.get('check_id', '?')}].verdict "
+                f"must be PASS/HAZARD/FAIL, got {verdict!r}"
+            )
         checks.append(
             AttestorCheck(
                 check_id=entry.get("check_id", ""),

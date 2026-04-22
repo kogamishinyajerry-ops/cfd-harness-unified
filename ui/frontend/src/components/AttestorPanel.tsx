@@ -26,11 +26,22 @@ interface Props {
 }
 
 export function AttestorPanel({ attestation }: Props) {
-  if (!attestation) {
+  // Treat "no fixture block" and "explicit ATTEST_NOT_APPLICABLE with no
+  // checks" as the same rendering case — both mean "no solver evidence".
+  // Per Codex DEC-040 round-1 FLAG, explicit NOT_APPLICABLE shouldn't render
+  // an empty panel body after the badge header.
+  const noSolverEvidence =
+    !attestation ||
+    attestation.overall === "ATTEST_NOT_APPLICABLE" ||
+    attestation.checks.length === 0;
+  if (noSolverEvidence) {
     return (
       <div className="card">
-        <div className="card-header">
+        <div className="card-header flex items-center justify-between">
           <h3 className="card-title">Convergence Attestor (A1–A6)</h3>
+          {attestation && (
+            <AttestorBadge overall={attestation.overall} size="sm" />
+          )}
         </div>
         <p className="px-4 py-4 text-xs text-surface-400">
           No solver log available for this run (reference / visual-only).

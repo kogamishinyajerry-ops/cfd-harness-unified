@@ -12,31 +12,35 @@ import type { AttestVerdict } from "@/types/validation";
 
 const STYLES: Record<
   AttestVerdict,
-  { bg: string; text: string; dot: string; label: string }
+  { bg: string; text: string; dot: string; label: string; aria: string }
 > = {
   ATTEST_PASS: {
     bg: "bg-contract-pass/15",
     text: "text-contract-pass",
     dot: "bg-contract-pass",
     label: "ATTEST PASS",
+    aria: "solver attestor: clean convergence",
   },
   ATTEST_HAZARD: {
     bg: "bg-contract-hazard/15",
     text: "text-contract-hazard",
     dot: "bg-contract-hazard",
     label: "ATTEST HAZARD",
+    aria: "solver attestor: convergence warning",
   },
   ATTEST_FAIL: {
     bg: "bg-contract-fail/15",
     text: "text-contract-fail",
     dot: "bg-contract-fail",
     label: "ATTEST FAIL",
+    aria: "solver attestor: convergence failure",
   },
   ATTEST_NOT_APPLICABLE: {
     bg: "bg-contract-unknown/15",
     text: "text-contract-unknown",
     dot: "bg-contract-unknown",
     label: "NO SOLVER LOG",
+    aria: "solver attestor: no solver log available",
   },
 };
 
@@ -59,7 +63,7 @@ export function AttestorBadge({ overall, size = "md", className = "" }: Props) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-semibold uppercase tracking-wider ${padding} ${style.bg} ${style.text} ${className}`}
       role="status"
-      aria-label={`attestor verdict ${style.label.toLowerCase()}`}
+      aria-label={style.aria}
       title="Solver-iteration attestor (A1–A6): did the solver actually converge?"
     >
       <span className={`inline-block rounded-full ${dotSize} ${style.dot}`} />

@@ -8,7 +8,11 @@ export type RunCategory =
   | "real_incident"
   | "under_resolved"
   | "wrong_model"
-  | "grid_convergence";
+  | "grid_convergence"
+  // DEC-V61-035: default run for audit fixtures — solver-in-the-loop
+  // output backing the signed audit package. Must stay in lockstep with
+  // backend RunCategory literal in schemas/validation.py.
+  | "audit_real_run";
 
 export interface RunDescriptor {
   run_id: string;

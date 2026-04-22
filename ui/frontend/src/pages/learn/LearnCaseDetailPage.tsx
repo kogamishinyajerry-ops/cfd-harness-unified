@@ -407,6 +407,7 @@ const RUN_CATEGORY_LABEL: Record<RunCategory, string> = {
   under_resolved: "欠分辨",
   wrong_model: "错模型",
   grid_convergence: "网格收敛",
+  audit_real_run: "真实审计",
 };
 
 const RUN_CATEGORY_COLOR: Record<RunCategory, string> = {
@@ -415,6 +416,7 @@ const RUN_CATEGORY_COLOR: Record<RunCategory, string> = {
   under_resolved: "bg-orange-900/30 text-orange-200 border-orange-800/50",
   wrong_model: "bg-rose-900/30 text-rose-200 border-rose-800/50",
   grid_convergence: "bg-sky-900/30 text-sky-200 border-sky-800/50",
+  audit_real_run: "bg-accent-900/40 text-accent-200 border-accent-800/60",
 };
 
 function CompareTab({
