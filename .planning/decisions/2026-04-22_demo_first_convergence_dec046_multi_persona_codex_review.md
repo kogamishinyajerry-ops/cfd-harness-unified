@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-046
 title: Demo-first convergence + 3-persona Codex iteration loop
-status: IN_PROGRESS (round 1 remediation landed 2026-04-23T00:05; round 2 pending)
+status: IN_PROGRESS (round 2 remediation landed 2026-04-23T00:30; round 3 pending)
 commits_in_scope:
   - 87b3b39 fix(contracts): Python 3.12 + jsonschema + UNKNOWN note_map
   - 335c4b4 test(cleanup): stale tests aligned with DEC-V61-011/029/040
@@ -15,11 +15,14 @@ commits_in_scope:
   - 6911611 feat(learn): round-1 batch 3 — buyer-facing hero + PhysicsContractPanel + CTA strip
   - 93e84cf fix(robustness): round-1 batch 4 — _precondition_marker helper + edge-case tests
   - 61140c4 docs(dec): round-1 remediation log
-codex_verdict: CHANGES_REQUIRED (round 1 — 0 blockers, ~15 major/minor; remediated in 4 batches above)
+  - f50a4e4 docs(dec): round-1 sync-complete marker + round-2 prompt
+  - c87a354 fix(precondition): round-3 batch 5 — tri-state through API (R3-B1 blocker)
+  - f6d1743 fix(contracts): round-3 batch 6 — BFS anchor internal consistency (R2-M2)
+codex_verdict: CHANGES_REQUIRED (round 2 — 1 blocker R3-B1 + 1 major R2-M2; both remediated via batches 5+6; R2-M5/R2-M8 deferrals accepted by codex)
 autonomous_governance: true
 autonomous_governance_counter_v61: 33 (33rd +1 entry since RETRO-V61-001 counter reset)
 external_gate_self_estimated_pass_rate: 0.70
-codex_tool_report_path: .planning/reviews/round_1_findings.md (31 KB, authored by codex exec)
+codex_tool_report_path: .planning/reviews/round_2_findings.md (11.5 KB, authored 2026-04-23; round_1_findings.md retained for arc audit)
 notion_sync_status: synced 2026-04-23T00:10 (Status=Accepted, round-1 summary appended as page children; https://www.notion.so/DEC-V61-046-Demo-first-convergence-3-persona-Codex-iteration-34ac68942bed81fa909dd8315a7bf7dd, page_id=34ac6894-2bed-81fa-909d-d8315a7bf7dd)
 github_sync_status: pushed (61140c4 on origin/main 2026-04-23T00:05; includes 4 remediation batches + round-log update)
 related:
@@ -112,12 +115,26 @@ Notion sync.
 - **GitHub sync**: pushed 2026-04-23T00:05 — 5 commits landed on origin/main (6c53986, fa7d96d, 6911611, 93e84cf, 61140c4).
 - **Notion sync**: synced 2026-04-23T00:10 — DEC-046 row Status=Proposed→Accepted; round-1 remediation summary appended as page children (5 bullets covering batches 1-4 + deferral rationale + round-2 next-step note).
 
-### Round 2 — TBD
-Codex re-review after the round-1 remediation is pushed. Expected: check
-batch 1-4 changes landed correctly; surface any new findings introduced
-by the remediation; ideally verdict escalates to APPROVE_WITH_COMMENTS or
-APPROVE. R2-M5 / R2-M8 deferral rationale should be accepted (or codex
-re-raises if insufficient).
+### Round 2 — 2026-04-23T00:00 → T00:11 (remediation landed T00:30)
+- **Codex exec PID**: 28060 (log `.planning/reviews/round_2_codex.log`)
+- **Prompt**: `.planning/reviews/round_2_prompt.md`
+- **Findings**: `.planning/reviews/round_2_findings.md` (11.5 KB)
+- **Verdict**: CHANGES_REQUIRED
+  - Role 1 商业立项: APPROVE_WITH_COMMENTS (R1-M1..M5 all verified addressed; 2 new nits R1-N2 browser title + R1-N3 audit-bridge context-drop)
+  - Role 2 CFD: CHANGES_REQUIRED — R2-M2 only partially addressed (BFS gold YAML internal inconsistency: header cites 6.28, stores 6.26, still repeats `<2%`)
+  - Role 3 Senior Reviewer: CHANGES_REQUIRED — **R3-B1 BLOCKER**: live `build_validation_report("backward_facing_step")` bool()-casts YAML `partial` → `True`; export bundle honest but Story-tab + `/pro` PreconditionList lossy
+- **Deferrals accepted by codex**: R2-M5 (taxonomy refactor, long-prefix `startswith()` behaviour pinned by unit test), R2-M8 (Spalding hard-hazard; TFP precondition already labels `partial` with follow-up note).
+- **Findings addressed** (2 atomic commits):
+  - Batch 5 (R3-B1 blocker) `c87a354` — `ui/backend/services/validation_report.py` new `_normalize_satisfied` helper + `_make_preconditions` tri-state pass-through (replaces `bool(...)` cast); `ui/backend/schemas/validation.py` `Precondition.satisfied` typed `Literal["partial"] | bool`; `ui/frontend/src/types/validation.ts` mirror `boolean | "partial"`; `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx` `mark()` simplified to 3 branches (evidence-text fallback removed); `ui/frontend/src/components/PreconditionList.tsx` `/pro` component gets tri-state dot/label/tone + header counts split satisfied/partial/unmet; 2 new tests (`test_validation_report_preserves_partial_precondition_tristate` pins BFS live-API surface; `test_normalize_satisfied_tristate_and_unknowns` covers 13 input shapes with fail-visible unknowns).
+  - Batch 6 (R2-M2 BFS) `f6d1743` — `knowledge/gold_standards/backward_facing_step.yaml` header + `reference_correlation_context` + reference_values[].description + source field all rewritten to explicitly label the stored 6.26 as a BLENDED engineering anchor (Le/Moin/Kim 5100 DNS 6.28 + Driver & Seegmiller 37500 experiment 6.26 both cited as bracket literature; 10% tolerance absorbs the 0.02 literature spread; the disavowed `<2%` sensitivity claim removed). `ui/frontend/src/data/learnCases.ts` BFS teaching copy removes `<2%` wording and matches the blended-anchor rationale.
+- **New commits**: c87a354, f6d1743 (local).
+- **Test suite**: 789 → 791 passed / 2 skipped (+2 new tri-state tests, 0 regressions).
+- **Frontend**: typecheck clean; build 1.33s; bundle unchanged 803 KB / 259 KB gzip.
+- **Notion sync**: pending (to update after push).
+- **GitHub sync**: pending (to push).
+
+### Round 3 — TBD
+Codex re-review after round-2 remediation. Expected: R3-B1 tri-state and R2-M2 blended-anchor fix verified; R1-N2 (browser title) + R1-N3 (audit-bridge context) judged as nits not blockers. Ideal outcome: consolidated APPROVE or APPROVE_WITH_COMMENTS with deferrals intact.
 
 ### Round N+1 — template
 (Fill after round N codex APPROVE or CHANGES_REQUIRED)
