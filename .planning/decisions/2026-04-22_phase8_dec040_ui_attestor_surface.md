@@ -20,7 +20,7 @@ counter_status: |
 reversibility: fully-reversible — additive schema field + two React
   components + one fixture block. Revert = 5 files restored, fixtures
   unchanged semantically (attestation block is additive).
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-040-Phase-8-Sprint-1-UI-attestor-surface-A1-A6-verdict-in-ValidationReport-34ac68942bed81498d06e804ac3f805c)
 github_pr_url: null (direct-to-main after Codex)
 external_gate_self_estimated_pass_rate: 0.80
   (Narrow additive change, mirrors the DEC-V61-039 shape. Main risk:

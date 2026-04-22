@@ -24,7 +24,7 @@ counter_status: |
 reversibility: fully-reversible — new module + new tests + explicit
   generator plumbing. Revert = remove src/wall_gradient.py + restore
   3 extractor bodies + remove BC metadata lines.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-042-Shared-wall-gradient-helper-Fornberg-3-point-DHC-impinging_jet-RBC-34ac68942bed81f6baf3f44348810ffc)
 github_pr_url: null (direct-to-main after Codex)
 external_gate_self_estimated_pass_rate: 0.55
   (Honest: BC plumbing + generator wiring + 3 extractor rewrites +

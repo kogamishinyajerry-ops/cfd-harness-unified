@@ -21,7 +21,7 @@ reversibility: fully-reversible — new emitter module + FO block in
   controlDict + extractor extension + new tests. Revert = remove
   src/plane_channel_uplus_emitter.py + revert the 2 foam_agent_adapter
   edits + drop functions{} block from controlDict.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-043-plane_channel_flow-u_-u-y-emitter-via-wallShearStress-line-sampler-FOs-34ac68942bed81638aeeed4f5d161048)
 github_pr_url: null (direct-to-main after Codex)
 external_gate_self_estimated_pass_rate: 0.70
   (Pattern is now well-established from DEC-042 — FO plumbing +

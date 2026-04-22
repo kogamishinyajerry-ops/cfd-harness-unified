@@ -26,7 +26,7 @@ reversibility: fully-reversible — new FFT module + new forceCoeffs
   src/cylinder_strouhal_fft.py + drop functions{} block +
   restore the old canonical-band-shortcut branch in
   `_extract_cylinder_strouhal`.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-041-Cylinder-Strouhal-FFT-via-forceCoeffs-FO-retires-0-165-canonical-band-hardcode-34ac68942bed8116a145deb8f21a785b)
 github_pr_url: null (direct-to-main after Codex)
 external_gate_self_estimated_pass_rate: 0.70
   (FFT is the most algorithmically novel of the Sprint 1 DECs.

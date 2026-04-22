@@ -22,7 +22,7 @@ reversibility: fully-reversible — new sampler module + new FO block
   in NACA controlDict + extractor extension. Revert = remove
   src/airfoil_surface_sampler.py + drop functions{} block + restore
   the old sampleDict-only _populate_naca_cp_from_sampledict body.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-044-NACA-C3-surface-Cp-sampler-surfaces-FO-direct-not-volume-cell-band-averaging-34ac68942bed819d9734dd0eac34cdce)
 github_pr_url: null (direct-to-main after Codex)
 external_gate_self_estimated_pass_rate: 0.75
   (Pattern now well-established from DEC-042/043. Remaining risks:
