@@ -12,11 +12,14 @@ Evidence sources:
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src import comparator_gates as cg
+from src.comparator_gates import check_all_gates, read_final_velocity_max
 from ui.backend.main import app
 
 
@@ -53,6 +56,30 @@ def _write_log(tmp_path: Path, content: str) -> Path:
     p = tmp_path / "log.simpleFoam"
     p.write_text(content, encoding="utf-8")
     return p
+
+
+class _FakeMesh:
+    def __init__(self, *, point_data: dict | None = None, cell_data: dict | None = None) -> None:
+        self.point_data = point_data or {}
+        self.cell_data = cell_data or {}
+
+
+def _write_vtk_stub(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("stub", encoding="utf-8")
+    return path
+
+
+def _install_fake_pyvista(monkeypatch: pytest.MonkeyPatch, meshes_by_name: dict[str, _FakeMesh]) -> list[str]:
+    reads: list[str] = []
+
+    def fake_read(path_str: str) -> _FakeMesh:
+        name = Path(path_str).name
+        reads.append(name)
+        return meshes_by_name[name]
+
+    monkeypatch.setitem(sys.modules, "pyvista", SimpleNamespace(read=fake_read))
+    return reads
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +192,82 @@ def test_g3_passes_on_clean_ldc_log(tmp_path: Path) -> None:
     violations = cg.check_all_gates(log_path=log, vtk_dir=None, U_ref=1.0)
     g3 = [v for v in violations if v.gate_id == "G3"]
     assert g3 == []
+
+
+def test_read_final_velocity_max_skips_allPatches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_vtk_stub(tmp_path / "case_100.vtk")
+    _write_vtk_stub(tmp_path / "allPatches" / "allPatches_100.vtk")
+    reads = _install_fake_pyvista(
+        monkeypatch,
+        {
+            "case_100.vtk": _FakeMesh(point_data={"U": [[2.0, 0.0, 0.0]]}),
+            "allPatches_100.vtk": _FakeMesh(point_data={"U": [[999.0, 0.0, 0.0]]}),
+        },
+    )
+    assert read_final_velocity_max(tmp_path) == pytest.approx(2.0)
+    assert reads == ["case_100.vtk"]
+
+
+def test_read_final_velocity_max_uses_latest_timestep(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("case_100.vtk", "case_200.vtk", "case_500.vtk"):
+        _write_vtk_stub(tmp_path / name)
+    reads = _install_fake_pyvista(
+        monkeypatch,
+        {
+            "case_100.vtk": _FakeMesh(point_data={"U": [[999.0, 0.0, 0.0]]}),
+            "case_200.vtk": _FakeMesh(point_data={"U": [[1.0, 0.0, 0.0]]}),
+            "case_500.vtk": _FakeMesh(point_data={"U": [[2.0, 0.0, 0.0]]}),
+        },
+    )
+    assert read_final_velocity_max(tmp_path) == pytest.approx(2.0)
+    assert reads == ["case_500.vtk"]
+
+
+def test_read_final_velocity_max_allPatches_only_returns_none(tmp_path: Path) -> None:
+    _write_vtk_stub(tmp_path / "allPatches" / "allPatches_500.vtk")
+    assert read_final_velocity_max(tmp_path) is None
+
+
+def test_read_final_velocity_max_numeric_vs_alphabetic_sort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("case_10.vtk", "case_100.vtk", "case_2.vtk"):
+        _write_vtk_stub(tmp_path / name)
+    reads = _install_fake_pyvista(
+        monkeypatch,
+        {
+            "case_10.vtk": _FakeMesh(point_data={"U": [[10.0, 0.0, 0.0]]}),
+            "case_100.vtk": _FakeMesh(point_data={"U": [[100.0, 0.0, 0.0]]}),
+            "case_2.vtk": _FakeMesh(point_data={"U": [[2.0, 0.0, 0.0]]}),
+        },
+    )
+    assert read_final_velocity_max(tmp_path) == pytest.approx(100.0)
+    assert reads == ["case_100.vtk"]
+
+
+def test_read_final_velocity_max_no_timestep_suffix_skipped(tmp_path: Path) -> None:
+    _write_vtk_stub(tmp_path / "bare_case.vtk")
+    assert read_final_velocity_max(tmp_path) is None
+
+
+def test_g3_boundary_99_U_ref_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cg, "read_final_velocity_max", lambda _: 99.0)
+    violations = check_all_gates(log_path=None, vtk_dir=tmp_path, U_ref=1.0)
+    assert [v for v in violations if v.gate_id == "G3"] == []
+
+
+def test_g3_boundary_101_U_ref_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cg, "read_final_velocity_max", lambda _: 101.0)
+    violations = check_all_gates(log_path=None, vtk_dir=tmp_path, U_ref=1.0)
+    g3 = [v for v in violations if v.gate_id == "G3"]
+    assert len(g3) == 1
+    assert g3[0].evidence["u_max"] == pytest.approx(101.0)
+
+
+@pytest.mark.skip(reason="Wave 2 scope")
+def test_g3_U_ref_none_behavior() -> None:
+    pass
 
 
 # ---------------------------------------------------------------------------

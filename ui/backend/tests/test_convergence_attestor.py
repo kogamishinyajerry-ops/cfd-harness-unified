@@ -12,10 +12,12 @@ Ground truth from Codex round-1 physics audit (DEC-036):
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from src import convergence_attestor as ca
+from src.convergence_attestor import Thresholds, load_thresholds
 
 
 def _write_log(tmp_path: Path, content: str) -> Path:
@@ -239,6 +241,44 @@ def test_a2_never_returns_fail_only_hazard(tmp_path: Path) -> None:
     assert a2.verdict == "HAZARD"  # was FAIL pre-fix
 
 
+def test_load_thresholds_defaults() -> None:
+    thresholds = load_thresholds()
+    assert isinstance(thresholds, Thresholds)
+    assert thresholds.continuity_floor == pytest.approx(1e-4)
+    assert thresholds.residual_floor == pytest.approx(1e-3)
+    assert thresholds.residual_floor_per_field["p_rgh"] == pytest.approx(1e-2)
+
+
+def test_load_thresholds_per_case_impinging_jet() -> None:
+    thresholds = load_thresholds("impinging_jet")
+    assert isinstance(thresholds, Thresholds)
+    assert thresholds.residual_floor_per_field["p_rgh"] == pytest.approx(5e-3)
+    assert thresholds.residual_floor_per_field["Ux"] == pytest.approx(1e-3)
+
+
+def test_load_thresholds_per_case_rayleigh_benard() -> None:
+    thresholds = load_thresholds("rayleigh_benard_convection")
+    assert thresholds.residual_floor_per_field["h"] == pytest.approx(2e-3)
+    assert thresholds.no_progress_decade_frac == pytest.approx(0.3)
+
+
+def test_load_thresholds_unknown_case_falls_back() -> None:
+    defaults = load_thresholds()
+    unknown = load_thresholds("nonexistent_xyz_12345")
+    assert unknown.continuity_floor == defaults.continuity_floor
+    assert unknown.residual_floor == defaults.residual_floor
+    assert unknown.residual_floor_per_field == defaults.residual_floor_per_field
+    assert unknown.no_progress_decade_frac == defaults.no_progress_decade_frac
+
+
+def test_load_thresholds_missing_yaml_uses_hardcoded(tmp_path: Path) -> None:
+    bad_path = tmp_path / "nonexistent.yaml"
+    thresholds = load_thresholds(yaml_path=bad_path)
+    assert isinstance(thresholds, Thresholds)
+    assert thresholds.continuity_floor == ca.A2_CONTINUITY_FLOOR
+    assert thresholds.residual_floor == ca.A3_RESIDUAL_FLOOR
+
+
 def test_a4_passes_on_sparse_cap_hits(tmp_path: Path) -> None:
     """Single-iteration cap is not pathological — solver typically hits
     high counts in transient but recovers."""
@@ -252,6 +292,52 @@ def test_a4_passes_on_sparse_cap_hits(tmp_path: Path) -> None:
     result = ca.attest(log)
     a4 = next(c for c in result.checks if c.check_id == "A4")
     assert a4.verdict == "PASS"
+
+
+def test_a1_exit_code_false_forces_fail(tmp_path: Path) -> None:
+    log = _write_log(tmp_path, "Time = 1\nExecutionTime = 1 s\nEnd\n")
+    result = ca._check_a1_solver_crash(
+        log,
+        execution_result=SimpleNamespace(success=False, exit_code=139),
+    )
+    assert result.verdict == "FAIL"
+    assert result.evidence["exit_code"] == 139
+
+
+def test_a1_log_fatal_fires_even_with_success_exit(tmp_path: Path) -> None:
+    log = _write_log(tmp_path, "Time = 1\nmiddle\nFloating exception\nEnd\n")
+    result = ca._check_a1_solver_crash(
+        log,
+        execution_result=SimpleNamespace(success=True, exit_code=0),
+    )
+    assert result.verdict == "FAIL"
+
+
+def test_a1_sigFpe_banner_not_false_positive(tmp_path: Path) -> None:
+    log = _write_log(
+        tmp_path,
+        "sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).\n"
+        "Time = 1\nEnd\n",
+    )
+    result = ca._check_a1_solver_crash(
+        log,
+        execution_result=SimpleNamespace(success=True, exit_code=0),
+    )
+    assert result.verdict == "PASS"
+
+
+def test_a3_per_field_threshold_impinging_jet_p_rgh(tmp_path: Path) -> None:
+    """Override guard: 6e-3 trips impinging_jet p_rgh (5e-3) but not YAML default (1e-2)."""
+    log = _write_log(
+        tmp_path,
+        "DILUPBiCGStab:  Solving for p_rgh, Initial residual = 6e-3, "
+        "Final residual = 1e-5, No Iterations 2\n",
+    )
+    impinging = ca._check_a3_residual_floor(log, thresholds=load_thresholds("impinging_jet"))
+    default = ca._check_a3_residual_floor(log, thresholds=load_thresholds())
+    assert impinging.verdict == "HAZARD"
+    assert impinging.evidence["thresholds_by_field"]["p_rgh"] == pytest.approx(5e-3)
+    assert default.verdict == "PASS"
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +404,60 @@ def test_a6_ignores_converged_plateau(tmp_path: Path) -> None:
     result = ca.attest(log)
     a6 = next(c for c in result.checks if c.check_id == "A6")
     assert a6.verdict == "PASS"
+
+
+def test_a6_decade_range_exactly_1_fires_fail(tmp_path: Path) -> None:
+    """Boundary guard: exactly 1.0 decade must fire A6, which stays HAZARD-tier."""
+    lines = []
+    for i in range(50):
+        initial = "1.0" if i % 2 == 0 else "10.0"
+        lines.append(
+            f"smoothSolver:  Solving for Ux, Initial residual = {initial}, "
+            "Final residual = 0.5, No Iterations 2"
+        )
+    log = _write_log(tmp_path, "\n".join(lines) + "\n")
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds())
+    assert result.verdict == "HAZARD"
+    assert result.evidence["offenders"]["Ux"]["decades"] == pytest.approx(1.0)
+
+
+def test_a4_gap_blocks_reset_consecutive(tmp_path: Path) -> None:
+    log = _write_log(
+        tmp_path,
+        "Time = 1\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n"
+        "Time = 2\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 0.1, Final residual = 0.01, No Iterations 2\n"
+        "Time = 3\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n"
+        "Time = 4\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n",
+    )
+    result = ca._check_a4_iteration_cap(log, thresholds=load_thresholds())
+    assert result.verdict == "PASS"
+
+
+def test_a4_three_consecutive_caps_fail(tmp_path: Path) -> None:
+    log = _write_log(
+        tmp_path,
+        "Time = 1\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n"
+        "Time = 2\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n"
+        "Time = 3\n"
+        "GAMG:  Solving for p, Initial residual = 0.9, Final residual = 0.5, No Iterations 1000\n",
+    )
+    result = ca._check_a4_iteration_cap(log, thresholds=load_thresholds())
+    assert result.verdict == "FAIL"
+    assert result.evidence["consecutive_cap_blocks"] == 3
+
+
+def test_attest_with_execution_result_failure(tmp_path: Path) -> None:
+    log = _write_log(tmp_path, "Time = 1\nExecutionTime = 1 s\nEnd\n")
+    result = ca.attest(log, execution_result=SimpleNamespace(success=False))
+    a1 = next(c for c in result.checks if c.check_id == "A1")
+    assert result.overall == "ATTEST_FAIL"
+    assert a1.verdict == "FAIL"
 
 
 # ---------------------------------------------------------------------------
