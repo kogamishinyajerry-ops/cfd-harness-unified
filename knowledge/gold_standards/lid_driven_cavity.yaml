@@ -44,12 +44,15 @@ physics_contract:
     - condition: "u_centerline reference values are Ghia 1982 Table I indexed by y (this observable only)"
       satisfied_by_current_adapter: true
       evidence_ref: "DEC-V61-030 Path A (2026-04-21) re-interpolated Ghia Table I to the 17-point y grid; verified against Ghia native points documented in YAML header lines 15-24."
-    - condition: "v_centerline + primary_vortex_location observables share the same Ghia provenance"
-      satisfied_by_current_adapter: partial
-      evidence_ref: "YAML header lines 26-32 flag both as unverified: v_centerline appears to be Ghia Table II indexed by x but labelled 'y'; primary_vortex_location vortex_center_y=0.7650 disagrees with Ghia's Re=100 primary vortex at (0.6172, 0.7344). These observables are NOT exercised by the current audit comparator; any PASS on them should be read with suspicion until a dedicated audit pass lands (Phase 5c follow-up)."
+    - condition: "v_centerline reference values match Ghia 1982 Table II v(x) along the geometric horizontal centreline"
+      satisfied_by_current_adapter: false
+      evidence_ref: "YAML header lines 26-32 flag that v_centerline appears to be Ghia Table II data (which Ghia indexes by x along the horizontal centreline) but the YAML labels the axis as 'y'. This is a provenance/indexing error, not a partial match — the values are the wrong coordinate basis for the observable name. Any PASS on v_centerline today is comparator coincidence, not Ghia-faithful."
+    - condition: "primary_vortex_location matches Ghia 1982 Re=100 primary vortex centre (0.6172, 0.7344)"
+      satisfied_by_current_adapter: false
+      evidence_ref: "YAML stores vortex_center_y=0.7650, which disagrees with Ghia's documented Re=100 primary vortex centre y≈0.7344 (and Ghia's x≈0.6172 isn't even stored alongside). Numerically close but not Ghia-indexed. Observable is NOT exercised by the current audit comparator; if a future audit turns it on, it will report a spurious deviation traceable to this bad reference."
     - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
       satisfied_by_current_adapter: true
-      evidence_ref: "whitelist default grid meets Ghia's 129² DNS-quality shoulder via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
+      evidence_ref: "whitelist default grid meets the Ghia high-resolution reference shoulder (Ghia 1982 used 129×129 on a second-order finite-difference stream-function/vorticity solver — historical high-resolution benchmark, not a present-day DNS claim) via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
   contract_status: "SATISFIED_FOR_U_CENTERLINE_ONLY — u_centerline block is Ghia-faithful and passes comparator cleanly; v_centerline + primary_vortex_location blocks have unverified Ghia-indexing and should not be treated as physics-valid PASS evidence without a dedicated re-audit."
   precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
 

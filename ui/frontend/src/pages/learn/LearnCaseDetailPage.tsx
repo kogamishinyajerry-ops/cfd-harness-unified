@@ -8,6 +8,7 @@ import { getFlowFields } from "@/data/flowFields";
 import { getLearnCase } from "@/data/learnCases";
 import type {
   ContractStatus,
+  Precondition,
   RunCategory,
   RunDescriptor,
   ValidationReport,
@@ -95,12 +96,19 @@ const GRID_CONVERGENCE_CASES: Record<
     ],
   },
   plane_channel_flow: {
-    meshLabel: "isotropic cubed cells",
+    // Honest labels: the live adapter path is laminar icoFoam at Re_bulk=5600
+    // (see knowledge/gold_standards/plane_channel_flow.yaml physics_contract —
+    // contract_status is INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE
+    // because laminar N-S cannot reproduce Kim 1987 Re_τ=180 turbulent DNS).
+    // Earlier mesh labels ("WR-LES" / "DNS") implied the solver could switch
+    // regimes at higher density — it cannot. Labels now just describe mesh
+    // count so the UI does not front-run the solver reality.
+    meshLabel: "isotropic cubed cells (laminar icoFoam; aspirational turbulent solver path not yet wired)",
     densities: [
-      { id: "mesh_20", label: "20³ RANS", n: 8000 },
-      { id: "mesh_40", label: "40³ hybrid", n: 64000 },
-      { id: "mesh_80", label: "80³ WR-LES", n: 512000 },
-      { id: "mesh_160", label: "160³ DNS", n: 4096000 },
+      { id: "mesh_20", label: "20³ cells", n: 8000 },
+      { id: "mesh_40", label: "40³ cells", n: 64000 },
+      { id: "mesh_80", label: "80³ cells", n: 512000 },
+      { id: "mesh_160", label: "160³ cells", n: 4096000 },
     ],
   },
   impinging_jet: {
@@ -290,7 +298,7 @@ export function LearnCaseDetailPage() {
       </div>
 
       {/* Tab panels */}
-      {tab === "story" && <StoryTab caseId={caseId} />}
+      {tab === "story" && <StoryTab caseId={caseId} report={report} />}
       {tab === "compare" && (
         <CompareTab
           caseId={caseId}
@@ -310,11 +318,25 @@ export function LearnCaseDetailPage() {
 
 // --- Story tab ----------------------------------------------------------------
 
-function StoryTab({ caseId }: { caseId: string }) {
+function StoryTab({
+  caseId,
+  report,
+}: {
+  caseId: string;
+  report: ValidationReport | undefined;
+}) {
   const learnCase = getLearnCase(caseId)!;
   const flowFields = getFlowFields(caseId);
   return (
     <div className="space-y-8">
+      {/* DEC-V61-046 round-1 R1-M2 + R2-M7: surface physics_contract.contract_status
+          + preconditions summary ABOVE the PASS/HAZARD/FAIL tile. The three-state
+          verdict alone reads as "the tool can't even pass its own tests"; what
+          a serious reviewer actually wants to see is the *contract* — what the
+          gold claims, what preconditions the adapter satisfies or doesn't, and
+          the explicit partial/false labels from the YAML. */}
+      <PhysicsContractPanel report={report} />
+
       <section>
         <h2 className="card-title mb-3">这个问题是什么</h2>
         <ul className="space-y-2 text-[14px] leading-relaxed text-surface-200">
@@ -399,6 +421,134 @@ function StoryTab({ caseId }: { caseId: string }) {
   );
 }
 
+// Physics-contract panel — surfaces the gold YAML's physics_contract block
+// (contract_status + preconditions with three-state satisfied markers) so a
+// reader sees the nuanced CFD-level verdict before the downstream PASS/HAZARD/
+// FAIL tile. Rendering is best-effort: if the backend hasn't returned the
+// ValidationReport yet we show a compact skeleton; if the case has no
+// physics_contract (shouldn't happen after DEC-V61-046 backfill) we hide.
+function PhysicsContractPanel({
+  report,
+}: {
+  report: ValidationReport | undefined;
+}) {
+  if (!report) {
+    return (
+      <section className="rounded-md border border-surface-800 bg-surface-900/30 px-4 py-3 text-[12px] text-surface-500">
+        正在从后端取回 physics contract…
+      </section>
+    );
+  }
+  const narrative = report.case.contract_status_narrative?.trim();
+  const preconds = report.preconditions ?? [];
+  if (!narrative && preconds.length === 0) {
+    return null;
+  }
+
+  // The contract_status string is often shaped "VERDICT — human detail".
+  // Split on the first em/en-dash or " - " so the verdict token can be
+  // highlighted while the detail stays as body text.
+  let verdict = narrative ?? "";
+  let detail = "";
+  if (narrative) {
+    const m = narrative.match(/^([A-Z_]+)(?:\s*[—\-–]\s*(.+))?$/s);
+    if (m) {
+      verdict = m[1];
+      detail = (m[2] ?? "").trim();
+    }
+  }
+  // Three-state precondition marker, mirroring ui/backend/routes/case_export.py's
+  // [✓]/[~]/[✗] renderer so the student / reviewer sees the same characters
+  // across the downloadable contract md and the in-UI panel.
+  const mark = (satisfied: Precondition["satisfied"]): {
+    glyph: string;
+    tone: string;
+  } => {
+    // Precondition.satisfied is bool in the TS type, but the backend relays
+    // the YAML's string "partial"/"partially" as a truthy-bool lossy cast.
+    // Fall back to narrative-level detection: evidence_ref often contains
+    // "partial" / "satisfied_by_current_adapter: partial" when the YAML
+    // used that label. See DEC-V61-046 round-2 follow-up for a cleaner
+    // wire-level 3-state enum.
+    if (typeof satisfied === "string") {
+      const s = (satisfied as string).toLowerCase();
+      if (s === "partial" || s === "partially") return { glyph: "~", tone: "text-amber-300" };
+      if (s === "false") return { glyph: "✗", tone: "text-contract-fail" };
+      return { glyph: "✓", tone: "text-contract-pass" };
+    }
+    return satisfied
+      ? { glyph: "✓", tone: "text-contract-pass" }
+      : { glyph: "✗", tone: "text-contract-fail" };
+  };
+
+  const verdictTone =
+    verdict.startsWith("SATISFIED") || verdict === "COMPATIBLE"
+      ? "text-contract-pass border-contract-pass/40 bg-contract-pass/10"
+      : verdict.startsWith("INCOMPATIBLE") ||
+        verdict.startsWith("INCOMPATIBLE_WITH_LITERATURE")
+      ? "text-contract-fail border-contract-fail/40 bg-contract-fail/10"
+      : "text-amber-300 border-amber-700/40 bg-amber-950/20";
+
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="card-title">物理契约 · Physics contract</h2>
+        <p className="text-[11px] text-surface-500">
+          来自 knowledge/gold_standards/*.yaml
+        </p>
+      </div>
+      {narrative && (
+        <div className={`rounded-md border px-4 py-3 ${verdictTone}`}>
+          <p className="mono text-[11px] uppercase tracking-wider opacity-80">
+            contract_status
+          </p>
+          <p className="mt-0.5 text-[15px] font-semibold leading-snug">
+            {verdict}
+          </p>
+          {detail && (
+            <p className="mt-2 text-[13px] leading-relaxed text-surface-200">
+              {detail}
+            </p>
+          )}
+        </div>
+      )}
+      {preconds.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] uppercase tracking-wider text-surface-500">
+            preconditions · 标记 [✓] 满足 · [~] 部分 · [✗] 不满足
+          </p>
+          <ul className="space-y-2">
+            {preconds.map((p, i) => {
+              const m = mark(p.satisfied);
+              return (
+                <li
+                  key={i}
+                  className="flex gap-3 rounded-md border border-surface-800 bg-surface-900/40 px-3 py-2"
+                >
+                  <span className={`mono font-semibold ${m.tone}`}>[{m.glyph}]</span>
+                  <div className="flex-1 text-[13px] leading-relaxed text-surface-200">
+                    {p.condition}
+                    {p.evidence_ref && (
+                      <div className="mt-1 mono text-[10px] leading-relaxed text-surface-500">
+                        evidence: {p.evidence_ref}
+                      </div>
+                    )}
+                    {p.consequence_if_unsatisfied && (
+                      <div className="mt-1 text-[11px] italic leading-relaxed text-amber-300/80">
+                        if unsatisfied: {p.consequence_if_unsatisfied}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // --- Compare tab --------------------------------------------------------------
 
 const RUN_CATEGORY_LABEL: Record<RunCategory, string> = {
@@ -450,10 +600,14 @@ function CompareTab({
   const { gold_standard, measurement, contract_status, deviation_pct, tolerance_lower, tolerance_upper } = report;
 
   // Which run is currently shown. If `activeRunId` is not set, the
-  // backend resolved the default (first reference run, then fallback).
-  // Highlight whichever run actually matches the loaded measurement.
+  // backend resolves the default via `_pick_default_run_id` — post
+  // DEC-V61-035 (honesty correction) that's audit_real_run first, then
+  // reference, then any curated run, then legacy. We highlight whichever
+  // run actually matches the loaded measurement; the heuristic below is
+  // the UI-side fallback when measurement.run_id is somehow missing.
   const resolvedRun = runs.find((r) => r.run_id === measurement?.run_id)
-    ?? runs.find((r) => activeRunId ? r.run_id === activeRunId : r.category === "reference")
+    ?? runs.find((r) => activeRunId ? r.run_id === activeRunId : r.category === "audit_real_run")
+    ?? runs.find((r) => r.category === "reference")
     ?? runs[0];
 
   return (

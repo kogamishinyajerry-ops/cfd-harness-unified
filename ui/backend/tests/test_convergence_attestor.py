@@ -487,7 +487,46 @@ def test_audit_fixture_doc_recomputes_to_fail_on_hard_concern(tmp_path: Path) ->
     assert doc["run_metadata"]["actual_verdict"] == "FAIL"
 
 
-def test_audit_fixture_doc_clean_run_stays_pass_regression(tmp_path: Path) -> None:
+def test_audit_fixture_doc_clean_run_no_false_concern_regression(tmp_path: Path) -> None:
+    """Clean solver log must NOT be demoted by a spurious concern-code match.
+
+    NOTE (demo-first convergence round 1, 2026-04-22): this test historically
+    used `lid_driven_cavity` and asserted `PASS`. After DEC-V61-046 round 1
+    CFD-reviewer feedback, the LDC physics_contract was split so that
+    v_centerline and primary_vortex_location preconditions are now explicitly
+    `satisfied_by_current_adapter: false` (they are known to be non-Ghia-indexed).
+    A clean solver log on LDC therefore legitimately returns HAZARD because
+    `precondition_fails=True` in `_derive_contract_status`. That's correct
+    physics honesty — but no longer what this regression test is trying to
+    protect.
+
+    Re-anchored to `lid_driven_cavity_benchmark`, the LDC canonical alias
+    whose physics_contract has all 3 preconditions satisfied (contract_status
+    COMPATIBLE). Shares the u_centerline quantity + comparator path with LDC,
+    so the fixture's u_centerline=-0.0415 still matches at y=0.0625. Purpose
+    unchanged: verify that a clean solver log with no hard-fail / hazard-tier
+    concern codes is NOT demoted by spurious pattern-matching in the audit
+    fixture builder."""
+    from scripts.phase5_audit_run import _audit_fixture_doc
+
+    report = _make_audit_fixture_report(
+        tmp_path,
+        "Time = 1\nExecutionTime = 1 s\nEnd\n",
+    )
+
+    doc = _audit_fixture_doc("lid_driven_cavity_benchmark", report, commit_sha="deadbee")
+
+    assert doc["run_metadata"]["expected_verdict"] == "PASS"
+    assert doc["run_metadata"]["actual_verdict"] == "PASS"
+
+
+def test_audit_fixture_doc_ldc_clean_run_hazards_on_precondition_fails(tmp_path: Path) -> None:
+    """Positive-path companion to the rename above: confirm the LDC case
+    specifically produces HAZARD on a clean solver log, because its
+    physics_contract encodes two false preconditions on v_centerline +
+    primary_vortex_location provenance. If a future YAML edit re-labels
+    those preconditions as satisfied without independent Ghia re-audit,
+    this assertion will fail loudly — which is the intended behaviour."""
     from scripts.phase5_audit_run import _audit_fixture_doc
 
     report = _make_audit_fixture_report(
@@ -497,8 +536,8 @@ def test_audit_fixture_doc_clean_run_stays_pass_regression(tmp_path: Path) -> No
 
     doc = _audit_fixture_doc("lid_driven_cavity", report, commit_sha="deadbee")
 
-    assert doc["run_metadata"]["expected_verdict"] == "PASS"
-    assert doc["run_metadata"]["actual_verdict"] == "PASS"
+    assert doc["run_metadata"]["expected_verdict"] == "HAZARD"
+    assert doc["run_metadata"]["actual_verdict"] == "HAZARD"
 
 
 # ---------------------------------------------------------------------------
