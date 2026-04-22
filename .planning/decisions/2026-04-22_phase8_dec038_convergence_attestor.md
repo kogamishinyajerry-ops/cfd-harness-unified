@@ -26,10 +26,42 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending (pre-merge required; self-pass-rate ≤ 0.70)
-codex_rounds: 0
-codex_verdict: pending
-codex_tool_report_path: []
+codex_tool_invoked: true (v6.2 backfill audit 2026-04-22 post-landing)
+codex_rounds: 1 (v6.2 backfill audit round)
+codex_verdict: BLOCK
+codex_independent_pass_rate: 0.33 (vs claude-estimated 0.65 · Codex significantly more pessimistic; independent verification protocol caught major contract gaps)
+codex_tool_report_path:
+  - reports/codex_tool_reports/20260422_dec038_codex_review.md
+codex_blockers_summary: |
+  CA-001: validation_report.py:558 _derive_contract_status() hard-fails ONLY
+          on A1/A4; ignores A2/A3/A5/A6 entirely → in-band scalar w/
+          CONTINUITY_NOT_CONVERGED or NO_RESIDUAL_PROGRESS still returns
+          PASS. Violates DEC's two-tier HAZARD/FAIL contract.
+  CA-002: phase5_audit_run.py:539 + task_runner.py:103 do NOT run attestor
+          pre-extraction. TaskRunner runs solver→comparator→correction
+          BEFORE _audit_fixture_doc() adds attestation → non-converged runs
+          flow through scalar extraction + correction generation. Violates
+          "attestor first, then extraction/gates" contract.
+  CA-003: convergence_attestor.py:206 A1 is log-only; never consumes
+          ExecutionResult.success (container exit_code). Also only matches
+          ^Floating point exception, not broader variants. DEC requires
+          "exit code 0 AND no fatal markers".
+  CA-004: **knowledge/attestor_thresholds.yaml DOES NOT EXIST in repo**
+          despite convergence_attestor.py:24 referencing it. Per-case
+          override + HAZARD→FAIL promotion mechanism are non-functional.
+  CA-005: A3/A6 field-agnostic (one 1e-3 floor for all fields incl.
+          buoyant h/p_rgh). On real impinging_jet log current code
+          produces A6 HAZARD on p_rgh (5.91e-01..6.98e-01, 0.07 decades)
+          contradicting DEC expectation (impinging_jet should fail only
+          via A4, not A6).
+codex_nits_summary: |
+  CA-006: "stuck" uses < 1.0 decade, DEC criterion says <= 1.0.
+  CA-007: A4 consecutiveness filters gap blocks → cap,gap,cap,cap treated
+          as 3 consecutive (stricter than DEC text).
+  CA-008: test_convergence_attestor.py missing 10-case real-log integration
+          matrix promised by DEC. Only LDC+BFS covered.
+followup_dec_pending: true
+followup_dec_scope: "Fix CA-001..CA-005 blockers. Most critical: (a) land knowledge/attestor_thresholds.yaml, (b) wire A2/A3/A5/A6 into _derive_contract_status HAZARD tier with per-case FAIL promotion, (c) move attestor pre-extraction in task_runner, (d) feed exit_code into A1, (e) per-field/per-case A3+A6 semantics. Requires new Codex round post-fix. Flagged to Kogami for scope decision."
 counter_status: |
   v6.1 autonomous_governance counter 24 → 25 after this DEC lands. Retro at 30.
 reversibility: |
@@ -37,10 +69,10 @@ reversibility: |
   into phase5_audit_run.py + concern types in _derive_contract_status.
   Revert = 3 files + 1 test file restored. No fixture regeneration needed
   because attestor reads reports/phase5_fields/* which is reproducible.
-notion_sync_status: pending
-github_pr_url: null (direct-to-main after Codex)
-github_merge_sha: pending
-github_merge_method: pre-merge Codex verdict required
+notion_sync_status: pending (v6.2 backfill Codex BLOCK; escalate to Kogami)
+github_pr_url: null (direct-to-main)
+github_merge_sha: 7f29a64 + eb51dcf + 9716dd4 (already landed pre-Codex-verify)
+github_merge_method: direct-to-main landed; v6.2 backfill audit surfaced 5 blockers requiring substantial follow-up (BLOCK tier)
 external_gate_self_estimated_pass_rate: 0.65
   (Mostly log-regex work reusing comparator_gates infrastructure. Main
   risk is threshold calibration — specifically A3 residual_floor on
