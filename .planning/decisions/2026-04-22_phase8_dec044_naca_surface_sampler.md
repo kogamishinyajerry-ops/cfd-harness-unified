@@ -11,9 +11,9 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending
-codex_rounds: 0
-codex_verdict: pending
+codex_tool_invoked: yes
+codex_rounds: 3
+codex_verdict: APPROVED (round 3, 2026-04-22)
 counter_status: |
   v6.1 autonomous_governance counter 30 → 31. Arc-size retro was
   due at 30; still deferred until after Codex approves DEC-044 and
