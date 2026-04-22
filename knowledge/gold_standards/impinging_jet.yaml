@@ -5,6 +5,28 @@
 # h/d = 2.0 (nozzle-to-plate distance / nozzle diameter)
 # STEADY simulation
 
+physics_contract:
+  geometry_assumption: "Intended: axisymmetric jet with wedge geometry, D=0.05 m nozzle, h/d=2.0, heated plate at z=z_max. Actual (adapter): 2D PLANAR slice — not a wedge. r=[0,5D], z=[-D/2, H+D/2]; axis patch declared `empty` (src/foam_agent_adapter.py:5184-5185), not `wedge`. A 2D-planar slice has fundamentally different stagnation-region dynamics than a true axisymmetric flow."
+  reference_correlation_context: "Cooper 1984 / Behnad et al. 2013 report Nusselt-number distribution Nu(r/d) for an axisymmetric heated impinging jet at Re=10000. Peak Nu=25 at the stagnation point comes from axisymmetric converging streamlines; a planar slice does not converge azimuthally and will under-predict the peak."
+  physics_precondition:
+    - condition: "Axisymmetric geometry with OpenFOAM wedge boundary on the axis"
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/foam_agent_adapter.py:5184-5185 — axis patch is `empty`, not `wedge`. Adapter produces a 2D-planar slice. This is a silent geometry simplification: the whitelist/YAML labels the case 'axisymmetric' but the adapter does not generate an axisymmetric mesh."
+    - condition: "Solver reaches steady state with p_rgh converged (no A4 iteration-cap hit)"
+      satisfied_by_current_adapter: false
+      evidence_ref: ".planning/STATE.md:1286 — impinging_jet ATTEST_FAIL (A4 solver_iteration_cap). src/plane_channel_uplus_emitter.py:53-56,86-88 records p_rgh GAMG repeatedly hitting the 1000-iter cap. ATTEST_FAIL propagates to contract FAIL before comparator even runs — there is no converged steady field from which to extract Nu."
+    - condition: "Turbulence model comparable to Cooper 1984 reference"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "src/foam_agent_adapter.py:5314-5318 — `simulationType RAS; RASModel kEpsilon` (comment at 5295: 'simpler for buoyant flow'). kEpsilon is the legacy jet-benchmark choice but v2f / kOmegaSST are the modern impinging-jet standard; Cooper 1984 itself is experimental so turbulence-model choice is an engineering call. PARTIAL because the choice is defensible but not best-in-class for this case."
+    - condition: "Nu extractor uses correct wall-normal heat-flux gradient (not a surrogate-quantity leakage)"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "DEC-V61-042 landed wall-gradient helper; src/wall_gradient.py + src/cylinder_strouhal_fft.py contain the machinery. Historical fixtures (STATE.md:455) recorded the classic pathology: 'ref_value=0.0042 is the adapter's Cf, not the Cooper Nu=25; honest but makes PASS vacuous'. Even with the gradient helper in place, extraction is vacuous until A4 converges a steady field — see precondition 2."
+    - condition: "Flow-field PNGs / report artifacts match the declared Re=10000 regime"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "STATE.md:884 — earlier flow-field PNG showed Baughn Re=23750 regime but case was at Re=10000; geometry/regime mismatch history. Recent phase-7 regeneration pass likely corrected this, but it's a pattern to check."
+  contract_status: "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — two independent physics hazards compound: (1) adapter produces a 2D planar slice, not an axisymmetric wedge; (2) ATTEST_FAIL at A4 (p_rgh iteration cap) means no converged steady field exists for Nu extraction. Prior fixture reported ref_value=0.0042 which is dimensionally Cf, not Nusselt — pure value-leakage into the wrong observable. A PASS on this case today is vacuous; queued for Phase 9 axisymmetric-wedge mesh + buoyantFoam solver-config audit."
+  precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
+
 quantity: nusselt_number
 reference_values:
   - r_over_d: 0.0

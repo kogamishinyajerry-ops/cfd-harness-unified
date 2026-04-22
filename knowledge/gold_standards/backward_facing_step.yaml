@@ -13,6 +13,25 @@
 # Expansion ratio 1.125, incompressible, steady.
 # INTERNAL flow over a backward-facing step.
 
+physics_contract:
+  geometry_assumption: "Backward-facing step, step height H=1, channel_height=1.125·H (expansion ratio 1.125), 2D with empty front/back (SIMPLE_GRID adapter path); upstream/downstream channel lengths per whitelist defaults."
+  reference_correlation_context: "Le, Moin & Kim 1997 DNS at Re_H=5100 reports Xr/H=6.28 for a BFS with expansion ratio 1.2 (closest published DNS to our regime). Our whitelist runs at Re_H=7600, where Xr/H varies smoothly on a <2% plateau — the adapter geometry + Re sits inside that plateau, so the gold reference value 6.26 is physics-congruent to within the declared 10% tolerance. Gate Q-4 Path A closure (DEC-V61-028, 2026-04-21) switched the anchor from Driver & Seegmiller 1985 Re_H≈36000 (turbulent experiment) to Le/Moin/Kim 5100 DNS for closer-regime match."
+  physics_precondition:
+    - condition: "Re_H matches reference DNS to within the Xr/H plateau (7600 adapter vs 5100 reference, <2% expected drift)"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "src/foam_agent_adapter.py:1178-1184 — nu=1/Re=1/7600 with U_bulk=1. Plateau argument documented in yaml header lines 6-13; accepted under Gate Q-4 Path A."
+    - condition: "Turbulence model adequate for transitional/turbulent separated flow (adapter uses RANS kOmegaSST against a DNS reference)"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "src/foam_agent_adapter.py:659-671 _turbulence_model_for_solver routes BFS geom to kOmegaSST; div(phi,k)/div(phi,epsilon) schemes present at 1310-1311 confirm RAS active. RANS-vs-DNS is the standard literature compromise for BFS benchmarks — Xr/H tolerance 0.10 absorbs the model-gap, but a RANS PASS is not a DNS PASS."
+    - condition: "Mesh resolves reattachment region + shear layer at declared 36000 cells"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "YAML declares mesh_info.cells=36000, but whitelist quick-run defaults (ncx=40, ncy=20) produce ~800 cells; .planning/STATE.md:1280 reports backward_facing_step ATTEST_HAZARD [G3,G4,G5] with G5 hard-FAIL contract. DEC-V61-036 G5 gate catches under-resolution; adapter fixtures at 36000 cells are the authoritative run."
+    - condition: "Residual convergence reaches attestor A4/A5/A6 thresholds"
+      satisfied_by_current_adapter: false
+      evidence_ref: "STATE.md:1280 — A6 HAZARD at current fixtures; residuals never drop sufficiently for quick-accept 8s wallclock runs. Full-resolution runs converge but ATTEST_HAZARD path remains sensitive to solver settings."
+  contract_status: "PARTIALLY_COMPATIBLE — Xr/H tolerance absorbs the RANS-vs-DNS model gap, but quick-run fixtures hit ATTEST_HAZARD on G3/G4/G5 gates. A PASS on the 36000-cell authoritative mesh is physics-defensible; a PASS on the 800-cell quick-run is a gate-blocked contract_status=HAZARD under DEC-V61-036."
+  precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
+
 quantity: reattachment_length
 reference_values:
   - value: 6.26

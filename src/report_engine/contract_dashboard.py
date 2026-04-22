@@ -153,6 +153,13 @@ CONTRACT_CLASS_ORDER: Tuple[str, ...] = (
     "PARTIALLY_COMPATIBLE",
     "INCOMPATIBLE",
     "DEVIATION",
+    # SATISFIED* prefixes are semantically strongest: physics contract is
+    # exactly satisfied (not just "compatible within tolerance"). Covers
+    # SATISFIED, SATISFIED_UNDER_LAMINAR_CONTRACT, SATISFIED_FOR_*_ONLY, etc.
+    # Must appear before COMPATIBLE in the .startswith() match order so that
+    # SATISFIED_UNDER_LAMINAR_CONTRACT resolves to SATISFIED (not UNKNOWN)
+    # and doesn't accidentally match COMPATIBLE's shorter prefix via a typo.
+    "SATISFIED",
     "COMPATIBLE",
 )
 
@@ -630,6 +637,7 @@ class ContractDashboardGenerator:
 
     def _render_distribution_card(self, contract_class: str, count: int) -> str:
         note_map = {
+            "SATISFIED": "Physics contract 完整满足：几何、流态、数值、比较链全部 evidence-backed。PASS 是真 PASS。",
             "COMPATIBLE": "所有关键 precondition 成立，PASS 可以被当作 physics-valid 结果读。",
             "COMPATIBLE_WITH_SILENT_PASS_HAZARD": "结果本身有价值，但必须把 runtime shortcut/fallback 的 caveat 一起展示。",
             "PARTIALLY_COMPATIBLE": "偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。",
@@ -876,7 +884,9 @@ class ContractDashboardGenerator:
 
     @staticmethod
     def _pill_class_for_contract(contract_class: str) -> str:
-        if contract_class == "COMPATIBLE":
+        # SATISFIED is strictly stronger than COMPATIBLE (full evidence-backed
+        # precondition match vs "compatible within tolerance"). Both pill-ok.
+        if contract_class in {"COMPATIBLE", "SATISFIED"}:
             return "ok"
         if contract_class in {"COMPATIBLE_WITH_SILENT_PASS_HAZARD", "PARTIALLY_COMPATIBLE"}:
             return "warn"
@@ -885,6 +895,7 @@ class ContractDashboardGenerator:
     @staticmethod
     def _short_label(contract_class: str) -> str:
         labels = {
+            "SATISFIED": "Satisfied",
             "COMPATIBLE": "Compatible",
             "COMPATIBLE_WITH_SILENT_PASS_HAZARD": "Silent-pass hazard",
             "PARTIALLY_COMPATIBLE": "Partially compatible",
@@ -893,7 +904,9 @@ class ContractDashboardGenerator:
             "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE": "Observable mismatch",
             "UNKNOWN": "Unknown",
         }
-        return labels[contract_class]
+        # Fallback to the raw class if a future status gets added without
+        # updating the label map — keep the dashboard renderable.
+        return labels.get(contract_class, contract_class)
 
     def _snapshot_path(self, canonical_path: Path, generated_at: datetime) -> Path:
         stamp = generated_at.strftime("%Y%m%d_%H%M%S")

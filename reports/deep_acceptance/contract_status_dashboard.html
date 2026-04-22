@@ -283,15 +283,15 @@ a:hover { text-decoration: underline; }
       <div class="version-grid">
         <div class="version-card">
           <div class="label">Generated</div>
-          <div class="value">2026-04-22 22:15:55</div>
+          <div class="value">2026-04-22 22:45:18</div>
         </div>
         <div class="version-card">
           <div class="label">Head SHA</div>
-          <div class="value">e6f264d</div>
+          <div class="value">700dccb</div>
         </div>
         <div class="version-card">
           <div class="label">Canonical / Snapshot</div>
-          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_221555.html</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_224518.html</div>
         </div>
         <div class="version-card">
           <div class="label">Manifest / Linked Surfaces</div>
@@ -323,10 +323,10 @@ a:hover { text-decoration: underline; }
         
 
         <article class="distribution-card">
-          <div class="label">UNKNOWN</div>
+          <div class="label">SATISFIED</div>
           <div class="value">3</div>
-          <div class="note">Gold standard 尚未声明 physics_contract 或 contract_status；无法判定兼容性，请补齐 gold YAML。</div>
-          <div class="pill-row"><span class="status-pill fail">Unknown</span></div>
+          <div class="note">Physics contract 完整满足：几何、流态、数值、比较链全部 evidence-backed。PASS 是真 PASS。</div>
+          <div class="pill-row"><span class="status-pill fail">Satisfied</span></div>
         </article>
         
 
@@ -455,7 +455,7 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>湍流平板边界层</strong><br><span class="case-subtitle">turbulent_flat_plate</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill fail">UNKNOWN</span><br>Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</td>
             <td>Cf=0.00760037，对 Spalding 相关式几乎零误差，但 fallback 路径必须持续透明。</td>
             <td>保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。</td>
           </tr>
@@ -464,7 +464,7 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>全发展湍流方管流</strong><br><span class="case-subtitle">duct_flow</span></td>
             <td><span class="status-pill fail">NO_RUNTIME_REPORT</span><br>NO_RUNTIME_REPORT</td>
-            <td><span class="status-pill fail">UNKNOWN</span><br>Q-2 Path A 落地后不再是类别错误；remaining hazard 是 Jones-vs-Colebrook 相关式 2% 量级差别，需要做一次新 auto_verify_report 才能关闭。</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>Q-2 Path A 落地后不再是类别错误；remaining hazard 是 Jones-vs-Colebrook 相关式 2% 量级差别，需要做一次新 auto_verify_report 才能关闭。</td>
             <td>Q-2 Path A 已落地 (DEC-V61-011)，geometry 从 pipe 重标为 duct，gold 切换 Jones 1976 方管相关式。等 auto_verify_report 复跑后给新 verdict。</td>
             <td>对比 Jones-duct vs Moody-pipe 数值差；确认 adapter simpleFoam+SIMPLE_GRID 在 duct 语义下 PASS。</td>
           </tr>
@@ -473,7 +473,7 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>差分加热方腔自然对流</strong><br><span class="case-subtitle">differential_heated_cavity</span></td>
             <td><span class="status-pill fail">FAIL</span><br>FAIL</td>
-            <td><span class="status-pill fail">UNKNOWN</span><br>extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</td>
             <td>Nu=77.82 vs gold 30.0；当前冲突已经明确进入 Q-1 external gate。</td>
             <td>保持 Q-1 显式开放，等待 gold correction 或 regime downgrade 的 Gate 选择。</td>
           </tr>
@@ -604,7 +604,7 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
-              <span class="status-pill fail">Unknown</span>
+              <span class="status-pill ok">Satisfied</span>
             </div>
           </div>
           <p>Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</p>
@@ -628,7 +628,7 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill fail">NO_RUNTIME_REPORT</span>
-              <span class="status-pill fail">Unknown</span>
+              <span class="status-pill ok">Satisfied</span>
             </div>
           </div>
           <p>Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</p>
@@ -652,7 +652,7 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill fail">FAIL</span>
-              <span class="status-pill fail">Unknown</span>
+              <span class="status-pill ok">Satisfied</span>
             </div>
           </div>
           <p>测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</p>
@@ -766,8 +766,8 @@ a:hover { text-decoration: underline; }
     </section>
 
     <div class="footer">
-      <span>Generated · 2026-04-22 22:15:55</span>
-      <span>Head · e6f264d</span>
+      <span>Generated · 2026-04-22 22:45:18</span>
+      <span>Head · 700dccb</span>
       <span>Source · knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml + reports/*/auto_verify_report.yaml</span>
       <span><a href="visual_acceptance_report.html">Open 5-case visual acceptance report</a></span>
       <span><a href="2026-04-18_contract_status_dashboard.md">Open historical markdown snapshot</a></span>

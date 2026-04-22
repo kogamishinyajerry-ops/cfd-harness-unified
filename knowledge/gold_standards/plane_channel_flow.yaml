@@ -4,6 +4,28 @@
 # 2D channel flow, DNS (direct numerical simulation)
 # STEADY simulation (time-averaged)
 
+physics_contract:
+  geometry_assumption: "2D plane-channel slab, half-height D/2=0.5 m, streamwise length 2·L=30 m, empty front/back patches. Inlet fixedValue U=(1,0,0), walls no-slip, outlet pressure reference. Re=5600 as bulk Reynolds set via ν=1/Re (src/foam_agent_adapter.py:3113)."
+  reference_correlation_context: "Kim/Moin/Moser 1987 / Moser/Kim/Mansour 1999 report the canonical u+ vs y+ profile for FULLY TURBULENT channel flow at Re_τ=180 (friction Reynolds). Re_τ=180 corresponds to Re_bulk≈5600 through u_τ·h/ν, which is why the adapter was sized at Re_bulk=5600. But that sizing alone does NOT make a laminar N-S solution turbulent — this is the crux of the disguised-incompatibility."
+  physics_precondition:
+    - condition: "Flow is turbulent (required for Kim 1987 / Moser 1999 DNS u+ log-law to exist)"
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/foam_agent_adapter.py:3270 — `application icoFoam` (transient PISO, incompressible LAMINAR N-S; no turbulence-transport equations). At Re_bulk=5600 a laminar N-S solution converges to the Poiseuille parabolic profile, not to a turbulent log-law. The reference u+ values (5.4 at y+=5, 13.5 at y+=30) are fundamentally inaccessible to this adapter path."
+    - condition: "u_τ computed from wall shear matches Re_τ=180"
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/plane_channel_uplus_emitter.py:246-287 — emitter math (u_τ=√|τ_w/ρ|, Re_τ=u_τ·h/ν) is correct, but τ_w is the LAMINAR wall stress of a Poiseuille profile at Re=5600, not the turbulent wall stress of Re_τ=180 DNS. The emitter produces a numerically self-consistent but physics-wrong u_τ. STATE.md:405 records the same pivot: 'u_tau = nu·Re_tau/h requires valid DNS setup that current icoFoam laminar adapter doesn't satisfy'."
+    - condition: "case_info declares solver regime congruent with reference"
+      satisfied_by_current_adapter: false
+      evidence_ref: "YAML case_info declares `steady_state: STEADY`, adapter uses TRANSIENT PISO icoFoam — second-order regime mismatch on top of the laminar-vs-turbulent mismatch."
+    - condition: "Comparator reads u_plus + y_plus correctly (ATTEST_PASS is a real pass, not an extractor artifact)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-036c G2 (2026-04-22) widened result_comparator key-chain to read u_plus/y_plus properly; STATE.md:1301 records the fix. But STATE.md:1292-1295 explicitly flags plane_channel_flow as the exact pattern 'ATTEST_PASS but Codex physics audit says physically FAIL — those are comparator/extractor bugs' — i.e., the comparator now reads the right key, but the values are a laminar Poiseuille profile mis-presented against a turbulent DNS reference."
+    - condition: "y+=100 gold value (22.8) is consistent with Kim/Moser centerline"
+      satisfied_by_current_adapter: false
+      evidence_ref: "YAML header notes 22.8 'looks anomalous vs log-law ~16.4 and Moser centerline ~18.3; out of audit §5.2 scope, queued for follow-up'. Even under a hypothetical correct turbulent solver, the gold value itself is suspect."
+  contract_status: "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — laminar icoFoam at Re_bulk=5600 cannot reproduce Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile. ATTEST_PASS is a comparator-path artifact; a physics-honest verdict is FAIL. No comparator or extractor fix can bridge the gap — this is a solver-choice incompatibility. Queued for Phase 9 real-solver routing (either move to pimpleFoam + LES, or demote the case to laminar Poiseuille benchmark at a new gold)."
+  precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
+
 quantity: u_mean_profile
 reference_values:
   - y_plus: 0.0

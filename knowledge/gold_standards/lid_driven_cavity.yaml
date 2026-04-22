@@ -31,6 +31,28 @@
 # not currently exercised by the audit-run comparator; flagged as follow-up
 # work in Phase 5c (NON-LDC) or a dedicated audit pass.
 
+physics_contract:
+  geometry_assumption: "Square cavity, L=0.1 m (convertToMeters=0.1), top lid at fixedValue U=(U_lid,0,0) with U_lid=1.0 m/s; other walls no-slip; front/back empty (2D). Re=U·L/ν with ν=1e-3 gives Re=100 matching Ghia Table I."
+  reference_correlation_context: "Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table I Re=100 column is the canonical reference for 2D lid-driven square-cavity flow. u_centerline reference values below are Ghia Table I interpolated to the harness's 17-point uniform y grid (DEC-V61-030 Q-5 Path A closure, 2026-04-21)."
+  physics_precondition:
+    - condition: "Flow is laminar at Re=100 (Re well below any cavity-transition regime ~7500)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py:810 writes constant/turbulenceProperties simulationType laminar; no RAS model active."
+    - condition: "Steady-state SIMPLE converged to machine-zero residuals for u_centerline extraction"
+      satisfied_by_current_adapter: true
+      evidence_ref: ".planning/STATE.md:1279 — lid_driven_cavity ATTEST_PASS, gates []; convergence attestor A1..A6 all green on current fixtures."
+    - condition: "u_centerline reference values are Ghia 1982 Table I indexed by y (this observable only)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-030 Path A (2026-04-21) re-interpolated Ghia Table I to the 17-point y grid; verified against Ghia native points documented in YAML header lines 15-24."
+    - condition: "v_centerline + primary_vortex_location observables share the same Ghia provenance"
+      satisfied_by_current_adapter: partial
+      evidence_ref: "YAML header lines 26-32 flag both as unverified: v_centerline appears to be Ghia Table II indexed by x but labelled 'y'; primary_vortex_location vortex_center_y=0.7650 disagrees with Ghia's Re=100 primary vortex at (0.6172, 0.7344). These observables are NOT exercised by the current audit comparator; any PASS on them should be read with suspicion until a dedicated audit pass lands (Phase 5c follow-up)."
+    - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "whitelist default grid meets Ghia's 129² DNS-quality shoulder via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
+  contract_status: "SATISFIED_FOR_U_CENTERLINE_ONLY — u_centerline block is Ghia-faithful and passes comparator cleanly; v_centerline + primary_vortex_location blocks have unverified Ghia-indexing and should not be treated as physics-valid PASS evidence without a dedicated re-audit."
+  precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
+
 quantity: u_centerline
 reference_values:
   - y: 0.0000

@@ -38,13 +38,16 @@ def test_contract_dashboard_render_contains_core_sections():
     assert "visual_acceptance_report.html" in result.html
     # Contract-class distribution drifts case-by-case as gold YAMLs are
     # reclassified (DEC-V61-011 duct rename, Q-new Case 4 TFP laminar
-    # promotion, DEC-V61-040 UNKNOWN surface). Pin current (2026-04-22)
-    # distribution so accidental re-classification is caught, but leave
-    # room for UNKNOWN to emerge — which is itself a post-DEC-040 signal.
+    # promotion, DEC-V61-040 UNKNOWN surface, demo-first round 2026-04-22
+    # SATISFIED recognition). Pin current distribution so accidental
+    # re-classification is caught. After the 2026-04-22 backfill there
+    # should be NO UNKNOWN cases — every whitelist entry has an explicit
+    # physics_contract block.
+    assert result.summary_counts["SATISFIED"] == 3
     assert result.summary_counts["COMPATIBLE"] == 3
     assert result.summary_counts["COMPATIBLE_WITH_SILENT_PASS_HAZARD"] == 1
     assert result.summary_counts["INCOMPATIBLE"] == 1
-    assert result.summary_counts.get("UNKNOWN", 0) >= 1  # DEC-V61-040 UNKNOWN surface
+    assert result.summary_counts.get("UNKNOWN", 0) == 0  # all 10 cases contract-labelled
 
 
 def test_contract_dashboard_generate_writes_output(tmp_path: Path):
