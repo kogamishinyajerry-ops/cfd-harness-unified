@@ -1,19 +1,21 @@
 ---
 decision_id: DEC-V61-047
 title: CFD 教学质量专项 — 每 case 仿真/网格/云图/分析/全流程升级 · 2-persona (expert + novice) 迭代
-status: IN_PROGRESS (round 1 remediation landed 2026-04-23T01:20; round 2 pending)
+status: IN_PROGRESS (round 2 remediation landed 2026-04-23T01:30; round 3 pending)
 commits_in_scope:
   - 09a4975 docs(dec): DEC-V61-047 PROPOSAL — CFD 教学质量专项 2-persona iteration
   - 9d43d6a fix(learn): round-1 batch 1 — narrative truth alignment (F5 blocker)
   - 958d85d fix(learn): round-1 batches 2+3 — visual-only verdict honesty + synthetic residual guard (F1+F2 blockers)
   - 10a3463 feat(learn): round-1 batches 4+5 — teaching cards + evidence collapse (F4+F6 majors)
-codex_verdict: CHANGES_REQUIRED (round 1 — 4 blockers + 2 majors; 5 blockers/majors addressed across batches 1-5; F3 Tier-C backend upgrade deferred to round 2 with rationale)
+  - 51c7198 docs(dec): round-1 SYNC COMPLETE + round-2 prompt authored
+  - 196fb94 fix(learn): round-2 batch 6 — naca0012 truth alignment (N1)
+codex_verdict: CHANGES_REQUIRED (round 2 — 0 blockers + 1 major N1 naca0012 setup drift; remediated in batch 6; F1/F2/F5/F6 CLOSED, F3 deferral ACCEPTED, F4 was PARTIAL due to N1 now fixed)
 autonomous_governance: true
 autonomous_governance_counter_v61: 34 (34th +1 entry since RETRO-V61-001 counter reset; next retro trigger at ≥20 arc-size → already past, retro owed)
 external_gate_self_estimated_pass_rate: 0.50
-codex_tool_report_path: .planning/reviews/pedagogy_round_1_findings.md (19 KB, authored 2026-04-23T00:59; CHANGES_REQUIRED overall, CHANGES_REQUIRED on both personas)
-notion_sync_status: synced 2026-04-23T01:25 (Status=Proposed→Accepted; round-1 summary + deferral rationale appended as 6 page children; https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf, page_id=34ac6894-2bed-8186-8028-c1a4aea5d6bf)
-github_sync_status: pushed 2026-04-23T01:20 (10a3463 on origin/main; includes scaffold 09a4975 + 3 remediation commits)
+codex_tool_report_path: .planning/reviews/pedagogy_round_2_findings.md (7.2 KB, authored 2026-04-23T01:22; CHANGES_REQUIRED · 0 blockers · F1/F2/F5/F6 CLOSED · F3 deferral accepted · F4 PARTIAL → N1 naca0012 drift · N1 remediated in 196fb94. Round 1 findings retained at pedagogy_round_1_findings.md for arc audit.)
+notion_sync_status: synced 2026-04-23T01:32 (round-2 remediation summary appended as 5 page children; Status=Accepted; https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf)
+github_sync_status: pushed 2026-04-23T01:30 (196fb94 on origin/main; scaffold + 3 round-1 remediation + round-1 sync-complete + round-2 batch 6 N1 fix)
 related:
   - DEC-V61-046 (prior iteration pattern; demo-first convergence; closed APPROVE_WITH_COMMENTS 2026-04-23T00:35 · this DEC inherits the iteration discipline)
   - DEC-V61-040 (UI 3-tier UNKNOWN surface · underpins the Story tab)
@@ -85,6 +87,28 @@ User 指定 2 个评审 persona（不含 senior code reviewer，这轮不是代�
 - **Frontend**: typecheck clean; build 1.30-1.33s; bundle 803 KB / 259 KB gzip (unchanged modulo string bytes).
 - **GitHub sync**: pushed 2026-04-23T01:20 (10a3463 on origin/main; scaffold 09a4975 + 3 remediation commits).
 - **Notion sync**: synced 2026-04-23T01:25 — Status=Accepted; 6 page children covering the round-1 arc (fairness correction + 3 remediation batches + deferral rationale + round-2 next-step).
+
+### Round 2 — 2026-04-23T01:15 → T01:30 (remediation landed)
+- **Codex exec PID**: 40409 (log `.planning/reviews/pedagogy_round_2_codex.log`)
+- **Prompt**: `.planning/reviews/pedagogy_round_2_prompt.md`
+- **Findings**: `.planning/reviews/pedagogy_round_2_findings.md` (7.2 KB)
+- **Verdict**: CHANGES_REQUIRED · **0 blockers** · 1 major (N1)
+  - F1 CLOSED (visual-only FAIL banner removed, matches backend verdict=None)
+  - F2 CLOSED (RunResidualsCard tries real PNG first, synthetic labeled 示意图)
+  - F5 CLOSED (TFP / plane_channel / impinging_jet / DHC narratives all aligned to gold — per-case cites verified)
+  - F4 PARTIAL — naca0012 teaching card cites Re=6e6 + α≈4°, repo truth is Re=3e6 + α=0° (flagged as N1)
+  - F6 CLOSED (evidence_ref `<details>` correctly hides reviewer jargon on impinging_jet)
+  - F3 DEFERRAL ACCEPTED — codex: "After F1/F2/F4/F5/F6, the frontend Story tab now provides an honest novice teaching path, so the missing Tier-B overlay is backlog, not the thing that should fail this round."
+- **Findings addressed** (1 atomic commit):
+  - Batch 6 (N1) `196fb94` — rewrote naca0012_airfoil's 4 teaching cards + physics_bullets + why_validation_matters + common_pitfall to match authoritative Re=3e6 + α=0° attached-flow symmetric-airfoil regime. Pulled URF from foam_agent_adapter (p=0.3, U/k/ω=0.5), mesh from gold YAML (blockMesh around OBJ, 80 z-cells, empty y-side), BC from physics_contract precondition #1 (α=0° → U_inlet has no sin α), Cp extraction from precondition #3 (surface_band = max(8·dz_min, 0.02·c) → 30-50% magnitude attenuation is the PASS_WITH_DEVIATIONS rationale).
+- **New commits**: 196fb94 (on origin/main).
+- **Test suite**: `pytest ui/backend/tests/test_comparison_report_visual_only.py` 10/10 passed (codex's suggested minimum verify).
+- **Frontend**: typecheck clean; build 1.33s.
+- **GitHub sync**: pushed 2026-04-23T01:30 (196fb94 on origin/main; scaffold + round-1 3 commits + round-1 sync-complete + round-2 remediation).
+- **Notion sync**: synced 2026-04-23T01:32 — 5 page children covering N1 problem + batch 6 fix + sanity checks + round-3 next-step.
+
+### Round 3 — TBD
+Codex re-review after round-2 N1 remediation. Expected: naca0012 factual fix verified; F3 deferral remains accepted; no new findings; ideal verdict **APPROVE / APPROVE_WITH_COMMENTS** under both personas — closing the pedagogy iteration.
 
 ### Round N+1 — template
 (Fill after round N codex verdict)
