@@ -85,8 +85,11 @@ that helper.
 3. **`_extract_nc_nusselt`** (DHC/RBC/NC-Cavity path):
    - Reads wall_coord_hot / T_hot_wall / wall_bc_type from
      task_spec.boundary_conditions.
-   - Fails closed with `_nc_wall_gradient_missing_bc_metadata=True`
-     when metadata absent — triggers DEC-036 G1 at the comparator.
+   - Fails closed silently when metadata absent — absence of
+     `nusselt_number` is the signal that DEC-036 G1's
+     MISSING_TARGET_QUANTITY concern fires on at the comparator.
+     No extractor-internal flags leak into key_quantities (Codex
+     round-1 FLAG 1 closure).
    - Applies helper to each y-layer's x-profile, averages |grad|.
    - Sets `nusselt_number_source = "wall_gradient_stencil_3pt"`.
 
