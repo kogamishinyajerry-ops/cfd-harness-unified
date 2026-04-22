@@ -316,6 +316,10 @@ class ResultComparator:
             (f"{quantity}_x", "x_over_c"),
             (f"{quantity}_x", "x_D"),
             (f"{quantity}_x", "x_H"),
+            # Codex DEC-036c review pointed out: impinging_jet gold emits
+            # `r_over_d`, not `r_D` — axis resolver missed the live key.
+            # Pre-existing gap (not introduced by G2), fixed here.
+            (f"{quantity}_x", "r_over_d"),
             (f"{quantity}_x", "r_D"),
             (f"{quantity}_x", "r"),
         ]
