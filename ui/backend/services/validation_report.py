@@ -763,8 +763,10 @@ def list_cases() -> list[CaseIndexEntry]:
         gs = _load_gold_standard(cid)
         # Use the same default-run resolution as build_validation_report so
         # the catalog contract_status matches what the Compare tab shows on
-        # first click (reference_pass preferred → student's first impression
-        # is PASS when curated).
+        # first click. Post-DEC-V61-035 the rule is audit_real_run first
+        # (honest solver-in-the-loop verdict), with reference_pass only as
+        # fallback — NOT the earlier "reference preferred" rule. See
+        # _pick_default_run_id for the authoritative implementation.
         default_run_id = _pick_default_run_id(cid)
         measurement_doc = (
             _load_run_measurement(cid, default_run_id) if default_run_id else None
@@ -858,11 +860,11 @@ def build_validation_report(
 ) -> ValidationReport | None:
     """Build the Screen-4 validation report for a case.
 
-    Run resolution:
-    - If `run_id` is None, resolves to the first 'reference' run (so
-      default view shows PASS narrative where curated), falling back to
-      any curated run, then to the legacy {case_id}_measurement.yaml
-      fixture.
+    Run resolution (post DEC-V61-035 honesty correction, 2026-04-22):
+    - If `run_id` is None, resolves via `_pick_default_run_id`:
+      audit_real_run first (honest solver-in-the-loop verdict), reference
+      second (curated literature-anchored PASS narrative), any curated run
+      third, legacy {case_id}_measurement.yaml last.
     - If `run_id` is provided but doesn't exist, returns None (treat
       as 404 at the route layer).
     """

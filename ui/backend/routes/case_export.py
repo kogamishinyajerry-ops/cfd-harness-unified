@@ -123,6 +123,36 @@ def _render_readme(case_id: str, case: dict, gold: dict | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _precondition_marker(satisfied: object) -> str:
+    """Three-state [✓] / [~] / [✗] marker for `satisfied_by_current_adapter`.
+
+    Input may be:
+      - True / False  (canonical YAML boolean)
+      - "true" / "false" (case-insensitive string boolean — hand-edited YAMLs)
+      - "partial" / "partially"  (documented partial-satisfy)
+      - 1 / 0  (YAML-idiomatic int-as-bool)
+      - anything else → [✗] (fail-visible, not laundered to ✓)
+
+    Returns the marker character (without brackets).
+    """
+    if satisfied is True:
+        return "✓"
+    if satisfied is False:
+        return "✗"
+    if isinstance(satisfied, str):
+        s = satisfied.lower().strip()
+        if s in {"partial", "partially"}:
+            return "~"
+        if s == "true":
+            return "✓"
+        if s == "false":
+            return "✗"
+        return "✗"
+    if isinstance(satisfied, int):  # also catches bool, but bool handled above
+        return "✓" if satisfied == 1 else "✗"
+    return "✗"
+
+
 def _render_contract_md(case_id: str, case: dict, gold: dict | None) -> str:
     """Render validation_contract.md — the student-readable contract."""
     lines = [
@@ -183,17 +213,14 @@ def _render_contract_md(case_id: str, case: dict, gold: dict | None) -> str:
                 ev = pc.get("evidence_ref", "")
                 consequence = pc.get("consequence_if_unsatisfied", "")
                 # Three-state marker — satisfied_by_current_adapter can be
-                # true / false / "partial" / "partially". Rendering partial
-                # as ✓ would launder a honest precondition-gap as a clean
-                # satisfied check, which defeats the whole point of the
-                # physics_contract block. Use [~] for partial, [✗] for
-                # explicit false, [✓] only for true.
-                if satisfied is True:
-                    mark = "✓"
-                elif isinstance(satisfied, str) and satisfied.lower() in {"partial", "partially"}:
-                    mark = "~"
-                else:
-                    mark = "✗"
+                # true / false / "partial" / "partially" (YAML-idiomatic).
+                # Accept also string booleans "true"/"false" (case-insensitive)
+                # because hand-edited YAMLs sometimes emit quoted literals,
+                # and without accepting them the output would silently downgrade
+                # a legitimate true to [✗]. Truthy ints (1) → [✓], falsy (0) → [✗].
+                # Unknown types fall through to [✗] — fail-visible instead of
+                # launder-to-✓. See DEC-V61-046 round-1 R3-N2.
+                mark = _precondition_marker(satisfied)
                 lines.append(f"### {i}. [{mark}] {condition}")
                 lines.append("")
                 if ev:

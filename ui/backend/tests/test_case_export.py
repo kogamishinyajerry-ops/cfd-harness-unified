@@ -113,3 +113,62 @@ def test_export_available_for_every_whitelist_case(case_id: str) -> None:
         f"{case_id}/gold_standard.yaml",
     }
     assert expected.issubset(set(zf.namelist()))
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-046 round-1 R3-N2/N3: _precondition_marker edge cases
+# ---------------------------------------------------------------------------
+
+def test_precondition_marker_three_state_boolean_and_string() -> None:
+    """Direct behavioural pin for `_precondition_marker`.
+
+    Ensures YAML booleans, stringly-typed booleans, partial labels, int-as-bool,
+    and unknown types all resolve to one of the three documented markers.
+    R3-N2/N3 codex finding: silent [✗] for `"True"` was launder-by-miscoercion;
+    silent [✓] for `"partial"` (pre-patch) was launder-in-the-other-direction.
+    Both paths now explicit."""
+    from ui.backend.routes.case_export import _precondition_marker
+
+    # Canonical booleans
+    assert _precondition_marker(True) == "\u2713"
+    assert _precondition_marker(False) == "\u2717"
+    # String booleans (hand-edited YAMLs)
+    assert _precondition_marker("true") == "\u2713"
+    assert _precondition_marker("True") == "\u2713"
+    assert _precondition_marker("TRUE") == "\u2713"
+    assert _precondition_marker("false") == "\u2717"
+    assert _precondition_marker("False") == "\u2717"
+    # Partial labels (both YAML-idiomatic spellings)
+    assert _precondition_marker("partial") == "~"
+    assert _precondition_marker("partially") == "~"
+    assert _precondition_marker("Partial") == "~"
+    # Int-as-bool
+    assert _precondition_marker(1) == "\u2713"
+    assert _precondition_marker(0) == "\u2717"
+    # Unknown types → fail-visible [\u2717], not laundered to [\u2713]
+    assert _precondition_marker(None) == "\u2717"
+    assert _precondition_marker({}) == "\u2717"
+    assert _precondition_marker([]) == "\u2717"
+    assert _precondition_marker("nonsense") == "\u2717"
+
+
+def test_export_bundle_renders_fail_marker_on_explicit_false() -> None:
+    """Live export must render [\u2717] for `satisfied_by_current_adapter: false`.
+    LDC`s physics_contract has preconditions #4 and #5 explicitly false (v_centerline
+    and primary_vortex_location provenance per DEC-V61-046 round-1 R2-M1 fix).
+    If rendering ever regressed to laundering those to [\u2713], the downloadable
+    contract bundle would no longer surface the documented gap — exactly the
+    honesty bug R3-N2 was guarding against."""
+    response = client.get("/api/cases/lid_driven_cavity/export")
+    assert response.status_code == 200
+    contract = _open_zip(response.content).read(
+        "lid_driven_cavity/validation_contract.md"
+    ).decode()
+    assert "[\u2717]" in contract, (
+        "LDC validation_contract.md should render [\u2717] for false preconditions"
+    )
+    # And confirm the false preconditions are the v/vortex ones (evidence-level
+    # check, not prose). If the YAML is re-ordered or edited without updating
+    # the indexing evidence, this assertion will fail loudly.
+    assert "v_centerline" in contract
+    assert "primary_vortex_location" in contract

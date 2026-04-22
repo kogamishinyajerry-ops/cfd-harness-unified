@@ -16,9 +16,11 @@ pnpm install        # or: npm install
 pnpm dev            # or: npm run dev
 ```
 
-Dev server binds to `127.0.0.1:5173` and proxies `/api/**` to the
+Dev server binds to `127.0.0.1:5180` and proxies `/api/**` to the
 backend on `127.0.0.1:8000`. Nothing listens on a public interface
-in Phase 0.
+in Phase 0. Port 5180 (not the Vite default 5173) is deliberate — see
+`ui/frontend/vite.config.ts` rationale for why. Override via
+`npm run dev -- --port NNNN` or `CFD_FRONTEND_PORT=NNNN ./scripts/start-ui-dev.sh`.
 
 ## Phase-0 scope
 
