@@ -3105,6 +3105,18 @@ boundaryField
         nu_val = 1.0 / Re
         U_bulk = 1.0
 
+        # DEC-V61-043: plumb the physical constants the u+/y+ emitter
+        # needs. Walls at y=±D/2 with noSlip (fixedValue U=0). Half
+        # channel height h = D/2. icoFoam is kinematic, so u_tau =
+        # sqrt(|τ_w/ρ|) with τ_w/ρ read directly from the
+        # wallShearStress FO.
+        if task_spec.boundary_conditions is None:
+            task_spec.boundary_conditions = {}
+        task_spec.boundary_conditions["channel_D"] = D
+        task_spec.boundary_conditions["channel_half_height"] = half_D
+        task_spec.boundary_conditions["nu"] = nu_val
+        task_spec.boundary_conditions["U_bulk"] = U_bulk
+
         # 1. system/blockMeshDict
         (case_dir / "system" / "blockMeshDict").write_text(
             f"""\
@@ -3261,6 +3273,48 @@ writeCompression off;
 timeFormat      general;
 timePrecision   6;
 runTimeModifiable true;
+
+// DEC-V61-043: in-solver function objects for u_tau / u+ / y+
+// extraction. wallShearStress writes τ_w at both channel walls;
+// uLine samples U along y at x=0 (mid-length, fully-developed
+// region for our long domain). Outputs:
+//   postProcessing/wallShearStress/<t>/wallShearStress.dat
+//   postProcessing/uLine/<t>/channelCenter_U.xy
+// icoFoam works in kinematic viscosity, so wallShearStress returns
+// τ_w/ρ (kinematic stress, units m²/s²). u_τ = sqrt(|τ_w/ρ|).
+functions
+{{
+    wallShearStress
+    {{
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        patches         (walls);
+        writeControl    writeTime;
+        writeFields     false;
+        log             false;
+    }}
+
+    uLine
+    {{
+        type            sets;
+        libs            ("libsampling.so");
+        writeControl    writeTime;
+        interpolationScheme cellPoint;
+        setFormat       raw;
+        fields          (U);
+        sets
+        (
+            channelCenter
+            {{
+                type        lineUniform;
+                axis        y;
+                start       (0.0 -0.5 0.0);
+                end         (0.0  0.5 0.0);
+                nPoints     129;
+            }}
+        );
+    }}
+}}
 // ************************************************************************* //
 """,
             encoding="utf-8",
@@ -7335,8 +7389,13 @@ mergePatchPairs
 
         # Plane Channel Flow DNS: BODY_IN_CHANNEL + INTERNAL -> u_mean_profile
         elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.INTERNAL:
+            # DEC-V61-043: pass case_dir so the extractor can prefer the
+            # wallShearStress+uLine FO emitter output over cell-centre
+            # U_max fallback. case_dir is the absolute case directory;
+            # FoamAgentExecutor ran postProcess -funcs here.
             key_quantities = self._extract_plane_channel_profile(
-                cxs, cys, u_vecs, task_spec, key_quantities
+                cxs, cys, u_vecs, task_spec, key_quantities,
+                case_dir=case_dir,
             )
 
         # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL -> strouhal_number
@@ -7937,17 +7996,60 @@ mergePatchPairs
         u_vecs: List[Tuple],
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
+        case_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
-        """Plane Channel Flow DNS: 提取 x=0 (inlet) 截面 y 方向速度分布。
+        """Plane Channel Flow DNS: emit u+/y+ profile for Moser comparison.
 
-        Gold Standard: u_mean_profile (y+ vs u+)，DNS 数据来自 Kim et al. 1987。
-        对于 laminar (Re_tau=180)，理论解是抛物线速度分布。
-        提取中轴线 (cx≈0) 的 Ux 剖面作为 u_mean_profile。
+        DEC-V61-043: prefer the in-solver wallShearStress + uLine FO
+        output (u_plus, y_plus, u_tau, Re_tau) over the old cell-centre
+        U/U_max fallback. The FO emitter runs when case_dir points to
+        a real run with postProcessing/wallShearStress/ and
+        postProcessing/uLine/ populated. Falls back to the cell-centre
+        path when those are absent (MOCK mode, legacy runs, case not
+        regenerated).
+
+        The comparator's DEC-V61-036c G2 canonical-alias path resolves
+        u_mean_profile ↔ u_plus + y_plus axis automatically — no
+        comparator changes needed.
         """
+        # DEC-V61-043 primary path: read the in-solver FO output.
+        bc = task_spec.boundary_conditions or {}
+        nu = bc.get("nu")
+        half_height = bc.get("channel_half_height")
+        if (
+            case_dir is not None
+            and nu is not None
+            and half_height is not None
+        ):
+            try:
+                from src.plane_channel_uplus_emitter import (
+                    emit_uplus_profile,
+                    PlaneChannelEmitterError,
+                )
+                emitted = emit_uplus_profile(
+                    case_dir,
+                    nu=float(nu),
+                    half_height=float(half_height),
+                )
+            except PlaneChannelEmitterError as exc:
+                # Malformed postProcessing input — surface as a clearly
+                # labelled extractor-side concern; the comparator will
+                # flag MISSING_TARGET_QUANTITY when u_mean_profile is
+                # absent. Don't silently mask corruption with fallback.
+                key_quantities["u_mean_profile_emitter_error"] = str(exc)
+                return key_quantities
+            if emitted is not None:
+                key_quantities.update(emitted)
+                return key_quantities
+
+        # Fallback: cell-centre mid-x U profile, normalized by U_max.
+        # This path is retained for MOCK runs and legacy fixtures. The
+        # comparator will NOT match gold Moser u_plus values from this
+        # fallback — that's expected per DEC-V61-043 scope; the case
+        # fails honestly instead of PASS-washing.
         if not cxs or not u_vecs:
             return key_quantities
 
-        # 找 cx≈0 的面（inlet）
         x_center = (min(cxs) + max(cxs)) / 2.0
         unique_x = sorted({round(x, 6) for x in cxs})
         if len(unique_x) >= 2:
@@ -7970,13 +8072,13 @@ mergePatchPairs
         sorted_y = sorted(y_groups.keys())
         u_means = [sum(y_groups[yr]) / len(y_groups[yr]) for yr in sorted_y]
 
-        # 归一化: u_norm = u / u_max
         u_max = max(u_means) if u_means else 1.0
         u_norm = [u / u_max for u in u_means]
 
         key_quantities["u_mean_profile"] = u_norm
         key_quantities["u_mean_profile_y"] = sorted_y
         key_quantities["U_max_approx"] = u_max
+        key_quantities["u_mean_profile_source"] = "cell_centre_fallback"
 
         return key_quantities
 
