@@ -142,9 +142,17 @@ class DecisionLink(BaseModel):
 
 
 class MeasuredValue(BaseModel):
-    """The extracted quantity from a solver run."""
+    """The extracted quantity from a solver run.
 
-    value: float
+    DEC-V61-036 G1: `value` may be None when the extractor could not locate
+    the gold's target quantity in the run's key_quantities (either direct
+    name or via result_comparator alias table). `quantity` carries the
+    canonical gold-name the extractor attempted to resolve; when
+    `extraction_source == "no_numeric_quantity"` the downstream
+    _derive_contract_status forces FAIL with MISSING_TARGET_QUANTITY concern.
+    """
+
+    value: float | None
     unit: str = ""
     source: str = Field(
         ...,
@@ -156,6 +164,8 @@ class MeasuredValue(BaseModel):
     run_id: str | None = None
     commit_sha: str | None = None
     measured_at: str | None = None
+    quantity: str | None = None
+    extraction_source: str | None = None
 
 
 class CaseDetail(BaseModel):

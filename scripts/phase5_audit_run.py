@@ -40,6 +40,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
 from src.task_runner import TaskRunner  # noqa: E402
+from src.result_comparator import _lookup_with_alias  # noqa: E402
 
 RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 RAW_DIR = REPO_ROOT / "reports" / "phase5_audit"
@@ -73,8 +74,92 @@ def _iso_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _primary_scalar(report) -> tuple[str | None, float | None, str]:
+def _gold_expected_quantity(case_id: str) -> str | None:
+    """Load `quantity` from knowledge/gold_standards/{case_id}.yaml.
+
+    Returns the canonical gold quantity name (e.g. "reattachment_length",
+    "friction_factor"). Used by DEC-V61-036 G1 to gate extraction — the
+    driver must compare measured value against this exact key (with
+    result_comparator alias resolution), not against "first numeric".
+    """
+    gold_path = REPO_ROOT / "knowledge" / "gold_standards" / f"{case_id}.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        with gold_path.open("r", encoding="utf-8") as fh:
+            docs = list(yaml.safe_load_all(fh))
+    except Exception:
+        return None
+    # Flat schema: top-level `quantity:` key in the first non-empty doc.
+    # observables[] schema: first observable's `name`.
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        q = doc.get("quantity")
+        if isinstance(q, str) and q.strip():
+            return q.strip()
+        obs = doc.get("observables")
+        if isinstance(obs, list) and obs:
+            first = obs[0]
+            if isinstance(first, dict):
+                name = first.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+    return None
+
+
+def _primary_scalar(
+    report, expected_quantity: str | None = None
+) -> tuple[str | None, float | None, str]:
+    """Extract the primary scalar for the audit fixture.
+
+    DEC-V61-036 G1: when `expected_quantity` is provided, this function
+    requires the run to emit exactly that quantity (with alias resolution)
+    — it no longer falls back to "first numeric key_quantities entry".
+
+    Priority:
+      1. comparator.deviations entry whose `quantity` matches expected_quantity
+      2. key_quantities lookup via `_lookup_with_alias(kq, expected_quantity)`
+      3. (expected_quantity, None, "no_numeric_quantity") — signals G1 failure
+
+    When `expected_quantity is None` (legacy calls without a gold), falls
+    back to the OLD behaviour (first numeric) for backward compatibility
+    — but this path should not fire for any whitelist case because every
+    case has a gold_standard.
+    """
     comp = report.comparison_result
+    kq = report.execution_result.key_quantities or {}
+
+    if expected_quantity is not None:
+        # (1) comparator deviation matching gold's quantity
+        if comp is not None and comp.deviations:
+            for dev in comp.deviations:
+                if dev.quantity == expected_quantity:
+                    actual = dev.actual
+                    if isinstance(actual, dict) and "value" in actual:
+                        return dev.quantity, float(actual["value"]), "comparator_deviation"
+                    if isinstance(actual, (int, float)):
+                        return dev.quantity, float(actual), "comparator_deviation"
+        # (2) direct/alias lookup in key_quantities
+        value, resolved_key = _lookup_with_alias(kq, expected_quantity)
+        if value is not None:
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                src = (
+                    "key_quantities_direct"
+                    if resolved_key == expected_quantity
+                    else f"key_quantities_alias:{resolved_key}"
+                )
+                return expected_quantity, float(value), src
+            if isinstance(value, dict) and "value" in value and isinstance(
+                value["value"], (int, float)
+            ):
+                return expected_quantity, float(value["value"]), "key_quantities_alias_dict"
+        # (3) G1 miss — NO fallback. Signal the verdict engine to hard-FAIL.
+        return expected_quantity, None, "no_numeric_quantity"
+
+    # Legacy path (no expected_quantity): preserve old behaviour for any
+    # non-whitelist caller that hasn't been updated yet. Whitelist cases
+    # always pass expected_quantity per DEC-V61-036.
     if comp is not None and comp.deviations:
         first = comp.deviations[0]
         actual = first.actual
@@ -82,12 +167,11 @@ def _primary_scalar(report) -> tuple[str | None, float | None, str]:
             return first.quantity, float(actual["value"]), "comparator_deviation"
         if isinstance(actual, (int, float)):
             return first.quantity, float(actual), "comparator_deviation"
-    kq = report.execution_result.key_quantities or {}
     for k, v in kq.items():
         if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return k, float(v), "key_quantities_fallback"
+            return k, float(v), "key_quantities_fallback_legacy"
         if isinstance(v, dict) and "value" in v and isinstance(v["value"], (int, float)):
-            return k, float(v["value"]), "key_quantities_fallback"
+            return k, float(v["value"]), "key_quantities_fallback_legacy"
     return None, None, "no_numeric_quantity"
 
 
@@ -151,11 +235,26 @@ def _audit_fixture_doc(
     commit_sha: str,
     field_artifacts_ref: "dict | None" = None,
 ) -> dict:
-    quantity, value, source_note = _primary_scalar(report)
+    # DEC-V61-036 G1: load the gold's canonical quantity BEFORE extraction
+    # so the driver can strict-match (and hard-fail on miss) instead of
+    # silently substituting "first numeric".
+    expected_quantity = _gold_expected_quantity(case_id)
+    quantity, value, source_note = _primary_scalar(report, expected_quantity)
     comp = report.comparison_result
     passed = comp.passed if comp else False
 
-    verdict_hint = "PASS" if passed else "FAIL"
+    # DEC-V61-036 G1: verdict hint must reflect the missing-quantity outcome.
+    # Prior behaviour tied verdict_hint to comp.passed alone, which showed
+    # "PASS" for runs that simply didn't measure the gold quantity.
+    if source_note == "no_numeric_quantity" or value is None:
+        verdict_hint = "FAIL"
+    else:
+        verdict_hint = "PASS" if passed else "FAIL"
+
+    # DEC-V61-036 G1: write measurement.value as literal null (None) when
+    # extractor missed; the verdict engine hard-FAILs on None. Do NOT coerce
+    # to 0.0 — that was the prior PASS-washing path.
+    measurement_value: float | None = value
 
     doc = {
         "run_metadata": {
@@ -174,7 +273,7 @@ def _audit_fixture_doc(
         "case_id": case_id,
         "source": "phase5_audit_run_foam_agent",
         "measurement": {
-            "value": value if value is not None else 0.0,
+            "value": measurement_value,
             "unit": "dimensionless",
             "run_id": f"audit_{case_id}_{commit_sha}",
             "commit_sha": commit_sha,
@@ -191,9 +290,42 @@ def _audit_fixture_doc(
                 "date": "2026-04-21",
                 "title": "Phase 5a audit pipeline — real-solver fixtures",
                 "autonomous": True,
-            }
+            },
+            {
+                "decision_id": "DEC-V61-036",
+                "date": "2026-04-22",
+                "title": "Hard comparator gate G1 (missing-target-quantity)",
+                "autonomous": True,
+            },
         ],
     }
+
+    # DEC-V61-036 G1: stamp a first-class concern when the extractor could
+    # not resolve the gold's quantity. The verdict engine hard-FAILs
+    # independently based on measurement.value is None, but embedding the
+    # concern in the fixture makes the audit package self-explaining.
+    if source_note == "no_numeric_quantity":
+        doc["audit_concerns"].append(
+            {
+                "concern_type": "MISSING_TARGET_QUANTITY",
+                "summary": (
+                    f"Extractor could not locate gold quantity "
+                    f"{quantity!r} in run key_quantities."
+                )[:240],
+                "detail": (
+                    "Gold standard expected a measurement of "
+                    f"{quantity!r} (with result_comparator alias resolution), "
+                    "but the case-specific extractor did not emit that key. "
+                    "Prior harness behaviour (pre-DEC-V61-036) silently "
+                    "substituted the first numeric key_quantities entry and "
+                    "compared it against the gold's tolerance band — that "
+                    "PASS-washing path is now closed. The adapter needs a "
+                    "case-specific extractor for this quantity; the verdict "
+                    "is hard-FAIL until that lands."
+                )[:2000],
+                "decision_refs": ["DEC-V61-036"],
+            }
+        )
 
     if comp is not None:
         doc["audit_concerns"].append(

@@ -467,6 +467,43 @@ def _make_audit_concerns(
                     decision_refs=concern.get("decision_refs", []) or [],
                 )
             )
+        # (3) DEC-V61-036 G1: synthesize MISSING_TARGET_QUANTITY concern when
+        # the extractor signalled it could not resolve the gold's quantity.
+        # Triggers:
+        #   - measurement.extraction_source == "no_numeric_quantity" (new post-DEC)
+        #   - measurement.extraction_source == "key_quantities_fallback" (legacy
+        #     fixtures — this was the silent-substitution bug marker itself)
+        #   - measurement.value is None (explicit missing)
+        # Surfacing as a first-class concern lets _derive_contract_status
+        # hard-FAIL and the UI display the schema failure separately from
+        # numeric deviations.
+        m = measurement_doc.get("measurement") or {}
+        src = m.get("extraction_source")
+        g1_miss = (
+            src == "no_numeric_quantity"
+            or src == "key_quantities_fallback"
+            or m.get("value") is None
+        )
+        if g1_miss:
+            gold_quantity = m.get("quantity") or "<unknown>"
+            out.append(
+                AuditConcern(
+                    concern_type="MISSING_TARGET_QUANTITY",
+                    summary=(
+                        f"Extractor could not locate gold quantity "
+                        f"'{gold_quantity}' in run key_quantities."
+                    ),
+                    detail=(
+                        "DEC-V61-036 G1: the case-specific extractor did not "
+                        "emit the gold standard's target quantity and the "
+                        "result_comparator alias lookup also missed. Prior "
+                        "behavior silently substituted the first numeric "
+                        "key_quantities entry — that PASS-washing path is now "
+                        "closed. Measurement.value = None, contract_status = FAIL."
+                    ),
+                    decision_refs=["DEC-V61-036"],
+                )
+            )
     return out
 
 
@@ -516,6 +553,17 @@ def _derive_contract_status(
     if measurement is None:
         return ("UNKNOWN", None, None, lower, upper)
 
+    # DEC-V61-036 G1: hard-FAIL when the extractor could not resolve the
+    # gold's target quantity. No numeric comparison is possible — the prior
+    # "first numeric key_quantity" fallback was the root cause of PASS-washing
+    # (user 2026-04-22 review: BFS measured U_residual_magnitude against
+    # Xr/H gold, duct_flow measured hydraulic_diameter against friction_factor).
+    has_missing_target = any(
+        c.concern_type == "MISSING_TARGET_QUANTITY" for c in audit_concerns
+    )
+    if measurement.value is None or has_missing_target:
+        return ("FAIL", None, None, lower, upper)
+
     deviation_pct = 0.0
     if gs_ref.ref_value != 0.0:
         deviation_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
@@ -544,13 +592,24 @@ def _make_measurement(doc: dict[str, Any] | None) -> MeasuredValue | None:
     m = doc.get("measurement") or {}
     if "value" not in m:
         return None
+    # DEC-V61-036 G1: value may be explicit None when extractor could not
+    # locate the gold's target quantity. Preserve None instead of coercing
+    # to 0.0 — the verdict engine hard-FAILs on None per the G1 contract.
+    raw_value = m["value"]
+    value: float | None
+    if raw_value is None:
+        value = None
+    else:
+        value = float(raw_value)
     return MeasuredValue(
-        value=float(m["value"]),
+        value=value,
         unit=m.get("unit", "") or "",
         source=doc.get("source", "fixture"),
         run_id=m.get("run_id"),
         commit_sha=m.get("commit_sha"),
         measured_at=m.get("measured_at"),
+        quantity=m.get("quantity"),
+        extraction_source=m.get("extraction_source"),
     )
 
 

@@ -32,6 +32,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
 from src.task_runner import TaskRunner  # noqa: E402
+from src.result_comparator import _lookup_with_alias  # noqa: E402
 
 TARGET_CASES = [
     "lid_driven_cavity",
@@ -61,44 +62,147 @@ def _iso_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _extract_primary_measurement(report) -> tuple[str | None, float | None, str]:
+def _gold_expected_quantity(case_id: str) -> str | None:
+    """Same helper as phase5_audit_run._gold_expected_quantity.
+
+    Loads `quantity` from knowledge/gold_standards/{case_id}.yaml. Returns
+    None if the file is absent or unparseable — caller then falls back to
+    the legacy first-numeric path (shouldn't happen for whitelist cases).
+    """
+    gold_path = REPO_ROOT / "knowledge" / "gold_standards" / f"{case_id}.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        with gold_path.open("r", encoding="utf-8") as fh:
+            docs = list(yaml.safe_load_all(fh))
+    except Exception:
+        return None
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        q = doc.get("quantity")
+        if isinstance(q, str) and q.strip():
+            return q.strip()
+        obs = doc.get("observables")
+        if isinstance(obs, list) and obs:
+            first = obs[0]
+            if isinstance(first, dict):
+                name = first.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name.strip()
+    return None
+
+
+def _extract_primary_measurement(
+    report, expected_quantity: str | None = None
+) -> tuple[str | None, float | None, str]:
     """Return (quantity_name, value, source_note).
 
-    Precedence: comparison.deviations[0] if present → key_quantities first
-    numeric entry → None.
+    DEC-V61-036 G1: when `expected_quantity` is provided (derived from the
+    gold standard), require the run to emit that exact quantity via direct
+    match or result_comparator alias. NO first-numeric fallback — the prior
+    fallback silently substituted any scalar and drove PASS-washing.
+
+    Precedence with expected_quantity:
+      1. comparator.deviations entry matching expected_quantity
+      2. key_quantities direct/alias lookup on expected_quantity
+      3. (expected_quantity, None, "no_numeric_quantity") — gate miss
+
+    Legacy path (expected_quantity=None) preserves first-numeric for
+    backwards-compat with any ad-hoc caller.
     """
     comp = report.comparison_result
+    kq = report.execution_result.key_quantities or {}
+
+    if expected_quantity is not None:
+        if comp is not None and comp.deviations:
+            for dev in comp.deviations:
+                if dev.quantity == expected_quantity:
+                    actual = dev.actual
+                    if isinstance(actual, dict) and "value" in actual:
+                        return dev.quantity, float(actual["value"]), "comparator_deviation"
+                    if isinstance(actual, (int, float)):
+                        return dev.quantity, float(actual), "comparator_deviation"
+        value, resolved_key = _lookup_with_alias(kq, expected_quantity)
+        if value is not None:
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                src = (
+                    "key_quantities_direct"
+                    if resolved_key == expected_quantity
+                    else f"key_quantities_alias:{resolved_key}"
+                )
+                return expected_quantity, float(value), src
+            if isinstance(value, dict) and "value" in value and isinstance(
+                value["value"], (int, float)
+            ):
+                return expected_quantity, float(value["value"]), "key_quantities_alias_dict"
+        return expected_quantity, None, "no_numeric_quantity"
+
+    # Legacy path (no expected_quantity): preserved for backward compat.
     if comp is not None and comp.deviations:
         first = comp.deviations[0]
         actual = first.actual
-        # actual may be float or dict like {"value": ..., "note": ...}
         if isinstance(actual, dict) and "value" in actual:
             return first.quantity, float(actual["value"]), "comparator_deviation"
         if isinstance(actual, (int, float)):
             return first.quantity, float(actual), "comparator_deviation"
-
-    kq = report.execution_result.key_quantities or {}
     for k, v in kq.items():
         if isinstance(v, (int, float)) and not isinstance(v, bool):
-            return k, float(v), "key_quantities_fallback"
+            return k, float(v), "key_quantities_fallback_legacy"
         if isinstance(v, dict) and "value" in v and isinstance(v["value"], (int, float)):
-            return k, float(v["value"]), "key_quantities_fallback"
+            return k, float(v["value"]), "key_quantities_fallback_legacy"
     return None, None, "no_numeric_quantity"
 
 
 def _write_fixture(case_id: str, report, commit_sha: str) -> Path:
-    """Emit minimal Screen-4 fixture from the run report."""
-    quantity, value, source_note = _extract_primary_measurement(report)
+    """Emit minimal Screen-4 fixture from the run report.
+
+    DEC-V61-036 G1: extractor must match the gold's canonical quantity
+    (with alias resolution). No numeric match → measurement.value: null,
+    which forces hard-FAIL in validation_report._derive_contract_status.
+    """
+    expected_quantity = _gold_expected_quantity(case_id)
+    quantity, value, source_note = _extract_primary_measurement(report, expected_quantity)
     comp = report.comparison_result
     passed = comp.passed if comp else False
     unit = "dimensionless"  # conservative default; gold_standard has unit but we don't
     # cross-reference here — the comparator already used the correct gold unit.
 
+    # DEC-V61-036 G1: null (None) preserved in YAML as explicit missing.
+    measurement_value: float | None = value
+
+    audit_concerns: list[dict] = []
+    if comp is not None:
+        audit_concerns.append(
+            {
+                "concern_type": "CONTRACT_STATUS",
+                "summary": (comp.summary or "No summary")[:240],
+                "detail": (comp.summary or "")[:2000],
+                "decision_refs": ["DEC-V61-019", "RETRO-V61-001"],
+            }
+        )
+    if source_note == "no_numeric_quantity":
+        audit_concerns.append(
+            {
+                "concern_type": "MISSING_TARGET_QUANTITY",
+                "summary": (
+                    f"Extractor could not locate gold quantity "
+                    f"{quantity!r} in run key_quantities."
+                )[:240],
+                "detail": (
+                    "DEC-V61-036 G1: prior PASS-washing fallback (first "
+                    "numeric) closed. Adapter needs a case-specific "
+                    "extractor for this quantity; verdict is hard-FAIL."
+                )[:2000],
+                "decision_refs": ["DEC-V61-036"],
+            }
+        )
+
     doc = {
         "case_id": case_id,
         "source": "p2_acceptance_solver_run",
         "measurement": {
-            "value": value if value is not None else 0.0,
+            "value": measurement_value,
             "unit": unit,
             "run_id": f"p2_acc_{case_id}_{commit_sha}",
             "commit_sha": commit_sha,
@@ -108,14 +212,7 @@ def _write_fixture(case_id: str, report, commit_sha: str) -> Path:
             "solver_success": report.execution_result.success,
             "comparator_passed": passed,
         },
-        "audit_concerns": [
-            {
-                "concern_type": "CONTRACT_STATUS",
-                "summary": (comp.summary if comp else "No comparator result")[:240],
-                "detail": (comp.summary if comp else "")[:2000],
-                "decision_refs": ["DEC-V61-019", "RETRO-V61-001"],
-            }
-        ] if comp else [],
+        "audit_concerns": audit_concerns,
         "decisions_trail": [
             {
                 "decision_id": "DEC-V61-019",
@@ -127,6 +224,12 @@ def _write_fixture(case_id: str, report, commit_sha: str) -> Path:
                 "decision_id": "RETRO-V61-001",
                 "date": "2026-04-21",
                 "title": "v6.1 governance retrospective (bundle D)",
+                "autonomous": True,
+            },
+            {
+                "decision_id": "DEC-V61-036",
+                "date": "2026-04-22",
+                "title": "Hard comparator gate G1 (missing-target-quantity)",
                 "autonomous": True,
             },
         ],
