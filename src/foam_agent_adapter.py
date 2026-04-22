@@ -4648,8 +4648,10 @@ runTimeModifiable true;
 // src.cylinder_strouhal_fft to extract St via FFT on Cl. Patches
 // (cylinder) matches the createBaffles output patch name verified at
 // DEC-V61-041 research time (createBafflesDict baffle patches owner
-// + neighbour both named 'cylinder'). lRef=D=0.1, Aref=D*span=0.01*0.1
-// for the 2D thin-span mesh, magUInf=1.0 matches the inlet U_bulk.
+// + neighbour both named 'cylinder'). lRef=D=0.1, Aref=D*span=0.1*0.01
+// = 0.001 for the 2D thin-span mesh (z_depth=0.1*D=0.01), magUInf=1.0
+// matches the inlet U_bulk. Codex DEC-041 round 1 BLOCKER fix: Aref
+// was 0.01 (10x too large) → coefficients were reported 10x smaller.
 functions
 {{
     forceCoeffs1
@@ -4667,7 +4669,7 @@ functions
         pitchAxis       (0 0 1);
         magUInf         1.0;
         lRef            0.1;
-        Aref            0.01;
+        Aref            0.001;
         log             false;
     }}
 }}

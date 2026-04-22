@@ -284,17 +284,26 @@ def compute_strouhal(
     cd_tr = [row[2] for row in trimmed]
 
     # Estimate the raw sample dt and pick a resample dt for Nyquist
-    # safety at the expected shedding band. We don't know f_shed yet,
-    # but at Re=100 it's ~1-2 Hz for U=1, D=0.1 — so dt=0.01s gives
-    # 50-100 samples/period. Use max(median raw dt, 0.005).
+    # safety at the expected shedding band. At Re=100, f_s ≈ 1-2 Hz
+    # for U=1, D=0.1 — so dt=0.02s gives 25-50 samples/period, well
+    # above Nyquist. Codex DEC-041 round 1 FLAG: the original 0.005s
+    # floor plus a 150s post-trim window produced ~30k samples, and
+    # the stdlib O(N²) DFT chokes on that (billions of trig ops).
+    # Cap via MAX_SAMPLES = 8192 so runtime stays ≤~30s per case.
+    # Bin resolution = 1/window_s ≈ 1/150 = 0.0067 Hz → St precision
+    # ≈ 0.00067 in St units, well below 1% of typical St=0.165.
     raw_dts = [t_tr[i + 1] - t_tr[i] for i in range(len(t_tr) - 1)]
     if raw_dts:
         raw_dts_sorted = sorted(raw_dts)
         median_raw_dt = raw_dts_sorted[len(raw_dts_sorted) // 2]
     else:
         median_raw_dt = 0.01
-    # Prefer finer resampling unless the raw dt is much coarser.
-    target_dt = max(median_raw_dt, 0.005)
+    MAX_SAMPLES = 8192
+    window_duration = t_tr[-1] - t_tr[0]
+    dt_floor_for_cap = window_duration / (MAX_SAMPLES - 1)
+    # Prefer finer resampling unless the raw dt is much coarser OR
+    # the window is long enough that MAX_SAMPLES would be exceeded.
+    target_dt = max(median_raw_dt, 0.02, dt_floor_for_cap)
     t_u, cl_u = _resample_uniform(t_tr, cl_tr, target_dt)
     _, cd_u = _resample_uniform(t_tr, cd_tr, target_dt)
 
