@@ -95,6 +95,7 @@ class ExecutionResult:
     key_quantities: Dict[str, Any] = field(default_factory=dict)
     execution_time_s: float = 0.0
     raw_output_path: Optional[str] = None
+    exit_code: Optional[int] = None
     error_message: Optional[str] = None
 
 

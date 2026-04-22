@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
@@ -28,6 +29,9 @@ from .result_comparator import ResultComparator
 from .correction_recorder import CorrectionRecorder
 from .error_attributor import ErrorAttributor
 
+if TYPE_CHECKING:
+    from .convergence_attestor import AttestationResult
+
 PostExecuteHook = Callable[
     [TaskSpec, ExecutionResult, Optional[ComparisonResult], Optional[CorrectionSpec]],
     Any,
@@ -46,6 +50,7 @@ class RunReport:
     comparison_result: Optional[ComparisonResult]
     correction_spec: Optional[CorrectionSpec]
     summary: str
+    attestation: Optional["AttestationResult"] = None
     auto_verify_report: Any = None  # AutoVerifyReport or hook-returned status dict, when hook configured
 
 
@@ -103,17 +108,24 @@ class TaskRunner:
         exec_result = self._executor.execute(task_spec)
         logger.info("Execution success=%s is_mock=%s", exec_result.success, exec_result.is_mock)
 
-        # 2. 加载 Gold Standard
+        # 2. 先做收敛 attestation；ATTEST_FAIL 不再进入 compare/correction。
+        attestation = self._compute_attestation(exec_result, task_spec)
+
+        # 3. 加载 Gold Standard
         gold = self._db.load_gold_standard(task_spec.name)
         comparison: Optional[ComparisonResult] = None
         correction: Optional[CorrectionSpec] = None
 
-        # 3. 对比结果
-        if gold is not None and exec_result.success:
+        # 4. 对比结果（仅 ATTEST_FAIL short-circuit；HAZARD 仍保留诊断值）
+        if (
+            gold is not None
+            and exec_result.success
+            and attestation.overall != "ATTEST_FAIL"
+        ):
             comparison = self._comparator.compare(exec_result, gold)
             logger.info("Comparison passed=%s", comparison.passed)
 
-            # 4. 如有偏差 → 生成 CorrectionSpec (saved only under legacy_auto_save policy)
+            # 5. 如有偏差 → 生成 CorrectionSpec (saved only under legacy_auto_save policy)
             if not comparison.passed:
                 correction = self._recorder.record(task_spec, exec_result, comparison)
                 if self._correction_policy == "legacy_auto_save":
@@ -124,7 +136,7 @@ class TaskRunner:
                         self._correction_policy,
                     )
 
-        # 5. AutoVerifier post-execute hook (SPEC §INT-1, additive)
+        # 6. AutoVerifier post-execute hook (SPEC §INT-1, additive)
         auto_verify_report: Any = None
         if self._post_execute_hook is not None:
             try:
@@ -134,10 +146,10 @@ class TaskRunner:
             except Exception:  # noqa: BLE001 - hook is optional, must not kill run
                 logger.exception("post_execute_hook raised; continuing without verify report")
 
-        # 6. 生成摘要
-        summary = self._build_summary(exec_result, comparison, correction)
+        # 7. 生成摘要
+        summary = self._build_summary(exec_result, comparison, correction, attestation)
 
-        # 7. 回写 Notion（Notion 未配置时静默跳过）
+        # 8. 回写 Notion（Notion 未配置时静默跳过）
         try:
             self._notion.write_execution_result(task_spec, exec_result, summary)
         except NotImplementedError:
@@ -148,6 +160,7 @@ class TaskRunner:
             execution_result=exec_result,
             comparison_result=comparison,
             correction_spec=correction,
+            attestation=attestation,
             summary=summary,
             auto_verify_report=auto_verify_report,
         )
@@ -248,6 +261,14 @@ class TaskRunner:
         """确保 report 有 comparison_result（如果没有则尝试生成）。"""
         if report.comparison_result is not None:
             return report.comparison_result
+        if (
+            report.attestation is not None
+            and report.attestation.overall == "ATTEST_FAIL"
+        ):
+            return ComparisonResult(
+                passed=False,
+                summary="Comparison skipped because attestation failed before extraction",
+            )
         if not report.execution_result.success:
             return ComparisonResult(
                 passed=False,
@@ -314,10 +335,13 @@ class TaskRunner:
         exec_result: ExecutionResult,
         comparison: Optional[ComparisonResult],
         correction: Optional[CorrectionSpec],
+        attestation: Optional["AttestationResult"] = None,
     ) -> str:
         parts = []
         status = "✅ Success" if exec_result.success else "❌ Failed"
         parts.append(f"{status} (mock={exec_result.is_mock}, t={exec_result.execution_time_s:.2f}s)")
+        if attestation is not None:
+            parts.append(f"Attestation: {attestation.overall}")
         if comparison is not None:
             parts.append(f"Comparison: {'PASS' if comparison.passed else 'FAIL'}")
             if comparison.deviations:
@@ -325,3 +349,42 @@ class TaskRunner:
         if correction is not None:
             parts.append(f"CorrectionSpec generated: {correction.error_type.value}")
         return " | ".join(parts)
+
+    def _compute_attestation(
+        self,
+        exec_result: ExecutionResult,
+        task_spec: TaskSpec,
+    ) -> "AttestationResult":
+        """Run the convergence attestor against the best-available solver log."""
+        from .convergence_attestor import AttestationResult, attest
+
+        log_path = self._resolve_log_path(exec_result)
+        case_id = self._resolve_attestation_case_id(task_spec)
+        try:
+            return attest(
+                log_path=log_path,
+                execution_result=exec_result,
+                case_id=case_id,
+            )
+        except Exception:  # noqa: BLE001 - attestor failure must not kill the task
+            logger.exception("Attestation failed; returning ATTEST_NOT_APPLICABLE")
+            return AttestationResult(overall="ATTEST_NOT_APPLICABLE", checks=[])
+
+    def _resolve_attestation_case_id(self, task_spec: TaskSpec) -> str:
+        chain = self._db.get_execution_chain(task_spec.name)
+        if chain is not None and chain.get("case_id"):
+            return str(chain["case_id"])
+        return task_spec.name
+
+    @staticmethod
+    def _resolve_log_path(exec_result: ExecutionResult) -> Optional[Path]:
+        """Resolve the newest solver log under raw_output_path."""
+        if not exec_result.raw_output_path:
+            return None
+        base = Path(exec_result.raw_output_path)
+        if base.is_file():
+            return base if base.name.startswith("log.") else None
+        if not base.is_dir():
+            return None
+        log_files = sorted(base.glob("log.*"))
+        return log_files[-1] if log_files else None

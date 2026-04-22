@@ -469,6 +469,7 @@ def _audit_fixture_doc(
     # extractor missed; the verdict engine hard-FAILs on None. Do NOT coerce
     # to 0.0 — that was the prior PASS-washing path.
     measurement_value: float | None = value
+    measured_at = _iso_now()
 
     doc = {
         "run_metadata": {
@@ -483,6 +484,7 @@ def _audit_fixture_doc(
             ),
             "category": "audit_real_run",
             "expected_verdict": verdict_hint,
+            "actual_verdict": verdict_hint,
         },
         "case_id": case_id,
         "source": "phase5_audit_run_foam_agent",
@@ -491,7 +493,7 @@ def _audit_fixture_doc(
             "unit": "dimensionless",
             "run_id": f"audit_{case_id}_{commit_sha}",
             "commit_sha": commit_sha,
-            "measured_at": _iso_now(),
+            "measured_at": measured_at,
             "quantity": quantity,
             "extraction_source": source_note,
             "solver_success": report.execution_result.success,
@@ -534,46 +536,54 @@ def _audit_fixture_doc(
             }
         )
 
-    # DEC-V61-036b G3/G4/G5 + DEC-V61-038 A1..A6: run pre-extraction
-    # attestor THEN post-extraction physics gates against the captured
-    # field artifacts + solver log. Attestor checks convergence process;
-    # gates check final-state sanity. Both emit audit_concerns[] entries
-    # that the verdict engine hard-FAILs on. Non-blocking on missing
-    # artifacts — both skip gracefully when log/VTK is unavailable.
+    artifact_dir: "Path | None" = None
+    solver_log: "Path | None" = None
+    vtk_dir: "Path | None" = None
     if phase7a_timestamp is not None:
         artifact_dir = FIELDS_DIR / case_id / phase7a_timestamp
-        solver_log: "Path | None" = None
         if artifact_dir.is_dir():
             log_candidates = sorted(artifact_dir.glob("log.*"))
             if log_candidates:
-                solver_log = log_candidates[0]
-        vtk_dir = artifact_dir / "VTK" if artifact_dir.is_dir() else None
+                solver_log = log_candidates[-1]
+            vtk_dir = artifact_dir / "VTK"
 
-        # DEC-V61-038 attestor — runs first, records overall verdict on the
-        # fixture for UI display + injects HAZARD/FAIL checks as concerns.
+    # Prefer TaskRunner's pre-extraction attestation when available so the
+    # fixture mirrors the exact pipeline verdict that governed comparison
+    # short-circuiting. Fall back to best-effort artifact-dir attestation for
+    # older callers that still invoke _audit_fixture_doc directly.
+    attestation = getattr(report, "attestation", None)
+    if attestation is None:
         try:
-            attestation = attest(solver_log)
-            doc["attestation"] = {
-                "overall": attestation.overall,
-                "checks": [
-                    {
-                        "check_id": c.check_id,
-                        "verdict": c.verdict,
-                        "concern_type": c.concern_type,
-                        "summary": c.summary,
-                    }
-                    for c in attestation.checks
-                ],
-            }
-            for c in attestation.concerns:
-                doc["audit_concerns"].append(check_to_audit_concern_dict(c))
+            attestation = attest(
+                solver_log,
+                execution_result=getattr(report, "execution_result", None),
+                case_id=case_id,
+            )
         except Exception as exc:  # noqa: BLE001 — never crash the audit
             print(
                 f"[audit] [WARN] attestor failed on {case_id}: {exc!r}",
                 flush=True,
             )
+            attestation = None
 
-        # DEC-V61-036b gates — post-extraction physics checks.
+    if attestation is not None:
+        doc["attestation"] = {
+            "overall": attestation.overall,
+            "checks": [
+                {
+                    "check_id": c.check_id,
+                    "verdict": c.verdict,
+                    "concern_type": c.concern_type,
+                    "summary": c.summary,
+                }
+                for c in attestation.checks
+            ],
+        }
+        for c in attestation.concerns:
+            doc["audit_concerns"].append(check_to_audit_concern_dict(c))
+
+    # DEC-V61-036b gates — post-extraction physics checks.
+    if phase7a_timestamp is not None:
         try:
             gate_violations = check_all_gates(
                 log_path=solver_log,
@@ -643,6 +653,60 @@ def _audit_fixture_doc(
     # The manifest at the referenced path contains the timestamp.
     if field_artifacts_ref is not None:
         doc["field_artifacts"] = field_artifacts_ref
+
+    # DEC-V61-045 Track 5 / Codex DEC-036b B1 remediation: recompute the
+    # verdict after ALL concerns have been stamped. The early verdict_hint
+    # only knows about extraction/comparator state and can stale-PASS after
+    # attestor or gate concerns are appended later in this function.
+    try:
+        from ui.backend.schemas.validation import AuditConcern as _AuditConcern
+        from ui.backend.schemas.validation import MeasuredValue as _MeasuredValue
+        from ui.backend.services.validation_report import (
+            _derive_contract_status,
+            _load_gold_standard as _load_validation_gold_standard,
+            _load_whitelist as _load_validation_whitelist,
+            _make_gold_reference,
+            _make_preconditions,
+        )
+
+        whitelist_case = _load_validation_whitelist().get(case_id, {})
+        gold_doc = _load_validation_gold_standard(case_id)
+        gold_ref = _make_gold_reference(whitelist_case, gold_doc)
+        final_status = verdict_hint
+        if gold_ref is not None:
+            measurement = _MeasuredValue(
+                value=measurement_value,
+                unit="dimensionless",
+                source=source_note,
+                run_id=doc["measurement"]["run_id"],
+                commit_sha=commit_sha,
+                measured_at=measured_at,
+                quantity=quantity,
+                extraction_source=source_note,
+            )
+            concerns = [
+                _AuditConcern(
+                    concern_type=concern.get("concern_type", "UNKNOWN"),
+                    summary=concern.get("summary", ""),
+                    detail=concern.get("detail"),
+                    decision_refs=concern.get("decision_refs", []) or [],
+                )
+                for concern in doc["audit_concerns"]
+            ]
+            preconditions = _make_preconditions(gold_doc)
+            final_status, *_ = _derive_contract_status(
+                gold_ref,
+                measurement,
+                preconditions,
+                concerns,
+            )
+        doc["run_metadata"]["actual_verdict"] = final_status
+        doc["run_metadata"]["expected_verdict"] = final_status
+    except Exception as exc:  # noqa: BLE001 - preserve fixture generation
+        print(
+            f"[audit] [WARN] verdict recompute failed on {case_id}: {exc!r}",
+            flush=True,
+        )
 
     return doc
 
