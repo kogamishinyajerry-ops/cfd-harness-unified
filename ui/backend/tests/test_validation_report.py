@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from src.convergence_attestor import Thresholds
 from ui.backend.main import app
 from ui.backend.schemas.validation import (
     AuditConcern,
@@ -53,6 +54,21 @@ def _sample_preconditions() -> list[Precondition]:
             evidence_ref="reports/phase5_audit/lid_driven_cavity",
         )
     ]
+
+
+def _sample_thresholds(*, promote_to_fail: frozenset[str]) -> Thresholds:
+    return Thresholds(
+        continuity_floor=1e-4,
+        residual_floor=1e-3,
+        residual_floor_per_field={"Ux": 1e-3, "p_rgh": 1e-2},
+        iteration_cap_detector_count=3,
+        bounding_recurrence_frac_threshold=0.3,
+        bounding_recurrence_window=50,
+        no_progress_decade_frac=1.0,
+        no_progress_window=50,
+        promote_to_fail=promote_to_fail,
+        case_id="sample_case",
+    )
 
 
 def test_hazard_tier_continuity_not_converged_forces_hazard() -> None:
@@ -120,6 +136,65 @@ def test_hazard_tier_no_residual_progress_forces_hazard() -> None:
                 summary="Ux plateaued over final 50 iterations",
             )
         ],
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_concern_promotes_to_fail_when_thresholds_request_it() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            )
+        ],
+        thresholds=_sample_thresholds(
+            promote_to_fail=frozenset({"CONTINUITY_NOT_CONVERGED"})
+        ),
+    )
+
+    assert status == "FAIL"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_concern_without_thresholds_stays_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            )
+        ],
+        thresholds=None,
+    )
+
+    assert status == "HAZARD"
+    assert within_tolerance is None
+    assert deviation_pct == pytest.approx(2.0)
+
+
+def test_hazard_tier_concern_with_empty_promotion_stays_hazard() -> None:
+    status, deviation_pct, within_tolerance, _, _ = _derive_contract_status(
+        _sample_gold_reference(),
+        _sample_measurement(1.02),
+        _sample_preconditions(),
+        [
+            AuditConcern(
+                concern_type="CONTINUITY_NOT_CONVERGED",
+                summary="final sum_local=5e-4 > floor 1e-4",
+            )
+        ],
+        thresholds=_sample_thresholds(promote_to_fail=frozenset()),
     )
 
     assert status == "HAZARD"

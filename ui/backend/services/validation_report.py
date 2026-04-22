@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -37,6 +37,9 @@ from ui.backend.schemas.validation import (
     RunSummary,
     ValidationReport,
 )
+
+if TYPE_CHECKING:
+    from src.convergence_attestor import Thresholds
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +542,7 @@ def _derive_contract_status(
     measurement: MeasuredValue | None,
     preconditions: list[Precondition],
     audit_concerns: list[AuditConcern],
+    thresholds: Thresholds | None = None,
 ) -> tuple[ContractStatus, float | None, bool | None, float, float]:
     """Compute the three-state contract status + tolerance bounds.
 
@@ -567,8 +571,8 @@ def _derive_contract_status(
     #   A4  SOLVER_ITERATION_CAP        — pressure loop hit cap ≥3 consecutive iters
     # A2/A3/A5/A6 are HAZARD tier — the scalar may still be computable, but
     # the convergence state is suspect enough that "within band" is not a
-    # meaningful PASS. Keep them distinct from hard-FAILs; per-case
-    # promotion to FAIL remains future Wave 4 work.
+    # meaningful PASS. Per-case thresholds can escalate selected concern
+    # codes to FAIL via `promote_to_fail`.
     _HARD_FAIL_CONCERNS = {
         "MISSING_TARGET_QUANTITY",
         "VELOCITY_OVERFLOW",
@@ -608,8 +612,15 @@ def _derive_contract_status(
         deviation_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
 
     if has_hazard_tier:
-        # TODO(Wave 4): allow per-case promote_to_fail escalation from
-        # attestor thresholds once that DEC lands.
+        if thresholds is not None and thresholds.promote_to_fail:
+            promoted_concerns = [
+                concern
+                for concern in audit_concerns
+                if concern.concern_type in thresholds.promote_to_fail
+                and concern.concern_type in _HAZARD_TIER_CONCERNS
+            ]
+            if promoted_concerns:
+                return ("FAIL", deviation_pct, None, lower, upper)
         return ("HAZARD", deviation_pct, None, lower, upper)
 
     # Tolerance test in deviation space (sign-invariant + consistent with
@@ -743,9 +754,12 @@ def _make_measurement(doc: dict[str, Any] | None) -> MeasuredValue | None:
 # Public service functions
 # ---------------------------------------------------------------------------
 def list_cases() -> list[CaseIndexEntry]:
+    from src.convergence_attestor import load_thresholds
+
     whitelist = _load_whitelist()
     out: list[CaseIndexEntry] = []
     for cid, case in whitelist.items():
+        thresholds = load_thresholds(cid)
         gs = _load_gold_standard(cid)
         # Use the same default-run resolution as build_validation_report so
         # the catalog contract_status matches what the Compare tab shows on
@@ -761,7 +775,11 @@ def list_cases() -> list[CaseIndexEntry]:
         measurement = _make_measurement(measurement_doc)
         if gs_ref is not None:
             status, *_ = _derive_contract_status(
-                gs_ref, measurement, preconditions, audit_concerns
+                gs_ref,
+                measurement,
+                preconditions,
+                audit_concerns,
+                thresholds=thresholds,
             )
         else:
             status = "UNKNOWN"
@@ -777,7 +795,11 @@ def list_cases() -> list[CaseIndexEntry]:
             run_measurement = _make_measurement(run_doc)
             if gs_ref is not None:
                 run_status, *_ = _derive_contract_status(
-                    gs_ref, run_measurement, preconditions, run_audits
+                    gs_ref,
+                    run_measurement,
+                    preconditions,
+                    run_audits,
+                    thresholds=thresholds,
                 )
             else:
                 run_status = "UNKNOWN"
@@ -844,6 +866,8 @@ def build_validation_report(
     - If `run_id` is provided but doesn't exist, returns None (treat
       as 404 at the route layer).
     """
+    from src.convergence_attestor import load_thresholds
+
     case_detail = load_case_detail(case_id)
     if case_detail is None or case_detail.gold_standard is None:
         return None
@@ -867,8 +891,13 @@ def build_validation_report(
     preconditions = case_detail.preconditions
     audit_concerns = _make_audit_concerns(gs, measurement_doc)
     decisions_trail = _make_decisions_trail(measurement_doc)
+    thresholds = load_thresholds(case_id)
     status, deviation, within, lower, upper = _derive_contract_status(
-        case_detail.gold_standard, measurement, preconditions, audit_concerns
+        case_detail.gold_standard,
+        measurement,
+        preconditions,
+        audit_concerns,
+        thresholds=thresholds,
     )
     # DEC-V61-039: reconcile with comparison_report's pointwise profile
     # verdict. For LDC (the only current gold-overlay case) 11/17 profile

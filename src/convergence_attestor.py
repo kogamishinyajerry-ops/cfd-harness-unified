@@ -443,7 +443,7 @@ def _parse_residual_timeline(log_path: Path) -> dict[str, list[float]]:
     """Extract per-field Initial residual history across all iterations.
 
     Returns {"Ux": [...], "Uy": [...], "p": [...], "k": [...], "epsilon": [...]}.
-    Order preserves the log's iteration order. Used by A3 + A6.
+    Order preserves the log's iteration order. Used by A3.
     """
     timeline: dict[str, list[float]] = {}
     with log_path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -457,6 +457,56 @@ def _parse_residual_timeline(log_path: Path) -> dict[str, list[float]]:
             except ValueError:
                 continue
             timeline.setdefault(field_name, []).append(r0)
+    return timeline
+
+
+def _parse_outer_iteration_residuals(log_path: Path) -> dict[str, list[float]]:
+    """Extract per-field residuals from the first solve seen in each Time block.
+
+    A6 should reason about outer-iteration progress, not every inner corrector
+    solve. For each ``Time = ...`` block, only the first
+    ``Solving for <field>, Initial residual = ...`` line per field is kept.
+    Subsequent solves of the same field inside that block are treated as
+    inner-loop corrections and ignored for the A6 plateau detector.
+    """
+    return {
+        field_name: [residual for residual, _ in samples]
+        for field_name, samples in _parse_outer_iteration_samples(log_path).items()
+    }
+
+
+def _parse_outer_iteration_samples(log_path: Path) -> dict[str, list[tuple[float, int]]]:
+    """Extract ``(initial_residual, iterations)`` for the first solve per field.
+
+    A6 uses the same outer-iteration grouping as `_parse_outer_iteration_residuals`,
+    but keeps the solver's reported iteration count so it can ignore
+    non-informative single-iteration algebraic updates and pressure fields that
+    are already covered by A4's iteration-cap detector.
+    """
+    timeline: dict[str, list[tuple[float, int]]] = {}
+    seen_fields_in_block: set[str] = set()
+    in_time_block = False
+    with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if _TIME_STEP_RE.match(line):
+                seen_fields_in_block.clear()
+                in_time_block = True
+                continue
+            if not in_time_block:
+                continue
+            m = _INITIAL_RESIDUAL_RE.search(line)
+            if not m:
+                continue
+            field_name = m.group(1)
+            if field_name in seen_fields_in_block:
+                continue
+            try:
+                r0 = float(m.group(2))
+                iterations = int(m.group(4))
+            except ValueError:
+                continue
+            timeline.setdefault(field_name, []).append((r0, iterations))
+            seen_fields_in_block.add(field_name)
     return timeline
 
 
@@ -802,16 +852,25 @@ def _check_a5_bounding_recurrence(log_path: Path, thresholds: Thresholds) -> Att
 
 
 def _check_a6_no_progress(log_path: Path, thresholds: Thresholds) -> AttestorCheck:
-    timeline = _parse_residual_timeline(log_path)
+    sample_timeline = _parse_outer_iteration_samples(log_path)
+    timeline = _parse_outer_iteration_residuals(log_path)
     if not timeline:
         return AttestorCheck(
             check_id="A6", concern_type="NO_RESIDUAL_PROGRESS", verdict="PASS",
-            summary="no residuals parsed",
+            summary="no outer-iteration residuals parsed",
             detail="",
         )
     offenders: dict[str, dict[str, float]] = {}
     for field_name, history in timeline.items():
-        if len(history) < thresholds.no_progress_window:
+        sample_window = sample_timeline.get(field_name, [])[-thresholds.no_progress_window:]
+        if len(sample_window) < 2:
+            continue
+        iterations_window = [iterations for _, iterations in sample_window]
+        if all(iterations <= 1 for iterations in iterations_window):
+            continue
+        if field_name in {"p", "p_rgh", "pd"} and all(
+            iterations in A4_ITERATION_CAP_VALUES for iterations in iterations_window
+        ):
             continue
         window = history[-thresholds.no_progress_window:]
         lo = min(window)
@@ -837,6 +896,7 @@ def _check_a6_no_progress(log_path: Path, thresholds: Thresholds) -> AttestorChe
                 "lo": lo,
                 "hi": hi,
                 "threshold": threshold,
+                "window": len(window),
             }
     if offenders:
         worst = min(offenders.items(), key=lambda kv: kv[1]["decades"])
@@ -845,23 +905,27 @@ def _check_a6_no_progress(log_path: Path, thresholds: Thresholds) -> AttestorChe
             verdict="HAZARD",
             summary=(
                 f"{worst[0]} residual range over last "
-                f"{thresholds.no_progress_window} iters: "
+                f"{worst[1]['window']} outer iterations: "
                 f"{worst[1]['lo']:.2e} – {worst[1]['hi']:.2e} "
                 f"({worst[1]['decades']:.2f} decades)"
             )[:240],
             detail=(
-                "DEC-V61-038 A6: initial residuals for the fields listed "
+                "DEC-V61-038 A6: first-solve residuals for the fields listed "
                 f"above did not decay > {thresholds.no_progress_decade_frac:.1f} decade(s) "
-                f"over the last {thresholds.no_progress_window} iterations. Solver is "
+                "over the recent outer-iteration window. Solver is "
                 "stuck at a plateau; any scalar extracted from this 'converged' "
                 "state is physically ambiguous."
             )[:2000],
-            evidence={"offenders": offenders, "window": thresholds.no_progress_window},
+            evidence={
+                "offenders": offenders,
+                "window": worst[1]["window"],
+                "requested_window": thresholds.no_progress_window,
+            },
         )
     return AttestorCheck(
         check_id="A6", concern_type="NO_RESIDUAL_PROGRESS", verdict="PASS",
         summary=(
-            f"all residual histories show > {thresholds.no_progress_decade_frac:.1f} "
+            f"all eligible outer-iteration residual histories show > {thresholds.no_progress_decade_frac:.1f} "
             "decade decay in tail window"
         ),
         detail="",

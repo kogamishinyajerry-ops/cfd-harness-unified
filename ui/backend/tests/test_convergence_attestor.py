@@ -26,6 +26,30 @@ def _write_log(tmp_path: Path, content: str) -> Path:
     return p
 
 
+def _write_outer_iteration_log(
+    tmp_path: Path,
+    outer_values: list[float],
+    *,
+    field: str = "Ux",
+    solver: str = "smoothSolver",
+    inner_values_per_block: list[list[float]] | None = None,
+) -> Path:
+    lines: list[str] = []
+    for idx, outer_value in enumerate(outer_values, start=1):
+        lines.append(f"Time = {idx}s")
+        block_values = (
+            inner_values_per_block[idx - 1]
+            if inner_values_per_block is not None
+            else [outer_value]
+        )
+        for residual in block_values:
+            lines.append(
+                f"{solver}:  Solving for {field}, Initial residual = {residual}, "
+                "Final residual = 0.1, No Iterations 2"
+            )
+    return _write_log(tmp_path, "\n".join(lines) + "\n")
+
+
 def _make_audit_fixture_report(tmp_path: Path, log_content: str) -> SimpleNamespace:
     from src.models import ComparisonResult, DeviationDetail
 
@@ -514,13 +538,7 @@ def test_a5_passes_on_early_bounding_only(tmp_path: Path) -> None:
 
 def test_a6_hazard_on_high_plateau(tmp_path: Path) -> None:
     """Ux stuck at 0.4 ± 0.02 for 60 iterations → HAZARD (high and flat)."""
-    lines = []
-    for _ in range(60):
-        lines.append(
-            "smoothSolver:  Solving for Ux, Initial residual = 0.4, "
-            "Final residual = 0.3, No Iterations 20"
-        )
-    log = _write_log(tmp_path, "\n".join(lines) + "\n")
+    log = _write_outer_iteration_log(tmp_path, [0.4] * 60)
     result = ca.attest(log)
     a6 = next(c for c in result.checks if c.check_id == "A6")
     assert a6.verdict == "HAZARD"
@@ -531,13 +549,7 @@ def test_a6_ignores_converged_plateau(tmp_path: Path) -> None:
 
     Codex nit: A6 should not false-positive on fully converged cases
     where residuals hit machine-noise and oscillate in the floor."""
-    lines = []
-    for _ in range(60):
-        lines.append(
-            "smoothSolver:  Solving for Ux, Initial residual = 1e-05, "
-            "Final residual = 1e-06, No Iterations 2"
-        )
-    log = _write_log(tmp_path, "\n".join(lines) + "\n")
+    log = _write_outer_iteration_log(tmp_path, [1e-5] * 60)
     result = ca.attest(log)
     a6 = next(c for c in result.checks if c.check_id == "A6")
     assert a6.verdict == "PASS"
@@ -545,17 +557,46 @@ def test_a6_ignores_converged_plateau(tmp_path: Path) -> None:
 
 def test_a6_decade_range_exactly_1_fires_fail(tmp_path: Path) -> None:
     """Boundary guard: exactly 1.0 decade must fire A6, which stays HAZARD-tier."""
-    lines = []
-    for i in range(50):
-        initial = "1.0" if i % 2 == 0 else "10.0"
-        lines.append(
-            f"smoothSolver:  Solving for Ux, Initial residual = {initial}, "
-            "Final residual = 0.5, No Iterations 2"
-        )
-    log = _write_log(tmp_path, "\n".join(lines) + "\n")
+    outer_values = [1.0 if i % 2 == 0 else 10.0 for i in range(50)]
+    log = _write_outer_iteration_log(tmp_path, outer_values)
     result = ca._check_a6_no_progress(log, thresholds=load_thresholds())
     assert result.verdict == "HAZARD"
     assert result.evidence["offenders"]["Ux"]["decades"] == pytest.approx(1.0)
+
+
+def test_a6_pass_when_fewer_than_two_outer_iterations(tmp_path: Path) -> None:
+    log = _write_outer_iteration_log(tmp_path, [0.4])
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds())
+    assert result.verdict == "PASS"
+
+
+def test_a6_outer_iter_vs_inner_solve_distinction(tmp_path: Path) -> None:
+    outer_values = [0.5] * 50
+    inner_values = [[value, 0.3, 0.2] for value in outer_values]
+    log = _write_outer_iteration_log(
+        tmp_path,
+        outer_values,
+        field="p_rgh",
+        solver="GAMG",
+        inner_values_per_block=inner_values,
+    )
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds())
+    assert result.verdict == "HAZARD"
+    assert result.evidence["offenders"]["p_rgh"]["decades"] == pytest.approx(0.0)
+
+
+def test_a6_pass_when_outer_iter_progresses_despite_inner_repeats(tmp_path: Path) -> None:
+    outer_values = [10.0 ** exponent for exponent in (-1.0 - (3.0 * i / 49.0) for i in range(50))]
+    inner_values = [[value, value, value] for value in outer_values]
+    log = _write_outer_iteration_log(
+        tmp_path,
+        outer_values,
+        field="p_rgh",
+        solver="GAMG",
+        inner_values_per_block=inner_values,
+    )
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds())
+    assert result.verdict == "PASS"
 
 
 def test_a4_gap_blocks_reset_consecutive(tmp_path: Path) -> None:
@@ -625,6 +666,22 @@ def test_attestor_ldc_real_log_is_pass() -> None:
     assert result.overall == "ATTEST_PASS", (
         f"LDC attestor tripped unexpectedly: {[(c.check_id, c.verdict, c.summary) for c in result.checks if c.verdict != 'PASS']}"
     )
+
+
+def test_a6_lid_driven_cavity_real_log_not_fire() -> None:
+    log = _resolve_latest_log("lid_driven_cavity")
+    if log is None:
+        pytest.skip("LDC phase7a log absent")
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds("lid_driven_cavity"))
+    assert result.verdict == "PASS"
+
+
+def test_a6_impinging_jet_real_log_not_fire() -> None:
+    log = _FIELDS / "impinging_jet" / "20260421T142307Z" / "log.buoyantFoam"
+    if not log.is_file():
+        pytest.skip("impinging_jet phase5_fields log absent")
+    result = ca._check_a6_no_progress(log, thresholds=load_thresholds("impinging_jet"))
+    assert result.verdict == "PASS"
 
 
 def test_attestor_bfs_real_log_is_hazard_plus_gate_fail() -> None:
