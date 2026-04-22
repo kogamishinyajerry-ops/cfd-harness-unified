@@ -457,28 +457,18 @@ function PhysicsContractPanel({
       detail = (m[2] ?? "").trim();
     }
   }
-  // Three-state precondition marker, mirroring ui/backend/routes/case_export.py's
+  // Tri-state precondition marker, mirroring ui/backend/routes/case_export.py's
   // [✓]/[~]/[✗] renderer so the student / reviewer sees the same characters
-  // across the downloadable contract md and the in-UI panel.
-  const mark = (satisfied: Precondition["satisfied"]): {
-    glyph: string;
-    tone: string;
-  } => {
-    // Precondition.satisfied is bool in the TS type, but the backend relays
-    // the YAML's string "partial"/"partially" as a truthy-bool lossy cast.
-    // Fall back to narrative-level detection: evidence_ref often contains
-    // "partial" / "satisfied_by_current_adapter: partial" when the YAML
-    // used that label. See DEC-V61-046 round-2 follow-up for a cleaner
-    // wire-level 3-state enum.
-    if (typeof satisfied === "string") {
-      const s = (satisfied as string).toLowerCase();
-      if (s === "partial" || s === "partially") return { glyph: "~", tone: "text-amber-300" };
-      if (s === "false") return { glyph: "✗", tone: "text-contract-fail" };
-      return { glyph: "✓", tone: "text-contract-pass" };
-    }
-    return satisfied
-      ? { glyph: "✓", tone: "text-contract-pass" }
-      : { glyph: "✗", tone: "text-contract-fail" };
+  // across the downloadable contract md and the in-UI panel. DEC-V61-046
+  // round-3 R3-B1: the backend now delivers the raw tri-state via
+  // Precondition.satisfied ∈ { true, false, "partial" }, so we can render
+  // it directly instead of reconstructing from evidence text.
+  const mark = (
+    satisfied: Precondition["satisfied"],
+  ): { glyph: string; tone: string } => {
+    if (satisfied === "partial") return { glyph: "~", tone: "text-amber-300" };
+    if (satisfied === false) return { glyph: "✗", tone: "text-contract-fail" };
+    return { glyph: "✓", tone: "text-contract-pass" };
   };
 
   const verdictTone =

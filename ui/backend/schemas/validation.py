@@ -136,10 +136,22 @@ class GoldStandardReference(BaseModel):
 
 
 class Precondition(BaseModel):
-    """One physics_contract precondition row."""
+    """One physics_contract precondition row.
+
+    `satisfied` is tri-state: `True` / `False` / literal string `"partial"`.
+    The gold YAMLs write `satisfied_by_current_adapter: partial` for
+    precondition rows that are defensible-but-not-ideal (e.g. Cooper
+    1984 impinging-jet turbulence model is `kEpsilon` rather than the
+    modern `v2f` standard, or the TFP Spalding fallback branch).
+    DEC-V61-046 round-3 R3-B1: previously we bool()-cast the raw YAML
+    value, so the live `/api/cases/<id>/report` path silently laundered
+    every `partial` into `True` — the export bundle was honest but the
+    Story-tab panel was not. Carrying the raw tri-state here keeps the
+    two surfaces aligned.
+    """
 
     condition: str
-    satisfied: bool
+    satisfied: Literal["partial"] | bool
     evidence_ref: str | None = None
     consequence_if_unsatisfied: str | None = None
 

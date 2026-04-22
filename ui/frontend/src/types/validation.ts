@@ -51,7 +51,11 @@ export interface GoldStandardReference {
 
 export interface Precondition {
   condition: string;
-  satisfied: boolean;
+  // DEC-V61-046 round-3 R3-B1: tri-state. The wire value is boolean
+  // (true / false) OR the literal string "partial" — matching the
+  // YAML `satisfied_by_current_adapter` domain. Prior boolean-only
+  // typing let the backend bool()-cast "partial" → true silently.
+  satisfied: boolean | "partial";
   evidence_ref: string | null;
   consequence_if_unsatisfied: string | null;
 }

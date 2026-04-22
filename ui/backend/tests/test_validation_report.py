@@ -477,3 +477,62 @@ def test_case_runs_endpoint_lists_reference_pass_first(client: TestClient) -> No
 def test_unknown_case_returns_404(client: TestClient) -> None:
     response = client.get("/api/validation-report/not_a_real_case")
     assert response.status_code == 404
+
+
+def test_validation_report_preserves_partial_precondition_tristate(
+    client: TestClient,
+) -> None:
+    """DEC-V61-046 round-3 R3-B1: the live `/api/validation-report` path
+    must preserve the YAML tri-state `satisfied_by_current_adapter:
+    partial` as the literal string `"partial"` on the wire, not a
+    truthy bool. The export bundle already renders [~] for `partial`;
+    this test pins the same honesty on the API surface consumed by the
+    /learn Story-tab `PhysicsContractPanel` and /pro `PreconditionList`.
+
+    Anchors on backward_facing_step because its gold YAML has three
+    explicit `partial` rows (per DEC-V61-046 round-2 codex probe:
+    runtime returned `True, True, True, False` before this fix).
+    """
+    response = client.get("/api/validation-report/backward_facing_step")
+    assert response.status_code == 200
+    body = response.json()
+    preconditions = body.get("preconditions") or []
+    assert preconditions, "BFS gold YAML has physics preconditions declared"
+    satisfied_values = [p["satisfied"] for p in preconditions]
+    # Tri-state domain: each value must be exactly True, False, or "partial"
+    for v in satisfied_values:
+        assert v is True or v is False or v == "partial", (
+            f"precondition.satisfied must be tri-state, got {v!r}"
+        )
+    # BFS specifically: at least one row must relay the raw "partial"
+    # string (round-2 runtime probe confirmed 3 partials in the YAML).
+    assert any(v == "partial" for v in satisfied_values), (
+        "backward_facing_step gold YAML declares 'partial' rows; live "
+        "ValidationReport must not bool()-cast them to True — this is "
+        "the R3-B1 honesty-guard regression test."
+    )
+
+
+def test_normalize_satisfied_tristate_and_unknowns() -> None:
+    """DEC-V61-046 round-3 R3-B1: direct unit pin on the normalizer —
+    covers all legal YAML shapes plus fail-visible fallback for
+    unknowns. Mirrors the export-side `_precondition_marker` policy so
+    the export bundle and live API cannot drift apart again.
+    """
+    from ui.backend.services.validation_report import _normalize_satisfied
+
+    assert _normalize_satisfied(True) is True
+    assert _normalize_satisfied(False) is False
+    assert _normalize_satisfied("true") is True
+    assert _normalize_satisfied("True") is True
+    assert _normalize_satisfied("yes") is True
+    assert _normalize_satisfied("false") is False
+    assert _normalize_satisfied("No") is False
+    assert _normalize_satisfied("partial") == "partial"
+    assert _normalize_satisfied("Partially") == "partial"
+    assert _normalize_satisfied(1) is True
+    assert _normalize_satisfied(0) is False
+    # Unknowns fail-visible (matches ui/backend/routes/case_export.py)
+    assert _normalize_satisfied(None) is False
+    assert _normalize_satisfied("maybe") is False
+    assert _normalize_satisfied(object()) is False

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -420,6 +420,29 @@ def _make_gold_reference(
     )
 
 
+def _normalize_satisfied(raw: Any) -> bool | Literal["partial"]:
+    """DEC-V61-046 round-3 R3-B1: carry the YAML tri-state through the API.
+
+    Accepts bool/int, strings `"true"/"false"/"yes"/"no"/"partial"/"partially"`,
+    and None/unknown. Unknowns map to `False` (fail-visible) rather than
+    silently truthy — matches the export-side `_precondition_marker`
+    policy from `ui/backend/routes/case_export.py`.
+    """
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return bool(raw)
+    if isinstance(raw, str):
+        low = raw.strip().lower()
+        if low in ("partial", "partially"):
+            return "partial"
+        if low in ("true", "yes", "1"):
+            return True
+        if low in ("false", "no", "0"):
+            return False
+    return False
+
+
 def _make_preconditions(gs_doc: dict[str, Any] | None) -> list[Precondition]:
     if not gs_doc:
         return []
@@ -430,7 +453,9 @@ def _make_preconditions(gs_doc: dict[str, Any] | None) -> list[Precondition]:
         out.append(
             Precondition(
                 condition=row.get("condition", ""),
-                satisfied=bool(row.get("satisfied_by_current_adapter", False)),
+                satisfied=_normalize_satisfied(
+                    row.get("satisfied_by_current_adapter", False)
+                ),
                 evidence_ref=row.get("evidence_ref"),
                 consequence_if_unsatisfied=row.get("consequence_if_unsatisfied"),
             )
