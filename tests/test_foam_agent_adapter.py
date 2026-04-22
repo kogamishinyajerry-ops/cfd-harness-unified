@@ -312,6 +312,41 @@ class TestFoamAgentExecutor:
         assert result["pressure_coefficient_rms_near_cylinder"] == pytest.approx(0.147901994577)
 
     def test_extract_nc_nusselt_uses_horizontal_wall_gradient_for_side_heated_cavity(self):
+        """DEC-V61-042: extractor uses the shared 3-point wall-gradient
+        stencil via BC metadata plumbed by _generate_natural_convection_cavity.
+        Construct a LINEAR T(x) so the stencil is exact — verifies both
+        orientation (hot wall at x=min) and numerical correctness."""
+        # Linear T(x) = T_hot + slope·x, slope=-10/L=-5 → |grad|=5
+        # Nu = 5 · L / dT = 5 · 2 / 10 = 1.0
+        task = TaskSpec(
+            name="nc-cavity",
+            geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+            flow_type=FlowType.NATURAL_CONVECTION,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            boundary_conditions={
+                "dT": 10.0,
+                "L": 2.0,
+                "aspect_ratio": 2.0,
+                "wall_coord_hot": 0.0,
+                "T_hot_wall": 305.0,
+                "wall_bc_type": "fixedValue",
+            },
+        )
+        cxs = [0.05, 0.15, 1.0, 1.85, 1.95] * 3
+        cys = [0.05] * 5 + [0.50] * 5 + [0.95] * 5
+        slope = -5.0
+        t_vals = [305.0 + slope * x for x in cxs]
+
+        result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
+
+        assert result["nusselt_number"] == pytest.approx(1.0, abs=1e-9)
+        assert result["nusselt_number_source"] == "wall_gradient_stencil_3pt"
+
+    def test_extract_nc_nusselt_fails_closed_without_bc_metadata(self):
+        """DEC-V61-042: without wall_coord_hot / T_hot_wall / wall_bc_type
+        plumbed through, the extractor must emit NO nusselt_number (so
+        DEC-V61-036 G1 MISSING_TARGET_QUANTITY fires at the comparator)."""
         task = TaskSpec(
             name="nc-cavity",
             geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
@@ -320,31 +355,49 @@ class TestFoamAgentExecutor:
             compressibility=Compressibility.INCOMPRESSIBLE,
             boundary_conditions={"dT": 10.0, "L": 2.0, "aspect_ratio": 2.0},
         )
-        cxs = [0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95]
-        cys = [0.05, 0.05, 0.05, 0.05, 0.05, 0.50, 0.50, 0.50, 0.50, 0.50, 0.95, 0.95, 0.95, 0.95, 0.95]
-        t_vals = [305.00, 299.75, 300.01, 295.25, 295.00, 305.00, 299.75, 300.01, 295.25, 295.00, 305.00, 299.75, 300.01, 295.25, 295.00]
+        cxs = [0.05, 0.15, 1.0] * 2
+        cys = [0.05] * 3 + [0.95] * 3
+        t_vals = [305.0, 300.0, 295.0] * 2
 
         result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
 
-        assert result["nusselt_number"] == pytest.approx(10.5)
+        assert "nusselt_number" not in result
+        assert result.get("_nc_wall_gradient_missing_bc_metadata") is True
 
     def test_extract_nc_nusselt_averages_gradient_over_y_for_wall_packed_mesh(self):
+        """DEC-V61-042: verify per-y-layer averaging. Each layer has a
+        LINEAR profile with a different slope so the stencil is exact
+        per-layer; the extractor averages the three |grad| values."""
         task = TaskSpec(
             name="nc-cavity",
             geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
             flow_type=FlowType.NATURAL_CONVECTION,
             steady_state=SteadyState.STEADY,
             compressibility=Compressibility.INCOMPRESSIBLE,
-            boundary_conditions={"dT": 10.0, "L": 2.0, "aspect_ratio": 2.0},
+            boundary_conditions={
+                "dT": 10.0,
+                "L": 2.0,
+                "aspect_ratio": 2.0,
+                "wall_coord_hot": 0.0,
+                "T_hot_wall": 305.0,
+                "wall_bc_type": "fixedValue",
+            },
         )
-        cxs = [0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95, 0.05, 0.15, 1.0, 1.85, 1.95]
-        cys = [0.10, 0.10, 0.10, 0.10, 0.10, 0.50, 0.50, 0.50, 0.50, 0.50, 0.90, 0.90, 0.90, 0.90, 0.90]
-        t_vals = [305.00, 304.90, 300.20, 295.20, 295.00, 305.00, 304.85, 300.10, 295.10, 295.00, 305.00, 304.80, 300.00, 295.00, 294.90]
+        cxs = [0.05, 0.15, 1.0, 1.85, 1.95] * 3
+        cys = [0.10] * 5 + [0.50] * 5 + [0.90] * 5
+        # Per-layer slopes: -3, -5, -7 → |grad|={3,5,7}, avg=5
+        # Nu = 5 · 2 / 10 = 1.0
+        slopes = [-3.0, -5.0, -7.0]
+        t_vals = []
+        for slope in slopes:
+            t_vals.extend(305.0 + slope * x for x in cxs[:5])
 
         result = FoamAgentExecutor._extract_nc_nusselt(cxs, cys, t_vals, task, {})
 
-        assert result["nusselt_number"] == pytest.approx(1.5 * 2.0 / 10.0)
-        assert result["midPlaneT"] == pytest.approx([305.0, 304.85, 300.1, 295.1, 295.0])
+        assert result["nusselt_number"] == pytest.approx(1.0, abs=1e-9)
+        # midPlaneT preservation: middle layer (y=0.5) with slope -5.
+        expected_mid = [305.0 + (-5.0) * x for x in [0.05, 0.15, 1.0, 1.85, 1.95]]
+        assert result["midPlaneT"] == pytest.approx(expected_mid)
         assert result["midPlaneT_y"] == pytest.approx([0.05, 0.15, 1.0, 1.85, 1.95])
 
     def test_extract_airfoil_cp_tracks_surface_profile(self):

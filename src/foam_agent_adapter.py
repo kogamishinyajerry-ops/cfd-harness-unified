@@ -1847,6 +1847,16 @@ fields          (U);
             task_spec.boundary_conditions = {}
         task_spec.boundary_conditions["dT"] = dT
         task_spec.boundary_conditions["L"] = L
+        # DEC-V61-042: plumb wall-coord + wall-value + BC type so the
+        # extractor can call src.wall_gradient.extract_wall_gradient
+        # against the actual boundary face instead of guessing which of
+        # two interior cells to difference. Hot wall at x=0, cold at x=L,
+        # both fixedValue per the T boundary block written below.
+        task_spec.boundary_conditions["wall_coord_hot"] = 0.0
+        task_spec.boundary_conditions["wall_coord_cold"] = L
+        task_spec.boundary_conditions["T_hot_wall"] = T_hot
+        task_spec.boundary_conditions["T_cold_wall"] = T_cold
+        task_spec.boundary_conditions["wall_bc_type"] = "fixedValue"
         # h = Cp*(T - T0) with T0=300K
         Cp = 1005.0
         T0 = 300.0
@@ -4977,6 +4987,22 @@ boundaryField
         # Gravity = 0 (forced convection impinging jet, buoyancy negligible)
         g_val = 0.0
 
+        # DEC-V61-042: plumb wall-coord + wall-value + BC type so the
+        # wall-normal stencil can difference against the actual plate
+        # temperature instead of differencing radially across the plate
+        # (which is ~0 by symmetry and gave the -6000× under-read).
+        # Plate is at the upper face of the upper block (patch `plate`,
+        # faces (8 9 10 11) at jet-axial coord = z_max). The extractor
+        # reads cells by cy (jet-axial coord in OpenFOAM's y-slot) and
+        # treats the wall as cy = max(cys), matching z_max here.
+        if task_spec.boundary_conditions is None:
+            task_spec.boundary_conditions = {}
+        task_spec.boundary_conditions["D_nozzle"] = D
+        task_spec.boundary_conditions["T_plate"] = T_plate
+        task_spec.boundary_conditions["T_inlet"] = T_inlet
+        task_spec.boundary_conditions["wall_coord_plate"] = z_max
+        task_spec.boundary_conditions["wall_bc_type"] = "fixedValue"
+
         (case_dir / "system" / "blockMeshDict").write_text(
             f"""/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -7211,29 +7237,15 @@ mergePatchPairs
                         if k.startswith("wallProfile"):
                             del key_quantities[k]
 
-            # NC Cavity: 从 midPlaneT 计算 Nusselt number
+            # DEC-V61-042: removed secondary NC-Cavity Nu computation path
+            # that differenced two cells of the midPlaneT profile (silent
+            # substitution risk — would overwrite the proper wall-gradient
+            # result from _extract_nc_nusselt if midPlaneT happened to be
+            # populated by a parallel sample FO). The authoritative path
+            # is now _extract_nc_nusselt via _parse_writeobjects_fields,
+            # which uses the 3-point one-sided stencil on the hot wall.
             elif geom == GeometryType.NATURAL_CONVECTION_CAVITY:
-                if "midPlaneT" in key_quantities:
-                    T_vals = key_quantities.get("midPlaneT", [])
-                    y_coords = key_quantities.get("midPlaneT_y", [])
-                    if T_vals and y_coords and len(T_vals) == len(y_coords):
-                        # Nu = -L * dT/dy |wall / dT_bulk
-                        # 用壁面梯度 (y 最小处) 近似
-                        # 找到 y 最小的点（热壁）及其邻点来计算梯度
-                        min_y_idx = min(range(len(y_coords)), key=lambda i: y_coords[i])
-                        if min_y_idx < len(T_vals) - 1:
-                            dy = y_coords[min_y_idx + 1] - y_coords[min_y_idx]
-                            dT = T_vals[min_y_idx + 1] - T_vals[min_y_idx]
-                            if abs(dy) > 1e-10:
-                                # Use actual dT and L from case parameters
-                                dT_bulk = float(task_spec.boundary_conditions.get("dT", 10.0)) if task_spec.boundary_conditions else 10.0
-                                L = float(task_spec.boundary_conditions.get("aspect_ratio", 1.0)) if task_spec.boundary_conditions else 1.0
-                                grad_T = abs(dT / dy) if dT != 0 else 0.0
-                                key_quantities["nusselt_number"] = grad_T * L / dT_bulk
-                    # 清理中间数据
-                    for k in list(key_quantities.keys()):
-                        if k.startswith("midPlaneT"):
-                            del key_quantities[k]
+                pass  # no-op — handled in _parse_writeobjects_fields
 
         return residuals, key_quantities
 
@@ -7818,16 +7830,36 @@ mergePatchPairs
     ) -> Dict[str, Any]:
         """NC Cavity: 从侧壁温度梯度计算 Nusselt number。
 
-        侧加热腔体（hot_wall at x=0, cold_wall at x=L）：
-        Nu = (∂T/∂x)_wall * L / (T_hot - T_cold)
-        取整段热壁高度上各 y-layer 的近壁温度梯度平均值；midPlaneT 仍保留 y=L/2 剖面。
+        DEC-V61-042: uses src.wall_gradient.extract_wall_gradient — a
+        3-point one-sided stencil that differences the hot-wall BC value
+        against the two nearest interior cells in each y-layer. This is
+        O(h²) accurate at the wall. The previous 1-point midpoint method
+        differenced two interior cells and got the gradient at their
+        midpoint, not at the wall — a systematic O(h) error that ran
+        ~30% on coarse meshes (DHC Ra=1e6: reported Nu=11.37 vs gold 8.8).
+
+        BC metadata (wall_coord_hot / T_hot_wall / wall_bc_type) is
+        plumbed through task_spec.boundary_conditions by the generator
+        (_generate_natural_convection_cavity). If it's absent, the
+        extractor fails closed — emits NO nusselt_number so the
+        comparator's MISSING_TARGET_QUANTITY path fires instead of a
+        silent fallback.
         """
         if not cxs or not cys or not t_vals:
             return key_quantities
 
-        from collections import defaultdict
+        bc = task_spec.boundary_conditions or {}
+        wall_coord_hot = bc.get("wall_coord_hot")
+        T_hot_wall = bc.get("T_hot_wall")
+        bc_type = bc.get("wall_bc_type")
+        if wall_coord_hot is None or T_hot_wall is None or bc_type is None:
+            # Generator did not plumb wall metadata — fail closed.
+            key_quantities["_nc_wall_gradient_missing_bc_metadata"] = True
+            return key_quantities
 
-        x_hot = min(cxs)
+        from collections import defaultdict
+        from src.wall_gradient import extract_wall_gradient, BCContractViolation
+
         y_target = 0.5 * (min(cys) + max(cys))
         unique_y = sorted({round(y, 6) for y in cys})
         if len(unique_y) >= 2:
@@ -7849,18 +7881,26 @@ mergePatchPairs
             layer_profiles[yr] = x_t_pairs
             if len(x_t_pairs) < 2:
                 continue
-            near_hot = sorted(x_t_pairs, key=lambda pair: (abs(pair[0] - x_hot), pair[0]))
-            x0, T0 = near_hot[0]
-            x1, T1 = near_hot[1]
-            dx = x1 - x0
-            if abs(dx) > 1e-10:
-                wall_gradients.append(abs((T1 - T0) / dx))
+            try:
+                grad = extract_wall_gradient(
+                    wall_coord=float(wall_coord_hot),
+                    wall_value=float(T_hot_wall),
+                    coords=[x for x, _ in x_t_pairs],
+                    values=[T for _, T in x_t_pairs],
+                    bc_type=bc_type,
+                    bc_gradient=bc.get("wall_bc_gradient"),
+                )
+            except BCContractViolation:
+                continue
+            wall_gradients.append(abs(grad))
 
         if wall_gradients:
-            bc = task_spec.boundary_conditions or {}
             dT_bulk = float(bc.get("dT", 10.0))
             L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
-            key_quantities["nusselt_number"] = (sum(wall_gradients) / len(wall_gradients)) * L / dT_bulk
+            key_quantities["nusselt_number"] = (
+                sum(wall_gradients) / len(wall_gradients)
+            ) * L / dT_bulk
+            key_quantities["nusselt_number_source"] = "wall_gradient_stencil_3pt"
 
         if layer_profiles:
             mid_candidates = [yr for yr in layer_profiles if abs(yr - y_target) < y_tol]
@@ -8148,67 +8188,96 @@ mergePatchPairs
     ) -> Dict[str, Any]:
         """Impinging Jet: 从壁面温度梯度计算局部 Nusselt number。
 
-        Gold Standard: Nu ≈ 25 at stagnation point (r/D=0), decays to ~12 at r/D=1
-        方法: 找冲击面（cy≈min(cy)）的温度，计算壁面梯度 dT/dy，
-        Nu = h*D/k = (q*"/k)*(D/ΔT) ，用温度梯度近似。
+        Gold Standard: Nu ≈ 25 at stagnation (r/D=0), decays to ~12 at r/D=1.
+
+        DEC-V61-042: previously this extractor differenced plate-face
+        temperatures RADIALLY (dT/dr) — which is ≈0 by symmetry on a
+        fixedValue-T plate, giving the catastrophic 0.00417 underread
+        (−6000× vs gold 25.0). The fix bins cells by radial position r,
+        then at each bin applies a wall-normal 3-point one-sided stencil
+        against the plate BC (wall_coord_plate, T_plate plumbed through
+        task_spec.boundary_conditions by _generate_impinging_jet).
+
+        Fails closed when BC metadata is missing — MISSING_TARGET_QUANTITY
+        will fire at the comparator rather than a silent garbage read.
         """
         if not cxs or not cys or not t_vals:
             return key_quantities
 
-        D_nozzle = 0.05
-        Delta_T = 20.0  # T_jet - T_wall = 310 K - 290 K
-
-        # 找 impingement wall: cy ≈ max(cy) (plate at z_max = top of domain)
-        cy_max = max(cys)
-        unique_y = sorted({round(y, 6) for y in cys})
-        if len(unique_y) >= 2:
-            dy = min(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
-            y_tol = max(0.6 * dy, 1e-6)
-        else:
-            y_tol = 0.01
-
-        from collections import defaultdict
-        r_groups: Dict[float, List[float]] = defaultdict(list)
-
-        for i in range(min(len(cxs), len(cys), len(t_vals))):
-            if abs(cys[i] - cy_max) < y_tol:
-                # radial position r = cx (jet is axisymmetric, axis at cx=0)
-                r = abs(cxs[i])
-                r_groups[round(r, 4)].append(t_vals[i])
-
-        if not r_groups:
+        bc = task_spec.boundary_conditions or {}
+        wall_coord_plate = bc.get("wall_coord_plate")
+        T_plate = bc.get("T_plate")
+        T_inlet = bc.get("T_inlet")
+        bc_type = bc.get("wall_bc_type")
+        D_nozzle = bc.get("D_nozzle")
+        if (
+            wall_coord_plate is None or T_plate is None or T_inlet is None
+            or bc_type is None or D_nozzle is None
+        ):
+            key_quantities["_ij_wall_gradient_missing_bc_metadata"] = True
             return key_quantities
 
-        sorted_r = sorted(r_groups.keys())
-        T_walls = [sum(r_groups[r]) / len(r_groups[r]) for r in sorted_r]
+        Delta_T = float(T_inlet) - float(T_plate)
+        if abs(Delta_T) < 1e-10:
+            key_quantities["_ij_wall_gradient_zero_delta_t"] = True
+            return key_quantities
 
-        # 找 stagnation point (r≈0) Nu
-        if sorted_r and T_walls:
-            r0, T0 = sorted_r[0], T_walls[0]
-            if len(sorted_r) >= 2:
-                r1, T1 = sorted_r[1], T_walls[1]
-                dr = r1 - r0
-                if dr > 1e-10:
-                    dT_dr = (T1 - T0) / dr
-                    # Stagnation-point Nusselt number: Nu = h*D/k = D*|dT/dr|/ΔT (dimensionless)
-                    dT_dy_approx = abs(dT_dr)
-                    Nu_stag = D_nozzle * dT_dy_approx / Delta_T if Delta_T > 0 else 0.0
-                    Nu_stag = min(max(Nu_stag, 0.0), 100.0)
-                    key_quantities["nusselt_number"] = Nu_stag
+        from collections import defaultdict
+        from src.wall_gradient import extract_wall_gradient, BCContractViolation
 
-        # Store Nu profile
-        if len(sorted_r) >= 2:
-            Nu_profile = []
-            for j in range(len(sorted_r) - 1):
-                r0, T0 = sorted_r[j], T_walls[j]
-                r1, T1 = sorted_r[j + 1], T_walls[j + 1]
-                dr = r1 - r0
-                if dr > 1e-10:
-                    dT_dr = (T1 - T0) / dr
-                    Nu = D_nozzle * abs(dT_dr) / Delta_T if Delta_T > 0 else 0.0
-                    Nu_profile.append(min(max(Nu, 0.0), 100.0))
-            if Nu_profile:
-                key_quantities["nusselt_number_profile"] = Nu_profile
+        # Bin cells by radial position r = |cx| (axisymmetric, axis at cx=0).
+        # Within each bin, we have cells at different cy (jet-axial) positions;
+        # the 3-point stencil operates on that cy-column against the plate
+        # BC at cy = wall_coord_plate.
+        unique_r = sorted({round(abs(cx), 4) for cx in cxs})
+        r_cols: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+        for i in range(min(len(cxs), len(cys), len(t_vals))):
+            r_key = round(abs(cxs[i]), 4)
+            r_cols[r_key].append((cys[i], t_vals[i]))
+
+        sorted_r: List[float] = []
+        Nu_profile: List[float] = []
+        wall_cy = float(wall_coord_plate)
+        for r_key in unique_r:
+            column = r_cols.get(r_key, [])
+            if len(column) < 2:
+                continue
+            # Plate sits at the MAX cy in the domain (jet hits top). The
+            # wall_gradient stencil validates wall_coord < cell_coord, so
+            # we flip into a wall-normal coordinate n = wall_cy - cy where
+            # the wall is at n=0 and interior cells at n>0. We take |grad|
+            # afterwards so the sign flip from dn/dcy = −1 washes out.
+            interior = [
+                (wall_cy - cy, t) for (cy, t) in column if cy < wall_cy
+            ]
+            if len(interior) < 2:
+                continue
+            try:
+                grad = extract_wall_gradient(
+                    wall_coord=0.0,
+                    wall_value=float(T_plate),
+                    coords=[n for n, _ in interior],
+                    values=[t for _, t in interior],
+                    bc_type=bc_type,
+                    bc_gradient=bc.get("wall_bc_gradient"),
+                )
+            except BCContractViolation:
+                continue
+            # Stagnation Nu definition: h·D/k = D·|dT/dn|/ΔT (dimensionless).
+            # sign of grad depends on cold-plate hot-jet orientation; take |·|.
+            Nu = float(D_nozzle) * abs(grad) / Delta_T
+            sorted_r.append(r_key)
+            # Cap at a generous physical upper bound to guard against wildly
+            # diverged runs producing astronomical gradients; Codex can
+            # promote this to fail-closed in a future DEC.
+            Nu_profile.append(min(max(Nu, 0.0), 500.0))
+
+        if Nu_profile:
+            # Stagnation Nu at r ≈ 0 is the first (smallest r) bin.
+            key_quantities["nusselt_number"] = Nu_profile[0]
+            key_quantities["nusselt_number_source"] = "wall_gradient_stencil_3pt"
+            key_quantities["nusselt_number_profile"] = Nu_profile
+            key_quantities["nusselt_number_profile_r"] = sorted_r
 
         return key_quantities
 
@@ -8312,72 +8381,14 @@ mergePatchPairs
 
         return key_quantities
 
-    # ------------------------------------------------------------------
-    # Rayleigh-Bénard Convection — 提取 Nusselt 数
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _extract_rayleigh_benard_nusselt(
-        cxs: List[float],
-        cys: List[float],
-        t_vals: List[float],
-        task_spec: TaskSpec,
-        key_quantities: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Rayleigh-Bénard: 从温度梯度计算 Nusselt number。
-
-        Gold Standard: Nu ≈ 10.5 (Ra=1e6, Chaivat et al. 2006)
-        方法: 同 NC Cavity，提取 mid-plane 温度梯度，计算壁面 Nu。
-        """
-        if not cxs or not cys or not t_vals:
-            return key_quantities
-
-        Ra = float(task_spec.Re or 1e6)  # Using Re as proxy for Ra in task_spec
-        Pr = 0.71
-        L = 1.0
-        Delta_T = 10.0
-
-        # Natural convection: use Grashof-Prandtl-Ra relation
-        # nu = Ra*alpha/(Gr*Pr), but for matching use simplified approach
-        # Find x=0.5 mid-plane
-        x_target = (min(cxs) + max(cxs)) / 2.0
-        unique_x = sorted({round(x, 6) for x in cxs})
-        if len(unique_x) >= 2:
-            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
-            x_tol = max(0.6 * dx, 1e-6)
-        else:
-            x_tol = 0.01
-
-        from collections import defaultdict
-        y_groups: Dict[float, List[float]] = defaultdict(list)
-
-        for i in range(min(len(cxs), len(cys), len(t_vals))):
-            if abs(cxs[i] - x_target) < x_tol:
-                yr = round(cys[i], 4)
-                y_groups[yr].append(t_vals[i])
-
-        if not y_groups:
-            return key_quantities
-
-        sorted_y = sorted(y_groups.keys())
-        y_t_pairs = [(yr, sum(y_groups[yr]) / len(y_groups[yr])) for yr in sorted_y]
-
-        if len(y_t_pairs) >= 2:
-            y0, T0 = y_t_pairs[0]
-            y1, T1 = y_t_pairs[1]
-            dy = y1 - y0
-            if abs(dy) > 1e-10:
-                dT = T1 - T0
-                grad_T = abs(dT / dy)
-                # Nusselt = grad_T * L / Delta_T
-                Nu = grad_T * L / Delta_T
-                key_quantities["nusselt_number"] = Nu
-                key_quantities["midPlaneT"] = [T for _, T in y_t_pairs]
-                key_quantities["midPlaneT_y"] = [y for y, _ in y_t_pairs]
-
-        return key_quantities
-
-        return key_quantities
+    # DEC-V61-042: _extract_rayleigh_benard_nusselt deleted — it was
+    # defined but never dispatched (RBC routes through _extract_nc_nusselt
+    # via GeometryType.NATURAL_CONVECTION_CAVITY), and it used the same
+    # 1-point gradient that DEC-042 replaces with the shared 3-point
+    # stencil. RBC's remaining issue (side-heated generator vs needed
+    # bottom-heated geometry) is out of scope and tracked separately —
+    # deleting the dead method avoids re-introducing the 1-point path
+    # as a silent fallback when that generator fix eventually lands.
 
     # ------------------------------------------------------------------
     # Error helper
