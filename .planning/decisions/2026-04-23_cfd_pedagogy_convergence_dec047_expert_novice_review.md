@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-047
 title: CFD 教学质量专项 — 每 case 仿真/网格/云图/分析/全流程升级 · 2-persona (expert + novice) 迭代
-status: IN_PROGRESS (round 2 remediation landed 2026-04-23T01:30; round 3 pending)
+status: COMPLETE (2026-04-23T01:35 · codex round-3 verdict APPROVE_WITH_COMMENTS across both personas · iteration loop closed per user mandate "迭代至两人都 APPROVE / APPROVE_WITH_COMMENTS")
 commits_in_scope:
   - 09a4975 docs(dec): DEC-V61-047 PROPOSAL — CFD 教学质量专项 2-persona iteration
   - 9d43d6a fix(learn): round-1 batch 1 — narrative truth alignment (F5 blocker)
@@ -9,13 +9,13 @@ commits_in_scope:
   - 10a3463 feat(learn): round-1 batches 4+5 — teaching cards + evidence collapse (F4+F6 majors)
   - 51c7198 docs(dec): round-1 SYNC COMPLETE + round-2 prompt authored
   - 196fb94 fix(learn): round-2 batch 6 — naca0012 truth alignment (N1)
-codex_verdict: CHANGES_REQUIRED (round 2 — 0 blockers + 1 major N1 naca0012 setup drift; remediated in batch 6; F1/F2/F5/F6 CLOSED, F3 deferral ACCEPTED, F4 was PARTIAL due to N1 now fixed)
+codex_verdict: APPROVE_WITH_COMMENTS (round 3 · expert + novice both · 0 blockers · N1 CLOSED · F3 deferral still accepted · F1/F2/F4/F5/F6 stay closed · iteration loop closed 2026-04-23T01:35 per user mandate "迭代至两人都 APPROVE / APPROVE_WITH_COMMENTS". Optional backlog: Story tab could become literal adapter patch-by-patch documentation — explicitly flagged as NOT a reason to reopen DEC.)
 autonomous_governance: true
 autonomous_governance_counter_v61: 34 (34th +1 entry since RETRO-V61-001 counter reset; next retro trigger at ≥20 arc-size → already past, retro owed)
 external_gate_self_estimated_pass_rate: 0.50
-codex_tool_report_path: .planning/reviews/pedagogy_round_2_findings.md (7.2 KB, authored 2026-04-23T01:22; CHANGES_REQUIRED · 0 blockers · F1/F2/F5/F6 CLOSED · F3 deferral accepted · F4 PARTIAL → N1 naca0012 drift · N1 remediated in 196fb94. Round 1 findings retained at pedagogy_round_1_findings.md for arc audit.)
-notion_sync_status: synced 2026-04-23T01:32 (round-2 remediation summary appended as 5 page children; Status=Accepted; https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf)
-github_sync_status: pushed 2026-04-23T01:30 (196fb94 on origin/main; scaffold + 3 round-1 remediation + round-1 sync-complete + round-2 batch 6 N1 fix)
+codex_tool_report_path: .planning/reviews/pedagogy_round_3_findings.md (2.8 KB, authored 2026-04-23T01:31; APPROVE_WITH_COMMENTS · 0 blockers. Rounds 1+2 findings retained at pedagogy_round_{1,2}_findings.md for arc audit.)
+notion_sync_status: synced 2026-04-23T01:36 (Status=Accepted→Done; round-3 APPROVE_WITH_COMMENTS closeout summary appended as 6 page children; https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf)
+github_sync_status: pushed 2026-04-23T01:36 (final DEC closeout commit on origin/main; arc includes scaffold + 4 remediation commits + 3 sync-complete markers)
 related:
   - DEC-V61-046 (prior iteration pattern; demo-first convergence; closed APPROVE_WITH_COMMENTS 2026-04-23T00:35 · this DEC inherits the iteration discipline)
   - DEC-V61-040 (UI 3-tier UNKNOWN surface · underpins the Story tab)
@@ -107,8 +107,29 @@ User 指定 2 个评审 persona（不含 senior code reviewer，这轮不是代�
 - **GitHub sync**: pushed 2026-04-23T01:30 (196fb94 on origin/main; scaffold + round-1 3 commits + round-1 sync-complete + round-2 remediation).
 - **Notion sync**: synced 2026-04-23T01:32 — 5 page children covering N1 problem + batch 6 fix + sanity checks + round-3 next-step.
 
-### Round 3 — TBD
-Codex re-review after round-2 N1 remediation. Expected: naca0012 factual fix verified; F3 deferral remains accepted; no new findings; ideal verdict **APPROVE / APPROVE_WITH_COMMENTS** under both personas — closing the pedagogy iteration.
+### Round 3 — 2026-04-23T01:26 → T01:31 (verdict landed; NO remediation required)
+- **Codex exec PID**: 42342 (log `.planning/reviews/pedagogy_round_3_codex.log`)
+- **Prompt**: `.planning/reviews/pedagogy_round_3_prompt.md`
+- **Findings**: `.planning/reviews/pedagogy_round_3_findings.md` (2.8 KB)
+- **Verdict**: **APPROVE_WITH_COMMENTS** (both personas · 0 blockers)
+  - Expert: "the round-2 blocker is closed. naca0012_airfoil now teaches the canonical repo-truth regime (simpleFoam + kOmegaSST, Re=3e6, α=0°, p=0.3, U/k/ω=0.5, near-surface Cp attenuation → 20% tolerance + PASS_WITH_DEVIATIONS)".
+  - Novice: "a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface."
+  - N1 CLOSED with 8 file:line cross-references verifying the fix matches whitelist + gold + adapter + reference fixture.
+  - Codex's own verification: `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`; grep across the other 9 cases in the diff returns no matches → surgical scope confirmed; no regressions on F1/F2/F4/F5/F6.
+- **No new code commits required** — codex explicitly said "End iteration."
+- **Optional backlog** (codex flagged as NON-blocking): Story tab could become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand (adapter exact far-field extents, freestreamVelocity/freestreamPressure wording). Explicitly declined to be a reason to reopen the DEC.
+- **GitHub sync**: pushed 2026-04-23T01:36 — final DEC closeout commit on origin/main; arc includes scaffold + 4 remediation commits + 3 sync-complete markers + round-3 findings archive.
+- **Notion sync**: synced 2026-04-23T01:36 — Status=Done; round-3 APPROVE_WITH_COMMENTS closeout summary appended as 6 page children (verdict + 2 persona bullets + optional backlog + arc summary).
+
+## Closeout summary
+
+| Round | Verdict | Blockers | Remediation commits | Test baseline |
+|---|---|---|---|---|
+| 1 | CHANGES_REQUIRED | 4 | 3 batches: 9d43d6a, 958d85d, 10a3463 | 791 passed |
+| 2 | CHANGES_REQUIRED | 0 (1 major N1) | 1 batch: 196fb94 | 791 passed |
+| 3 | **APPROVE_WITH_COMMENTS** | 0 | none needed | 791 (stable) |
+
+Total iteration arc: **4 remediation commits** across **3 codex review rounds** (6 findings addressed in rounds 1+2: F1/F2/F5 blockers + F4/F6 majors + N1 factual drift; F3 Tier-C backend tier upgrade deferred to a later dedicated DEC per codex-accepted rationale). Bi-directional sync (GitHub + Notion) held at every round boundary per user mandate.
 
 ### Round N+1 — template
 (Fill after round N codex verdict)
