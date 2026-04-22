@@ -271,7 +271,13 @@ class TestFoamAgentExecutor:
         assert result.success is False
         assert result.raw_output_path == "/tmp/case"
 
-    def test_extract_cylinder_strouhal_uses_canonical_low_re_value_for_unreasonable_pressure(self):
+    def test_extract_cylinder_strouhal_fails_closed_without_case_dir(self):
+        """DEC-V61-041: the old code hardcoded strouhal_number=0.165 for
+        Re∈[50,200] from a single snapshot, regardless of solver
+        convergence. That was the core PASS-washing bug. The new path
+        requires the forceCoeffs FO output (reached only when
+        case_dir is supplied). Without case_dir, extractor emits NO
+        strouhal_number — DEC-V61-036 G1 picks up the missing quantity."""
         task = TaskSpec(
             name="cylinder",
             geometry_type=GeometryType.BODY_IN_CHANNEL,
@@ -287,11 +293,15 @@ class TestFoamAgentExecutor:
             task,
             {},
         )
-        assert result["strouhal_number"] == pytest.approx(0.165)
-        assert "p_rms_near_cylinder" not in result
-        assert "pressure_coefficient_rms_near_cylinder" not in result
+        # No case_dir, no fabricated strouhal_number. Diagnostics
+        # (p_rms_near_cylinder) may still emit but they are DIAGNOSTICS
+        # not the measurement itself.
+        assert "strouhal_number" not in result
 
-    def test_extract_cylinder_strouhal_records_reasonable_pressure_diagnostics(self):
+    def test_extract_cylinder_strouhal_records_diagnostic_pressure_rms(self):
+        """Diagnostic p_rms / Cp_rms still emitted for debugging a
+        MOCK or pre-DEC run, but NOT used to fabricate strouhal_number
+        (which was the PASS-washing path retired in DEC-V61-041)."""
         task = TaskSpec(
             name="cylinder",
             geometry_type=GeometryType.BODY_IN_CHANNEL,
@@ -307,7 +317,7 @@ class TestFoamAgentExecutor:
             task,
             {},
         )
-        assert result["strouhal_number"] == pytest.approx(0.165)
+        assert "strouhal_number" not in result
         assert result["p_rms_near_cylinder"] == pytest.approx(0.073950997289)
         assert result["pressure_coefficient_rms_near_cylinder"] == pytest.approx(0.147901994577)
 
@@ -1214,7 +1224,12 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
 
 
 class TestCylinderStrouhalExtractor:
-    def test_extract_cylinder_strouhal_records_canonical_band_shortcut(self):
+    def test_extract_cylinder_strouhal_no_hardcode_in_canonical_band(self):
+        """DEC-V61-041: the old code hardcoded strouhal_number=0.165 whenever
+        Re∈[50,200] (canonical shedding band), bypassing the actual flow
+        data. That was PASS-washing. New semantics: without case_dir (no
+        forceCoeffs FO), no strouhal_number is emitted regardless of Re.
+        DEC-V61-036 G1 then picks up MISSING_TARGET_QUANTITY."""
         task = TaskSpec(
             name="cylinder",
             geometry_type=GeometryType.BODY_IN_CHANNEL,
@@ -1232,8 +1247,8 @@ class TestCylinderStrouhalExtractor:
             {},
         )
 
-        assert result["strouhal_number"] == pytest.approx(0.165)
-        assert result["strouhal_canonical_band_shortcut_fired"] is True
+        assert "strouhal_number" not in result
+        assert "strouhal_canonical_band_shortcut_fired" not in result
 
     def test_extract_cylinder_strouhal_no_shortcut_flag_outside_band(self):
         task = TaskSpec(
@@ -1253,6 +1268,7 @@ class TestCylinderStrouhalExtractor:
             {},
         )
 
+        assert "strouhal_number" not in result
         assert "strouhal_canonical_band_shortcut_fired" not in result
 
 

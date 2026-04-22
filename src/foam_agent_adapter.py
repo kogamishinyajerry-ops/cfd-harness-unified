@@ -29,7 +29,16 @@ class MockExecutor:
         },
         "EXTERNAL": {
             "residuals": {"p": 1e-5, "U": 1e-5},
-            "key_quantities": {"strouhal_number": 0.165, "cd_mean": 1.36},
+            # DEC-V61-041: mock preset deliberately stamps a gold-
+            # matching value because it IS a mock (real adapter now
+            # produces this via forceCoeffs FFT). `mock_preset_marker`
+            # lets downstream distinguish mock from real.
+            "key_quantities": {
+                "strouhal_number": 0.165,
+                "cd_mean": 1.36,
+                "cl_rms": 0.048,
+                "mock_preset_marker": True,
+            },
         },
         "NATURAL_CONVECTION": {
             "residuals": {"p": 1e-6, "T": 1e-7},
@@ -4259,6 +4268,13 @@ fields          (T);
         D = 0.1  # cylinder diameter
         U_bulk = 1.0  # m/s
         nu_val = U_bulk * D / Re  # kinematic viscosity
+        # DEC-V61-041: plumb D, U_ref so the FFT emitter doesn't have to
+        # rediscover them. The forceCoeffs FO references lRef/magUInf
+        # that must stay in sync with these.
+        if task_spec.boundary_conditions is None:
+            task_spec.boundary_conditions = {}
+        task_spec.boundary_conditions["cylinder_D"] = D
+        task_spec.boundary_conditions["U_ref"] = U_bulk
 
         # Channel dimensions
         W = 2.0 * D  # half-width
@@ -4603,10 +4619,22 @@ application     pimpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-endTime         1.0;
-deltaT          0.002;
+// DEC-V61-041: endTime extended to 200 convective units (D=0.1, U=1 →
+// t_ref=D/U=0.1s, so 200s = 2000 shedding cycles per D). At St=0.164
+// that's >30 resolved shedding periods post-transient-trim, giving
+// frequency resolution Δf ≈ 1/150s ≈ 0.0067 Hz → ΔSt ≈ 0.00067
+// (comfortably inside the 5% tolerance of gold 0.164).
+endTime         200.0;
+// DEC-V61-041: adjustable timestep keeps Co≤0.5 so Nyquist is safe at
+// any achievable shedding frequency; deltaT starting value is for the
+// ramp-up. maxDeltaT ensures ≥100 samples per shedding period even
+// after CFL relaxes on a well-resolved wake.
+deltaT          0.001;
+adjustTimeStep  yes;
+maxCo           0.5;
+maxDeltaT       0.01;
 writeControl    runTime;
-writeInterval   0.5;
+writeInterval   10.0;
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  6;
@@ -4614,6 +4642,35 @@ writeCompression off;
 timeFormat      general;
 timePrecision   6;
 runTimeModifiable true;
+
+// DEC-V61-041: forceCoeffs FO — writes Cl(t), Cd(t) time histories to
+// postProcessing/forceCoeffs1/0/coefficient.dat. Parsed by
+// src.cylinder_strouhal_fft to extract St via FFT on Cl. Patches
+// (cylinder) matches the createBaffles output patch name verified at
+// DEC-V61-041 research time (createBafflesDict baffle patches owner
+// + neighbour both named 'cylinder'). lRef=D=0.1, Aref=D*span=0.01*0.1
+// for the 2D thin-span mesh, magUInf=1.0 matches the inlet U_bulk.
+functions
+{{
+    forceCoeffs1
+    {{
+        type            forceCoeffs;
+        libs            ("libforces.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        patches         (cylinder);
+        rho             rhoInf;
+        rhoInf          1.0;
+        CofR            (0 0 0);
+        liftDir         (0 1 0);
+        dragDir         (1 0 0);
+        pitchAxis       (0 0 1);
+        magUInf         1.0;
+        lRef            0.1;
+        Aref            0.01;
+        log             false;
+    }}
+}}
 
 // ************************************************************************* //
 """,
@@ -7432,11 +7489,16 @@ mergePatchPairs
         # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL -> strouhal_number
         elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.EXTERNAL:
             p_path = latest_dir / "p"
+            p_vals: List[float] = []
             if p_path.exists():
                 p_vals = self._read_openfoam_scalar_field(p_path)
-                key_quantities = self._extract_cylinder_strouhal(
-                    cxs, cys, p_vals, task_spec, key_quantities
-                )
+            # DEC-V61-041: pass case_dir so the extractor can read the
+            # forceCoeffs FO output (postProcessing/forceCoeffs1/) for
+            # the real FFT-based Strouhal measurement.
+            key_quantities = self._extract_cylinder_strouhal(
+                cxs, cys, p_vals, task_spec, key_quantities,
+                case_dir=case_dir,
+            )
 
         # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
         # P6-TD-002 guard: exclude duct_flow (also SIMPLE_GRID + Re>=2300).
@@ -8179,66 +8241,77 @@ mergePatchPairs
         p_vals: List[float],
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
+        case_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
-        """Circular Cylinder Wake: 从压力场估计 Strouhal 数。
+        """Circular Cylinder Wake: Strouhal number via forceCoeffs FFT.
 
-        Gold Standard: strouhal_number ≈ 0.165 (Re=100, Williamson 1996)
-        方法: 找到cylinder近场（cx≈0, cy≈0）压力，计算 RMS 脉动，
-        从特征频率 f 估算 St = f*D/U。
-        对于稳态/RANS 结果（无时间序列），用 RMS 压力作为替代指标。
+        DEC-V61-041 retired the previous hardcoded `canonical_st = 0.165
+        if 50 <= Re <= 200` path — a PASS-washing landmine that stamped
+        the literature value regardless of solver convergence. This
+        extractor now reads the forceCoeffs FO's coefficient.dat time
+        history (Cl(t), Cd(t)), FFTs Cl to find the dominant shedding
+        frequency, and reports St = f·D/U. Secondary observables
+        cd_mean, cl_rms emit from the same trimmed time-series.
+
+        Fail-closed: when the FO output is absent (MOCK mode, pre-DEC
+        runs, case not regenerated) → returns without emitting
+        strouhal_number so DEC-036 G1 MISSING_TARGET_QUANTITY fires at
+        the comparator. When the FO output is present but corrupt →
+        raises the error via `strouhal_emitter_error` so the failure
+        is loud, not silent.
+
+        The legacy pressure-RMS diagnostics (p_rms_near_cylinder,
+        pressure_coefficient_rms_near_cylinder) are retained as
+        DIAGNOSTICS only — they are NOT used to fabricate strouhal_number
+        like the old code did (that fabrication was the core of the
+        PASS-washing bug). A cylinder run with no forceCoeffs output
+        is now honestly tagged as MISSING, not 0.165.
         """
+        bc = task_spec.boundary_conditions or {}
+        D = float(bc.get("cylinder_D", 0.1))
+        U_ref = float(bc.get("U_ref", 1.0))
+
+        # Primary path: forceCoeffs FFT.
+        if case_dir is not None:
+            try:
+                from src.cylinder_strouhal_fft import (
+                    emit_strouhal,
+                    CylinderStrouhalError,
+                )
+                emitted = emit_strouhal(case_dir, D=D, U_ref=U_ref)
+            except CylinderStrouhalError as exc:
+                key_quantities["strouhal_emitter_error"] = str(exc)
+                # Corruption must not leave a stale strouhal value from
+                # a different path.
+                key_quantities.pop("strouhal_number", None)
+                return key_quantities
+            if emitted is not None:
+                key_quantities.update(emitted)
+                return key_quantities
+
+        # No forceCoeffs output and no case_dir (MOCK executor, pre-DEC
+        # fixture). Retain the legacy pressure-RMS diagnostic for
+        # debugging but do NOT fabricate strouhal_number from it.
         if not cxs or not p_vals:
             return key_quantities
-
-        Re = float(task_spec.Re or 100.0)
-        D = 0.1  # cylinder diameter used in _generate_body_in_channel
-        U_ref = 1.0  # canonical inlet velocity for this case
         rho = 1.0
-        q_ref = 0.5 * rho * U_ref**2
-        canonical_st = 0.165 if 50.0 <= Re <= 200.0 else None
-
-        if canonical_st is not None:
-            key_quantities["strouhal_number"] = canonical_st
-            key_quantities["strouhal_canonical_band_shortcut_fired"] = True
-
-        # 找 cylinder 附近区域（cx≈0, cy≈0）
-        cx_c = 0.0
-        cy_c = 0.0
-
-        # 找 cylinder 表面附近（距中心 0.5D）压力
+        q_ref = 0.5 * rho * U_ref ** 2
         p_near = []
         for i in range(min(len(cxs), len(cys), len(p_vals))):
-            dist = ((cxs[i] - cx_c)**2 + (cys[i] - cy_c)**2)**0.5
+            dist = ((cxs[i]) ** 2 + (cys[i]) ** 2) ** 0.5
             if 0.4 * D < dist < 0.6 * D:
                 p_near.append(p_vals[i])
-
         if not p_near:
             return key_quantities
-
         p_mean = sum(p_near) / len(p_near)
-        p_rms = (sum((p - p_mean)**2 for p in p_near) / len(p_near))**0.5
-
-        # Convert to fluctuating Cp so solver-dependent pressure offsets do not
-        # dominate the fallback logic.
-        if q_ref > 0:
-            cp_fluctuations = [(p - p_mean) / q_ref for p in p_near]
-            cp_rms = (sum(cp * cp for cp in cp_fluctuations) / len(cp_fluctuations))**0.5
-        else:
-            cp_rms = float("inf")
-
-        cp_is_reasonable = (
-            math.isfinite(p_rms)
-            and math.isfinite(cp_rms)
-            and 0.0 <= cp_rms <= 10.0
+        p_rms = (sum((p - p_mean) ** 2 for p in p_near) / len(p_near)) ** 0.5
+        cp_rms = (
+            (sum((p - p_mean) ** 2 for p in p_near) / len(p_near)) ** 0.5
+            / q_ref if q_ref > 0 else float("inf")
         )
-
-        if cp_is_reasonable:
+        if math.isfinite(p_rms) and math.isfinite(cp_rms) and 0.0 <= cp_rms <= 10.0:
             key_quantities["p_rms_near_cylinder"] = p_rms
             key_quantities["pressure_coefficient_rms_near_cylinder"] = cp_rms
-
-        if canonical_st is None and cp_is_reasonable:
-            key_quantities["strouhal_number"] = min(max(0.0, 0.165 * cp_rms), 0.3)
-
         return key_quantities
 
     # ------------------------------------------------------------------
