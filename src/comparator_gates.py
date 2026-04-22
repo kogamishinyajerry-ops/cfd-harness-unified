@@ -192,7 +192,7 @@ def parse_solver_log(log_path: Path) -> LogStats:
 # ---------------------------------------------------------------------------
 
 def read_final_velocity_max(vtk_dir: Path) -> Optional[float]:
-    """Return the max |U| across all cells in the latest-time VTK.
+    """Return the max |U| across all cells in the latest internal-field VTK.
 
     Uses pyvista when available. Returns None when VTK unavailable,
     unreadable, or pyvista is not installed — caller treats None as
@@ -206,43 +206,47 @@ def read_final_velocity_max(vtk_dir: Path) -> Optional[float]:
     except ImportError:
         return None
 
-    # Find the latest-time VTK file. OpenFOAM foamToVTK lays files as
-    # {case}_{timestep}.vtk or allPatches/{case}_{timestep}.vtk. We scan
-    # the whole tree under vtk_dir.
-    candidates = sorted(vtk_dir.rglob("*.vtk"))
-    if not candidates:
+    latest_internal: list[tuple[int, str, Path]] = []
+    for vtk_path in vtk_dir.rglob("*.vtk"):
+        if "allPatches" in vtk_path.parts:
+            continue
+        match = re.search(r"_(\d+)\.vtk$", vtk_path.name)
+        if match is None:
+            continue
+        latest_internal.append((int(match.group(1)), str(vtk_path), vtk_path))
+
+    if not latest_internal:
         return None
 
-    u_max_overall: Optional[float] = None
-    for vtk_path in candidates:
-        try:
-            mesh = pv.read(str(vtk_path))
-        except Exception:
-            continue
-        # Look for a vector field named U or velocity.
-        point_fields = set(mesh.point_data.keys()) if hasattr(mesh, "point_data") else set()
-        cell_fields = set(mesh.cell_data.keys()) if hasattr(mesh, "cell_data") else set()
-        U_array = None
-        for field_name in ("U", "velocity", "u"):
-            if field_name in point_fields:
-                U_array = np.asarray(mesh.point_data[field_name])
-                break
-            if field_name in cell_fields:
-                U_array = np.asarray(mesh.cell_data[field_name])
-                break
-        if U_array is None or U_array.size == 0:
-            continue
-        # U is typically (N, 3); compute per-cell magnitude.
-        if U_array.ndim == 2 and U_array.shape[1] >= 3:
-            mags = np.linalg.norm(U_array[:, :3], axis=1)
-        else:
-            mags = np.abs(U_array.ravel())
-        if mags.size == 0:
-            continue
-        candidate_max = float(np.nanmax(mags))
-        if u_max_overall is None or candidate_max > u_max_overall:
-            u_max_overall = candidate_max
-    return u_max_overall
+    latest_internal.sort(key=lambda item: (item[0], item[1]))
+    vtk_path = latest_internal[-1][2]
+
+    try:
+        mesh = pv.read(str(vtk_path))
+    except Exception:
+        return None
+
+    # Look for a vector field named U or velocity.
+    point_fields = set(mesh.point_data.keys()) if hasattr(mesh, "point_data") else set()
+    cell_fields = set(mesh.cell_data.keys()) if hasattr(mesh, "cell_data") else set()
+    U_array = None
+    for field_name in ("U", "velocity", "u"):
+        if field_name in point_fields:
+            U_array = np.asarray(mesh.point_data[field_name])
+            break
+        if field_name in cell_fields:
+            U_array = np.asarray(mesh.cell_data[field_name])
+            break
+    if U_array is None or U_array.size == 0:
+        return None
+    # U is typically (N, 3); compute per-cell magnitude.
+    if U_array.ndim == 2 and U_array.shape[1] >= 3:
+        mags = np.linalg.norm(U_array[:, :3], axis=1)
+    else:
+        mags = np.abs(U_array.ravel())
+    if mags.size == 0:
+        return None
+    return float(np.nanmax(mags))
 
 
 # ---------------------------------------------------------------------------
