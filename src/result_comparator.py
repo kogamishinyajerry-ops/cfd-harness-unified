@@ -217,15 +217,23 @@ class ResultComparator:
         否则退化为 index-based positional matching。
         """
         deviations = []
-        ref_scalars = [
-            r.get("u") if r.get("u") is not None
-            else r.get("value") if r.get("value") is not None
-            else r.get("Nu") if r.get("Nu") is not None
-            else r.get("Cp") if r.get("Cp") is not None
-            else r.get("Cf") if r.get("Cf") is not None
-            else r.get("f")
-            for r in reference_values
-        ]
+        # DEC-V61-036c G2: extended ref-scalar key lookup to close the
+        # last schema-level PASS-washing path. plane_channel_flow gold
+        # has `{y_plus: ..., u_plus: ...}` tuples — the prior key set
+        # {u, value, Nu, Cp, Cf, f} all returned None for every tuple,
+        # so comparator silently produced zero deviations and PASSed.
+        # Added u_plus (DNS profile) + other known gold-dict scalar keys
+        # per Codex DEC-036 round-1 B2 finding.
+        _REF_SCALAR_KEYS = ("u", "u_plus", "value", "Nu", "Cp", "Cf", "f", "St")
+
+        def _pick_ref_scalar(r: Dict[str, Any]) -> Optional[float]:
+            for k in _REF_SCALAR_KEYS:
+                v = r.get(k)
+                if v is not None:
+                    return v
+            return None
+
+        ref_scalars = [_pick_ref_scalar(r) for r in reference_values]
         ref_axis = reference_coords or [None for _ in reference_values]
 
         # 坐标感知插值比较：只有当 actual_coords 可用且 reference 有同轴坐标时才启用
@@ -296,6 +304,14 @@ class ResultComparator:
         """
         axis_candidates = [
             (f"{quantity}_y", "y"),
+            # DEC-V61-036c G2: plane_channel u+/y+ DNS profile. Gold has
+            # `y_plus` as the reference axis; the adapter emits
+            # `u_mean_profile_y_plus` (or its alias `y_plus`) as the
+            # actual axis. Without this candidate, axis resolution fell
+            # through to positional matching and the comparator silently
+            # did not honestly compare u+ against y+.
+            (f"{quantity}_y_plus", "y_plus"),
+            ("y_plus", "y_plus"),
             (f"{quantity}_x", "x"),
             (f"{quantity}_x", "x_over_c"),
             (f"{quantity}_x", "x_D"),

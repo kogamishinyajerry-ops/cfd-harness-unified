@@ -151,14 +151,19 @@ def _extract_primary_measurement(
                         float(first),
                         "key_quantities_profile_sample",
                     )
-                if isinstance(first, dict) and "value" in first and isinstance(
-                    first["value"], (int, float)
-                ):
-                    return (
-                        f"{expected_quantity}[0]",
-                        float(first["value"]),
-                        "key_quantities_profile_sample_dict",
-                    )
+                # DEC-V61-036c G2: support dict-profile shapes beyond just
+                # `value` key — NACA sampleDict emits {x_over_c, Cp},
+                # plane_channel DNS emits {y_plus, u_plus}, etc.
+                _PROFILE_SCALAR_KEYS = ("value", "Cp", "Cf", "u", "u_plus", "Nu", "f")
+                if isinstance(first, dict):
+                    for scalar_key in _PROFILE_SCALAR_KEYS:
+                        val = first.get(scalar_key)
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            return (
+                                f"{expected_quantity}[0]",
+                                float(val),
+                                f"key_quantities_profile_sample_dict:{scalar_key}",
+                            )
         return expected_quantity, None, "no_numeric_quantity"
 
     # Legacy path (no expected_quantity): preserved for backward compat.

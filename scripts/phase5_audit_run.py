@@ -190,8 +190,22 @@ def _primary_scalar(
                         float(first),
                         "key_quantities_profile_sample",
                     )
-                # Profile of non-scalar entries (e.g., list of dicts with
-                # value key). Pick the first dict's value if present.
+                # Profile of non-scalar entries — list[dict]. Look for a
+                # value key under several conventional names, per
+                # DEC-V61-036c G2 Codex round-2 nit: NACA sampleDict emits
+                # dict{x_over_c, Cp}, plane_channel DNS profile emits
+                # dict{y_plus, u_plus}, etc.
+                _PROFILE_SCALAR_KEYS = ("value", "Cp", "Cf", "u", "u_plus", "Nu", "f")
+                if isinstance(first, dict):
+                    for scalar_key in _PROFILE_SCALAR_KEYS:
+                        val = first.get(scalar_key)
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            return (
+                                f"{expected_quantity}[0]",
+                                float(val),
+                                f"key_quantities_profile_sample_dict:{scalar_key}",
+                            )
+                # Fallback for legacy shape (kept for backward compat).
                 if isinstance(first, dict) and "value" in first and isinstance(
                     first["value"], (int, float)
                 ):
