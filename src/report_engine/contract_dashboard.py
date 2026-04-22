@@ -55,28 +55,38 @@ class DashboardCaseState:
 
 
 CANONICAL_CASE_SPECS: Tuple[DashboardCaseSpec, ...] = (
+    # DEC-V61-046 round-1 fix (R3-M1): gold_file retargeted from legacy
+    # alias (lid_driven_cavity_benchmark.yaml) to canonical LDC gold
+    # (lid_driven_cavity.yaml) so dashboard and live /api/cases share the
+    # same gold source. report_case_id kept legacy because the on-disk
+    # run fixture lives at reports/lid_driven_cavity_benchmark/auto_verify_report.yaml;
+    # the gold / run split is deliberate but now from the SAME canonical
+    # gold YAML, not a parallel alias.
     DashboardCaseSpec(
         whitelist_id="lid_driven_cavity",
         report_case_id="lid_driven_cavity_benchmark",
-        gold_file="lid_driven_cavity_benchmark.yaml",
+        gold_file="lid_driven_cavity.yaml",
         title="方腔顶盖驱动流",
-        subtitle="Lid-driven cavity · clean textbook baseline",
-        focus="中心线 benchmark 与主涡核位置都已稳定，适合当作 physics-backed anchor。",
-        next_step="继续作为 demo baseline，无需治理动作。",
+        subtitle="Lid-driven cavity · u_centerline satisfied, v/vortex preconditions flagged",
+        focus="u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。",
+        next_step="保持 SATISFIED_FOR_U_CENTERLINE_ONLY 语义；等 Phase 5c 独立 audit 再解锁 v/vortex 观测量。",
     ),
     DashboardCaseSpec(
         whitelist_id="backward_facing_step",
         report_case_id="backward_facing_step_steady",
-        gold_file="backward_facing_step_steady.yaml",
+        gold_file="backward_facing_step.yaml",
         title="后台阶分离再附着",
-        subtitle="Backward-facing step · separation / reattachment anchor",
-        focus="再附着长度与速度剖面已对齐，是另一条可信的内部流锚点。",
-        next_step="维持为 demo-ready case；后续只在保留场更丰富时补图，不动 physics contract。",
+        subtitle="Backward-facing step · RANS k-ε vs DNS plateau (partial)",
+        focus="Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。",
+        next_step="保持 PARTIALLY_COMPATIBLE 叙事；任何 PASS 只属于 RANS 语义，不是 DNS PASS。",
     ),
+    # cylinder: gold_file points at canonical circular_cylinder_wake.yaml
+    # per R3-M1 parity invariant; report_case_id stays legacy "cylinder_crossflow"
+    # because the on-disk run fixture lives at reports/cylinder_crossflow/.
     DashboardCaseSpec(
         whitelist_id="circular_cylinder_wake",
         report_case_id="cylinder_crossflow",
-        gold_file="cylinder_crossflow.yaml",
+        gold_file="circular_cylinder_wake.yaml",
         title="圆柱绕流卡门涡街",
         subtitle="Cylinder crossflow · PASS with runtime shortcut caveat",
         focus="Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。",
@@ -112,20 +122,20 @@ CANONICAL_CASE_SPECS: Tuple[DashboardCaseSpec, ...] = (
     DashboardCaseSpec(
         whitelist_id="plane_channel_flow",
         report_case_id="fully_developed_plane_channel_flow",
-        gold_file="fully_developed_plane_channel_flow.yaml",
+        gold_file="plane_channel_flow.yaml",
         title="平面通道流 DNS",
-        subtitle="Plane channel flow · comparator / solver mismatch",
-        focus="当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。",
-        next_step="继续保持 structural blocker 语义，不把 PENDING_RE_RUN 伪装成恢复完成。",
+        subtitle="Plane channel flow · laminar solver vs turbulent DNS (disguised)",
+        focus="canonical gold 已明确这是 solver-choice incompatibility：laminar icoFoam 在 Re_bulk=5600 下不可能复现 Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile。ATTEST_PASS 是 comparator-path artifact，物理上应读为 FAIL。",
+        next_step="保持 INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE，不要把 ATTEST_PASS 伪装成物理通过；Phase 9 solver routing 负责真修（pimpleFoam+LES 或 demote 到层流 Poiseuille）。",
     ),
     DashboardCaseSpec(
         whitelist_id="impinging_jet",
         report_case_id="axisymmetric_impinging_jet",
-        gold_file="axisymmetric_impinging_jet.yaml",
+        gold_file="impinging_jet.yaml",
         title="轴对称冲击射流",
-        subtitle="Impinging jet · literature-observable mismatch",
-        focus="报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。",
-        next_step="只有在 observable / literature 重新对齐后，才能恢复科学上的可比性。",
+        subtitle="Impinging jet · 2D-slice + A4 iteration cap (disguised)",
+        focus="canonical gold 暴露两条复合 hazard：(1) adapter axis patch 是 `empty` 不是 `wedge`，真实产出 2D 平面切片而非 axisymmetric；(2) A4 p_rgh iteration-cap ATTEST_FAIL — 当前 solver-config 未收敛（症状；根因仍需 solver-config audit）。历史 fixture 把 Cf=0.0042 当 Nu=25 报告，属纯维度错位。",
+        next_step="维持 PASS-vacuous 判定；先做 solver-config audit（under-relaxation / coupling / axis wedge），再谈物理可比性。",
     ),
     DashboardCaseSpec(
         whitelist_id="naca0012_airfoil",

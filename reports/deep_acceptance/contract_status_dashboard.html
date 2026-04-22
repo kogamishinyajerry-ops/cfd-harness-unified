@@ -261,7 +261,7 @@ a:hover { text-decoration: underline; }
         </article>
         <article class="summary-card">
           <div class="label">Clean Demo-ready</div>
-          <div class="value">2</div>
+          <div class="value">0</div>
           <div class="note">既是 PASS，又是 COMPATIBLE，适合对外演示时充当 physics-backed anchor。</div>
         </article>
         <article class="summary-card">
@@ -283,15 +283,15 @@ a:hover { text-decoration: underline; }
       <div class="version-grid">
         <div class="version-card">
           <div class="label">Generated</div>
-          <div class="value">2026-04-22 22:49:38</div>
+          <div class="value">2026-04-22 23:51:39</div>
         </div>
         <div class="version-card">
           <div class="label">Head SHA</div>
-          <div class="value">47bc235</div>
+          <div class="value">5c90ea1</div>
         </div>
         <div class="version-card">
           <div class="label">Canonical / Snapshot</div>
-          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_224938.html</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_235139.html</div>
         </div>
         <div class="version-card">
           <div class="label">Manifest / Linked Surfaces</div>
@@ -307,10 +307,18 @@ a:hover { text-decoration: underline; }
       <div class="distribution-grid">
         
         <article class="distribution-card">
-          <div class="label">COMPATIBLE</div>
-          <div class="value">3</div>
-          <div class="note">所有关键 precondition 成立，PASS 可以被当作 physics-valid 结果读。</div>
-          <div class="pill-row"><span class="status-pill ok">Compatible</span></div>
+          <div class="label">SATISFIED</div>
+          <div class="value">4</div>
+          <div class="note">Physics contract 完整满足：几何、流态、数值、比较链全部 evidence-backed。PASS 是真 PASS。</div>
+          <div class="pill-row"><span class="status-pill fail">Satisfied</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">PARTIALLY_COMPATIBLE</div>
+          <div class="value">2</div>
+          <div class="note">偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。</div>
+          <div class="pill-row"><span class="status-pill warn">Partially compatible</span></div>
         </article>
         
 
@@ -323,34 +331,18 @@ a:hover { text-decoration: underline; }
         
 
         <article class="distribution-card">
-          <div class="label">SATISFIED</div>
-          <div class="value">3</div>
-          <div class="note">Physics contract 完整满足：几何、流态、数值、比较链全部 evidence-backed。PASS 是真 PASS。</div>
-          <div class="pill-row"><span class="status-pill fail">Satisfied</span></div>
-        </article>
-        
-
-        <article class="distribution-card">
-          <div class="label">INCOMPATIBLE</div>
-          <div class="value">1</div>
-          <div class="note">几何、solver 或 comparator 前提未满足，继续调参没有意义。</div>
-          <div class="pill-row"><span class="status-pill warn">Incompatible</span></div>
-        </article>
-        
-
-        <article class="distribution-card">
           <div class="label">INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE</div>
-          <div class="value">1</div>
+          <div class="value">2</div>
           <div class="note">最危险的类型：表面 PASS，但 observable 和 literature 根本不是一回事。</div>
           <div class="pill-row"><span class="status-pill warn">Observable mismatch</span></div>
         </article>
         
 
         <article class="distribution-card">
-          <div class="label">PARTIALLY_COMPATIBLE</div>
+          <div class="label">COMPATIBLE</div>
           <div class="value">1</div>
-          <div class="note">偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。</div>
-          <div class="pill-row"><span class="status-pill warn">Partially compatible</span></div>
+          <div class="note">所有关键 precondition 成立，PASS 可以被当作 physics-valid 结果读。</div>
+          <div class="pill-row"><span class="status-pill ok">Compatible</span></div>
         </article>
         
       </div>
@@ -385,7 +377,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane A · Physics-backed Demo</div>
           <div class="lane-note">这些 case 可以作为对外 demo 或验收 anchor，但依旧应该引用 benchmark 与 source path。</div>
           <ul class="lane-list">
-            <li><strong>方腔顶盖驱动流</strong> · 中心线 benchmark 与主涡核位置都已稳定，适合当作 physics-backed anchor。</li><li><strong>后台阶分离再附着</strong> · 再附着长度与速度剖面已对齐，是另一条可信的内部流锚点。</li>
+            
           </ul>
         </article>
         
@@ -394,7 +386,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane B · 可展示但必须带 caveat</div>
           <div class="lane-note">这些 case 不是不能展示，而是展示时必须把 runtime hazard 或已知偏差一起抬到台面上。</div>
           <ul class="lane-list">
-            <li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
+            <li><strong>后台阶分离再附着</strong> · Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。</li><li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
           </ul>
         </article>
         
@@ -403,7 +395,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane C · 治理 / 结构阻塞</div>
           <div class="lane-note">这些 case 目前的主要问题不是“再调一点参数”，而是 physics contract / governance 语义还没闭环。</div>
           <ul class="lane-list">
-            <li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>全发展湍流方管流</strong> · Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · 当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</li><li><strong>轴对称冲击射流</strong> · 报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</li>
+            <li><strong>方腔顶盖驱动流</strong> · u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。</li><li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>全发展湍流方管流</strong> · Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · canonical gold 已明确这是 solver-choice incompatibility：laminar icoFoam 在 Re_bulk=5600 下不可能复现 Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile。ATTEST_PASS 是 comparator-path artifact，物理上应读为 FAIL。</li><li><strong>轴对称冲击射流</strong> · canonical gold 暴露两条复合 hazard：(1) adapter axis patch 是 `empty` 不是 `wedge`，真实产出 2D 平面切片而非 axisymmetric；(2) A4 p_rgh iteration-cap ATTEST_FAIL — 当前 solver-config 未收敛（症状；根因仍需 solver-config audit）。历史 fixture 把 Cf=0.0042 当 Nu=25 报告，属纯维度错位。</li>
           </ul>
         </article>
         
@@ -428,18 +420,18 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>方腔顶盖驱动流</strong><br><span class="case-subtitle">lid_driven_cavity_benchmark</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill ok">COMPATIBLE</span><br>COMPATIBLE</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>SATISFIED_FOR_U_CENTERLINE_ONLY</td>
             <td>u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</td>
-            <td>继续作为 demo baseline，无需治理动作。</td>
+            <td>保持 SATISFIED_FOR_U_CENTERLINE_ONLY 语义；等 Phase 5c 独立 audit 再解锁 v/vortex 观测量。</td>
           </tr>
         
 
           <tr>
             <td><strong>后台阶分离再附着</strong><br><span class="case-subtitle">backward_facing_step_steady</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill ok">COMPATIBLE</span><br>COMPATIBLE</td>
+            <td><span class="status-pill warn">PARTIALLY_COMPATIBLE</span><br>PARTIALLY_COMPATIBLE</td>
             <td>Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</td>
-            <td>维持为 demo-ready case；后续只在保留场更丰富时补图，不动 physics contract。</td>
+            <td>保持 PARTIALLY_COMPATIBLE 叙事；任何 PASS 只属于 RANS 语义，不是 DNS PASS。</td>
           </tr>
         
 
@@ -482,9 +474,9 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>平面通道流 DNS</strong><br><span class="case-subtitle">fully_developed_plane_channel_flow</span></td>
             <td><span class="status-pill warn">PENDING_RE_RUN</span><br>PENDING_RE_RUN</td>
-            <td><span class="status-pill fail">INCOMPATIBLE</span><br>当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。</td>
+            <td><span class="status-pill fail">INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE</span><br>当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。</td>
             <td>PENDING_RE_RUN；laminar comparator patch 已落地，但 fresh Docker E2E 尚未补齐。</td>
-            <td>继续保持 structural blocker 语义，不把 PENDING_RE_RUN 伪装成恢复完成。</td>
+            <td>保持 INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE，不要把 ATTEST_PASS 伪装成物理通过；Phase 9 solver routing 负责真修（pimpleFoam+LES 或 demote 到层流 Poiseuille）。</td>
           </tr>
         
 
@@ -493,7 +485,7 @@ a:hover { text-decoration: underline; }
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
             <td><span class="status-pill fail">INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE</span><br>observable 命名与 literature 目标不一致，最容易造成“数值 PASS 但科学含义错位”的误读。</td>
             <td>当前 report 记录 PASS on 0.0042，但 literature target 实际是 Nu=25，不是同一个 observable。</td>
-            <td>只有在 observable / literature 重新对齐后，才能恢复科学上的可比性。</td>
+            <td>维持 PASS-vacuous 判定；先做 solver-config audit（under-relaxation / coupling / axis wedge），再谈物理可比性。</td>
           </tr>
         
 
@@ -528,22 +520,22 @@ a:hover { text-decoration: underline; }
             <div>
               <div class="label">Case</div>
               <h3>方腔顶盖驱动流</h3>
-              <div class="case-subtitle">Lid-driven cavity · clean textbook baseline</div>
+              <div class="case-subtitle">Lid-driven cavity · u_centerline satisfied, v/vortex preconditions flagged</div>
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
-              <span class="status-pill ok">Compatible</span>
+              <span class="status-pill ok">Satisfied</span>
             </div>
           </div>
-          <p>中心线 benchmark 与主涡核位置都已稳定，适合当作 physics-backed anchor。</p>
+          <p>u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。</p>
           <div class="case-callout"><strong>当前观测：</strong> u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</div>
-          <div class="case-callout"><strong>风险说明：</strong> COMPATIBLE</div>
-          <div class="case-callout"><strong>下一步：</strong> 继续作为 demo baseline，无需治理动作。</div>
+          <div class="case-callout"><strong>风险说明：</strong> SATISFIED_FOR_U_CENTERLINE_ONLY</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 SATISFIED_FOR_U_CENTERLINE_ONLY 语义；等 Phase 5c 独立 audit 再解锁 v/vortex 观测量。</div>
           <div class="pill-row">
-            <span class="pill">Physics-backed demo</span>
-            <span class="pill">Ghia et al. 1982, J. Comput. Phys.</span>
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Ghia, Ghia &amp; Shin 1982, J. Comput. Phys. 47, 387-411 — Table I Re=100 column, linearly interpolated to uniform 17-point y grid</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/lid_driven_cavity_benchmark.yaml">gold standard</a> · <a href="../lid_driven_cavity_benchmark/auto_verify_report.yaml">runtime report</a> · <a href="../lid_driven_cavity_benchmark/report.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/lid_driven_cavity.yaml">gold standard</a> · <a href="../lid_driven_cavity_benchmark/auto_verify_report.yaml">runtime report</a> · <a href="../lid_driven_cavity_benchmark/report.md">deep evidence</a></p>
         </article>
         
 
@@ -552,22 +544,22 @@ a:hover { text-decoration: underline; }
             <div>
               <div class="label">Case</div>
               <h3>后台阶分离再附着</h3>
-              <div class="case-subtitle">Backward-facing step · separation / reattachment anchor</div>
+              <div class="case-subtitle">Backward-facing step · RANS k-ε vs DNS plateau (partial)</div>
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
-              <span class="status-pill ok">Compatible</span>
+              <span class="status-pill warn">Partially compatible</span>
             </div>
           </div>
-          <p>再附着长度与速度剖面已对齐，是另一条可信的内部流锚点。</p>
+          <p>Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。</p>
           <div class="case-callout"><strong>当前观测：</strong> Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</div>
-          <div class="case-callout"><strong>风险说明：</strong> COMPATIBLE</div>
-          <div class="case-callout"><strong>下一步：</strong> 维持为 demo-ready case；后续只在保留场更丰富时补图，不动 physics contract。</div>
+          <div class="case-callout"><strong>风险说明：</strong> PARTIALLY_COMPATIBLE</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 PARTIALLY_COMPATIBLE 叙事；任何 PASS 只属于 RANS 语义，不是 DNS PASS。</div>
           <div class="pill-row">
-            <span class="pill">Physics-backed demo</span>
-            <span class="pill">Driver &amp; Seegmiller 1985, AIAA J.</span>
+            <span class="pill">Caveat-required</span>
+            <span class="pill">Le, Moin &amp; Kim 1997, J. Fluid Mech. (DNS at Re_H=5100)</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/backward_facing_step_steady.yaml">gold standard</a> · <a href="../backward_facing_step_steady/auto_verify_report.yaml">runtime report</a> · <a href="../backward_facing_step_steady/report.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/backward_facing_step.yaml">gold standard</a> · <a href="../backward_facing_step_steady/auto_verify_report.yaml">runtime report</a> · <a href="../backward_facing_step_steady/report.md">deep evidence</a></p>
         </article>
         
 
@@ -591,7 +583,7 @@ a:hover { text-decoration: underline; }
             <span class="pill">Caveat-required</span>
             <span class="pill">Williamson 1996, Annu. Rev. Fluid Mech.</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/cylinder_crossflow.yaml">gold standard</a> · <a href="../cylinder_crossflow/auto_verify_report.yaml">runtime report</a> · <a href="../cylinder_crossflow/report.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/circular_cylinder_wake.yaml">gold standard</a> · <a href="../cylinder_crossflow/auto_verify_report.yaml">runtime report</a> · <a href="../cylinder_crossflow/report.md">deep evidence</a></p>
         </article>
         
 
@@ -672,22 +664,22 @@ a:hover { text-decoration: underline; }
             <div>
               <div class="label">Case</div>
               <h3>平面通道流 DNS</h3>
-              <div class="case-subtitle">Plane channel flow · comparator / solver mismatch</div>
+              <div class="case-subtitle">Plane channel flow · laminar solver vs turbulent DNS (disguised)</div>
             </div>
             <div class="pill-row">
               <span class="status-pill warn">PENDING_RE_RUN</span>
-              <span class="status-pill fail">Incompatible</span>
+              <span class="status-pill fail">Observable mismatch</span>
             </div>
           </div>
-          <p>当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</p>
+          <p>canonical gold 已明确这是 solver-choice incompatibility：laminar icoFoam 在 Re_bulk=5600 下不可能复现 Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile。ATTEST_PASS 是 comparator-path artifact，物理上应读为 FAIL。</p>
           <div class="case-callout"><strong>当前观测：</strong> PENDING_RE_RUN；laminar comparator patch 已落地，但 fresh Docker E2E 尚未补齐。</div>
           <div class="case-callout"><strong>风险说明：</strong> 当前是 comparator / solver 路线不闭环，不适合再用局部 patch 把它包装成可验收结果。</div>
-          <div class="case-callout"><strong>下一步：</strong> 继续保持 structural blocker 语义，不把 PENDING_RE_RUN 伪装成恢复完成。</div>
+          <div class="case-callout"><strong>下一步：</strong> 保持 INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE，不要把 ATTEST_PASS 伪装成物理通过；Phase 9 solver routing 负责真修（pimpleFoam+LES 或 demote 到层流 Poiseuille）。</div>
           <div class="pill-row">
             <span class="pill">Governance / structural blocker</span>
-            <span class="pill">Kim et al. 1987 / Moser et al. 1999 (DNS); Phase 7 Docker used icoFoam laminar</span>
+            <span class="pill">Kim et al. 1987 / Moser et al. 1999</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/fully_developed_plane_channel_flow.yaml">gold standard</a> · <a href="../fully_developed_plane_channel_flow/auto_verify_report.yaml">runtime report</a> · <a href="../fully_developed_plane_channel_flow/report.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/plane_channel_flow.yaml">gold standard</a> · <a href="../fully_developed_plane_channel_flow/auto_verify_report.yaml">runtime report</a> · <a href="../fully_developed_plane_channel_flow/report.md">deep evidence</a></p>
         </article>
         
 
@@ -696,22 +688,22 @@ a:hover { text-decoration: underline; }
             <div>
               <div class="label">Case</div>
               <h3>轴对称冲击射流</h3>
-              <div class="case-subtitle">Impinging jet · literature-observable mismatch</div>
+              <div class="case-subtitle">Impinging jet · 2D-slice + A4 iteration cap (disguised)</div>
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
               <span class="status-pill fail">Observable mismatch</span>
             </div>
           </div>
-          <p>报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</p>
+          <p>canonical gold 暴露两条复合 hazard：(1) adapter axis patch 是 `empty` 不是 `wedge`，真实产出 2D 平面切片而非 axisymmetric；(2) A4 p_rgh iteration-cap ATTEST_FAIL — 当前 solver-config 未收敛（症状；根因仍需 solver-config audit）。历史 fixture 把 Cf=0.0042 当 Nu=25 报告，属纯维度错位。</p>
           <div class="case-callout"><strong>当前观测：</strong> 当前 report 记录 PASS on 0.0042，但 literature target 实际是 Nu=25，不是同一个 observable。</div>
           <div class="case-callout"><strong>风险说明：</strong> observable 命名与 literature 目标不一致，最容易造成“数值 PASS 但科学含义错位”的误读。</div>
-          <div class="case-callout"><strong>下一步：</strong> 只有在 observable / literature 重新对齐后，才能恢复科学上的可比性。</div>
+          <div class="case-callout"><strong>下一步：</strong> 维持 PASS-vacuous 判定；先做 solver-config audit（under-relaxation / coupling / axis wedge），再谈物理可比性。</div>
           <div class="pill-row">
             <span class="pill">Governance / structural blocker</span>
-            <span class="pill">Computed: simpleFoam flat-plate extraction (cf_skin_friction); Literature: Cooper 1984 for impinging jet Nu correlation</span>
+            <span class="pill">Cooper 1984 / Behnad et al. 2013</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/axisymmetric_impinging_jet.yaml">gold standard</a> · <a href="../axisymmetric_impinging_jet/auto_verify_report.yaml">runtime report</a> · <a href="../axisymmetric_impinging_jet/report.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/impinging_jet.yaml">gold standard</a> · <a href="../axisymmetric_impinging_jet/auto_verify_report.yaml">runtime report</a> · <a href="../axisymmetric_impinging_jet/report.md">deep evidence</a></p>
         </article>
         
 
@@ -766,8 +758,8 @@ a:hover { text-decoration: underline; }
     </section>
 
     <div class="footer">
-      <span>Generated · 2026-04-22 22:49:38</span>
-      <span>Head · 47bc235</span>
+      <span>Generated · 2026-04-22 23:51:39</span>
+      <span>Head · 5c90ea1</span>
       <span>Source · knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml + reports/*/auto_verify_report.yaml</span>
       <span><a href="visual_acceptance_report.html">Open 5-case visual acceptance report</a></span>
       <span><a href="2026-04-18_contract_status_dashboard.md">Open historical markdown snapshot</a></span>
