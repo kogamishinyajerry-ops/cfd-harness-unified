@@ -195,17 +195,22 @@ export const LEARN_CASES: LearnCase[] = [
     canonical_ref: "Ladson et al. · NASA TM 1996",
     observable: "Cp distribution along chord",
     difficulty: "core",
+    // DEC-V61-047 round-2 N1: Authoritative setup per knowledge/whitelist.yaml
+    // + knowledge/gold_standards/naca0012_airfoil.yaml + src/foam_agent_adapter.py:
+    // Re=3e6 (NOT 6e6), α=0° (NOT ≈4°) — symmetric airfoil at zero incidence
+    // gives attached flow + zero lift. Earlier round-1 solver card mis-cited
+    // α≈4°/Re=6e6, which would teach the wrong canonical setup to a novice.
     physics_bullets_zh: [
-      `小攻角（~5°）下近似线性`,
-      `失速攻角（~15°）附近非线性剧增`,
-      `远场边界距离直接影响解`,
+      `0° 攻角下对称翼型——attached flow，零升力`,
+      `Cp 分布沿弦长是 canonical 压强场验证量`,
+      `远场边界距离直接影响解（< 15 倍弦长会产生伪 blockage）`,
     ],
-    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
-    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误。环流效应会让升力系数 Cl 被压低 10%+，而且网格无关性测试抓不到这个问题。`,
-    solver_setup_zh: `simpleFoam (稳态) + RAS kOmegaSST (航空默认湍流模型)。Re=6e6 基于弦长 c=1m 和 M∞ (assumed incompressible here)。small angle attack (α≈4°) 接近线性区。URF: U≈0.7, p≈0.3。收敛需要足够的 iterations (≥1000)，尤其是 Cl 积分值要稳定。`,
-    mesh_strategy_zh: `C-grid 或 O-grid 贴翼型表面，远场至少 15-20·c 距离（防止伪 blockage）。壁面第一层 cell 目标 y+≈1 让 kOmegaSST 低雷诺数修正正确工作；典型第一层厚度 10⁻⁵·c。约 5-10 万 cells 二维结构网格。Cp 采样是 near-surface band (不是 exact surface)，所以 y+<5 区间内 cells 的密度直接影响 Cp 曲线平滑度。`,
-    boundary_conditions_zh: `inlet (upstream + lateral far-field) fixedValue U=(U∞·cos α, U∞·sin α, 0)；outlet (downstream) 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0)，k/ω wall functions。远场边界要够远：<15·c 会产生虚假 blockage，Cl 系统偏低。`,
-    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。沿翼型表面从 x/c=0 (leading edge) 到 x/c=1 (trailing edge) 采样，分 upper/lower surface。extractor 用 patchAverage 在 airfoil patch 上做 sample，生成 (x/c, Cp) 列表，和 Ladson 风洞数据（NASA TM 1996）对齐比。Cp 对 mesh 的 near-wall 分辨率敏感，y+ 变化 2× 可能让曲线轻微偏。`,
+    why_validation_matters_zh: `Ladson / Thomas 的 NASA 风洞数据是公开基准之一，对称翼型 α=0° 是入门验证：attached flow、无分离、压强分布可由简单 RANS 稳态收敛。你的 CFD 要做更复杂的外流（带攻角、带分离、机翼、螺旋桨），必须先在 NACA 0012 零度这一关拿到可控误差——这是航空 CFD 验证流水线的"第一道门"。`,
+    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误——虚假 blockage 让整个压强场 shifted，网格无关性测试抓不到。另一个陷阱：本 case 的 Cp 提取是 near-surface band 平均（adapter 在壁面上方 ~2% 弦长厚度带里取 cell-center 均值），与文献的"exact surface"定义相比系统性衰减 30-50%，形状对、幅值小——这也是 gold 容差设为 20% 并用 PASS_WITH_DEVIATIONS 的原因。`,
+    solver_setup_zh: `simpleFoam (稳态 SIMPLE) + RAS kOmegaSST。Re=3e6 基于弦长 c=1m，α=0°（对称翼型，符合 physics_contract 的 precondition "flow attached and steady at α=0°"）。URF: p=0.3（GAMG 求解，relTol=0.05, tolerance=1e-6）; U/k/ω=0.5 each（见 knowledge/gold_standards/naca0012_airfoil.yaml:5-14）. 收敛到 p residual ≤ 1e-6 且 Cp 稳态。`,
+    mesh_strategy_zh: `blockMesh 直接围绕 NACA0012 OBJ 生成 x-z 平面（z 法向 80 cells，y 薄展向 ±0.001 + empty side patches，伪 2D）。远场至少 15-20·c 距离。kOmegaSST 在 OpenFOAM 2.x+ 能 blended 处理 y+<1 (低雷诺数修正) 和 y+>30 (wall function)；当前 mesh 的 surface_band=max(8·dz_min, 0.02·c) 让 Cp 提取在 y+<5 区间平滑。`,
+    boundary_conditions_zh: `上游 + 横向 inlet/freestream fixedValue U=(U_∞, 0, 0)（α=0°，无 sin α 分量）；下游 outlet 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0) + k/ω wall functions；展向 front/back 为 empty 模拟 2D。远场 < 15·c 会显著 shift 整个 Cp 分布；> 20·c 后增益递减。`,
+    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。src/foam_agent_adapter.py:7068 的 extractor 在翼型表面上方 surface_band=max(8·dz_min, 0.02·c) 厚度带里取 cell-center 做 patchAverage，然后按 x/c 分 upper/lower。精确文献 Cp 是 exact surface 点，adapter 是 near-surface cell average → 形状正确但幅值系统衰减 ~30-50%（physics_contract precondition #3 明确标 satisfied=false）。容差 20%、verdict PASS_WITH_DEVIATIONS 就是为此。`,
   },
   {
     id: "rayleigh_benard_convection",
