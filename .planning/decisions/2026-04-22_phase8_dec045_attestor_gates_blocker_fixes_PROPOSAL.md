@@ -1,16 +1,25 @@
 ---
 decision_id: DEC-V61-045
-status: IN_PROGRESS (Waves 1+2 landed 2026-04-22 per Kogami A2+b approval; Waves 3+4 deferred to Sprint 2)
+status: COMPLETE (all 4 Waves landed 2026-04-22 via Kogami autonomous escalation; §B verified CV-S003q-02@b1e4005)
 waves_landed:
   - wave_1_A: 61c7cd1 (convergence_attestor loader + A1 exit + CA-005/006/007)
   - wave_1_B: 9e6f30f (comparator_gates VTK reader fix)
   - wave_1_C: 49ba6e5 (21 new tests for Wave 1)
   - wave_2_D: 396cefe (HAZARD tier in _derive_contract_status + U_ref plumb)
   - wave_2_E: ad0bad2 (12 new tests for Wave 2)
-  - codex_verify: CV-S003q-01 VERIFIED @ ad0bad2 (233 passed + 1 skipped)
-waves_deferred:
-  - wave_3: TaskRunner reorder (attestor pre-comparator); deferred to Sprint 2
-  - wave_4: A6 outer-iter semantics + per-case promote_to_fail; deferred to Sprint 2
+  - codex_verify_mid: CV-S003q-01 VERIFIED @ ad0bad2 (233 passed + 1 skipped)
+  - wave_3_F: 5433e20 (TaskRunner attestor-first + verdict recompute)
+  - wave_3_G: 8d9a74a (10 new tests for Wave 3)
+  - wave_4_H: b1e4005 (A6 outer-iter semantics + promote_to_fail)
+  - codex_verify_final: CV-S003q-02 VERIFIED @ b1e4005 (303 passed + 1 skipped; impinging_jet A6 PASS; LDC ATTEST_PASS; all 8 blockers VERIFIED)
+blockers_closed:
+  - DEC-036b: B1 (Wave 3 F), B2 (Wave 2 D), B3 (Wave 1 B), S1/S2 (Waves 1 C + 2 D)
+  - DEC-038: CA-001 (Wave 2 D), CA-002 (Wave 3 F), CA-003 (Waves 1 A + 3 F), CA-004 (Wave 1 A), CA-005 full (Waves 1 A + 4 H), CA-006 (Wave 1 A), CA-007 (Wave 1 A), CA-008 (Waves 1 C + 3 G)
+tests_added: 43 (21 Wave 1 C + 12 Wave 2 E + 10 Wave 3 G + 10 Wave 4 H)
+final_test_count: 303 passed + 1 skipped (Python 3.12 via .venv)
+real_log_verdicts:
+  - impinging_jet A6: HAZARD (pre-Wave-4) → PASS (post-Wave-4, correct)
+  - LDC attestor: ATTEST_PASS (preserved regression guard)
 timestamp: 2026-04-22T19:20 local
 scope: |
   Phase 8 Sprint 1 follow-up — fix 8 Codex blockers across DEC-036b
