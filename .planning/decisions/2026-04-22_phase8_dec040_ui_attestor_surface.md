@@ -148,8 +148,25 @@ returned **CHANGES_REQUIRED** with 2 BLOCKERs + 3 FLAGs + 1 NIT:
   Fixed: per-verdict domain language ("solver attestor: clean
   convergence" etc.).
 
-Round 2 pending — expected APPROVED_WITH_COMMENTS given narrow scope
-of fixes and both BLOCKERs addressed at root cause.
+Round 2 (post-commit 34c3109) returned **CHANGES_REQUIRED** with 1 FLAG:
+
+- FLAG: `_make_attestation` + `AttestorPanel` both tolerated an impossible
+  payload `{overall: ATTEST_PASS, checks: []}`. The real attestor only
+  emits empty `checks` for `ATTEST_NOT_APPLICABLE`. The parser accepted
+  the corrupt payload, and the panel used `checks.length === 0` as a
+  "no evidence" heuristic, so the UI would render a contradictory
+  ATTEST PASS badge with "No solver log available" copy side-by-side.
+
+Fixed by:
+- Backend: `_make_attestation` now raises `ValueError` if
+  `ATTEST_NOT_APPLICABLE` has non-empty checks, or any other overall
+  has empty checks. Fail-closed at the parsing boundary.
+- Frontend: AttestorPanel now keys "no evidence" branch off
+  `overall === "ATTEST_NOT_APPLICABLE"` only, never on `checks.length`.
+- Test added: `test_dec040_parser_fails_closed_on_contradictory_payload`
+  covers all three malformed states (201/201 tests green, +1).
+
+Round 3 pending.
 
 ## Related
 

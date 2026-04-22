@@ -677,6 +677,23 @@ def _make_attestation(
                 summary=entry.get("summary", "") or "",
             )
         )
+    # Codex DEC-040 round-2 FLAG: checks:[] is only physically valid for
+    # ATTEST_NOT_APPLICABLE (the attestor bails early with no checks when
+    # there's no log). Any other overall with empty checks is a corrupt
+    # fixture — fail closed at the parsing boundary rather than letting
+    # the UI render a contradictory "ATTEST PASS + no solver log" badge.
+    if overall == "ATTEST_NOT_APPLICABLE":
+        if checks:
+            raise ValueError(
+                f"attestation.overall=ATTEST_NOT_APPLICABLE must have empty "
+                f"checks[], got {len(checks)} entries"
+            )
+    else:
+        if not checks:
+            raise ValueError(
+                f"attestation.overall={overall} requires non-empty checks[]; "
+                f"only ATTEST_NOT_APPLICABLE may have an empty checks array"
+            )
     return AttestorVerdict(overall=overall, checks=checks)
 
 

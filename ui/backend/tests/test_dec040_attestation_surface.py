@@ -48,6 +48,45 @@ def test_dec040_reference_run_has_null_attestation(client: TestClient) -> None:
     )
 
 
+def test_dec040_parser_fails_closed_on_contradictory_payload() -> None:
+    """Codex round-2 FLAG: the attestor only emits checks:[] for
+    ATTEST_NOT_APPLICABLE. Any other overall with empty checks — or
+    ATTEST_NOT_APPLICABLE with non-empty checks — is a corrupt fixture
+    and must fail closed at the parsing boundary so the UI can't render
+    a contradictory ATTEST_PASS badge + 'no solver log' message."""
+    from ui.backend.services.validation_report import _make_attestation
+
+    # ATTEST_PASS with empty checks: physically impossible → ValueError.
+    with pytest.raises(ValueError, match="requires non-empty checks"):
+        _make_attestation(
+            {"attestation": {"overall": "ATTEST_PASS", "checks": []}}
+        )
+    # ATTEST_NOT_APPLICABLE with checks: also impossible → ValueError.
+    with pytest.raises(ValueError, match="must have empty checks"):
+        _make_attestation(
+            {
+                "attestation": {
+                    "overall": "ATTEST_NOT_APPLICABLE",
+                    "checks": [
+                        {"check_id": "A1", "verdict": "PASS"},
+                    ],
+                }
+            }
+        )
+    # Malformed overall → ValueError.
+    with pytest.raises(ValueError, match="attestation.overall must be one of"):
+        _make_attestation(
+            {"attestation": {"overall": "TOTALLY_BOGUS", "checks": []}}
+        )
+    # Valid ATTEST_NOT_APPLICABLE with empty checks is accepted.
+    obj = _make_attestation(
+        {"attestation": {"overall": "ATTEST_NOT_APPLICABLE", "checks": []}}
+    )
+    assert obj is not None
+    assert obj.overall == "ATTEST_NOT_APPLICABLE"
+    assert obj.checks == []
+
+
 def test_dec040_schema_fields_present_in_openapi(client: TestClient) -> None:
     """attestation + AttestorVerdict + AttestorCheck must be documented in
     the OpenAPI schema so TypeScript clients can rely on them."""

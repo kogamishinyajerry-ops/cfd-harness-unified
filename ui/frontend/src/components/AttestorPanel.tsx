@@ -26,14 +26,13 @@ interface Props {
 }
 
 export function AttestorPanel({ attestation }: Props) {
-  // Treat "no fixture block" and "explicit ATTEST_NOT_APPLICABLE with no
-  // checks" as the same rendering case — both mean "no solver evidence".
-  // Per Codex DEC-040 round-1 FLAG, explicit NOT_APPLICABLE shouldn't render
-  // an empty panel body after the badge header.
+  // Two "no solver evidence" cases, keyed off `overall` only (not
+  // checks.length — Codex round-2 FLAG: an impossible payload like
+  // {overall: ATTEST_PASS, checks: []} should NOT masquerade as "no
+  // evidence". The backend _make_attestation parser now fails closed on
+  // that, but keep the UI honest too so any future drift stays visible).
   const noSolverEvidence =
-    !attestation ||
-    attestation.overall === "ATTEST_NOT_APPLICABLE" ||
-    attestation.checks.length === 0;
+    !attestation || attestation.overall === "ATTEST_NOT_APPLICABLE";
   if (noSolverEvidence) {
     return (
       <div className="card">
