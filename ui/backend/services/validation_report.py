@@ -553,16 +553,33 @@ def _derive_contract_status(
     if measurement is None:
         return ("UNKNOWN", None, None, lower, upper)
 
-    # DEC-V61-036 G1: hard-FAIL when the extractor could not resolve the
-    # gold's target quantity. No numeric comparison is possible — the prior
-    # "first numeric key_quantity" fallback was the root cause of PASS-washing
-    # (user 2026-04-22 review: BFS measured U_residual_magnitude against
-    # Xr/H gold, duct_flow measured hydraulic_diameter against friction_factor).
-    has_missing_target = any(
-        c.concern_type == "MISSING_TARGET_QUANTITY" for c in audit_concerns
+    # DEC-V61-036 G1 + DEC-V61-036b G3/G4/G5: hard-FAIL concern codes.
+    # When any of these concerns are present, the measurement cannot be
+    # trusted regardless of whether it lies inside the gold tolerance band.
+    #   G1  MISSING_TARGET_QUANTITY    — schema mismatch (extractor missed gold quantity)
+    #   G3  VELOCITY_OVERFLOW           — |U|_max > 100·U_ref
+    #   G4  TURBULENCE_NEGATIVE         — k/eps/omega < 0 at last iter or overflow
+    #   G5  CONTINUITY_DIVERGED         — sum_local > 1e-2 or |cum| > 1
+    _HARD_FAIL_CONCERNS = {
+        "MISSING_TARGET_QUANTITY",
+        "VELOCITY_OVERFLOW",
+        "TURBULENCE_NEGATIVE",
+        "CONTINUITY_DIVERGED",
+    }
+    has_hard_fail = any(
+        c.concern_type in _HARD_FAIL_CONCERNS for c in audit_concerns
     )
-    if measurement.value is None or has_missing_target:
-        return ("FAIL", None, None, lower, upper)
+    if measurement.value is None or has_hard_fail:
+        # Return None deviation/within when there is no trustable scalar; for
+        # G3/G4/G5 with a valid measurement.value we still return the
+        # computed deviation so the UI can surface it as supplementary info.
+        if measurement.value is None:
+            return ("FAIL", None, None, lower, upper)
+        dev_pct = 0.0
+        if gs_ref.ref_value != 0.0:
+            dev_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
+        within = abs(dev_pct) <= gs_ref.tolerance_pct * 100.0
+        return ("FAIL", dev_pct, within, lower, upper)
 
     deviation_pct = 0.0
     if gs_ref.ref_value != 0.0:

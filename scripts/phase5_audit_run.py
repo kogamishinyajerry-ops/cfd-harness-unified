@@ -41,6 +41,10 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
 from src.task_runner import TaskRunner  # noqa: E402
 from src.result_comparator import _lookup_with_alias  # noqa: E402
+from src.comparator_gates import (  # noqa: E402
+    check_all_gates,
+    violation_to_audit_concern_dict,
+)
 
 RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 RAW_DIR = REPO_ROOT / "reports" / "phase5_audit"
@@ -272,6 +276,8 @@ def _audit_fixture_doc(
     report,
     commit_sha: str,
     field_artifacts_ref: "dict | None" = None,
+    phase7a_timestamp: "str | None" = None,
+    u_ref: float = 1.0,
 ) -> dict:
     # DEC-V61-036 G1: load the gold's canonical quantity BEFORE extraction
     # so the driver can strict-match (and hard-fail on miss) instead of
@@ -337,6 +343,33 @@ def _audit_fixture_doc(
             },
         ],
     }
+
+    # DEC-V61-036b G3/G4/G5: run post-extraction physics gates against the
+    # captured field artifacts + solver log. Each violation is injected as
+    # an audit_concerns[] entry with a concern_type the verdict engine
+    # recognizes as a hard-FAIL trigger. Non-blocking on missing artifacts
+    # — gates skip gracefully when the log/VTK is unavailable.
+    if phase7a_timestamp is not None:
+        artifact_dir = FIELDS_DIR / case_id / phase7a_timestamp
+        solver_log: "Path | None" = None
+        if artifact_dir.is_dir():
+            # Solver log filename is "log.{solver_name}"; scan for any match.
+            log_candidates = sorted(artifact_dir.glob("log.*"))
+            if log_candidates:
+                solver_log = log_candidates[0]
+        vtk_dir = artifact_dir / "VTK" if artifact_dir.is_dir() else None
+        try:
+            gate_violations = check_all_gates(
+                log_path=solver_log,
+                vtk_dir=vtk_dir if vtk_dir and vtk_dir.is_dir() else None,
+                U_ref=u_ref,
+            )
+            for v in gate_violations:
+                doc["audit_concerns"].append(violation_to_audit_concern_dict(v))
+        except Exception as exc:  # noqa: BLE001 — gates must not crash the audit
+            print(
+                f"[audit] [WARN] gates failed on {case_id}: {exc!r}", flush=True
+            )
 
     # DEC-V61-036 G1: stamp a first-class concern when the extractor could
     # not resolve the gold's quantity. The verdict engine hard-FAILs
@@ -484,7 +517,11 @@ def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
         }
 
     doc = _audit_fixture_doc(
-        case_id, report, commit_sha, field_artifacts_ref=field_artifacts_ref,
+        case_id,
+        report,
+        commit_sha,
+        field_artifacts_ref=field_artifacts_ref,
+        phase7a_timestamp=ts,
     )
     fixture_path = _write_audit_fixture(case_id, doc)
     raw_path = _write_raw_capture(case_id, report, dt)
