@@ -565,9 +565,10 @@ def _derive_contract_status(
     #   G5  CONTINUITY_DIVERGED         — sum_local > 1e-2 or |cum| > 1
     #   A1  SOLVER_CRASH_LOG            — FOAM FATAL / stack-trace in log
     #   A4  SOLVER_ITERATION_CAP        — pressure loop hit cap ≥3 consecutive iters
-    # A2/A3/A5/A6 are HAZARD tier — they record concerns but don't hard-FAIL
-    # (some cases physically operate at high residuals; promotion to FAIL
-    # via per-case override lands in a future DEC).
+    # A2/A3/A5/A6 are HAZARD tier — the scalar may still be computable, but
+    # the convergence state is suspect enough that "within band" is not a
+    # meaningful PASS. Keep them distinct from hard-FAILs; per-case
+    # promotion to FAIL remains future Wave 4 work.
     _HARD_FAIL_CONCERNS = {
         "MISSING_TARGET_QUANTITY",
         "VELOCITY_OVERFLOW",
@@ -576,8 +577,17 @@ def _derive_contract_status(
         "SOLVER_CRASH_LOG",
         "SOLVER_ITERATION_CAP",
     }
+    _HAZARD_TIER_CONCERNS = {
+        "CONTINUITY_NOT_CONVERGED",
+        "RESIDUALS_ABOVE_TARGET",
+        "BOUNDING_RECURRENT",
+        "NO_RESIDUAL_PROGRESS",
+    }
     has_hard_fail = any(
         c.concern_type in _HARD_FAIL_CONCERNS for c in audit_concerns
+    )
+    has_hazard_tier = any(
+        c.concern_type in _HAZARD_TIER_CONCERNS for c in audit_concerns
     )
     if measurement.value is None or has_hard_fail:
         # Codex DEC-036b round-1 feedback: when a hard-fail concern fires,
@@ -596,6 +606,11 @@ def _derive_contract_status(
     deviation_pct = 0.0
     if gs_ref.ref_value != 0.0:
         deviation_pct = (measurement.value - gs_ref.ref_value) / gs_ref.ref_value * 100.0
+
+    if has_hazard_tier:
+        # TODO(Wave 4): allow per-case promote_to_fail escalation from
+        # attestor thresholds once that DEC lands.
+        return ("HAZARD", deviation_pct, None, lower, upper)
 
     # Tolerance test in deviation space (sign-invariant + consistent with
     # the percentage shown in the UI). `within_tolerance` matches when

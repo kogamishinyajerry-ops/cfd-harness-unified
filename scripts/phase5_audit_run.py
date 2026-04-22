@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import math
 import os
 import subprocess
 import sys
@@ -66,6 +67,151 @@ ALL_CASES = [
     "naca0012_airfoil",
     "rayleigh_benard_convection",
 ]
+
+
+# Best-effort characteristic velocity scales for whitelist cases whose
+# current TaskSpec/boundary_conditions do not yet plumb a canonical inlet /
+# freestream speed through to the audit layer. Explicit boundary-condition
+# keys still win when present.
+_CASE_U_REF_REGISTRY: dict[str, float] = {
+    "backward_facing_step": 44.2,
+    "turbulent_flat_plate": 69.4,
+    "duct_flow": 10.0,
+    "differential_heated_cavity": 0.01,
+    "impinging_jet": 5.0,
+    "rayleigh_benard_convection": 0.005,
+}
+
+
+def _coerce_velocity_magnitude(value: object) -> float | None:
+    """Convert a scalar or short vector-like payload into |U_ref|."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        scalar = abs(float(value))
+        if math.isfinite(scalar) and scalar > 0.0:
+            return scalar
+        return None
+    if isinstance(value, (list, tuple)) and value:
+        components: list[float] = []
+        for item in value[:3]:
+            if isinstance(item, bool) or not isinstance(item, (int, float)):
+                return None
+            comp = float(item)
+            if not math.isfinite(comp):
+                return None
+            components.append(comp)
+        if not components:
+            return None
+        magnitude = math.sqrt(sum(comp * comp for comp in components))
+        return magnitude if magnitude > 0.0 else None
+    if isinstance(value, dict):
+        for key in ("magnitude", "value", "u", "U", "Ux"):
+            if key in value:
+                magnitude = _coerce_velocity_magnitude(value.get(key))
+                if magnitude is not None:
+                    return magnitude
+    return None
+
+
+def _resolve_from_bc_keys(
+    boundary_conditions: dict[str, object], *keys: str
+) -> float | None:
+    for key in keys:
+        if key not in boundary_conditions:
+            continue
+        magnitude = _coerce_velocity_magnitude(boundary_conditions.get(key))
+        if magnitude is not None:
+            return magnitude
+    return None
+
+
+def _flow_type_name(task_spec: object | None, case_id: str) -> str:
+    flow_type = getattr(task_spec, "flow_type", None)
+    flow_value = getattr(flow_type, "value", flow_type)
+    if isinstance(flow_value, str) and flow_value:
+        return flow_value.upper()
+
+    cid = case_id.lower()
+    if any(token in cid for token in ("differential_heated", "rayleigh_benard")):
+        return "NATURAL_CONVECTION"
+    if any(token in cid for token in ("airfoil", "cylinder", "impinging")):
+        return "EXTERNAL"
+    return "INTERNAL"
+
+
+def _resolve_u_ref(task_spec: object | None, case_id: str) -> tuple[float, bool]:
+    """Best-effort `U_ref` resolution for DEC-V61-036b G3.
+
+    Priority order:
+      1. Explicit velocity-like boundary-condition keys already present on
+         the TaskSpec (e.g. U_ref/U_inf/U_bulk/lid velocity).
+      2. Flow-type heuristics / buoyancy-derived estimate when enough
+         metadata is present.
+      3. Whitelist case registry for known cases not yet plumbed.
+      4. Safe fallback `(1.0, False)` with a WARN concern stamped into the
+         fixture by `_audit_fixture_doc`.
+    """
+    boundary_conditions = getattr(task_spec, "boundary_conditions", None) or {}
+    if not isinstance(boundary_conditions, dict):
+        boundary_conditions = {}
+
+    direct = _resolve_from_bc_keys(
+        boundary_conditions,
+        "U_ref",
+        "u_ref",
+        "U_inf",
+        "u_inf",
+        "free_stream_velocity",
+        "freestream_velocity",
+        "inlet_velocity",
+        "inlet_u",
+        "U_bulk",
+        "u_bulk",
+        "lid_velocity_u",
+        "top_wall_u",
+    )
+    if direct is not None:
+        return direct, True
+
+    flow_type = _flow_type_name(task_spec, case_id)
+    if flow_type == "INTERNAL":
+        internal = _resolve_from_bc_keys(
+            boundary_conditions,
+            "pipe_inlet_velocity",
+            "channel_inlet_velocity",
+            "duct_inlet_velocity",
+            "lid_velocity",
+        )
+        if internal is not None:
+            return internal, True
+    elif flow_type == "EXTERNAL":
+        external = _resolve_from_bc_keys(
+            boundary_conditions,
+            "free_stream_u",
+            "freestream_u",
+            "U_external",
+        )
+        if external is not None:
+            return external, True
+    elif flow_type == "NATURAL_CONVECTION":
+        g_mag = _resolve_from_bc_keys(boundary_conditions, "g", "gravity", "g_mag")
+        beta = _resolve_from_bc_keys(boundary_conditions, "beta")
+        delta_t = _resolve_from_bc_keys(boundary_conditions, "dT", "delta_T")
+        length_scale = _resolve_from_bc_keys(boundary_conditions, "L", "length_scale")
+        if (
+            g_mag is not None
+            and beta is not None
+            and delta_t is not None
+            and length_scale is not None
+        ):
+            return math.sqrt(abs(g_mag * beta * delta_t * length_scale)), True
+
+    registry_value = _CASE_U_REF_REGISTRY.get(case_id.lower())
+    if registry_value is not None:
+        return registry_value, True
+
+    return 1.0, False
 
 
 def _git_head_sha() -> str:
@@ -296,7 +442,13 @@ def _audit_fixture_doc(
     field_artifacts_ref: "dict | None" = None,
     phase7a_timestamp: "str | None" = None,
     u_ref: float = 1.0,
+    u_ref_resolved: bool = True,
 ) -> dict:
+    if u_ref == 1.0 and u_ref_resolved:
+        report_task_spec = getattr(report, "task_spec", None)
+        if report_task_spec is not None:
+            u_ref, u_ref_resolved = _resolve_u_ref(report_task_spec, case_id)
+
     # DEC-V61-036 G1: load the gold's canonical quantity BEFORE extraction
     # so the driver can strict-match (and hard-fail on miss) instead of
     # silently substituting "first numeric".
@@ -361,6 +513,26 @@ def _audit_fixture_doc(
             },
         ],
     }
+
+    if not u_ref_resolved:
+        doc["audit_concerns"].append(
+            {
+                "concern_type": "U_REF_UNRESOLVED",
+                "summary": (
+                    "G3 gate audited at default U_ref=1.0 because "
+                    "task_spec.boundary_conditions did not yield a "
+                    "resolvable reference velocity."
+                )[:240],
+                "detail": (
+                    f"Case {case_id!r} did not expose a canonical inlet / lid / "
+                    "freestream velocity in task_spec.boundary_conditions, so "
+                    "the audit pipeline fell back to U_ref=1.0 for DEC-V61-036b "
+                    "G3. This keeps the gate executable but marks the result as "
+                    "heuristic rather than fully case-derived."
+                )[:2000],
+                "decision_refs": ["DEC-V61-036b"],
+            }
+        )
 
     # DEC-V61-036b G3/G4/G5 + DEC-V61-038 A1..A6: run pre-extraction
     # attestor THEN post-extraction physics gates against the captured
@@ -560,12 +732,16 @@ def run_one(runner: TaskRunner, case_id: str, commit_sha: str) -> dict:
             # Deliberately NO timestamp string here (byte-repro): resolve via manifest.
         }
 
+    task_spec = getattr(report, "task_spec", None)
+    u_ref, u_ref_resolved = _resolve_u_ref(task_spec, case_id)
     doc = _audit_fixture_doc(
         case_id,
         report,
         commit_sha,
         field_artifacts_ref=field_artifacts_ref,
         phase7a_timestamp=ts,
+        u_ref=u_ref,
+        u_ref_resolved=u_ref_resolved,
     )
     fixture_path = _write_audit_fixture(case_id, doc)
     raw_path = _write_raw_capture(case_id, report, dt)
