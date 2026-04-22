@@ -403,6 +403,43 @@ function StoryTab({
         </div>
       </section>
 
+      {/* DEC-V61-047 round-1 F4 teaching cards — surface solver / mesh /
+          BC / observable-extraction directly in Story so a novice does
+          not need to open gold YAML or Pro Workbench. 2-col grid on
+          medium+ screens; each card is a compact Chinese paragraph. */}
+      <section>
+        <h2 className="card-title mb-3">CFD 全流程</h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+          从问题到数值结果，本 case 的每一步设置 —— 让你理解"这个 case 的网格 / solver / BC 是怎么来的"，而不只是"它的数值能不能对上"。
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <TeachingCard
+            label="Solver 设置"
+            label_en="Solver"
+            body={learnCase.solver_setup_zh}
+            tone="sky"
+          />
+          <TeachingCard
+            label="网格策略"
+            label_en="Mesh"
+            body={learnCase.mesh_strategy_zh}
+            tone="emerald"
+          />
+          <TeachingCard
+            label="边界条件"
+            label_en="Boundary conditions"
+            body={learnCase.boundary_conditions_zh}
+            tone="violet"
+          />
+          <TeachingCard
+            label="观察量提取"
+            label_en="Observable extraction"
+            body={learnCase.observable_extraction_zh}
+            tone="amber"
+          />
+        </div>
+      </section>
+
       <section>
         <h2 className="card-title mb-3">可观察量</h2>
         <div className="inline-flex items-center gap-2 rounded-md border border-surface-800 bg-surface-900/50 px-3 py-2">
@@ -417,6 +454,50 @@ function StoryTab({
         <h2 className="card-title mb-3">参考文献</h2>
         <p className="mono text-[13px] text-surface-300">{learnCase.canonical_ref}</p>
       </section>
+    </div>
+  );
+}
+
+// DEC-V61-047 round-1 F4: per-case teaching card — solver/mesh/BC/
+// observable-extraction surfaced on Story tab. Accepts dangerouslySet
+// for small HTML tags (<strong>, <code>) in the YAML-sourced bodies.
+function TeachingCard({
+  label,
+  label_en,
+  body,
+  tone,
+}: {
+  label: string;
+  label_en: string;
+  body: string;
+  tone: "sky" | "emerald" | "violet" | "amber";
+}) {
+  const TONE_BORDER: Record<typeof tone, string> = {
+    sky: "border-sky-900/50 bg-sky-950/20",
+    emerald: "border-emerald-900/50 bg-emerald-950/20",
+    violet: "border-violet-900/50 bg-violet-950/20",
+    amber: "border-amber-900/50 bg-amber-950/20",
+  };
+  const TONE_TAG: Record<typeof tone, string> = {
+    sky: "text-sky-300",
+    emerald: "text-emerald-300",
+    violet: "text-violet-300",
+    amber: "text-amber-300",
+  };
+  return (
+    <div className={`rounded-md border ${TONE_BORDER[tone]} p-4`}>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className={`text-[13px] font-semibold ${TONE_TAG[tone]}`}>
+          {label}
+        </h3>
+        <span className="mono text-[10px] uppercase tracking-wider text-surface-500">
+          {label_en}
+        </span>
+      </div>
+      <p
+        className="text-[13px] leading-relaxed text-surface-200"
+        dangerouslySetInnerHTML={{ __html: body }}
+      />
     </div>
   );
 }
@@ -518,14 +599,29 @@ function PhysicsContractPanel({
                   <span className={`mono font-semibold ${m.tone}`}>[{m.glyph}]</span>
                   <div className="flex-1 text-[13px] leading-relaxed text-surface-200">
                     {p.condition}
+                    {/* DEC-V61-047 round-1 F6: evidence_ref 是 reviewer-grade
+                        文本（含文件路径、adapter 行号、attestor 术语），对
+                        novice 会产生认知过载（参考 codex persona-2 在
+                        impinging_jet case 的 🔴）。把它折叠到 <details> 里，
+                        默认收起；好奇的读者可以点开看审计证据。
+                        consequence_if_unsatisfied 保持常驻因为它是"如果
+                        这条 precondition 不满足会怎样"的学生级 takeaway。 */}
                     {p.evidence_ref && (
-                      <div className="mt-1 mono text-[10px] leading-relaxed text-surface-500">
-                        evidence: {p.evidence_ref}
-                      </div>
+                      <details className="group mt-1.5">
+                        <summary className="cursor-pointer list-none text-[11px] text-surface-500 hover:text-surface-400">
+                          <span className="mono">▸ 查看审计证据 (evidence)</span>
+                          <span className="hidden text-surface-600 group-open:inline">
+                            {" "}· 点击收起
+                          </span>
+                        </summary>
+                        <div className="mt-1 mono text-[10px] leading-relaxed text-surface-500">
+                          {p.evidence_ref}
+                        </div>
+                      </details>
                     )}
                     {p.consequence_if_unsatisfied && (
                       <div className="mt-1 text-[11px] italic leading-relaxed text-amber-300/80">
-                        if unsatisfied: {p.consequence_if_unsatisfied}
+                        如果不满足：{p.consequence_if_unsatisfied}
                       </div>
                     )}
                   </div>
