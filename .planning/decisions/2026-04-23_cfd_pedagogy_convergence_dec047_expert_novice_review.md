@@ -1,16 +1,19 @@
 ---
 decision_id: DEC-V61-047
 title: CFD 教学质量专项 — 每 case 仿真/网格/云图/分析/全流程升级 · 2-persona (expert + novice) 迭代
-status: IN_PROGRESS (round 1 codex review pending 2026-04-23T00:45)
+status: IN_PROGRESS (round 1 remediation landed 2026-04-23T01:20; round 2 pending)
 commits_in_scope:
-  - (none yet — scaffold phase; remediation commits will land per round)
-codex_verdict: PENDING (round 1 not yet launched)
+  - 09a4975 docs(dec): DEC-V61-047 PROPOSAL — CFD 教学质量专项 2-persona iteration
+  - 9d43d6a fix(learn): round-1 batch 1 — narrative truth alignment (F5 blocker)
+  - 958d85d fix(learn): round-1 batches 2+3 — visual-only verdict honesty + synthetic residual guard (F1+F2 blockers)
+  - 10a3463 feat(learn): round-1 batches 4+5 — teaching cards + evidence collapse (F4+F6 majors)
+codex_verdict: CHANGES_REQUIRED (round 1 — 4 blockers + 2 majors; 5 blockers/majors addressed across batches 1-5; F3 Tier-C backend upgrade deferred to round 2 with rationale)
 autonomous_governance: true
 autonomous_governance_counter_v61: 34 (34th +1 entry since RETRO-V61-001 counter reset; next retro trigger at ≥20 arc-size → already past, retro owed)
 external_gate_self_estimated_pass_rate: 0.50
-codex_tool_report_path: .planning/reviews/pedagogy_round_1_findings.md (pending codex write)
-notion_sync_status: synced 2026-04-23T00:50 (page_id=34ac6894-2bed-8186-8028-c1a4aea5d6bf, Status=Proposed, https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf)
-github_sync_status: local-only (scaffold commit pending)
+codex_tool_report_path: .planning/reviews/pedagogy_round_1_findings.md (19 KB, authored 2026-04-23T00:59; CHANGES_REQUIRED overall, CHANGES_REQUIRED on both personas)
+notion_sync_status: synced 2026-04-23T01:25 (Status=Proposed→Accepted; round-1 summary + deferral rationale appended as 6 page children; https://www.notion.so/DEC-V61-047-CFD-10-case-2-persona-expert-novice-34ac68942bed81868028c1a4aea5d6bf, page_id=34ac6894-2bed-8186-8028-c1a4aea5d6bf)
+github_sync_status: pushed 2026-04-23T01:20 (10a3463 on origin/main; includes scaffold 09a4975 + 3 remediation commits)
 related:
   - DEC-V61-046 (prior iteration pattern; demo-first convergence; closed APPROVE_WITH_COMMENTS 2026-04-23T00:35 · this DEC inherits the iteration discipline)
   - DEC-V61-040 (UI 3-tier UNKNOWN surface · underpins the Story tab)
@@ -63,17 +66,25 @@ User 指定 2 个评审 persona（不含 senior code reviewer，这轮不是代�
 
 ## Round log (updated per round)
 
-### Round 1 — TBD (prompt authoring + codex launch pending)
-- **Codex exec PID**: TBD
+### Round 1 — 2026-04-23T00:51 → T01:20 (remediation landed)
+- **Codex exec PID**: 36085 (log `.planning/reviews/pedagogy_round_1_codex.log`)
 - **Prompt**: `.planning/reviews/pedagogy_round_1_prompt.md`
-- **Findings**: `.planning/reviews/pedagogy_round_1_findings.md` (pending)
-- **Verdict**: TBD
-- **Findings addressed**: (list with commit sha)
-- **Findings deferred**: (list with rationale)
-- **New commits**: TBD
-- **Test suite**: baseline 791 passed / 2 skipped
-- **Notion sync**: pending
-- **GitHub sync**: pending
+- **Findings**: `.planning/reviews/pedagogy_round_1_findings.md` (19 KB)
+- **Verdict**: CHANGES_REQUIRED across both personas · 4 blockers + 2 majors
+  - Fairness correction codex volunteered: real OpenFOAM contours ARE now mounted via ScientificComparisonReportSection; user's "完全没有真实云图" read is partially out of date. The real problem is that evidence is **under-explained, inconsistently narrated, and often status-contradictory**, not missing.
+  - Blockers: F1 hardcoded Story-visual-only FAIL banner (contradicts cylinder/plane_channel fixtures that declare `expected_verdict: PASS`); F2 synthetic /run residual shown as "你大概会看到" without clear mock signal; F5 stale case narratives on TFP/plane_channel/impinging_jet/DHC disagree with current gold contracts.
+  - Majors: F3 9/10 cases still Tier-C visual-only in `comparison_report.py`; F4 solver/mesh/BC/observable-extraction live only in gold YAML, never surfaced as student cards; F6 PhysicsContractPanel reviewer-grade evidence_ref jargon confuses novice (impinging_jet 🔴).
+- **Findings addressed** (5 atomic commits):
+  - Batch 1 (F5 blocker) `9d43d6a` — rewrote 4 stale learnCases.ts entries to match current gold contracts: TFP labeled laminar Blasius not turbulent; plane_channel labeled as "disguised incompatibility" teaching case; impinging_jet labeled 2-layer (geometry+solver) gap; DHC rewritten from retired Ra=1e10 to Ra=1e6 de Vahl Davis benchmark.
+  - Batches 2+3 (F1+F2 blockers) `958d85d` — removed hardcoded "audit_real_run verdict FAIL" copy from visual-only Tier-C branch (backend sends verdict=None; fixtures may say PASS); reframed as honest "Tier C · 过程证据，未做自动化金标准比对". Wrapped /run residual in new RunResidualsCard that tries real `audit_real_run/renders/residuals.png` first, falls back to synthetic SVG only with prominent "⚠ 示意图 · illustrative only" warning.
+  - Batches 4+5 (F4+F6 majors) `10a3463` — extended LearnCase type with 4 new Chinese teaching fields (solver_setup_zh / mesh_strategy_zh / boundary_conditions_zh / observable_extraction_zh); populated all 10 cases with concrete content pulled from gold YAML + foam_agent_adapter; added TeachingCard component rendering 4 color-coded cards (sky/emerald/violet/amber) on Story tab under new "CFD 全流程" section. Collapsed PhysicsContractPanel evidence_ref into `<details>` so novice sees condition + consequence_if_unsatisfied by default, expandable for raw audit evidence.
+- **Findings deferred with rationale**:
+  - F3 (9/10 cases Tier-C) — upgrading `_VISUAL_ONLY_CASES` in `ui/backend/services/comparison_report.py` to include gold overlay + verdict + metrics for more cases is a backend service refactor that ripples through tier-B report assembly + HTML iframe rendering + test fixtures. The round-1 blockers (F1/F2/F5 + majors F4/F6) were the more urgent cognitive blockers for the novice persona. F3 deserves its own scoped batch or round.
+- **New commits**: 9d43d6a, 958d85d, 10a3463 (all on origin/main).
+- **Test suite**: 791 passed / 2 skipped (no change, no regressions).
+- **Frontend**: typecheck clean; build 1.30-1.33s; bundle 803 KB / 259 KB gzip (unchanged modulo string bytes).
+- **GitHub sync**: pushed 2026-04-23T01:20 (10a3463 on origin/main; scaffold 09a4975 + 3 remediation commits).
+- **Notion sync**: synced 2026-04-23T01:25 — Status=Accepted; 6 page children covering the round-1 arc (fairness correction + 3 remediation batches + deferral rationale + round-2 next-step).
 
 ### Round N+1 — template
 (Fill after round N codex verdict)
