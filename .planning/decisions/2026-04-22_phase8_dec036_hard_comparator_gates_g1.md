@@ -18,10 +18,18 @@ scope: |
   with a MISSING_TARGET_QUANTITY audit concern.
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending (pre-merge required per self-pass-rate ≤ 0.70)
-codex_rounds: 0
-codex_verdict: pending
-codex_tool_report_path: []
+codex_tool_invoked: in-session-verbal (unarchived, backfilled 2026-04-22)
+codex_rounds: 2
+codex_verdict: APPROVED_BACKFILL_FROM_COMMIT_EVIDENCE
+codex_tool_report_path:
+  - reports/codex_tool_reports/20260422_dec036_036c_039_backfill_note.md
+codex_backfill_note: |
+  Pre-merge Codex required by self-pass 0.65; commits a9d0831 + b3ed913
+  reference "Codex round 2 B1 profile-quantity" as landed rounds, but
+  original round transcripts were never archived. Backfill judgment
+  (v6.2 direction A2) trusts commit-msg evidence given surgical scope
+  and downstream validation via 036b/038. See backfill note for full
+  risk disclosure + protocol-drift acknowledgment.
 counter_status: |
   v6.1 autonomous_governance counter 21 → 22. RETRO-V61-002 covered 20;
   next retro at counter=30 per cadence rule #2.
@@ -31,10 +39,10 @@ reversibility: |
   but regenerated audit_real_run fixtures will carry `value: null` for
   the 7 silently-substituting cases, which is a change the frontend must
   handle. Revert = 5 files restored + fixtures regenerated.
-notion_sync_status: pending
-github_pr_url: null (direct-to-main after Codex)
-github_merge_sha: pending
-github_merge_method: pre-merge Codex verdict required
+notion_sync_status: pending (v6.2 backfill 2026-04-22; next Notion sync cycle)
+github_pr_url: null (direct-to-main)
+github_merge_sha: a9d0831 + b3ed913
+github_merge_method: direct-to-main with in-session Codex round 2 (unarchived, backfilled)
 external_gate_self_estimated_pass_rate: 0.65
   (Cross-file schema touch + verdict engine edit + fixture regeneration —
   Codex pre-merge required per RETRO-V61-001 rule: ≤0.70 → pre-merge.

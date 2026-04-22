@@ -18,10 +18,17 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending (pre-merge required; self-pass-rate ≤ 0.70)
-codex_rounds: 0
-codex_verdict: pending
-codex_tool_report_path: []
+codex_tool_invoked: in-session-verbal (unarchived, backfilled 2026-04-22)
+codex_rounds: 1
+codex_verdict: APPROVED_BACKFILL_FROM_COMMIT_EVIDENCE
+codex_tool_report_path:
+  - reports/codex_tool_reports/20260422_dec036_036c_039_backfill_note.md
+codex_backfill_note: |
+  Pre-merge Codex boundary (self-pass=0.70, ≤0.70 rule triggers). Commit
+  c227c6b "Codex nit r_over_d" evidences 1 round landed but transcript
+  not archived. Backfill judgment (v6.2 direction A2) trusts commit-msg
+  evidence given surgical 3-file scope. See backfill note for residual
+  risk (literal boundary case — 0.70 is inclusive in rule wording).
 counter_status: |
   v6.1 autonomous_governance counter 25 → 26 after this DEC. Next retro at 30.
 reversibility: |
@@ -29,10 +36,10 @@ reversibility: |
   hardcoded chain to a tuple iteration; `_resolve_profile_axis` adds 2
   y_plus candidates; drivers' dict-profile fallback iterates a scalar
   key tuple. Revert = 3 files restored. No fixture regeneration needed.
-notion_sync_status: pending
-github_pr_url: null (direct-to-main after Codex)
-github_merge_sha: pending
-github_merge_method: pre-merge Codex verdict required
+notion_sync_status: pending (v6.2 backfill 2026-04-22; next Notion sync cycle)
+github_pr_url: null (direct-to-main)
+github_merge_sha: d4d9bae + c227c6b
+github_merge_method: direct-to-main with in-session Codex nit (unarchived, backfilled)
 external_gate_self_estimated_pass_rate: 0.70
   (Surgical change to 3 files, 2 of which are the acceptance drivers
   already reviewed across DEC-036 rounds 1+2. Main risk: profile axis

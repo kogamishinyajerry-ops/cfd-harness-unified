@@ -12,15 +12,24 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending
+codex_tool_invoked: false (self-rate 0.80 > 0.70 threshold; protocol-compliant skip)
 codex_rounds: 0
-codex_verdict: pending
+codex_verdict: POST_MERGE_SKIP_PER_SELF_RATE
+codex_tool_report_path:
+  - reports/codex_tool_reports/20260422_dec036_036c_039_backfill_note.md
+codex_backfill_note: |
+  Self-pass 0.80 is above the ≤0.70 pre-merge trigger; per RETRO-V61-001
+  this DEC is protocol-compliant without a Codex round. Commit 8ca850e
+  landed additive API fields + reach-in to module-private
+  _GOLD_OVERLAY_CASES. Backfill formalizes the "no Codex needed" verdict
+  so audit trail is complete (v6.2 direction A2).
 counter_status: |
   v6.1 autonomous_governance counter 26 → 27. Next retro at 30.
 reversibility: fully-reversible — additive schema fields + a helper
   function. Revert = 4 files restored, fixtures unchanged.
-notion_sync_status: pending
-github_pr_url: null (direct-to-main after Codex)
+notion_sync_status: pending (v6.2 backfill 2026-04-22; next Notion sync cycle)
+github_pr_url: null (direct-to-main)
+github_merge_sha: 8ca850e
 external_gate_self_estimated_pass_rate: 0.80
   (Narrow additive change. Main risk: is the module-private
   `_GOLD_OVERLAY_CASES` set the right thing to gate on? If a future DEC
