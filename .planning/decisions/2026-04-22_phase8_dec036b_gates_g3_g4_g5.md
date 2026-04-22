@@ -17,10 +17,31 @@ scope: |
   (stuck residuals), DEC-V61-038 (attestor) land separately.
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending (pre-merge required; self-pass-rate ≤ 0.70)
-codex_rounds: 0
-codex_verdict: pending
-codex_tool_report_path: []
+codex_tool_invoked: true (v6.2 backfill audit 2026-04-22 post-landing)
+codex_rounds: 1 (v6.2 backfill audit round)
+codex_verdict: CHANGES_REQUIRED
+codex_independent_pass_rate: 0.42 (vs claude-estimated 0.60 · Codex more pessimistic; independent verification protocol working as designed)
+codex_tool_report_path:
+  - reports/codex_tool_reports/20260422_dec036b_codex_review.md
+codex_blockers_summary: |
+  B1: expected_verdict decided before attestor/G3/G4/G5 run, never recomputed
+      → fixture metadata + CLI summary can print stale "PASS" after hard-fail
+      concerns stamped (scripts/phase5_audit_run.py:311, :406, :563)
+  B2: G3 U_ref not resolved from task_spec.boundary_conditions; run_one()
+      calls _audit_fixture_doc() without u_ref → all cases audited at default
+      1.0, masking within=None/WARN path entirely
+      (scripts/phase5_audit_run.py:298, :409, src/comparator_gates.py:252)
+  B3: read_final_velocity_max() scans every *.vtk under tree incl. allPatches
+      → earlier-timestep or boundary-patch spikes can false-fire G3 even
+      when final internal solution is clean (src/comparator_gates.py:209)
+codex_nits_summary: |
+  S1: missing-coverage paths only print [WARN] to stdout, don't stamp WARN
+      concern → silent false-negative holes for k-omega or laminar w/o VTK
+  S2: test coverage weaker than DEC claims — LDC clean is synthetic, BFS
+      real-log test machine-specific, no VTK-branch test, no threshold
+      boundary tests (99·U_ref pass / 101·U_ref fail / U_ref=None WARN)
+followup_dec_pending: true
+followup_dec_scope: "Fix B1/B2/B3 blockers + S1 WARN stamping. Requires new Codex round post-fix. Flagged to Kogami for scope decision."
 counter_status: |
   v6.1 autonomous_governance counter 22 → 23 (DEC-V61-036a G1) → 24
   (DEC-V61-036b G3/G4/G5). Next retro at counter=30.
@@ -30,10 +51,10 @@ reversibility: |
   Revert = 4 files restored. No fixture regeneration required because
   the gates operate on reports/phase5_fields/* and log.simpleFoam which
   are themselves reproducible artifacts.
-notion_sync_status: pending
-github_pr_url: null (direct-to-main after Codex)
-github_merge_sha: pending
-github_merge_method: pre-merge Codex verdict required
+notion_sync_status: pending (v6.2 backfill Codex CHANGES_REQUIRED; flag to Kogami)
+github_pr_url: null (direct-to-main)
+github_merge_sha: 1fedfd6 + c3afe93 (already landed pre-Codex-verify)
+github_merge_method: direct-to-main landed; v6.2 backfill audit surfaced 3 blockers requiring follow-up
 external_gate_self_estimated_pass_rate: 0.60
   (Three new gates + new module + fixture-writer integration + concern
   schema extension. Threshold calibration is the main risk surface — too
