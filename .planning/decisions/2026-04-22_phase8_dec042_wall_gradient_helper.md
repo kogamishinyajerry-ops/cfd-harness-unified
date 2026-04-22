@@ -16,9 +16,9 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending
-codex_rounds: 0
-codex_verdict: pending
+codex_tool_invoked: yes
+codex_rounds: 4
+codex_verdict: APPROVED (round 4, 2026-04-22)
 counter_status: |
   v6.1 autonomous_governance counter 28 → 29. Next retro at 30.
 reversibility: fully-reversible — new module + new tests + explicit
