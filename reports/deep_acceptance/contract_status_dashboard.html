@@ -266,12 +266,12 @@ a:hover { text-decoration: underline; }
         </article>
         <article class="summary-card">
           <div class="label">Runtime Hazard</div>
-          <div class="value">2</div>
+          <div class="value">1</div>
           <div class="note">不是假阳性，但仍需把 shortcut / fallback 风险持续暴露给读者。</div>
         </article>
         <article class="summary-card">
           <div class="label">Structural / Gate Blockers</div>
-          <div class="value">4</div>
+          <div class="value">2</div>
           <div class="note">包括 DHC 外部门控、pipe/duct 几何错位，以及 literature-observable 错配。</div>
         </article>
         <article class="summary-card">
@@ -283,15 +283,15 @@ a:hover { text-decoration: underline; }
       <div class="version-grid">
         <div class="version-card">
           <div class="label">Generated</div>
-          <div class="value">2026-04-20 01:38:35</div>
+          <div class="value">2026-04-22 22:15:55</div>
         </div>
         <div class="version-card">
           <div class="label">Head SHA</div>
-          <div class="value">3128a63</div>
+          <div class="value">e6f264d</div>
         </div>
         <div class="version-card">
           <div class="label">Canonical / Snapshot</div>
-          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260420_013835.html</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_221555.html</div>
         </div>
         <div class="version-card">
           <div class="label">Manifest / Linked Surfaces</div>
@@ -316,25 +316,25 @@ a:hover { text-decoration: underline; }
 
         <article class="distribution-card">
           <div class="label">COMPATIBLE_WITH_SILENT_PASS_HAZARD</div>
-          <div class="value">2</div>
+          <div class="value">1</div>
           <div class="note">结果本身有价值，但必须把 runtime shortcut/fallback 的 caveat 一起展示。</div>
           <div class="pill-row"><span class="status-pill warn">Silent-pass hazard</span></div>
         </article>
         
 
         <article class="distribution-card">
-          <div class="label">INCOMPATIBLE</div>
-          <div class="value">2</div>
-          <div class="note">几何、solver 或 comparator 前提未满足，继续调参没有意义。</div>
-          <div class="pill-row"><span class="status-pill warn">Incompatible</span></div>
+          <div class="label">UNKNOWN</div>
+          <div class="value">3</div>
+          <div class="note">Gold standard 尚未声明 physics_contract 或 contract_status；无法判定兼容性，请补齐 gold YAML。</div>
+          <div class="pill-row"><span class="status-pill fail">Unknown</span></div>
         </article>
         
 
         <article class="distribution-card">
-          <div class="label">DEVIATION</div>
+          <div class="label">INCOMPATIBLE</div>
           <div class="value">1</div>
-          <div class="note">不是 clean pass，也不是结构性错位；往往需要治理级判断来解释 remaining gap。</div>
-          <div class="pill-row"><span class="status-pill fail">Deviation</span></div>
+          <div class="note">几何、solver 或 comparator 前提未满足，继续调参没有意义。</div>
+          <div class="pill-row"><span class="status-pill warn">Incompatible</span></div>
         </article>
         
 
@@ -366,11 +366,11 @@ a:hover { text-decoration: underline; }
           <p>DHC 的 extractor 方法学已经修正到 mean-over-y，但当前测量 <strong>Nu=77.82</strong> 与 gold <strong>30.0</strong> 的冲突，实质上是 gold 语义与工况匹配问题，不是继续盲修 solver 就能解决的问题。</p>
           <p class="artifact-link"><a href="../differential_heated_cavity/report.html">打开 DHC narrative report</a></p>
         </article>
-        <article class="gate-card">
-          <div class="label">Q-2</div>
-          <h3>pipe ↔ duct relabel 仍冻结</h3>
-          <p>`fully_developed_turbulent_pipe_flow` 当前 physics contract 已明示 geometry mismatch。要变成 physics-valid，需要 whitelist / gold / naming 一起改，这不是这轮 delivery/dashboard 开发可以越权落地的事。</p>
-          <p class="artifact-link"><a href="../../.planning/external_gate_queue.md">查看 external gate queue</a></p>
+        <article class="gate-card gate-closed">
+          <div class="label">Q-2 · CLOSED</div>
+          <h3>pipe ↔ duct relabel 已落地 (2026-04-20)</h3>
+          <p>Gate Q-2 Path A 通过 DEC-V61-011 关闭：whitelist id <code>fully_developed_pipe</code> 与 auto_verifier id <code>fully_developed_turbulent_pipe_flow</code> 统一为 <code>duct_flow</code>，gold standard 切换到 Jones 1976 方管摩擦因子参考（Re=50000, f=0.0185，与 Colebrook pipe 在 2% 以内）。physics contract 从 INCOMPATIBLE 转为 SATISFIED。</p>
+          <p class="artifact-link"><a href="../../.planning/gates/Q-2_r_a_relabel.md">查看 Gate Q-2 full record</a></p>
         </article>
       </div>
     </section>
@@ -394,7 +394,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane B · 可展示但必须带 caveat</div>
           <div class="lane-note">这些 case 不是不能展示，而是展示时必须把 runtime hazard 或已知偏差一起抬到台面上。</div>
           <ul class="lane-list">
-            <li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
+            <li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
           </ul>
         </article>
         
@@ -403,7 +403,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane C · 治理 / 结构阻塞</div>
           <div class="lane-note">这些 case 目前的主要问题不是“再调一点参数”，而是 physics contract / governance 语义还没闭环。</div>
           <ul class="lane-list">
-            <li><strong>全发展湍流管流</strong> · 当前 adapter 还是矩形 duct，不是 circular pipe；这是物理类别错配，不是调参问题。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · 当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</li><li><strong>轴对称冲击射流</strong> · 报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</li>
+            <li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>全发展湍流方管流</strong> · Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · 当前 laminar comparator patch 还没 fresh rerun，DNS wall-unit 物理面仍未真正闭环。</li><li><strong>轴对称冲击射流</strong> · 报告里叫 Nusselt，但当前 extractor 实际比的是 Cf，属于术语-物理错位。</li>
           </ul>
         </article>
         
@@ -455,25 +455,25 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>湍流平板边界层</strong><br><span class="case-subtitle">turbulent_flat_plate</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill warn">COMPATIBLE_WITH_SILENT_PASS_HAZARD</span><br>Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</td>
+            <td><span class="status-pill fail">UNKNOWN</span><br>Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</td>
             <td>Cf=0.00760037，对 Spalding 相关式几乎零误差，但 fallback 路径必须持续透明。</td>
             <td>保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。</td>
           </tr>
         
 
           <tr>
-            <td><strong>全发展湍流管流</strong><br><span class="case-subtitle">fully_developed_turbulent_pipe_flow</span></td>
+            <td><strong>全发展湍流方管流</strong><br><span class="case-subtitle">duct_flow</span></td>
             <td><span class="status-pill fail">NO_RUNTIME_REPORT</span><br>NO_RUNTIME_REPORT</td>
-            <td><span class="status-pill fail">INCOMPATIBLE</span><br>当前矩形 duct 几何与 circular pipe literature 不匹配；继续调 solver 不能修复这个类别错误。</td>
-            <td>当前没有 materialized auto_verify_report；但 geometry mismatch 已足够判定 physics-incompatible。</td>
-            <td>等待 Q-2 外部门控，决定是否 relabel 为 duct flow。</td>
+            <td><span class="status-pill fail">UNKNOWN</span><br>Q-2 Path A 落地后不再是类别错误；remaining hazard 是 Jones-vs-Colebrook 相关式 2% 量级差别，需要做一次新 auto_verify_report 才能关闭。</td>
+            <td>Q-2 Path A 已落地 (DEC-V61-011)，geometry 从 pipe 重标为 duct，gold 切换 Jones 1976 方管相关式。等 auto_verify_report 复跑后给新 verdict。</td>
+            <td>对比 Jones-duct vs Moody-pipe 数值差；确认 adapter simpleFoam+SIMPLE_GRID 在 duct 语义下 PASS。</td>
           </tr>
         
 
           <tr>
             <td><strong>差分加热方腔自然对流</strong><br><span class="case-subtitle">differential_heated_cavity</span></td>
             <td><span class="status-pill fail">FAIL</span><br>FAIL</td>
-            <td><span class="status-pill fail">DEVIATION</span><br>extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</td>
+            <td><span class="status-pill fail">UNKNOWN</span><br>extractor 方法学已修正，但 gold-reference 语义与 literature/工况冲突仍未裁决。</td>
             <td>Nu=77.82 vs gold 30.0；当前冲突已经明确进入 Q-1 external gate。</td>
             <td>保持 Q-1 显式开放，等待 gold correction 或 regime downgrade 的 Gate 选择。</td>
           </tr>
@@ -604,7 +604,7 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
-              <span class="status-pill warn">Silent-pass hazard</span>
+              <span class="status-pill fail">Unknown</span>
             </div>
           </div>
           <p>Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</p>
@@ -612,8 +612,8 @@ a:hover { text-decoration: underline; }
           <div class="case-callout"><strong>风险说明：</strong> Cf&gt;0.01 时可能走 Spalding substitution；结果可用，但必须持续保留 runtime fallback 透明度。</div>
           <div class="case-callout"><strong>下一步：</strong> 保留 runtime hazard 标记；不要把 fallback-PASS 冒充成 clean extraction。</div>
           <div class="pill-row">
-            <span class="pill">Caveat-required</span>
-            <span class="pill">Spalding 1962 / ISO 12048</span>
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Blasius 1908 / Schlichting Boundary Layer Theory (7th ed.) Ch.7</span>
           </div>
           <p class="artifact-link"><a href="../../knowledge/gold_standards/turbulent_flat_plate.yaml">gold standard</a> · <a href="../turbulent_flat_plate/auto_verify_report.yaml">runtime report</a> · <a href="../turbulent_flat_plate/report.md">deep evidence</a></p>
         </article>
@@ -623,23 +623,23 @@ a:hover { text-decoration: underline; }
           <div class="case-meta">
             <div>
               <div class="label">Case</div>
-              <h3>全发展湍流管流</h3>
-              <div class="case-subtitle">Turbulent pipe flow · geometry mismatch blocker</div>
+              <h3>全发展湍流方管流</h3>
+              <div class="case-subtitle">Turbulent square-duct flow · geometry honestly labeled (post Q-2 Path A)</div>
             </div>
             <div class="pill-row">
               <span class="status-pill fail">NO_RUNTIME_REPORT</span>
-              <span class="status-pill fail">Incompatible</span>
+              <span class="status-pill fail">Unknown</span>
             </div>
           </div>
-          <p>当前 adapter 还是矩形 duct，不是 circular pipe；这是物理类别错配，不是调参问题。</p>
-          <div class="case-callout"><strong>当前观测：</strong> 当前没有 materialized auto_verify_report；但 geometry mismatch 已足够判定 physics-incompatible。</div>
-          <div class="case-callout"><strong>风险说明：</strong> 当前矩形 duct 几何与 circular pipe literature 不匹配；继续调 solver 不能修复这个类别错误。</div>
-          <div class="case-callout"><strong>下一步：</strong> 等待 Q-2 外部门控，决定是否 relabel 为 duct flow。</div>
+          <p>Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</p>
+          <div class="case-callout"><strong>当前观测：</strong> Q-2 Path A 已落地 (DEC-V61-011)，geometry 从 pipe 重标为 duct，gold 切换 Jones 1976 方管相关式。等 auto_verify_report 复跑后给新 verdict。</div>
+          <div class="case-callout"><strong>风险说明：</strong> Q-2 Path A 落地后不再是类别错误；remaining hazard 是 Jones-vs-Colebrook 相关式 2% 量级差别，需要做一次新 auto_verify_report 才能关闭。</div>
+          <div class="case-callout"><strong>下一步：</strong> 对比 Jones-duct vs Moody-pipe 数值差；确认 adapter simpleFoam+SIMPLE_GRID 在 duct 语义下 PASS。</div>
           <div class="pill-row">
             <span class="pill">Governance / structural blocker</span>
-            <span class="pill">Nikuradse 1933 / Moody 1944</span>
+            <span class="pill">Jones 1976 / Jones &amp; Launder 1973</span>
           </div>
-          <p class="artifact-link"><a href="../../knowledge/gold_standards/fully_developed_turbulent_pipe_flow.yaml">gold standard</a> · <a href="../fully_developed_turbulent_pipe_flow/auto_verify_report.yaml">runtime report</a> · <a href="../ex1_first_slice/diagnostic_memo.md">deep evidence</a></p>
+          <p class="artifact-link"><a href="../../knowledge/gold_standards/duct_flow.yaml">gold standard</a> · <a href="../duct_flow/auto_verify_report.yaml">runtime report</a> · <a href="../ex1_first_slice/diagnostic_memo.md">deep evidence</a></p>
         </article>
         
 
@@ -652,7 +652,7 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill fail">FAIL</span>
-              <span class="status-pill fail">Deviation</span>
+              <span class="status-pill fail">Unknown</span>
             </div>
           </div>
           <p>测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</p>
@@ -661,7 +661,7 @@ a:hover { text-decoration: underline; }
           <div class="case-callout"><strong>下一步：</strong> 保持 Q-1 显式开放，等待 gold correction 或 regime downgrade 的 Gate 选择。</div>
           <div class="pill-row">
             <span class="pill">Governance / structural blocker</span>
-            <span class="pill">Dhir 2001 / Ampofo &amp; Karayiannis 2003</span>
+            <span class="pill">de Vahl Davis 1983</span>
           </div>
           <p class="artifact-link"><a href="../../knowledge/gold_standards/differential_heated_cavity.yaml">gold standard</a> · <a href="../differential_heated_cavity/auto_verify_report.yaml">runtime report</a> · <a href="../differential_heated_cavity/report.html">deep evidence</a></p>
         </article>
@@ -766,8 +766,8 @@ a:hover { text-decoration: underline; }
     </section>
 
     <div class="footer">
-      <span>Generated · 2026-04-20 01:38:35</span>
-      <span>Head · 3128a63</span>
+      <span>Generated · 2026-04-22 22:15:55</span>
+      <span>Head · e6f264d</span>
       <span>Source · knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml + reports/*/auto_verify_report.yaml</span>
       <span><a href="visual_acceptance_report.html">Open 5-case visual acceptance report</a></span>
       <span><a href="2026-04-18_contract_status_dashboard.md">Open historical markdown snapshot</a></span>

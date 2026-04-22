@@ -96,7 +96,8 @@
               "enum": [
                 "SCALED",
                 "TOPOLOGICAL",
-                "WALL-MODELLED"
+                "WALL-MODELLED",
+                "SAME_CLASS"
               ]
             },
             "scale_factor": {
@@ -285,6 +286,21 @@
         },
         "legacy_source_file": {
           "type": "string"
+        },
+        "legacy_case_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "legacy_source_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "note": {
+          "type": "string"
+        },
+        "physics_contract": {
+          "type": "object",
+          "additionalProperties": true
         },
         "source": {
           "type": "string",

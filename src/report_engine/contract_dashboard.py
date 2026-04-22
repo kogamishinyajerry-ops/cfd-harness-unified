@@ -636,13 +636,21 @@ class ContractDashboardGenerator:
             "DEVIATION": "不是 clean pass，也不是结构性错位；往往需要治理级判断来解释 remaining gap。",
             "INCOMPATIBLE": "几何、solver 或 comparator 前提未满足，继续调参没有意义。",
             "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE": "最危险的类型：表面 PASS，但 observable 和 literature 根本不是一回事。",
+            # Post-DEC-V61-040 attestation surface can emit UNKNOWN when the
+            # physics_contract block is absent or the gold YAML pre-dates the
+            # contract_status field. Render a muted note instead of crashing.
+            "UNKNOWN": "Gold standard 尚未声明 physics_contract 或 contract_status；无法判定兼容性，请补齐 gold YAML。",
         }
         pill_class = "ok" if contract_class == "COMPATIBLE" else "warn" if "COMPATIBLE" in contract_class else "fail"
+        # Graceful fallback for any other future contract_class: empty note
+        # instead of KeyError. Dashboard stays renderable as a structural
+        # invariant — that's the whole point of the "honest evidence" surface.
+        note = note_map.get(contract_class, "")
         return f"""
         <article class="distribution-card">
           <div class="label">{escape(contract_class)}</div>
           <div class="value">{count}</div>
-          <div class="note">{escape(note_map[contract_class])}</div>
+          <div class="note">{escape(note)}</div>
           <div class="pill-row"><span class="status-pill {pill_class}">{escape(self._short_label(contract_class))}</span></div>
         </article>
         """
