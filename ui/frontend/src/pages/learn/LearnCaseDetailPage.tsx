@@ -450,8 +450,53 @@ function StoryTab({
         </div>
       </section>
 
+      {/* DEC-V61-048 round-1 batch 1 (A) — benchmark lineage + next-reading
+          ladder. Codex deep-dive: every case had only a single canonical_ref
+          citation token; for graduate-course reading value the page needs
+          to tell the student WHY this paper is the teaching anchor, what
+          parallel benchmarks exist, and what to read next. Renders 3-part
+          structure: why_primary paragraph + secondary refs as bulleted list
+          + next_reading paragraph. */}
       <section>
-        <h2 className="card-title mb-3">参考文献</h2>
+        <h2 className="card-title mb-3">历史基准链 · Benchmark lineage</h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+          这条链告诉你当前页锚定的这一篇文献为什么成了课堂共同语言、同主题还有哪些并列或互相补充的基准、以及读完这一 case 之后下一篇应该读什么。
+        </p>
+        <div className="space-y-4 rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-sky-300">
+              为什么选这一篇 · Why this paper
+            </p>
+            <p className="text-[13px] leading-relaxed text-surface-200">
+              {learnCase.benchmark_lineage_zh.why_primary}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+              并列 / 补充文献 · Parallel + complementary
+            </p>
+            <ul className="space-y-1 text-[12px] leading-relaxed text-surface-300">
+              {learnCase.benchmark_lineage_zh.secondary.map((s, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="mono text-surface-500">·</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+              下一篇读什么 · Next reading
+            </p>
+            <p className="text-[13px] leading-relaxed text-surface-200">
+              {learnCase.benchmark_lineage_zh.next_reading}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="card-title mb-3">参考文献 · Short citation</h2>
         <p className="mono text-[13px] text-surface-300">{learnCase.canonical_ref}</p>
       </section>
     </div>
