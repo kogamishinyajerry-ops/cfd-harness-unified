@@ -54,7 +54,11 @@ A3_RESIDUAL_FLOOR = 1.0e-3             # initial residual of any field
 #   block; A4 must track BLOCKS not LINES (BLOCKER 2) so consecutive-hit
 #   semantics match the DEC's "3 consecutive time steps" intent.
 A4_PRESSURE_FIELD_RE = re.compile(
-    r"(?:GAMG|PCG|DICPCG|PBiCG|DILUPBiCGStab|smoothSolver)\s*:\s*"
+    # Codex DEC-038 round-2 nit: PBiCGStab:... would not match PBiCG
+    # alternative because the next char after the 5-letter prefix is 'S'
+    # not ':'. List PBiCGStab before PBiCG so regex alternation picks the
+    # longer literal first.
+    r"(?:GAMG|DICPCG|PCG|PBiCGStab|PBiCG|DILUPBiCGStab|smoothSolver)\s*:\s*"
     r"Solving for\s+(p(?:_rgh|d)?)\s*,"
     r".+?No Iterations\s+(\d+)"
 )
