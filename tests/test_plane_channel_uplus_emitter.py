@@ -122,18 +122,16 @@ def test_compute_profile_recovers_known_u_tau() -> None:
         assert up == pytest.approx(yp, abs=1e-9)
 
 
-def test_compute_profile_half_channel_fold_drops_upper_half() -> None:
-    """For a full-channel U(y) input spanning both walls, the emitter
-    must fold into half-channel and NOT double-count. Only points with
-    y_wall ≤ h survive."""
+def test_compute_profile_half_channel_fold_keeps_lower_half_only() -> None:
+    """Codex DEC-V61-043 round-1 FLAG fix: "half-channel fold" means
+    actually drop the upper half, NOT double-fold both halves to the
+    same y_wall coords (which gave duplicate y_plus entries). For a
+    symmetric 7-point full-channel input, emitter must return exactly
+    4 entries (y_wall ∈ {0, 0.2, 0.4, 0.5}) from the lower half only."""
     tau_w = 1.0  # u_tau = 1
     nu = 1e-5
     h = 0.5
-    # Build full-channel profile (symmetric about y=0) and verify that
-    # compute_profile drops the upper half.
-    rows = []
-    for y in [-0.5, -0.3, -0.1, 0.0, 0.1, 0.3, 0.5]:
-        rows.append((y, 1.0))  # constant Ux
+    rows = [(y, 1.0) for y in [-0.5, -0.3, -0.1, 0.0, 0.1, 0.3, 0.5]]
     profile = compute_normalized_profile(
         wall_shear_stress=tau_w,
         u_line=rows,
@@ -142,12 +140,13 @@ def test_compute_profile_half_channel_fold_drops_upper_half() -> None:
         y_bottom=-0.5,
         y_top=0.5,
     )
-    # y=-0.5 → y_wall=0, y=-0.3 → 0.2, y=-0.1 → 0.4, y=0 → 0.5 (centerline,
-    # y_wall=h exactly → kept by the ≤ h bound), y=0.1 → 0.4 (still ≤ h),
-    # y=0.3 → 0.2, y=0.5 → 0. So all 7 points are within half-channel
-    # (in a perfectly symmetric channel both halves map to the same
-    # y_wall values — that's the fold, not a drop).
-    assert len(profile.y_plus) == 7
+    # Lower half (y ≤ 0): y=-0.5 → y_wall=0, y=-0.3 → 0.2,
+    # y=-0.1 → 0.4, y=0 → 0.5 (centerline kept exactly once).
+    # Upper half dropped.
+    assert len(profile.y_plus) == 4
+    expected_y_wall = [0.0, 0.2, 0.4, 0.5]
+    for yp, y_wall_expected in zip(profile.y_plus, expected_y_wall):
+        assert yp == pytest.approx(y_wall_expected * 1.0 / nu, abs=1e-6)
 
 
 def test_compute_profile_rejects_nonpositive_tau() -> None:
@@ -240,8 +239,11 @@ def test_read_uline_profile_returns_none_when_absent(tmp_path: Path) -> None:
 
 
 def test_read_uline_profile_raises_on_sparse(tmp_path: Path) -> None:
+    """Codex DEC-V61-043 round-1 FLAG fix: threshold raised from 4 to
+    64 (half the generator's 129-point default) to catch gross
+    truncation of the line-uniform sampler output."""
     _write_uline(tmp_path, "50", [(0.0, 1.0, 0.0, 0.0), (0.1, 1.1, 0.0, 0.0)])
-    with pytest.raises(PlaneChannelEmitterError, match="<4 sample rows"):
+    with pytest.raises(PlaneChannelEmitterError, match="expected ≥64"):
         _read_uline_profile(tmp_path)
 
 
@@ -315,6 +317,31 @@ def test_emit_uplus_profile_roundtrip_loglaw(tmp_path: Path) -> None:
         assert abs(u_p - expected) / expected < 0.05, (
             f"y+={y_p:.2f}: got u+={u_p:.4f}, expected ≈{expected:.4f}"
         )
+
+
+def test_emit_uplus_profile_raises_on_partial_fo_output_wss_only(
+    tmp_path: Path,
+) -> None:
+    """Codex DEC-V61-043 round-1 BLOCKER: wallShearStress present but
+    uLine absent means the run emitted half the required evidence.
+    Must raise (not return None) so the comparator sees
+    MISSING_TARGET_QUANTITY rather than silently falling back."""
+    _write_wall_shear_stress(tmp_path, "50", (0.01, 0.0, 0.0))
+    # No uLine output.
+    with pytest.raises(PlaneChannelEmitterError, match="uLine output absent"):
+        emit_uplus_profile(tmp_path, nu=1e-5, half_height=0.5)
+
+
+def test_emit_uplus_profile_raises_on_partial_fo_output_uline_only(
+    tmp_path: Path,
+) -> None:
+    """Symmetric: uLine present but wallShearStress absent must raise."""
+    rows = [
+        (-0.5 + 0.01 * i, 0.0, 0.0, 0.0) for i in range(100)
+    ]
+    _write_uline(tmp_path, "50", rows)
+    with pytest.raises(PlaneChannelEmitterError, match="wallShearStress output absent"):
+        emit_uplus_profile(tmp_path, nu=1e-5, half_height=0.5)
 
 
 def test_emit_uplus_profile_propagates_malformed_error(tmp_path: Path) -> None:

@@ -190,10 +190,17 @@ def _read_uline_profile(
                 f"{xy}: row {s!r} has non-numeric y or Ux"
             ) from exc
         rows.append((y, ux))
-    if len(rows) < 4:
+    # Codex DEC-V61-043 round-1 FLAG: generator emits nPoints=129 on
+    # the line-uniform sampler; accepting <64 rows would silently let
+    # a truncated run PASS the sparse-input check. Threshold at 64 is
+    # half the default, which allows for any future down-sampled
+    # generator variant but rejects gross truncation / corruption.
+    MIN_SAMPLES = 64
+    if len(rows) < MIN_SAMPLES:
         raise PlaneChannelEmitterError(
-            f"{xy} has <4 sample rows; line-uniform sampler should emit "
-            f"{129} per DEC-V61-043 generator default"
+            f"{xy} has {len(rows)} sample rows; expected ≥{MIN_SAMPLES} "
+            f"(DEC-V61-043 generator emits 129). Truncated / corrupt "
+            f"postProcessing output."
         )
     rows.sort(key=lambda r: r[0])
     return rows
@@ -240,20 +247,32 @@ def compute_normalized_profile(
         y_bottom = min(y for y, _ in u_line)
     if y_top is None:
         y_top = max(y for y, _ in u_line)
+    y_center = 0.5 * (y_bottom + y_top)
 
+    # Codex DEC-V61-043 round-1 FLAG: "half-channel fold" means FOLD —
+    # map both halves to the same [0, h] space AND either drop one
+    # half or average duplicates. Previously we just folded y_wall
+    # without deduplicating, so each y_plus value appeared twice
+    # (once from the lower half, once from the upper). For a
+    # converged run the two halves are symmetric and the duplicates
+    # are benign, but a subtly-asymmetric run (upstream effects,
+    # mesh asymmetry) would silently let the comparator pick one
+    # arbitrary branch. Fix: keep only the LOWER half (y ≤ center),
+    # which is standard Moser convention. Upper-half statistics are
+    # available via the mirror; if a case ever develops real
+    # asymmetry it should emit two separate profiles, not merge.
     y_plus_list: List[float] = []
     u_plus_list: List[float] = []
     for y, ux in u_line:
-        y_wall = min(abs(y - y_bottom), abs(y - y_top))
-        if y_wall < 0.0:
+        # Keep lower half only (y ≤ center). Include the center
+        # point exactly once (y_wall = half_height at y = center).
+        if y > y_center + 1e-9:
+            continue
+        y_wall = abs(y - y_bottom)
+        if y_wall > half_height * 1.0000001:
             continue
         yp = y_wall * u_tau / nu
         up = ux / u_tau
-        # Half-channel fold: keep only points at or below centerline
-        # (y_wall ≤ half_height). Points past centerline are the
-        # mirror image on the other wall.
-        if y_wall > half_height * 1.0000001:
-            continue
         y_plus_list.append(yp)
         u_plus_list.append(up)
 
@@ -285,8 +304,26 @@ def emit_uplus_profile(
     """
     tau_w = _read_wall_shear_stress(case_dir)
     u_line = _read_uline_profile(case_dir)
-    if tau_w is None or u_line is None:
+    # Codex DEC-V61-043 round-1 BLOCKER: treat partial FO output as
+    # corruption, not absence. If *both* inputs are missing (MOCK run,
+    # legacy fixture, case not regenerated), return None so the caller
+    # can fall back cleanly. If only one is missing, the run emitted
+    # half the required evidence — fail loud so the comparator sees
+    # MISSING_TARGET_QUANTITY instead of a silent cell-centre fallback.
+    if tau_w is None and u_line is None:
         return None
+    if tau_w is None:
+        raise PlaneChannelEmitterError(
+            "plane_channel postProcessing corruption: uLine output "
+            "present but wallShearStress output absent — expected both "
+            "from the DEC-V61-043 controlDict functions{} block."
+        )
+    if u_line is None:
+        raise PlaneChannelEmitterError(
+            "plane_channel postProcessing corruption: wallShearStress "
+            "output present but uLine output absent — expected both "
+            "from the DEC-V61-043 controlDict functions{} block."
+        )
 
     profile = compute_normalized_profile(
         wall_shear_stress=tau_w,
