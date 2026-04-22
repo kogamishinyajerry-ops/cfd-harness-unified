@@ -1,67 +1,108 @@
 # cfd-harness-unified
 
-统一 AI-CFD 知识编译器：**Foam-Agent** 执行引擎 + **Notion** 控制面 + **Path B UI MVP** 工作台。
+A demo-first AI-CFD workbench. Ten canonical flow problems, each paired with
+its historical gold standard, tolerance band, and common pitfalls — so you can
+see the distance between *getting a number* and *getting it right*.
 
-## 快速开始（核心 CLI / 测试）
-
-```bash
-pip install -e ".[dev]"
-pytest
-```
-
-## UI MVP 快速开始（Path B · Phase 0..4）
-
-Path B 是面向受监管行业（FDA V&V40 / DO-178C / NQA-1 / ASME V&V40）的 Agentic
-V&V-first 工作台。MVP 已落地 Phase 0 至 Phase 4：Validation Report、Case
-Editor、Decisions Queue、Run Monitor、Dashboard。Phase 5（Audit Package
-Builder）暂缓，等待 Q-1 / Q-2 外部 Gate 决议。
+## Quick start
 
 ```bash
-# 一次性安装
-pip install -e ".[ui,dev]"
+# Python 3.12 is the supported runtime. Everything below assumes .venv is
+# Python 3.12.x (see `./.venv/bin/python --version`).
+python3.12 -m venv .venv
+.venv/bin/pip install -e ".[ui,dev]"
 (cd ui/frontend && npm install)
 
-# 一键启动（FastAPI :8000 + Vite :5173）
 ./scripts/start-ui-dev.sh
-
-# 浏览器访问
-#   UI:      http://127.0.0.1:5173
-#   API Doc: http://127.0.0.1:8000/api/docs
+# UI:      http://127.0.0.1:5173/learn          ← demo front door
+# Pro:     http://127.0.0.1:5173/pro            ← evidence workbench
+# API doc: http://127.0.0.1:8000/api/docs
 ```
 
-UI 目录概览：
+## What you see
 
-- `ui/backend/` — FastAPI + Pydantic v2，只读挂载知识库，禁写 `knowledge/whitelist.yaml` 与 `knowledge/gold_standards/**`
-- `ui/backend/user_drafts/` — Case Editor 写入的用户草稿区（Phase 1 禁区隔离）
-- `ui/frontend/` — Vite 5 + React 18 + TypeScript + Tailwind 3 + CodeMirror 6
+### `/learn` — demo front door
 
-相关决策：见 `.planning/decisions/2026-04-20_path_b_ui_mvp.md`（DEC-V61-002）
-及 `.planning/decisions/2026-04-20_phase_1_to_4_mvp.md`（DEC-V61-003）。
+Ten classic CFD problems as a visual catalog. Each card carries its historical
+citation, a difficulty dot, and a one-line teaser. Click into a case and you
+get five tabs:
 
-## 架构
+- **故事 / Story** — physics, canonical reference, why validation matters, the
+  literature reference plot, and the solver contour + residuals from a real
+  OpenFOAM run.
+- **对比 / Compare** — your measurement vs. the gold value on a tolerance band.
+  Run selector lets you flip between reference / under-resolved / wrong-model
+  runs to watch the verdict change — that's the teaching moment.
+- **网格 / Mesh** — grid-convergence slider (4 densities), live sparkline that
+  plots your measurement as it converges toward gold.
+- **运行 / Run** — jump into Pro Workbench for the real solver loop.
+- **进阶 / Advanced** — decision trail, audit concerns, signed audit package
+  builder.
 
-```
-Notion TaskSpec → task_runner → CFDExecutor → result_comparator → correction_recorder → Notion
-```
+Anchor cases (the ones with the tightest story → compare → evidence loop):
 
-- **MockExecutor**：测试专用，返回预设结果
-- **FoamAgentExecutor**：占位符，对接真实 Foam-Agent
-- **knowledge_db**：本地 YAML 知识库（Gold Standard + CorrectionSpec）
-- **UI MVP**：`ui/backend` + `ui/frontend`，Validation Report → Case Editor → Decisions Queue → Run Monitor → Dashboard
+- `lid_driven_cavity` (Ghia 1982)
+- `circular_cylinder_wake` (Williamson 1996)
+- `naca0012_airfoil` (Ladson 1988)
 
-## 配置
+### `/pro` — evidence workbench
 
-复制并填写 `config/notion_config.yaml` 和 `config/foam_agent_config.yaml`。
+Path B V&V-first surface for audit, regulated-industry contexts, and anyone
+who needs to hand a CFD result to someone whose signature is on the line.
+Screens: Dashboard · Cases · Decisions · Runs · Audit Package.
 
-## 测试
+Not the right starting point for a demo. Reachable from every `/learn` page
+via `进入专业工作台 →` and from the top-nav `Pro Workbench →` link.
+
+## Testing
 
 ```bash
-# 核心
-pytest --cov=src --cov-report=term-missing
+# Core engine + knowledge + report engine
+.venv/bin/pytest
 
-# UI backend
-pytest ui/backend/tests -q
+# UI backend (FastAPI routes, comparator gates, attestor, audit package)
+.venv/bin/pytest ui/backend/tests -q
 
 # UI frontend
 (cd ui/frontend && npm run typecheck && npm run build)
 ```
+
+## Architecture (one screen)
+
+```
+knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml
+       │
+       ├─► auto_verifier  ─────► report_engine  ─────► reports/<case>/
+       │                                                auto_verify_report.yaml
+       │
+       ├─► task_runner  ──► FoamAgentExecutor ──► reports/phase5_fields/<case>/
+       │                   (Docker + OpenFOAM)
+       │
+       └─► ui/backend  ──► /api/cases/*
+                               │
+                               ▼
+                         ui/frontend  /learn  /pro
+```
+
+- `MockExecutor`: unit-test fast path; returns preset results.
+- `FoamAgentExecutor`: the real Docker + OpenFOAM path (optional,
+  install via `.venv/bin/pip install -e '.[cfd-real-solver]'`).
+- `src/convergence_attestor.py` + `src/comparator_gates.py`: the A1..A6 /
+  G1..G5 hard-FAIL guards that stop a PASS-washed verdict from leaking out
+  of the system (DEC-V61-036, DEC-V61-038, DEC-V61-045).
+
+## Configuration
+
+- `config/notion_config.yaml` — Notion control-plane (optional, only wired
+  up for the internal decisions mirror).
+- `config/foam_agent_config.yaml` — Foam-Agent executor (only needed when
+  running real OpenFOAM, not for the demo path).
+
+## Where to look next
+
+- `.planning/STATE.md` — current phase state, open decisions, external gates.
+- `.planning/decisions/` — the numbered DEC-V61-* ledger; every non-trivial
+  contract change is recorded here.
+- `knowledge/gold_standards/*.yaml` — one canonical file per case. Each now
+  carries a `physics_contract` block (preconditions, contract_status) so a
+  PASS is explicitly a physics-valid PASS.

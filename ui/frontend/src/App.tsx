@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { Layout } from "@/components/Layout";
 import { LearnLayout } from "@/components/learn/LearnLayout";
@@ -12,23 +12,35 @@ import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { RunMonitorPage } from "@/pages/RunMonitorPage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 
-// Path B · Phase 0..5 MVP routes (Pro Workbench under /) + student-
-// facing demo under /learn (LearnLayout). The /learn tree is a separate
-// shell — softer typography, no sidebar, top-nav only — that speaks to
-// CFD learners. Evidence-heavy features (audit, decisions, run monitor)
-// stay under / and are reachable via "Pro Workbench →" link.
+// Demo-first routing (convergence round, 2026-04-22): the default landing is
+// now the /learn shell — the student-facing catalog of 10 canonical cases.
+// Pro Workbench (evidence-heavy validation / decisions / audit package) stays
+// mounted under /pro and every /learn case has a "进入专业工作台 →" hook.
+//
+// Rationale: the workbench builds credibility but the demo story starts from
+// "ten canonical flows, honest comparison against literature". Landing on the
+// dashboard surfaced governance jargon (Phase 8 Sprint 1, attestor, gates,
+// verdict split) before the user had any anchor case to tie them to. Flipping
+// the default solves that without touching either shell internally.
 export default function App() {
   return (
     <Routes>
+      {/* Default: redirect / → /learn */}
+      <Route index element={<Navigate to="/learn" replace />} />
+
       {/* Student-facing learn shell */}
       <Route path="/learn" element={<LearnLayout />}>
         <Route index element={<LearnHomePage />} />
         <Route path="cases/:caseId" element={<LearnCaseDetailPage />} />
       </Route>
 
-      {/* Pro Workbench (existing Phase 0..5 routes) */}
+      {/* Pro Workbench (Phase 0..5 evidence surface). Dashboard lives at /pro
+          so the existing Dashboard "cards" layout still works for power users
+          while it's one click further from the demo front door. Every
+          evidence sub-route (decisions/runs/audit-package/cases) keeps its
+          canonical top-level path so existing deep-links still resolve. */}
       <Route element={<Layout />}>
-        <Route index element={<DashboardPage />} />
+        <Route path="/pro" element={<DashboardPage />} />
         <Route path="/cases" element={<CaseListPage />} />
         <Route path="/cases/:caseId/report" element={<ValidationReportPage />} />
         <Route path="/cases/:caseId/edit" element={<CaseEditorPage />} />
@@ -36,7 +48,7 @@ export default function App() {
         <Route path="/runs" element={<RunMonitorPage />} />
         <Route path="/runs/:caseId" element={<RunMonitorPage />} />
         <Route path="/audit-package" element={<AuditPackagePage />} />
-        <Route path="*" element={<DashboardPage />} />
+        <Route path="*" element={<Navigate to="/learn" replace />} />
       </Route>
     </Routes>
   );

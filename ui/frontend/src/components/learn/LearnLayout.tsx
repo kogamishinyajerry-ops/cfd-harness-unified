@@ -53,7 +53,7 @@ export function LearnLayout() {
             </a>
             <span className="h-4 w-px bg-surface-700" aria-hidden />
             <Link
-              to="/"
+              to="/pro"
               className="text-[11px] uppercase tracking-[0.16em] text-surface-400 hover:text-surface-200"
               title="Pro workbench: audit packages, decisions, run monitor"
             >

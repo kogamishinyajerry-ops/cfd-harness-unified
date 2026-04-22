@@ -12,7 +12,10 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { label: "Dashboard", to: "/", enabled: true, phaseLabel: "Phase 4" },
+  // Dashboard moved from "/" to "/pro" when /learn became the demo front
+  // door (2026-04-22 convergence round). Sidebar order unchanged so the
+  // power-user muscle memory still works.
+  { label: "Dashboard", to: "/pro", enabled: true, phaseLabel: "Phase 4" },
   { label: "Cases", to: "/cases", enabled: true, phaseLabel: "Phase 0" },
   { label: "Decisions", to: "/decisions", enabled: true, phaseLabel: "Phase 2" },
   { label: "Runs", to: "/runs", enabled: true, phaseLabel: "Phase 3" },
@@ -22,6 +25,8 @@ const NAV: NavItem[] = [
     enabled: true,
     phaseLabel: "Phase 5",
   },
+  // One-click back to the demo / learning catalog.
+  { label: "← Learn", to: "/learn", enabled: true, phaseLabel: "Demo" },
 ];
 
 export function Layout() {
@@ -45,7 +50,7 @@ export function Layout() {
               <NavLink
                 key={item.label}
                 to={item.to}
-                end={item.to === "/"}
+                end={item.to === "/pro"}
                 className={({ isActive }) =>
                   `flex items-center justify-between rounded-sm px-2 py-1.5 text-sm transition-colors ${
                     isActive
