@@ -14,9 +14,9 @@ scope: |
 
 autonomous_governance: true
 claude_signoff: yes
-codex_tool_invoked: pending
-codex_rounds: 0
-codex_verdict: pending
+codex_tool_invoked: yes
+codex_rounds: 2
+codex_verdict: APPROVED (round 2, 2026-04-22)
 counter_status: |
   v6.1 autonomous_governance counter 31 → 32. Arc-size retro was due
   at 30; still deferred until DEC-041 closes (last of the Phase 8
@@ -188,11 +188,36 @@ DEC-V61-041 closes this by:
   single peak and flags low_confidence if peak-to-next-peak ratio
   is <1.5× but doesn't explicitly model the transition.
 
+## Codex round history
+
+**Round 1 (commit c81a028) — CHANGES_REQUIRED:**
+- BLOCKER — `Aref=0.01` in forceCoeffs FO, 10x too large. For
+  D=0.1, z_depth=0.1·D=0.01 → correct `Aref = D·z_depth = 0.001`.
+  OpenFOAM would have under-reported Cd, Cl by 10x. Fixed in
+  commit dd9cabc at `src/foam_agent_adapter.py:4670`.
+- FLAG — O(N²) stdlib DFT with 30k samples (150s @ 0.005s resample)
+  was impractically slow (~2min/run). Fixed in commit dd9cabc at
+  `src/cylinder_strouhal_fft.py:296-308` by adding `MAX_SAMPLES=8192`
+  via `dt_floor_for_cap = window_duration / (MAX_SAMPLES - 1)`
+  combined with `target_dt = max(median_raw_dt, 0.02, dt_floor_for_cap)`.
+  Fast test suite: 117s → 7.4s.
+
+**Round 2 (commit dd9cabc) — APPROVED:**
+- BLOCKER: resolved (Aref=0.001 verified geometrically correct).
+- FLAG: resolved. Codex probed synthetic 1.00-2.00 Hz → St error
+  0.18-0.34%, cap-active 170s window (N=8192) gave St=0.164118 for
+  true 0.164000. Nyquist margin 25Hz vs ≤2Hz signal. Safe.
+- nit: add CI test for MAX_SAMPLES branch. Fixed in this commit via
+  `test_compute_strouhal_enforces_max_samples_cap_on_long_window`
+  at `tests/test_cylinder_strouhal_fft.py:198` (250s window →
+  dt_floor_for_cap ≈ 0.0244 > 0.02 → cap branch active).
+
 ## Live verification
 
 ```
-tests/test_cylinder_strouhal_fft.py ................... 15 passed
+tests/test_cylinder_strouhal_fft.py ................... 16 fast passed
                                                         (4 slow deselected)
+  + test_compute_strouhal_enforces_max_samples_cap_on_long_window (NEW)
 tests/test_foam_agent_adapter.py::*cylinder* ........... 4 passed
 tests/test_airfoil_surface_sampler.py .................. 20 passed
 tests/test_plane_channel_uplus_emitter.py .............. 20 passed
@@ -200,7 +225,7 @@ tests/test_wall_gradient.py ............................ 11 passed
 tests/test_dec042_extractor_integration.py ..............  5 passed
 ui/backend/tests/ ...................................... 201 passed
 
-Total: 276/276 green post-DEC-041 (excluding 16 pre-existing
+Total: 277/277 green post-DEC-041 round 2 (excluding 16 pre-existing
 unrelated failures in contract_dashboard / audit_package / gold_
 standard_schema / LDC sampleDict helpers — these were failing before
 DEC-041 was started; verified via `git stash` sanity check).
@@ -216,9 +241,13 @@ Codex pre-merge per RETRO-V61-001:
   extractor rewrite)
 - New shared module with non-trivial algorithm (FFT)
 
+Codex outcome: 2 rounds, APPROVED round 2. Self-pass 0.70 calibrated
+accurately — round 1 returned BLOCKER + FLAG, both addressed in one
+follow-up commit, round 2 clean APPROVED.
+
 Retro now due per RETRO-V61-001 arc-size cadence (counter ≥30 fired
 at DEC-043; deferred through DEC-041 completion). Will land
-immediately after DEC-041 Codex APPROVED.
+immediately after DEC-041 closes.
 
 ## Related
 

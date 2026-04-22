@@ -195,6 +195,32 @@ def test_compute_strouhal_removes_transient_bias() -> None:
     assert result.cd_mean == pytest.approx(1.33, abs=0.005)
 
 
+def test_compute_strouhal_enforces_max_samples_cap_on_long_window() -> None:
+    """Codex DEC-041 round 2 nit: the MAX_SAMPLES=8192 branch only
+    activates when dt_floor_for_cap = window_duration / 8191 exceeds
+    the 0.02s floor, i.e. window > 163.82s. Exercise that branch:
+    duration=250s + transient_trim=50s → 200s post-trim window,
+    dt_floor_for_cap ≈ 0.0244s > 0.02s → cap is active."""
+    dt = 0.005
+    duration = 250.0
+    f_true = 1.64
+    rows = _sinusoidal_cl(duration, dt, f_hz=f_true, amplitude=0.048,
+                          cd_mean=1.33)
+    t = [r[0] for r in rows]
+    cd = [r[2] for r in rows]
+    cl = [r[3] for r in rows]
+    result = compute_strouhal(
+        t, cl, cd, U_ref=1.0, D=0.1, transient_trim_s=50.0
+    )
+    # St still recovered within bin resolution.
+    assert result.strouhal_number == pytest.approx(0.164, rel=0.01)
+    # samples_used must be at or below MAX_SAMPLES (8192).
+    assert result.samples_used <= 8192
+    # fft_window_s should match the 200s post-trim window (within one
+    # resampled step).
+    assert 199.0 < result.fft_window_s < 201.0
+
+
 def test_compute_strouhal_raises_on_short_window() -> None:
     rows = _sinusoidal_cl(0.1, 0.005, f_hz=1.64)
     t = [r[0] for r in rows]
