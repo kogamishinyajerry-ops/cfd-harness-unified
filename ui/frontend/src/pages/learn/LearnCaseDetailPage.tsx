@@ -495,6 +495,74 @@ function StoryTab({
         </div>
       </section>
 
+      {/* DEC-V61-048 round-1 batch 3 (B) — reproducibility runbook +
+          troubleshooting checklist. Codex deep-dive D/F axes: every case
+          lacked a "from zero" OpenFOAM pipeline walk and a symptom→cause→fix
+          troubleshooting checklist. Without them the page reads like a
+          description of a finished run, not a chapter the student can
+          follow. Rendered between benchmark lineage and short citation so
+          a student reads: why this case → physics → solver/mesh/BC/extract
+          → lineage → "here is exactly how to rerun it and what to do when
+          it breaks" → citation. */}
+      <section>
+        <h2 className="card-title mb-3">复现流程 · Reproducibility walk-through</h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+          下面是在 OpenFOAM 里从零到 comparator verdict 的完整命令/文件 sequence。每一步给出操作、对应 command (若有) 和应该检查的产物，方便在你自己的环境里逐步对照。
+        </p>
+        <ol className="space-y-3 rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          {learnCase.workflow_steps_zh.map((w, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="mono mt-0.5 shrink-0 text-[11px] font-semibold text-sky-300">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="flex-1 space-y-1">
+                <p className="text-[13px] font-medium text-surface-100">{w.step}</p>
+                {w.command && (
+                  <pre className="mono overflow-x-auto rounded bg-surface-950/60 px-2.5 py-1.5 text-[11.5px] leading-snug text-emerald-200/90">
+                    {w.command}
+                  </pre>
+                )}
+                <p className="text-[12px] leading-relaxed text-surface-300">{w.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section>
+        <h2 className="card-title mb-3">故障排查 · Troubleshooting checklist</h2>
+        <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+          按经验可能性从高到低排列的失败模式。每一行是一个"如果你看到 X，十有八九是 Y，修 Z"的三段式诊断，帮你在 solver 不收敛或 comparator 给出奇怪数字时快速定位根因。
+        </p>
+        <div className="space-y-2">
+          {learnCase.troubleshooting_zh.map((t, i) => (
+            <div
+              key={i}
+              className="rounded-md border border-amber-900/40 bg-amber-950/10 p-3"
+            >
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+                症状 · Symptom
+              </p>
+              <p className="mb-2 text-[13px] leading-relaxed text-surface-100">{t.symptom}</p>
+              <div className="grid gap-2 text-[12px] leading-relaxed text-surface-300 md:grid-cols-2">
+                <div>
+                  <p className="mb-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-rose-300">
+                    根因 · Likely cause
+                  </p>
+                  <p>{t.likely_cause}</p>
+                </div>
+                <div>
+                  <p className="mb-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300">
+                    修复 · Fix
+                  </p>
+                  <p>{t.fix}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section>
         <h2 className="card-title mb-3">参考文献 · Short citation</h2>
         <p className="mono text-[13px] text-surface-300">{learnCase.canonical_ref}</p>
