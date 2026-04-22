@@ -5871,6 +5871,15 @@ boundaryField
         chord = float(bc.get("chord_length", 1.0))
         U_inf = 1.0  # freestream velocity
         nu_val = U_inf * chord / Re
+        # DEC-V61-044: plumb chord + U_inf + rho into boundary_conditions
+        # so the airfoil_surface_sampler.compute_cp helper can normalize
+        # p → Cp without re-deriving the freestream from other sources.
+        # simpleFoam is incompressible kinematic-pressure, so rho=1.0.
+        task_spec.boundary_conditions = bc
+        bc.setdefault("chord_length", chord)
+        bc["U_inf"] = U_inf
+        bc["p_inf"] = 0.0  # gauge pressure matches 0/p internalField
+        bc["rho"] = 1.0  # incompressible kinematic convention
         # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
         # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
         # works with the C-grid hex ordering. The adapter's previous x-y plane
@@ -6175,6 +6184,28 @@ writeCompression off;
 timeFormat      general;
 timePrecision   6;
 runTimeModifiable true;
+
+// DEC-V61-044: in-solver surface sampler on the `aerofoil` patch
+// (note British spelling — matches blockMesh patch name). Emits
+// postProcessing/airfoilSurface/<t>/p_aerofoil.raw with columns
+// `x y z p` per face. Parser lives in src/airfoil_surface_sampler.py.
+// Runs at writeTime (every 200 iterations via writeInterval above).
+functions
+{
+    airfoilSurface
+    {
+        type            surfaces;
+        libs            ("libsampling.so");
+        writeControl    writeTime;
+        surfaceFormat   raw;
+        fields          (p);
+        interpolationScheme cellPoint;
+        surfaces
+        {
+            aerofoil { type patch; patches (aerofoil); interpolate false; }
+        }
+    }
+}
 
 // ************************************************************************* //
 """,
@@ -7624,20 +7655,66 @@ mergePatchPairs
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """If postProcessing/sets/.../airfoilCp_p.xy is present, overwrite
-        `pressure_coefficient` with Cp = (p - p_inf) / (0.5·ρ·U_inf²).
+        """NACA Cp profile: prefer in-solver `surfaces` FO output,
+        fall back to legacy point-based sampleDict, finally to
+        volume-cell band averaging.
 
-        For incompressible simpleFoam, OpenFOAM's `p` field is kinematic
-        (p/ρ), so we use q_ref = 0.5·U_inf² with ρ treated as 1.0. p_inf
-        is taken as 0 gauge — matches the 0/p internalField uniform 0.
+        DEC-V61-044 migration path:
+        1. Read postProcessing/airfoilSurface/<t>/p_aerofoil.raw (the
+           `surfaces` FO on patches=(aerofoil) emitted by the current
+           generator). This is THE source of truth for Cp.
+        2. If the FO output is absent (MOCK run / legacy case / pre-DEC
+           case not regenerated), fall through to the old point-based
+           sampleDict path (`airfoilCp_p.xy`). That path was orphaned
+           at runtime pre-DEC (executor didn't invoke `sample`), but
+           we keep the parser for backward compat.
+        3. Legacy volume-cell band averaging (`_extract_airfoil_cp`)
+           is dispatched BEFORE this method and populates the default
+           scalar. If neither FO path produces output, the band-
+           averaged value stays — honest PASS_WITH_DEVIATIONS is
+           preferable to refusing a run entirely, and the source flag
+           tells the UI which path fired.
+
+        Malformed FO output fails loud via
+        AirfoilSurfaceSamplerError — matches DEC-V61-040 round-2
+        pattern: corruption must surface, not silently degrade.
         """
+        bc = task_spec.boundary_conditions or {}
+        chord = float(bc.get("chord_length", 1.0))
+        U_inf = float(bc.get("U_inf", 1.0))
+        rho = float(bc.get("rho", 1.0))
+        p_inf = float(bc.get("p_inf", 0.0))
+
+        # Primary path: in-solver surfaces FO.
+        try:
+            from src.airfoil_surface_sampler import (
+                emit_cp_profile,
+                AirfoilSurfaceSamplerError,
+            )
+            emitted = emit_cp_profile(
+                case_dir,
+                chord=chord,
+                U_inf=U_inf,
+                rho=rho,
+                p_inf=p_inf,
+            )
+        except AirfoilSurfaceSamplerError as exc:
+            # Corruption: fail loud via a clearly-labelled extractor
+            # concern. Downstream DEC-036 G1 will flag
+            # MISSING_TARGET_QUANTITY at the comparator since
+            # pressure_coefficient is not overwritten.
+            key_quantities["pressure_coefficient_emitter_error"] = str(exc)
+            return key_quantities
+        if emitted is not None:
+            key_quantities.update(emitted)
+            return key_quantities
+
+        # Fallback: legacy point-based sampleDict (orphaned at runtime
+        # pre-DEC-044, but preserved for back-compat with any case
+        # that still uses the old generator output).
         points = _try_load_sampledict_output(case_dir, "airfoilCp", "p")
         if not points:
             return key_quantities
-        bc = task_spec.boundary_conditions or {}
-        chord = float(bc.get("chord_length", 1.0))
-        U_inf = 1.0
-        rho = 1.0  # kinematic pressure convention
         q_ref = 0.5 * rho * U_inf * U_inf
         if q_ref <= 0.0 or chord <= 0.0:
             return key_quantities
@@ -7655,7 +7732,6 @@ mergePatchPairs
             cp_entries.append({"x_over_c": x_over_c, "Cp": cp})
         if not cp_entries:
             return key_quantities
-        # Sort by x/c for consistent comparator ordering
         cp_entries.sort(key=lambda entry: entry["x_over_c"])
         key_quantities["pressure_coefficient"] = cp_entries
         key_quantities["pressure_coefficient_source"] = "sampleDict_direct"
