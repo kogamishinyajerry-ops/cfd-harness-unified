@@ -38,6 +38,27 @@ def test_export_returns_zip_with_readme_and_contract() -> None:
     assert "u_centerline" in contract or "Tolerance" in contract
 
 
+def test_export_renders_physics_contract_with_three_state_markers() -> None:
+    """Regression guard for the honesty bug where `satisfied_by_current_adapter: partial`
+    was truthy-rendered as `[✓]`, laundering a documented gap into a clean check.
+    LDC's physics_contract has 4 `true` preconditions + 1 `partial`, so the rendered
+    markdown must carry the [~] marker at least once, and the Contract status headline
+    must surface the nuanced status string."""
+    response = client.get("/api/cases/lid_driven_cavity/export")
+    assert response.status_code == 200
+    contract = _open_zip(response.content).read(
+        "lid_driven_cavity/validation_contract.md"
+    ).decode()
+    assert "## Contract status" in contract
+    assert "SATISFIED_FOR_U_CENTERLINE_ONLY" in contract
+    assert "[~]" in contract, (
+        "partial-satisfied precondition must render as [~], not laundered to [✓]"
+    )
+    assert "[✓]" in contract
+    # Legend must be present so readers know what [~] means.
+    assert "Legend" in contract
+
+
 def test_export_preserves_gold_yaml_byte_identity() -> None:
     """Gold YAML in the zip must be byte-identical to knowledge/gold_standards/."""
     from pathlib import Path

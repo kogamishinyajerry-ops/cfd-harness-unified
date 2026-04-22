@@ -149,21 +149,51 @@ def _render_contract_md(case_id: str, case: dict, gold: dict | None) -> str:
                 )
                 break
 
+    # Contract-status headline (SATISFIED / COMPATIBLE / PARTIAL / INCOMPATIBLE /
+    # INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE / ...). This is the
+    # nuanced verdict from the gold YAML — rendering it up top makes the PASS/HAZARD
+    # rubric below readable against the right baseline.
+    pc_block = (gold or {}).get("physics_contract") or {}
+    contract_status = pc_block.get("contract_status")
+    if contract_status:
+        lines.append("")
+        lines.append("## Contract status")
+        lines.append("")
+        lines.append(f"> {contract_status}")
+        reviewed = pc_block.get("precondition_last_reviewed")
+        if reviewed:
+            lines.append("")
+            lines.append(f"_Last reviewed: {reviewed}_")
+
     # Preconditions
     if gold:
-        preconds = (gold.get("physics_contract") or {}).get(
-            "physics_precondition"
-        ) or []
+        preconds = pc_block.get("physics_precondition") or []
         if preconds:
             lines.append("")
             lines.append("## Preconditions")
+            lines.append("")
+            lines.append(
+                "Legend: `[✓]` satisfied by the current adapter · `[~]` partially satisfied "
+                "(known gap, usually documented in the evidence) · `[✗]` not satisfied."
+            )
             lines.append("")
             for i, pc in enumerate(preconds, 1):
                 condition = pc.get("condition", "(no condition given)")
                 satisfied = pc.get("satisfied_by_current_adapter", False)
                 ev = pc.get("evidence_ref", "")
                 consequence = pc.get("consequence_if_unsatisfied", "")
-                mark = "✓" if satisfied else "✗"
+                # Three-state marker — satisfied_by_current_adapter can be
+                # true / false / "partial" / "partially". Rendering partial
+                # as ✓ would launder a honest precondition-gap as a clean
+                # satisfied check, which defeats the whole point of the
+                # physics_contract block. Use [~] for partial, [✗] for
+                # explicit false, [✓] only for true.
+                if satisfied is True:
+                    mark = "✓"
+                elif isinstance(satisfied, str) and satisfied.lower() in {"partial", "partially"}:
+                    mark = "~"
+                else:
+                    mark = "✗"
                 lines.append(f"### {i}. [{mark}] {condition}")
                 lines.append("")
                 if ev:
