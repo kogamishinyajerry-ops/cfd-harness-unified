@@ -14,8 +14,8 @@ python3.12 -m venv .venv
 (cd ui/frontend && npm install)
 
 ./scripts/start-ui-dev.sh
-# UI:      http://127.0.0.1:5173/learn          ← demo front door
-# Pro:     http://127.0.0.1:5173/pro            ← evidence workbench
+# UI:      http://127.0.0.1:5180/learn          ← demo front door
+# Pro:     http://127.0.0.1:5180/pro            ← evidence workbench
 # API doc: http://127.0.0.1:8000/api/docs
 ```
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts the CFD Harness UI dev stack (Phase 0..4 MVP):
 #   - FastAPI backend on :8000 (uvicorn w/ reload)        [CFD_BACKEND_PORT overrides]
-#   - Vite dev server on :5173 (React + HMR, proxies /api) [CFD_FRONTEND_PORT overrides]
+#   - Vite dev server on :5180 (React + HMR, proxies /api) [CFD_FRONTEND_PORT overrides]
 #
 # Prereqs (one-time):
 #   pip install -e ".[ui,dev]"
@@ -31,9 +31,11 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 # Ports are overridable so the dev stack can coexist with other projects
-# that are already using 8000/5173. Defaults match the Phase 0..4 contract.
+# that are already using 8000/5180. 5180 chosen over the Vite default 5173
+# to avoid silent "opened the wrong app" incidents when multiple React
+# projects live on the same dev box (see 2026-04-22 convergence round).
 : "${CFD_BACKEND_PORT:=8000}"
-: "${CFD_FRONTEND_PORT:=5173}"
+: "${CFD_FRONTEND_PORT:=5180}"
 
 BACKEND_LOG="$(mktemp -t cfd-ui-backend.XXXXXX)"
 FRONTEND_LOG="$(mktemp -t cfd-ui-frontend.XXXXXX)"

@@ -70,10 +70,12 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# CORS: local dev (Vite @ 5173) allowed; tightened / origin-bound in Phase 5.
+# CORS: local dev (Vite @ 5180) allowed; tightened / origin-bound in Phase 5.
+# 5180 chosen over the Vite default 5173 to avoid collision with other React
+# projects on the same dev box (see 2026-04-22 convergence round).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=["http://127.0.0.1:5180", "http://localhost:5180"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
