@@ -1344,17 +1344,21 @@ function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
       <section>
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="card-title">
-            仿真结果云图 · OpenFOAM Simulation Fields
+            仿真场图 · Visual evidence only · 未完成金标准验证
           </h2>
           <p className="text-[11px] text-surface-500">
-            实际 OpenFOAM 真跑 · {data.solver ?? "solver"} · {data.commit_sha ?? ""}
+            OpenFOAM {data.solver ?? "solver"} · audit_real_run ·
+            commit {data.commit_sha ?? ""}
           </p>
         </div>
-        <div className="mb-3 rounded-md border border-sky-700/40 bg-sky-950/30 p-3 text-[12px] text-surface-200">
-          <span className="font-semibold text-sky-300">真实仿真输出</span>
-          ：下方 |U| 速度云图 + 残差曲线来自实际 OpenFOAM 求解器运行，
-          不是占位图。
-          {data.subtitle ? ` ${data.subtitle}` : ""}
+        <div className="mb-3 rounded-md border border-amber-600/50 bg-amber-950/30 p-3 text-[12px] text-amber-100">
+          <span className="font-semibold text-amber-300">⚠ 未通过金标准验证</span>
+          ：下方 |U| 速度云图 + 残差曲线来自实际 OpenFOAM 求解器，但本 case
+          的 <code className="mono text-amber-200">audit_real_run</code> verdict 为
+          <strong> FAIL</strong>（金标准指标比对未通过或指标提取缺失，详见
+          Run Inspector → audit_real_run 的 measurement.actual vs gold.expected）。
+          云图 + 残差只作为过程证据，<strong>不能作为"计算已通过"的结论依据</strong>。
+          完整金标准覆盖（Tier B）在 Phase 7c Sprint 2 之后提供。
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {contourUrl && (

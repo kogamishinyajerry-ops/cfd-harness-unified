@@ -111,19 +111,26 @@ def test_validation_report_turbulent_flat_plate_hazard(client: TestClient) -> No
     assert body["contract_status"] in ("HAZARD", "PASS", "FAIL")
 
 
-def test_validation_report_default_prefers_reference_pass_when_curated(
+def test_validation_report_default_prefers_audit_real_run(
     client: TestClient,
 ) -> None:
-    """Multi-run governance: a case with a curated reference_pass run
-    must surface that run by default rather than the real_incident
-    fixture, so the learner's first impression is a PASS narrative."""
+    """DEC-V61-035 (2026-04-22 deep-review): default run resolution must
+    prefer the `audit_real_run` category so the solver-in-the-loop verdict
+    is shown first, NOT the curated `reference_pass` narrative.
+
+    The previous rule preferred 'reference' unconditionally, which surfaced
+    curated PASS narratives as the default case verdict even when the
+    real-solver audit run FAILED — a PASS-washing bug flagged by user
+    deep-review (BFS/TFP/duct/plane_channel/RBC all FAIL on audit_real_run
+    but UI showed PASS via the default-pointing-to-reference fallback).
+    """
     response = client.get("/api/validation-report/turbulent_flat_plate")
     assert response.status_code == 200
     body = response.json()
-    # reference_pass is Blasius-aligned 0.00423 (+0.7% deviation, inside
-    # the 10% tolerance band → PASS).
-    assert body["measurement"]["value"] == pytest.approx(0.00423)
-    assert body["contract_status"] == "PASS"
+    # audit_real_run for TFP: Cf extracted = 0.00760 (well above gold 0.00423
+    # tolerance band → FAIL). This is the honest default.
+    assert body["measurement"]["value"] == pytest.approx(0.007600365566051871)
+    assert body["contract_status"] == "FAIL"
 
 
 def test_validation_report_rejects_unknown_run_id(client: TestClient) -> None:

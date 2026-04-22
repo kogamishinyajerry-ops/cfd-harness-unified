@@ -83,14 +83,14 @@ def test_dashboard_has_cases_and_summary():
     body = client.get("/api/dashboard").json()
     assert body["summary"]["total_cases"] == len(body["cases"])
     assert body["summary"]["total_cases"] >= 10
-    # Post DEC-V61-024 Option A: reference_pass runs are curated for
-    # every case, so the default distribution lands at 8 PASS · 2 HAZARD.
-    # HAZARD cases (cylinder + NACA) persist because silent-pass hazards
-    # / profile-quantity preconditions remain armed; FAIL cases default
-    # out to zero because every case now has a curated PASS-or-HAZARD
-    # reference run. The FAIL semantics still live on the non-default
-    # under_resolved / wrong_model runs, surfaced via `run_id=...`.
-    assert body["summary"]["hazard_cases"] >= 1
+    # DEC-V61-035 (2026-04-22 deep-review correction): default-run resolution
+    # now prefers `audit_real_run` over `reference_pass`, so the dashboard
+    # verdict distribution reflects HONEST solver-in-the-loop results, not
+    # curated narrative PASSes. Expect FAILs to dominate: every
+    # audit_real_run on the current adapter is FAIL/PARTIAL per the
+    # 2026-04-22 review. HAZARD cases may or may not survive (cylinder/
+    # NACA silent-pass gates), PASS cases may be zero.
+    assert body["summary"]["fail_cases"] >= 1
 
 
 def test_dashboard_includes_gate_queue_and_timeline():

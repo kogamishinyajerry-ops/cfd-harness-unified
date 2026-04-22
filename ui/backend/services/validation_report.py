@@ -283,17 +283,29 @@ def _load_run_measurement(case_id: str, run_id: str) -> dict[str, Any] | None:
 
 
 def _pick_default_run_id(case_id: str) -> str | None:
-    """Default run resolution rule: prefer the first 'reference' category
-    run (so the default validation-report shows a PASS narrative), else
-    fall back to the first run of any category, else 'legacy' if a
-    legacy fixture is on disk."""
+    """Default run resolution rule (DEC-V61-035 correction): prefer the
+    ``audit_real_run`` category — i.e. the actual solver-in-the-loop
+    verdict. Falls back to 'reference' (literature-data curated PASS
+    narrative) only when no audit_real_run exists, and finally to any
+    curated run, then 'legacy' on-disk fixture.
+
+    The previous rule preferred `reference` unconditionally, which
+    surfaced curated PASS narratives as the case verdict even when the
+    real-solver audit run FAILED — a PASS-washing bug flagged in the
+    2026-04-22 deep-review.
+    """
     runs = list_runs(case_id)
+    # 1. Prefer audit_real_run (honest: solver-in-the-loop evidence).
+    for r in runs:
+        if r.category == "audit_real_run":
+            return r.run_id
+    # 2. Fall back to reference (curated literature-anchored run).
     for r in runs:
         if r.category == "reference":
             return r.run_id
+    # 3. Any curated run.
     if runs:
         return runs[0].run_id
-    # No curated runs, no legacy fixture either
     return None
 
 
