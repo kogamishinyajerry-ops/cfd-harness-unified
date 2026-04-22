@@ -1168,15 +1168,60 @@ function RunTab({ caseId }: { caseId: string }) {
         </div>
       </div>
 
-      <div className="rounded-md border border-surface-800 bg-surface-900/30 p-5">
-        <p className="card-title mb-3">你大概会看到</p>
-        <ResidualsPreview />
-        <p className="mt-4 text-[12px] leading-relaxed text-surface-400">
-          残差随迭代步数下降到判据以下意味着解收敛。
-          但是——收敛不代表"算对"。下一步请回到"对比"tab
-          看看你的数值能不能贴住黄金标准。
-        </p>
+      {/* DEC-V61-047 round-1 F2 blocker fix: the synthetic SVG preview
+          below was previously shown under "你大概会看到" with no clear
+          signal that it was decorative. A novice reading the page
+          could mistake it for this case's real solver trace. We now
+          try the real audit_real_run residuals.png first (exists for
+          all 10 cases via phase5_audit_run.py captures), and only
+          fall back to the synthetic preview with an explicit 示意图
+          marker if the real artifact is missing. */}
+      <RunResidualsCard caseId={caseId} />
+    </div>
+  );
+}
+
+function RunResidualsCard({ caseId }: { caseId: string }) {
+  const realUrl = `/api/cases/${encodeURIComponent(caseId)}/runs/audit_real_run/renders/residuals.png`;
+  const [realOk, setRealOk] = useState<boolean | null>(null);
+
+  return (
+    <div className="rounded-md border border-surface-800 bg-surface-900/30 p-5">
+      <div className="mb-3 flex items-baseline justify-between">
+        <p className="card-title">残差收敛 · 真实 solver 输出</p>
+        {realOk && (
+          <span className="mono text-[10px] text-contract-pass">
+            audit_real_run · 真实数据
+          </span>
+        )}
       </div>
+      {realOk !== false ? (
+        <div className="rounded-md border border-surface-800 bg-white p-2">
+          <img
+            src={realUrl}
+            alt={`${caseId} audit_real_run residuals`}
+            className="w-full"
+            onLoad={() => setRealOk(true)}
+            onError={() => setRealOk(false)}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="mb-2 rounded-md border border-amber-600/50 bg-amber-950/30 p-2 text-[11px] text-amber-200">
+            <span className="font-semibold">⚠ 示意图 · illustrative only</span>
+            ：该 case 的 audit_real_run 真实残差 PNG 暂未生成（可能是尚未 phase-5
+            audit 过）。下方 SVG 是<strong>示意性装饰</strong>，不是本 case 真实
+            的 solver 残差 —— 目的仅是让新手了解"残差应该长什么样"。要看真实残差
+            请去 Pro Workbench 或重跑 <code className="mono">scripts/phase5_audit_run.py</code>。
+          </div>
+          <ResidualsPreview />
+        </>
+      )}
+      <p className="mt-4 text-[12px] leading-relaxed text-surface-400">
+        残差随迭代步数下降到判据以下意味着解收敛——但<strong>收敛不等于"算对"</strong>。
+        残差降下去只说明离散方程的数值解稳定了，它不知道你的 mesh / BC /
+        model 是否符合物理。下一步请回到 "对比" tab 看数值能不能贴住黄金标准。
+      </p>
     </div>
   );
 }
@@ -1497,14 +1542,24 @@ function ScientificComparisonReportSection({ caseId }: { caseId: string }) {
             commit {data.commit_sha ?? ""}
           </p>
         </div>
+        {/* DEC-V61-047 round-1 F1 blocker fix: the prior copy hardcoded
+            "audit_real_run verdict 为 FAIL" in visual-only mode, but the
+            backend context (`comparison_report._build_visual_only_context`)
+            explicitly returns verdict=None in this branch and some run
+            fixtures declare expected_verdict: PASS (cylinder, plane_channel).
+            The hardcoded FAIL was a demonstrable false negative on those
+            cases. Reframe as "Tier C: visual evidence only, no automated
+            gold comparison yet" — honest about what the user is looking at. */}
         <div className="mb-3 rounded-md border border-amber-600/50 bg-amber-950/30 p-3 text-[12px] text-amber-100">
-          <span className="font-semibold text-amber-300">⚠ 未通过金标准验证</span>
-          ：下方 |U| 速度云图 + 残差曲线来自实际 OpenFOAM 求解器，但本 case
-          的 <code className="mono text-amber-200">audit_real_run</code> verdict 为
-          <strong> FAIL</strong>（金标准指标比对未通过或指标提取缺失，详见
-          Run Inspector → audit_real_run 的 measurement.actual vs gold.expected）。
-          云图 + 残差只作为过程证据，<strong>不能作为"计算已通过"的结论依据</strong>。
-          完整金标准覆盖（Tier B）在 Phase 7c Sprint 2 之后提供。
+          <span className="font-semibold text-amber-300">Tier C · 过程证据，未做自动化金标准比对</span>
+          ：下方 |U| 速度云图 + 残差曲线来自实际 OpenFOAM 求解器（
+          <code className="mono text-amber-200">audit_real_run</code> ·
+          commit <code className="mono text-amber-200">{data.commit_sha ?? ""}</code>）。
+          本 case 当前处于 visual-only 层——没有跑自动化 gold-overlay / metrics /
+          GCI（详见 Run Inspector → audit_real_run 的 physics_contract 与 audit_concerns）。
+          云图 + 残差仅作为<strong> 过程证据 </strong>展示求解器跑通了，
+          <strong>不等于自动化金标准通过也不等于失败</strong>。Tier B 全金标准覆盖在
+          Phase 7c Sprint 2 之后上线。
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {contourUrl && (
