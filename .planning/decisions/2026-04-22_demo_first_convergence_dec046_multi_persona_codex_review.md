@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-046
 title: Demo-first convergence + 3-persona Codex iteration loop
-status: IN_PROGRESS (round 1 codex review active 2026-04-22T23:25)
+status: IN_PROGRESS (round 1 remediation landed 2026-04-23T00:05; round 2 pending)
 commits_in_scope:
   - 87b3b39 fix(contracts): Python 3.12 + jsonschema + UNKNOWN note_map
   - 335c4b4 test(cleanup): stale tests aligned with DEC-V61-011/029/040
@@ -9,13 +9,19 @@ commits_in_scope:
   - 47bc235 feat(contracts): physics_contract backfill LDC/BFS/plane_channel/impinging_jet + SATISFIED class
   - f89cfd0 fix(export): 3-state precondition marker + contract_status headline
   - a1feef9 chore(dev-server): pin frontend port 5180 (was 5173 default)
-codex_verdict: PENDING (round 1 in flight)
+  - 5c90ea1 docs(dec): DEC-V61-046 PROPOSAL — demo-first convergence + 3-persona Codex iteration
+  - 6c53986 fix(contracts): round-1 batch 1 — factual corrections (LDC/BFS/plane_channel/impinging_jet)
+  - fa7d96d fix(dashboard): round-1 batch 2 — unify gold_file on canonical yamls + parity test
+  - 6911611 feat(learn): round-1 batch 3 — buyer-facing hero + PhysicsContractPanel + CTA strip
+  - 93e84cf fix(robustness): round-1 batch 4 — _precondition_marker helper + edge-case tests
+  - 61140c4 docs(dec): round-1 remediation log
+codex_verdict: CHANGES_REQUIRED (round 1 — 0 blockers, ~15 major/minor; remediated in 4 batches above)
 autonomous_governance: true
 autonomous_governance_counter_v61: 33 (33rd +1 entry since RETRO-V61-001 counter reset)
 external_gate_self_estimated_pass_rate: 0.70
-codex_tool_report_path: .planning/reviews/round_1_findings.md (pending codex write)
-notion_sync_status: synced 2026-04-22 (https://www.notion.so/DEC-V61-046-Demo-first-convergence-3-persona-Codex-iteration-34ac68942bed81fa909dd8315a7bf7dd, page_id=34ac6894-2bed-81fa-909d-d8315a7bf7dd, Status=Proposed until round-1 codex_verdict returns)
-github_sync_status: pushed (a1feef9 on origin/main 2026-04-22T23:24)
+codex_tool_report_path: .planning/reviews/round_1_findings.md (31 KB, authored by codex exec)
+notion_sync_status: synced 2026-04-23T00:10 (Status=Accepted, round-1 summary appended as page children; https://www.notion.so/DEC-V61-046-Demo-first-convergence-3-persona-Codex-iteration-34ac68942bed81fa909dd8315a7bf7dd, page_id=34ac6894-2bed-81fa-909d-d8315a7bf7dd)
+github_sync_status: pushed (61140c4 on origin/main 2026-04-23T00:05; includes 4 remediation batches + round-log update)
 related:
   - DEC-V61-035 (flip default run audit_real_run; underpins this round's dashboard distribution)
   - DEC-V61-036 G1/G3/G4/G5 (gates)
@@ -103,8 +109,8 @@ Notion sync.
 - **Test suite**: 784 → 789 passed / 2 skipped (+5 new, 0 regressions).
 - **Schema validator**: 15/15 PASS.
 - **Frontend**: typecheck clean; build 1.34s.
-- **Notion sync**: pending (to update after push).
-- **GitHub sync**: pending (to push).
+- **GitHub sync**: pushed 2026-04-23T00:05 — 5 commits landed on origin/main (6c53986, fa7d96d, 6911611, 93e84cf, 61140c4).
+- **Notion sync**: synced 2026-04-23T00:10 — DEC-046 row Status=Proposed→Accepted; round-1 remediation summary appended as page children (5 bullets covering batches 1-4 + deferral rationale + round-2 next-step note).
 
 ### Round 2 — TBD
 Codex re-review after the round-1 remediation is pushed. Expected: check
