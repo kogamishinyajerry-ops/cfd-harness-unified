@@ -1883,13 +1883,12 @@ class TestPopulateNacaCpFromSampleDict:
         out = FoamAgentExecutor._populate_naca_cp_from_sampledict(
             tmp_path, task, {}
         )
-        cp = out["pressure_coefficient"]
-        # Sorted by x/c
-        assert [entry["x_over_c"] for entry in cp] == [0.0, 0.3, 1.0]
+        # DEC-V61-044 round-1 FLAG closure: legacy sampleDict path now
+        # emits parallel scalar+axis lists (not list[dict]) so the
+        # comparator's numeric-vector path doesn't TypeError.
+        assert out["pressure_coefficient_x"] == [0.0, 0.3, 1.0]
         # Cp = 2·p: 2·0.5=1.0, 2·-0.25=-0.5, 2·0.1=0.2
-        assert cp[0]["Cp"] == pytest.approx(1.0)
-        assert cp[1]["Cp"] == pytest.approx(-0.5)
-        assert cp[2]["Cp"] == pytest.approx(0.2)
+        assert out["pressure_coefficient"] == pytest.approx([1.0, -0.5, 0.2])
         assert out["pressure_coefficient_source"] == "sampleDict_direct"
 
     def test_chord_scaling_in_x_over_c(self, tmp_path):
@@ -1907,7 +1906,7 @@ class TestPopulateNacaCpFromSampleDict:
         out = FoamAgentExecutor._populate_naca_cp_from_sampledict(
             tmp_path, task, {}
         )
-        assert out["pressure_coefficient"][0]["x_over_c"] == pytest.approx(0.3)
+        assert out["pressure_coefficient_x"][0] == pytest.approx(0.3)
 
 
 class TestPopulateIjNusseltFromSampleDict:
