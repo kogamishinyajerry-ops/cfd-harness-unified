@@ -1,6 +1,14 @@
 # Stage 0 · Case Intake Assessment · DEC-V61-053 · circular_cylinder_wake
 # Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
 # Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
+#
+# Revision history:
+#   v1 (2026-04-23 20:00): initial draft, pass rate 0.30
+#   v2 (2026-04-23 22:05): Codex pre-Stage-A review APPROVE_PLAN_WITH_CHANGES —
+#        incorporated 7 required edits (blockage correction, laminar/RAS
+#        mismatch, u_mean_centerline semantics, Batch B split, forceCoeffs
+#        axis precondition, cylinder_crossflow.yaml alias, Batch D preflight).
+#        See reports/codex_tool_reports/dec_v61_053_plan_review.log.
 
 case_id: circular_cylinder_wake
 dec_id: DEC-V61-053
@@ -8,21 +16,31 @@ case_number: 3  # LDC = 1, BFS = 2, cylinder = 3
 intake_authored_at: "2026-04-23"
 intake_author: "Claude Code (Opus 4.7, 1M context)"
 methodology_version: "v2.0"
+intake_version: 2
+codex_plan_review_verdict: APPROVE_PLAN_WITH_CHANGES (2026-04-23)
 
 # ============================================================================
 # Classification (F5-M1 hard gate, §3b)
 # ============================================================================
 case_type: I
 case_type_rationale: |
-  Four independent scalar gates exist in knowledge/gold_standards/circular_cylinder_wake.yaml:
-   1. strouhal_number (St)        — Williamson 1996 St=0.164 at Re=100
-   2. cd_mean                     — 1.33 at Re=100
-   3. cl_rms                      — 0.048 at Re=100
-   4. u_mean_centerline @ 4 x/D   — 0.83, 0.64, 0.55, 0.35 at x/D = 1, 2, 3, 5
-  Type I requires ≥3 independent scalar gates — satisfied by forceCoeffs alone (St + Cd + Cl).
-  u_mean_centerline is the 4th (a per-station wake-profile metric, analogous to LDC's D6 v_centerline).
+  Four scalar gates declared in knowledge/gold_standards/circular_cylinder_wake.yaml:
+   1. strouhal_number (St)        — HEADLINE GATE — Williamson 1996 St=0.164 at Re=100
+   2. cd_mean                     — 1.33 at Re=100 (shares forceCoeffs windowing with St)
+   3. cl_rms                      — 0.048 at Re=100 (shares forceCoeffs windowing with St)
+   4. u_mean_centerline @ 4 x/D   — INDEPENDENT from forceCoeffs path (sampleDict-based)
+
+  Codex plan-review clarification: St/Cd/Cl share implementation surface
+  (forceCoeffs time-history FFT), so they are NOT independent implementation
+  gates, but they ARE independent physical gates. u_mean_centerline is a
+  truly independent fourth gate (sampleDict probe, not forceCoeffs).
+
+  Type I requires ≥3 independent scalar gates — satisfied. St remains the
+  HEADLINE gate (per Williamson §2); the others are load-bearing cross-checks,
+  not ornamental.
 primary_gate_count: 4
 case_type_hard_gate_signed: true  # per §3b, no mid-arc Type change allowed
+headline_gate: strouhal_number
 
 # ============================================================================
 # Reference papers
@@ -37,6 +55,8 @@ reference_paper:
       providing: [cross_check_cd_cl]
     - citation: "Henderson (1995). Details of the drag curve near the onset of vortex shedding. Phys Fluids 7, 2102"
       providing: [cross_check_strouhal_re_range]
+    - citation: "Zdravkovich (1997). Flow Around Circular Cylinders, Vol 1. Oxford UP — Ch.6 blockage corrections"
+      providing: [blockage_correction_context_for_domain_hazard]
 
 # ============================================================================
 # Observable scope (F1-M1 § hardens against breadth drift / scope creep)
@@ -47,98 +67,246 @@ observable_scope:
       tolerance_pct: 5.0
       extraction_method: "FFT on Cl(t) from forceCoeffs FO · existing in src.cylinder_strouhal_fft (DEC-V61-041)"
       status_pre_v61_053: "EXTRACTOR_EXISTS · emits via key_quantities, but not surfaced as measurement.value"
+      role: HEADLINE_GATE
     - quantity: cd_mean
       tolerance_pct: 5.0
       extraction_method: "time-averaged Cd(t) over stationary window from forceCoeffs FO"
       status_pre_v61_053: "EXTRACTOR_EXISTS · same path as strouhal_number"
+      role: CROSS_CHECK
     - quantity: cl_rms
       tolerance_pct: 5.0
       extraction_method: "RMS of Cl(t) over stationary window (same window as St FFT)"
       status_pre_v61_053: "EXTRACTOR_EXISTS · same path"
+      role: CROSS_CHECK
     - quantity: u_mean_centerline
       tolerance_pct: 5.0
       extraction_method: "sampleDict probe at (x/D, 0, 0) for x/D ∈ {1, 2, 3, 5}, time-averaged over stationary window"
       status_pre_v61_053: "NOT_IMPLEMENTED · requires new sampleDict emit + extractor"
+      role: INDEPENDENT_CROSS_CHECK
+      semantics_OPEN_QUESTION: |
+        Gold values at x/D ∈ {1,2,3,5} are {0.83, 0.64, 0.55, 0.35}. These are
+        NOT physically consistent with raw u_mean/U_inf (which at x/D=1 in the
+        near-wake recirculation is small/negative and INCREASES with x/D).
+        They ARE consistent with wake-deficit = (U_inf - u_mean)/U_inf
+        (decreasing with x/D as wake recovers). Gold YAML keys say
+        "u_Uinf: 0.83" which is ambiguous — literal reading says raw, value
+        profile says deficit. Batch B2 MUST resolve this by re-checking
+        Williamson 1996 Fig.19 / wherever the 4 points were sourced, and
+        either (a) rename gold keys to "deficit" and invert, or (b) keep
+        "u_Uinf" name and confirm raw values (likely wrong numbers, need
+        re-sourcing). NOT resolving pre-Stage-A because it requires Williamson
+        1996 PDF access.
 
   explicitly_out_of_scope:
     - item: "3D span-wise instability / oblique shedding"
-      reason: "Williamson 1996 §3 — only relevant at Re > 180; whitelist pins Re=100 in laminar regime"
-    - item: "Blockage correction for confined domain"
-      reason: "adapter _generate_body_in_channel uses sufficient domain (L_up=10D, L_down=20D); blockage < 5%"
+      reason: "Williamson 1996 §3 — only relevant at Re > 180; whitelist pins Re=100 in laminar regime; adapter emits 1-cell z with empty front/back (verified)"
+    - item: "Blockage correction retroactive to gold values"
+      reason: "Williamson 1996 anchors are unconfined; our 20% domain blockage is a RISK (see risk flags) that Batch A must decide: shrink cylinder (unchanged adapter) or grow domain (adapter rewrite). NOT a Re-sweep / blockage-parameter study."
     - item: "Mesh refinement study (GCI)"
       reason: "40k-cell fixture is whitelist canonical; Phase 5 GCI protocol is a separate DEC"
     - item: "Inlet turbulence intensity sweep"
       reason: "laminar regime; not a physical driver at Re=100"
     - item: "Re range sweep (Re 40-200 transition curve)"
       reason: "teaching figure (flowFields.ts strouhal_curve.png) already shows this analytically; not a solver gate"
+    - item: "Base pressure coefficient / separation angle / recirculation length"
+      reason: "Codex plan-review explicit: do NOT add as additional in-scope observables; belong to a future DEC if ever wanted"
 
 # ============================================================================
 # Risk flags (F1-M1 requires ≥1 subjective risk annotation)
 # ============================================================================
 risk_flags:
-  - flag: transient_windowing
+  - flag: domain_blockage_mismatch
     severity: high
-    detail: "St/Cd/Cl all depend on stationary-window FFT. Adapter runtime must capture ≥8 shedding cycles AND discard start-up transients. If window too short, FFT peak smears → St error."
-    mitigation_pre: "Re-verify forceCoeffs window_start / window_end in adapter match whitelist runtime"
-  - flag: sample_point_outside_cylinder
+    codex_flagged: true
+    detail: |
+      Adapter `_generate_body_in_channel` (src/foam_agent_adapter.py:4462-4467)
+      uses L_inlet=2D, L_outlet=8D, H=2.5D per side → blockage = D / (2·2.5D)
+      = 20%. Williamson 1996 anchors assume UNCONFINED flow. 20% blockage is
+      known to bias Cd HIGH (+8-12% typical, Zdravkovich Ch.6) and shift St
+      by +2-5%. Likely to trigger Codex round 1 CHANGES_REQUIRED on Cd/St
+      tolerance if not addressed.
+    decision_required_before_batch_a: |
+      Pick one:
+      (a) Accept bias: document in physics_contract, widen tolerance to 10%
+          on Cd/St for this fixture.
+      (b) Grow domain: adapter rewrite to L_up=10D, L_down=20D, H=6D → ~8%
+          blockage. Larger mesh (~100k cells vs 40k).
+      (c) Apply analytical correction: Maskell or Mercker for bluff-body
+          blockage. Non-trivial, not standard in pimpleFoam fixtures.
+      RECOMMENDATION: (b) — cleanest; matches Williamson context. But Codex
+      round 1 will still see whether 100k cells stays within runtime budget.
+    mitigation_pre: "Decision committed as part of Batch A gold-YAML work (precondition entry documenting domain extents + chosen regime)"
+
+  - flag: laminar_contract_vs_RAS_default
+    severity: high
+    codex_flagged: true
+    detail: |
+      Whitelist (knowledge/whitelist.yaml:83) declares `turbulence_model:
+      laminar` per DEC-V61-005 A-class correction. Adapter dispatch at
+      src/foam_agent_adapter.py:515-518 calls `_turbulence_model_for_solver`
+      which returns `kOmegaSST` for BODY_IN_CHANNEL (line 668). The whitelist
+      field is SILENTLY IGNORED.
+
+      Impact: whitelist documents laminar; audit fixture actually runs RAS.
+      kOmegaSST over-dissipates the wake at Re=100 → under-predicts St by
+      10-20% and under-predicts Cl_rms by 30-50% (classic over-damped wake
+      signature). Likely a hidden contributor to the current
+      `measurement.value = 4.93502e-06 U_max_approx` fallback fixture: the
+      FFT extractor may be legitimately failing on a steady-by-damping wake.
+    decision_required_before_batch_b: |
+      Pick one:
+      (a) Honor whitelist: thread `task_spec.turbulence_model` through
+          `_turbulence_model_for_solver` so the whitelist override wins.
+          Generate cylinder with `laminar` solver. Likely recovers St.
+      (b) Update whitelist to `kOmegaSST`: documents what's actually running.
+          Widens all 4 tolerances; may need gold-value audit.
+      RECOMMENDATION: (a) — honors DEC-V61-005 A-class decision. But
+      pimpleFoam + laminar at Re=100 is the physics everyone teaches.
+    mitigation_pre: "Decision committed in Batch B1 (adapter work); any laminar solver fixture needs fvSchemes adjustment (no k/omega fields)"
+
+  - flag: u_mean_centerline_deficit_semantics
+    severity: high
+    codex_flagged: true
+    detail: "See observable_scope.in_scope[u_mean_centerline].semantics_OPEN_QUESTION. Values 0.83→0.35 are inconsistent with raw u_mean/U_inf but consistent with wake-deficit. Either gold keys mislabeled, or gold values wrong, or both. Affects extractor implementation, Compare-tab card label, and figure captions."
+    mitigation_pre: "Re-check Williamson 1996 Fig.19 in Batch B2 before writing extractor. If deficit, rename key u_Uinf → u_deficit AND update all downstream code. If raw, the current gold numbers are simply wrong and Batch B2 must re-source them."
+
+  - flag: forceCoeffs_axis_convention
     severity: medium
-    detail: "x/D=1.0 is only 0.5D from cylinder surface. Any coordinate-system error (cylinder center offset, D convention) → sample point inside solid body → garbage u value."
-    mitigation_pre: "Unit test: verify emitted sampleDict coordinates vs cylinder center + radius"
+    codex_flagged: true
+    detail: "Current generator writes explicit `(drag x, lift y, pitch z)` axes which IS correct for this mesh (freestream in +x, lift perpendicular in +y, 2D normal in z). But OpenFOAM defaults are different and regressions here are silent. Any adapter edit in Batch B1 that touches forceCoeffs block must preserve these axes."
+    mitigation_pre: "Add unit-test asserting generated forceCoeffs1 dict contains `dragDir (1 0 0); liftDir (0 1 0); pitchAxis (0 0 1);` explicitly. Add to Batch B1."
+
+  - flag: sampleDict_interpolation_and_scaling
+    severity: medium
+    codex_flagged: true
+    detail: "New u_mean_centerline extractor needs sampleDict with explicit (interpolationScheme=cellPoint, setFormat=raw, field=U). Coordinates MUST be D-scaled (x = (x/D) · D). A coordinate-system bug here → sample point inside cylinder body → garbage or NaN. Compounds with `domain_blockage_mismatch` if L_outlet changes in Batch A."
+    mitigation_pre: "Batch B1 generates sampleDict block with explicit D-scaling; Batch B2 extractor reads set files, asserts non-zero U at all 4 stations before time-averaging. Unit-test on mocked sample output."
+
   - flag: stale_contract_status
-    severity: low
-    detail: "gold YAML says contract_status: COMPATIBLE_WITH_SILENT_PASS_HAZARD but the hazard (canonical_st=0.165 hardcode) was retired in DEC-V61-041. Documentation debt — not a physics issue."
-    mitigation_pre: "Flip to SATISFIED during batch A of this DEC"
+    severity: medium                         # raised from LOW per Codex plan-review (preflight hard-fails on hazard)
+    codex_flagged: true
+    detail: |
+      knowledge/gold_standards/circular_cylinder_wake.yaml declares
+      `contract_status: COMPATIBLE_WITH_SILENT_PASS_HAZARD` with evidence
+      citing the canonical_st=0.165 hardcode. That hardcode was retired in
+      DEC-V61-041 (src/cylinder_strouhal_fft.py + adapter). The gold YAML
+      is documentation debt. `knowledge/gold_standards/cylinder_crossflow.yaml`
+      is a LEGACY ALIAS DUPLICATE of the same case with the same stale
+      status — any gold-scanner hitting both will double-report.
+      scripts/preflight_case_visual.py hard-fails on "hazard" substring match.
+    mitigation_pre: "Batch A must: (a) flip circular_cylinder_wake.yaml to SATISFIED with precondition refresh; (b) decide cylinder_crossflow.yaml fate (delete, alias-redirect, or same-flip); (c) audit for other gold-scanners."
+
   - flag: ldc_style_breadth_drift
     severity: medium
-    detail: "V61-053 is a Type I DEC. LDC V61-050 is the precedent — 4 batches, 5 Codex rounds, 8 MED findings. Breadth-drift risk: tempting to add cp_rms_surface or near-wake vorticity scalar → scope creep."
-    mitigation_pre: "any mid-arc observable addition MUST open a new DEC per §3b hard gate"
+    detail: "V61-053 is a Type I DEC. LDC V61-050 is the precedent — 4 batches, 5 Codex rounds, 8 MED findings. Breadth-drift risk: tempting to add cp_rms_surface or near-wake vorticity scalar → scope creep. Codex plan-review explicitly listed base pressure / separation angle / recirculation length as NOT in-scope."
+    mitigation_pre: "any mid-arc observable addition MUST open a new DEC per §3b hard gate; enumerate in explicitly_out_of_scope (done)"
+
   - flag: u_mean_centerline_new_extractor
     severity: high
     detail: "4th observable has no extractor at all. Most novel code in this DEC. LDC ψ extractor (V61-050) took 3 rounds to stabilize; realistic expectation same here."
-    mitigation_pre: "Unit-test extractor on mocked sampleDict output before integration"
+    mitigation_pre: "Unit-test extractor on mocked sampleDict output before integration (Batch B2 opens with test scaffolding)"
+
+# ============================================================================
+# Batch plan (Codex plan-review split: B → B1/B2/B3 + Batch D preflight gate)
+# ============================================================================
+batch_plan:
+  batch_A:
+    name: "Gold YAML hygiene + domain/turbulence decisions"
+    scope:
+      - "Flip contract_status: COMPATIBLE_WITH_SILENT_PASS_HAZARD → SATISFIED (once hazards resolved)"
+      - "Resolve cylinder_crossflow.yaml alias (delete/redirect/sync — decide)"
+      - "Document domain_blockage_mismatch decision (a/b/c above) in physics_precondition"
+      - "Document laminar_contract_vs_RAS_default decision in physics_precondition"
+      - "Add reference_probe_coords block for u_mean_centerline (4 points)"
+      - "Add u_mean_centerline semantics field (raw vs deficit, per Williamson re-check)"
+      - "Bump precondition_last_reviewed to 2026-04-23"
+    codex_review: "Batch A close · scope-review on decisions + gold YAML hygiene"
+  batch_B1:
+    name: "Adapter · sampleDict + solver-contract emission"
+    scope:
+      - "Generate sampleDict.cylinderCenterline in _generate_body_in_channel (D-scaled coords)"
+      - "Implement forceCoeffs axis-convention assertion unit test"
+      - "If Batch A chose laminar: thread task_spec.turbulence_model through _turbulence_model_for_solver"
+      - "If Batch A chose domain-grow: expand L_inlet/L_outlet/H constants"
+    codex_review: "combined with B2 at B2 close (unless B1 triggers a standalone fvSchemes rewrite)"
+  batch_B2:
+    name: "Extractor · u_mean_centerline from sampleDict"
+    scope:
+      - "src/cylinder_centerline_extractor.py (new module) — parse postProcessing/cylinderCenterline/"
+      - "Unit tests on mocked sampleDict output (at least: all-zero, all-Uinf, staircase, NaN-at-one-station)"
+      - "Apply raw vs deficit semantics per Batch A decision"
+    codex_review: "B1 + B2 close · extractor correctness + sample-point physics"
+  batch_B3:
+    name: "Audit fixture primary-scalar surfacing"
+    scope:
+      - "scripts/phase5_audit_run.py: cylinder path now writes measurement.quantity = strouhal_number (not U_max_approx)"
+      - "Embed St, Cd_mean, Cl_rms, u_mean_centerline@4stations in key_quantities"
+      - "Regenerate audit_real_run_measurement.yaml fixture with all 4 scalars"
+    codex_review: "with C"
+  batch_C:
+    name: "Preflight multi-scalar gate"
+    scope:
+      - "scripts/preflight_case_visual.py::_check_scalar_contract iterates over multi-doc gold YAML"
+      - "For cylinder: report 4 scalar gates individually (St, Cd, Cl, u@4)"
+      - "GREEN-on-all-4 threshold, honest RED on any fail"
+    codex_review: "B3 + C close · full extractor → audit → preflight pipeline check (round 1 of close loop)"
+  batch_D:
+    name: "Compare-tab multi-dim + solver_output figure + Batch D preflight"
+    scope:
+      - "Promote circular_cylinder_wake: visual_only → gold_overlay (LDC-tier) OR keep visual_only + add 4-scalar anchor cards (decide via Codex B3/C review)"
+      - "ui/backend/services/comparison_report.py: _load_cylinder_*_gold loaders × 4"
+      - "LearnCaseDetailPage.tsx MultiDimensionComparePanel adds D-St, D-Cd, D-Cl, D-u@4"
+      - "flowFields.ts: new solver_output figure `karman_shedding.png` with St annotation (like BFS velocity_streamlines.png)"
+      - "Batch D preflight gate (new): verify provenance caption matches code (lRef/dragDir/sample stride) — catches the 122→119 caption staleness class of bug"
+    codex_review: "Batch D close · UI + visual provenance · round 2 of close loop"
 
 # ============================================================================
 # Budget and halt criteria (F6-M1, §1b)
 # ============================================================================
-codex_budget_rounds: 3                      # soft target (LDC was 4)
-round_4_health_check_required: true         # auto-flag halt_risk_flag: true if CHANGES_REQUIRED at r4
-round_6_force_abandon_hard_gate: true       # MUST halt and open RETRO at round 6
+codex_budget_rounds: 4                      # soft target raised 3 → 4 per Codex review (Type I + multi-batch split)
+round_4_health_check_required: true
+round_6_force_abandon_hard_gate: true
 
-estimated_pass_rate_round1: 0.30
+estimated_pass_rate_round1: 0.30            # Codex held at 0.30 (not raising to 0.35 until B split + plan-edits land)
 pass_rate_rationale: |
-  Conservative against LDC V61-050 round-1 observables:
-   - LDC D6 round 1 passed (v_centerline matched ±5% on 12/17 points)
-   - LDC D7 (primary vortex) round 1 passed to 0.23% ψ err
-   - LDC D8 (BL/BR secondaries) round 1 shown high SNR due to ψ resolution
-  But BFS V61-052 round 1 was CHANGES_REQUIRED (2H+2M+1L) on adapter rewrite.
-  Cylinder is adapter-intact (DEC-V61-041 already landed forceCoeffs) BUT
-  u_mean_centerline extractor is new code. And 4 primary gates → 4× the surface
-  area of BFS's single gate. 0.30 reflects: (a) known brittleness of transient
-  FFT windowing, (b) new extractor code, (c) documentation debt in gold YAML,
-  (d) stale visual_only → gold_overlay promotion plumbing, (e) Compare-tab
-  multi-dim panel for 4 dimensions is new UI surface. Not 0.70 because at
-  least 3 of the 4 extractors already exist + mostly battle-tested.
+  Held at 0.30 per Codex plan-review. The 7 plan edits resolve intake-level
+  defects but don't reduce implementation uncertainty:
+   - u_mean_centerline semantics (raw vs deficit) is still OPEN
+   - domain_blockage_mismatch decision pending (options a/b/c each have
+     different round-1 failure modes)
+   - laminar_vs_RAS decision pending (could invalidate existing forceCoeffs
+     fixtures if we flip to laminar)
+   - 4 separate extractor paths + multi-dim UI = 4× the BFS round-1
+     surface area
+  0.35 is defensible only AFTER Batch A lands with decisions A-a/b/c and
+  B-a/b signed off. 0.25 is where we'd be if the u_mean_centerline semantics
+  doesn't resolve cleanly.
 
 # ============================================================================
 # Delta from Case 2 (BFS · DEC-V61-052) · what's different
 # ============================================================================
 delta_from_case_2:
   - "BFS was Type II (1 scalar gate); cylinder is Type I (4 gates) — more surface area"
-  - "BFS needed adapter geometry rewrite (blockMeshDict multi-block); cylinder adapter already landed (DEC-V61-041)"
-  - "BFS had no pre-existing FFT/transient code; cylinder already has forceCoeffs FFT path"
-  - "BFS promoted visual_only → visual_only+scalar-anchor; cylinder should promote visual_only → gold_overlay (LDC-tier)"
-  - "BFS's single Xr/H extractor was wall-shear sign-change (rare OpenFOAM convention pitfall); cylinder's FFT is a standard signal-processing flow"
-  - "BFS had zero audit YAML primary scalar surface; cylinder has fixture primary=U_max_approx (wrong quantity → low-hanging fix)"
+  - "BFS needed adapter geometry rewrite (blockMeshDict multi-block); cylinder adapter already landed (DEC-V61-041) BUT has 2 silent gaps (blockage, turbulence-override)"
+  - "BFS had no pre-existing FFT/transient code; cylinder already has forceCoeffs FFT path (but with silent kOmegaSST mismatch)"
+  - "BFS promoted visual_only → visual_only+scalar-anchor; cylinder MAY promote visual_only → gold_overlay (LDC-tier) — decision in Batch D"
+  - "BFS's single Xr/H extractor was wall-shear sign-change (rare OpenFOAM convention pitfall); cylinder's FFT is a standard flow BUT u_mean_centerline is net-new sampleDict code"
+  - "BFS had zero audit YAML primary scalar surface (comparator fell back to U_max_approx); cylinder is in the same fallback state (measurement.value=4.93502e-06 U_max_approx) — shared root cause fix in Batch B3"
+  - "BFS Codex arc: 5 rounds (1 for F1-M2 back-fill); cylinder expected 4 rounds per budget (Type I precedent LDC was 4 round-close)"
 
 # ============================================================================
 # Success criteria (what 'close' looks like)
 # ============================================================================
 success_criteria:
-  - "Gold YAML contract_status: SATISFIED (flipped from COMPATIBLE_WITH_SILENT_PASS_HAZARD)"
+  - "Gold YAML contract_status: SATISFIED (flipped from COMPATIBLE_WITH_SILENT_PASS_HAZARD); cylinder_crossflow.yaml resolved"
   - "Audit fixture measurement.quantity = strouhal_number (not U_max_approx); measurement.value from solver FFT (not canonical)"
-  - "All 4 observables surface on Compare-tab multi-dim panel: D1 St, D2 Cd_mean, D3 Cl_rms, D4 u_centerline"
-  - "LearnCaseDetailPage for circular_cylinder_wake shows gold-overlay mode (not visual_only)"
-  - "flowFields.ts has a real solver_output figure (Karman vortex shedding contour/streamlines with St annotation) alongside the existing analytical_visual strouhal_curve.png"
+  - "All 4 observables within tolerance: St ±5%, Cd ±5%, Cl_rms ±5%, u_mean_centerline all 4 stations ±5%"
+  - "domain_blockage_mismatch + laminar_contract_vs_RAS_default both resolved and documented in physics_contract"
+  - "u_mean_centerline semantics (raw vs deficit) resolved and applied consistently across gold YAML, extractor, UI label"
+  - "Compare-tab shows 4 observables: D1 St, D2 Cd_mean, D3 Cl_rms, D4 u_centerline@4"
+  - "LearnCaseDetailPage for cylinder: either gold-overlay mode OR visual_only + 4-scalar anchor (honest label either way)"
+  - "flowFields.ts has real solver_output figure (Karman vortex shedding) alongside existing analytical_visual strouhal_curve.png"
   - "Preflight scalar-contract gate GREEN on all 4 scalars"
+  - "forceCoeffs axis convention unit test passes"
   - "Codex final-round verdict = APPROVE (clean) per F1-M2"
   - "DEC frontmatter methodology_version: v2.0 (first-apply case, not retroactive)"

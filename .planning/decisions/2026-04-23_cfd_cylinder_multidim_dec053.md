@@ -48,16 +48,31 @@ Key determinations:
 
 **Preflight**: not yet wired for cylinder scalar gates.
 
-## Stage A plan (next session) — NOT YET EXECUTED
+## Stage A plan (revised per Codex pre-Stage-A review · intake v2)
 
-Following LDC V61-050 batch cadence (explicit 4-batch split keeps Codex review atomic):
+Codex pre-Stage-A plan review at commit 505c022: **APPROVE_PLAN_WITH_CHANGES**
+(see [reports/codex_tool_reports/dec_v61_053_plan_review.log](../../reports/codex_tool_reports/dec_v61_053_plan_review.log)).
+Two plan-level defects caught pre-code:
+1. Blockage claim was **false** — adapter uses 2D/8D/2.5D → 20% blockage, not <5%
+2. **laminar_contract_vs_RAS_default mismatch** — whitelist says laminar, adapter silently uses kOmegaSST
 
-- **Batch A · gold YAML hygiene**: flip contract_status SATISFIED; add `reference_probe_coords` block for u_mean_centerline sample points; bump precondition_last_reviewed date.
-- **Batch B · adapter + extractor**: add u_mean_centerline sampleDict emission in `_generate_body_in_channel`; implement `_extract_cylinder_centerline_profile` (read `postProcessing/cylinderCenterline/`); wire St/Cd/Cl as primary scalars (not U_max_approx fallback).
-- **Batch C · audit fixture regen + preflight**: regen audit_real_run_measurement.yaml with 4 primary scalars; extend `scripts/preflight_case_visual.py::_check_scalar_contract` to iterate over multi-scalar gold.
-- **Batch D · Compare-tab multi-dim + solver_output figure**: promote cylinder to `_GOLD_OVERLAY_CASES` OR add visual_only multi-scalar card (TBD via Codex round 1); generate `karman_shedding.png` from a transient VTK frame for `flowFields.ts` `solver_output` slot.
+Intake updated to v2 with 7 required edits. Batch B split into B1/B2/B3; Batch D gains its own preflight gate.
 
-**Codex cadence**: 1 scope-review after Batch A (plan sanity), 1 review after Batch C (all extractors), 1 review after Batch D (UI + close).
+Full batch table in intake.yaml `batch_plan`. Summary:
+
+- **Batch A** · gold YAML hygiene + domain/turbulence decisions (resolve blockage a/b/c, laminar a/b, cylinder_crossflow.yaml fate)
+- **Batch B1** · adapter · sampleDict emission + forceCoeffs axis assertion (+ decisions applied)
+- **Batch B2** · u_mean_centerline extractor (new module + unit tests on mock)
+- **Batch B3** · audit fixture primary-scalar surfacing (St as primary, not U_max_approx)
+- **Batch C** · preflight multi-scalar gate (4 gates GREEN)
+- **Batch D** · Compare-tab multi-dim + solver_output figure + **Batch D preflight gate** (catches 122→119-class caption staleness)
+
+**Codex cadence** (4 rounds budgeted per F6-M1):
+- Round 0 (done, 2026-04-23): plan sanity — APPROVE_PLAN_WITH_CHANGES
+- Round 1: post-Batch A close + Batch B1/B2 review
+- Round 2: post-Batch B3/C close (all extractors → audit → preflight pipeline)
+- Round 3: post-Batch D close (UI + provenance)
+- Round 4: F6-M1 round-4 health check (halt_risk_flag if CHANGES_REQUIRED)
 
 **Self-pass tracking** (intake predicts 0.30; RETRO-V61-001 requires pre-merge Codex if ≤ 70%):
 - MUST pre-merge Codex review before any batch lands on main.
