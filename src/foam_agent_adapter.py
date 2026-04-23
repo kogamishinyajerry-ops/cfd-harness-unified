@@ -1197,9 +1197,15 @@ fields          (U);
         # 这里 nu = 1/7600 m^2/s  (U_bulk=1 m/s, H=1 m)
         nu_val = 1.0 / float(task_spec.Re)  # ~1.316e-4 for Re=7600
         H = 1.0  # step height
-        channel_height = 1.125 * H  # 1.125
+        # Driver & Seegmiller 1985 ER=1.125 canonical geometry:
+        #   inlet channel height = 8·H, full downstream channel height = 9·H,
+        #   ER = H_channel / H_inlet = 9/8 = 1.125 (Xr/H=6.26 reference).
+        # DEC-V61-052: previous channel_height=1.125·H was wrong-convention
+        # (treated 1.125 as H_ch/H_step instead of H_ch/H_inlet) and combined
+        # with the single-block mesh produced a flat channel, not a BFS.
+        channel_height = 9.0 * H  # full downstream channel height (ER=1.125)
 
-        # 1. system/blockMeshDict — 2D channel with step at x=0
+        # 1. system/blockMeshDict — 3-block BFS topology with real step at x=0
         block_mesh = self._render_bfs_block_mesh_dict(task_spec, H, channel_height, self._ncx, self._ncy)
         (case_dir / "system" / "blockMeshDict").write_text(block_mesh, encoding="utf-8")
 
@@ -1796,13 +1802,17 @@ setFormat       raw;
 
 sets
 (
+    // Near-floor probe for Xr extraction — y=0.025 sits inside the first
+    // B1 cell (ncy_B1=40, dy_B1≈0.025) for x≥0; for x<0 the probe runs
+    // through the step void and samples nothing (field undefined → skipped
+    // by the post-hoc Xr extractor). DEC-V61-052 geometry: L_down=30·H.
     wallProfile
     {
         type        uniform;
         axis        x;
-        start       (-1.0 0.5 0.0);
-        end         (12.0 0.5 0.0);
-        nPoints     100;
+        start       (0.05 0.025 0.05);
+        end         (29.95 0.025 0.05);
+        nPoints     300;
     }
 );
 
@@ -6708,26 +6718,106 @@ boundaryField
         self, task_spec: TaskSpec, H: float, channel_height: float,
         ncx: int = 40, ncy: int = 20,
     ) -> str:
-        """渲染简化 BFS 的 blockMeshDict（单矩形通道，简单几何）。
+        """Render a canonical 3-block BFS blockMeshDict with a real step at x=0.
 
-        使用单矩形通道近似 BFS（无 step 几何细节），
-        用于 Phase 2 Grid Refinement Study。
-        ncx × ncy: X方向 × Y方向 cell 数（默认 40×20）。
+        Geometry (Driver & Seegmiller 1985, ER=1.125 convention):
+          - h_s = H                     (step height, input param `H`)
+          - H_ch = channel_height       (full downstream channel height = 9·H)
+          - H_inlet = H_ch - h_s        (upstream inlet channel height = 8·H)
+          - L_up = 10·H                 (upstream inlet channel length)
+          - L_down = 30·H               (downstream channel length — covers Xr≈6.26 + recovery)
+          - L_z = 0.1·H                 (thin z-extrusion for 2D empty patches)
+
+        Three-block topology (viewed in the xy-plane at any z):
+
+            y=H_ch ┌───────────────┬───────────────────────────────┐
+                   │               │                               │
+                   │    block A    │          block B2             │  upper_wall
+                   │ (inlet chan)  │      (downstream upper)       │
+            y=h_s  ├───────────────┼───────────────────────────────┤
+                   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│          block B1             │
+                   ▓  STEP VOID   ▓│      (recirculation + recov.) │
+                   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│                               │
+            y=0                    └───────────────────────────────┘
+                   x=-L_up         x=0                      x=+L_down
+                                   │
+                                   step_face (part of lower_wall patch)
+
+        Patch name policy (DEC-V61-052):
+          The three physical lower-wall pieces — inlet-channel floor at y=h_s
+          for x∈[-L_up,0], the vertical step face at x=0 for y∈[0,h_s], and
+          the downstream floor at y=0 for x∈[0,L_down] — are all noSlip walls
+          with identical k/ε/nut wall-function BC. They are merged into a
+          SINGLE `lower_wall` patch so that the existing 0/U, 0/p, 0/k,
+          0/epsilon, 0/nut templates (which reference one `lower_wall`) keep
+          working without per-piece rewrites. This is semantically lossless.
+
+          `inlet` is block A's x=-L_up face (spans only y∈[h_s,H_ch], i.e., the
+          physical inlet channel). `outlet` combines B1 and B2 east faces.
+          `upper_wall` combines A and B2 top faces. `front`/`back` are empty
+          patches across all three blocks.
+
+        Cell-count ties (blockMesh requires matching subdivisions at shared
+        interfaces):
+          - A-B2 interface at x=0, y∈[h_s,H_ch]: both blocks use ncy_A cells in y.
+          - B1-B2 interface at y=h_s, x∈[0,L_down]: both blocks use ncx_B cells in x.
+          - B1's y-resolution (ncy_B1) is independent — only appears on B1's
+            west (step face, wall) and east (outlet, patch) faces, both boundary.
+
+        Default cell counts (whitelist, ~7300 cells):
+          ncx_A=40, ncy_A=16, ncx_B=120, ncy_B1=40, ncy_B2=ncy_A=16.
+          Legacy `ncx`/`ncy` args are ignored by this multi-block generator —
+          they were single-block quantities. TODO: thread explicit multi-block
+          counts through TaskSpec if grid-refinement studies need override.
         """
-        x_min = -10.0 * H
-        x_max = 30.0 * H
-        y_min = 0.0
-        y_max = channel_height
-        z_min = 0.0
-        z_max = 0.1 * H
+        # Geometry (see docstring for conventions)
+        h_s = H
+        H_ch = channel_height
+        L_up = 10.0 * H
+        L_down = 30.0 * H
+        L_z = 0.1 * H
+
+        x0 = -L_up
+        x1 = 0.0
+        x2 = L_down
+        y0 = 0.0
+        y1 = h_s
+        y2 = H_ch
+        z0 = 0.0
+        z1 = L_z
+
+        # Cell counts (see docstring — legacy single-block ncx/ncy ignored)
+        ncx_A = 40
+        ncy_A = 16          # must equal ncy_B2 (A-B2 interface at x=0)
+        ncx_B = 120
+        ncy_B1 = 40
+        ncy_B2 = ncy_A
+
+        # 16 vertices: 8 (x,y) grid points × 2 z-levels.
+        # Layout (v_i / v_(i+8) give z=0 / z=L_z pairs):
+        #   v0 = (x0, y1)  upstream-bottom (inlet channel floor corner)
+        #   v1 = (x1, y1)  step-top corner (junction A/B1/B2)
+        #   v2 = (x1, y2)  upstream-top interior (junction A/B2)
+        #   v3 = (x0, y2)  upstream-top outer
+        #   v4 = (x1, y0)  step-foot (start of downstream floor)
+        #   v5 = (x2, y0)  downstream-bottom outer
+        #   v6 = (x2, y1)  downstream y=h_s outer (B1-B2 east joint)
+        #   v7 = (x2, y2)  downstream-top outer
+        verts = [
+            (x0, y1, z0), (x1, y1, z0), (x1, y2, z0), (x0, y2, z0),
+            (x1, y0, z0), (x2, y0, z0), (x2, y1, z0), (x2, y2, z0),
+            (x0, y1, z1), (x1, y1, z1), (x1, y2, z1), (x0, y2, z1),
+            (x1, y0, z1), (x2, y0, z1), (x2, y1, z1), (x2, y2, z1),
+        ]
+        vtx_block = "\n".join(f"    ({vx} {vy} {vz})" for vx, vy, vz in verts)
 
         return f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
+/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
 {{
@@ -6742,19 +6832,17 @@ convertToMeters 1;
 
 vertices
 (
-    ({x_min} {y_min} {z_min})
-    ({x_max} {y_min} {z_min})
-    ({x_max} {y_max} {z_min})
-    ({x_min} {y_max} {z_min})
-    ({x_min} {y_min} {z_max})
-    ({x_max} {y_min} {z_max})
-    ({x_max} {y_max} {z_max})
-    ({x_min} {y_max} {z_max})
+{vtx_block}
 );
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) ({ncx} {ncy} 1) simpleGrading (1 1 1)
+    // block A: upstream inlet channel, y∈[h_s,H_ch], x∈[-L_up,0]
+    hex (0 1 2 3 8 9 10 11) ({ncx_A} {ncy_A} 1) simpleGrading (1 1 1)
+    // block B1: recirculation + recovery, y∈[0,h_s], x∈[0,L_down]
+    hex (4 5 6 1 12 13 14 9) ({ncx_B} {ncy_B1} 1) simpleGrading (1 1 1)
+    // block B2: downstream upper, y∈[h_s,H_ch], x∈[0,L_down]
+    hex (1 6 7 2 9 14 15 10) ({ncx_B} {ncy_B2} 1) simpleGrading (1 1 1)
 );
 
 edges
@@ -6766,32 +6854,58 @@ boundary
     inlet
     {{
         type            patch;
-        faces           ((0 4 7 3));
+        faces
+        (
+            (0 8 11 3)  // block A west face, y∈[h_s,H_ch], x=-L_up
+        );
     }}
     outlet
     {{
         type            patch;
-        faces           ((1 2 6 5));
+        faces
+        (
+            (5 6 14 13) // block B1 east face, y∈[0,h_s], x=+L_down
+            (6 7 15 14) // block B2 east face, y∈[h_s,H_ch], x=+L_down
+        );
     }}
     lower_wall
     {{
         type            wall;
-        faces           ((0 1 5 4));
+        faces
+        (
+            (0 1 9 8)   // block A south face (inlet channel floor, y=h_s, x∈[-L_up,0])
+            (4 12 9 1)  // block B1 west face (the step face, x=0, y∈[0,h_s])
+            (4 5 13 12) // block B1 south face (downstream floor, y=0, x∈[0,L_down])
+        );
     }}
     upper_wall
     {{
         type            wall;
-        faces           ((3 7 6 2));
+        faces
+        (
+            (3 11 10 2) // block A north face, y=H_ch, x∈[-L_up,0]
+            (2 10 15 7) // block B2 north face, y=H_ch, x∈[0,L_down]
+        );
     }}
     front
     {{
         type            empty;
-        faces           ((0 3 2 1));
+        faces
+        (
+            (8 9 10 11)  // block A  z=+L_z
+            (12 13 14 9) // block B1 z=+L_z
+            (9 14 15 10) // block B2 z=+L_z
+        );
     }}
     back
     {{
         type            empty;
-        faces           ((4 5 6 7));
+        faces
+        (
+            (0 3 2 1)  // block A  z=0
+            (4 1 6 5)  // block B1 z=0
+            (1 2 7 6)  // block B2 z=0
+        );
     }}
 );
 
