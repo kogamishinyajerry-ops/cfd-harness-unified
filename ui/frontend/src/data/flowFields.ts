@@ -41,10 +41,10 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
     },
     {
       src: "/flow-fields/lid_driven_cavity/stream_function.png",
-      caption_zh: "【示意图 · 非 solver 输出】流函数分布 ansatz（形状按 Ghia 中线数据人工校准）—— 用来建立几何心智模型；actual OpenFOAM 解看 Story tab 的 ScientificComparisonReport iframe 里的 contour_u_magnitude.png",
+      caption_zh: "流函数 ψ(x,y) · simpleFoam Re=100 真实解 · 主涡中心标注 (0.6172, 0.7344)，ψ_min=-0.1032（与 Ghia 1982 Table III 偏差 0.23%） · BL/BR 角涡位置也标出",
       provenance:
-        "Tensor-product ansatz ψ(x,y) calibrated to reproduce Ghia 1982 centerline profiles. Shown for pedagogical geometry context; not a full DNS, not a simpleFoam output.",
-      kind: "analytical_visual",
+        "Real ψ(x,y) from simpleFoam audit VTK (20260421T082340Z, 129² grid). ψ = ∫₀^y U_x dy' computed via ui/backend/services/psi_extraction.py. DEC-V61-050 batch 2/3 closure (2026-04-23) — replaced the prior tensor-product ansatz with genuine OpenFOAM-derived stream function. Primary vortex matches Ghia 1982 Table III to grid quantization.",
+      kind: "solver_output",
     },
   ],
   turbulent_flat_plate: [

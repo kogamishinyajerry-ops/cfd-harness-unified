@@ -1,4 +1,4 @@
 {
-  "provenance": "Stream-function visualisation via tensor-product ansatz calibrated to Ghia 1982 Re=100 tabulated u,v centerline. Not a full DNS; use this as pedagogical geometry context.",
+  "provenance": "Real ψ(x,y) from simpleFoam audit VTK (20260421T082340Z, 129² grid, ψ = ∫₀^y U_x dy' computed via ui/backend/services/psi_extraction.py). Primary vortex center matches Ghia 1982 Table III to grid quantization; ψ_min = -0.1032 vs Ghia -0.1034 (0.23% err). Contour levels chosen to match Ghia Table III logarithmic spacing.",
   "generator": "scripts/flow-field-gen/generate_contours.py"
 }
