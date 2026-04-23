@@ -12,8 +12,8 @@ autonomous_governance: true
 autonomous_governance_counter_v61: 37
 external_gate_self_estimated_pass_rate: 0.70
 codex_tool_report_path: (pending post-batch-1 Codex review)
-notion_sync_status: pending
-github_sync_status: pending
+notion_sync_status: synced 2026-04-23T13:50 (page_id=34bc6894-2bed-818e-a692-cab52be61282, Status=Accepted, https://www.notion.so/DEC-V61-050-LDC-true-multi-dimensional-validation-4-independent-Ghia-observables-34bc68942bed818ea692cab52be61282)
+github_sync_status: pushed (1f1ff6b on origin/main, 4-commit arc)
 related:
   - DEC-V61-049 (LDC single-case pilot · 5-dim Compare tab honesty footer noted this DEC as the "true 6-dim expansion" successor — V61-049 only promoted existing back-end data; V61-050 adds NEW physical observables)
   - DEC-V61-030 (Q-5 Path A u_centerline Ghia Table I correctness fix · establishes the "gold YAML must be Ghia-faithful" precedent)
