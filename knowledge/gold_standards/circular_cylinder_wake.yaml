@@ -5,7 +5,7 @@
 # TRANSIENT simulation required
 #
 physics_contract:
-  geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. Current domain L_up=2D, L_down=8D, H=2.5D per side → 20% blockage (see physics_precondition). DEC-V61-053 Batch B1 will grow to L_up=10D, L_down=20D, H=6D per side → ~8% blockage, matching Williamson context."
+  geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. As of DEC-V61-053 Batch B1 (commits 63c11cb / f1a9cf3), adapter emits L_inlet=10D, L_outlet=20D, H=6D per side → ~8% blockage (was 20% pre-B1). Residual 3-5% Cd bias documented as RESIDUAL_RISK_CARRIED in physics_precondition; future DEC may grow H to 10D for <5%."
   reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. u_mean_centerline gold values 0.83→0.35 at x/D ∈ {1,2,3,5} are WAKE DEFICIT = (U_inf - u_mean)/U_inf (per the per-point `description: centerline velocity deficit`), NOT raw u_mean/U_inf. The gold ref_value key `u_Uinf` is historical mislabeling; Batch B2 resolved this via documentation + extractor-self-naming (no rename; retained for back-compat with contract_dashboard + e2e tests)."
   physics_precondition:
     - condition: "Flow is 2D laminar at Re=100 (unambiguously in laminar shedding regime 40 < Re < ~180)"

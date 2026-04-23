@@ -4769,7 +4769,24 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
             encoding="utf-8",
         )
 
-        # constant/turbulenceProperties
+        # constant/turbulenceProperties — compute body OUTSIDE the outer
+        # f-string to stay Python 3.9-compatible (nested multi-line f-strings
+        # with embedded braces break 3.9 parsers; project .venv is 3.12 but
+        # test tooling like `python3 -m py_compile` and CI shims default to
+        # 3.9, per Codex round-2 FAIL).
+        if turbulence_model == "laminar":
+            _turb_body = "simulationType  laminar;"
+        else:
+            _turb_body = (
+                "simulationType  RAS;\n"
+                "\n"
+                "RAS\n"
+                "{\n"
+                f"    RASModel      {turbulence_model};\n"
+                "    turbulence    on;\n"
+                "    printCoeffs   on;\n"
+                "}"
+            )
         (case_dir / "constant" / "turbulenceProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -4789,18 +4806,7 @@ FoamFile
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-{
-    "simulationType  laminar;"
-    if turbulence_model == "laminar"
-    else f"""simulationType  RAS;
-
-RAS
-{{
-    RASModel      {turbulence_model};
-    turbulence    on;
-    printCoeffs   on;
-}}"""
-}
+{_turb_body}
 
 // ************************************************************************* //
 """,

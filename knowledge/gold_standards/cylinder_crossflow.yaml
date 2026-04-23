@@ -11,19 +11,17 @@ physics_contract:
   # into a single gold YAML is a post-V61-053 follow-up DEC (not in scope here).
   # physics_contract block mirrors circular_cylinder_wake.yaml as of DEC-V61-053
   # Batch A (2026-04-23).
-  geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. Current domain L_up=2D, L_down=8D, H=2.5D per side → 20% blockage (see physics_precondition). DEC-V61-053 Batch B1 will grow to L_up=10D, L_down=20D, H=6D per side → ~8% blockage, matching Williamson context."
+  geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. As of DEC-V61-053 Batch B1 (commits 63c11cb / f1a9cf3), adapter emits L_inlet=10D, L_outlet=20D, H=6D per side → ~8% blockage (was 20% pre-B1). Synced with circular_cylinder_wake.yaml."
   reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. u_mean_centerline gold values 0.83→0.35 at x/D ∈ {1,2,3,5} are WAKE DEFICIT = (U_inf - u_mean)/U_inf (per the per-observable `description: mean centerline wake velocity deficit`). The gold ref_value key `u_Uinf` is historical mislabeling; Batch B2 resolved via documentation + extractor-self-naming (no rename, retained for backward compat)."
   physics_precondition:
     - condition: "Flow is 2D laminar at Re=100 (unambiguously in laminar shedding regime 40 < Re < ~180)"
-      satisfied_by_current_adapter: false
-      evidence_ref: "whitelist.yaml:83 declares turbulence_model=laminar per DEC-V61-005. Adapter src/foam_agent_adapter.py:515-518 calls _turbulence_model_for_solver which returns kOmegaSST for BODY_IN_CHANNEL (line 668). The whitelist field is SILENTLY IGNORED."
-      consequence_if_unsatisfied: "kOmegaSST over-dissipates the laminar wake at Re=100 → underpredicts St by 10-20%, Cl_rms by 30-50%. Likely contributor to the current audit fixture's `measurement.value = 4.93502e-06 U_max_approx` fallback."
-      resolution_plan: "DEC-V61-053 Batch B1 decision (a): thread task_spec.turbulence_model through _turbulence_model_for_solver so whitelist override wins."
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-053 Batch B1a (commit 63c11cb): adapter dispatch at src/foam_agent_adapter.py:513-533 now queries whitelist.yaml `turbulence_model: laminar` via _db.get_execution_chain and uses it. kOmegaSST override no longer fires for cylinder."
     - condition: "Domain is large enough that blockage does not bias Cd/St/u_centerline vs Williamson's unconfined anchors."
-      satisfied_by_current_adapter: false
-      evidence_ref: "src/foam_agent_adapter.py:4462-4467 — L_inlet=2D, L_outlet=8D, H=2.5D per side → 20% blockage."
-      consequence_if_unsatisfied: "Cd round-1 tolerance breach almost certain (Zdravkovich Ch.6: 20% blockage biases Cd high +8-12%)."
-      resolution_plan: "DEC-V61-053 Batch B1 decision (b): grow domain to L_inlet=10D, L_outlet=20D, H=6D per side → ~8% blockage."
+      satisfied_by_current_adapter: partially
+      evidence_ref: "DEC-V61-053 Batch B1a grew L_inlet 2D→10D, L_outlet 8D→20D, H 2.5D→6D. Blockage 20% → ~8%. Mesh scaled (200×100)→(600×240) = 144k cells to preserve dx=dy=0.05D."
+      consequence_if_unsatisfied: "Residual 8.3% blockage still above 5% rule-of-thumb — expected +3-5% Cd bias. Round-1 tolerance skirt acknowledged."
+      resolution_plan: "RESIDUAL_RISK_CARRIED: 8.3% blockage accepted for this DEC; future follow-up DEC may grow H to 10D for <5% blockage. Synced with circular_cylinder_wake.yaml."
     - condition: "Transient solution runs long enough to capture ≥8 shedding cycles AND time-average removes start-up transients."
       satisfied_by_current_adapter: partially
       evidence_ref: "DEC-V61-041 landed forceCoeffs FO + cylinder_strouhal_fft windowing. No regression since."
