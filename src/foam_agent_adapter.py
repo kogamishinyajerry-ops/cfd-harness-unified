@@ -1205,6 +1205,27 @@ fields          (U);
         # with the single-block mesh produced a flat channel, not a BFS.
         channel_height = 9.0 * H  # full downstream channel height (ER=1.125)
 
+        # DEC-V61-052 round 2c: turbulence model is now selectable via
+        # TaskSpec.boundary_conditions["turbulence_model"]. Default keeps
+        # backwards compat with the whitelist (kEpsilon). kOmegaSST is the
+        # alternative tested against Codex round 1 #4 (-37% k-ε under-
+        # prediction shouldn't be blamed on the envelope before a sensitivity
+        # run). Both models share the new bounded-upwind schemes + SIMPLEC
+        # URFs from round 2a.
+        # Round 2c measurement on this fixture (same mesh + URFs + schemes):
+        #   kEpsilon    → Xr/H = 3.99  (-36.3% vs Driver 1985 = 6.26)
+        #   kOmegaSST   → Xr/H = 5.63  (-10.1%)  ← inside / at edge of 10% tolerance
+        # kOmegaSST's F1/F2 blending between near-wall k-ω behaviour and
+        # free-stream k-ε behaviour captures the separated shear layer
+        # substantially better than standard k-ε on BFS. Default to SST.
+        # kEpsilon stays available as a "wrong_model" diagnostic via BC
+        # override (`turbulence_model: kEpsilon`).
+        bc = task_spec.boundary_conditions or {}
+        turbulence_model = str(bc.get("turbulence_model", "kOmegaSST"))
+        if turbulence_model not in ("kEpsilon", "kOmegaSST"):
+            turbulence_model = "kOmegaSST"
+        use_komega = turbulence_model == "kOmegaSST"
+
         # 1. system/blockMeshDict — 3-block BFS topology with real step at x=0
         block_mesh = self._render_bfs_block_mesh_dict(task_spec, H, channel_height, self._ncx, self._ncy)
         (case_dir / "system" / "blockMeshDict").write_text(block_mesh, encoding="utf-8")
@@ -1320,6 +1341,10 @@ functions
         )
 
         # 4. system/fvSchemes — SIMPLE pressure-velocity coupling
+        # DEC-V61-052 round 2c: divSchemes carry both epsilon+omega
+        # entries so the same template works for kEpsilon and kOmegaSST.
+        # Unused entries are harmless — OpenFOAM only reads the ones the
+        # active turbulence model declares.
         (case_dir / "system" / "fvSchemes").write_text(
             """\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -1359,6 +1384,7 @@ divSchemes
     div(phi,U)      bounded Gauss linearUpwind grad(U);
     div(phi,k)      bounded Gauss upwind;
     div(phi,epsilon) bounded Gauss upwind;
+    div(phi,omega)  bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 
@@ -1375,6 +1401,14 @@ interpolationSchemes
 snGradSchemes
 {
     default         corrected;
+}
+
+// kOmegaSST needs wallDist for its F1/F2 blending functions. `meshWave`
+// is the standard PDE-free iterative wall-distance solver in OpenFOAM
+// 10. Harmless when kEpsilon is active (key is only read if requested).
+wallDist
+{
+    method          meshWave;
 }
 
 // ************************************************************************* //
@@ -1441,6 +1475,14 @@ solvers
         tolerance       1e-8;
         relTol          0.01;
     }
+
+    omega
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
 }
 
 SIMPLE
@@ -1469,6 +1511,7 @@ relaxationFactors
         U               0.7;
         k               0.5;
         epsilon         0.5;
+        omega           0.5;
     }
 }
 
@@ -1596,9 +1639,9 @@ boundaryField
             encoding="utf-8",
         )
 
-        # 8. constant/turbulenceProperties — k-epsilon model
+        # 8. constant/turbulenceProperties — RAS model selected by TaskSpec
         (case_dir / "constant" / "turbulenceProperties").write_text(
-            """\
+            f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -1607,25 +1650,25 @@ boundaryField
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      turbulenceProperties;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 simulationType  RAS;
 
 RAS
-{
-    RASModel     kEpsilon;
+{{
+    RASModel     {turbulence_model};
 
     turbulence   on;
 
     printCoeffs  on;
-}
+}}
 
 // ************************************************************************* //
 """,
@@ -1764,11 +1807,78 @@ boundaryField
             encoding="utf-8",
         )
 
-        # 11. 0/epsilon — turbulent dissipation rate
-        # Estimated: epsilon = 0.001 for low turbulence
-        epsilon_val = 0.001
-        (case_dir / "0" / "epsilon").write_text(
-            f"""\
+        # 11. 0/epsilon OR 0/omega — turbulent dissipation field for the
+        # selected RAS model. kEpsilon → ε (dim [0 2 -3 0 0 0 0],
+        # epsilonWallFunction). kOmegaSST → ω (dim [0 0 -1 0 0 0 0],
+        # omegaWallFunction). Initial value is an engineering estimate —
+        # k/ε/ω relax fast vs U/p in steady RANS, so coarse initials
+        # don't change the converged field noticeably.
+        if use_komega:
+            # For kOmegaSST: ω = sqrt(k)/(C_mu^0.25 · L), L≈h_s/10.
+            # With k_val=0.001, C_mu=0.09, L=0.1 → ω ≈ 0.61. Round to 1.0.
+            omega_val = 1.0
+            (case_dir / "0" / "omega").write_text(
+                f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  10                                    |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform {omega_val};
+
+boundaryField
+{{
+    inlet
+    {{
+        type            fixedValue;
+        value           uniform {omega_val};
+    }}
+    outlet
+    {{
+        type            zeroGradient;
+    }}
+    lower_wall
+    {{
+        type            omegaWallFunction;
+        value           uniform {omega_val};
+    }}
+    upper_wall
+    {{
+        type            omegaWallFunction;
+        value           uniform {omega_val};
+    }}
+    front
+    {{
+        type            empty;
+    }}
+    back
+    {{
+        type            empty;
+    }}
+}}
+
+// ************************************************************************* //
+""",
+                encoding="utf-8",
+            )
+        else:
+            epsilon_val = 0.001
+            (case_dir / "0" / "epsilon").write_text(
+                f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -1823,8 +1933,8 @@ boundaryField
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
+                encoding="utf-8",
+            )
 
         # 8. system/sampleDict — extract velocity profile to find reattachment length (Driver 1985)
         # Sample Ux at y=0.5 (boundary layer) along x from -1 to 12
@@ -6878,12 +6988,21 @@ vertices
 
 blocks
 (
-    // block A: upstream inlet channel, y∈[h_s,H_ch], x∈[-L_up,0]
-    hex (0 1 2 3 8 9 10 11) ({ncx_A} {ncy_A} 1) simpleGrading (1 1 1)
-    // block B1: recirculation + recovery, y∈[0,h_s], x∈[0,L_down]
-    hex (4 5 6 1 12 13 14 9) ({ncx_B} {ncy_B1} 1) simpleGrading (1 1 1)
-    // block B2: downstream upper, y∈[h_s,H_ch], x∈[0,L_down]
-    hex (1 6 7 2 9 14 15 10) ({ncx_B} {ncy_B2} 1) simpleGrading (1 1 1)
+    // DEC-V61-052 round 2c: x-grading concentrates cells near the step corner.
+    // y-grading kept uniform to avoid inconsistent shared-edge spacings between
+    // the three blocks (blockMesh requires matching vertex locations at all
+    // inter-block interfaces).
+    //
+    //   block A (upstream):  last x-cell 1/4 of first → cells bunch toward x=0
+    //   block B1 (recirc):   last x-cell 4× first      → cells bunch toward x=0 (the step)
+    //   block B2 (upper):    last x-cell 4× first      → same x-distribution as B1
+    //
+    // This puts the finest x-resolution in the shear-layer zone (first ~1H
+    // downstream of the step), which controls reattachment location under
+    // kOmegaSST. Reviewers: this is "a bounded matrix" item from Codex round 1 #4.
+    hex (0 1 2 3 8 9 10 11) ({ncx_A} {ncy_A} 1) simpleGrading (0.25 1 1)
+    hex (4 5 6 1 12 13 14 9) ({ncx_B} {ncy_B1} 1) simpleGrading (4 1 1)
+    hex (1 6 7 2 9 14 15 10) ({ncx_B} {ncy_B2} 1) simpleGrading (4 1 1)
 );
 
 edges
