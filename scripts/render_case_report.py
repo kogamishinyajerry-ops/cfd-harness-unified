@@ -614,7 +614,26 @@ def _render_unstructured_contour(
         mag = np.where(finite, np.clip(mag, 0.0, vmax), 0.0)
         Ux = np.where(np.isfinite(Ux), np.clip(Ux, -vmax, vmax), 0.0)
         Uy = np.where(np.isfinite(Uy), np.clip(Uy, -vmax, vmax), 0.0)
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    # Aspect-adaptive figsize: elongated domains (BFS L=40/H=9, plane_channel
+    # L=30/H=1, duct_flow L=5/H=0.4) crammed into a 7.5×5.5 canvas look
+    # unreadable (titles overlap the domain, quiver arrows oversized). Scale
+    # figsize to actual (dx, dy) span, capped so colorbar + labels fit.
+    finite_xy = np.isfinite(Cx) & np.isfinite(Cy)
+    if finite_xy.any():
+        dx = float(Cx[finite_xy].max() - Cx[finite_xy].min())
+        dy = float(Cy[finite_xy].max() - Cy[finite_xy].min())
+    else:
+        dx, dy = 1.0, 1.0
+    aspect = (dx / dy) if dy > 0 else 1.0
+    if aspect >= 2.5:
+        fig_h = 4.2
+        fig_w = min(max(fig_h * aspect * 0.9, 8.0), 14.0)
+    elif aspect <= 0.4:
+        fig_w = 5.0
+        fig_h = min(max(fig_w / aspect * 0.9, 6.0), 12.0)
+    else:
+        fig_w, fig_h = 7.5, 5.5
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     # Attempt Delaunay triangulation; qhull fails on degenerate/collinear
     # geometries (e.g. NACA0012 after a solver divergence — all cells end up
     # at boundary or coincident). Fall through to scatter on failure.
@@ -628,22 +647,28 @@ def _render_unstructured_contour(
     if cf is None:
         # Plain scatter-mag map — always works, no triangulation.
         cf = ax.scatter(Cx, Cy, c=mag, s=8, cmap="viridis", edgecolors="none")
-    # Sparse quiver: ~40 arrows on a decimated lattice so large meshes stay readable.
+    # Aspect-aware quiver density: target ~120-200 arrows laid out roughly
+    # proportional to the domain aspect so elongated domains don't look like
+    # a stripe of overlapping arrows. Prior uniform stride=sqrt(n)/8 produced
+    # ~700 arrows on BFS → unreadable.
     n = len(Cx)
-    stride = max(1, int(np.sqrt(n) / 8))
+    target_arrows = 150
+    stride = max(1, int(n / target_arrows))
     idx = np.arange(0, n, stride)
     ax.quiver(
         Cx[idx], Cy[idx], Ux[idx], Uy[idx],
-        color="white", alpha=0.8, scale=None, width=0.0025,
-        headwidth=3.5, headlength=4.0,
+        color="white", alpha=0.85, scale=None, width=0.0018,
+        headwidth=3.2, headlength=3.8,
     )
     ax.set_aspect("equal")
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
-    ax.set_title(f"{case_id} — |U| contour (unstructured tricontour + quiver)")
+    ax.set_title(f"{case_id} — |U| contour (unstructured tricontour + quiver)",
+                 fontsize=10, pad=6)
     cbar = fig.colorbar(cf, ax=ax, fraction=0.03, pad=0.02)
     cbar.set_label("|U| [m/s]")
-    fig.savefig(out)
+    fig.tight_layout()
+    fig.savefig(out, bbox_inches="tight", dpi=110)
     plt.close(fig)
     return out
 
