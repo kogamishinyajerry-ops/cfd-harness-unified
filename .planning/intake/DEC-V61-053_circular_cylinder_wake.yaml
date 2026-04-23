@@ -1,0 +1,144 @@
+# Stage 0 · Case Intake Assessment · DEC-V61-053 · circular_cylinder_wake
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
+
+case_id: circular_cylinder_wake
+dec_id: DEC-V61-053
+case_number: 3  # LDC = 1, BFS = 2, cylinder = 3
+intake_authored_at: "2026-04-23"
+intake_author: "Claude Code (Opus 4.7, 1M context)"
+methodology_version: "v2.0"
+
+# ============================================================================
+# Classification (F5-M1 hard gate, §3b)
+# ============================================================================
+case_type: I
+case_type_rationale: |
+  Four independent scalar gates exist in knowledge/gold_standards/circular_cylinder_wake.yaml:
+   1. strouhal_number (St)        — Williamson 1996 St=0.164 at Re=100
+   2. cd_mean                     — 1.33 at Re=100
+   3. cl_rms                      — 0.048 at Re=100
+   4. u_mean_centerline @ 4 x/D   — 0.83, 0.64, 0.55, 0.35 at x/D = 1, 2, 3, 5
+  Type I requires ≥3 independent scalar gates — satisfied by forceCoeffs alone (St + Cd + Cl).
+  u_mean_centerline is the 4th (a per-station wake-profile metric, analogous to LDC's D6 v_centerline).
+primary_gate_count: 4
+case_type_hard_gate_signed: true  # per §3b, no mid-arc Type change allowed
+
+# ============================================================================
+# Reference papers
+# ============================================================================
+reference_paper:
+  primary:
+    citation: "Williamson, C.H.K. (1996). Vortex dynamics in the cylinder wake. Annu. Rev. Fluid Mech. 28, 477-539"
+    doi: "10.1146/annurev.fl.28.010196.002421"
+    providing: [St, Cd_mean, Cl_rms, u_mean_centerline_x_over_D]
+  secondary:
+    - citation: "Park, Kwon & Choi (1998). Numerical solutions of flow past a circular cylinder. KSME Int J. 12, 1200"
+      providing: [cross_check_cd_cl]
+    - citation: "Henderson (1995). Details of the drag curve near the onset of vortex shedding. Phys Fluids 7, 2102"
+      providing: [cross_check_strouhal_re_range]
+
+# ============================================================================
+# Observable scope (F1-M1 § hardens against breadth drift / scope creep)
+# ============================================================================
+observable_scope:
+  in_scope:
+    - quantity: strouhal_number
+      tolerance_pct: 5.0
+      extraction_method: "FFT on Cl(t) from forceCoeffs FO · existing in src.cylinder_strouhal_fft (DEC-V61-041)"
+      status_pre_v61_053: "EXTRACTOR_EXISTS · emits via key_quantities, but not surfaced as measurement.value"
+    - quantity: cd_mean
+      tolerance_pct: 5.0
+      extraction_method: "time-averaged Cd(t) over stationary window from forceCoeffs FO"
+      status_pre_v61_053: "EXTRACTOR_EXISTS · same path as strouhal_number"
+    - quantity: cl_rms
+      tolerance_pct: 5.0
+      extraction_method: "RMS of Cl(t) over stationary window (same window as St FFT)"
+      status_pre_v61_053: "EXTRACTOR_EXISTS · same path"
+    - quantity: u_mean_centerline
+      tolerance_pct: 5.0
+      extraction_method: "sampleDict probe at (x/D, 0, 0) for x/D ∈ {1, 2, 3, 5}, time-averaged over stationary window"
+      status_pre_v61_053: "NOT_IMPLEMENTED · requires new sampleDict emit + extractor"
+
+  explicitly_out_of_scope:
+    - item: "3D span-wise instability / oblique shedding"
+      reason: "Williamson 1996 §3 — only relevant at Re > 180; whitelist pins Re=100 in laminar regime"
+    - item: "Blockage correction for confined domain"
+      reason: "adapter _generate_body_in_channel uses sufficient domain (L_up=10D, L_down=20D); blockage < 5%"
+    - item: "Mesh refinement study (GCI)"
+      reason: "40k-cell fixture is whitelist canonical; Phase 5 GCI protocol is a separate DEC"
+    - item: "Inlet turbulence intensity sweep"
+      reason: "laminar regime; not a physical driver at Re=100"
+    - item: "Re range sweep (Re 40-200 transition curve)"
+      reason: "teaching figure (flowFields.ts strouhal_curve.png) already shows this analytically; not a solver gate"
+
+# ============================================================================
+# Risk flags (F1-M1 requires ≥1 subjective risk annotation)
+# ============================================================================
+risk_flags:
+  - flag: transient_windowing
+    severity: high
+    detail: "St/Cd/Cl all depend on stationary-window FFT. Adapter runtime must capture ≥8 shedding cycles AND discard start-up transients. If window too short, FFT peak smears → St error."
+    mitigation_pre: "Re-verify forceCoeffs window_start / window_end in adapter match whitelist runtime"
+  - flag: sample_point_outside_cylinder
+    severity: medium
+    detail: "x/D=1.0 is only 0.5D from cylinder surface. Any coordinate-system error (cylinder center offset, D convention) → sample point inside solid body → garbage u value."
+    mitigation_pre: "Unit test: verify emitted sampleDict coordinates vs cylinder center + radius"
+  - flag: stale_contract_status
+    severity: low
+    detail: "gold YAML says contract_status: COMPATIBLE_WITH_SILENT_PASS_HAZARD but the hazard (canonical_st=0.165 hardcode) was retired in DEC-V61-041. Documentation debt — not a physics issue."
+    mitigation_pre: "Flip to SATISFIED during batch A of this DEC"
+  - flag: ldc_style_breadth_drift
+    severity: medium
+    detail: "V61-053 is a Type I DEC. LDC V61-050 is the precedent — 4 batches, 5 Codex rounds, 8 MED findings. Breadth-drift risk: tempting to add cp_rms_surface or near-wake vorticity scalar → scope creep."
+    mitigation_pre: "any mid-arc observable addition MUST open a new DEC per §3b hard gate"
+  - flag: u_mean_centerline_new_extractor
+    severity: high
+    detail: "4th observable has no extractor at all. Most novel code in this DEC. LDC ψ extractor (V61-050) took 3 rounds to stabilize; realistic expectation same here."
+    mitigation_pre: "Unit-test extractor on mocked sampleDict output before integration"
+
+# ============================================================================
+# Budget and halt criteria (F6-M1, §1b)
+# ============================================================================
+codex_budget_rounds: 3                      # soft target (LDC was 4)
+round_4_health_check_required: true         # auto-flag halt_risk_flag: true if CHANGES_REQUIRED at r4
+round_6_force_abandon_hard_gate: true       # MUST halt and open RETRO at round 6
+
+estimated_pass_rate_round1: 0.30
+pass_rate_rationale: |
+  Conservative against LDC V61-050 round-1 observables:
+   - LDC D6 round 1 passed (v_centerline matched ±5% on 12/17 points)
+   - LDC D7 (primary vortex) round 1 passed to 0.23% ψ err
+   - LDC D8 (BL/BR secondaries) round 1 shown high SNR due to ψ resolution
+  But BFS V61-052 round 1 was CHANGES_REQUIRED (2H+2M+1L) on adapter rewrite.
+  Cylinder is adapter-intact (DEC-V61-041 already landed forceCoeffs) BUT
+  u_mean_centerline extractor is new code. And 4 primary gates → 4× the surface
+  area of BFS's single gate. 0.30 reflects: (a) known brittleness of transient
+  FFT windowing, (b) new extractor code, (c) documentation debt in gold YAML,
+  (d) stale visual_only → gold_overlay promotion plumbing, (e) Compare-tab
+  multi-dim panel for 4 dimensions is new UI surface. Not 0.70 because at
+  least 3 of the 4 extractors already exist + mostly battle-tested.
+
+# ============================================================================
+# Delta from Case 2 (BFS · DEC-V61-052) · what's different
+# ============================================================================
+delta_from_case_2:
+  - "BFS was Type II (1 scalar gate); cylinder is Type I (4 gates) — more surface area"
+  - "BFS needed adapter geometry rewrite (blockMeshDict multi-block); cylinder adapter already landed (DEC-V61-041)"
+  - "BFS had no pre-existing FFT/transient code; cylinder already has forceCoeffs FFT path"
+  - "BFS promoted visual_only → visual_only+scalar-anchor; cylinder should promote visual_only → gold_overlay (LDC-tier)"
+  - "BFS's single Xr/H extractor was wall-shear sign-change (rare OpenFOAM convention pitfall); cylinder's FFT is a standard signal-processing flow"
+  - "BFS had zero audit YAML primary scalar surface; cylinder has fixture primary=U_max_approx (wrong quantity → low-hanging fix)"
+
+# ============================================================================
+# Success criteria (what 'close' looks like)
+# ============================================================================
+success_criteria:
+  - "Gold YAML contract_status: SATISFIED (flipped from COMPATIBLE_WITH_SILENT_PASS_HAZARD)"
+  - "Audit fixture measurement.quantity = strouhal_number (not U_max_approx); measurement.value from solver FFT (not canonical)"
+  - "All 4 observables surface on Compare-tab multi-dim panel: D1 St, D2 Cd_mean, D3 Cl_rms, D4 u_centerline"
+  - "LearnCaseDetailPage for circular_cylinder_wake shows gold-overlay mode (not visual_only)"
+  - "flowFields.ts has a real solver_output figure (Karman vortex shedding contour/streamlines with St annotation) alongside the existing analytical_visual strouhal_curve.png"
+  - "Preflight scalar-contract gate GREEN on all 4 scalars"
+  - "Codex final-round verdict = APPROVE (clean) per F1-M2"
+  - "DEC frontmatter methodology_version: v2.0 (first-apply case, not retroactive)"
