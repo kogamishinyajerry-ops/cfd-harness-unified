@@ -9,7 +9,10 @@ commits_in_scope:
   - 6f97a84 feat(learn): batch B — LDC complete OpenFOAM reproduction bundle (9 files)
   - a05d316 feat(learn): batch D — contour annotations + real-vs-synthetic labels
   - 3ed94b7 feat(learn): batch E — LDC glossary + report skeleton + path normalization
-codex_verdict: DEEP_DIVE_COMPLETE (round 1 findings landed at .planning/reviews/case_pilot_ldc_findings.md, 4188 words, verdict 4/10 → patches A+B+D+E target 7/10; batch C deferred to future DEC since it touches Compare-tab backend wiring)
+  - a405fff docs(dec): 4-batch closeout
+  - 7d383af chore(renders): batch D contour regeneration with annotations baked in
+  - 4a3fbf1 feat(learn): batch C — Compare tab multi-dim upgrade (UI-only, no backend changes)
+codex_verdict: DEEP_DIVE_COMPLETE (round 1 findings landed at .planning/reviews/case_pilot_ldc_findings.md, 4188 words, verdict 4/10 → patches A+B+C+D+E target 8/10. C ended up UI-only after inspection — backend already computed grid_conv / per_point_dev_pct / GCI / profile verdict via comparison_report.py; previously only Story iframe surfaced them, now CompareTab has them as 5 named dimensions. True 6-dim expansion (v_centerline / primary_vortex_location / ψ / KE / wall-shear extractors + gold fixes) still requires independent DEC — honesty footer on CompareTab states this.)
 autonomous_governance: true
 autonomous_governance_counter_v61: 36
 external_gate_self_estimated_pass_rate: 0.55
