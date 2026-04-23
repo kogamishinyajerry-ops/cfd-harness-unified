@@ -9,7 +9,7 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit e8d4897）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 25a0753）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
@@ -18,11 +18,11 @@ run_metadata:
 case_id: backward_facing_step
 source: phase5_audit_run_foam_agent
 measurement:
-  value: 5.641598611012603
+  value: 5.6472863199692656
   unit: dimensionless
-  run_id: audit_backward_facing_step_e8d4897
-  commit_sha: e8d4897
-  measured_at: '2026-04-23T09:15:14Z'
+  run_id: audit_backward_facing_step_25a0753
+  commit_sha: 25a0753
+  measured_at: '2026-04-23T09:18:57Z'
   quantity: reattachment_length
   extraction_source: key_quantities_direct
   solver_success: true

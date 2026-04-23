@@ -1287,7 +1287,13 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         1000;
+// DEC-V61-052 round 2d: endTime bumped to 1500 so residuals have room to
+// fall into the 1e-6 range — late-window Xr drift is then read straight
+// off the persisted write snapshots at t=800/1000/1200/1500. Prior
+// endTime=1000 left Ux at 1e-5 still dropping ~80% in the last 200
+// iterations; the visual/scalar gates were all passing, but the
+// stationarity claim (Codex round 1 #5) required a larger margin.
+endTime         1500;
 
 deltaT          1;
 
