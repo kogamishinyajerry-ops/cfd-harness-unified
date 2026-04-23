@@ -255,12 +255,89 @@ def _check_velocity_envelope(case_id: str, fixture: Path) -> Check:
                 f"max |U| = {umax:.3g}, {ratio:.2f}× U_ref")
 
 
+def _check_scalar_contract(case_id: str) -> list[Check]:
+    """Structured scalar-contract check.
+
+    DEC-V61-052 round 2 (Codex round 1 #2): the contract_status string-
+    matching gate is too easy to dodge — renaming a status from
+    PARTIALLY_COMPATIBLE to GEOMETRY_AND_GATES_GREEN_XR_UNDER_TOLERANCE
+    flipped preflight from RED to GREEN even though the headline scalar
+    stayed outside its 10% tolerance band. This gate reads the live
+    `audit_real_run_measurement.yaml` and compares the extracted scalar
+    against the gold reference + tolerance from the gold YAML, producing
+    an explicit pass/fail independent of contract_status prose.
+    """
+    checks: list[Check] = []
+    meas_path = (REPO_ROOT / "ui/backend/tests/fixtures/runs"
+                 / case_id / "audit_real_run_measurement.yaml")
+    if not meas_path.is_file():
+        return [Check("scalar contract", "warn",
+                      f"no audit measurement at {meas_path.relative_to(REPO_ROOT)}")]
+    try:
+        meas = yaml.safe_load(meas_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        return [Check("scalar contract", "warn", f"audit YAML parse failed: {exc!r}")]
+    measurement = (meas or {}).get("measurement", {}) or {}
+    actual = measurement.get("value")
+    quantity = measurement.get("quantity")
+    if actual is None or quantity is None:
+        return [Check("scalar contract", "warn",
+                      f"audit measurement missing value/quantity (got {actual!r}/{quantity!r})")]
+
+    # Walk the multi-doc gold YAML for the matching `quantity` block.
+    gold_path = _GOLD_ROOT / f"{case_id}.yaml"
+    if not gold_path.is_file():
+        return [Check("scalar contract", "warn",
+                      f"no gold YAML for {case_id}")]
+    try:
+        docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    except yaml.YAMLError as exc:
+        return [Check("scalar contract", "warn", f"gold YAML parse failed: {exc!r}")]
+    gold_doc = next((d for d in docs
+                     if isinstance(d, dict) and d.get("quantity") == quantity), None)
+    if gold_doc is None:
+        return [Check("scalar contract", "warn",
+                      f"gold has no quantity block for {quantity!r}")]
+    refs = gold_doc.get("reference_values") or []
+    if not refs or "value" not in refs[0]:
+        return [Check("scalar contract", "warn",
+                      f"gold {quantity} has no reference_values[].value")]
+    expected = float(refs[0]["value"])
+    tolerance = float(gold_doc.get("tolerance", 0.10))
+
+    try:
+        actual_f = float(actual)
+    except (TypeError, ValueError):
+        return [Check("scalar contract", "warn",
+                      f"audit value not numeric: {actual!r}")]
+    abs_dev = actual_f - expected
+    rel_dev = abs_dev / expected if expected != 0 else float("inf")
+    pct = rel_dev * 100
+    summary = (
+        f"{quantity}: actual={actual_f:.4g}  expected={expected:.4g}  "
+        f"dev={pct:+.1f}% (tolerance ±{tolerance*100:.0f}%)"
+    )
+    evidence = {
+        "quantity": quantity,
+        "actual": actual_f,
+        "expected": expected,
+        "tolerance_pct": tolerance * 100,
+        "deviation_pct": pct,
+        "method": measurement.get("extraction_source"),
+    }
+    if abs(rel_dev) <= tolerance:
+        checks.append(Check("scalar contract", "pass", summary, evidence=evidence))
+    else:
+        checks.append(Check("scalar contract", "fail", summary, evidence=evidence))
+    return checks
+
+
 def preflight(case_id: str) -> int:
     """Run the battery for one case. Returns exit-code-style result."""
     print(f"\n══ pre-flight · {case_id} ══")
     all_checks: list[Check] = []
 
-    # Check 1: gold YAML contract_status
+    # Check 1: gold YAML contract_status (string-match prose check)
     all_checks.append(_check_gold_status(case_id))
 
     # Check 2: fixture presence
@@ -279,6 +356,8 @@ def preflight(case_id: str) -> int:
             all_checks.append(_check_geometry_bfs(fixture))
         # Check 5: velocity envelope
         all_checks.append(_check_velocity_envelope(case_id, fixture))
+        # Check 6: structured scalar contract (measured vs gold)
+        all_checks.extend(_check_scalar_contract(case_id))
 
     for c in all_checks:
         print(c.format())
