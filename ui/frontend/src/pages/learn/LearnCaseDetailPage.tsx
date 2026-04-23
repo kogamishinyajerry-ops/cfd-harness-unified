@@ -1139,8 +1139,14 @@ function CompareTab({
 //        re-slice of u_centerline. Gold = Ghia 1982 Table II native 17
 //        non-uniform x points. Measured = post-hoc VTK interpolation
 //        of U_y onto y=0.05 line (no simpleFoam re-run).
+//   D7 · primary vortex (x_c, y_c, ψ_min) — DEC-V61-050 batch 3:
+//        2D observable, completely independent of the two line-
+//        probe observables. Gold = Ghia 1982 Table III primary row.
+//        Measured = 2D argmin of ψ(x, y) = ∫₀^y U_x dy' on a 129²
+//        resampling of the audit VTK (see ui/backend/services/
+//        psi_extraction.py).
 // Plus an honesty footer listing dims that are IN GOLD but NOT yet
-// validated (primary_vortex_location — batch 3 scope) so students
+// validated (secondary vortices BL/BR — batch 4 scope) so students
 // do not claim unsupported dims in their report.
 function MultiDimensionComparePanel({
   caseId,
@@ -1201,7 +1207,7 @@ function MultiDimensionComparePanel({
       <div className="flex items-baseline justify-between">
         <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
         <p className="text-[11px] text-surface-500">
-          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0) + (data.metrics_v_centerline ? 1 : 0)} 个独立维度
+          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0) + (data.metrics_v_centerline ? 1 : 0) + (data.metrics_primary_vortex ? 1 : 0)} 个独立维度
         </p>
       </div>
 
@@ -1440,16 +1446,105 @@ function MultiDimensionComparePanel({
         </div>
       )}
 
+      {/* D7 · Primary vortex (x_c, y_c, ψ_min) — DEC-V61-050 batch 3.
+          Independent physical observable: 2D argmin of ψ over the whole
+          cavity, compared against Ghia Table III Re=100. */}
+      {data.metrics_primary_vortex && data.paper_primary_vortex && (
+        <div className={`rounded-md border p-4 ${
+          data.metrics_primary_vortex.all_pass
+            ? "border-emerald-900/40 bg-emerald-950/10"
+            : "border-amber-900/40 bg-amber-950/10"
+        }`}>
+          <div className="mb-1 flex items-baseline gap-2">
+            <span className={`mono text-[10.5px] font-semibold uppercase tracking-wider ${
+              data.metrics_primary_vortex.all_pass ? "text-emerald-300" : "text-amber-300"
+            }`}>
+              D7 · 主涡中心（独立观测量）
+            </span>
+            <span className={`mono inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${
+              data.metrics_primary_vortex.all_pass
+                ? "bg-emerald-900/40 text-emerald-300"
+                : "bg-amber-900/40 text-amber-300"
+            }`}>
+              {data.metrics_primary_vortex.all_pass ? "PASS" : "PARTIAL"}
+            </span>
+          </div>
+          <p className="text-[13px] leading-relaxed text-surface-200">
+            {data.paper_primary_vortex.short} · 由 ψ(x,y)=∫₀^y U_x dy' 在 129² 重采样网格上 2D argmin 提取，
+            对比 Ghia 1982 Table III Re=100 的主涡中心和 ψ_min。
+            <span className="block mt-1 text-[11.5px] text-emerald-200/80">
+              这是<strong>与 u_centerline / v_centerline 都不同的 2D 结构观测量</strong>——前两者都是 1D 剖面，主涡中心是通过整个场的流函数 argmin 定位得到的二维点 + ψ 强度。完全独立于任何单线采样。
+            </span>
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-3 text-[11px]">
+            <div>
+              <div className="text-surface-500">x_c (x/L)</div>
+              <div className="mono text-surface-100">
+                {data.metrics_primary_vortex.x_meas.toFixed(4)}
+              </div>
+              <div className="mono text-[10px] text-surface-500">
+                gold: {data.metrics_primary_vortex.x_gold.toFixed(4)}
+              </div>
+            </div>
+            <div>
+              <div className="text-surface-500">y_c (y/L)</div>
+              <div className="mono text-surface-100">
+                {data.metrics_primary_vortex.y_meas.toFixed(4)}
+              </div>
+              <div className="mono text-[10px] text-surface-500">
+                gold: {data.metrics_primary_vortex.y_gold.toFixed(4)}
+              </div>
+            </div>
+            <div>
+              <div className="text-surface-500">ψ_min / (U·L)</div>
+              <div className="mono text-surface-100">
+                {data.metrics_primary_vortex.psi_meas.toFixed(5)}
+              </div>
+              <div className="mono text-[10px] text-surface-500">
+                gold: {data.metrics_primary_vortex.psi_gold.toFixed(5)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-3 text-[11px]">
+            <div className="rounded border border-surface-800 bg-surface-950/40 px-2 py-1.5">
+              <div className="text-surface-500">2D 位置误差</div>
+              <div className="mono text-surface-100">
+                {data.metrics_primary_vortex.position_error.toFixed(5)}
+                <span className={`ml-1.5 ${data.metrics_primary_vortex.position_pass ? "text-emerald-300" : "text-rose-300"}`}>
+                  {data.metrics_primary_vortex.position_pass ? "✓" : "✗"}
+                </span>
+              </div>
+              <div className="mono text-[10px] text-surface-500">
+                tol ≤ {data.metrics_primary_vortex.position_tolerance.toFixed(3)}
+              </div>
+            </div>
+            <div className="rounded border border-surface-800 bg-surface-950/40 px-2 py-1.5">
+              <div className="text-surface-500">|ψ| 相对误差</div>
+              <div className="mono text-surface-100">
+                {data.metrics_primary_vortex.psi_error_pct.toFixed(2)}%
+                <span className={`ml-1.5 ${data.metrics_primary_vortex.psi_pass ? "text-emerald-300" : "text-rose-300"}`}>
+                  {data.metrics_primary_vortex.psi_pass ? "✓" : "✗"}
+                </span>
+              </div>
+              <div className="mono text-[10px] text-surface-500">
+                tol ≤ {data.metrics_primary_vortex.psi_tolerance_pct.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Honesty footer: dims that look supported but are NOT */}
       <div className="rounded-md border border-rose-900/40 bg-rose-950/10 p-4">
         <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-rose-300">
           当前未支持的验证维度
         </p>
         <p className="text-[12px] leading-relaxed text-surface-300">
-          黄金标准 YAML 里仍列有 <span className="mono text-rose-200">primary_vortex_location</span>（主涡中心坐标），但 <span className="mono text-rose-200">physics_contract.physics_precondition</span> 明确标 <span className="mono text-rose-200">satisfied_by_current_adapter=false</span>——储存的 vortex_center_y=0.7650 与 Ghia Re=100 真值 (0.6172, 0.7344) 对不上，且 vortex_center_x 根本没存。
-          这一维当前 audit comparator 不调用，<strong>写报告时不能当作独立验证维度声明</strong>。修复路径：DEC-V61-050 batch 3 做 ψ streamfunction argmin 提取器 + 修 gold YAML。
+          Ghia 1982 Table III 另外列出的 <span className="mono text-rose-200">secondary vortices</span>（左下角 BL 和右下角 BR 反向涡）黄金标准 YAML 里暂未写入，当前 audit comparator 也不调用。Ghia Re=100 的参考值是 BL: (x, y, ψ) = (0.0313, 0.0391, +1.749e-6) 和 BR: (0.9453, 0.0625, +1.254e-5)——对应<strong>次级角涡的大小和位置</strong>，修复路径：DEC-V61-050 batch 4 做角域 ψ 局部极值提取 + 加 gold YAML 新 block。
           <span className="block mt-1 text-emerald-200/80">
-            ✓ <span className="mono">v_centerline</span>（水平中线 v 剖面）已在 DEC-V61-050 batch 1 落地为独立观测量，见上方 D6。
+            ✓ <span className="mono">v_centerline</span>（水平中线 v 剖面，Ghia Table II）已在 batch 1 落地 · D6
+            <br />
+            ✓ <span className="mono">primary_vortex_location</span>（主涡中心 2D argmin ψ，Ghia Table III 主行）已在 batch 3 落地 · D7
           </span>
         </p>
       </div>
@@ -2216,6 +2311,30 @@ type ComparisonReportContext = {
     n_pass: number;
     n_total: number;
     per_point_dev_pct?: number[];
+  } | null;
+  // DEC-V61-050 batch 3: primary vortex (x_c, y_c, ψ_min) from 2D
+  // argmin of ψ. Fields match comparison_report.py exactly.
+  metrics_primary_vortex?: {
+    x_meas: number;
+    y_meas: number;
+    psi_meas: number;
+    x_gold: number;
+    y_gold: number;
+    psi_gold: number;
+    position_error: number;
+    psi_error_pct: number;
+    position_tolerance: number;
+    psi_tolerance_pct: number;
+    position_pass: boolean;
+    psi_pass: boolean;
+    all_pass: boolean;
+  } | null;
+  paper_primary_vortex?: {
+    source: string;
+    doi?: string;
+    short: string;
+    position_tolerance: number;
+    psi_tolerance_pct: number;
   } | null;
   paper?: {
     title: string;

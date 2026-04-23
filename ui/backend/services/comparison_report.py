@@ -193,6 +193,46 @@ def _load_ldc_v_gold() -> tuple[list[float], list[float], dict] | None:
     return xs, vs, v_doc
 
 
+def _load_ldc_vortex_gold() -> dict | None:
+    """Load the primary_vortex_location gold block from lid_driven_cavity.yaml.
+
+    DEC-V61-050 batch 3: returns the dict with {vortex_center_x,
+    vortex_center_y, psi_min, position_tolerance, psi_tolerance, source}
+    extracted from the reference_values entries. Returns None if the
+    block is missing or still has the pre-batch-3 shape (x=0.5, y=0.7650).
+    """
+    gold_path = _GOLD_ROOT / "lid_driven_cavity.yaml"
+    if not gold_path.is_file():
+        return None
+    docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    pv_doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == "primary_vortex_location"),
+        None,
+    )
+    if pv_doc is None:
+        return None
+    rvs = {
+        entry.get("name"): entry.get("value")
+        for entry in pv_doc.get("reference_values", [])
+        if isinstance(entry, dict)
+    }
+    # Require all three Ghia Table III fields. Pre-batch-3 block had
+    # u_min instead of psi_min — we refuse to load that and silently
+    # return None so the comparator degrades rather than reporting
+    # garbage against the wrong reference.
+    if "vortex_center_x" not in rvs or "vortex_center_y" not in rvs or "psi_min" not in rvs:
+        return None
+    return {
+        "vortex_center_x": float(rvs["vortex_center_x"]),
+        "vortex_center_y": float(rvs["vortex_center_y"]),
+        "psi_min": float(rvs["psi_min"]),
+        "position_tolerance": float(pv_doc.get("position_tolerance", 0.02)),
+        "psi_tolerance": float(pv_doc.get("psi_tolerance", 0.05)),
+        "source": pv_doc.get("source", "Ghia 1982 Table III"),
+        "literature_doi": pv_doc.get("literature_doi", "10.1016/0021-9991(82)90058-4"),
+    }
+
+
 def _load_sample_xy(path: Path, value_col: int = 1) -> tuple[np.ndarray, np.ndarray]:
     """Load an OpenFOAM raw-xy sample file. Returns (coord, value) arrays.
 
@@ -502,6 +542,63 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
             except ReportError:
                 metrics_v = None
 
+    # DEC-V61-050 batch 3: primary vortex (x_c, y_c, ψ_min) via 2D-argmin
+    # of ψ on a resampling of the audit VTK. Best-effort: silently skip
+    # when pyvista missing, VTK malformed, or gold still has the pre-
+    # batch-3 shape (u_min field → _load_ldc_vortex_gold returns None).
+    metrics_primary_vortex: dict[str, Any] | None = None
+    vortex_gold = _load_ldc_vortex_gold()
+    if vortex_gold is not None:
+        try:
+            from ui.backend.services.psi_extraction import (
+                compute_streamfunction_from_vtk,
+                find_vortex_core,
+                pick_latest_internal_vtk,
+            )
+            vtk_path = pick_latest_internal_vtk(artifact_dir / "VTK")
+            if vtk_path is not None:
+                psi_result = compute_streamfunction_from_vtk(vtk_path)
+                if psi_result is not None:
+                    psi, xs, ys = psi_result
+                    core = find_vortex_core(psi, xs, ys, mode="min")
+                    if core is not None:
+                        x_c_meas, y_c_meas, psi_meas = core
+                        pos_err = float(
+                            ((x_c_meas - vortex_gold["vortex_center_x"]) ** 2
+                             + (y_c_meas - vortex_gold["vortex_center_y"]) ** 2) ** 0.5
+                        )
+                        # ψ_min is negative; use |ψ_gold| as the denominator
+                        # for percentage.
+                        psi_gold_abs = abs(vortex_gold["psi_min"])
+                        psi_err_pct = (
+                            100.0 * abs(psi_meas - vortex_gold["psi_min"]) / psi_gold_abs
+                            if psi_gold_abs > 1e-12
+                            else 0.0
+                        )
+                        pos_pass = pos_err <= vortex_gold["position_tolerance"]
+                        psi_pass = psi_err_pct <= vortex_gold["psi_tolerance"] * 100.0
+                        metrics_primary_vortex = {
+                            "x_meas": x_c_meas,
+                            "y_meas": y_c_meas,
+                            "psi_meas": psi_meas,
+                            "x_gold": vortex_gold["vortex_center_x"],
+                            "y_gold": vortex_gold["vortex_center_y"],
+                            "psi_gold": vortex_gold["psi_min"],
+                            "position_error": pos_err,
+                            "psi_error_pct": psi_err_pct,
+                            "position_tolerance": vortex_gold["position_tolerance"],
+                            "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
+                            "position_pass": pos_pass,
+                            "psi_pass": psi_pass,
+                            "all_pass": pos_pass and psi_pass,
+                        }
+        except (ImportError, OSError, ValueError):
+            # Fail-soft: psi_extraction module missing, VTK dir unreadable,
+            # or any numpy/pyvista downstream exception just means "skip
+            # the D7 dimension for this run". The u/v dims are not gated
+            # on vortex extraction.
+            metrics_primary_vortex = None
+
     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
     # Phase 7d: Richardson extrapolation + GCI over the finest 3 meshes.
@@ -606,6 +703,22 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                 "tolerance_pct": v_tolerance,
             }
             if v_gold_pair is not None and metrics_v is not None
+            else None
+        ),
+        # DEC-V61-050 batch 3: primary vortex (x_c, y_c, ψ_min) from 2D
+        # argmin of ψ. Optional — null when pyvista missing, VTK
+        # unreadable, or gold still has the pre-batch-3 shape. Frontend
+        # D7 card silently hides on null.
+        "metrics_primary_vortex": metrics_primary_vortex,
+        "paper_primary_vortex": (
+            {
+                "source": vortex_gold["source"],
+                "doi": vortex_gold["literature_doi"],
+                "short": "Ghia 1982 Table III",
+                "position_tolerance": vortex_gold["position_tolerance"],
+                "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
+            }
+            if vortex_gold is not None and metrics_primary_vortex is not None
             else None
         ),
         "renders": renders,

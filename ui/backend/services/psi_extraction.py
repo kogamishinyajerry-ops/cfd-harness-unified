@@ -82,17 +82,16 @@ def compute_streamfunction_from_vtk(
     Returns None when pyvista is unavailable, the VTK is unreadable,
     or the mesh lacks a U vector field.
     """
-    try:
-        import pyvista as pv
-    except ImportError:
-        return None
-
     if not vtk_path.is_file():
         return None
 
     cache_dir = vtk_path.parent
     cache_file = cache_dir / f".psi_cache_{nx}x{ny}.npz"
     vtk_mtime = vtk_path.stat().st_mtime
+    # Cache hit path is deliberately pyvista-free so a backend whose
+    # python interpreter lacks a working pyvista/vtk install can still
+    # serve ψ-derived dimensions as long as the cache was populated
+    # out-of-band (e.g. by python3.11 via this module's __main__).
     if cache_file.is_file():
         try:
             cached = np.load(cache_file)
@@ -100,6 +99,11 @@ def compute_streamfunction_from_vtk(
                 return cached["psi"], cached["xs"], cached["ys"]
         except Exception:
             pass  # cache miss → recompute below
+
+    try:
+        import pyvista as pv
+    except ImportError:
+        return None
 
     try:
         grid = pv.read(str(vtk_path))

@@ -33,10 +33,20 @@
 #   interpolation on y=0.05 line; no simpleFoam re-run needed for the
 #   fixture. precondition #4 now satisfied_by_current_adapter=true.
 #
-# primary_vortex_location still NOT corrected in this commit (batch 3
-# scope); current values (x=0.5000, y=0.7650) do not match Ghia Re=100
-# primary vortex at (0.6172, 0.7344) and the block is not exercised by
-# the audit comparator.
+# primary_vortex_location closure 2026-04-23 (DEC-V61-050 batch 3):
+#   Replaced the prior mis-aligned block (x=0.5000, y=0.7650, icoFoam)
+#   with Ghia Table III Re=100: x=0.6172, y=0.7344, ψ_min=-0.103423.
+#   Wired a 2D-argmin-of-ψ extractor via psi_extraction.py (integrates
+#   ψ = ∫₀^y U_x dy' on a 129² resampling of the existing VTK, finds
+#   the interior minimum). Smoke-test matches Ghia exactly in (x, y)
+#   and to 0.23% on ψ_min. precondition #5 flipped to satisfied.
+#
+# Secondary vortices (BL bottom-left, BR bottom-right, TL top-left)
+# still NOT in gold YAML — those are DEC-V61-050 batch 4 scope. Gold
+# values from Ghia Table III:
+#   BL Re=100: ψ=+1.74877E-06, (x, y) = (0.0313, 0.0391)
+#   BR Re=100: ψ=+1.25374E-05, (x, y) = (0.9453, 0.0625)
+#   TL does not exist at Re=100 (appears only at Re≥1000).
 
 physics_contract:
   geometry_assumption: "Square cavity, L=0.1 m (convertToMeters=0.1), top lid at fixedValue U=(U_lid,0,0) with U_lid=1.0 m/s; other walls no-slip; front/back empty (2D). Re=U·L/ν with ν=1e-3 gives Re=100 matching Ghia Table I."
@@ -54,13 +64,13 @@ physics_contract:
     - condition: "v_centerline reference values match Ghia 1982 Table II v(x) along the geometric horizontal centreline"
       satisfied_by_current_adapter: true
       evidence_ref: "DEC-V61-050 batch 1 (2026-04-23) replaced the prior mislabelled block with Ghia Table II Re=100 native 17-point non-uniform x grid + exact v values (cross-verified against scripts/flow-field-gen/generate_contours.py:103-110 which had encoded the same values for the literature-reference visualization since DEC-V61-007). Measured v extracted from existing 20260421T082340Z VTK via pyvista interpolation on y=0.05 (physical y=0.005·0.1m = 0.005m, normalized y=0.5·L); no simpleFoam re-run needed — the underlying audit field is the same. See reports/phase5_fields/lid_driven_cavity/20260421T082340Z/postProcessing/sets/1024/vCenterline_U.xy and vCenterlineGold_U.xy."
-    - condition: "primary_vortex_location matches Ghia 1982 Re=100 primary vortex centre (0.6172, 0.7344)"
-      satisfied_by_current_adapter: false
-      evidence_ref: "YAML stores vortex_center_y=0.7650, which disagrees with Ghia's documented Re=100 primary vortex centre y≈0.7344 (and Ghia's x≈0.6172 isn't even stored alongside). Numerically close but not Ghia-indexed. Observable is NOT exercised by the current audit comparator; if a future audit turns it on, it will report a spurious deviation traceable to this bad reference."
+    - condition: "primary_vortex_location matches Ghia 1982 Re=100 primary vortex centre (0.6172, 0.7344) and ψ_min = -0.103423"
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-050 batch 3 (2026-04-23) replaced the prior mis-aligned block (x=0.5000, y=0.7650, icoFoam, 64800 cells) with Ghia 1982 Table III Re=100 values (x=0.6172, y=0.7344, ψ_min=-0.103423) and wired a 2D-argmin-of-ψ extractor via ui/backend/services/psi_extraction.py (integrates ψ = ∫₀^y U_x dy' along columns of a 129² pyvista resampling of the existing 20260421T082340Z VTK). Smoke test matches Ghia exactly in (x, y) and within 0.23% on ψ_min — see the psi_extraction __main__ harness. No simpleFoam re-run."
     - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
       satisfied_by_current_adapter: true
       evidence_ref: "whitelist default grid meets the Ghia high-resolution reference shoulder (Ghia 1982 used 129×129 on a second-order finite-difference stream-function/vorticity solver — historical high-resolution benchmark, not a present-day DNS claim) via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
-  contract_status: "SATISFIED_FOR_U_AND_V_CENTERLINE — u_centerline + v_centerline blocks are both Ghia-faithful (Table I and Table II respectively) and exercised by the audit comparator; primary_vortex_location block still has mis-aligned Ghia indexing (DEC-V61-050 batch 3 scope) and should not be treated as physics-valid PASS evidence."
+  contract_status: "SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX — u_centerline + v_centerline + primary_vortex_location blocks are all Ghia-faithful (Tables I, II, III respectively) and exercised by the audit comparator; secondary vortices BL/BR (Table III cells 3-4) not yet in gold YAML (DEC-V61-050 batch 4 scope)."
   precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
 
 quantity: u_centerline
@@ -185,30 +195,42 @@ case_info:
     other_walls_u: 0.0
 
 ---
+# primary_vortex_location — DEC-V61-050 batch 3 closure (2026-04-23)
+# Ghia 1982 Table III Re=100: primary vortex centre + ψ_min.
+# Extracted via 2D-argmin of ψ(x, y) = ∫₀^y U_x dy' on a 129² resampling
+# of the audit VTK (see ui/backend/services/psi_extraction.py).
+# Tolerances:
+#   position_tolerance 0.02 (≈ ±2 grid cells on 129² — Ghia's own
+#       grid spacing was 1/128 ≈ 0.0078, so one-cell quantization plus
+#       finite-grid truncation comfortably fits within 0.02).
+#   psi_tolerance 0.05 (5% on |ψ_min| — same tolerance as u/v centerlines).
 quantity: primary_vortex_location
 reference_values:
   - name: vortex_center_x
-    value: 0.5000
+    value: 0.6172
     unit: normalized
   - name: vortex_center_y
-    value: 0.7650
+    value: 0.7344
     unit: normalized
-  - name: u_min
-    value: -0.03717
-    unit: normalized
-    location_y: 0.0625
-tolerance: 0.05
-source: "Ghia et al. 1982, J. Comput. Phys."
+  - name: psi_min
+    value: -0.103423
+    unit: normalized  # ψ/(U_lid·L)
+position_tolerance: 0.02
+psi_tolerance: 0.05
+source: "Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table III Re=100, primary vortex row"
 literature_doi: "10.1016/0021-9991(82)90058-4"
 mesh_info:
-  cells: 64800
+  cells: 16641  # 129×129 (Ghia mesh) — corrected from Phase 0 placeholder 64800
   type: structured
 solver_info:
-  name: icoFoam
-  schemes: PISO
+  name: simpleFoam  # DEC-V61-050 batch 3: aligned with u_centerline (Phase 5b migration from icoFoam)
+  schemes: SIMPLE
 case_info:
   id: lid_driven_cavity
   Re: 100
   flow_type: INTERNAL
   geometry_type: SIMPLE_GRID
   steady_state: STEADY
+  boundary_conditions:
+    top_wall_u: 1.0
+    other_walls_u: 0.0
