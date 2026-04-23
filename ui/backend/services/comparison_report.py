@@ -590,10 +590,18 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
     # DEC-V61-050 batches 3 + 4: primary vortex + secondary vortices via
     # ψ on a resampling of the audit VTK. Share the ψ grid + VTK-read
     # between both dimensions (one integration, two argmin windows) so
-    # the cache hit stays warm. Best-effort: silently skip when pyvista
-    # missing, VTK malformed, gold still has the pre-batch-3 shape, etc.
+    # the cache hit stays warm.
+    #
+    # Codex round 1 MEDs: (a) widen exception envelope — pyvista/VTK can
+    # raise RuntimeError/TypeError/KeyError/etc. beyond ImportError+OSError
+    # +ValueError, so catch Exception here (this is an optional viz
+    # dimension, not a critical path). (b) compute ψ wall-closure
+    # residuals so the UI can flag when the observable scale is
+    # dwarfed by numerical noise (especially secondary eddies ψ ~1e-6
+    # vs typical wall residual ~1e-3 on 129² trapezoidal).
     metrics_primary_vortex: dict[str, Any] | None = None
     metrics_secondary_vortices: dict[str, Any] | None = None
+    psi_wall_residuals: dict[str, Any] | None = None
     vortex_gold = _load_ldc_vortex_gold()
     secondary_gold = _load_ldc_secondary_vortices_gold()
     if vortex_gold is not None or secondary_gold is not None:
@@ -602,12 +610,14 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                 compute_streamfunction_from_vtk,
                 find_vortex_core,
                 pick_latest_internal_vtk,
+                psi_wall_closure_residuals,
             )
             vtk_path = pick_latest_internal_vtk(artifact_dir / "VTK")
             if vtk_path is not None:
                 psi_result = compute_streamfunction_from_vtk(vtk_path)
                 if psi_result is not None:
                     psi, xs, ys = psi_result
+                    psi_wall_residuals = psi_wall_closure_residuals(psi, xs, ys)
                     # --- Primary vortex (D7) ---
                     if vortex_gold is not None:
                         core = find_vortex_core(psi, xs, ys, mode="min")
@@ -624,6 +634,13 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                             )
                             pos_pass = pos_err <= vortex_gold["position_tolerance"]
                             psi_pass = psi_err_pct <= vortex_gold["psi_tolerance"] * 100.0
+                            # SNR — how far above the ψ wall-closure residual
+                            # is the signal? Codex round 1 MED #2.
+                            snr = (
+                                psi_gold_abs / psi_wall_residuals["max"]
+                                if psi_wall_residuals and psi_wall_residuals["max"] > 0
+                                else None
+                            )
                             metrics_primary_vortex = {
                                 "x_meas": x_c_meas,
                                 "y_meas": y_c_meas,
@@ -638,6 +655,8 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                                 "position_pass": pos_pass,
                                 "psi_pass": psi_pass,
                                 "all_pass": pos_pass and psi_pass,
+                                "signal_to_residual_ratio": snr,
+                                "signal_above_noise": snr is not None and snr >= 3.0,
                             }
                     # --- Secondary vortices BL/BR (D8) ---
                     if secondary_gold is not None:
@@ -663,6 +682,20 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                             )
                             pos_pass = pos_err <= secondary_gold["position_tolerance"]
                             psi_pass = psi_err_pct <= secondary_gold["psi_tolerance"] * 100.0
+                            # Per-eddy SNR vs wall-closure residual. Codex
+                            # round 1 MED #2: BL ψ gold is O(1e-6), wall
+                            # residual on 129² trapezoidal is O(1e-3), so
+                            # BL signal is 2000× BELOW the numerical floor —
+                            # the coordinate match is a coincidence of
+                            # argmax landing near the Ghia point, NOT a
+                            # validated physics reproduction. Expose this
+                            # so the UI can flag it honestly.
+                            snr = (
+                                psi_gold_abs / psi_wall_residuals["max"]
+                                if psi_wall_residuals and psi_wall_residuals["max"] > 0
+                                else None
+                            )
+                            signal_above_noise = snr is not None and snr >= 3.0
                             eddy_results.append({
                                 "name": eddy["name"],
                                 "description": eddy["description"],
@@ -676,7 +709,9 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                                 "psi_error_pct": psi_err_pct,
                                 "position_pass": pos_pass,
                                 "psi_pass": psi_pass,
-                                "all_pass": pos_pass and psi_pass,
+                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+                                "signal_to_residual_ratio": snr,
+                                "signal_above_noise": signal_above_noise,
                             })
                         if eddy_results:
                             metrics_secondary_vortices = {
@@ -687,9 +722,20 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                                 "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
                                 "n_total": len(eddy_results),
                             }
-        except (ImportError, OSError, ValueError):
+        except Exception:
+            # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide
+            # variety of exceptions (RuntimeError, TypeError, KeyError,
+            # pyvista.core.errors.*, VTK C++ exceptions surfaced as Python
+            # RuntimeError, etc.). The D7/D8 dimensions are optional viz
+            # augmentations — a pyvista internal failure must not 500 the
+            # whole report endpoint. Broad catch is warranted here because
+            # the comparator for u_centerline (D1-D5) is a separate code
+            # path that's already run above and is not guarded by this
+            # try/except. Real programmer bugs in psi_extraction itself
+            # are caught in tests + by the module's __main__ smoke test.
             metrics_primary_vortex = None
             metrics_secondary_vortices = None
+            psi_wall_residuals = None
 
     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
@@ -817,6 +863,12 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
         # cells 3-4, extracted via corner-windowed ψ_max on the same 129²
         # grid used for primary vortex. Frontend D8 card silently hides
         # when null (same fail-soft pattern as D6/D7).
+        # Codex round 1 MED #2: ψ wall-closure residuals — UI uses these
+        # to render a "signal below noise floor" warning for D8 BL (ψ
+        # ~1e-6 vs typical wall residual ~1e-3 on 129² trapezoidal ∫U_x
+        # integration + pyvista resampling interpolation). Null when
+        # extraction failed or gold blocks absent.
+        "psi_wall_residuals": psi_wall_residuals,
         "metrics_secondary_vortices": metrics_secondary_vortices,
         "paper_secondary_vortices": (
             {

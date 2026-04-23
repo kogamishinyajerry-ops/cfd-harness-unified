@@ -43,6 +43,18 @@ from typing import Optional
 import numpy as np
 
 
+class PsiExtractionError(RuntimeError):
+    """Any recoverable failure in ψ extraction or vortex-core location.
+
+    Introduced (Codex round 1 MED on DEC-V61-050 batch 4): gives callers
+    a single type to catch rather than forcing them to enumerate pyvista
+    / VTK / numpy / OS errors. The module still returns None from its
+    public functions on soft failures (keeping the existing contract);
+    this exception class exists so that callers who WANT to distinguish
+    a genuine extractor failure from a "no data at all" result can.
+    """
+
+
 def pick_latest_internal_vtk(vtk_dir: Path) -> Optional[Path]:
     """Return the newest internal-field VTK in vtk_dir, or None.
 
@@ -85,17 +97,37 @@ def compute_streamfunction_from_vtk(
     if not vtk_path.is_file():
         return None
 
+    # Cache schema version — bump when the on-disk npz layout changes.
+    CACHE_SCHEMA_VERSION = 2
     cache_dir = vtk_path.parent
     cache_file = cache_dir / f".psi_cache_{nx}x{ny}.npz"
-    vtk_mtime = vtk_path.stat().st_mtime
+    stat = vtk_path.stat()
+    vtk_mtime_ns = int(stat.st_mtime_ns)
+    vtk_size = int(stat.st_size)
+    # Codex round 1 MED #3: prior cache key was {nx, ny, st_mtime float,
+    # 1e-6 tol}; this misses APFS sub-µs updates and ext4 same-second
+    # overwrites, and also ignored `bounds`. Use mtime_ns (integer, exact)
+    # + size (catches content change when mtime is reused) + bounds
+    # (explicit-bounds call shouldn't be served cached-default result) +
+    # schema version (invalidates when this serialization format changes).
+    bounds_key = tuple(bounds) if bounds is not None else None
     # Cache hit path is deliberately pyvista-free so a backend whose
     # python interpreter lacks a working pyvista/vtk install can still
     # serve ψ-derived dimensions as long as the cache was populated
     # out-of-band (e.g. by python3.11 via this module's __main__).
     if cache_file.is_file():
         try:
-            cached = np.load(cache_file)
-            if abs(float(cached["vtk_mtime"]) - vtk_mtime) < 1e-6:
+            cached = np.load(cache_file, allow_pickle=True)
+            cached_schema = int(cached["schema_version"]) if "schema_version" in cached else 1
+            cached_mtime_ns = int(cached["vtk_mtime_ns"]) if "vtk_mtime_ns" in cached else None
+            cached_size = int(cached["vtk_size"]) if "vtk_size" in cached else None
+            cached_bounds = cached["bounds"].item() if "bounds" in cached else None
+            if (
+                cached_schema == CACHE_SCHEMA_VERSION
+                and cached_mtime_ns == vtk_mtime_ns
+                and cached_size == vtk_size
+                and cached_bounds == bounds_key
+            ):
                 return cached["psi"], cached["xs"], cached["ys"]
         except Exception:
             pass  # cache miss → recompute below
@@ -154,12 +186,56 @@ def compute_streamfunction_from_vtk(
     try:
         np.savez(
             cache_file,
-            psi=psi, xs=xs, ys=ys, vtk_mtime=np.array([vtk_mtime]),
+            psi=psi, xs=xs, ys=ys,
+            vtk_mtime_ns=np.array([vtk_mtime_ns]),
+            vtk_size=np.array([vtk_size]),
+            bounds=np.array(bounds_key, dtype=object),
+            schema_version=np.array([CACHE_SCHEMA_VERSION]),
         )
     except Exception:
         pass  # cache write best-effort
 
     return psi, xs, ys
+
+
+def psi_wall_closure_residuals(
+    psi: np.ndarray,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    u_ref: float = 1.0,
+) -> Optional[dict]:
+    """Return max |ψ| on each of the 4 walls, normalized by U_ref·L.
+
+    For LDC with no-slip everywhere except the lid, the stream function
+    should satisfy ψ = 0 on all 4 walls. Numerical integration along
+    columns plus resampling interpolation leak some residual. These
+    residuals bound the credibility of derived observables:
+      - primary vortex ψ_min ≈ 0.1 → residual O(1e-3) is fine
+      - secondary eddies ψ ≈ 1e-6 to 1e-5 → residual must be << those
+        or the match is coincidence, not physics.
+
+    Introduced (Codex round 1 MED on DEC-V61-050 batch 4): caller can
+    compare these residuals against observable scales and warn/fail.
+
+    Returns {left, right, bottom, top, max, L} (all dimensionless, ψ/UL)
+    or None if inputs invalid.
+    """
+    if xs.size == 0 or ys.size == 0 or psi.shape != (ys.size, xs.size):
+        return None
+    L = float(xs[-1]) if xs[-1] > 0 else 1.0
+    denom = max(u_ref * L, 1e-12)
+    left = float(np.max(np.abs(psi[:, 0]))) / denom
+    right = float(np.max(np.abs(psi[:, -1]))) / denom
+    bottom = float(np.max(np.abs(psi[0, :]))) / denom
+    top = float(np.max(np.abs(psi[-1, :]))) / denom
+    return {
+        "left": left,
+        "right": right,
+        "bottom": bottom,
+        "top": top,
+        "max": max(left, right, bottom, top),
+        "L": L,
+    }
 
 
 def find_vortex_core(
@@ -244,6 +320,11 @@ if __name__ == "__main__":
         sys.exit(1)
     psi, xs, ys = result
     print(f"psi grid: {psi.shape} · bounds x=[{xs[0]:.4g}, {xs[-1]:.4g}] y=[{ys[0]:.4g}, {ys[-1]:.4g}]")
+    residuals = psi_wall_closure_residuals(psi, xs, ys)
+    if residuals:
+        print(f"\nψ wall-closure residuals (ψ/UL, should be << observable scale):")
+        print(f"  left={residuals['left']:.2e}  right={residuals['right']:.2e}  bottom={residuals['bottom']:.2e}  top={residuals['top']:.2e}")
+        print(f"  max={residuals['max']:.2e}  · BL/BR ψ scale ≈ 1e-6 to 1e-5 — wall residual > BL scale means BL match is suspect")
     primary = find_vortex_core(psi, xs, ys, mode="min")
     bl = find_vortex_core(psi, xs, ys, x_window_norm=(0.0, 0.25), y_window_norm=(0.0, 0.25), mode="max")
     br = find_vortex_core(psi, xs, ys, x_window_norm=(0.75, 1.0), y_window_norm=(0.0, 0.25), mode="max")

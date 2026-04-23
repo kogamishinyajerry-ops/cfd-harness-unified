@@ -6,7 +6,8 @@ commits_in_scope:
   - 1d3505c feat(ldc): batch 1 — v_centerline (Ghia Table II) as independent observable
   - 2fb9c44 feat(ldc): batch 2 — streamfunction ψ extraction infrastructure
   - 8475c29 feat(ldc): batch 3 — primary vortex (x_c, y_c, ψ_min) wired to D7
-  - TBD feat(ldc): batch 4 — secondary vortices BL/BR wired to D8
+  - 1f1ff6b feat(ldc): batch 4 — secondary vortices BL/BR wired to D8 (arc closure)
+  - e5dd20e docs(dec): sync log — pushed + Notion Accepted
 codex_verdict: PENDING (batch 1 post-merge Codex review triggered by "CFD new observable + adapter >5 LOC + comparator extension")
 autonomous_governance: true
 autonomous_governance_counter_v61: 37

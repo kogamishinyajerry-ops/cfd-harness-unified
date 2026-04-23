@@ -1230,7 +1230,7 @@ function MultiDimensionComparePanel({
           </div>
           <p className="text-[13px] leading-relaxed text-surface-200">
             <span className="mono font-semibold text-surface-100">{profilePassCount} / {profileTotalCount}</span>{" "}
-            个采样点落在 ±{(data.paper.tolerance_pct * 100).toFixed(1)}% 容差带内。
+            个采样点落在 ±{data.paper.tolerance_pct.toFixed(1)}% 容差带内。
             {profileVerdict === "PARTIAL" && (
               <span className="text-amber-200/90">
                 {" "}注意：上面的 scalar 单点裁决和这个 profile 整体裁决可能不一致——scalar 取的是某一 y 的单点，profile 是全 17 点。写报告时必须两个维度都报告。
@@ -1291,7 +1291,7 @@ function MultiDimensionComparePanel({
               D4 · 逐点偏差柱状图
             </span>
             <span className="text-[10.5px] text-surface-500">
-              红色柱 = 超出 ±{(data.paper.tolerance_pct * 100).toFixed(1)}% 容差
+              红色柱 = 超出 ±{data.paper.tolerance_pct.toFixed(1)}% 容差
             </span>
           </div>
           <img
@@ -1537,6 +1537,17 @@ function MultiDimensionComparePanel({
               </div>
             </div>
           </div>
+          {data.metrics_primary_vortex.signal_to_residual_ratio !== null && (
+            <p className="mono mt-2 text-[10.5px] text-surface-500">
+              SNR: |ψ_gold| / max-wall-residual ={" "}
+              <span className={data.metrics_primary_vortex.signal_above_noise ? "text-emerald-300" : "text-rose-300"}>
+                {data.metrics_primary_vortex.signal_to_residual_ratio.toFixed(1)}×
+              </span>
+              {" "}· {data.metrics_primary_vortex.signal_above_noise
+                ? "信号远高于数值噪声（>3×），裁决可信"
+                : "信号 ≤ 3× 数值噪声，裁决可能不可靠"}
+            </p>
+          )}
         </div>
       )}
 
@@ -1569,6 +1580,25 @@ function MultiDimensionComparePanel({
               BL / BR 是与主涡<strong>反向旋转</strong>的小角涡（ψ 为正，主涡 ψ 为负）。强度比主涡小 5-6 个数量级，对网格分辨率极其敏感——容差放宽到 10% (相比主涡的 5%)。Re=100 时 TL 角涡不存在（Re≥1000 才出现）。
             </span>
           </p>
+          {data.psi_wall_residuals && !data.metrics_secondary_vortices.all_pass && (
+            <div className="mt-2 rounded border border-rose-900/50 bg-rose-950/30 px-3 py-2">
+              <p className="mono text-[10.5px] font-semibold uppercase tracking-wider text-rose-300">
+                诚实声明 · 信号低于数值噪声地板
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-surface-200">
+                当前 ψ 提取用的是 trapezoidal <span className="mono">∫U_x dy'</span> + pyvista 重采样，在 129² 网格上墙面闭合残差 ψ_wall ≈{" "}
+                <span className="mono text-rose-200">{data.psi_wall_residuals.max.toExponential(2)}</span>（非零 = 积分常数漂移 + 采样插值误差）。
+                Ghia BL/BR 的 ψ 量级只有 <span className="mono text-rose-200">1e-6 到 1e-5</span>——<strong>信号本身比数值噪声还小 2-3 个数量级</strong>。
+                argmax 找到的点坐标"恰好"落在 Ghia 点附近，不能当作物理复现，而是 argmax 在噪声主导场里的<strong>巧合</strong>。
+                要真正验证 BL/BR 需要 Poisson 解（<span className="mono">∇²ψ = -ω_z</span> 且 ψ=0 边界）或 OpenFOAM 原生 ψ 场——均超出 DEC-V61-050 范围。
+                {" "}D7 主涡 SNR ={" "}
+                <span className="mono text-emerald-200">
+                  {data.metrics_primary_vortex ? data.metrics_primary_vortex.signal_to_residual_ratio?.toFixed(1) : "—"}×
+                </span>
+                {" "}安全；D8 用作证据前必须有 signal {'>'} 3× residual 的提取方法。
+              </p>
+            </div>
+          )}
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {data.metrics_secondary_vortices.eddies.map((eddy) => (
               <div
@@ -1613,6 +1643,17 @@ function MultiDimensionComparePanel({
                     |ψ|_err {eddy.psi_error_pct.toFixed(2)}% {eddy.psi_pass ? "✓" : "✗"}
                   </span>
                 </div>
+                {eddy.signal_to_residual_ratio !== null && (
+                  <div className="mt-1 text-[10px]">
+                    <span className="text-surface-500">SNR: </span>
+                    <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+                      {eddy.signal_to_residual_ratio < 0.01
+                        ? eddy.signal_to_residual_ratio.toExponential(2)
+                        : eddy.signal_to_residual_ratio.toFixed(3)}×
+                    </span>
+                    <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1622,20 +1663,58 @@ function MultiDimensionComparePanel({
         </div>
       )}
 
-      {/* Final celebratory footer — DEC-V61-050 closure (all 4 batches) */}
-      <div className="rounded-md border border-emerald-900/40 bg-emerald-950/10 p-4">
-        <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300">
-          DEC-V61-050 closure · Ghia 1982 fully exercised
-        </p>
-        <p className="text-[12px] leading-relaxed text-surface-300">
-          <strong className="text-emerald-200">所有 4 个 Ghia 1982 Re=100 观测量都已作为独立验证维度接入 audit comparator</strong>：
-          Table I 的 u(y) 垂直中线剖面 (D2-D4)、Table II 的 v(x) 水平中线剖面 (D6)、Table III 的主涡中心 + ψ_min (D7)、Table III 的角涡 BL+BR (D8)。
-          这些维度分别量测不同的物理结构——1D 剖面、2D argmin、局部极值——任何一个 PASS 不意味着其他 PASS；一个 FAIL 也不被其他 PASS 屏蔽。physics_contract 现在是 <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>，LDC case 达到了该文献能提供的最强验证边界。
-          <span className="block mt-1 text-[11px] text-surface-500">
-            实现详情：批次 1 加 v_centerline + post-hoc VTK populator；批次 2 落 ψ 抽取基础设施 (<span className="mono">psi_extraction.py</span>)；批次 3 接入主涡 + 改 gold YAML；批次 4 加角涡 + 写 FULLY_SATISFIED contract_status。
-          </span>
-        </p>
-      </div>
+      {/* Final closure footer — honest assessment of which Ghia
+          observables are validated at what strength level. Codex round 1
+          MED #2 / HIGH: the original footer claimed FULLY_SATISFIED for
+          all 4 Ghia observables, but D8 BL/BR signals are 2-3 decades
+          below the ∫U_x dy' wall-closure residual — argmax coincidences
+          in a noise-dominated field, not validated physics. Post-fix,
+          the footer distinguishes present-but-validated vs present-but-
+          noise-dominated vs missing. */}
+      {(() => {
+        const missing: string[] = [];
+        if (!data.metrics_v_centerline) missing.push("D6 v_centerline");
+        if (!data.metrics_primary_vortex) missing.push("D7 primary vortex");
+        if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+        if (missing.length > 0) {
+          return (
+            <div className="rounded-md border border-amber-900/40 bg-amber-950/10 p-4">
+              <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-amber-300">
+                降级模式 · 部分 Ghia 观测量缺失
+              </p>
+              <p className="text-[12px] leading-relaxed text-surface-300">
+                本次 audit run 以下维度未返回 metrics，当前 Compare tab 仅展示已有的维度：
+                <span className="mono block mt-1 text-amber-200">
+                  缺失: {missing.join(" · ")}
+                </span>
+                <span className="block mt-1 text-[11px] text-surface-400">
+                  常见原因：后端缺 pyvista 且 <span className="mono">.psi_cache</span> 未预生成（需跑 <span className="mono">python3.11 ui/backend/services/psi_extraction.py</span>）；VTK 文件缺失或格式变更；gold YAML schema 漂移导致 loader 拒绝。
+                </span>
+              </p>
+            </div>
+          );
+        }
+        const d8_noise_floor =
+          data.metrics_secondary_vortices !== null &&
+          data.metrics_secondary_vortices !== undefined &&
+          !data.metrics_secondary_vortices.all_pass;
+        return (
+          <div className={`rounded-md border p-4 ${d8_noise_floor ? "border-amber-900/40 bg-amber-950/10" : "border-emerald-900/40 bg-emerald-950/10"}`}>
+            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${d8_noise_floor ? "text-amber-300" : "text-emerald-300"}`}>
+              DEC-V61-050 closure · 3 / 4 Ghia 观测量已验证（诚实等级）
+            </p>
+            <p className="text-[12px] leading-relaxed text-surface-300">
+              <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+              <span className="block mt-1">
+                <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+              </span>
+              <span className="block mt-1 text-[11px] text-surface-500">
+                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 已尽其所能——诚实停在 3 / 4，而不是伪装 4 / 4。这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+              </span>
+            </p>
+          </div>
+        );
+      })()}
     </section>
   );
 }
@@ -2416,6 +2495,8 @@ type ComparisonReportContext = {
     position_pass: boolean;
     psi_pass: boolean;
     all_pass: boolean;
+    signal_to_residual_ratio: number | null;
+    signal_above_noise: boolean;
   } | null;
   paper_primary_vortex?: {
     source: string;
@@ -2442,12 +2523,22 @@ type ComparisonReportContext = {
       position_pass: boolean;
       psi_pass: boolean;
       all_pass: boolean;
+      signal_to_residual_ratio: number | null;
+      signal_above_noise: boolean;
     }[];
     position_tolerance: number;
     psi_tolerance_pct: number;
     all_pass: boolean;
     n_pass: number;
     n_total: number;
+  } | null;
+  psi_wall_residuals?: {
+    left: number;
+    right: number;
+    bottom: number;
+    top: number;
+    max: number;
+    L: number;
   } | null;
   paper_secondary_vortices?: {
     source: string;

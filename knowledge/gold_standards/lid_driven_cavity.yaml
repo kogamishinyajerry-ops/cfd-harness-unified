@@ -41,16 +41,22 @@
 #   the interior minimum). Smoke-test matches Ghia exactly in (x, y)
 #   and to 0.23% on ψ_min. precondition #5 flipped to satisfied.
 #
-# Secondary vortices closure 2026-04-23 (DEC-V61-050 batch 4):
-#   Added a secondary_vortices doc below with Ghia Table III Re=100:
+# Secondary vortices added 2026-04-23 (DEC-V61-050 batch 4) — but
+#   honest physics gate REMAINED UNSATISFIED after Codex round 1
+#   MED #2 (2026-04-23) caught the issue:
 #     BL: (0.0313, 0.0391, ψ=+1.749e-6)
 #     BR: (0.9453, 0.0625, ψ=+1.254e-5)
-#     TL does not exist at Re=100 (appears only at Re≥1000).
-#   Extractor: psi_extraction.find_vortex_core(mode='max', x_window=,
-#   y_window=) on the same 129² ψ grid used by the primary vortex.
-#   Relaxed tolerance (10% vs primary's 5%) because corner eddies
-#   are finite-grid sensitive by an order of magnitude more than the
-#   main vortex. contract_status → FULLY_SATISFIED_ALL_4_GHIA_TABLES.
+#   The ∫U_x dy' + pyvista resampling produces ψ wall-closure
+#   residual ≈ 3.4e-3 on 129² — 2000× larger than BL ψ_gold and 270×
+#   larger than BR ψ_gold. Therefore the argmax extractor lands
+#   near the Ghia coords by coincidence of noise, not physics. The
+#   comparator now returns all_pass=False with a noise-floor caveat
+#   on the UI (D8 banner). TRUE validation would need either:
+#     (a) Poisson solve ∇²ψ = -ω_z + ψ=0 walls (eliminates drift)
+#     (b) OpenFOAM-native ψ sampling at the fixture mesh
+#   Both out of DEC-V61-050 scope → future DEC. Current
+#   contract_status therefore reflects 3 of 4 Ghia observables,
+#   not 4.
 
 physics_contract:
   geometry_assumption: "Square cavity, L=0.1 m (convertToMeters=0.1), top lid at fixedValue U=(U_lid,0,0) with U_lid=1.0 m/s; other walls no-slip; front/back empty (2D). Re=U·L/ν with ν=1e-3 gives Re=100 matching Ghia Table I."
@@ -74,10 +80,10 @@ physics_contract:
     - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
       satisfied_by_current_adapter: true
       evidence_ref: "whitelist default grid meets the Ghia high-resolution reference shoulder (Ghia 1982 used 129×129 on a second-order finite-difference stream-function/vorticity solver — historical high-resolution benchmark, not a present-day DNS claim) via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
-    - condition: "Secondary vortices BL (bottom-left) and BR (bottom-right) match Ghia 1982 Table III Re=100 corner eddy positions and ψ strengths"
-      satisfied_by_current_adapter: true
-      evidence_ref: "DEC-V61-050 batch 4 (2026-04-23) added a secondary_vortices gold block with Ghia Table III Re=100 values — BL: (0.0313, 0.0391, ψ=+1.749e-6); BR: (0.9453, 0.0625, ψ=+1.254e-5) — and wired a corner-windowed ψ-argmax extractor via psi_extraction.find_vortex_core(mode='max'). Smoke test on the existing 20260421T082340Z VTK: BL meas=(0.0312, 0.0391, ψ=+1.649e-6) → 5.7% ψ error; BR meas=(0.9453, 0.0625, ψ=+1.216e-5) → 3.0% ψ error; both within the 10% psi_tolerance chosen for corner eddies (which are more mesh-sensitive than the primary vortex). TL eddy does not exist at Re=100."
-  contract_status: "FULLY_SATISFIED_ALL_4_GHIA_TABLES — u_centerline (Table I), v_centerline (Table II), primary_vortex_location (Table III primary row), and secondary_vortices (Table III BL + BR rows) are all Ghia-faithful and exercised by the audit comparator. DEC-V61-050 closure 2026-04-23: LDC is now validated against every observable Ghia 1982 reports for Re=100."
+    - condition: "Secondary vortices BL (bottom-left) and BR (bottom-right) match Ghia 1982 Table III Re=100 corner eddy positions and ψ strengths above the numerical noise floor"
+      satisfied_by_current_adapter: false
+      evidence_ref: "DEC-V61-050 batch 4 (2026-04-23) added the secondary_vortices gold block with Ghia Table III Re=100 values (BL: 0.0313, 0.0391, ψ=+1.749e-6; BR: 0.9453, 0.0625, ψ=+1.254e-5) and wired a corner-windowed ψ-argmax extractor. Codex round 1 MED #2 (2026-04-23) flagged that the current ∫U_x dy' + pyvista resampling method has ψ wall-closure residual ≈ 3.4e-3 on the 20260421T082340Z fixture — 2000× LARGER than the BL ψ_gold (1.75e-6) and 270× larger than BR ψ_gold (1.25e-5). The coordinate matches found by argmax are therefore in a noise-dominated regime, not a validated physics reproduction. `metrics_secondary_vortices.eddies[*].all_pass` is now gated on signal_to_residual_ratio ≥ 3.0, so both eddies correctly report all_pass=False on the current pipeline. TRUE satisfaction of this precondition requires either (a) a Poisson solve ∇²ψ = -ω_z with ψ=0 walls, which eliminates integration-constant drift, or (b) OpenFOAM-native streamfunction sampling at the fixture mesh — both outside DEC-V61-050 scope (→ future DEC)."
+  contract_status: "SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES — u_centerline (Table I), v_centerline (Table II), and primary_vortex_location (Table III primary row) are all Ghia-faithful and exercised by the audit comparator. secondary_vortices block is written and the extractor is wired, but Codex round 1 MED #2 confirmed BL/BR ψ magnitude is 2-3 decades below the ∫U_x trapezoidal integration's wall-closure residual, so those observables are currently reported as all_pass=False with a noise-floor caveat on the UI. DEC-V61-050 closure 2026-04-23: 3 of 4 Ghia Re=100 observables validated; secondaries require a Poisson-based ψ solve in a future DEC."
   precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
 
 quantity: u_centerline
