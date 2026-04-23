@@ -1,10 +1,15 @@
 ---
 decision_id: DEC-V61-049
 title: lid_driven_cavity single-case pilot · CFD-novice end-to-end walk · pattern-before-rollout
-status: IN_PROGRESS (codex round 1 CFD-novice walk running · PID 77739 · 2026-04-23T10:00 local)
+status: AWAITING_USER_READ (4 batches A+B+D+E landed · C skipped per user choice · exit gate = user subjective LDC re-read)
 commits_in_scope:
-  - (none yet — remediation commits will land after codex findings + user batch approval)
-codex_verdict: PENDING
+  - 6d8e8f5 docs(dec): DEC-V61-049 PROPOSAL + prompt
+  - 54be451 docs(dec): notion row synced
+  - 920b4b0 feat(learn): batch A — LDC prose-vs-code drift + honesty fixes
+  - 6f97a84 feat(learn): batch B — LDC complete OpenFOAM reproduction bundle (9 files)
+  - a05d316 feat(learn): batch D — contour annotations + real-vs-synthetic labels
+  - 3ed94b7 feat(learn): batch E — LDC glossary + report skeleton + path normalization
+codex_verdict: DEEP_DIVE_COMPLETE (round 1 findings landed at .planning/reviews/case_pilot_ldc_findings.md, 4188 words, verdict 4/10 → patches A+B+D+E target 7/10; batch C deferred to future DEC since it touches Compare-tab backend wiring)
 autonomous_governance: true
 autonomous_governance_counter_v61: 36
 external_gate_self_estimated_pass_rate: 0.55
