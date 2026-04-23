@@ -102,6 +102,29 @@ export interface LearnCase {
     fix: string;
   }[];
 
+  // ===== DEC-V61-049 pilot batch E (glossary + report prompts) =========
+  // Codex CFD-novice walk Step 1 findings: physics_intuition and
+  // TeachingCards use terms like SIMPLE / URF / residualControl /
+  // stream function / GCI / tolerance band without defining them. A
+  // first-semester student would have to Google each one. Step 5
+  // findings: the page has no explicit scaffold for a course-report
+  // draft, so the student has to invent structure and may cite
+  // unsupported claims.
+  // Schema:
+  //   glossary_zh: array of 7-10 concise term definitions, rendered
+  //     as a compact definition list. Terms specifically cover the
+  //     vocabulary TeachingCards + physics_intuition assume.
+  //   report_skeleton_zh: array of 5-7 section bullets that map the
+  //     page's content to a 1000-word reproduction-report outline.
+  //     Each bullet tells the student what to write + what the /learn
+  //     page already supports + what is NOT yet supported (so they
+  //     do not claim unsupported dimensions).
+  // Both fields optional — only LDC pilot populates them; rolling to
+  // other cases pending V61-049 approval.
+  // ======================================================================
+  glossary_zh?: Array<{ term: string; definition: string }>;
+  report_skeleton_zh?: Array<{ section: string; what_to_write: string; supported: "yes" | "partial" | "not_yet" }>;
+
   // ===== DEC-V61-049 pilot batch B (reproduction bundle) ================
   // Codex CFD-novice walk Step 2 findings: workflow_steps_zh told the
   // student "edit system/blockMeshDict" without providing its contents,
@@ -170,6 +193,26 @@ export const LEARN_CASES: LearnCase[] = [
       { symptom: `二级涡（底角）消失`, likely_cause: `网格分辨率不足（<65×65 cells），二级涡尺度小于 cell 尺度被数值耗散抹平。`, fix: `加密到 audit 129×129 或更密；fvSchemes 的 div(phi,U) 保持 <code>bounded Gauss limitedLinearV 1</code>（二阶有限制）而不是 upwind（一阶，过度耗散）。`},
     ],
     reproduction_bundle_zh: LDC_REPRODUCTION_BUNDLE,
+    glossary_zh: [
+      { term: `SIMPLE / SIMPLEC`, definition: `Semi-Implicit Method for Pressure-Linked Equations。SIMPLE 把动量方程和连续性方程的耦合拆成 "先解动量（用旧 p）→ 再用 U 校正 p → 松弛更新 U 和 p" 的迭代；每步只是近似满足连续性，靠反复迭代逼近稳态。SIMPLEC（fvSolution::SIMPLE::consistent yes）是变体：压力校正项包含 off-diagonal 贡献，稳定性更好，允许 URF 开大到 U=0.9 而不震荡。`},
+      { term: `URF · Under-relaxation factor`, definition: `SIMPLE 每步把 U 和 p 的新值按 x_new = α·x_calc + (1-α)·x_old 混合。α 就是 URF。U=0.9 表示每步用 90% 新解 + 10% 旧值；p=0.3 只用 30% 新压力校正。调小 URF 收敛慢但稳；调大收敛快但可能震荡甚至发散。经验值：p=0.3, U=0.7（SIMPLE 常规）或 U=0.9（SIMPLEC）。`},
+      { term: `residual`, definition: `每次迭代结束后，把 "当前解代回方程两边" 的差值归一化到来流尺度，得到一个 0-1 之间的数。U 的 residual 表示动量方程还差多少没满足，p 表示连续性方程还差多少。report-grade 标准是所有 residual 都 drop 到 1e-5 以下（本仓库 fvSolution::SIMPLE::residualControl 到这个值自动停）。1e-5 对应"相对误差 0.001%"量级。`},
+      { term: `stream function ψ`, definition: `2D 不可压流里定义 U_x = ∂ψ/∂y, U_y = −∂ψ/∂x 的标量场。ψ 的等值线就是流线（粒子轨迹），ψ 的极值点就是涡心。本仓库当前 extractor 没有直接计算 ψ（需要对速度场积分或解 ∇²ψ=−ω）；/flow-fields/lid_driven_cavity/stream_function.png 是 ansatz 示意图，不是真解。`},
+      { term: `primary / secondary vortex`, definition: `LDC 里最大的顺时针大涡叫 primary vortex，占腔体大部分体积，Ghia Re=100 给中心 (0.6172, 0.7344)。底部两角各有一个小反向涡叫 secondary vortex（左下角 BL、右下角 BR），它们是主涡下洗流撞底墙后被迫反转形成的。secondary vortex 的尺寸和清晰度是 "mesh 分辨率够不够" 的最好 litmus test——粗网格会抹掉它们。`},
+      { term: `GCI · Grid Convergence Index`, definition: `Roache 1994 给出的网格独立性定量指标，基于 Richardson extrapolation：跑至少 3 套系统加密的网格 (h, 2h, 4h)，观察 observable 的变化幅度，外推到 h→0 得到 "连续无网格解"。误差 bar = GCI × 某个 safety factor (常取 1.25 或 3)。本仓库 Mesh tab 的 mesh_20/40/80/160 convergence sweep 是 GCI-style 证据，但没明确算 Richardson 指数。`},
+      { term: `tolerance band`, definition: `gold YAML 里 tolerance: 0.05 意思是 comparator 把 |measured − gold| / |gold| ≤ 5% 记为 PASS。这个带宽吸收 "finite grid + finite iteration + extractor 离散" 这些不可避免误差；不是 "数值可以随便浮动 5%"，是 "5% 以内不能算错"。`},
+      { term: `Ghia Table I / Table II`, definition: `Ghia, Ghia & Shin 1982 (JCP 47, 387) 的核心数据表。Table I 列了不同 Re 下 x=0.5 垂直中线上 17 个 y 对应的 u/U_lid 值（u 沿 y 的剖面）。Table II 列了 y=0.5 水平中线上 17 个 x 对应的 v/U_lid 值（v 沿 x 的剖面）。本仓库 gold 的 u_centerline block 是 Table I；v_centerline block 声称 Table II 但 physics_contract 标 suspect（没和 Ghia Table II 仔细对齐 axis 标签，也未被 audit comparator 调用）。`},
+      { term: `audit_real_run vs teaching_quick_run`, definition: `本仓库区分两类 run：audit_real_run = 129×129 mesh + residualControl 1e-5 的验证级别跑，结果写 reports/phase5_renders/lid_driven_cavity/<timestamp>/；teaching_quick_run = 40×40 或更粗 mesh 的 < 10 秒探索跑，绝对不能当验证结果写进课程报告。/learn 页面默认给 audit run 数字；如果你自己跑了 quick run 请显式在报告里标 non-validation。`},
+    ],
+    report_skeleton_zh: [
+      { section: `§1 物理问题陈述`, what_to_write: `写清 geometry (1×1 无量纲方腔，convertToMeters=0.1 → 0.1m 物理尺度)、BC (顶 lid fixedValue U=1, 其余三面 no-slip, 前后 empty 伪 2D)、Re=U·L/ν=100、flow regime (层流稳态)。引用 physics_intuition_zh 里 (0.62, 0.74) 主涡位置作为预期。`, supported: `yes`},
+      { section: `§2 数值方法`, what_to_write: `solver: simpleFoam (稳态 SIMPLE + SIMPLEC consistent); schemes: fvSchemes (div(phi,U) = bounded Gauss limitedLinearV 1, ddt steadyState); URF: U=0.9 / p=0.3; pressure reference: SIMPLE::pRefCell 0 pRefValue 0; residualControl: p/U 都到 1e-5 自动停。所有数字都在 solver_setup_zh + reproduction bundle 里，直接引用。`, supported: `yes`},
+      { section: `§3 网格与网格独立性`, what_to_write: `audit mesh 129×129×1 = 16641 cells, uniform 结构，convertToMeters 0.1。Mesh tab 的 convergence sweep (mesh_20/40/80/160) 给你 Richardson-style 证据——如果 u_centerline L2 从 mesh_20 单调降到 mesh_160 < 1%，就可以主张 mesh-independent。注意 Mesh tab 的 fixtures 有的是 synthetic，不是全真跑——在报告里标注出来。`, supported: `partial`},
+      { section: `§4 收敛性证据`, what_to_write: `贴 reports/phase5_renders/lid_driven_cavity/<timestamp>/residuals.png 图（log scale, U/p 都掉到 1e-5 以下）。明确说 residualControl 命中后 solver 自动终止；你可以从 log.simpleFoam 拿到具体终止 iter 数。注意"收敛 ≠ 物理正确"，这是 Run tab 也会提醒的分层。`, supported: `yes`},
+      { section: `§5 验证对比 · 仅 u_centerline`, what_to_write: `u_centerline: 取 17 点 Ghia 1982 Table I（不是 Table II），x=0.5 y=0...1，和仿真 postProcess -func sampleDict 的 17 点输出做 pointwise L2 + max deviation。贴 profile_u_centerline.png + pointwise_deviation.png。若 pass rate 11/17 在 5% tol 里，诚实写 "11/17 points within 5% tolerance"，不要泛化成 "全盘通过"。`, supported: `yes`},
+      { section: `§6 已知局限 · 诚实声明`, what_to_write: `**必写**：当前 harness 的 v_centerline 和 primary_vortex_location gold 在 physics_contract 里明确标 satisfied=false，不能作为 validation 证据写进报告（哪怕 Compare tab 看起来给了数字）。secondary vortex 位置、ψ 极值、kinetic energy、lid wall shear 这些 5 维对比里的其他维度，本仓库 extractor 目前都不算——如果报告要提，必须明说 "NOT YET computed in the current harness; would require a separate observable-extractor run"。`, supported: `not_yet`},
+      { section: `§7 参考文献`, what_to_write: `引用 benchmark_lineage_zh 里的 4 篇：Ghia 1982 (Table I 数据源)、Burggraf 1966 (历史起点)、Botella-Peyret 1998 (高精度交叉验证)、Shankar-Deshpande 2000 综述。DOI 在 gold YAML 里有 Ghia 的，其他需要自己查 Google Scholar。`, supported: `partial`},
+    ],
     benchmark_lineage_zh: {
       why_primary: `Ghia, Ghia & Shin 1982 成为课堂共同语言的原因有三。一，他们用 multigrid + FMG 在 129×129 uniform grid 上对 Re=100/400/1000/3200/5000/7500/10000 全部跑到完全收敛，这是当时最彻底的系统扫描，后续文献都以它为回归测试的基准。二，他们列了 u-centerline 和 v-centerline 的数值表 (Table I/II)，而不只是印图——这让任何后续代码都能做逐点误差比较，不用 digitize 曲线。三，他们提供了主涡和二级涡中心位置，成为"网格是否分辨出二次涡"的 discriminator。早期 Burggraf 1966 只到 Re=400，高精度的 Botella-Peyret 1998 用 spectral collocation 达到 10⁻¹⁴ 精度但只做 Re=1000。Ghia 的甜点是"够高精度 + 够宽参数扫描 + 数值表形式"。`,
       secondary: [

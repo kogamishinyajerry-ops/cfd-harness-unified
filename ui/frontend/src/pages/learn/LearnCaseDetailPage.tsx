@@ -447,6 +447,33 @@ function StoryTab({
         </section>
       )}
 
+      {/* DEC-V61-049 batch E — glossary for novice vocabulary.
+          Codex CFD-novice walk Step 1: TeachingCards + physics_intuition
+          use terms like SIMPLE / URF / residualControl / stream function
+          / GCI / tolerance band without defining them. A first-semester
+          student would have to Google each one. Optional per-case;
+          populated for LDC pilot only. */}
+      {learnCase.glossary_zh && learnCase.glossary_zh.length > 0 && (
+        <section>
+          <h2 className="card-title mb-3">术语表 · Glossary</h2>
+          <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+            本页 TeachingCards + 物理直觉块里用到的每个非日常 CFD 术语的一句定义，本 case 的 scope 内够用；想深究请去对应的教材章节。
+          </p>
+          <dl className="space-y-2.5 rounded-md border border-surface-800 bg-surface-900/40 p-4">
+            {learnCase.glossary_zh.map((g, i) => (
+              <div key={i} className="grid gap-2 md:grid-cols-[max-content_1fr] md:gap-4">
+                <dt className="mono shrink-0 text-[12px] font-semibold text-sky-300">
+                  {g.term}
+                </dt>
+                <dd className="text-[12.5px] leading-relaxed text-surface-200">
+                  {g.definition}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
       <section>
         <h2 className="card-title mb-3 text-amber-300">常见陷阱</h2>
         <div className="rounded-md border border-amber-900/40 bg-amber-950/20 px-4 py-3">
@@ -660,6 +687,61 @@ function StoryTab({
           ))}
         </div>
       </section>
+
+      {/* DEC-V61-049 batch E — report-writing scaffold.
+          Codex CFD-novice walk Step 5: the page had no explicit scaffold
+          for a 1000-word reproduction report, so the student would
+          invent structure and might claim unsupported dimensions. This
+          block maps the page's content to a 7-section outline with
+          explicit "supported / partial / not_yet" honesty markers per
+          section. Student writes what is supported, flags what is not.
+          Optional per-case; LDC pilot only. */}
+      {learnCase.report_skeleton_zh && learnCase.report_skeleton_zh.length > 0 && (
+        <section>
+          <h2 className="card-title mb-3">课程报告骨架 · Report skeleton</h2>
+          <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+            如果你要用本 case 写一份 ~1000 词的 CFD 复现 / 验证报告，下面 7 段是建议的结构。每段都标明当前页面"已经支持 / 部分支持 / 目前不支持"的状态——未支持的维度不要在报告里假装能写，老实写 "NOT YET in current harness" 比伪装通过更值钱。
+          </p>
+          <div className="space-y-2">
+            {learnCase.report_skeleton_zh.map((r, i) => {
+              const supportStyles: Record<typeof r.supported, { border: string; bg: string; badge: string; label: string }> = {
+                yes: {
+                  border: "border-emerald-900/40",
+                  bg: "bg-emerald-950/10",
+                  badge: "bg-emerald-900/40 text-emerald-300",
+                  label: "supported",
+                },
+                partial: {
+                  border: "border-amber-900/40",
+                  bg: "bg-amber-950/10",
+                  badge: "bg-amber-900/40 text-amber-300",
+                  label: "partial",
+                },
+                not_yet: {
+                  border: "border-rose-900/40",
+                  bg: "bg-rose-950/10",
+                  badge: "bg-rose-900/40 text-rose-300",
+                  label: "NOT yet",
+                },
+              };
+              const s = supportStyles[r.supported];
+              return (
+                <div key={i} className={`rounded-md border p-3 ${s.border} ${s.bg}`}>
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <h3 className="text-[13.5px] font-semibold text-surface-100">{r.section}</h3>
+                    <span className={`mono inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${s.badge}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  <p className="text-[12.5px] leading-relaxed text-surface-200">
+                    {r.what_to_write}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="card-title mb-3">参考文献 · Short citation</h2>

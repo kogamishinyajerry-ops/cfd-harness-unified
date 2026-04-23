@@ -72,7 +72,7 @@ Files you must read in full:
 - `ui/frontend/public/flow-fields/lid_driven_cavity/` — literature
   reference images (Ghia 1982 figures if present).
 
-- `reports/lid_driven_cavity/phase5_renders/` — actual OpenFOAM
+- `reports/phase5_renders/lid_driven_cavity/` — actual OpenFOAM
   output contours (u_magnitude, stream function, residuals, etc.)
   and the Compare-tab figures.
 
@@ -140,7 +140,7 @@ For each of the 8 candidate dimensions above:
 
 ### Step 4 — Check contour / geometry consistency
 
-Open `reports/lid_driven_cavity/phase5_renders/` and look at each
+Open `reports/phase5_renders/lid_driven_cavity/` and look at each
 PNG. For each contour image:
 
 - Does the image show the correct geometry? (a 1×1 unit square with
