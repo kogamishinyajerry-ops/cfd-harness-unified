@@ -1,29 +1,41 @@
 ---
 decision_id: DEC-V61-052
 title: backward_facing_step adapter rewrite · multi-block geometry + fixture regen + LDC-style iteration loop
-status: PROPOSED (scope committed · implementation follows in subsequent commits within this DEC)
+status: COMPLETE (2026-04-23 · Codex round 3 APPROVE_WITH_COMMENTS; 3 MED/LOW cleanups left for a follow-up pass, no HIGH blockers remain)
 supersedes_gate: DEC-V61-051 (ABANDONED_PHASE_1; this DEC is the "scope-adapter-rewrite" option Codex flagged during that review)
 commits_in_scope:
-  - TBD draft: adapter multi-block blockMeshDict generator
-  - TBD draft: fixture regen via phase5_audit_run.py (yields new timestamp under reports/phase5_fields/backward_facing_step/)
-  - TBD audit: preflight_case_visual.py must flip BFS from RED → GREEN
-  - TBD Codex round 1: post-merge review with retry-on-capacity + honest iteration
-  - TBD round-N fixes: whatever Codex surfaces (LDC precedent was HIGH + 4 MED + 1 LOW)
-  - TBD LDC-style visualization: real |U|+streamlines figure from the NEW fixture, matching the post-DEC-V61-051 pattern we discarded
-  - TBD Compare-tab wiring: promote to _GOLD_OVERLAY_CASES and surface Xr as scalar-anchor dimension
-codex_verdict: (pending — loop starts on the first implementation commit)
+  - 4ba4fd7 docs(dec): DEC-V61-052 scaffold · BFS adapter multi-block rewrite (PROPOSED)
+  - 2420c3b feat(bfs-adapter): Batch A · canonical 3-block BFS mesh + ER=1.125 fix
+  - 4fb8682 fix(bfs-adapter): Batch B · solver-stability harden + fixture regen (preflight GREEN)
+  - 013657f fix(bfs-adapter): round 2a · wallShearStress FO + tau_x-proxy Xr extractor (Codex r1 #1+#3)
+  - e8d4897 feat(preflight): round 2b · structured scalar-contract gate (Codex r1 #2)
+  - 25a0753 feat(bfs-adapter): round 2c · kOmegaSST default + x-graded mesh · Xr/H=5.64 (-9.9%, inside tolerance)
+  - a62ca3c fix(bfs-adapter): round 2d · endTime 1500 for stationary residual plateau (Codex r1 #5)
+  - a1cf921 feat(bfs): round 3 + Batch D · authoritative wall-shear Xr + Compare-tab scalar-anchor card (Codex r2 #1/#3/#4 + Batch D)
+codex_verdict: APPROVE_WITH_COMMENTS — round 3 (a1cf921) cleared the round-2 HIGH (wall-shear now authoritative), MED-2 (BFS scalar overlay scoped correctly), MED-3 (diagnostic flags in executor), LOW-4 (stationarity wording matches artifacts). Round 3 itself surfaced 2 MED + 1 LOW clean-up items (wall mask includes 2 outlet cells at x=30; generate_contours figure still computes Xr via Ux proxy even though caption cites wall-shear; reattachment_method/flags not propagated to the serialized audit YAML). All 3 are non-blocking per Codex: "DEC-V61-052 is ready to close with comments; I do not see any remaining HIGH issue that warrants a round 4." Tracked as a follow-up cleanup commit on main; does not reopen the DEC.
 autonomous_governance: true
 autonomous_governance_counter_v61: 39
 external_gate_self_estimated_pass_rate: 0.45
-external_gate_caveat: "Lower than typical V61-050 batches (0.70) because this requires multi-block blockMeshDict correctness + fixture regen + turbulence model BC stability simultaneously. The failure mode that killed V61-051 was I skipped Codex review on a visualization of a known-HAZARD fixture; this DEC's explicit plan is to (a) get GREEN preflight first, (b) get Codex review before any visualization."
-codex_tool_report_path: (pending round 1)
+external_gate_actual_outcome: "APPROVE_WITH_COMMENTS on round 3 — one iteration beyond the LDC V61-050 precedent (which was APPROVE on round 2). Arc size: 8 commits across 4 batches + 3 iteration rounds. Self-pass-rate 0.45 was calibrated well: round 1 landed CHANGES_REQUIRED (2H+2M+1L), round 2 CHANGES_REQUIRED (1H+2M+1L), round 3 APPROVE_WITH_COMMENTS (0H+2M+1L). The pattern of 'HIGH count shrinking to zero across iterations while MED/LOW count stays constant' matches the LDC arc qualitatively."
+external_gate_caveat: "Lower than typical V61-050 batches (0.70) because this requires multi-block blockMeshDict correctness + fixture regen + turbulence model BC stability simultaneously. The failure mode that killed V61-051 was I skipped Codex review on a visualization of a known-HAZARD fixture; this DEC's explicit plan is to (a) get GREEN preflight first, (b) get Codex review before any visualization. Plan executed as designed."
+codex_tool_report_path: .planning/reviews/dec_v61_052_bfs_round3_codex.log (+ round 1 + 2 logs co-located)
 notion_sync_status: pending
-github_sync_status: pending
+github_sync_status: pushed (8 commits on origin/main)
 related:
   - DEC-V61-050 (LDC true multi-dim validation · methodology reference)
   - DEC-V61-051 (BFS visual upgrade ABANDONED_PHASE_1 · this DEC is its successor)
   - DEC-V61-036 (comparator gates G3/G4/G5 · the attestor that correctly flagged BFS as hard-FAIL — we should never have tried to visualize past it)
 ---
+
+## Closure summary (2026-04-23)
+
+**Entry state**: V61-051 abandoned · BFS fixture was a flat rectangular channel with no step, k-ε diverged to 1e+30, Xr/H extractor was looking at the wrong y-band, contract_status falsely PARTIAL_COMPATIBLE.
+
+**Exit state**: Preflight GREEN on all 6 checks. Authoritative Xr/H = 5.647 via `wall_shear_tau_x_zero_crossing` on `lower_wall` face tau_x from the allPatches VTK (cross-checked against near-wall Ux proxy to 0.004%). Driver 1985 reference Xr/H = 6.26 → deviation -9.8%, inside ±10% tolerance. velocity_streamlines.png published as `kind: solver_output`. Compare-tab D1 scalar-anchor card renders measured vs gold with PASS/FAIL colour. physics_contract.contract_status = SATISFIED.
+
+**Methodology verification**: This DEC was the first "类推 case-1" application of the LDC V61-050 iteration loop. The loop ran as designed — 3 rounds of Codex review, each finding real issues, each iteration shrinking the HIGH count while exposing deeper MEDs. The round-2 wall-shear HIGH (Xr was emitted as proxy not wall-shear) was exactly the kind of finding the loop is built to surface and is the equivalent of the LDC D8 SNR retraction: a claim in the attestation layer that was stronger than the artifact chain supported.
+
+**Follow-up (non-blocking, post-close)**: 2 MED + 1 LOW items Codex surfaced in round 3: (a) the `y<0.05 && x>0.05` wall mask picks up 2 B1 outlet face centres at x=30.0, not a scalar blocker but `n_floor_pts=122` wording overclaims; (b) `scripts/flow-field-gen/generate_contours.py::gen_backward_facing_step` still re-probes Xr via the Ux proxy while the flowFields.ts caption says wall-shear (numerical agreement is 0.004% so the figure label is right but the attribution is stronger than the code supports); (c) `reattachment_method` + diagnostic flags live in executor key_quantities but do not propagate to `audit_real_run_measurement.yaml::measurement` (only `extraction_source: key_quantities_direct` is kept), so the Compare tab cannot tell "wall-shear authoritative" from "Ux proxy fallback" without reading raw JSON. All three are small, same-file fixes; Codex confirmed none of them warrant reopening the DEC.
 
 ## Why this DEC exists
 
