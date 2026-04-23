@@ -19,7 +19,7 @@ external_gate_self_estimated_pass_rate: 0.45
 external_gate_actual_outcome: "APPROVE_WITH_COMMENTS on round 3 — one iteration beyond the LDC V61-050 precedent (which was APPROVE on round 2). Arc size: 8 commits across 4 batches + 3 iteration rounds. Self-pass-rate 0.45 was calibrated well: round 1 landed CHANGES_REQUIRED (2H+2M+1L), round 2 CHANGES_REQUIRED (1H+2M+1L), round 3 APPROVE_WITH_COMMENTS (0H+2M+1L). The pattern of 'HIGH count shrinking to zero across iterations while MED/LOW count stays constant' matches the LDC arc qualitatively."
 external_gate_caveat: "Lower than typical V61-050 batches (0.70) because this requires multi-block blockMeshDict correctness + fixture regen + turbulence model BC stability simultaneously. The failure mode that killed V61-051 was I skipped Codex review on a visualization of a known-HAZARD fixture; this DEC's explicit plan is to (a) get GREEN preflight first, (b) get Codex review before any visualization. Plan executed as designed."
 codex_tool_report_path: .planning/reviews/dec_v61_052_bfs_round3_codex.log (+ round 1 + 2 logs co-located)
-notion_sync_status: pending
+notion_sync_status: "synced 2026-04-23 (https://www.notion.so/DEC-V61-052-BFS-adapter-multi-block-rewrite-LDC-style-iteration-loop-case-2-34bc68942bed81bf95e7dac9c6a638bd)"
 github_sync_status: pushed (8 commits on origin/main)
 related:
   - DEC-V61-050 (LDC true multi-dim validation · methodology reference)

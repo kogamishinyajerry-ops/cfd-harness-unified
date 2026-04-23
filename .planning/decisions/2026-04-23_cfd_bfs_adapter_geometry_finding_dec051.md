@@ -10,7 +10,7 @@ autonomous_governance: true
 autonomous_governance_counter_v61: 38
 external_gate_self_estimated_pass_rate: 0.00
 codex_tool_report_path: .planning/reviews/bfs_phase1_selfaudit.md (this DEC supersedes, no separate file)
-notion_sync_status: pending
+notion_sync_status: "synced 2026-04-23 (https://www.notion.so/DEC-V61-051-BFS-visual-upgrade-ABANDONED_PHASE_1-adapter-geometry-finding-34bc68942bed81b89de9ea6493bea6ea)"
 github_sync_status: pushed (8ff71e4 on origin/main)
 related:
   - DEC-V61-050 (LDC true multi-dim validation — the methodology reference; case 2 was meant to be the first "类推" application)
