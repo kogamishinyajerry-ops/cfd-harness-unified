@@ -154,7 +154,58 @@ def _load_ldc_gold() -> tuple[list[float], list[float], dict]:
     return ys, us, u_doc
 
 
-def _load_sample_xy(path: Path) -> tuple[np.ndarray, np.ndarray]:
+def _load_ldc_v_gold() -> tuple[list[float], list[float], dict] | None:
+    """Load the v_centerline gold block from lid_driven_cavity.yaml.
+
+    DEC-V61-050 batch 1: returns (xs, vs, doc) for the Ghia 1982 Table II
+    Re=100 native 17-point non-uniform x grid + v values. Returns None if
+    the block is missing, empty, or still uses the legacy y-indexed shape
+    (silent degrade — caller treats absence as "v_centerline not
+    exercised for this case"). Reads the SAME multi-doc YAML as
+    _load_ldc_gold so both share a single IO.
+    """
+    gold_path = _GOLD_ROOT / "lid_driven_cavity.yaml"
+    if not gold_path.is_file():
+        return None
+    docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    v_doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == "v_centerline"),
+        None,
+    )
+    if v_doc is None:
+        return None
+    xs: list[float] = []
+    vs: list[float] = []
+    for entry in v_doc.get("reference_values", []):
+        if not isinstance(entry, dict):
+            continue
+        # Post-DEC-V61-050-batch-1 shape: {x: float, v: float}. Old shape
+        # pre-batch-1 was {y: float, v: float} (axis-label bug). Accept
+        # the new shape only — the old shape's values were unusable even
+        # if read, so silently return None rather than degrade to garbage.
+        x = entry.get("x")
+        v = entry.get("value") or entry.get("v")
+        if x is not None and v is not None:
+            xs.append(float(x))
+            vs.append(float(v))
+    if not xs:
+        return None
+    return xs, vs, v_doc
+
+
+def _load_sample_xy(path: Path, value_col: int = 1) -> tuple[np.ndarray, np.ndarray]:
+    """Load an OpenFOAM raw-xy sample file. Returns (coord, value) arrays.
+
+    OpenFOAM's lineUniform function object writes either 2-col files
+    (coord + single-field-scalar) or 5-col files (coord + U_x + U_y + U_z
+    + p) depending on fields requested. Col 0 is always the sampling axis
+    coordinate. For u_centerline (sampled along y, U_x is the observable)
+    value_col=1 is correct. For v_centerline (sampled along x, U_y is the
+    observable) value_col=2.
+
+    DEC-V61-050 batch 1: value_col parameter added so a single helper
+    services both LDC observables without duplicating parser code.
+    """
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
         s = line.strip()
@@ -162,7 +213,9 @@ def _load_sample_xy(path: Path) -> tuple[np.ndarray, np.ndarray]:
             continue
         parts = s.split()
         try:
-            rows.append([float(parts[0]), float(parts[1])])
+            if value_col >= len(parts):
+                continue
+            rows.append([float(parts[0]), float(parts[value_col])])
         except (ValueError, IndexError):
             continue
     if not rows:
@@ -430,6 +483,25 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
     y_sim, u_sim = _load_sample_xy(latest_sample / "uCenterline.xy")
     metrics = _compute_metrics(y_sim, u_sim, gold_y, gold_u, tolerance)
 
+    # DEC-V61-050 batch 1: v_centerline second observable (Ghia Table II).
+    # Best-effort: silently skip if gold block missing, xy file missing,
+    # or sample file malformed (e.g., old fixtures predating the v
+    # sampler). The u path above must work; v is additive evidence.
+    metrics_v: dict[str, Any] | None = None
+    v_tolerance: float | None = None
+    v_gold_pair = _load_ldc_v_gold()
+    if v_gold_pair is not None:
+        gold_x, gold_v, v_doc = v_gold_pair
+        v_tolerance = float(v_doc.get("tolerance", 0.05)) * 100.0
+        v_xy_path = latest_sample / "vCenterline.xy"
+        if v_xy_path.is_file():
+            try:
+                # v observable is U_y; in OF native xy format that is col 2.
+                x_sim, v_sim = _load_sample_xy(v_xy_path, value_col=2)
+                metrics_v = _compute_metrics(x_sim, v_sim, gold_x, gold_v, v_tolerance)
+            except ReportError:
+                metrics_v = None
+
     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
     # Phase 7d: Richardson extrapolation + GCI over the finest 3 meshes.
@@ -515,6 +587,27 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
         "verdict_subtitle": subtitle,
         "metrics": metrics,
         "paper": paper,
+        # DEC-V61-050 batch 1: v_centerline observable bundled as
+        # sibling to metrics/paper. Both are optional — a case that
+        # does not emit vCenterline.xy (or a YAML without the v block)
+        # will see null here and frontend silently hides the D6 card.
+        "metrics_v_centerline": metrics_v,
+        "paper_v_centerline": (
+            {
+                "source": v_gold_pair[2].get(
+                    "source",
+                    "Ghia, Ghia & Shin 1982 — Table II Re=100 column",
+                ),
+                "doi": v_gold_pair[2].get(
+                    "literature_doi", "10.1016/0021-9991(82)90058-4"
+                ),
+                "short": "Ghia 1982 Table II",
+                "gold_count": metrics_v["n_total"] if metrics_v else 0,
+                "tolerance_pct": v_tolerance,
+            }
+            if v_gold_pair is not None and metrics_v is not None
+            else None
+        ),
         "renders": renders,
         "contour_caption": (
             "2D |U| contour + streamlines 由 OpenFOAM VTK 体数据渲染（Phase 7b polish）。"

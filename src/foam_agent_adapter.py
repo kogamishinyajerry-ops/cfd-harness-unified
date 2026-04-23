@@ -716,6 +716,13 @@ class FoamAgentExecutor:
             # "Attempt to return dictionary entry as a primitive" inside
             # Foam::functionObjects::sampledSets::read. Verified against
             # /opt/openfoam10/etc/caseDicts/postProcessing/graphs/graphUniform.cfg.
+            # DEC-V61-050 batch 1: two sets — uCenterline (vertical, x=0.05)
+            # for Ghia Table I u-profile comparison; vCenterline (horizontal,
+            # y=0.05) for Ghia Table II v-profile comparison. Without the
+            # second set, v_centerline physics_contract precondition #4
+            # stays unsatisfied and the audit comparator can only exercise
+            # one observable dimension. The OF function-object syntax
+            # accepts multiple dict-like entries inside `sets ( ... )`.
             "        sets\n"
             "        (\n"
             "            uCenterline\n"
@@ -724,6 +731,15 @@ class FoamAgentExecutor:
             "                axis        y;\n"
             "                start       (0.05 0.0   0.005);\n"
             "                end         (0.05 0.1   0.005);\n"
+            "                nPoints     129;\n"
+            "            }\n"
+            "\n"
+            "            vCenterline\n"
+            "            {\n"
+            "                type        lineUniform;\n"
+            "                axis        x;\n"
+            "                start       (0.0  0.05  0.005);\n"
+            "                end         (0.1  0.05  0.005);\n"
             "                nPoints     129;\n"
             "            }\n"
             "        );\n"

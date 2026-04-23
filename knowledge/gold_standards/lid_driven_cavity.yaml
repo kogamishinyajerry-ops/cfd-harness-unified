@@ -23,13 +23,20 @@
 #   0.4531  u=-0.21090 (min)     | 0.9766  u=+0.84123
 #                                | 1.0000  u=+1.00000 (lid BC)
 #
-# v_centerline and primary_vortex_location blocks below are NOT corrected in
-# this commit (Q-5 scope is u_centerline only). Both sections have suspected
-# schema/value issues (v_centerline appears to be Ghia Table II indexed by x
-# but labelled "y"; primary_vortex_location has vortex_center_y=0.7650 which
-# disagrees with Ghia's Re=100 primary vortex at (0.6172, 0.7344)). These are
-# not currently exercised by the audit-run comparator; flagged as follow-up
-# work in Phase 5c (NON-LDC) or a dedicated audit pass.
+# v_centerline closure 2026-04-23 (DEC-V61-050 batch 1):
+#   Prior v_centerline block was Ghia Table II data mislabelled by axis
+#   ("y" instead of "x") with arbitrary-looking values that did not match
+#   Ghia at either y-index or x-index. Replaced with Ghia's native 17
+#   non-uniform x points + exact Table II v values (no interpolation so
+#   the 0.2344→0.5 gap does not get linearly filled). Post-hoc measured
+#   v sampled from the existing 20260421T082340Z VTK via pyvista
+#   interpolation on y=0.05 line; no simpleFoam re-run needed for the
+#   fixture. precondition #4 now satisfied_by_current_adapter=true.
+#
+# primary_vortex_location still NOT corrected in this commit (batch 3
+# scope); current values (x=0.5000, y=0.7650) do not match Ghia Re=100
+# primary vortex at (0.6172, 0.7344) and the block is not exercised by
+# the audit comparator.
 
 physics_contract:
   geometry_assumption: "Square cavity, L=0.1 m (convertToMeters=0.1), top lid at fixedValue U=(U_lid,0,0) with U_lid=1.0 m/s; other walls no-slip; front/back empty (2D). Re=U·L/ν with ν=1e-3 gives Re=100 matching Ghia Table I."
@@ -45,15 +52,15 @@ physics_contract:
       satisfied_by_current_adapter: true
       evidence_ref: "DEC-V61-030 Path A (2026-04-21) re-interpolated Ghia Table I to the 17-point y grid; verified against Ghia native points documented in YAML header lines 15-24."
     - condition: "v_centerline reference values match Ghia 1982 Table II v(x) along the geometric horizontal centreline"
-      satisfied_by_current_adapter: false
-      evidence_ref: "YAML header lines 26-32 flag that v_centerline appears to be Ghia Table II data (which Ghia indexes by x along the horizontal centreline) but the YAML labels the axis as 'y'. This is a provenance/indexing error, not a partial match — the values are the wrong coordinate basis for the observable name. Any PASS on v_centerline today is comparator coincidence, not Ghia-faithful."
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-050 batch 1 (2026-04-23) replaced the prior mislabelled block with Ghia Table II Re=100 native 17-point non-uniform x grid + exact v values (cross-verified against scripts/flow-field-gen/generate_contours.py:103-110 which had encoded the same values for the literature-reference visualization since DEC-V61-007). Measured v extracted from existing 20260421T082340Z VTK via pyvista interpolation on y=0.05 (physical y=0.005·0.1m = 0.005m, normalized y=0.5·L); no simpleFoam re-run needed — the underlying audit field is the same. See reports/phase5_fields/lid_driven_cavity/20260421T082340Z/postProcessing/sets/1024/vCenterline_U.xy and vCenterlineGold_U.xy."
     - condition: "primary_vortex_location matches Ghia 1982 Re=100 primary vortex centre (0.6172, 0.7344)"
       satisfied_by_current_adapter: false
       evidence_ref: "YAML stores vortex_center_y=0.7650, which disagrees with Ghia's documented Re=100 primary vortex centre y≈0.7344 (and Ghia's x≈0.6172 isn't even stored alongside). Numerically close but not Ghia-indexed. Observable is NOT exercised by the current audit comparator; if a future audit turns it on, it will report a spurious deviation traceable to this bad reference."
     - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
       satisfied_by_current_adapter: true
       evidence_ref: "whitelist default grid meets the Ghia high-resolution reference shoulder (Ghia 1982 used 129×129 on a second-order finite-difference stream-function/vorticity solver — historical high-resolution benchmark, not a present-day DNS claim) via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
-  contract_status: "SATISFIED_FOR_U_CENTERLINE_ONLY — u_centerline block is Ghia-faithful and passes comparator cleanly; v_centerline + primary_vortex_location blocks have unverified Ghia-indexing and should not be treated as physics-valid PASS evidence without a dedicated re-audit."
+  contract_status: "SATISFIED_FOR_U_AND_V_CENTERLINE — u_centerline + v_centerline blocks are both Ghia-faithful (Table I and Table II respectively) and exercised by the audit comparator; primary_vortex_location block still has mis-aligned Ghia indexing (DEC-V61-050 batch 3 scope) and should not be treated as physics-valid PASS evidence."
   precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
 
 quantity: u_centerline
@@ -112,43 +119,61 @@ case_info:
     other_walls_u: 0.0
 
 ---
+# v_centerline — DEC-V61-050 batch 1 closure (2026-04-23)
+# Ghia 1982 Table II Re=100: v/U_lid sampled at 17 native non-uniform x
+# coordinates along the horizontal centerline y=0.5. Values verified
+# against scripts/flow-field-gen/generate_contours.py:103-110 which
+# encoded the same 17 points for the literature-reference visualization.
+# Non-uniform grid is deliberate — Ghia's native x points cluster near
+# the side walls where v varies most steeply; re-sampling to a uniform
+# 17-point grid introduces ~20-30% gold error in the x=0.25-0.45
+# interior because Ghia has no data point between x=0.2344 and x=0.5
+# and linear interpolation over that gap underestimates the curve.
 quantity: v_centerline
 reference_values:
-  - y: 0.1250
-    v: -0.04939
-  - y: 0.1875
-    v: -0.06203
-  - y: 0.2500
-    v: -0.06904
-  - y: 0.3125
-    v: -0.07080
-  - y: 0.3750
-    v: -0.06629
-  - y: 0.4375
-    v: -0.05259
-  - y: 0.5000
+  - x: 0.0000
+    v: 0.00000
+  - x: 0.0625
+    v: 0.09233
+  - x: 0.0703
+    v: 0.10091
+  - x: 0.0781
+    v: 0.10890
+  - x: 0.0938
+    v: 0.12317
+  - x: 0.1563
+    v: 0.16077
+  - x: 0.2266
+    v: 0.17507
+  - x: 0.2344
+    v: 0.17527
+  - x: 0.5000
     v: 0.05454
-  - y: 0.5625
-    v: 0.06406
-  - y: 0.6250
-    v: 0.06920
-  - y: 0.6875
-    v: 0.06878
-  - y: 0.7500
-    v: 0.06021
-  - y: 0.8125
-    v: 0.04404
-  - y: 0.8750
-    v: 0.02429
+  - x: 0.8047
+    v: -0.24533
+  - x: 0.8594
+    v: -0.22445
+  - x: 0.9063
+    v: -0.16914
+  - x: 0.9453
+    v: -0.10313
+  - x: 0.9531
+    v: -0.08864
+  - x: 0.9609
+    v: -0.07391
+  - x: 0.9688
+    v: -0.05906
+  - x: 1.0000
+    v: 0.00000
 tolerance: 0.05
-source: "Ghia et al. 1982, J. Comput. Phys."
+source: "Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table II Re=100 column, native 17-point non-uniform x grid (not interpolated)"
 literature_doi: "10.1016/0021-9991(82)90058-4"
 mesh_info:
-  cells: 64800
+  cells: 16641  # 129×129 — corrected from Phase 0 placeholder 64800 (same note as u_centerline block)
   type: structured
 solver_info:
-  name: icoFoam
-  schemes: PISO
+  name: simpleFoam  # DEC-V61-050 batch 1: aligned with u_centerline (Phase 5b migration from icoFoam)
+  schemes: SIMPLE
 case_info:
   id: lid_driven_cavity
   Re: 100

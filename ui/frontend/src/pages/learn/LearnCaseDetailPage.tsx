@@ -1134,9 +1134,14 @@ function CompareTab({
 //   D3 · profile overlay chart (embedded profile_u_centerline.png)
 //   D4 · pointwise deviation bars (embedded pointwise_deviation.png)
 //   D5 · grid convergence + GCI (native card from grid_conv + gci)
-// Plus an honesty footer listing dims that are IN GOLD but NOT
-// currently validated (v_centerline, primary_vortex_location) so
-// students do not claim unsupported dims in their report.
+//   D6 · v_centerline (Ghia Table II, horizontal centerline v profile) —
+//        DEC-V61-050 batch 1: independent physical observable, not a
+//        re-slice of u_centerline. Gold = Ghia 1982 Table II native 17
+//        non-uniform x points. Measured = post-hoc VTK interpolation
+//        of U_y onto y=0.05 line (no simpleFoam re-run).
+// Plus an honesty footer listing dims that are IN GOLD but NOT yet
+// validated (primary_vortex_location — batch 3 scope) so students
+// do not claim unsupported dims in their report.
 function MultiDimensionComparePanel({
   caseId,
   profileVerdict,
@@ -1196,7 +1201,7 @@ function MultiDimensionComparePanel({
       <div className="flex items-baseline justify-between">
         <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
         <p className="text-[11px] text-surface-500">
-          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0)} 个独立维度
+          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0) + (data.metrics_v_centerline ? 1 : 0)} 个独立维度
         </p>
       </div>
 
@@ -1381,15 +1386,71 @@ function MultiDimensionComparePanel({
         </div>
       )}
 
+      {/* D6 · v_centerline (Ghia Table II) — DEC-V61-050 batch 1.
+          Independent physical observable: horizontal centerline v profile
+          at y=0.5L, compared against Ghia Table II Re=100 native 17-point
+          non-uniform x grid. */}
+      {data.metrics_v_centerline && data.paper_v_centerline && (
+        <div className="rounded-md border border-emerald-900/40 bg-emerald-950/10 p-4">
+          <div className="mb-1 flex items-baseline gap-2">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300">
+              D6 · 水平中线 v 剖面（独立观测量）
+            </span>
+            <span className="mono inline-flex items-center rounded-sm bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+              {data.metrics_v_centerline.n_pass} / {data.metrics_v_centerline.n_total}
+            </span>
+          </div>
+          <p className="text-[13px] leading-relaxed text-surface-200">
+            {data.paper_v_centerline.short} · Ghia 原生 17 点非均匀 x 网格，从既有 VTK 体数据后验插值到 y=0.5L 水平线（无需重跑 simpleFoam）。
+            <span className="mono font-semibold text-surface-100">
+              {" "}{data.metrics_v_centerline.n_pass} / {data.metrics_v_centerline.n_total}
+            </span>
+            {" "}个点落在 ±{data.paper_v_centerline.tolerance_pct.toFixed(1)}% 容差带内。
+          </p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-emerald-200/80">
+            这是<strong>独立于 u_centerline 的物理维度</strong>——u 量的是垂直中线上水平分量 U_x，v 量的是水平中线上竖直分量 U_y，曲线形状、极值位置、零交叉都完全不同。与 D2-D4 的 u_centerline 合计两个真正独立的 profile 观测量。
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-3 text-[11px]">
+            <div>
+              <div className="text-surface-500">L²</div>
+              <div className="mono text-surface-100">{data.metrics_v_centerline.l2.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="text-surface-500">L∞</div>
+              <div className="mono text-surface-100">{data.metrics_v_centerline.linf.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="text-surface-500">max |dev|</div>
+              <div className="mono text-surface-100">{data.metrics_v_centerline.max_dev_pct.toFixed(2)}%</div>
+            </div>
+            <div>
+              <div className="text-surface-500">RMS</div>
+              <div className="mono text-surface-100">{data.metrics_v_centerline.rms.toFixed(4)}</div>
+            </div>
+          </div>
+          {data.metrics_v_centerline.per_point_dev_pct && data.metrics_v_centerline.per_point_dev_pct.length > 0 && (
+            <p className="mono mt-2 text-[10.5px] leading-relaxed text-surface-500">
+              per-point |dev|%: [
+              {data.metrics_v_centerline.per_point_dev_pct
+                .map((d) => (Number.isFinite(d) ? d.toFixed(1) : "—"))
+                .join(", ")}
+              ]
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Honesty footer: dims that look supported but are NOT */}
       <div className="rounded-md border border-rose-900/40 bg-rose-950/10 p-4">
         <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-rose-300">
           当前未支持的验证维度
         </p>
         <p className="text-[12px] leading-relaxed text-surface-300">
-          黄金标准 YAML 里还列有 <span className="mono text-rose-200">v_centerline</span>（水平中线 v 剖面）和 <span className="mono text-rose-200">primary_vortex_location</span>（主涡中心坐标），
-          但 <span className="mono text-rose-200">physics_contract.physics_precondition</span> 明确标这两块 <span className="mono text-rose-200">satisfied_by_current_adapter=false</span>——前者 axis label 可能误用 Table II 的 x-indexed 数据，后者数值与 Ghia Re=100 真值 (0.6172, 0.7344) 对不上。
-          这两维当前 audit comparator 不调用，<strong>写报告时不能当作独立验证维度声明</strong>。拓展需要独立 DEC 修 gold YAML + 加 extractor（不在 V61-049 pilot 范围）。
+          黄金标准 YAML 里仍列有 <span className="mono text-rose-200">primary_vortex_location</span>（主涡中心坐标），但 <span className="mono text-rose-200">physics_contract.physics_precondition</span> 明确标 <span className="mono text-rose-200">satisfied_by_current_adapter=false</span>——储存的 vortex_center_y=0.7650 与 Ghia Re=100 真值 (0.6172, 0.7344) 对不上，且 vortex_center_x 根本没存。
+          这一维当前 audit comparator 不调用，<strong>写报告时不能当作独立验证维度声明</strong>。修复路径：DEC-V61-050 batch 3 做 ψ streamfunction argmin 提取器 + 修 gold YAML。
+          <span className="block mt-1 text-emerald-200/80">
+            ✓ <span className="mono">v_centerline</span>（水平中线 v 剖面）已在 DEC-V61-050 batch 1 落地为独立观测量，见上方 D6。
+          </span>
         </p>
       </div>
     </section>
@@ -2142,8 +2203,29 @@ type ComparisonReportContext = {
     // simplicity; field is populated regardless).
     per_point_dev_pct?: number[];
   } | null;
+  // DEC-V61-050 batch 1 — v_centerline observable (Ghia Table II).
+  // Optional: null when the case has no v_centerline gold block or
+  // the audit fixture has no vCenterline.xy. For LDC post-batch-1 it
+  // is populated from the post-hoc VTK interpolation onto Ghia's 17
+  // native x points on y=0.5 horizontal centerline.
+  metrics_v_centerline?: {
+    max_dev_pct: number;
+    l2: number;
+    linf: number;
+    rms: number;
+    n_pass: number;
+    n_total: number;
+    per_point_dev_pct?: number[];
+  } | null;
   paper?: {
     title: string;
+    source: string;
+    doi?: string;
+    short: string;
+    gold_count: number;
+    tolerance_pct: number;
+  } | null;
+  paper_v_centerline?: {
     source: string;
     doi?: string;
     short: string;
