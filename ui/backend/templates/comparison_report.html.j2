@@ -80,14 +80,14 @@
 <!-- Section 3 — Profile overlay -->
 <h2>3. 中心线 profile 叠合对比</h2>
 <figure>
-  <img src="{{ renders.profile_png_rel }}" alt="U centerline profile overlay">
+  <img src="{{ renders.profile_png }}" alt="U centerline profile overlay">
   <figcaption>simpleFoam 实线 vs {{ paper.short }} 离散点，x=0.5 垂直中心线。</figcaption>
 </figure>
 
 <!-- Section 4 — Pointwise deviation heatmap -->
 <h2>4. 逐点偏差分布 (5% 容差)</h2>
 <figure>
-  <img src="{{ renders.pointwise_png_rel }}" alt="Pointwise deviation bar chart">
+  <img src="{{ renders.pointwise_png }}" alt="Pointwise deviation bar chart">
   <figcaption>
     沿 y/L 的逐 gold 点 |dev|%，绿色 &lt; 5% PASS，黄色 5-10% WARN，红色 &gt; 10% FAIL。
     {{ metrics.n_pass }}/{{ metrics.n_total }} 点通过 5% 容差。
@@ -97,7 +97,7 @@
 <!-- Section 5 — Full 2D field contour -->
 <h2>5. 流场 contour (中心线切片)</h2>
 <figure>
-  <img src="{{ renders.contour_png_rel }}" alt="U magnitude contour slice">
+  <img src="{{ renders.contour_png }}" alt="U magnitude contour slice">
   <figcaption>
     {{ contour_caption }}
   </figcaption>
@@ -106,7 +106,7 @@
 <!-- Section 6 — Residual convergence -->
 <h2>6. 残差收敛历史</h2>
 <figure>
-  <img src="{{ renders.residuals_png_rel }}" alt="Residual log convergence">
+  <img src="{{ renders.residuals_png }}" alt="Residual log convergence">
   <figcaption>
     SIMPLE 迭代下 U_x / U_y / p 初始残差对数。收敛到
     {{ '%.1e'|format(residual_info.final_ux) if residual_info.final_ux else 'N/A' }}

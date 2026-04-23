@@ -466,6 +466,7 @@ def _get_commit_sha() -> str:
 
 def _build_visual_only_context(
     case_id: str, run_label: str, timestamp: str, artifact_dir: Path,
+    *, for_pdf: bool = False,
 ) -> dict:
     """Tier C reduced context (DEC-V61-034): real contour + residuals PNGs from
     the captured OpenFOAM artifacts, no gold overlay / verdict / GCI. The
@@ -494,9 +495,23 @@ def _build_visual_only_context(
                     pass
         return candidate or ""
 
+    # _rel = repo-relative path (PDF base_url=_REPO_ROOT resolves it).
+    # _url = browser URL (HTML served at /api/... needs an absolute path
+    # that hits the working renders route — repo-relative paths would
+    # otherwise resolve against the /api/cases/... URL and 404).
+    def _url(basename: str) -> str:
+        return f"/api/cases/{case_id}/runs/{run_label}/renders/{basename}"
+
     renders = {
         "contour_png_rel": _rel("contour_u_magnitude_png", "contour_u_magnitude.png"),
         "residuals_png_rel": _rel("residuals_png", "residuals.png"),
+        "contour_png_url": _url("contour_u_magnitude.png"),
+        "residuals_png_url": _url("residuals.png"),
+        # Unified field read by the template — PDF mode gets repo-rel
+        # paths (WeasyPrint base_url resolves them); HTML browser mode
+        # gets API URLs that the /renders/ route serves.
+        "contour_png": _rel("contour_u_magnitude_png", "contour_u_magnitude.png") if for_pdf else _url("contour_u_magnitude.png"),
+        "residuals_png": _rel("residuals_png", "residuals.png") if for_pdf else _url("residuals.png"),
     }
 
     # Detect solver name from which log.<solver> file exists in artifact dir.
@@ -532,8 +547,18 @@ def _build_visual_only_context(
     }
 
 
-def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dict:
-    """Assemble all template variables. Raises ReportError on missing data."""
+def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for_pdf: bool = False) -> dict:
+    """Assemble all template variables. Raises ReportError on missing data.
+
+    for_pdf: when True, the `renders.*_png` fields carry repo-relative
+    paths (e.g. reports/phase5_renders/...) that WeasyPrint resolves
+    against base_url=_REPO_ROOT. When False (default), those fields
+    carry absolute HTTP URLs to the /api/cases/.../renders/{file}
+    route so the HTML served at /api/cases/.../comparison-report
+    actually displays images in a browser — without this, img srcs
+    were resolved against the report URL and 404'd (2026-04-23
+    user-reported bug).
+    """
     if case_id not in _REPORT_SUPPORTED_CASES:
         raise ReportError(
             f"case_id={case_id!r} not in Phase 7 report scope. "
@@ -559,7 +584,7 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
 
     # Tier C: visual-only cases skip gold-overlay / verdict / GCI assembly.
     if case_id in _VISUAL_ONLY_CASES:
-        return _build_visual_only_context(case_id, run_label, timestamp, artifact_dir)
+        return _build_visual_only_context(case_id, run_label, timestamp, artifact_dir, for_pdf=for_pdf)
 
     # Load + compute
     gold_y, gold_u, gold_doc = _load_ldc_gold()
@@ -794,11 +819,29 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                     pass
         return candidate or ""
 
+    # _rel = repo-relative (PDF base_url=_REPO_ROOT resolves it).
+    # _url = browser URL — fixes "all comparison report images fail to
+    # load" when the HTML is served at /api/cases/.../comparison-report
+    # (browser otherwise resolves `reports/...` src against the URL
+    # path → /api/cases/X/runs/Y/reports/... which 404s; the working
+    # renders route is /api/cases/X/runs/Y/renders/{basename}).
+    def _url(basename: str) -> str:
+        return f"/api/cases/{case_id}/runs/{run_label}/renders/{basename}"
+
     renders = {
         "profile_png_rel": _rel("profile_png", "profile_u_centerline.png"),
         "pointwise_png_rel": _rel("pointwise_deviation_png", "pointwise_deviation.png"),
         "contour_png_rel": _rel("contour_u_magnitude_png", "contour_u_magnitude.png"),
         "residuals_png_rel": _rel("residuals_png", "residuals.png"),
+        "profile_png_url": _url("profile_u_centerline.png"),
+        "pointwise_png_url": _url("pointwise_deviation.png"),
+        "contour_png_url": _url("contour_u_magnitude.png"),
+        "residuals_png_url": _url("residuals.png"),
+        # Unified field read by the template.
+        "profile_png": _rel("profile_png", "profile_u_centerline.png") if for_pdf else _url("profile_u_centerline.png"),
+        "pointwise_png": _rel("pointwise_deviation_png", "pointwise_deviation.png") if for_pdf else _url("pointwise_deviation.png"),
+        "contour_png": _rel("contour_u_magnitude_png", "contour_u_magnitude.png") if for_pdf else _url("contour_u_magnitude.png"),
+        "residuals_png": _rel("residuals_png", "residuals.png") if for_pdf else _url("residuals.png"),
     }
 
     paper = {
@@ -946,7 +989,7 @@ def render_report_pdf(case_id: str, run_label: str = "audit_real_run",
     # the output_path branch so caller-supplied output_path callers also hit
     # the guard (avoids importing weasyprint only to have render_report_html
     # raise downstream).
-    ctx = build_report_context(case_id, run_label)
+    ctx = build_report_context(case_id, run_label, for_pdf=True)
     if ctx.get("visual_only"):
         raise ReportError(
             f"case_id={case_id!r} is in Tier C visual-only mode — no PDF "
@@ -969,7 +1012,13 @@ def render_report_pdf(case_id: str, run_label: str = "audit_real_run",
     # Import weasyprint lazily — heavy import, only when PDF actually needed.
     import weasyprint  # type: ignore  # ImportError → 503 via route layer.
 
-    html = render_report_html(case_id, run_label)
+    # Render the template with the for_pdf=True context (img srcs are
+    # repo-rel paths that WeasyPrint resolves against base_url).
+    # Deliberately not calling render_report_html — that builds a
+    # for_pdf=False context whose img srcs are /api/ URLs, which
+    # WeasyPrint cannot fetch without a live backend.
+    tmpl = _env.get_template("comparison_report.html.j2")
+    html = tmpl.render(**ctx)
     doc = weasyprint.HTML(string=html, base_url=str(_REPO_ROOT))
     doc.write_pdf(str(resolved_out))
     return resolved_out
