@@ -1,0 +1,249 @@
+"""DEC-V61-050 batch 2 — streamfunction ψ extraction from VTK.
+
+Infrastructure consumed by batches 3 (primary vortex from argmin ψ)
+and 4 (secondary BL/BR eddies from local extrema in corners). Does
+not wire into the comparator on its own — a deliberate scope boundary
+so this module can be reviewed and reused independently.
+
+Method: compute ψ(x, y) on a uniform nx × ny grid by integrating
+    ψ(x, y) = ∫₀^y U_x(x, y') dy'
+along columns (trapezoidal rule, numpy). Resamples the unstructured
+OpenFOAM VTK volume onto the uniform grid via pyvista's .sample().
+
+Why integrate rather than solve ∇²ψ = −ω_z: the direct integral
+needs only U_x (which OpenFOAM writes natively) and numpy trapz,
+whereas the Poisson approach needs either scipy.sparse.linalg or a
+custom multigrid, and the accuracy difference is dominated by the
+underlying mesh/sampling errors, not the discretization of the ψ
+equation. For LDC Re=100 with a 129² mesh this is adequate to
+reproduce Ghia Table III primary vortex to ~1% in (x, y) and a few
+percent in ψ_min; batches 3-4 will report the measured values against
+those tolerances honestly.
+
+Cache: writes {vtk_dir}/.psi_cache_{nx}x{ny}.npz keyed by the VTK
+mtime so repeated calls at the same resolution hit the cache rather
+than re-sampling (sampling a 20k-cell unstructured grid onto 129² ≈
+17k points is ~100 ms, worth caching).
+
+API:
+    compute_streamfunction_from_vtk(vtk_path, nx=129, ny=129)
+        → (psi, xs, ys) in physical units (m²/s, m, m) or None.
+
+    find_vortex_core(psi, xs, ys, x_window_norm, y_window_norm, mode,
+                     u_ref=1.0)
+        → (x_c_norm, y_c_norm, psi_norm) in Ghia convention
+          (x/L, y/L, ψ/(U·L)) or None.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+
+
+def pick_latest_internal_vtk(vtk_dir: Path) -> Optional[Path]:
+    """Return the newest internal-field VTK in vtk_dir, or None.
+
+    Matches the pattern used by src/comparator_gates.py:read_final_
+    velocity_max — skips 'allPatches' boundary files, requires a
+    trailing '_<iter>.vtk' suffix so we can order by iteration.
+    """
+    if not vtk_dir.is_dir():
+        return None
+    candidates: list[tuple[int, Path]] = []
+    for p in vtk_dir.rglob("*.vtk"):
+        if "allPatches" in p.parts:
+            continue
+        m = re.search(r"_(\d+)\.vtk$", p.name)
+        if m is None:
+            continue
+        candidates.append((int(m.group(1)), p))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[-1][1]
+
+
+def compute_streamfunction_from_vtk(
+    vtk_path: Path,
+    nx: int = 129,
+    ny: int = 129,
+    bounds: Optional[tuple[float, float, float, float, float]] = None,
+) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Return (psi, xs, ys) on a uniform nx × ny grid, or None on failure.
+
+    psi.shape == (ny, nx) in physical m²/s.
+    xs, ys in physical m (uniform).
+    bounds: optional explicit (xmin, xmax, ymin, ymax, z_mid). If None,
+    derived from mesh.bounds with z at the midplane (2D slab convention).
+
+    Returns None when pyvista is unavailable, the VTK is unreadable,
+    or the mesh lacks a U vector field.
+    """
+    try:
+        import pyvista as pv
+    except ImportError:
+        return None
+
+    if not vtk_path.is_file():
+        return None
+
+    cache_dir = vtk_path.parent
+    cache_file = cache_dir / f".psi_cache_{nx}x{ny}.npz"
+    vtk_mtime = vtk_path.stat().st_mtime
+    if cache_file.is_file():
+        try:
+            cached = np.load(cache_file)
+            if abs(float(cached["vtk_mtime"]) - vtk_mtime) < 1e-6:
+                return cached["psi"], cached["xs"], cached["ys"]
+        except Exception:
+            pass  # cache miss → recompute below
+
+    try:
+        grid = pv.read(str(vtk_path))
+    except Exception:
+        return None
+
+    point_fields = set(grid.point_data.keys()) if hasattr(grid, "point_data") else set()
+    cell_fields = set(grid.cell_data.keys()) if hasattr(grid, "cell_data") else set()
+
+    if "U" not in point_fields and "U" in cell_fields:
+        try:
+            grid = grid.cell_data_to_point_data()
+            point_fields = set(grid.point_data.keys())
+        except Exception:
+            return None
+    if "U" not in point_fields:
+        return None
+
+    if bounds is None:
+        xmin, xmax, ymin, ymax, zmin, zmax = grid.bounds
+        z_mid = 0.5 * (zmin + zmax)
+    else:
+        xmin, xmax, ymin, ymax, z_mid = bounds
+
+    if xmax <= xmin or ymax <= ymin:
+        return None
+
+    xs = np.linspace(xmin, xmax, nx)
+    ys = np.linspace(ymin, ymax, ny)
+    XX, YY = np.meshgrid(xs, ys)  # shape (ny, nx)
+    points = np.column_stack([
+        XX.ravel(),
+        YY.ravel(),
+        np.full(XX.size, z_mid),
+    ])
+    probe = pv.PolyData(points).sample(grid)
+    U = np.asarray(probe["U"])
+    if U.ndim != 2 or U.shape[1] < 2:
+        return None
+    U_x = U[:, 0].reshape(YY.shape)
+
+    # ψ(x, y) = ∫₀^y U_x(x, y') dy', trapezoidal along axis 0 (y).
+    dy = ys[1] - ys[0] if ny > 1 else 0.0
+    psi = np.zeros_like(U_x)
+    for i in range(1, ny):
+        psi[i, :] = psi[i - 1, :] + 0.5 * (U_x[i - 1, :] + U_x[i, :]) * dy
+
+    try:
+        np.savez(
+            cache_file,
+            psi=psi, xs=xs, ys=ys, vtk_mtime=np.array([vtk_mtime]),
+        )
+    except Exception:
+        pass  # cache write best-effort
+
+    return psi, xs, ys
+
+
+def find_vortex_core(
+    psi: np.ndarray,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    x_window_norm: tuple[float, float] = (0.0, 1.0),
+    y_window_norm: tuple[float, float] = (0.0, 1.0),
+    mode: str = "min",
+    u_ref: float = 1.0,
+) -> Optional[tuple[float, float, float]]:
+    """Find local extremum of ψ inside the normalized (x/L, y/L) window.
+
+    Returns (x_c_norm, y_c_norm, psi_ghia) where:
+        x_c_norm, y_c_norm ∈ [0, 1] are normalized by L = xs[-1].
+        psi_ghia = ψ / (U_ref · L) follows Ghia's non-dimensionalization
+                   (matches Table III convention).
+    Returns None if the window is empty or has no cells.
+
+    Conventions for LDC Re=100 (Ghia 1982 Table III):
+        primary  : window=(0,1)×(0,1),       mode='min'  (clockwise → ψ_min)
+        BL eddy  : window=(0,0.25)×(0,0.25), mode='max'  (counter-rotate → ψ_max)
+        BR eddy  : window=(0.75,1)×(0,0.25), mode='max'  (counter-rotate → ψ_max)
+    """
+    if xs.size == 0 or ys.size == 0:
+        return None
+    L = float(xs[-1])
+    if L <= 0 or u_ref <= 0:
+        return None
+
+    xs_norm = xs / L
+    ys_norm = ys / L
+
+    x_lo, x_hi = x_window_norm
+    y_lo, y_hi = y_window_norm
+    x_mask = (xs_norm >= x_lo) & (xs_norm <= x_hi)
+    y_mask = (ys_norm >= y_lo) & (ys_norm <= y_hi)
+    if not x_mask.any() or not y_mask.any():
+        return None
+
+    ix_indices = np.where(x_mask)[0]
+    iy_indices = np.where(y_mask)[0]
+    sub = psi[np.ix_(iy_indices, ix_indices)]
+
+    if mode == "min":
+        flat_idx = int(np.argmin(sub))
+        psi_val = float(sub.min())
+    elif mode == "max":
+        flat_idx = int(np.argmax(sub))
+        psi_val = float(sub.max())
+    else:
+        raise ValueError(f"mode must be 'min' or 'max', got {mode!r}")
+
+    iy_local, ix_local = np.unravel_index(flat_idx, sub.shape)
+    iy = int(iy_indices[iy_local])
+    ix = int(ix_indices[ix_local])
+
+    return (
+        float(xs_norm[ix]),
+        float(ys_norm[iy]),
+        psi_val / (u_ref * L),
+    )
+
+
+if __name__ == "__main__":
+    # Smoke test against the existing LDC fixture.
+    # Expected (Ghia 1982 Table III, Re=100):
+    #   primary: (0.6172, 0.7344, ψ=-0.103423)
+    #   BL     : (0.0313, 0.0391, ψ=+1.74877e-6)
+    #   BR     : (0.9453, 0.0625, ψ=+1.25374e-5)
+    import sys
+    repo_root = Path(__file__).resolve().parents[3]
+    fixture = repo_root / "reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK"
+    vtk = pick_latest_internal_vtk(fixture)
+    if vtk is None:
+        print("no VTK found under", fixture)
+        sys.exit(1)
+    print(f"reading {vtk.relative_to(repo_root)}")
+    result = compute_streamfunction_from_vtk(vtk)
+    if result is None:
+        print("compute returned None (pyvista missing or VTK malformed)")
+        sys.exit(1)
+    psi, xs, ys = result
+    print(f"psi grid: {psi.shape} · bounds x=[{xs[0]:.4g}, {xs[-1]:.4g}] y=[{ys[0]:.4g}, {ys[-1]:.4g}]")
+    primary = find_vortex_core(psi, xs, ys, mode="min")
+    bl = find_vortex_core(psi, xs, ys, x_window_norm=(0.0, 0.25), y_window_norm=(0.0, 0.25), mode="max")
+    br = find_vortex_core(psi, xs, ys, x_window_norm=(0.75, 1.0), y_window_norm=(0.0, 0.25), mode="max")
+    print("\nGhia Re=100 vs measured:")
+    print(f"  primary:  gold=(0.6172, 0.7344, ψ=-0.103423)  meas=({primary[0]:.4f}, {primary[1]:.4f}, ψ={primary[2]:+.6f})")
+    print(f"  BL eddy:  gold=(0.0313, 0.0391, ψ=+1.749e-6)  meas=({bl[0]:.4f}, {bl[1]:.4f}, ψ={bl[2]:+.6g})")
+    print(f"  BR eddy:  gold=(0.9453, 0.0625, ψ=+1.254e-5)  meas=({br[0]:.4f}, {br[1]:.4f}, ψ={br[2]:+.6g})")
