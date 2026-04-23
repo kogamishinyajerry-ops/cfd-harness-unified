@@ -106,7 +106,7 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
       caption_zh:
         "|U|(x,y) 与流线 · simpleFoam kOmegaSST Re=7600 真实解 · 再附着点 Xr/H=5.65 标注（Driver 1985 参考 6.26，偏差 -9.8%，在 ±10% 容差带内）· 阶梯下方回流区清晰可辨",
       provenance:
-        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 122 downstream-floor face centres, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 119 downstream-floor face centres after x&lt;29.5 outlet exclusion, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
       kind: "solver_output",
     },
     {
