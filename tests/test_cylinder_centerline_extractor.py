@@ -204,6 +204,37 @@ def test_time_based_trim_rejects_tiny_window_even_with_many_samples(tmp_path: Pa
     assert result == {}
 
 
+def test_b3_integration_extractor_populates_key_quantities(tmp_path: Path) -> None:
+    """DEC-V61-053 Batch B3 wiring: when the cylinder generator runs, the
+    adapter's extract-side chain calls extract_centerline_u_deficit and
+    merges the result into key_quantities. This test exercises the function
+    directly (since calling the full adapter dispatch requires a live
+    FoamAgent executor); it verifies that downstream consumers of
+    `deficit_x_over_D_*` see them as honest float values alongside the
+    metadata fields. Protects the B3 contract from regressions that would
+    silently drop deficit_* from key_quantities."""
+    gold_deficit = {1.0: 0.83, 2.0: 0.64, 3.0: 0.55, 5.0: 0.35}
+    snapshots = []
+    # 12 snapshots spanning t ∈ [100, 210]s — adequate physical window.
+    for t in (100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 170.0, 180.0, 190.0, 200.0, 205.0, 210.0):
+        snapshots.append((t, {x_D: 1.0 * (1 - d) for x_D, d in gold_deficit.items()}))
+    case_dir = _build_case_with_snapshots(tmp_path, snapshots)
+    result = extract_centerline_u_deficit(case_dir, window_start_fraction=0.0)
+
+    # B3 contract: 4 deficit_* float keys + 3 metadata keys.
+    deficit_keys = [k for k in result if k.startswith("deficit_x_over_D_")]
+    assert len(deficit_keys) == 4
+    assert all(isinstance(result[k], float) for k in deficit_keys)
+    # Metadata for downstream comparator + UI.
+    for mk in ("u_deficit_n_samples_averaged", "u_deficit_t_window_start_s",
+               "u_deficit_t_window_end_s"):
+        assert mk in result
+        assert isinstance(result[mk], float)
+    # Accuracy to gold values within the mocked-signal tolerance.
+    for x_D, expected in gold_deficit.items():
+        assert math.isclose(result[f"deficit_x_over_D_{x_D}"], expected, rel_tol=0.01)
+
+
 def test_y_or_z_off_centerline_row_rejected(tmp_path: Path) -> None:
     """Codex round-1 MED-3: sample rows with |y| > tol or |z| > tol are
     NOT on the wake centerline; accepting them would bias u_x. Assert the

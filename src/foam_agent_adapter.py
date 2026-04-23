@@ -7992,6 +7992,30 @@ mergePatchPairs
                 cxs, cys, p_vals, task_spec, key_quantities,
                 case_dir=case_dir,
             )
+            # DEC-V61-053 Batch B3: u_mean_centerline deficit extractor.
+            # Reads postProcessing/cylinderCenterline/<t>/wakeCenterline_U.xy
+            # (emitted by the controlDict `cylinderCenterline` FO added in
+            # Batch B1b). Emits deficit_x_over_D_{1.0,2.0,3.0,5.0} into
+            # key_quantities alongside Strouhal/Cd/Cl. Fails closed (returns
+            # empty dict) if sampling FO missing or solver diverged; the
+            # audit fixture then simply won't surface the u_centerline gate.
+            try:
+                from src.cylinder_centerline_extractor import (  # noqa: PLC0415
+                    extract_centerline_u_deficit,
+                )
+                bc = task_spec.boundary_conditions or {}
+                D_val = float(bc.get("cylinder_D", 0.1))
+                U_val = float(bc.get("U_ref", 1.0))
+                centerline = extract_centerline_u_deficit(
+                    case_dir, U_inf=U_val, D=D_val,
+                )
+                for k, v in centerline.items():
+                    key_quantities[k] = v
+            except Exception as e:  # noqa: BLE001
+                # Fail-soft alongside DEC-V61-041 pattern — diagnostic flag
+                # only, do not raise. Absence of deficit_* keys is how
+                # downstream code (comparator / audit YAML) detects failure.
+                key_quantities["u_deficit_extractor_error"] = f"{type(e).__name__}: {e}"
 
         # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
         # P6-TD-002 guard: exclude duct_flow (also SIMPLE_GRID + Re>=2300).
