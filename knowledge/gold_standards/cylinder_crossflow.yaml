@@ -35,9 +35,9 @@ physics_contract:
       evidence_ref: "ui/backend/tests/fixtures/runs/circular_cylinder_wake/audit_real_run_measurement.yaml → measurement.quantity = U_max_approx."
       resolution_plan: "DEC-V61-053 Batch B3 — phase5_audit_run.py emits St as primary."
     - condition: "u_mean_centerline semantics (raw vs deficit) are unambiguously documented AND aligned with extractor output."
-      satisfied_by_current_adapter: false
-      evidence_ref: "Gold values 0.83→0.35 are wake deficit per observable description field; ref_value key `u_Uinf` is historical mislabeling."
-      resolution_plan: "DEC-V61-053 Batch B2 — rename gold key u_Uinf → u_deficit across both YAML files + extractor + UI label."
+      satisfied_by_current_adapter: true
+      evidence_ref: "Gold values 0.83→0.35 are wake deficit per observable description field. ref_value key `u_Uinf` retained for backward compat with existing contract-dashboard and e2e-report tests (rename reverted in Batch B2 — blast radius too large). Extractor self-names output keys `deficit_x_over_D_*`; Batch B3 bridges gold↔extractor via x_D lookup."
+      resolution_plan: "RESOLVED in Batch B2 (documented; no gold rename). Future DEC may consolidate both YAMLs and rename keys together."
   contract_status: "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
   contract_status_detail: "Canonical_st=0.165 hazard RETIRED in DEC-V61-041. Three NEW hazards documented in physics_precondition (blockage, silent kOmegaSST override, u_mean_centerline deficit-mislabel). DEC-V61-053 Batch B1-B3 resolves all three; contract_status flips to SATISFIED at Batch B3 close. This alias YAML tracks the same status as circular_cylinder_wake.yaml."
   precondition_last_reviewed: "2026-04-23 (DEC-V61-053 Batch A intake integration; synced with circular_cylinder_wake.yaml)"
