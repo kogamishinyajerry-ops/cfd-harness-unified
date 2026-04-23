@@ -1,4 +1,0 @@
-{
-  "provenance": "Real |U|+streamlines from backward_facing_step audit VTK (20260421T125637Z, 800-cell ATTEST_HAZARD fixture, k-ε RANS). Reattachment extracted via U_x zero-crossing on y=0.02 wall probe line: Xr/H = 3.770 (gold 6.26, deviation -39.8%). This fixture is below the 36000-cell authoritative mesh; the deviation is a mesh-resolution artifact, not a solver bug.",
-  "generator": "scripts/flow-field-gen/generate_contours.py"
-}

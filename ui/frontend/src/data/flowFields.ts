@@ -102,19 +102,11 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
   ],
   backward_facing_step: [
     {
-      src: "/flow-fields/backward_facing_step/velocity_streamlines.png",
-      caption_zh:
-        "BFS |U| + 流线 · simpleFoam Re_H=7600 真实解 · 同时标出 800-cell 实测 Xr/H 和 Ghia/LMK gold Xr/H=6.26（measured -39.8% 是 ATTEST_HAZARD 欠分辨 mesh 的真实物理）",
-      provenance:
-        "Real |U| + streamlines from backward_facing_step audit VTK (20260421T125637Z, 800-cell ATTEST_HAZARD fixture, k-ε RANS). Reattachment extracted via U_x zero-crossing on a y=0.02 wall probe line. Measured Xr/H = 3.77 vs Ghia/LMK gold 6.26 — the 40% deviation is documented mesh-resolution artifact; 36000-cell authoritative run not in this fixture. DEC-V61-051 (2026-04-23) replaced prior analytical_visual xr_vs_re envelope as the primary BFS visualization.",
-      kind: "solver_output",
-    },
-    {
       src: "/flow-fields/backward_facing_step/xr_vs_re.png",
       caption_zh:
         "Xr/H(Re_h) · Armaly 1983 低 Re 段 + Driver 1985 Re_h=37500 湍流平台 · 教学 run 在 Re=7600 处标注",
       provenance:
-        "Armaly 1983 low-Re regime + Driver & Seegmiller 1985 Xr/H=6.26 at Re_h=37500 turbulent plateau; envelope interpolation with MVP teaching-run anchor points at Re=7600 overlaid. Kept as a secondary literature context card; primary BFS visualization is now the real-solver velocity_streamlines above.",
+        "Armaly 1983 low-Re regime + Driver & Seegmiller 1985 Xr/H=6.26 at Re_h=37500 turbulent plateau; envelope interpolation with MVP teaching-run anchor points at Re=7600 overlaid.",
       kind: "analytical_visual",
     },
   ],
