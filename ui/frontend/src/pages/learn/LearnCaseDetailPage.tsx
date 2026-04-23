@@ -1190,7 +1190,65 @@ function MultiDimensionComparePanel({
     if (status === 404 || status === 400) return null;
     return null; // Non-critical failure; scalar part above still renders.
   }
-  if (!data || data.visual_only) return null;
+  if (!data) return null;
+  // DEC-V61-052 Batch D: visual-only cases can still render a scalar-
+  // anchor card (currently only BFS Xr/H). Full LDC-style multi-dim
+  // panel requires data.metrics + data.paper, but a single-observable
+  // visual-only card renders independently below.
+  if (data.visual_only) {
+    if (!data.metrics_reattachment || !data.paper_reattachment) return null;
+    const mr = data.metrics_reattachment;
+    const pr = data.paper_reattachment;
+    const passing = mr.within_tolerance;
+    return (
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+          <p className="text-[11px] text-surface-500">{pr.short} · 1 个独立标量维度</p>
+        </div>
+        <div className={`rounded-md border p-4 ${
+          passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-rose-800/60 bg-rose-900/15"
+        }`}>
+          <div className="mb-2 flex items-baseline gap-2">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+              D1 · Scalar anchor
+            </span>
+            <span className={`mono text-[10.5px] font-semibold ${
+              passing ? "text-emerald-300" : "text-rose-300"
+            }`}>
+              {passing ? "PASS" : "FAIL"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <div className="text-[10.5px] text-surface-500">{mr.symbol} 测量</div>
+              <div className="mono text-surface-100">{mr.actual.toFixed(3)}</div>
+            </div>
+            <div>
+              <div className="text-[10.5px] text-surface-500">{mr.symbol} 金标准</div>
+              <div className="mono text-surface-100">{mr.expected.toFixed(3)}</div>
+            </div>
+            <div>
+              <div className="text-[10.5px] text-surface-500">偏差</div>
+              <div className={`mono ${passing ? "text-emerald-300" : "text-rose-300"}`}>
+                {mr.deviation_pct.toFixed(1)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-[10.5px] text-surface-500">容差带</div>
+              <div className="mono text-surface-100">±{mr.tolerance_pct.toFixed(0)}%</div>
+            </div>
+          </div>
+          <div className="mt-3 text-[11px] text-surface-400">
+            来源：{pr.source}
+            {mr.method ? <> · 测量方法：<span className="mono">{mr.method}</span></> : null}
+          </div>
+        </div>
+      </section>
+    );
+  }
   if (!data.metrics || !data.paper) return null;
 
   const m = data.metrics;
@@ -2616,6 +2674,26 @@ type ComparisonReportContext = {
   // Visual-only top-level fields:
   solver?: string;
   commit_sha?: string;
+  // DEC-V61-052 Batch D: BFS scalar-anchor (Xr/H) Compare-tab card.
+  // Populated only when case_id == "backward_facing_step" and both the
+  // audit measurement YAML and the gold anchor are present. Other
+  // visual-only cases see null here until their own anchors are wired.
+  metrics_reattachment?: {
+    quantity: string;
+    symbol: string;
+    actual: number;
+    expected: number;
+    deviation_pct: number;
+    tolerance_pct: number;
+    within_tolerance: boolean;
+    method?: string | null;
+  } | null;
+  paper_reattachment?: {
+    source: string;
+    doi?: string;
+    short: string;
+    tolerance_pct: number;
+  } | null;
 };
 
 function ScientificComparisonReportSection({ caseId }: { caseId: string }) {

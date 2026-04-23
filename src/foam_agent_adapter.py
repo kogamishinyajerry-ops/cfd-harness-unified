@@ -7763,25 +7763,98 @@ mergePatchPairs
 
         # BFS: reattachment length via wallShearStress tau_x sign change
         # on the lower_wall patch (authoritative) or near-wall Ux proxy
-        # as fallback. DEC-V61-052 Batch C round 2 (Codex finding #1/#3).
+        # as fallback. DEC-V61-052 Batch C round 2 (Codex finding #1/#3)
+        # + round 3 (Codex r2 finding #1: parse allPatches VTK correctly
+        # and use the right sign convention for OpenFOAM wallShearStress).
         elif geom == GeometryType.BACKWARD_FACING_STEP:
             tau_x_list: Optional[List[float]] = None
             tau_pts_list: Optional[List[Tuple[float, float, float]]] = None
+
+            # Round 3 · Path-1a: read lower_wall wallShearStress from the
+            # allPatches VTK (staged by foamToVTK during execution). Much
+            # more reliable than parsing the raw OpenFOAM boundary-field
+            # file format with face→cell mapping. The allPatches VTK is
+            # face-centred data, so patch-face centres are directly usable
+            # as probe coordinates — no mapping needed.
+            allpatches_vtk = None
+            try:
+                vtk_root = case_dir / "VTK"
+                if vtk_root.is_dir():
+                    cand = list((vtk_root / "allPatches").glob("allPatches_*.vtk"))
+                    if cand:
+                        allpatches_vtk = sorted(cand)[-1]
+            except Exception:
+                allpatches_vtk = None
+
+            if allpatches_vtk is not None:
+                try:
+                    import pyvista as _pv  # noqa: WPS433
+                    import numpy as _np  # noqa: WPS433
+                    ap = _pv.read(str(allpatches_vtk))
+                    if "wallShearStress" in ap.array_names:
+                        wss_ap = _np.asarray(ap["wallShearStress"])
+                        centres_ap = _np.asarray(ap.cell_centers().points)
+                        # lower_wall identification: y ≈ 0 floor downstream
+                        # of the step. Strict filter y<0.05, x>0.05 excludes
+                        # the step face (x=0, y∈[0,1]) and the inlet floor
+                        # (y=1, x<0). Works independently of patchID
+                        # ordering (which can vary across OpenFOAM builds).
+                        floor_mask = (centres_ap[:, 1] < 0.05) & (centres_ap[:, 0] > 0.05)
+                        if floor_mask.sum() >= 5:
+                            xs_floor = centres_ap[floor_mask, 0]
+                            tx_floor = wss_ap[floor_mask, 0]
+                            order = _np.argsort(xs_floor)
+                            xs_sorted = xs_floor[order]
+                            tx_sorted = tx_floor[order]
+                            # OpenFOAM wallShearStress sign convention on
+                            # a fluid floor moving in +x: the field reports
+                            # -tau_xy = -μ·∂u_x/∂y|_wall which is NEGATIVE
+                            # where the fluid flows forward (+x, attached)
+                            # and POSITIVE where it reverses (recirculation).
+                            # Reattachment is therefore the first POSITIVE-
+                            # to-NEGATIVE crossing (NOT the neg→pos crossing
+                            # that a naive reader would pick — that gives
+                            # a spurious x≈1.15 corner artefact).
+                            xr_ws = None
+                            for j in range(1, len(xs_sorted)):
+                                t1 = tx_sorted[j - 1]
+                                t2 = tx_sorted[j]
+                                if t1 > 0 and t2 <= 0:
+                                    denom = t2 - t1
+                                    xr_ws = (xs_sorted[j - 1]
+                                             - t1 * (xs_sorted[j] - xs_sorted[j - 1]) / denom
+                                             if abs(denom) > 1e-30 else xs_sorted[j - 1])
+                                    break
+                            if xr_ws is not None and xr_ws > 0:
+                                H_bfs = 1.0
+                                key_quantities["reattachment_length"] = xr_ws / H_bfs
+                                key_quantities["reattachment_method"] = "wall_shear_tau_x_zero_crossing"
+                                key_quantities["reattachment_probe_height"] = 0.0
+                                key_quantities["reattachment_n_floor_pts"] = int(floor_mask.sum())
+                                key_quantities["reattachment_wall_shear_source"] = "allPatches_vtk"
+                                return key_quantities
+                            else:
+                                key_quantities["reattachment_wall_shear_no_sign_change"] = True
+                        else:
+                            key_quantities["reattachment_wall_shear_filter_empty"] = True
+                    else:
+                        key_quantities["reattachment_wall_shear_layout_unparsed"] = "no_wallShearStress_in_allPatches"
+                except ImportError:
+                    key_quantities["reattachment_wall_shear_layout_unparsed"] = "pyvista_missing"
+                except Exception as _wss_exc:
+                    key_quantities["reattachment_wall_shear_layout_unparsed"] = f"{type(_wss_exc).__name__}:{str(_wss_exc)[:80]}"
+            else:
+                key_quantities["reattachment_wall_shear_layout_unparsed"] = "allPatches_vtk_missing"
+
+            # Path-1b (legacy): raw wallShearStress in latestTime. Retained
+            # as a diagnostic probe — if present we try to read it, but on
+            # the current OpenFOAM layout it returns the lower_wall face
+            # count (not cell count) and falls through to Path-2. Kept so
+            # future polyMesh-mapped parsing can slot in without churn.
             wss_path = latest_dir / "wallShearStress"
-            if wss_path.exists():
+            if wss_path.exists() and "reattachment_length" not in key_quantities:
                 try:
                     wss_vecs = self._read_openfoam_vector_field(wss_path, len(cxs))
-                    # OpenFOAM writes wallShearStress as a volVectorField with
-                    # `internalField uniform (0 0 0)` + boundaryField patch
-                    # values. Our generic reader lands in the first
-                    # boundaryField patch, yielding len(wss_vecs) ≈ wall-face
-                    # count (lower_wall ≈ 200 faces for this geometry) rather
-                    # than cell count (7360). Detect the mismatch and fall
-                    # back to the near-wall Ux proxy rather than silently
-                    # treating the 200 patch values as cell-indexed.
-                    # (Future round: proper face→adjacent-cell mapping via
-                    # polyMesh, or read the VTK staged by _capture_field
-                    # _artifacts which already deserializes the field.)
                     if len(wss_vecs) == len(cxs) == len(cys):
                         # wallShearStress is a volVectorField — it's zero
                         # on internal cells and carries tau on wall-adjacent
@@ -8438,6 +8511,12 @@ mergePatchPairs
         elif reattachment_x is not None:
             key_quantities["reattachment_detection_upstream_artifact"] = True
             key_quantities["reattachment_detection_rejected_x"] = reattachment_x
+        else:
+            # Path-2 ran with populated x_ux_pairs but saw no neg→pos
+            # sign change → recirculation bubble either didn't form or
+            # extends past the probe range. Explicit flag so the audit
+            # can distinguish this from missing input data (Codex r2 #3).
+            key_quantities["reattachment_proxy_no_sign_change"] = True
 
         return key_quantities
 

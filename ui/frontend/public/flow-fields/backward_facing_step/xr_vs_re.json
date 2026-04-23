@@ -1,4 +1,4 @@
 {
-  "provenance": "Armaly 1983 (low Re) + Driver & Seegmiller 1985 (Re=37500, Xr/H=6.26) reattachment envelope. Teaching runs at Re=7600 (this commit's whitelist) land on the turbulent plateau — reference_pass on-target, under_resolved ~-18% from coarse recirculation mesh.",
+  "provenance": "Armaly 1983 (low Re) + Driver & Seegmiller 1985 (Re=37500, Xr/H=6.26) reattachment envelope. DEC-V61-052 round 2c fixture at Re=7600 produces Xr/H=5.65 with kOmegaSST + x-graded mesh (-9.8%, inside 10% tolerance); kEpsilon anchor shown as wrong_model diagnostic.",
   "generator": "scripts/flow-field-gen/generate_contours.py"
 }

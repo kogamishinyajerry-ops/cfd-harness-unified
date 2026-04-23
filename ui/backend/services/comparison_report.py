@@ -47,6 +47,13 @@ _FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
 # — real OpenFOAM evidence without the per-case gold-overlay plumbing.
 # _REPORT_SUPPORTED_CASES is the union; gate membership checks use this.
 _GOLD_OVERLAY_CASES = frozenset({"lid_driven_cavity"})
+# DEC-V61-052 Batch D: BFS stays in the visual-only tier but
+# _build_visual_only_context now emits `metrics_reattachment` +
+# `paper_reattachment` when the case is backward_facing_step. This
+# surfaces the measured Xr/H vs the gold anchor as a scalar card in
+# the Compare tab (mirroring the LDC D7/D8 pattern) without having
+# to fork the full LDC gold-overlay pipeline (which expects uCenterline
+# .xy + psi_extraction — neither applicable to BFS).
 _VISUAL_ONLY_CASES = frozenset({
     "backward_facing_step",
     "plane_channel_flow",
@@ -275,6 +282,37 @@ def _load_ldc_secondary_vortices_gold() -> dict | None:
         "psi_tolerance": float(sv_doc.get("psi_tolerance", 0.10)),
         "source": sv_doc.get("source", "Ghia 1982 Table III secondary vortex rows"),
         "literature_doi": sv_doc.get("literature_doi", "10.1016/0021-9991(82)90058-4"),
+    }
+
+
+def _load_bfs_reattachment_gold() -> dict | None:
+    """Load the reattachment_length gold block from backward_facing_step.yaml.
+
+    DEC-V61-052 Batch D: mirrors _load_ldc_vortex_gold's shape.
+    Returns {value, tolerance, source, literature_doi} or None.
+    """
+    gold_path = _GOLD_ROOT / "backward_facing_step.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    except yaml.YAMLError:
+        return None
+    doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == "reattachment_length"),
+        None,
+    )
+    if doc is None:
+        return None
+    refs = doc.get("reference_values") or []
+    if not refs or "value" not in refs[0]:
+        return None
+    return {
+        "value": float(refs[0]["value"]),
+        "unit": refs[0].get("unit", "Xr/H"),
+        "tolerance": float(doc.get("tolerance", 0.10)),
+        "source": doc.get("source", "Driver & Seegmiller 1985"),
+        "literature_doi": doc.get("literature_doi", ""),
     }
 
 
@@ -522,6 +560,51 @@ def _build_visual_only_context(
             break
     commit_sha = _get_commit_sha()
 
+    # DEC-V61-052 Batch D: BFS scalar-anchor Xr/H comparison. Reads the
+    # audit measurement + gold anchor and emits a compact scalar block
+    # that the frontend Compare tab renders as a card (mirrors LDC D7
+    # primary-vortex shape). Fail-soft: any missing piece → None, card
+    # silently hides. Other visual-only cases (plane_channel_flow,
+    # turbulent_flat_plate, etc.) see None here until their own anchors
+    # are wired — this is intentionally narrow scope.
+    metrics_reattachment: Optional[dict] = None
+    paper_reattachment: Optional[dict] = None
+    if case_id == "backward_facing_step":
+        try:
+            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+                         / case_id / f"{run_label}_measurement.yaml")
+            if meas_path.is_file():
+                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+                m = meas.get("measurement", {}) or {}
+                actual = m.get("value")
+                method = m.get("extraction_source")
+                if actual is not None:
+                    gold = _load_bfs_reattachment_gold()
+                    if gold is not None:
+                        actual_f = float(actual)
+                        expected = gold["value"]
+                        dev_pct = (actual_f - expected) / expected * 100 if expected else 0.0
+                        tol_pct = gold["tolerance"] * 100.0
+                        metrics_reattachment = {
+                            "quantity": "reattachment_length",
+                            "symbol": "Xr/H",
+                            "actual": actual_f,
+                            "expected": expected,
+                            "deviation_pct": dev_pct,
+                            "tolerance_pct": tol_pct,
+                            "within_tolerance": abs(dev_pct) <= tol_pct,
+                            "method": method,
+                        }
+                        paper_reattachment = {
+                            "source": gold["source"],
+                            "doi": gold.get("literature_doi", ""),
+                            "short": "Driver 1985 / LMK 1997",
+                            "tolerance_pct": tol_pct,
+                        }
+        except (OSError, yaml.YAMLError, ValueError, TypeError):
+            metrics_reattachment = None
+            paper_reattachment = None
+
     return {
         "visual_only": True,
         "case_id": case_id,
@@ -544,6 +627,9 @@ def _build_visual_only_context(
         "deviations": None,
         "residual_info": None,
         "tolerance_percent": None,
+        # DEC-V61-052 Batch D: BFS scalar-anchor block.
+        "metrics_reattachment": metrics_reattachment,
+        "paper_reattachment": paper_reattachment,
     }
 
 

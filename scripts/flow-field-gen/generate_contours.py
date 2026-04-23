@@ -40,6 +40,11 @@ for _font in ("PingFang SC", "Heiti SC", "STHeiti", "Arial Unicode MS", "Noto Sa
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_ROOT = REPO_ROOT / "ui" / "frontend" / "public" / "flow-fields"
 
+# Ensure `ui.backend.services.*` is importable (used for LDC stream function).
+import sys as _sys
+if str(REPO_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(REPO_ROOT))
+
 # Consistent dark-mode aesthetic that blends into the /learn surface palette.
 DARK_BG = "#0a0e14"
 PANEL_BG = "#0f1620"
@@ -422,19 +427,142 @@ def gen_backward_facing_step():
     ax.plot(Re, Xr, color=ACCENT, linewidth=1.6, label="Armaly 1983 + Driver 1985 envelope")
     ax.axhspan(5.96, 6.56, color=PASS, alpha=0.15, label="±5% tolerance band (gold 6.26)")
     ax.axhline(6.26, color=PASS, linewidth=1.4, linestyle="--", label="Gold Xr/H = 6.26 (Driver 1985, Re_h=37500)")
-    # Teaching anchors at Re=7600 (the whitelist / fixtures Re). The
-    # under_resolved fixture measures Xr/H = 5.1, which sits clearly
-    # below the tolerance band at any turbulent Re.
-    ax.scatter([7600], [5.1], color=FAIL, s=50, zorder=5, edgecolor="black",
-               label="under_resolved: 5.1 (-18%)")
-    ax.scatter([7600], [6.28], color=PASS, s=50, zorder=5, edgecolor="black",
-               label="reference_pass: 6.28 (+0.3%)")
+    # Teaching anchor: DEC-V61-052 round 2c measured Xr/H = 5.65 on the
+    # 7360-cell kOmegaSST x-graded fixture at Re=7600 (-9.8% vs 6.26,
+    # inside 10% tolerance). kEpsilon on the same mesh gives 3.99 (-36%)
+    # as a wrong-model anchor.
+    ax.scatter([7600], [3.99], color=FAIL, s=50, zorder=5, edgecolor="black",
+               label="kEpsilon (wrong_model): 3.99 (-36.3%)")
+    ax.scatter([7600], [5.65], color=PASS, s=50, zorder=5, edgecolor="black",
+               label="kOmegaSST (this fixture): 5.65 (-9.8%)")
     _setup_axes(ax, "Reattachment length Xr/H · Armaly + Driver 1985",
                 "Re_h", "Xr / H", xmin=30, xmax=1e5, ymin=2, ymax=13)
     ax.set_xscale("log")
     ax.legend(loc="upper right", fontsize=7.5, facecolor=PANEL_BG, edgecolor=GRID, labelcolor=LABEL_TEXT)
     _save(fig, "backward_facing_step", "xr_vs_re",
-          "Armaly 1983 (low Re) + Driver & Seegmiller 1985 (Re=37500, Xr/H=6.26) reattachment envelope. Teaching runs at Re=7600 (this commit's whitelist) land on the turbulent plateau — reference_pass on-target, under_resolved ~-18% from coarse recirculation mesh.")
+          "Armaly 1983 (low Re) + Driver & Seegmiller 1985 (Re=37500, Xr/H=6.26) reattachment envelope. "
+          "DEC-V61-052 round 2c fixture at Re=7600 produces Xr/H=5.65 with kOmegaSST + x-graded mesh (-9.8%, inside 10% tolerance); "
+          "kEpsilon anchor shown as wrong_model diagnostic.")
+
+    # --- Figure 2: Real velocity-field contours from DEC-V61-052 fixture ---
+    # Mirrors the LDC stream_function.png pattern: read the live simpleFoam
+    # VTK, render |U| contours + streamlines + Xr annotation. The fixture
+    # directory is dynamic — pick the latest timestamped dir that has a
+    # non-allPatches internal VTK. If nothing is staged, skip silently so
+    # the generator still runs on fresh clones that haven't run phase5_audit.
+    fixture_root = REPO_ROOT / "reports/phase5_fields/backward_facing_step"
+    candidates = sorted([p for p in fixture_root.iterdir()
+                         if p.is_dir() and p.name[0].isdigit()]) if fixture_root.is_dir() else []
+    vtk_path = None
+    for fx in reversed(candidates):
+        vtks = [v for v in (fx / "VTK").rglob("*.vtk")
+                if fx / "VTK" in v.parents and "allPatches" not in v.parts]
+        if vtks:
+            vtk_path = vtks[0]
+            break
+    if vtk_path is None:
+        print("  [skip] no BFS VTK fixture found — run scripts/phase5_audit_run.py backward_facing_step")
+        return
+
+    try:
+        import pyvista as pv  # noqa: WPS433
+    except ImportError:
+        print("  [skip] pyvista not available in this interpreter")
+        return
+    mesh = pv.read(str(vtk_path))
+    # U is stored as cell-data (len=n_cells). Convert to point-data so the
+    # shape matches `mesh.points` for tricontourf. cell_data_to_point_data
+    # does a volume-weighted average — fine for visualization.
+    mesh_pd = mesh.cell_data_to_point_data()
+    pts = np.asarray(mesh_pd.points)
+    U = np.asarray(mesh_pd["U"])
+    umag = np.sqrt(U[:, 0] ** 2 + U[:, 1] ** 2)
+    finite = (np.isfinite(umag) & np.isfinite(pts[:, 0]) & np.isfinite(pts[:, 1])
+              & (umag < 3.0))  # clip rare boundary-divergence outliers
+    X = pts[finite, 0]
+    Y = pts[finite, 1]
+    Umag = np.clip(umag[finite], 0.0, 1.5)
+
+    # Re-probe Xr using the EXACT same algorithm as the adapter's
+    # authoritative `_extract_bfs_reattachment` Path-2 extractor: group
+    # first-cell-band (y ∈ [0, 0.025]) cell-centre Ux by x-column, then
+    # find the zero-crossing of the per-column mean. This guarantees the
+    # figure's Xr annotation agrees with the scalar-contract preflight
+    # gate — `backward_facing_step.yaml::contract_status` + the audit
+    # fixture's `measurement.value` — so the page can't show a different
+    # Xr than the validation layer reported.
+    from collections import defaultdict
+    centers = np.asarray(mesh.cell_centers().points)
+    Ux_cell = np.asarray(mesh["U"])[:, 0]
+    x_groups: dict = defaultdict(list)
+    for i in range(len(centers)):
+        cx, cy, _cz = centers[i]
+        if 0.0 <= cy < 0.025:
+            x_groups[round(cx, 3)].append(Ux_cell[i])
+    sorted_x = sorted(x_groups.keys())
+    x_ux_pairs = [(xc, sum(x_groups[xc]) / len(x_groups[xc])) for xc in sorted_x]
+    xr_over_h = None
+    for j in range(1, len(x_ux_pairs)):
+        x1, u1 = x_ux_pairs[j - 1]
+        x2, u2 = x_ux_pairs[j]
+        if u1 < 0 <= u2 and x1 > 0:
+            xr_over_h = (x1 - u1 * (x2 - x1) / (u2 - u1)
+                         if abs(u2 - u1) > 1e-10 else x1)
+            break
+
+    fig, ax = plt.subplots(figsize=(8.8, 3.0), facecolor=DARK_BG, dpi=220)
+    # tricontourf across the unstructured points gives a valid shading even
+    # with the block-interface topology (three blocks of different cell counts).
+    levels = np.linspace(0.0, 1.2, 20)
+    cf = ax.tricontourf(X, Y, Umag, levels=levels, cmap="viridis", extend="max", antialiased=True)
+
+    # Draw step outline (the void the mesh excludes).
+    from matplotlib.patches import Rectangle
+    step_void = Rectangle((-10.0, 0.0), 10.0, 1.0,
+                          facecolor="#111", edgecolor="white", linewidth=0.8, hatch="//")
+    ax.add_patch(step_void)
+
+    # Streamlines via pyvista streamlines_from_source at x=-9 (inlet).
+    seed_y = np.linspace(1.1, 8.9, 12)
+    seed_pts = pv.PolyData(np.array([[-9.0, y, 0.05] for y in seed_y]))
+    try:
+        streams = mesh.streamlines_from_source(
+            seed_pts, vectors="U", max_time=80.0, initial_step_length=0.01,
+        )
+        if streams.n_points > 0:
+            spts = np.asarray(streams.points)
+            # Plot as sparse connected polylines — pv's streamlines carry lines.
+            ax.scatter(spts[:, 0], spts[:, 1], s=0.2, c="white", alpha=0.5, zorder=3)
+    except Exception:
+        pass
+
+    # Reattachment annotation.
+    if xr_over_h is not None:
+        ax.axvline(xr_over_h, color="red", linestyle="--", linewidth=0.8, alpha=0.9, zorder=4)
+        ax.annotate(
+            f"Xr/H = {xr_over_h:.2f}\n(-{(6.26 - xr_over_h) / 6.26 * 100:.1f}%)",
+            xy=(xr_over_h, 0.4), xytext=(xr_over_h + 2.5, 1.8),
+            color="red", fontsize=8,
+            arrowprops=dict(arrowstyle="->", color="red", lw=0.8, alpha=0.9),
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=PANEL_BG, edgecolor=GRID),
+        )
+    # Gold-reference line at Xr/H=6.26.
+    ax.axvline(6.26, color=PASS, linestyle=":", linewidth=1.0, alpha=0.8, zorder=4)
+    ax.text(6.26 + 0.15, 7.5, "Driver 1985\nXr/H = 6.26", color=PASS, fontsize=7)
+
+    _setup_axes(ax, "|U| 与流线 · simpleFoam kOmegaSST Re=7600 · 来自真实 OpenFOAM 体数据",
+                "x / H", "y / H", xmin=-10, xmax=30, ymin=0, ymax=9)
+    ax.grid(False)
+    ax.set_aspect("equal")
+    cbar = fig.colorbar(cf, ax=ax, shrink=0.78, pad=0.02, aspect=30)
+    cbar.set_label("|U| / U_bulk", color=AXIS_TEXT, fontsize=8.5)
+    cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
+    cbar.outline.set_edgecolor(GRID)
+    _save(fig, "backward_facing_step", "velocity_streamlines",
+          f"Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK "
+          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H≈{xr_over_h:.2f} "
+          f"via near-wall Ux sign-change at first B1 cell row (y=0.0125). "
+          f"Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.")
 
 
 # ---------------------------------------------------------------------------
