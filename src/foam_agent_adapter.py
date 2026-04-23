@@ -4529,13 +4529,15 @@ vertices
 
 blocks
 (
-    // DEC-V61-053 Batch B1: scaled from (200 100 1)=40k cells to
-    // (400 200 1)=80k cells to preserve near-cylinder resolution after
-    // 3x domain growth. dx = 30D/400 = 0.075D near cylinder; dy = 12D/200
-    // = 0.06D. Adequate for Re=100 laminar Karman shedding (Williamson's
-    // canonical unconfined anchors typically use dx,dy ≈ 0.05-0.10D at
-    // cylinder-wake plane).
-    hex (0 1 2 3 4 5 6 7) (400 200 1) simpleGrading (1 1 1)
+    // DEC-V61-053 Batch B1 + Codex round-1 MED-2 refinement:
+    // original (200 100 1)=40k cells on the pre-B1 small domain gave
+    // dx=dy=0.05D. Naive scale to (400 200 1) for the grown domain gave
+    // dx=0.075D / dy=0.06D — a 50% coarsening vs. the original. Bumped
+    // to (600 240 1)=144k cells to match original resolution:
+    //   dx = L_total/600 = 30D/600 = 0.050D
+    //   dy = H_total/240 = 12D/240 = 0.050D
+    // Matches Williamson-quality resolution (~0.05D at cylinder/wake).
+    hex (0 1 2 3 4 5 6 7) (600 240 1) simpleGrading (1 1 1)
 );
 
 edges

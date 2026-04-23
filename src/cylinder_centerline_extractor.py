@@ -11,9 +11,11 @@ The runtime FO writes one file per sample-write step:
 Each file has one row per sample point (axis xyz, ordered on):
     x y z  u_x u_y u_z
 
-Per DEC-V61-053 intake and gold YAML rename (Batch B2):
-  - u_Uinf key was historical mislabeling; description has always said
-    "velocity deficit". This module emits u_deficit directly.
+Per DEC-V61-053 intake + Batch B2 semantics resolution (no rename):
+  - Gold YAML keeps `u_Uinf:` for backward compatibility, but the per-point
+    description field ("centerline velocity deficit") has been authoritative
+    all along. This module self-names output keys `deficit_x_over_D_*` so
+    the API is unambiguous; Batch B3 bridges gold↔extractor by x_D lookup.
   - Williamson 1996 gold at Re=100: {0.83, 0.64, 0.55, 0.35} for x/D ∈
     {1, 2, 3, 5}. These are deficit = 1 - u_mean/U_inf.
 
@@ -40,9 +42,25 @@ GOLD_STATIONS_X_OVER_D: Tuple[float, ...] = (1.0, 2.0, 3.0, 5.0)
 
 # Tolerance for matching sampled x-coord to expected x = x_D * D.
 # sampleDict with `cellPoint` interpolation snaps to the nearest cell center,
-# so the returned x can be off by ~0.5*cell_dx. At the new 400x200 domain
-# grown per B1a, dx ≈ 0.075D = 0.0075 m. Use 2x that as the match tolerance.
+# so the returned x can be off by ~0.5*cell_dx. At the B1a mesh (now 600x240
+# per Codex round-1 MED-2), dx ≈ 0.05D = 0.005 m. 0.02 m tolerance covers
+# ~4x dx — safe for refined mesh and forward-compatible with coarser meshes.
 XY_MATCH_TOLERANCE_M: float = 0.02
+
+# Y/Z centerline tolerance per Codex round-1 MED-3: `type points` with
+# cellPoint interpolation snaps to nearest cell center, which for a 2D
+# planar cylinder mesh means y ≈ 0 (and z snaps to the thin-span plane).
+# An off-axis sample row (|y| > this) would bias u_x for a centerline
+# observable — reject those rows.
+CENTERLINE_YZ_TOLERANCE_M: float = 0.02
+
+# Minimum physical duration of the averaging window (seconds). Codex
+# round-1 HIGH-1: count-based trim with adjustable deltaT + writeControl
+# timeStep can produce a physically tiny post-trim window even when the
+# sample count looks healthy. Assert at least this many seconds of
+# averaging regardless of sample count. At endTime=200s + window_start
+# fraction=0.5, the post-trim window is ~100s — plenty.
+MIN_AVERAGING_WINDOW_SECONDS: float = 10.0
 
 
 def _parse_sample_file(path: Path) -> List[Tuple[float, float, float, float, float, float]]:
@@ -137,11 +155,22 @@ def extract_centerline_u_deficit(
     if not time_dirs:
         return {}
 
-    # Trim leading transient.
-    n_total = len(time_dirs)
-    trim_idx = int(n_total * window_start_fraction)
-    windowed = time_dirs[trim_idx:]
+    # Codex round-1 HIGH-1 fix: trim by physical time, not sample count.
+    # With writeControl=timeStep + adjustable deltaT, startup samples can
+    # cluster at small dt (e.g. dt=0.001s → 1000 samples/s before relaxing
+    # to maxDeltaT=0.01s). A 0.5 count-fraction trim could leave most of
+    # the startup transient in the averaging window. Use
+    #     t_trim = t_min + window_start_fraction * (t_max - t_min)
+    # so "0.5" means "skip the first half of the PHYSICAL time range".
+    t_min = time_dirs[0][0]
+    t_max = time_dirs[-1][0]
+    t_trim = t_min + window_start_fraction * (t_max - t_min)
+    windowed = [(t, p) for t, p in time_dirs if t >= t_trim]
     if len(windowed) < min_samples:
+        return {}
+    # Assert a minimum physical averaging duration regardless of count.
+    window_duration = windowed[-1][0] - windowed[0][0]
+    if window_duration < MIN_AVERAGING_WINDOW_SECONDS:
         return {}
 
     file_suffix = f"{set_name}_{field}.xy"
@@ -156,8 +185,15 @@ def extract_centerline_u_deficit(
         if not rows:
             continue
         for row in rows:
-            x, _y, _z, ux, _uy, _uz = row
+            x, y, z, ux, _uy, _uz = row
             if not np.isfinite(ux):
+                continue
+            # Codex round-1 MED-3 fix: enforce centerline (y≈0 AND z≈0)
+            # before accepting the row. An off-axis snap point would bias
+            # u_x for a centerline observable.
+            if abs(y) > CENTERLINE_YZ_TOLERANCE_M:
+                continue
+            if abs(z) > CENTERLINE_YZ_TOLERANCE_M:
                 continue
             for x_D in GOLD_STATIONS_X_OVER_D:
                 expected_x = x_D * D
@@ -210,5 +246,7 @@ def extract_centerline_u_deficit(
 __all__ = [
     "GOLD_STATIONS_X_OVER_D",
     "XY_MATCH_TOLERANCE_M",
+    "CENTERLINE_YZ_TOLERANCE_M",
+    "MIN_AVERAGING_WINDOW_SECONDS",
     "extract_centerline_u_deficit",
 ]

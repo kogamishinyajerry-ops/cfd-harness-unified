@@ -6,7 +6,7 @@
 #
 physics_contract:
   geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. Current domain L_up=2D, L_down=8D, H=2.5D per side → 20% blockage (see physics_precondition). DEC-V61-053 Batch B1 will grow to L_up=10D, L_down=20D, H=6D per side → ~8% blockage, matching Williamson context."
-  reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. u_mean_centerline gold values 0.83→0.35 at x/D ∈ {1,2,3,5} are WAKE DEFICIT = (U_inf - u_mean)/U_inf (per the per-point `description: centerline velocity deficit`), NOT raw u_mean/U_inf. The gold key `u_Uinf` is mislabeled for historical reasons; DEC-V61-053 Batch B2 will rename to `u_deficit` and align extractor."
+  reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. u_mean_centerline gold values 0.83→0.35 at x/D ∈ {1,2,3,5} are WAKE DEFICIT = (U_inf - u_mean)/U_inf (per the per-point `description: centerline velocity deficit`), NOT raw u_mean/U_inf. The gold ref_value key `u_Uinf` is historical mislabeling; Batch B2 resolved this via documentation + extractor-self-naming (no rename; retained for back-compat with contract_dashboard + e2e tests)."
   physics_precondition:
     - condition: "Flow is 2D laminar at Re=100 (unambiguously in laminar shedding regime 40 < Re < ~180)"
       satisfied_by_current_adapter: false
@@ -14,10 +14,10 @@ physics_contract:
       consequence_if_unsatisfied: "kOmegaSST over-dissipates the laminar wake at Re=100 → underpredicts St by 10-20%, Cl_rms by 30-50%. Likely contributor to the current audit fixture's `measurement.value = 4.93502e-06 U_max_approx` fallback."
       resolution_plan: "DEC-V61-053 Batch B1 decision (a): thread task_spec.turbulence_model through _turbulence_model_for_solver so whitelist override wins; generate cylinder with laminar solver; fvSchemes adjusted for no k/omega fields."
     - condition: "Domain is large enough that blockage does not bias Cd/St/u_centerline vs Williamson's unconfined anchors."
-      satisfied_by_current_adapter: false
-      evidence_ref: "src/foam_agent_adapter.py:4462-4467 — L_inlet=2D, L_outlet=8D, H=2.5D per side. Blockage = D / (2 · 2.5D) = 20%. Williamson 1996 assumes unconfined; Zdravkovich 1997 Ch.6 documents 20% blockage biases Cd HIGH (+8-12%) and shifts St +2-5%."
-      consequence_if_unsatisfied: "Cd round-1 tolerance breach almost certain (1.33 · 1.10 = 1.46 vs gold 1.33 ±5%)."
-      resolution_plan: "DEC-V61-053 Batch B1 decision (b): grow domain to L_inlet=10D, L_outlet=20D, H=6D per side → blockage = D / (12D) ≈ 8%; mesh cells ~100k (was 40k); runtime estimate +3-4× (15min → 45-60min)."
+      satisfied_by_current_adapter: partially
+      evidence_ref: "Batch B1a grew L_inlet 2D→10D, L_outlet 8D→20D, H 2.5D→6D (commit 63c11cb). Blockage reduced from 20% (Cd bias +8-12% per Zdravkovich Ch.6) to ~8% (D/12D = 0.083). Residual bias ~3-5% on Cd at Re=100 per same Zdravkovich reference — below the 5% tolerance threshold only in the best case."
+      consequence_if_unsatisfied: "Codex round-1 MED-1 (2026-04-24): residual 8.3% blockage still above the ~5% rule-of-thumb for Williamson-matched anchors. Cd may come in +3-5% high; possible round-1 tolerance-band skirt. Not grown to H=10D (would need ~200k cells, runtime 60-90min) as the Cd bias shrinks faster than 1/H beyond H=5D."
+      resolution_plan: "RESIDUAL_RISK_CARRIED: 8.3% blockage accepted for this DEC; if Batch C preflight shows Cd outside tolerance, B1 follow-up would grow H to 10D or add analytic blockage correction. Out-of-scope follow-up DEC: domain sensitivity study across H ∈ {6D, 8D, 10D, 12D}."
     - condition: "Transient solution runs long enough to capture ≥8 shedding cycles AND time-average removes start-up transients."
       satisfied_by_current_adapter: partially
       evidence_ref: "DEC-V61-041 landed forceCoeffs FO + cylinder_strouhal_fft module with windowing. No regression since; window config tied to whitelist runtime."

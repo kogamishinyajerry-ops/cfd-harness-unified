@@ -158,20 +158,73 @@ def test_outlier_single_1e30_is_clipped(tmp_path: Path) -> None:
 
 def test_transient_trim_drops_startup(tmp_path: Path) -> None:
     """Early snapshots with startup transient (different u values) should
-    be dropped when window_start_fraction=0.5, so the reported deficit
-    reflects only the stationary window."""
+    be dropped when window_start_fraction=0.5 — i.e. discard first half
+    of PHYSICAL time range per Codex round-1 HIGH-1 fix. The reported
+    deficit reflects only the stationary window."""
     snapshots = []
-    # 4 transient snapshots with u=0 (deficit=1.0), 4 stationary with u=0.17 (deficit=0.83)
-    for t in (1.0, 2.0, 3.0, 4.0):
+    # Transient samples with u=0 at t ∈ [0, 100] (deficit would be 1.0).
+    for t in (1.0, 10.0, 20.0, 50.0, 80.0, 99.0):
         snapshots.append((t, {1.0: 0.0, 2.0: 0.0, 3.0: 0.0, 5.0: 0.0}))
-    for t in (100.0, 150.0, 180.0, 200.0):
+    # Stationary samples at t ∈ [120, 200] (deficit 0.83 at x_D=1).
+    for t in (120.0, 140.0, 160.0, 180.0, 190.0, 195.0, 200.0):
         snapshots.append((t, {1.0: 0.17, 2.0: 0.36, 3.0: 0.45, 5.0: 0.65}))
     case_dir = _build_case_with_snapshots(tmp_path, snapshots)
+    # t_span = 199, window_start_fraction=0.5 → t_trim = 1 + 99.5 = 100.5.
+    # Post-trim window: t ≥ 100.5 → 7 stationary samples, ≥ min_samples=4.
     result = extract_centerline_u_deficit(case_dir, window_start_fraction=0.5)
-    # Averaged over the last 4 (stationary) samples only → deficit 0.83, not
-    # the mixed-startup 0.915.
+    # Averaged only over post-t=100.5 samples → deficit 0.83, not 0.915.
     assert math.isclose(result["deficit_x_over_D_1.0"], 0.83, rel_tol=0.01)
-    assert result["u_deficit_t_window_start_s"] == 100.0
+    # First post-trim sample is t=120, not any transient time.
+    assert result["u_deficit_t_window_start_s"] == 120.0
+    assert result["u_deficit_t_window_end_s"] == 200.0
+
+
+def test_time_based_trim_rejects_tiny_window_even_with_many_samples(tmp_path: Path) -> None:
+    """Codex round-1 HIGH-1: 20 samples clustered in a 2-second post-trim
+    window is physically inadequate (needs MIN_AVERAGING_WINDOW_SECONDS=10s).
+    Assert we fail closed on duration, not let count-based logic pass."""
+    snapshots = []
+    # 10 startup samples over t ∈ [0, 99]
+    for t in (1.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 99.0):
+        snapshots.append((t, {1.0: 0.0, 2.0: 0.0, 3.0: 0.0, 5.0: 0.0}))
+    # 20 samples packed into t ∈ [101, 103] (post-trim but tiny duration)
+    for i in range(20):
+        t = 101.0 + 0.1 * i
+        snapshots.append((t, {1.0: 0.17, 2.0: 0.36, 3.0: 0.45, 5.0: 0.65}))
+    case_dir = _build_case_with_snapshots(tmp_path, snapshots)
+    # t_trim = 1 + 0.5*(103-1) = 52 → post-trim = {60,70,80,99, then 20 packed}
+    # Actually post-trim includes t=60 etc since they're ≥52. Let me use higher
+    # fraction to force the tight-window case.
+    result = extract_centerline_u_deficit(
+        case_dir, window_start_fraction=0.99,
+    )
+    # At fraction=0.99: t_trim = 1 + 0.99*102 = 101.98. Post-trim = 11 samples
+    # all in t ∈ [102, 103.9], duration ~1.9s < MIN_AVERAGING_WINDOW_SECONDS=10.
+    # Must fail closed despite having 11 > min_samples=4.
+    assert result == {}
+
+
+def test_y_or_z_off_centerline_row_rejected(tmp_path: Path) -> None:
+    """Codex round-1 MED-3: sample rows with |y| > tol or |z| > tol are
+    NOT on the wake centerline; accepting them would bias u_x. Assert the
+    extractor filters them out."""
+    snapshots = []
+    # 8 snapshots, all with y=0.05 (above CENTERLINE_YZ_TOLERANCE_M=0.02).
+    # All 4 stations will be rejected → fail closed.
+    for t in (100.0, 120.0, 140.0, 160.0, 180.0, 190.0, 195.0, 200.0):
+        # Write a synthetic snapshot where all rows have y=0.05.
+        t_dir = tmp_path / "case" / "postProcessing" / "cylinderCenterline" / f"{t:g}"
+        t_dir.mkdir(parents=True, exist_ok=True)
+        D = 0.1
+        rows = ["# x y z u_x u_y u_z"]
+        for x_D in (1.0, 2.0, 3.0, 5.0):
+            x = x_D * D
+            rows.append(f"{x:.6f}  0.050000  0.000000  0.170000  0.000000  0.000000")
+        (t_dir / "wakeCenterline_U.xy").write_text("\n".join(rows) + "\n")
+    case_dir = tmp_path / "case"
+    result = extract_centerline_u_deficit(case_dir, window_start_fraction=0.0)
+    # All rows filtered out → no station matches → fail closed.
+    assert result == {}
 
 
 def test_coordinate_match_tolerance_handles_cell_snapping(tmp_path: Path) -> None:

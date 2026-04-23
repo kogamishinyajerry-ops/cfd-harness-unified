@@ -1333,8 +1333,9 @@ class TestCylinderGeneratorBatchB1:
         assert "-1.000000" in bm, "x_min should be -1.0 m (10D upstream)"
         # x_max = L_outlet = 20*D = 2.0 m
         assert "2.000000" in bm, "x_max should be 2.0 m (20D downstream)"
-        # Block count scaled 200×100 → 400×200 to preserve near-cylinder resolution
-        assert "(400 200 1)" in bm
+        # Block count 600x240 per Codex round-1 MED-2 (matches pre-B1 0.05D
+        # resolution across the new larger domain).
+        assert "(600 240 1)" in bm
 
     def test_forceCoeffs_axis_convention_explicit(self):
         """DEC-V61-053 Batch B1 hardening per intake risk_flag
