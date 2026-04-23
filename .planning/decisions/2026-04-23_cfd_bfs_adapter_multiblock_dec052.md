@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-052
 title: backward_facing_step adapter rewrite · multi-block geometry + fixture regen + LDC-style iteration loop
-status: COMPLETE (2026-04-23 · Codex round 3 APPROVE_WITH_COMMENTS; 3 MED/LOW cleanups left for a follow-up pass, no HIGH blockers remain)
+status: COMPLETE (2026-04-23 · Codex round 5 APPROVE clean; round 4 returned CHANGES_REQUIRED on flowFields.ts caption 122→119, fixed in e830abf, round 5 clean per new F1-M2 two-tier close gate)
 supersedes_gate: DEC-V61-051 (ABANDONED_PHASE_1; this DEC is the "scope-adapter-rewrite" option Codex flagged during that review)
 commits_in_scope:
   - 4ba4fd7 docs(dec): DEC-V61-052 scaffold · BFS adapter multi-block rewrite (PROPOSED)
@@ -12,13 +12,16 @@ commits_in_scope:
   - 25a0753 feat(bfs-adapter): round 2c · kOmegaSST default + x-graded mesh · Xr/H=5.64 (-9.9%, inside tolerance)
   - a62ca3c fix(bfs-adapter): round 2d · endTime 1500 for stationary residual plateau (Codex r1 #5)
   - a1cf921 feat(bfs): round 3 + Batch D · authoritative wall-shear Xr + Compare-tab scalar-anchor card (Codex r2 #1/#3/#4 + Batch D)
-codex_verdict: APPROVE_WITH_COMMENTS — round 3 (a1cf921) cleared the round-2 HIGH (wall-shear now authoritative), MED-2 (BFS scalar overlay scoped correctly), MED-3 (diagnostic flags in executor), LOW-4 (stationarity wording matches artifacts). Round 3 itself surfaced 2 MED + 1 LOW clean-up items (wall mask includes 2 outlet cells at x=30; generate_contours figure still computes Xr via Ux proxy even though caption cites wall-shear; reattachment_method/flags not propagated to the serialized audit YAML). All 3 are non-blocking per Codex: "DEC-V61-052 is ready to close with comments; I do not see any remaining HIGH issue that warrants a round 4." Tracked as a follow-up cleanup commit on main; does not reopen the DEC.
+  - 28cac30 fix(bfs): post-close cleanup · 3 Codex round-3 MED/LOW findings (wall mask x<29.5 / generator Xr via allPatches / flags in audit YAML)
+  - e830abf fix(bfs): round 4 · flowFields.ts caption 122→119 floor face count (Codex round 4 CHANGES_REQUIRED single verbatim finding)
+codex_verdict: APPROVE (clean) — round 5 (post-e830abf) clean close per the new F1-M2 two-tier gate. Full arc: round 1 CHANGES_REQUIRED (2H+2M+1L), round 2 CHANGES_REQUIRED (1H+2M+1L), round 3 APPROVE_WITH_COMMENTS (0H+2M+1L), round 4 CHANGES_REQUIRED (1 caption staleness), round 5 APPROVE. Total 5 rounds — one past LDC (4) but within F6-M1 halt criterion's round 6 force-abandon gate.
 autonomous_governance: true
 autonomous_governance_counter_v61: 39
 external_gate_self_estimated_pass_rate: 0.45
 external_gate_actual_outcome: "APPROVE_WITH_COMMENTS on round 3 — one iteration beyond the LDC V61-050 precedent (which was APPROVE on round 2). Arc size: 8 commits across 4 batches + 3 iteration rounds. Self-pass-rate 0.45 was calibrated well: round 1 landed CHANGES_REQUIRED (2H+2M+1L), round 2 CHANGES_REQUIRED (1H+2M+1L), round 3 APPROVE_WITH_COMMENTS (0H+2M+1L). The pattern of 'HIGH count shrinking to zero across iterations while MED/LOW count stays constant' matches the LDC arc qualitatively."
 external_gate_caveat: "Lower than typical V61-050 batches (0.70) because this requires multi-block blockMeshDict correctness + fixture regen + turbulence model BC stability simultaneously. The failure mode that killed V61-051 was I skipped Codex review on a visualization of a known-HAZARD fixture; this DEC's explicit plan is to (a) get GREEN preflight first, (b) get Codex review before any visualization. Plan executed as designed."
-codex_tool_report_path: .planning/reviews/dec_v61_052_bfs_round3_codex.log (+ round 1 + 2 logs co-located)
+codex_tool_report_path: reports/codex_tool_reports/dec_v61_052_bfs_round5.log (+ rounds 1-4 co-located, round 5 is the F1-M2 clean-close proof)
+methodology_version: v2.0 (retroactive under F1-M2 two-tier close; round 4+5 added post-hoc to satisfy new rule)
 notion_sync_status: "synced 2026-04-23 (https://www.notion.so/DEC-V61-052-BFS-adapter-multi-block-rewrite-LDC-style-iteration-loop-case-2-34bc68942bed81bf95e7dac9c6a638bd)"
 github_sync_status: pushed (8 commits on origin/main)
 related:

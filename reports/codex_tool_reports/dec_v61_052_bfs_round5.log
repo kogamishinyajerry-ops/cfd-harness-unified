@@ -1,0 +1,1031 @@
+2026-04-23T13:39:10.679008Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-23T13:39:10.679147Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dba90-e9db-7771-87ff-4a718ad8d3f1
+--------
+user
+# Codex round-5 final close · DEC-V61-052 BFS · caption fix (e830abf)
+
+Repo: `/Users/Zhuanz/Desktop/cfd-harness-unified` · branch `main`.
+
+## Context
+
+Round 4 returned CHANGES_REQUIRED citing **one remaining staleness**:
+`ui/frontend/src/data/flowFields.ts:109` still said "122 downstream-floor
+face centres" after the round-3 mask-tightening (`x < 29.5` outlet exclusion)
+dropped the authoritative count to 119.
+
+Commit `e830abf` is a **single-line** verbatim fix:
+- Changed caption from "122 downstream-floor face centres" to
+  "119 downstream-floor face centres after x<29.5 outlet exclusion"
+  (note: HTML entity `&lt;` used because this string is rendered in React)
+
+## Scope (STRICT)
+
+This is a round N+1 verification under the new F1-M2 two-tier close gate.
+Verdict MUST be **APPROVE** or **CHANGES_REQUIRED**. `APPROVE_WITH_COMMENTS`
+is NOT acceptable. Any new observation goes to OUT_OF_SCOPE_FOLLOWUP.
+
+Scope is **limited to two things**:
+
+### Check #1 · Caption fix landed
+- `ui/frontend/src/data/flowFields.ts:109` provenance string now mentions
+  "119 downstream-floor face centres" (not 122)
+- The `&lt;29.5` HTML entity rendering is acceptable (React auto-decodes
+  in string context; this is the pre-existing encoding pattern in that
+  file if you check other captions)
+- The rest of the provenance string (method, reference, tolerance, paper
+  citation) is unchanged
+
+### Check #2 · Regressions
+- `python3.11 scripts/preflight_case_visual.py backward_facing_step`
+  still GREEN on all 6 checks
+- `python3.11 -m pytest ui/backend/tests/test_comparison_report_visual_only.py
+  ui/backend/tests/test_comparison_report_route.py -q` still 20/20 passes
+- `metrics_reattachment.method` on the Compare-tab context still returns
+  `wall_shear_tau_x_zero_crossing`
+- Audit YAML's `reattachment_n_floor_pts` still = 119 (not regressed back to 122)
+
+## What I do NOT want
+
+- Do NOT re-verify the 3 round-3 findings — those were confirmed PASS in
+  round 4 (wall mask, flags, generator Xr reading). Only #2's caption
+  was flagged and that's what this round checks.
+- Do NOT open new findings outside the caption fix + regression.
+- Do NOT propose design changes or style improvements.
+
+## Verdict format
+
+```
+VERDICT: APPROVE | CHANGES_REQUIRED
+
+VERIFICATION:
+  check #1 (caption 122→119): PASS | FAIL + line evidence
+  check #2 (regression): PASS | FAIL + test output evidence
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only):
+  - <item, if any>
+
+SUMMARY:
+  <one sentence: does DEC-V61-052 now cleanly close under F1-M2?>
+```
+
+Self-estimated pass rate: 0.95 (one-line string change matching the exact
+round 4 finding; all runtime/test infra already PASS per round 4 evidence).
+
+-- Claude Code (Opus 4.7, 1M context), 2026-04-23
+
+codex
+I’ll stay in verification mode and only check the requested caption and regression signals. I’m going to read the relevant file/audit context first, then run the two specified commands and the targeted Compare-tab method check.
+exec
+/bin/zsh -lc "sed -n '1,180p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/b7ed91c86dc6604b8217892f05c8866518c82852/skills/verification-before-completion/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: verification-before-completion
+description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+---
+
+# Verification Before Completion
+
+## Overview
+
+Claiming work is complete without verification is dishonesty, not efficiency.
+
+**Core principle:** Evidence before claims, always.
+
+**Violating the letter of this rule is violating the spirit of this rule.**
+
+## The Iron Law
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+If you haven't run the verification command in this message, you cannot claim it passes.
+
+## The Gate Function
+
+```
+BEFORE claiming any status or expressing satisfaction:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the FULL command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. ONLY THEN: Make the claim
+
+Skip any step = lying, not verifying
+```
+
+## Common Failures
+
+| Claim | Requires | Not Sufficient |
+|-------|----------|----------------|
+| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
+| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
+| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
+| Regression test works | Red-green cycle verified | Test passes once |
+| Agent completed | VCS diff shows changes | Agent reports "success" |
+| Requirements met | Line-by-line checklist | Tests passing |
+
+## Red Flags - STOP
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
+- About to commit/push/PR without verification
+- Trusting agent success reports
+- Relying on partial verification
+- Thinking "just this once"
+- Tired and wanting work over
+- **ANY wording implying success without having run verification**
+
+## Rationalization Prevention
+
+| Excuse | Reality |
+|--------|---------|
+| "Should work now" | RUN the verification |
+| "I'm confident" | Confidence ≠ evidence |
+| "Just this once" | No exceptions |
+| "Linter passed" | Linter ≠ compiler |
+| "Agent said success" | Verify independently |
+| "I'm tired" | Exhaustion ≠ excuse |
+| "Partial check is enough" | Partial proves nothing |
+| "Different words so rule doesn't apply" | Spirit over letter |
+
+## Key Patterns
+
+**Tests:**
+```
+✅ [Run test command] [See: 34/34 pass] "All tests pass"
+❌ "Should pass now" / "Looks correct"
+```
+
+**Regression tests (TDD Red-Green):**
+```
+✅ Write → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
+❌ "I've written a regression test" (without red-green verification)
+```
+
+**Build:**
+```
+✅ [Run build] [See: exit 0] "Build passes"
+❌ "Linter passed" (linter doesn't check compilation)
+```
+
+**Requirements:**
+```
+✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
+❌ "Tests pass, phase complete"
+```
+
+**Agent delegation:**
+```
+✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
+❌ Trust agent report
+```
+
+## Why This Matters
+
+From 24 failure memories:
+- your human partner said "I don't believe you" - trust broken
+- Undefined functions shipped - would crash
+- Missing requirements shipped - incomplete features
+- Time wasted on false completion → redirect → rework
+- Violates: "Honesty is a core value. If you lie, you'll be replaced."
+
+## When To Apply
+
+**ALWAYS before:**
+- ANY variation of success/completion claims
+- ANY expression of satisfaction
+- ANY positive statement about work state
+- Committing, PR creation, task completion
+- Moving to next task
+- Delegating to agents
+
+**Rule applies to:**
+- Exact phrases
+- Paraphrases and synonyms
+- Implications of success
+- ANY communication suggesting completion/correctness
+
+## The Bottom Line
+
+**No shortcuts for verification.**
+
+Run the command. Read the output. THEN claim the result.
+
+This is non-negotiable.
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/data/flowFields.ts | sed -n '100,116p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   100	      kind: "literature_data",
+   101	    },
+   102	  ],
+   103	  backward_facing_step: [
+   104	    {
+   105	      src: "/flow-fields/backward_facing_step/velocity_streamlines.png",
+   106	      caption_zh:
+   107	        "|U|(x,y) 与流线 · simpleFoam kOmegaSST Re=7600 真实解 · 再附着点 Xr/H=5.65 标注（Driver 1985 参考 6.26，偏差 -9.8%，在 ±10% 容差带内）· 阶梯下方回流区清晰可辨",
+   108	      provenance:
+   109	        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 119 downstream-floor face centres after x&lt;29.5 outlet exclusion, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+   110	      kind: "solver_output",
+   111	    },
+   112	    {
+   113	      src: "/flow-fields/backward_facing_step/xr_vs_re.png",
+   114	      caption_zh:
+   115	        "Xr/H(Re_h) · Armaly 1983 低 Re 段 + Driver 1985 Re_h=37500 湍流平台 · kEpsilon(错误模型)对比 kOmegaSST(正确)anchors @ Re=7600",
+   116	      provenance:
+
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|DEC-V61|F1-M2|backward_facing_step" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+330:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+350:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+571:# Task Group: cfd-harness-unified demo-first assessment and Claude Code execution briefs
+573:scope: Assess whether `cfd-harness-unified` is actually moving toward the user’s demo goal, narrow the product story toward `/learn` plus Pro Workbench, and package a Chinese Claude Code brief without making direct repo edits.
+574:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s demo-first architecture review and executor-handoff workflow, but exact failing tests, anchor cases, and runtime paths are checkout-specific.
+580:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+584:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+590:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+619:# Task Group: cfd-harness-unified governance closeout and planning gates
+621:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+622:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+628:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+638:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+648:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+702:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+1305:- rollout_summaries/2026-04-08T01-51-49-tiX8-phase1_backward_facing_step_e2e_demo.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/08/rollout-2026-04-08T09-51-49-019d6ac9-e6c1-7bd0-a4f5-85561bb81ca2.jsonl, updated_at=2026-04-08T02:02:01+00:00, thread_id=019d6ac9-e6c1-7bd0-a4f5-85561bb81ca2, runnable demo spec preserved even though test file was not created)
+
+exec
+/bin/zsh -lc 'git status --short --branch' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+## main...origin/main [ahead 12]
+ M reports/cylinder_crossflow/report.md
+ M reports/deep_acceptance/contract_status_dashboard.html
+ M reports/deep_acceptance/contract_status_dashboard_manifest.json
+ M reports/deep_acceptance/visual_acceptance_report.html
+ M reports/deep_acceptance/visual_acceptance_report_manifest.json
+ M reports/differential_heated_cavity/report.md
+ M reports/rayleigh_benard_convection/report.md
+ M reports/turbulent_flat_plate/report.md
+ M ui/frontend/public/flow-fields/differential_heated_cavity/nu_ra_scaling.png
+ M ui/frontend/public/flow-fields/duct_flow/f_vs_re.png
+ M ui/frontend/public/flow-fields/impinging_jet/nu_radial.png
+ M ui/frontend/public/flow-fields/naca0012_airfoil/cp_distribution.png
+?? .claude/
+?? .planning/reviews/case_deep_dive_round_1_codex.log
+?? .planning/reviews/case_deep_dive_round_1_findings.md
+?? .planning/reviews/case_pilot_ldc_codex.log
+?? .planning/reviews/case_pilot_ldc_codex_run1_readonly_blocked.log
+?? .planning/reviews/case_pilot_ldc_findings.md
+?? .planning/reviews/pedagogy_round_1_codex.log
+?? .planning/reviews/pedagogy_round_2_codex.log
+?? .planning/reviews/pedagogy_round_3_codex.log
+?? .planning/reviews/round_1_codex.log
+?? .planning/reviews/round_1_findings.md
+?? .planning/reviews/round_2_codex.log
+?? .planning/reviews/round_3_codex.log
+?? knowledge/corrections/
+?? reports/deep_acceptance/20260421_000138_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000139_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000231_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000232_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135406_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135407_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135452_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135453_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145436_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145437_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151428_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154122_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154123_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_212242_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220456_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220457_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221125_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221215_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221557_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224520_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224939_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224940_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233648_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233649_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234027_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234028_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234345_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234430_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_235141_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_001613_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_002022_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011135_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011136_visual_acceptance_package.md
+?? reports/deep_acceptance/contract_status_dashboard_20260422_220732.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221123.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221213.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221555.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224518.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224937.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224938.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_233647.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234025.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234329.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234342.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234343.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234427.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234428.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_235139.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_000536.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_001611.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_002020.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_011134.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000138.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000139.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000231.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000232.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135406.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135407.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135452.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135453.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145436.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145437.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151428.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154122.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154123.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_212242.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220456.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220457.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221125.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221215.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221557.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224520.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224939.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224940.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233648.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233649.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234027.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234028.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234345.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234430.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_235141.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_001613.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_002022.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011135.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011136.html
+?? reports/phase5_audit/20260423T082752Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T082959Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085717Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085904Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T090128Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091335Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091408Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091515Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091746Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091857Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+?? reports/phase5_reports/
+
+codex
+The caption line is already showing the 119 text and the `x&lt;29.5` encoding at the requested location. I also see the worktree has unrelated dirty artifacts, so I’m treating this as a read-only verification and not touching them.
+exec
+/bin/zsh -lc "nl -ba /Users/Zhuanz/.codex/memories/MEMORY.md | sed -n '619,628p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   619	# Task Group: cfd-harness-unified governance closeout and planning gates
+   620	
+   621	scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+   622	applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+   623	
+   624	## Task 1: Close Phase 8 and reconcile stale governance evidence
+   625	
+   626	### rollout_summary_files
+   627	
+   628	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+
+exec
+/bin/zsh -lc 'git show --format=fuller --stat e830abf -- ui/frontend/src/data/flowFields.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+commit e830abf23fbbb10b1adb1188d877cb86bcb68746
+Author:     claude-opus47-app <claude-opus47-app@anthropic.com>
+AuthorDate: Thu Apr 23 21:38:37 2026 +0800
+Commit:     claude-opus47-app <claude-opus47-app@anthropic.com>
+CommitDate: Thu Apr 23 21:38:37 2026 +0800
+
+    fix(bfs): DEC-V61-052 round 4 · flowFields.ts caption 122→119 floor face count
+    
+    Codex round 4 CHANGES_REQUIRED identified one remaining staleness: the
+    user-facing provenance caption in ui/frontend/src/data/flowFields.ts still
+    advertised "122 downstream-floor face centres" after the round-3 mask
+    tightening (x<29.5 outlet exclusion) dropped the authoritative count to 119
+    (per audit YAML reattachment_n_floor_pts).
+    
+    Single-line caption update to restore agreement between extractor, audit
+    YAML, and user-facing docs. No code / no API / no gold change — this is
+    the verbatim fix called out at flowFields.ts:109 by Codex round 4 verdict.
+    
+    Methodology: qualifies for F1-M2 verbatim-exception (1 line, 1 file, no
+    public API, matches Codex finding word-for-word), but F1-M2's new clean-
+    close gate still requires round 5 to return APPROVE to officially close
+    DEC-V61-052.
+    
+    Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+ ui/frontend/src/data/flowFields.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+exec
+/bin/zsh -lc 'git show --format= --unified=2 e830abf -- ui/frontend/src/data/flowFields.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+diff --git a/ui/frontend/src/data/flowFields.ts b/ui/frontend/src/data/flowFields.ts
+index d395eb9..c67f4e8 100644
+--- a/ui/frontend/src/data/flowFields.ts
++++ b/ui/frontend/src/data/flowFields.ts
+@@ -107,5 +107,5 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
+         "|U|(x,y) 与流线 · simpleFoam kOmegaSST Re=7600 真实解 · 再附着点 Xr/H=5.65 标注（Driver 1985 参考 6.26，偏差 -9.8%，在 ±10% 容差带内）· 阶梯下方回流区清晰可辨",
+       provenance:
+-        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 122 downstream-floor face centres, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
++        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 119 downstream-floor face centres after x&lt;29.5 outlet exclusion, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+       kind: "solver_output",
+     },
+
+exec
+/bin/zsh -lc "rg -n \"metrics_reattachment|reattachment_n_floor_pts|wall_shear_tau_x_zero_crossing|119 downstream-floor|122 downstream-floor\" ui reports scripts tests .planning -g '*.yaml' -g '*.yml' -g '*.json' -g '*.py' -g '*.ts' -g '*.tsx' -g '*.md'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:51:# _build_visual_only_context now emits `metrics_reattachment` +
+ui/backend/services/comparison_report.py:570:    metrics_reattachment: Optional[dict] = None
+ui/backend/services/comparison_report.py:581:                # method key (wall_shear_tau_x_zero_crossing / near_wall_
+ui/backend/services/comparison_report.py:594:                        metrics_reattachment = {
+ui/backend/services/comparison_report.py:611:            metrics_reattachment = None
+ui/backend/services/comparison_report.py:637:        "metrics_reattachment": metrics_reattachment,
+scripts/phase5_audit_run.py:515:                    "reattachment_n_floor_pts": kq.get("reattachment_n_floor_pts"),
+reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json:9:    "reattachment_method": "wall_shear_tau_x_zero_crossing",
+reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json:11:    "reattachment_n_floor_pts": 119,
+reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json:9:    "reattachment_method": "wall_shear_tau_x_zero_crossing",
+reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json:11:    "reattachment_n_floor_pts": 122,
+.planning/decisions/2026-04-23_cfd_bfs_adapter_multiblock_dec052.md:34:**Exit state**: Preflight GREEN on all 6 checks. Authoritative Xr/H = 5.647 via `wall_shear_tau_x_zero_crossing` on `lower_wall` face tau_x from the allPatches VTK (cross-checked against near-wall Ux proxy to 0.004%). Driver 1985 reference Xr/H = 6.26 → deviation -9.8%, inside ±10% tolerance. velocity_streamlines.png published as `kind: solver_output`. Compare-tab D1 scalar-anchor card renders measured vs gold with PASS/FAIL colour. physics_contract.contract_status = SATISFIED.
+.planning/decisions/2026-04-23_cfd_bfs_adapter_multiblock_dec052.md:118:- Add `_load_bfs_reattachment_gold()` + post-hoc Xr extractor + `metrics_reattachment` / `paper_reattachment` wiring.
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:30:  reattachment_method: wall_shear_tau_x_zero_crossing
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:32:  reattachment_n_floor_pts: 119
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1199:    if (!data.metrics_reattachment || !data.paper_reattachment) return null;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1200:    const mr = data.metrics_reattachment;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2681:  metrics_reattachment?: {
+ui/frontend/src/data/flowFields.ts:109:        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 119 downstream-floor face centres after x&lt;29.5 outlet exclusion, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+
+codex
+The commit diff confirms `e830abf` changed exactly one provenance string in `flowFields.ts`, replacing the stale 122 phrase with the 119 outlet-exclusion phrase while leaving the surrounding method/reference/citation text intact. Next I’m running the requested runtime gates.
+exec
+/bin/zsh -lc 'python3.11 scripts/preflight_case_visual.py backward_facing_step' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 362ms:
+
+══ pre-flight · backward_facing_step ══
+  [92mGREEN[0m  gold contract_status: SATISFIED — DEC-V61-052 closed all four defects V61-051 exposed (flat channel wi
+  [92mGREEN[0m  fixture directory: reports/phase5_fields/backward_facing_step/20260423T102413Z
+  [92mGREEN[0m  gate battery: G3/G4/G5 all clean
+  [92mGREEN[0m  geometry BFS step-body exclusion: no mesh points in step void · 15154 total
+  [92mGREEN[0m  |U| envelope: max |U| = 1.04, 1.04× U_ref
+  [92mGREEN[0m  scalar contract: reattachment_length: actual=5.647  expected=6.26  dev=-9.8% (tolerance ±10%)
+  [92m■ GREEN · safe to visualize[0m
+
+exec
+/bin/zsh -lc 'python3.11 -m pytest ui/backend/tests/test_comparison_report_visual_only.py ui/backend/tests/test_comparison_report_route.py -q' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1328ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: langsmith-0.7.32, asyncio-1.3.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 20 items
+
+ui/backend/tests/test_comparison_report_visual_only.py ..........        [ 50%]
+ui/backend/tests/test_comparison_report_route.py ..........              [100%]
+
+============================== 20 passed in 0.80s ==============================
+
+codex
+Both requested commands are green: preflight reports all six checks GREEN, and the two backend test modules report 20 passed. I’m doing the two narrow data checks now: the Compare-tab context method and the audit YAML floor-point count.
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml | sed -n '24,36p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'rg -n "_build_visual_only_context|metrics_reattachment|audit_real_run_measurement|backward_facing_step" ui/backend/tests/test_comparison_report_visual_only.py ui/backend/tests/test_comparison_report_route.py ui/backend/services/comparison_report.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+    24	  commit_sha: 3f3021e
+    25	  measured_at: '2026-04-23T10:24:48Z'
+    26	  quantity: reattachment_length
+    27	  extraction_source: key_quantities_direct
+    28	  solver_success: true
+    29	  comparator_passed: true
+    30	  reattachment_method: wall_shear_tau_x_zero_crossing
+    31	  reattachment_probe_height: 0.0
+    32	  reattachment_n_floor_pts: 119
+    33	  reattachment_wall_shear_source: allPatches_vtk
+    34	audit_concerns:
+    35	- concern_type: CONTRACT_STATUS
+    36	  summary: 'Quantity: reattachment_length | Tolerance: 10.0% | PASS'
+
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:51:# _build_visual_only_context now emits `metrics_reattachment` +
+ui/backend/services/comparison_report.py:52:# `paper_reattachment` when the case is backward_facing_step. This
+ui/backend/services/comparison_report.py:58:    "backward_facing_step",
+ui/backend/services/comparison_report.py:289:    """Load the reattachment_length gold block from backward_facing_step.yaml.
+ui/backend/services/comparison_report.py:294:    gold_path = _GOLD_ROOT / "backward_facing_step.yaml"
+ui/backend/services/comparison_report.py:505:def _build_visual_only_context(
+ui/backend/services/comparison_report.py:570:    metrics_reattachment: Optional[dict] = None
+ui/backend/services/comparison_report.py:572:    if case_id == "backward_facing_step":
+ui/backend/services/comparison_report.py:594:                        metrics_reattachment = {
+ui/backend/services/comparison_report.py:611:            metrics_reattachment = None
+ui/backend/services/comparison_report.py:637:        "metrics_reattachment": metrics_reattachment,
+ui/backend/services/comparison_report.py:679:        return _build_visual_only_context(case_id, run_label, timestamp, artifact_dir, for_pdf=for_pdf)
+ui/backend/tests/test_comparison_report_visual_only.py:78:        "backward_facing_step", "plane_channel_flow", "turbulent_flat_plate",
+ui/backend/tests/test_comparison_report_visual_only.py:87:    case = "backward_facing_step"
+ui/backend/tests/test_comparison_report_visual_only.py:125:        "/api/cases/backward_facing_step/runs/audit_real_run/renders/..%2F..%2F..%2Fetc%2Fpasswd",
+ui/backend/tests/test_comparison_report_visual_only.py:170:    case = "backward_facing_step"
+ui/backend/tests/test_comparison_report_visual_only.py:212:        "/api/cases/backward_facing_step/runs/audit_real_run/comparison-report",
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_comparison_report_visual_only.py | sed -n '150,230p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/comparison_report.py | sed -n '505,645p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   150	            "timestamp": "../../../etc/passwd",  # malicious
+   151	            "case_id": case,
+   152	        }),
+   153	        encoding="utf-8",
+   154	    )
+   155	    monkeypatch.setattr(
+   156	        "ui.backend.services.comparison_report._FIELDS_ROOT",
+   157	        tmp_path / "reports" / "phase5_fields",
+   158	    )
+   159	
+   160	    with pytest.raises(ReportError, match="invalid timestamp"):
+   161	        build_report_context(case, "audit_real_run")
+   162	
+   163	
+   164	def test_render_report_html_raises_for_visual_only(tmp_path, monkeypatch) -> None:
+   165	    """Codex round 1 CR (2026-04-21): render_report_html on a visual-only case
+   166	    must raise ReportError (→ 404), NOT 500 from template dereferencing
+   167	    None metrics/paper fields.
+   168	    """
+   169	    from ui.backend.services.comparison_report import render_report_html
+   170	    case = "backward_facing_step"
+   171	    _plant_run_manifest(tmp_path, case)
+   172	    monkeypatch.setattr(
+   173	        "ui.backend.services.comparison_report._FIELDS_ROOT",
+   174	        tmp_path / "reports" / "phase5_fields",
+   175	    )
+   176	    monkeypatch.setattr(
+   177	        "ui.backend.services.comparison_report._RENDERS_ROOT",
+   178	        tmp_path / "reports" / "phase5_renders",
+   179	    )
+   180	    monkeypatch.setattr(
+   181	        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+   182	    )
+   183	    with pytest.raises(ReportError, match="visual-only"):
+   184	        render_report_html(case, "audit_real_run")
+   185	
+   186	
+   187	def test_render_report_pdf_raises_for_visual_only(tmp_path, monkeypatch) -> None:
+   188	    """PDF path runs through render_report_html internally, so the same
+   189	    ReportError guard fires; nothing else downstream can crash."""
+   190	    from ui.backend.services.comparison_report import render_report_pdf
+   191	    case = "plane_channel_flow"
+   192	    _plant_run_manifest(tmp_path, case)
+   193	    monkeypatch.setattr(
+   194	        "ui.backend.services.comparison_report._FIELDS_ROOT",
+   195	        tmp_path / "reports" / "phase5_fields",
+   196	    )
+   197	    monkeypatch.setattr(
+   198	        "ui.backend.services.comparison_report._RENDERS_ROOT",
+   199	        tmp_path / "reports" / "phase5_renders",
+   200	    )
+   201	    monkeypatch.setattr(
+   202	        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+   203	    )
+   204	    with pytest.raises(ReportError, match="visual-only"):
+   205	        render_report_pdf(case, "audit_real_run")
+   206	
+   207	
+   208	def test_route_html_returns_404_for_visual_only(client) -> None:
+   209	    """End-to-end: GET /api/cases/BFS/runs/audit_real_run/comparison-report
+   210	    returns 404 (via ReportError) for visual-only case, NOT 500."""
+   211	    resp = client.get(
+   212	        "/api/cases/backward_facing_step/runs/audit_real_run/comparison-report",
+   213	    )
+   214	    assert resp.status_code == 404, f"expected 404, got {resp.status_code}: {resp.text[:200]}"
+   215	
+   216	
+   217	def test_gold_overlay_case_not_affected_by_visual_only_branch(tmp_path, monkeypatch) -> None:
+   218	    """LDC does NOT take the visual_only branch — existing gold-overlay flow
+   219	    preserved. This test ensures the dispatch check is case-set membership,
+   220	    not a global flag."""
+   221	    from ui.backend.services.comparison_report import _GOLD_OVERLAY_CASES
+   222	    assert "lid_driven_cavity" in _GOLD_OVERLAY_CASES
+   223	    for c in _VISUAL_ONLY_CASES:
+   224	        assert c not in _GOLD_OVERLAY_CASES
+
+ succeeded in 0ms:
+   505	def _build_visual_only_context(
+   506	    case_id: str, run_label: str, timestamp: str, artifact_dir: Path,
+   507	    *, for_pdf: bool = False,
+   508	) -> dict:
+   509	    """Tier C reduced context (DEC-V61-034): real contour + residuals PNGs from
+   510	    the captured OpenFOAM artifacts, no gold overlay / verdict / GCI. The
+   511	    frontend + template detect ``visual_only: True`` and suppress the
+   512	    gold-dependent sections.
+   513	    """
+   514	    renders_manifest = _load_renders_manifest(case_id, run_label)
+   515	    renders_dir = _RENDERS_ROOT / case_id / timestamp
+   516	
+   517	    def _rel(key: str, default: str = "") -> str:
+   518	        candidate: Optional[str] = None
+   519	        if renders_manifest:
+   520	            raw = renders_manifest.get("outputs", {}).get(key)
+   521	            if isinstance(raw, str):
+   522	                validated = _safe_rel_under(raw, _RENDERS_ROOT)
+   523	                if validated:
+   524	                    candidate = validated
+   525	        if candidate is None and default:
+   526	            guess = renders_dir / default
+   527	            if guess.is_file():
+   528	                try:
+   529	                    rel = str(guess.resolve().relative_to(_REPO_ROOT.resolve()))
+   530	                    if _safe_rel_under(rel, _RENDERS_ROOT):
+   531	                        candidate = rel
+   532	                except ValueError:
+   533	                    pass
+   534	        return candidate or ""
+   535	
+   536	    # _rel = repo-relative path (PDF base_url=_REPO_ROOT resolves it).
+   537	    # _url = browser URL (HTML served at /api/... needs an absolute path
+   538	    # that hits the working renders route — repo-relative paths would
+   539	    # otherwise resolve against the /api/cases/... URL and 404).
+   540	    def _url(basename: str) -> str:
+   541	        return f"/api/cases/{case_id}/runs/{run_label}/renders/{basename}"
+   542	
+   543	    renders = {
+   544	        "contour_png_rel": _rel("contour_u_magnitude_png", "contour_u_magnitude.png"),
+   545	        "residuals_png_rel": _rel("residuals_png", "residuals.png"),
+   546	        "contour_png_url": _url("contour_u_magnitude.png"),
+   547	        "residuals_png_url": _url("residuals.png"),
+   548	        # Unified field read by the template — PDF mode gets repo-rel
+   549	        # paths (WeasyPrint base_url resolves them); HTML browser mode
+   550	        # gets API URLs that the /renders/ route serves.
+   551	        "contour_png": _rel("contour_u_magnitude_png", "contour_u_magnitude.png") if for_pdf else _url("contour_u_magnitude.png"),
+   552	        "residuals_png": _rel("residuals_png", "residuals.png") if for_pdf else _url("residuals.png"),
+   553	    }
+   554	
+   555	    # Detect solver name from which log.<solver> file exists in artifact dir.
+   556	    solver = "unknown"
+   557	    for cand in ("simpleFoam", "icoFoam", "pimpleFoam", "buoyantFoam"):
+   558	        if (artifact_dir / f"log.{cand}").is_file():
+   559	            solver = cand
+   560	            break
+   561	    commit_sha = _get_commit_sha()
+   562	
+   563	    # DEC-V61-052 Batch D: BFS scalar-anchor Xr/H comparison. Reads the
+   564	    # audit measurement + gold anchor and emits a compact scalar block
+   565	    # that the frontend Compare tab renders as a card (mirrors LDC D7
+   566	    # primary-vortex shape). Fail-soft: any missing piece → None, card
+   567	    # silently hides. Other visual-only cases (plane_channel_flow,
+   568	    # turbulent_flat_plate, etc.) see None here until their own anchors
+   569	    # are wired — this is intentionally narrow scope.
+   570	    metrics_reattachment: Optional[dict] = None
+   571	    paper_reattachment: Optional[dict] = None
+   572	    if case_id == "backward_facing_step":
+   573	        try:
+   574	            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+   575	                         / case_id / f"{run_label}_measurement.yaml")
+   576	            if meas_path.is_file():
+   577	                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+   578	                m = meas.get("measurement", {}) or {}
+   579	                actual = m.get("value")
+   580	                # DEC-V61-052 Codex r3 #3: prefer the explicit extractor
+   581	                # method key (wall_shear_tau_x_zero_crossing / near_wall_
+   582	                # tau_x_proxy_via_Ux) over the generic extraction_source
+   583	                # (key_quantities_direct / comparator_deviation / ...),
+   584	                # so the Compare tab can tell authoritative wall-shear
+   585	                # success from proxy fallback.
+   586	                method = m.get("reattachment_method") or m.get("extraction_source")
+   587	                if actual is not None:
+   588	                    gold = _load_bfs_reattachment_gold()
+   589	                    if gold is not None:
+   590	                        actual_f = float(actual)
+   591	                        expected = gold["value"]
+   592	                        dev_pct = (actual_f - expected) / expected * 100 if expected else 0.0
+   593	                        tol_pct = gold["tolerance"] * 100.0
+   594	                        metrics_reattachment = {
+   595	                            "quantity": "reattachment_length",
+   596	                            "symbol": "Xr/H",
+   597	                            "actual": actual_f,
+   598	                            "expected": expected,
+   599	                            "deviation_pct": dev_pct,
+   600	                            "tolerance_pct": tol_pct,
+   601	                            "within_tolerance": abs(dev_pct) <= tol_pct,
+   602	                            "method": method,
+   603	                        }
+   604	                        paper_reattachment = {
+   605	                            "source": gold["source"],
+   606	                            "doi": gold.get("literature_doi", ""),
+   607	                            "short": "Driver 1985 / LMK 1997",
+   608	                            "tolerance_pct": tol_pct,
+   609	                        }
+   610	        except (OSError, yaml.YAMLError, ValueError, TypeError):
+   611	            metrics_reattachment = None
+   612	            paper_reattachment = None
+   613	
+   614	    return {
+   615	        "visual_only": True,
+   616	        "case_id": case_id,
+   617	        "run_label": run_label,
+   618	        "timestamp": timestamp,
+   619	        "renders": renders,
+   620	        "solver": solver,
+   621	        "commit_sha": commit_sha,
+   622	        "verdict": None,
+   623	        "verdict_gradient": "#64748b 0%, #94a3b8 100%",
+   624	        "subtitle": (
+   625	            "Visual-only mode (DEC-V61-034 Tier C): real OpenFOAM field + "
+   626	            "residual evidence captured; per-case gold-overlay plumbing pending "
+   627	            "Phase 7c Sprint 2 (Tier B)."
+   628	        ),
+   629	        "paper": None,
+   630	        "metrics": None,
+   631	        "gci": None,
+   632	        "grid_convergence": None,
+   633	        "deviations": None,
+   634	        "residual_info": None,
+   635	        "tolerance_percent": None,
+   636	        # DEC-V61-052 Batch D: BFS scalar-anchor block.
+   637	        "metrics_reattachment": metrics_reattachment,
+   638	        "paper_reattachment": paper_reattachment,
+   639	    }
+   640	
+   641	
+   642	def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for_pdf: bool = False) -> dict:
+   643	    """Assemble all template variables. Raises ReportError on missing data.
+   644	
+   645	    for_pdf: when True, the `renders.*_png` fields carry repo-relative
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_comparison_report_visual_only.py | sed -n '1,125p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""Phase 7c Tier C (DEC-V61-034) — visual-only context + render-serving route tests.
+     2	
+     3	Guards:
+     4	- build_report_context returns visual_only=True for VISUAL_ONLY_CASES
+     5	- Render route serves PNG with path-containment defense
+     6	- Traversal attempts in render filename are rejected (404)
+     7	- Missing case / run_label produces 404 (not 500)
+     8	- Tampered run-manifest timestamp is rejected (404)
+     9	"""
+    10	from __future__ import annotations
+    11	
+    12	import json
+    13	from pathlib import Path
+    14	
+    15	import pytest
+    16	from fastapi.testclient import TestClient
+    17	
+    18	from ui.backend.main import app
+    19	from ui.backend.services.comparison_report import (
+    20	    _VISUAL_ONLY_CASES,
+    21	    ReportError,
+    22	    build_report_context,
+    23	)
+    24	
+    25	
+    26	@pytest.fixture
+    27	def client() -> TestClient:
+    28	    return TestClient(app)
+    29	
+    30	
+    31	def _plant_run_manifest(
+    32	    repo_root: Path, case_id: str, timestamp: str = "20260101T000000Z",
+    33	) -> Path:
+    34	    """Write a minimal Phase 7a runs/{label}.json + corresponding renders
+    35	    manifest + both PNGs into reports/phase5_{fields,renders}/{case}/.
+    36	    """
+    37	    fields_dir = repo_root / "reports" / "phase5_fields" / case_id
+    38	    renders_dir = repo_root / "reports" / "phase5_renders" / case_id
+    39	    artifact_dir = fields_dir / timestamp
+    40	    render_ts_dir = renders_dir / timestamp
+    41	    artifact_dir.mkdir(parents=True, exist_ok=True)
+    42	    render_ts_dir.mkdir(parents=True, exist_ok=True)
+    43	    (fields_dir / "runs").mkdir(parents=True, exist_ok=True)
+    44	    (fields_dir / "runs" / "audit_real_run.json").write_text(
+    45	        json.dumps({
+    46	            "run_label": "audit_real_run",
+    47	            "timestamp": timestamp,
+    48	            "case_id": case_id,
+    49	            "artifact_dir_rel": str(artifact_dir.relative_to(repo_root)),
+    50	        }),
+    51	        encoding="utf-8",
+    52	    )
+    53	    (artifact_dir / "log.simpleFoam").write_text("Time = 1s\n", encoding="utf-8")
+    54	    (render_ts_dir / "contour_u_magnitude.png").write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    55	    (render_ts_dir / "residuals.png").write_bytes(b"\x89PNG\r\n\x1a\nfake2")
+    56	    (renders_dir / "runs").mkdir(parents=True, exist_ok=True)
+    57	    (renders_dir / "runs" / "audit_real_run.json").write_text(
+    58	        json.dumps({
+    59	            "run_label": "audit_real_run",
+    60	            "timestamp": timestamp,
+    61	            "case_id": case_id,
+    62	            "outputs": {
+    63	                "contour_u_magnitude_png":
+    64	                    f"reports/phase5_renders/{case_id}/{timestamp}/contour_u_magnitude.png",
+    65	                "residuals_png":
+    66	                    f"reports/phase5_renders/{case_id}/{timestamp}/residuals.png",
+    67	            },
+    68	        }),
+    69	        encoding="utf-8",
+    70	    )
+    71	    return artifact_dir
+    72	
+    73	
+    74	def test_visual_only_cases_are_nine() -> None:
+    75	    """VISUAL_ONLY_CASES covers all 9 non-LDC whitelist cases per DEC-V61-034."""
+    76	    assert "lid_driven_cavity" not in _VISUAL_ONLY_CASES
+    77	    expected = {
+    78	        "backward_facing_step", "plane_channel_flow", "turbulent_flat_plate",
+    79	        "circular_cylinder_wake", "impinging_jet", "naca0012_airfoil",
+    80	        "rayleigh_benard_convection", "differential_heated_cavity", "duct_flow",
+    81	    }
+    82	    assert _VISUAL_ONLY_CASES == expected
+    83	
+    84	
+    85	def test_visual_only_context_shape(tmp_path, monkeypatch) -> None:
+    86	    """build_report_context returns visual_only=True with renders populated."""
+    87	    case = "backward_facing_step"
+    88	    _plant_run_manifest(tmp_path, case)
+    89	    monkeypatch.setattr(
+    90	        "ui.backend.services.comparison_report._FIELDS_ROOT",
+    91	        tmp_path / "reports" / "phase5_fields",
+    92	    )
+    93	    monkeypatch.setattr(
+    94	        "ui.backend.services.comparison_report._RENDERS_ROOT",
+    95	        tmp_path / "reports" / "phase5_renders",
+    96	    )
+    97	    monkeypatch.setattr(
+    98	        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    99	    )
+   100	
+   101	    ctx = build_report_context(case, "audit_real_run")
+   102	    assert ctx["visual_only"] is True
+   103	    assert ctx["case_id"] == case
+   104	    assert ctx["run_label"] == "audit_real_run"
+   105	    assert ctx["verdict"] is None
+   106	    assert ctx["metrics"] is None
+   107	    assert ctx["paper"] is None
+   108	    assert ctx["renders"]["contour_png_rel"].endswith("contour_u_magnitude.png")
+   109	    assert ctx["renders"]["residuals_png_rel"].endswith("residuals.png")
+   110	    assert ctx["solver"] == "simpleFoam"
+   111	    assert "visual-only" in ctx["subtitle"].lower()
+   112	
+   113	
+   114	def test_unknown_case_404(client) -> None:
+   115	    """Unsupported case → 404, not 500."""
+   116	    resp = client.get(
+   117	        "/api/cases/totally_unknown_case/runs/audit_real_run/comparison-report/context",
+   118	    )
+   119	    assert resp.status_code == 404
+   120	
+   121	
+   122	def test_render_route_traversal_rejected(client) -> None:
+   123	    """../../secret in render filename is rejected as 404 (traversal defense)."""
+   124	    resp = client.get(
+   125	        "/api/cases/backward_facing_step/runs/audit_real_run/renders/..%2F..%2F..%2Fetc%2Fpasswd",
+
+exec
+/bin/zsh -lc "rg -n \"comparison-report/context|build_report_context\\(|context\" ui/backend -g '*.py'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:51:# _build_visual_only_context now emits `metrics_reattachment` +
+ui/backend/services/comparison_report.py:505:def _build_visual_only_context(
+ui/backend/services/comparison_report.py:509:    """Tier C reduced context (DEC-V61-034): real contour + residuals PNGs from
+ui/backend/services/comparison_report.py:642:def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for_pdf: bool = False) -> dict:
+ui/backend/services/comparison_report.py:679:        return _build_visual_only_context(case_id, run_label, timestamp, artifact_dir, for_pdf=for_pdf)
+ui/backend/services/comparison_report.py:1046:    PNG) via the JSON context + /renders/ route instead. Requesting the HTML
+ui/backend/services/comparison_report.py:1051:    ctx = build_report_context(case_id, run_label)
+ui/backend/services/comparison_report.py:1055:            f"HTML/PDF report is produced. Use the JSON context at "
+ui/backend/services/comparison_report.py:1056:            f"/api/cases/{case_id}/runs/{run_label}/comparison-report/context "
+ui/backend/services/comparison_report.py:1080:    # DEC-V61-034 Codex R2 comment: build context + visual-only guard BEFORE
+ui/backend/services/comparison_report.py:1084:    ctx = build_report_context(case_id, run_label, for_pdf=True)
+ui/backend/services/comparison_report.py:1093:        ts = ctx["timestamp"]  # already validated by build_report_context
+ui/backend/services/comparison_report.py:1107:    # Render the template with the for_pdf=True context (img srcs are
+ui/backend/services/comparison_report.py:1110:    # for_pdf=False context whose img srcs are /api/ URLs, which
+ui/backend/services/validation_report.py:984:        ctx = cr.build_report_context(case_id, run_label)
+ui/backend/routes/comparison_report.py:18:    build_report_context,
+ui/backend/routes/comparison_report.py:49:    "/cases/{case_id}/runs/{run_label}/comparison-report/context",
+ui/backend/routes/comparison_report.py:52:def get_comparison_report_context(case_id: str, run_label: str) -> JSONResponse:
+ui/backend/routes/comparison_report.py:53:    """Return the raw template context as JSON (for frontend custom rendering
+ui/backend/routes/comparison_report.py:57:        ctx = build_report_context(case_id, run_label)
+ui/backend/__init__.py:5:2026-04-20_path_b_ui_mvp.md for context.
+ui/backend/tests/test_comparison_report_route.py:47:def test_context_200_when_artifacts_present() -> None:
+ui/backend/tests/test_comparison_report_route.py:51:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:77:def test_context_400_urlencoded_traversal() -> None:
+ui/backend/tests/test_comparison_report_route.py:79:        "/api/cases/%2e%2e__pwn/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:173:def test_context_json_end_to_end_synthetic(_synth_route_tree) -> None:
+ui/backend/tests/test_comparison_report_route.py:175:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_visual_only.py:1:"""Phase 7c Tier C (DEC-V61-034) — visual-only context + render-serving route tests.
+ui/backend/tests/test_comparison_report_visual_only.py:4:- build_report_context returns visual_only=True for VISUAL_ONLY_CASES
+ui/backend/tests/test_comparison_report_visual_only.py:22:    build_report_context,
+ui/backend/tests/test_comparison_report_visual_only.py:85:def test_visual_only_context_shape(tmp_path, monkeypatch) -> None:
+ui/backend/tests/test_comparison_report_visual_only.py:86:    """build_report_context returns visual_only=True with renders populated."""
+ui/backend/tests/test_comparison_report_visual_only.py:101:    ctx = build_report_context(case, "audit_real_run")
+ui/backend/tests/test_comparison_report_visual_only.py:117:        "/api/cases/totally_unknown_case/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_visual_only.py:142:def test_visual_only_context_rejects_tampered_timestamp(tmp_path, monkeypatch) -> None:
+ui/backend/tests/test_comparison_report_visual_only.py:161:        build_report_context(case, "audit_real_run")
+ui/backend/tests/test_comparison_report_service.py:4:constants, exercises render_report_html + build_report_context + the Codex
+ui/backend/tests/test_comparison_report_service.py:97:def test_build_context_happy_path(synthetic_tree) -> None:
+ui/backend/tests/test_comparison_report_service.py:99:    ctx = svc.build_report_context("lid_driven_cavity", "audit_real_run")
+ui/backend/tests/test_comparison_report_service.py:123:        svc.build_report_context("lid_driven_cavity", "audit_real_run")
+ui/backend/tests/test_comparison_report_service.py:133:        svc.build_report_context("lid_driven_cavity", "audit_real_run")
+ui/backend/tests/test_comparison_report_service.py:155:    ctx = svc.build_report_context("lid_driven_cavity", "audit_real_run")
+ui/backend/tests/test_comparison_report_service.py:171:        svc.build_report_context("lid_driven_cavity", "audit_real_run")
+
+exec
+/bin/zsh -lc 'ls reports/phase5_fields/backward_facing_step/runs ui/backend/tests/fixtures/runs/backward_facing_step' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+reports/phase5_fields/backward_facing_step/runs:
+audit_real_run.json
+
+ui/backend/tests/fixtures/runs/backward_facing_step:
+audit_real_run_measurement.yaml
+mesh_160_measurement.yaml
+mesh_20_measurement.yaml
+mesh_40_measurement.yaml
+mesh_80_measurement.yaml
+real_incident_measurement.yaml
+reference_pass_measurement.yaml
+under_resolved_measurement.yaml
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+from fastapi.testclient import TestClient
+from ui.backend.main import app
+
+resp = TestClient(app).get('/api/cases/backward_facing_step/runs/audit_real_run/comparison-report/context')
+print('status_code=', resp.status_code)
+ctx = resp.json()
+mr = ctx.get('metrics_reattachment')
+print('metrics_reattachment.method=', None if mr is None else mr.get('method'))
+print('metrics_reattachment.actual=', None if mr is None else mr.get('actual'))
+print('metrics_reattachment.within_tolerance=', None if mr is None else mr.get('within_tolerance'))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 301ms:
+status_code= 200
+metrics_reattachment.method= wall_shear_tau_x_zero_crossing
+metrics_reattachment.actual= 5.647054267872632
+metrics_reattachment.within_tolerance= True
+
+codex
+VERDICT: APPROVE
+
+VERIFICATION:
+  check #1 (caption 122→119): PASS
+  Evidence: `ui/frontend/src/data/flowFields.ts:109` now says `119 downstream-floor face centres after x&lt;29.5 outlet exclusion`; `git show e830abf` confirms the commit is a single-line provenance replacement and the surrounding method/reference/citation text is unchanged.
+
+  check #2 (regression): PASS
+  Evidence: `python3.11 scripts/preflight_case_visual.py backward_facing_step` returned GREEN on all 6 checks; targeted pytest returned `20 passed in 0.80s`; Compare-tab context returned `metrics_reattachment.method= wall_shear_tau_x_zero_crossing`; audit YAML has `reattachment_n_floor_pts: 119` at `ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:32`.
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only):
+  - None.
+
+SUMMARY:
+  DEC-V61-052 now cleanly closes under F1-M2. 
+
+
+tokens used
+258,967
+VERDICT: APPROVE
+
+VERIFICATION:
+  check #1 (caption 122→119): PASS
+  Evidence: `ui/frontend/src/data/flowFields.ts:109` now says `119 downstream-floor face centres after x&lt;29.5 outlet exclusion`; `git show e830abf` confirms the commit is a single-line provenance replacement and the surrounding method/reference/citation text is unchanged.
+
+  check #2 (regression): PASS
+  Evidence: `python3.11 scripts/preflight_case_visual.py backward_facing_step` returned GREEN on all 6 checks; targeted pytest returned `20 passed in 0.80s`; Compare-tab context returned `metrics_reattachment.method= wall_shear_tau_x_zero_crossing`; audit YAML has `reattachment_n_floor_pts: 119` at `ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:32`.
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only):
+  - None.
+
+SUMMARY:
+  DEC-V61-052 now cleanly closes under F1-M2. 
+
+

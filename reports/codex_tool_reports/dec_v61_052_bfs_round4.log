@@ -1,0 +1,1970 @@
+2026-04-23T13:34:15.625313Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-23T13:34:15.625596Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dba8c-6a96-7f21-b4c1-e0388600c3af
+--------
+user
+# Codex round-4 verification · DEC-V61-052 BFS · post-close cleanup (28cac30)
+
+Repo: `/Users/Zhuanz/Desktop/cfd-harness-unified` · branch `main`.
+
+## Why this round exists
+
+This review is mandated by a new methodology hard rule (Opus 4.7 审查 F1-M2):
+any DEC that closes on Codex APPROVE_WITH_COMMENTS MUST have a round N+1
+that explicitly verifies the MED/LOW findings were fixed and no regressions
+were introduced. DEC-V61-052 closed on round 3 APPROVE_WITH_COMMENTS with
+3 non-blocking items (2 MED + 1 LOW). Commit `28cac30` claims to address
+all three. This round 4 verifies that claim.
+
+**Scope is STRICTLY LIMITED**: only verify the three round-3 findings and
+check for regressions. Do NOT open new findings outside this scope — if
+you observe new issues, note them as "out-of-scope follow-ups" for the
+next DEC, not as round-4 findings.
+
+## Round 3 findings to verify
+
+### #1 MED · Wall mask outlet leak (now claimed fixed)
+
+Round 3 said: `y<0.05 && x>0.05` picks up lower_wall (120 cells) PLUS
+2 outlet-face cells at (30, 0.0125) and (30, 0.0375). Fix commit 28cac30
+adds `x < 29.5` upper bound.
+
+Verify:
+- `src/foam_agent_adapter.py::_parse_writeobjects_fields` (search `floor_mask`
+  in the BACKWARD_FACING_STEP branch) now has three conditions:
+  `centres_ap[:, 1] < 0.05 AND centres_ap[:, 0] > 0.05 AND centres_ap[:, 0] < 29.5`
+- Audit YAML's `measurement.reattachment_n_floor_pts` dropped from 122 to 119
+- Cross-check on the staged `allPatches_1500.vtk`: filter now excludes both
+  outlet cells at x=30 (was 2 cells of leak; now 0)
+- Xr/H value unchanged at 5.647 (sign-change lives well inside the tightened mask)
+
+### #2 MED · Generator Xr probe vs caption mismatch (now claimed fixed)
+
+Round 3 said: `scripts/flow-field-gen/generate_contours.py::gen_backward_facing_step`
+re-probed Xr via Ux proxy while the flowFields.ts caption cited wallShearStress.
+Fix commit 28cac30 switches the generator's Xr probe to actually read wall-shear
+from the allPatches VTK (same algorithm as the adapter extractor).
+
+Verify:
+- Generator now reads `vtk_path.parent / "allPatches" / "allPatches_*.vtk"` (note:
+  single `parent`, the first fix pass had a `parent.parent` bug that was corrected)
+- Generator applies the SAME sign convention (pos→neg crossing) as the extractor
+- Generator applies the SAME mask `y<0.05 AND x>0.05 AND x<29.5` as the extractor
+- Figure label Xr/H=5.65 unchanged (numerical agreement with round-2 value)
+- flowFields.ts caption now says "via wallShearStress tau_x pos→neg crossing
+  on the lower_wall patch (allPatches VTK, 122 floor-face centres, OpenFOAM
+  pos→neg convention)" — NOTE the "122" is now stale after fix #1 (should be
+  119). Flag if you see this.
+
+### #3 LOW · Diagnostic flags not in audit YAML (now claimed fixed)
+
+Round 3 said: `reattachment_method` + diagnostic flags live in executor
+`key_quantities` but don't propagate to `audit_real_run_measurement.yaml`.
+Fix commit 28cac30 adds them to the `_audit_fixture_doc` measurement block
+(in `scripts/phase5_audit_run.py`) and adjusts
+`ui/backend/services/comparison_report.py::_build_visual_only_context` to
+prefer `reattachment_method` over `extraction_source` for the Compare-tab card.
+
+Verify:
+- Run `grep -A 15 "^measurement:" ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml`
+  should show `reattachment_method: wall_shear_tau_x_zero_crossing`,
+  `reattachment_probe_height: 0.0`, `reattachment_n_floor_pts: 119`,
+  `reattachment_wall_shear_source: allPatches_vtk`
+- `_build_visual_only_context` BFS branch uses
+  `m.get("reattachment_method") or m.get("extraction_source")` fallback
+- `GET /api/cases/backward_facing_step/runs/audit_real_run/comparison-report`
+  context returns `metrics_reattachment.method = "wall_shear_tau_x_zero_crossing"`
+  (not the generic `key_quantities_direct`)
+
+## Regression checks (still in-scope)
+
+- `python3.11 scripts/preflight_case_visual.py backward_facing_step` exits 0
+  GREEN on all 6 checks
+- Xr/H still within 10% of Driver 1985 reference 6.26
+- No new executor / adapter errors introduced in 28cac30
+
+## What I do NOT want you to do in this round
+
+- Do NOT propose new design changes.
+- Do NOT open findings about issues outside the three round-3 items.
+- Do NOT re-litigate already-closed HIGH findings from rounds 1-2.
+- Do NOT expand scope to "while you're at it, check X" items. Mark those
+  as "OUT_OF_SCOPE_FOLLOWUP" at the bottom if they occur to you.
+
+## Verdict format (per new F1-M2 hard rule)
+
+This round MUST return either APPROVE (clean) or a tightly scoped
+CHANGES_REQUIRED listing ONLY regressions or uncompleted round-3 fixes.
+APPROVE_WITH_COMMENTS is NOT acceptable here — the methodology's new F1-M2
+rule requires round N+1 to be APPROVE. If you would have said
+APPROVE_WITH_COMMENTS, say APPROVE and put the comments in an
+"OUT_OF_SCOPE_FOLLOWUP" block at the bottom.
+
+```
+VERDICT: APPROVE | CHANGES_REQUIRED
+
+VERIFICATION:
+  round-3 #1 (wall mask): PASS | FAIL + evidence
+  round-3 #2 (generator Xr): PASS | FAIL + evidence
+  round-3 #3 (flags in YAML): PASS | FAIL + evidence
+  regression check: PASS | FAIL + evidence
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only, not blocking this round):
+  - <item 1, if any>
+  - ...
+
+SUMMARY:
+  <one paragraph: does DEC-V61-052 now meet the new F1-M2 clean-close rule?>
+```
+
+Self-estimated pass rate: 0.80 (round 3 fixes were narrow and verified
+locally; the 122→119 caption staleness is the only known near-miss).
+
+-- Claude Code (Opus 4.7, 1M context), 2026-04-23
+
+codex
+I’ll treat this as a scoped verification review only: inspect commit `28cac30` effects, run the requested checks, and return the required verdict format without proposing unrelated changes. I’ll first load the repo/GSD context and the relevant files, then verify the fixture and API behavior.
+codex
+I’m using the existing cfd-harness memory only to recover prior workflow constraints for this repo, then I’ll verify directly from the current checkout so the verdict is evidence-based.
+exec
+/bin/zsh -lc 'rg -n "DEC-V61-052|28cac30|BFS|backward_facing_step|flowFields|phase5_audit_run|cfd-harness-unified" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+330:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+350:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+571:# Task Group: cfd-harness-unified demo-first assessment and Claude Code execution briefs
+573:scope: Assess whether `cfd-harness-unified` is actually moving toward the user’s demo goal, narrow the product story toward `/learn` plus Pro Workbench, and package a Chinese Claude Code brief without making direct repo edits.
+574:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s demo-first architecture review and executor-handoff workflow, but exact failing tests, anchor cases, and runtime paths are checkout-specific.
+580:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+584:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+590:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+619:# Task Group: cfd-harness-unified governance closeout and planning gates
+621:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+622:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+628:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+638:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+648:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+702:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+1305:- rollout_summaries/2026-04-08T01-51-49-tiX8-phase1_backward_facing_step_e2e_demo.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/08/rollout-2026-04-08T09-51-49-019d6ac9-e6c1-7bd0-a4f5-85561bb81ca2.jsonl, updated_at=2026-04-08T02:02:01+00:00, thread_id=019d6ac9-e6c1-7bd0-a4f5-85561bb81ca2, runnable demo spec preserved even though test file was not created)
+
+exec
+/bin/zsh -lc 'git log --oneline -5' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+1fd4d95 docs(notion): sync DEC-V61-051 + DEC-V61-052 to Notion Decisions DB
+28cac30 fix(bfs): DEC-V61-052 post-close cleanup · 3 Codex round-3 MED/LOW findings
+3f3021e docs(dec): DEC-V61-052 COMPLETE · Codex round 3 APPROVE_WITH_COMMENTS
+a1cf921 feat(bfs): DEC-V61-052 round 3 + Batch D · authoritative wall-shear Xr + Compare-tab scalar-anchor card
+a62ca3c fix(bfs-adapter): DEC-V61-052 round 2d · endTime 1500 for stationary residual plateau (Codex round 1 #5)
+
+exec
+/bin/zsh -lc 'git status --short --branch' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+## main...origin/main [ahead 11]
+ M reports/cylinder_crossflow/report.md
+ M reports/deep_acceptance/contract_status_dashboard.html
+ M reports/deep_acceptance/contract_status_dashboard_manifest.json
+ M reports/deep_acceptance/visual_acceptance_report.html
+ M reports/deep_acceptance/visual_acceptance_report_manifest.json
+ M reports/differential_heated_cavity/report.md
+ M reports/rayleigh_benard_convection/report.md
+ M reports/turbulent_flat_plate/report.md
+ M ui/frontend/public/flow-fields/differential_heated_cavity/nu_ra_scaling.png
+ M ui/frontend/public/flow-fields/duct_flow/f_vs_re.png
+ M ui/frontend/public/flow-fields/impinging_jet/nu_radial.png
+ M ui/frontend/public/flow-fields/naca0012_airfoil/cp_distribution.png
+?? .claude/
+?? .planning/reviews/case_deep_dive_round_1_codex.log
+?? .planning/reviews/case_deep_dive_round_1_findings.md
+?? .planning/reviews/case_pilot_ldc_codex.log
+?? .planning/reviews/case_pilot_ldc_codex_run1_readonly_blocked.log
+?? .planning/reviews/case_pilot_ldc_findings.md
+?? .planning/reviews/pedagogy_round_1_codex.log
+?? .planning/reviews/pedagogy_round_2_codex.log
+?? .planning/reviews/pedagogy_round_3_codex.log
+?? .planning/reviews/round_1_codex.log
+?? .planning/reviews/round_1_findings.md
+?? .planning/reviews/round_2_codex.log
+?? .planning/reviews/round_3_codex.log
+?? knowledge/corrections/
+?? reports/deep_acceptance/20260421_000138_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000139_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000231_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000232_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135406_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135407_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135452_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135453_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145436_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145437_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151428_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154122_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154123_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_212242_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220456_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220457_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221125_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221215_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221557_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224520_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224939_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224940_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233648_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233649_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234027_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234028_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234345_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234430_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_235141_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_001613_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_002022_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011135_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011136_visual_acceptance_package.md
+?? reports/deep_acceptance/contract_status_dashboard_20260422_220732.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221123.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221213.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221555.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224518.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224937.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224938.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_233647.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234025.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234329.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234342.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234343.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234427.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234428.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_235139.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_000536.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_001611.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_002020.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_011134.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000138.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000139.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000231.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000232.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135406.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135407.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135452.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135453.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145436.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145437.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151428.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154122.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154123.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_212242.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220456.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220457.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221125.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221215.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221557.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224520.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224939.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224940.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233648.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233649.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234027.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234028.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234345.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234430.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_235141.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_001613.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_002022.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011135.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011136.html
+?? reports/phase5_audit/20260423T082752Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T082959Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085717Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085904Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T090128Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091335Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091408Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091515Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091746Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091857Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+?? reports/phase5_reports/
+
+codex
+The checkout is on `main`, with `28cac30` present under a newer Notion sync commit. The worktree has unrelated dirty/generated files, so I’ll keep this review read-only and ignore unrelated changes unless they affect the requested verification path.
+exec
+/bin/zsh -lc 'for f in .planning/PROJECT.md .planning/STATE.md .planning/ROADMAP.md .planning/config.json .planning/codebase/ARCHITECTURE.md .planning/codebase/CONVENTIONS.md .planning/codebase/STACK.md; do if [ -f "$f" ]; then printf '"'%s\\n' \""'$f"; fi; done' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba /Users/Zhuanz/.codex/memories/MEMORY.md | sed -n '619,638p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+.planning/PROJECT.md
+.planning/STATE.md
+.planning/ROADMAP.md
+
+ succeeded in 0ms:
+   619	# Task Group: cfd-harness-unified governance closeout and planning gates
+   620	
+   621	scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+   622	applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+   623	
+   624	## Task 1: Close Phase 8 and reconcile stale governance evidence
+   625	
+   626	### rollout_summary_files
+   627	
+   628	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+   629	
+   630	### keywords
+   631	
+   632	- Phase 8, AutoVerifier, 13/13, knowledge/whitelist.yaml, ai_cfd_cold_start_whitelist.yaml, Canonical Docs Type=Report, Phase 8 Done, naming drift
+   633	
+   634	## Task 2: Open Phase 9 as planning-only and keep solver expansion bounded
+   635	
+   636	### rollout_summary_files
+   637	
+   638	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+
+exec
+/bin/zsh -lc 'git show --stat --oneline 28cac30' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+28cac30 fix(bfs): DEC-V61-052 post-close cleanup · 3 Codex round-3 MED/LOW findings
+ .../backward_facing_step/runs/audit_real_run.json  |   4 +-
+ scripts/flow-field-gen/generate_contours.py        |  64 ++++++++++++---------
+ scripts/phase5_audit_run.py                        |  24 ++++++++
+ src/foam_agent_adapter.py                          |  17 ++++--
+ ui/backend/services/comparison_report.py           |   8 ++-
+ .../audit_real_run_measurement.yaml                |  12 ++--
+ .../backward_facing_step/velocity_streamlines.json |   2 +-
+ .../backward_facing_step/velocity_streamlines.png  | Bin 93633 -> 93643 bytes
+ 8 files changed, 92 insertions(+), 39 deletions(-)
+
+exec
+/bin/zsh -lc "sed -n '1,220p' .planning/PROJECT.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+# cfd-harness-unified
+
+## 项目意图
+
+统一知识治理层 + Foam-Agent 执行引擎，建立个人 CFD 知识图谱。
+
+本项目是 AI-CFD Knowledge Harness 的下一代架构：
+- **Foam-Agent** 作为外部 CFD 执行引擎（不自建 NL→OpenFOAM 生成能力）
+- **Notion** 作为唯一的 Process SSOT 控制面
+- **本地 YAML** 作为 Gold Standard 和 CorrectionSpec 知识库
+
+## 核心约束
+
+- Python 3.9+
+- 所有类型定义用 dataclass（不用普通 dict）
+- 所有枚举字段用 Enum（不用字符串常量）
+- 接口定义用 Protocol（不用 ABC）
+- 测试用 pytest，覆盖率 > 80%
+- 不安装或调用真实 Foam-Agent，只实现 adapter 接口和 MockExecutor
+- 不调用真实 Notion API，notion_client.py 留占位符，测试用 mock
+
+## 不做的事
+
+- 不自建 NL→OpenFOAM 生成能力（Foam-Agent 已覆盖）
+- 不自建求解器
+- 不管理 OpenFOAM 安装
+
+## 唯一控制面
+
+Notion 页面：cfd-harness-unified
+- Phases 数据库 → Tasks 数据库 → Sessions 数据库
+- Decisions 数据库 ← → Phases / Sessions
+- Canonical Docs 数据库 ← → Phases / Tasks
+
+## 架构流程
+
+```
+Notion TaskSpec
+    ↓
+task_runner.py（编排器）
+    ├── knowledge_db.py（加载 Gold Standard + CorrectionSpec）
+    ├── foam_agent_adapter.py（调用 CFDExecutor Protocol）
+    │       ├── MockExecutor（测试用）
+    │       └── FoamAgentExecutor（占位符）
+    ├── result_comparator.py（结果 vs Gold Standard）
+    └── correction_recorder.py（偏差 → CorrectionSpec）
+    ↓
+回写结果摘要到 Notion
+```
+
+exec
+/bin/zsh -lc "sed -n '1,260p' .planning/STATE.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+gsd_state_version: 1.0
+milestone: v1.6.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-04-22T18:55 local"
+progress:
+  total_phases: 9
+  completed_phases: 8
+  total_plans: 18
+  completed_plans: 18
+  percent: 89
+---
+
+driving_model: claude-code-opus47 (Main Driver under Model Routing v6.2 · CLI-based · 2026-04-22 takeover from v6.1 claude-opus47-app). Subagent discipline: >5 turns / >40k tokens / >3 files / >500 LOC → fresh subagent dispatch. Codex GPT-5.4-xhigh: Joint Dev Peer with 3 invocation modes — (§A) 禁区 diff generator; (§B) independent key-claim verifier [NEW — anti-deception]; (§C) milestone joint reviewer. Notion Gate: 5 hard-floor guards (+1 new: heterogeneous verification failure).
+tier: T3-Orchestrator
+last_updated: "2026-04-22T18:55 local"
+session: S-003q OPEN (v6.2 takeover 2026-04-22). Supersedes S-003p. v6.2 cutover: Claude Code CLI main-driven (v6.1 APP retired), /agents Team + Subagent native capability added, Codex post-mortem verification added. **First-action slice**: 5 DEC codex_verdict reconciliation — 036/036c/039 backfill from commit-msg evidence (committed 17f7f14), 036b/038 Codex re-run in progress (pre-merge per RETRO-V61-001). Phase 8 Sprint 1 PASS-washing cleanup in flight (DEC-V61-036..044 landed); Phase 5 Audit Package Builder done; Phases 0-7 complete; external_gate_queue EMPTY.
+
+# Phase Status
+
+current_phase: **Phase 8 — Sprint 1 PASS-washing cleanup** (hard gates G1/G2/G3/G4/G5 + convergence attestor A1..A6 + LDC verdict split reconciliation). Bulk of module work landed 2026-04-22; governance tail-wag (codex_verdict reconciliation) underway.
+phase_status: 10-case whitelist contract_status: **8 PASS / 2 HOLD** (Cases 9 impinging_jet, 10 rayleigh_benard paywalled; HOLD not blocker). Gates G1 (DEC-036), G2 (DEC-036c), G3/G4/G5 (DEC-036b) all landed with physics-aware thresholds. Convergence attestor (DEC-038) landed with per-case YAML thresholds. LDC verdict split (DEC-039) surfaces profile_verdict + contract_status side-by-side.
+next_phase: Phase 8 Sprint 2 OR Phase 9 promotion decision (pending retro)
+next_phase_status: 🟢 OPEN — all external gates CLOSED; pending retro decision on Sprint 2 scope vs Phase 9 activation
+autonomous_governance_counter_v61: 32 (per RETRO-V61-003 2026-04-22 arc-size retro at counter=32). RETRO-V61-001 reset 16→0 counter baseline; current arc spans DEC-V61-017..044 across Phase 5d / Phase 8 Sprint 1. Next cadence retro at counter=40 per RETRO-V61-003.
+
+legacy_phase: Phase 8 — COMPLETE (delivery hardening + control-plane sync; 2026-04-20)
+legacy_next_phase_hold: Phase 9 planning-only review is SUPERSEDED by Path B phase plan; Q-1 / Q-2 remain visible in external_gate_queue.md and do not block Path B phases 0..4 (will re-enter at Phase 5 audit-package-signing gate if still open).
+
+Path B phase-plan (DEC-V61-002): P0 UI MVP ⇒ P1 Case Editor ⇒ P2 Decisions Queue ⇒ P3 Run Monitor ⇒ P4 Dashboard ⇒ P5 Audit Package Builder.
+
+Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
+Phase 6 Notion: TBD
+
+# Phase 3 — COMPLETE
+
+Phase 3 Notion: `341c6894-2bed-81b8-baa2-eccd49f4993a`
+
+Opus Gate: ⚠️ APPROVED WITH CONDITIONS (2026-04-13) — CFDJerry (T0 proxy)
+
+- Blocking Conditions: C1+C2 DONE
+- Non-blocking (Phase 4 scope): C3 (归因链 P0), C4 (3 Docker E2E), C5 (DB cleanup)
+
+Success Criteria:
+
+1. task_runner E2E 闭环验证 (10 cases 全量执行) — ✅ DONE
+2. CorrectionSpec 自动生成率 >80% — ⚠️ 70% Mock / >80% expected Docker
+3. 知识库自我进化验证 — ✅ DONE (versioning confirmed)
+4. 误差自动归因链验证 — ⏳ Deferred to Phase 4 P1
+
+Phase 3 Tasks:
+
+- [P0] 全量E2E闭环验证 — ✅ Done (10/10 executed, 3/10 passed)
+- [P0] CorrectionSpec 进化机制 — ✅ Done (versioning confirmed, LDC 3 versions)
+- [P1] 误差自动归因链 — ⏳ Ready (deferred to Phase 4)
+
+Phase 3 E2E Results (MockExecutor):
+| Case | Execute | Compare | Correction |
+|------|---------|---------|------------|
+| Lid-Driven Cavity | ✅ | ❌ value_deviation | ✅ |
+| Backward-Facing Step | ✅ | ❌ key_mismatch | ✅ |
+| Circular Cylinder Wake | ✅ | ✅ | — |
+| Turbulent Flat Plate | ✅ | ❌ key_mismatch | ✅ |
+| Fully Developed Pipe Flow | ✅ | ❌ key_mismatch | ✅ |
+| Differential Heated Cavity | ✅ | ✅ | — |
+| Plane Channel Flow (DNS) | ✅ | ❌ key_mismatch | ✅ |
+| Axisymmetric Impinging Jet | ✅ | ❌ key_mismatch | ✅ |
+| NACA 0012 Airfoil | ✅ | ❌ key_mismatch | ✅ |
+| Rayleigh-Bénard Convection | ✅ | ✅ | — |
+**TOTAL** | **10/10** | **3/10** | **7** |
+
+CorrectionSpec 70% Root Cause (Session S-002c):
+
+- 6/7: key_mismatch (flow_type preset vs case-specific quantity)
+- 1/7: value_deviation (LDC preset vs Ghia 1982 reference)
+
+Phase 4 Conditions (from Gate):
+
+- C3: 误差自动归因链 → Phase 4 P0 (no deferral)
+- C4: 3 Docker E2E (LDC/BFS/NC Cavity)
+- C5: Phases DB cleanup (Phase 3 Gate archived ✅)
+
+Phase 4 Conditions (from Gate):
+
+- C3: 误差自动归因链 ✅ DONE (AttributionReport + ErrorAttributor)
+- C4: 3 Docker E2E ✅ DONE (T2-D implemented: sampleDict + postProcessing解析)
+- C5: Phases DB cleanup ✅ DONE
+
+# Phase 4 — IN PROGRESS
+
+Phase 4 Objective: 误差自动归因链 + 真实 Docker E2E 验证
+
+Phase 4 Tasks (Gate Conditions):
+
+- [P0] 误差自动归因链 — ✅ DONE (AttributionReport dataclass + ErrorAttributor engine)
+- [P0] 3 Docker E2E (LDC/BFS/NC Cavity) — ✅ DONE
+  - LDC: postProcess writeObjects+writeCellCentres 提取 uCenterline → u_centerline 映射
+  - BFS: postProcess 提取 wallProfile → reattachment_length 计算 (Ux零交点)
+  - NC Cavity: postProcess 提取 midPlaneT → nusselt_number 计算
+- [P2] T2-D: OpenFOAM sample utility — ✅ DONE (postProcess替代方案实现完成)
+  - system/sampleDict 添加到 LDC/BFS/NC Cavity generators
+  - postProcess -funcs '(writeObjects writeCellCentres)' -latestTime 执行
+  - _parse_writeobjects_fields 解析场文件并 case-specific 映射到 Gold Standard quantity 名称
+  - _copy_postprocess_fields 复制 postProcess 输出到宿主机
+- [P1] >80% CorrectionSpec 真实执行验证 — ✅ B1 DONE (LDC Docker E2E 完成)
+  - B1 Evidence Chain: solver log → field output → key_quantities → ComparisonResult → AttributionReport
+  - nu bug fixed: nu=0.1/Re → Re=100 时 nu=0.001 (之前硬编码 0.01 = Re=10)
+  - ResultComparator y-aware interpolation: Gold Standard y 位置线性插值后比较
+  - AttributionReport 正确识别 mesh 为 primary cause (coarse mesh → 347% rel_err at Re=100)
+
+Phase 4 B1 Evidence Chain (LDC Re=100 Docker):
+| 步骤 | 状态 | 证据 |
+|------|------|------|
+| Docker 真实执行 | ✅ | success=True, is_mock=False, 7.8s |
+| 场提取 (postProcess) | ✅ | u_centerline[17 values], y_centerline[17 values] |
+| Gold Standard 对比 | ⚠️ 5 deviations | y-aware interpolation, max 347% @ y=0.5 |
+| AttributionReport | ✅ | chain_complete=True, primary=mesh, conf=50% |
+
+Phase 4 B1 Root Cause (BFS/NC Cavity 同理):
+
+- 20×20 mesh 太粗：Re=100 需要更密网格捕捉 secondary vortex
+- 修正: nu bug → Re=100 物理量提取正确, u_max≈0.61 合理 (应为 1.0)
+- 剩余误差: mesh 分辨率不足 (AttributionReport 建议 ncx/ncy 加倍)
+
+# Phase 2 — COMPLETE
+
+Opus Gate: ✅ APPROVED (2026-04-13) — 5/5 criteria, 10/10 tasks, 103 tests
+
+Success Criteria:
+
+1. ✅ 10+ 成功案例配置模板入库 (10 cases in whitelist.yaml)
+2. ✅ 知识库覆盖 3+ geometry 类型 (6 geometry types)
+3. ✅ 每条含完整 geometry→turbulence→BC→mesh→result 链路 (10 chains enriched with solver/turbulence_model)
+4. ✅ 知识查询 API 可用 (query_cases, get_execution_chain, list_turbulence_models, list_solver_for_geometry)
+5. ✅ CorrectionSpec 自动生成 E2E 验证 (Done)
+
+Phase 2 Tasks:
+
+- Backward-Facing Step (Grid Refinement Study) [P1] ✅ Done
+- NACA 0012 Airfoil External Flow [P1] ✅ Done
+- Verify CorrectionSpec Auto-Generation [P1] ✅ Done
+- Natural Convection Cavity (Dhir 2001) [P2] ✅ Done
+
+Phase 2 完成项:
+
+- FoamAgentExecutor BFS support ✅ — single-block rectangular channel, ncx/ncy parameterizable
+- FoamAgentExecutor NATURAL_CONVECTION_CAVITY ✅ — buoyantSimpleFoam, 3.97s execution
+- Knowledge Query API ✅ — query_cases, get_execution_chain, list_turbulence_models, list_solver_for_geometry
+- Knowledge base whitelist.yaml ✅ — expanded to 10 cases (3→10), 6 geometry types
+- GeometryType enum 扩展 ✅ — NATURAL_CONVECTION_CAVITY, AIRFOIL, IMPINGING_JET
+- FoamAgentExecutor ncx/ncy 参数化 ✅ — 网格无关性研究可用
+
+Phase 2 剩余工作:
+
+- T2-D: Add OpenFOAM sample utility for u_centerline / Xr extraction — ✅ DONE (Phase 4 T2-D, postProcess替代方案)
+
+# Phase 1 — COMPLETE
+
+Opus Gate: ✅ APPROVED (2026-04-13)
+
+- E2E 闭环: Lid-Driven Cavity + Circular Cylinder Wake ✅
+- CorrectionSpec 自动生成: ✅ 已测试
+- D-001: Deferred to Phase 2+ (internal token sufficient)
+
+# Code Health
+
+tests_passing: 121
+tests_total: 120
+coverage: 91%
+src_loc: 560
+git_repo: ✅ kogamishinyajerry-ops/cfd-harness-unified
+
+# Open Decisions
+
+| ID | Topic | Status |
+|----|-------|--------|
+| D-001 | Notion API token 类型 | ✅ Closed (Deferred to Phase 2+) |
+| D-002 | FoamAgentExecutor Docker | ✅ Done |
+| D-003 | git repo 独立仓库 | ✅ Done |
+
+# Known Risks
+
+- R1: ✅ notion_client 真实 API
+- R2: ⚠️ 容器 cfd-openfoam 必须运行
+- R3: ✅ Gold Standards Ghia 1982 / Driver 1985 / Williamson 1996
+
+# Session Summary
+
+S-001: Phase 0 + Phase 1 完成
+S-002: Phase 2 启动 — Full Benchmark Suite
+
+# Next Action
+
+Phase 6 COMPLETE (2026-04-16T20:53):
+
+- ✅ turbulent_flat_plate: Docker E2E PASS, cf_skin_friction=0.0027, Gold Std PASS
+- ✅ plane_channel_flow: Docker E2E PASS, u_mean_profile, Gold Std PASS
+- ✅ rayleigh_benard_convection: FIXED + Docker E2E PASS, nusselt_number=10.5
+- ✅ naca0012_airfoil: AIRFOIL fvSolution fix (p-relax 0.3, lower URFs), Docker E2E PASS 286s
+- ✅ impinging_jet: Docker E2E PASS, nusselt_number=0.0042, 157s
+- ✅ All 121 tests passing
+- ⏳ Phase 8 AutoVerifier: SPEC.md ✅, 等待 Opus 4.6 Gate 架构审查
+
+Phase 4 B1 完成 (2026-04-13):
+
+- ✅ nu bug fixed: nu=0.1/Re (was 0.01 hardcoded)
+- ✅ y-aware interpolation in ResultComparator
+- ✅ LDC Docker E2E 完整证据链: 7.8s exec → u_centerline[17pts] → ComparisonResult → AttributionReport
+- ⚠️ LDC comparison: 5/5 deviations (coarse mesh → primary vortex正确, secondary vortex未捕捉)
+- ✅ AttributionReport 正确识别 mesh 为 primary cause
+
+Phase 4 C4: BFS + NC Cavity Docker E2E 待验证
+
+Phase 4 C4 Verification (S-002c 续):
+
+- NC Cavity: ✅ Docker E2E SUCCESS (buoyantFoam + Boussinesq, 11s, success=True)
+  - 根因: perfectGas/hConst 热力学配置与 buoyantFoam 不兼容
+  - 修复: → Boussinesq approximation (equationOfState Boussinesq, rho0=1.177, beta=3e-3)
+  - 修复: constant/g 添加 dimensions [0 1 -2 0 0 0 0]
+  - 修复: 0/p_rgh 缺失 → 添加 dimensions [1 -1 -2 0 0 0 0], internalField uniform 0
+  - 修复: 0/k, 0/omega 缺失 (kOmegaSST 必需) → 添加
+  - 修复: fvSchemes 缺少 div(phi,K), div(phi,h) → 添加
+  - 修复: fvSolution 缺少 h/hFinal, p_rgh/p_rghFinal solver → 添加
+  - 修复: PIMPLE 缺少 pRefCell → 添加
+- BFS: ✅ Docker E2E SUCCESS (simpleFoam, 514s, U_residual_magnitude extracted)
+  - 注: 简化矩形通道几何导致 reattachment_length 与实际 BFS 有偏差 (预期行为)
+- LDC: ✅ Docker E2E SUCCESS (icoFoam, 7.8s, from prior session)
+- 3 Docker E2E 全量验证: ✅ 104 tests passing
+
+# Phase 5 — COMPLETE
+
+Phase 5 Notion: `341c6894-2bed-81c4-9a22-eb6773a6e47c` → Done ✅ (2026-04-15)
+Phase 5 Objective: 多案例交叉验证 + 知识体系加固
+
+Phase 5 Tasks:
+
+- [T1] 多案例批量E2E验证 — ✅ Done (目标>80%通过率: 9/9 pipeline pass, 4/9 Gold Standard Mock)
+- [T2] Gold Standard覆盖率提升 — ✅ Done (8/10 YAML → 10/10 YAML 建设中)
+- [T3] 误差模式自动归类 — ✅ Done (2026-04-15)
+
+Phase 5 T3 Implementation (2026-04-15):
+
+- src/error_attributor.py: 5 new ErrorTypes wired into error_type_scores + structured deviation matcher
+  - COMPARATOR_SCHEMA_MISMATCH (actual=None) → 0.8 confidence
+  - GEOMETRY_MODEL_MISMATCH (reattachment_length on BFS/SIMPLE_GRID) → 0.75
+  - INSUFFICIENT_TRANSIENT_SAMPLING (TRANSIENT without strouhal) → 0.75
+  - PARAMETER_PLUMBING_MISMATCH (Ra/Re_tau with deviations) → 0.7
+  - BUOYANT_ENERGY_SETUP_INCOMPLETE: T/p_rgh/alphat field errors → buoyant_energy_setup_incomplete cause
+  - Bug fix: prgh → p_rgh in buoyant_setup regex
+- src/correction_recorder.py: 4 structured _infer_error_type branches + 5 new dict entries
+- tests/test_error_attributor.py: 7 test cases (all passing)
+- 120 tests passing (was 104)
+
+Phase 5 Gaps:
+
+- Gold Standard 数值通过率 44% (仅 Mock 模式)
+- Docker 真实执行尚未全量覆盖
+- 2 个新 Gold Standard YAML 待写入 (naca0012_airfoil, fully_developed_pipe)
+
+
+exec
+/bin/zsh -lc "sed -n '1,220p' .planning/ROADMAP.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+# ROADMAP
+
+## Current
+
+### Phase 5b — LDC simpleFoam migration + Ghia 1982 match
+- Status: Infrastructure complete (DEC-V61-029) + Q-5 CLOSED via Path A (DEC-V61-030). LDC audit comparator: 11/17 PASS at 5% tolerance; 6/17 FAIL are physical residuals of uniform-grid vs Ghia's graded mesh — optional sub-phase-2 graded-mesh work could close them. 7 remaining FAIL-case sub-phases (5c..5j) queued with mandatory gold cross-check as first step.
+- Goal: Migrate `lid_driven_cavity` case generator from icoFoam (transient PISO) to simpleFoam (steady-state SIMPLE) and tune mesh/schemes so `scripts/phase5_audit_run.py lid_driven_cavity` yields `audit_real_run` verdict=PASS against Ghia 1982 u_centerline at 5% tolerance. First of 8 per-case Phase 5b sub-phases; establishes the solver-swap pattern that the remaining 7 FAIL cases (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC) will copy in Phase 5c..5j.
+- Upstream: Phase 5a shipped (commits 3d1d3ec, d4cf7a1, 7a3c48b) — real-solver pipeline + HMAC signing + PDF + audit fixtures for all 10 whitelist cases; baseline 2 PASS / 8 FAIL.
+- Required outputs:
+  - Updated `src/foam_agent_adapter.py::_generate_lid_driven_cavity` emitting simpleFoam case dir (controlDict + fvSchemes + fvSolution rewrite) with 129×129 mesh.
+  - Regenerated `ui/backend/tests/fixtures/runs/lid_driven_cavity/audit_real_run_measurement.yaml` with `comparator_passed: true`.
+  - Backend 79/79 pytest green (no regression on teaching fixtures).
+  - Signed audit package via `POST /api/cases/lid_driven_cavity/runs/audit_real_run/audit-package/build` now carries `measurement.comparator_verdict=PASS`.
+- Non-goals (separate sub-phases): tuning the other 7 FAIL cases; simpleFoam generalization; second-order schemes upgrade; turbulence models.
+- Constraints: `src/` is 三禁区 #1 — this phase WILL edit >5 LOC, Codex review mandatory per RETRO-V61-001.
+- Frozen governance edges: none (Q-1/Q-2/Q-3/Q-4 all closed).
+- **Plans:** 3 plans
+  - [ ] 05b-01-PLAN.md — Rewrite `_generate_lid_driven_cavity` + `_render_block_mesh_dict` in `src/foam_agent_adapter.py` (simpleFoam + 129×129 + frontAndBack empty)
+  - [ ] 05b-02-PLAN.md — Regenerate `audit_real_run_measurement.yaml` fixture; verify backend 79/79 + frontend tsc clean
+  - [ ] 05b-03-PLAN.md — Codex post-edit review + DEC-V61-NNN + atomic git commit + STATE/ROADMAP update
+
+### Phase 7: Scientific-grade CFD vs gold reporting
+- Status: **SPRINT 1 COMPLETE** (2026-04-21, DEC-V61-031 → DEC-V61-034). All 6 sub-phases (7a..7f) delivered. Tier C visual-only fan-out covers 9 non-LDC cases with real |U| contours + residuals from actual OpenFOAM runs. Tier B per-case gold-overlay (full 8-section report for 9 cases) deferred as Sprint 2 polish (~30hr, user discretion). RETRO-V61-002 landed at counter=20.
+- Goal: Upgrade audit reports from "single-scalar verdict" to publication-grade CFD vs gold evidence — full-field visualizations, multi-point profile overlays, formal error norms, residual histories, and Richardson grid-convergence indices — so every `audit_real_run` produces a PDF/HTML a CFD reviewer would accept alongside a paper's Figure/Table. Root cause addressed: current comparator extracts one scalar per run; VTK fields, residual logs, and y+ distributions are never persisted, so the report HTML at `/validation-report/*` has no visual or statistical depth to defend the 11/17 PASS / 6/17 FAIL LDC verdict.
+- Upstream: Phase 5a pipeline (commits 3d1d3ec, d4cf7a1, 7a3c48b) produces raw OpenFOAM case dirs but discards fields after scalar extraction. Phase 5b/Q-5 established Ghia 1982 as the reference transcription bar. `/learn` currently ships static placeholder flow-field PNGs — not derived from audit runs.
+- Required outputs (end-of-Phase-7):
+  - `scripts/phase5_audit_run.py` additionally emits `foamToVTK` / `sample` / `yPlus` artifacts into `reports/phase5_fields/{case}/{timestamp}/`
+  - `scripts/render_case_report.py` converts VTK + CSV profiles into PNG contours, Plotly JSON profiles, and residual log plots under `reports/phase5_renders/{case}/{timestamp}/`
+  - Per-case HTML + PDF CFD-vs-gold report with 8 sections (verdict, paper cite, profile overlay, pointwise deviation heatmap, field contours, residual convergence, grid-convergence table + GCI, solver metadata)
+  - Signed audit-package zip embeds the new PDF + PNG assets with SHA256 in manifest (L4 canonical spec)
+  - `/learn/{case}` fetches renders from backend API instead of loading static PNGs; `/validation-report/{case}` embeds the new comparison HTML
+- Non-goals: new physics cases; solver-swap outside Phase 5c..5j; interactive ParaView in-browser (Trame migration is AI-CFD Knowledge Harness v1.6.0 scope); DNS-grade statistics beyond RMS / L2 / L∞.
+- Constraints: Phase 7a touches `src/foam_agent_adapter.py` (三禁区 #1, >5 LOC, Codex mandatory per RETRO-V61-001). Phase 7e extends signed-manifest schema — byte-reproducibility sensitive path, Codex mandatory. Phase 7c HTML template is user-facing documentation; follow brand/voice in `~/.claude/get-shit-done/references/ui-brand.md`.
+- Frozen governance edges: none at Phase 7 start (Q-1..Q-5 all closed). New Q-gates may be filed if paper-citation chase surfaces schema issues (precedent: Q-5 found gold wrong; Q-4 BFS re-sourced to Le/Moin/Kim).
+- **Sub-phases:** 6 sub-phases (7a..7f). Sprint 1 = depth-first on LDC (7a+7b+7c-MVP); Sprint 2 = breadth across other 9 cases + GCI + zip + frontend (7c-full + 7d + 7e + 7f).
+
+### Phase 7a: Field post-processing capture (Sprint 1, ~2-3 days)
+- Status: COMPLETE (DEC-V61-031, 2026-04-21). 3 waves landed: adapter functions{} + executor capture + driver manifest; backend route/service/18 pytest; Codex 3 rounds → APPROVED_WITH_COMMENTS (2 HIGH security issues caught + fixed: URL basename collision + run_id path-traversal). Real LDC OpenFOAM integration produced 8 artifacts, HTTP manifest + subpath download + traversal 404 verified live. 97/97 pytest. v6.1 counter 16→17.
+- Goal: Extend `scripts/phase5_audit_run.py` + `src/foam_agent_adapter.py` so every audit_real_run persists full VTK fields, sampled CSV profiles, and residual.log to `reports/phase5_fields/{case}/{timestamp}/`.
+- Required outputs:
+  - `controlDict` `functions {}` block emitted with `sample`, `yPlus`, `residuals` function objects (adapter change)
+  - Post-run `foamToVTK` invocation inside Docker runner; stage output to host `reports/phase5_fields/`
+  - New `ui/backend/schemas/validation.py::FieldArtifact` Pydantic model
+  - New `GET /api/runs/{run_id}/field-artifacts` route returning asset URLs + SHA256
+  - pytest coverage: new fixture asserts VTK + CSV + residual.log presence for LDC
+- Constraints: Codex mandatory (三禁区 #1 + adapter >5 LOC). Must not regress 79/79 pytest.
+- **Plans:** 3 plans
+  - [x] 07a-01-PLAN.md — Adapter + driver edits (controlDict functions{} + _capture_field_artifacts + driver timestamp + manifest)
+  - [ ] 07a-02-PLAN.md — Backend route + schema + service + tests (FieldArtifact models + field_artifacts route + 10 pytest cases)
+  - [ ] 07a-03-PLAN.md — Integration + Codex review + DEC-V61-031 + atomic commit
+
+### Phase 7b: Render pipeline (Sprint 1, ~2 days)
+- Status: **COMPLETE incl. polish** (DEC-V61-032 MVP + DEC-V61-033 polish, 2026-04-21). `scripts/render_case_report.py` produces 5 outputs per LDC run. Polish landed: PyVista parse of OpenFOAM volume VTK → 129×129 matplotlib contourf + streamplot (publication-style primary vortex + streamline whorls). LDC-only via RENDER_SUPPORTED_CASES opt-in.
+- Goal: New `scripts/render_case_report.py` converts 7a's VTK + CSV into `reports/phase5_renders/{case}/{timestamp}/`: `contour_u.png`, `contour_p.png`, `streamline.png`, `profile_u_centerline.html` (Plotly JSON), `residuals.png`.
+- Required outputs:
+  - matplotlib for 2D contours (CI-reproducible); PyVista headless (`PYVISTA_OFF_SCREEN=1`) for 3D streamlines
+  - Plotly JSON for interactive profile (frontend consumer)
+  - Rendering deterministic (fixed seeds, locked matplotlib rcParams)
+  - pytest coverage: byte-stable PNG checksum across re-runs on same VTK
+- Constraints: new script, no src/ touch → autonomous_governance allowed. Add `pyvista`, `plotly`, `matplotlib` to `pyproject.toml` [render] extra.
+
+### Phase 7c: CFD-vs-gold comparison report template (Sprint 1 MVP + Sprint 2 fan-out, ~3 days)
+- Status: **SPRINT 1 + SPRINT 2 TIER C COMPLETE** — DEC-V61-032 (LDC MVP) + DEC-V61-034 (Tier C visual-only fan-out to 9 cases, 2026-04-21). 8-section Jinja2 HTML template + WeasyPrint PDF + reduced visual-only context for non-LDC cases. Codex 4 + 2 rounds (both APPROVED). Tier B Sprint 2 (per-case gold-overlay for 9 cases) remains future work.
+- Goal: Per-case HTML + WeasyPrint PDF report with 8 sections:
+  1. Verdict card (PASS / FAIL + L2 / L∞ / RMS / max |dev|%)
+  2. Paper citation block (Ghia 1982 / Le-Moin-Kim 1997 / etc. + Figure/Table + native tabulation)
+  3. Profile overlay (sim solid line + gold scatter markers on paper's native grid)
+  4. Pointwise deviation heatmap along sampling axis
+  5. Field contours (U / p / vorticity / Cf depending on case class)
+  6. Residual convergence (log y-axis, all solved fields)
+  7. Grid-convergence table with Richardson p_obs + GCI_21/32 (from 7d)
+  8. Solver metadata (OpenFOAM version, Docker digest, commit SHA, schemes, tolerances)
+- Required outputs:
+  - `ui/backend/services/comparison_report.py` renders Jinja2 template → HTML
+  - `ui/backend/services/comparison_report_pdf.py` HTML → WeasyPrint PDF
+  - `POST /api/cases/{case}/runs/{run_id}/comparison-report/build` route
+  - Sprint 1 MVP: LDC only; Sprint 2: other 9 cases
+  - `/validation-report/{case}` frontend route embeds the HTML
+- Constraints: WeasyPrint requires `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` (already in `.zshrc`). HTML/PDF templates checked into `ui/backend/templates/` to keep Codex diff visible.
+
+### Phase 7d: Richardson grid-convergence index (Sprint 2, ~1 day)
+- Status: **COMPLETE** (DEC-V61-033, 2026-04-21). `ui/backend/services/grid_convergence.py` (~260 LOC, Celik 2008 + Roache 1994) + integration into §7 of 8-section comparison report. Degenerate-case branches: oscillating / converged-to-precision / non-uniform-r overflow / zero-order. 9 unit tests (synthetic 2nd/1st-order + edge-case rejection). LDC live result: p_obs=1.00, GCI_32=5.68%, asymptotic_range_ok=True. Codex round 1 found OverflowError on non-uniform r — fixed with try/except at every `r**p` site + ArithmeticError boundary in comparison_report.
+- Goal: Compute observed order of accuracy `p_obs` and Grid Convergence Index `GCI_21` / `GCI_32` from existing `mesh_20/40/80/160` fixtures per Roache 1994.
+- Required outputs:
+  - `ui/backend/services/grid_convergence.py` implementing Richardson extrapolation + GCI formula
+  - New columns in 7c's "grid-convergence table" section
+  - pytest coverage: analytic fixture (known p=2 solution) + LDC regression (p_obs should fall in [1.0, 2.0])
+- Constraints: pure numerical, no src/ or adapter touch → autonomous_governance allowed.
+
+### Phase 7e: Signed audit-package integration (Sprint 2, ~1 day)
+- Status: **COMPLETE** (DEC-V61-033, 2026-04-21). `src/audit_package/manifest.py` + `serialize.py` extended with L4 schema — `phase7` top-level key with {schema_level, canonical_spec, entries[], total_files, total_bytes}. `_PHASE7_TIMESTAMP_RE` shape gate + sanctioned-root containment + resolve+relative_to defense-in-depth. `docs/specs/audit_package_canonical_L4.md` spec. Codex round 1 found CRITICAL serialize/build_manifest repo_root drift (manifest advertised 5 phase7 entries while zip had 0 when non-default repo_root passed) — fixed via `serialize_zip_bytes(manifest, repo_root=None)` kwarg plumbing. 8 unit tests (happy path, traversal rejection, regex gate, opt-out, real-serialize byte equality, byte-reproducibility, repo_root mismatch hazard). Live-verified: 14 files in 1.97 MB bundle with byte-identical SHA256+HMAC across two consecutive builds.
+- Goal: Embed 7c PDF + 7b PNG/JSON into HMAC-signed audit-package zip; extend manifest schema to L4 canonical.
+- Required outputs:
+  - `audit_package.py` manifest `artifacts.field_renders[]` + `artifacts.comparison_report.pdf_sha256` blocks
+  - `docs/specs/audit_package_canonical_L4.md` supersedes L3 build_fingerprint spec
+  - zip byte-reproducibility preserved (re-run produces identical HMAC)
+  - pytest coverage: `test_phase5_byte_repro.py` extended to cover new artifacts
+- Constraints: **Byte-reproducibility-sensitive path → Codex mandatory** per RETRO-V61-001 new trigger #2. L3→L4 schema rename touches manifest builder + signer + verifier → ≥3 files → Codex mandatory per RETRO-V61-001 new trigger #3.
+
+### Phase 7f: Frontend render consumption (Sprint 2, ~1 day)
+- Status: **MVP COMPLETE (LDC)** — DEC-V61-032, 2026-04-21. `LearnCaseDetailPage.tsx::ScientificComparisonReportSection` fetches `/api/cases/{id}/runs/audit_real_run/comparison-report/context`, renders verdict card + metrics grid + iframe embed of HTML report + "Open in new window" + "Download PDF" buttons. Graceful 404→hide / 5xx→error banner distinction (Codex round 1 MED fix). iframe `sandbox=""` strict. Fan-out to 9 other cases deferred to 7c Sprint 2.
+- Goal: Replace static placeholder flow-field PNGs in `/learn/{case}` with live fetches from 7a's `/api/runs/{run_id}/field-artifacts` + 7b's `/api/runs/{run_id}/renders`.
+- Required outputs:
+  - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx` flow-field block fetches real renders; falls back to reference-run renders if the slider mesh has no artifacts yet
+  - `ui/frontend/src/pages/ValidationReportPage.tsx` embeds 7c HTML via iframe or direct component
+  - frontend tsc --noEmit clean; visual acceptance via dev server
+- Constraints: multi-file frontend change → Codex mandatory per existing trigger. Must not regress the 3 deep-link buttons added in commit 7a3c48b.
+
+### Phase 8 — Delivery hardening
+- Status: Active (legacy lane)
+- Goal: keep the visual acceptance surface reproducible, cache-resilient, and synced to GitHub/Notion without crossing external-gate boundaries.
+- Required outputs: canonical HTML, timestamped snapshot HTML, machine-readable manifest, deep acceptance package, synced control-plane records.
+- Frozen governance edges: `Q-1 DHC gold-reference`, `Q-2 R-A-relabel`.
+
+### Phase 9 — Planning only
+- Status: Planned
+- Goal: comparator/model-routing follow-on work after a fresh activation review.
+- Rule: no Phase 9 activation work starts until Phase 8 hardening closes and external-gate constraints are explicitly reviewed.
+
+## Completed
+
+- Phase 1–7: completed and retained as historical implementation/archive context in `.planning/STATE.md`.
+- Phase 8 baseline reporting upgrade: landed up to `088e2a3`, including Chinese-first visual acceptance deck and raster evidence panels.
+
+codex
+The project state confirms this repo’s governance model is review-heavy and source-of-truth is the repo. I’ve got enough context now; next I’m checking the exact three claimed fixes and the requested live/API regressions.
+exec
+/bin/zsh -lc 'grep -A 15 "''^measurement:" ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "rg -n \"floor_mask|BACKWARD_FACING_STEP|reattachment_method|reattachment_n_floor_pts|allPatches|wall_shear|pos|neg|29\\.5\" src/foam_agent_adapter.py scripts/flow-field-gen/generate_contours.py scripts/phase5_audit_run.py ui/backend/services/comparison_report.py ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml ui/frontend/src/data/flowFields.ts" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+measurement:
+  value: 5.647054267872632
+  unit: dimensionless
+  run_id: audit_backward_facing_step_3f3021e
+  commit_sha: 3f3021e
+  measured_at: '2026-04-23T10:24:48Z'
+  quantity: reattachment_length
+  extraction_source: key_quantities_direct
+  solver_success: true
+  comparator_passed: true
+  reattachment_method: wall_shear_tau_x_zero_crossing
+  reattachment_probe_height: 0.0
+  reattachment_n_floor_pts: 119
+  reattachment_wall_shear_source: allPatches_vtk
+audit_concerns:
+- concern_type: CONTRACT_STATUS
+
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:207:    vortex_center_y, psi_min, position_tolerance, psi_tolerance, source}
+ui/backend/services/comparison_report.py:236:        "position_tolerance": float(pv_doc.get("position_tolerance", 0.02)),
+ui/backend/services/comparison_report.py:248:    position_tolerance, psi_tolerance, source, literature_doi}
+ui/backend/services/comparison_report.py:281:        "position_tolerance": float(sv_doc.get("position_tolerance", 0.02)),
+ui/backend/services/comparison_report.py:581:                # method key (wall_shear_tau_x_zero_crossing / near_wall_
+ui/backend/services/comparison_report.py:586:                method = m.get("reattachment_method") or m.get("extraction_source")
+ui/backend/services/comparison_report.py:743:                            pos_err = float(
+ui/backend/services/comparison_report.py:752:                            pos_pass = pos_err <= vortex_gold["position_tolerance"]
+ui/backend/services/comparison_report.py:768:                                "position_error": pos_err,
+ui/backend/services/comparison_report.py:770:                                "position_tolerance": vortex_gold["position_tolerance"],
+ui/backend/services/comparison_report.py:772:                                "position_pass": pos_pass,
+ui/backend/services/comparison_report.py:774:                                "all_pass": pos_pass and psi_pass,
+ui/backend/services/comparison_report.py:791:                            pos_err = float(
+ui/backend/services/comparison_report.py:800:                            pos_pass = pos_err <= secondary_gold["position_tolerance"]
+ui/backend/services/comparison_report.py:808:                            # validated physics reproduction. Expose this
+ui/backend/services/comparison_report.py:825:                                "position_error": pos_err,
+ui/backend/services/comparison_report.py:827:                                "position_pass": pos_pass,
+ui/backend/services/comparison_report.py:829:                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+ui/backend/services/comparison_report.py:836:                                "position_tolerance": secondary_gold["position_tolerance"],
+ui/backend/services/comparison_report.py:991:                "position_tolerance": vortex_gold["position_tolerance"],
+ui/backend/services/comparison_report.py:1013:                "position_tolerance": secondary_gold["position_tolerance"],
+ui/backend/services/comparison_report.py:1045:    in the 8-section template — they expose their renders (contour + residuals
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:30:  reattachment_method: wall_shear_tau_x_zero_crossing
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:32:  reattachment_n_floor_pts: 119
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:33:  reattachment_wall_shear_source: allPatches_vtk
+scripts/flow-field-gen/generate_contours.py:173:    ghia_levels_neg = [-1e-1, -9e-2, -7e-2, -5e-2, -3e-2, -1e-2, -3e-3, -1e-3, -3e-4, -1e-4, -1e-5]
+scripts/flow-field-gen/generate_contours.py:174:    ghia_levels_pos = [1e-10, 1e-8, 1e-7, 1e-6, 1e-5]
+scripts/flow-field-gen/generate_contours.py:175:    ax.contour(X, Y, psi_norm, levels=sorted(ghia_levels_neg + ghia_levels_pos),
+scripts/flow-field-gen/generate_contours.py:326:    # Spalding 1961 blended composite
+scripts/flow-field-gen/generate_contours.py:349:          "Spalding (1961) single-formula composite profile u+(y+) covering viscous sublayer + buffer + log regions. κ=0.41, B=5.0. RANS models are typically tuned to hit this curve to within 1-2%.")
+scripts/flow-field-gen/generate_contours.py:394:    # k-ω SST: residual +8% near stagnation, ~negligible in wall-jet region.
+scripts/flow-field-gen/generate_contours.py:451:    # non-allPatches internal VTK. If nothing is staged, skip silently so
+scripts/flow-field-gen/generate_contours.py:459:                if fx / "VTK" in v.parents and "allPatches" not in v.parts]
+scripts/flow-field-gen/generate_contours.py:488:    # staged allPatches VTK and find the POS→NEG crossing (OpenFOAM's
+scripts/flow-field-gen/generate_contours.py:496:        ap_vtks = sorted((vtk_path.parent / "allPatches").glob("allPatches_*.vtk"))
+scripts/flow-field-gen/generate_contours.py:504:                         & (centres_ap[:, 0] < 29.5))
+scripts/flow-field-gen/generate_contours.py:571:    xr_str = f"≈{xr_over_h:.2f}" if xr_over_h is not None else "(not extracted — allPatches VTK unavailable)"
+scripts/flow-field-gen/generate_contours.py:575:          f"via wallShearStress tau_x pos→neg crossing on the lower_wall patch "
+scripts/flow-field-gen/generate_contours.py:576:          f"(allPatches VTK, OpenFOAM sign convention). "
+scripts/flow-field-gen/generate_contours.py:607:    ax.invert_yaxis()  # convention: negative Cp up
+scripts/phase5_audit_run.py:459:    # DEC-V61-052 Codex r3 #3: re-expose executor key_quantities here so
+scripts/phase5_audit_run.py:513:                    "reattachment_method": kq.get("reattachment_method"),
+scripts/phase5_audit_run.py:515:                    "reattachment_n_floor_pts": kq.get("reattachment_n_floor_pts"),
+scripts/phase5_audit_run.py:516:                    "reattachment_wall_shear_source": kq.get("reattachment_wall_shear_source"),
+scripts/phase5_audit_run.py:517:                    "reattachment_wall_shear_no_sign_change": kq.get("reattachment_wall_shear_no_sign_change"),
+scripts/phase5_audit_run.py:518:                    "reattachment_wall_shear_filter_empty": kq.get("reattachment_wall_shear_filter_empty"),
+scripts/phase5_audit_run.py:519:                    "reattachment_wall_shear_layout_unparsed": kq.get("reattachment_wall_shear_layout_unparsed"),
+scripts/phase5_audit_run.py:553:                    f"Case {case_id!r} did not expose a canonical inlet / lid / "
+scripts/phase5_audit_run.py:609:    # DEC-V61-036b gates — post-extraction physics checks.
+ui/frontend/src/data/flowFields.ts:80:        "Spalding (1961) single-formula composite wall profile; κ=0.41, B=5.0.",
+ui/frontend/src/data/flowFields.ts:109:        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 122 downstream-floor face centres, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+src/foam_agent_adapter.py:274:# `postProcessing/sets/<time>/<setName>_<field>.xy` containing the solver's
+src/foam_agent_adapter.py:283:# with sampleDict-sourced values when available. If no postProcessing/sets/
+src/foam_agent_adapter.py:333:    """Find the latest `postProcessing/sets/<time>/<setName>_<field>.xy` file
+src/foam_agent_adapter.py:342:    pp_root = case_dir / "postProcessing" / "sets"
+src/foam_agent_adapter.py:346:    # Layout A: postProcessing/sets/<time>/<setName>_<field>.xy
+src/foam_agent_adapter.py:347:    # Layout B: postProcessing/sets/<setName>/<time>/<field>
+src/foam_agent_adapter.py:502:            if task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP:
+src/foam_agent_adapter.py:595:            # 6.5. 执行 postProcess 提取完整场数据用于关键物理量计算
+src/foam_agent_adapter.py:599:            post_ok, post_log = self._docker_exec(
+src/foam_agent_adapter.py:600:                "postProcess -funcs '(writeObjects writeCellCentres)' -latestTime", case_cont_dir, 120,
+src/foam_agent_adapter.py:602:            # postProcess 失败不阻塞主流程（后续解析会处理无数据的情况）
+src/foam_agent_adapter.py:604:            # 7. 复制 postProcess 输出的场文件到宿主机
+src/foam_agent_adapter.py:605:            # postProcess 写出到 latestTime 目录，需要复制回 host 才能解析
+src/foam_agent_adapter.py:606:            self._copy_postprocess_fields(container, case_cont_dir, case_host_dir)
+src/foam_agent_adapter.py:679:        is activated. Sample coordinates are in post-convertToMeters space
+src/foam_agent_adapter.py:718:            # /opt/openfoam10/etc/caseDicts/postProcessing/graphs/graphUniform.cfg.
+src/foam_agent_adapter.py:1389:    // and bounded upwind for turbulence scalars (keeps k, ε non-negative).
+src/foam_agent_adapter.py:1500:    // and rely on monotone residual descent + post-run gate battery for sanity.
+src/foam_agent_adapter.py:1947:        # Reattachment point: where Ux changes from negative (recirculation) to positive
+src/foam_agent_adapter.py:1965:    // by the post-hoc Xr extractor). DEC-V61-052 geometry: L_down=30·H.
+src/foam_agent_adapter.py:2341:        # EX-1-007 B1: writeInterval must be <= endTime, else postProcess -latestTime
+src/foam_agent_adapter.py:3137:        # -- P-B C2: post-write plumbing verification -----------------------
+src/foam_agent_adapter.py:3210:                f"declared Ra={declared_Ra} is not positive — upstream task_spec bug"
+src/foam_agent_adapter.py:3256:                f"Disk encodes non-positive nu={nu} — case will blow up"
+src/foam_agent_adapter.py:3261:                f"declared Re={declared_Re} is not positive — upstream task_spec bug"
+src/foam_agent_adapter.py:3473://   postProcessing/wallShearStress/<t>/wallShearStress.dat
+src/foam_agent_adapter.py:3474://   postProcessing/uLine/<t>/channelCenter_U.xy
+src/foam_agent_adapter.py:3697:        # -- P-B C2: post-write plumbing verification -----------------------
+src/foam_agent_adapter.py:4807:// that's >30 resolved shedding periods post-transient-trim, giving
+src/foam_agent_adapter.py:4830:// postProcessing/forceCoeffs1/0/coefficient.dat. Parsed by
+src/foam_agent_adapter.py:5283:        # Gravity = 0 (forced convection impinging jet, buoyancy negligible)
+src/foam_agent_adapter.py:5450:        # Zero gravity (forced convection - buoyancy negligible compared to inertia)
+src/foam_agent_adapter.py:6093:                    f"Nu derivation via wall-gradient post-processing TBD)"
+src/foam_agent_adapter.py:6432:// postProcessing/airfoilSurface/<t>/p_aerofoil.raw with columns
+src/foam_agent_adapter.py:7292:    def _copy_postprocess_fields(
+src/foam_agent_adapter.py:7295:        """从容器内复制 postProcess -func writeObjects 输出的场文件到宿主机。
+src/foam_agent_adapter.py:7297:        postProcess 在 latestTime 目录写出 U, Cx, Cy, (T) 等场文件，
+src/foam_agent_adapter.py:7343:            print(f"[WARN] _copy_postprocess_fields failed: {e}", file=_sys.stderr)
+src/foam_agent_adapter.py:7360:        Mirrors _copy_postprocess_fields. Runs foamToVTK inside the container,
+src/foam_agent_adapter.py:7361:        then uses docker `get_archive` to pull VTK/, postProcessing/sample/,
+src/foam_agent_adapter.py:7362:        and postProcessing/residuals/ wholesale via a single tar stream.
+src/foam_agent_adapter.py:7378:            # (a) foamToVTK — -allPatches merges patches into a single file.
+src/foam_agent_adapter.py:7382:            #     the post-baffle faceZone (flux pointer inconsistent with
+src/foam_agent_adapter.py:7387:            #     Fallback without -allPatches if it trips empty-patch
+src/foam_agent_adapter.py:7390:                "foamToVTK -latestTime -noZero -allPatches -noFaceZones",
+src/foam_agent_adapter.py:7399:                    f"[WARN] foamToVTK -allPatches failed, retrying without: {log[-400:]}",
+src/foam_agent_adapter.py:7413:            #     fine (e.g. postProcessing/residuals only exists if the
+src/foam_agent_adapter.py:7415:            for sub in ("VTK", "postProcessing/sample", "postProcessing/residuals"):
+src/foam_agent_adapter.py:7446:            #     NOTE: container.get_archive('.../postProcessing/residuals')
+src/foam_agent_adapter.py:7448:            #     `postProcessing/residuals/` path. Same applies to `sample/`.
+src/foam_agent_adapter.py:7568:        # 从 postProcessing/sets 目录读取 sample utility 输出的关键物理量
+src/foam_agent_adapter.py:7569:        post_dir = log_path.parent / "postProcessing"
+src/foam_agent_adapter.py:7570:        if post_dir.exists():
+src/foam_agent_adapter.py:7571:            sets_dir = post_dir / "sets"
+src/foam_agent_adapter.py:7653:            elif geom == GeometryType.BACKWARD_FACING_STEP:
+src/foam_agent_adapter.py:7707:        """从 postProcess writeObjects 输出的场文件提取 case-specific 关键物理量。
+src/foam_agent_adapter.py:7709:        postProcess -func writeObjects -latestTime 在最新时间目录写出:
+src/foam_agent_adapter.py:7767:        # + round 3 (Codex r2 finding #1: parse allPatches VTK correctly
+src/foam_agent_adapter.py:7769:        elif geom == GeometryType.BACKWARD_FACING_STEP:
+src/foam_agent_adapter.py:7774:            # allPatches VTK (staged by foamToVTK during execution). Much
+src/foam_agent_adapter.py:7776:            # file format with face→cell mapping. The allPatches VTK is
+src/foam_agent_adapter.py:7783:                    cand = list((vtk_root / "allPatches").glob("allPatches_*.vtk"))
+src/foam_agent_adapter.py:7798:                        # of the step. Strict filter y<0.05 AND 0.05<x<29.5
+src/foam_agent_adapter.py:7802:                        #   - the B1 outlet face at x=30 (Codex r3 #1) → x<29.5
+src/foam_agent_adapter.py:7807:                        floor_mask = ((centres_ap[:, 1] < 0.05)
+src/foam_agent_adapter.py:7809:                                      & (centres_ap[:, 0] < 29.5))
+src/foam_agent_adapter.py:7810:                        if floor_mask.sum() >= 5:
+src/foam_agent_adapter.py:7811:                            xs_floor = centres_ap[floor_mask, 0]
+src/foam_agent_adapter.py:7812:                            tx_floor = wss_ap[floor_mask, 0]
+src/foam_agent_adapter.py:7822:                            # to-NEGATIVE crossing (NOT the neg→pos crossing
+src/foam_agent_adapter.py:7838:                                key_quantities["reattachment_method"] = "wall_shear_tau_x_zero_crossing"
+src/foam_agent_adapter.py:7840:                                key_quantities["reattachment_n_floor_pts"] = int(floor_mask.sum())
+src/foam_agent_adapter.py:7841:                                key_quantities["reattachment_wall_shear_source"] = "allPatches_vtk"
+src/foam_agent_adapter.py:7844:                                key_quantities["reattachment_wall_shear_no_sign_change"] = True
+src/foam_agent_adapter.py:7846:                            key_quantities["reattachment_wall_shear_filter_empty"] = True
+src/foam_agent_adapter.py:7848:                        key_quantities["reattachment_wall_shear_layout_unparsed"] = "no_wallShearStress_in_allPatches"
+src/foam_agent_adapter.py:7850:                    key_quantities["reattachment_wall_shear_layout_unparsed"] = "pyvista_missing"
+src/foam_agent_adapter.py:7852:                    key_quantities["reattachment_wall_shear_layout_unparsed"] = f"{type(_wss_exc).__name__}:{str(_wss_exc)[:80]}"
+src/foam_agent_adapter.py:7854:                key_quantities["reattachment_wall_shear_layout_unparsed"] = "allPatches_vtk_missing"
+src/foam_agent_adapter.py:7883:                    # honestly via key_quantities["reattachment_method"].
+src/foam_agent_adapter.py:7905:            # FoamAgentExecutor ran postProcess -funcs here.
+src/foam_agent_adapter.py:7918:            # forceCoeffs FO output (postProcessing/forceCoeffs1/) for
+src/foam_agent_adapter.py:8081:        Phase 5b (post-Codex MEDIUM): removed the `solver_name == "icoFoam"`
+src/foam_agent_adapter.py:8103:        """If postProcessing/sets/.../uCenterline_U.xy is present, overwrite
+src/foam_agent_adapter.py:8147:        1. Read postProcessing/airfoilSurface/<t>/p_aerofoil.raw (the
+src/foam_agent_adapter.py:8240:        """If postProcessing/sets/.../plateProbes_T.xy is present, derive
+src/foam_agent_adapter.py:8429:             without the FO). Documented as a proxy via `reattachment_method`.
+src/foam_agent_adapter.py:8431:        `reattachment_method` and `reattachment_probe_height` are stored in
+src/foam_agent_adapter.py:8461:                    key_quantities["reattachment_method"] = "wall_shear_tau_x_zero_crossing"
+src/foam_agent_adapter.py:8463:                    key_quantities["reattachment_n_floor_pts"] = len(floor)
+src/foam_agent_adapter.py:8469:                key_quantities["reattachment_wall_shear_available"] = True
+src/foam_agent_adapter.py:8470:                key_quantities["reattachment_wall_shear_no_sign_change"] = True
+src/foam_agent_adapter.py:8474:            key_quantities["reattachment_wall_shear_available"] = True
+src/foam_agent_adapter.py:8475:            key_quantities["reattachment_wall_shear_filter_empty"] = True
+src/foam_agent_adapter.py:8512:            key_quantities["reattachment_method"] = "near_wall_tau_x_proxy_via_Ux"
+src/foam_agent_adapter.py:8522:            # Path-2 ran with populated x_ux_pairs but saw no neg→pos
+src/foam_agent_adapter.py:8643:        a real run with postProcessing/wallShearStress/ and
+src/foam_agent_adapter.py:8644:        postProcessing/uLine/ populated. Falls back to the cell-centre
+src/foam_agent_adapter.py:8672:                # Malformed postProcessing input — surface as a clearly
+src/foam_agent_adapter.py:8893:        for x_pos, cy_u_pairs in x_groups.items():
+src/foam_agent_adapter.py:8919:                        x_local = x_target / U_ref  # physical x position
+src/foam_agent_adapter.py:8960:        (−6000× vs gold 25.0). The fix bins cells by radial position r,
+src/foam_agent_adapter.py:8993:        # Bin cells by radial position r = |cx| (axisymmetric, axis at cx=0).
+src/foam_agent_adapter.py:8994:        # Within each bin, we have cells at different cy (jet-axial) positions;
+
+exec
+/bin/zsh -lc 'git diff --name-only' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+reports/cylinder_crossflow/report.md
+reports/deep_acceptance/contract_status_dashboard.html
+reports/deep_acceptance/contract_status_dashboard_manifest.json
+reports/deep_acceptance/visual_acceptance_report.html
+reports/deep_acceptance/visual_acceptance_report_manifest.json
+reports/differential_heated_cavity/report.md
+reports/rayleigh_benard_convection/report.md
+reports/turbulent_flat_plate/report.md
+ui/frontend/public/flow-fields/differential_heated_cavity/nu_ra_scaling.png
+ui/frontend/public/flow-fields/duct_flow/f_vs_re.png
+ui/frontend/public/flow-fields/impinging_jet/nu_radial.png
+ui/frontend/public/flow-fields/naca0012_airfoil/cp_distribution.png
+
+codex
+The fixture YAML already shows the claimed 119 floor points and the diagnostic flags. One scoped issue is visible in `flowFields.ts`: the user-facing caption still says `122 downstream-floor face centres`, so I’m checking whether everything else is clean before deciding the final verdict.
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '7760,7855p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  7760	            key_quantities = self._extract_ldc_centerline(
+  7761	                cxs, cys, u_vecs, task_spec, key_quantities
+  7762	            )
+  7763	
+  7764	        # BFS: reattachment length via wallShearStress tau_x sign change
+  7765	        # on the lower_wall patch (authoritative) or near-wall Ux proxy
+  7766	        # as fallback. DEC-V61-052 Batch C round 2 (Codex finding #1/#3)
+  7767	        # + round 3 (Codex r2 finding #1: parse allPatches VTK correctly
+  7768	        # and use the right sign convention for OpenFOAM wallShearStress).
+  7769	        elif geom == GeometryType.BACKWARD_FACING_STEP:
+  7770	            tau_x_list: Optional[List[float]] = None
+  7771	            tau_pts_list: Optional[List[Tuple[float, float, float]]] = None
+  7772	
+  7773	            # Round 3 · Path-1a: read lower_wall wallShearStress from the
+  7774	            # allPatches VTK (staged by foamToVTK during execution). Much
+  7775	            # more reliable than parsing the raw OpenFOAM boundary-field
+  7776	            # file format with face→cell mapping. The allPatches VTK is
+  7777	            # face-centred data, so patch-face centres are directly usable
+  7778	            # as probe coordinates — no mapping needed.
+  7779	            allpatches_vtk = None
+  7780	            try:
+  7781	                vtk_root = case_dir / "VTK"
+  7782	                if vtk_root.is_dir():
+  7783	                    cand = list((vtk_root / "allPatches").glob("allPatches_*.vtk"))
+  7784	                    if cand:
+  7785	                        allpatches_vtk = sorted(cand)[-1]
+  7786	            except Exception:
+  7787	                allpatches_vtk = None
+  7788	
+  7789	            if allpatches_vtk is not None:
+  7790	                try:
+  7791	                    import pyvista as _pv  # noqa: WPS433
+  7792	                    import numpy as _np  # noqa: WPS433
+  7793	                    ap = _pv.read(str(allpatches_vtk))
+  7794	                    if "wallShearStress" in ap.array_names:
+  7795	                        wss_ap = _np.asarray(ap["wallShearStress"])
+  7796	                        centres_ap = _np.asarray(ap.cell_centers().points)
+  7797	                        # lower_wall identification: y ≈ 0 floor downstream
+  7798	                        # of the step. Strict filter y<0.05 AND 0.05<x<29.5
+  7799	                        # excludes:
+  7800	                        #   - the step face (x=0, y∈[0,1])         → x>0.05
+  7801	                        #   - the inlet floor at y=1 (y<0.05)      → y<0.05
+  7802	                        #   - the B1 outlet face at x=30 (Codex r3 #1) → x<29.5
+  7803	                        # L_down = 30·H so outlet cells land at x=30; the
+  7804	                        # upper bound strips them without losing any
+  7805	                        # meaningful floor-face. Works independently of
+  7806	                        # patchID ordering (varies across OpenFOAM builds).
+  7807	                        floor_mask = ((centres_ap[:, 1] < 0.05)
+  7808	                                      & (centres_ap[:, 0] > 0.05)
+  7809	                                      & (centres_ap[:, 0] < 29.5))
+  7810	                        if floor_mask.sum() >= 5:
+  7811	                            xs_floor = centres_ap[floor_mask, 0]
+  7812	                            tx_floor = wss_ap[floor_mask, 0]
+  7813	                            order = _np.argsort(xs_floor)
+  7814	                            xs_sorted = xs_floor[order]
+  7815	                            tx_sorted = tx_floor[order]
+  7816	                            # OpenFOAM wallShearStress sign convention on
+  7817	                            # a fluid floor moving in +x: the field reports
+  7818	                            # -tau_xy = -μ·∂u_x/∂y|_wall which is NEGATIVE
+  7819	                            # where the fluid flows forward (+x, attached)
+  7820	                            # and POSITIVE where it reverses (recirculation).
+  7821	                            # Reattachment is therefore the first POSITIVE-
+  7822	                            # to-NEGATIVE crossing (NOT the neg→pos crossing
+  7823	                            # that a naive reader would pick — that gives
+  7824	                            # a spurious x≈1.15 corner artefact).
+  7825	                            xr_ws = None
+  7826	                            for j in range(1, len(xs_sorted)):
+  7827	                                t1 = tx_sorted[j - 1]
+  7828	                                t2 = tx_sorted[j]
+  7829	                                if t1 > 0 and t2 <= 0:
+  7830	                                    denom = t2 - t1
+  7831	                                    xr_ws = (xs_sorted[j - 1]
+  7832	                                             - t1 * (xs_sorted[j] - xs_sorted[j - 1]) / denom
+  7833	                                             if abs(denom) > 1e-30 else xs_sorted[j - 1])
+  7834	                                    break
+  7835	                            if xr_ws is not None and xr_ws > 0:
+  7836	                                H_bfs = 1.0
+  7837	                                key_quantities["reattachment_length"] = xr_ws / H_bfs
+  7838	                                key_quantities["reattachment_method"] = "wall_shear_tau_x_zero_crossing"
+  7839	                                key_quantities["reattachment_probe_height"] = 0.0
+  7840	                                key_quantities["reattachment_n_floor_pts"] = int(floor_mask.sum())
+  7841	                                key_quantities["reattachment_wall_shear_source"] = "allPatches_vtk"
+  7842	                                return key_quantities
+  7843	                            else:
+  7844	                                key_quantities["reattachment_wall_shear_no_sign_change"] = True
+  7845	                        else:
+  7846	                            key_quantities["reattachment_wall_shear_filter_empty"] = True
+  7847	                    else:
+  7848	                        key_quantities["reattachment_wall_shear_layout_unparsed"] = "no_wallShearStress_in_allPatches"
+  7849	                except ImportError:
+  7850	                    key_quantities["reattachment_wall_shear_layout_unparsed"] = "pyvista_missing"
+  7851	                except Exception as _wss_exc:
+  7852	                    key_quantities["reattachment_wall_shear_layout_unparsed"] = f"{type(_wss_exc).__name__}:{str(_wss_exc)[:80]}"
+  7853	            else:
+  7854	                key_quantities["reattachment_wall_shear_layout_unparsed"] = "allPatches_vtk_missing"
+  7855	
+
+exec
+/bin/zsh -lc "nl -ba scripts/flow-field-gen/generate_contours.py | sed -n '480,585p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   480	    finite = (np.isfinite(umag) & np.isfinite(pts[:, 0]) & np.isfinite(pts[:, 1])
+   481	              & (umag < 3.0))  # clip rare boundary-divergence outliers
+   482	    X = pts[finite, 0]
+   483	    Y = pts[finite, 1]
+   484	    Umag = np.clip(umag[finite], 0.0, 1.5)
+   485	
+   486	    # Re-probe Xr using the EXACT same algorithm as the adapter's
+   487	    # authoritative Path-1a extractor: read lower_wall tau_x from the
+   488	    # staged allPatches VTK and find the POS→NEG crossing (OpenFOAM's
+   489	    # convention where wallShearStress[0] > 0 indicates reversed flow).
+   490	    # Agrees with the adapter's audit measurement.value to 4 sig figs.
+   491	    # Codex r3 #2: pre-round-3 this re-probed via the Ux proxy instead,
+   492	    # which produced the same number to 0.004% but undermined the
+   493	    # caption's "wallShearStress on lower_wall" attribution.
+   494	    xr_over_h = None
+   495	    try:
+   496	        ap_vtks = sorted((vtk_path.parent / "allPatches").glob("allPatches_*.vtk"))
+   497	        if ap_vtks:
+   498	            ap = pv.read(str(ap_vtks[-1]))
+   499	            if "wallShearStress" in ap.array_names:
+   500	                wss_ap = np.asarray(ap["wallShearStress"])
+   501	                centres_ap = np.asarray(ap.cell_centers().points)
+   502	                floor = ((centres_ap[:, 1] < 0.05)
+   503	                         & (centres_ap[:, 0] > 0.05)
+   504	                         & (centres_ap[:, 0] < 29.5))
+   505	                if floor.sum() >= 5:
+   506	                    xs_floor = centres_ap[floor, 0]
+   507	                    tx_floor = wss_ap[floor, 0]
+   508	                    order = np.argsort(xs_floor)
+   509	                    xs_sorted = xs_floor[order]
+   510	                    tx_sorted = tx_floor[order]
+   511	                    for j in range(1, len(xs_sorted)):
+   512	                        t1 = tx_sorted[j - 1]
+   513	                        t2 = tx_sorted[j]
+   514	                        if t1 > 0 and t2 <= 0:
+   515	                            denom = t2 - t1
+   516	                            xr_over_h = (xs_sorted[j - 1]
+   517	                                         - t1 * (xs_sorted[j] - xs_sorted[j - 1]) / denom
+   518	                                         if abs(denom) > 1e-30 else xs_sorted[j - 1])
+   519	                            break
+   520	    except Exception:
+   521	        xr_over_h = None
+   522	
+   523	    fig, ax = plt.subplots(figsize=(8.8, 3.0), facecolor=DARK_BG, dpi=220)
+   524	    # tricontourf across the unstructured points gives a valid shading even
+   525	    # with the block-interface topology (three blocks of different cell counts).
+   526	    levels = np.linspace(0.0, 1.2, 20)
+   527	    cf = ax.tricontourf(X, Y, Umag, levels=levels, cmap="viridis", extend="max", antialiased=True)
+   528	
+   529	    # Draw step outline (the void the mesh excludes).
+   530	    from matplotlib.patches import Rectangle
+   531	    step_void = Rectangle((-10.0, 0.0), 10.0, 1.0,
+   532	                          facecolor="#111", edgecolor="white", linewidth=0.8, hatch="//")
+   533	    ax.add_patch(step_void)
+   534	
+   535	    # Streamlines via pyvista streamlines_from_source at x=-9 (inlet).
+   536	    seed_y = np.linspace(1.1, 8.9, 12)
+   537	    seed_pts = pv.PolyData(np.array([[-9.0, y, 0.05] for y in seed_y]))
+   538	    try:
+   539	        streams = mesh.streamlines_from_source(
+   540	            seed_pts, vectors="U", max_time=80.0, initial_step_length=0.01,
+   541	        )
+   542	        if streams.n_points > 0:
+   543	            spts = np.asarray(streams.points)
+   544	            # Plot as sparse connected polylines — pv's streamlines carry lines.
+   545	            ax.scatter(spts[:, 0], spts[:, 1], s=0.2, c="white", alpha=0.5, zorder=3)
+   546	    except Exception:
+   547	        pass
+   548	
+   549	    # Reattachment annotation.
+   550	    if xr_over_h is not None:
+   551	        ax.axvline(xr_over_h, color="red", linestyle="--", linewidth=0.8, alpha=0.9, zorder=4)
+   552	        ax.annotate(
+   553	            f"Xr/H = {xr_over_h:.2f}\n(-{(6.26 - xr_over_h) / 6.26 * 100:.1f}%)",
+   554	            xy=(xr_over_h, 0.4), xytext=(xr_over_h + 2.5, 1.8),
+   555	            color="red", fontsize=8,
+   556	            arrowprops=dict(arrowstyle="->", color="red", lw=0.8, alpha=0.9),
+   557	            bbox=dict(boxstyle="round,pad=0.3", facecolor=PANEL_BG, edgecolor=GRID),
+   558	        )
+   559	    # Gold-reference line at Xr/H=6.26.
+   560	    ax.axvline(6.26, color=PASS, linestyle=":", linewidth=1.0, alpha=0.8, zorder=4)
+   561	    ax.text(6.26 + 0.15, 7.5, "Driver 1985\nXr/H = 6.26", color=PASS, fontsize=7)
+   562	
+   563	    _setup_axes(ax, "|U| 与流线 · simpleFoam kOmegaSST Re=7600 · 来自真实 OpenFOAM 体数据",
+   564	                "x / H", "y / H", xmin=-10, xmax=30, ymin=0, ymax=9)
+   565	    ax.grid(False)
+   566	    ax.set_aspect("equal")
+   567	    cbar = fig.colorbar(cf, ax=ax, shrink=0.78, pad=0.02, aspect=30)
+   568	    cbar.set_label("|U| / U_bulk", color=AXIS_TEXT, fontsize=8.5)
+   569	    cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
+   570	    cbar.outline.set_edgecolor(GRID)
+   571	    xr_str = f"≈{xr_over_h:.2f}" if xr_over_h is not None else "(not extracted — allPatches VTK unavailable)"
+   572	    _save(fig, "backward_facing_step", "velocity_streamlines",
+   573	          f"Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK "
+   574	          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H{xr_str} "
+   575	          f"via wallShearStress tau_x pos→neg crossing on the lower_wall patch "
+   576	          f"(allPatches VTK, OpenFOAM sign convention). "
+   577	          f"Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.")
+   578	
+   579	
+   580	# ---------------------------------------------------------------------------
+   581	# 8. NACA 0012 Airfoil — Ladson 1987 Cp(x/c) at α=0°
+   582	# ---------------------------------------------------------------------------
+   583	def gen_naca0012_airfoil():
+   584	    print("[naca0012_airfoil]")
+   585	    # Thomas 1979 / Ladson 1987 exact-surface Cp anchors from gold standard:
+
+exec
+/bin/zsh -lc "nl -ba scripts/phase5_audit_run.py | sed -n '450,525p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   450	            u_ref, u_ref_resolved = _resolve_u_ref(report_task_spec, case_id)
+   451	
+   452	    # DEC-V61-036 G1: load the gold's canonical quantity BEFORE extraction
+   453	    # so the driver can strict-match (and hard-fail on miss) instead of
+   454	    # silently substituting "first numeric".
+   455	    expected_quantity = _gold_expected_quantity(case_id)
+   456	    quantity, value, source_note = _primary_scalar(report, expected_quantity)
+   457	    comp = report.comparison_result
+   458	    passed = comp.passed if comp else False
+   459	    # DEC-V61-052 Codex r3 #3: re-expose executor key_quantities here so
+   460	    # the measurement block can surface extractor-side method + diagnostic
+   461	    # flags alongside the primary scalar.
+   462	    kq = report.execution_result.key_quantities or {}
+   463	
+   464	    # DEC-V61-036 G1: verdict hint must reflect the missing-quantity outcome.
+   465	    # Prior behaviour tied verdict_hint to comp.passed alone, which showed
+   466	    # "PASS" for runs that simply didn't measure the gold quantity.
+   467	    if source_note == "no_numeric_quantity" or value is None:
+   468	        verdict_hint = "FAIL"
+   469	    else:
+   470	        verdict_hint = "PASS" if passed else "FAIL"
+   471	
+   472	    # DEC-V61-036 G1: write measurement.value as literal null (None) when
+   473	    # extractor missed; the verdict engine hard-FAILs on None. Do NOT coerce
+   474	    # to 0.0 — that was the prior PASS-washing path.
+   475	    measurement_value: float | None = value
+   476	    measured_at = _iso_now()
+   477	
+   478	    doc = {
+   479	        "run_metadata": {
+   480	            "run_id": "audit_real_run",
+   481	            "label_zh": "真实 solver 审计运行",
+   482	            "label_en": "Real solver audit run",
+   483	            "description_zh": (
+   484	                f"FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit {commit_sha}）。"
+   485	                "这是 audit package 背书的权威测量——不是合成 fixture。"
+   486	                "失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，"
+   487	                "不是 harness bug；会进入 audit_concerns 随包交付给审查方。"
+   488	            ),
+   489	            "category": "audit_real_run",
+   490	            "expected_verdict": verdict_hint,
+   491	            "actual_verdict": verdict_hint,
+   492	        },
+   493	        "case_id": case_id,
+   494	        "source": "phase5_audit_run_foam_agent",
+   495	        "measurement": {
+   496	            "value": measurement_value,
+   497	            "unit": "dimensionless",
+   498	            "run_id": f"audit_{case_id}_{commit_sha}",
+   499	            "commit_sha": commit_sha,
+   500	            "measured_at": measured_at,
+   501	            "quantity": quantity,
+   502	            "extraction_source": source_note,
+   503	            "solver_success": report.execution_result.success,
+   504	            "comparator_passed": passed,
+   505	            # DEC-V61-052 Codex r3 #3: surface extractor-side method +
+   506	            # diagnostic flags so downstream consumers (Compare-tab card,
+   507	            # audit package review) can distinguish authoritative
+   508	            # wall-shear success from proxy fallback without reading raw
+   509	            # key_quantities. All entries are optional — only populated
+   510	            # when the corresponding key exists in executor output.
+   511	            **{
+   512	                k: v for k, v in {
+   513	                    "reattachment_method": kq.get("reattachment_method"),
+   514	                    "reattachment_probe_height": kq.get("reattachment_probe_height"),
+   515	                    "reattachment_n_floor_pts": kq.get("reattachment_n_floor_pts"),
+   516	                    "reattachment_wall_shear_source": kq.get("reattachment_wall_shear_source"),
+   517	                    "reattachment_wall_shear_no_sign_change": kq.get("reattachment_wall_shear_no_sign_change"),
+   518	                    "reattachment_wall_shear_filter_empty": kq.get("reattachment_wall_shear_filter_empty"),
+   519	                    "reattachment_wall_shear_layout_unparsed": kq.get("reattachment_wall_shear_layout_unparsed"),
+   520	                    "reattachment_proxy_no_sign_change": kq.get("reattachment_proxy_no_sign_change"),
+   521	                    "reattachment_detection_upstream_artifact": kq.get("reattachment_detection_upstream_artifact"),
+   522	                    "reattachment_detection_rejected_x": kq.get("reattachment_detection_rejected_x"),
+   523	                }.items() if v is not None
+   524	            },
+   525	        },
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/comparison_report.py | sed -n '560,595p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   560	            break
+   561	    commit_sha = _get_commit_sha()
+   562	
+   563	    # DEC-V61-052 Batch D: BFS scalar-anchor Xr/H comparison. Reads the
+   564	    # audit measurement + gold anchor and emits a compact scalar block
+   565	    # that the frontend Compare tab renders as a card (mirrors LDC D7
+   566	    # primary-vortex shape). Fail-soft: any missing piece → None, card
+   567	    # silently hides. Other visual-only cases (plane_channel_flow,
+   568	    # turbulent_flat_plate, etc.) see None here until their own anchors
+   569	    # are wired — this is intentionally narrow scope.
+   570	    metrics_reattachment: Optional[dict] = None
+   571	    paper_reattachment: Optional[dict] = None
+   572	    if case_id == "backward_facing_step":
+   573	        try:
+   574	            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+   575	                         / case_id / f"{run_label}_measurement.yaml")
+   576	            if meas_path.is_file():
+   577	                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+   578	                m = meas.get("measurement", {}) or {}
+   579	                actual = m.get("value")
+   580	                # DEC-V61-052 Codex r3 #3: prefer the explicit extractor
+   581	                # method key (wall_shear_tau_x_zero_crossing / near_wall_
+   582	                # tau_x_proxy_via_Ux) over the generic extraction_source
+   583	                # (key_quantities_direct / comparator_deviation / ...),
+   584	                # so the Compare tab can tell authoritative wall-shear
+   585	                # success from proxy fallback.
+   586	                method = m.get("reattachment_method") or m.get("extraction_source")
+   587	                if actual is not None:
+   588	                    gold = _load_bfs_reattachment_gold()
+   589	                    if gold is not None:
+   590	                        actual_f = float(actual)
+   591	                        expected = gold["value"]
+   592	                        dev_pct = (actual_f - expected) / expected * 100 if expected else 0.0
+   593	                        tol_pct = gold["tolerance"] * 100.0
+   594	                        metrics_reattachment = {
+   595	                            "quantity": "reattachment_length",
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/data/flowFields.ts | sed -n '100,115p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   100	      kind: "literature_data",
+   101	    },
+   102	  ],
+   103	  backward_facing_step: [
+   104	    {
+   105	      src: "/flow-fields/backward_facing_step/velocity_streamlines.png",
+   106	      caption_zh:
+   107	        "|U|(x,y) 与流线 · simpleFoam kOmegaSST Re=7600 真实解 · 再附着点 Xr/H=5.65 标注（Driver 1985 参考 6.26，偏差 -9.8%，在 ±10% 容差带内）· 阶梯下方回流区清晰可辨",
+   108	      provenance:
+   109	        "Real |U|(x,y) from simpleFoam kOmegaSST BFS audit VTK (DEC-V61-052 round 3, 7360 cells, x-graded 3-block mesh, 1500 iter residual plateau). Measured Xr/H=5.65 via wallShearStress tau_x sign-change on the `lower_wall` patch (allPatches VTK, 122 downstream-floor face centres, OpenFOAM pos→neg convention), cross-checked against near-wall Ux proxy to 4 sig figs. Matches the audit fixture's `measurement.value` and the preflight scalar-contract gate. Reference Xr/H=6.26 (Driver & Seegmiller 1985 AIAA J. 23(2) at Re_h=37500).",
+   110	      kind: "solver_output",
+   111	    },
+   112	    {
+   113	      src: "/flow-fields/backward_facing_step/xr_vs_re.png",
+   114	      caption_zh:
+   115	        "Xr/H(Re_h) · Armaly 1983 低 Re 段 + Driver 1985 Re_h=37500 湍流平台 · kEpsilon(错误模型)对比 kOmegaSST(正确)anchors @ Re=7600",
+
+exec
+/bin/zsh -lc "rg --files | rg 'allPatches_1500\\.vtk"'$|allPatches_.*'"\\.vtk"'$'"'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "rg -n \"allPatches_1500|phase5_fields|backward_facing_step\" ui/backend/tests scripts reports -g '*.json' -g '*.yaml' -g '*.md' | head -80" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/tests/fixtures/backward_facing_step_measurement.yaml:6:case_id: backward_facing_step
+ui/backend/tests/fixtures/backward_facing_step_measurement.yaml:11:  run_id: p2_acc_backward_facing_step_b8be73a
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:3:#   EXECUTOR_MODE=foam_agent .venv/bin/python scripts/phase5_audit_run.py backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:18:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:23:  run_id: audit_backward_facing_step_3f3021e
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml:53:  manifest_path_rel: reports/phase5_fields/backward_facing_step/runs/audit_real_run.json
+ui/backend/tests/fixtures/runs/backward_facing_step/reference_pass_measurement.yaml:1:# Reference-pass run for backward_facing_step.
+ui/backend/tests/fixtures/runs/backward_facing_step/reference_pass_measurement.yaml:20:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/mesh_40_measurement.yaml:11:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/impinging_jet/audit_real_run_measurement.yaml:46:  manifest_path_rel: reports/phase5_fields/impinging_jet/runs/audit_real_run.json
+reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml:22:  slices can continue extending to the remaining 4 (backward_facing_step,
+reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml:162:    - backward_facing_step_steady
+ui/backend/tests/fixtures/runs/backward_facing_step/mesh_20_measurement.yaml:19:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/under_resolved_measurement.yaml:1:# Under-resolved teaching run for backward_facing_step.
+ui/backend/tests/fixtures/runs/backward_facing_step/under_resolved_measurement.yaml:17:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/mesh_160_measurement.yaml:15:case_id: backward_facing_step
+reports/phase5_fields/backward_facing_step/runs/audit_real_run.json:4:  "case_id": "backward_facing_step",
+reports/phase5_fields/backward_facing_step/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/backward_facing_step/20260423T102413Z"
+ui/backend/tests/fixtures/runs/plane_channel_flow/audit_real_run_measurement.yaml:41:  manifest_path_rel: reports/phase5_fields/plane_channel_flow/runs/audit_real_run.json
+ui/backend/tests/fixtures/runs/backward_facing_step/real_incident_measurement.yaml:1:# Real-incident run for backward_facing_step. §5d Part-2 acceptance batch
+ui/backend/tests/fixtures/runs/backward_facing_step/real_incident_measurement.yaml:18:case_id: backward_facing_step
+ui/backend/tests/fixtures/runs/backward_facing_step/real_incident_measurement.yaml:23:  run_id: p2_acc_backward_facing_step_b8be73a
+ui/backend/tests/fixtures/runs/differential_heated_cavity/audit_real_run_measurement.yaml:46:  manifest_path_rel: reports/phase5_fields/differential_heated_cavity/runs/audit_real_run.json
+reports/phase5_renders/backward_facing_step/runs/audit_real_run.json:2:  "case_id": "backward_facing_step",
+reports/phase5_renders/backward_facing_step/runs/audit_real_run.json:5:  "renders_dir_rel": "reports/phase5_renders/backward_facing_step/20260421T125637Z",
+reports/phase5_renders/backward_facing_step/runs/audit_real_run.json:7:    "residuals_png": "reports/phase5_renders/backward_facing_step/20260421T125637Z/residuals.png",
+reports/phase5_renders/backward_facing_step/runs/audit_real_run.json:8:    "contour_u_magnitude_png": "reports/phase5_renders/backward_facing_step/20260421T125637Z/contour_u_magnitude.png"
+reports/phase5_fields/circular_cylinder_wake/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/circular_cylinder_wake/20260421T150630Z"
+ui/backend/tests/fixtures/runs/lid_driven_cavity/audit_real_run_measurement.yaml:49:  manifest_path_rel: reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json
+ui/backend/tests/fixtures/runs/lid_driven_cavity/audit_real_run_measurement.yaml:53:# against reports/phase5_fields/lid_driven_cavity/20260421T082340Z/log.simpleFoam —
+reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/lid_driven_cavity/20260421T082340Z"
+ui/backend/tests/fixtures/runs/backward_facing_step/mesh_80_measurement.yaml:13:case_id: backward_facing_step
+reports/deep_acceptance/20260422_224520_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_fields/turbulent_flat_plate/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/turbulent_flat_plate/20260421T130909Z"
+reports/codex_tool_reports/2026-04-21_pr21_bfs_guard_review.md:38:- `_generate_backward_facing_step` says “step at `x=0`” (`src/foam_agent_adapter.py:1020`).
+reports/phase5_fields/differential_heated_cavity/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/differential_heated_cavity/20260421T131052Z"
+reports/codex_tool_reports/20260422_dec045_wave2_D_hazard_tier_uref_prompt.md:197:    "backward_facing_step": 44.2,          # inlet
+reports/codex_tool_reports/20260422_dec045_wave2_D_hazard_tier_uref_prompt.md:226:CHK-7: `_audit_fixture_doc(case_id="backward_facing_step", ...)`: u_ref resolves to BFS inlet velocity (44.2 or whatever whitelist specifies, NOT 1.0).
+reports/deep_acceptance/20260422_234028_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_fields/naca0012_airfoil/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/naca0012_airfoil/20260421T142539Z"
+reports/deep_acceptance/20260422_145436_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_fields/impinging_jet/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/impinging_jet/20260421T142307Z"
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:455:+    fields_root = repo_root / "reports" / "phase5_fields" / case_id
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:782:?? reports/phase5_fields/
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:1205:   340	    fields_root = repo_root / "reports" / "phase5_fields" / case_id
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:1922:    39	    fields = tmp_path / "reports" / "phase5_fields" / case_id
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:1983:   100	    m = tmp_path / "reports" / "phase5_fields" / "lid_driven_cavity" / "runs" / "audit_real_run.json"
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2303:    49	  `reports/phase5_fields/{case}/`, `reports/phase5_renders/{case}/`, or
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2729:/bin/zsh -lc "find reports/phase5_fields -maxdepth 4 -type f | rg '/VTK/|runs/.+json|residuals|uCenterline|log\\.simpleFoam' | sed -n '1,200p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2731:reports/phase5_fields/lid_driven_cavity/20260421T082340Z/log.simpleFoam
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2732:reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK/ldc_59058_1776759820768_1024.vtk
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2733:reports/phase5_fields/lid_driven_cavity/20260421T082340Z/residuals.csv
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:2734:reports/phase5_fields/lid_driven_cavity/runs/audit_real_run.json
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3161:  6904	        artifact_dir = repo_root / "reports" / "phase5_fields" / case_id / timestamp
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3241:phase7/field_artifacts/VTK/allPatches/allPatches_1024.vtk reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK/allPatches/allPatches_1024.vtk 45784
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3242:phase7/field_artifacts/VTK/ldc_59058_1776759820768_1024.vtk reports/phase5_fields/lid_driven_cavity/20260421T082340Z/VTK/ldc_59058_1776759820768_1024.vtk 3155888
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3243:phase7/field_artifacts/log.simpleFoam reports/phase5_fields/lid_driven_cavity/20260421T082340Z/log.simpleFoam 490559
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3244:phase7/field_artifacts/residuals.csv reports/phase5_fields/lid_driven_cavity/20260421T082340Z/residuals.csv 43972
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3245:phase7/field_artifacts/residuals/0/residuals.dat reports/phase5_fields/lid_driven_cavity/20260421T082340Z/residuals/0/residuals.dat 55394
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3246:phase7/field_artifacts/sample/0/uCenterline.xy reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/0/uCenterline.xy 9099
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3247:phase7/field_artifacts/sample/1000/uCenterline.xy reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/1000/uCenterline.xy 9099
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:3248:phase7/field_artifacts/sample/500/uCenterline.xy reports/phase5_fields/lid_driven_cavity/20260421T082340Z/sample/500/uCenterline.xy 9099
+reports/phase5_fields/rayleigh_benard_convection/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/rayleigh_benard_convection/20260421T142559Z"
+ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:48:  manifest_path_rel: reports/phase5_fields/naca0012_airfoil/runs/audit_real_run.json
+reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json:2:  "case_id": "backward_facing_step",
+reports/deep_acceptance/20260423_002022_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_fields/plane_channel_flow/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/plane_channel_flow/20260421T130203Z"
+ui/backend/tests/fixtures/runs/rayleigh_benard_convection/audit_real_run_measurement.yaml:46:  manifest_path_rel: reports/phase5_fields/rayleigh_benard_convection/runs/audit_real_run.json
+reports/deep_acceptance/20260422_234430_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_fields/duct_flow/runs/audit_real_run.json:5:  "artifact_dir_rel": "reports/phase5_fields/duct_flow/20260421T131015Z"
+reports/codex_verifications/20260422_dec045_waves1234_final_verify_prompt.md:66:log = Path('reports/phase5_fields/impinging_jet/20260421T142307Z/log.buoyantFoam')
+reports/codex_verifications/20260422_dec045_waves1234_final_verify_prompt.md:77:log = Path('reports/phase5_fields/lid_driven_cavity/20260421T082340Z/log.simpleFoam')
+reports/deep_acceptance/20260422_235141_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_audit/20260423T091408Z_backward_facing_step_raw.json:2:  "case_id": "backward_facing_step",
+reports/deep_acceptance/20260422_220457_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/deep_acceptance/20260422_135452_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/deep_acceptance/20260422_234429_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/deep_acceptance/20260423_011136_visual_acceptance_package.md:18:| `backward_facing_step_steady` | PASS | reports/deep_acceptance/assets/backward_facing_step_steady_cad.png, reports/deep_acceptance/assets/backward_facing_step_steady_cfd.png, reports/deep_acceptance/assets/backward_facing_step_steady_benchmark.png |
+reports/phase5_audit/20260423T085904Z_backward_facing_step_raw.json:2:  "case_id": "backward_facing_step",
+reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review_round2.md:666:  - `scripts/phase5_audit_run.py` additionally emits `foamToVTK` / `sample` / `yPlus` artifacts into `reports/phase5_fields/{case}/{timestamp}/`
+
+exec
+/bin/zsh -lc 'cat reports/phase5_fields/backward_facing_step/runs/audit_real_run.json' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "find reports/phase5_fields/backward_facing_step -path '*allPatches*.vtk' -o -path '*allPatches*' -maxdepth 8" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+{
+  "run_label": "audit_real_run",
+  "timestamp": "20260423T102413Z",
+  "case_id": "backward_facing_step",
+  "artifact_dir_rel": "reports/phase5_fields/backward_facing_step/20260423T102413Z"
+}
+
+ succeeded in 0ms:
+reports/phase5_fields/backward_facing_step/20260423T091448Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T091448Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T091309Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T091309Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T091828Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T091828Z/VTK/allPatches/allPatches_1500.vtk
+reports/phase5_fields/backward_facing_step/20260423T090101Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T090101Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T085649Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T085649Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T082740Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T082740Z/VTK/allPatches/allPatches_17.vtk
+reports/phase5_fields/backward_facing_step/20260423T082933Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T082933Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T102245Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T102245Z/VTK/allPatches/allPatches_1500.vtk
+reports/phase5_fields/backward_facing_step/20260421T125637Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260421T125637Z/VTK/allPatches/allPatches_36.vtk
+reports/phase5_fields/backward_facing_step/20260423T085836Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T085836Z/VTK/allPatches/allPatches_1000.vtk
+reports/phase5_fields/backward_facing_step/20260423T094706Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T094706Z/VTK/allPatches/allPatches_1500.vtk
+reports/phase5_fields/backward_facing_step/20260423T091717Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T091717Z/VTK/allPatches/allPatches_1500.vtk
+reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches
+reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches/allPatches_1500.vtk
+
+exec
+/bin/zsh -lc "find reports/phase5_fields/backward_facing_step/20260423T102413Z -maxdepth 5 -type f | sort | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches/allPatches_1500.vtk
+reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/ldc_38156_1776939853949_1500.vtk
+reports/phase5_fields/backward_facing_step/20260423T102413Z/log.simpleFoam
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+from pathlib import Path
+import numpy as np
+import pyvista as pv
+vtk = Path('reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches/allPatches_1500.vtk')
+ap = pv.read(str(vtk))
+centres = np.asarray(ap.cell_centers().points)
+wss = np.asarray(ap['wallShearStress'])
+old = (centres[:,1] < 0.05) & (centres[:,0] > 0.05)
+new = old & (centres[:,0] < 29.5)
+outlet_leak = old & (centres[:,0] >= 29.5)
+print('vtk=', vtk)
+print('total_cells=', ap.n_cells)
+print('old_floor_count=', int(old.sum()))
+print('new_floor_count=', int(new.sum()))
+print('outlet_leak_count=', int(outlet_leak.sum()))
+print('outlet_leak_centres=', [(round(float(x),4), round(float(y),4), round(float(z),4)) for x,y,z in centres[outlet_leak]])
+xs = centres[new,0]
+tx = wss[new,0]
+order = np.argsort(xs)
+xs = xs[order]
+tx = tx[order]
+xr = None
+cross_pair = None
+for j in range(1, len(xs)):
+    t1 = tx[j-1]
+    t2 = tx[j]
+    if t1 > 0 and t2 <= 0:
+        denom = t2 - t1
+        xr = xs[j-1] - t1 * (xs[j]-xs[j-1]) / denom if abs(denom) > 1e-30 else xs[j-1]
+        cross_pair = (xs[j-1], t1, xs[j], t2)
+        break
+print('xr_over_h=', None if xr is None else f'{xr:.12f}')
+if cross_pair:
+    print('cross_pair=', tuple(round(float(v), 12) for v in cross_pair))
+print('within_10pct_driver_6.26=', xr is not None and abs(xr-6.26)/6.26 <= 0.10)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 832ms:
+vtk= reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches/allPatches_1500.vtk
+total_cells= 432
+old_floor_count= 122
+new_floor_count= 119
+outlet_leak_count= 3
+outlet_leak_centres= [(30.0, 0.0125, 0.05), (30.0, 0.0375, 0.05), (29.7693, 0.0, 0.05)]
+xr_over_h= 5.647054267873
+cross_pair= (5.572921514511, 7.5015203e-05, 5.753597021103, -0.000107811)
+within_10pct_driver_6.26= True
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+from pathlib import Path
+import numpy as np
+import pyvista as pv
+vtk = Path('reports/phase5_fields/backward_facing_step/20260423T102413Z/VTK/allPatches/allPatches_1500.vtk')
+ap = pv.read(str(vtk))
+centres = np.asarray(ap.cell_centers().points)
+old = (centres[:,1] < 0.05) & (centres[:,0] > 0.05)
+new = old & (centres[:,0] < 29.5)
+outlet_old = old & np.isclose(centres[:,0], 30.0)
+outlet_new = new & np.isclose(centres[:,0], 30.0)
+print('old_x30_outlet_count=', int(outlet_old.sum()))
+print('new_x30_outlet_count=', int(outlet_new.sum()))
+print('old_x30_outlet_centres=', [(float(x), float(y), float(z)) for x,y,z in centres[outlet_old]])
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 316ms:
+old_x30_outlet_count= 2
+new_x30_outlet_count= 0
+old_x30_outlet_centres= [(30.0, 0.012500000186264515, 0.05000000074505806), (30.0, 0.037500000558793545, 0.05000000074505806)]
+
+exec
+/bin/zsh -lc 'cat ui/frontend/public/flow-fields/backward_facing_step/velocity_streamlines.json' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+{
+  "provenance": "Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK (20260423T102413Z, 7360 cells, x-graded). Measured Xr/H≈5.65 via wallShearStress tau_x pos→neg crossing on the lower_wall patch (allPatches VTK, OpenFOAM sign convention). Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.",
+  "generator": "scripts/flow-field-gen/generate_contours.py"
+}
+exec
+/bin/zsh -lc "git show 28cac30 -- ui/frontend/src/data/flowFields.ts | sed -n '1,160p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "git show 28cac30 -- scripts/flow-field-gen/generate_contours.py | sed -n '1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+commit 28cac302c6589620a2dd6d6279fe835fc52cb1a3
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Thu Apr 23 18:26:33 2026 +0800
+
+    fix(bfs): DEC-V61-052 post-close cleanup · 3 Codex round-3 MED/LOW findings
+    
+    Address the three non-blocking items Codex round 3 surfaced
+    (APPROVE_WITH_COMMENTS did not require these before closure).
+    
+    1. MED · tighten wall mask to exclude outlet-face leak
+       (src/foam_agent_adapter.py::_parse_writeobjects_fields)
+    
+       Pre-cleanup filter `y<0.05 AND x>0.05` matched 120 lower_wall cells
+       PLUS 2 B1 outlet cells at (30, 0.0125) and (30, 0.0375) — Codex
+       verified this on the staged allPatches_1500.vtk. Not a scalar blocker
+       (the pos→neg crossing still lives well before x=30), but
+       reattachment_n_floor_pts=122 + "120 floor-face centres on lower_wall"
+       wording was not literally true.
+    
+       Added upper bound `x < 29.5`:
+       ```
+       floor_mask = ((centres_ap[:, 1] < 0.05)
+                     & (centres_ap[:, 0] > 0.05)
+                     & (centres_ap[:, 0] < 29.5))
+       ```
+       L_down = 30·H so the outlet cells land at x=30 and are now cleanly
+       excluded. New count: reattachment_n_floor_pts=119 (also strips 1
+       near-inlet B1 edge cell at x=0.058 which was semantically fine to
+       include but the tightened mask is still sound).
+    
+    2. MED · generator Xr probe must match the adapter's wall-shear path
+       (scripts/flow-field-gen/generate_contours.py::gen_backward_facing_step)
+    
+       Pre-cleanup the figure re-probed Xr via the Path-2 band-averaged Ux
+       zero-crossing even though flowFields.ts caption said wallShearStress.
+       Numerical agreement was 0.004% so the Xr label was right, but the
+       method attribution was stronger than the figure-generator code
+       supported. Codex: "align the BFS figure/caption with the actual
+       measurement method (or switch the generator to wall-shear)."
+    
+       Switched: the figure now reads lower_wall tau_x from the allPatches
+       VTK adjacent to the main case VTK (same x<29.5 tightened mask),
+       finds the pos→neg crossing via the identical algorithm the adapter
+       extractor uses, and prints Xr/H directly. Caption updated to
+       "via wallShearStress tau_x pos→neg crossing on the lower_wall patch".
+       Figure label unchanged at 5.65 since both methods agree to 4 sig figs.
+    
+    3. LOW · surface reattachment_method + diagnostic flags in audit YAML
+       (scripts/phase5_audit_run.py::_audit_fixture_doc,
+        ui/backend/services/comparison_report.py::_build_visual_only_context)
+    
+       Pre-cleanup the executor's extractor stored `reattachment_method`,
+       `reattachment_probe_height`, `reattachment_n_floor_pts`,
+       `reattachment_wall_shear_source`, and the 6 failure-mode flags in
+       the ExecutionResult.key_quantities dict, but the audit pipeline
+       dropped everything except `value`/`quantity`/`extraction_source`
+       when serializing to audit_real_run_measurement.yaml. The Compare-tab
+       card then mapped its `method` field to the generic `extraction_source`
+       (`key_quantities_direct`), so a reviewer reading the audit YAML
+       couldn't tell wall-shear-authoritative from Ux-proxy-fallback
+       without reading the raw JSON.
+    
+       Audit YAML `measurement` block now carries the full set of
+       extractor-side method + diagnostic flags as optional keys (only
+       populated when the underlying key_quantities entry exists).
+       `_build_visual_only_context` prefers the explicit method key over
+       `extraction_source` when emitting `metrics_reattachment.method` to
+       the frontend.
+    
+       Verified on a fresh regen: audit YAML now includes
+         reattachment_method: wall_shear_tau_x_zero_crossing
+         reattachment_probe_height: 0.0
+         reattachment_n_floor_pts: 119
+         reattachment_wall_shear_source: allPatches_vtk
+       and the Compare-tab card picks up
+         method: "wall_shear_tau_x_zero_crossing"
+    
+    Preflight on the regenerated fixture still exits 0 (GREEN all 6 checks),
+    Xr/H=5.647, -9.8% vs 6.26 inside 10% tolerance. Artifact chain
+    (measurement.value → audit YAML → Compare-tab card → figure caption) is
+    now fully coherent under the wall-shear method attribution.
+    
+    DEC-V61-052 stays CLOSED; this is the post-close hardening Codex
+    suggested.
+    
+    Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/scripts/flow-field-gen/generate_contours.py b/scripts/flow-field-gen/generate_contours.py
+index 3c2a5d9..c3c9457 100644
+--- a/scripts/flow-field-gen/generate_contours.py
++++ b/scripts/flow-field-gen/generate_contours.py
+@@ -484,31 +484,41 @@ def gen_backward_facing_step():
+     Umag = np.clip(umag[finite], 0.0, 1.5)
+ 
+     # Re-probe Xr using the EXACT same algorithm as the adapter's
+-    # authoritative `_extract_bfs_reattachment` Path-2 extractor: group
+-    # first-cell-band (y ∈ [0, 0.025]) cell-centre Ux by x-column, then
+-    # find the zero-crossing of the per-column mean. This guarantees the
+-    # figure's Xr annotation agrees with the scalar-contract preflight
+-    # gate — `backward_facing_step.yaml::contract_status` + the audit
+-    # fixture's `measurement.value` — so the page can't show a different
+-    # Xr than the validation layer reported.
+-    from collections import defaultdict
+-    centers = np.asarray(mesh.cell_centers().points)
+-    Ux_cell = np.asarray(mesh["U"])[:, 0]
+-    x_groups: dict = defaultdict(list)
+-    for i in range(len(centers)):
+-        cx, cy, _cz = centers[i]
+-        if 0.0 <= cy < 0.025:
+-            x_groups[round(cx, 3)].append(Ux_cell[i])
+-    sorted_x = sorted(x_groups.keys())
+-    x_ux_pairs = [(xc, sum(x_groups[xc]) / len(x_groups[xc])) for xc in sorted_x]
++    # authoritative Path-1a extractor: read lower_wall tau_x from the
++    # staged allPatches VTK and find the POS→NEG crossing (OpenFOAM's
++    # convention where wallShearStress[0] > 0 indicates reversed flow).
++    # Agrees with the adapter's audit measurement.value to 4 sig figs.
++    # Codex r3 #2: pre-round-3 this re-probed via the Ux proxy instead,
++    # which produced the same number to 0.004% but undermined the
++    # caption's "wallShearStress on lower_wall" attribution.
+     xr_over_h = None
+-    for j in range(1, len(x_ux_pairs)):
+-        x1, u1 = x_ux_pairs[j - 1]
+-        x2, u2 = x_ux_pairs[j]
+-        if u1 < 0 <= u2 and x1 > 0:
+-            xr_over_h = (x1 - u1 * (x2 - x1) / (u2 - u1)
+-                         if abs(u2 - u1) > 1e-10 else x1)
+-            break
++    try:
++        ap_vtks = sorted((vtk_path.parent / "allPatches").glob("allPatches_*.vtk"))
++        if ap_vtks:
++            ap = pv.read(str(ap_vtks[-1]))
++            if "wallShearStress" in ap.array_names:
++                wss_ap = np.asarray(ap["wallShearStress"])
++                centres_ap = np.asarray(ap.cell_centers().points)
++                floor = ((centres_ap[:, 1] < 0.05)
++                         & (centres_ap[:, 0] > 0.05)
++                         & (centres_ap[:, 0] < 29.5))
++                if floor.sum() >= 5:
++                    xs_floor = centres_ap[floor, 0]
++                    tx_floor = wss_ap[floor, 0]
++                    order = np.argsort(xs_floor)
++                    xs_sorted = xs_floor[order]
++                    tx_sorted = tx_floor[order]
++                    for j in range(1, len(xs_sorted)):
++                        t1 = tx_sorted[j - 1]
++                        t2 = tx_sorted[j]
++                        if t1 > 0 and t2 <= 0:
++                            denom = t2 - t1
++                            xr_over_h = (xs_sorted[j - 1]
++                                         - t1 * (xs_sorted[j] - xs_sorted[j - 1]) / denom
++                                         if abs(denom) > 1e-30 else xs_sorted[j - 1])
++                            break
++    except Exception:
++        xr_over_h = None
+ 
+     fig, ax = plt.subplots(figsize=(8.8, 3.0), facecolor=DARK_BG, dpi=220)
+     # tricontourf across the unstructured points gives a valid shading even
+@@ -558,10 +568,12 @@ def gen_backward_facing_step():
+     cbar.set_label("|U| / U_bulk", color=AXIS_TEXT, fontsize=8.5)
+     cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
+     cbar.outline.set_edgecolor(GRID)
++    xr_str = f"≈{xr_over_h:.2f}" if xr_over_h is not None else "(not extracted — allPatches VTK unavailable)"
+     _save(fig, "backward_facing_step", "velocity_streamlines",
+           f"Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK "
+-          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H≈{xr_over_h:.2f} "
+-          f"via near-wall Ux sign-change at first B1 cell row (y=0.0125). "
++          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H{xr_str} "
++          f"via wallShearStress tau_x pos→neg crossing on the lower_wall patch "
++          f"(allPatches VTK, OpenFOAM sign convention). "
+           f"Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.")
+ 
+ 
+
+exec
+/bin/zsh -lc "rg -n \"comparison-report/context|comparison-report\" ui/backend/tests ui/backend -g '*.py' | head -80" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:649:    route so the HTML served at /api/cases/.../comparison-report
+ui/backend/services/comparison_report.py:916:    # load" when the HTML is served at /api/cases/.../comparison-report
+ui/backend/services/comparison_report.py:1056:            f"/api/cases/{case_id}/runs/{run_label}/comparison-report/context "
+ui/backend/tests/test_comparison_report_route.py:29:    r = client.get("/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:51:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:63:    r = client.get("/api/cases/nonexistent_case/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:68:    r = client.get("/api/cases/..__pwn/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:73:    r = client.get("/api/cases/lid_driven_cavity/runs/..__pwn/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:79:        "/api/cases/%2e%2e__pwn/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:163:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report",
+ui/backend/tests/test_comparison_report_route.py:175:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:185:    """Codex round 3: GET .../comparison-report.pdf must map OSError → 503."""
+ui/backend/tests/test_comparison_report_route.py:193:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report.pdf",
+ui/backend/tests/test_comparison_report_route.py:200:    """Codex round 3 MED follow-up: POST .../comparison-report/build must ALSO
+ui/backend/tests/test_comparison_report_route.py:209:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/build",
+ui/backend/tests/test_dec039_profile_verdict_reconciliation.py:3:The root user-report bug: `comparison-report` said LDC PARTIAL (11/17
+ui/backend/tests/test_comparison_report_visual_only.py:117:        "/api/cases/totally_unknown_case/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_visual_only.py:209:    """End-to-end: GET /api/cases/BFS/runs/audit_real_run/comparison-report
+ui/backend/tests/test_comparison_report_visual_only.py:212:        "/api/cases/backward_facing_step/runs/audit_real_run/comparison-report",
+ui/backend/tests/test_comparison_report_route.py:29:    r = client.get("/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:51:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:63:    r = client.get("/api/cases/nonexistent_case/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:68:    r = client.get("/api/cases/..__pwn/runs/audit_real_run/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:73:    r = client.get("/api/cases/lid_driven_cavity/runs/..__pwn/comparison-report")
+ui/backend/tests/test_comparison_report_route.py:79:        "/api/cases/%2e%2e__pwn/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:163:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report",
+ui/backend/tests/test_comparison_report_route.py:175:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_route.py:185:    """Codex round 3: GET .../comparison-report.pdf must map OSError → 503."""
+ui/backend/tests/test_comparison_report_route.py:193:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report.pdf",
+ui/backend/tests/test_comparison_report_route.py:200:    """Codex round 3 MED follow-up: POST .../comparison-report/build must ALSO
+ui/backend/tests/test_comparison_report_route.py:209:        "/api/cases/lid_driven_cavity/runs/audit_real_run/comparison-report/build",
+ui/backend/tests/test_comparison_report_visual_only.py:117:        "/api/cases/totally_unknown_case/runs/audit_real_run/comparison-report/context",
+ui/backend/tests/test_comparison_report_visual_only.py:209:    """End-to-end: GET /api/cases/BFS/runs/audit_real_run/comparison-report
+ui/backend/tests/test_comparison_report_visual_only.py:212:        "/api/cases/backward_facing_step/runs/audit_real_run/comparison-report",
+ui/backend/main.py:94:app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
+ui/backend/routes/comparison_report.py:3:GET  /api/cases/{case_id}/runs/{run_label}/comparison-report         → HTML
+ui/backend/routes/comparison_report.py:4:GET  /api/cases/{case_id}/runs/{run_label}/comparison-report.pdf     → PDF
+ui/backend/routes/comparison_report.py:5:POST /api/cases/{case_id}/runs/{run_label}/comparison-report/build   → rebuild PDF + return manifest
+ui/backend/routes/comparison_report.py:34:    "/cases/{case_id}/runs/{run_label}/comparison-report",
+ui/backend/routes/comparison_report.py:36:    tags=["comparison-report"],
+ui/backend/routes/comparison_report.py:49:    "/cases/{case_id}/runs/{run_label}/comparison-report/context",
+ui/backend/routes/comparison_report.py:50:    tags=["comparison-report"],
+ui/backend/routes/comparison_report.py:66:    "/cases/{case_id}/runs/{run_label}/comparison-report.pdf",
+ui/backend/routes/comparison_report.py:67:    tags=["comparison-report"],
+ui/backend/routes/comparison_report.py:98:    tags=["comparison-report"],
+ui/backend/routes/comparison_report.py:141:    "/cases/{case_id}/runs/{run_label}/comparison-report/build",
+ui/backend/routes/comparison_report.py:142:    tags=["comparison-report"],
+ui/backend/tests/test_dec039_profile_verdict_reconciliation.py:3:The root user-report bug: `comparison-report` said LDC PARTIAL (11/17
+
+exec
+/bin/zsh -lc "rg -n \"FastAPI|app =|include_router\" ui/backend -g '*.py' | head -80" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/field_artifacts.py:6:the FastAPI route in ui/backend/routes/field_artifacts.py.
+ui/backend/routes/audit_package.py:21:  as static files by FastAPI. This route does NOT implement TTL cleanup —
+ui/backend/routes/__init__.py:1:"""FastAPI route modules for the UI backend."""
+ui/backend/main.py:1:"""FastAPI application entrypoint for the CFD Harness UI.
+ui/backend/main.py:43:from fastapi import FastAPI
+ui/backend/main.py:60:app = FastAPI(
+ui/backend/main.py:84:app.include_router(health.router,       prefix="/api", tags=["health"])
+ui/backend/main.py:85:app.include_router(cases.router,        prefix="/api", tags=["cases"])
+ui/backend/main.py:86:app.include_router(case_editor.router,  prefix="/api", tags=["case-editor"])
+ui/backend/main.py:87:app.include_router(validation.router,   prefix="/api", tags=["validation"])
+ui/backend/main.py:88:app.include_router(decisions.router,    prefix="/api", tags=["decisions"])
+ui/backend/main.py:89:app.include_router(run_monitor.router,  prefix="/api", tags=["runs"])
+ui/backend/main.py:90:app.include_router(dashboard.router,    prefix="/api", tags=["dashboard"])
+ui/backend/main.py:91:app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])
+ui/backend/main.py:92:app.include_router(case_export.router,  prefix="/api", tags=["case-export"])
+ui/backend/main.py:93:app.include_router(field_artifacts.router, prefix="/api", tags=["field-artifacts"])
+ui/backend/main.py:94:app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
+ui/backend/__init__.py:1:"""CFD Harness UI Backend — FastAPI service wrapping src/ read-only.
+ui/backend/tests/test_audit_package_route.py:193:        # FastAPI path params decode %2F; try a few attempts
+ui/backend/tests/test_field_artifacts_route.py:89:    # parse_run_id raises 400; some FastAPI versions wrap as 422. Accept 400 or 404.
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+from fastapi.testclient import TestClient
+from ui.backend.main import app
+client = TestClient(app)
+r = client.get('/api/cases/backward_facing_step/runs/audit_real_run/comparison-report/context')
+print('status=', r.status_code)
+if r.status_code "'!= 200:
+    print(r.text[:1000])
+else:
+    data = r.json()
+    m = data.get('"'metrics_reattachment')
+    print('metrics_reattachment=', m)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 361ms:
+status= 200
+metrics_reattachment= {'quantity': 'reattachment_length', 'symbol': 'Xr/H', 'actual': 5.647054267872632, 'expected': 6.26, 'deviation_pct': -9.791465369446765, 'tolerance_pct': 10.0, 'within_tolerance': True, 'method': 'wall_shear_tau_x_zero_crossing'}
+
+codex
+The API context check passes: the Compare-tab payload reports `metrics_reattachment.method` as `wall_shear_tau_x_zero_crossing`, not the generic source. I’m running the requested preflight now and then I’ll consolidate the scoped verdict.
+exec
+/bin/zsh -lc 'python3.11 scripts/preflight_case_visual.py backward_facing_step' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 344ms:
+
+══ pre-flight · backward_facing_step ══
+  [92mGREEN[0m  gold contract_status: SATISFIED — DEC-V61-052 closed all four defects V61-051 exposed (flat channel wi
+  [92mGREEN[0m  fixture directory: reports/phase5_fields/backward_facing_step/20260423T102413Z
+  [92mGREEN[0m  gate battery: G3/G4/G5 all clean
+  [92mGREEN[0m  geometry BFS step-body exclusion: no mesh points in step void · 15154 total
+  [92mGREEN[0m  |U| envelope: max |U| = 1.04, 1.04× U_ref
+  [92mGREEN[0m  scalar contract: reattachment_length: actual=5.647  expected=6.26  dev=-9.8% (tolerance ±10%)
+  [92m■ GREEN · safe to visualize[0m
+
+exec
+/bin/zsh -lc 'rg -n "ERROR|FATAL|Traceback|Exception|RuntimeError|Adapter|adapter|failed" reports/phase5_fields/backward_facing_step/20260423T102413Z/log.simpleFoam reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+import json
+from pathlib import Path
+p = Path('reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json')
+data = json.loads(p.read_text())
+print('path=', p)
+print('execution_success=', data.get('execution_result', {}).get('success'))
+print('error_message=', data.get('execution_result', {}).get('error_message'))
+print('key_quantities=', data.get('execution_result', {}).get('key_quantities'))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+path= reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+execution_success= None
+error_message= None
+key_quantities= None
+
+exec
+/bin/zsh -lc 'git show --name-only --oneline 28cac30' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+28cac30 fix(bfs): DEC-V61-052 post-close cleanup · 3 Codex round-3 MED/LOW findings
+reports/phase5_fields/backward_facing_step/runs/audit_real_run.json
+scripts/flow-field-gen/generate_contours.py
+scripts/phase5_audit_run.py
+src/foam_agent_adapter.py
+ui/backend/services/comparison_report.py
+ui/backend/tests/fixtures/runs/backward_facing_step/audit_real_run_measurement.yaml
+ui/frontend/public/flow-fields/backward_facing_step/velocity_streamlines.json
+ui/frontend/public/flow-fields/backward_facing_step/velocity_streamlines.png
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+import json
+from pathlib import Path
+p = Path('reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json')
+data = json.loads(p.read_text())
+print(data.keys())
+for k,v in data.items():
+    if isinstance(v, dict):
+        print(k, v.keys())
+    else:
+        print(k, type(v), repr(v)[:120])
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+dict_keys(['case_id', 'measured_at', 'duration_s', 'solver_success', 'key_quantities', 'comparator_passed', 'comparator_summary', 'deviations'])
+case_id <class 'str'> 'backward_facing_step'
+measured_at <class 'str'> '2026-04-23T10:24:48Z'
+duration_s <class 'float'> 34.616
+solver_success <class 'bool'> True
+key_quantities dict_keys(['U_residual_magnitude', 'reattachment_length', 'reattachment_method', 'reattachment_probe_height', 'reattachment_n_floor_pts', 'reattachment_wall_shear_source'])
+comparator_passed <class 'bool'> True
+comparator_summary <class 'str'> 'Quantity: reattachment_length | Tolerance: 10.0% | PASS'
+deviations <class 'list'> []
+
+exec
+/bin/zsh -lc "python3.11 - <<'PY'
+import json
+from pathlib import Path
+p = Path('reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json')
+data = json.loads(p.read_text())
+print('path=', p)
+print('solver_success=', data['solver_success'])
+print('comparator_passed=', data['comparator_passed'])
+print('comparator_summary=', data['comparator_summary'])
+print('key_quantities=', data['key_quantities'])
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+path= reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+solver_success= True
+comparator_passed= True
+comparator_summary= Quantity: reattachment_length | Tolerance: 10.0% | PASS
+key_quantities= {'U_residual_magnitude': 9.798412111199905e-05, 'reattachment_length': 5.647054267872632, 'reattachment_method': 'wall_shear_tau_x_zero_crossing', 'reattachment_probe_height': 0.0, 'reattachment_n_floor_pts': 119, 'reattachment_wall_shear_source': 'allPatches_vtk'}
+
+exec
+/bin/zsh -lc 'python3.11 -m pytest ui/backend/tests/test_comparison_report_visual_only.py ui/backend/tests/test_comparison_report_route.py -q' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1534ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: langsmith-0.7.32, asyncio-1.3.0, anyio-4.13.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 20 items
+
+ui/backend/tests/test_comparison_report_visual_only.py ..........        [ 50%]
+ui/backend/tests/test_comparison_report_route.py ..........              [100%]
+
+============================== 20 passed in 0.89s ==============================
+
+codex
+VERDICT: CHANGES_REQUIRED
+
+VERIFICATION:
+  round-3 #1 (wall mask): PASS. Adapter uses `y < 0.05 && x > 0.05 && x < 29.5` in [src/foam_agent_adapter.py](/Users/Zhuanz/Desktop/cfd-harness-unified/src/foam_agent_adapter.py:7807). Audit YAML reports `reattachment_n_floor_pts: 119`. VTK cross-check on `allPatches_1500.vtk`: old mask had 2 `x=30` outlet cells; new mask has 0. Xr/H remains `5.647054267873`.
+
+  round-3 #2 (generator Xr): FAIL. Generator now correctly reads `vtk_path.parent / "allPatches"`, uses pos-to-neg wall-shear crossing, and applies `x < 29.5` in [generate_contours.py](/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/flow-field-gen/generate_contours.py:496). Generated JSON says `Xr/H≈5.65`. However the user-facing `flowFields.ts` provenance still says `122 downstream-floor face centres`, stale after the mask fix; it should be 119. Evidence: [flowFields.ts](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/data/flowFields.ts:109).
+
+  round-3 #3 (flags in YAML): PASS. Fixture includes `reattachment_method: wall_shear_tau_x_zero_crossing`, `reattachment_probe_height: 0.0`, `reattachment_n_floor_pts: 119`, and `reattachment_wall_shear_source: allPatches_vtk`. Compare context returns `metrics_reattachment.method = "wall_shear_tau_x_zero_crossing"`.
+
+  regression check: PASS. `python3.11 scripts/preflight_case_visual.py backward_facing_step` exits 0 with GREEN on all 6 checks; scalar contract reports `actual=5.647 expected=6.26 dev=-9.8% tolerance ±10%`. Focused backend tests passed: `20 passed in 0.89s`. Latest raw audit JSON has `solver_success=True`, `comparator_passed=True`, and no executor/adapter error strings found in the staged BFS log/raw JSON.
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only, not blocking this round):
+  - None.
+
+SUMMARY:
+  DEC-V61-052 does not yet meet the new F1-M2 clean-close rule because one round-3 cleanup claim remains incomplete: the frontend static provenance still advertises the old `122` floor-centre count after the authoritative mask dropped the audit count to `119`. All runtime, extractor, YAML, API, and regression checks otherwise pass.
+
+
+tokens used
+130,273
+VERDICT: CHANGES_REQUIRED
+
+VERIFICATION:
+  round-3 #1 (wall mask): PASS. Adapter uses `y < 0.05 && x > 0.05 && x < 29.5` in [src/foam_agent_adapter.py](/Users/Zhuanz/Desktop/cfd-harness-unified/src/foam_agent_adapter.py:7807). Audit YAML reports `reattachment_n_floor_pts: 119`. VTK cross-check on `allPatches_1500.vtk`: old mask had 2 `x=30` outlet cells; new mask has 0. Xr/H remains `5.647054267873`.
+
+  round-3 #2 (generator Xr): FAIL. Generator now correctly reads `vtk_path.parent / "allPatches"`, uses pos-to-neg wall-shear crossing, and applies `x < 29.5` in [generate_contours.py](/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/flow-field-gen/generate_contours.py:496). Generated JSON says `Xr/H≈5.65`. However the user-facing `flowFields.ts` provenance still says `122 downstream-floor face centres`, stale after the mask fix; it should be 119. Evidence: [flowFields.ts](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/data/flowFields.ts:109).
+
+  round-3 #3 (flags in YAML): PASS. Fixture includes `reattachment_method: wall_shear_tau_x_zero_crossing`, `reattachment_probe_height: 0.0`, `reattachment_n_floor_pts: 119`, and `reattachment_wall_shear_source: allPatches_vtk`. Compare context returns `metrics_reattachment.method = "wall_shear_tau_x_zero_crossing"`.
+
+  regression check: PASS. `python3.11 scripts/preflight_case_visual.py backward_facing_step` exits 0 with GREEN on all 6 checks; scalar contract reports `actual=5.647 expected=6.26 dev=-9.8% tolerance ±10%`. Focused backend tests passed: `20 passed in 0.89s`. Latest raw audit JSON has `solver_success=True`, `comparator_passed=True`, and no executor/adapter error strings found in the staged BFS log/raw JSON.
+
+OUT_OF_SCOPE_FOLLOWUPS (informational only, not blocking this round):
+  - None.
+
+SUMMARY:
+  DEC-V61-052 does not yet meet the new F1-M2 clean-close rule because one round-3 cleanup claim remains incomplete: the frontend static provenance still advertises the old `122` floor-centre count after the authoritative mask dropped the audit count to `119`. All runtime, extractor, YAML, API, and regression checks otherwise pass.
+
+
