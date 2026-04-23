@@ -5,23 +5,58 @@
 # TRANSIENT simulation required
 #
 physics_contract:
-  geometry_assumption: "2D cylinder in freestream, diameter D=1.0 (whitelist default) or 0.1 (adapter _generate_body_in_channel inner setup), centred at x=0, y=0 with upstream/downstream channel of sufficient length to not confine the wake."
-  reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. Centerline u/U_inf deficits at x/D=1..5 are from the same dataset."
+  geometry_assumption: "2D cylinder in freestream, D=0.1 m (adapter _generate_body_in_channel). Re=100. Williamson 1996 anchors assume unconfined flow. Current domain L_up=2D, L_down=8D, H=2.5D per side → 20% blockage (see physics_precondition). DEC-V61-053 Batch B1 will grow to L_up=10D, L_down=20D, H=6D per side → ~8% blockage, matching Williamson context."
+  reference_correlation_context: "Williamson 1996 reports St≈0.164, Cd≈1.33, Cl_rms≈0.048 for Re=100 laminar Karman shedding from a 2D cylinder. u_mean_centerline gold values 0.83→0.35 at x/D ∈ {1,2,3,5} are WAKE DEFICIT = (U_inf - u_mean)/U_inf (per the per-point `description: centerline velocity deficit`), NOT raw u_mean/U_inf. The gold key `u_Uinf` is mislabeled for historical reasons; DEC-V61-053 Batch B2 will rename to `u_deficit` and align extractor."
   physics_precondition:
     - condition: "Flow is 2D laminar at Re=100 (unambiguously in laminar shedding regime 40 < Re < ~180)"
-      satisfied_by_current_adapter: true
-      evidence_ref: "whitelist declares Re=100 + pimpleFoam (transient); _generate_body_in_channel mesh 40000 cells structured."
-    - condition: "Transient solution runs long enough to capture multiple shedding cycles AND time-average removes start-up transients."
-      satisfied_by_current_adapter: partially
-      evidence_ref: "no explicit window control in the adapter; whitelist runtime assumed sufficient."
-      consequence_if_unsatisfied: "St and Cd estimates from too-short windows converge slowly; PASS outcome still likely at Re=100 due to the next precondition's safety net."
-    - condition: "Strouhal extractor reflects solver physics (not a hardcoded canonical value)."
       satisfied_by_current_adapter: false
-      evidence_ref: "src/foam_agent_adapter.py:6766-6774 — canonical_st=0.165 if 50<=Re<=200 else None; key_quantities['strouhal_number']=canonical_st."
-      consequence_if_unsatisfied: "PASS on the strouhal_number observable alone proves nothing about solver output at the whitelist Re=100 point. The supplementary pressure_coefficient_rms_near_cylinder IS derived from solver data. cd_mean and cl_rms observables are NOT subject to this hardcoding."
+      evidence_ref: "whitelist.yaml:83 declares turbulence_model=laminar per DEC-V61-005. Adapter src/foam_agent_adapter.py:515-518 calls _turbulence_model_for_solver which returns kOmegaSST for BODY_IN_CHANNEL (line 668). The whitelist field is SILENTLY IGNORED."
+      consequence_if_unsatisfied: "kOmegaSST over-dissipates the laminar wake at Re=100 → underpredicts St by 10-20%, Cl_rms by 30-50%. Likely contributor to the current audit fixture's `measurement.value = 4.93502e-06 U_max_approx` fallback."
+      resolution_plan: "DEC-V61-053 Batch B1 decision (a): thread task_spec.turbulence_model through _turbulence_model_for_solver so whitelist override wins; generate cylinder with laminar solver; fvSchemes adjusted for no k/omega fields."
+    - condition: "Domain is large enough that blockage does not bias Cd/St/u_centerline vs Williamson's unconfined anchors."
+      satisfied_by_current_adapter: false
+      evidence_ref: "src/foam_agent_adapter.py:4462-4467 — L_inlet=2D, L_outlet=8D, H=2.5D per side. Blockage = D / (2 · 2.5D) = 20%. Williamson 1996 assumes unconfined; Zdravkovich 1997 Ch.6 documents 20% blockage biases Cd HIGH (+8-12%) and shifts St +2-5%."
+      consequence_if_unsatisfied: "Cd round-1 tolerance breach almost certain (1.33 · 1.10 = 1.46 vs gold 1.33 ±5%)."
+      resolution_plan: "DEC-V61-053 Batch B1 decision (b): grow domain to L_inlet=10D, L_outlet=20D, H=6D per side → blockage = D / (12D) ≈ 8%; mesh cells ~100k (was 40k); runtime estimate +3-4× (15min → 45-60min)."
+    - condition: "Transient solution runs long enough to capture ≥8 shedding cycles AND time-average removes start-up transients."
+      satisfied_by_current_adapter: partially
+      evidence_ref: "DEC-V61-041 landed forceCoeffs FO + cylinder_strouhal_fft module with windowing. No regression since; window config tied to whitelist runtime."
+      consequence_if_unsatisfied: "St and Cd RMS converge slowly on too-short windows; unit-tests in B2 guard by asserting ≥8 peaks in trimmed series."
+    - condition: "Strouhal extractor reflects solver physics (not a hardcoded canonical value)."
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-041 retired canonical_st=0.165 hardcode. src/cylinder_strouhal_fft.emit_strouhal reads forceCoeffs FO postProcessing/forceCoeffs1/0/coefficient.dat and computes St via FFT of Cl(t). cd_mean and cl_rms emit from the same trimmed time-series."
+      resolution_plan: "no further action in DEC-V61-053; was the pre-V61-041 hazard now retired."
+    - condition: "Audit fixture surfaces St as measurement.quantity (not U_max_approx fallback)."
+      satisfied_by_current_adapter: false
+      evidence_ref: "ui/backend/tests/fixtures/runs/circular_cylinder_wake/audit_real_run_measurement.yaml → measurement.quantity = U_max_approx, extraction_source = key_quantities_fallback. Likely cascades from the kOmegaSST damping (St FFT finds no dominant peak, falls back)."
+      consequence_if_unsatisfied: "Compare-tab cannot surface St as primary scalar; 4-gate UI impossible."
+      resolution_plan: "DEC-V61-053 Batch B3 — phase5_audit_run.py writes St as primary; expected to succeed once laminar solver + grown domain produce physical shedding."
+    - condition: "u_mean_centerline semantics (raw vs deficit) are unambiguously documented in gold YAML AND aligned with extractor output."
+      satisfied_by_current_adapter: false
+      evidence_ref: "Gold values 0.83→0.35 monotonically decreasing are INCONSISTENT with raw u/U_inf (which INCREASES with x/D as wake recovers) but CONSISTENT with deficit (decreases with x/D as wake recovers). Per-point `description: centerline velocity deficit` confirms deficit; key name `u_Uinf` is mislabeled."
+      consequence_if_unsatisfied: "Extractor that emits raw U would fail all 4 stations by 2-3× the tolerance band. Silent — extractor returns 'number', contract says '0.83', comparator says FAIL without explaining why."
+      resolution_plan: "DEC-V61-053 Batch B2 — rename gold key u_Uinf → u_deficit (BREAKING change; coordinate with ref_value consumers in src/comparator/ + tests); extractor emits deficit directly; UI label shows 'u_deficit @ x/D=N' not 'u_Uinf'."
   contract_status: "COMPATIBLE_WITH_SILENT_PASS_HAZARD"
-  contract_status_detail: "cd_mean, cl_rms, and u_mean_centerline are physics-faithful comparisons; strouhal_number is a shortcut that should be audited as 'canonical-band shortcut fired' when key_quantities['strouhal_number']==0.165 exactly while Re in [50,200]."
-  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice; EX-1-G3 structural promotion)"
+  contract_status_detail: "Canonical_st=0.165 hazard RETIRED in DEC-V61-041. Three NEW hazards documented in physics_precondition (blockage, silent kOmegaSST override, u_mean_centerline deficit-mislabel). DEC-V61-053 Batch B1-B3 resolves all three; contract_status flips to SATISFIED at Batch B3 close."
+  precondition_last_reviewed: "2026-04-23 (DEC-V61-053 Batch A intake integration)"
+  reference_probe_coords:
+    u_mean_centerline:
+      - x_D: 1.0
+        y: 0.0
+        z: 0.0
+        comment: "near-wake recirculation; x_sample = x_D * D where D from adapter boundary_conditions['cylinder_D']"
+      - x_D: 2.0
+        y: 0.0
+        z: 0.0
+        comment: "vortex formation region"
+      - x_D: 3.0
+        y: 0.0
+        z: 0.0
+        comment: "early recovery"
+      - x_D: 5.0
+        y: 0.0
+        z: 0.0
+        comment: "far-wake recovering"
 
 quantity: strouhal_number
 reference_values:
