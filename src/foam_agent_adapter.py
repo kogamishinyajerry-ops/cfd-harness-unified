@@ -512,9 +512,23 @@ class FoamAgentExecutor:
                     solver_name = "icoFoam"
                 else:
                     solver_name = "pimpleFoam"
-                    turbulence_model = self._turbulence_model_for_solver(
-                        solver_name, task_spec.geometry_type, task_spec.Re
-                    )
+                    # DEC-V61-053 Batch B1: honor whitelist `turbulence_model`
+                    # per DEC-V61-005 A-class correction. Prior code always
+                    # called _turbulence_model_for_solver which hardcoded
+                    # kOmegaSST for BODY_IN_CHANNEL EXTERNAL, silently
+                    # overriding whitelist's `laminar` — see
+                    # knowledge/gold_standards/circular_cylinder_wake.yaml
+                    # physics_precondition. Cylinder at Re=100 is in the
+                    # laminar 2D Karman shedding regime (Williamson 1996);
+                    # kOmegaSST over-dissipates the wake.
+                    whitelist_chain = self._db.get_execution_chain(task_spec.name) or {}
+                    whitelist_turb = whitelist_chain.get("turbulence_model")
+                    if whitelist_turb in ("laminar", "kOmegaSST", "kEpsilon"):
+                        turbulence_model = whitelist_turb
+                    else:
+                        turbulence_model = self._turbulence_model_for_solver(
+                            solver_name, task_spec.geometry_type, task_spec.Re
+                        )
                     self._generate_circular_cylinder_wake(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.AIRFOIL:
                 solver_name = "simpleFoam"
@@ -4459,12 +4473,16 @@ fields          (T);
         task_spec.boundary_conditions["cylinder_D"] = D
         task_spec.boundary_conditions["U_ref"] = U_bulk
 
-        # Channel dimensions
-        W = 2.0 * D  # half-width
-        H = 2.5 * D  # half-height
-        L_inlet = 2.0 * D  # upstream length
-        L_outlet = 8.0 * D  # downstream length
-        z_depth = 0.1 * D  # 2D thickness
+        # Channel dimensions — DEC-V61-053 Batch B1 (decision b):
+        # grown from L_inlet=2D/L_outlet=8D/H=2.5D (20% blockage) to
+        # L_inlet=10D/L_outlet=20D/H=6D (~8% blockage) to match Williamson
+        # 1996 unconfined-wake anchors. Prior geometry biased Cd high +8-12%
+        # and St +2-5% per Zdravkovich Ch.6.
+        W = 6.0 * D  # half-width (unused downstream, retained for reference)
+        H = 6.0 * D  # half-height (was 2.5D)
+        L_inlet = 10.0 * D  # upstream length (was 2D)
+        L_outlet = 20.0 * D  # downstream length (was 8D)
+        z_depth = 0.1 * D  # 2D thickness (unchanged)
 
         x_min = -L_inlet
         x_max = L_outlet
@@ -4511,7 +4529,13 @@ vertices
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (200 100 1) simpleGrading (1 1 1)
+    // DEC-V61-053 Batch B1: scaled from (200 100 1)=40k cells to
+    // (400 200 1)=80k cells to preserve near-cylinder resolution after
+    // 3x domain growth. dx = 30D/400 = 0.075D near cylinder; dy = 12D/200
+    // = 0.06D. Adequate for Re=100 laminar Karman shedding (Williamson's
+    // canonical unconfined anchors typically use dx,dy ≈ 0.05-0.10D at
+    // cylinder-wake plane).
+    hex (0 1 2 3 4 5 6 7) (400 200 1) simpleGrading (1 1 1)
 );
 
 edges
@@ -4763,14 +4787,18 @@ FoamFile
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-simulationType  RAS;
+{
+    "simulationType  laminar;"
+    if turbulence_model == "laminar"
+    else f"""simulationType  RAS;
 
 RAS
 {{
     RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}}
+}}"""
+}
 
 // ************************************************************************* //
 """,
@@ -5081,6 +5109,11 @@ boundaryField
             encoding="utf-8",
         )
 
+        # DEC-V61-053 Batch B1: laminar solver needs only p/U (not k/omega/nut).
+        # Writing turbulence fields when simulationType=laminar causes
+        # "Field nut not found" / RAS-model-not-registered errors at startup.
+        _is_laminar = turbulence_model == "laminar"
+
         # 0/p
         (case_dir / "0" / "p").write_text(
             f"""\
@@ -5121,9 +5154,12 @@ boundaryField
             encoding="utf-8",
         )
 
-        # 0/k — turbulent kinetic energy
-        (case_dir / "0" / "k").write_text(
-            f"""\
+        # 0/k, 0/omega, 0/nut — written only when turbulence_model != "laminar".
+        # Laminar solver stack doesn't register these fields; writing them
+        # causes startup errors.
+        if not _is_laminar:
+            (case_dir / "0" / "k").write_text(
+                f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -5158,12 +5194,10 @@ boundaryField
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
-
-        # 0/omega — specific dissipation rate (kOmegaSST)
-        (case_dir / "0" / "omega").write_text(
-            f"""\
+                encoding="utf-8",
+            )
+            (case_dir / "0" / "omega").write_text(
+                f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -5198,10 +5232,10 @@ boundaryField
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
-        (case_dir / "0" / "nut").write_text(
-            """\
+                encoding="utf-8",
+            )
+            (case_dir / "0" / "nut").write_text(
+                """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -5236,8 +5270,8 @@ boundaryField
 
 // ************************************************************************* //
 """,
-            encoding="utf-8",
-        )
+                encoding="utf-8",
+            )
 
     def _generate_impinging_jet(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """Generate impinging jet case files (buoyantFoam steady, Boussinesq).
