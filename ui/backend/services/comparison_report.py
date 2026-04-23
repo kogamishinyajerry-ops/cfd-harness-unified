@@ -577,7 +577,13 @@ def _build_visual_only_context(
                 meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
                 m = meas.get("measurement", {}) or {}
                 actual = m.get("value")
-                method = m.get("extraction_source")
+                # DEC-V61-052 Codex r3 #3: prefer the explicit extractor
+                # method key (wall_shear_tau_x_zero_crossing / near_wall_
+                # tau_x_proxy_via_Ux) over the generic extraction_source
+                # (key_quantities_direct / comparator_deviation / ...),
+                # so the Compare tab can tell authoritative wall-shear
+                # success from proxy fallback.
+                method = m.get("reattachment_method") or m.get("extraction_source")
                 if actual is not None:
                     gold = _load_bfs_reattachment_gold()
                     if gold is not None:

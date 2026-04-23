@@ -1,4 +1,4 @@
 {
-  "provenance": "Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK (20260423T094706Z, 7360 cells, x-graded). Measured Xr/H≈5.65 via near-wall Ux sign-change at first B1 cell row (y=0.0125). Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.",
+  "provenance": "Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK (20260423T102413Z, 7360 cells, x-graded). Measured Xr/H≈5.65 via wallShearStress tau_x pos→neg crossing on the lower_wall patch (allPatches VTK, OpenFOAM sign convention). Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.",
   "generator": "scripts/flow-field-gen/generate_contours.py"
 }

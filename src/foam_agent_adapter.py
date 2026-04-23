@@ -7795,11 +7795,18 @@ mergePatchPairs
                         wss_ap = _np.asarray(ap["wallShearStress"])
                         centres_ap = _np.asarray(ap.cell_centers().points)
                         # lower_wall identification: y ≈ 0 floor downstream
-                        # of the step. Strict filter y<0.05, x>0.05 excludes
-                        # the step face (x=0, y∈[0,1]) and the inlet floor
-                        # (y=1, x<0). Works independently of patchID
-                        # ordering (which can vary across OpenFOAM builds).
-                        floor_mask = (centres_ap[:, 1] < 0.05) & (centres_ap[:, 0] > 0.05)
+                        # of the step. Strict filter y<0.05 AND 0.05<x<29.5
+                        # excludes:
+                        #   - the step face (x=0, y∈[0,1])         → x>0.05
+                        #   - the inlet floor at y=1 (y<0.05)      → y<0.05
+                        #   - the B1 outlet face at x=30 (Codex r3 #1) → x<29.5
+                        # L_down = 30·H so outlet cells land at x=30; the
+                        # upper bound strips them without losing any
+                        # meaningful floor-face. Works independently of
+                        # patchID ordering (varies across OpenFOAM builds).
+                        floor_mask = ((centres_ap[:, 1] < 0.05)
+                                      & (centres_ap[:, 0] > 0.05)
+                                      & (centres_ap[:, 0] < 29.5))
                         if floor_mask.sum() >= 5:
                             xs_floor = centres_ap[floor_mask, 0]
                             tx_floor = wss_ap[floor_mask, 0]

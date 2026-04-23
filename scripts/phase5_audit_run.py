@@ -456,6 +456,10 @@ def _audit_fixture_doc(
     quantity, value, source_note = _primary_scalar(report, expected_quantity)
     comp = report.comparison_result
     passed = comp.passed if comp else False
+    # DEC-V61-052 Codex r3 #3: re-expose executor key_quantities here so
+    # the measurement block can surface extractor-side method + diagnostic
+    # flags alongside the primary scalar.
+    kq = report.execution_result.key_quantities or {}
 
     # DEC-V61-036 G1: verdict hint must reflect the missing-quantity outcome.
     # Prior behaviour tied verdict_hint to comp.passed alone, which showed
@@ -498,6 +502,26 @@ def _audit_fixture_doc(
             "extraction_source": source_note,
             "solver_success": report.execution_result.success,
             "comparator_passed": passed,
+            # DEC-V61-052 Codex r3 #3: surface extractor-side method +
+            # diagnostic flags so downstream consumers (Compare-tab card,
+            # audit package review) can distinguish authoritative
+            # wall-shear success from proxy fallback without reading raw
+            # key_quantities. All entries are optional — only populated
+            # when the corresponding key exists in executor output.
+            **{
+                k: v for k, v in {
+                    "reattachment_method": kq.get("reattachment_method"),
+                    "reattachment_probe_height": kq.get("reattachment_probe_height"),
+                    "reattachment_n_floor_pts": kq.get("reattachment_n_floor_pts"),
+                    "reattachment_wall_shear_source": kq.get("reattachment_wall_shear_source"),
+                    "reattachment_wall_shear_no_sign_change": kq.get("reattachment_wall_shear_no_sign_change"),
+                    "reattachment_wall_shear_filter_empty": kq.get("reattachment_wall_shear_filter_empty"),
+                    "reattachment_wall_shear_layout_unparsed": kq.get("reattachment_wall_shear_layout_unparsed"),
+                    "reattachment_proxy_no_sign_change": kq.get("reattachment_proxy_no_sign_change"),
+                    "reattachment_detection_upstream_artifact": kq.get("reattachment_detection_upstream_artifact"),
+                    "reattachment_detection_rejected_x": kq.get("reattachment_detection_rejected_x"),
+                }.items() if v is not None
+            },
         },
         "audit_concerns": [],
         "decisions_trail": [

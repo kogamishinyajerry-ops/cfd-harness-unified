@@ -9,7 +9,7 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit a62ca3c）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 3f3021e）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
@@ -20,13 +20,17 @@ source: phase5_audit_run_foam_agent
 measurement:
   value: 5.647054267872632
   unit: dimensionless
-  run_id: audit_backward_facing_step_a62ca3c
-  commit_sha: a62ca3c
-  measured_at: '2026-04-23T09:47:36Z'
+  run_id: audit_backward_facing_step_3f3021e
+  commit_sha: 3f3021e
+  measured_at: '2026-04-23T10:24:48Z'
   quantity: reattachment_length
   extraction_source: key_quantities_direct
   solver_success: true
   comparator_passed: true
+  reattachment_method: wall_shear_tau_x_zero_crossing
+  reattachment_probe_height: 0.0
+  reattachment_n_floor_pts: 119
+  reattachment_wall_shear_source: allPatches_vtk
 audit_concerns:
 - concern_type: CONTRACT_STATUS
   summary: 'Quantity: reattachment_length | Tolerance: 10.0% | PASS'

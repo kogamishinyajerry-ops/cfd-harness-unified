@@ -484,31 +484,41 @@ def gen_backward_facing_step():
     Umag = np.clip(umag[finite], 0.0, 1.5)
 
     # Re-probe Xr using the EXACT same algorithm as the adapter's
-    # authoritative `_extract_bfs_reattachment` Path-2 extractor: group
-    # first-cell-band (y ∈ [0, 0.025]) cell-centre Ux by x-column, then
-    # find the zero-crossing of the per-column mean. This guarantees the
-    # figure's Xr annotation agrees with the scalar-contract preflight
-    # gate — `backward_facing_step.yaml::contract_status` + the audit
-    # fixture's `measurement.value` — so the page can't show a different
-    # Xr than the validation layer reported.
-    from collections import defaultdict
-    centers = np.asarray(mesh.cell_centers().points)
-    Ux_cell = np.asarray(mesh["U"])[:, 0]
-    x_groups: dict = defaultdict(list)
-    for i in range(len(centers)):
-        cx, cy, _cz = centers[i]
-        if 0.0 <= cy < 0.025:
-            x_groups[round(cx, 3)].append(Ux_cell[i])
-    sorted_x = sorted(x_groups.keys())
-    x_ux_pairs = [(xc, sum(x_groups[xc]) / len(x_groups[xc])) for xc in sorted_x]
+    # authoritative Path-1a extractor: read lower_wall tau_x from the
+    # staged allPatches VTK and find the POS→NEG crossing (OpenFOAM's
+    # convention where wallShearStress[0] > 0 indicates reversed flow).
+    # Agrees with the adapter's audit measurement.value to 4 sig figs.
+    # Codex r3 #2: pre-round-3 this re-probed via the Ux proxy instead,
+    # which produced the same number to 0.004% but undermined the
+    # caption's "wallShearStress on lower_wall" attribution.
     xr_over_h = None
-    for j in range(1, len(x_ux_pairs)):
-        x1, u1 = x_ux_pairs[j - 1]
-        x2, u2 = x_ux_pairs[j]
-        if u1 < 0 <= u2 and x1 > 0:
-            xr_over_h = (x1 - u1 * (x2 - x1) / (u2 - u1)
-                         if abs(u2 - u1) > 1e-10 else x1)
-            break
+    try:
+        ap_vtks = sorted((vtk_path.parent / "allPatches").glob("allPatches_*.vtk"))
+        if ap_vtks:
+            ap = pv.read(str(ap_vtks[-1]))
+            if "wallShearStress" in ap.array_names:
+                wss_ap = np.asarray(ap["wallShearStress"])
+                centres_ap = np.asarray(ap.cell_centers().points)
+                floor = ((centres_ap[:, 1] < 0.05)
+                         & (centres_ap[:, 0] > 0.05)
+                         & (centres_ap[:, 0] < 29.5))
+                if floor.sum() >= 5:
+                    xs_floor = centres_ap[floor, 0]
+                    tx_floor = wss_ap[floor, 0]
+                    order = np.argsort(xs_floor)
+                    xs_sorted = xs_floor[order]
+                    tx_sorted = tx_floor[order]
+                    for j in range(1, len(xs_sorted)):
+                        t1 = tx_sorted[j - 1]
+                        t2 = tx_sorted[j]
+                        if t1 > 0 and t2 <= 0:
+                            denom = t2 - t1
+                            xr_over_h = (xs_sorted[j - 1]
+                                         - t1 * (xs_sorted[j] - xs_sorted[j - 1]) / denom
+                                         if abs(denom) > 1e-30 else xs_sorted[j - 1])
+                            break
+    except Exception:
+        xr_over_h = None
 
     fig, ax = plt.subplots(figsize=(8.8, 3.0), facecolor=DARK_BG, dpi=220)
     # tricontourf across the unstructured points gives a valid shading even
@@ -558,10 +568,12 @@ def gen_backward_facing_step():
     cbar.set_label("|U| / U_bulk", color=AXIS_TEXT, fontsize=8.5)
     cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
+    xr_str = f"≈{xr_over_h:.2f}" if xr_over_h is not None else "(not extracted — allPatches VTK unavailable)"
     _save(fig, "backward_facing_step", "velocity_streamlines",
           f"Real |U|(x,y) + streamlines from simpleFoam kOmegaSST BFS audit VTK "
-          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H≈{xr_over_h:.2f} "
-          f"via near-wall Ux sign-change at first B1 cell row (y=0.0125). "
+          f"({vtk_path.parent.parent.name}, 7360 cells, x-graded). Measured Xr/H{xr_str} "
+          f"via wallShearStress tau_x pos→neg crossing on the lower_wall patch "
+          f"(allPatches VTK, OpenFOAM sign convention). "
           f"Reference Xr/H = 6.26 (Driver & Seegmiller 1985) overlaid for context.")
 
 
