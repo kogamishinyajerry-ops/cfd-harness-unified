@@ -1328,9 +1328,13 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      Gauss linear;
-    div(phi,k)      Gauss linear;
-    div(phi,epsilon) Gauss linear;
+    // DEC-V61-052: BFS k-ε is unconditionally unstable under central-differenced
+    // convection at the recirculation shear layer. Switch to bounded Gauss
+    // linearUpwind for momentum (TVD-like, still 2nd-order in smooth regions)
+    // and bounded upwind for turbulence scalars (keeps k, ε non-negative).
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,k)      bounded Gauss upwind;
+    div(phi,epsilon) bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 
@@ -1418,24 +1422,29 @@ solvers
 SIMPLE
 {
     nNonOrthogonalCorrectors 0;
-
-    residualControl
-    {
-        Ux              1e-5;
-        Uy              1e-5;
-        p               1e-4;
-        k               1e-5;
-        epsilon         1e-5;
-    }
+    // DEC-V61-052: residualControl removed — BFS k-ε false-converges in ~17 iters
+    // when k/ε are bouncing around at 1e+33 but residuals (which are normalized
+    // to current magnitude) come in tiny. Let the solver run endTime=1000 iters
+    // and rely on monotone residual descent + post-run gate battery for sanity.
+    // consistent=yes enables SIMPLEC, which permits higher URFs with less drift.
+    consistent      yes;
 }
 
 relaxationFactors
 {
+    // DEC-V61-052: gentle BFS defaults. k-ε on a recirculating mesh with
+    // steep gradients at the step corner needs p relaxation (absent
+    // originally, effectively p=1.0) and tighter U/k/ε. Values here are
+    // the standard Fluent/CFX-style SIMPLEC defaults for separated flow.
+    fields
+    {
+        p               0.3;
+    }
     equations
     {
-        U               0.9;
-        k               0.9;
-        epsilon         0.9;
+        U               0.7;
+        k               0.5;
+        epsilon         0.5;
     }
 }
 
@@ -1638,12 +1647,20 @@ boundaryField
     }}
     lower_wall
     {{
-        type            nutkWallFunction;
+        // DEC-V61-052: Spalding-form blending wall function spans viscous
+        // sublayer (y+<5), buffer (5<y+<30), and log region. First B1
+        // near-wall cell at ncy_B1=40 has y+≈5 under BFS Re=7600, so
+        // nutkWallFunction (log-only) would give nonsense.
+        type            nutUSpaldingWallFunction;
         value           uniform 0;
     }}
     upper_wall
     {{
-        type            nutkWallFunction;
+        // DEC-V61-052: Spalding-form blending wall function spans viscous
+        // sublayer (y+<5), buffer (5<y+<30), and log region. First B1
+        // near-wall cell at ncy_B1=40 has y+≈5 under BFS Re=7600, so
+        // nutkWallFunction (log-only) would give nonsense.
+        type            nutUSpaldingWallFunction;
         value           uniform 0;
     }}
     front
