@@ -1278,6 +1278,93 @@ class TestCylinderStrouhalExtractor:
         assert "strouhal_canonical_band_shortcut_fired" not in result
 
 
+class TestCylinderGeneratorBatchB1:
+    """DEC-V61-053 Batch B1 adapter changes — laminar threading, domain grow,
+    runtime sampleDict, forceCoeffs axis convention. Each test is a narrow
+    assertion so Codex round-1 review can pinpoint regressions by name.
+    """
+
+    def _generate(self, turbulence_model: str) -> Path:
+        import tempfile
+        from pathlib import Path as _P
+        tmp = _P(tempfile.mkdtemp(prefix=f"cyl_b1_{turbulence_model}_"))
+        task = TaskSpec(
+            name="circular_cylinder_wake",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.TRANSIENT,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100.0,
+        )
+        ex = FoamAgentExecutor.__new__(FoamAgentExecutor)
+        ex._generate_circular_cylinder_wake(tmp, task, turbulence_model=turbulence_model)
+        return tmp
+
+    def test_laminar_turbulenceProperties_uses_laminar_simulationType(self):
+        """Whitelist `turbulence_model: laminar` path — constant/turbulenceProperties
+        must declare `simulationType laminar;` (no RAS block)."""
+        case_dir = self._generate("laminar")
+        tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+        assert "simulationType  laminar" in tp
+        assert "RASModel" not in tp
+
+    def test_laminar_skips_k_omega_nut_initial_fields(self):
+        """Laminar solver stack doesn't register k/omega/nut — writing them
+        causes 'Field not found' / RAS-model-not-registered errors at startup.
+        Contract: these 3 files MUST NOT exist for laminar."""
+        case_dir = self._generate("laminar")
+        assert not (case_dir / "0" / "k").exists()
+        assert not (case_dir / "0" / "omega").exists()
+        assert not (case_dir / "0" / "nut").exists()
+
+    def test_kOmegaSST_writes_k_omega_nut_initial_fields(self):
+        """Dual of above — kOmegaSST path MUST write all three."""
+        case_dir = self._generate("kOmegaSST")
+        assert (case_dir / "0" / "k").exists()
+        assert (case_dir / "0" / "omega").exists()
+        assert (case_dir / "0" / "nut").exists()
+
+    def test_domain_grown_to_williamson_unconfined_geometry(self):
+        """Batch B1 decision (b): blockage 20% → ~8% via L_inlet 2D→10D,
+        L_outlet 8D→20D, H 2.5D→6D. blockMeshDict vertices encode these."""
+        case_dir = self._generate("laminar")
+        bm = (case_dir / "system" / "blockMeshDict").read_text()
+        # x_min = -L_inlet = -10*D = -10*0.1 = -1.0 m
+        assert "-1.000000" in bm, "x_min should be -1.0 m (10D upstream)"
+        # x_max = L_outlet = 20*D = 2.0 m
+        assert "2.000000" in bm, "x_max should be 2.0 m (20D downstream)"
+        # Block count scaled 200×100 → 400×200 to preserve near-cylinder resolution
+        assert "(400 200 1)" in bm
+
+    def test_forceCoeffs_axis_convention_explicit(self):
+        """DEC-V61-053 Batch B1 hardening per intake risk_flag
+        `forceCoeffs_axis_convention`: OpenFOAM defaults for forceCoeffs
+        dragDir/liftDir/pitchAxis differ across versions; any generator edit
+        that accidentally drops the explicit triple would silently invert
+        Cl/Cd. Assert the exact strings are present."""
+        case_dir = self._generate("laminar")
+        cd = (case_dir / "system" / "controlDict").read_text()
+        assert "dragDir         (1 0 0);" in cd
+        assert "liftDir         (0 1 0);" in cd
+        assert "pitchAxis       (0 0 1);" in cd
+        # And the force-coefficients FO is actually enabled
+        assert "forceCoeffs1" in cd
+        assert 'patches         (cylinder);' in cd
+
+    def test_cylinderCenterline_runtime_sampling_has_4_gold_stations(self):
+        """Batch B1b new function object: wakeCenterline sampleSet with 4
+        points at x/D ∈ {1,2,3,5} (D=0.1 → x ∈ {0.1, 0.2, 0.3, 0.5}). These
+        are the u_mean_centerline gold stations from Williamson 1996."""
+        case_dir = self._generate("laminar")
+        cd = (case_dir / "system" / "controlDict").read_text()
+        assert "cylinderCenterline" in cd
+        assert "wakeCenterline" in cd
+        for expected_point in ("(0.1 0 0)", "(0.2 0 0)", "(0.3 0 0)", "(0.5 0 0)"):
+            assert expected_point in cd, f"Missing centerline probe point {expected_point}"
+        # Fields must include U (velocity is what we're sampling)
+        assert "fields          (U)" in cd
+
+
 # ---------------------------------------------------------------------------
 # P-B C2: parameter plumbing pre-run assertion
 # ---------------------------------------------------------------------------

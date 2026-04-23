@@ -4883,6 +4883,41 @@ functions
         Aref            0.001;
         log             false;
     }}
+
+    // DEC-V61-053 Batch B1b: runtime-sample wake centerline U at 4 gold
+    // x/D stations (Williamson 1996 u_mean_centerline reference). D=0.1m
+    // so x=(x/D)·D ∈ {0.01, 0.02, 0.03, 0.05} ... wait D=0.1 → points are
+    // at x=0.1, 0.2, 0.3, 0.5 m (i.e. 1D, 2D, 3D, 5D downstream of the
+    // cylinder center at x=0). writeControl=timeStep + writeInterval=20
+    // gives ~20 samples per shedding period at St=0.164, dt~0.001s, Co
+    // relaxing to ~0.005s steady-state — adequate for B2 time-averaging
+    // in the statistically-stationary window.
+    cylinderCenterline
+    {{
+        type            sets;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   20;
+        interpolationScheme cellPoint;
+        setFormat       raw;
+        fields          (U);
+        sets
+        (
+            wakeCenterline
+            {{
+                type        points;
+                axis        xyz;
+                ordered     on;
+                points
+                (
+                    (0.1 0 0)
+                    (0.2 0 0)
+                    (0.3 0 0)
+                    (0.5 0 0)
+                );
+            }}
+        );
+    }}
 }}
 
 // ************************************************************************* //
