@@ -329,6 +329,64 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
         checks.append(Check("scalar contract", "pass", summary, evidence=evidence))
     else:
         checks.append(Check("scalar contract", "fail", summary, evidence=evidence))
+
+    # DEC-V61-053 Batch C: multi-scalar gate for Type I cases (cylinder's
+    # 4 observables: St headline + cd_mean + cl_rms + u_mean_centerline).
+    # Backward-compat: cases without `measurement.secondary_scalars` just
+    # run the single-scalar check above. Type I cases emit
+    # `secondary_scalars: {cd_mean: 1.34, cl_rms: 0.05, ...}` and this
+    # block iterates over each additional gold quantity.
+    secondary = measurement.get("secondary_scalars") or {}
+    if isinstance(secondary, dict) and secondary:
+        # Collect every non-primary gold quantity doc keyed by its `quantity:`.
+        gold_secondary_docs = {
+            d["quantity"]: d for d in docs
+            if isinstance(d, dict)
+            and isinstance(d.get("quantity"), str)
+            and d["quantity"] != quantity  # skip primary (already checked)
+            and d.get("reference_values")
+        }
+        for sec_name, sec_val in secondary.items():
+            if not isinstance(sec_val, (int, float)):
+                continue
+            # Coordinate-indexed keys like "deficit_x_over_D_1.0" map to the
+            # same gold_doc (u_mean_centerline) with per-point refs. For
+            # simplicity in Batch C, check only canonical scalar-named
+            # entries (cd_mean, cl_rms); profile-keyed entries go through
+            # the LDC-style comparator pipeline downstream.
+            sec_gold = gold_secondary_docs.get(sec_name)
+            if sec_gold is None:
+                continue
+            sec_refs = sec_gold.get("reference_values") or []
+            if not sec_refs or "value" not in sec_refs[0]:
+                continue
+            sec_expected = float(sec_refs[0]["value"])
+            sec_tol = float(sec_gold.get("tolerance", 0.10))
+            sec_actual = float(sec_val)
+            sec_rel_dev = (sec_actual - sec_expected) / sec_expected if sec_expected != 0 else float("inf")
+            sec_pct = sec_rel_dev * 100
+            sec_summary = (
+                f"{sec_name}: actual={sec_actual:.4g}  expected={sec_expected:.4g}  "
+                f"dev={sec_pct:+.1f}% (tolerance ±{sec_tol*100:.0f}%)"
+            )
+            sec_evidence = {
+                "quantity": sec_name,
+                "actual": sec_actual,
+                "expected": sec_expected,
+                "tolerance_pct": sec_tol * 100,
+                "deviation_pct": sec_pct,
+                "gate_role": "secondary",
+            }
+            if abs(sec_rel_dev) <= sec_tol:
+                checks.append(Check(
+                    f"secondary scalar ({sec_name})", "pass",
+                    sec_summary, evidence=sec_evidence,
+                ))
+            else:
+                checks.append(Check(
+                    f"secondary scalar ({sec_name})", "fail",
+                    sec_summary, evidence=sec_evidence,
+                ))
     return checks
 
 
