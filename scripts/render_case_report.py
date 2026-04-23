@@ -508,7 +508,10 @@ def _render_structured_contour(
     y_min, y_max = float(yn.min()), float(yn.max())
     x1d = np.linspace(x_min, x_max, side)
     y1d = np.linspace(y_min, y_max, side)
-    fig, ax = plt.subplots(figsize=(6.5, 6))
+    # DEC-V61-049 batch D: bump figsize + dpi so LDC annotations stay
+    # readable. Previous 6.5×6 inches @ default dpi gave ~650 px image
+    # where vortex/secondary/provenance text was too small.
+    fig, ax = plt.subplots(figsize=(9, 8))
     cf = ax.contourf(x1d, y1d, mag, levels=20, cmap="viridis")
     ax.streamplot(x1d, y1d, Ux_r, Uy_r, density=1.1, color="white",
                   linewidth=0.6, arrowsize=0.8)
@@ -527,48 +530,57 @@ def _render_structured_contour(
     # secondary vortices in bottom corners). Only LDC gets these —
     # other cases fall through.
     if case_id.startswith("lid_driven_cavity"):
-        # 1. Lid arrow + label at y=1 (top of cavity)
-        for xi in (0.20, 0.50, 0.80):
+        # Stretch y a bit and give the title room so the lid annotation
+        # does not collide with the title line.
+        ax.set_ylim(-0.02, 1.08)
+        ax.set_xlim(-0.02, 1.05)
+        # 1. Lid arrows + label JUST BELOW y=1 so they sit inside the plot
+        #    area and do not fight the suptitle. Arrows + label are placed
+        #    between the top of the cavity (y=1) and the cavity interior.
+        for xi in (0.18, 0.48, 0.78):
             ax.annotate(
-                "", xy=(xi + 0.08, 1.02), xytext=(xi, 1.02),
-                arrowprops=dict(arrowstyle="->", color="#f59e0b", lw=1.3),
-                annotation_clip=False,
+                "", xy=(xi + 0.10, 0.965), xytext=(xi, 0.965),
+                arrowprops=dict(arrowstyle="->", color="#f59e0b", lw=1.6),
             )
         ax.text(
-            0.5, 1.07, "lid · U = U_lid → (sole momentum source)",
+            0.5, 1.045, "lid · U = U_lid →  (sole momentum source)",
             ha="center", color="#f59e0b", fontsize=9, fontweight="bold",
-            transform=ax.transData, clip_on=False,
         )
-        # 2. Primary vortex marker at Ghia Re=100 (0.6172, 0.7344)
-        ax.plot(0.6172, 0.7344, marker="o", markersize=9,
+        # 2. Primary vortex marker at Ghia Re=100 (0.6172, 0.7344).
+        #    Callout moved to lower-left interior to avoid right-edge clip.
+        ax.plot(0.6172, 0.7344, marker="o", markersize=11,
                 markerfacecolor="none", markeredgecolor="#ef4444",
-                markeredgewidth=2.0, zorder=5)
+                markeredgewidth=2.2, zorder=5)
         ax.annotate(
-            "primary vortex center\n(Ghia Re=100: 0.6172, 0.7344)",
-            xy=(0.6172, 0.7344), xytext=(0.78, 0.55),
+            "primary vortex\nGhia Re=100: (0.6172, 0.7344)",
+            xy=(0.6172, 0.7344), xytext=(0.15, 0.45),
             fontsize=8, color="#ef4444",
-            arrowprops=dict(arrowstyle="->", color="#ef4444", lw=0.8),
+            ha="left",
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="#1f1515",
+                      edgecolor="#ef4444", linewidth=0.6),
+            arrowprops=dict(arrowstyle="->", color="#ef4444", lw=0.9,
+                            connectionstyle="arc3,rad=0.2"),
         )
-        # 3. Secondary vortex labels at bottom corners
-        ax.text(0.05, 0.05, "secondary\nvortex (BL)", fontsize=7.5,
-                color="#c084fc", alpha=0.9,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="#1e1b4b",
-                          edgecolor="#c084fc", linewidth=0.5))
-        ax.text(0.82, 0.05, "secondary\nvortex (BR)", fontsize=7.5,
-                color="#c084fc", alpha=0.9,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="#1e1b4b",
-                          edgecolor="#c084fc", linewidth=0.5))
+        # 3. Secondary vortex labels at bottom corners (tucked inside plot).
+        ax.text(0.03, 0.10, "secondary\nvortex (BL)", fontsize=7.5,
+                color="#c084fc", alpha=0.95,
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#1e1b4b",
+                          edgecolor="#c084fc", linewidth=0.6))
+        ax.text(0.78, 0.10, "secondary\nvortex (BR)", fontsize=7.5,
+                color="#c084fc", alpha=0.95,
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#1e1b4b",
+                          edgecolor="#c084fc", linewidth=0.6))
         # 4. Cavity outline (visual hint of 1×1 square)
         ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0],
-                color="#94a3b8", linewidth=0.8, alpha=0.6, linestyle="--")
+                color="#94a3b8", linewidth=0.9, alpha=0.7, linestyle="--")
         # 5. Provenance footnote so the student knows this is real solver output
         fig.text(
-            0.5, 0.01,
+            0.5, 0.005,
             "actual simpleFoam audit_real_run output · NOT synthetic / NOT ansatz",
             ha="center", fontsize=7.5, color="#64748b", style="italic",
         )
 
-    fig.savefig(out, bbox_inches="tight")
+    fig.savefig(out, bbox_inches="tight", dpi=120)
     plt.close(fig)
     return out
 
