@@ -1093,6 +1093,24 @@ function CompareTab({
         )}
       </section>
 
+      {/* DEC-V61-049 batch C · multi-dimensional Compare panel.
+          Previously CompareTab was scalar-only (one anchor + one tolerance
+          band). Backend already computes: profile PASS/PARTIAL/FAIL with
+          n_pass/n_total counts, per-point deviation array, rendered
+          profile + pointwise + residual PNGs, grid convergence rows, and
+          Richardson GCI. Story tab's ScientificComparisonReportSection
+          was the only place that surfaced them. This panel promotes 5
+          named dimensions into Compare so the student can see >1 dim
+          of validation evidence without leaving the tab named Compare.
+          Optional: only renders for cases with gold-overlay context
+          (404/400 → silent hide). */}
+      <MultiDimensionComparePanel
+        caseId={caseId}
+        profileVerdict={report.profile_verdict}
+        profilePassCount={report.profile_pass_count}
+        profileTotalCount={report.profile_total_count}
+      />
+
       {/* Learning angle — reframe FAIL/HAZARD as a teaching moment */}
       <section className="rounded-md border border-sky-900/40 bg-sky-950/15 px-4 py-3">
         <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-sky-300">
@@ -1103,6 +1121,278 @@ function CompareTab({
         </p>
       </section>
     </div>
+  );
+}
+
+// DEC-V61-049 batch C — Multi-dimensional Compare panel.
+// Reuses the existing comparison-report/context endpoint (same data
+// source as Story tab's ScientificComparisonReportSection) but
+// promotes the evidence into 5 named dimensions inside Compare tab.
+// Dimensions:
+//   D1 · scalar anchor (already rendered above, recap verdict here)
+//   D2 · profile verdict (PASS/PARTIAL/FAIL with n/N count)
+//   D3 · profile overlay chart (embedded profile_u_centerline.png)
+//   D4 · pointwise deviation bars (embedded pointwise_deviation.png)
+//   D5 · grid convergence + GCI (native card from grid_conv + gci)
+// Plus an honesty footer listing dims that are IN GOLD but NOT
+// currently validated (v_centerline, primary_vortex_location) so
+// students do not claim unsupported dims in their report.
+function MultiDimensionComparePanel({
+  caseId,
+  profileVerdict,
+  profilePassCount,
+  profileTotalCount,
+}: {
+  caseId: string;
+  profileVerdict: "PASS" | "PARTIAL" | "FAIL" | null;
+  profilePassCount: number | null;
+  profileTotalCount: number | null;
+}) {
+  const runLabel = "audit_real_run";
+  const { data, error, isLoading } = useQuery<ComparisonReportContext, ApiError>({
+    queryKey: ["comparison-report-ctx", caseId, runLabel],
+    queryFn: async () => {
+      const resp = await fetch(
+        `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
+          runLabel,
+        )}/comparison-report/context`,
+        { credentials: "same-origin" },
+      );
+      if (!resp.ok) throw new ApiError(resp.status, await resp.text());
+      return (await resp.json()) as ComparisonReportContext;
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  // 404/400 = case not opted-in to gold-overlay (scalar-only case).
+  // Silent hide — the panel is a value-add, not a blocker.
+  if (isLoading) return null;
+  if (error) {
+    const status = error instanceof ApiError ? error.status : 0;
+    if (status === 404 || status === 400) return null;
+    return null; // Non-critical failure; scalar part above still renders.
+  }
+  if (!data || data.visual_only) return null;
+  if (!data.metrics || !data.paper) return null;
+
+  const m = data.metrics;
+  const renderUrl = (basename: string) =>
+    `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(
+      runLabel,
+    )}/renders/${basename}`;
+  const profileUrl = data.renders.profile_png_rel ? renderUrl("profile_u_centerline.png") : null;
+  const pointwiseUrl = data.renders.pointwise_png_rel ? renderUrl("pointwise_deviation.png") : null;
+
+  const verdictStyles: Record<NonNullable<typeof profileVerdict>, { badge: string; label: string }> = {
+    PASS: { badge: "bg-emerald-900/40 text-emerald-300", label: "PASS" },
+    PARTIAL: { badge: "bg-amber-900/40 text-amber-300", label: "PARTIAL" },
+    FAIL: { badge: "bg-rose-900/40 text-rose-300", label: "FAIL" },
+  };
+  const pv = profileVerdict ? verdictStyles[profileVerdict] : null;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-baseline justify-between">
+        <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+        <p className="text-[11px] text-surface-500">
+          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0)} 个独立维度
+        </p>
+      </div>
+
+      {/* D2 · Profile verdict split from scalar anchor */}
+      {pv && profileTotalCount && (
+        <div className="rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          <div className="mb-1 flex items-baseline gap-2">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+              D2 · 剖面整体裁决
+            </span>
+            <span className={`mono inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${pv.badge}`}>
+              {pv.label}
+            </span>
+          </div>
+          <p className="text-[13px] leading-relaxed text-surface-200">
+            <span className="mono font-semibold text-surface-100">{profilePassCount} / {profileTotalCount}</span>{" "}
+            个采样点落在 ±{(data.paper.tolerance_pct * 100).toFixed(1)}% 容差带内。
+            {profileVerdict === "PARTIAL" && (
+              <span className="text-amber-200/90">
+                {" "}注意：上面的 scalar 单点裁决和这个 profile 整体裁决可能不一致——scalar 取的是某一 y 的单点，profile 是全 17 点。写报告时必须两个维度都报告。
+              </span>
+            )}
+            {profileVerdict === "FAIL" && (
+              <span className="text-rose-200/90">
+                {" "}Profile 整体未达标——即使 scalar 单点通过，也不能视为 case 通过。
+              </span>
+            )}
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-3 text-[11px]">
+            <div>
+              <div className="text-surface-500">L²</div>
+              <div className="mono text-surface-100">{m.l2.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="text-surface-500">L∞</div>
+              <div className="mono text-surface-100">{m.linf.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="text-surface-500">max |dev|</div>
+              <div className="mono text-surface-100">{m.max_dev_pct.toFixed(2)}%</div>
+            </div>
+            <div>
+              <div className="text-surface-500">RMS</div>
+              <div className="mono text-surface-100">{m.rms.toFixed(4)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* D3 · Profile overlay chart */}
+      {profileUrl && (
+        <div className="rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+              D3 · 剖面逐点对比
+            </span>
+            <span className="text-[10.5px] text-surface-500">
+              17 点 vs {data.paper.short}
+            </span>
+          </div>
+          <img
+            src={profileUrl}
+            alt={`${caseId} u_centerline profile vs ${data.paper.short}`}
+            className="w-full rounded bg-white"
+            loading="lazy"
+          />
+        </div>
+      )}
+
+      {/* D4 · Pointwise deviation bars */}
+      {pointwiseUrl && (
+        <div className="rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+              D4 · 逐点偏差柱状图
+            </span>
+            <span className="text-[10.5px] text-surface-500">
+              红色柱 = 超出 ±{(data.paper.tolerance_pct * 100).toFixed(1)}% 容差
+            </span>
+          </div>
+          <img
+            src={pointwiseUrl}
+            alt={`${caseId} pointwise deviation`}
+            className="w-full rounded bg-white"
+            loading="lazy"
+          />
+          {m.per_point_dev_pct && m.per_point_dev_pct.length > 0 && (
+            <p className="mono mt-2 text-[10.5px] leading-relaxed text-surface-500">
+              raw: [
+              {m.per_point_dev_pct
+                .map((d) => d.toFixed(1))
+                .join(", ")}
+              ] %
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* D5 · Grid convergence + GCI */}
+      {data.grid_conv && data.grid_conv.length > 0 && (
+        <div className="rounded-md border border-surface-800 bg-surface-900/40 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+              D5 · 网格收敛（Richardson / GCI）
+            </span>
+            {data.grid_conv_note && (
+              <span className="text-[10.5px] text-surface-500">{data.grid_conv_note}</span>
+            )}
+          </div>
+          <table className="w-full border-separate border-spacing-y-1 text-[11.5px]">
+            <thead>
+              <tr className="text-left text-[10.5px] uppercase tracking-wider text-surface-500">
+                <th className="pb-1">mesh</th>
+                <th className="pb-1">u @ y=0.0625</th>
+                <th className="pb-1">|dev|%</th>
+                <th className="pb-1">verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.grid_conv.map((r) => {
+                const cls =
+                  r.verdict_class === "pass"
+                    ? "text-emerald-300"
+                    : r.verdict_class === "warn"
+                    ? "text-amber-300"
+                    : "text-rose-300";
+                return (
+                  <tr key={r.mesh} className="bg-surface-950/30">
+                    <td className="mono px-2 py-1 text-surface-200">{r.mesh}</td>
+                    <td className="mono px-2 py-1 text-surface-100">
+                      {r.value.toFixed(4)}
+                    </td>
+                    <td className="mono px-2 py-1 text-surface-300">
+                      {r.dev_pct.toFixed(2)}%
+                    </td>
+                    <td className={`mono px-2 py-1 font-semibold ${cls}`}>
+                      {r.verdict}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {data.gci && (
+            <div className="mt-3 rounded border border-surface-800 bg-surface-950/40 px-3 py-2 text-[11.5px]">
+              <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-sky-300">
+                Richardson extrapolation
+              </p>
+              <div className="grid grid-cols-4 gap-3 text-[11px]">
+                <div>
+                  <div className="text-surface-500">p_obs</div>
+                  <div className="mono text-surface-100">
+                    {data.gci.p_obs !== null ? data.gci.p_obs.toFixed(2) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-surface-500">GCI_21</div>
+                  <div className="mono text-surface-100">
+                    {data.gci.gci_21_pct !== null ? `${data.gci.gci_21_pct.toFixed(2)}%` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-surface-500">GCI_32</div>
+                  <div className="mono text-surface-100">
+                    {data.gci.gci_32_pct !== null ? `${data.gci.gci_32_pct.toFixed(2)}%` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-surface-500">渐近区</div>
+                  <div className={`mono ${data.gci.asymptotic_range_ok ? "text-emerald-300" : "text-amber-300"}`}>
+                    {data.gci.asymptotic_range_ok ? "OK" : "check"}
+                  </div>
+                </div>
+              </div>
+              {data.gci.note && (
+                <p className="mt-1 text-[10.5px] leading-relaxed text-surface-400">
+                  {data.gci.note}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Honesty footer: dims that look supported but are NOT */}
+      <div className="rounded-md border border-rose-900/40 bg-rose-950/10 p-4">
+        <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-rose-300">
+          当前未支持的验证维度
+        </p>
+        <p className="text-[12px] leading-relaxed text-surface-300">
+          黄金标准 YAML 里还列有 <span className="mono text-rose-200">v_centerline</span>（水平中线 v 剖面）和 <span className="mono text-rose-200">primary_vortex_location</span>（主涡中心坐标），
+          但 <span className="mono text-rose-200">physics_contract.physics_precondition</span> 明确标这两块 <span className="mono text-rose-200">satisfied_by_current_adapter=false</span>——前者 axis label 可能误用 Table II 的 x-indexed 数据，后者数值与 Ghia Re=100 真值 (0.6172, 0.7344) 对不上。
+          这两维当前 audit comparator 不调用，<strong>写报告时不能当作独立验证维度声明</strong>。拓展需要独立 DEC 修 gold YAML + 加 extractor（不在 V61-049 pilot 范围）。
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -1844,6 +2134,13 @@ type ComparisonReportContext = {
     rms: number;
     n_pass: number;
     n_total: number;
+    // DEC-V61-049 batch C1 — backend already computes this array in
+    // comparison_report.py:_compute_metrics (line 210) but the frontend
+    // type previously omitted it, so the pointwise bars could only be
+    // viewed via the rendered PNG. Adding it lets CompareTab render a
+    // native live chart if we want to (currently still PNG-first for
+    // simplicity; field is populated regardless).
+    per_point_dev_pct?: number[];
   } | null;
   paper?: {
     title: string;
@@ -1863,6 +2160,47 @@ type ComparisonReportContext = {
     commit_sha: string;
     report_generated_at: string;
   };
+  // DEC-V61-049 batch C1 — grid convergence + GCI + residual info are
+  // all already returned by comparison_report.py build_report_context
+  // (lines 516, 524-526) but were not previously surfaced in the
+  // frontend type. CompareTab now consumes them for the grid-convergence
+  // dim and the residual/iteration dim.
+  // Shapes match comparison_report.py exactly:
+  // - grid_conv row: _load_grid_convergence (line 275 at 2026-04-23)
+  // - gci: _gci_to_template_dict (line 290)
+  // - residual_info: _parse_residuals_csv (line 239)
+  grid_conv?: Array<{
+    mesh: string;
+    value: number;
+    dev_pct: number;
+    verdict: "PASS" | "WARN" | "FAIL";
+    verdict_class: "pass" | "warn" | "fail";
+  }> | null;
+  grid_conv_note?: string | null;
+  gci?: {
+    coarse_label: string;
+    coarse_n: number;
+    coarse_value: number;
+    medium_label: string;
+    medium_n: number;
+    medium_value: number;
+    fine_label: string;
+    fine_n: number;
+    fine_value: number;
+    r_21: number;
+    r_32: number;
+    p_obs: number | null;
+    f_extrapolated: number | null;
+    gci_21_pct: number | null;
+    gci_32_pct: number | null;
+    asymptotic_range_ok: boolean;
+    note: string | null;
+  } | null;
+  residual_info?: {
+    total_iter: number;
+    final_ux: number | null;
+    note: string | null;
+  } | null;
   // Visual-only top-level fields:
   solver?: string;
   commit_sha?: string;
