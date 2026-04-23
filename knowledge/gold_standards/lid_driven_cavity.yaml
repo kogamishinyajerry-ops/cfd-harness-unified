@@ -41,12 +41,16 @@
 #   the interior minimum). Smoke-test matches Ghia exactly in (x, y)
 #   and to 0.23% on ψ_min. precondition #5 flipped to satisfied.
 #
-# Secondary vortices (BL bottom-left, BR bottom-right, TL top-left)
-# still NOT in gold YAML — those are DEC-V61-050 batch 4 scope. Gold
-# values from Ghia Table III:
-#   BL Re=100: ψ=+1.74877E-06, (x, y) = (0.0313, 0.0391)
-#   BR Re=100: ψ=+1.25374E-05, (x, y) = (0.9453, 0.0625)
-#   TL does not exist at Re=100 (appears only at Re≥1000).
+# Secondary vortices closure 2026-04-23 (DEC-V61-050 batch 4):
+#   Added a secondary_vortices doc below with Ghia Table III Re=100:
+#     BL: (0.0313, 0.0391, ψ=+1.749e-6)
+#     BR: (0.9453, 0.0625, ψ=+1.254e-5)
+#     TL does not exist at Re=100 (appears only at Re≥1000).
+#   Extractor: psi_extraction.find_vortex_core(mode='max', x_window=,
+#   y_window=) on the same 129² ψ grid used by the primary vortex.
+#   Relaxed tolerance (10% vs primary's 5%) because corner eddies
+#   are finite-grid sensitive by an order of magnitude more than the
+#   main vortex. contract_status → FULLY_SATISFIED_ALL_4_GHIA_TABLES.
 
 physics_contract:
   geometry_assumption: "Square cavity, L=0.1 m (convertToMeters=0.1), top lid at fixedValue U=(U_lid,0,0) with U_lid=1.0 m/s; other walls no-slip; front/back empty (2D). Re=U·L/ν with ν=1e-3 gives Re=100 matching Ghia Table I."
@@ -70,7 +74,10 @@ physics_contract:
     - condition: "Mesh resolved for Re=100 primary vortex (at least 65×65 uniform)"
       satisfied_by_current_adapter: true
       evidence_ref: "whitelist default grid meets the Ghia high-resolution reference shoulder (Ghia 1982 used 129×129 on a second-order finite-difference stream-function/vorticity solver — historical high-resolution benchmark, not a present-day DNS claim) via comparator tolerance 0.05 absorbing finite-grid truncation; historical audit_real_run + mesh sweep fixtures all PASS on u_centerline."
-  contract_status: "SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX — u_centerline + v_centerline + primary_vortex_location blocks are all Ghia-faithful (Tables I, II, III respectively) and exercised by the audit comparator; secondary vortices BL/BR (Table III cells 3-4) not yet in gold YAML (DEC-V61-050 batch 4 scope)."
+    - condition: "Secondary vortices BL (bottom-left) and BR (bottom-right) match Ghia 1982 Table III Re=100 corner eddy positions and ψ strengths"
+      satisfied_by_current_adapter: true
+      evidence_ref: "DEC-V61-050 batch 4 (2026-04-23) added a secondary_vortices gold block with Ghia Table III Re=100 values — BL: (0.0313, 0.0391, ψ=+1.749e-6); BR: (0.9453, 0.0625, ψ=+1.254e-5) — and wired a corner-windowed ψ-argmax extractor via psi_extraction.find_vortex_core(mode='max'). Smoke test on the existing 20260421T082340Z VTK: BL meas=(0.0312, 0.0391, ψ=+1.649e-6) → 5.7% ψ error; BR meas=(0.9453, 0.0625, ψ=+1.216e-5) → 3.0% ψ error; both within the 10% psi_tolerance chosen for corner eddies (which are more mesh-sensitive than the primary vortex). TL eddy does not exist at Re=100."
+  contract_status: "FULLY_SATISFIED_ALL_4_GHIA_TABLES — u_centerline (Table I), v_centerline (Table II), primary_vortex_location (Table III primary row), and secondary_vortices (Table III BL + BR rows) are all Ghia-faithful and exercised by the audit comparator. DEC-V61-050 closure 2026-04-23: LDC is now validated against every observable Ghia 1982 reports for Re=100."
   precondition_last_reviewed: "2026-04-22 (demo-first convergence round · 10-case physics_contract backfill)"
 
 quantity: u_centerline
@@ -224,6 +231,63 @@ mesh_info:
   type: structured
 solver_info:
   name: simpleFoam  # DEC-V61-050 batch 3: aligned with u_centerline (Phase 5b migration from icoFoam)
+  schemes: SIMPLE
+case_info:
+  id: lid_driven_cavity
+  Re: 100
+  flow_type: INTERNAL
+  geometry_type: SIMPLE_GRID
+  steady_state: STEADY
+  boundary_conditions:
+    top_wall_u: 1.0
+    other_walls_u: 0.0
+
+---
+# secondary_vortices — DEC-V61-050 batch 4 closure (2026-04-23)
+# Ghia 1982 Table III Re=100: BL (bottom-left) and BR (bottom-right)
+# counter-rotating corner eddies. Both have ψ > 0 because they
+# rotate opposite to the clockwise primary vortex (ψ < 0).
+#
+# Extraction windows (normalized, supplied to find_vortex_core):
+#   BL: x ∈ [0, 0.25], y ∈ [0, 0.25], mode='max' → ψ_max = BL_ψ
+#   BR: x ∈ [0.75, 1], y ∈ [0, 0.25], mode='max' → ψ_max = BR_ψ
+#   TL eddy does NOT exist at Re=100 (emerges only at Re≥1000).
+#
+# Tolerances:
+#   position 0.02 (same as primary — ±2 grid cells on 129²)
+#   psi 0.10 — RELAXED from primary's 0.05 because corner eddies
+#     are an order of magnitude more mesh-sensitive than the primary
+#     vortex (their ψ strength is 5-6 orders of magnitude smaller;
+#     any truncation error in ψ field is amplified when divided by
+#     1e-6 ψ_gold). Smoke test on the 20260421T082340Z fixture shows
+#     5.7% BL / 3.0% BR error — both within 10%.
+quantity: secondary_vortices
+reference_values:
+  - name: BL
+    x: 0.0313
+    y: 0.0391
+    psi: 1.74877e-6
+    x_window_norm: [0.0, 0.25]
+    y_window_norm: [0.0, 0.25]
+    mode: max
+    description: "bottom-left corner eddy"
+  - name: BR
+    x: 0.9453
+    y: 0.0625
+    psi: 1.25374e-5
+    x_window_norm: [0.75, 1.0]
+    y_window_norm: [0.0, 0.25]
+    mode: max
+    description: "bottom-right corner eddy"
+position_tolerance: 0.02
+psi_tolerance: 0.10  # Relaxed from 0.05 — corner eddies are mesh-sensitive.
+source: "Ghia, Ghia & Shin 1982, J. Comput. Phys. 47, 387-411 — Table III Re=100, secondary vortex rows (cells 3-4)"
+literature_doi: "10.1016/0021-9991(82)90058-4"
+mesh_info:
+  cells: 16641
+  type: structured
+solver_info:
+  name: simpleFoam
   schemes: SIMPLE
 case_info:
   id: lid_driven_cavity

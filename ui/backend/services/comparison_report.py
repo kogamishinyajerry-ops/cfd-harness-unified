@@ -233,6 +233,51 @@ def _load_ldc_vortex_gold() -> dict | None:
     }
 
 
+def _load_ldc_secondary_vortices_gold() -> dict | None:
+    """Load the secondary_vortices gold block from lid_driven_cavity.yaml.
+
+    DEC-V61-050 batch 4: returns {eddies: [{name, x, y, psi,
+    x_window_norm, y_window_norm, mode, description}, ...],
+    position_tolerance, psi_tolerance, source, literature_doi}
+    or None if the block is missing.
+    """
+    gold_path = _GOLD_ROOT / "lid_driven_cavity.yaml"
+    if not gold_path.is_file():
+        return None
+    docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    sv_doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == "secondary_vortices"),
+        None,
+    )
+    if sv_doc is None:
+        return None
+    eddies: list[dict] = []
+    for entry in sv_doc.get("reference_values", []):
+        if not isinstance(entry, dict):
+            continue
+        if not all(k in entry for k in ("name", "x", "y", "psi", "x_window_norm", "y_window_norm", "mode")):
+            continue
+        eddies.append({
+            "name": str(entry["name"]),
+            "x_gold": float(entry["x"]),
+            "y_gold": float(entry["y"]),
+            "psi_gold": float(entry["psi"]),
+            "x_window_norm": tuple(float(v) for v in entry["x_window_norm"]),
+            "y_window_norm": tuple(float(v) for v in entry["y_window_norm"]),
+            "mode": str(entry["mode"]),
+            "description": str(entry.get("description", "")),
+        })
+    if not eddies:
+        return None
+    return {
+        "eddies": eddies,
+        "position_tolerance": float(sv_doc.get("position_tolerance", 0.02)),
+        "psi_tolerance": float(sv_doc.get("psi_tolerance", 0.10)),
+        "source": sv_doc.get("source", "Ghia 1982 Table III secondary vortex rows"),
+        "literature_doi": sv_doc.get("literature_doi", "10.1016/0021-9991(82)90058-4"),
+    }
+
+
 def _load_sample_xy(path: Path, value_col: int = 1) -> tuple[np.ndarray, np.ndarray]:
     """Load an OpenFOAM raw-xy sample file. Returns (coord, value) arrays.
 
@@ -542,13 +587,16 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
             except ReportError:
                 metrics_v = None
 
-    # DEC-V61-050 batch 3: primary vortex (x_c, y_c, ψ_min) via 2D-argmin
-    # of ψ on a resampling of the audit VTK. Best-effort: silently skip
-    # when pyvista missing, VTK malformed, or gold still has the pre-
-    # batch-3 shape (u_min field → _load_ldc_vortex_gold returns None).
+    # DEC-V61-050 batches 3 + 4: primary vortex + secondary vortices via
+    # ψ on a resampling of the audit VTK. Share the ψ grid + VTK-read
+    # between both dimensions (one integration, two argmin windows) so
+    # the cache hit stays warm. Best-effort: silently skip when pyvista
+    # missing, VTK malformed, gold still has the pre-batch-3 shape, etc.
     metrics_primary_vortex: dict[str, Any] | None = None
+    metrics_secondary_vortices: dict[str, Any] | None = None
     vortex_gold = _load_ldc_vortex_gold()
-    if vortex_gold is not None:
+    secondary_gold = _load_ldc_secondary_vortices_gold()
+    if vortex_gold is not None or secondary_gold is not None:
         try:
             from ui.backend.services.psi_extraction import (
                 compute_streamfunction_from_vtk,
@@ -560,44 +608,88 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                 psi_result = compute_streamfunction_from_vtk(vtk_path)
                 if psi_result is not None:
                     psi, xs, ys = psi_result
-                    core = find_vortex_core(psi, xs, ys, mode="min")
-                    if core is not None:
-                        x_c_meas, y_c_meas, psi_meas = core
-                        pos_err = float(
-                            ((x_c_meas - vortex_gold["vortex_center_x"]) ** 2
-                             + (y_c_meas - vortex_gold["vortex_center_y"]) ** 2) ** 0.5
-                        )
-                        # ψ_min is negative; use |ψ_gold| as the denominator
-                        # for percentage.
-                        psi_gold_abs = abs(vortex_gold["psi_min"])
-                        psi_err_pct = (
-                            100.0 * abs(psi_meas - vortex_gold["psi_min"]) / psi_gold_abs
-                            if psi_gold_abs > 1e-12
-                            else 0.0
-                        )
-                        pos_pass = pos_err <= vortex_gold["position_tolerance"]
-                        psi_pass = psi_err_pct <= vortex_gold["psi_tolerance"] * 100.0
-                        metrics_primary_vortex = {
-                            "x_meas": x_c_meas,
-                            "y_meas": y_c_meas,
-                            "psi_meas": psi_meas,
-                            "x_gold": vortex_gold["vortex_center_x"],
-                            "y_gold": vortex_gold["vortex_center_y"],
-                            "psi_gold": vortex_gold["psi_min"],
-                            "position_error": pos_err,
-                            "psi_error_pct": psi_err_pct,
-                            "position_tolerance": vortex_gold["position_tolerance"],
-                            "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
-                            "position_pass": pos_pass,
-                            "psi_pass": psi_pass,
-                            "all_pass": pos_pass and psi_pass,
-                        }
+                    # --- Primary vortex (D7) ---
+                    if vortex_gold is not None:
+                        core = find_vortex_core(psi, xs, ys, mode="min")
+                        if core is not None:
+                            x_c_meas, y_c_meas, psi_meas = core
+                            pos_err = float(
+                                ((x_c_meas - vortex_gold["vortex_center_x"]) ** 2
+                                 + (y_c_meas - vortex_gold["vortex_center_y"]) ** 2) ** 0.5
+                            )
+                            psi_gold_abs = abs(vortex_gold["psi_min"])
+                            psi_err_pct = (
+                                100.0 * abs(psi_meas - vortex_gold["psi_min"]) / psi_gold_abs
+                                if psi_gold_abs > 1e-12 else 0.0
+                            )
+                            pos_pass = pos_err <= vortex_gold["position_tolerance"]
+                            psi_pass = psi_err_pct <= vortex_gold["psi_tolerance"] * 100.0
+                            metrics_primary_vortex = {
+                                "x_meas": x_c_meas,
+                                "y_meas": y_c_meas,
+                                "psi_meas": psi_meas,
+                                "x_gold": vortex_gold["vortex_center_x"],
+                                "y_gold": vortex_gold["vortex_center_y"],
+                                "psi_gold": vortex_gold["psi_min"],
+                                "position_error": pos_err,
+                                "psi_error_pct": psi_err_pct,
+                                "position_tolerance": vortex_gold["position_tolerance"],
+                                "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
+                                "position_pass": pos_pass,
+                                "psi_pass": psi_pass,
+                                "all_pass": pos_pass and psi_pass,
+                            }
+                    # --- Secondary vortices BL/BR (D8) ---
+                    if secondary_gold is not None:
+                        eddy_results: list[dict] = []
+                        for eddy in secondary_gold["eddies"]:
+                            core = find_vortex_core(
+                                psi, xs, ys,
+                                x_window_norm=eddy["x_window_norm"],
+                                y_window_norm=eddy["y_window_norm"],
+                                mode=eddy["mode"],
+                            )
+                            if core is None:
+                                continue
+                            x_m, y_m, psi_m = core
+                            pos_err = float(
+                                ((x_m - eddy["x_gold"]) ** 2
+                                 + (y_m - eddy["y_gold"]) ** 2) ** 0.5
+                            )
+                            psi_gold_abs = abs(eddy["psi_gold"])
+                            psi_err_pct = (
+                                100.0 * abs(psi_m - eddy["psi_gold"]) / psi_gold_abs
+                                if psi_gold_abs > 1e-12 else 0.0
+                            )
+                            pos_pass = pos_err <= secondary_gold["position_tolerance"]
+                            psi_pass = psi_err_pct <= secondary_gold["psi_tolerance"] * 100.0
+                            eddy_results.append({
+                                "name": eddy["name"],
+                                "description": eddy["description"],
+                                "x_meas": x_m,
+                                "y_meas": y_m,
+                                "psi_meas": psi_m,
+                                "x_gold": eddy["x_gold"],
+                                "y_gold": eddy["y_gold"],
+                                "psi_gold": eddy["psi_gold"],
+                                "position_error": pos_err,
+                                "psi_error_pct": psi_err_pct,
+                                "position_pass": pos_pass,
+                                "psi_pass": psi_pass,
+                                "all_pass": pos_pass and psi_pass,
+                            })
+                        if eddy_results:
+                            metrics_secondary_vortices = {
+                                "eddies": eddy_results,
+                                "position_tolerance": secondary_gold["position_tolerance"],
+                                "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+                                "all_pass": all(e["all_pass"] for e in eddy_results),
+                                "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+                                "n_total": len(eddy_results),
+                            }
         except (ImportError, OSError, ValueError):
-            # Fail-soft: psi_extraction module missing, VTK dir unreadable,
-            # or any numpy/pyvista downstream exception just means "skip
-            # the D7 dimension for this run". The u/v dims are not gated
-            # on vortex extraction.
             metrics_primary_vortex = None
+            metrics_secondary_vortices = None
 
     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
@@ -719,6 +811,22 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run") -> dic
                 "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
             }
             if vortex_gold is not None and metrics_primary_vortex is not None
+            else None
+        ),
+        # DEC-V61-050 batch 4: secondary vortices BL/BR from Ghia Table III
+        # cells 3-4, extracted via corner-windowed ψ_max on the same 129²
+        # grid used for primary vortex. Frontend D8 card silently hides
+        # when null (same fail-soft pattern as D6/D7).
+        "metrics_secondary_vortices": metrics_secondary_vortices,
+        "paper_secondary_vortices": (
+            {
+                "source": secondary_gold["source"],
+                "doi": secondary_gold["literature_doi"],
+                "short": "Ghia 1982 Table III (secondaries)",
+                "position_tolerance": secondary_gold["position_tolerance"],
+                "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+            }
+            if secondary_gold is not None and metrics_secondary_vortices is not None
             else None
         ),
         "renders": renders,

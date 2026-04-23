@@ -1,12 +1,12 @@
 ---
 decision_id: DEC-V61-050
 title: LDC true multi-dimensional validation · independent physical observables · v_centerline + streamfunction + vortex cores
-status: IN_PROGRESS (batch 1 landed · batches 2-4 scoped)
+status: IMPLEMENTATION_COMPLETE (all 4 batches landed 2026-04-23 · pending post-merge Codex review)
 commits_in_scope:
-  - TBD feat(ldc): batch 1 — v_centerline (Ghia Table II horizontal centerline) as independent observable
-  - TBD feat(ldc): batch 2 — ψ streamfunction extraction infrastructure (scoped, not started)
-  - TBD feat(ldc): batch 3 — primary vortex (x_c, y_c) + ψ_min from streamfunction (scoped, not started)
-  - TBD feat(ldc): batch 4 — secondary vortices BL/BR from Ghia Table III (scoped, not started)
+  - 1d3505c feat(ldc): batch 1 — v_centerline (Ghia Table II) as independent observable
+  - 2fb9c44 feat(ldc): batch 2 — streamfunction ψ extraction infrastructure
+  - 8475c29 feat(ldc): batch 3 — primary vortex (x_c, y_c, ψ_min) wired to D7
+  - TBD feat(ldc): batch 4 — secondary vortices BL/BR wired to D8
 codex_verdict: PENDING (batch 1 post-merge Codex review triggered by "CFD new observable + adapter >5 LOC + comparator extension")
 autonomous_governance: true
 autonomous_governance_counter_v61: 37
