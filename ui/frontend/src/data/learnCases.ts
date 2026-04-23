@@ -5,6 +5,8 @@
 // Every case_id MUST exist in knowledge/whitelist.yaml or the detail
 // route will 404 when it tries to fetch /api/cases/:id.
 
+import { LDC_REPRODUCTION_BUNDLE, type ReproductionBundle } from "./reproductionBundles/lidDrivenCavity";
+
 export interface LearnCase {
   id: string;
   // Name shown in catalog cards (kept terse). Detail header uses the real
@@ -100,6 +102,19 @@ export interface LearnCase {
     fix: string;
   }[];
 
+  // ===== DEC-V61-049 pilot batch B (reproduction bundle) ================
+  // Codex CFD-novice walk Step 2 findings: workflow_steps_zh told the
+  // student "edit system/blockMeshDict" without providing its contents,
+  // and the prose claimed patch/URF/nu values that drifted from the
+  // generator. Without complete dictionary text a novice cannot
+  // reproduce the run from the page alone. Bundle exposes the 8 core
+  // OpenFOAM files (plus optional sampleDict) byte-for-byte matching
+  // src/foam_agent_adapter.py:_generate_lid_driven_cavity. Optional
+  // field, populated only for LDC in the V61-049 pilot; other cases
+  // will receive their own bundles if the pattern rolls.
+  // ======================================================================
+  reproduction_bundle_zh?: ReproductionBundle;
+
   // ===== DEC-V61-048 round-1 batch 4 (flagship deep-dive) ===============
   // Codex deep-dive B-axis (physical intuition) + regime transitions:
   // even with lineage + teaching cards + runbook, the 3 lowest-scoring
@@ -154,6 +169,7 @@ export const LEARN_CASES: LearnCase[] = [
       { symptom: `solver 初始几步 p residual = NaN`, likely_cause: `遗漏 fvSolution::SIMPLE::pRefCell / pRefValue，不可压 N-S 的 pressure 无约束 → drift。`, fix: `fvSolution 的 SIMPLE 块加 <code>pRefCell 0; pRefValue 0;</code>（注意是 SIMPLE 块内，不是顶层），重跑。NaN 通常第一步就出现，检查 log.simpleFoam 前 10 行。`},
       { symptom: `二级涡（底角）消失`, likely_cause: `网格分辨率不足（<65×65 cells），二级涡尺度小于 cell 尺度被数值耗散抹平。`, fix: `加密到 audit 129×129 或更密；fvSchemes 的 div(phi,U) 保持 <code>bounded Gauss limitedLinearV 1</code>（二阶有限制）而不是 upwind（一阶，过度耗散）。`},
     ],
+    reproduction_bundle_zh: LDC_REPRODUCTION_BUNDLE,
     benchmark_lineage_zh: {
       why_primary: `Ghia, Ghia & Shin 1982 成为课堂共同语言的原因有三。一，他们用 multigrid + FMG 在 129×129 uniform grid 上对 Re=100/400/1000/3200/5000/7500/10000 全部跑到完全收敛，这是当时最彻底的系统扫描，后续文献都以它为回归测试的基准。二，他们列了 u-centerline 和 v-centerline 的数值表 (Table I/II)，而不只是印图——这让任何后续代码都能做逐点误差比较，不用 digitize 曲线。三，他们提供了主涡和二级涡中心位置，成为"网格是否分辨出二次涡"的 discriminator。早期 Burggraf 1966 只到 Re=400，高精度的 Botella-Peyret 1998 用 spectral collocation 达到 10⁻¹⁴ 精度但只做 Re=1000。Ghia 的甜点是"够高精度 + 够宽参数扫描 + 数值表形式"。`,
       secondary: [

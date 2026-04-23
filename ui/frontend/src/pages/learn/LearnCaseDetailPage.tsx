@@ -550,6 +550,51 @@ function StoryTab({
         </ol>
       </section>
 
+      {/* DEC-V61-049 pilot batch B — complete OpenFOAM reproduction bundle.
+          Codex CFD-novice walk: workflow_steps described "edit system/
+          blockMeshDict" without giving the file contents, so a student
+          couldn't actually reproduce. Optional per-case bundle (only LDC
+          populated in V61-049 pilot); hidden for cases without one. Uses
+          native <details> for progressive disclosure to avoid dominating
+          the Story tab with 9 large monospace blocks. */}
+      {learnCase.reproduction_bundle_zh && (
+        <section>
+          <h2 className="card-title mb-3">复现 bundle · Complete OpenFOAM case files</h2>
+          <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
+            {learnCase.reproduction_bundle_zh.intro}
+          </p>
+          <div className="mb-3 rounded-md border border-sky-900/40 bg-sky-950/10 p-3 text-[12px] leading-relaxed text-sky-100/85">
+            <span className="mr-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-sky-300">
+              操作流程
+            </span>
+            {learnCase.reproduction_bundle_zh.usage}
+          </div>
+          <div className="space-y-2">
+            {learnCase.reproduction_bundle_zh.files.map((f, i) => (
+              <details
+                key={i}
+                className="rounded-md border border-surface-800 bg-surface-900/40 p-3 open:bg-surface-900/60"
+              >
+                <summary className="flex cursor-pointer select-none items-start gap-3 text-[12.5px] leading-relaxed text-surface-100 hover:text-sky-200">
+                  <span className="mono mt-0.5 shrink-0 text-[11px] font-semibold text-sky-300">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="flex-1">
+                    <p className="mono font-semibold text-sky-200">{f.path}</p>
+                    <p className="mt-0.5 text-[11.5px] leading-snug text-surface-300">
+                      {f.role}
+                    </p>
+                  </div>
+                </summary>
+                <pre className="mono mt-3 max-h-[420px] overflow-auto rounded bg-surface-950/70 p-3 text-[11px] leading-snug text-surface-100">
+                  {f.content}
+                </pre>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <h2 className="card-title mb-3">故障排查 · Troubleshooting checklist</h2>
         <p className="mb-3 text-[12px] leading-relaxed text-surface-400">
