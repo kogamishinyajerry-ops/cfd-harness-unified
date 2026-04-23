@@ -9,8 +9,8 @@ autonomous_governance: true
 autonomous_governance_counter_v61: 36
 external_gate_self_estimated_pass_rate: 0.55
 codex_tool_report_path: .planning/reviews/case_pilot_ldc_findings.md (pending codex write)
-notion_sync_status: pending (row creation after codex launch logged)
-github_sync_status: local-only (scaffold commit pending)
+notion_sync_status: synced 2026-04-23T10:05 (page_id=34bc6894-2bed-81e5-bdc4-d42466bc8e2c, Status=Proposed, https://www.notion.so/DEC-V61-049-lid_driven_cavity-single-case-pilot-CFD-novice-end-to-end-walk-34bc68942bed81e5bdc4d42466bc8e2c)
+github_sync_status: pushed (6d8e8f5 on origin/main)
 related:
   - DEC-V61-046 (demo-first convergence · APPROVE_WITH_COMMENTS)
   - DEC-V61-047 (2-persona pedagogy · APPROVE_WITH_COMMENTS)
