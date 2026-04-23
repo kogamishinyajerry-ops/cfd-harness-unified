@@ -515,10 +515,60 @@ def _render_structured_contour(
     ax.set_aspect("equal")
     ax.set_xlabel("x / L")
     ax.set_ylabel("y / L")
-    ax.set_title(f"{case_id} — |U| contour + streamlines")
+    ax.set_title(f"{case_id} — actual OpenFOAM |U|/U_lid contour + streamlines")
     cbar = fig.colorbar(cf, ax=ax, fraction=0.045, pad=0.04)
-    cbar.set_label("|U|")
-    fig.savefig(out)
+    cbar.set_label("|U| / U_lid")
+
+    # DEC-V61-049 batch D — LDC-specific novice annotations.
+    # Codex CFD-novice walk Step 4: the structured contour was visually
+    # recognizable but lacked the callouts a first-semester student needs
+    # to map the image to the physics narrative (moving lid as sole
+    # momentum source; primary vortex near Ghia's (0.6172, 0.7344);
+    # secondary vortices in bottom corners). Only LDC gets these —
+    # other cases fall through.
+    if case_id.startswith("lid_driven_cavity"):
+        # 1. Lid arrow + label at y=1 (top of cavity)
+        for xi in (0.20, 0.50, 0.80):
+            ax.annotate(
+                "", xy=(xi + 0.08, 1.02), xytext=(xi, 1.02),
+                arrowprops=dict(arrowstyle="->", color="#f59e0b", lw=1.3),
+                annotation_clip=False,
+            )
+        ax.text(
+            0.5, 1.07, "lid · U = U_lid → (sole momentum source)",
+            ha="center", color="#f59e0b", fontsize=9, fontweight="bold",
+            transform=ax.transData, clip_on=False,
+        )
+        # 2. Primary vortex marker at Ghia Re=100 (0.6172, 0.7344)
+        ax.plot(0.6172, 0.7344, marker="o", markersize=9,
+                markerfacecolor="none", markeredgecolor="#ef4444",
+                markeredgewidth=2.0, zorder=5)
+        ax.annotate(
+            "primary vortex center\n(Ghia Re=100: 0.6172, 0.7344)",
+            xy=(0.6172, 0.7344), xytext=(0.78, 0.55),
+            fontsize=8, color="#ef4444",
+            arrowprops=dict(arrowstyle="->", color="#ef4444", lw=0.8),
+        )
+        # 3. Secondary vortex labels at bottom corners
+        ax.text(0.05, 0.05, "secondary\nvortex (BL)", fontsize=7.5,
+                color="#c084fc", alpha=0.9,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="#1e1b4b",
+                          edgecolor="#c084fc", linewidth=0.5))
+        ax.text(0.82, 0.05, "secondary\nvortex (BR)", fontsize=7.5,
+                color="#c084fc", alpha=0.9,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="#1e1b4b",
+                          edgecolor="#c084fc", linewidth=0.5))
+        # 4. Cavity outline (visual hint of 1×1 square)
+        ax.plot([0, 1, 1, 0, 0], [0, 0, 1, 1, 0],
+                color="#94a3b8", linewidth=0.8, alpha=0.6, linestyle="--")
+        # 5. Provenance footnote so the student knows this is real solver output
+        fig.text(
+            0.5, 0.01,
+            "actual simpleFoam audit_real_run output · NOT synthetic / NOT ansatz",
+            ha="center", fontsize=7.5, color="#64748b", style="italic",
+        )
+
+    fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     return out
 

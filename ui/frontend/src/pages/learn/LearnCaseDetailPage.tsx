@@ -363,26 +363,58 @@ function StoryTab({
               每张图都直接来自文献精确解或公开实验表格（对照基准）
             </p>
           </div>
+          {/* DEC-V61-049 batch D · kind badge legend. Codex CFD-novice walk
+              Step 4: the stream-function ansatz looked more symmetric than
+              the real OpenFOAM contour, and the student had no way to tell
+              "this is published data" from "this is a pedagogical
+              reconstruction". Badge makes it visible at a glance. */}
+          <p className="mb-3 text-[10.5px] leading-relaxed text-surface-500">
+            <span className="mr-1 inline-flex items-center rounded-sm bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">literature_data</span>
+            直接来自文献 / 实验表格 ·
+            <span className="mx-1 inline-flex items-center rounded-sm bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">analytical_visual</span>
+            解析公式 / ansatz / 合成图 — 不是 solver 输出 ·
+            <span className="ml-1 inline-flex items-center rounded-sm bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">solver_output</span>
+            实跑 OpenFOAM 产出
+          </p>
           <div className="space-y-4">
-            {flowFields.map((ff) => (
-              <figure
-                key={ff.src}
-                className="overflow-hidden rounded-md border border-surface-800 bg-surface-900/30"
-              >
-                <img
-                  src={ff.src}
-                  alt={ff.caption_zh}
-                  className="w-full max-w-full"
-                  loading="lazy"
-                />
-                <figcaption className="border-t border-surface-800 px-4 py-3">
-                  <p className="text-[13px] text-surface-200">{ff.caption_zh}</p>
-                  <p className="mono mt-1.5 text-[10px] leading-relaxed text-surface-500">
-                    provenance: {ff.provenance}
-                  </p>
-                </figcaption>
-              </figure>
-            ))}
+            {flowFields.map((ff) => {
+              const kindStyles: Record<typeof ff.kind, string> = {
+                literature_data: "bg-emerald-900/40 text-emerald-300",
+                analytical_visual: "bg-amber-900/40 text-amber-300",
+                solver_output: "bg-sky-900/40 text-sky-300",
+              };
+              const kindBorder: Record<typeof ff.kind, string> = {
+                literature_data: "border-surface-800",
+                analytical_visual: "border-amber-900/50",
+                solver_output: "border-sky-900/50",
+              };
+              return (
+                <figure
+                  key={ff.src}
+                  className={`overflow-hidden rounded-md border bg-surface-900/30 ${kindBorder[ff.kind]}`}
+                >
+                  <img
+                    src={ff.src}
+                    alt={ff.caption_zh}
+                    className="w-full max-w-full"
+                    loading="lazy"
+                  />
+                  <figcaption className="border-t border-surface-800 px-4 py-3">
+                    <div className="mb-1 flex items-start gap-2">
+                      <span
+                        className={`mono inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${kindStyles[ff.kind]}`}
+                      >
+                        {ff.kind}
+                      </span>
+                      <p className="flex-1 text-[13px] text-surface-200">{ff.caption_zh}</p>
+                    </div>
+                    <p className="mono mt-1.5 text-[10px] leading-relaxed text-surface-500">
+                      provenance: {ff.provenance}
+                    </p>
+                  </figcaption>
+                </figure>
+              );
+            })}
           </div>
         </section>
       )}
