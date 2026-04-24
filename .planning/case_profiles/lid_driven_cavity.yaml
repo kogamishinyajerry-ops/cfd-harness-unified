@@ -20,3 +20,18 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+
+# P1-T3 (DEC-V61-054 follow-up) · per-observable tolerance overrides consumed
+# by MetricsRegistry.evaluate_all via CaseProfile.tolerance_policy dispatch
+# per METRICS_AND_TRUST_GATES §4. Per-name entries only — no top-level
+# fallback (Codex R1 finding #2). Absent entries fall through to
+# observable_def.tolerance in the gold YAML.
+tolerance_policy:
+  u_centerline:
+    tolerance: 0.05        # 5% · Ghia 1982 reference, 4-observable multi-dim (DEC-V61-050)
+  v_centerline:
+    tolerance: 0.05
+  primary_vortex_location_x:
+    tolerance: 0.03        # 3% · location-sensitive, tighter bound
+  primary_vortex_location_y:
+    tolerance: 0.03

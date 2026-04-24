@@ -35,6 +35,11 @@ from .integrated import IntegratedMetric
 from .spectral import SpectralMetric
 from .residual import ResidualMetric
 from .trust_gate import TrustGateReport, reduce_reports
+from .case_profile_loader import (
+    CaseProfileError,
+    load_case_profile,
+    load_tolerance_policy,
+)
 
 __all__ = [
     "Metric",
@@ -48,4 +53,7 @@ __all__ = [
     "ResidualMetric",
     "TrustGateReport",
     "reduce_reports",
+    "CaseProfileError",
+    "load_case_profile",
+    "load_tolerance_policy",
 ]

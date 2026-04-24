@@ -28,3 +28,17 @@ risk_flags:
     evidence_refs:
       - .planning/retrospectives/2026-04-24_retro_v61_053_python_parity.md
       - reports/phase5_audit/live_cylinder_run_20260424.log
+
+# P1-T3 (DEC-V61-054 follow-up) · per-observable tolerance overrides.
+# Tolerances reflect DEC-V61-053 attempt-6 live run precision at 10s endTime
+# (ΔSt~20% from FFT Δf limit). Gold-grade DEC would bump endTime→60/200s and
+# tighten these bounds.
+tolerance_policy:
+  strouhal_number:
+    tolerance: 0.25        # 25% · 10s-endTime precision-limited; DEC-V61-053 R4
+  cd_mean:
+    tolerance: 0.05        # 5% · anchor scalar, tight reference (Williamson 1996)
+  cl_rms:
+    tolerance: 0.30        # 30% · amplitude sensitive to transient trim window
+  u_mean_centerline:
+    tolerance: 0.10        # 10% · wake deficit profile
