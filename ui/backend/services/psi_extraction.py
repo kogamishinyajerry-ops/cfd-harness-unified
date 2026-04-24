@@ -121,7 +121,11 @@ def compute_streamfunction_from_vtk(
             cached_schema = int(cached["schema_version"]) if "schema_version" in cached else 1
             cached_mtime_ns = int(cached["vtk_mtime_ns"]) if "vtk_mtime_ns" in cached else None
             cached_size = int(cached["vtk_size"]) if "vtk_size" in cached else None
-            cached_bounds = cached["bounds"].item() if "bounds" in cached else None
+            # Codex round 2 MED: `bounds` is a 1-element object array
+            # wrapping the bounds_key tuple. Index [0] works for both
+            # size-1 object arrays and 0-d arrays; `.item()` fails on
+            # the size-5 legacy write path, which silently forced recompute.
+            cached_bounds = cached["bounds"][0] if "bounds" in cached else None
             if (
                 cached_schema == CACHE_SCHEMA_VERSION
                 and cached_mtime_ns == vtk_mtime_ns
@@ -184,12 +188,18 @@ def compute_streamfunction_from_vtk(
         psi[i, :] = psi[i - 1, :] + 0.5 * (U_x[i - 1, :] + U_x[i, :]) * dy
 
     try:
+        # Wrap bounds_key in a 1-element object array so the tuple
+        # round-trips as a single opaque value; `np.array(bounds_key,
+        # dtype=object)` would splat a 5-tuple into a size-5 array and
+        # break the read-side `.item()`/`[0]` unwrap.
+        bounds_store = np.empty(1, dtype=object)
+        bounds_store[0] = bounds_key
         np.savez(
             cache_file,
             psi=psi, xs=xs, ys=ys,
             vtk_mtime_ns=np.array([vtk_mtime_ns]),
             vtk_size=np.array([vtk_size]),
-            bounds=np.array(bounds_key, dtype=object),
+            bounds=bounds_store,
             schema_version=np.array([CACHE_SCHEMA_VERSION]),
         )
     except Exception:

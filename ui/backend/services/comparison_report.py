@@ -1054,6 +1054,12 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for
                                 "all_pass": all(e["all_pass"] for e in eddy_results),
                                 "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
                                 "n_total": len(eddy_results),
+                                "all_above_noise": all(
+                                    e["signal_above_noise"] for e in eddy_results
+                                ),
+                                "any_above_noise": any(
+                                    e["signal_above_noise"] for e in eddy_results
+                                ),
                             }
         except Exception:
             # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide

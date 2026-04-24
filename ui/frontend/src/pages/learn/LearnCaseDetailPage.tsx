@@ -1888,22 +1888,46 @@ function MultiDimensionComparePanel({
             </div>
           );
         }
-        const d8_noise_floor =
-          data.metrics_secondary_vortices !== null &&
-          data.metrics_secondary_vortices !== undefined &&
-          !data.metrics_secondary_vortices.all_pass;
+        // Codex round 2 MED: derive D8 state from signal_above_noise
+        // aggregate (not !all_pass) so we can distinguish:
+        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
+        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
+        //   (c) !all_pass && any_above_noise → genuine physics deviation
+        const d8 = data.metrics_secondary_vortices!;
+        const d8_all_pass = d8.all_pass === true;
+        const d8_all_above_noise = (d8 as any).all_above_noise === true;
+        const d8_any_above_noise = (d8 as any).any_above_noise === true;
+        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
+        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+        const footer_tone = d8_all_pass && d8_all_above_noise
+          ? "ok"
+          : d8_noise_floor
+            ? "noise"
+            : "fail";
         return (
-          <div className={`rounded-md border p-4 ${d8_noise_floor ? "border-amber-900/40 bg-amber-950/10" : "border-emerald-900/40 bg-emerald-950/10"}`}>
-            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${d8_noise_floor ? "text-amber-300" : "text-emerald-300"}`}>
-              DEC-V61-050 closure · 3 / 4 Ghia 观测量已验证（诚实等级）
+          <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
+            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
+              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
             </p>
             <p className="text-[12px] leading-relaxed text-surface-300">
               <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
-              <span className="block mt-1">
-                <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
-              </span>
+              {footer_tone === "ok" && (
+                <span className="block mt-1">
+                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+                </span>
+              )}
+              {footer_tone === "noise" && (
+                <span className="block mt-1">
+                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+                </span>
+              )}
+              {footer_tone === "fail" && (
+                <span className="block mt-1">
+                  <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
+                </span>
+              )}
               <span className="block mt-1 text-[11px] text-surface-500">
-                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 已尽其所能——诚实停在 3 / 4，而不是伪装 4 / 4。这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
               </span>
             </p>
           </div>
