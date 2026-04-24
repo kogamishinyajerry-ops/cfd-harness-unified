@@ -1,0 +1,252 @@
+# VERSION_COMPATIBILITY_POLICY — 版本兼容硬宪法
+
+**Status**: Active v1.0 (Promoted from v0.1 Draft · 2026-04-24)
+**Authority**: Opus 4.7 Pivot Post-Hoc Review §6 (HOLD + 串行 blocker) · GOV-1 Task
+**Notion SSOT**: <https://www.notion.so/VERSION_COMPATIBILITY_POLICY-947fa51765734d3cb84f626c2411e949>
+**Gate**: Promoted per `docs/specs/SPEC_PROMOTION_GATE.md` §2 (6 通用门 AND §3 spec-specific blocker)
+**Scope**: All Knowledge Plane artefacts (CaseProfile, GoldStandard, SimulationObject, ExecutionArtifacts, audit manifests) + all cross-plane contracts in SYSTEM_ARCHITECTURE v1.0 §4.
+
+---
+
+## §0 目的
+
+防止 OpenFOAM / knowledge schema / extractor 版本漂移造成静默数值错误
+或集成崩溃。本文件为 **Constraint 级硬约束**：违反需 Decisions DB +
+Opus Gate 联合放行，autonomous governance 不足以豁免。
+
+METRICS_AND_TRUST_GATES v0.1 的核心 blocker 是 "tolerance 必须来自
+`CaseProfile.tolerance_policy`"——本文件是 `CaseProfile` 四元组元数据的
+权威定义者。没有 v1.0 Active，P1-T1 (MetricsRegistry) 的 tolerance 字段
+就没有上游来源。
+
+## §1 当前 Baseline (Pinned · 2026-04-24)
+
+所有 repo 资产默认绑到以下 baseline。任何新增 artefact 都**必须**声明
+版本元数据；默认继承 baseline，偏离需显式声明。
+
+| 轴 | 当前 Baseline | 锚点 |
+|---|---|---|
+| Solver | `openfoam/v2312` | Foam-Agent ship 的 docker image (`cfd-openfoam:v2312`) |
+| Knowledge Schema | `schema_version: 1` (integer, monotonic) + `schema_semver: "1.0.0"` | `knowledge/schemas/gold_standard_schema.json` + `src/audit_package/manifest.py:43` |
+| Extractor Suite | `extractor_semver: "1.0.0"` | `src/result_comparator.py` + `src/*_extractor.py` 集合 |
+| Harness Core | `harness_semver: "1.0.0"` | `pyproject.toml` `[project].version` (planned) |
+
+**Tombstone**: baseline 更新时必须在本 §1 追加一行 `## §1.X` 子节，**不
+得直接覆盖**，以保持历史可审计。
+
+## §2 元数据四元组（强制 · MANDATORY）
+
+每个 CaseProfile / GoldStandard / SimulationObject / ExecutionArtifacts
+的 frontmatter / schema 根对象**必须**携带以下四元组字段：
+
+### §2.1 字段定义
+
+| Field | Type | 解释 | 示例 |
+|---|---|---|---|
+| `solver_version` | string（精确版本） | 产生该 artefact 的 solver 版本串 | `"openfoam/v2312"` |
+| `case_compatibility` | string（semver range） | 该 case 契约兼容的 solver semver range | `">=openfoam/v2312,<openfoam/v2500"` |
+| `extractor_compatibility` | string（semver range） | 该 case 契约兼容的 extractor semver range | `">=1.0.0,<2.0.0"` |
+| `schema_version` | integer（monotonic） | Knowledge schema 的 breaking-change 序号 | `1` |
+
+语义约束：
+- `solver_version` 是**精确值**（跑出来的就是这个版本）；`case_compatibility`
+  是**范围**（该 case 允许跨多少版本仍被认为等价）
+- `extractor_compatibility` 覆盖 comparator / gate / sampler 的总和行为；
+  任何 extractor 模块改变可能影响 observable 值的逻辑 → bump minor
+- `schema_version` 是 integer 而不是 semver，因为 Knowledge Plane 的
+  schema 破坏性变更需要**全量迁移**。每个 breaking 变更 += 1；兼容补充
+  不变更
+- 额外 (optional)：`schema_semver` 可选携带，用于跨工程生态的声明式对比；
+  内部决策以 integer `schema_version` 为准
+
+### §2.2 字段出处映射
+
+| 对象 | frontmatter 字段位置 | Owner Plane |
+|---|---|---|
+| `CaseProfile` (intake.yaml) | 顶层 `version_metadata:` 块 | Knowledge |
+| `GoldStandard` (`knowledge/gold_standards/*.yaml`) | 顶层 `case_info.version_metadata:` 块 | Knowledge |
+| `SimulationObject` | 顶层 `version_metadata:` 块 | Knowledge |
+| `ExecutionArtifacts` (runs/*.json manifest) | 根对象 `version_metadata:` 键 | Execution |
+| `audit_package/manifest.py` 生成的 manifest | `schema_version` + `solver_version` (其余继承) | Control |
+| `knowledge/attestor_thresholds.yaml` 等 config | `schema_version: <int>` 独立 | Knowledge |
+
+### §2.3 兼容 shim（过渡期 · 2026-04-24 → 2026-06-30）
+
+历史 artefact (10 个 gold YAML + existing runs) 不带完整四元组。过渡规则：
+
+1. **隐式继承 baseline**：缺失字段视为当前 §1 baseline
+2. **首次 touch 必须补全**：任何 PR 修改一个 artefact 的数值内容
+   **必须**同步补齐其四元组；纯格式 / 注释改动豁免
+3. **2026-06-30 截止**：该日期后所有 10 个 gold YAML 必须显式声明四元组；
+   否则 `lint-knowledge.py`（未实现；G-6 / KNOWLEDGE v1.0 时上线）CI 失败
+
+## §3 Drift 防护决策树
+
+当 ExecutionArtifacts 的 `solver_version` 与 GoldStandard 的
+`case_compatibility` 比较时：
+
+```
+                compare(execution.solver_version, gold.case_compatibility)
+                                |
+                    +-----------+-----------+
+                    | in-range               | out-of-range
+                    v                        v
+         +----------+----------+       +-----+-----+
+         | patch-only drift?    |       | MAJOR mismatch?
+         +----------+----------+       +-----+-----+
+                    |                        |
+              YES   v   NO                   v
+         +----------+----+            +------+-------+
+         | PASS · log only |          | MINOR mismatch?
+         +----------------+           +------+-------+
+                                            | YES
+                                            v
+                       +-----------+  +--------+--------+
+                       | HARD FAIL  |  | WARN + audit   |
+                       +-----------+   +----------------+
+                         (no run)        (run allowed,
+                                          verdict=WARN
+                                          logged to Provenance)
+```
+
+规则（伪代码）：
+
+```python
+def check_drift(execution_solver: str, gold_range: SemverRange) -> Verdict:
+    if execution_solver in gold_range:
+        return Verdict.PASS
+    delta = semver_distance(execution_solver, gold_range)
+    if delta.major > 0:
+        return Verdict.HARD_FAIL   # 阻止 run
+    if delta.minor > 0:
+        return Verdict.WARN         # 允许 run，标红
+    return Verdict.PASS             # patch-only drift 透明通过
+```
+
+对 `extractor_compatibility` / `schema_version` 同样应用三态决策；
+`schema_version` 是 integer，所以 "major" = 数字不同，HARD FAIL。
+
+## §4 跨层契约影响
+
+- **TrustGate (METRICS_AND_TRUST_GATES)**: TrustGate 决策三态与本文件
+  drift 决策三态**合流**。规则：先过 VERSION drift check 得到初步
+  verdict（PASS/WARN/HARD_FAIL），再过 tolerance check。任何 HARD_FAIL
+  立即终止；WARN 与 tolerance verdict 合并（max-pessimistic）
+- **Executor (EXECUTOR_ABSTRACTION)**: `ExecutorMode.run()` 返回的
+  `ExecutionArtifacts` 必须在 top-level 携带 `version_metadata.solver_version`；
+  缺失 = HARD FAIL
+- **Attribution**: 归因报告必须引用当次 run 的 solver_version 字符串
+  作为 context，不可省略
+- **AuditPackage**: manifest 构建时从 ExecutionArtifacts 提升四元组到
+  package level；signer 不再独立生成版本号
+
+## §5 未来扩展
+
+### §5.1 跨 solver（P5+）
+
+接入其他 solver（SU2 / Code_Saturne / OpenFOAM.com 分支）走
+**ExecutorMode plugin 协议** + `CaseProfile.solver_family` 字段扩展：
+
+- `solver_family`: enum {`openfoam_esi`, `openfoam_com`, `su2`, `code_saturne`}
+- `solver_version` 维持 opaque 字符串，跨 family 比较 **HARD FAIL** 默认
+- 跨 solver 对比**不比较数值**，只能通过 `BenchmarkManifest` 层面的
+  `evaluation_protocol` 做 relative benchmark
+
+### §5.2 Knowledge schema 增演
+
+每次 `knowledge/schemas/*.json` breaking change：
+1. `schema_version += 1` (integer)
+2. `schema_semver` major bump (optional declarative tag)
+3. 所有 `gold_standards/*.yaml` 必须同步迁移或显式声明 legacy
+4. 迁移脚本 `scripts/migrate_knowledge_schema_vN_to_vM.py` 作为 DEC 附件落地
+
+### §5.3 Deprecation 窗口
+
+任何 field rename / 移除 **必须**先进入 `deprecated_fields` 列表（存
+`docs/specs/VERSION_COMPATIBILITY_POLICY_deprecations.yaml`；G-6 KNOWLEDGE
+v1.0 时创建），至少保留 **一个完整 minor cycle** + 2 周 grace。
+
+## §6 审计
+
+### §6.1 Session handoff fingerprint
+
+每个 session handoff 必须在 `.planning/STATE.md` 或 session summary 附
+`version_fingerprint` 块：
+
+```yaml
+version_fingerprint:
+  timestamp: "2026-04-24T22:50Z"
+  harness_semver: "1.0.0"
+  knowledge_schema_version: 1
+  extractor_semver: "1.0.0"
+  solver_default: "openfoam/v2312"
+  git_sha: "4fd9215"
+```
+
+### §6.2 季度 Drift Audit
+
+每季度（Q1/Q2/Q3/Q4）运行 `scripts/audit_version_drift.py`（未实现；
+P1 closeout 前上线）对 Provenance 全量扫描：
+- 找出所有 `solver_version` 分布，非 baseline 的每条都要有 audit_concern 引用
+- 找出所有 `schema_version` 不等于当前的 YAML，每条必须已 migrate 或带 legacy exception
+
+## §7 违反与豁免
+
+### §7.1 违反处理
+
+| 级别 | 触发 | 处置 |
+|---|---|---|
+| CRITICAL | 四元组缺失且不继承 baseline（新增 artefact 不声明版本） | pre-commit / CI 直接拒绝 merge |
+| HIGH | Drift major mismatch 但未走 Decision | revert commit；开 incident retro |
+| MEDIUM | Drift minor mismatch 未标 WARN in Provenance | 补 Provenance entry；不回退代码 |
+| LOW | 历史 artefact 未补齐四元组（过渡窗口内） | 提醒，不阻塞 |
+
+### §7.2 豁免路径
+
+- **小型修复** (≤20 LOC 且不改 artefact 版本语义) — 按 Pivot Charter
+  §4.3a (b) 允许行为豁免本文件
+- **跨 solver 实验性接入** — 开独立 DEC-PIVOT-P5-* 并在 `CaseProfile.solver_family`
+  显式标记 `experimental: true`
+- **Knowledge schema bump 本身** — schema_version += 1 的 DEC 不受本
+  文件 §3 drift check 约束（因为它就是变更 source of truth）
+
+## §8 不做清单
+
+本文件**不做**：
+- 不定义各 plane 内部的对象 schema（见 KNOWLEDGE_OBJECT_MODEL）
+- 不定义 tolerance 的数值（见 `CaseProfile.tolerance_policy` via METRICS_AND_TRUST_GATES）
+- 不替代 SYSTEM_ARCHITECTURE 的 plane 划分
+- 不约束 `ui/**` 或 `scripts/**` 的版本策略
+- 不要求跨 solver 的 apples-to-apples 数值比较 (见 §5.1)
+
+## §9 Promotion Gate 证据
+
+per SPEC_PROMOTION_GATE.md §2:
+
+| Gate | Status | Evidence |
+|---|---|---|
+| G-A (Deliverables ≥80% merge) | ✅ | 本文件即 deliverable；`src.audit_package.manifest` + `src.convergence_attestor` 已使用 schema_version |
+| G-B (冒烟案例) | ✅ | gold_standards/*.yaml 全部已隐式继承 baseline + audit_package manifest 生产链跑通 |
+| G-C (上下游 cross-ref) | ✅ | §4 显式引用 METRICS_AND_TRUST_GATES / EXECUTOR_ABSTRACTION / KNOWLEDGE_OBJECT_MODEL |
+| G-D ("不做清单"有兜底) | ✅ | §8 + CI 已有 gold schema validator (`scripts/validate_gold_standards.py`) |
+| G-E (DEC record) | ⏳ | `DEC-PIVOT-P1-GOV-1` 待 CFDJerry 签 (G-1 完成时同步登记) |
+| G-F (Codex 独立审查无 HIGH) | ⏳ | 触发 `/codex-gpt54` G-3 review 后补 |
+
+当 G-E + G-F 完成，本文件 status 从 "Active v1.0 (promoted pending external)"
+正式升格为 "Active v1.0"。
+
+## §10 修订记录
+
+| 版本 | 日期 | 修订者 | 说明 |
+|---|---|---|---|
+| v0.1 | 2026-04-22 | 首席架构官 (Notion) | Initial Draft; 四元组骨架 + drift 树概念 |
+| v1.0 | 2026-04-24 | Claude Code + Opus 4.7 Post-Hoc Gate + Codex (pending) | GOV-1 promote; 固化四元组字段、drift 决策树、过渡 shim、baseline pin、Promotion Gate 证据 |
+
+---
+
+**相关 Governance 文件**：
+- `docs/specs/SPEC_PROMOTION_GATE.md` — Draft → Active 通用审查标准
+- `docs/governance/PIVOT_CHARTER_2026_04_22.md` §4.3a — Foundation-Freeze 边界
+- `docs/adr/ADR-001-four-plane-import-enforcement.md` — 四层 import 强制
+- Notion: SYSTEM_ARCHITECTURE v1.0 §5 (版本兼容矩阵引用本文件)
+- Notion: METRICS_AND_TRUST_GATES v0.1 §5 (tolerance 字段来自 CaseProfile)
