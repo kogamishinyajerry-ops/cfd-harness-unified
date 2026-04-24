@@ -150,7 +150,32 @@ this ADR treats Plugin as a contract-level boundary, not a new
 architectural layer. Final升格 decision defers to P5 activation
 retro.
 
-## 3. Consequences
+### 2.7 Plane Assignment Extensibility Clause (Opus 追签 AC-1 · 2026-04-25)
+
+任一以下事件发生时，**Plane assignment (§2.1) 审计必须复跑**（Claude
+Code + Codex R1 review + Opus Gate 签字），`.importlinter` contract 同步
+更新：
+
+1. **新增 `src/**` 顶层包**（例如 `src/metrics/`, `src/trust_gate/`, `src/executor_mode/`)
+2. **`ui/backend/**` 或 `scripts/**` 单 PR 净增 `> 500 LOC`**（signals
+   scope 膨胀到 non-trivial，需评估是否仍适合 v1.0 exclusion）
+3. **跨包迁移 `≥ 3 文件`**（例如 reorganizing `src/result_comparator.py`
+   → `src/evaluation/comparator.py`）
+
+CI 需扩展 `.importlinter` **coverage check**：walk `src.*` 所有顶层包，
+对每个包断言**至少出现在一个 contract 的 `source_modules` 或
+`forbidden_modules` 列表中**，无 orphan 包。实现方式待 ADR-002 配套
+脚本或单独 test 落地（`tests/test_plane_assignment.py` 作为 AC-2
+执行）。
+
+### 2.8 Runtime Layer Target — ADR-002 Anchored at 2026-04-28 (Opus 追签 AC-3)
+
+Runtime layer (sys.meta_path finder raising LayerViolationError) 原
+scheduled for 「W2-W3 per Opus fallback §3 末」。**Opus 追签 2026-04-25
+锚定**为 **W2 Tuesday 2026-04-28** 作为 ADR-002 drafting deadline。
+未按时 (到 2026-04-28 23:59) 提交 ADR-002 草案（可以是 Draft 状态）
+**自动触发** `RETRO-V61-001 trigger #3` (CHANGES_REQUIRED-equivalent
+retro on missed governance deadline)。
 
 ### 3.1 Positive
 
