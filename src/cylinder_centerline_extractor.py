@@ -122,6 +122,7 @@ def extract_centerline_u_deficit(
     field: str = "U",
     window_start_fraction: float = 0.5,
     min_samples: int = 4,
+    min_averaging_window_s: Optional[float] = None,
 ) -> Dict[str, float]:
     """Return {x_D: u_deficit, ...} for the 4 gold stations.
 
@@ -169,8 +170,18 @@ def extract_centerline_u_deficit(
     if len(windowed) < min_samples:
         return {}
     # Assert a minimum physical averaging duration regardless of count.
+    # DEC-V61-053 live-run: `min_averaging_window_s` override lets the
+    # adapter scale this when endTime is below the MIN_AVERAGING_WINDOW_
+    # SECONDS default (10s). When endTime=10s, the default would refuse
+    # everything; adapter passes 3s (30% of endTime) to let the
+    # demonstration-grade fixture surface SOMETHING — with the caller
+    # aware precision is lower than gold-grade.
+    effective_min_window = (
+        min_averaging_window_s if min_averaging_window_s is not None
+        else MIN_AVERAGING_WINDOW_SECONDS
+    )
     window_duration = windowed[-1][0] - windowed[0][0]
-    if window_duration < MIN_AVERAGING_WINDOW_SECONDS:
+    if window_duration < effective_min_window:
         return {}
 
     file_suffix = f"{set_name}_{field}.xy"

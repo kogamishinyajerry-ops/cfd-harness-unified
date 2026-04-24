@@ -7871,8 +7871,18 @@ mergePatchPairs
         # silently on pimpleFoam adaptive-timestep runs).
         if (task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
                 and task_spec.flow_type == FlowType.EXTERNAL):
+            # DEC-V61-053 live-run tuning: adapter sets endTime=10s per
+            # 35f3278. Default extractor trims (50s transient / 10s min
+            # averaging window) were sized for 200s endTime and would
+            # reject the full 10s series. Scale trims to actual endTime.
+            # endTime is set in the generator at line 4879 (currently
+            # 10s — future DEC may bump back to 60s / 200s for precision).
+            _cyl_endtime = 10.0  # MUST match adapter's controlDict endTime
+            _cyl_trim = min(0.2 * _cyl_endtime, 50.0)  # 20% transient, cap at original default
+            _cyl_min_window = max(0.3 * _cyl_endtime, 2.0)  # half of post-trim, min 2s
             key_quantities = self._extract_cylinder_strouhal(
                 [], [], [], task_spec, key_quantities, case_dir=case_dir,
+                transient_trim_s=_cyl_trim,
             )
             try:
                 from src.cylinder_centerline_extractor import (  # noqa: PLC0415
@@ -7883,6 +7893,7 @@ mergePatchPairs
                 U_val = float(bc.get("U_ref", 1.0))
                 centerline = extract_centerline_u_deficit(
                     case_dir, U_inf=U_val, D=D_val,
+                    min_averaging_window_s=_cyl_min_window,
                 )
                 for k, v in centerline.items():
                     key_quantities[k] = v
@@ -8896,6 +8907,7 @@ mergePatchPairs
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
         case_dir: Optional[Path] = None,
+        transient_trim_s: float = 50.0,
     ) -> Dict[str, Any]:
         """Circular Cylinder Wake: Strouhal number via forceCoeffs FFT.
 
@@ -8932,7 +8944,10 @@ mergePatchPairs
                     emit_strouhal,
                     CylinderStrouhalError,
                 )
-                emitted = emit_strouhal(case_dir, D=D, U_ref=U_ref)
+                emitted = emit_strouhal(
+                    case_dir, D=D, U_ref=U_ref,
+                    transient_trim_s=transient_trim_s,
+                )
             except CylinderStrouhalError as exc:
                 key_quantities["strouhal_emitter_error"] = str(exc)
                 # Corruption must not leave a stale strouhal value from
