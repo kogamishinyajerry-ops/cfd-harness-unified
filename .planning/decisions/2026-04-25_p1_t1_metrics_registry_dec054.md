@@ -10,13 +10,14 @@ commits_in_scope:
   - 9b7aeaf feat(metrics) P1-T1ab Pointwise+Integrated wrappers via _comparator_wrap helper (12 tests)
   - 27c42fe feat(metrics) P1-T1c SpectralMetric WARN-on-low-confidence demotion (9 tests + wrapper-level deviation-gate fix)
   - 1dd91eb feat(metrics) P1-T1d ResidualMetric attestor-verdict → MetricStatus mapping (10 tests)
-codex_verdict: PENDING_POST_MERGE_REVIEW (batched arc review to run against commits 2b5ceb7..1dd91eb)
+  - 83f1161 fix(metrics) Codex R1 CHANGES_REQUIRED verbatim — REF_SCALAR_KEYS shared tuple + registry tolerance-policy leak + residual doc drift (3 regression tests)
+codex_verdict: APPROVE_WITH_COMMENTS (R2) · F1-M2 two-tier CLEAN CLOSE. R1 CHANGES_REQUIRED (2 blocking findings: wrapper/comparator scalar-key misalignment causing false PASS→FAIL + registry tolerance-policy top-level leak) → 83f1161 verbatim fix + 3 regression tests → R2 APPROVE_WITH_COMMENTS (non-blocking docstring-accuracy nit: wrapper agrees with comparator only on gold_standard_schema.json-valid shapes, not on arbitrary heterogeneous shapes — fixed in follow-up verbatim docstring update).
 autonomous_governance: true
 autonomous_governance_counter_v61: 41
 external_gate_self_estimated_pass_rate: 0.75
 external_gate_self_estimated_pass_rate_source: "Wrapper-level deviation-gate override (fix for comparator ref-key gap) + 3 verdict-translation mappings (ATTEST_* → MetricStatus, low_confidence demotion, PASS→FAIL override) are non-obvious. Tests cover happy + 3-4 failure modes per class. 619 pass overall. 4 import contracts KEPT. Moderate confidence; Codex may flag edge cases around tolerance-policy dispatch or provenance key name conventions."
 external_gate_caveat: "First concrete implementation of METRICS_AND_TRUST_GATES v0.1 Draft accepting clause (VCP §8.2 tolerance_policy dispatch). SpectralMetric/ResidualMetric wrappers add verdict-translation logic that did not exist before; Pointwise/Integrated reuse existing result_comparator so regression risk is contained. No production code touched outside src/metrics/. ADR-001 Contract 2 honored — Evaluation plane does not import cylinder_strouhal_fft (classified Execution); SpectralMetric reads pre-extracted scalars from ExecutionResult.key_quantities instead."
-codex_tool_report_path: reports/codex_tool_reports/dec_v61_054_p1_t1_arc_review.log (to be written by /codex-gpt54)
+codex_tool_report_path: reports/codex_tool_reports/dec_v61_054_p1_t1_arc_review.log (R1) + reports/codex_tool_reports/dec_v61_054_r2_review.log (R2)
 notion_sync_status: synced 2026-04-25T02:40 · Status=Proposed (page_id=34cc6894-2bed-81bc-b0bd-f36acb16b98d, URL=https://www.notion.so/DEC-V61-054-P1-T1-Metrics-Registry-arc-4-Metric-Class-wrappers-landed-34cc68942bed81bcb0bdf36acb16b98d). Awaits Codex post-merge review verdict.
 github_sync_status: pushed (5 commits on origin/main)
 reversibility: MEDIUM — reverting 5 commits would remove src/metrics/ package entirely; no downstream consumers yet (TrustGate reducer is P1-T2, next DEC). Single atomic revert is safe.

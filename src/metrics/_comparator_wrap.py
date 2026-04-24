@@ -41,9 +41,13 @@ def _extract_first_reference_scalar(
     """Pick the same reference scalar `ResultComparator._compare_scalar` would.
 
     Iterates reference_values in order; for each entry, walks REF_SCALAR_KEYS
-    and returns the first non-None scalar. Mirrors comparator semantics
-    verbatim so wrapper-level deviation gating agrees with comparator
-    (Codex DEC-V61-054 R1 finding #1 fix).
+    and returns the first non-None numeric scalar. Agrees with comparator
+    for the supported `knowledge/schemas/gold_standard_schema.json` shapes
+    (numeric dict entries); divergence from comparator only occurs on
+    out-of-contract shapes (non-dict entries, non-numeric recognized
+    values) which comparator crashes on anyway (TypeError / AttributeError).
+    Wrapper returns None defensively on those edge cases rather than raising
+    — see Codex DEC-V61-054 R2 APPROVE_WITH_COMMENTS note.
     """
     if not reference_values:
         return None
