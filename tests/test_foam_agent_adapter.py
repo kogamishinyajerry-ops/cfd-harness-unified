@@ -788,9 +788,13 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         guard lives in both _parse_solver_log and the static extractor
         called from _parse_writeobjects_fields. This test exercises the
         static path directly — same Ux zero-crossing pattern at x≈-4.58
-        that §5d Part-2 produced via writeObjects fields. Must reject."""
+        that §5d Part-2 produced via writeObjects fields. Must reject.
+
+        DEC-V61-052 rewrite narrowed the Ux-proxy band to y<0.025 under the
+        canonical 3-block mesh; sample points shifted to y=0.01 to stay
+        inside the band while preserving the upstream-crossing pattern."""
         cxs = [-8.0, -5.0, -4.5, -4.0]
-        cys = [0.5, 0.5, 0.5, 0.5]
+        cys = [0.01, 0.01, 0.01, 0.01]
         u_vecs = [(-1.0, 0.0, 0.0), (-0.5, 0.0, 0.0), (0.1, 0.0, 0.0), (1.0, 0.0, 0.0)]
         bfs_task = TaskSpec(
             name="Backward-Facing Step",
@@ -810,9 +814,12 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
 
     def test_extract_bfs_reattachment_static_accepts_valid_downstream_detection(self):
         """P6-TD-001 positive-case companion: valid downstream Ux zero-
-        crossing produces reattachment_length without the artifact flag."""
+        crossing produces reattachment_length without the artifact flag.
+
+        DEC-V61-052 band narrowed to y<0.025 — sample points placed at y=0.01
+        (within first B1 cell layer)."""
         cxs = [0.5, 1.5, 2.5, 3.5]
-        cys = [0.5, 0.5, 0.5, 0.5]
+        cys = [0.01, 0.01, 0.01, 0.01]
         u_vecs = [(-0.4, 0.0, 0.0), (-0.1, 0.0, 0.0), (0.2, 0.0, 0.0), (0.8, 0.0, 0.0)]
         bfs_task = TaskSpec(
             name="Backward-Facing Step",

@@ -37,23 +37,22 @@ def test_contract_dashboard_render_contains_core_sections():
     assert "Observable mismatch" in result.html
     assert "visual_acceptance_report.html" in result.html
     # Contract-class distribution drifts case-by-case as gold YAMLs are
-    # reclassified. After DEC-V61-046 round-1 R3-M1 fix (gold_file pointers
-    # switched from legacy aliases to canonical yamls on 2026-04-22), the
-    # dashboard now reads the same gold source as the live /api/cases surface.
-    # Distribution consequently shifted:
-    #   SATISFIED: 3 → 4 (+LDC canonical SATISFIED_FOR_U_CENTERLINE_ONLY)
-    #   COMPATIBLE: 3 → 1 (LDC_benchmark + BFS_steady were COMPATIBLE;
-    #       canonical LDC is SATISFIED and canonical BFS is PARTIALLY)
-    #   PARTIALLY_COMPATIBLE: 1 → 2 (+BFS canonical)
-    #   INCOMPATIBLE: 1 → 0 (plane_channel legacy → canonical DISGUISED tier)
-    #   INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE: 1 → 2
-    #       (+plane_channel canonical; impinging_jet canonical is also DISGUISED)
+    # reclassified. History:
+    #   DEC-V61-046 R3-M1 (2026-04-22): gold_file pointers switched from legacy
+    #     aliases to canonical yamls — SATISFIED 3→4, COMPATIBLE 3→1,
+    #     PARTIALLY 1→2, INCOMPATIBLE 1→0, DISGUISED 1→2.
+    #   DEC-V61-052 (2026-04-23): BFS canonical promoted PARTIALLY_COMPATIBLE
+    #     → SATISFIED after 3-block mesh rewrite + wall-shear Xr extractor
+    #     brought Xr/H=5.647 (-9.8% vs Driver 1985, inside 10% band).
+    #     Net: SATISFIED 4→5, PARTIALLY 2→1.
+    # Current (2026-04-24) SATISFIED-tier cases: LDC, BFS, turbulent_flat_plate
+    # (SATISFIED_UNDER_LAMINAR_CONTRACT), duct_flow, differential_heated_cavity.
     # COMPATIBLE_WITH_SILENT_PASS_HAZARD (cylinder) unchanged at 1.
     # Zero UNKNOWN maintained.
-    assert result.summary_counts["SATISFIED"] == 4
+    assert result.summary_counts["SATISFIED"] == 5
     assert result.summary_counts["COMPATIBLE"] == 1
     assert result.summary_counts["COMPATIBLE_WITH_SILENT_PASS_HAZARD"] == 1
-    assert result.summary_counts["PARTIALLY_COMPATIBLE"] == 2
+    assert result.summary_counts["PARTIALLY_COMPATIBLE"] == 1
     assert result.summary_counts["INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE"] == 2
     assert result.summary_counts.get("INCOMPATIBLE", 0) == 0
     assert result.summary_counts.get("UNKNOWN", 0) == 0
@@ -74,10 +73,10 @@ def test_contract_dashboard_generate_writes_output(tmp_path: Path):
     assert manifest["snapshot_path"] == str(Path(result.snapshot_path))
     assert manifest["manifest_path"] == str(manifest_path)
     assert manifest["case_count"] == 10
-    # Post-R3-M1 gold_file retargeting (DEC-V61-046 round 1): dashboard now
-    # reads canonical yamls, shifting the distribution. COMPATIBLE collapsed
-    # 3→1 as LDC promoted to SATISFIED and BFS to PARTIALLY_COMPATIBLE.
-    assert manifest["class_counts"]["SATISFIED"] == 4
+    # Post-R3-M1 gold_file retargeting (DEC-V61-046 round 1) + DEC-V61-052
+    # BFS promotion to SATISFIED tier. Full rationale pinned in the render
+    # test above.
+    assert manifest["class_counts"]["SATISFIED"] == 5
     assert manifest["class_counts"]["COMPATIBLE"] == 1
     assert any(ref.startswith("Q-1") for ref in manifest["open_gate_refs"])
     assert any(ref.startswith("Q-2") for ref in manifest["open_gate_refs"])

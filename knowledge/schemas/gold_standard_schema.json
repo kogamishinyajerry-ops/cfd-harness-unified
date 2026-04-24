@@ -137,8 +137,15 @@
       "required": [
         "quantity",
         "reference_values",
-        "tolerance",
         "source"
+      ],
+      "anyOf": [
+        {
+          "required": ["tolerance"]
+        },
+        {
+          "required": ["position_tolerance", "psi_tolerance"]
+        }
       ],
       "properties": {
         "quantity": {
@@ -154,6 +161,12 @@
           }
         },
         "tolerance": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "position_tolerance": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "psi_tolerance": {
           "$ref": "#/$defs/Tolerance"
         },
         "source": {
