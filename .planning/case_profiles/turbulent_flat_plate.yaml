@@ -20,3 +20,11 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/turbulent_flat_plate.yaml
+# (Blasius laminar similarity @ x=0.5, plate_length=1.0m, Re_x=25000).
+# c3a1a4c/9d843e9/6411d0b history: mesh 80-cell w/ 4:1 wall grading +
+# Spalding fallback now land Cf within 10%; DEC-V61-018 story.
+tolerance_policy:
+  cf_skin_friction:
+    tolerance: 0.10        # 10% · Blasius Cf; alias "Cf"/"cf"/"skin_friction" via CANONICAL_ALIASES

@@ -20,3 +20,16 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b (DEC-V61-054 follow-up) · per-observable tolerance overrides.
+# Sourced from knowledge/gold_standards/backward_facing_step.yaml
+# (multi-doc yaml; 4 observables). Anchor: DEC-V61-046 round-3 blended
+# Le/Moin/Kim + Driver & Seegmiller, 10% tolerance band.
+tolerance_policy:
+  reattachment_length:
+    tolerance: 0.10        # 10% · post-transition plateau, weakly Re-sensitive
+  cd_mean:
+    tolerance: 0.10
+  pressure_recovery:
+    tolerance: 0.10
+  velocity_profile_reattachment:
+    tolerance: 0.10

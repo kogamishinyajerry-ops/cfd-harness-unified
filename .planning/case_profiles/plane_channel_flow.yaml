@@ -20,3 +20,9 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/plane_channel_flow.yaml
+# (Moser DNS u+ profile at Re_tau=180/395/590 — 5% for DNS reference).
+tolerance_policy:
+  u_mean_profile:
+    tolerance: 0.05        # 5% · DNS u+ profile, tight bound per DEC-V61-036c

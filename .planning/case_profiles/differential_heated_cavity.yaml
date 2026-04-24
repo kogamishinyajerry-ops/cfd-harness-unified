@@ -20,3 +20,9 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/differential_heated_cavity.yaml
+# (de Vahl Davis 1983 benchmark @ Ra=1e6).
+tolerance_policy:
+  nusselt_number:
+    tolerance: 0.10        # 10% · wall-averaged Nu, hot wall

@@ -20,3 +20,9 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/duct_flow.yaml
+# (Jones 1976 Darcy friction factor @ Re=50000 smooth square duct).
+tolerance_policy:
+  friction_factor:
+    tolerance: 0.10        # 10% · Darcy f; alias-aware comparator resolves "f"/"fDarcy"

@@ -20,3 +20,8 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/impinging_jet.yaml
+tolerance_policy:
+  nusselt_number:
+    tolerance: 0.15        # 15% · impinging jet Nu spatial distribution tolerance

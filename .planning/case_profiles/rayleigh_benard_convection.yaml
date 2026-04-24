@@ -20,3 +20,10 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/rayleigh_benard_convection.yaml
+# (Ra=1e6 mean Nu; looser 15% band per known mesh-refinement deviation
+# described in STATE.md Known limitations).
+tolerance_policy:
+  nusselt_number:
+    tolerance: 0.15        # 15% · includes expected DHC/RB BL undersampling at Ra=1e6

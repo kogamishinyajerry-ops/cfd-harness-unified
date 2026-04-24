@@ -199,6 +199,36 @@ def test_circular_cylinder_wake_policy_loads_from_repo() -> None:
     assert policy["cd_mean"]["tolerance"] == pytest.approx(0.05)
 
 
+def test_all_10_whitelist_cases_have_tolerance_policy() -> None:
+    """P1-T3b backfill coverage: every whitelist case yaml has a
+    non-empty tolerance_policy block that the loader parses without
+    CaseProfileError. Smoke-test across the full whitelist so a
+    schema drift in any single profile breaks CI loudly."""
+    whitelist = [
+        "backward_facing_step",
+        "circular_cylinder_wake",
+        "differential_heated_cavity",
+        "duct_flow",
+        "impinging_jet",
+        "lid_driven_cavity",
+        "naca0012_airfoil",
+        "plane_channel_flow",
+        "rayleigh_benard_convection",
+        "turbulent_flat_plate",
+    ]
+    for case_id in whitelist:
+        policy = load_tolerance_policy(case_id)
+        assert policy, f"{case_id} · tolerance_policy is empty"
+        for obs_name, entry in policy.items():
+            assert isinstance(entry, dict), f"{case_id}[{obs_name}] not dict"
+            tol = entry.get("tolerance")
+            if tol is not None:
+                assert 0 < tol <= 1.0, (
+                    f"{case_id}[{obs_name}] tolerance={tol} "
+                    f"outside plausible (0, 1.0] fraction range"
+                )
+
+
 # ---------------------------------------------------------------------------
 # End-to-end integration with MetricsRegistry
 # ---------------------------------------------------------------------------

@@ -20,3 +20,9 @@ risk_flags:
     justification: |
       Case uses established OpenFOAM tutorial solver topology; no
       smoother-vs-BC divergence reported to date on main.
+# P1-T3b · per-observable tolerance overrides.
+# Source: knowledge/gold_standards/naca0012_airfoil.yaml
+# (profile observable — Cp distribution along chord).
+tolerance_policy:
+  pressure_coefficient:
+    tolerance: 0.20        # 20% · profile-wise Cp, alias "Cp"/"cp" per CANONICAL_ALIASES
