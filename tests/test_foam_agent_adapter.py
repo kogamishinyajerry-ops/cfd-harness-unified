@@ -1365,6 +1365,13 @@ class TestCylinderGeneratorBatchB1:
             assert expected_point in cd, f"Missing centerline probe point {expected_point}"
         # Fields must include U (velocity is what we're sampling)
         assert "fields          (U)" in cd
+        # DEC-V61-053 live-run attempt 6 fix: executeControl + executeInterval
+        # MUST be present. Without them, OF10 registers the FO and parses the
+        # set description but sampling never runs (no Writing in log, no files
+        # on disk). Silent failure mode that cost attempt 6 a u_centerline
+        # gate — guard with an assertion.
+        assert "executeControl  timeStep" in cd
+        assert "executeInterval 20" in cd
 
 
 # ---------------------------------------------------------------------------

@@ -4941,6 +4941,17 @@ functions
     {{
         type            sets;
         libs            ("libsampling.so");
+        // DEC-V61-053 live-run attempt 6 (2026-04-24): FO registered and
+        // "Reading set description" logged, but postProcessing/cylinder
+        // Centerline/ never materialized on disk. Root cause: missing
+        // `executeControl` → sampling never fires even though the set
+        // is parsed. OF10 template at /opt/openfoam10/etc/caseDicts/
+        // postProcessing/probes/internalProbes.cfg uses BOTH
+        // `executeControl writeTime` AND `writeControl writeTime`.
+        // Fix: add executeControl + executeInterval matching the
+        // writeControl, so sampling runs AND output flushes.
+        executeControl  timeStep;
+        executeInterval 20;
         writeControl    timeStep;
         writeInterval   20;
         interpolationScheme cellPoint;
