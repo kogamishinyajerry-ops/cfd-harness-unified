@@ -1,0 +1,21 @@
+# Pre-commit hooks for cfd-harness-unified.
+#
+# Install once:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Authority: ADR-001 (four-plane import enforcement, static layer).
+# The hook runs the full `.importlinter` contract — not just on staged
+# files — because import-linter's dependency graph is repo-global.
+
+repos:
+  - repo: local
+    hooks:
+      - id: import-linter
+        name: import-linter · four-plane contract (ADR-001)
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
+        types: [python]
+        stages: [commit]

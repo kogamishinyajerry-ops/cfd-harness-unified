@@ -41,6 +41,9 @@ jobs:
             --schema knowledge/schemas/gold_standard_schema.json \
             --gold-dir knowledge/gold_standards
 
+      - name: Four-plane import contract (ADR-001)
+        run: lint-imports
+
       - name: Run pytest
         env:
           EXECUTOR_MODE: mock

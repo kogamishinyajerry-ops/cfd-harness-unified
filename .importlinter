@@ -1,0 +1,112 @@
+# import-linter contract for cfd-harness-unified four-plane architecture.
+# Authority: ADR-001 (docs/adr/ADR-001-four-plane-import-enforcement.md)
+# SSOT:      SYSTEM_ARCHITECTURE v1.0 §2
+#
+# Scope: src.* only. ui.backend / scripts / tests are out of contract scope
+# for v1.0 (per ADR-001 §3.2).
+#
+# To run locally:
+#   pip install -e ".[dev]"   # picks up import-linter
+#   lint-imports
+#
+# Contract types used: forbidden (bidirectional Execution ⇄ Evaluation).
+# `layers` contract is not enforced top-down because Control already reads
+# all planes by design; we only forbid the two HARD NOs and Knowledge
+# reverse-import.
+
+[importlinter]
+root_package = src
+include_external_packages = False
+
+# ===== Contract 1: Execution must not import Evaluation =====
+[importlinter:contract:execution-never-imports-evaluation]
+name = Execution Plane may not import Evaluation Plane (HARD NO per SYSTEM_ARCHITECTURE §2)
+type = forbidden
+source_modules =
+    src.foam_agent_adapter
+    src.airfoil_surface_sampler
+    src.cylinder_centerline_extractor
+    src.cylinder_strouhal_fft
+    src.plane_channel_uplus_emitter
+    src.wall_gradient
+forbidden_modules =
+    src.comparator_gates
+    src.convergence_attestor
+    src.error_attributor
+    src.result_comparator
+    src.correction_recorder
+    src.auto_verifier
+    src.report_engine
+
+# ===== Contract 2: Evaluation must not import Execution =====
+[importlinter:contract:evaluation-never-imports-execution]
+name = Evaluation Plane may not import Execution Plane (HARD NO per SYSTEM_ARCHITECTURE §2)
+type = forbidden
+source_modules =
+    src.comparator_gates
+    src.convergence_attestor
+    src.error_attributor
+    src.result_comparator
+    src.correction_recorder
+    src.auto_verifier
+    src.report_engine
+forbidden_modules =
+    src.foam_agent_adapter
+    src.airfoil_surface_sampler
+    src.cylinder_centerline_extractor
+    src.cylinder_strouhal_fft
+    src.plane_channel_uplus_emitter
+    src.wall_gradient
+
+# ===== Contract 3: Knowledge stays downstream (no reverse imports) =====
+[importlinter:contract:knowledge-no-reverse-import]
+name = Knowledge Plane may not import Control/Execution/Evaluation
+type = forbidden
+source_modules =
+    src.knowledge_db
+forbidden_modules =
+    src.task_runner
+    src.orchestrator
+    src.notion_client
+    src.notion_sync
+    src.audit_package
+    src.foam_agent_adapter
+    src.airfoil_surface_sampler
+    src.cylinder_centerline_extractor
+    src.cylinder_strouhal_fft
+    src.plane_channel_uplus_emitter
+    src.wall_gradient
+    src.comparator_gates
+    src.convergence_attestor
+    src.error_attributor
+    src.result_comparator
+    src.correction_recorder
+    src.auto_verifier
+    src.report_engine
+
+# ===== Contract 4: shared contracts stay dependency-free =====
+[importlinter:contract:models-stays-pure]
+name = src.models must not depend on any other src module (type-only escape hatch)
+type = forbidden
+source_modules =
+    src.models
+forbidden_modules =
+    src.task_runner
+    src.orchestrator
+    src.notion_client
+    src.notion_sync
+    src.audit_package
+    src.foam_agent_adapter
+    src.airfoil_surface_sampler
+    src.cylinder_centerline_extractor
+    src.cylinder_strouhal_fft
+    src.plane_channel_uplus_emitter
+    src.wall_gradient
+    src.comparator_gates
+    src.convergence_attestor
+    src.error_attributor
+    src.result_comparator
+    src.correction_recorder
+    src.auto_verifier
+    src.report_engine
+    src.knowledge_db

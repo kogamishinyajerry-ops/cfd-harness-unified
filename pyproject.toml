@@ -31,6 +31,9 @@ dev = [
     # tests/test_gold_standard_schema/. Previously an implicit dep — pytest
     # collection failed with ModuleNotFoundError on fresh venvs.
     "jsonschema>=4.0",
+    # Four-plane architecture static enforcement (ADR-001).
+    # Lints `.importlinter` contract on pre-commit + CI.
+    "import-linter>=2.0",
 ]
 ui = [
     "fastapi>=0.115",
