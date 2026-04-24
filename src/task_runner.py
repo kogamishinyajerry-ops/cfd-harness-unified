@@ -10,6 +10,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
+from .metrics import (
+    MetricClass,
+    MetricReport,
+    MetricStatus,
+    TrustGateReport,
+    reduce_reports,
+)
 from .models import (
     AttributionReport,
     BatchResult,
@@ -42,6 +49,94 @@ CORRECTION_POLICIES = ("legacy_auto_save", "suggest_only")
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# P1-T5 · TrustGate integration helper
+# ---------------------------------------------------------------------------
+
+_ATTEST_VERDICT_TO_STATUS: Dict[str, MetricStatus] = {
+    "ATTEST_PASS": MetricStatus.PASS,
+    "ATTEST_HAZARD": MetricStatus.WARN,
+    "ATTEST_FAIL": MetricStatus.FAIL,
+    "ATTEST_NOT_APPLICABLE": MetricStatus.WARN,
+}
+
+
+def _build_trust_gate_report(
+    *,
+    task_name: str,
+    comparison: Optional[ComparisonResult],
+    attestation: Optional["AttestationResult"],
+) -> Optional[TrustGateReport]:
+    """Aggregate legacy ComparisonResult + AttestationResult into a
+    TrustGateReport for P1-T5 downstream consumers.
+
+    Pre-P1-T4 ObservableDef formalization, this produces synthetic
+    MetricReports (one residual-class from attestor verdict, one
+    pointwise-class from gold comparison) and reduces them worst-wins.
+    Returns None when neither input is available (e.g. Notion-only path).
+
+    Plane: Control → Evaluation (import src.metrics). ADR-001 matrix row
+    `Control | ✓ (orchestrate) |` authorizes this.
+    """
+    reports: List[MetricReport] = []
+
+    if attestation is not None:
+        status = _ATTEST_VERDICT_TO_STATUS.get(
+            attestation.overall, MetricStatus.WARN
+        )
+        concerns = [c for c in attestation.checks if c.verdict != "PASS"]
+        notes = (
+            "; ".join(
+                f"{c.check_id}/{c.concern_type}: {c.summary}" for c in concerns
+            )
+            or None
+        )
+        reports.append(
+            MetricReport(
+                name=f"{task_name}_convergence_attestation",
+                metric_class=MetricClass.RESIDUAL,
+                status=status,
+                provenance={
+                    "attest_verdict": attestation.overall,
+                    "source": "task_runner._build_trust_gate_report",
+                },
+                notes=notes,
+            )
+        )
+
+    if comparison is not None:
+        status = MetricStatus.PASS if comparison.passed else MetricStatus.FAIL
+        deviation: Optional[float] = None
+        if comparison.deviations:
+            errs = [
+                d.relative_error
+                for d in comparison.deviations
+                if d.relative_error is not None
+            ]
+            if errs:
+                deviation = max(errs)
+        provenance: Dict[str, Any] = {
+            "source": "task_runner._build_trust_gate_report",
+            "comparator_summary": comparison.summary,
+        }
+        if comparison.gold_standard_id:
+            provenance["gold_standard_id"] = comparison.gold_standard_id
+        reports.append(
+            MetricReport(
+                name=f"{task_name}_gold_comparison",
+                metric_class=MetricClass.POINTWISE,
+                status=status,
+                deviation=deviation,
+                provenance=provenance,
+                notes=comparison.summary if not comparison.passed else None,
+            )
+        )
+
+    if not reports:
+        return None
+    return reduce_reports(reports)
+
+
 @dataclass
 class RunReport:
     """单次任务运行的完整报告"""
@@ -52,6 +147,15 @@ class RunReport:
     summary: str
     attestation: Optional["AttestationResult"] = None
     auto_verify_report: Any = None  # AutoVerifyReport or hook-returned status dict, when hook configured
+    trust_gate_report: Optional[TrustGateReport] = None
+    """P1-T5 · aggregated PASS/WARN/FAIL verdict across attestation +
+    gold-comparison for this task. Populated by `_build_trust_gate_report`
+    from the existing comparison_result + attestation outputs — no
+    refactor of the comparator/attestor paths. Pre-P1-T4 ObservableDef
+    formalization, this is a 2-report reduce (one residual-class from
+    attestor, one pointwise-class from comparator) wrapped in TrustGate's
+    worst-wins aggregation. When neither attestation nor comparison
+    applies (e.g. Notion-only write-back path), this is None."""
 
 
 class TaskRunner:
@@ -155,6 +259,12 @@ class TaskRunner:
         except NotImplementedError:
             logger.debug("Notion not configured, skipping write-back")
 
+        trust_gate_report = _build_trust_gate_report(
+            task_name=task_spec.name,
+            comparison=comparison,
+            attestation=attestation,
+        )
+
         return RunReport(
             task_spec=task_spec,
             execution_result=exec_result,
@@ -163,6 +273,7 @@ class TaskRunner:
             attestation=attestation,
             summary=summary,
             auto_verify_report=auto_verify_report,
+            trust_gate_report=trust_gate_report,
         )
 
     def run_all(self) -> List[RunReport]:
