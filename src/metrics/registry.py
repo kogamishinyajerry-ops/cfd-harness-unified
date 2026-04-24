@@ -102,8 +102,13 @@ class MetricsRegistry:
             obs_def = observable_defs.get(name)
             if obs_def is None:
                 continue
-            per_metric_tol = None
-            if tolerance_policy is not None:
-                per_metric_tol = tolerance_policy.get(name, tolerance_policy)
+            # Per-metric dispatch: only the named entry (observable name key)
+            # applies. Do NOT fall back to the whole policy dict — that would
+            # leak a top-level `tolerance` override into unrelated metrics
+            # (Codex DEC-V61-054 R1 finding #2). Documented semantics per
+            # METRICS_AND_TRUST_GATES §4: `tolerance_policy[<observable_name>]`.
+            per_metric_tol = (
+                tolerance_policy.get(name) if tolerance_policy is not None else None
+            )
             reports.append(metric.evaluate(artifacts, obs_def, per_metric_tol))
         return reports

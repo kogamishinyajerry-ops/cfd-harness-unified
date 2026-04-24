@@ -14,10 +14,11 @@ Verdict mapping (AttestVerdict → MetricStatus):
   - ATTEST_NOT_APPLICABLE → WARN  (no log → cannot attest; downstream
                                    TrustGate should not silently PASS)
 
-`value` field: the verdict string itself (for report UI / TrustGate
-inspection). `reference_value`, `deviation`, `tolerance_applied` are all
+`value`, `reference_value`, `deviation`, `tolerance_applied` are all
 None (not applicable — this is an absolute attestation, not a gold-ref
-deviation). `notes` aggregates per-check concerns when status != PASS.
+deviation). The verdict string is surfaced via `provenance.attest_verdict`
+for report UI / TrustGate inspection. `notes` aggregates per-check
+concerns when status != PASS.
 
 Plane: Evaluation (src.metrics.residual → src.convergence_attestor) —
 both sides are Evaluation Plane per ADR-001 §2.1, same as Pointwise/

@@ -23,6 +23,25 @@ logger = logging.getLogger(__name__)
 # DEC-V61-003). Does NOT modify knowledge/gold_standards/ or knowledge/whitelist.yaml.
 # Each alias set should be defensible from published solver/postProcessing
 # conventions — do not paper over real physics mismatches here.
+# Shared ref-dict scalar-key extraction order. Used by `_compare_scalar`
+# and mirrored verbatim in `src.metrics._comparator_wrap` so wrapper-level
+# deviation gating never disagrees with the comparator's own scalar pick.
+# Codex DEC-V61-054 R1 finding #1: heterogeneous `reference_values` (e.g.
+# `[{'u': 2.0}, {'value': 1.0}]`) used to produce different picks in
+# wrapper vs comparator, turning a legitimate comparator PASS into a
+# wrapper-level false FAIL. This canonical tuple is the fix.
+REF_SCALAR_KEYS: Tuple[str, ...] = (
+    "value",
+    "u",
+    "u_plus",
+    "Nu",
+    "Cp",
+    "Cf",
+    "f",
+    "St",
+)
+
+
 CANONICAL_ALIASES: Dict[str, Tuple[str, ...]] = {
     # Darcy friction factor: solver may emit "f" (single letter),
     # "fDarcy" (OpenFOAM turbulence function object), or "fFanning" (4× smaller).
@@ -172,13 +191,12 @@ class ResultComparator:
         """标量比较：从 reference_values 取第一个 value"""
         deviations = []
         for ref in reference_values:
-            _v = ref.get("value")
-            if _v is None: _v = ref.get("Nu")
-            if _v is None: _v = ref.get("Cp")
-            if _v is None: _v = ref.get("Cf")
-            if _v is None: _v = ref.get("u_plus")
-            if _v is None: _v = ref.get("f")
-            expected = _v
+            expected = None
+            for key in REF_SCALAR_KEYS:
+                v = ref.get(key)
+                if v is not None:
+                    expected = v
+                    break
             if expected is None:
                 continue
             abs_err = abs(actual - expected)

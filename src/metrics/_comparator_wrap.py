@@ -15,10 +15,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from ..models import ExecutionResult
-from ..result_comparator import ResultComparator
+from ..result_comparator import REF_SCALAR_KEYS, ResultComparator
 from .base import Metric, MetricReport, MetricStatus
-
-_REF_SCALAR_KEYS = ("value", "u", "Nu", "Cp", "Cf", "f", "St", "u_plus")
 
 
 def _coerce_execution_result(artifacts: Any) -> ExecutionResult:
@@ -40,16 +38,23 @@ def _coerce_execution_result(artifacts: Any) -> ExecutionResult:
 def _extract_first_reference_scalar(
     reference_values: Optional[list],
 ) -> Optional[float]:
+    """Pick the same reference scalar `ResultComparator._compare_scalar` would.
+
+    Iterates reference_values in order; for each entry, walks REF_SCALAR_KEYS
+    and returns the first non-None scalar. Mirrors comparator semantics
+    verbatim so wrapper-level deviation gating agrees with comparator
+    (Codex DEC-V61-054 R1 finding #1 fix).
+    """
     if not reference_values:
         return None
-    first = reference_values[0]
-    if isinstance(first, (int, float)):
-        return float(first)
-    if isinstance(first, dict):
-        for key in _REF_SCALAR_KEYS:
-            v = first.get(key)
-            if isinstance(v, (int, float)):
-                return float(v)
+    for entry in reference_values:
+        if isinstance(entry, (int, float)):
+            return float(entry)
+        if isinstance(entry, dict):
+            for key in REF_SCALAR_KEYS:
+                v = entry.get(key)
+                if isinstance(v, (int, float)):
+                    return float(v)
     return None
 
 

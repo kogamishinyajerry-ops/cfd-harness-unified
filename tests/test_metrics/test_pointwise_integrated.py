@@ -231,6 +231,95 @@ def test_canonical_alias_resolution_via_comparator() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Regression: Codex DEC-V61-054 R1 finding #1 — wrapper PASS→FAIL false-fail
+# when reference_values is heterogeneous and entry[0] has a key the
+# comparator skips. Wrapper must mirror comparator's iteration order + key set.
+# ---------------------------------------------------------------------------
+
+
+def test_wrapper_and_comparator_agree_on_heterogeneous_reference_values() -> None:
+    # Codex repro: reference_values = [{'u': 2.0}, {'value': 1.0}], actual=1.0.
+    # Pre-fix: wrapper picked entry[0]["u"]=2.0 → deviation 0.5 → FALSE FAIL.
+    # Post-fix: comparator-canonical order walks entries; "u" is now in the
+    # shared REF_SCALAR_KEYS, so wrapper picks entry[0]["u"]=2.0 and FAILs
+    # consistently — OR comparator was updated to see "u" too, also FAILing
+    # consistently. Either way wrapper + comparator must agree.
+    m = PointwiseMetric(name="x")
+    report = m.evaluate(
+        artifacts=_exec(x=1.0),
+        observable_def={
+            "quantity": "x",
+            "reference_values": [{"u": 2.0}, {"value": 1.0}],
+            "tolerance": 0.1,
+        },
+    )
+    # With REF_SCALAR_KEYS = (value, u, u_plus, Nu, Cp, Cf, f, St),
+    # comparator picks entry[0]["u"]=2.0 first → abs_err=1.0 → FAIL.
+    # Wrapper picks the same. They agree.
+    assert report.status is MetricStatus.FAIL
+    assert report.reference_value == pytest.approx(2.0)
+
+
+def test_wrapper_empty_first_entry_walks_to_next() -> None:
+    # reference_values = [{unrecognized key}, {'value': 1.0}]. Wrapper
+    # should skip entry[0] (no scalar-keyed value) and pick entry[1]["value"].
+    m = PointwiseMetric(name="x")
+    report = m.evaluate(
+        artifacts=_exec(x=1.0),
+        observable_def={
+            "quantity": "x",
+            "reference_values": [{"unknown_key": 99.0}, {"value": 1.0}],
+            "tolerance": 0.05,
+        },
+    )
+    assert report.status is MetricStatus.PASS
+    assert report.reference_value == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Regression: Codex DEC-V61-054 R1 finding #2 — tolerance_policy top-level
+# leak into unrelated metrics. Per-metric dispatch must NOT fall back to
+# whole-dict when per-name entry is absent.
+# ---------------------------------------------------------------------------
+
+
+def test_tolerance_policy_top_level_does_not_leak_into_unrelated_metrics() -> None:
+    from src.metrics import MetricsRegistry
+
+    r = MetricsRegistry()
+    r.register(PointwiseMetric(name="a"))
+    r.register(PointwiseMetric(name="b"))
+    artifacts = _exec(a=1.25, b=1.25)  # both 25% off
+    observable_defs = {
+        "a": {
+            "quantity": "a",
+            "reference_values": [{"value": 1.0}],
+            "tolerance": 0.05,
+        },
+        "b": {
+            "quantity": "b",
+            "reference_values": [{"value": 1.0}],
+            "tolerance": 0.05,
+        },
+    }
+    # Policy only addresses metric `a` explicitly. The top-level "tolerance"
+    # must NOT be inherited by metric `b`.
+    tolerance_policy = {"tolerance": 0.5, "a": {"tolerance": 0.3}}
+
+    reports = r.evaluate_all(artifacts, observable_defs, tolerance_policy)
+    by_name = {rep.name: rep for rep in reports}
+
+    # `a` got its named 0.3 override → 25% < 30% → PASS
+    assert by_name["a"].status is MetricStatus.PASS
+    assert by_name["a"].tolerance_applied == pytest.approx(0.3)
+
+    # `b` had no named override → falls back to observable_def 0.05
+    # → 25% > 5% → FAIL. Crucially NOT 0.5 from the outer dict.
+    assert by_name["b"].status is MetricStatus.FAIL
+    assert by_name["b"].tolerance_applied == pytest.approx(0.05)
+
+
 def test_registry_evaluate_all_exercises_wrapper() -> None:
     from src.metrics import MetricsRegistry
 
