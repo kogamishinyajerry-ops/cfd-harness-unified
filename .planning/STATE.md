@@ -18,20 +18,21 @@ pivot:
   status: "post-pivot-foundation-freeze W1-claude-owned-all-DONE (6 of 9 gates)"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
-    G-2_charter_freeze_semantics: DONE_2026-04-24_commit_f0b1c0d_awaits_opus_追签
+    G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed
     G-3_gov1_version_policy_v1: DONE_2026-04-25_commits_acb1993_41fed9d_63b02bf_cb31c9a_codex_R1_R2_CHANGES_REQUIRED_R3_CHANGES_REQUIRED_verbatim_fixed_opus_option_X_spec_promotion_gate_v1_1
     G-4_spec_promotion_gate: DONE_2026-04-24_commit_f0b1c0d
-    G-5_adr001_import_static: DONE_2026-04-24_commits_4fd9215_9d372fb_codex_R1_APPROVE_WITH_COMMENTS_verbatim_fixed
+    G-5_adr001_import_static: DONE_2026-04-25_commits_4fd9215_9d372fb_a32f1a9_codex_R1_APPROVE_WITH_COMMENTS_verbatim_fixed_opus_ACCEPT_WITH_COMMENTS_3AC_landed_Draft_to_Active
     G-6_caseprofile_risk_flags: DONE_2026-04-24_commit_88d7a8e
     G-7_retro_5th_trigger: DONE_2026-04-24_commit_f0b1c0d
     G-8_state_stamp: DONE_2026-04-24
     G-9_opus_w2_phase_transition: pending_W2
   claude_owned_w1_closed: true
+  opus_signoff_w1_closed: true  # 2026-04-25 ITEM 1 + ITEM 2 + ITEM 3 all ACCEPTED
   external_blockers:
-    - "G-1 · CFDJerry sign DEC-PIVOT-2026-04-22-001 in Notion Decisions DB"
-    - "G-3 · optional Codex review (user-triggered via /codex-gpt54)"
-    - "G-5 · Opus 4.7 追签 on Notion after reviewing commits 4fd9215 + 9d372fb"
-    - "G-9 · W2 early Opus Gate Phase transition (Foundation-Freeze Done + P1 Active)"
+    - "G-1 · CFDJerry sign DEC-PIVOT-2026-04-22-001 in Notion Decisions DB (Pivot trigger)"
+    - "DEC-POLICY-VCP-001 · CFDJerry sign first Cat 3 commitment (跨 solver apples-to-apples)"
+    - "G-9 · W2 (targeted 2026-04-28 Tuesday) Opus Gate Phase transition: Foundation-Freeze Done + P1 Active"
+    - "ADR-002 runtime layer draft · due 2026-04-28 23:59 (missed deadline auto-triggers RETRO-V61-001 trigger #3)"
 ---
 
 driving_model: claude-code-opus47 (Main Driver under Model Routing v6.2 · CLI-based · 2026-04-22 takeover from v6.1 claude-opus47-app). Subagent discipline: >5 turns / >40k tokens / >3 files / >500 LOC → fresh subagent dispatch. Codex GPT-5.4-xhigh: Joint Dev Peer with 3 invocation modes — (§A) 禁区 diff generator; (§B) independent key-claim verifier [NEW — anti-deception]; (§C) milestone joint reviewer. Notion Gate: 5 hard-floor guards (+1 new: heterogeneous verification failure).
