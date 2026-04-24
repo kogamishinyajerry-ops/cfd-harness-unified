@@ -85,12 +85,21 @@ def _build_trust_gate_report(
             attestation.overall, MetricStatus.WARN
         )
         concerns = [c for c in attestation.checks if c.verdict != "PASS"]
-        notes = (
-            "; ".join(
-                f"{c.check_id}/{c.concern_type}: {c.summary}" for c in concerns
-            )
-            or None
+        concerns_text = "; ".join(
+            f"{c.check_id}/{c.concern_type}: {c.summary}" for c in concerns
         )
+        if concerns_text:
+            notes = concerns_text
+        elif attestation.overall == "ATTEST_NOT_APPLICABLE":
+            # Mirror src.metrics.residual: preserve the WARN reason on the
+            # no-log path so Control-plane consumers don't see an unexplained
+            # warning. Codex DEC-V61-056 finding #1.
+            notes = (
+                "attestor not applicable (no solver log resolvable "
+                "from artifacts)"
+            )
+        else:
+            notes = None
         reports.append(
             MetricReport(
                 name=f"{task_name}_convergence_attestation",

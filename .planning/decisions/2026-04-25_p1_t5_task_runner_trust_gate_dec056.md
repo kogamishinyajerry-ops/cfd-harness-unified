@@ -6,7 +6,7 @@ intake_ref: none (P1 task-level DEC)
 methodology_version: "v2.0"
 commits_in_scope:
   - bc91716 feat(task_runner) P1-T5 TrustGateReport integration (+7 tests)
-codex_verdict: PENDING_POST_MERGE_REVIEW
+codex_verdict: APPROVE_WITH_COMMENTS · F1-M2 CLEAN CLOSE. 2 non-blocking findings: (1) ATTEST_NOT_APPLICABLE with empty checks produced notes=None, dropping the WARN reason at TrustGate level (diverged from src.metrics.residual which preserves an explicit note). (2) E2E happy-path test only exercised attestation-only branch; comparison-present E2E + None-relative-error deviation edge case missing. Both fixed verbatim in follow-up commit: attestor not-applicable note mirroring residual.py + 3 new regression tests. 666 tests pass.
 autonomous_governance: true
 autonomous_governance_counter_v61: 43
 external_gate_self_estimated_pass_rate: 0.85

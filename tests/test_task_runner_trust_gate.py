@@ -268,3 +268,135 @@ def test_run_report_populates_trust_gate_on_happy_path(tmp_path: Path) -> None:
         report.trust_gate_report.reports[0].name
         == "lid_driven_cavity_convergence_attestation"
     )
+
+
+# ---------------------------------------------------------------------------
+# Codex V61-056 finding #1: ATTEST_NOT_APPLICABLE with no concerns must still
+# surface the WARN reason — previously silently dropped.
+# ---------------------------------------------------------------------------
+
+
+def test_attestor_not_applicable_surfaces_explicit_note() -> None:
+    attestation = _FakeAttestation(overall="ATTEST_NOT_APPLICABLE", checks=[])
+    tg = _build_trust_gate_report(
+        task_name="x", comparison=None, attestation=attestation
+    )
+    assert tg is not None
+    assert tg.overall is MetricStatus.WARN
+    assert len(tg.reports) == 1
+    residual = tg.reports[0]
+    assert residual.notes is not None
+    assert "not applicable" in residual.notes.lower()
+    # And the formatted note flows through to TrustGateReport.notes tuple
+    assert any("not applicable" in n.lower() for n in tg.notes)
+
+
+# ---------------------------------------------------------------------------
+# Codex V61-056 finding #2: Deviation-extraction edge case when comparison
+# has deviations but all relative_error values are None.
+# ---------------------------------------------------------------------------
+
+
+def test_comparison_with_none_relative_errors_yields_no_deviation() -> None:
+    attestation = _FakeAttestation(overall="ATTEST_PASS", checks=[])
+    # Comparison with deviations but none carrying relative_error (legacy
+    # comparator code paths existed that produced abstract-deviation records
+    # without numeric error). Wrapper must not crash and must leave
+    # MetricReport.deviation = None.
+    comparison = ComparisonResult(
+        passed=False,
+        deviations=[
+            DeviationDetail(
+                quantity="x",
+                expected=1.0,
+                actual=None,
+                relative_error=None,
+                tolerance=0.05,
+            ),
+        ],
+        summary="Quantity x not found in execution result",
+        gold_standard_id="x",
+    )
+    tg = _build_trust_gate_report(
+        task_name="x", comparison=comparison, attestation=attestation
+    )
+    assert tg is not None
+    assert tg.overall is MetricStatus.FAIL  # comparison.passed=False
+    gold_report = next(r for r in tg.reports if r.name.endswith("_gold_comparison"))
+    assert gold_report.deviation is None  # no relative_error available
+    assert gold_report.status is MetricStatus.FAIL
+
+
+# ---------------------------------------------------------------------------
+# Codex V61-056 finding #2b: E2E TaskRunner with gold present (comparison
+# branch actually exercised, not just attestation-only).
+# ---------------------------------------------------------------------------
+
+
+def test_run_report_populates_trust_gate_with_comparison_present(
+    tmp_path: Path,
+) -> None:
+    from unittest.mock import MagicMock
+
+    from src.models import (
+        Compressibility,
+        FlowType,
+        GeometryType,
+        SteadyState,
+        TaskSpec,
+    )
+    from src.task_runner import TaskRunner
+
+    log_dir = tmp_path / "solver_output"
+    log_dir.mkdir()
+    (log_dir / "log.simpleFoam").write_text(
+        "Time = 1\nExecutionTime = 1 s\nEnd\n", encoding="utf-8"
+    )
+
+    class _Executor:
+        def execute(self, task_spec):
+            return ExecutionResult(
+                success=True,
+                is_mock=False,
+                key_quantities={"u_centerline": 0.98},
+                raw_output_path=str(log_dir),
+                exit_code=0,
+            )
+
+    # Gold declares quantity=u_centerline, ref=1.0, tolerance=0.05. Actual=0.98,
+    # deviation=0.02 < tolerance → comparison PASSes.
+    gold = {
+        "quantity": "u_centerline",
+        "reference_values": [{"value": 1.0}],
+        "tolerance": 0.05,
+        "id": "lid_driven_cavity",
+    }
+    stub_notion = MagicMock()
+    stub_notion.write_execution_result = MagicMock()
+    stub_db = MagicMock()
+    stub_db.load_gold_standard = MagicMock(return_value=gold)
+    stub_db.save_correction = MagicMock()
+
+    runner = TaskRunner(
+        executor=_Executor(),
+        notion_client=stub_notion,
+        knowledge_db=stub_db,
+    )
+    task = TaskSpec(
+        name="lid_driven_cavity",
+        geometry_type=GeometryType.SIMPLE_GRID,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+    )
+    report = runner.run_task(task)
+
+    # ATTEST_PASS + comparison PASS → overall PASS, 2 reports
+    assert report.trust_gate_report is not None
+    assert report.trust_gate_report.overall is MetricStatus.PASS
+    assert len(report.trust_gate_report.reports) == 2
+    names = {r.name for r in report.trust_gate_report.reports}
+    assert names == {
+        "lid_driven_cavity_convergence_attestation",
+        "lid_driven_cavity_gold_comparison",
+    }
