@@ -104,7 +104,18 @@ def evaluate_via_result_comparator(
         else:
             deviation = abs_err / (abs(reference_value) + 1e-12)
 
+    # Wrapper-level gate: when we have a value + reference + tolerance but
+    # the comparator accepted anyway (e.g. its ref-scalar-key list doesn't
+    # include our observable's key — `{"St": ...}` for Strouhal), apply
+    # our own tolerance check so downstream TrustGate doesn't get bogus PASS.
     status = MetricStatus.PASS if cmp_result.passed else MetricStatus.FAIL
+    if (
+        status is MetricStatus.PASS
+        and deviation is not None
+        and tolerance_applied is not None
+        and deviation > tolerance_applied
+    ):
+        status = MetricStatus.FAIL
 
     provenance: Dict[str, Any] = {
         "delegate_module": metric.delegate_to_module,
@@ -119,7 +130,18 @@ def evaluate_via_result_comparator(
     else:
         provenance["tolerance_source"] = "comparator_default"
 
-    notes = cmp_result.summary if status is MetricStatus.FAIL else None
+    if status is MetricStatus.FAIL:
+        if not cmp_result.passed:
+            notes = cmp_result.summary
+        else:
+            # Wrapper-level override: comparator said PASS but our deviation
+            # gate disagreed (usually ref-dict key not in comparator's list).
+            notes = (
+                f"deviation {deviation:.4f} exceeds tolerance "
+                f"{tolerance_applied:.4f} (wrapper-level gate)"
+            )
+    else:
+        notes = None
 
     return MetricReport(
         name=metric.name,
