@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T05:15 local"
+last_updated: "2026-04-25T05:30 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE (T1+T2+T3+T3b+T5 all CLEAN CLOSE · 3 DECs V61-054/055/056 all Accepted · 3 Codex audit rounds) · 666 passed · 4 contracts KEPT · P1-T4 blocked (KOM Draft)"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE + RETRO-V61-004 landed (T1+T2+T3+T3b+T5 CLEAN CLOSE · 3 DECs + 1 retro all Accepted · 4 Codex rounds) · 666 passed · 4 contracts KEPT · P1-T4 blocked (KOM Draft) · 40 commits unpushed pending user approval"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed
