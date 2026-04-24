@@ -1191,63 +1191,199 @@ function MultiDimensionComparePanel({
     return null; // Non-critical failure; scalar part above still renders.
   }
   if (!data) return null;
-  // DEC-V61-052 Batch D: visual-only cases can still render a scalar-
-  // anchor card (currently only BFS Xr/H). Full LDC-style multi-dim
-  // panel requires data.metrics + data.paper, but a single-observable
-  // visual-only card renders independently below.
+  // DEC-V61-052 Batch D + V61-053 Batch D: visual-only cases can still
+  // render scalar-anchor cards. BFS → 1 card (Xr/H); cylinder → up to 4
+  // cards (D-St, D-Cd, D-Cl_rms, D-u@4 profile). Full LDC-style multi-dim
+  // panel requires data.metrics + data.paper below.
   if (data.visual_only) {
-    if (!data.metrics_reattachment || !data.paper_reattachment) return null;
-    const mr = data.metrics_reattachment;
-    const pr = data.paper_reattachment;
-    const passing = mr.within_tolerance;
-    return (
-      <section className="space-y-4">
-        <div className="flex items-baseline justify-between">
-          <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
-          <p className="text-[11px] text-surface-500">{pr.short} · 1 个独立标量维度</p>
-        </div>
-        <div className={`rounded-md border p-4 ${
-          passing
-            ? "border-emerald-800/60 bg-emerald-900/15"
-            : "border-rose-800/60 bg-rose-900/15"
-        }`}>
-          <div className="mb-2 flex items-baseline gap-2">
-            <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
-              D1 · Scalar anchor
-            </span>
-            <span className={`mono text-[10.5px] font-semibold ${
-              passing ? "text-emerald-300" : "text-rose-300"
-            }`}>
-              {passing ? "PASS" : "FAIL"}
-            </span>
+    // BFS scalar-anchor card (DEC-V61-052)
+    if (data.case_id === "backward_facing_step") {
+      if (!data.metrics_reattachment || !data.paper_reattachment) return null;
+      const mr = data.metrics_reattachment;
+      const pr = data.paper_reattachment;
+      const passing = mr.within_tolerance;
+      return (
+        <section className="space-y-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+            <p className="text-[11px] text-surface-500">{pr.short} · 1 个独立标量维度</p>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <div className="text-[10.5px] text-surface-500">{mr.symbol} 测量</div>
-              <div className="mono text-surface-100">{mr.actual.toFixed(3)}</div>
+          <div className={`rounded-md border p-4 ${
+            passing
+              ? "border-emerald-800/60 bg-emerald-900/15"
+              : "border-rose-800/60 bg-rose-900/15"
+          }`}>
+            <div className="mb-2 flex items-baseline gap-2">
+              <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+                D1 · Scalar anchor
+              </span>
+              <span className={`mono text-[10.5px] font-semibold ${
+                passing ? "text-emerald-300" : "text-rose-300"
+              }`}>
+                {passing ? "PASS" : "FAIL"}
+              </span>
             </div>
-            <div>
-              <div className="text-[10.5px] text-surface-500">{mr.symbol} 金标准</div>
-              <div className="mono text-surface-100">{mr.expected.toFixed(3)}</div>
-            </div>
-            <div>
-              <div className="text-[10.5px] text-surface-500">偏差</div>
-              <div className={`mono ${passing ? "text-emerald-300" : "text-rose-300"}`}>
-                {mr.deviation_pct.toFixed(1)}%
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <div className="text-[10.5px] text-surface-500">{mr.symbol} 测量</div>
+                <div className="mono text-surface-100">{mr.actual.toFixed(3)}</div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">{mr.symbol} 金标准</div>
+                <div className="mono text-surface-100">{mr.expected.toFixed(3)}</div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">偏差</div>
+                <div className={`mono ${passing ? "text-emerald-300" : "text-rose-300"}`}>
+                  {mr.deviation_pct.toFixed(1)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">容差带</div>
+                <div className="mono text-surface-100">±{mr.tolerance_pct.toFixed(0)}%</div>
               </div>
             </div>
-            <div>
-              <div className="text-[10.5px] text-surface-500">容差带</div>
-              <div className="mono text-surface-100">±{mr.tolerance_pct.toFixed(0)}%</div>
+            <div className="mt-3 text-[11px] text-surface-400">
+              来源：{pr.source}
+              {mr.method ? <> · 测量方法：<span className="mono">{mr.method}</span></> : null}
             </div>
           </div>
-          <div className="mt-3 text-[11px] text-surface-400">
-            来源：{pr.source}
-            {mr.method ? <> · 测量方法：<span className="mono">{mr.method}</span></> : null}
+        </section>
+      );
+    }
+
+    // Cylinder 4-scalar anchor cards (DEC-V61-053 Batch D)
+    if (data.case_id === "circular_cylinder_wake") {
+      const hasAnyCylinderMetric =
+        data.metrics_strouhal || data.metrics_cd_mean ||
+        data.metrics_cl_rms || data.metrics_u_centerline;
+      if (!hasAnyCylinderMetric) return null;
+      const dims = [
+        data.metrics_strouhal,
+        data.metrics_cd_mean,
+        data.metrics_cl_rms,
+        data.metrics_u_centerline,
+      ].filter(Boolean).length;
+      // Reusable scalar-card renderer
+      const renderScalarCard = (
+        label: string,
+        metrics: typeof data.metrics_strouhal,
+        paper: typeof data.paper_strouhal,
+      ) => {
+        if (!metrics || !paper) return null;
+        const passing = metrics.within_tolerance;
+        return (
+          <div key={label} className={`rounded-md border p-3 ${
+            passing
+              ? "border-emerald-800/60 bg-emerald-900/15"
+              : "border-rose-800/60 bg-rose-900/15"
+          }`}>
+            <div className="mb-2 flex items-baseline gap-2">
+              <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+                {label} · {metrics.symbol}
+              </span>
+              <span className={`mono text-[10.5px] font-semibold ${
+                passing ? "text-emerald-300" : "text-rose-300"
+              }`}>
+                {passing ? "PASS" : "FAIL"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-[10.5px] text-surface-500">测量</div>
+                <div className="mono text-surface-100">{metrics.actual.toFixed(4)}</div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">金标准</div>
+                <div className="mono text-surface-100">{metrics.expected.toFixed(4)}</div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">偏差</div>
+                <div className={`mono ${passing ? "text-emerald-300" : "text-rose-300"}`}>
+                  {metrics.deviation_pct.toFixed(1)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">容差带</div>
+                <div className="mono text-surface-100">±{metrics.tolerance_pct.toFixed(0)}%</div>
+              </div>
+            </div>
+            {metrics.method && (
+              <div className="mt-2 text-[10.5px] text-surface-500">
+                方法：<span className="mono">{metrics.method}</span>
+              </div>
+            )}
           </div>
-        </div>
-      </section>
-    );
+        );
+      };
+      return (
+        <section className="space-y-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+            <p className="text-[11px] text-surface-500">
+              Williamson 1996 · {dims} 个独立维度 (Type I 圆柱尾迹)
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {renderScalarCard("D-St · Strouhal 频率", data.metrics_strouhal, data.paper_strouhal)}
+            {renderScalarCard("D-Cd · 平均阻力", data.metrics_cd_mean, data.paper_cd_mean)}
+            {renderScalarCard("D-Cl · 升力 RMS", data.metrics_cl_rms, data.paper_cl_rms)}
+          </div>
+          {data.metrics_u_centerline && data.paper_u_centerline && (() => {
+            const uc = data.metrics_u_centerline;
+            const allPass = uc.all_within_tolerance;
+            return (
+              <div className={`rounded-md border p-4 ${
+                allPass
+                  ? "border-emerald-800/60 bg-emerald-900/15"
+                  : "border-amber-800/60 bg-amber-900/15"
+              }`}>
+                <div className="mb-3 flex items-baseline gap-2">
+                  <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+                    D-u · 尾迹中线速度亏损剖面 (4 stations)
+                  </span>
+                  <span className={`mono text-[10.5px] font-semibold ${
+                    allPass ? "text-emerald-300" : "text-amber-300"
+                  }`}>
+                    {allPass ? "PASS (4/4)" : `PARTIAL (${
+                      uc.stations.filter((s) => s.within_tolerance).length
+                    }/${uc.stations.length})`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {uc.stations.map((s) => (
+                    <div key={s.x_D} className={`rounded p-2 ${
+                      s.within_tolerance
+                        ? "bg-emerald-950/50"
+                        : "bg-rose-950/50"
+                    }`}>
+                      <div className="text-[10.5px] text-surface-500">x/D={s.x_D}</div>
+                      <div className="mono text-[12px] text-surface-100">
+                        {s.actual.toFixed(3)}
+                      </div>
+                      <div className="text-[10px] text-surface-500">
+                        gold {s.expected.toFixed(2)}
+                      </div>
+                      <div className={`mono text-[10.5px] ${
+                        s.within_tolerance ? "text-emerald-300" : "text-rose-300"
+                      }`}>
+                        {s.deviation_pct >= 0 ? "+" : ""}{s.deviation_pct.toFixed(1)}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 text-[11px] text-surface-400">
+                  语义：wake deficit = (U∞ − u_mean)/U∞ · 容差 ±{uc.tolerance_pct.toFixed(0)}% · 来源：{data.paper_u_centerline.source}
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+      );
+    }
+
+    // Other visual_only cases: no scalar-anchor cards yet.
+    return null;
   }
   if (!data.metrics || !data.paper) return null;
 
@@ -2689,6 +2825,80 @@ type ComparisonReportContext = {
     method?: string | null;
   } | null;
   paper_reattachment?: {
+    source: string;
+    doi?: string;
+    short: string;
+    tolerance_pct: number;
+  } | null;
+  // DEC-V61-053 Batch D: cylinder 4-scalar anchor (Williamson 1996).
+  // All 4 metrics + matching paper blocks are null when the audit fixture
+  // is stale (measurement.quantity=U_max_approx, no secondary_scalars).
+  // Lighten/flatten shape mirrors metrics_reattachment so the BFS card
+  // pattern can be reused × 3 for D-St / D-Cd / D-Cl_rms.
+  metrics_strouhal?: {
+    quantity: string;
+    symbol: string;
+    actual: number;
+    expected: number;
+    deviation_pct: number;
+    tolerance_pct: number;
+    within_tolerance: boolean;
+    method?: string | null;
+  } | null;
+  paper_strouhal?: {
+    source: string;
+    doi?: string;
+    short: string;
+    tolerance_pct: number;
+  } | null;
+  metrics_cd_mean?: {
+    quantity: string;
+    symbol: string;
+    actual: number;
+    expected: number;
+    deviation_pct: number;
+    tolerance_pct: number;
+    within_tolerance: boolean;
+    method?: string | null;
+  } | null;
+  paper_cd_mean?: {
+    source: string;
+    doi?: string;
+    short: string;
+    tolerance_pct: number;
+  } | null;
+  metrics_cl_rms?: {
+    quantity: string;
+    symbol: string;
+    actual: number;
+    expected: number;
+    deviation_pct: number;
+    tolerance_pct: number;
+    within_tolerance: boolean;
+    method?: string | null;
+  } | null;
+  paper_cl_rms?: {
+    source: string;
+    doi?: string;
+    short: string;
+    tolerance_pct: number;
+  } | null;
+  // Profile observable (4 stations at x/D ∈ {1, 2, 3, 5}).
+  metrics_u_centerline?: {
+    quantity: string;
+    symbol: string;
+    stations: {
+      x_D: number;
+      actual: number;
+      expected: number;
+      deviation_pct: number;
+      within_tolerance: boolean;
+    }[];
+    tolerance_pct: number;
+    all_within_tolerance: boolean;
+    method?: string | null;
+  } | null;
+  paper_u_centerline?: {
     source: string;
     doi?: string;
     short: string;
