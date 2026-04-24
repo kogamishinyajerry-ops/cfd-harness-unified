@@ -19,7 +19,7 @@ pivot:
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-24_commit_f0b1c0d_awaits_opus_追签
-    G-3_gov1_version_policy_v1: DONE_2026-04-24_commit_acb1993_codex_pending
+    G-3_gov1_version_policy_v1: DONE_2026-04-25_commits_acb1993_41fed9d_63b02bf_cb31c9a_codex_R1_R2_CHANGES_REQUIRED_R3_CHANGES_REQUIRED_verbatim_fixed_opus_option_X_spec_promotion_gate_v1_1
     G-4_spec_promotion_gate: DONE_2026-04-24_commit_f0b1c0d
     G-5_adr001_import_static: DONE_2026-04-24_commits_4fd9215_9d372fb_codex_R1_APPROVE_WITH_COMMENTS_verbatim_fixed
     G-6_caseprofile_risk_flags: DONE_2026-04-24_commit_88d7a8e
