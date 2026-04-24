@@ -70,7 +70,7 @@ requires ADR-001 addendum.
 | `src.correction_recorder` | CorrectionSpec artifact builder (persistence to Knowledge is done by Control via `TaskRunner` → `KnowledgeDB.save_correction`, not by this module directly) |
 | `src.auto_verifier.*` | Three-layer AutoVerifier |
 | `src.report_engine.*` | Visual acceptance + dashboard generators |
-| `src.metrics.*` | MetricsRegistry + 4 metric class skeletons (P1-T1 · pointwise / integrated / spectral / residual) per METRICS_AND_TRUST_GATES v0.1 Draft |
+| `src.metrics.*` | MetricsRegistry + 4 metric class wrappers (P1-T1 arc clean-close DEC-V61-054) + TrustGate overall-verdict reducer (P1-T2) per METRICS_AND_TRUST_GATES v0.1 Draft |
 
 #### Knowledge Plane (`src.knowledge.*` · logical label)
 

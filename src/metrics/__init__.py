@@ -34,6 +34,7 @@ from .pointwise import PointwiseMetric
 from .integrated import IntegratedMetric
 from .spectral import SpectralMetric
 from .residual import ResidualMetric
+from .trust_gate import TrustGateReport, reduce_reports
 
 __all__ = [
     "Metric",
@@ -45,4 +46,6 @@ __all__ = [
     "IntegratedMetric",
     "SpectralMetric",
     "ResidualMetric",
+    "TrustGateReport",
+    "reduce_reports",
 ]
