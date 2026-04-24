@@ -37,6 +37,7 @@ forbidden_modules =
     src.correction_recorder
     src.auto_verifier
     src.report_engine
+    src.metrics
 
 # ===== Contract 2: Evaluation must not import Execution =====
 [importlinter:contract:evaluation-never-imports-execution]
@@ -50,6 +51,7 @@ source_modules =
     src.correction_recorder
     src.auto_verifier
     src.report_engine
+    src.metrics
 forbidden_modules =
     src.foam_agent_adapter
     src.airfoil_surface_sampler
@@ -83,6 +85,7 @@ forbidden_modules =
     src.correction_recorder
     src.auto_verifier
     src.report_engine
+    src.metrics
 
 # ===== Contract 4: shared contracts stay dependency-free =====
 [importlinter:contract:models-stays-pure]
@@ -109,4 +112,5 @@ forbidden_modules =
     src.correction_recorder
     src.auto_verifier
     src.report_engine
+    src.metrics
     src.knowledge_db
