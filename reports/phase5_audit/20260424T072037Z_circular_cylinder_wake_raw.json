@@ -1,0 +1,27 @@
+{
+  "case_id": "circular_cylinder_wake",
+  "measured_at": "2026-04-24T07:20:37Z",
+  "duration_s": 8142.008,
+  "solver_success": true,
+  "key_quantities": {
+    "U_max_approx": 0.00986214,
+    "strouhal_number": 0.13784461152882208,
+    "cd_mean": 1.3790543620796876,
+    "cl_rms": 0.08094277312528547,
+    "strouhal_source": "forceCoeffs_fft_v1",
+    "strouhal_dominant_frequency_hz": 1.3784461152882206,
+    "strouhal_fft_window_s": 7.98,
+    "strouhal_transient_trim_s": 2.0,
+    "strouhal_samples_used": 400,
+    "strouhal_low_confidence": false
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity: strouhal_number | Tolerance: 5.0% | Failed: 1 deviation(s)",
+  "deviations": [
+    {
+      "quantity": "strouhal_number",
+      "actual": 0.13784461152882208,
+      "expected": 0.165
+    }
+  ]
+}

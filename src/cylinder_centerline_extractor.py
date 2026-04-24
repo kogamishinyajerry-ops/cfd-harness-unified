@@ -154,7 +154,21 @@ def extract_centerline_u_deficit(
     fo_dir = case_dir / "postProcessing" / fo_name
     time_dirs = _list_time_dirs(fo_dir)
     if not time_dirs:
-        return {}
+        # DEC-V61-053 live-run attempt 6 (2026-04-24): FO registered but
+        # postProcessing/cylinderCenterline/ never materialized on disk.
+        # Emit a single diagnostic key via an exception so the adapter's
+        # try/except records u_deficit_extractor_error, making the silent
+        # failure visible in the audit fixture. Without this, the absence
+        # of deficit_x_over_D_* keys is ambiguous (FO didn't fire? dir got
+        # cleaned? extractor bug?). Explicit reason beats silence.
+        raise RuntimeError(
+            f"cylinderCenterline FO produced no time dirs at "
+            f"{fo_dir}. Check (a) FO actually wrote (look for "
+            f"'Writing postProcessing/{fo_name}' in solver log), "
+            f"(b) case_dir is still on disk when extractor runs "
+            f"(shutil.rmtree in finally block runs AFTER return), "
+            f"(c) FO config (writeControl/writeInterval/fields/points)."
+        )
 
     # Codex round-1 HIGH-1 fix: trim by physical time, not sample count.
     # With writeControl=timeStep + adjustable deltaT, startup samples can

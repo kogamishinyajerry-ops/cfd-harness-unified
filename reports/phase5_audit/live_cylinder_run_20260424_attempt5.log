@@ -1,0 +1,3 @@
+[audit] commit: e8b92ed · cases: ['circular_cylinder_wake']
+[audit] circular_cylinder_wake → start
+[audit] [WARN] field artifact dir missing, skipping manifest: /Users/Zhuanz/Desktop/cfd-harness-unified/reports/phase5_fields/circular_cylinder_wake/20260424T050216Z

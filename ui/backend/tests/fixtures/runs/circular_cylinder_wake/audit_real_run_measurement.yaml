@@ -9,7 +9,7 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit d3ffc06）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit c81c0aa）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
@@ -18,36 +18,24 @@ run_metadata:
 case_id: circular_cylinder_wake
 source: phase5_audit_run_foam_agent
 measurement:
-  value: null
+  value: 0.13784461152882208
   unit: dimensionless
-  run_id: audit_circular_cylinder_wake_d3ffc06
-  commit_sha: d3ffc06
-  measured_at: '2026-04-24T04:52:13Z'
+  run_id: audit_circular_cylinder_wake_c81c0aa
+  commit_sha: c81c0aa
+  measured_at: '2026-04-24T07:20:37Z'
   quantity: strouhal_number
-  extraction_source: no_numeric_quantity
+  extraction_source: comparator_deviation
   solver_success: true
   comparator_passed: false
 audit_concerns:
-- concern_type: MISSING_TARGET_QUANTITY
-  summary: Extractor could not locate gold quantity 'strouhal_number' in run key_quantities.
-  detail: Gold standard expected a measurement of 'strouhal_number' (with result_comparator
-    alias resolution), but the case-specific extractor did not emit that key. Prior
-    harness behaviour (pre-DEC-V61-036) silently substituted the first numeric key_quantities
-    entry and compared it against the gold's tolerance band — that PASS-washing path
-    is now closed. The adapter needs a case-specific extractor for this quantity;
-    the verdict is hard-FAIL until that lands.
-  decision_refs:
-  - DEC-V61-036
 - concern_type: CONTRACT_STATUS
-  summary: 'Quantity ''strouhal_number'' not found in execution result (tried aliases:
-    (''St'', ''strouhal'', ''shedding_St''); available scalar keys: [''U_max_approx''])'
-  detail: 'Quantity ''strouhal_number'' not found in execution result (tried aliases:
-    (''St'', ''strouhal'', ''shedding_St''); available scalar keys: [''U_max_approx''])'
+  summary: 'Quantity: strouhal_number | Tolerance: 5.0% | Failed: 1 deviation(s)'
+  detail: 'Quantity: strouhal_number | Tolerance: 5.0% | Failed: 1 deviation(s)'
   decision_refs:
   - DEC-V61-028
 - concern_type: DEVIATIONS
   summary: 1 deviation(s) over tolerance
-  detail: 'strouhal_number: actual=None expected=[{''value'': 0.165, ''unit'': ''dimensionless''}]'
+  detail: 'strouhal_number: actual=0.13784461152882208 expected=0.165'
   decision_refs:
   - DEC-V61-028
 decisions_trail:

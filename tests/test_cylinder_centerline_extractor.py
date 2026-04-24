@@ -100,14 +100,20 @@ def test_happy_path_4_stations_average_to_gold(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_postprocessing_dir_returns_empty(tmp_path: Path) -> None:
-    """Extractor must fail closed when postProcessing/cylinderCenterline/
-    doesn't exist (FO never ran; solver crashed before first write).
+def test_no_postprocessing_dir_raises_with_diagnostic(tmp_path: Path) -> None:
+    """Extractor must fail LOUDLY (not silently) when postProcessing/
+    cylinderCenterline/ doesn't exist — DEC-V61-053 live-run attempt 6
+    surfaced that silent empty-dict return made it impossible to
+    distinguish "FO didn't fire" from "extractor bug" from "case cleaned
+    up pre-extraction". The adapter's try/except catches the exception
+    and records u_deficit_extractor_error in key_quantities, making the
+    failure visible in the audit fixture.
     """
+    import pytest
     case_dir = tmp_path / "case"
     case_dir.mkdir()
-    result = extract_centerline_u_deficit(case_dir)
-    assert result == {}
+    with pytest.raises(RuntimeError, match="cylinderCenterline FO produced no time dirs"):
+        extract_centerline_u_deficit(case_dir)
 
 
 def test_fewer_than_min_samples_returns_empty(tmp_path: Path) -> None:
