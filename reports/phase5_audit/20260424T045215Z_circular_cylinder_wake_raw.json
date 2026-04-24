@@ -1,0 +1,23 @@
+{
+  "case_id": "circular_cylinder_wake",
+  "measured_at": "2026-04-24T04:52:15Z",
+  "duration_s": 8362.622,
+  "solver_success": true,
+  "key_quantities": {
+    "U_max_approx": 0.00986214
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity 'strouhal_number' not found in execution result (tried aliases: ('St', 'strouhal', 'shedding_St'); available scalar keys: ['U_max_approx'])",
+  "deviations": [
+    {
+      "quantity": "strouhal_number",
+      "actual": null,
+      "expected": [
+        {
+          "value": 0.165,
+          "unit": "dimensionless"
+        }
+      ]
+    }
+  ]
+}

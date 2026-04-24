@@ -379,11 +379,15 @@ def gen_circular_cylinder_wake():
     ax.add_patch(cyl)
 
     # u_mean_centerline sampling stations — 4 vertical ticks at x/D ∈ {1,2,3,5}, y=0.
+    # Labels staggered vertically at y=0.6/0.9/1.2/0.6 to avoid overlap near cylinder
+    # (stations at x/D=1,2,3 are 1D apart, labels "x/D=1"/"x/D=2"/"x/D=3" are ~1.5D
+    # wide at this plot scale so would collide if all on one y-level).
+    label_y = {1.0: 0.6, 2.0: 1.0, 3.0: 0.6, 5.0: 0.6}
     for x_D in (1.0, 2.0, 3.0, 5.0):
         ax.plot([x_D], [0.0], marker="o", markersize=6.0,
                 markerfacecolor="red", markeredgecolor="white",
                 markeredgewidth=0.8, zorder=6)
-        ax.text(x_D, 0.6, f"x/D={x_D:g}", color="red", fontsize=7,
+        ax.text(x_D, label_y[x_D], f"x/D={x_D:g}", color="red", fontsize=7,
                 ha="center", zorder=6)
 
     # Gold St annotation in the corner.

@@ -1,0 +1,10 @@
+{
+  "case_id": "circular_cylinder_wake",
+  "measured_at": "2026-04-24T02:30:08Z",
+  "duration_s": 258.723,
+  "solver_success": false,
+  "key_quantities": {},
+  "comparator_passed": null,
+  "comparator_summary": null,
+  "deviations": []
+}

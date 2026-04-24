@@ -65,22 +65,20 @@ export const FLOW_FIELDS: Record<string, FlowFieldAsset[]> = {
   ],
   circular_cylinder_wake: [
     {
+      src: "/flow-fields/circular_cylinder_wake/karman_shedding.png",
+      caption_zh:
+        "|U|(x,y) 瞬时场 · pimpleFoam laminar Re=100 · 清晰可见 Karman 涡街向下游脱落 · 红点标 u_mean_centerline 4 个采样站 (x/D ∈ {1,2,3,5})",
+      provenance:
+        "Real |U|(x,y) from pimpleFoam laminar Re=100 cylinder audit VTK (DEC-V61-053 live run 2026-04-24, 40k cells on grown domain L_up=10D/L_down=20D/H=6D → 8% blockage, endTime=10s ≈ 16 resolved shedding periods at St=0.164). VTK snapshot at t=10s. Skip-guard in scripts/flow-field-gen/generate_contours.py refuses to render on pre-Batch-B1 fixtures (x-span<15D) or diverged solver output (|U|_max>3·U_inf). St=0.164 gold annotation from Williamson 1996.",
+      kind: "solver_output",
+    },
+    {
       src: "/flow-fields/circular_cylinder_wake/strouhal_curve.png",
       caption_zh: "St(Re) · Williamson 1996 实验拟合 · 红带显示 canonical-band shortcut 区域",
       provenance:
         "Williamson (1996) eqn (1) St = 0.2175 - 5.1064/Re for Re ∈ [49, 180]; saturates to ~0.21 above Re=300.",
       kind: "literature_data",
     },
-    // DEC-V61-053 Batch D solver_output figure — karman_shedding.png — will
-    // be registered here once scripts/flow-field-gen/generate_contours.py
-    // stops skipping on pre-B1 fixtures. Skip-guard requires x-span ≥ 15D
-    // AND |U|_max ≤ 3·U_inf; current fixture is 10D pre-B1 steady simpleFoam
-    // so the generator correctly refuses to ship a misleading PNG.
-    // Registration body (add below after fixture regen):
-    //   { src: "/flow-fields/circular_cylinder_wake/karman_shedding.png",
-    //     caption_zh: "|U|(x,y) 瞬时场 · pimpleFoam laminar Re=100 · Karman 涡街 · 4 红点=u_mean_centerline 采样站",
-    //     provenance: "Transient pimpleFoam VTK from DEC-V61-053 post-B1 live audit run (domain L_up=10D/L_down=20D/H=6D, ~144k cells). St=0.164 gold annotation from Williamson 1996.",
-    //     kind: "solver_output" }
   ],
   plane_channel_flow: [
     {
