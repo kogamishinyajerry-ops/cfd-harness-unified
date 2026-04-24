@@ -28,7 +28,7 @@ external_gate_caveat: |
   when src.metrics is packaged for downstream distribution. Not
   blocking; flag for P2 packaging DEC.
 codex_tool_report_path: reports/codex_tool_reports/dec_v61_055_p1_t2_t3_review.log (pending)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-25T04:05 · Status=Proposed (page_id=34cc6894-2bed-81bb-84da-fffed3160327, URL=https://www.notion.so/DEC-V61-055-P1-T2-TrustGate-reducer-P1-T3-CaseProfile-tolerance_policy-loader-34cc68942bed81bb84dafffed3160327)
 github_sync_status: pushed (2 feat commits + 1 state stamp on origin/main)
 reversibility: MEDIUM — TrustGate reducer is a pure function, easily
   removable. CaseProfile loader touches 2 case profile YAMLs additively
