@@ -1,0 +1,160 @@
+# Risk-flag canonical registry — enum source-of-truth for CaseProfile.risk_flags[]
+# and intake.yaml §4 risk_flags slots.
+#
+# Authority:  Opus 4.7 Pivot Post-Hoc Review §7 (2026-04-24) — "risk flags
+#             属于 intake.yaml schema 的必填字段, 应写进 KNOWLEDGE_OBJECT_MODEL
+#             的 CaseProfile 对象定义".
+# Gate:       G-6 of Post-Pivot Go/No-Go (docs/governance/PIVOT_CHARTER_2026_04_22.md §4.3a).
+# Schema ver: 1 (integer, per VERSION_COMPATIBILITY_POLICY v1.0 §2.1).
+# Effective:  2026-04-24.
+#
+# Each entry is a named risk annotation. CaseProfile.risk_flags[] MUST only
+# reference flag_id values that appear in this file's `flags:` list.
+# Per-case populated files live at .planning/case_profiles/<case_id>.yaml.
+#
+# When a flag proves obsolete: do NOT delete. Set status: deprecated + deprecation_since
+# + successor (if any). Keeps provenance auditable (per VERSION_COMPATIBILITY_POLICY §5.3).
+
+schema_version: 1
+registry_version: "1.0.0"
+effective: "2026-04-24"
+
+flags:
+
+  # -- Mandatory v2.0+ template slots (RETRO-V61-053 post-R3 2026-04-24) --
+
+  - flag_id: executable_smoke_test
+    severity_default: high
+    origin: RETRO-V61-053 post-R3 addendum
+    origin_date: "2026-04-24"
+    origin_commit: "d3ffc06"
+    description: |
+      Unit tests exercising generator methods via direct call bypass the
+      dispatch-layer where upstream accessors (e.g. self._db.get_execution_chain)
+      are evaluated. Codex static review catches logic bugs but cannot catch
+      accessor-level bugs without actual runtime execution.
+    mitigation_pattern: |
+      Before accepting ANY Codex APPROVE on adapter change, run one
+      short-duration (<10min wall) end-to-end invocation through the
+      dispatch path. Docker-based OpenFOAM smoke test qualifies; or a pytest
+      mock that constructs FoamAgentExecutor and calls .execute(task) through
+      to blockMesh, not leaf generators.
+    applies_to:
+      - adapter changes touching dispatch paths
+      - new extractor modules
+      - new executor method additions
+
+  - flag_id: solver_stability_on_novel_geometry
+    severity_default: high
+    origin: RETRO-V61-053 post-R3 addendum
+    origin_date: "2026-04-24"
+    origin_commit: "35f3278"
+    description: |
+      pimpleFoam / simpleFoam solver stability on a specific mesh + BC
+      combination is runtime-emergent. checkMesh can report clean, Codex
+      can approve fvSolution static content, and still the solver diverges
+      on timestep 1 due to smoother-vs-BC interaction (e.g. GAMG+GaussSeidel
+      diverged p on cylinder noSlip Neumann; PCG+DIC required as robust
+      fallback).
+    mitigation_pattern: |
+      (a) Compare fvSolution against closest OF.org tutorial for geometry
+          type (cylinder → incompressible/pimpleFoam/laminar/cylinder;
+          BFS → incompressible/simpleFoam/pitzDaily).
+      (b) If BC type (noSlip / freeSlip / fixedValue) or domain dims change
+          vs tutorial, prefer PCG+DIC over GAMG for p-solve as robust default.
+      (c) executable_smoke_test catches this immediately.
+    applies_to:
+      - new case geometry types
+      - BC type changes
+      - domain dimension changes >10% on any axis
+
+  - flag_id: python_version_parity
+    severity_default: med
+    origin: RETRO-V61-053 P0 2026-04-24 R2
+    origin_date: "2026-04-24"
+    description: |
+      Python 3.9 (CI / Codex shim default) vs 3.12 (project .venv) have
+      different f-string parsers (PEP-701). Nested multi-line f-strings that
+      parse under 3.12 can crash 3.9 with SyntaxError.
+    mitigation_pattern: |
+      MUST run `python3 -m py_compile <all changed .py>` before any Stage A
+      commit. Do not rely on .venv-only syntax validation. If forced to
+      write a nested conditional containing an f-string, hoist the inner
+      string to a separate variable first.
+    applies_to:
+      - any .py change using nested f-strings
+      - any code scheduled to run under Python 3.9 (Codex shim / CI matrix)
+
+  - flag_id: mesh_density_on_domain_change
+    severity_default: med
+    origin: RETRO-V61-053 P1 2026-04-24 R1
+    origin_date: "2026-04-24"
+    description: |
+      When blockMesh dimensions change by >10% on any axis (dx, dy, cell
+      count), risk of "scale cells proportionally" being forgotten and
+      resolution coarsening silently. V61-053 Batch B1 grew domain 3× but
+      only scaled cells 2×, losing 33% wall resolution.
+    mitigation_pattern: |
+      Compute and COMMENT in the adapter's blockMesh block:
+      dx=dy=<val>D at the cylinder/feature (numerical value). This becomes
+      a reviewable assertion — stale dimensions surface immediately.
+    applies_to:
+      - blockMesh dimension changes
+      - domain extent changes
+      - mesh refinement studies
+
+  - flag_id: numerical_noise_snr
+    severity_default: med
+    origin: RETRO-V61-050 2026-04-24 R1
+    origin_date: "2026-04-24"
+    description: |
+      When extraction method has a known numerical floor (e.g.
+      psi_wall_closure_residual ≈ 3e-3 for ∫U_x dy' on 129² grid) and a
+      gate's gold value can be below that floor (e.g. LDC BL/BR ψ_gold
+      ≈ 1e-6), extraction becomes argmax-coincidence, not validated
+      physics. Live smoke-test "2/2 PASS" on a noise-floor result is a LURE.
+    mitigation_pattern: |
+      For every gate, compute and COMMIT: extraction_numerical_floor vs
+      |gate_gold_value|. If ratio < 10×, either refuse the gate (move to
+      follow-up DEC) or use a different extraction method (Poisson solve
+      for ψ, native OpenFOAM FO instead of trapezoidal, etc.). UI must
+      render a signal_above_noise flag.
+    applies_to:
+      - gates with gold values <1e-3
+      - integrand-based extractors
+      - indirect measurement derivations
+
+# ===========================================================================
+# How to reference from a CaseProfile
+# ===========================================================================
+# .planning/case_profiles/<case_id>.yaml format:
+#
+#   case_id: circular_cylinder_wake
+#   schema_version: 1
+#   last_assessed: "2026-04-24"
+#   last_assessed_by: "Claude Code (G-6)"
+#   risk_flags:
+#     - flag_id: executable_smoke_test    # MUST match registry flags[].flag_id
+#       triggered: true
+#       justification: "FoamAgentExecutor had self._db accessor bug caught only at live run"
+#     - flag_id: solver_stability_on_novel_geometry
+#       triggered: true
+#       justification: "GAMG+GaussSeidel diverged; PCG+DIC required"
+#     - flag_id: python_version_parity
+#       triggered: false
+#       justification: "No nested f-strings in changed .py"
+#
+# Unmentioned flag_ids default to triggered=false. Explicit false is for
+# flags where an audit considered the flag and actively ruled it out.
+
+# ===========================================================================
+# Deprecation policy
+# ===========================================================================
+# Flags are never deleted. To retire a flag:
+#   status: deprecated
+#   deprecation_since: YYYY-MM-DD
+#   successor: <other_flag_id>  # optional
+#   reason: <short text>
+#
+# CaseProfiles referencing deprecated flags remain valid; lint warns but
+# does not fail. Full removal requires separate Opus Gate sign-off.

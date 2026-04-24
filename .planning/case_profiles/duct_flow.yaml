@@ -1,0 +1,22 @@
+# CaseProfile stub — G-6 backfill (Opus 4.7 Pivot Post-Hoc Review §7).
+# Schema: knowledge/schemas/risk_flag_registry.yaml (schema_version=1).
+# Only the 2 mandatory post-R3 flags are populated per Opus directive;
+# triggered=false means the audit on 2026-04-24 considered each flag
+# against this case's historical record and ruled it out.
+
+case_id: duct_flow
+schema_version: 1
+last_assessed: "2026-04-24"
+last_assessed_by: "Claude Code (G-6 backfill · Opus Pivot Review §7)"
+
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: false
+    justification: |
+      No post-R3 dispatch-layer defect recorded for this case on main.
+      Flag re-evaluated if future DEC touches adapter dispatch path.
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      Case uses established OpenFOAM tutorial solver topology; no
+      smoother-vs-BC divergence reported to date on main.

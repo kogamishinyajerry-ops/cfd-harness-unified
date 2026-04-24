@@ -232,3 +232,19 @@ full close.
 - Intake: `.planning/intake/DEC-V61-053_circular_cylinder_wake.yaml`
 - Codex logs: `reports/codex_tool_reports/dec_v61_053_{plan_review,round1,round2,round3}.log`
 - Methodology: Notion page `34bc68942bed8189be77c703cc62d0f4` §8 (v2.0 patches)
+
+---
+
+## Addendum 2026-04-24 · risk_flag registry promotion (G-6)
+
+`executable_smoke_test` + `solver_stability_on_novel_geometry` (both P0
+findings from this retro's post-R3 analysis) were **promoted to a
+canonical enum** on 2026-04-24 per G-6 of Post-Pivot Go/No-Go.
+
+- Registry: `knowledge/schemas/risk_flag_registry.yaml` (schema_version=1)
+- Per-case assessments: `.planning/case_profiles/<case_id>.yaml` (10 cases
+  backfilled; cylinder marks both flags `triggered: true`, others `false`)
+- Intake TEMPLATE pointer: `.planning/intake/TEMPLATE.yaml` header note
+
+This retro's narrative §10 remains the historical record; the registry
+is the machine-readable source of truth going forward.

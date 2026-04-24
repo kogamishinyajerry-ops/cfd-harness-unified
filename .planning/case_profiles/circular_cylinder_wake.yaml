@@ -1,0 +1,30 @@
+# CaseProfile stub — G-6 backfill (Opus 4.7 Pivot Post-Hoc Review §7).
+# Schema: knowledge/schemas/risk_flag_registry.yaml (schema_version=1).
+# Only the 2 mandatory post-R3 flags are populated per Opus directive;
+# additional registry flags may be audited in future DECs.
+
+case_id: circular_cylinder_wake
+schema_version: 1
+last_assessed: "2026-04-24"
+last_assessed_by: "Claude Code (G-6 backfill · Opus Pivot Review §7)"
+
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      DEC-V61-053 post-R3 live run surfaced FoamAgentExecutor accessor
+      bug (self._db.get_execution_chain AttributeError) that Codex
+      static review did not catch. Dispatch-layer smoke test now
+      required per RETRO-V61-053 addendum (2026-04-24 d3ffc06).
+    evidence_refs:
+      - .planning/retrospectives/2026-04-24_retro_v61_053_python_parity.md
+      - .planning/decisions/2026-04-23_cfd_cylinder_multidim_dec053.md
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: true
+    justification: |
+      pimpleFoam + GAMG/GaussSeidel diverged on cylinder noSlip Neumann
+      BC (timestep 1 p NaN). PCG+DIC required as robust fallback. This
+      is exactly the runtime-emergent defect class the flag encodes.
+    evidence_refs:
+      - .planning/retrospectives/2026-04-24_retro_v61_053_python_parity.md
+      - reports/phase5_audit/live_cylinder_run_20260424.log

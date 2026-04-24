@@ -68,6 +68,11 @@ observable_scope:
 # The 4 categories below are the v2.0+ mandatory template slots (4th, 5th, 6th,
 # 7th added by RETRO-V61-053 post-R3 addendum 2026-04-24). Add case-specific
 # flags above the mandatory slots when relevant.
+#
+# Canonical registry (promoted 2026-04-24 per G-6 of Post-Pivot Go/No-Go):
+# knowledge/schemas/risk_flag_registry.yaml — all `flag:` values below MUST
+# exist in the registry. CaseProfile instances live at
+# .planning/case_profiles/<case_id>.yaml.
 risk_flags:
   # --- case-specific (add as needed) ---
   - flag: <e.g. domain_blockage_mismatch>
