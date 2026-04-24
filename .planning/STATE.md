@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T01:05 local"
+last_updated: "2026-04-25T02:30 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1-T1 MVP skeleton landed (commit 2b5ceb7 · src.metrics package · 12 tests · 4 contracts KEPT)"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1-T1 arc COMPLETE (5 commits 2b5ceb7..1dd91eb · 4 metric class wrappers · 43 new tests · 619 passed · 4 contracts KEPT · Codex review pending)"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed
