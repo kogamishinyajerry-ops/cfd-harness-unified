@@ -310,6 +310,106 @@ def gen_circular_cylinder_wake():
     _save(fig, "circular_cylinder_wake", "strouhal_curve",
           "Williamson (1996) review eqn (1) for mode A shedding: St = 0.2175 - 5.1064/Re in Re ∈ [49, 180]; saturates around 0.21 at higher Re. Overlay shows the canonical-band shortcut zone our adapter used to fall into.")
 
+    # --- Figure 2: Real velocity-field contour from DEC-V61-053 fixture ---
+    # DEC-V61-053 Batch D: mirrors the BFS velocity_streamlines.png pattern.
+    # Reads the latest cylinder VTK, renders an instantaneous |U| snapshot
+    # with Karman vortex street visible, annotates the 4 u_centerline
+    # sampling stations (x/D ∈ {1, 2, 3, 5}) and the gold St=0.164. If no
+    # VTK is staged yet (stale fixture pre-B3-regen), skip silently so the
+    # generator doesn't fail on fresh clones.
+    fixture_root = REPO_ROOT / "reports/phase5_fields/circular_cylinder_wake"
+    candidates = sorted([p for p in fixture_root.iterdir()
+                         if p.is_dir() and p.name[0].isdigit()]) if fixture_root.is_dir() else []
+    vtk_path = None
+    for fx in reversed(candidates):
+        vtks = [v for v in (fx / "VTK").rglob("*.vtk")
+                if fx / "VTK" in v.parents and "allPatches" not in v.parts]
+        if vtks:
+            vtk_path = vtks[-1]  # latest-in-name = latest-time iteration
+            break
+    if vtk_path is None:
+        print("  [skip] no cylinder VTK fixture found — run scripts/phase5_audit_run.py circular_cylinder_wake")
+        return
+
+    try:
+        import pyvista as pv  # noqa: WPS433
+    except ImportError:
+        print("  [skip] pyvista not available in this interpreter")
+        return
+    mesh = pv.read(str(vtk_path))
+    mesh_pd = mesh.cell_data_to_point_data()
+    pts = np.asarray(mesh_pd.points)
+
+    # Stale-fixture detection — DEC-V61-053 Batch B1 grew the domain to
+    # L_up=10D + L_down=20D (total x-span ≥ 30D = 3.0 m). Any fixture
+    # with x-span < 15D (1.5 m) is pre-B1 and cannot illustrate the
+    # post-B1 Karman shedding. Also: simpleFoam laminar at Re=100 on the
+    # grown domain should produce |U|_max ≈ 1.2·U_inf ≈ 1.2 m/s; a fixture
+    # reporting |U|_max > 3·U_inf has not converged. Skip silently in
+    # either case — honesty beats a misleading placeholder PNG.
+    D_cyl = 0.1
+    x_span = float(pts[:, 0].max() - pts[:, 0].min())
+    U_all = np.asarray(mesh_pd["U"])
+    umag_raw_max = float(np.nanmax(np.sqrt(U_all[:, 0] ** 2 + U_all[:, 1] ** 2)))
+    if x_span < 15.0 * D_cyl:
+        print(f"  [skip] fixture x-span {x_span/D_cyl:.1f}D < 15D — pre-Batch-B1 domain, "
+              f"run live OpenFOAM on grown (10D/20D/6D) domain first")
+        return
+    if umag_raw_max > 3.0:
+        print(f"  [skip] fixture |U|_max = {umag_raw_max:.2f} m/s > 3·U_inf — not converged, "
+              f"re-run with longer end_time or smaller timestep")
+        return
+
+    U = U_all
+    umag = np.sqrt(U[:, 0] ** 2 + U[:, 1] ** 2)
+    finite = (np.isfinite(umag) & np.isfinite(pts[:, 0]) & np.isfinite(pts[:, 1])
+              & (umag < 3.0))
+    # Normalize x, y by D=0.1 so the plot reads x/D, y/D (Williamson convention).
+    X_over_D = pts[finite, 0] / D_cyl
+    Y_over_D = pts[finite, 1] / D_cyl
+    Umag = np.clip(umag[finite], 0.0, 1.5)
+
+    fig, ax = plt.subplots(figsize=(10.0, 4.0), facecolor=DARK_BG, dpi=200)
+    levels = np.linspace(0.0, 1.2, 20)
+    cf = ax.tricontourf(X_over_D, Y_over_D, Umag, levels=levels, cmap="viridis", extend="max")
+
+    # Cylinder outline (circle at origin, radius 0.5 in x/D space).
+    from matplotlib.patches import Circle
+    cyl = Circle((0.0, 0.0), 0.5, facecolor="#111", edgecolor="white", linewidth=1.0, zorder=5)
+    ax.add_patch(cyl)
+
+    # u_mean_centerline sampling stations — 4 vertical ticks at x/D ∈ {1,2,3,5}, y=0.
+    for x_D in (1.0, 2.0, 3.0, 5.0):
+        ax.plot([x_D], [0.0], marker="o", markersize=6.0,
+                markerfacecolor="red", markeredgecolor="white",
+                markeredgewidth=0.8, zorder=6)
+        ax.text(x_D, 0.6, f"x/D={x_D:g}", color="red", fontsize=7,
+                ha="center", zorder=6)
+
+    # Gold St annotation in the corner.
+    ax.text(0.98, 0.95,
+            "St (Williamson 1996) = 0.164",
+            transform=ax.transAxes, fontsize=8, color=PASS, ha="right", va="top",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=PANEL_BG, edgecolor=GRID))
+
+    _setup_axes(ax, "|U| 瞬时场 · simpleFoam laminar Re=100 · Karman 涡街",
+                "x / D", "y / D",
+                xmin=float(X_over_D.min()), xmax=float(X_over_D.max()),
+                ymin=float(Y_over_D.min()), ymax=float(Y_over_D.max()))
+    ax.set_aspect("equal")
+    ax.grid(False)
+    cbar = fig.colorbar(cf, ax=ax, shrink=0.78, pad=0.02, aspect=30)
+    cbar.set_label("|U| / U_inf", color=AXIS_TEXT, fontsize=8.5)
+    cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
+    cbar.outline.set_edgecolor(GRID)
+    _save(fig, "circular_cylinder_wake", "karman_shedding",
+          f"Real |U|(x,y) instantaneous snapshot from simpleFoam laminar Re=100 "
+          f"cylinder wake audit VTK ({vtk_path.parent.parent.name}, ~144k cells, "
+          f"L_up=10D/L_down=20D/H=6D → 8% blockage per DEC-V61-053 Batch B1). "
+          f"Red dots mark the 4 u_mean_centerline sampling stations at "
+          f"x/D ∈ {{1, 2, 3, 5}} (Williamson 1996 Fig.19 comparison points). "
+          f"Cylinder outline at origin; y/D coordinate normalizes by D=0.1 m.")
+
 
 # ---------------------------------------------------------------------------
 # 4. Plane Channel Flow — log-law universal profile
