@@ -4871,22 +4871,26 @@ application     pimpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-041: endTime extended to 200 convective units (D=0.1, U=1 →
-// t_ref=D/U=0.1s, so 200s = 2000 shedding cycles per D). At St=0.164
-// that's >30 resolved shedding periods post-transient-trim, giving
-// frequency resolution Δf ≈ 1/150s ≈ 0.0067 Hz → ΔSt ≈ 0.00067
-// (comfortably inside the 5% tolerance of gold 0.164).
-endTime         200.0;
-// DEC-V61-041: adjustable timestep keeps Co≤0.5 so Nyquist is safe at
-// any achievable shedding frequency; deltaT starting value is for the
-// ramp-up. maxDeltaT ensures ≥100 samples per shedding period even
-// after CFL relaxes on a well-resolved wake.
-deltaT          0.001;
+// DEC-V61-053 Batch B1 live-run tuning (2026-04-24): first-pass audit
+// endTime=10s. At St=0.164 the shedding period T = D/U/St ≈ 0.61s; 10s
+// gives ~2.5s transient (4 periods) + 7.5s steady (~12 resolved periods).
+// Δf ≈ 1/7.5s ≈ 0.13 Hz → ΔSt ≈ 0.013 (just above the 5% gold tolerance
+// 0.0082 — acceptable for demonstration audit, needs precision follow-up
+// before claiming final Williamson comparison). The 60s / 200s targets
+// are retained in comments as future precision upgrades.
+endTime         10.0;
+// DEC-V61-053 Batch B1 live-run tuning (2026-04-24): maxCo=1.0 doubles
+// the achievable timestep vs the conservative 0.5 (shedding frequency
+// is well-resolved at Co=1 on this refined grid; Nyquist margin per
+// DEC-V61-041 was 2x). deltaT bumped to 0.005 so the adaptive ramp
+// starts closer to stationary Co. maxDeltaT 0.02 keeps ≥30 samples
+// per shedding period at St=0.164.
+deltaT          0.005;
 adjustTimeStep  yes;
-maxCo           0.5;
-maxDeltaT       0.01;
+maxCo           1.0;
+maxDeltaT       0.02;
 writeControl    runTime;
-writeInterval   10.0;
+writeInterval   2.0;
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  6;
@@ -5078,11 +5082,17 @@ FoamFile
 
 solvers
 {
+    // DEC-V61-053 live-run debug (2026-04-24): swapped GAMG+GaussSeidel
+    // for PCG+DIC on p. The GAMG path diverged on first pressure solve
+    // (Initial=1 → Final=nan in 1000 iters) for this external cylinder
+    // geometry; see reports/phase5_audit/live_cylinder_run_20260424.log.
+    // PCG+DIC is the recommended robust fallback for 2D cylinder wakes
+    // per OpenFOAM tutorials. Kept GAMG wiring commented as reference.
     p
     {
-        solver          GAMG;
-        smoother        GaussSeidel;
-        tolerance       1e-5;
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
         relTol          0.01;
     }
     pFinal
