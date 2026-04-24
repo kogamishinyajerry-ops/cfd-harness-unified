@@ -1,0 +1,231 @@
+# Stage 0 · Case Intake Assessment · TEMPLATE
+# Copy this to `.planning/intake/DEC-V61-XXX_<case_id>.yaml` before Stage A.
+#
+# Mandated by methodology v2.0 F1-M1 hard gate. See Notion methodology
+# page §8 for the full spec. This template is the canonical intake shape
+# — v2.0 first-apply (DEC-V61-053) proved it; DEC-V61-054+ MUST use it.
+#
+# Revision history format:
+#   v1 (YYYY-MM-DD HH:MM): initial draft, pass rate X.XX
+#   v2 (YYYY-MM-DD HH:MM): Codex pre-Stage-A review <verdict> — incorporated
+#        <N> required edits. See reports/codex_tool_reports/<log>.
+
+case_id: <case_id_snake_case>
+dec_id: DEC-V61-XXX
+case_number: X  # integer — position in the ongoing case sequence
+intake_authored_at: "YYYY-MM-DD"
+intake_author: "Claude Code (Opus 4.7, 1M context)"
+methodology_version: "v2.0"
+intake_version: 1
+codex_plan_review_verdict: PENDING  # update to APPROVE_PLAN / APPROVE_PLAN_WITH_CHANGES / REQUEST_CHANGES after pre-Stage-A Codex review
+
+# ============================================================================
+# §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
+# ============================================================================
+case_type: I|II|III
+case_type_rationale: |
+  Explain which gates exist, how many are physically independent (NOT just
+  implementation-independent), and why this satisfies Type I / II / III
+  requirements. Type I = ≥3 independent scalar gates. Type II = 1 primary
+  scalar gate + ≥2 qualitative/profile gates. Type III = exploratory or
+  canonical-only case (St/Cd baseline, no multi-dim).
+primary_gate_count: <int>
+case_type_hard_gate_signed: true
+headline_gate: <quantity_name>
+
+# ============================================================================
+# §2 Reference papers
+# ============================================================================
+reference_paper:
+  primary:
+    citation: "Author (YYYY). Title. Journal V, pp"
+    doi: "10.xxxx/xxxx"
+    providing: [list, of, gates]
+  secondary:  # optional cross-check sources
+    - citation: "..."
+      providing: [...]
+
+# ============================================================================
+# §3 Observable scope (hardens against breadth drift / scope creep)
+# ============================================================================
+observable_scope:
+  in_scope:
+    - quantity: <gate_1_name>
+      tolerance_pct: <float>
+      extraction_method: "how the adapter + extractor chain produce this value"
+      status_pre_DEC: "EXTRACTOR_EXISTS | EXTRACTOR_PARTIAL | NOT_IMPLEMENTED"
+      role: HEADLINE_GATE | CROSS_CHECK | INDEPENDENT_CROSS_CHECK
+  explicitly_out_of_scope:
+    - item: "<scope creep guard>"
+      reason: "<why this DEC does not include it>"
+
+# ============================================================================
+# §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
+# ============================================================================
+# Rubric: high = directly threatens primary_gate_count accuracy; med = likely
+# needs a Codex round-1 fix; low = probably survives review but worth declaring.
+#
+# The 4 categories below are the v2.0+ mandatory template slots (4th, 5th, 6th,
+# 7th added by RETRO-V61-053 post-R3 addendum 2026-04-24). Add case-specific
+# flags above the mandatory slots when relevant.
+risk_flags:
+  # --- case-specific (add as needed) ---
+  - flag: <e.g. domain_blockage_mismatch>
+    severity: high|med|low
+    codex_flagged: false  # flip to true after pre-Stage-A plan review if Codex raised it
+    description: |
+      What could go wrong physically / numerically, and the mechanism.
+    mitigation_in_batch: <batch letter or "none yet">
+
+  # --- mandatory v2.0+ slots below (omit at your peril) ---
+
+  - flag: python_version_parity  # RETRO-V61-053 P0 (2026-04-24 R2)
+    severity: med
+    codex_flagged: false
+    description: |
+      Python 3.9 (CI / Codex shim default) vs 3.12 (project .venv) have
+      different f-string parsers (PEP-701). Nested multi-line f-strings
+      that parse under 3.12 can crash 3.9 with SyntaxError.
+    mitigation_in_batch: |
+      MUST run `python3 -m py_compile <all changed .py>` before any
+      Stage A commit. Under no circumstances rely on .venv-only syntax
+      validation. If forced to write a nested conditional containing an
+      f-string, hoist the inner string to a separate variable first.
+
+  - flag: mesh_density_on_domain_change  # RETRO-V61-053 P1 (2026-04-24 R1)
+    severity: med
+    codex_flagged: false
+    description: |
+      Whenever blockMesh dimensions change by >10% in ANY axis (dx, dy,
+      cell count), there's a risk that "scale cells proportionally" gets
+      forgotten and resolution coarsens silently. V61-053 Batch B1 grew
+      domain 3× but only scaled cells 2×, losing 33% wall resolution.
+    mitigation_in_batch: |
+      Compute and COMMENT in the adapter's blockMesh block: dx=dy=<val>D
+      at the cylinder/feature (numerical value). This becomes a
+      reviewable assertion — stale dimensions surface immediately.
+
+  - flag: executable_smoke_test  # RETRO-V61-053 P0 post-R3 (2026-04-24 d3ffc06)
+    severity: high
+    codex_flagged: false
+    description: |
+      Unit tests that exercise a generator method via direct call
+      (`_generate_foo(tmp, task, turbulence_model="laminar")`) bypass
+      the dispatch-layer code path where `self._db.get_execution_chain`
+      or similar upstream accessors are evaluated. Codex review catches
+      LOGIC bugs ("should lookup whitelist") but cannot catch ACCESSOR
+      bugs ("self._db doesn't exist") without actually exercising them.
+    mitigation_in_batch: |
+      Before accepting ANY Codex APPROVE on an adapter change, run one
+      short-duration (<10min wall) end-to-end invocation through the
+      dispatch path. Docker-based OpenFOAM smoke test qualifies.
+      Alternative: a pytest-based mock that actually constructs the
+      FoamAgentExecutor and calls .execute(task) up to the point of
+      blockMesh, NOT just the leaf generator methods.
+
+  - flag: solver_stability_on_novel_geometry  # RETRO-V61-053 P0 post-R3 (2026-04-24 35f3278)
+    severity: high
+    codex_flagged: false
+    description: |
+      pimpleFoam / simpleFoam solver stability on a specific mesh + BC
+      combination is runtime-emergent. checkMesh can report clean, Codex
+      can approve the fvSolution static content, and still the solver
+      diverges on timestep 1 due to a smoother-vs-BC interaction. V61-053:
+      GAMG+GaussSeidel diverged p on the noSlip cylinder Neumann BC; PCG+DIC
+      was required as the robust fallback.
+    mitigation_in_batch: |
+      (a) Compare fvSolution against the closest OF.org tutorial for this
+          geometry type (cylinder → `incompressible/pimpleFoam/laminar/
+          cylinder`; BFS → `incompressible/simpleFoam/pitzDaily`).
+      (b) If the BC type (noSlip / freeSlip / fixedValue) or domain
+          dimensions change vs tutorial, prefer PCG+DIC over GAMG for
+          p-solve as robust default.
+      (c) executable_smoke_test (above) catches this immediately.
+
+  - flag: numerical_noise_snr  # RETRO-V61-050 (2026-04-24 R1)
+    severity: med
+    codex_flagged: false
+    description: |
+      Whenever the extraction method has a known numerical floor (e.g.
+      psi_wall_closure_residual ≈ 3e-3 for ∫U_x dy' on 129² grid) and a
+      gate's gold value can be below that floor (e.g. LDC BL/BR ψ_gold
+      ≈ 1e-6), the extraction becomes argmax-coincidence, not validated
+      physics. Live smoke-test "2/2 PASS" on a noise-floor result is a
+      LURE.
+    mitigation_in_batch: |
+      For every gate, compute and COMMIT: extraction_numerical_floor vs
+      |gate_gold_value|. If the ratio < 10×, either refuse the gate (move
+      to follow-up DEC) or use a different extraction method (Poisson
+      solve for ψ, native OpenFOAM FO instead of trapezoidal, etc.). UI
+      must render a `signal_above_noise` flag so students don't confuse
+      noise coincidences with physics.
+
+# ============================================================================
+# §5 Pre-Stage-A Codex plan review
+# ============================================================================
+codex_pre_stage_a_plan_review:
+  requested_at: "YYYY-MM-DD HH:MM"
+  verdict: PENDING  # → APPROVE_PLAN / APPROVE_PLAN_WITH_CHANGES / REQUEST_CHANGES
+  log_path: reports/codex_tool_reports/dec_v61_XXX_plan_review.log
+  required_edits_v1_to_v2: []  # list of edits applied; fill after v2
+
+# ============================================================================
+# §6 Self-estimated pass rate (F1-M1 honesty clause)
+# ============================================================================
+# RETRO-V61-001 rule: pass_rate ≤ 70% → pre-merge Codex review mandatory.
+# Be honest. Over-estimating triggers retro penalty. Under-estimating
+# (predicting 30% when actual is 80%) is fine — conservative is cheap.
+estimated_pass_rate_round1: 0.XX
+estimated_pass_rate_rationale: |
+  Explain the 3-5 biggest risk drivers that lowered pass rate from 1.0.
+  Each should connect back to a risk_flag above. Include per-flag
+  expected finding severity: "flag-X likely generates 1 MED finding,
+  flag-Y likely 1 HIGH + 1 LOW".
+
+# ============================================================================
+# §7 Batch plan (arc architecture)
+# ============================================================================
+# Codex pre-Stage-A review MAY rewrite this section. Final batch_plan
+# is the one in intake_version >= 2 after plan review response.
+batch_plan:
+  - batch: A
+    scope: "gold YAML hygiene + decisions documented"
+    commit_count_estimate: 1
+    atomicity_guard: "single commit; no code changes; doc-only"
+  - batch: B1
+    scope: "..."
+  - batch: B2
+    scope: "..."
+  - batch: C
+    scope: "preflight/gate wiring"
+  - batch: D
+    scope: "frontend + audit fixture surface + solver_output figure"
+
+# ============================================================================
+# §8 Codex budget (F6-M1 halt criterion)
+# ============================================================================
+codex_budget_rounds: 3  # soft target — V61-053 proved 3 rounds is achievable for Type I
+round_4_action: "health check — halt_risk_flag if CHANGES_REQUIRED"
+round_6_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
+
+# ============================================================================
+# §9 Stage-E close conditions (F1-M2 two-tier gate)
+# ============================================================================
+# Tier 1: code lands + ALL Codex-required fixes merged
+# Tier 2: ONE more clean Codex review round with verdict=APPROVE (not
+#         APPROVE_WITH_COMMENTS — F1-M2 demands clean)
+#
+# RETRO-V61-053 post-R3 addendum: also need an executable_smoke_test
+# checkbox for any adapter change.
+stage_e_close_checklist:
+  - item: "All Codex round-N findings landed in commits"
+    required: true
+  - item: "Clean Codex round-(N+1) verdict = APPROVE"
+    required: true
+  - item: "Executable smoke test passes (<10min wall docker invocation)"
+    required: true  # RETRO-V61-053 post-R3 addendum (2026-04-24)
+    waiver_allowed: "only for pure-doc / pure-YAML / pure-test-only DECs"
+  - item: "DEC frontmatter notion_sync_status updated to synced <date>"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented"
+    required: true
