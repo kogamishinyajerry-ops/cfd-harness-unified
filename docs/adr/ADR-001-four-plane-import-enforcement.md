@@ -67,7 +67,7 @@ requires ADR-001 addendum.
 | `src.convergence_attestor` | A1..A6 attestor |
 | `src.error_attributor` | Attribution analyzer |
 | `src.result_comparator` | Tolerance comparator |
-| `src.correction_recorder` | CorrectionSpec recorder (write-only to Knowledge) |
+| `src.correction_recorder` | CorrectionSpec artifact builder (persistence to Knowledge is done by Control via `TaskRunner` → `KnowledgeDB.save_correction`, not by this module directly) |
 | `src.auto_verifier.*` | Three-layer AutoVerifier |
 | `src.report_engine.*` | Visual acceptance + dashboard generators |
 
@@ -108,10 +108,12 @@ the dispatch model.
 - **Tool**: `import-linter >=2.0` (PyPI)
 - **Config location**: `.importlinter` at repo root (simpler than embedding in `pyproject.toml`)
 - **Optional dep group**: add to `pyproject.toml` under `[project.optional-dependencies]` `dev` group
-- **Contract types used**:
-  - `layers` — establish hierarchy (not strict "containment", just ordering)
-  - `forbidden` — explicit bidirectional Execution ⇄ Evaluation block
-  - `independence` — Knowledge can't depend on other planes
+- **Contract types used**: **4 `forbidden` contracts** (shipped W1; see `.importlinter`)
+  - Execution must not import Evaluation (7 source × 7 forbidden modules)
+  - Evaluation must not import Execution (reverse)
+  - Knowledge must not import Control/Execution/Evaluation
+  - `src.models` must not import any other `src.*` module (type-only escape hatch)
+  - `layers` / `independence` contract types were **considered but not shipped** — the 4 `forbidden` contracts encode the two HARD NOs + Knowledge reverse-import + models purity, which is exactly what SYSTEM_ARCHITECTURE §2 requires. Future expansion (e.g. Plugin Plane) may add a 5th contract
 
 ### 2.4 Enforcement path
 
@@ -191,12 +193,13 @@ retro.
 
 | # | Criterion | Evidence |
 |---|---|---|
-| A1 | `.importlinter` config lints all 6 contracts (4 layers + 2 forbidden + 1 independence) without errors | `lint-imports` exit 0 on main |
+| A1 | `.importlinter` lints **4 forbidden contracts** without errors | `lint-imports` exit 0 on main; `Contracts: 4 kept, 0 broken` |
 | A2 | `lint-imports` runs in < 10s locally on current src/ | Measured on M1 Mac |
 | A3 | Pre-commit hook installed and runs `lint-imports` | `.pre-commit-config.yaml` present |
 | A4 | CI `backend-tests` job runs `lint-imports` before `pytest` | `.github/workflows/ci.yml` updated |
 | A5 | Zero violations reported on current `main` | See §2.5 |
 | A6 | Adding a deliberate violation fails CI | Manual verification in PR description |
+| A7 | **New-module governance rule**: any PR adding a new top-level `src.*` module (or reassigning one between planes) must update `.importlinter` in the same commit. Reviewer checks this in the PR template. (Per Codex G-5 round 1 Medium #3 — hand-enumerated `source_modules`/`forbidden_modules` lists are brittle without this rule.) | PR reviewer checklist |
 
 ### 4.2 Codex independent verification
 
@@ -238,3 +241,4 @@ owner, target week.*
 | Version | Date | Author | Change |
 |---|---|---|---|
 | v1.0-draft | 2026-04-24 | Claude Code + Opus 4.7 Post-Hoc Gate | Initial draft; static layer only; W2-W3 runtime layer scheduled as ADR-002 |
+| v1.0-accepted | 2026-04-24 | Claude Code + Codex G-5 round 1 APPROVE_WITH_COMMENTS | Address 3 Medium + 1 Low: (a) §2.3 ADR prose aligned to actual 4 `forbidden` contracts (layers / independence dropped; ship/text parity); (b) §2.1 correction_recorder Purpose column — now states artifact builder + Control-side persistence, not "write-only to Knowledge"; (c) §4.1 A7 added — new-module governance rule + PR reviewer checklist; (d) `.pre-commit-config.yaml` — replaced `always_run: true` with `files:` regex (src/*.py + .importlinter + pyproject.toml + .pre-commit-config.yaml + .github/workflows/ci.yml). Verbatim exception 5/5: ≤20 LOC, 2 files, no public API change, cites Codex round + findings. |

@@ -16,6 +16,8 @@ repos:
         entry: lint-imports
         language: system
         pass_filenames: false
-        always_run: true
-        types: [python]
-        stages: [commit]
+        # Per Codex G-5 round 1 Low #4: avoid running on docs-only commits.
+        # The contract graph is repo-global so we can't use stale staged files,
+        # but we can gate by file touch set — run only when code or contract
+        # config actually changes.
+        files: ^(src/.*\.py|\.importlinter|pyproject\.toml|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
