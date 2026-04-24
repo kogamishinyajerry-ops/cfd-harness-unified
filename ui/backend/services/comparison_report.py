@@ -285,6 +285,80 @@ def _load_ldc_secondary_vortices_gold() -> dict | None:
     }
 
 
+def _load_cylinder_scalar_gold(quantity: str, default_tol: float = 0.05) -> dict | None:
+    """Load a scalar-block gold for circular_cylinder_wake by quantity name.
+
+    DEC-V61-053 Batch D: supports strouhal_number, cd_mean, cl_rms (all
+    scalar docs in the multi-doc gold YAML). u_mean_centerline is a
+    profile — handled by _load_cylinder_centerline_gold below.
+    """
+    gold_path = _GOLD_ROOT / "circular_cylinder_wake.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    except yaml.YAMLError:
+        return None
+    doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == quantity),
+        None,
+    )
+    if doc is None:
+        return None
+    refs = doc.get("reference_values") or []
+    if not refs or "value" not in refs[0]:
+        return None
+    return {
+        "value": float(refs[0]["value"]),
+        "unit": refs[0].get("unit", "dimensionless"),
+        "tolerance": float(doc.get("tolerance", default_tol)),
+        "source": doc.get("source", "Williamson 1996"),
+        "literature_doi": doc.get("literature_doi", "10.1146/annurev.fl.28.010196.002421"),
+    }
+
+
+def _load_cylinder_centerline_gold() -> dict | None:
+    """Load the u_mean_centerline profile gold (4 x_D points, u_deficit).
+
+    DEC-V61-053 Batch D: returns {
+        "stations": [{x_D: 1.0, deficit: 0.83}, ...],
+        "tolerance": 0.05,
+        "source": "Williamson 1996",
+    } or None. Ref_value key is `u_Uinf` for back-compat (per B2 resolution;
+    semantic is wake deficit per description field).
+    """
+    gold_path = _GOLD_ROOT / "circular_cylinder_wake.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
+    except yaml.YAMLError:
+        return None
+    doc = next(
+        (d for d in docs if isinstance(d, dict) and d.get("quantity") == "u_mean_centerline"),
+        None,
+    )
+    if doc is None:
+        return None
+    refs = doc.get("reference_values") or []
+    stations: list[dict] = []
+    for entry in refs:
+        if not isinstance(entry, dict):
+            continue
+        x_D = entry.get("x_D")
+        deficit = entry.get("u_Uinf")  # historical key name; value IS deficit
+        if isinstance(x_D, (int, float)) and isinstance(deficit, (int, float)):
+            stations.append({"x_D": float(x_D), "deficit": float(deficit)})
+    if not stations:
+        return None
+    return {
+        "stations": stations,
+        "tolerance": float(doc.get("tolerance", 0.05)),
+        "source": doc.get("source", "Williamson 1996"),
+        "literature_doi": doc.get("literature_doi", "10.1146/annurev.fl.28.010196.002421"),
+    }
+
+
 def _load_bfs_reattachment_gold() -> dict | None:
     """Load the reattachment_length gold block from backward_facing_step.yaml.
 
@@ -611,6 +685,139 @@ def _build_visual_only_context(
             metrics_reattachment = None
             paper_reattachment = None
 
+    # DEC-V61-053 Batch D: cylinder 4-scalar anchor cards (Type I case).
+    # Mirrors BFS single-scalar pattern above × 4 observables:
+    #   D-St   (strouhal_number, headline gate)
+    #   D-Cd   (cd_mean)
+    #   D-Cl   (cl_rms)
+    #   D-u@4  (u_mean_centerline profile, 4 x_D stations)
+    # Emission path: measurement.value is the headline St; cd_mean / cl_rms
+    # / deficit_x_over_D_* come from measurement.secondary_scalars (Batch C
+    # schema). Until a live solver run regenerates the fixture with the
+    # new primary+secondary surface, all 4 return None (silently hidden).
+    metrics_strouhal: Optional[dict] = None
+    paper_strouhal: Optional[dict] = None
+    metrics_cd_mean: Optional[dict] = None
+    paper_cd_mean: Optional[dict] = None
+    metrics_cl_rms: Optional[dict] = None
+    paper_cl_rms: Optional[dict] = None
+    metrics_u_centerline: Optional[dict] = None
+    paper_u_centerline: Optional[dict] = None
+    if case_id == "circular_cylinder_wake":
+        try:
+            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+                         / case_id / f"{run_label}_measurement.yaml")
+            if meas_path.is_file():
+                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+                m = meas.get("measurement", {}) or {}
+                primary_quantity = m.get("quantity")
+                primary_value = m.get("value")
+                secondary = m.get("secondary_scalars") or {}
+
+                # D-St · primary-scalar path
+                if primary_quantity == "strouhal_number" and primary_value is not None:
+                    gold = _load_cylinder_scalar_gold("strouhal_number")
+                    if gold is not None:
+                        actual_f = float(primary_value)
+                        expected = gold["value"]
+                        dev_pct = (actual_f - expected) / expected * 100 if expected else 0.0
+                        tol_pct = gold["tolerance"] * 100.0
+                        metrics_strouhal = {
+                            "quantity": "strouhal_number",
+                            "symbol": "St",
+                            "actual": actual_f,
+                            "expected": expected,
+                            "deviation_pct": dev_pct,
+                            "tolerance_pct": tol_pct,
+                            "within_tolerance": abs(dev_pct) <= tol_pct,
+                            "method": m.get("extraction_source"),
+                        }
+                        paper_strouhal = {
+                            "source": gold["source"],
+                            "doi": gold.get("literature_doi", ""),
+                            "short": "Williamson 1996",
+                            "tolerance_pct": tol_pct,
+                        }
+
+                # D-Cd, D-Cl · secondary_scalars path (Batch C schema)
+                for sec_name, metrics_var_name, paper_var_name, symbol in [
+                    ("cd_mean", "metrics_cd_mean", "paper_cd_mean", "C_d"),
+                    ("cl_rms", "metrics_cl_rms", "paper_cl_rms", "C_l,rms"),
+                ]:
+                    sec_val = secondary.get(sec_name)
+                    if isinstance(sec_val, (int, float)):
+                        gold = _load_cylinder_scalar_gold(sec_name)
+                        if gold is not None:
+                            actual_f = float(sec_val)
+                            expected = gold["value"]
+                            dev_pct = (actual_f - expected) / expected * 100 if expected else 0.0
+                            tol_pct = gold["tolerance"] * 100.0
+                            _metrics_block = {
+                                "quantity": sec_name,
+                                "symbol": symbol,
+                                "actual": actual_f,
+                                "expected": expected,
+                                "deviation_pct": dev_pct,
+                                "tolerance_pct": tol_pct,
+                                "within_tolerance": abs(dev_pct) <= tol_pct,
+                                "method": "forceCoeffs_time_average",
+                            }
+                            _paper_block = {
+                                "source": gold["source"],
+                                "doi": gold.get("literature_doi", ""),
+                                "short": "Williamson 1996",
+                                "tolerance_pct": tol_pct,
+                            }
+                            if metrics_var_name == "metrics_cd_mean":
+                                metrics_cd_mean = _metrics_block
+                                paper_cd_mean = _paper_block
+                            else:
+                                metrics_cl_rms = _metrics_block
+                                paper_cl_rms = _paper_block
+
+                # D-u_centerline · 4-station profile from deficit_x_over_D_* keys
+                gold_centerline = _load_cylinder_centerline_gold()
+                if gold_centerline is not None:
+                    station_rows: list[dict] = []
+                    for gs in gold_centerline["stations"]:
+                        x_D = gs["x_D"]
+                        gold_deficit = gs["deficit"]
+                        sec_key = f"deficit_x_over_D_{x_D}"
+                        measured = secondary.get(sec_key)
+                        if isinstance(measured, (int, float)):
+                            actual_f = float(measured)
+                            dev_pct = (actual_f - gold_deficit) / gold_deficit * 100 if gold_deficit else 0.0
+                            station_rows.append({
+                                "x_D": x_D,
+                                "actual": actual_f,
+                                "expected": gold_deficit,
+                                "deviation_pct": dev_pct,
+                                "within_tolerance": abs(dev_pct) <= gold_centerline["tolerance"] * 100.0,
+                            })
+                    if station_rows:
+                        tol_pct = gold_centerline["tolerance"] * 100.0
+                        all_pass = all(r["within_tolerance"] for r in station_rows)
+                        metrics_u_centerline = {
+                            "quantity": "u_mean_centerline",
+                            "symbol": "u_deficit(x/D)",
+                            "stations": station_rows,
+                            "tolerance_pct": tol_pct,
+                            "all_within_tolerance": all_pass,
+                            "method": "sampleDict_cylinderCenterline_time_average",
+                        }
+                        paper_u_centerline = {
+                            "source": gold_centerline["source"],
+                            "doi": gold_centerline.get("literature_doi", ""),
+                            "short": "Williamson 1996 Fig.19",
+                            "tolerance_pct": tol_pct,
+                        }
+        except (OSError, yaml.YAMLError, ValueError, TypeError):
+            # Fail-soft: any parse/type issue → all 4 stay None; UI hides cards silently.
+            metrics_strouhal = None; paper_strouhal = None
+            metrics_cd_mean = None; paper_cd_mean = None
+            metrics_cl_rms = None; paper_cl_rms = None
+            metrics_u_centerline = None; paper_u_centerline = None
+
     return {
         "visual_only": True,
         "case_id": case_id,
@@ -636,6 +843,15 @@ def _build_visual_only_context(
         # DEC-V61-052 Batch D: BFS scalar-anchor block.
         "metrics_reattachment": metrics_reattachment,
         "paper_reattachment": paper_reattachment,
+        # DEC-V61-053 Batch D: cylinder 4-scalar + profile anchor blocks.
+        "metrics_strouhal": metrics_strouhal,
+        "paper_strouhal": paper_strouhal,
+        "metrics_cd_mean": metrics_cd_mean,
+        "paper_cd_mean": paper_cd_mean,
+        "metrics_cl_rms": metrics_cl_rms,
+        "paper_cl_rms": paper_cl_rms,
+        "metrics_u_centerline": metrics_u_centerline,
+        "paper_u_centerline": paper_u_centerline,
     }
 
 

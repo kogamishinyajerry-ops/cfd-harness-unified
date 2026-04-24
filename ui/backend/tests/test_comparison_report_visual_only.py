@@ -222,3 +222,153 @@ def test_gold_overlay_case_not_affected_by_visual_only_branch(tmp_path, monkeypa
     assert "lid_driven_cavity" in _GOLD_OVERLAY_CASES
     for c in _VISUAL_ONLY_CASES:
         assert c not in _GOLD_OVERLAY_CASES
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-053 Batch D · cylinder 4-scalar anchor emission
+# ---------------------------------------------------------------------------
+
+
+def _plant_cylinder_fixture(
+    repo_root: Path,
+    measurement: dict,
+    timestamp: str = "20260101T000000Z",
+) -> None:
+    """Build a cylinder case fixture tree with a user-supplied measurement dict."""
+    case_id = "circular_cylinder_wake"
+    _plant_run_manifest(repo_root, case_id, timestamp)
+    import yaml as _yaml  # local import
+    meas_dir = (repo_root / "ui" / "backend" / "tests" / "fixtures" / "runs"
+                / case_id)
+    meas_dir.mkdir(parents=True, exist_ok=True)
+    (meas_dir / "audit_real_run_measurement.yaml").write_text(
+        _yaml.safe_dump(measurement), encoding="utf-8",
+    )
+
+
+def test_cylinder_batch_d_all_4_metrics_when_fresh_fixture(
+    tmp_path, monkeypatch,
+) -> None:
+    """DEC-V61-053 Batch D · fresh fixture with primary St + secondary Cd/Cl
+    + 4 deficit stations → all 4 metrics blocks emit with within_tolerance
+    reflecting the synthetic values."""
+    measurement = {
+        "measurement": {
+            "quantity": "strouhal_number",
+            "value": 0.163,  # 0.6% low
+            "unit": "dimensionless",
+            "extraction_source": "forceCoeffs_fft",
+            "secondary_scalars": {
+                "cd_mean": 1.34,                # +0.75%
+                "cl_rms": 0.047,                # -2.1%
+                "deficit_x_over_D_1.0": 0.82,   # vs gold 0.83, -1.2%
+                "deficit_x_over_D_2.0": 0.63,   # vs 0.64, -1.6%
+                "deficit_x_over_D_3.0": 0.54,   # vs 0.55, -1.8%
+                "deficit_x_over_D_5.0": 0.34,   # vs 0.35, -2.9%
+            },
+        },
+    }
+    _plant_cylinder_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+
+    ctx = build_report_context("circular_cylinder_wake", "audit_real_run")
+    assert ctx["visual_only"] is True
+
+    # D-St headline gate
+    mst = ctx["metrics_strouhal"]
+    assert mst is not None
+    assert mst["quantity"] == "strouhal_number"
+    assert mst["symbol"] == "St"
+    assert mst["actual"] == 0.163
+    assert mst["expected"] == 0.164
+    assert mst["within_tolerance"] is True
+    assert ctx["paper_strouhal"]["short"] == "Williamson 1996"
+
+    # D-Cd + D-Cl cross-check gates
+    assert ctx["metrics_cd_mean"]["within_tolerance"] is True
+    assert ctx["metrics_cl_rms"]["within_tolerance"] is True
+
+    # D-u_centerline profile
+    u_block = ctx["metrics_u_centerline"]
+    assert u_block is not None
+    assert len(u_block["stations"]) == 4
+    assert all(s["within_tolerance"] for s in u_block["stations"])
+    assert u_block["all_within_tolerance"] is True
+
+
+def test_cylinder_batch_d_stale_fixture_hides_all_metrics(
+    tmp_path, monkeypatch,
+) -> None:
+    """Stale fixture (quantity=U_max_approx, no secondary_scalars) → all 4
+    metrics blocks return None (cards silently hidden). Mirrors the current
+    state of `ui/backend/tests/fixtures/runs/circular_cylinder_wake/`."""
+    measurement = {
+        "measurement": {
+            "quantity": "U_max_approx",  # legacy fallback
+            "value": 4.93502e-06,
+            "extraction_source": "key_quantities_fallback",
+            # no secondary_scalars
+        },
+    }
+    _plant_cylinder_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+
+    ctx = build_report_context("circular_cylinder_wake", "audit_real_run")
+    for k in ("metrics_strouhal", "metrics_cd_mean", "metrics_cl_rms",
+              "metrics_u_centerline", "paper_strouhal", "paper_cd_mean",
+              "paper_cl_rms", "paper_u_centerline"):
+        assert ctx[k] is None, f"{k} should be None for stale fixture, got {ctx[k]}"
+
+
+def test_cylinder_batch_d_out_of_tolerance_flagged(
+    tmp_path, monkeypatch,
+) -> None:
+    """Cd=1.55 (vs gold 1.33 = +16.5%) is outside the 5% tolerance band.
+    Assert within_tolerance=False while other gates stay True — regression
+    guard against the Batch D emission accidentally forcing PASS."""
+    measurement = {
+        "measurement": {
+            "quantity": "strouhal_number",
+            "value": 0.164,
+            "secondary_scalars": {
+                "cd_mean": 1.55,  # +16.5% → FAIL
+                "cl_rms": 0.049,  # +2% → PASS
+            },
+        },
+    }
+    _plant_cylinder_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    ctx = build_report_context("circular_cylinder_wake", "audit_real_run")
+    assert ctx["metrics_strouhal"]["within_tolerance"] is True
+    assert ctx["metrics_cd_mean"]["within_tolerance"] is False
+    assert ctx["metrics_cl_rms"]["within_tolerance"] is True
