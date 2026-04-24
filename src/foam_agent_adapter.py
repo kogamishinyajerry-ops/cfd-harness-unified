@@ -7418,12 +7418,20 @@ mergePatchPairs
         将这些文件复制到宿主机的对应时间目录。
         """
         try:
-            # Find numeric time directories (exclude '0' - initial condition)
+            # Find numeric time directories (exclude '0' - initial condition).
+            # DEC-V61-053 live-run fix (2026-04-24): `sort -t/ -k1 -n` fails
+            # on adaptive-timestep directory names like "2.00032" "5.998936"
+            # "10.000003" — field 1 (before first /) is empty on absolute
+            # paths, so sort falls back to lexical comparison and picks
+            # "5.9..." as "latest" over "10.0...". This silently skipped
+            # writeObjects fields for pimpleFoam transient runs. Fixed by
+            # tagging each line with its basename and numeric-sorting on
+            # the tag instead.
             result = container.exec_run(
                 cmd=[
                     "bash",
                     "-c",
-                    f'find "{case_cont_dir}" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | grep -v "/0$" | sed "s|/$||" | sort -t/ -k1 -n | tail -1',
+                    f'find "{case_cont_dir}" -maxdepth 1 -type d -name "[0-9]*" 2>/dev/null | grep -v "/0$" | sed "s|/$||" | awk -F/ \'{{print $NF"\\t"$0}}\' | sort -k1,1 -n | tail -1 | cut -f2-',
                 ],
             )
             latest_cont_dir = result.output.decode().strip()
@@ -7852,6 +7860,35 @@ mergePatchPairs
 
         latest_t, latest_dir = max(time_dirs, key=lambda x: x[0])
 
+        # DEC-V61-053 live-run fix (2026-04-24): cylinder extractor paths
+        # (forceCoeffs FFT for St/Cd/Cl + sampleDict for u_centerline) are
+        # independent of the U/Cx/Cy field-file existence check below —
+        # they read postProcessing/forceCoeffs1 and postProcessing/sets
+        # directly. Lift their invocation ABOVE the field-file gate so
+        # they still run when _copy_postprocess_fields doesn't produce
+        # U/Cx/Cy (which happens when the sort-bug fix above lands
+        # incomplete, or when `postProcess -funcs writeObjects` fails
+        # silently on pimpleFoam adaptive-timestep runs).
+        if (task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
+                and task_spec.flow_type == FlowType.EXTERNAL):
+            key_quantities = self._extract_cylinder_strouhal(
+                [], [], [], task_spec, key_quantities, case_dir=case_dir,
+            )
+            try:
+                from src.cylinder_centerline_extractor import (  # noqa: PLC0415
+                    extract_centerline_u_deficit,
+                )
+                bc = task_spec.boundary_conditions or {}
+                D_val = float(bc.get("cylinder_D", 0.1))
+                U_val = float(bc.get("U_ref", 1.0))
+                centerline = extract_centerline_u_deficit(
+                    case_dir, U_inf=U_val, D=D_val,
+                )
+                for k, v in centerline.items():
+                    key_quantities[k] = v
+            except Exception as e:  # noqa: BLE001
+                key_quantities["u_deficit_extractor_error"] = f"{type(e).__name__}: {e}"
+
         # 检查是否有 U 和 Cx/Cy 文件
         u_path = latest_dir / "U"
         cx_path = latest_dir / "Cx"
@@ -8028,43 +8065,27 @@ mergePatchPairs
                 case_dir=case_dir,
             )
 
-        # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL -> strouhal_number
+        # Circular Cylinder Wake: BODY_IN_CHANNEL + EXTERNAL — already
+        # handled above the field-file gate per DEC-V61-053 live-run fix.
+        # Keep this branch as a no-op placeholder so the elif chain's flow
+        # remains explicit; the pressure-RMS fallback at _extract_cylinder_
+        # strouhal's legacy path is retained for MOCK-mode tests that
+        # supply synthesized cxs/cys/p_vals but not a case_dir.
         elif geom == GeometryType.BODY_IN_CHANNEL and task_spec.flow_type == FlowType.EXTERNAL:
-            p_path = latest_dir / "p"
-            p_vals: List[float] = []
-            if p_path.exists():
-                p_vals = self._read_openfoam_scalar_field(p_path)
-            # DEC-V61-041: pass case_dir so the extractor can read the
-            # forceCoeffs FO output (postProcessing/forceCoeffs1/) for
-            # the real FFT-based Strouhal measurement.
-            key_quantities = self._extract_cylinder_strouhal(
-                cxs, cys, p_vals, task_spec, key_quantities,
-                case_dir=case_dir,
-            )
-            # DEC-V61-053 Batch B3: u_mean_centerline deficit extractor.
-            # Reads postProcessing/cylinderCenterline/<t>/wakeCenterline_U.xy
-            # (emitted by the controlDict `cylinderCenterline` FO added in
-            # Batch B1b). Emits deficit_x_over_D_{1.0,2.0,3.0,5.0} into
-            # key_quantities alongside Strouhal/Cd/Cl. Fails closed (returns
-            # empty dict) if sampling FO missing or solver diverged; the
-            # audit fixture then simply won't surface the u_centerline gate.
-            try:
-                from src.cylinder_centerline_extractor import (  # noqa: PLC0415
-                    extract_centerline_u_deficit,
+            # Primary cylinder extraction ran at the top of this method.
+            # If the MOCK path wants to emit pressure-RMS diagnostics,
+            # call the legacy fallback explicitly (only fires when
+            # case_dir is None AND cxs/p_vals are populated, which is
+            # the MOCK branch).
+            if case_dir is None:
+                p_path = latest_dir / "p"
+                p_vals: List[float] = []
+                if p_path.exists():
+                    p_vals = self._read_openfoam_scalar_field(p_path)
+                key_quantities = self._extract_cylinder_strouhal(
+                    cxs, cys, p_vals, task_spec, key_quantities,
+                    case_dir=None,
                 )
-                bc = task_spec.boundary_conditions or {}
-                D_val = float(bc.get("cylinder_D", 0.1))
-                U_val = float(bc.get("U_ref", 1.0))
-                centerline = extract_centerline_u_deficit(
-                    case_dir, U_inf=U_val, D=D_val,
-                )
-                for k, v in centerline.items():
-                    key_quantities[k] = v
-            except Exception as e:  # noqa: BLE001
-                # Fail-soft alongside DEC-V61-041 pattern — diagnostic flag
-                # only, do not raise. Absence of deficit_* keys is how
-                # downstream code (comparator / audit YAML) detects failure.
-                key_quantities["u_deficit_extractor_error"] = f"{type(e).__name__}: {e}"
 
         # Turbulent Flat Plate: SIMPLE_GRID + Re>=2300 -> cf_skin_friction
         # P6-TD-002 guard: exclude duct_flow (also SIMPLE_GRID + Re>=2300).
