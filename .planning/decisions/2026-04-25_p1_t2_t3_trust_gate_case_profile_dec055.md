@@ -7,7 +7,7 @@ methodology_version: "v2.0 (per RETRO-V61-001 + RETRO-V61-053)"
 commits_in_scope:
   - 4410b0c feat(metrics) P1-T2 TrustGate overall-verdict reducer (13 tests)
   - bcea4ec chore(state) P1-T2 STATE stamp
-  - (pending commit hash) feat(metrics) P1-T3 CaseProfile.tolerance_policy schema + loader (16 tests + 2 case profile backfills)
+  - 0450df6 feat(metrics) P1-T3 CaseProfile.tolerance_policy schema + loader (16 tests + 2 case profile backfills)
 codex_verdict: PENDING_POST_MERGE_REVIEW (batched review of P1-T2+T3)
 autonomous_governance: true
 autonomous_governance_counter_v61: 42
