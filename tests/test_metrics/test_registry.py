@@ -97,13 +97,20 @@ def test_evaluate_all_skips_missing_observable_def() -> None:
     r = MetricsRegistry()
     r.register(PointwiseMetric(name="has_obs"))
     r.register(PointwiseMetric(name="no_obs"))
-    observable_defs = {"has_obs": {"quantity": "u", "tolerance": 0.05}}
+    observable_defs = {
+        "has_obs": {
+            "quantity": "has_obs",
+            "reference_values": [{"value": 1.0}],
+            "tolerance": 0.05,
+        }
+    }
 
-    # Both metrics raise NotImplementedError on evaluate() in MVP; the
-    # 'no_obs' metric should be skipped (no observable def), so the
-    # iteration should hit 'has_obs' first and raise immediately.
-    with pytest.raises(NotImplementedError, match="has no evaluate"):
-        r.evaluate_all({}, observable_defs)
+    # 'no_obs' has no observable def → skipped silently.
+    # 'has_obs' evaluates against empty key_quantities → FAIL
+    # (quantity not found). Exactly 1 report.
+    reports = r.evaluate_all({"key_quantities": {}}, observable_defs)
+    assert [rep.name for rep in reports] == ["has_obs"]
+    assert reports[0].status.value == "fail"
 
 
 def test_evaluate_all_empty_when_no_matching_defs() -> None:

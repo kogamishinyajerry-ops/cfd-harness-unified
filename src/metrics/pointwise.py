@@ -1,8 +1,10 @@
-"""PointwiseMetric · P1-T1 MVP skeleton.
+"""PointwiseMetric · P1-T1a extractor wrapper.
 
-Single-point scalar extracted at a specific (x, y, z) / time. Delegates to
-`src.result_comparator` for the actual comparator logic when P1-T1a DEC
-lands the extractor wrapper.
+Single-point scalar extracted at a specific (x, y, z) / time. Delegates
+to `src.result_comparator` (same-plane Evaluation helper) via the shared
+`evaluate_via_result_comparator` wrapper — IntegratedMetric uses the same
+path because the extractor-level semantic is identical (scalar float +
+optional profile list with axis coords).
 
 Examples of pointwise metrics in the 10-case whitelist:
 - `u_centerline_y=0.5` (LDC)
@@ -12,12 +14,22 @@ Examples of pointwise metrics in the 10-case whitelist:
 
 from __future__ import annotations
 
-from .base import Metric, MetricClass
+from typing import Any, Dict, Optional
+
+from ._comparator_wrap import evaluate_via_result_comparator
+from .base import Metric, MetricClass, MetricReport
 
 
 class PointwiseMetric(Metric):
     metric_class = MetricClass.POINTWISE
     delegate_to_module = "src.result_comparator"
 
-    # evaluate() inherits NotImplementedError from Metric.evaluate until
-    # P1-T1a DEC lands the concrete wrapper around result_comparator.
+    def evaluate(
+        self,
+        artifacts: Any,
+        observable_def: Dict[str, Any],
+        tolerance_policy: Optional[Dict[str, Any]] = None,
+    ) -> MetricReport:
+        return evaluate_via_result_comparator(
+            self, artifacts, observable_def, tolerance_policy
+        )
