@@ -8,7 +8,7 @@ commits_in_scope:
   - 4410b0c feat(metrics) P1-T2 TrustGate overall-verdict reducer (13 tests)
   - bcea4ec chore(state) P1-T2 STATE stamp
   - 0450df6 feat(metrics) P1-T3 CaseProfile.tolerance_policy schema + loader (16 tests + 2 case profile backfills)
-codex_verdict: PENDING_POST_MERGE_REVIEW (batched review of P1-T2+T3)
+codex_verdict: APPROVE_WITH_COMMENTS (R1) · F1-M2 CLEAN CLOSE. Non-blocking finding: TrustGateReport inner containers (reports/count_by_status/notes) were mutable despite "frozen" claim — a caller could mutate them post-reduction, silently invalidating summary()/has_failures/has_warnings. Fixed verbatim in follow-up commit: reports tuple-wrapped, count_by_status MappingProxyType-wrapped, notes tuple-wrapped. 4 new immutability regression tests + 1 canonical E2E test (load_tolerance_policy → evaluate_all → reduce_reports, Codex noted coverage gap). 655 tests pass.
 autonomous_governance: true
 autonomous_governance_counter_v61: 42
 external_gate_self_estimated_pass_rate: 0.82

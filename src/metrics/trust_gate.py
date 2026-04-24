@@ -21,7 +21,8 @@ no plane boundary crossing, no extractor delegate.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from types import MappingProxyType
+from typing import Mapping, Tuple
 
 from .base import MetricReport, MetricStatus
 
@@ -30,26 +31,33 @@ from .base import MetricReport, MetricStatus
 class TrustGateReport:
     """Aggregated trust-gate output for a set of metric evaluations.
 
+    Fully immutable: the dataclass is frozen AND the container fields are
+    wrapped so callers cannot mutate them post-reduction (Codex DEC-V61-055
+    R1 APPROVE_WITH_COMMENTS — prior impl had mutable list/dict fields
+    which meant `report.count_by_status[FAIL] = 999` silently invalidated
+    `summary()` / `has_failures` / `has_warnings`).
+
     Attributes
     ----------
     overall
         Worst-wins verdict across all input reports. Empty input → PASS.
     reports
-        Per-metric MetricReport list in the order provided to the reducer
-        (defensive copy — consumers may mutate their original list safely).
+        Per-metric MetricReport tuple in the order provided to the
+        reducer (input list defensively snapshotted as a tuple).
     count_by_status
-        Histogram keyed by MetricStatus. All three keys always present
-        (zero-filled when absent) so consumers can index without KeyError.
+        Histogram keyed by MetricStatus wrapped in MappingProxyType.
+        All three keys always present (zero-filled when absent) so
+        consumers can index without KeyError.
     notes
         Aggregated non-PASS notes in report order, formatted
         `"{metric_name} [{status}]: {notes}"` for UI display. Reports
-        with status=PASS or notes=None are skipped.
+        with status=PASS or notes=None are skipped. Wrapped as a tuple.
     """
 
     overall: MetricStatus
-    reports: List[MetricReport]
-    count_by_status: Dict[MetricStatus, int]
-    notes: List[str] = field(default_factory=list)
+    reports: Tuple[MetricReport, ...]
+    count_by_status: Mapping[MetricStatus, int]
+    notes: Tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def passed(self) -> bool:
@@ -91,14 +99,14 @@ def reduce_reports(reports: List[MetricReport]) -> TrustGateReport:
     TrustGateReport
         Aggregated verdict + histogram + formatted notes.
     """
-    reports_list = list(reports)
+    reports_tuple: Tuple[MetricReport, ...] = tuple(reports)
 
-    counts: Dict[MetricStatus, int] = {
+    counts: dict = {
         MetricStatus.PASS: 0,
         MetricStatus.WARN: 0,
         MetricStatus.FAIL: 0,
     }
-    for rep in reports_list:
+    for rep in reports_tuple:
         counts[rep.status] = counts.get(rep.status, 0) + 1
 
     if counts[MetricStatus.FAIL] > 0:
@@ -108,15 +116,15 @@ def reduce_reports(reports: List[MetricReport]) -> TrustGateReport:
     else:
         overall = MetricStatus.PASS
 
-    notes = [
+    notes_tuple: Tuple[str, ...] = tuple(
         f"{rep.name} [{rep.status.value}]: {rep.notes}"
-        for rep in reports_list
+        for rep in reports_tuple
         if rep.status is not MetricStatus.PASS and rep.notes
-    ]
+    )
 
     return TrustGateReport(
         overall=overall,
-        reports=reports_list,
-        count_by_status=counts,
-        notes=notes,
+        reports=reports_tuple,
+        count_by_status=MappingProxyType(counts),
+        notes=notes_tuple,
     )
