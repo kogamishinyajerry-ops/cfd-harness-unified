@@ -141,6 +141,84 @@ V61-053 is the first DEC where:
 
 4. **Retro cadence** — this is the first DEC-arc incident retro under v2.0 F1-M2 rules. The "write retro when CHANGES_REQUIRED fires twice in same DEC" trigger works; keeping it.
 
+## Addendum (2026-04-24 post-R3 live-run findings)
+
+After R3 APPROVE, attempting the Batch D live audit fixture regen uncovered **two more methodology gaps** that neither static Codex review nor the existing unit tests caught:
+
+### P0 (new) · `self._db.get_execution_chain` accessor bug (d3ffc06)
+
+**Incident**: First cylinder audit run errored immediately with
+`AttributeError: 'FoamAgentExecutor' object has no attribute '_db'`. The
+expression was introduced in B1a (63c11cb) while threading whitelist-driven
+`turbulence_model` overrides. Codex round 1 reviewed the *logic* of the
+lookup (whitelist demands laminar, adapter should honor it) but not the
+*accessor* (`self._db` doesn't exist; correct path was a module-level
+YAML loader).
+
+**Why the tests missed it**: B1 unit tests call `_generate_circular_cylinder_wake(tmp, task, turbulence_model="laminar")` directly, bypassing the
+dispatch path where `self._db.get_execution_chain(...)` is evaluated. The
+tests demonstrate correct downstream behavior *given* a turbulence_model
+value but never exercise the upstream whitelist lookup.
+
+**Methodology implication** — new Type III intake risk flag:
+`executable_smoke_test`. Require at least one short-duration (<10 min wall,
+can be Docker container or mock) end-to-end invocation of the changed code
+path before accepting any Codex APPROVE. Ideally integrated into the
+F1-M2 Stage E close: "has the post-R3 code been invoked end-to-end once?"
+Otherwise any accessor / attribute-dereference bug downstream of the
+tested method signature is invisible.
+
+### P0 (new) · Solver numerical stability risk (35f3278)
+
+**Incident**: First successful invocation of pimpleFoam on the post-B1
+grown-domain (144k-cell) cylinder geometry diverged pressure on the
+**first timestep**: GAMG with GaussSeidel smoother returned Initial=1,
+Final=nan after 1000 iterations. Ux/Uy solves were fine. Everything
+NaN thereafter.
+
+**Why no review caught it**: Codex reviews static code; pimpleFoam's
+GAMG behavior on a specific mesh+BC combination is runtime-emergent. The
+B1 unit tests don't invoke the actual solver. Even running `checkMesh`
+reports OK (max skewness 4.4e-13, non-ortho 0) — the mesh is clean; the
+failure is an interaction between GAMG's Gauss-Seidel smoother and the
+noSlip pressure Neumann boundary at the cylinder wall.
+
+**Fix**: PCG+DIC for p (recommended OF.org fallback for 2D external
+wakes), plus shorter endTime (200s→10s) and maxCo relaxation (0.5→1.0)
+to bring projected wall time from 40 hours → ~2.8 hours.
+
+**Methodology implication** — new Type II intake risk flag:
+`solver_stability_on_novel_geometry`. Triggers whenever any BC type or
+domain dimension changes in the adapter. Mitigations should include:
+(a) explicit fvSolution review against OF.org tutorials for the closest
+matching case, (b) optional `potentialFoam` initialization for external
+flows, (c) the executable_smoke_test rule above catches the failure
+immediately.
+
+### Updated counter calibration
+
+| DEC | Type | Intake est. | Rounds | Actual outcome | Hidden defects caught post-R3 | Arc |
+|-----|------|-------------|--------|----------------|-------------------------------|-----|
+| V61-050 (LDC) | I | 0.70 (late-arc) | 4 | APPROVE r4 | N/A | retrofit |
+| V61-052 (BFS) | II | 0.45 | 5 (incl. r4 back-fill) | APPROVE r5 | 1 (wall-shear provenance) | back-fill |
+| V61-053 (cyl) | I | **0.30** | **3 + 2 live fixes** | APPROVE r3 + live-run recalibration | **2 (accessor + solver)** | first-apply |
+
+V61-053's 3-round Codex arc was genuinely clean on the code paths Codex
+could see. The post-R3 defects are a **blind spot category**, not a
+Codex miss — no static review can catch an attribute-dereference bug
+on an object graph that isn't exercised, or a solver divergence in a
+numerical solver that isn't invoked.
+
+### Concrete action items for RETRO-V61-053 + successors
+
+1. **Write `.planning/intake/TEMPLATE.yaml`** with all 4 new risk_flag categories:
+   - `python_version_parity` (2026-04-24 R2 finding)
+   - `mesh_density_on_domain_change` (2026-04-24 R1 finding)
+   - `executable_smoke_test` (2026-04-24 post-R3 finding)
+   - `solver_stability_on_novel_geometry` (2026-04-24 post-R3 finding)
+2. **Amend RETRO-V61-001 cadence rule**: add "post-R3 live-run defect" as a 4th retro trigger (currently 3: phase complete / counter≥20 / CHANGES_REQUIRED on PR).
+3. **Methodology page §10**: dedicate a section to "static review vs dynamic invocation" — be explicit that Codex can't catch what it can't exercise.
+
 ## Counter status
 
 `autonomous_governance_counter_v61`: **40** after DEC-V61-053 lands. Up from

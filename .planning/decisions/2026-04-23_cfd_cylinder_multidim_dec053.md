@@ -1,10 +1,10 @@
 ---
 decision_id: DEC-V61-053
 title: circular_cylinder_wake Type I multi-dim validation · LDC-style iteration loop · case 3 · v2.0 first-apply
-status: IN_PROGRESS (2026-04-24 · Batches A+B1+B2+B3+C F1-M2-clean via Codex round 3 APPROVE; Batch D pending · audit fixture regen pending live OpenFOAM run)
+status: IN_PROGRESS (2026-04-24 · Batches A+B1+B2+B3+C+D code-complete · 3 Codex rounds F1-M2-clean on B1-C scope · live audit fixture regen in progress w/ ~2.8h wall projection · karman_shedding.png generator landed with honest skip-guard · 2 live-run bugs uncovered & fixed post-R3)
 supersedes_gate: none
 intake_ref: .planning/intake/DEC-V61-053_circular_cylinder_wake.yaml
-methodology_version: "v2.0 (first-apply, not retroactive · see Notion methodology page §8)"
+methodology_version: "v2.0 (first-apply, not retroactive · see Notion methodology page §8/§9)"
 commits_in_scope:
   - 505c022 docs(dec): DEC-V61-053 · Stage 0 intake + scaffold (v2.0 first-apply)
   - 5aebd56 docs(dec): intake v2 · Codex pre-Stage-A plan review APPROVE_PLAN_WITH_CHANGES
@@ -16,16 +16,23 @@ commits_in_scope:
   - c8387ec feat(cylinder): Batch B3 · wire centerline extractor into adapter pipeline
   - 6b783f5 feat(preflight): Batch C · multi-scalar preflight gate for Type I cases
   - e7c7500 fix(cylinder): round-2 response · py3.9 f-string syntax + 3 doc sync
-codex_verdict: APPROVE (round 3, F1-M2 clean-close on B1+B2+B3+C scope). Arc total 3 Codex rounds matches LDC V61-050 (Type I precedent). Round 1 CHANGES_REQUIRED (1H+3M+1L) → Round 2 CHANGES_REQUIRED (1 py3.9 syntax + 1 doc sync) → Round 3 APPROVE.
+  - 0168c96 docs(dec): Round 3 APPROVE · B1+B2+B3+C F1-M2-clean
+  - 2a7d5e4 docs(retro): RETRO-V61-053 · Python version parity + 3-round Codex calibration
+  - 05faba8 feat(cylinder): Batch D backend · 4-scalar anchor emission in Compare-tab context
+  - 90b5829 feat(cylinder): Batch D frontend · 4-scalar anchor cards in Compare-tab
+  - 592922c feat(cylinder): Batch D karman_shedding generator · honest skip-guard
+  - d3ffc06 fix(cylinder): Batch B1a bug — self._db did not exist on FoamAgentExecutor (live-run find)
+  - 35f3278 fix(cylinder): live-run solver tuning — PCG p + endTime 10s + maxCo 1.0
+codex_verdict: APPROVE (round 3, F1-M2 clean-close on B1+B2+B3+C scope). Arc total 3 Codex rounds matches LDC V61-050 (Type I precedent). Round 1 CHANGES_REQUIRED (1H+3M+1L) → Round 2 CHANGES_REQUIRED (1 py3.9 syntax + 1 doc sync) → Round 3 APPROVE. Batch D (post-R3) + 2 live-run fixes (post-R3) await Codex round 4 verification after audit fixture regen lands.
 autonomous_governance: true
 autonomous_governance_counter_v61: 40
 external_gate_self_estimated_pass_rate: 0.30
 external_gate_self_estimated_pass_rate_source: .planning/intake/DEC-V61-053_circular_cylinder_wake.yaml
-external_gate_actual_outcome_partial: "3-round Codex arc, APPROVE on round 3. Round 1 pass rate ACTUAL=0% (CHANGES_REQUIRED, 5 findings) vs estimated 0.30 → intake calibrated honestly. py3.9 f-string bug in Round 2 was a real methodology lesson — Python version parity not previously required in intake, now flagged as RETRO-V61-053 follow-up."
-external_gate_caveat: "Type I DEC (4 scalar gates). Adapter already has forceCoeffs/FFT (DEC-V61-041), but measurement surface + u_mean_centerline extractor are net-new. See intake.yaml risk_flags. Codex log archive: reports/codex_tool_reports/dec_v61_053_{round1,round2,round3}.log"
+external_gate_actual_outcome_partial: "3-round Codex arc on B1-C, APPROVE on round 3. Round 1 pass rate ACTUAL=0% (CHANGES_REQUIRED, 5 findings) vs estimated 0.30. Two additional methodology gaps surfaced post-R3 from the live OpenFOAM audit fixture regen attempt: (1) self._db.get_execution_chain dereferenced a nonexistent attribute — unit tests bypassed the dispatch call site by calling _generate_circular_cylinder_wake directly with kwargs, slipping past Codex round 1 which reviewed the LOGIC but not the ACCESSOR; fixed via _load_whitelist_turbulence_model module helper + 7 regression tests (d3ffc06). (2) GAMG+GaussSeidel diverged p on first pimpleFoam timestep (Initial=1, Final=nan, 1000 iter) on the cylinder noSlip geometry — no Codex path would have caught this without running the solver; fixed via PCG+DIC + endTime reduction 200s→10s + maxCo 0.5→1.0 (35f3278). Both bugs are strong evidence for a new Type III intake risk flag: 'executable_smoke_test' — require at least one short-duration (<10min wall) end-to-end invocation of the changed code path before Codex review, to catch accessor bugs and solver-stability failures that unit tests and static review miss."
+external_gate_caveat: "Type I DEC (4 scalar gates). Adapter already has forceCoeffs/FFT (DEC-V61-041), but measurement surface + u_mean_centerline extractor are net-new. See intake.yaml risk_flags. Codex log archive: reports/codex_tool_reports/dec_v61_053_{round1,round2,round3}.log. Live-run log archive: reports/phase5_audit/live_cylinder_run_20260424*.log"
 codex_tool_report_path: reports/codex_tool_reports/dec_v61_053_round3.log (+ plan_review + round1 + round2 co-located)
-notion_sync_status: pending (sync after Batch D close + DEC final-close)
-github_sync_status: pushed (10 commits on origin/main)
+notion_sync_status: pending (sync after Batch D audit fixture regen completes + final DEC close + Codex round 4 verification)
+github_sync_status: pushed (17 commits on origin/main · 10-commit pre-R3 arc + 2 post-R3 Batch D + 1 generator + 2 live-run fixes + 2 docs)
 related:
   - DEC-V61-050 (LDC true multi-dim · Type I precedent · 4 rounds)
   - DEC-V61-052 (BFS · Type II precedent · 5 rounds incl. F1-M2 back-fill)
