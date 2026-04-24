@@ -200,6 +200,40 @@ def _load_gold_reference_values(
     return None
 
 
+def _load_whitelist_turbulence_model(
+    task_name: str,
+    *,
+    whitelist_path: Optional[Path] = None,
+) -> Optional[str]:
+    """Return `turbulence_model` from whitelist.yaml for the named case.
+
+    DEC-V61-053 Batch B1: whitelist may demand a specific model (e.g. `laminar`
+    for cylinder at Re=100 in the 2D Karman shedding regime). The historic
+    `_turbulence_model_for_solver` heuristic ignored whitelist and hardcoded
+    kOmegaSST for BODY_IN_CHANNEL EXTERNAL, silently over-dissipating the
+    wake. Callers should prefer this value when present and fall back to
+    the heuristic only when absent.
+
+    Returns None when the whitelist file is missing, unreadable, the case
+    isn't present, or no `turbulence_model` field is set.
+    """
+    import yaml
+
+    path = whitelist_path or _DEFAULT_WHITELIST_PATH
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+
+    for case in data.get("cases", []):
+        if case.get("id") == task_name or case.get("name") == task_name:
+            val = case.get("turbulence_model")
+            return val if isinstance(val, str) else None
+    return None
+
+
 def _emit_gold_anchored_points_sampledict(
     case_dir: Path,
     set_name: str,
@@ -521,8 +555,7 @@ class FoamAgentExecutor:
                     # physics_precondition. Cylinder at Re=100 is in the
                     # laminar 2D Karman shedding regime (Williamson 1996);
                     # kOmegaSST over-dissipates the wake.
-                    whitelist_chain = self._db.get_execution_chain(task_spec.name) or {}
-                    whitelist_turb = whitelist_chain.get("turbulence_model")
+                    whitelist_turb = _load_whitelist_turbulence_model(task_spec.name)
                     if whitelist_turb in ("laminar", "kOmegaSST", "kEpsilon"):
                         turbulence_model = whitelist_turb
                     else:

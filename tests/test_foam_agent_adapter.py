@@ -16,6 +16,7 @@ from src.foam_agent_adapter import (
     ParameterPlumbingError,
     _emit_gold_anchored_points_sampledict,
     _load_gold_reference_values,
+    _load_whitelist_turbulence_model,
     _parse_dict_scalar,
     _parse_g_magnitude,
     _parse_openfoam_raw_points_output,
@@ -1593,6 +1594,57 @@ class TestLoadGoldReferenceValues:
             "      reference_values: []\n"
         )
         assert _load_gold_reference_values("empty_case", whitelist_path=wl) is None
+
+
+class TestLoadWhitelistTurbulenceModel:
+    """_load_whitelist_turbulence_model — DEC-V61-053 Batch B1 whitelist lookup.
+
+    Regression for the `self._db.get_execution_chain` bug that slipped B1a
+    unit tests by calling _generate_circular_cylinder_wake directly with an
+    explicit turbulence_model arg. The earlier code path dereferenced
+    self._db which doesn't exist on FoamAgentExecutor, blowing up the
+    live audit run with AttributeError on the first cylinder attempt.
+    """
+
+    def test_returns_laminar_for_cylinder(self):
+        """Production whitelist has `turbulence_model: laminar` for the cylinder case."""
+        assert _load_whitelist_turbulence_model("circular_cylinder_wake") == "laminar"
+
+    def test_returns_none_when_whitelist_missing(self, tmp_path):
+        missing = tmp_path / "nope.yaml"
+        assert _load_whitelist_turbulence_model("x", whitelist_path=missing) is None
+
+    def test_returns_none_when_case_not_in_whitelist(self, tmp_path):
+        wl = tmp_path / "wl.yaml"
+        wl.write_text("cases:\n  - id: other\n    turbulence_model: kEpsilon\n")
+        assert _load_whitelist_turbulence_model("missing", whitelist_path=wl) is None
+
+    def test_matches_by_id_or_name(self, tmp_path):
+        wl = tmp_path / "wl.yaml"
+        wl.write_text(
+            "cases:\n"
+            "  - id: my_case\n"
+            "    name: My Case\n"
+            "    turbulence_model: kOmegaSST\n"
+        )
+        assert _load_whitelist_turbulence_model("my_case", whitelist_path=wl) == "kOmegaSST"
+        assert _load_whitelist_turbulence_model("My Case", whitelist_path=wl) == "kOmegaSST"
+
+    def test_returns_none_when_turbulence_model_absent(self, tmp_path):
+        wl = tmp_path / "wl.yaml"
+        wl.write_text("cases:\n  - id: no_model\n    name: No Model\n")
+        assert _load_whitelist_turbulence_model("no_model", whitelist_path=wl) is None
+
+    def test_returns_none_when_turbulence_model_not_string(self, tmp_path):
+        """Fail closed on non-string (e.g. accidental list/dict)."""
+        wl = tmp_path / "wl.yaml"
+        wl.write_text("cases:\n  - id: bad\n    turbulence_model: [laminar]\n")
+        assert _load_whitelist_turbulence_model("bad", whitelist_path=wl) is None
+
+    def test_returns_none_for_malformed_yaml(self, tmp_path):
+        bad = tmp_path / "bad.yaml"
+        bad.write_text("cases: [this is : broken yaml :: [")
+        assert _load_whitelist_turbulence_model("x", whitelist_path=bad) is None
 
 
 class TestEmitGoldAnchoredPointsSampleDict:
