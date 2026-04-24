@@ -1,6 +1,6 @@
 # VERSION_COMPATIBILITY_POLICY — 版本兼容硬宪法
 
-**Status**: Active v1.0-rc2 (Promoted from v0.1 Draft · 2026-04-24 · Codex R1 CHANGES_REQUIRED → round 2 in flight — see §10.1)
+**Status**: Active v1.0 (Promoted under SPEC_PROMOTION_GATE v1.1 · G-D Refinement Gate 2026-04-24 · Opus Option X ACCEPTED)
 **Authority**: Opus 4.7 Pivot Post-Hoc Review §6 (HOLD + 串行 blocker) · GOV-1 Task
 **Notion SSOT**: <https://www.notion.so/VERSION_COMPATIBILITY_POLICY-947fa51765734d3cb84f626c2411e949>
 **Gate**: Promoted per `docs/specs/SPEC_PROMOTION_GATE.md` §2 (6 通用门 AND §3 spec-specific blocker)
@@ -29,7 +29,7 @@ METRICS_AND_TRUST_GATES v0.1 的核心 blocker 是 "tolerance 必须来自
 | 轴 | 当前 Baseline | 锚点 |
 |---|---|---|
 | Solver | `"openfoam"` (family) + `"v2312"` (version) | Foam-Agent ship 的 docker image (`cfd-openfoam:v2312`) |
-| Knowledge Schema (live, heterogeneous) | **Structured files: `schema_version: 2`** (例如 `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`, `turbulent_flat_plate.yaml`); **Legacy files: `schema_version: 1`** (其余 gold YAML); **audit manifest: `SCHEMA_VERSION = 1`** | `knowledge/schemas/gold_standard_schema.json` + `src/audit_package/manifest.py:43` |
+| Knowledge Schema (live, heterogeneous) | **Structured files (10 files with `schema_version: 2`)** — e.g. `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`, `turbulent_flat_plate.yaml`, `axisymmetric_impinging_jet.yaml`, `duct_flow.yaml`, etc.; **Legacy files (5 multi-document YAMLs with NO top-level `schema_version`)** — e.g. `lid_driven_cavity.yaml`, `backward_facing_step.yaml`, etc. (accepted by `LegacyObservable` branch of schema); **audit manifest: `SCHEMA_VERSION = 1` (integer emitted in `src/audit_package/manifest.py`, unrelated to gold YAML schema_version)** | `knowledge/schemas/gold_standard_schema.json` `$defs.LegacyGoldStandardFile` + `$defs.StructuredGoldStandardFile` (oneOf); `src/audit_package/manifest.py:43` |
 | Extractor Suite | `extractor_semver: "1.0.0"` (nominal) | `src/result_comparator.py` + `src/*_extractor.py` 集合；semver 尚未 embedded in code 中 (P1-T1 deliverable) |
 | Harness Core | `harness_semver: "1.0.0"` (planned) | `pyproject.toml` `[project].version` (not yet set) |
 
@@ -79,13 +79,20 @@ METRICS_AND_TRUST_GATES v0.1 的核心 blocker 是 "tolerance 必须来自
 
 ### §2.3 兼容 shim（过渡期 · 2026-04-24 → P1-T1 closeout）
 
-**Codex R1 #2 fix (2026-04-24)**: 原 "2026-06-30 截止" 过于激进 (2 个月 buffer
-且依赖未实现 lint-knowledge.py)。改为 P1-T1 closeout 为截止点（P1-T1 会实现
-lint-knowledge.py 作为 deliverable），并区分 schema_version 与四元组两种状态。
+**Codex R1 #2 + R2 #1 fix (2026-04-24)**: 原 "2026-06-30 截止" 过于激进
+(2 个月 buffer 且依赖未实现 lint-knowledge.py)。改为 P1-T1 closeout 为
+截止点（P1-T1 会实现 lint-knowledge.py 作为 deliverable），并区分
+schema_version 与四元组两种状态。
 
-历史 artefact 不带完整四元组。当前 gold YAML 状态已是**混合**（§1 table）：
-- structured files: `schema_version: 2` (lid_driven_cavity_benchmark, cylinder_crossflow, turbulent_flat_plate 等) — 现代契约
-- legacy files: `schema_version: 1` (多数 primary gold yaml) — 待迁移
+历史 artefact 不带完整四元组。当前 gold YAML 状态已是**混合**：
+- **structured files (10 个，有 top-level `schema_version: 2`)**：例如
+  `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`,
+  `turbulent_flat_plate.yaml`, `axisymmetric_impinging_jet.yaml`,
+  `duct_flow.yaml` 等 — 走 schema 的 `StructuredGoldStandardFile` 分支
+- **legacy files (5 个多文档 YAML，无 top-level `schema_version`)**：例如
+  `lid_driven_cavity.yaml`, `backward_facing_step.yaml` 等 — 走 schema 的
+  `LegacyGoldStandardFile` / `LegacyObservable` 分支；validator (`oneOf`)
+  两条路径都接受
 
 过渡规则：
 
@@ -217,10 +224,11 @@ Fluent / ...）走 **ExecutorMode plugin 协议** + `CaseProfile.solver_family`
 ### §5.2 Knowledge schema 增演
 
 每次 `knowledge/schemas/*.json` breaking change：
-1. `schema_version += 1` (integer)
-2. `schema_semver` major bump (optional declarative tag)
-3. 所有 `gold_standards/*.yaml` 必须同步迁移或显式声明 legacy
-4. 迁移脚本 `scripts/migrate_knowledge_schema_vN_to_vM.py` 作为 DEC 附件落地
+1. `schema_version += 1` (integer — 唯一权威版本标识, per §2.1)
+2. 所有 `gold_standards/*.yaml` 必须同步迁移或显式声明 legacy（通过
+   schema 的 `oneOf(LegacyGoldStandardFile, StructuredGoldStandardFile)`
+   分支兼容共存）
+3. 迁移脚本 `scripts/migrate_knowledge_schema_vN_to_vM.py` 作为 DEC 附件落地
 
 ### §5.3 Deprecation 窗口
 
@@ -248,9 +256,12 @@ version_fingerprint:
   git_sha: "4fd9215"
 ```
 
-### §6.2 季度 Drift Audit
+### §6.2 季度 Drift Audit (planned · enforcement P1-T1)
 
-每季度（Q1/Q2/Q3/Q4）运行 `scripts/audit_version_drift.py`（未实现；
+**Codex R2 minor comment (2026-04-24)**: 本节与 §6.1 一样标 **recommended · 
+enforcement 尚未实现**, 避免读者误认为 quarterly audit 已强制。
+
+每季度（Q1/Q2/Q3/Q4）**建议**运行 `scripts/audit_version_drift.py`（未实现；
 P1 closeout 前上线）对 Provenance 全量扫描：
 - 找出所有 `solver_version` 分布，非 baseline 的每条都要有 audit_concern 引用
 - 找出所有 `schema_version` 不等于当前的 YAML，每条必须已 migrate 或带 legacy exception
@@ -277,45 +288,102 @@ P1 closeout 前上线）对 Provenance 全量扫描：
 
 ## §8 不做清单
 
-本文件**不做**：
-- 不定义各 plane 内部的对象 schema（见 KNOWLEDGE_OBJECT_MODEL）
-- 不定义 tolerance 的数值（见 `CaseProfile.tolerance_policy` via METRICS_AND_TRUST_GATES）
-- 不替代 SYSTEM_ARCHITECTURE 的 plane 划分
-- 不约束 `ui/**` 或 `scripts/**` 的版本策略
-- 不要求跨 solver 的 apples-to-apples 数值比较 (见 §5.1)
+**G-D v1.1 (SPEC_PROMOTION_GATE §7)**: 每条 "不做" 必须显式标注类别
+(Cat 1/2/3) 并满足对应 evidence 要求。详见 §9.1 evidence table。
+
+### §8.1 [Cat 2] 不定义各 plane 内部的对象 schema
+
+Delegated to `KNOWLEDGE_OBJECT_MODEL.md` §1 Object Definitions.
+See §9.1 entry for accepting clause evidence.
+
+### §8.2 [Cat 2] 不定义 tolerance 的数值
+
+Delegated to `METRICS_AND_TRUST_GATES.md` §4 Tolerance Policy.
+See §9.1 entry for accepting clause evidence.
+
+### §8.3 [Cat 1] 不替代 SYSTEM_ARCHITECTURE 的 plane 划分
+
+Capability-negated via `ADR-001` `.importlinter` contract
+`execution-never-imports-evaluation` + `evaluation-never-imports-execution`
++ `knowledge-no-reverse-import` + `models-stays-pure`. CI step
+"Four-plane import contract (ADR-001)" in `.github/workflows/ci.yml`
+fails if any VCP-claimed plane cross would actually occur.
+
+### §8.4 [Cat 2] 不约束 `ui/**` 或 `scripts/**` 的版本策略
+
+Delegated to `docs/scope/UI_SCRIPTS_BOUNDARY.md` §1 + §2.
+See §9.1 entry for accepting clause evidence.
+
+### §8.5 [Cat 3] 不要求跨 solver 的 apples-to-apples 数值比较
+
+Policy commitment recorded at `docs/governance/POLICY_COMMITMENTS_LEDGER.md`
+entry `POL-VCP-001` + Decisions DB `DEC-POLICY-VCP-001` (pending
+CFDJerry signature). Rationale: cross-family numerical differences =
+solver-implementation-difference, not physics-disagreement. ESI/.com
+internal-compatible pairs require explicit registry (see §5.1).
 
 ## §9 Promotion Gate 证据
 
-per SPEC_PROMOTION_GATE.md §2:
+per SPEC_PROMOTION_GATE.md v1.1 §2:
 
 | Gate | Status | Evidence |
 |---|---|---|
 | G-A (Deliverables ≥80% merge) | ✅ | 本 spec 文件; `src.audit_package.manifest` + `src.convergence_attestor` 已使用 `schema_version` |
-| G-B (冒烟案例) | ⚠️ | legacy gold_standards/*.yaml 隐式 baseline 继承 pass; structured files 显式 `schema_version: 2`；4-tuple 未强制 |
+| G-B (冒烟案例) | ⚠️ | legacy gold_standards/*.yaml 走 LegacyObservable 分支 pass; structured files 显式 `schema_version: 2`；4-tuple 未强制（P1-T1 deliverable） |
 | G-C (上下游 cross-ref) | ✅ | §4 显式引用 METRICS_AND_TRUST_GATES / EXECUTOR_ABSTRACTION / KNOWLEDGE_OBJECT_MODEL |
-| G-D ("不做清单"有兜底) | ⚠️ (narrowed · Codex R1 #4 fix 2026-04-24) | 本 §8 的 5 条"不做"各自的 CI 兜底差异化；见 §9.1 表 |
+| G-D v1.1 (Cat 1/2/3 evidence) | ✅ | 详见 §9.1 scope_delegations 表 + §9.2 Cat 1 evidence + §9.3 Cat 3 ledger ref |
 | G-E (DEC record) | ⏳ | `DEC-PIVOT-P1-GOV-1` 待 CFDJerry 签 (G-1 完成时同步登记) |
-| G-F (Codex 独立审查无 HIGH) | ⏳ | R1 CHANGES_REQUIRED 2026-04-24 → round 2 pending after本 rc2 fix |
+| G-F (Codex 独立审查无 HIGH) | ⏳ | R1+R2 CHANGES_REQUIRED → R3 pending on this commit (Option X accept clause landing + §8 categorization) |
 
-### §9.1 "不做清单" CI 兜底映射
+### §9.1 Cat 2 · Scope Delegations 表
 
-原 §9 G-D claim 把 5 条都归给 `scripts/validate_gold_standards.py` —
-该脚本只校验 gold YAML schema shape 和 corpus，覆盖不全。正确映射：
+per SPEC_PROMOTION_GATE.md v1.1 §7.2 (3 条全部满足):
 
-| §8 "不做" 条目 | 实际 CI / 运行期兜底 | 成熟度 |
+```yaml
+scope_delegations:
+  - item: "Plane 内部对象 schema"
+    category: 2
+    source_section: "§8.1"
+    delegated_to_spec: KNOWLEDGE_OBJECT_MODEL
+    delegated_to_section: "§1 Object Definitions"
+    accepting_clause_path: "docs/specs/KNOWLEDGE_OBJECT_MODEL.md §1"
+    accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.1 · Plane 内部 object schema"
+    co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
+
+  - item: "tolerance 数值"
+    category: 2
+    source_section: "§8.2"
+    delegated_to_spec: METRICS_AND_TRUST_GATES
+    delegated_to_section: "§4 Tolerance Policy"
+    accepting_clause_path: "docs/specs/METRICS_AND_TRUST_GATES.md §4"
+    accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.2 · tolerance values"
+    co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
+
+  - item: "ui/** and scripts/** 版本策略"
+    category: 2
+    source_section: "§8.4"
+    delegated_to_spec: UI_SCRIPTS_BOUNDARY (scope doc, not a canonical spec)
+    delegated_to_section: "§1 ui/** + §2 scripts/**"
+    accepting_clause_path: "docs/scope/UI_SCRIPTS_BOUNDARY.md §0"
+    accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.4 · ui/** and scripts/** 的版本策略"
+    co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
+```
+
+### §9.2 Cat 1 · Capability Negation evidence
+
+| §8 条目 | CI 强制机制 | 失败条件 |
 |---|---|---|
-| 不定义 Plane 内部 schema (见 KNOWLEDGE_OBJECT_MODEL) | KNOWLEDGE Active 时由该 spec + 对应 lint 接管 | ⏳ blocked on KNOWLEDGE v1.0 |
-| 不定义 tolerance 数值 (见 CaseProfile.tolerance_policy via METRICS) | METRICS Active 时由该 spec + schema lint 接管 | ⏳ blocked on METRICS v1.0 |
-| 不替代 SYSTEM_ARCHITECTURE 的 plane 划分 | `.importlinter` (ADR-001) · 4 forbidden contracts · CI step | ✅ 已生效 |
-| 不约束 ui/** 或 scripts/** 的版本策略 | 仅声明, 无 CI (ui/backend 自有 SCOPE_RULES 文档) | N/A policy-level constraint |
-| 不要求跨 solver apples-to-apples 比较 (§5.1 HARD_FAIL default) | §5.1 注：P5 activation 前无 cross-solver code path 可能构成违规 | ✅ 架构层阻止 |
+| §8.3 不替代 SYSTEM_ARCHITECTURE plane 划分 | `.importlinter` 4 forbidden contracts (ADR-001); `.github/workflows/ci.yml` step "Four-plane import contract (ADR-001)" | 任何 VCP 声称的 plane cross import 真实发生时 `lint-imports` non-zero exit |
 
-结论：G-D 的 claim 从 "validate_gold_standards.py 背书全部 5 条" 收敛为
-"schema shape + plane partition (ADR-001) 两条有硬 CI, 其余挂在对应
-spec 的 Active 链路 + 架构约束上"。
+### §9.3 Cat 3 · Policy Commitment evidence
 
-当 G-E + G-F 完成，本文件 status 从 "Active v1.0-rc2 (Codex R2 pending)"
-正式升格为 "Active v1.0"。
+| §8 条目 | Ledger entry | Decision | Review cadence |
+|---|---|---|---|
+| §8.5 不要求跨 solver apples-to-apples | `docs/governance/POLICY_COMMITMENTS_LEDGER.md` entry `POL-VCP-001` | `DEC-POLICY-VCP-001` (pending CFDJerry sign) | quarterly; next due 2026-07-24 |
+
+当 G-E + G-F 完成，本文件 status 从 "Active v1.0 (Cat 2 accepting clauses
+landed, Cat 3 decision pending)" 正式 CLEAR 到 "Active v1.0 · all
+Promotion Gate 通过"。
 
 ## §10 修订记录
 
@@ -323,7 +391,8 @@ spec 的 Active 链路 + 架构约束上"。
 |---|---|---|---|
 | v0.1 | 2026-04-22 | 首席架构官 (Notion) | Initial Draft; 四元组骨架 + drift 树概念 |
 | v1.0 | 2026-04-24 | Claude Code + Opus 4.7 Post-Hoc Gate | GOV-1 promote attempt; 固化四元组字段、drift 决策树、过渡 shim、baseline pin、Promotion Gate 证据。Commit acb1993 |
-| v1.0-rc2 | 2026-04-24 | Claude Code + Codex R1 CHANGES_REQUIRED response | 4 BLOCKING 修复 (solver_version parser custom / baseline heterogeneous / §3§4 aspirational 标注 / G-D scope narrowed). 3 open comment fix (schema_semver 删除 / solver_family open registry / §6 planned 标注). See §10.1 |
+| v1.0-rc2 | 2026-04-24 | Claude Code + Codex R1 CHANGES_REQUIRED response | 4 BLOCKING 修复 (solver_version parser custom / baseline heterogeneous / §3§4 aspirational 标注 / G-D scope narrowed). 3 open comment fix (schema_semver 删除 / solver_family open registry / §6 planned 标注). See §10.1. Commit 41fed9d. |
+| v1.0 | 2026-04-24 | Opus 4.7 Gate Option X ACCEPTED + Claude Code + (pending) Codex R3 | Promoted under SPEC_PROMOTION_GATE v1.1 per G-D Refinement Gate 2026-04-24. §8 each "不做" item explicitly categorized (Cat 1/2/3 per G-D v1.1); §9.1 scope_delegations table (Cat 2) added with accepting clauses co-landed in consumer specs (KNOWLEDGE_OBJECT_MODEL §1, METRICS_AND_TRUST_GATES §4, UI_SCRIPTS_BOUNDARY §0); §9.2 Cat 1 evidence via ADR-001 importlinter; §9.3 Cat 3 evidence via POLICY_COMMITMENTS_LEDGER POL-VCP-001 + DEC-POLICY-VCP-001. R2 #1 corpus accuracy fix: 10 structured files with top-level schema_version=2 + 5 legacy multi-doc YAMLs with NO top-level schema_version (走 LegacyObservable 分支). R2 #2 schema_semver residual cleanup in §5.2. R2 #3 G-D gate met per v1.1 differentiated evidence. See §10.2. |
 
 ### §10.1 Codex R1 CHANGES_REQUIRED 响应细则 (v1.0 → v1.0-rc2 · 2026-04-24)
 
@@ -370,6 +439,57 @@ validate_gold_standards 兜底" 收敛为实际能做到的范围。
   (enforcement P1-T1 起)
 
 Regression: 569 pass, 4 import contracts KEPT (本修复 doc-only, 无代码触碰).
+
+### §10.2 Codex R2 CHANGES_REQUIRED + Opus Option X 响应 (rc2 → v1.0 · 2026-04-24)
+
+Codex R2 returned CHANGES_REQUIRED with 3 more blocking findings beyond R1
+fix. All 3 addressed in this v1.0 commit, plus upstream Opus 4.7 Gate
+ruling in Option X (see `docs/specs/SPEC_PROMOTION_GATE.md` §9 v1.1
+changelog).
+
+**R2 Blocking #1** (§1 corpus accuracy) — Codex showed legacy files have NO
+top-level `schema_version`, 10 structured files with `schema_version: 2`,
+not a "structured=2 / legacy=1" split.
+**Fix**: §1 table + §2.3 rewritten with accurate: 10 structured + 5 legacy
+multi-doc; LegacyObservable / StructuredGoldStandardFile `oneOf` branches
+of gold_standard_schema.json explicitly referenced.
+
+**R2 Blocking #2** (§5.2 schema_semver residual contradiction) — v1.0-rc2
+claimed removal in §10.1 but §5.2 still required `schema_semver` major bump.
+**Fix**: §5.2 entry 2 removed; only integer `schema_version` remains.
+
+**R2 Blocking #3** (G-D v1.0 字面门未满足) — §9.1 argued from "future-spec
+dependencies" / "policy-level" / "architectural"; not regression tests or
+CI lints per G-D v1.0.
+**Fix (Opus Option X)**: SPEC_PROMOTION_GATE v1.0 → v1.1 refinement. G-D
+now categorizes "不做" items into Cat 1/2/3 with differentiated evidence
+bars. VCP §8 items now explicitly Cat 2 (4 items with scope_delegations
+table §9.1 + accepting clauses in consumer specs) + Cat 1 (1 item with
+ADR-001 importlinter evidence §9.2) + Cat 3 (1 item with POL-VCP-001 ledger
+entry + DEC-POLICY-VCP-001 §9.3). This refinement triggered under RETRO-V61-001
+rule #3 (CHANGES_REQUIRED); documented as `DEC-PIVOT-GATE-001` in Notion
+Decisions DB.
+
+**R2 Minor comment** (§6.2 labeling) — `quarterly audit` not labeled as
+explicitly "planned" as §6.1 `version_fingerprint`.
+**Fix**: §6.2 now labeled "(planned · enforcement P1-T1)" same as §6.1.
+
+**Consumer-side co-landed commits** (per SPEC_PROMOTION_GATE §7.2 item 3):
+- `docs/specs/KNOWLEDGE_OBJECT_MODEL.md` §1 Object Definitions — accepting
+  clause for VCP §8.1
+- `docs/specs/METRICS_AND_TRUST_GATES.md` §4 Tolerance Policy — accepting
+  clause for VCP §8.2
+- `docs/scope/UI_SCRIPTS_BOUNDARY.md` §0 — accepting clause for VCP §8.4
+- `docs/governance/POLICY_COMMITMENTS_LEDGER.md` POL-VCP-001 — Cat 3 for VCP §8.5
+
+**Gate v1.1 changes** (`docs/specs/SPEC_PROMOTION_GATE.md`):
+- §2 G-D replaced with v1.1 wording (category-dispatched evidence)
+- §7 new section: Cat 1/2/3 definitions + evidence requirements
+- §8 new appendix: schema examples for scope_delegations + POL entry
+- `docs/governance/CODEX_REVIEW_RUBRIC.md` (new stub): Codex challenge
+  duty on category classification
+
+Regression: 569 pass, 4 import contracts KEPT (所有 fix doc-only, 无代码触碰).
 
 ---
 
