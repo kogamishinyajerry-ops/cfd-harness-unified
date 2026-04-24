@@ -291,3 +291,72 @@ Kogami reply: **"D，Q1～Q5由你推荐决定"** — adopts bundle D, delegates
 - Notion Decisions DB — retrospective mirrored at https://www.notion.so/348c68942bed819185f1fa3351e89ace (Scope=Project, Status=Accepted)
 
 **Phase 6 kicks off at counter=0 + new governance active.**
+
+---
+
+## Addendum · 2026-04-24 · 5th retro trigger (Post-Pivot)
+
+**Not a supersede.** Appended per Opus 4.7 Pivot Post-Hoc Review §5
+(2026-04-24). Claude Code 自签 (autonomous_governance: true). Counter
+state unchanged; governance semantics unchanged.
+
+### 5th retro trigger
+
+RETRO-V61-001 originally codified **4 retro triggers** (phase-close /
+counter ≥ 20 / `CHANGES_REQUIRED` verdict / post-R3 live-run defect,
+latter per RETRO-V61-053 addendum). Under the Pivot 2026-04-22
+operating model, P1 (Metrics & Trust) and subsequent Phases will
+produce smaller, more atomic PRs (each metric class potentially its
+own PR). The existing 4 triggers undersample the cross-plane
+integration moment where spec interface first meets reality.
+
+**New 5th trigger**:
+
+> A retro is required when a spec crosses ≥ 2 Planes (per
+> SYSTEM_ARCHITECTURE v1.0) and its first end-to-end integration test
+> passes.
+>
+> Example: Metrics (Evaluation Plane) → TrustGate (Control Plane) →
+> Provenance write (Knowledge Plane) — the first time all three planes
+> exchange a real CaseProfile + measurement + verdict in one test run,
+> a retro is written.
+
+### Why not "spec v0.1 → v1.0 promote" as the trigger
+
+User originally proposed "spec promote" as the trigger. Rejected
+because Opus Gate (per `docs/specs/SPEC_PROMOTION_GATE.md`) is already
+a heavy review; stacking retro on top would be process-theatre. The
+integration-test moment is a *different* signal — it catches interface
+mismatch and cross-plane call-direction violations **before** a spec
+is promoted, so issues surface early where Gate review would already
+be too late.
+
+### Retro format for 5th trigger
+
+- Scope: the spec crossing AND the integration test (not the code under
+  test)
+- Ask: did the interface types on both sides match what each spec
+  declared?
+- Ask: did any call traverse the Planes in a direction forbidden by
+  SYSTEM_ARCHITECTURE §2 (even via import aliasing)?
+- Ask: did the test require any downstream spec to lift a restriction
+  that its Draft v0.1 originally had? (If yes, log as interface debt.)
+- Output: `.planning/retrospectives/YYYY-MM-DD_retro_spec_crossing_<A>_<B>.md`
+
+### Updated rule inventory
+
+Retro triggers as of 2026-04-24 (5 total):
+
+1. Phase marked COMPLETE
+2. `autonomous_governance_counter_v61` ≥ 20
+3. Any PR receives `CHANGES_REQUIRED`
+4. Post-R3 live-run defect (per RETRO-V61-053 addendum 2026-04-24)
+5. **NEW**: Spec crosses ≥ 2 Planes and first integration test passes
+
+### Cross-refs
+
+- Opus 4.7 Pivot Post-Hoc Review 2026-04-24 §5 (Notion — independent
+  Gate session verdict)
+- `docs/specs/SPEC_PROMOTION_GATE.md` §2 (6 通用门) — promote Gate
+  distinct from this trigger
+- SYSTEM_ARCHITECTURE v1.0 §2 四层 import 铁律

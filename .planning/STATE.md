@@ -3,13 +3,29 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-22T18:55 local"
+last_updated: "2026-04-24T22:50 local"
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 18
   completed_plans: 18
   percent: 89
+pivot:
+  date: "2026-04-22"
+  charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
+  charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
+  opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
+  status: "post-pivot-foundation-freeze-in-progress (Track A landed W1-day-0)"
+  go_no_go:
+    G-1_dec_pivot_signoff: pending_cfdjerry
+    G-2_charter_freeze_semantics: DONE_2026-04-24
+    G-3_gov1_version_policy_v1: pending_codex_review
+    G-4_spec_promotion_gate: DONE_2026-04-24
+    G-5_adr001_import_static: pending_codex_review
+    G-6_caseprofile_risk_flags: pending_knowledge_align
+    G-7_retro_5th_trigger: DONE_2026-04-24
+    G-8_state_stamp: DONE_2026-04-24
+    G-9_opus_w2_phase_transition: pending_W2
 ---
 
 driving_model: claude-code-opus47 (Main Driver under Model Routing v6.2 · CLI-based · 2026-04-22 takeover from v6.1 claude-opus47-app). Subagent discipline: >5 turns / >40k tokens / >3 files / >500 LOC → fresh subagent dispatch. Codex GPT-5.4-xhigh: Joint Dev Peer with 3 invocation modes — (§A) 禁区 diff generator; (§B) independent key-claim verifier [NEW — anti-deception]; (§C) milestone joint reviewer. Notion Gate: 5 hard-floor guards (+1 new: heterogeneous verification failure).
