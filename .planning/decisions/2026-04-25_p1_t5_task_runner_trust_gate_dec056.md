@@ -26,7 +26,7 @@ external_gate_caveat: |
   The additive RunReport.trust_gate_report field means that transition
   can happen without breaking downstream consumers.
 codex_tool_report_path: reports/codex_tool_reports/dec_v61_056_p1_t5_review.log (pending)
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-25T04:55 · Status=Proposed (page_id=34cc6894-2bed-81f1-b99e-eb962162691e, URL=https://www.notion.so/DEC-V61-056-P1-T5-task_runner-TrustGateReport-integration-Control-Evaluation-34cc68942bed81f1b99eeb962162691e)
 github_sync_status: pushed (1 commit on origin/main locally; main not yet pushed to remote)
 reversibility: MEDIUM — revert would remove one field (default None) from
   RunReport + one helper function + 1 test file. Downstream consumers don't
