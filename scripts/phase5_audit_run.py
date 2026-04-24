@@ -522,6 +522,28 @@ def _audit_fixture_doc(
                     "reattachment_detection_rejected_x": kq.get("reattachment_detection_rejected_x"),
                 }.items() if v is not None
             },
+            # DEC-V61-053 Codex R4 MED fix: surface Type I cross-check gates
+            # (cd_mean, cl_rms, deficit_x_over_D_*) as `secondary_scalars` so
+            # the Compare-tab multi-scalar anchor cards light up on live
+            # fixtures. Preflight already reads this key (scripts/preflight_
+            # case_visual.py:339), and comparison_report.py reads it (line
+            # 715). Previously the raw JSON captured these values but the
+            # fixture YAML dropped them on the floor.
+            **({
+                "secondary_scalars": {
+                    k: kq[k] for k in (
+                        "cd_mean", "cl_rms",
+                        "deficit_x_over_D_1.0", "deficit_x_over_D_2.0",
+                        "deficit_x_over_D_3.0", "deficit_x_over_D_5.0",
+                    ) if k in kq and kq[k] is not None
+                }
+            } if any(
+                k in kq for k in (
+                    "cd_mean", "cl_rms",
+                    "deficit_x_over_D_1.0", "deficit_x_over_D_2.0",
+                    "deficit_x_over_D_3.0", "deficit_x_over_D_5.0",
+                )
+            ) else {}),
         },
         "audit_concerns": [],
         "decisions_trail": [

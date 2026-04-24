@@ -396,7 +396,7 @@ def gen_circular_cylinder_wake():
             transform=ax.transAxes, fontsize=8, color=PASS, ha="right", va="top",
             bbox=dict(boxstyle="round,pad=0.3", facecolor=PANEL_BG, edgecolor=GRID))
 
-    _setup_axes(ax, "|U| 瞬时场 · simpleFoam laminar Re=100 · Karman 涡街",
+    _setup_axes(ax, "|U| 瞬时场 · pimpleFoam laminar Re=100 · Karman 涡街",
                 "x / D", "y / D",
                 xmin=float(X_over_D.min()), xmax=float(X_over_D.max()),
                 ymin=float(Y_over_D.min()), ymax=float(Y_over_D.max()))
@@ -407,7 +407,7 @@ def gen_circular_cylinder_wake():
     cbar.ax.tick_params(colors=AXIS_TEXT, labelsize=7)
     cbar.outline.set_edgecolor(GRID)
     _save(fig, "circular_cylinder_wake", "karman_shedding",
-          f"Real |U|(x,y) instantaneous snapshot from simpleFoam laminar Re=100 "
+          f"Real |U|(x,y) instantaneous snapshot from pimpleFoam laminar Re=100 "
           f"cylinder wake audit VTK ({vtk_path.parent.parent.name}, ~144k cells, "
           f"L_up=10D/L_down=20D/H=6D → 8% blockage per DEC-V61-053 Batch B1). "
           f"Red dots mark the 4 u_mean_centerline sampling stations at "

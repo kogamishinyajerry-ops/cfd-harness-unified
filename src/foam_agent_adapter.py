@@ -440,6 +440,15 @@ class FoamAgentExecutor:
     BLOCK_MESH_TIMEOUT = 600
     SOLVER_TIMEOUT = 7200
 
+    # DEC-V61-053 Codex R4 LOW fix (2026-04-24): single source of truth
+    # for the cylinder case's endTime. Both the controlDict generator
+    # (line ~4886) and the extractor's endTime-aware trim (line ~7891)
+    # read from this class constant instead of hardcoding the literal.
+    # Silent-drift prevention: if a future DEC bumps this back to 60s or
+    # 200s for precision, the extractor's transient_trim / min_averaging_
+    # window values scale automatically.
+    CYLINDER_ENDTIME_S = 10.0
+
     def __init__(
         self,
         work_dir: Optional[str] = None,
@@ -4505,6 +4514,10 @@ fields          (T);
             task_spec.boundary_conditions = {}
         task_spec.boundary_conditions["cylinder_D"] = D
         task_spec.boundary_conditions["U_ref"] = U_bulk
+        # DEC-V61-053 Codex R4 LOW fix: surface endTime in boundary_conditions
+        # from the class constant CYLINDER_ENDTIME_S (single source of truth).
+        # Extractor reads it to derive transient_trim / min_averaging_window.
+        task_spec.boundary_conditions["cylinder_endTime"] = self.CYLINDER_ENDTIME_S
 
         # Channel dimensions — DEC-V61-053 Batch B1 (decision b):
         # grown from L_inlet=2D/L_outlet=8D/H=2.5D (20% blockage) to
@@ -4871,14 +4884,13 @@ application     pimpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-053 Batch B1 live-run tuning (2026-04-24): first-pass audit
-// endTime=10s. At St=0.164 the shedding period T = D/U/St ≈ 0.61s; 10s
-// gives ~2.5s transient (4 periods) + 7.5s steady (~12 resolved periods).
-// Δf ≈ 1/7.5s ≈ 0.13 Hz → ΔSt ≈ 0.013 (just above the 5% gold tolerance
-// 0.0082 — acceptable for demonstration audit, needs precision follow-up
-// before claiming final Williamson comparison). The 60s / 200s targets
-// are retained in comments as future precision upgrades.
-endTime         10.0;
+// DEC-V61-053 endTime from class constant CYLINDER_ENDTIME_S (single
+// source of truth; extractor reads via boundary_conditions to keep
+// transient_trim / min_averaging_window in sync). At St=0.164 the
+// shedding period T = D/U/St ≈ 0.61s. 10s gives ~2s transient +
+// ~8s steady = ~13 resolved periods. Δf ≈ 0.13 Hz → ΔSt ≈ 0.013.
+// The 60s / 200s precision upgrades remain deferred to a future DEC.
+endTime         {self.CYLINDER_ENDTIME_S};
 // DEC-V61-053 Batch B1 live-run tuning (2026-04-24): maxCo=1.0 doubles
 // the achievable timestep vs the conservative 0.5 (shedding frequency
 // is well-resolved at Co=1 on this refined grid; Nyquist margin per
@@ -7882,15 +7894,16 @@ mergePatchPairs
         # silently on pimpleFoam adaptive-timestep runs).
         if (task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
                 and task_spec.flow_type == FlowType.EXTERNAL):
-            # DEC-V61-053 live-run tuning: adapter sets endTime=10s per
-            # 35f3278. Default extractor trims (50s transient / 10s min
-            # averaging window) were sized for 200s endTime and would
-            # reject the full 10s series. Scale trims to actual endTime.
-            # endTime is set in the generator at line 4879 (currently
-            # 10s — future DEC may bump back to 60s / 200s for precision).
-            _cyl_endtime = 10.0  # MUST match adapter's controlDict endTime
+            # DEC-V61-053 Codex R4 LOW fix: read endTime from
+            # boundary_conditions (plumbed by generator from class constant
+            # CYLINDER_ENDTIME_S — single source of truth). Fallback to
+            # CYLINDER_ENDTIME_S for MOCK / out-of-band calls. If a future
+            # DEC bumps the constant to 60s/200s, transient_trim and
+            # min_averaging_window scale automatically.
+            _bc = task_spec.boundary_conditions or {}
+            _cyl_endtime = float(_bc.get("cylinder_endTime", self.CYLINDER_ENDTIME_S))
             _cyl_trim = min(0.2 * _cyl_endtime, 50.0)  # 20% transient, cap at original default
-            _cyl_min_window = max(0.3 * _cyl_endtime, 2.0)  # half of post-trim, min 2s
+            _cyl_min_window = max(0.3 * _cyl_endtime, 2.0)  # min 2s floor for demo runs
             key_quantities = self._extract_cylinder_strouhal(
                 [], [], [], task_spec, key_quantities, case_dir=case_dir,
                 transient_trim_s=_cyl_trim,

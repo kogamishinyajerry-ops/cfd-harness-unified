@@ -27,6 +27,12 @@ measurement:
   extraction_source: comparator_deviation
   solver_success: true
   comparator_passed: false
+  # DEC-V61-053 Codex R4 MED fix: Type I cross-check gates promoted from
+  # attempt-6 raw key_quantities (reports/phase5_audit/20260424T072037Z_
+  # circular_cylinder_wake_raw.json). Compare-tab reads this.
+  secondary_scalars:
+    cd_mean: 1.3790543620796876
+    cl_rms: 0.08094277312528547
 audit_concerns:
 - concern_type: CONTRACT_STATUS
   summary: 'Quantity: strouhal_number | Tolerance: 5.0% | Failed: 1 deviation(s)'

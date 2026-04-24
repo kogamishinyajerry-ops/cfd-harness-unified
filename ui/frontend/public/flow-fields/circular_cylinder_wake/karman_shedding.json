@@ -1,4 +1,4 @@
 {
-  "provenance": "Real |U|(x,y) instantaneous snapshot from simpleFoam laminar Re=100 cylinder wake audit VTK (20260424T023251Z, ~144k cells, L_up=10D/L_down=20D/H=6D → 8% blockage per DEC-V61-053 Batch B1). Red dots mark the 4 u_mean_centerline sampling stations at x/D ∈ {1, 2, 3, 5} (Williamson 1996 Fig.19 comparison points). Cylinder outline at origin; y/D coordinate normalizes by D=0.1 m.",
+  "provenance": "Real |U|(x,y) instantaneous snapshot from pimpleFoam laminar Re=100 cylinder wake audit VTK (20260424T050455Z, ~144k cells, L_up=10D/L_down=20D/H=6D → 8% blockage per DEC-V61-053 Batch B1). Red dots mark the 4 u_mean_centerline sampling stations at x/D ∈ {1, 2, 3, 5} (Williamson 1996 Fig.19 comparison points). Cylinder outline at origin; y/D coordinate normalizes by D=0.1 m.",
   "generator": "scripts/flow-field-gen/generate_contours.py"
 }
