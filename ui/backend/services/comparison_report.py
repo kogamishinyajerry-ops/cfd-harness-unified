@@ -1060,6 +1060,14 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for
                                 "any_above_noise": any(
                                     e["signal_above_noise"] for e in eddy_results
                                 ),
+                                # Codex round 3 MED: distinguish "at least one
+                                # eddy is above noise AND fails tolerance" from
+                                # "one passes above-noise + one is noise-floor".
+                                # Only the former is a genuine physics deviation.
+                                "any_above_noise_fail": any(
+                                    e["signal_above_noise"] and not e["all_pass"]
+                                    for e in eddy_results
+                                ),
                             }
         except Exception:
             # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide

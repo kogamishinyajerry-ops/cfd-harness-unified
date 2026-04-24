@@ -1888,22 +1888,26 @@ function MultiDimensionComparePanel({
             </div>
           );
         }
-        // Codex round 2 MED: derive D8 state from signal_above_noise
-        // aggregate (not !all_pass) so we can distinguish:
-        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
-        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
-        //   (c) !all_pass && any_above_noise → genuine physics deviation
+        // Codex round 3 MED: the fail branch must only fire when there
+        // is genuinely above-noise deviation — `any_above_noise_fail` =
+        // "at least one eddy is above noise AND failed tolerance". That
+        // excludes the mixed state where one eddy passes above noise and
+        // the other is noise-floor; in that case `noise` is the honest
+        // label. State matrix:
+        //   ok:    all_pass && all_above_noise → 4/4 validated
+        //   fail:  any_above_noise_fail → genuine above-noise deviation
+        //   noise: otherwise (!all_pass && !any_above_noise_fail)
         const d8 = data.metrics_secondary_vortices!;
         const d8_all_pass = d8.all_pass === true;
-        const d8_all_above_noise = (d8 as any).all_above_noise === true;
-        const d8_any_above_noise = (d8 as any).any_above_noise === true;
-        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
+        const d8_all_above_noise = d8.all_above_noise === true;
+        const d8_any_fail_above_noise = d8.any_above_noise_fail === true;
         const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
-        const footer_tone = d8_all_pass && d8_all_above_noise
-          ? "ok"
-          : d8_noise_floor
-            ? "noise"
-            : "fail";
+        const footer_tone: "ok" | "noise" | "fail" =
+          d8_all_pass && d8_all_above_noise
+            ? "ok"
+            : d8_any_fail_above_noise
+              ? "fail"
+              : "noise";
         return (
           <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
             <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
@@ -2749,6 +2753,9 @@ type ComparisonReportContext = {
     all_pass: boolean;
     n_pass: number;
     n_total: number;
+    all_above_noise: boolean;
+    any_above_noise: boolean;
+    any_above_noise_fail: boolean;
   } | null;
   psi_wall_residuals?: {
     left: number;
