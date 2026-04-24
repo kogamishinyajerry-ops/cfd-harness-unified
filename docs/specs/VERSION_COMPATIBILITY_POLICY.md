@@ -29,7 +29,7 @@ METRICS_AND_TRUST_GATES v0.1 的核心 blocker 是 "tolerance 必须来自
 | 轴 | 当前 Baseline | 锚点 |
 |---|---|---|
 | Solver | `"openfoam"` (family) + `"v2312"` (version) | Foam-Agent ship 的 docker image (`cfd-openfoam:v2312`) |
-| Knowledge Schema (live, heterogeneous) | **Structured files (10 files with `schema_version: 2`)** — e.g. `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`, `turbulent_flat_plate.yaml`, `axisymmetric_impinging_jet.yaml`, `duct_flow.yaml`, etc.; **Legacy files (5 multi-document YAMLs with NO top-level `schema_version`)** — e.g. `lid_driven_cavity.yaml`, `backward_facing_step.yaml`, etc. (accepted by `LegacyObservable` branch of schema); **audit manifest: `SCHEMA_VERSION = 1` (integer emitted in `src/audit_package/manifest.py`, unrelated to gold YAML schema_version)** | `knowledge/schemas/gold_standard_schema.json` `$defs.LegacyGoldStandardFile` + `$defs.StructuredGoldStandardFile` (oneOf); `src/audit_package/manifest.py:43` |
+| Knowledge Schema (live, heterogeneous) | **Structured files (10 files with top-level `schema_version: 2`)** — e.g. `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`, `turbulent_flat_plate.yaml`, `axisymmetric_impinging_jet.yaml`, `duct_flow.yaml`, etc.; **Legacy files (5 files with NO top-level `schema_version`, mix of multi-document and single-document YAML)** — multi-doc examples: `lid_driven_cavity.yaml`, `backward_facing_step.yaml`; single-doc examples: `impinging_jet.yaml`, `plane_channel_flow.yaml` (accepted by `LegacyObservable` / `LegacyGoldStandardFile` branch of schema via `oneOf`); **audit manifest: `SCHEMA_VERSION = 1` (integer emitted in `src/audit_package/manifest.py`, unrelated to gold YAML schema_version)** | `knowledge/schemas/gold_standard_schema.json` `$defs.LegacyGoldStandardFile` + `$defs.StructuredGoldStandardFile` (oneOf); `src/audit_package/manifest.py:43` |
 | Extractor Suite | `extractor_semver: "1.0.0"` (nominal) | `src/result_comparator.py` + `src/*_extractor.py` 集合；semver 尚未 embedded in code 中 (P1-T1 deliverable) |
 | Harness Core | `harness_semver: "1.0.0"` (planned) | `pyproject.toml` `[project].version` (not yet set) |
 
@@ -61,10 +61,8 @@ METRICS_AND_TRUST_GATES v0.1 的核心 blocker 是 "tolerance 必须来自
   任何 extractor 模块改变可能影响 observable 值的逻辑 → bump minor
 - `schema_version` 是 integer 而不是 semver，因为 Knowledge Plane 的
   schema 破坏性变更需要**全量迁移**。每个 breaking 变更 += 1；兼容补充
-  不变更
-- `schema_semver` 已删除（Codex R1 open comment · 2026-04-24）——既然 optional
-  又无强制语义，留着只会给读者造成"两套 version"的混淆。整数 schema_version
-  是唯一权威
+  不变更。**整数 `schema_version` 是唯一权威版本标识**（see §10.1/§10.3
+  for earlier two-system removal rationale）
 
 ### §2.2 字段出处映射
 
@@ -89,8 +87,9 @@ schema_version 与四元组两种状态。
   `lid_driven_cavity_benchmark.yaml`, `cylinder_crossflow.yaml`,
   `turbulent_flat_plate.yaml`, `axisymmetric_impinging_jet.yaml`,
   `duct_flow.yaml` 等 — 走 schema 的 `StructuredGoldStandardFile` 分支
-- **legacy files (5 个多文档 YAML，无 top-level `schema_version`)**：例如
-  `lid_driven_cavity.yaml`, `backward_facing_step.yaml` 等 — 走 schema 的
+- **legacy files (5 个，无 top-level `schema_version`, 多文档与单文档 YAML
+  混合)**：多文档示例 `lid_driven_cavity.yaml`, `backward_facing_step.yaml`;
+  单文档示例 `impinging_jet.yaml`, `plane_channel_flow.yaml` — 走 schema 的
   `LegacyGoldStandardFile` / `LegacyObservable` 分支；validator (`oneOf`)
   两条路径都接受
 
@@ -346,6 +345,7 @@ scope_delegations:
     source_section: "§8.1"
     delegated_to_spec: KNOWLEDGE_OBJECT_MODEL
     delegated_to_section: "§1 Object Definitions"
+    accepting_clause_sha: 63b02bf              # per SPEC_PROMOTION_GATE §8.1 schema
     accepting_clause_path: "docs/specs/KNOWLEDGE_OBJECT_MODEL.md §1"
     accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.1 · Plane 内部 object schema"
     co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
@@ -355,6 +355,7 @@ scope_delegations:
     source_section: "§8.2"
     delegated_to_spec: METRICS_AND_TRUST_GATES
     delegated_to_section: "§4 Tolerance Policy"
+    accepting_clause_sha: 63b02bf              # per SPEC_PROMOTION_GATE §8.1 schema
     accepting_clause_path: "docs/specs/METRICS_AND_TRUST_GATES.md §4"
     accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.2 · tolerance values"
     co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
@@ -364,6 +365,7 @@ scope_delegations:
     source_section: "§8.4"
     delegated_to_spec: UI_SCRIPTS_BOUNDARY (scope doc, not a canonical spec)
     delegated_to_section: "§1 ui/** + §2 scripts/**"
+    accepting_clause_sha: 63b02bf              # per SPEC_PROMOTION_GATE §8.1 schema
     accepting_clause_path: "docs/scope/UI_SCRIPTS_BOUNDARY.md §0"
     accepting_clause_text: "accepts delegation from VERSION_COMPATIBILITY_POLICY §8.4 · ui/** and scripts/** 的版本策略"
     co_landed_with: "this VCP v1.0 promote commit (same PR per §7.2 item 3)"
@@ -490,6 +492,31 @@ explicitly "planned" as §6.1 `version_fingerprint`.
   duty on category classification
 
 Regression: 569 pass, 4 import contracts KEPT (所有 fix doc-only, 无代码触碰).
+
+### §10.3 Codex R3 CHANGES_REQUIRED 响应 · verbatim fix (2026-04-25)
+
+R3 stayed inside allowed F1-M2 scope (no new findings). 3 narrow fixes:
+
+**R3 #1** (§1 + §2.3 legacy corpus wording) — Codex: 2 of 5 legacy files
+(`impinging_jet.yaml` + `plane_channel_flow.yaml`) are single-document,
+not all multi-document. **Fix**: §1 table + §2.3 rewording to "mix of
+multi-document and single-document YAML" with both examples given.
+
+**R3 #2** (§2.1 schema_semver residual mention) — Codex: §2.1 line "`schema_semver`
+已删除..." still triggers grep, not limited to changelog. **Fix**: §2.1
+删除 removal-announcement line; history lives only in §10.1/§10.2. §2.1 now
+says "整数 `schema_version` 是唯一权威版本标识 (see §10.1 for schema_semver removal history)".
+
+**R3 #3** (§9.1 schema not matching SPEC_PROMOTION_GATE §8.1 Cat 2 spec) —
+Gate schema calls for `accepting_clause_sha`; VCP used `accepting_clause_path`
++ `accepting_clause_text` + `co_landed_with`. **Fix**: §9.1 each Cat 2
+entry now has all 4 fields (sha + path + text + co_landed_with). The extra
+path/text are informative supplements on top of the literal sha requirement.
+
+Regression: 569 pass, 4 contracts KEPT; doc-only.
+
+Verbatim exception 5/5: diff ≤20 LOC, 1 file, no public API, cites Codex
+R3 + findings. Self-sign under autonomous_governance.
 
 ---
 
