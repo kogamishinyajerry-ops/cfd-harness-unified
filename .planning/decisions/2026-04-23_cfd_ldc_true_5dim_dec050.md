@@ -1,20 +1,25 @@
 ---
 decision_id: DEC-V61-050
 title: LDC true multi-dimensional validation · independent physical observables · v_centerline + streamfunction + vortex cores
-status: IMPLEMENTATION_COMPLETE (all 4 batches landed 2026-04-23 · pending post-merge Codex review)
+status: COMPLETE (4-batch arc + 3 Codex fix rounds F1-M2-clean · 2026-04-24 · Codex round 4 APPROVE)
 commits_in_scope:
   - 1d3505c feat(ldc): batch 1 — v_centerline (Ghia Table II) as independent observable
   - 2fb9c44 feat(ldc): batch 2 — streamfunction ψ extraction infrastructure
   - 8475c29 feat(ldc): batch 3 — primary vortex (x_c, y_c, ψ_min) wired to D7
   - 1f1ff6b feat(ldc): batch 4 — secondary vortices BL/BR wired to D8 (arc closure)
   - e5dd20e docs(dec): sync log — pushed + Notion Accepted
-codex_verdict: PENDING (batch 1 post-merge Codex review triggered by "CFD new observable + adapter >5 LOC + comparator extension")
+  - 3189048 fix(ldc): Codex round 1 response · 1 HIGH + 4 MED + 1 LOW (D8 noise-floor retraction + cache-key + exception envelope + footer gating)
+  - 008ffe3 feat(ldc): replace LDC stream_function.png ansatz with real ψ from OpenFOAM VTK
+  - 793aca2 fix(ldc): Codex round 2 response · 2 MED (footer 3-state impl + psi cache bounds round-trip)
+  - 715786e fix(ldc): Codex round 3 response · 1 MED + 1 LOW (any_above_noise_fail aggregate + TS type tightening)
+codex_verdict: APPROVE (round 4, F1-M2 clean-close · 4-round Codex arc: R1 CHANGES_REQUIRED 1H+3M+1L → R2 CHANGES_REQUIRED 2M → R3 CHANGES_REQUIRED 1M+1L → R4 APPROVE clean)
 autonomous_governance: true
 autonomous_governance_counter_v61: 37
 external_gate_self_estimated_pass_rate: 0.70
-codex_tool_report_path: (pending post-batch-1 Codex review)
-notion_sync_status: synced 2026-04-23T13:50 (page_id=34bc6894-2bed-818e-a692-cab52be61282, Status=Accepted, https://www.notion.so/DEC-V61-050-LDC-true-multi-dimensional-validation-4-independent-Ghia-observables-34bc68942bed818ea692cab52be61282)
-github_sync_status: pushed (1f1ff6b on origin/main, 4-commit arc)
+external_gate_actual_outcome_partial: "4-round Codex arc, APPROVE on round 4 (F1-M2 clean-close). Round 1 actual pass rate = 0% (CHANGES_REQUIRED, 6 findings) vs estimated 70% → intake over-estimated. The real HIGH was a noise-floor false positive (D8 BL/BR PASS was argmax coincidence where ψ_gold was 270-2000× below wall-closure residual 3.4e-3). Two follow-on rounds caught incremental implementation gaps in the fix path: (R2) partial 3-state footer + bounds cache round-trip bug; (R3) mixed-state truth table wrong in the fail branch."
+codex_tool_report_path: reports/codex_tool_reports/dec_v61_050_ldc_multidim_review.log (+ round2 + round3 + round4 co-located)
+notion_sync_status: synced 2026-04-23T13:50 (page_id=34bc6894-2bed-818e-a692-cab52be61282, Status=Accepted, https://www.notion.so/DEC-V61-050-LDC-true-multi-dimensional-validation-4-independent-Ghia-observables-34bc68942bed818ea692cab52be61282) · PENDING re-sync to update Status → COMPLETE + final codex_verdict
+github_sync_status: pushed (715786e on origin/main, 9-commit arc including 3 fix rounds)
 related:
   - DEC-V61-049 (LDC single-case pilot · 5-dim Compare tab honesty footer noted this DEC as the "true 6-dim expansion" successor — V61-049 only promoted existing back-end data; V61-050 adds NEW physical observables)
   - DEC-V61-030 (Q-5 Path A u_centerline Ghia Table I correctness fix · establishes the "gold YAML must be Ghia-faithful" precedent)
