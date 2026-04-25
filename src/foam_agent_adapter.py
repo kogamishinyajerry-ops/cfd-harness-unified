@@ -6996,7 +6996,11 @@ SIMPLE
         U       1e-5;
         k       1e-5;
         omega   1e-5;
-        gammaInt 1e-5;
+        // DEC-V61-063 Stage E.iter2: gammaInt threshold relaxed 1e-5 → 1e-4.
+        // iter1 evidence: gammaInt residual stuck at 3-6e-5 even after
+        // forceCoeffs converged to 5th decimal at iter ~2500/8000. The 1e-5
+        // threshold was preventing early termination — runs exhausted endTime.
+        gammaInt 1e-4;
         ReThetat 1e-5;
     }
     // DEC-V61-061 iter 2: nNOC 0→1 to handle higher non-orthogonality
@@ -7022,16 +7026,18 @@ relaxationFactors
         # computed above). Y component stays zero — thin-span x-z plane mesh.
         Ux = Ux_inf
         Uz = Uz_inf
-        # DEC-V61-063 Stage A: Tu=0.18% per Ladson 1988 LTPT facility
-        # characterization (was Tu=0.5% in V61-061; appropriate for fully-turbulent
-        # kOmegaSST baseline but suppresses transition in kOmegaSSTLM if too high).
-        # k = 1.5*(U_inf*I)^2  --  physically consistent TKE
-        # omega = k^0.5 / (Cmu^0.25 * L),  Cmu=0.09 → Cmu^0.25 ≈ 0.5477
-        I_turb = 0.0018
-        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 4.86e-6
+        # DEC-V61-063 Stage E.iter2: Tu_inf bumped 0.18% → 1.0% to test
+        # transition-model sensitivity. iter1 (Tu=0.18% per Ladson 1988 LTPT)
+        # produced Cl@α=8°=0.6769 — IDENTICAL to V61-061 fully-turbulent kOmegaSST
+        # 0.677. Hypothesis: at Tu=0.18%, ReThetat=1074.2 puts transition Re_θ
+        # so high it never triggers in the BL → model degenerates to fully
+        # turbulent kOmegaSST. Tu=1.0% → ReThetat=584.3 should trigger
+        # transition closer to expected experimental x/c=0.3-0.5 location.
+        I_turb = 0.01
+        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 1.5e-4 (was 4.86e-6 iter1)
         L_turb = 0.1 * chord                     # = 0.1
         Cmu = 0.09
-        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.0403
+        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.2236 (was 0.0403)
 
         # DEC-V61-063 Stage A: ReThetat init per Langtry-Menter empirical formula.
         # For Tu < 1.3%: ReThetat = 1173.51 - 589.428*Tu_pct + 0.2196/Tu_pct^2

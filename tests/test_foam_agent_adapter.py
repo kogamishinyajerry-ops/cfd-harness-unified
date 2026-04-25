@@ -595,11 +595,11 @@ class TestFoamAgentExecutor:
             omega_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", omega_text)
             assert k_match is not None
             assert omega_match is not None
-            # DEC-V61-063 Stage A: Tu=0.18% (Ladson 1988 LTPT) → k=4.86e-6
-            # k = 1.5*(1.0*0.0018)^2 = 4.86e-6
-            assert float(k_match.group(1)) == pytest.approx(4.86e-6, rel=1e-3)
-            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(4.86e-6) / (0.5477 * 0.1) ≈ 0.0403
-            assert float(omega_match.group(1)) == pytest.approx(0.0403, rel=0.05)
+            # DEC-V61-063 Stage E.iter2: Tu=1.0% (bumped from iter1's 0.18%) → k=1.5e-4
+            # k = 1.5*(1.0*0.01)^2 = 1.5e-4
+            assert float(k_match.group(1)) == pytest.approx(1.5e-4, rel=1e-3)
+            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(1.5e-4) / (0.5477 * 0.1) ≈ 0.2236
+            assert float(omega_match.group(1)) == pytest.approx(0.2236, rel=0.05)
 
             # DEC-V61-063 Stage A: kOmegaSSTLM transition fields present.
             turbulence_text = (case_dir / "constant" / "turbulenceProperties").read_text()
@@ -614,11 +614,11 @@ class TestFoamAgentExecutor:
             gamma_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", gamma_text)
             assert gamma_match is not None
             assert float(gamma_match.group(1)) == pytest.approx(1.0, abs=1e-6)
-            # ReThetat for Tu=0.18% (low-Tu Langtry-Menter branch):
-            # ReThetat = 1173.51 - 589.428*0.18 + 0.2196/0.18² ≈ 1074.2
+            # iter2 ReThetat for Tu=1.0% (low-Tu Langtry-Menter branch):
+            # ReThetat = 1173.51 - 589.428*1.0 + 0.2196/1.0² ≈ 584.30
             re_thetat_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", re_thetat_text)
             assert re_thetat_match is not None
-            assert float(re_thetat_match.group(1)) == pytest.approx(1074.2, rel=0.01)
+            assert float(re_thetat_match.group(1)) == pytest.approx(584.30, rel=0.01)
             # Aerofoil BC for both transition fields = zeroGradient (no surface model).
             assert "aerofoil" in gamma_text and "zeroGradient" in gamma_text
             assert "aerofoil" in re_thetat_text and "zeroGradient" in re_thetat_text
