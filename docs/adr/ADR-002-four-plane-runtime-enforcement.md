@@ -719,7 +719,15 @@ precondition, not W2 Impl completion.
 - **DEC-V61-054/055/056** — P1 Metrics & Trust Layer arc (reason why
   `src.metrics.*` needs plane assignment enforcement)
 - **PIVOT_CHARTER_2026_04_22** §4.3a G-5 — ADR-001 is G-5; this ADR
-  closes the "W2-W3 runtime layer" deferral in §4.3a
+  closes the "W2-W3 runtime layer" deferral in §4.3a. **Compliance
+  confirmation (Opus round-1 Additional Concern #2)**: every artifact
+  shipped under ADR-002 (the ADR itself, the runtime guard module,
+  the SSOT module, the generator, the test suites, the CI step)
+  falls inside §4.3a (b) "CI / Governance tooling — import-linter /
+  GitHub Actions / retro / Gate docs" allow-list. None of these
+  alter Foundation-Freeze gate semantics or fall under §4.3a (c)
+  gray-zone activities; therefore ADR-002 lands under autonomous
+  governance and does NOT require a separate (c) Gate.
 - **SYSTEM_ARCHITECTURE v1.0** §2 — authoritative import rules
   (SSOT)
 - **RETRO-V61-001 trigger #3** — missed-deadline retro that
