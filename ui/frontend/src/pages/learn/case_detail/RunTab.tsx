@@ -8,11 +8,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { RunRail } from "./RunRail";
+
 // --- Run tab body ------------------------------------------------------
 
 export function RunTab({ caseId }: { caseId: string }) {
   return (
     <div className="space-y-6">
+      {/* Stage 4 GuardedRun MVP — preflight checkpoint rail. Sits above
+          the run CTA so the user sees gate status before clicking. */}
+      <RunRail caseId={caseId} />
+
       <div className="rounded-md border border-surface-800 bg-surface-900/40 p-5">
         <p className="card-title mb-3">运行求解器</p>
         <p className="text-[13px] leading-relaxed text-surface-300">

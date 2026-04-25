@@ -54,6 +54,7 @@ from ui.backend.routes import (
     field_artifacts,
     health,
     mesh_metrics,
+    preflight,
     run_monitor,
     validation,
     workbench_basics,
@@ -96,3 +97,4 @@ app.include_router(field_artifacts.router, prefix="/api", tags=["field-artifacts
 app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
 app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basics"])
 app.include_router(mesh_metrics.router, prefix="/api", tags=["mesh-metrics"])
+app.include_router(preflight.router, prefix="/api", tags=["preflight"])

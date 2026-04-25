@@ -20,6 +20,7 @@ import type {
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { MeshMetrics } from "@/types/mesh_metrics";
+import type { PreflightSummary } from "@/types/preflight";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 
 async function request<T>(
@@ -122,5 +123,11 @@ export const api = {
   getMeshMetrics: (caseId: string) =>
     request<MeshMetrics>(
       `/api/cases/${encodeURIComponent(caseId)}/mesh-metrics`,
+    ),
+
+  // Stage 4 — GuardedRun preflight
+  getPreflight: (caseId: string) =>
+    request<PreflightSummary>(
+      `/api/cases/${encodeURIComponent(caseId)}/preflight`,
     ),
 };
