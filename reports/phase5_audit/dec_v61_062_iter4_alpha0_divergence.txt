@@ -1,0 +1,31 @@
+DEC-V61-062 Stage E.iter4 alpha=0 divergence evidence
+case: /tmp/cfd-harness-cases/ldc_46649_1777137572627
+captured: 2026-04-25T17:57:41Z
+killed_at: PID 46649 SIGTERM after 36:36 elapsed wall-clock
+
+=== Time progression ===
+iterations completed: 1706 (of endTime=8000)
+first_NaN_at_Time: 1635
+
+=== Force coefficient evolution (last 5 finite rows) ===
+1630 9.780884e+25 6.652155e+26
+1631 8.018545e+25 -4.670437e+26
+1632 8.791604e+25 -1.564451e+26
+1633 1.737094e+26 2.750295e+26
+1634 1.131737e+29 -3.547458e+30
+
+=== bounding events (full history) ===
+bounding k, min: -3527.89 max: 1.22104e+10 average: 4.87775e+07
+
+=== Last finite residuals before NaN ===
+ExecutionTime = 805.941 s  ClockTime = 808 s
+
+Time = 1635s
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.412238, Final residual = 0.0184956, No Iterations 1
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.412227, Final residual = 0.00577794, No Iterations 1
+GAMG:  Solving for p, Initial residual = 0.957733, Final residual = 7.5907e+75, No Iterations 1000
+GAMG:  Solving for p, Initial residual = 0.999993, Final residual = nan, No Iterations 1000
+GAMG:  Solving for p, Initial residual = nan, Final residual = nan, No Iterations 1000
+time step continuity errors : sum local = nan, global = nan, cumulative = nan
+DILUPBiCGStab:  Solving for omega, Initial residual = nan, Final residual = nan, No Iterations 1000
