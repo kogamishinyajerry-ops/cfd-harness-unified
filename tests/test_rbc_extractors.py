@@ -162,3 +162,99 @@ class TestExtractNuAsymmetryB1:
         assert bc.Lx == 4.0
         assert bc.Ly == 1.0
         assert bc.H == 1.0
+
+
+from src.rbc_extractors import extract_w_max
+
+
+def _two_roll_velocity_field(nx: int = 16, ny: int = 16) -> RBCFieldSlice:
+    """Synthetic 2-roll u_y(x,y) ≈ U_pk · sin(2πx/Lx) · sin(πy/Ly).
+
+    Pandey & Schumacher Fig 4b shows this dominant 2-roll structure for
+    the AR=4 box. Peak is in the cavity interior, away from walls.
+    Returns slice with t_vals (linear conduction) so nu_asymmetry tests
+    can reuse this fixture if needed.
+    """
+    cxs: list[float] = []
+    cys: list[float] = []
+    t_vals: list[float] = []
+    u_vecs: list[tuple[float, float, float]] = []
+    Lx, Ly = 4.0, 1.0
+    U_pk = 0.005  # m/s — peak vertical velocity (much smaller than U_ff at Ra=1e6 Pr=10)
+    dx = Lx / nx
+    dy = Ly / ny
+    for i in range(nx):
+        x = (i + 0.5) * dx
+        for j in range(ny):
+            y = (j + 0.5) * dy
+            cxs.append(x)
+            cys.append(y)
+            t_vals.append(305.0 - 10.0 * y)
+            uy = U_pk * math.sin(2 * math.pi * x / Lx) * math.sin(math.pi * y / Ly)
+            u_vecs.append((0.0, uy, 0.0))
+    return RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
+
+
+class TestExtractWMaxB2:
+    """DEC-V61-060 Stage B.2 unit tests for extract_w_max."""
+
+    def test_two_roll_field_returns_positive_w_max(self):
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc()
+        out = extract_w_max(slice_, bc)
+        assert out, f"Two-roll field returned empty dict: {out}"
+        assert out["status"] == "ok"
+        # raw peak ≈ U_pk = 0.005 (after wall trim), should be close
+        assert out["raw_w_max"] == pytest.approx(0.005, rel=0.15), (
+            f"Peak should be ~0.005 m/s; got {out['raw_w_max']}"
+        )
+        # Nondim by U_ff = sqrt(g·β·dT·H) with defaults g=3e-4 β=1/300
+        # → U_ff = sqrt(3e-4 / 300 * 10 * 1) = sqrt(1e-5) ≈ 0.00316
+        # → w_max_nondim ≈ 0.005 / 0.00316 ≈ 1.58
+        assert out["value"] > 1.0, f"Nondim w_max should be O(1); got {out['value']}"
+        assert "U_ff" in out and out["U_ff"] > 0
+        assert out["interior_cell_count"] > 0
+
+    def test_no_velocity_field_returns_empty_dict(self):
+        slice_ = RBCFieldSlice(cxs=[0.5], cys=[0.5], t_vals=[300.0], u_vecs=None)
+        bc = _make_bc()
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Missing u_vecs must return {{}}; got {out}"
+
+    def test_zero_buoyancy_returns_empty_dict(self):
+        """Degenerate U_ff=0 → fail closed."""
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc(g=0.0)
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Zero gravity (U_ff=0) must return {{}}; got {out}"
+
+    def test_wall_layer_excluded_from_max(self):
+        """The trim must exclude wall-layer cells (where no-slip would
+        give u_y=0). Build a field where ONLY wall cells have nonzero u_y;
+        the extractor must NOT pick them up."""
+        cxs: list[float] = []
+        cys: list[float] = []
+        t_vals: list[float] = []
+        u_vecs: list[tuple[float, float, float]] = []
+        # Cells inside the trim zone (within H/20 = 0.05 of walls):
+        # y=0.025, y=0.975 → trim threshold y_lo=0.05, y_hi=0.95
+        for x in (1.0, 2.0, 3.0):
+            for y in (0.025, 0.975):
+                cxs.append(x)
+                cys.append(y)
+                t_vals.append(300.0)
+                u_vecs.append((0.0, 99.0, 0.0))  # huge u_y in wall layer
+            # Interior cells with small u_y
+            for y in (0.5, 0.6):
+                cxs.append(x)
+                cys.append(y)
+                t_vals.append(300.0)
+                u_vecs.append((0.0, 0.001, 0.0))
+        slice_ = RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
+        bc = _make_bc()
+        out = extract_w_max(slice_, bc)
+        assert out, f"Should produce a result; got {out}"
+        # Must NOT have picked up the 99.0 wall-layer noise
+        assert out["raw_w_max"] == pytest.approx(0.001, abs=1e-9), (
+            f"Wall layer trim failed: raw_w_max={out['raw_w_max']} (expected 0.001)"
+        )

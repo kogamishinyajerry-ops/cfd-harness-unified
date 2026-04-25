@@ -85,6 +85,12 @@ class RBCBoundary:
             mode in ``src.wall_gradient.extract_wall_gradient``.
         bc_gradient: required iff ``bc_type='fixedGradient'``; ignored
             otherwise.
+        g: gravity magnitude (m/s²). Required for B.2 w_max free-fall
+            velocity; default value matches the adapter's buoyantFoam
+            emit at Ra=1e6 Pr=10 AR=4 (~3.0e-4 m/s²; intake §4
+            mitigation_in_batch + Codex R2 in-venv probe).
+        beta: thermal expansion coefficient (1/K). Boussinesq value
+            β = 1/T_mean ≈ 1/300 ≈ 0.00333. Required for B.2 w_max.
     """
     Lx: float
     Ly: float
@@ -96,6 +102,8 @@ class RBCBoundary:
     T_cold_wall: float
     bc_type: str = "fixedValue"
     bc_gradient: Optional[float] = None
+    g: float = 3.0e-4
+    beta: float = 1.0 / 300.0
 
 
 # ---------------------------------------------------------------------------
@@ -238,5 +246,69 @@ def extract_nu_asymmetry(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
         "nu_top": nu_top,
         "column_count_bottom": len(grads_bottom),
         "column_count_top": len(grads_top),
+        "status": "ok",
+    }
+
+
+def extract_w_max(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, Any]:
+    """Peak vertical velocity nondim by free-fall velocity (B.2).
+
+    Definition (DEC-V61-060 §3 in_scope w_max_nondim):
+        U_ff = sqrt(g · β · dT · H)
+        raw_w_max = max |u_y| over interior cells (excluding wall layers
+                    to avoid the no-slip-zero contribution polluting the max)
+        w_max_nondim = raw_w_max / U_ff
+
+    Per intake A.0 BRANCH-B, w_max_nondim ref_value =
+    "ADVISORY_NO_LITERATURE_LOCATOR" — comparator surfaces but does NOT
+    enforce. This extractor still computes the value; the gate_status
+    is PROVISIONAL_ADVISORY.
+
+    "Interior" excludes cells within H/20 of either horizontal wall to
+    avoid biasing the max by no-slip-zero values. Pandey & Schumacher
+    Fig 4 shows peak |u_y| occurring well inside the cavity, not at the
+    wall, so this trim is benign.
+
+    Returns dict with:
+        - ``value``: w_max_nondim (raw / U_ff)
+        - ``raw_w_max``: max |u_y| in interior cells (m/s)
+        - ``U_ff``: free-fall velocity (m/s)
+        - ``interior_cell_count``: number of cells contributing to the max
+        - ``status``: 'ok' on success
+    Returns ``{}`` on missing u_vecs / shape error / U_ff = 0.
+    """
+    if slice_.u_vecs is None:
+        return {}
+    if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
+        return {}
+    U_ff_sq = bc.g * bc.beta * bc.dT * bc.H
+    if U_ff_sq <= 0:
+        return {}
+    U_ff = U_ff_sq ** 0.5
+    if U_ff == 0:
+        return {}
+    # Trim no-slip wall layer (H/20 from y=0 and y=Ly) to avoid the
+    # max being pinned by the literal zero of the no-slip BC.
+    trim = bc.H / 20.0
+    raw_w_max = 0.0
+    counted = 0
+    for i in range(len(slice_.cxs)):
+        y = slice_.cys[i]
+        if y < bc.wall_coord_hot + trim:
+            continue
+        if y > bc.wall_coord_cold - trim:
+            continue
+        u_y = slice_.u_vecs[i][1]  # (ux, uy, uz) tuple — index 1 is u_y
+        au = abs(u_y)
+        if au > raw_w_max:
+            raw_w_max = au
+        counted += 1
+    if counted == 0:
+        return {}
+    return {
+        "value": raw_w_max / U_ff,
+        "raw_w_max": raw_w_max,
+        "U_ff": U_ff,
+        "interior_cell_count": counted,
         "status": "ok",
     }
