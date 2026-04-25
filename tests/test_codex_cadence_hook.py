@@ -336,9 +336,12 @@ def test_q6_override_with_trailer_reason_logs(fresh_repo: Path) -> None:
     assert "revert botched migration" in log_content
 
 
-def test_q6_override_log_format_tab_separated(fresh_repo: Path) -> None:
-    """Audit log line must be tab-separated and contain SHA + timestamp
-    so post-hoc analysis tools can parse it."""
+def test_q6_override_log_format_jsonl(fresh_repo: Path) -> None:
+    """Round-3 F8 migration: audit log is now JSONL (one JSON object per
+    line) instead of TSV. Round-2 TSV form was retired because tabs in
+    `Override-reason:` text broke parse-back."""
+    import json as _json
+
     _seed_verified_baseline(fresh_repo)
     _run_hook(
         fresh_repo,
@@ -347,14 +350,12 @@ def test_q6_override_log_format_tab_separated(fresh_repo: Path) -> None:
     )
     log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
     line = log_path.read_text(encoding="utf-8").strip().splitlines()[-1]
-    parts = line.split("\t")
-    assert len(parts) == 5, f"expected 5 tab-sep parts; got {parts}"
-    iso_ts, sha, reason, n_trig, triggers = parts
-    assert iso_ts.startswith("20")  # ISO8601
-    assert len(sha) == 12
-    assert reason == "format check"
-    assert n_trig.isdigit()
-    assert triggers  # may be "(no risk triggers)" but is non-empty
+    record = _json.loads(line)  # must parse as JSON
+    assert record["ts"].startswith("20")  # ISO8601
+    assert len(record["sha"]) == 12
+    assert record["reason"] == "format check"
+    assert isinstance(record["n_triggers"], int)
+    assert isinstance(record["triggers"], list)
 
 
 def test_q6_override_log_appends_not_overwrites(fresh_repo: Path) -> None:
@@ -373,3 +374,161 @@ def test_q6_override_log_appends_not_overwrites(fresh_repo: Path) -> None:
     assert len(lines) == 2
     assert "first" in lines[0]
     assert "second" in lines[1]
+
+
+# --- Round-3 F8: JSONL log format ------------------------------------------
+
+def test_f8_log_is_jsonl_not_tsv(fresh_repo: Path) -> None:
+    """Round-3 F8: each log line is a JSON object, not TSV. Tab/quote/
+    newline characters in reason no longer break the format."""
+    import json as _json
+
+    _seed_verified_baseline(fresh_repo)
+    _run_hook(
+        fresh_repo, override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "ticket\twith\ttabs and \"quotes\""},
+    )
+    log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
+    line = log_path.read_text(encoding="utf-8").strip().splitlines()[-1]
+    record = _json.loads(line)  # must parse as JSON
+    assert record["reason"] == 'ticket\twith\ttabs and "quotes"', (
+        "tabs and quotes must round-trip through JSONL"
+    )
+    assert "ts" in record and "sha" in record
+    assert "n_triggers" in record and "triggers" in record
+
+
+# --- Round-3 F10: CI override refusal --------------------------------------
+
+def test_f10_ci_env_blocks_override_even_with_reason(fresh_repo: Path) -> None:
+    """Round-3 F10: CI=true forbids override even if reason supplied.
+    Policy: humans-only override; CI must use a Codex-verified trailer."""
+    _seed_verified_baseline(fresh_repo)
+    _add_file_and_commit(
+        fresh_repo, "ui/backend/routes/risky.py", "# new\n",
+        "feat(routes): risky in CI",
+    )
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={
+            "CI": "true",
+            "CODEX_OVERRIDE_REASON": "test should still block",
+        },
+    )
+    assert code == 1, f"CI override must be refused; got: {out}"
+    assert "CI OVERRIDE REFUSED" in out
+
+
+def test_f10_non_ci_override_still_works(fresh_repo: Path) -> None:
+    """Sanity check: outside CI, the existing override path still works."""
+    _seed_verified_baseline(fresh_repo)
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={
+            "CI": "",  # explicitly clear CI
+            "CODEX_OVERRIDE_REASON": "human override",
+        },
+    )
+    assert code == 0
+    assert "OVERRIDE active" in out
+
+
+# --- Round-3 F11: whitespace-only reason rejected --------------------------
+
+def test_f11_override_reason_whitespace_only_blocks(fresh_repo: Path) -> None:
+    """Round-3 F11: ' ' / '\t' / '\\n' as reason must be rejected.
+    Defense-in-depth: even though the existing `or None` chain falls
+    through to BLOCK on empty-after-strip, the explicit `if not reason`
+    check now makes the intent loud and lint-checkable."""
+    _seed_verified_baseline(fresh_repo)
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "   "},
+    )
+    assert code == 1, f"whitespace-only reason must block; got: {out}"
+    assert "OVERRIDE BLOCKED" in out
+
+
+def test_f11_override_reason_tab_only_blocks(fresh_repo: Path) -> None:
+    """Tabs alone count as whitespace and must also be rejected."""
+    _seed_verified_baseline(fresh_repo)
+    code, _ = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "\t\t\t"},
+    )
+    assert code == 1
+
+
+# --- Round-3 F5: risk-class detection on modifications ---------------------
+
+def _modify_file_and_commit(
+    repo: Path, relpath: str, content: str, msg: str
+) -> None:
+    target = repo / relpath
+    target.write_text(content)
+    _run_git(repo, "add", str(target.relative_to(repo)))
+    _run_git(repo, "commit", "-m", msg, "--no-verify")
+
+
+def test_f5_existing_risk_file_large_mod_blocks(fresh_repo: Path) -> None:
+    """Round-3 F5: large modification of an existing routes/**.py file
+    triggers risk-class even when no NEW file is added. Closes round-3
+    finding 5: routes/wizard.py would be silently bypassed under round-2
+    rule because round-2 only saw additions."""
+    _seed_verified_baseline(fresh_repo)
+    # First land a routes/wizard.py as a baseline (so it exists in HEAD).
+    # We commit it as part of baseline so it's NOT new in the next push.
+    _add_file_and_commit(
+        fresh_repo, "ui/backend/routes/wizard.py",
+        "# initial\n",
+        "feat(routes): seed wizard route\n\nCodex-verified: APPROVE seed",
+    )
+    _run_git(fresh_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    # Now add 200 LOC to the SAME existing file (no new file)
+    big_blob = "# initial\n" + "\n".join(f"def fn_{i}(): pass" for i in range(200))
+    _modify_file_and_commit(
+        fresh_repo, "ui/backend/routes/wizard.py", big_blob,
+        "feat(routes): big mod to wizard",
+    )
+    code, out = _run_hook(fresh_repo)
+    assert code == 1, f"large mod of risk-class file must block; got: {out}"
+    assert "large modification" in out
+    assert "wizard.py" in out
+
+
+def test_f5_existing_risk_file_small_mod_passes(fresh_repo: Path) -> None:
+    """Small mods (<150 LOC) of risk-class files must NOT trigger.
+    A typo-fix PR shouldn't ring the governance bell."""
+    _seed_verified_baseline(fresh_repo)
+    _add_file_and_commit(
+        fresh_repo, "ui/backend/routes/wizard.py",
+        "# initial\n" + "\n".join(f"line {i}" for i in range(50)),
+        "feat(routes): seed wizard route\n\nCodex-verified: APPROVE seed",
+    )
+    _run_git(fresh_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    # Modify ~30 LOC — well under the 150 threshold
+    _modify_file_and_commit(
+        fresh_repo, "ui/backend/routes/wizard.py",
+        "# initial\n" + "\n".join(f"line {i}" for i in range(80)),
+        "fix(routes): minor patch",
+    )
+    code, out = _run_hook(fresh_repo)
+    assert code == 0, f"small mod must pass; got: {out}"
+
+
+def test_f5_added_risk_file_still_triggers(fresh_repo: Path) -> None:
+    """Regression guard: F5 doesn't break the round-2 A-only behavior.
+    A new file under routes/** still triggers regardless of LOC."""
+    _seed_verified_baseline(fresh_repo)
+    _add_file_and_commit(
+        fresh_repo, "ui/backend/routes/brand_new.py",
+        "# tiny new file\n",
+        "feat(routes): brand new",
+    )
+    code, out = _run_hook(fresh_repo)
+    assert code == 1
+    assert "new file matches" in out

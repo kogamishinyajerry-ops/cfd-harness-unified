@@ -56,8 +56,15 @@ export function NewCaseWizardPage() {
   }, [step, selected, caseId, nameDisplay, params]);
 
   const validId = /^[A-Za-z0-9_-]+$/.test(caseId);
+  // Round-3 F3: previewError must also disable Create. The previous
+  // logic let the user click 创建并跑 even when the server-rendered
+  // preview was already failing — they'd just hit the same 400 again.
   const canCreate =
-    selected !== null && validId && caseId.length > 0 && !createMutation.isPending;
+    selected !== null &&
+    validId &&
+    caseId.length > 0 &&
+    !createMutation.isPending &&
+    !previewMutation.isError;
 
   if (templatesQuery.isLoading) {
     return <Section><p className="text-surface-300">Loading templates…</p></Section>;

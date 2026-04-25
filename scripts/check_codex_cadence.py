@@ -37,6 +37,7 @@ the risk-class gate (cadence still runs).
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import re
 import subprocess
@@ -45,6 +46,12 @@ from pathlib import Path
 
 THRESHOLD = 10
 RISK_LOC_THRESHOLD = 500
+# Round-3 F5: when a risk-class FILE is modified (not just newly added),
+# we need a per-file LOC threshold — every typo PR shouldn't ring the
+# governance bell, only material changes should. 150 lines is the empirical
+# floor between "minor patch" (Codex review unnecessary) and "feature"
+# (review warranted). Tunable.
+RISK_MOD_LOC_THRESHOLD = 150
 OVERRIDE_LOG_PATH = Path(".governance/codex_cadence_overrides.log")
 OVERRIDE_REASON_RE = re.compile(r"^Override-reason:\s*(.+)$", re.MULTILINE)
 
@@ -117,6 +124,18 @@ def _find_last_verified_sha() -> str | None:
     return None
 
 
+def _is_ci_environment() -> bool:
+    """Round-3 F10: detect CI/runner context via standard env vars.
+
+    Most CI providers (GitHub Actions, GitLab CI, CircleCI, Travis, Jenkins,
+    Buildkite) set `CI=true`. Anyone setting these in a dev shell on
+    purpose either knows what they're doing or is exactly the workflow
+    we want to audit. Only check `CI` (which is the de-facto standard);
+    avoid matching any container env that just happens to set CI=1.
+    """
+    return os.environ.get("CI", "").lower() in ("1", "true", "yes")
+
+
 def _head_carries_trailer() -> bool:
     body = _try_run(["git", "log", "-1", "--pretty=%B", "HEAD"])
     if body is None:
@@ -141,25 +160,42 @@ def _head_override_reason() -> str | None:
     return None
 
 
-def _append_override_log(reason: str, head_sha: str, triggers: list[str]) -> None:
-    """Round-2 Q6: persistent audit trail. Append a single line to
-    .governance/codex_cadence_overrides.log so post-hoc review can scan
-    historical overrides without git-blame archaeology.
+def _append_override_log(
+    reason: str,
+    head_sha: str,
+    triggers: list[str],
+    extra: dict[str, object] | None = None,
+) -> None:
+    """Round-2 Q6 + round-3 F8: persistent JSONL audit trail.
 
-    Format (tab-separated, append-only): `<iso8601>\\t<sha>\\t<reason>\\t<n_triggers>\\t<triggers_joined>`
+    Format change (round-3): TSV → JSONL. Round-2 used 5-field TSV which
+    breaks if `reason` contains a literal `\\t` (round-3 finding #8). JSONL
+    via `json.dumps` escapes tabs / quotes / newlines automatically and
+    is the standard append-only audit log format (jq-friendly).
+
+    One JSON object per line:
+        {"ts": "...", "sha": "...", "reason": "...",
+         "n_triggers": N, "triggers": [...], ...extra}
+
+    `extra` carries optional fields (e.g. `{"backfill": true}` for the
+    round-3 F18 PR-1 backfill entry).
     """
     try:
         OVERRIDE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         ts = datetime.datetime.now(datetime.timezone.utc).isoformat(
             timespec="seconds"
         )
-        triggers_joined = "; ".join(triggers) if triggers else "(no risk triggers)"
-        line = (
-            f"{ts}\t{head_sha[:12]}\t{reason}\t"
-            f"{len(triggers)}\t{triggers_joined}\n"
-        )
+        record: dict[str, object] = {
+            "ts": ts,
+            "sha": head_sha[:12],
+            "reason": reason,
+            "n_triggers": len(triggers),
+            "triggers": triggers,
+        }
+        if extra:
+            record.update(extra)
         with OVERRIDE_LOG_PATH.open("a", encoding="utf-8") as fh:
-            fh.write(line)
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         # Audit log failure must not block the developer's work, but it
         # should be loud — print to stderr so the failure is visible.
@@ -227,21 +263,52 @@ def _diff_text(remote_sha: str, local_sha: str) -> str:
     return _try_run(["git", "diff", f"{remote_sha}..{local_sha}"]) or ""
 
 
-def _new_files_in_diff(remote_sha: str, local_sha: str) -> list[str]:
-    """Files added (not just modified) in the diff. New files are higher
-    risk than mods because they introduce new surface entirely."""
+def _changed_risk_files(
+    remote_sha: str, local_sha: str
+) -> list[tuple[str, str]]:
+    """Round-3 F5: extends the risk-class detector to ALSO catch large
+    modifications of existing risk-class files (not just additions).
+
+    Returns a list of (status, path) pairs where status is "A" (added)
+    or "M" (modified). Renames and deletions are out of scope here —
+    rename targets show as A in the second commit anyway, and deletions
+    don't add new surface.
+
+    Caller decides per-status policy: A → trigger on any path-glob match;
+    M → trigger only if also above RISK_MOD_LOC_THRESHOLD added LOC for
+    that specific file.
+    """
     raw = _try_run([
-        "git", "diff", "--name-status", "--diff-filter=A",
+        "git", "diff", "--name-status", "--diff-filter=AM",
         f"{remote_sha}..{local_sha}",
     ])
     if not raw:
         return []
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for line in raw.splitlines():
         parts = line.split("\t", 1)
-        if len(parts) == 2 and parts[0].startswith("A"):
-            out.append(parts[1].strip())
+        if len(parts) == 2 and parts[0][0] in ("A", "M"):
+            out.append((parts[0][0], parts[1].strip()))
     return out
+
+
+def _added_loc_per_file(
+    remote_sha: str, local_sha: str, path: str
+) -> int:
+    """Insertions for a single file via `git diff --numstat`. Used by
+    the round-3 F5 mod-threshold check."""
+    raw = _try_run([
+        "git", "diff", "--numstat",
+        f"{remote_sha}..{local_sha}", "--", path,
+    ])
+    if not raw:
+        return 0
+    # numstat format: "<added>\t<deleted>\t<path>"; use first column
+    first = raw.splitlines()[0]
+    parts = first.split("\t")
+    if len(parts) < 1 or not parts[0].isdigit():
+        return 0
+    return int(parts[0])
 
 
 def _detect_risk_triggers() -> list[str]:
@@ -254,14 +321,28 @@ def _detect_risk_triggers() -> list[str]:
 
     triggers: list[str] = []
 
-    new_files = _new_files_in_diff(remote_sha, local_sha)
-    for path in new_files:
+    # Round-3 F5: walk both A (added) and M (modified) files. Added files
+    # trigger on any path-glob match; modified files require a per-file
+    # ≥RISK_MOD_LOC_THRESHOLD added-LOC threshold so typo-fix PRs to
+    # routes/wizard.py don't ring the governance bell.
+    for status, path in _changed_risk_files(remote_sha, local_sha):
         for pat in RISK_PATH_PATTERNS:
-            if pat.match(path):
+            if not pat.match(path):
+                continue
+            if status == "A":
                 triggers.append(
                     f"new file matches risk path glob: {path} (pattern {pat.pattern})"
                 )
-                break  # one trigger per file is enough
+                break
+            # status == "M"
+            file_loc = _added_loc_per_file(remote_sha, local_sha, path)
+            if file_loc >= RISK_MOD_LOC_THRESHOLD:
+                triggers.append(
+                    f"large modification of risk-class file: {path} "
+                    f"(+{file_loc} LOC ≥ {RISK_MOD_LOC_THRESHOLD}; "
+                    f"pattern {pat.pattern})"
+                )
+                break
 
     loc = _added_loc(remote_sha, local_sha)
     if loc > RISK_LOC_THRESHOLD:
@@ -294,16 +375,41 @@ def main() -> int:
     head_verified = _head_carries_trailer()
 
     if override_active:
-        # Round-2 Q6: override now requires an audit-grade reason. Either
-        # an `Override-reason:` trailer on HEAD or a CODEX_OVERRIDE_REASON
-        # env var. The trailer is preferred (durable in git history) but
-        # env var is allowed for emergency hot-fixes (CI / cron contexts).
-        reason = (
-            _head_override_reason()
-            or os.environ.get("CODEX_OVERRIDE_REASON", "").strip()
-            or None
+        # Round-3 F10: refuse override entirely in CI contexts. CI runners
+        # are ephemeral and the audit log is gitignored — overrides done
+        # in CI leave no trace. Policy: humans-only override; CI must use
+        # a properly-trailered Codex-verified commit instead.
+        if _is_ci_environment():
+            print("", file=sys.stderr)
+            print(
+                "[codex-cadence] CI OVERRIDE REFUSED · CI=true detected; "
+                "overrides are not permitted in CI/runner contexts.",
+                file=sys.stderr,
+            )
+            print(
+                "   Reason: ephemeral runners discard the audit log; bypass "
+                "would be undetectable in post-hoc review.",
+                file=sys.stderr,
+            )
+            print(
+                "   Required: land a Codex-verified trailer on HEAD before "
+                "the CI push, or push from a developer machine.",
+                file=sys.stderr,
+            )
+            print("", file=sys.stderr)
+            return 1
+
+        # Round-2 Q6 + round-3 F11: override requires an audit-grade
+        # reason. Either an `Override-reason:` trailer on HEAD (preferred —
+        # durable in git history) or a CODEX_OVERRIDE_REASON env var
+        # (emergency hot-fix path). Both forms strip whitespace and reject
+        # empty results explicitly — round-3 #11 flagged the implicit
+        # `or None` chain as not obviously rejecting whitespace-only reasons.
+        reason_raw = _head_override_reason() or os.environ.get(
+            "CODEX_OVERRIDE_REASON", ""
         )
-        if reason is None:
+        reason = reason_raw.strip() if reason_raw else ""
+        if not reason:
             print("", file=sys.stderr)
             print(
                 "[codex-cadence] OVERRIDE BLOCKED · CODEX_CADENCE_OVERRIDE=1 "
