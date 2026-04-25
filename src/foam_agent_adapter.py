@@ -234,6 +234,46 @@ def _load_whitelist_turbulence_model(
     return None
 
 
+def _load_whitelist_parameter(
+    task_name: str,
+    param_name: str,
+    *,
+    whitelist_path: Optional[Path] = None,
+) -> Optional[float]:
+    """Return `parameters.<param_name>` from whitelist.yaml for the named case.
+
+    DEC-V61-057 Batch A.1 (Codex F1-HIGH): the natural-convection adapter
+    historically inferred `aspect_ratio` from `Ra` via threshold heuristic
+    (Ra<1e9 → AR=2.0 rayleigh_benard branch; Ra>=1e9 → AR=1.0 DHC branch),
+    even though the whitelist explicitly declares `parameters.aspect_ratio`
+    per case. This trapped DHC at Ra=1e6 (de Vahl Davis 1983 benchmark,
+    AR=1.0 square cavity) into the rayleigh_benard 2:1-rectangle branch.
+
+    This loader lets callers consult the whitelist parameters block directly
+    when `task_spec.boundary_conditions` does not carry the field.
+
+    Returns None when whitelist file/case/parameter is missing or non-numeric.
+    """
+    import yaml
+
+    path = whitelist_path or _DEFAULT_WHITELIST_PATH
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None
+
+    for case in data.get("cases", []):
+        if case.get("id") == task_name or case.get("name") == task_name:
+            params = case.get("parameters") or {}
+            val = params.get(param_name)
+            if isinstance(val, (int, float)):
+                return float(val)
+            return None
+    return None
+
+
 def _emit_gold_anchored_points_sampledict(
     case_dir: Path,
     set_name: str,
@@ -2060,15 +2100,39 @@ fields          (U);
         T_hot = 305.0  # K
         T_cold = 295.0  # K
         dT = T_hot - T_cold  # 10K — Boussinesq-valid for all Ra
-        aspect_ratio = float(task_spec.boundary_conditions.get("aspect_ratio", 1.0)) if task_spec.boundary_conditions else 1.0
-        # Infer from Ra when boundary_conditions.aspect_ratio not set:
-        # High Ra (>=1e9): DHC square cavity (aspect_ratio=1.0)
-        # Lower Ra (<1e9): NC Cavity (aspect_ratio=2.0 typical for Ra=1e6)
-        if aspect_ratio == 1.0 and not (task_spec.boundary_conditions and task_spec.boundary_conditions.get("aspect_ratio")):
-            if Ra >= 1e9:
-                aspect_ratio = 1.0  # DHC: square cavity
+        # DEC-V61-057 Batch A.1 (Codex F1-HIGH): the historic Ra-threshold
+        # heuristic (Ra<1e9 → AR=2.0; Ra>=1e9 → AR=1.0) trapped DHC at
+        # Ra=1e6 (de Vahl Davis 1983, AR=1.0 square cavity) into the
+        # rayleigh_benard 2:1-rectangle branch because Ra=1e6 is shared
+        # between RBC (AR=2.0) and DHC (AR=1.0). Resolution priority:
+        #
+        #   1. task_spec.boundary_conditions["aspect_ratio"]  — explicit override
+        #   2. whitelist.yaml parameters.aspect_ratio for task_spec.name
+        #   3. case-id-aware fallback (DHC=1.0, RBC=2.0)
+        #   4. Ra-threshold heuristic (legacy default for unknown cases)
+        bc_ar = (
+            task_spec.boundary_conditions.get("aspect_ratio")
+            if task_spec.boundary_conditions
+            else None
+        )
+        wl_ar = _load_whitelist_parameter(task_spec.name, "aspect_ratio")
+        if isinstance(bc_ar, (int, float)):
+            aspect_ratio = float(bc_ar)
+        elif wl_ar is not None:
+            aspect_ratio = wl_ar
+        else:
+            # case-id-aware fallback before falling back to Ra threshold
+            name_lower = (task_spec.name or "").lower()
+            if "differential_heated_cavity" in name_lower:
+                aspect_ratio = 1.0  # DHC: square cavity (de Vahl Davis 1983)
+            elif "rayleigh_benard" in name_lower or "rayleigh-bénard" in name_lower:
+                aspect_ratio = 2.0  # RBC: 2:1 rectangle
+            elif Ra >= 1e9:
+                aspect_ratio = 1.0  # legacy: high-Ra DHC heuristic
             elif Ra >= 1e5:
-                aspect_ratio = 2.0  # NC Cavity Ra=1e6: aspect_ratio=2
+                aspect_ratio = 2.0  # legacy: mid-Ra RBC heuristic
+            else:
+                aspect_ratio = 1.0  # safe square default
         L = aspect_ratio  # cavity length in x-direction (m)
         beta = 1.0 / ((T_hot + T_cold) / 2.0)  # Boussinesq beta at mean temperature
         nu = 1.0e-5  # kinematic viscosity (air, m^2/s)

@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import Dict, Optional
 import pytest
 from unittest.mock import patch, MagicMock
 from src.foam_agent_adapter import (
@@ -16,6 +17,7 @@ from src.foam_agent_adapter import (
     ParameterPlumbingError,
     _emit_gold_anchored_points_sampledict,
     _load_gold_reference_values,
+    _load_whitelist_parameter,
     _load_whitelist_turbulence_model,
     _parse_dict_scalar,
     _parse_g_magnitude,
@@ -1385,15 +1387,32 @@ class TestCylinderGeneratorBatchB1:
 # P-B C2: parameter plumbing pre-run assertion
 # ---------------------------------------------------------------------------
 
-def _make_nc_spec(Ra: float, aspect_ratio: float) -> TaskSpec:
+def _make_nc_spec(
+    Ra: float,
+    aspect_ratio: float,
+    name: Optional[str] = None,
+    *,
+    include_aspect_ratio_in_bc: bool = True,
+) -> TaskSpec:
+    """Construct a natural-convection TaskSpec for adapter tests.
+
+    DEC-V61-057 Batch A.1: parameterized `name` so tests can exercise the
+    case-id-aware AR fallback path (DHC at Ra=1e6 → AR=1.0; RBC at Ra=1e6
+    → AR=2.0). When `include_aspect_ratio_in_bc` is False, simulates a
+    whitelist-driven path where AR is NOT in boundary_conditions but must
+    be resolved from whitelist parameters or case-id default.
+    """
+    bc: Dict[str, float] = {"Pr": 0.71}
+    if include_aspect_ratio_in_bc:
+        bc["aspect_ratio"] = aspect_ratio
     return TaskSpec(
-        name=f"nc-Ra{Ra:g}",
+        name=name if name is not None else f"nc-Ra{Ra:g}",
         geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
         flow_type=FlowType.NATURAL_CONVECTION,
         steady_state=SteadyState.STEADY,
         compressibility=Compressibility.INCOMPRESSIBLE,
         Ra=Ra,
-        boundary_conditions={"aspect_ratio": aspect_ratio, "Pr": 0.71},
+        boundary_conditions=bc,
     )
 
 
@@ -1425,7 +1444,7 @@ class TestBuoyantCasePlumbingVerification:
     """Natural convection cavity: Ra must survive the write pipeline intact."""
 
     def test_rayleigh_benard_ra_1e6_round_trip_passes(self):
-        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0)
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0, name="rayleigh_benard_convection")
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
             # Does not raise — verifier is called internally on success.
@@ -1434,10 +1453,56 @@ class TestBuoyantCasePlumbingVerification:
             assert (case_dir / "constant" / "g").exists()
 
     def test_dhc_ra_1e10_round_trip_passes(self):
-        spec = _make_nc_spec(Ra=1e10, aspect_ratio=1.0)
+        spec = _make_nc_spec(Ra=1e10, aspect_ratio=1.0, name="differential_heated_cavity")
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
             FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+
+    def test_dhc_ra_1e6_round_trip_passes(self):
+        """DEC-V61-057 Batch A.1: DHC at Ra=1e6 (de Vahl Davis 1983) is the canonical
+        benchmark — square cavity AR=1.0, NOT the rayleigh_benard 2:1-rectangle branch."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            assert (case_dir / "constant" / "physicalProperties").exists()
+            blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # Square cavity: x-domain and y-domain both = 1.0L, so vertices
+            # (1 0 0) and (0 1 0) should both appear (NOT 2.0 from RBC branch).
+            assert "(1 0 0)" in blockmesh or "(1.0 0 0)" in blockmesh, (
+                f"DHC AR=1.0 should yield x=1 vertex, got blockMesh={blockmesh[:300]}"
+            )
+
+    def test_dhc_ra_1e6_dispatch_falls_back_to_case_id_when_bc_lacks_ar(self):
+        """DEC-V61-057 Batch A.1 (Codex F1-HIGH): when boundary_conditions does NOT
+        carry aspect_ratio (e.g. whitelist-driven path), the adapter must consult
+        whitelist parameters or fall back to case-id-aware default — NOT to the
+        Ra-threshold heuristic that previously sent Ra=1e6 → AR=2.0."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity",
+            include_aspect_ratio_in_bc=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # Without explicit BC AR, DHC must still dispatch AR=1.0 (whitelist parameter
+            # OR case-id-aware fallback both lead here). If the regression hits, we'd see
+            # x-domain=2.0 from the legacy Ra<1e9 → AR=2.0 heuristic.
+            assert "(1 0 0)" in blockmesh or "(1.0 0 0)" in blockmesh, (
+                f"DHC dispatch fell back to AR != 1.0 — Ra-heuristic regression. "
+                f"blockMesh head: {blockmesh[:300]}"
+            )
+
+    def test_load_whitelist_parameter_dhc_aspect_ratio(self):
+        """DEC-V61-057 Batch A.1: smoke-test the whitelist parameter loader against
+        the live whitelist.yaml — DHC must report AR=1.0 (de Vahl Davis canonical)."""
+        ar = _load_whitelist_parameter("differential_heated_cavity", "aspect_ratio")
+        assert ar == 1.0, f"whitelist DHC aspect_ratio expected 1.0, got {ar}"
+
+    def test_load_whitelist_parameter_missing_returns_none(self):
+        ar = _load_whitelist_parameter("nonexistent_case_xyz", "aspect_ratio")
+        assert ar is None
 
     def test_tampered_gravity_raises_plumbing_error(self):
         """If someone bumps |g| post-write, Ra_effective drifts — detect it."""
