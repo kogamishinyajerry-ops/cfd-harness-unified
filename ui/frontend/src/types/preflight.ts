@@ -1,7 +1,15 @@
 // Preflight types · Stage 4 GuardedRun MVP.
 // Mirrors `ui/backend/schemas/preflight.py`.
 
-export type PreflightStatus = "pass" | "fail" | "partial" | "skip";
+export type PreflightStatus =
+  | "pass"
+  | "fail"
+  | "partial"
+  | "skip"
+  // Added per Opus 4.7 review 2026-04-25 ACCEPT_WITH_COMMENTS edge case
+  // #4: a single category builder throw degrades to 'indeterminate'
+  // rather than 500-ing the whole endpoint.
+  | "indeterminate";
 export type PreflightCategory =
   | "physics"
   | "schema"

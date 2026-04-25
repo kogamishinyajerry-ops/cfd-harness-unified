@@ -131,7 +131,9 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 
 ---
 
-## ✅ Workbench rollout COMPLETE — 6 / 6 stages MVP-landed (2026-04-25)
+## ✅ V&V Dashboard Layer rollout COMPLETE — 6 / 6 stages MVP-landed (2026-04-25)
+
+> **Scope honesty (Opus 4.7 review 2026-04-25)**: the original framing "industrial CFD workbench" overclaims relative to ANSYS/STAR-CCM+ (which require 3D viz + parametric BC editor + live residuals + project tree). What we landed is more accurately the **industrial-grade V&V dashboard layer**: a trust surface (GCI honesty, preflight gates, batch verdict pulse, audit-grade export). Independent industrial-readiness score: 0.55 overall (V&V axis 0.75 — exceeds ANSYS default which force-greens oscillating convergence). The 0.94 maturity target requires Stage 7+ (real OpenFOAM checkMesh integration) before being attainable.
 
 End-to-end deliverables in production at `/learn`:
 

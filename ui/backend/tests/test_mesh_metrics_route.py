@@ -56,6 +56,20 @@ def test_unknown_case_returns_404() -> None:
     assert r.status_code == 404
 
 
+def test_no_fixture_graceful_404_not_500() -> None:
+    """Opus 4.7 review 2026-04-25 ACCEPT_WITH_COMMENTS edge case #1:
+    a case_id with no mesh_*_measurement.yaml fixtures must return 404
+    with a descriptive detail, not 500. Guards the graceful-degradation
+    contract for newly-added cases that haven't been fixture-populated
+    yet."""
+    r = client.get("/api/cases/totally_no_fixture_yet/mesh-metrics")
+    assert r.status_code == 404
+    body = r.json()
+    # detail should mention "fixture" or "mesh" so the client can react
+    detail = (body.get("detail") or "").lower()
+    assert "fixture" in detail or "mesh" in detail
+
+
 def test_threshold_helper_gci() -> None:
     assert _verdict_gci(None) == "gray"
     assert _verdict_gci(0.0) == "green"

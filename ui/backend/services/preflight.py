@@ -300,22 +300,106 @@ def _aggregate_overall(checks: list[PreflightCheck]) -> str:
         return "fail"
     if any(c.status == "partial" for c in checks):
         return "partial"
+    # 'indeterminate' shouldn't escalate to fail (it means we couldn't
+    # decide, not that we found a problem). It downgrades to partial.
+    if any(c.status == "indeterminate" for c in checks):
+        return "partial"
     if all(c.status == "skip" for c in checks):
         return "skip"
     return "pass"
 
 
+def _safe_run(
+    builder,
+    *,
+    category: str,
+    check_id: str,
+    label_zh: str,
+):
+    """Wrap a per-category builder so an upstream service throw degrades
+    to a single 'indeterminate' check rather than 500'ing the whole
+    preflight endpoint. Per Opus 4.7 review 2026-04-25 ACCEPT_WITH_COMMENTS
+    edge case #4 (preflight partial-failure)."""
+    try:
+        result = builder()
+    except Exception as exc:  # noqa: BLE001 — intentional broad catch for graceful UI degradation
+        return [
+            PreflightCheck(
+                category=category,
+                id=check_id,
+                label_zh=label_zh,
+                status="indeterminate",
+                evidence=f"upstream raised {type(exc).__name__}: {exc!s}"[:240],
+                consequence=(
+                    "类别检查未能执行；其余类别仍按常规返回。检查 "
+                    "ui/backend/services/preflight.py 调用栈"
+                ),
+            )
+        ]
+    if isinstance(result, list):
+        return result
+    return [result]
+
+
 def build_preflight(case_id: str) -> PreflightSummary:
-    """Run all preflight categories for a case, return composite summary."""
-    gs = _load_gold_standard(case_id)
-    whitelist_ids = _load_whitelist_ids()
+    """Run all preflight categories for a case, return composite summary.
+
+    Each category builder is wrapped in _safe_run so that one upstream
+    failure (e.g. malformed YAML, FS permission, transient I/O) degrades
+    that single category to 'indeterminate' status with evidence pointing
+    at the exception, rather than 500-ing the whole endpoint. The other
+    four categories continue to evaluate normally.
+    """
+    try:
+        gs = _load_gold_standard(case_id)
+    except Exception:  # noqa: BLE001
+        gs = None
+    try:
+        whitelist_ids = _load_whitelist_ids()
+    except Exception:  # noqa: BLE001
+        whitelist_ids = set()
 
     checks: list[PreflightCheck] = []
-    checks.append(_adapter_check(case_id, whitelist_ids))
-    checks.append(_gold_check(gs))
-    checks.extend(_physics_checks(gs))
-    checks.append(_schema_check(case_id))
-    checks.extend(_mesh_checks(case_id))
+    checks.extend(
+        _safe_run(
+            lambda: _adapter_check(case_id, whitelist_ids),
+            category="adapter",
+            check_id="adapter_whitelisted",
+            label_zh="案例在 canonical whitelist",
+        )
+    )
+    checks.extend(
+        _safe_run(
+            lambda: _gold_check(gs),
+            category="gold_standard",
+            check_id="gold_completeness",
+            label_zh="金标准三件套",
+        )
+    )
+    checks.extend(
+        _safe_run(
+            lambda: _physics_checks(gs),
+            category="physics",
+            check_id="physics_indeterminate",
+            label_zh="物理前置（执行失败）",
+        )
+    )
+    checks.extend(
+        _safe_run(
+            lambda: [_schema_check(case_id)],
+            category="schema",
+            check_id="schema_basics_present",
+            label_zh="工作台首屏数据已编排",
+        )
+    )
+    checks.extend(
+        _safe_run(
+            lambda: _mesh_checks(case_id),
+            category="mesh",
+            check_id="mesh_indeterminate",
+            label_zh="网格 sweep（执行失败）",
+        )
+    )
 
     counts = PreflightCounts()
     for c in checks:
@@ -327,6 +411,12 @@ def build_preflight(case_id: str) -> PreflightSummary:
             counts.partial += 1
         elif c.status == "skip":
             counts.skip += 1
+        elif c.status == "indeterminate":
+            # Count indeterminate under partial in the rollup so existing
+            # consumers (BatchMatrix-adjacent UI, audit_concerns) keep
+            # working unchanged. The per-row status field still carries
+            # "indeterminate" for honest display in <RunRail>.
+            counts.partial += 1
     counts.total = len(checks)
 
     n_categories = len({c.category for c in checks})

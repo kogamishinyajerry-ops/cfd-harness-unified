@@ -79,6 +79,18 @@ export function MeshQC({ caseId }: { caseId: string }) {
         </span>
       </div>
 
+      {/* Data-source honesty badge — Opus 4.7 review 2026-04-25
+          ACCEPT_WITH_COMMENTS: chip 数据来自合成 fixture (mesh_*_measurement.yaml)
+          而非真实 checkMesh log。真值（skew / non-orthogonality / max-y+）待
+          Stage 7 接入 docker-openfoam 真跑后才能填。这里用 amber 标签明示，
+          避免新手把 GCI=green 误读为"网格通过 ANSYS-style mesh quality 检查"。 */}
+      <div className="mb-4 inline-flex items-center gap-2 rounded-sm border border-amber-700/50 bg-amber-950/30 px-2.5 py-1 text-[11px] text-amber-200">
+        <span className="mono text-[10px] uppercase tracking-wider text-amber-400">data source</span>
+        <span>synthetic fixture (mesh_*_measurement.yaml)</span>
+        <span className="text-surface-600">·</span>
+        <span className="text-surface-400">真 skew / non-orthogonality / y+ 待 Stage 7</span>
+      </div>
+
       {/* 4-bar QC band */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <QcChip

@@ -5,7 +5,9 @@ stages_landed: 6/6
 last_polish_commit: c2b3f12
 ---
 
-# Industrial CFD Workbench · Rollout Summary
+# Industrial-grade V&V Dashboard Layer · Rollout Summary
+
+> **Naming correction (Opus 4.7 review 2026-04-25)**: this rollout was originally framed as an "industrial CFD workbench" but the delivered scope is more honestly described as an "industrial-grade V&V dashboard layer." A true workbench (ANSYS / STAR-CCM+ class) requires interactive 3D viz, parametric BC editor, in-run residual streaming, and project tree — none of which were in scope here. What landed is the *trust* surface: GCI/Richardson honesty, preflight gates, batch verdict pulse, audit-grade export. The original name is preserved in commit history for traceability; new artifacts adopt the corrected name. Industrial-readiness vs ANSYS/STAR-CCM+ scored 0.55 by independent review; V&V-axis sub-score 0.75 (exceeding ANSYS default which force-greens oscillating convergence).
 
 **Origin**: User request 2026-04-25 — "如何把这个项目打造成一款工业级的 CFD workbench？让一名刚接触系统的新手 CFD 工程师，也能像使用 ANSYS 或 STAR-CCM+ 一样：每个步骤有清晰的指引、交互、对应部件与产物的渲染显示。"
 

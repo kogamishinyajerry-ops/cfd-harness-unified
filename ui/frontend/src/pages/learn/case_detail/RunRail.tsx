@@ -48,6 +48,11 @@ const STATUS_COLOR: Record<PreflightStatus, { ring: string; text: string; chip: 
     text: "text-surface-500",
     chip: "bg-surface-900/40",
   },
+  indeterminate: {
+    ring: "border-violet-700/60",
+    text: "text-violet-300",
+    chip: "bg-violet-950/40",
+  },
 };
 
 const STATUS_GLYPH: Record<PreflightStatus, string> = {
@@ -55,6 +60,7 @@ const STATUS_GLYPH: Record<PreflightStatus, string> = {
   fail: "✗",
   partial: "◐",
   skip: "○",
+  indeterminate: "?!",
 };
 
 const STATUS_LABEL: Record<PreflightStatus, string> = {
@@ -62,6 +68,7 @@ const STATUS_LABEL: Record<PreflightStatus, string> = {
   fail: "FAIL",
   partial: "PARTIAL",
   skip: "SKIP",
+  indeterminate: "INDET",
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -225,9 +232,11 @@ function CategoryGroup({
 
 function CheckRow({ check }: { check: PreflightCheck }) {
   const c = STATUS_COLOR[check.status];
-  // Auto-expand failures so problems are visible at first glance. Pass
-  // rows stay collapsed to keep the rail compact.
-  const [open, setOpen] = useState(check.status === "fail");
+  // Auto-expand failures + indeterminate rows so problems are visible
+  // at first glance. Pass rows stay collapsed to keep the rail compact.
+  const [open, setOpen] = useState(
+    check.status === "fail" || check.status === "indeterminate",
+  );
   const hasExpand = !!(check.evidence || check.consequence);
 
   return (

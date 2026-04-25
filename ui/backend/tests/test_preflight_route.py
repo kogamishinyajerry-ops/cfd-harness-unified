@@ -82,6 +82,38 @@ def test_failures_carry_evidence() -> None:
     assert found_failure_with_evidence, "expected ≥1 fail with evidence across 3 cases"
 
 
+def test_partial_failure_does_not_500_whole_endpoint(monkeypatch) -> None:
+    """Opus 4.7 review 2026-04-25 ACCEPT_WITH_COMMENTS edge case #4:
+    when a single category builder throws, that single category should
+    degrade to 'indeterminate' status while the other 4 categories
+    continue to evaluate normally. Guards the per-category isolation
+    we added via _safe_run."""
+    from ui.backend.services import preflight as preflight_svc
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("synthetic failure for graceful-degradation test")
+
+    # Force the mesh-checks builder to throw. The preflight endpoint
+    # should still return 200, with the mesh category showing
+    # 'indeterminate' rather than failing the whole request.
+    monkeypatch.setattr(preflight_svc, "_mesh_checks", boom)
+    r = client.get("/api/cases/lid_driven_cavity/preflight")
+    assert r.status_code == 200, f"got {r.status_code} body={r.text[:200]}"
+    body = r.json()
+    mesh_rows = [c for c in body["checks"] if c["category"] == "mesh"]
+    assert len(mesh_rows) >= 1
+    assert any(c["status"] == "indeterminate" for c in mesh_rows)
+    # The other four categories must still report their normal verdicts
+    for cat in ("adapter", "schema", "gold_standard", "physics"):
+        cat_rows = [c for c in body["checks"] if c["category"] == cat]
+        assert len(cat_rows) >= 1
+        # None of the non-mesh rows should be tainted by the mesh failure
+        for c in cat_rows:
+            assert c["status"] != "indeterminate", (
+                f"{cat} got indeterminate; isolation broken"
+            )
+
+
 def test_unknown_case_returns_response() -> None:
     """The preflight service is permissive — for an unknown case_id it
     still runs the structural checks (adapter, schema, mesh) and returns

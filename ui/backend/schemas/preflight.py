@@ -17,9 +17,11 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-# Status tri-state — matches existing harness conventions ("partial" used
-# by physics_precondition rows that have caveats).
-PreflightStatus = str  # Literal["pass", "fail", "partial", "skip"]
+# Status — matches existing harness conventions ("partial" used by
+# physics_precondition rows that have caveats; "indeterminate" added per
+# Opus 4.7 review 2026-04-25 so that an upstream service throw degrades
+# a single category gracefully instead of 500'ing the whole endpoint).
+PreflightStatus = str  # Literal["pass", "fail", "partial", "skip", "indeterminate"]
 
 # Category — small closed set for now; new entries land additively.
 PreflightCategory = str  # Literal["physics", "schema", "mesh", "gold_standard", "adapter"]
