@@ -390,6 +390,48 @@ def _load_bfs_reattachment_gold() -> dict | None:
     }
 
 
+# DEC-V61-057 Stage D: DHC structured-schema gold loader.
+def _load_dhc_observable_gold(name: str) -> dict | None:
+    """Load a DHC named observable from the schema_v2 differential_heated_cavity
+    gold YAML. Returns None when the YAML, observables block, or named entry
+    is missing. Surfaces gate_status (HARD_GATED | PROVISIONAL_ADVISORY) so the
+    Compare tab can render advisory observables with a distinct badge per
+    DEC-V61-057 §C/§D.
+    """
+    gold_path = _GOLD_ROOT / "differential_heated_cavity.yaml"
+    if not gold_path.is_file():
+        return None
+    try:
+        gold = yaml.safe_load(gold_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+    observables = gold.get("observables") or []
+    for obs in observables:
+        if not isinstance(obs, dict) or obs.get("name") != name:
+            continue
+        ref_value = obs.get("ref_value")
+        if not isinstance(ref_value, (int, float)):
+            return None
+        tol_block = obs.get("tolerance") or {}
+        tol_value = (
+            float(tol_block.get("value", 0.10))
+            if isinstance(tol_block, dict) else float(tol_block)
+        )
+        return {
+            "value": float(ref_value),
+            "unit": obs.get("unit", "dimensionless"),
+            "tolerance": tol_value,
+            "gate_status": obs.get("gate_status", "HARD_GATED"),
+            "family": obs.get("family", "unspecified"),
+            "role": obs.get("role", "observation"),
+            "source": gold.get("source", "de Vahl Davis 1983"),
+            "literature_doi": gold.get("literature_doi", "10.1002/fld.1650030305"),
+            "source_table": obs.get("source_table", ""),
+            "description": obs.get("description", ""),
+        }
+    return None
+
+
 def _load_sample_xy(path: Path, value_col: int = 1) -> tuple[np.ndarray, np.ndarray]:
     """Load an OpenFOAM raw-xy sample file. Returns (coord, value) arrays.
 
@@ -818,6 +860,111 @@ def _build_visual_only_context(
             metrics_cl_rms = None; paper_cl_rms = None
             metrics_u_centerline = None; paper_u_centerline = None
 
+    # DEC-V61-057 Stage D: differential_heated_cavity 5-observable anchor
+    # cards (4 HARD_GATED + 1 PROVISIONAL_ADVISORY). Mirrors cylinder pattern
+    # but reads from the structured schema_v2 observables[] block (not
+    # multi-doc YAML). Headline value is `nusselt_number` carried in
+    # measurement.value; the other 4 come from measurement.secondary_scalars
+    # populated by Stage E live run via scripts/phase5_audit_run.py.
+    metrics_dhc: Optional[dict] = None
+    if case_id == "differential_heated_cavity":
+        try:
+            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+                         / case_id / f"{run_label}_measurement.yaml")
+            if meas_path.is_file():
+                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+                m = meas.get("measurement", {}) or {}
+                primary_value = m.get("value")
+                secondary = m.get("secondary_scalars") or {}
+                dhc_observables: list[dict] = []
+                # Headline (nusselt_number) → primary measurement.value
+                # The other 4 → secondary_scalars (populated by Stage E).
+                obs_to_value: dict[str, Any] = {
+                    "nusselt_number": primary_value,
+                    "nusselt_max": secondary.get("nusselt_max"),
+                    "u_max_centerline_v": secondary.get("u_max_centerline_v"),
+                    "v_max_centerline_h": secondary.get("v_max_centerline_h"),
+                    "psi_max_center": secondary.get("psi_max_center"),
+                }
+                # Renderer-friendly Chinese labels keyed by observable name.
+                label_map = {
+                    "nusselt_number":      ("D-Nu_avg", "Nu", "壁面平均 Nusselt"),
+                    "nusselt_max":         ("D-Nu_max", "Nu_max", "壁面峰值 Nusselt"),
+                    "u_max_centerline_v":  ("D-u_max",  "u·L/α", "x=L/2 中线 u 峰值"),
+                    "v_max_centerline_h":  ("D-v_max",  "v·L/α", "y=L/2 中线 v 峰值"),
+                    "psi_max_center":      ("D-ψ_max",  "ψ·1/α",  "腔心流函数峰值"),
+                }
+                for obs_name, actual in obs_to_value.items():
+                    gold = _load_dhc_observable_gold(obs_name)
+                    if gold is None:
+                        continue
+                    label, symbol, label_zh = label_map.get(
+                        obs_name, (obs_name, obs_name, obs_name)
+                    )
+                    if isinstance(actual, (int, float)):
+                        actual_f = float(actual)
+                        expected = gold["value"]
+                        dev_pct = (
+                            (actual_f - expected) / expected * 100
+                            if expected else 0.0
+                        )
+                        tol_pct = gold["tolerance"] * 100.0
+                        within = abs(dev_pct) <= tol_pct
+                        dhc_observables.append({
+                            "label": label,
+                            "label_zh": label_zh,
+                            "symbol": symbol,
+                            "name": obs_name,
+                            "actual": actual_f,
+                            "expected": expected,
+                            "deviation_pct": dev_pct,
+                            "tolerance_pct": tol_pct,
+                            "within_tolerance": within,
+                            "gate_status": gold["gate_status"],
+                            "family": gold["family"],
+                            "role": gold["role"],
+                            "source_table": gold["source_table"],
+                        })
+                    else:
+                        # Stage E hasn't populated this observable yet —
+                        # surface a "pending" card so the user can see the
+                        # 5-observable promise even on Stage D fixtures.
+                        dhc_observables.append({
+                            "label": label,
+                            "label_zh": label_zh,
+                            "symbol": symbol,
+                            "name": obs_name,
+                            "actual": None,
+                            "expected": gold["value"],
+                            "deviation_pct": None,
+                            "tolerance_pct": gold["tolerance"] * 100.0,
+                            "within_tolerance": None,
+                            "gate_status": gold["gate_status"],
+                            "family": gold["family"],
+                            "role": gold["role"],
+                            "source_table": gold["source_table"],
+                            "pending": True,
+                        })
+                if dhc_observables:
+                    hard_gated = [
+                        o for o in dhc_observables
+                        if o["gate_status"] != "PROVISIONAL_ADVISORY"
+                    ]
+                    advisory = [
+                        o for o in dhc_observables
+                        if o["gate_status"] == "PROVISIONAL_ADVISORY"
+                    ]
+                    metrics_dhc = {
+                        "observables": dhc_observables,
+                        "hard_gated_count": len(hard_gated),
+                        "advisory_count": len(advisory),
+                        "source": "de Vahl Davis 1983",
+                        "literature_doi": "10.1002/fld.1650030305",
+                        "short": "de Vahl Davis 1983 Tables I/II/III",
+                    }
+        except (OSError, yaml.YAMLError, ValueError, TypeError):
+            metrics_dhc = None
+
     return {
         "visual_only": True,
         "case_id": case_id,
@@ -852,6 +999,9 @@ def _build_visual_only_context(
         "paper_cl_rms": paper_cl_rms,
         "metrics_u_centerline": metrics_u_centerline,
         "paper_u_centerline": paper_u_centerline,
+        # DEC-V61-057 Stage D: DHC 5-observable Compare-tab block
+        # (4 HARD_GATED + 1 PROVISIONAL_ADVISORY).
+        "metrics_dhc": metrics_dhc,
     }
 
 
