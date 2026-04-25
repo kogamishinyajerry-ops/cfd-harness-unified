@@ -3736,28 +3736,38 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
-        # 2b. constant/turbulenceProperties (DEC-V61-059 A.4 contract).
-        # icoFoam ignores this file (it has no turbulence-transport
-        # equations) but emitting it makes the case forward-compatible
-        # with the simpleFoam+RAS path that A.4.b will wire. The
-        # `simulationType` is also the canonical place for downstream
-        # tooling to read the case's actually-active turbulence
-        # treatment (audit packages, Notion sync, byte-stable reviews).
-        # Codex round-1 F1: the file content MUST match the bc field
-        # match `_emits_rans_path` — a "RAS" simulationType paired
-        # with `application icoFoam;` would be a contradictory case
-        # spec that misleads readers and breaks G2 trust semantics.
+        # 2b. constant/momentumTransport (DEC-V61-059 A.4 contract,
+        # post-R3 live-run defect fix per RETRO-V61-053 addendum).
+        #
+        # OpenFOAM 10 renamed `turbulenceProperties` → `momentumTransport`
+        # for incompressible cases. The `wallShearStress` function-object
+        # used by the DEC-V61-043 emitter REQUIRES a registered
+        # momentumTransport object — `Unable to find turbulence model
+        # in the database` is the exact FOAM FATAL ERROR Stage B
+        # live-run surfaced (4.6s case death). icoFoam ignores the
+        # file's content (laminar PISO has no transport equations),
+        # but the file MUST EXIST so the FO database lookup succeeds.
+        # See LDC's identical pattern at src/foam_agent_adapter.py:954.
+        # The `simulationType` is also the canonical place for
+        # downstream tooling to read the case's actually-active
+        # turbulence treatment (audit packages, Notion sync, byte-
+        # stable reviews).
+        #
+        # Codex round-1 F1: content MUST match `_emits_rans_path` —
+        # a "RAS" simulationType paired with `application icoFoam;`
+        # would be a contradictory case spec that misleads readers
+        # and breaks G2 trust semantics.
         if _emits_rans_path and isinstance(whitelist_turbulence, str) and whitelist_turbulence.lower() != "laminar":
-            _turbulence_props_body = (
+            _momentum_transport_body = (
                 f"simulationType  RAS;\n\n"
                 f"RAS\n{{\n"
-                f"    RASModel     {whitelist_turbulence};\n\n"
+                f"    model     {whitelist_turbulence};\n\n"
                 f"    turbulence   on;\n\n"
                 f"    printCoeffs  on;\n}}\n"
             )
         else:
-            _turbulence_props_body = "simulationType  laminar;\n"
-        (case_dir / "constant" / "turbulenceProperties").write_text(
+            _momentum_transport_body = "simulationType  laminar;\n"
+        (case_dir / "constant" / "momentumTransport").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
@@ -3772,10 +3782,10 @@ FoamFile
     format      ascii;
     class       dictionary;
     location    "constant";
-    object      turbulenceProperties;
+    object      momentumTransport;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-{_turbulence_props_body}
+{_momentum_transport_body}
 // ************************************************************************* //
 """,
             encoding="utf-8",

@@ -1894,15 +1894,23 @@ class TestPlaneChannelMultiDim:
             # → bc reflects that.
             assert bc.get("turbulence_model_used") == "laminar"
 
-    def test_a4a_turbulence_properties_file_emitted_laminar(self):
+    def test_a4a_momentum_transport_file_emitted_laminar(self):
+        """OF10 renamed turbulenceProperties → momentumTransport for
+        incompressible cases. wallShearStress FO requires this file
+        to exist (Stage B live-run defect fix).
+        """
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
             FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec())
-            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
-            # Whitelist says laminar; turbulenceProperties must reflect that.
+            tp = (case_dir / "constant" / "momentumTransport").read_text()
+            # Whitelist says laminar; momentumTransport must reflect that.
             assert "simulationType  laminar" in tp
             # Must NOT contain RAS block in laminar mode.
             assert "RASModel" not in tp
+            # The legacy `turbulenceProperties` filename is NOT created
+            # under OF10 — verify cleanly so a future regression that
+            # reverts to the older filename is caught.
+            assert not (case_dir / "constant" / "turbulenceProperties").exists()
 
     def test_a4a_locks_bc_to_laminar_even_when_caller_overrides(self):
         """Codex round-1 F1 regression: A.4.a is the laminar icoFoam
@@ -1936,9 +1944,9 @@ class TestPlaneChannelMultiDim:
                 boundary_conditions={"turbulence_model": "kOmegaSST"},
             )
             FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
-            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            tp = (case_dir / "constant" / "momentumTransport").read_text()
             assert "simulationType  laminar" in tp, (
-                "A.4.a must emit laminar turbulenceProperties — RAS path is "
+                "A.4.a must emit laminar momentumTransport — RAS path is "
                 "deferred to A.4.b alongside the actual simpleFoam files."
             )
             assert "RASModel" not in tp
