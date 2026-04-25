@@ -2146,7 +2146,23 @@ fields          (U);
 
         # Physical parameters
         Ra = float(task_spec.Ra or task_spec.Re or 1e10)  # Use Ra field; fallback to Re as proxy
-        Pr = 0.71  # Prandtl number (air)
+        # DEC-V61-060 A-final (Codex R1 F1-HIGH): Pr was hard-coded to
+        # 0.71 (air) regardless of the canonical case. Post-A.0 pivot the
+        # RBC benchmark calls for Pr=10 (water-like, Pandey & Schumacher
+        # 2018). Resolve Pr per case_id from the same priority as
+        # aspect_ratio: explicit BC override > whitelist > legacy default.
+        bc_pr = (
+            task_spec.boundary_conditions.get("Pr")
+            if task_spec.boundary_conditions
+            else None
+        )
+        wl_pr = _load_whitelist_parameter(task_spec.name, "Pr")
+        if isinstance(bc_pr, (int, float)):
+            Pr = float(bc_pr)
+        elif wl_pr is not None:
+            Pr = float(wl_pr)
+        else:
+            Pr = 0.71  # legacy default (air, DHC + unknown NC cavities)
         # Boussinesq validity: beta * dT << 1
         # At mean T=323K: beta=1/T_mean≈0.0031; set dT=10K → beta*dT≈0.031 (VALID)
         # dT=10K works for both Ra=1e6 (NC Cavity) and Ra=1e10 (DHC) via g scaling

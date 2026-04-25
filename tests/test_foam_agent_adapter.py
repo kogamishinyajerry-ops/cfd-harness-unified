@@ -1393,6 +1393,7 @@ def _make_nc_spec(
     name: Optional[str] = None,
     *,
     include_aspect_ratio_in_bc: bool = True,
+    Pr: Optional[float] = None,
 ) -> TaskSpec:
     """Construct a natural-convection TaskSpec for adapter tests.
 
@@ -1401,10 +1402,18 @@ def _make_nc_spec(
     → AR=2.0). When `include_aspect_ratio_in_bc` is False, simulates a
     whitelist-driven path where AR is NOT in boundary_conditions but must
     be resolved from whitelist parameters or case-id default.
+
+    DEC-V61-060 A-final (Codex R1 F2-MED): `Pr` is now an OPTIONAL
+    parameter. When omitted, Pr is NOT pre-seeded into BC — letting the
+    adapter exercise the same whitelist-resolution path that production
+    uses. Tests that need to lock a specific Pr (e.g. tampered-Pr
+    plumbing) pass it explicitly.
     """
-    bc: Dict[str, float] = {"Pr": 0.71}
+    bc: Dict[str, float] = {}
     if include_aspect_ratio_in_bc:
         bc["aspect_ratio"] = aspect_ratio
+    if Pr is not None:
+        bc["Pr"] = Pr
     return TaskSpec(
         name=name if name is not None else f"nc-Ra{Ra:g}",
         geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
@@ -1444,7 +1453,11 @@ class TestBuoyantCasePlumbingVerification:
     """Natural convection cavity: Ra must survive the write pipeline intact."""
 
     def test_rayleigh_benard_ra_1e6_round_trip_passes(self):
-        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0, name="rayleigh_benard_convection")
+        # DEC-V61-060 A-final (Codex R1 F2-MED): updated AR=2.0 → 4.0 to
+        # match canonical Pandey & Schumacher 2018 TU Ilmenau benchmark.
+        # Pr is now resolved from whitelist (Pr=10) — explicit BC override
+        # NOT supplied here so the whitelist path is exercised.
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection")
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
             # Does not raise — verifier is called internally on success.
@@ -2789,4 +2802,50 @@ class TestRBCMultiDim:
         bc = spec.boundary_conditions
         assert bc.get("wall_orientation") != "x", (
             "RBC must NOT default to x-axis Nu extraction (Pre-A.3 regression)"
+        )
+
+    def test_a_final_rbc_emits_pr_10_in_physical_properties(self, tmp_path):
+        """DEC-V61-060 A-final (Codex R1 F1-HIGH + F2-MED): the A.0
+        documentation pivot to Pr=10 (Pandey & Schumacher benchmark) must
+        actually reach the generated case. Pre-A-final the generator
+        hard-coded Pr=0.71 (air) regardless of whitelist; post-A-final
+        Pr is resolved per case_id from {boundary_conditions, whitelist,
+        legacy default}.
+
+        Asserts canonical RBC (no explicit Pr in BC; whitelist drives)
+        emits 'Pr 10' (or '10.0') in constant/physicalProperties — NOT
+        the legacy 'Pr 0.71'.
+        """
+        # Note: NO explicit Pr in BC (helper Pr=None). RBC is in whitelist
+        # with parameters.Pr=10.0, so the adapter resolution should pick
+        # that up.
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        pp_text = (case_dir / "constant" / "physicalProperties").read_text()
+        # Strong negative: legacy Pr=0.71 must NOT be in canonical RBC output
+        assert "Pr              0.71" not in pp_text, (
+            "RBC physicalProperties still emits legacy Pr=0.71 — A-final "
+            "regression. constant/physicalProperties:\n" + pp_text[:1500]
+        )
+        # Positive: Pr=10 (or 10.0) must be present
+        assert ("Pr              10" in pp_text), (
+            "RBC physicalProperties must emit Pr=10 per A.0 pivot; got:\n"
+            + pp_text[:1500]
+        )
+
+    def test_a_final_dhc_keeps_pr_0_71_in_physical_properties(self, tmp_path):
+        """DEC-V61-060 A-final regression guard: DHC has whitelist Pr=0.71
+        so it must keep the legacy air value. The generalized Pr resolution
+        must NOT regress DHC."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        pp_text = (case_dir / "constant" / "physicalProperties").read_text()
+        assert "Pr              0.71" in pp_text, (
+            "DHC physicalProperties must keep Pr=0.71; got:\n" + pp_text[:1500]
         )
