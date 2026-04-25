@@ -33,7 +33,7 @@ external_gate_self_estimated_pass_rate: 0.45
 external_gate_self_estimated_pass_rate_source: .planning/intake/DEC-V61-063_turbulent_flat_plate.yaml §7
 external_gate_actual_outcome_partial: |
   3-round Codex arc, final R3 verdict APPROVE_WITH_COMMENTS. R1 ACTUAL=0% (CHANGES_REQUIRED, 2 findings F1+F2) vs estimated 0.45 — overestimated; F1 specifically (hard-gate against constant value) was a categorical methodology miss that no SNR test could have caught. R2 ACTUAL=100% (APPROVE, 0 residuals) — F1+F2 fixes both verbatim, Codex reproduced both acceptance scenarios independently. R3 ACTUAL=80% (APPROVE_WITH_COMMENTS, 1 D1 doc-wording residual) vs estimated 0.40 (R3 was unplanned in original budget — added under RETRO-V61-053 post-R3 protocol after Stage B v1 exposed pre-existing case-gen defects).
-notion_sync_status: pending
+notion_sync_status: "synced 2026-04-26T00:24 · Status=Accepted (page_id=34dc6894-2bed-8185-9ff4-f65210c5f3e7, URL=https://www.notion.so/DEC-V61-063-Turbulent-Flat-Plate-Type-II-multi-dim-validation-methodology-v2-0-fourth-apply-34dc68942bed81859ff4f65210c5f3e7). Body: headline callout + 3-round Codex arc + Stage B v1→v2→v3 iteration table + RETRO-V61-053 post-R3 defect addendum + methodology v2.0 fourth-apply calibration table + counter calibration + GitHub artifact links + V61-064 follow-up callout."
 codex_tool_report_path:
   - reports/codex_tool_reports/dec_v61_063_round1_review.md
   - reports/codex_tool_reports/dec_v61_063_round2_review.md
