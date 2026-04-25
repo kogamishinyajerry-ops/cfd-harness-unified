@@ -483,32 +483,40 @@ batch_plan:
 
   - batch: A.4
     scope: |
-      Adapter turbulence-model wire: simpleFoam + kOmegaSST emission
-      path when whitelist turbulence_model != laminar. Whitelist
-      update: plane_channel_flow → solver=simpleFoam,
-      turbulence_model=kOmegaSST, Re_tau=395.
-    commit_count_estimate: 2
+      Split into A.4.a (LANDED · cb6737b) + A.4.b (deferred).
+      A.4.a: turbulence_model_used contract — generator stamps
+      bc["turbulence_model_used"] from whitelist + emits
+      constant/turbulenceProperties matching the resolved model.
+      Tests: 3 in TestPlaneChannelMultiDim (laminar default, RAS
+      block when overridden, bc stamping).
+      A.4.b: full simpleFoam + RAS file emission (k/omega/nut
+      initial fields, fvSchemes/fvSolution for SST, dispatch line
+      solver_name update) + whitelist flip to kOmegaSST + Re_τ=395.
+      Lands after Codex round-1 review feedback.
+    commit_count_estimate: "1 landed (a) + 1 pending (b)"
 
   - batch: A.5
     scope: |
-      Validation-artifact lineage repair (DEC-V61-057 A.4 pattern):
-      regenerate fully_developed_plane_channel_flow.yaml observables[]
-      to match new gates (u_tau, C_f, Re_tau, u_plus_profile @
-      Re_tau=395). Remove or refresh contract_status: INCOMPATIBLE
-      block. Regenerate auto_verify_report.yaml fixture to match.
-      3-way invariant test (gold YAML ↔ auto_verify_report ↔ rendered
-      report).
+      Validation-artifact lineage repair (DEC-V61-057 A.4 pattern).
+      DEFERRED to A.5.b alongside A.4.b — gold YAML observables[]
+      regen to match new HARD-GATED layout (u_tau, C_f, Re_tau,
+      u_plus_profile @ Re_τ=395) is tightly coupled to A.4.b's
+      whitelist flip. Until then, the gold YAML retains its
+      contract_status: INCOMPATIBLE marker which honestly reflects
+      the laminar icoFoam path.
+      A.5.a (deferrable): 3-way invariant test (gold YAML ↔
+      auto_verify_report.yaml fixture ↔ rendered report.md/html)
+      can land before A.4.b — it pins the CURRENT state and
+      catches future drift.
     commit_count_estimate: 2
 
   - batch: A.6
     scope: |
-      Alias normalization sanity check: confirm
-      _TASK_NAME_TO_CASE_ID_ALIASES already maps
-      "Fully Developed Plane Channel Flow (DNS)" →
-      fully_developed_plane_channel_flow (it does, line 260 of
-      foam_agent_adapter.py). Add unit test asserting
-      _normalize_task_name_to_case_id round-trips for all whitelist
-      titles. Single commit.
+      LANDED · c3c347f. Alias normalization parity tests:
+      verifies adapter (Execution plane) and auto_verifier
+      (Evaluation plane) tables agree on the plane-channel
+      mapping. 6 tests cover display-title resolution, _normalize
+      helper, and cross-table drift detection.
     commit_count_estimate: 1
 
   - batch: B
