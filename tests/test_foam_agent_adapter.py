@@ -2691,3 +2691,102 @@ class TestRBCMultiDim:
         assert sg_line.startswith("simpleGrading (1 "), (
             f"RBC x-grading must stay uniform; got:\n{sg_line[:250]}"
         )
+
+    def test_a5_rbc_stage_a_integration_smoke(self, tmp_path):
+        """DEC-V61-060 Stage A.5 INTEGRATION SMOKE — end-to-end assertion
+        that Stage A (A.0-A.4) lands a self-consistent RBC case directory.
+        No live solver run (per intake §4 F4-HIGH constraint); only the
+        adapter-side dispatch path is exercised.
+
+        Asserts:
+          (a) blockMeshDict is a 4×1 rectangle (A.1)
+          (b) blockMeshDict has bottom-heated hot_wall topology (A.3)
+          (c) blockMeshDict has y-direction BL grading (A.4)
+          (d) constant/g writes gravity in -y direction
+          (e) 0/T has fixedValue hot_wall = 305 K
+          (f) task_spec.boundary_conditions plumbs wall_orientation='y' (A.3)
+          (g) task_spec.boundary_conditions plumbs Lx=4, Ly=1, H=1 (A.1)
+        """
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+
+        # (a) Rectangle 4×1
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+        assert "(4 0 0)" in blockmesh and "(4 1 0)" in blockmesh, (
+            f"Stage A.1 rectangle missing. blockMesh:\n{blockmesh[:500]}"
+        )
+        assert "(4 4 0)" not in blockmesh, "Stage A.1 4×4 square bug regressed"
+
+        # (b) Bottom-heated topology
+        hot_idx = blockmesh.find("hot_wall")
+        cold_idx = blockmesh.find("cold_wall")
+        hot_block = blockmesh[hot_idx:cold_idx]
+        assert "(0 1 5 4)" in hot_block, (
+            f"Stage A.3 bottom-heated topology missing. hot_block:\n{hot_block}"
+        )
+
+        # (c) y-direction BL grading
+        assert "((0.5 0.5 4) (0.5 0.5 0.25))" in blockmesh, (
+            f"Stage A.4 y-direction grading missing. blockMesh:\n{blockmesh[:800]}"
+        )
+
+        # (d) Gravity in -y
+        g_text = (case_dir / "constant" / "g").read_text()
+        assert "value           (0 -" in g_text, (
+            f"Gravity must be in -y direction. constant/g:\n{g_text}"
+        )
+
+        # (e) 0/T hot_wall fixedValue
+        T_text = (case_dir / "0" / "T").read_text()
+        assert "hot_wall" in T_text and "fixedValue" in T_text, (
+            f"0/T missing hot_wall fixedValue patch:\n{T_text[:1000]}"
+        )
+
+        # (f) wall_orientation plumbed
+        bc = spec.boundary_conditions
+        assert bc.get("wall_orientation") == "y"
+
+        # (g) Lx, Ly, H plumbed
+        assert bc.get("Lx") == pytest.approx(4.0)
+        assert bc.get("Ly") == pytest.approx(1.0)
+        assert bc.get("H") == pytest.approx(1.0)
+
+    def test_a5_rbc_invariant_no_legacy_2x2_artifacts(self, tmp_path):
+        """DEC-V61-060 Stage A.5 INVARIANT TEST: no pre-Stage-A artifacts
+        leak into the post-Stage-A case directory. This is a catch-all
+        regression guard that fires if any of A.0-A.4 backslides:
+
+          - whitelist Chaivat citation (A.0): NOT testable via case_dir
+          - 2×2 square geometry (A.1): vertex (2 2 0) must be absent
+          - x-axis Nu extractor (A.2/A.3): wall_orientation == 'x' is the
+            fingerprint of the legacy DHC-clone topology; for RBC must
+            be 'y'
+          - side-heated topology (A.3): hot_wall face (0 4 7 3) is the
+            DHC fingerprint; for RBC must be (0 1 5 4)
+        """
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+
+        # Pre-A.1: 2×2 vertex pattern (with old AR=2.0 default)
+        assert "(2 2 0)" not in blockmesh, "Pre-A.1 2×2 bug regression"
+
+        # Pre-A.3: DHC hot_wall face (0 4 7 3)
+        hot_idx = blockmesh.find("hot_wall")
+        cold_idx = blockmesh.find("cold_wall")
+        hot_block = blockmesh[hot_idx:cold_idx]
+        assert "(0 4 7 3)" not in hot_block, (
+            "Pre-A.3 DHC side-heated topology regression in RBC dispatch"
+        )
+
+        # wall_orientation fingerprint
+        bc = spec.boundary_conditions
+        assert bc.get("wall_orientation") != "x", (
+            "RBC must NOT default to x-axis Nu extraction (Pre-A.3 regression)"
+        )
