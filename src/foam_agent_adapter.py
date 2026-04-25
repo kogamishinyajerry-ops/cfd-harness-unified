@@ -3941,17 +3941,29 @@ boundaryField
         """生成稳态内部流 case 文件（simpleFoam + configurable turbulence model）。
 
         适用于:
-        - Turbulent Flat Plate (SIMPLE_GRID, Re=5e4) -> kOmegaSST
+        - Laminar Flat Plate (SIMPLE_GRID, Re=5e4 deep-laminar Blasius)
+          per V61-006 -> laminar (DEC-V61-063 Batch A.7)
         - Fully Developed Pipe Flow (SIMPLE_GRID, Re=5e4) -> kOmegaSST
 
         几何: 矩形通道, 2D 近似 (z-depth = 0.1m)
         - inlet: uniform velocity U = (U_bulk, 0, 0)
         - walls: no-slip
         - outlet: zeroGradient pressure
+
+        DEC-V61-063 A.7: support `turbulence_model="laminar"` so the case
+        generator obeys the V61-006 closed regime decision. Stage B v1
+        proved that emitting `simulationType RAS; RASModel laminar;`
+        crashes simpleFoam at startup (no such RAS model). Branches:
+          - turbulenceProperties: simulationType laminar (no RAS block)
+          - 0/k, 0/omega, 0/epsilon, 0/nut: skipped — laminar solver
+            stack does not register these fields
+          - fvSolution: minimal U+p solver block, no k/omega/epsilon
+            residualControl
         """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
         (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
+        is_laminar = turbulence_model == "laminar"
 
         Re = float(task_spec.Re or 50000)
         L = float(task_spec.boundary_conditions.get("plate_length", 1.0)) if task_spec.boundary_conditions else 1.0
@@ -4072,7 +4084,22 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
-        # constant/turbulenceProperties — k-epsilon
+        # constant/turbulenceProperties
+        # DEC-V61-063 A.7: branch on laminar — RAS{ RASModel laminar; }
+        # is invalid in OpenFOAM 10 (no laminar RAS model registered).
+        if is_laminar:
+            _turb_body = "simulationType  laminar;\n"
+        else:
+            _turb_body = (
+                f"simulationType  RAS;\n"
+                f"\n"
+                f"RAS\n"
+                f"{{\n"
+                f"    RASModel      {turbulence_model};\n"
+                f"    turbulence    on;\n"
+                f"    printCoeffs   on;\n"
+                f"}}\n"
+            )
         (case_dir / "constant" / "turbulenceProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -4092,15 +4119,7 @@ FoamFile
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-simulationType  RAS;
-
-RAS
-{{
-    RASModel      {turbulence_model};
-    turbulence    on;
-    printCoeffs   on;
-}}
-
+{_turb_body}
 // ************************************************************************* //
 """,
             encoding="utf-8",
@@ -4209,7 +4228,79 @@ wallDist
 
 
         # Build fvSolution content conditionally based on turbulence model
-        if turbulence_model == "kOmegaSST":
+        # DEC-V61-063 A.7: laminar branch — no k/omega/epsilon solvers,
+        # no residualControl entries for non-existent fields, no
+        # relaxation factors on absent equations.
+        if is_laminar:
+            solvers_block = """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    U
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    UFinal
+    {
+        $U;
+        relTol          0;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 1;
+    residualControl
+    {
+        U       1e-5;
+        p       1e-4;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.3;
+    }
+    equations
+    {
+        U               0.7;
+    }
+}
+"""
+        elif turbulence_model == "kOmegaSST":
             solvers_block = """\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
@@ -4476,6 +4567,15 @@ boundaryField
 """,
             encoding="utf-8",
         )
+
+        # DEC-V61-063 A.7: laminar simpleFoam needs ONLY p/U fields.
+        # Writing k/omega/epsilon/nut while simulationType=laminar causes
+        # "Field nut not found" / RAS-not-registered errors at solver
+        # startup. The remaining sampleDict block (temperature profile
+        # for natural-convection cavity — leftover from copy-paste) is
+        # irrelevant for flat plate either way; skip with the same guard.
+        if is_laminar:
+            return
 
         # 0/k
         k_init = 0.01

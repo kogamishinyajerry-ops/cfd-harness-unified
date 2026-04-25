@@ -2302,6 +2302,75 @@ class TestLoadWhitelistTurbulenceModel:
         """Production whitelist has `turbulence_model: laminar` for the cylinder case."""
         assert _load_whitelist_turbulence_model("circular_cylinder_wake") == "laminar"
 
+    def test_generate_steady_internal_flow_laminar_branch(self, tmp_path):
+        """DEC-V61-063 A.7: when called with turbulence_model='laminar',
+        the generator must:
+          - emit `simulationType laminar` (not RAS) in turbulenceProperties
+          - emit no `RASModel laminar` block (invalid in OpenFOAM 10)
+          - skip 0/k, 0/omega, 0/epsilon, 0/nut writes
+          - emit fvSolution without k/omega/epsilon solver entries
+        Stage B v1 proved that the pre-A.7 path crashed simpleFoam at
+        startup with "Unknown RAS turbulence model laminar" because the
+        function unconditionally wrote `RAS{ RASModel laminar }`.
+        """
+        executor = FoamAgentExecutor()
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        executor._generate_steady_internal_flow(
+            tmp_path, task, turbulence_model="laminar"
+        )
+        turb_props = (tmp_path / "constant" / "turbulenceProperties").read_text()
+        assert "simulationType  laminar;" in turb_props
+        assert "RAS\n{" not in turb_props
+        assert "RASModel" not in turb_props
+        # 0/* turbulent fields must NOT exist for laminar.
+        assert (tmp_path / "0" / "U").exists()
+        assert (tmp_path / "0" / "p").exists()
+        assert not (tmp_path / "0" / "k").exists()
+        assert not (tmp_path / "0" / "omega").exists()
+        assert not (tmp_path / "0" / "epsilon").exists()
+        assert not (tmp_path / "0" / "nut").exists()
+        # fvSolution must not solve for non-existent turbulence fields.
+        fv_sol = (tmp_path / "system" / "fvSolution").read_text()
+        # Crude but effective: no k/omega/epsilon section header.
+        # (kFinal/omegaFinal would also be absent.)
+        for tok in ("\n    k\n", "\n    omega\n", "\n    epsilon\n"):
+            assert tok not in fv_sol, (
+                f"laminar fvSolution should not contain solver block {tok.strip()!r}"
+            )
+
+    def test_generate_steady_internal_flow_kOmegaSST_unchanged(self, tmp_path):
+        """A.7 must not regress the turbulent path: kOmegaSST still emits
+        RAS turbulenceProperties + 0/k, 0/omega, 0/nut and includes
+        omega in fvSolution.
+        """
+        executor = FoamAgentExecutor()
+        task = TaskSpec(
+            name="Some Turbulent Case",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        executor._generate_steady_internal_flow(
+            tmp_path, task, turbulence_model="kOmegaSST"
+        )
+        turb_props = (tmp_path / "constant" / "turbulenceProperties").read_text()
+        assert "simulationType  RAS;" in turb_props
+        assert "RASModel      kOmegaSST;" in turb_props
+        assert (tmp_path / "0" / "k").exists()
+        assert (tmp_path / "0" / "omega").exists()
+        assert (tmp_path / "0" / "nut").exists()
+        fv_sol = (tmp_path / "system" / "fvSolution").read_text()
+        assert "    omega\n" in fv_sol
+
     def test_returns_laminar_for_turbulent_flat_plate(self):
         """DEC-V61-063 Batch A.6 acceptance: production whitelist has
         `turbulence_model: laminar` for turbulent_flat_plate per V61-006
