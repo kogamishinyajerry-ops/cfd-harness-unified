@@ -8722,6 +8722,141 @@ mergePatchPairs
         return key_quantities
 
     @staticmethod
+    def _populate_naca_force_coeffs_from_forceCoeffs(
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """DEC-V61-058 Batch C: emit Cl, Cd, alpha_deg, y+_max into
+        key_quantities by reading the forceCoeffs1 + yPlus FO outputs
+        registered in B1.2/B1.3 controlDict.
+
+        Per Codex round 2 round-3-readiness C-priority-1: failures must
+        propagate as explicit gate failures, never silently default. We
+        mirror the pattern at _populate_naca_cp_from_sampledict (DEC-V61-
+        044): on extractor error, write an `*_emitter_error` key into
+        key_quantities and DROP any stale scalar so DEC-V61-036 G1
+        MISSING_TARGET_QUANTITY fires at the comparator.
+
+        Per Codex round 2 round-3-readiness C-priority-2: alpha_deg from
+        task_spec (resolved exactly as in B1 with `angle_of_attack`-first
+        precedence) is plumbed alongside Cl/Cd so the audit fixture
+        surfaces α provenance end-to-end.
+
+        Mock-executor case (no postProcessing/forceCoeffs1 directory):
+        the extractor raises; we record the emitter_error and return.
+        Comparator stays MISSING_TARGET_QUANTITY which is the desired
+        behaviour for non-live runs.
+        """
+        # Resolve α with the same precedence as the adapter B1.fix1
+        # ruleset (angle_of_attack first, alpha_deg fallback). Don't
+        # mutate bc — read-only here.
+        bc = task_spec.boundary_conditions or {}
+        _alpha_raw = bc.get("angle_of_attack")
+        if _alpha_raw is None:
+            _alpha_raw = bc.get("alpha_deg", 0.0)
+        if _alpha_raw is None:
+            alpha_deg = 0.0
+        elif isinstance(_alpha_raw, bool):
+            # Mirror B1.fix1 fail-closed; in the populator path we surface
+            # via emitter_error rather than raise (different layer of the
+            # pipeline — populators are best-effort, dispatch already ran).
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"alpha_deg/angle_of_attack invalid bool={_alpha_raw!r}"
+            )
+            return key_quantities
+        elif isinstance(_alpha_raw, (int, float)):
+            alpha_deg = float(_alpha_raw)
+        else:
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"alpha_deg/angle_of_attack non-numeric type="
+                f"{type(_alpha_raw).__name__}"
+            )
+            return key_quantities
+
+        # Force-coefficient extraction.
+        try:
+            from src.airfoil_extractors import (
+                AirfoilExtractorError,
+                compute_cl_cd,
+                compute_y_plus_max,
+            )
+        except ImportError as exc:  # pragma: no cover — import-time failure
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"airfoil_extractors import failure: {exc}"
+            )
+            return key_quantities
+
+        try:
+            coeffs = compute_cl_cd(case_dir, alpha_deg=alpha_deg)
+        except AirfoilExtractorError as exc:
+            # Codex C-priority-1: propagate as gate failure. Drop any
+            # stale Cl/Cd/alpha keys so MISSING_TARGET_QUANTITY fires.
+            key_quantities["lift_coefficient_emitter_error"] = str(exc)
+            for stale in (
+                "lift_coefficient",
+                "drag_coefficient",
+                "lift_coefficient_alpha_eight",
+                "drag_coefficient_alpha_zero",
+                "alpha_deg",
+                "cl_drift_pct_last_100",
+                "cd_drift_pct_last_100",
+            ):
+                key_quantities.pop(stale, None)
+        else:
+            # α-aware naming: keep generic `lift_coefficient` /
+            # `drag_coefficient` for slope orchestration + the α-suffixed
+            # variants matching gold YAML observable names so the
+            # comparator's _lookup_with_alias resolves directly.
+            key_quantities["lift_coefficient"] = coeffs.Cl
+            key_quantities["drag_coefficient"] = coeffs.Cd
+            key_quantities["alpha_deg"] = coeffs.alpha_deg
+            key_quantities["force_coeffs_final_time"] = coeffs.final_time
+            key_quantities["force_coeffs_n_samples"] = coeffs.n_samples
+            key_quantities["cl_drift_pct_last_100"] = coeffs.cl_drift_pct_last_100
+            key_quantities["cd_drift_pct_last_100"] = coeffs.cd_drift_pct_last_100
+            key_quantities["force_coeffs_source"] = "forceCoeffs_FO_aerofoil"
+            # α-suffixed canonical-observable population matches gold YAML:
+            #   lift_coefficient_alpha_eight (HEADLINE) at α=8°
+            #   drag_coefficient_alpha_zero  (CROSS_CHECK) at α=0°
+            # Slope (lift_slope_dCl_dalpha_linear_regime) is computed at
+            # the orchestration layer across multiple runs (Stage E driver).
+            if abs(coeffs.alpha_deg - 8.0) < 0.5:
+                key_quantities["lift_coefficient_alpha_eight"] = coeffs.Cl
+            elif abs(coeffs.alpha_deg) < 0.5:
+                key_quantities["drag_coefficient_alpha_zero"] = coeffs.Cd
+                # SANITY_CHECK band per gold YAML sanity_checks block.
+                key_quantities["lift_coefficient_alpha_zero_sanity"] = coeffs.Cl
+                key_quantities["lift_coefficient_alpha_zero_sanity_ok"] = (
+                    abs(coeffs.Cl) < 0.005
+                )
+            elif abs(coeffs.alpha_deg - 4.0) < 0.5:
+                # Helper-anchor for slope; not a HARD gate per gold YAML.
+                key_quantities["lift_coefficient_alpha_four"] = coeffs.Cl
+
+        # y+_max extraction (PROVISIONAL_ADVISORY per Codex F5).
+        try:
+            yplus = compute_y_plus_max(case_dir)
+        except AirfoilExtractorError as exc:
+            key_quantities["y_plus_max_emitter_error"] = str(exc)
+            for stale in (
+                "y_plus_max",
+                "y_plus_min",
+                "y_plus_avg",
+                "y_plus_max_advisory_status",
+            ):
+                key_quantities.pop(stale, None)
+        else:
+            key_quantities["y_plus_max"] = yplus.y_plus_max
+            key_quantities["y_plus_min"] = yplus.y_plus_min
+            key_quantities["y_plus_avg"] = yplus.y_plus_avg
+            key_quantities["y_plus_max_on_aerofoil"] = yplus.y_plus_max
+            key_quantities["y_plus_max_advisory_status"] = yplus.advisory_status
+            key_quantities["y_plus_source"] = "yPlus_FO_aerofoil"
+
+        return key_quantities
+
+    @staticmethod
     def _populate_ij_nusselt_from_sampledict(
         case_dir: Path,
         task_spec: TaskSpec,
@@ -8806,6 +8941,14 @@ mergePatchPairs
             )
         if task_spec.geometry_type == GeometryType.AIRFOIL or "airfoil" in name_lower or "naca" in name_lower:
             key_quantities = self._populate_naca_cp_from_sampledict(
+                case_dir, task_spec, key_quantities
+            )
+            # DEC-V61-058 Batch C: forceCoeffs + yPlus FOs (B1.2/B1.3) emit
+            # Cl/Cd/y+ to postProcessing/. Populator surfaces them into
+            # key_quantities; on extractor failure, an *_emitter_error key is
+            # written and stale scalars are dropped so DEC-V61-036 G1 fires
+            # (Codex round 2 round-3-readiness C-priority-1 wiring).
+            key_quantities = self._populate_naca_force_coeffs_from_forceCoeffs(
                 case_dir, task_spec, key_quantities
             )
         if task_spec.geometry_type == GeometryType.IMPINGING_JET or "impinging" in name_lower:

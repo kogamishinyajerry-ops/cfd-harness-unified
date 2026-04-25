@@ -2529,6 +2529,7 @@ class TestNACA0012MultiDim:
         # Least-squares slope through these 3 points
         assert result.slope_per_deg == pytest.approx(0.1031, abs=0.005)
         assert result.intercept == pytest.approx(0.005, abs=0.01)
+        assert result.linearity_check_applicable is True  # 3-pt α∈{0,4,8} present
         assert result.linearity_ok is True
         assert result.linearity_residual < 0.05
         assert result.n_points == 3
@@ -2539,15 +2540,19 @@ class TestNACA0012MultiDim:
         points = [(0.0, 0.0), (4.0, 0.5), (8.0, 0.6)]
         result = compute_lift_slope(points)
         # midpoint = 0.3; |0.5 - 0.3| / |0.6| = 0.333 > 0.05
+        assert result.linearity_check_applicable is True
         assert result.linearity_ok is False
         assert result.linearity_residual > 0.05
 
-    def test_lift_slope_two_points_skips_linearity_check(self):
-        """With only 2 points, slope is computable but linearity check is N/A."""
+    def test_lift_slope_two_points_marks_linearity_not_applicable(self):
+        """Codex round 2 Q4(c) → round 3 C3 fix: 2-point case (α∈{0,8}) cannot
+        evaluate the 3-point linearity check; flag is False AND linearity_ok
+        is False (was misleadingly True pre-C3)."""
         points = [(0.0, 0.0), (8.0, 0.815)]
         result = compute_lift_slope(points)
         assert result.slope_per_deg == pytest.approx(0.815 / 8.0, abs=0.001)
-        assert result.linearity_ok is True  # default true when α∈{0,4,8} not all present
+        assert result.linearity_check_applicable is False  # α=4° absent
+        assert result.linearity_ok is False                 # not silently True
         assert result.linearity_residual == 0.0
 
     def test_lift_slope_one_point_raises(self):
@@ -2861,6 +2866,139 @@ class TestNACA0012MultiDim:
         )
         with pytest.raises(ParameterPlumbingError, match="must be numeric"):
             FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+
+    # ------------------------------------------------------------------
+    # Stage C: _populate_naca_force_coeffs_from_forceCoeffs gate wiring
+    # ------------------------------------------------------------------
+
+    def _make_naca_task(self, alpha_deg=0.0, *, alias="angle_of_attack"):
+        bc = {"chord_length": 1.0, alias: alpha_deg}
+        return TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions=bc,
+        )
+
+    def test_populator_emits_cl_cd_alpha_eight_into_key_quantities(self, tmp_path):
+        """Live-run pattern: forceCoeffs FO produced output; populator surfaces
+        Cl/Cd/alpha into key_quantities including the α=8° HEADLINE name."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.815, 0.0145) for i in range(1, 201)]
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        # yPlus also emitted (in-band)
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 11.5, 84.0, 47.0)])
+
+        task = self._make_naca_task(alpha_deg=8.0)
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, {}
+        )
+        assert kq["lift_coefficient"] == pytest.approx(0.815, abs=1e-6)
+        assert kq["drag_coefficient"] == pytest.approx(0.0145, abs=1e-6)
+        assert kq["alpha_deg"] == 8.0
+        assert kq["lift_coefficient_alpha_eight"] == pytest.approx(0.815)  # HEADLINE
+        assert kq["force_coeffs_source"] == "forceCoeffs_FO_aerofoil"
+        # y+ advisory
+        assert kq["y_plus_max"] == pytest.approx(84.0)
+        assert kq["y_plus_max_advisory_status"] == "PASS"
+
+    def test_populator_emits_cd_alpha_zero_and_sanity_at_alpha_zero(self, tmp_path):
+        """At α=0°: drag_coefficient_alpha_zero is the CROSS_CHECK; Cl SANITY_CHECK populates
+        with absolute band <0.005."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.001, 0.0080) for i in range(1, 201)]  # Cl≈0 (symmetric), Cd=0.008
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 12.0, 90.0, 50.0)])
+
+        task = self._make_naca_task(alpha_deg=0.0)
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, {}
+        )
+        assert kq["drag_coefficient_alpha_zero"] == pytest.approx(0.0080)  # CROSS_CHECK
+        assert kq["lift_coefficient_alpha_zero_sanity"] == pytest.approx(0.001)
+        assert kq["lift_coefficient_alpha_zero_sanity_ok"] is True
+        # The α=8° HEADLINE key MUST NOT populate from an α=0° run.
+        assert "lift_coefficient_alpha_eight" not in kq
+
+    def test_populator_extractor_error_drops_stale_keys(self, tmp_path):
+        """Codex C-1: missing forceCoeffs dir → emitter_error written, stale keys dropped,
+        downstream comparator sees MISSING_TARGET_QUANTITY."""
+        # No postProcessing/ directory — simulates MOCK or pre-FO case.
+        task = self._make_naca_task(alpha_deg=8.0)
+        # Pre-seed a stale value (simulates a prior-run leak).
+        kq_input = {"lift_coefficient": 999.0, "drag_coefficient": 999.0}
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, kq_input
+        )
+        assert "lift_coefficient_emitter_error" in kq
+        assert "forceCoeffs FO output dir not found" in kq["lift_coefficient_emitter_error"]
+        # Stale keys MUST be dropped so DEC-V61-036 G1 fires.
+        assert "lift_coefficient" not in kq
+        assert "drag_coefficient" not in kq
+        assert "lift_coefficient_alpha_eight" not in kq
+
+    def test_populator_yplus_failure_independent_of_force_coeffs(self, tmp_path):
+        """yPlus FO failure must not block the force-coefficient populator output."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.815, 0.0145) for i in range(1, 201)]
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        # yPlus dir absent → emitter_error path
+
+        task = self._make_naca_task(alpha_deg=8.0)
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, {}
+        )
+        # Force-coefficient gates STILL populate.
+        assert kq["lift_coefficient_alpha_eight"] == pytest.approx(0.815)
+        # y+ advisory falls back to error path.
+        assert "y_plus_max_emitter_error" in kq
+        assert "y_plus_max" not in kq
+
+    def test_populator_alias_precedence_matches_b1_fix(self, tmp_path):
+        """Populator α resolution mirrors B1.fix1 precedence (angle_of_attack first)."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.434, 0.0095) for i in range(1, 201)]  # α=4° anchors
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 11.0, 90.0, 50.0)])
+
+        # Both keys present; angle_of_attack must win.
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": 4.0, "alpha_deg": 0.0},
+        )
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, {}
+        )
+        assert kq["alpha_deg"] == 4.0
+        assert kq["lift_coefficient_alpha_four"] == pytest.approx(0.434)
+
+    def test_populator_alpha_bool_writes_emitter_error(self, tmp_path):
+        """Populator's fail-closed type check writes emitter_error (vs B1's raise)."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": True},
+        )
+        kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
+            tmp_path, task, {}
+        )
+        assert "lift_coefficient_emitter_error" in kq
+        assert "invalid bool" in kq["lift_coefficient_emitter_error"]
 
     # ------------------------------------------------------------------
     # Gate-set sanity: Cl@α=0° EXCLUDED (Codex F1 + numerical_noise_snr)

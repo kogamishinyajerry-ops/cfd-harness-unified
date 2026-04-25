@@ -101,13 +101,23 @@ class CoeffsResult:
 
 @dataclass(frozen=True)
 class LiftSlopeResult:
-    """Multi-α slope extraction (3-point linear fit)."""
+    """Multi-α slope extraction (3-point linear fit).
+
+    DEC-V61-058 Codex round 2 Q4(c) → C3-priority deferred:
+    `linearity_check_applicable` flag added (round 3). The 2-point case
+    (α∈{0,8}) cannot evaluate `|Cl(4°) - 0.5·(Cl(0°)+Cl(8°))|` because
+    Cl(4°) is missing; pre-flag the result reported `linearity_ok=True`
+    by default which was misleading. Now: `linearity_check_applicable`
+    is True ONLY when α∈{0,4,8} are all present; downstream consumers
+    must check this flag before trusting `linearity_ok`.
+    """
 
     slope_per_deg: float        # dCl/dα
     intercept: float             # Cl at α=0
-    linearity_ok: bool           # |Cl(4) - 0.5·(Cl(0)+Cl(8))| / |Cl(8)| < 0.05
-    linearity_residual: float    # the LHS of the inequality above
-    n_points: int                # 3 for α∈{0,4,8}
+    linearity_check_applicable: bool  # True iff α∈{0,4,8} all present
+    linearity_ok: bool           # |Cl(4) - 0.5·(Cl(0)+Cl(8))| / |Cl(8)| < 0.05; meaningful only when linearity_check_applicable
+    linearity_residual: float    # LHS of the inequality; 0.0 if not applicable
+    n_points: int                # 3 for α∈{0,4,8}; ≥2 for arbitrary fit
     points: Tuple[Tuple[float, float], ...] = ()  # ((α, Cl), …)
 
 
@@ -298,7 +308,11 @@ def compute_lift_slope(
     # Linearity check per gold YAML extraction.linearity_check:
     #   |Cl(4°) - 0.5·(Cl(0°) + Cl(8°))| / |Cl(8°)| < 0.05
     # Only well-defined when α∈{0, 4, 8} are all present.
-    linearity_ok = True
+    # Codex round 2 Q4(c) → round 3 C3 fix: linearity_check_applicable flag
+    # makes the not-applicable case explicit instead of silently reporting
+    # linearity_ok=True.
+    linearity_check_applicable = False
+    linearity_ok = False
     linearity_residual = 0.0
     by_alpha = {round(a): c for a, c in pts}
     if all(a in by_alpha for a in (0, 4, 8)):
@@ -309,10 +323,12 @@ def compute_lift_slope(
         denom8 = abs(cl_8) + 1e-12
         linearity_residual = abs(cl_4 - midpoint) / denom8
         linearity_ok = linearity_residual < 0.05
+        linearity_check_applicable = True
 
     return LiftSlopeResult(
         slope_per_deg=slope,
         intercept=intercept,
+        linearity_check_applicable=linearity_check_applicable,
         linearity_ok=linearity_ok,
         linearity_residual=linearity_residual,
         n_points=n,
