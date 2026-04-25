@@ -248,3 +248,149 @@ canonical enum** on 2026-04-24 per G-6 of Post-Pivot Go/No-Go.
 
 This retro's narrative §10 remains the historical record; the registry
 is the machine-readable source of truth going forward.
+
+---
+
+## Addendum 2026-04-25 · attempt-7 live run post-mortem
+
+**Background.** A final attempt-7 live OpenFOAM run for
+`circular_cylinder_wake` was triggered mid-RETRO-V61-004 P1 arc as a
+background task (id `bbuywy0ry`, started 2026-04-24, completed
+2026-04-25 after 8628.2s = ~2.4 hours wall). It finished with
+`FAIL · audit_real_run_measurement.yaml` and this addendum closes
+the decision loop.
+
+### Observed outcome (ui/backend/tests/fixtures/runs/circular_cylinder_wake/audit_real_run_measurement.yaml)
+
+```yaml
+solver_success: true
+comparator_passed: false
+measurement:
+  value: 0.13784461152882208    # strouhal_number
+  reference: 0.165
+  deviation: ~16.5%             # exceeds gold tolerance=5%
+secondary_scalars:
+  cd_mean: 1.3790543620796876   # within tolerance vs Williamson 1996 (1.33)
+  cl_rms: 0.08094277312528547
+attestation:
+  overall: ATTEST_NOT_APPLICABLE
+  checks: []
+commit_sha: c4d89b2
+measured_at: '2026-04-24T18:05:07Z'
+```
+
+### Classification: NOT a new defect
+
+Attempt-7's Strouhal number 0.1378 is within 0.14% of attempt-6's
+0.138 (the prior audit-fixture baseline). This is the **same physics-
+precision ceiling** that DEC-V61-053 frontmatter already acknowledged:
+
+> "precision-limited at 10s endTime, gold-grade requires future
+> endTime bump DEC"
+> — DEC-V61-053 `external_gate_actual_outcome_partial` field
+
+Mechanism: at endTime=10s with shedding frequency f≈1.63 Hz (St=0.165,
+U=1, D=0.1), the post-50s-transient-trim window mathematically cannot
+be computed (10s total < 50s default trim). The extractor gracefully
+degrades to a shorter trim + smaller FFT window, which sits well below
+the 8-shedding-period confidence threshold set by DEC-V61-040 round-2.
+Result: a legitimate measurement but with large FFT Δf uncertainty,
+and `strouhal_low_confidence=True` flag set by the extractor.
+
+### The P1 arc (RETRO-V61-004) partially mitigates this
+
+Two P1 deliverables already landed on main would soften attempt-7's
+FAIL when threaded through the new pipeline:
+
+1. **P1-T3b** backfilled `.planning/case_profiles/circular_cylinder_wake.yaml`
+   with `tolerance_policy.strouhal_number.tolerance = 0.25` (25%),
+   reflecting the known precision ceiling. Under the new
+   `MetricsRegistry.evaluate_all(..., tolerance_policy=...)` dispatch,
+   deviation 16.5% vs 25% tolerance → PASS.
+
+2. **P1-T1c** SpectralMetric demotes PASS → WARN when
+   `strouhal_low_confidence=True` is observed in `key_quantities`.
+   So even under the loose 25% policy tolerance, the honest verdict
+   would be WARN (not silent PASS).
+
+**Why attempt-7 still shows FAIL in the fixture:** the legacy
+`ResultComparator` path in `task_runner.run_task` does NOT yet call
+`load_tolerance_policy`. This is RETRO-V61-004 Recommendation #1 —
+"next DEC should add `load_tolerance_policy` call to
+`_build_trust_gate_report`" — explicitly deferred in P1-T5 per the
+no-refactor-of-comparator-path scope. Until that DEC lands, audit
+fixtures continue to use the gold-standard 5% tolerance and FAIL.
+
+### Not a runtime-emergent blind spot
+
+Unlike the 6 runtime-emergent defects documented in this retro's
+original §§ (d3ffc06 accessor, 35f3278 solver divergence, e8b92ed
+extractor gating, c81c0aa transient trim sizing, fdfa98a FO
+executeControl), attempt-7 exhibits **no new runtime defect**. The
+solver ran, the extractor ran, and the physics output is the
+expected 10s-endTime-budget number. The FAIL is a pre-declared
+precision ceiling, not a bug.
+
+No additional intake `risk_flag_id` needed —
+`solver_stability_on_novel_geometry` already `triggered: true` for
+this case, and the physics-precision ceiling is NOT a runtime/code
+defect class.
+
+### Side-observation: attestation ATTEST_NOT_APPLICABLE
+
+`attestation.overall == ATTEST_NOT_APPLICABLE` with empty checks
+indicates the attestor did not locate a solver log after the run.
+Probable causes:
+
+- `FoamAgentExecutor.execute()` finally-block teardown removed the
+  case dir before the attestor inspected it (known limitation in
+  STATE.md: "FoamAgentExecutor: case dirs auto-deleted in finally block")
+- `raw_output_path` captured in `ExecutionResult` points at a
+  location whose `log.{solver}` file was cleaned up
+
+This is the **same gap** that V61-056 R1 finding #1 addressed at
+the Control layer (the no-log WARN reason was being dropped; fixed
+to emit an explicit "attestor not applicable (no solver log
+resolvable from artifacts)" note). For a future audit re-run,
+the Control-plane fix is already in — verdict will surface the
+explicit note rather than a silent NOT_APPLICABLE.
+
+### Recommendation · gold-grade follow-up DEC
+
+Keep attempt-7's result as **demonstration-grade**, not gold-grade,
+consistent with DEC-V61-053's clean-close verdict. A follow-up DEC
+(tentative id DEC-V61-057 or later depending on sequencing) should:
+
+1. Bump `CYLINDER_ENDTIME_S` from 10s to 60s (or 200s for ±3%
+   precision). At 60s post-trim window would be ~10s = ~16 shedding
+   periods, well above the 8-period confidence threshold →
+   `strouhal_low_confidence` should clear and ΔSt should collapse
+   from ~20% to ~3-5%.
+2. Re-run as attempt-8 for the authoritative audit fixture.
+3. Tighten `tolerance_policy.strouhal_number.tolerance` from 25%
+   back to 5-10% in `circular_cylinder_wake.yaml`.
+4. This follow-up DEC is a pure parameter bump + re-run; no new
+   code path. Self-pass-rate 0.90+, minimal Codex scope.
+
+Wall-time budget for the endTime-60s re-run: ~16 hours (6× current
+~2.4h wall × endTime scaling). Feasible for an overnight run.
+
+### Counter impact
+
+This addendum is doc-only; no counter tick. V61-053 DEC counter
+stays at 40; P1 arc end counter stays at 43.
+
+### Cross-refs for attempt-7
+
+- Background task output: `/private/tmp/claude-502/.../bbuywy0ry.output`
+- Measurement fixture:
+  `ui/backend/tests/fixtures/runs/circular_cylinder_wake/audit_real_run_measurement.yaml`
+  (commit_sha `c4d89b2` · measured_at `2026-04-24T18:05:07Z`)
+- P1 arc retrospective that triggered this analysis:
+  `.planning/retrospectives/2026-04-25_p1_arc_complete_retrospective.md`
+  (RETRO-V61-004)
+- Recommendation #1 for the P1-to-production transition:
+  Add `load_tolerance_policy` to `_build_trust_gate_report`
+  (RETRO-V61-004 §Recommendations)
+- Current case_profile with 25% policy override:
+  `.planning/case_profiles/circular_cylinder_wake.yaml` (P1-T3b commit e8a0565)
