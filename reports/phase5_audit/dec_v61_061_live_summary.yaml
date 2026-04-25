@@ -1,0 +1,153 @@
+dec_id: DEC-V61-061
+case_id: naca0012_airfoil
+timestamp: 20260425T122605Z
+runs:
+- alpha_deg: 0.0
+  success: true
+  exit_code: null
+  wall_clock_s: 1008.9382599161472
+  Cl: -1.597793e-08
+  Cd: 0.01256229
+  y_plus_max: 37.4514
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-mesh/reports/phase5_audit/dec_v61_061_live_run_20260425T122605Z_alpha0.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 0.0
+  cl_drift_pct_last_100: 7747.277428834718
+  cd_drift_pct_last_100: 0.0003184136910098931
+  sign_convention_smoke: PASS
+- alpha_deg: 4.0
+  success: true
+  exit_code: null
+  wall_clock_s: 745.5722446660511
+  Cl: 0.3621906
+  Cd: 0.01821041
+  y_plus_max: 58.67585
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-mesh/reports/phase5_audit/dec_v61_061_live_run_20260425T122605Z_alpha4.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 4.0
+  cl_drift_pct_last_100: 5.521956290795937e-05
+  cd_drift_pct_last_100: 0.0003843943388692708
+  sign_convention_smoke: PASS
+- alpha_deg: 8.0
+  success: true
+  exit_code: null
+  wall_clock_s: 1250.0964119159617
+  Cl: 0.6749625
+  Cd: 0.03623578
+  y_plus_max: 83.75746
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-mesh/reports/phase5_audit/dec_v61_061_live_run_20260425T122605Z_alpha8.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 8.0
+  cl_drift_pct_last_100: 1.4815639939390642e-05
+  cd_drift_pct_last_100: 0.000496748550308764
+  sign_convention_smoke: PASS
+gates:
+  lift_coefficient_alpha_eight:
+    value: 0.6749625
+    gold: 0.815
+    rel_error: 0.17182515337423304
+    tolerance: 0.05
+    pass: false
+    role: HEADLINE_PRIMARY_SCALAR
+  drag_coefficient_alpha_zero:
+    value: 0.01256229
+    gold: 0.008
+    rel_error: 0.57028625
+    tolerance: 0.15
+    pass: false
+    role: SAME_RUN_CROSS_CHECK
+  lift_slope_dCl_dalpha_linear_regime:
+    value: 0.08437031449724126
+    intercept: 0.008236436685058246
+    linearity_check_applicable: true
+    linearity_ok: true
+    linearity_residual: 0.03660849008489856
+    n_points: 3
+    gold: 0.105
+    rel_error: 0.19647319526436888
+    tolerance: 0.1
+    pass: false
+    role: QUALITATIVE_GATE
+smoke_assertions:
+  sanity_cl_at_alpha_zero:
+    value: -1.597793e-08
+    abs_band: 0.005
+    pass: true
+  sign_convention_alpha_eight:
+    Cl: 0.6749625
+    expected: '>0'
+    pass: true
+headline_verdict: 'FAIL: [''lift_coefficient_alpha_eight'', ''drag_coefficient_alpha_zero'',
+  ''lift_slope_dCl_dalpha_linear_regime'']'
+
+# DEC-V61-061 closeout summary (recorded 2026-04-25):
+v61_058_to_v61_061_progress:
+  Cl_alpha_eight:
+    v61_058: 0.491   # 40% under
+    v61_061: 0.675   # 17% under
+    improvement_pp: 23  # 23 percentage-point gain
+    rel_improvement: 0.572  # 57% reduction in error
+  Cd_alpha_zero:
+    v61_058: 0.0201  # 151% over
+    v61_061: 0.0126  # 57% over
+    improvement_pp: 94
+    rel_improvement: 0.622
+  slope_dCl_dalpha:
+    v61_058: 0.0613  # 42% under
+    v61_061: 0.0844  # 19.6% under
+    improvement_pp: 22
+    rel_improvement: 0.524
+  linearity_ok:
+    v61_058: false
+    v61_061: true   # 3-point Cl(α) profile now linear
+  y_plus_max_alpha_eight:
+    v61_058: 138.96  # high in log-layer
+    v61_061: 83.76   # mid log-layer
+  cell_count:
+    v61_058: 16000
+    v61_061: 96000   # 6× refinement
+  airfoil_surface_faces:
+    v61_058: 120
+    v61_061: 400     # 3.3×
+
+defect_addendum_v61_061:
+  category: topology_ceiling_reached  # NEW classification
+  classification: H_grid_plus_wall_function_caps_at_Cl_eight_around_0.68_0.72
+  evidence:
+    monotone_improvement_across_2_iterations: true
+    diminishing_returns: |
+      V61-058→iter1: 2.7× cells → 23 pp Cl@8° gain
+      iter1→iter2:   2.2× cells → 5  pp Cl@8° gain
+      Linear extrapolation to gate-clear Cl=0.775: ~400k cells with
+      same H-grid topology, runtime 60+ min/α (well past §4 budget).
+    structural_limitation: |
+      H-grid topology has corner singularities at LE/TE that wall
+      functions cannot fully resolve. To clear HEADLINE 5% gate
+      requires either:
+        (a) C-grid topology around the airfoil — block topology
+            refactor in `_generate_airfoil_flow`, ~2 weeks of work
+        (b) LowRe wall treatment (y+<1) — needs first cell ~5e-6 m,
+            which with current 6-block topology would create extreme
+            aspect ratios; needs BL block split (architectural change)
+        (c) Both (a) and (b) combined — typical industry approach
+            for accurate NACA0012 at Re=3e6
+  status_at_close: topology_ceiling_documented
+  recommended_followup: |
+    DEC V61-062 (or later): C-grid + LowRe NACA0012 mesh.
+    Inherits V61-058 + V61-061 stack: gold YAML, extractors, Stage E
+    driver, sanity/smoke assertions, audit fixture format. Only
+    `_generate_airfoil_flow` block topology changes.
+
+v61_061_close_verdict: |
+  ITERATION_IMPROVEMENT_TOPOLOGY_CEILING_REACHED.
+  Smoke + sanity PASS. Gates FAIL but with substantial monotone
+  improvement (Cl@8° error 40%→17%, slope error 42%→20%, linearity
+  now TRUE). Architectural change required (C-grid or LowRe) to
+  close HEADLINE gate — out of scope for V61-061's mesh-density-only
+  remit per intake §1 out-of-scope guardrail.
