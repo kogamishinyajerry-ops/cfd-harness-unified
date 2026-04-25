@@ -6405,7 +6405,7 @@ boundaryField
             )
 
     def _generate_airfoil_flow(
-        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
+        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSSTLM"
     ) -> None:
         """Generate airfoil external flow case files (simpleFoam steady k-omega SST).
 
@@ -6931,12 +6931,16 @@ gradSchemes {
     grad(U)         $limited;
     grad(k)         $limited;
     grad(omega)     $limited;
+    grad(gammaInt)  $limited;
+    grad(ReThetat)  $limited;
 }
 divSchemes {
     default         none;
     div(phi,U)      bounded Gauss upwind;
     div(phi,k)      bounded Gauss upwind;
     div(phi,omega)  bounded Gauss upwind;
+    div(phi,gammaInt)  bounded Gauss upwind;
+    div(phi,ReThetat)  bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 laplacianSchemes { default Gauss linear corrected; }
@@ -6976,6 +6980,8 @@ solvers
     UFinal { $U; relTol 0; }
     k { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
     omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    gammaInt { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    ReThetat { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
 }
 
 SIMPLE
@@ -6986,6 +6992,8 @@ SIMPLE
         U       1e-5;
         k       1e-5;
         omega   1e-5;
+        gammaInt 1e-5;
+        ReThetat 1e-5;
     }
     // DEC-V61-061 iter 2: nNOC 0→1 to handle higher non-orthogonality
     // from refined mesh near LE/TE (max non-orth was 69° in V61-058).
@@ -6995,7 +7003,10 @@ SIMPLE
 relaxationFactors
 {
     fields { p 0.3; }
-    equations { U 0.5; k 0.5; omega 0.5; }
+    // DEC-V61-063 Stage A: gammaInt + ReThetat URFs at 0.7 per OF10 T3A tutorial
+    // (kOmegaSSTLM has stiffer transition equations than kOmegaSST). Other URFs
+    // unchanged from V61-061 baseline.
+    equations { U 0.5; k 0.5; omega 0.5; gammaInt 0.7; ReThetat 0.7; }
 }
 
 // ************************************************************************* //
@@ -7007,20 +7018,27 @@ relaxationFactors
         # computed above). Y component stays zero — thin-span x-z plane mesh.
         Ux = Ux_inf
         Uz = Uz_inf
-        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
-        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
-        # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
-        # Standard turbulence length-scale formula for omega:
-        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
-        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
-        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
-        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
-        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
-        I_turb = 0.005
-        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
+        # DEC-V61-063 Stage A: Tu=0.18% per Ladson 1988 LTPT facility
+        # characterization (was Tu=0.5% in V61-061; appropriate for fully-turbulent
+        # kOmegaSST baseline but suppresses transition in kOmegaSSTLM if too high).
+        # k = 1.5*(U_inf*I)^2  --  physically consistent TKE
+        # omega = k^0.5 / (Cmu^0.25 * L),  Cmu=0.09 → Cmu^0.25 ≈ 0.5477
+        I_turb = 0.0018
+        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 4.86e-6
         L_turb = 0.1 * chord                     # = 0.1
         Cmu = 0.09
-        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.069 (was 0.681)
+        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.0403
+
+        # DEC-V61-063 Stage A: ReThetat init per Langtry-Menter empirical formula.
+        # For Tu < 1.3%: ReThetat = 1173.51 - 589.428*Tu_pct + 0.2196/Tu_pct^2
+        # For Tu ≥ 1.3%: ReThetat = 331.5 * (Tu_pct - 0.5658)^(-0.671)
+        # Tu_pct = I_turb*100 = 0.18 → ReThetat ≈ 1074
+        Tu_pct = I_turb * 100.0
+        if Tu_pct < 1.3:
+            ReThetat_init = 1173.51 - 589.428 * Tu_pct + 0.2196 / (Tu_pct ** 2)
+        else:
+            ReThetat_init = 331.5 * (Tu_pct - 0.5658) ** (-0.671)
+        gammaInt_init = 1.0  # T3A tutorial pattern: full intermittency at freestream
 
         (case_dir / "0" / "U").write_text(
             f"""\
@@ -7198,6 +7216,79 @@ boundaryField
 {{
     freestream {{ type calculated; value uniform 0; }}
     aerofoil {{ type nutkWallFunction; value uniform 0; }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # DEC-V61-063 Stage A: kOmegaSSTLM transition fields per OF10 T3A tutorial.
+        # gammaInt (intermittency, dimensionless): 1 in freestream/inlet, zeroGradient
+        # at aerofoil wall (no surface model). Solver evolves the field internally.
+        (case_dir / "0" / "gammaInt").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      gammaInt;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 0 0 0 0];
+internalField   uniform {gammaInt_init};
+boundaryField
+{{
+    freestream {{ type inletOutlet; inletValue uniform {gammaInt_init}; value uniform {gammaInt_init}; }}
+    aerofoil {{ type zeroGradient; }}
+    front {{ type empty; }}
+    back  {{ type empty; }}
+}}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # ReThetat (transition Reynolds number, dimensionless): Langtry-Menter
+        # empirical formula init from Tu_inf. Aerofoil zeroGradient (no surface model).
+        (case_dir / "0" / "ReThetat").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      ReThetat;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 0 0 0 0];
+internalField   uniform {ReThetat_init:.2f};
+boundaryField
+{{
+    freestream {{ type inletOutlet; inletValue uniform {ReThetat_init:.2f}; value uniform {ReThetat_init:.2f}; }}
+    aerofoil {{ type zeroGradient; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
