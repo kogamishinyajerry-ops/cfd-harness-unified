@@ -811,12 +811,16 @@ class FoamAgentExecutor:
         """Auto-select turbulence model based on solver family.
 
         Core rule: buoyantFoam family -> kEpsilon (avoids OF10 kOmegaSST dimension bug);
-        SIMPLE_GRID laminar -> laminar; others -> kOmegaSST.
+        SIMPLE_GRID laminar -> laminar; AIRFOIL -> kOmegaSSTLM (Langtry-Menter γ-Re_θt
+        SST per DEC-V61-063 — addresses V61-061 17 pp Cl@α=8 gap and V61-062 ceiling
+        via natural-transition modeling on V61-061 H-grid); others -> kOmegaSST.
         """
         if "buoyant" in solver_name:
             return "kEpsilon"
         if geometry_type == GeometryType.SIMPLE_GRID and Re is not None and Re < 2300:
             return "laminar"
+        if geometry_type == GeometryType.AIRFOIL:
+            return "kOmegaSSTLM"
         return "kOmegaSST"
 
     @staticmethod
