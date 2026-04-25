@@ -1,6 +1,6 @@
 # ADR-002 · Four-Plane Runtime Import Enforcement (sys.meta_path Layer)
 
-**Status**: Draft-rev3 (Claude Code · 2026-04-25 · all round-1 follow-ups + round-2 minors landed) — awaiting Opus 4.7 W2 Gate re-re-review before W3 init Accepted flip
+**Status**: Draft-rev4 (Claude Code · 2026-04-25 · Opus round-3 ACCEPT_WITH_TRIVIAL_COMMENTS closed; zero outstanding) — W3 init (2026-05-04) flips Draft → Accepted as a single-line status edit
 **Deciders**: Opus 4.7 (W2 Gate) · Claude Code (main session) · Codex GPT-5.4 (independent verification pending)
 **Consulted**: CFDJerry (indirect — this ADR inherits §2 SSOT authority from the pivot charter)
 **Scope**: W2-W3 runtime layer — `sys.meta_path` finder raising `LayerViolationError` on
@@ -147,6 +147,16 @@ observability gap for legitimate external code dynamically importing
 `src.*` from `exec` scopes, without introducing false positives.
 Log format matches the §2.5 / §4.1 A7b structured-JSON schema.
 
+**Logger hierarchy constraint (Draft-rev4 · Opus round-3 L1)**: all
+`src._plane_guard.*` sub-loggers (`external_dynamic_import`,
+`pollution`, etc.) MUST be configured `propagate=True` with handlers
+attached ONLY at the `src._plane_guard` root logger. Attaching
+handlers at sub-logger level would cause duplicate emission of the
+same incident to `reports/plane_guard/*.jsonl` and downstream
+audit pipelines. Enforced by `tests/test_plane_guard_log_schema.py`
+asserting `logger.propagate is True` and `len(logger.handlers) == 0`
+for every sub-logger instantiated by the guard.
+
 **Cython / C-extension handling**: C code calling
 `PyImport_ImportModule` does not push a Python frame, so frame[1]
 appears to jump directly to whatever Python caller invoked the C
@@ -241,6 +251,24 @@ PR is blocked at review. This locks the rhythm to P2's technical
 prerequisite rather than to a calendar date, and ensures the
 runtime layer is at least warning on the dynamic-import path before
 the path is introduced.
+
+**Enforcement path (Draft-rev4 · Opus round-3 L2)**: v1.0
+enforcement of the P2 startup-PR binding is **reviewer checklist
+only**; no automated gate. Automation (P2 DEC intake YAML schema
+field `adr_002_warn_active_commit_hash` validated by the intake
+preflight) is **deferred to the P2 spec** — ADR-002 Accepted state
+does not block on it. Tracked as P2 spec follow-up; not an ADR-002
+outstanding item.
+
+**WARN-mode dedup (Draft-rev4 · Opus round-3 R-new-2)**: to avoid
+log flooding when a single violation reproduces across 100+ call
+sites in one CI run, WARN mode dedupes by
+`(source_module, target_module, contract_name)` tuple with
+per-process scope — each unique tuple emits **exactly one**
+`logger.warning` per process lifetime. ON mode does NOT dedupe
+(every violation raises a fresh `LayerViolationError`; dedup would
+silently swallow repeat violations). Dedup set lives in guard-local
+state protected by the same `threading.Lock` that A11 mandates.
 
 ### 2.4 Test-mode allowlist (revised Draft · Option A with strengthened conditions)
 
@@ -455,6 +483,13 @@ round-2 A13 framing clarification — observability not enforcement):
     autoreload + pytest `--forked` which are valid dev workflows.
   - Keys added post-`S0` → expected (lazy imports legitimately load
     `src.*` as the session runs).
+  - **`__file__` missing on either side** (built-in / frozen /
+    `module_from_spec` with no source · Draft-rev4 · Opus round-3
+    R-new-1): conservative fallback to **id-only criterion** and
+    log as pollution. Rationale: fail-loud preserves the detection
+    guarantee; missing `__file__` is rare in a regular-package
+    project and a reload of a file-less module is itself unusual
+    enough to merit a log line over silent skip.
 - Pollution lines go to `reports/plane_guard/sys_modules_pollution.jsonl`
   one line per event with timestamp, key, old `id()`, new `id()`,
   old `__file__`, new `__file__`, and best-effort stack trace
@@ -466,6 +501,13 @@ unreachable from `meta_path`; finder is enforcement, watchdog is
 observability). The decision to upgrade to a hard fail is deferred
 to W5 GA retro if pollution events ever originate from prod code
 (they should not).
+
+**Logger propagation**: the pollution watchdog writes under the
+`src._plane_guard` root logger and under the
+`src._plane_guard.pollution` sub-logger. Per §2.1 Draft-rev4
+addendum, only the root attaches handlers; sub-loggers rely on
+`propagate=True`. Ensures pollution events are not duplicated to
+dashboards (consistent with the exec/eval path rule).
 
 ## 3. Consequences
 
@@ -535,7 +577,7 @@ test + §2.8 rollback measurement).
 | **A10** | **fork-safety**: `tests/test_plane_guard_fork.py` spawns a child via `multiprocessing.get_context('fork')` with guard in ON mode; child inherits `sys.meta_path` finder and `CFD_HARNESS_PLANE_GUARD=1`; child raises `LayerViolationError` on a deliberate violation. Also tests `spawn` context (env var survives). If guard uses contextvar for any state, `tests/test_plane_guard_fork.py` asserts that state is re-initialized in child (no stale parent state leaks) | pytest green |
 | **A10c** | **forkserver context** (Opus round-2 minor #4): Linux-specific `multiprocessing.get_context('forkserver')` pre-forks a clean interpreter used in some prod deployments; must be covered in a Linux-only CI matrix row. On macOS CI, test skips with pytest marker `@pytest.mark.skipif(sys.platform != 'linux')` and documents the gap | pytest green on linux-ci · skipped on macOS |
 | **A11** | **thread-safety**: `tests/test_plane_guard_thread.py` runs 100 concurrent imports across 8 threads with guard in ON mode; no deadlock, no dropped `LayerViolationError`, no false positive. Internal state (any dedupe `set` or counter) protected by `threading.Lock` if mutable; or proven immutable | pytest green + `grep -n "Lock\|RLock" src/_plane_guard.py` diff review |
-| **A12** | **bootstrapping zero-src-deps**: `src/_plane_guard.py` and `src/_plane_assignment.py` import **only from stdlib** (no `from src.*` anywhere in either module). Enforced by a dedicated `import-linter` contract (`contract:plane-guard-bootstrap-purity`) declaring `src._plane_guard` + `src._plane_assignment` have forbidden_modules = all other `src.*`. Without this, guard loading would chain-load `src.*` modules which would themselves trigger the guard → infinite recursion. This is **the** most critical AC | `.importlinter` diff shows the new contract + `lint-imports` green |
+| **A12** | **bootstrapping zero-src-deps**: `src/_plane_guard.py` and `src/_plane_assignment.py` import **only from stdlib** (no `from src.*` anywhere in either module). Enforced by a dedicated `import-linter` contract (`contract:plane-guard-bootstrap-purity`) declaring `src._plane_guard` + `src._plane_assignment` have forbidden_modules = all other `src.*`. Without this, guard loading would chain-load `src.*` modules which would themselves trigger the guard → infinite recursion. This is **the** most critical AC. **v1.0 scope (Draft-rev4 · Opus round-3 R-new-3)**: single-module purity — `src._plane_guard` is exactly one file. Multi-module decomposition (e.g. splitting into `src._plane_guard` + `src._plane_guard_helpers`) is deferred to ADR-002 v1.1, at which point the contract must be rewritten to a `src._plane_guard*` glob with the same zero-src-deps invariant | `.importlinter` diff shows the new contract + `lint-imports` green |
 | **A13** | **sys.modules pollution watchdog** (partial closure of Pattern 7 · **SHOULD-have, not MUST-have** per Opus round-2 minor #4 framing clarification): §2.9 watchdog diffs `sys.modules` keys tagged `src.*` at `src/__init__` load vs. post-test-session hook using the double-criterion (id mismatch AND file mismatch) to carve out legitimate reload. Test scope only; prod code writing to `sys.modules['src.*']` already fails static `import-linter` review. Logging lives in `reports/plane_guard/sys_modules_pollution.jsonl`. **Framing**: Pattern 7 in §1.1 is BLOCKING for documentation completeness (the bypass exists and must be acknowledged); A13 watchdog is non-blocking because `sys.modules` post-hoc writes are unreachable from `meta_path` by Python's design — no finder could ever "prevent" the write, so the watchdog is detect-not-prevent mitigation, not enforcement. An enforcement-level AC would be fictitious | `tests/test_plane_guard_sys_modules.py` · 1 pytest-mock case (pollution detected) + 1 negative case (legitimate reload not flagged) |
 | **A14** | **importlib.reload matrix** (Pattern 8): `tests/test_plane_guard_reload.py` parametrized across Python 3.11 / 3.12 (CI matrix); asserts `importlib.reload(src.task_runner)` still triggers finder. Python 3.9 row documented in §6 Known Limitations if finder is skipped on that version; 3.9 row NOT in the `runtime-plane-guard` CI job | pytest green on 3.11/3.12 · §6 ADR amendment if 3.9 divergence |
 | **A15** | **PEP 420 namespace package** (Pattern 9): `tests/fixtures/plane_violation/namespace_pkg/` constructs a two-root namespace package for `src.<synthetic>`; asserts finder classifies by `spec.name` not file path | pytest green |
@@ -595,6 +637,23 @@ bootstrapping). The revised schedule separates basic suite (A3 a-d,
 W2-Mid) from edge-case suite (A10/A11/A14-A16/A7b, W2-Late), giving
 each ~one full day. P1 arc density (V61-054 single-day) used as
 precedent; the split is a defensive margin, not a re-estimate.
+
+**Slippage protocol (Draft-rev4 · Opus round-3 L3)**: W2 Late
+(5/2-5/3) carries **buffer = 0** — V61-054 precedent is same-class
+unit-test density, while A10c / A11 / A14-A16 are heterogeneous
+edge-cases (multiprocessing, threading, namespace packages,
+C-extensions) with per-item setup cost ~2-5 hours each (estimated
+12-16 hours total). If W2 Mid Codex R1 returns CHANGES_REQUIRED
+and the fix exceeds the verbatim 5/5 exception (per RETRO-V61-001
+/ RETRO-V61-004 convention), W2 Late items A10c + A11 slip to
+W3 Mon-Tue (5/4-5/5) and W3 WARN-default activation (§2.3) slips
+correspondingly by 2 days (to 5/6-5/7). P2 ExecutorMode startup PR
+remains hard-bound to the **actual** WARN-active commit hash (§2.3),
+so a schedule slip does not loosen the P2 gate — it only delays
+when the gate can be cited. Accepted state flip (§5 W3 row)
+continues to target 5/4 independent of Impl slippage because
+Draft-rev4 Opus sign-off (expected 2026-04-25) is the flip
+precondition, not W2 Impl completion.
 
 ## 6. Known limitations (revised Draft)
 
@@ -672,4 +731,5 @@ precedent; the split is a defensive margin, not a re-estimate.
 |---|---|---|---|
 | Draft | 2026-04-25T05:30 | Claude Code (Opus 4.7 CLI) | Initial draft; pending Opus W2 Gate review |
 | Draft-rev2 | 2026-04-25T08:00 | Claude Code (Opus 4.7 CLI) | CHANGES_REQUIRED verdict response. 4 blocking items landed: (1) §2.1 single-frame → bounded multi-frame walk (N=20) with `__spec__.name` priority chain + Cython/external fallback; (2) §1.1 table expanded from 6 to 9 patterns (sys.modules pollution, reload, PEP 420 namespace) with per-pattern closure strategy column; (3) §2.4 Option A strengthened — regex literal `^tests($|/)` frozen, reverse-test AC-A17 required, Option A→B rollback trigger plumbing AC-A18 shipped in v1.0; (4) §4.1 AC expanded A7 to 4-contracts × 3-modes matrix, added A10 fork-safety / A11 thread-safety / A12 bootstrapping zero-src-deps / A13-A16 for patterns 7-9 + C-extension / A17-A18 for §2.4 conditions. New §2.9 sys.modules watchdog. New §6 Known Limitations. Revision history promoted to §8. |
+| Draft-rev4 | 2026-04-25T10:45 | Claude Code (Opus 4.7 CLI) | ACCEPT_WITH_TRIVIAL_COMMENTS verdict response. 6 trivial items inlined for zero-outstanding: (1) §2.1 + §2.9 sub-logger `propagate=True` + single-root-handler constraint (L1 · avoids duplicate emission); (2) §2.3 P2 startup-PR binding explicitly deferred to P2 DEC intake automation, v1.0 reviewer-checklist only (L2); (3) §5 W2-Late buffer=0 slippage protocol — A10c/A11 slip to W3 5/4-5/5 if W2-Mid R1 fails beyond verbatim exception, but Accepted flip stays on 5/4 (L3); (4) §2.9 `__file__`-missing conservative fallback to id-only pollution detection (R-new-1 · fail-loud); (5) §2.3 WARN-mode dedup by (source, target, contract) tuple per-process, ON mode does NOT dedup (R-new-2 · anti-flood); (6) §4.1 A12 v1.0 single-module purity explicit, multi-module decomposition deferred to ADR-002 v1.1 (R-new-3). Status line revised — W3 init flip is now single-line edit. |
 | Draft-rev3 | 2026-04-25T09:30 | Claude Code (Opus 4.7 CLI) | ACCEPT_WITH_COMMENTS verdict response · 5 round-2 minors + 4 round-1 follow-ups landed in one pass (pre-emptive zero-outstanding close). Round-2 minors: (1) §2.1 `CFD_PLANE_GUARD_FRAME_LIMIT` env-configurable N + `exec()/eval()` frames WARN-level monitoring log; (2) §2.4 regex changed to `^tests($|\.)` dotted form + 14-day rolling window for rollback counter + AC-A17 ui/backend+scripts exclusion inline note; (3) §2.9 `src/` must remain regular package constraint + pollution double-criterion (id AND `__file__` mismatch) carving out legitimate reload; (4) §4.1 A7b log JSON schema stability AC + A10c forkserver linux-only AC + A13 framing clarified as SHOULD-have detect-not-prevent mitigation; (5) §6 additions — attribute-level reverse pollution + GIL-free 3.13t undefined behavior + asyncio diagnostic-quality limitation + subinterpreter follow-up ADR flag + §1.1 pattern 4 explicit `importlib.metadata`/`pkg_resources` listing. Round-1 follow-ups: §2.2 byte-identical CI check wired; §2.3 node-advance rhythm (W3 WARN default dev+CI / W4 CI hard-fail / W5 ON-everywhere) + P2 ExecutorMode startup-PR hard-binding; §2.8 pickle prose reframed as coincident side-effect (not active design); §5 timeline split W2 Impl Mid (A3 a-d basic) vs W2 Impl Late (A3 e-g + edge matrix). |
