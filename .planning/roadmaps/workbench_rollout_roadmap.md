@@ -75,15 +75,15 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 - **Risk**: 路由碎裂 / 跨文件 type 引用断链 (验证: tsc 0 错 + vite build 通过 + live HTTP 200)
 - **Maturity impact**: +0.02 (壳层准备就绪 · 后续每个 viz primitive 改动只摸单文件)
 
-### Stage 2 · CaseFrame 首屏 (active development next)
+### Stage 2 · CaseFrame 首屏 ✅ CLOSED (commits e34f4b4 + 7921fa0 + c884aad, 2026-04-25)
 
-- **Trigger (start)**: Stage 1 落地 (满足) **AND** `workbench-basics` endpoint 跑通至少 1 case 的 geometry / patches / BC 元数据
-- **MVP scope**: `/api/cases/{id}/workbench-basics` 后端 endpoint (返回 geometry topology + patch list + BC schema + materials) + `<CaseFrame>` 前端组件 (一屏 SVG · 几何区域 / patch / BC pin-map / property strip 同时可见)
-- **Trigger (close)**: `10 case basics 映射 ≥8` (即 10 case 中 ≥8 case 有完整可渲染 basics 数据)
-- **主交付 viz**: topology SVG + property strip + BC pin-map (3 个 primitive 拼一屏)
+- **Trigger (start)**: ✅ MET — Stage 1 落地 + LDC 通过 endpoint (commit e34f4b4)
+- **MVP scope** (delivered): `/api/cases/{id}/workbench-basics` FastAPI route + Pydantic schema + 5 SVG renderers in `<CaseFrame>` (rectangle / step / airfoil / cylinder + UnsupportedShapeStub fallback)
+- **Trigger (close)**: ✅ MET — 8/10 cases authored (LDC, plane_channel, flat_plate, DHC, RBC, BFS, NACA0012, cylinder). Remaining 2 (impinging_jet, duct_flow) soft-skip with 404 → CaseFrame returns null, falls through to legacy hero unchanged.
+- **主交付 viz** (delivered): topology SVG (4 shape renderers, role-coded patch edges, driver arrows, vortex/recirc hints) + 物理锚点 panel (Re prominent + derived) + BC pin-map table + materials/solver strip + terse hints row
 - **Predecessor**: Stage 1
-- **Risk**: schema drift (case_profile YAML 字段命名不统一 → BC pin-map 渲染 fall-through)
-- **Anti-pattern**: 把现有 LearnCaseDetailPage Story tab 文字搬到 CaseFrame — 这是 viz-first surface, 不是 doc surface
+- **Risk** (resolved): schema drift surfaces as soft amber banner via `validate_patch_consistency()`, never 500s. Aspect ratio clamped to [0.25, 5] for legibility on long/thin geometries.
+- **Anti-pattern guard observed**: hints intentionally terse (3 captions × 1 line); long-form prose stays in StoryTab. Honesty hints surface known gaps (e.g., plane_channel laminar-vs-DNS contract incompatibility, RBC-vs-classical-textbook side-vs-bottom heating divergence).
 
 ### Stage 3 · MeshTrust QC band
 
