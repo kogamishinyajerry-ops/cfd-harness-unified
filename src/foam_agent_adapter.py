@@ -7384,20 +7384,26 @@ relaxationFactors
         # computed above). Y component stays zero — thin-span x-z plane mesh.
         Ux = Ux_inf
         Uz = Uz_inf
-        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
-        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
+        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6.
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
-        # Standard turbulence length-scale formula for omega:
-        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
-        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
-        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
-        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
-        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
+        # DEC-V61-062 Stage E.iter3: omega_init formula switched from log-layer
+        # length-scale formula (omega = sqrt(k)/(Cmu^0.25 * L_t) ≈ 0.109) to
+        # LowRe convention (omega such that nut/nu_freestream ≈ 0.005 → ~10^4).
+        #
+        # Why: with y+~1 LowRe BL, omegaWallFunction sets wall omega ≈
+        # 6*nu/(beta_1*y_p^2) ≈ 6e5. Initializing internalField at log-layer 0.109
+        # creates a 6e6:1 wall-internal omega gradient that triggers k production
+        # explosion (Stage E.iter1 + iter2 both diverged with k bounded to 4e8 by
+        # iter ~40, then NaN). Setting omega_init = 1e4 keeps wall-internal
+        # gradient ~60:1 — manageable for kOmegaSST stiffness.
+        #
+        # Reference: NASA TMR / Spalart freestream convention for LowRe NACA0012:
+        # nut/nu_freestream ≈ 0.001-0.01; omega = k/nut = k/(C*nu) where C is the
+        # target ratio. With k=3.75e-5, nu=3.33e-7, target nut/nu=0.003: nut=1e-9,
+        # omega = 3.75e-5/1e-9 = 3.75e4. Round to 1e4 for headroom.
         I_turb = 0.005
         k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
-        L_turb = 0.1 * chord                     # = 0.1
-        Cmu = 0.09
-        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.069 (was 0.681)
+        omega_init = 1.0e4   # DEC-V61-062 Stage E.iter3 LowRe (was 0.109 log-layer V61-061)
 
         (case_dir / "0" / "U").write_text(
             f"""\
