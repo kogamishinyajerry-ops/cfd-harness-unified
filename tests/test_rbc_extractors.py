@@ -542,3 +542,61 @@ class TestStageBFinalFixR3:
         out = extract_nu_asymmetry(slice_, bc)
         assert out, f"nu_asymmetry should not require g/beta; got {out}"
         assert out["status"] == "ok"
+
+
+# ============================================================================
+# Stage B-final-fix-v2 · Codex R4 F1-HIGH boundary-metadata fail-closed tests
+# ============================================================================
+
+class TestStageBFinalFixR4:
+    """DEC-V61-060 Stage B-final-fix-v2 tests addressing Codex R4 F1-HIGH:
+    fail-closed must hold for non-finite values in BOUNDARY METADATA
+    (wall_coord_hot/cold, T_hot/cold_wall, bc_gradient), not just field
+    arrays. R3 closed the field-array path; R4 closes the BC path."""
+
+    def test_w_max_returns_empty_on_nan_wall_coord_hot(self):
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc(wall_coord_hot=float("nan"))
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"NaN wall_coord_hot must return {{}}; got {out}"
+
+    def test_w_max_returns_empty_on_inf_wall_coord_cold(self):
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc(wall_coord_cold=float("inf"))
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Inf wall_coord_cold must return {{}}; got {out}"
+
+    def test_nu_asymmetry_returns_empty_on_nan_wall_coord(self):
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(wall_coord_hot=float("nan"))
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, f"NaN wall_coord_hot must return {{}}; got {out}"
+
+    def test_nu_asymmetry_returns_empty_on_nan_t_hot_wall(self):
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(T_hot_wall=float("nan"))
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, f"NaN T_hot_wall must return {{}}; got {out}"
+
+    def test_nu_asymmetry_returns_empty_on_nan_t_cold_wall(self):
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(T_cold_wall=float("nan"))
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, f"NaN T_cold_wall must return {{}}; got {out}"
+
+    def test_nu_asymmetry_returns_empty_on_nan_bc_gradient(self):
+        """fixedGradient bc_type with NaN bc_gradient must fail-closed."""
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(bc_type="fixedGradient", bc_gradient=float("nan"))
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, f"NaN bc_gradient must return {{}}; got {out}"
+
+    def test_nu_asymmetry_returns_empty_on_missing_bc_gradient_for_fixed_gradient(self):
+        """bc_type='fixedGradient' with bc_gradient=None (the dataclass
+        default) is also non-finite for our purposes — must fail-closed."""
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(bc_type="fixedGradient", bc_gradient=None)
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, (
+            f"fixedGradient with None bc_gradient must return {{}}; got {out}"
+        )

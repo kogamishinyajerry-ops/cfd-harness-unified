@@ -25,9 +25,18 @@ RBC's hot wall is HORIZONTAL (y=0), so the grouping axis is y (across
 layers) and the profile axis within each layer is x (which we then
 collapse to a single Nu per x-column or average across all x).
 
-For RBC the only B.1 extractor is ``extract_nu_asymmetry`` — the
-NON_TYPE_HARD_INVARIANT defined as |Nu_top − Nu_bottom| / |Nu_bottom|.
-B.2 (w_max) and B.3 (roll_count) land in subsequent commits.
+Stage B ships three public extractors:
+  - ``extract_nu_asymmetry`` (B.1, NON_TYPE_HARD_INVARIANT): conservation
+    invariant |Nu_top − Nu_bottom| / |Nu_bottom|; FAIL when > 0.05.
+  - ``extract_w_max`` (B.2, PROVISIONAL_ADVISORY): peak |u_y| in cavity
+    interior, nondim by free-fall velocity sqrt(g·β·ΔT·H).
+  - ``extract_roll_count_x`` (B.3, PROVISIONAL_ADVISORY): counter-rotating
+    roll count via mid-cavity u_y sign-change analysis.
+
+DEC-V61-060 R3+R4 fail-closed contract: every extractor returns ``{}``
+on shape error, malformed u_vecs (arity), or non-finite (NaN/Inf)
+inputs in field arrays OR boundary metadata, instead of crashing or
+emitting ``status: 'ok'`` with NaN value.
 """
 from __future__ import annotations
 
@@ -58,11 +67,16 @@ def _all_finite(seq: Sequence[Any]) -> bool:
 
 
 def _u_vecs_well_formed(u_vecs: Sequence[Any]) -> bool:
-    """True iff every entry is a (ux, uy, uz) triple of finite numbers.
+    """True iff every entry is a tuple/list of length ≥2 with a finite
+    u_y at index 1.
 
     DEC-V61-060 R3 F1-HIGH: extract_w_max and extract_roll_count_x
     used to index ``u_vecs[i][1]`` blindly, raising IndexError on
     malformed inputs. This guard fails-closed instead.
+
+    NOTE: only u_y (index 1) is currently consumed; u_x and u_z (if
+    present) are not validated. Callers must NOT add extractors that
+    consume u_x or u_z without extending this guard.
     """
     for v in u_vecs:
         if not (isinstance(v, (tuple, list)) and len(v) >= 2):
@@ -119,12 +133,17 @@ class RBCBoundary:
             mode in ``src.wall_gradient.extract_wall_gradient``.
         bc_gradient: required iff ``bc_type='fixedGradient'``; ignored
             otherwise.
-        g: gravity magnitude (m/s²). Required for B.2 w_max free-fall
-            velocity; default value matches the adapter's buoyantFoam
-            emit at Ra=1e6 Pr=10 AR=4 (~3.0e-4 m/s²; intake §4
-            mitigation_in_batch + Codex R2 in-venv probe).
-        beta: thermal expansion coefficient (1/K). Boussinesq value
-            β = 1/T_mean ≈ 1/300 ≈ 0.00333. Required for B.2 w_max.
+        g: gravity magnitude (m/s²). Optional[float] = None — REQUIRED
+            for B.2 extract_w_max (computes free-fall velocity
+            U_ff = sqrt(g·β·dT·H)). Per DEC-V61-060 R3 F2-MED, no
+            default is supplied (would silently bake the canonical
+            AR=4 / Pr=10 case at 3.0e-4 m/s²); Stage C wiring MUST
+            plumb case-derived gravity or extract_w_max fails-closed.
+            extract_nu_asymmetry does NOT use g and runs without it.
+        beta: thermal expansion coefficient (1/K). Optional[float] = None
+            with the same contract as `g` — required for w_max,
+            unused by nu_asymmetry. Canonical Boussinesq value at
+            T_mean ≈ 300 K is 1/300 ≈ 0.00333.
     """
     Lx: float
     Ly: float
@@ -253,12 +272,19 @@ def extract_nu_asymmetry(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
     """
     if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.t_vals):
         return {}
-    # DEC-V61-060 R3 F1-HIGH: fail-closed on non-finite inputs
+    # DEC-V61-060 R3+R4 F1-HIGH: fail-closed on non-finite inputs.
+    # R3 covered cxs/cys/t_vals + bc.dT/H. R4 added: bc.wall_coord_hot/cold,
+    # bc.T_hot_wall/T_cold_wall, and bc.bc_gradient (when fixedGradient).
     if not (_all_finite(slice_.cxs) and _all_finite(slice_.cys) and _all_finite(slice_.t_vals)):
         return {}
     if not _is_finite(bc.dT) or bc.dT == 0:
         return {}
     if not _is_finite(bc.H):
+        return {}
+    if not (_is_finite(bc.wall_coord_hot) and _is_finite(bc.wall_coord_cold)
+            and _is_finite(bc.T_hot_wall) and _is_finite(bc.T_cold_wall)):
+        return {}
+    if bc.bc_type == "fixedGradient" and not _is_finite(bc.bc_gradient):
         return {}
 
     grads_bottom = _column_gradient_at_horizontal_wall(
@@ -285,6 +311,11 @@ def extract_nu_asymmetry(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
     if nu_bottom == 0:
         return {}
     asymmetry = abs(nu_top - nu_bottom) / abs(nu_bottom)
+    # DEC-V61-060 R4 F1-HIGH defense-in-depth: even with all inputs finite,
+    # degenerate gradient computations can theoretically produce NaN/Inf.
+    # Reject any non-finite final result rather than emit status=ok+nan.
+    if not (_is_finite(nu_bottom) and _is_finite(nu_top) and _is_finite(asymmetry)):
+        return {}
     return {
         "value": asymmetry,
         "nu_bottom": nu_bottom,
@@ -333,8 +364,11 @@ def extract_w_max(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, Any]:
         return {}
     # DEC-V61-060 R3 F2-MED: g/beta now Optional[float]; fail-closed when
     # caller forgot to plumb case-derived physics.
+    # R4 F1-HIGH: also validate wall_coord_hot/cold (used by interior trim).
     if not (_is_finite(bc.g) and _is_finite(bc.beta)
             and _is_finite(bc.dT) and _is_finite(bc.H)):
+        return {}
+    if not (_is_finite(bc.wall_coord_hot) and _is_finite(bc.wall_coord_cold)):
         return {}
     U_ff_sq = bc.g * bc.beta * bc.dT * bc.H
     if U_ff_sq <= 0:
