@@ -117,9 +117,28 @@ def test_signal_metrics_filters_nan_and_inf_samples():
 def test_canonicalize_turbulence_model_known_aliases():
     assert canonicalize_turbulence_model("kOmegaSST") == "kOmegaSST"
     assert canonicalize_turbulence_model("kOMEGAsst") == "kOmegaSST"
-    assert canonicalize_turbulence_model("k_omega_sst") == "k_omega_sst"  # not in alias set; preserved as-is
     assert canonicalize_turbulence_model("laminar") == "laminar"
     assert canonicalize_turbulence_model("LAMINAR") == "laminar"
+
+
+def test_canonicalize_turbulence_model_hyphenated_repo_spellings():
+    """Codex round-1 F2 regression: knowledge/whitelist.yaml uses
+    'k-omega SST' and 'k-epsilon' for several cases (BFS at line 215,
+    impinging_jet at 243, NACA at 137 etc.). Without strip-based
+    normalization, those values fall through and G2 false-fires
+    CANONICAL_BAND_SHORTCUT_LAMINAR_DNS on legitimate turbulent runs.
+    Verify hyphens, spaces, and underscores all collapse to the same
+    canonical camelCase identifier.
+    """
+    assert canonicalize_turbulence_model("k-omega SST") == "kOmegaSST"
+    assert canonicalize_turbulence_model("k-omega sst") == "kOmegaSST"
+    assert canonicalize_turbulence_model("k omega SST") == "kOmegaSST"
+    assert canonicalize_turbulence_model("k_omega_sst") == "kOmegaSST"
+    assert canonicalize_turbulence_model("k-epsilon") == "kEpsilon"
+    assert canonicalize_turbulence_model("k epsilon") == "kEpsilon"
+    assert canonicalize_turbulence_model("RNG k-epsilon") == "RNGkEpsilon"
+    assert canonicalize_turbulence_model("spalart-allmaras") == "SpalartAllmaras"
+    assert canonicalize_turbulence_model("realizable k-epsilon") == "realizableKE"
 
 
 def test_canonicalize_turbulence_model_none_or_empty():

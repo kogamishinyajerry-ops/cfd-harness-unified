@@ -20,6 +20,7 @@ auto_verifier (Evaluation plane).
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Sequence, Tuple
 
@@ -186,6 +187,17 @@ def canonicalize_turbulence_model(declared: Optional[str]) -> str:
     """Normalize a generator-side turbulence model declaration into the
     canonical key string consumed by comparator_gates.G2.
 
+    Hyphens, underscores, and whitespace are stripped before lookup so
+    repo-standard whitelist spellings ("k-omega SST", "k-epsilon",
+    "spalart-allmaras") collapse to the same canonical camelCase
+    identifier as their OpenFOAM-side counterparts ("kOmegaSST",
+    "kEpsilon", "SpalartAllmaras"). Codex round-1 F2 (DEC-V61-059):
+    without this stripping, knowledge/whitelist.yaml's existing
+    `turbulence_model: k-omega SST` for plane-channel-adjacent cases
+    would fall through canonicalization, get treated as untrusted by
+    G2, and false-fire CANONICAL_BAND_SHORTCUT_LAMINAR_DNS on
+    legitimate turbulent runs.
+
     None or empty → "<not declared>" (G2 will treat as untrusted-by-default
     per fail-closed semantics).
     Unknown name → return the input verbatim (G2 will not match the
@@ -195,10 +207,13 @@ def canonicalize_turbulence_model(declared: Optional[str]) -> str:
         return "<not declared>"
     if not isinstance(declared, str):
         return "<not declared>"
-    key = declared.strip().lower()
+    raw = declared.strip()
+    if not raw:
+        return "<not declared>"
+    key = re.sub(r"[\s\-_]+", "", raw).lower()
     if not key:
         return "<not declared>"
-    return _MODEL_CANONICAL.get(key, declared.strip())
+    return _MODEL_CANONICAL.get(key, raw)
 
 
 # ---------------------------------------------------------------------------

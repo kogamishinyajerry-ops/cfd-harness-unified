@@ -3569,19 +3569,36 @@ boundaryField
         # turbulence_model_used into bc so the emitter (via
         # plane_channel_extractors.canonicalize_turbulence_model) and
         # comparator_gates.G2 can discriminate honest turbulent
-        # runs from canonical-band laminar shortcuts. Resolution
-        # order: (1) whitelist.yaml::plane_channel_flow.turbulence_model
-        # (canonical source), (2) caller-injected override via
-        # task_spec.boundary_conditions["turbulence_model"] (used by
-        # tests + ad-hoc forward-compat specs), (3) "laminar" default.
-        # Whitelist flip to kOmegaSST lands as A.4.b alongside full
-        # RAS file emission.
+        # runs from canonical-band laminar shortcuts.
+        #
+        # Codex round-1 F1 (DEC-V61-059): the bc field MUST reflect
+        # the path the generator ACTUALLY emits, not the declaration
+        # the caller requested. Stage A.4.a only emits the laminar
+        # icoFoam path — A.4.b will add the simpleFoam + RAS files
+        # behind a `_emits_rans_path` flag and stamp the bc field
+        # with the resolved model at the same moment. Until then,
+        # this field is hard-pinned to "laminar" so a forward-compat
+        # caller setting `bc["turbulence_model"]="kOmegaSST"` cannot
+        # bypass G2 by metadata override alone.
+        #
+        # We still resolve `whitelist_turbulence` here so A.4.b can
+        # flip the gate cleanly (single-line change) and so tests
+        # exercising the resolution-priority logic stay valid.
+        # Resolution order: (1) whitelist.yaml::<case>.turbulence_model,
+        # (2) caller bc["turbulence_model"], (3) "laminar".
         whitelist_turbulence = _load_whitelist_turbulence_model(task_spec.name)
         if whitelist_turbulence is None or not whitelist_turbulence:
             _override_bc = task_spec.boundary_conditions or {}
             whitelist_turbulence = (
                 _override_bc.get("turbulence_model") or "laminar"
             )
+        # A.4.a is locked to the laminar icoFoam emission path; the
+        # turbulent file emit lands in A.4.b together with the
+        # _emits_rans_path flip.
+        _emits_rans_path = False
+        effective_turbulence_used = (
+            whitelist_turbulence if _emits_rans_path else "laminar"
+        )
         if task_spec.boundary_conditions is None:
             task_spec.boundary_conditions = {}
         task_spec.boundary_conditions["channel_D"] = D
@@ -3589,7 +3606,7 @@ boundaryField
         task_spec.boundary_conditions["nu"] = nu_val
         task_spec.boundary_conditions["U_bulk"] = U_bulk
         task_spec.boundary_conditions["turbulence_model_used"] = (
-            whitelist_turbulence
+            effective_turbulence_used
         )
         # Track the mesh resolution actually emitted so post-extraction
         # diagnostics (preflight + audit fixtures) can verify the
@@ -3722,16 +3739,15 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
         # 2b. constant/turbulenceProperties (DEC-V61-059 A.4 contract).
         # icoFoam ignores this file (it has no turbulence-transport
         # equations) but emitting it makes the case forward-compatible
-        # with the simpleFoam+RAS path that A.4.b will wire. Equally
-        # important: the file's `simulationType` is the canonical place
-        # for downstream tooling to read the case's declared turbulence
-        # treatment (e.g., for byte-stable audit packages, an external
-        # auditor can grep the case dir without consulting bc[]).
-        if (
-            isinstance(whitelist_turbulence, str)
-            and whitelist_turbulence
-            and whitelist_turbulence.lower() != "laminar"
-        ):
+        # with the simpleFoam+RAS path that A.4.b will wire. The
+        # `simulationType` is also the canonical place for downstream
+        # tooling to read the case's actually-active turbulence
+        # treatment (audit packages, Notion sync, byte-stable reviews).
+        # Codex round-1 F1: the file content MUST match the bc field
+        # match `_emits_rans_path` — a "RAS" simulationType paired
+        # with `application icoFoam;` would be a contradictory case
+        # spec that misleads readers and breaks G2 trust semantics.
+        if _emits_rans_path and isinstance(whitelist_turbulence, str) and whitelist_turbulence.lower() != "laminar":
             _turbulence_props_body = (
                 f"simulationType  RAS;\n\n"
                 f"RAS\n{{\n"

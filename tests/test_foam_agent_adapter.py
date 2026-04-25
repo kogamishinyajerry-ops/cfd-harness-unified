@@ -1904,21 +1904,29 @@ class TestPlaneChannelMultiDim:
             # Must NOT contain RAS block in laminar mode.
             assert "RASModel" not in tp
 
-    def test_a4a_turbulence_properties_file_emitted_ras_when_whitelist_overrides(self):
-        """When task_spec.turbulence_model overrides whitelist (used for
-        forward-compat tests + ad-hoc unit-test specs), the
-        turbulenceProperties file emits a RAS block. This is the rail
-        that A.4.b will travel when the whitelist itself is flipped to
-        kOmegaSST.
+    def test_a4a_locks_bc_to_laminar_even_when_caller_overrides(self):
+        """Codex round-1 F1 regression: A.4.a is the laminar icoFoam
+        emission path only — the bc["turbulence_model_used"] field
+        and the constant/turbulenceProperties file content MUST both
+        reflect the actually-emitted laminar path, regardless of any
+        forward-compat caller override via
+        boundary_conditions["turbulence_model"]. Otherwise a metadata-
+        only declaration of "kOmegaSST" would silence comparator-gate
+        G2 and let a laminar Poiseuille u+/y+ profile PASS-wash
+        against the Moser DNS gold via canonical-band match.
+
+        A.4.b will introduce the _emits_rans_path flag flip alongside
+        full simpleFoam + RAS file emission; until then this lock is
+        load-bearing.
         """
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
+            # Name not in the whitelist so the override-path code is
+            # exercised: bc["turbulence_model"]="kOmegaSST" enters the
+            # generator's resolution but MUST NOT propagate to the
+            # bc["turbulence_model_used"] field nor the turbulenceProperties
+            # file under A.4.a.
             spec = TaskSpec(
-                # Use a name NOT in the whitelist so
-                # _load_whitelist_turbulence_model returns None and the
-                # fallback (boundary_conditions["turbulence_model"])
-                # wins. This is the rail A.4.b will also travel once
-                # the whitelist itself is flipped to kOmegaSST.
                 name="plane-channel-forward-compat-test",
                 geometry_type=GeometryType.BODY_IN_CHANNEL,
                 flow_type=FlowType.INTERNAL,
@@ -1929,11 +1937,16 @@ class TestPlaneChannelMultiDim:
             )
             FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
             tp = (case_dir / "constant" / "turbulenceProperties").read_text()
-            assert "simulationType  RAS" in tp
-            assert "RASModel     kOmegaSST" in tp
-            assert "turbulence   on" in tp
+            assert "simulationType  laminar" in tp, (
+                "A.4.a must emit laminar turbulenceProperties — RAS path is "
+                "deferred to A.4.b alongside the actual simpleFoam files."
+            )
+            assert "RASModel" not in tp
             bc = spec.boundary_conditions or {}
-            assert bc.get("turbulence_model_used") == "kOmegaSST"
+            assert bc.get("turbulence_model_used") == "laminar", (
+                "A.4.a F1 lock: bc field MUST reflect the actually-emitted "
+                "icoFoam path, not the caller's declaration override."
+            )
 
 
 # ---------------------------------------------------------------------------
