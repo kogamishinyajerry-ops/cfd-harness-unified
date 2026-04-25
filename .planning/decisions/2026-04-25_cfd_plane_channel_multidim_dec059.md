@@ -69,7 +69,7 @@ external_gate_caveat: |
 codex_tool_report_path: |
   reports/codex_tool_reports/dec_v61_059_plan_review_round{1,2,3,4}.md
   reports/codex_tool_reports/dec_v61_059_round{5,6}.md
-notion_sync_status: pending — sync DEC frontmatter + retro narrative on next session sweep
+notion_sync_status: synced 2026-04-25T22:11 · Status=Complete (page_id=34dc6894-2bed-81fe-8ab4-ff9c3fa7de71, URL=https://www.notion.so/DEC-V61-059-plane_channel_flow-Type-II-multi-dim-u_tau-headline-3-profile-gates-case-6-10-v2-34dc68942bed81fe8ab4ff9c3fa7de71). Decisions DB fa55d3ed-0a6d-452f-909d-91a8c8d218a7. Frontmatter fields synced: Decision, Why, Impact, Alternatives, Canonical Follow-up; Status=Complete; Scope=Architecture.
 github_sync_status: dec-v61-059-pc branch · 19 commits ahead of fb2ea78 (round-4 baseline)
 related:
   - DEC-V61-036b (comparator gates G3/G4/G5 — canonical-band shortcut detector G2 added here)
