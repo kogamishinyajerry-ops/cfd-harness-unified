@@ -589,6 +589,110 @@ class TestFoamAgentExecutor:
         assert "cf_skin_friction" in result
 
     # ------------------------------------------------------------------
+    # DEC-V61-063 Stage A.4: comparator-facing dict-shape emits
+    # ------------------------------------------------------------------
+
+    def test_extract_flat_plate_cf_emits_cf_x_profile_points_dict_shape(self):
+        """A.4: gold-comparator consumes profile observables as
+        list[{axis_key, value_key}] with `Cf` in PROFILE_VALUE_KEYS.
+        `_extract_flat_plate_cf` must dual-emit `cf_x_profile_points`
+        in this shape alongside the tuple `cf_x_profile`.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        cxs, cys, u_vecs = [], [], []
+        for x in (0.25, 0.5, 0.75, 1.0):
+            for y, u in [(0.0, 0.0), (0.005, 0.05), (0.010, 0.10)]:
+                cxs.append(x); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        assert "cf_x_profile_points" in result
+        points = result["cf_x_profile_points"]
+        assert isinstance(points, list)
+        assert len(points) == len(result["cf_x_profile"])
+        for tup, dct in zip(result["cf_x_profile"], points):
+            assert isinstance(dct, dict)
+            assert dct["x"] == tup[0]
+            assert dct["Cf"] == tup[1]
+        # Dict shape is sorted by x ascending too (inherits the tuple order).
+        xs = [p["x"] for p in points]
+        assert xs == sorted(xs)
+
+    def test_enrich_flat_plate_cf_emits_delta_99_x_profile_dict_shape(self):
+        """A.4: `_enrich_flat_plate_cf` must emit `delta_99_x_profile`
+        as list[{x, value}] for the gold-comparator to ingest as a
+        profile observable. Only x's with successful δ_99 extraction
+        contribute (mirrors cylinder centreline extractor sparsity).
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        K_target = 0.664
+        cf_x_profile = [
+            (0.5, K_target / math.sqrt(50000 * 0.5)),
+            (1.0, K_target / math.sqrt(50000 * 1.0)),
+        ]
+        profile_05 = [(0.0, 0.0), (0.010, 0.5), (0.01581, 0.99), (0.025, 1.0)]
+        profile_10 = [(0.0, 0.0), (0.010, 0.4), (0.02236, 0.99), (0.030, 1.0)]
+        cxs, cys, u_vecs = [], [], []
+        for y, u in profile_05:
+            cxs.append(0.5); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        for y, u in profile_10:
+            cxs.append(1.0); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        kq = {"cf_x_profile": cf_x_profile, "cf_x_profile_n_samples": 2}
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities=kq,
+        )
+        assert "delta_99_x_profile" in result
+        d_profile = result["delta_99_x_profile"]
+        assert isinstance(d_profile, list)
+        assert len(d_profile) == 2
+        for entry in d_profile:
+            assert "x" in entry and "value" in entry
+        xs = [p["x"] for p in d_profile]
+        assert xs == [0.5, 1.0]
+        # Each value matches its sibling scalar (within float repr equality).
+        assert d_profile[0]["value"] == result["delta_99_at_x_0p5"]
+        assert d_profile[1]["value"] == result["delta_99_at_x_1"]
+
+    def test_enrich_flat_plate_cf_omits_delta_99_x_profile_when_all_missing(self):
+        """A.4: when no δ_99 extraction succeeds (e.g., empty u_lines),
+        the profile key must NOT appear (rather than emitting an empty
+        list which the comparator could mis-interpret as zero-length
+        input data).
+        """
+        task = self._make_flat_plate_task()
+        K_target = 0.664
+        cf_x_profile = [
+            (0.5, K_target / math.sqrt(50000 * 0.5)),
+            (1.0, K_target / math.sqrt(50000 * 1.0)),
+        ]
+        kq = {"cf_x_profile": cf_x_profile, "cf_x_profile_n_samples": 2}
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=[], cys=[], u_vecs=[],
+            task_spec=task, key_quantities=kq,
+        )
+        assert "delta_99_x_profile" not in result
+        # Both x's individually flagged missing — invariant still landed.
+        assert result["delta_99_at_x_0p5_missing_u_line"] is True
+        assert result["delta_99_at_x_1_missing_u_line"] is True
+        assert "cf_blasius_invariant_mean_K" in result
+
+    # ------------------------------------------------------------------
     # DEC-V61-063 Stage A.3: enrichment with Blasius invariant + δ_99
     # ------------------------------------------------------------------
 

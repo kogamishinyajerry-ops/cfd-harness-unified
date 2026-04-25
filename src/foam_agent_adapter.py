@@ -9664,9 +9664,17 @@ mergePatchPairs
                 key_quantities["cf_location_x"] = (
                     FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X
                 )
-            # New A.2 emit: full multi-x profile.
+            # New A.2 emit: full multi-x profile (tuple shape — keeps
+            # introspection cheap for tests + audit code).
             key_quantities["cf_x_profile"] = list(cf_x_profile)
             key_quantities["cf_x_profile_n_samples"] = len(cf_x_profile)
+            # A.4 comparator-facing dict shape: gold_standard_comparator
+            # consumes profile observables as list[{axis_key, value_key}],
+            # with `Cf` in PROFILE_VALUE_KEYS. Dual-emit so the tuple
+            # contract above stays untouched.
+            key_quantities["cf_x_profile_points"] = [
+                {"x": x, "Cf": cf} for x, cf in cf_x_profile
+            ]
             # Audit-package stamp distinguishing wall-gradient extraction
             # from any future correlation-based path. Stage A.3 will use
             # this to assert no Spalding fallback fired under the laminar
@@ -9795,6 +9803,20 @@ mergePatchPairs
                 key_quantities[f"delta_99_rel_error_at_x_{x_key}"] = d["rel_error"]
             except FlatPlateExtractorError as exc:
                 key_quantities[f"delta_99_at_x_{x_key}_error"] = str(exc)
+
+        # A.4 comparator-facing dict shape for δ_99(x). Built from the
+        # already-populated `delta_99_at_x_<x_key>` scalars (only the x's
+        # where extraction succeeded contribute a point — missing-u-line
+        # x's are silently absent from the profile, mirroring how the
+        # cylinder centreline extractor emits sparse deficit_x_over_D_*).
+        delta_99_points: List[Dict[str, float]] = []
+        for x_pos in delta_99_targets:
+            x_key = f"{x_pos:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+            d_val = key_quantities.get(f"delta_99_at_x_{x_key}")
+            if isinstance(d_val, (int, float)) and math.isfinite(d_val):
+                delta_99_points.append({"x": x_pos, "value": float(d_val)})
+        if delta_99_points:
+            key_quantities["delta_99_x_profile"] = delta_99_points
 
         key_quantities["cf_enrichment_path"] = "enrich_cf_profile_v1_inline"
         return key_quantities
