@@ -1,28 +1,121 @@
-# CaseProfile stub — G-6 backfill (Opus 4.7 Pivot Post-Hoc Review §7).
+# CaseProfile · naca0012_airfoil
 # Schema: knowledge/schemas/risk_flag_registry.yaml (schema_version=1).
-# Only the 2 mandatory post-R3 flags are populated per Opus directive;
-# triggered=false means the audit on 2026-04-24 considered each flag
-# against this case's historical record and ruled it out.
+# Authority: Opus 4.7 Pivot Post-Hoc Review §7 (2026-04-24); G-6 of Post-Pivot Go/No-Go.
+#
+# This file MUST only reference flag_id values that appear in
+# knowledge/schemas/risk_flag_registry.yaml flags[].flag_id list.
+# Case-specific risk flags (not in the registry) live in the per-DEC intake at
+# .planning/intake/<DEC>_<case_id>.yaml §4 risk_flags — those are intake-local
+# free-form annotations, NOT registry-bound.
+#
+# DEC-V61-058 Batch A (2026-04-25) — Codex F6 verbatim: CaseProfile expanded
+# from 2-flag stub to full 5-registered-flags coverage reflecting the V61-058
+# multi-α scope. Predecessor (G-6 backfill 2026-04-24) had only the 2 mandatory
+# v2.0+ post-R3 flags, both ruled-out triggered=false.
 
 case_id: naca0012_airfoil
 schema_version: 1
-last_assessed: "2026-04-24"
-last_assessed_by: "Claude Code (G-6 backfill · Opus Pivot Review §7)"
+last_assessed: "2026-04-25"
+last_assessed_by: "Claude Code (Opus 4.7, 1M context · DEC-V61-058 Batch A part 2 · Codex F6 verbatim)"
 
+# Pointer to per-DEC case-specific risk flags (intake §4).
+# These are NOT in the registry; they're local to the DEC arc.
+case_specific_risk_flags_in_intake:
+  - dec_id: DEC-V61-058
+    intake_path: .planning/intake/DEC-V61-058_naca0012_airfoil.yaml
+    flags:
+      - angle_of_attack_implementation_canonical_routing  # HIGH
+      - forceCoeffs_aref_2d_thin_span                     # MED
+      - lift_signal_at_alpha_zero_snr_trap                # MED
+      - wall_function_validity_at_re_3e6                  # MED
+      - trailing_edge_singularity_te_cp_provenance        # MED
+      - codex_residual_attestor_naca_threshold_inheritance  # LOW
+
+# Registered risk-flag entries (registry-bound).
 risk_flags:
   - flag_id: executable_smoke_test
-    triggered: false
+    triggered: true  # was false (G-6 backfill); V61-058 introduces α-rotation
+                     # dispatch path that must be exercised end-to-end before close
+    triggered_by: DEC-V61-058
+    triggered_date: "2026-04-25"
     justification: |
-      No post-R3 dispatch-layer defect recorded for this case on main.
-      Flag re-evaluated if future DEC touches adapter dispatch path.
+      DEC-V61-058 introduces α-routing through task_spec.alpha_deg parameter
+      consumed by _generate_airfoil_flow at src/foam_agent_adapter.py:6407.
+      Multi-α runs (α∈{0°,4°,8°}) require dispatch-chain validation —
+      task_spec mutation between dispatch and generator is invisible to
+      static Codex review. Stage E close gate: Docker OpenFOAM live runs
+      at all 3 α (per intake §9 stage_e_close_checklist).
+    mitigation_owner: DEC-V61-058 Stage E
+
   - flag_id: solver_stability_on_novel_geometry
+    triggered: true  # was false (G-6 backfill); V61-058 α=8° on rotated-
+                     # freestream is a NEW solver+BC combination not yet exercised
+    triggered_by: DEC-V61-058
+    triggered_date: "2026-04-25"
+    justification: |
+      simpleFoam + kOmegaSST stability on rotated-freestream NACA0012 at
+      α=8° is runtime-emergent. The current α=0° fvSolution at
+      src/foam_agent_adapter.py:6811-6856 (p GAMG/GaussSeidel relTol=0.05,
+      URF p=0.3, U/k/omega=0.5) is tuned for symmetric flow. At α=8° the
+      upper surface adverse-pressure-gradient peaks may require tighter
+      URF (p=0.2) or PCG+DIC fallback for p. OF tutorial precedent:
+      incompressible/simpleFoam/airFoil2D fvSolution.
+    mitigation_owner: DEC-V61-058 Batch B1 + Stage E executable_smoke_test
+
+  - flag_id: python_version_parity
+    triggered: true  # V61-058 introduces new f-string blocks in 0/U for α-rotation
+    triggered_by: DEC-V61-058
+    triggered_date: "2026-04-25"
+    justification: |
+      DEC-V61-058 Batch B1 will add α-aware f-string blocks in 0/U
+      (U_inf_vec computed via cos/sin of alpha_deg) AND new forceCoeffs FO
+      block with rotated liftDir/dragDir. Nested multi-line f-strings can
+      crash Python 3.9 (CI default) while parsing fine on 3.12 (.venv).
+    mitigation_owner: DEC-V61-058 Batch B1+B2 — `python3 -m py_compile` on
+      every edited .py before commit; hoist nested f-strings to plain
+      .format() or string concat where the inner expression is itself a
+      multi-line f-string.
+
+  - flag_id: mesh_density_on_domain_change
     triggered: false
     justification: |
-      Case uses established OpenFOAM tutorial solver topology; no
-      smoother-vs-BC divergence reported to date on main.
+      DEC-V61-058 v2 keeps existing 5×chord domain (no growth) per Codex F2
+      "no mesh changes" architectural lock. Freestream rotation in 0/U is
+      mesh-invariant. If Codex round 2 demands domain growth, this flag
+      flips to triggered=true and Batch B1 must add cell-count proportionality
+      computation + dz_min/dx_min comments at the airfoil.
+    mitigation_owner: deferred — re-evaluate at DEC-V61-058 Codex round 2
+
+  - flag_id: numerical_noise_snr
+    triggered: true
+    triggered_by: DEC-V61-058
+    triggered_date: "2026-04-25"
+    justification: |
+      DEC-V61-058 introduces 4 new HARD scalar/profile gates with varying
+      SNR ratios (computed in intake §4 numerical_noise_snr block):
+        Cl@α=8°: gold 0.815, ratio ≈ 8e5 (ample SNR)
+        Cl@α=4°: gold 0.434, ratio ≈ 4e5 (helper, slope-fit only, ample)
+        Cd@α=0°: gold 0.0080, ratio ≈ 8e3 (adequate)
+        Cp@x/c=0.5: gold ≈ -0.40, ratio ≈ 2e5 (ample)
+        dCl/dα slope: gold 0.105, ratio ≈ 2e4 (ample)
+        Cl@α=0°: gold = 0 EXACTLY → SANITY_CHECK only (excluded from gate set
+                  per RETRO-V61-050 numerical_noise_snr trap, see intake risk
+                  flag lift_signal_at_alpha_zero_snr_trap).
+      All HARD gates have SNR ≥ 8e3, well above the 10× safety floor.
+      Cl@α=0° is the explicit exclusion case — handled via SANITY_CHECK
+      sub-status with absolute band |Cl| < 0.005, NOT a gate.
+    mitigation_owner: DEC-V61-058 Batch B3 — SNR table in airfoil_extractors
+      module-level docstring; UI renders signal_above_noise flag per gate.
+
 # P1-T3b · per-observable tolerance overrides.
 # Source: knowledge/gold_standards/naca0012_airfoil.yaml
-# (profile observable — Cp distribution along chord).
+# (4 HARD observables + 1 PROVISIONAL_ADVISORY per DEC-V61-058 Batch A v2).
 tolerance_policy:
   pressure_coefficient:
-    tolerance: 0.20        # 20% · profile-wise Cp, alias "Cp"/"cp" per CANONICAL_ALIASES
+    tolerance: 0.20  # 20% — PROFILE_GATE shape-match (alias "Cp"/"cp" per CANONICAL_ALIASES)
+  lift_coefficient_alpha_eight:
+    tolerance: 0.05  # 5% — HEADLINE_PRIMARY_SCALAR (Ladson 1988 ±1.2% tunnel uncertainty)
+  drag_coefficient_alpha_zero:
+    tolerance: 0.15  # 15% — SAME_RUN_CROSS_CHECK (Cd0 small, wall-function discretization noise)
+  lift_slope_dCl_dalpha_linear_regime:
+    tolerance: 0.10  # 10% — QUALITATIVE_GATE (linearity check)
