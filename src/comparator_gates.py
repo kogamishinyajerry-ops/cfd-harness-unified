@@ -410,9 +410,18 @@ def _check_g2_canonical_band_shortcut(
     if len(hits) < G2_CANONICAL_BAND_MIN_HITS:
         return violations  # not enough canonical points hit; honest miss
 
-    # Need at least one viscous-sublayer hit AND one log-law hit.
+    # Need at least one viscous-sublayer hit AND one ACTUAL log-law-
+    # region hit. Codex round-3 F5 (DEC-V61-059): the original
+    # `has_loglaw = any(yp >= 30.0)` test counted the y+=100 centerline
+    # reference as "log-law", which let a profile that hit only the
+    # viscous (y+=5) + centerline (y+=100) anchors but MISSED the real
+    # log-law band (y+≈30) trip the gate. Tighten the band so a hit
+    # must land in the canonical log-law region (y+ ∈ (10, 60)) — the
+    # range where (1/0.41)·ln(y+)+5.2 governs the velocity profile.
+    # Centerline y+≥60 is its own asymptotic regime and cannot stand in
+    # for log-law evidence.
     has_viscous = any(yp <= 10.0 for yp, *_ in hits)
-    has_loglaw = any(yp >= 30.0 for yp, *_ in hits)
+    has_loglaw = any(10.0 < yp < 60.0 for yp, *_ in hits)
     if not (has_viscous and has_loglaw):
         return violations
 

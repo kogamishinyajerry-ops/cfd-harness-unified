@@ -219,6 +219,51 @@ def test_g2_band_tolerance_constant_is_documented():
     assert 0.05 < G2_CANONICAL_BAND_TOLERANCE < 0.5
 
 
+def test_g2_silent_when_only_viscous_and_centerline_hit_no_loglaw():
+    """Codex round-3 F5 regression: a profile that interpolates to
+    canonical values at y+=5 (viscous sublayer) AND y+=100 (centerline)
+    but MISSES the actual y+=30 log-law region must NOT trip G2.
+    The earlier `has_loglaw = any(yp >= 30.0)` check counted y+=100
+    as log-law, producing false hard-fails for profiles whose viscous
+    + centerline values happened to land near canonical without
+    actually reproducing the (1/0.41)·ln(y+)+5.2 log-law curve.
+    """
+    # Profile passes through canonical y+=5 (u+=5.4) and y+=100 (u+=18.3)
+    # but at y+=30 sits at u+=8.0 — far from the canonical 13.5 (rel_err
+    # ≈ 0.41, well outside G2 tolerance 0.20). With the F5 fix the gate
+    # only fires if a hit lands in the (10, 60) log-law window.
+    key_qty = {
+        "u_mean_profile_y_plus": [1.0, 5.0, 30.0, 100.0],
+        "u_mean_profile":         [1.0, 5.4, 8.0, 18.3],
+        "turbulence_model_used": "laminar",
+    }
+    violations = _check_g2_canonical_band_shortcut(
+        case_id="fully_developed_plane_channel_flow",
+        key_quantities=key_qty,
+    )
+    assert violations == [], (
+        f"G2 must not trip on viscous+centerline-only band match: {violations}"
+    )
+
+
+def test_g2_fires_when_actual_loglaw_y_plus_30_is_hit():
+    """Companion to the F5 regression above: when the profile DOES hit
+    the y+=30 log-law canonical AND a viscous-sublayer point, G2 still
+    fires as designed. Prevents F5 from over-tightening the gate.
+    """
+    key_qty = {
+        "u_mean_profile_y_plus": [1.0, 5.0, 30.0, 100.0],
+        "u_mean_profile":         [1.0, 5.4, 13.5, 19.0],  # y+=30 hits canonical
+        "turbulence_model_used": "laminar",
+    }
+    violations = _check_g2_canonical_band_shortcut(
+        case_id="fully_developed_plane_channel_flow",
+        key_quantities=key_qty,
+    )
+    assert len(violations) == 1
+    assert violations[0].gate_id == "G2"
+
+
 def test_violation_to_audit_concern_dict_uses_dec_v61_059_for_g2():
     """G2 violations must reference DEC-V61-059, not DEC-V61-036b."""
     from src.comparator_gates import violation_to_audit_concern_dict
