@@ -84,3 +84,19 @@ These are proposals, not committed methodology changes — `MP-XXX` patches sit 
 2. **Is dogfood window 2026-04-25 → 2026-05-09 enough to surface plane-guard-class bugs?** Open. Window is read-only; no synthetic injection planned. If 5/9 review surfaces zero incidents, that's evidence W4 prep is correctly aimed but not evidence W4 prep is bug-free. Future addendum if signal differs.
 
 3. **Should MP-2026-04-25-C extend to all instrumentation in the codebase?** Possibly. Other observability code (correction_recorder, audit_package signing) was written without subprocess repro. Defer to a counter-40 cadence retro for arc-wide methodology promotion.
+
+## Addendum 2026-04-25T20:05 +0800 · OPS-2026-04-25-001 §5 reverse-direction protocol violation
+
+While drafting this retro and the dogfood baseline, line B session absorbed line A's pending uncommitted work (`.planning/retrospectives/2026-04-25_retro_w4_prep_r1_incident.md`, `reports/plane_guard/baseline_2026-04-25.md`, `tests/conftest.py`, `tests/test_plane_guard_observability.py`, `.gitignore` line A patches) into its own commit `e7909ac` (`[line-b] docs(intake): DEC-V61-057 · DHC Type I 5-dim · v1 intake`). Most likely cause: line B used `git add -A` or `git add .` while line A had files in working tree but not yet staged; line B's commit then included both.
+
+Net effect:
+- Files landed on origin/main correctly (no work lost)
+- Commit ownership taxonomy violated (`[line-b]` tag now contains line A artifacts)
+- The dual-track-isolation pre-commit hook would have warned line B at commit-msg stage if installed (line B has not yet run `pre-commit install`)
+- No CI / dogfood signal impact (.jsonl files were tmp-redirected before this incident)
+
+Methodology patches added (proposed for v6.1 amendment):
+- **MP-2026-04-25-E**: cross-track add-all is the most likely "how" of line ownership violations. Recommend explicit `git add <path>` or `git add -p` (interactive patch) discipline during dogfood window. Add to OPS-2026-04-25-001 §9 commit-granularity guidance.
+- **MP-2026-04-25-F**: line B should `pre-commit install` immediately on session start so the dual-track-isolation warn-not-block hook fires. Until installed, it's documentation only.
+
+This addendum is a one-time post-hoc documentation. The actual fix path (move incorrectly-attributed files to a `[line-a]` revert+recommit) is rejected — git history rewrite during dogfood window is more risk than benefit, and the file *content* is correct regardless of which commit message bears the tag.
