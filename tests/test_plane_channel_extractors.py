@@ -75,16 +75,73 @@ def test_compute_friction_coefficient_rejects_nan():
 # SNR / signal metrics
 # ---------------------------------------------------------------------------
 
-def test_signal_metrics_high_snr_for_rich_profile():
-    """A 10-point Moser-like profile spanning u+ ∈ [0, 18.3] with
-    smooth spacings has SNR ≫ 10× — sample noise floor is at most
-    a few % of the amplitude.
+def test_signal_metrics_high_snr_when_sampling_is_uniform_in_uplus():
+    """A profile whose adjacent u+ samples are evenly spaced passes
+    the RETRO-V61-050 SNR ≥ 10× threshold under the conservative
+    worst-case floor (Codex round-2 F4: floor = max Δu+ between
+    adjacent samples). The diagnostic is *intentionally pessimistic*
+    — a profile that achieves SNR ≥ 10× has been sampled densely
+    enough that worst-case interpolation error is <10% of profile
+    amplitude. For a realistic Moser-shaped channel curve this
+    requires sampling at ≥30 evenly-spaced u+ points.
     """
+    n = 60  # 60 sample points over the half-channel
+    u_plus = [i * (18.3 / (n - 1)) for i in range(n)]
+    # y+ mapping is monotone but irrelevant to the SNR floor; the
+    # floor is computed in u+ space.
+    y_plus = [i * (150.0 / (n - 1)) for i in range(n)]
+    sig = compute_uplus_profile_signal_metrics(y_plus, u_plus)
+    assert sig.profile_amplitude == pytest.approx(18.3)
+    # max Δu+ ≈ 18.3/59 ≈ 0.31 → snr ≈ 59 (well above 10×)
+    assert sig.snr > 10.0
+
+
+def test_signal_metrics_loglaw_profile_under_resolved_at_sublayer_boundary():
+    """A 64-point UNIFORM-IN-Y+ Moser-like profile fails the 10× SNR
+    threshold under conservative max(spacings) — the y+=5 sublayer-to-
+    log-law transition produces a single Δu+ ≈ 5 jump that
+    bounds interpolation error from below. This is exactly the
+    under-resolution that RETRO-V61-050 SNR diagnostic should surface
+    on real plane-channel emissions; the gate informs the user
+    'sample more densely near y+=5' instead of silently passing.
+    """
+    import math as _m
+
+    n = 64
+    y_plus = [i * (150.0 / (n - 1)) for i in range(n)]
+    u_plus = []
+    for yp in y_plus:
+        if yp <= 5.0:
+            u_plus.append(yp)
+        else:
+            u_plus.append(min(19.0, (1 / 0.41) * _m.log(max(yp, 1.0)) + 5.2))
+    sig = compute_uplus_profile_signal_metrics(y_plus, u_plus)
+    # Max gap is the y+=2.38 → y+=4.76 → y+=7.14 region where
+    # log-law jumps abruptly above the linear sublayer.
+    assert sig.snr < 10.0
+    assert sig.snr > 1.0  # not pathological
+
+
+def test_signal_metrics_low_snr_for_sparse_non_uniform_profile():
+    """Codex round-2 F4 regression: under the previous min(spacings)
+    floor, a sparse non-uniform profile reported SNR > 10× even
+    though the largest u+ gap was a meaningful fraction of the
+    amplitude. Switching to max(spacings) collapses the false
+    high-SNR for under-sampled curves — exactly what RETRO-V61-050
+    asks the SNR diagnostic to surface.
+    """
+    # 10-point Moser-like profile (the OLD test fixture). Under
+    # min(spacings)=0.7 the SNR was ~27×; under max(spacings)=4.0
+    # it should drop to ~4.75×.
     y_plus = [0.0, 1.0, 5.0, 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 150.0]
     u_plus = [0.0, 1.0, 5.0, 8.5, 11.5, 13.5, 15.4, 16.7, 18.3, 19.0]
     sig = compute_uplus_profile_signal_metrics(y_plus, u_plus)
     assert sig.profile_amplitude == pytest.approx(19.0)
-    assert sig.snr > 10.0  # RETRO-V61-050 acceptance threshold
+    # Worst-case Δu+ = 4.0 (the y+=5→y+=10 jump or y+=1→y+=5),
+    # so SNR = 19 / 4 ≈ 4.75 — below the 10× threshold.
+    assert sig.snr < 10.0
+    assert sig.snr > 4.0
+    assert sig.sample_spacing_floor == pytest.approx(4.0)
 
 
 def test_signal_metrics_degenerate_constant_profile_reports_zero_snr():

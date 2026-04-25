@@ -103,11 +103,22 @@ def compute_uplus_profile_signal_metrics(
     """Compute the (numerical_floor, profile_amplitude, snr) triple
     for an emitted u+(y+) profile.
 
-    The "noise floor" model is conservative: take the minimum spacing
-    between adjacent u+ samples. Real interpolation noise is bounded
-    above by this for any 1D linearly-interpolating extractor — a
-    target value at y+ that falls between samples i and i+1 has
-    interpolation error at most |u+_{i+1} − u+_i|.
+    The "noise floor" model is the WORST-CASE interpolation error
+    bound: take the *maximum* |Δu+| between adjacent samples. For a
+    1D linearly-interpolating extractor, a target value at y+ that
+    falls between samples i and i+1 has interpolation error at most
+    |u+_{i+1} − u+_i|; the largest such gap upper-bounds the error
+    for *any* y+ target across the profile.
+
+    Codex round-2 F4 (DEC-V61-059): an earlier version of this
+    helper used `min(spacings)`, which is the OPTIMISTIC floor —
+    a single near-flat segment drove the reported floor toward
+    zero and inflated SNR. On non-uniform u+(y+) profiles (which
+    plane-channel emissions always are: dense near-wall, sparse at
+    centerline), the optimistic floor systematically overstated
+    profile quality and could miss under-resolved runs that should
+    be flagged. Switching to `max(spacings)` makes the diagnostic
+    a genuine worst-case bound.
 
     Returns a frozen dataclass so it can be safely cached / serialized.
     """
@@ -135,19 +146,25 @@ def compute_uplus_profile_signal_metrics(
     spacings = []
     for i in range(len(pairs) - 1):
         du = abs(pairs[i + 1][1] - pairs[i][1])
-        if du > 0.0:
-            spacings.append(du)
+        # Include zero-spacing segments in the worst-case computation
+        # so a constant-stretch profile still shows zero amplitude
+        # downstream rather than inflating SNR via a tiny non-zero
+        # neighbour. The floor is `max` so zero entries do not
+        # dominate; the only way the floor stays zero is if EVERY
+        # adjacent pair is identical, which is the constant-profile
+        # case handled below.
+        spacings.append(du)
     if not spacings:
-        # Constant profile — every adjacent diff is zero; SNR
-        # undefined. Report 0 to surface as "no measurable signal".
         return ProfileSignalMetrics(
             sample_spacing_floor=0.0,
             profile_amplitude=profile_amplitude,
             snr=0.0,
         )
 
-    sample_spacing_floor = min(spacings)
+    sample_spacing_floor = max(spacings)
     if sample_spacing_floor < 1e-12:
+        # Constant profile — every adjacent diff is zero; SNR
+        # undefined. Report 0 to surface as "no measurable signal".
         snr = 0.0
     else:
         snr = profile_amplitude / sample_spacing_floor
