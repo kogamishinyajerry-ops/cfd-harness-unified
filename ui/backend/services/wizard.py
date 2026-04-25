@@ -266,7 +266,9 @@ def _validate_params(template: _Template, params: dict[str, float]) -> None:
     would just create drift.
 
     Unknown keys are silently dropped (the renderer falls back to defaults
-    for any param it doesn't see) — only declared params get validated."""
+    for any param it doesn't see) — only declared params get validated.
+    Unknown-key warnings are surfaced separately via _unknown_param_keys()
+    so the wizard UI can show typo defenses (round-3 F13)."""
     bounds_by_key = {p.key: p for p in template.summary.params}
     for key, value in (params or {}).items():
         if key not in bounds_by_key:
@@ -293,6 +295,18 @@ def _validate_params(template: _Template, params: dict[str, float]) -> None:
             )
 
 
+def _unknown_param_keys(template: _Template, params: dict[str, float]) -> list[str]:
+    """Round-3 F13: return params that are NOT declared in the template
+    schema, so the wizard can surface a 'typo' warning. Defense for the
+    common newcomer mistake of typing `lid_velociy` and silently getting
+    the default value (which would mask broken intent).
+
+    Empty list when all keys match the template schema — the common case.
+    """
+    declared = {p.key for p in template.summary.params}
+    return sorted(k for k in (params or {}) if k not in declared)
+
+
 def render_yaml(
     template_id: str, case_id: str, name_display: str | None, params: dict[str, float]
 ) -> str:
@@ -303,6 +317,16 @@ def render_yaml(
     display = name_display or f"{template.summary.name_zh} · {case_id}"
     body = template.render_fn(case_id, display, params or {})
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True)
+
+
+def get_unknown_keys(template_id: str, params: dict[str, float]) -> list[str]:
+    """Public lookup for routes/wizard.py to surface F13 warnings.
+    Returns [] for unknown templates rather than raising — preview /
+    draft routes already validate template_id separately."""
+    template = _TEMPLATES.get(template_id)
+    if template is None:
+        return []
+    return _unknown_param_keys(template, params)
 
 
 def create_draft(

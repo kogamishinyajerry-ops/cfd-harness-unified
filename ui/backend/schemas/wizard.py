@@ -102,6 +102,15 @@ class WizardPreviewResponse(BaseModel):
     """
 
     yaml_text: str
+    unknown_keys: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Round-3 F13: param keys the user supplied that are NOT in the "
+            "template schema (likely typos). Wizard surfaces as a non-blocking "
+            "warning; the renderer ignored these keys and used template "
+            "defaults for any declared params they were meant to be."
+        ),
+    )
 
 
 # --- Run-stream events (Stage 8a-2; surfaced now so frontend types align)

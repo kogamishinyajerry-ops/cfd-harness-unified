@@ -49,6 +49,9 @@ export interface DraftCreateResponse {
 
 export interface WizardPreviewResponse {
   yaml_text: string;
+  // Round-3 F13: param keys the user supplied that are NOT in the
+  // template schema (likely typos). Empty in the common case.
+  unknown_keys?: string[];
 }
 
 export type PhaseId = "geometry" | "mesh" | "boundary" | "solver" | "compare";

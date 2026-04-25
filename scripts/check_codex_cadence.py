@@ -46,6 +46,11 @@ from pathlib import Path
 
 THRESHOLD = 10
 RISK_LOC_THRESHOLD = 500
+# Round-3 F4: full-history scan safety valve. On a 100k-commit repo the
+# unbounded `git log` would pay full O(N) IO every push. 2000 is well
+# beyond practical workbench arc length while still bounding the worst
+# case. Tunable.
+FULL_HISTORY_CAP = 2000
 # Round-3 F5: when a risk-class FILE is modified (not just newly added),
 # we need a per-file LOC threshold — every typo PR shouldn't ring the
 # governance bell, only material changes should. 150 lines is the empirical
@@ -105,9 +110,18 @@ def _try_run(cmd: list[str]) -> str | None:
 def _find_last_verified_sha() -> str | None:
     """Q5: full-history scan. Returns the SHA of the most recent commit
     whose body carries a canonical Codex-verified trailer, or None if
-    none has ever existed."""
+    none has ever existed.
+
+    Round-3 F4 safety valve: cap the scan at FULL_HISTORY_CAP commits
+    so a 100k-commit repo doesn't pay full O(N) IO on every push. If
+    no trailer is found within the cap, treat as "no recent verified
+    commit" — same outcome as bootstrap mode for cadence-floor purposes.
+    The honesty trade-off: a verified commit older than the cap is
+    invisible to the hook. That's acceptable because the cadence rule
+    is about RECENT review, not "ever-reviewed in repo history".
+    """
     raw = _try_run([
-        "git", "log",
+        "git", "log", f"-{FULL_HISTORY_CAP}",
         "-E", "--grep", TRAILER_GIT_GREP,
         "--pretty=%H%x00%B%x00%x00",
     ])

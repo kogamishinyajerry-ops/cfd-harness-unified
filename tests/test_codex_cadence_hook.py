@@ -532,3 +532,24 @@ def test_f5_added_risk_file_still_triggers(fresh_repo: Path) -> None:
     code, out = _run_hook(fresh_repo)
     assert code == 1
     assert "new file matches" in out
+
+
+# --- Round-3 F4: full-history cap safety valve -----------------------------
+
+def test_f4_full_history_cap_constant_set(fresh_repo: Path) -> None:
+    """F4 safety valve: the FULL_HISTORY_CAP constant exists and bounds
+    the git log scan. Sanity check on the constant rather than
+    constructing a 2000+-commit fixture (too slow for CI).
+
+    The actual scan-bound behavior is verified indirectly: F4 closure
+    doc note in .governance/README.md + readability of the constant
+    in the script. If a future change unbounds the scan, this test
+    would still pass — it's a wired-up signal, not a behavioral guard.
+    Behavioral coverage of the cap would require a 2000+ commit
+    fixture, deferred."""
+    import importlib
+    import scripts.check_codex_cadence as cadence_mod  # noqa: WPS433
+    importlib.reload(cadence_mod)
+    assert hasattr(cadence_mod, "FULL_HISTORY_CAP")
+    assert cadence_mod.FULL_HISTORY_CAP >= 100  # any reasonable bound
+    assert cadence_mod.FULL_HISTORY_CAP <= 100000

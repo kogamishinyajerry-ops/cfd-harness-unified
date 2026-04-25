@@ -18,8 +18,13 @@ push. One JSON object per line.
 {"ts": "<iso8601_utc>", "sha": "<short_sha>", "reason": "<text>", "n_triggers": <int>, "triggers": [<strings>]}
 ```
 
-**Timestamp convention**: ISO 8601, **UTC** (the `+00:00` suffix is
-explicit). Don't reinterpret as local time during forensic review.
+**Timestamp convention** (round-3 F9 explicit): ISO 8601 with
+`timespec="seconds"`, generated via Python's
+`datetime.datetime.now(datetime.timezone.utc).isoformat(...)`. The
+`+00:00` suffix is the explicit UTC marker — **all timestamps in this
+log are UTC**, never local time. During forensic review, do NOT
+re-parse with a local timezone interpretation; that would shift
+recorded incidents by hours and corrupt the audit reconstruction.
 
 **Why JSONL, not TSV**: round-3 finding F8 — TSV broke if `Override-reason:`
 text contained a literal `\t` (e.g. pasted from a spreadsheet). JSONL

@@ -40,7 +40,15 @@ export function NewCaseWizardPage() {
   const yamlPreview = previewMutation.data?.yaml_text ?? "";
 
   useEffect(() => {
-    if (step !== 3 || !selected) return;
+    // Round-3 F2: clear stale preview state when leaving step 3. Without
+    // this, jumping step 3 → step 2 → step 3 briefly shows the OLD
+    // yaml_text from the previous param values until the new debounced
+    // mutation lands, which is misleading on slow networks.
+    if (step !== 3) {
+      previewMutation.reset();
+      return;
+    }
+    if (!selected) return;
     const handle = setTimeout(() => {
       previewMutation.mutate({
         template_id: selected.template_id,
@@ -136,6 +144,7 @@ export function NewCaseWizardPage() {
           previewError={
             previewMutation.isError ? previewMutation.error : null
           }
+          unknownKeys={previewMutation.data?.unknown_keys ?? []}
           canCreate={canCreate}
           isPending={createMutation.isPending}
           error={createMutation.isError ? createMutation.error : null}
@@ -359,6 +368,7 @@ function PreviewAndCreate({
   yamlPreview,
   previewLoading,
   previewError,
+  unknownKeys,
   canCreate,
   isPending,
   error,
@@ -368,6 +378,7 @@ function PreviewAndCreate({
   yamlPreview: string;
   previewLoading: boolean;
   previewError: unknown;
+  unknownKeys: string[];
   canCreate: boolean;
   isPending: boolean;
   error: unknown;
@@ -411,6 +422,21 @@ function PreviewAndCreate({
         </span>
         。
       </p>
+      {unknownKeys.length > 0 ? (
+        <div
+          className="mt-3 rounded-sm border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-200"
+          role="alert"
+        >
+          <span className="mono mr-2 text-[10px] uppercase tracking-wider text-amber-400">
+            typo guard
+          </span>
+          以下参数键不在模板定义里（被忽略，模板默认值兜底）：
+          <span className="mono ml-1 text-amber-100">
+            {unknownKeys.join(", ")}
+          </span>
+          。检查拼写。
+        </div>
+      ) : null}
       {error ? (
         <p className="mt-3 text-sm text-contract-fail">
           创建失败：

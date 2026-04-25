@@ -344,6 +344,54 @@ def test_q9_unknown_param_keys_silently_dropped() -> None:
         _cleanup_draft(case_id)
 
 
+def test_f13_unknown_keys_surfaced_as_warning() -> None:
+    """Round-3 F13: unknown param keys are silently dropped from the
+    rendered YAML BUT surfaced in the response so the wizard can show
+    a typo-defense warning. Closes the user-hostile silent-default
+    fallback Opus flagged in round-3 review."""
+    case_id = "wizard_test_typo"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {
+                    "Re": 100.0,
+                    "lid_velociy": 0.5,  # typo of 'lid_velocity'
+                    "another_typo": 1.0,
+                },
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        # YAML body unchanged (extras dropped, defaults used)
+        assert "lid_velociy" not in body["yaml_text"]
+        assert "another_typo" not in body["yaml_text"]
+        # Warning surfaced with both unknown keys, sorted
+        assert body["unknown_keys"] == ["another_typo", "lid_velociy"]
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_f13_no_typos_yields_empty_unknown_keys() -> None:
+    """Common case: all keys match. unknown_keys must be []."""
+    case_id = "wizard_test_clean_keys"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {"Re": 100.0, "lid_velocity": 1.0},
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["unknown_keys"] == []
+    finally:
+        _cleanup_draft(case_id)
+
+
 def test_q9_create_draft_also_validates() -> None:
     """The validation must run on both /preview and /draft (otherwise
     user could see a clean preview but write a corrupt YAML to disk)."""

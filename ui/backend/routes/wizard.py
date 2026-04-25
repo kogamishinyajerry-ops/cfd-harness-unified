@@ -22,7 +22,12 @@ from ui.backend.schemas.wizard import (
     TemplateListResponse,
     WizardPreviewResponse,
 )
-from ui.backend.services.wizard import create_draft, list_templates, render_yaml
+from ui.backend.services.wizard import (
+    create_draft,
+    get_unknown_keys,
+    list_templates,
+    render_yaml,
+)
 
 
 router = APIRouter()
@@ -69,7 +74,10 @@ def preview_yaml_route(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return WizardPreviewResponse(yaml_text=yaml_text)
+    return WizardPreviewResponse(
+        yaml_text=yaml_text,
+        unknown_keys=get_unknown_keys(payload.template_id, payload.params),
+    )
 
 
 @router.post("/wizard/draft", response_model=DraftCreateResponse)
