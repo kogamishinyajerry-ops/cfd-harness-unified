@@ -10,6 +10,7 @@ related_artifacts:
   - 12 commits: e4d118a → 87e5c9e → 01de7da → a21c05d → 5d4fd87 → 7e0fe5c → 3e9205f → efc25ce → acf1ffe → 8651d1c → 72ddcd0 → 0fae68e → 494455e
 counter_at_retro: 43 (P1-arc end, no further DEC counter increments today; ADR work is governance-class not DEC-class)
 notion_page: 34dc6894-2bed-811c-9e0e-e822d11f21e0 (Notion Decisions DB · ADR-002 · Status=Active 2026-04-25)
+notion_sync_status: synced 2026-04-25 (https://www.notion.so/RETRO-V61-005-ADR-002-W2-Gate-three-round-arc-same-day-Accepted-flip-34dc68942bed812a9ddcfa72cb925078)
 ---
 
 ## Incident summary
