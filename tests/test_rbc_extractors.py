@@ -168,19 +168,19 @@ from src.rbc_extractors import extract_w_max
 
 
 def _two_roll_velocity_field(nx: int = 16, ny: int = 16) -> RBCFieldSlice:
-    """Synthetic 2-roll u_y(x,y) ≈ U_pk · sin(2πx/Lx) · sin(πy/Ly).
+    """Synthetic 2-roll u_y(x,y) = U_pk · cos(2πx/Lx) · sin(πy/Ly).
 
-    Pandey & Schumacher Fig 4b shows this dominant 2-roll structure for
-    the AR=4 box. Peak is in the cavity interior, away from walls.
-    Returns slice with t_vals (linear conduction) so nu_asymmetry tests
-    can reuse this fixture if needed.
+    Mirrors Pandey & Schumacher Fig 4b: hot plumes rising at sidewalls
+    (u_y > 0 near x=0 and x=Lx), descending plume at center (u_y < 0
+    near x=Lx/2). Sign changes at x=Lx/4 (+ → −) and x=3Lx/4 (− → +)
+    → 2 sign changes → 2 rolls.
     """
     cxs: list[float] = []
     cys: list[float] = []
     t_vals: list[float] = []
     u_vecs: list[tuple[float, float, float]] = []
     Lx, Ly = 4.0, 1.0
-    U_pk = 0.005  # m/s — peak vertical velocity (much smaller than U_ff at Ra=1e6 Pr=10)
+    U_pk = 0.005
     dx = Lx / nx
     dy = Ly / ny
     for i in range(nx):
@@ -190,7 +190,7 @@ def _two_roll_velocity_field(nx: int = 16, ny: int = 16) -> RBCFieldSlice:
             cxs.append(x)
             cys.append(y)
             t_vals.append(305.0 - 10.0 * y)
-            uy = U_pk * math.sin(2 * math.pi * x / Lx) * math.sin(math.pi * y / Ly)
+            uy = U_pk * math.cos(2 * math.pi * x / Lx) * math.sin(math.pi * y / Ly)
             u_vecs.append((0.0, uy, 0.0))
     return RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
 
@@ -257,4 +257,78 @@ class TestExtractWMaxB2:
         # Must NOT have picked up the 99.0 wall-layer noise
         assert out["raw_w_max"] == pytest.approx(0.001, abs=1e-9), (
             f"Wall layer trim failed: raw_w_max={out['raw_w_max']} (expected 0.001)"
+        )
+
+
+from src.rbc_extractors import extract_roll_count_x
+
+
+class TestExtractRollCountB3:
+    """DEC-V61-060 Stage B.3 unit tests for extract_roll_count_x."""
+
+    def test_two_roll_field_returns_2(self):
+        """Canonical 2-roll u_y(x) ≈ U_pk·sin(2πx/Lx)·sin(πy/Ly) at
+        y=H/2: positive near x=Lx/4, negative at x=Lx/2 (descending plume),
+        positive near x=3Lx/4 → 2 sign changes → 2 rolls."""
+        slice_ = _two_roll_velocity_field(nx=32, ny=32)
+        bc = _make_bc()
+        out = extract_roll_count_x(slice_, bc)
+        assert out, f"Two-roll field returned empty dict: {out}"
+        assert out["status"] == "ok"
+        assert out["value"] == 2, (
+            f"Two-roll field must give roll_count=2; got {out['value']} "
+            f"(sign_changes={out.get('sign_changes')})"
+        )
+        assert out["sign_changes"] == 2
+        assert out["y_layer_used"] == pytest.approx(0.5, abs=0.05)
+
+    def test_no_velocity_field_returns_empty_dict(self):
+        slice_ = RBCFieldSlice(cxs=[0.5], cys=[0.5], t_vals=[300.0], u_vecs=None)
+        bc = _make_bc()
+        out = extract_roll_count_x(slice_, bc)
+        assert out == {}, f"Missing u_vecs must return {{}}; got {out}"
+
+    def test_single_roll_field_returns_1(self):
+        """Single-cell roll: u_y(x) = U_pk·sin(πx/Lx) at y=H/2 — positive
+        across the full interior → 0 sign changes → roll_count = 1."""
+        nx, ny = 32, 32
+        Lx, Ly = 4.0, 1.0
+        U_pk = 0.005
+        cxs, cys, t_vals, u_vecs = [], [], [], []
+        for i in range(nx):
+            x = (i + 0.5) * Lx / nx
+            for j in range(ny):
+                y = (j + 0.5) * Ly / ny
+                cxs.append(x); cys.append(y); t_vals.append(300.0)
+                uy = U_pk * math.sin(math.pi * x / Lx) * math.sin(math.pi * y / Ly)
+                u_vecs.append((0.0, uy, 0.0))
+        slice_ = RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
+        bc = _make_bc()
+        out = extract_roll_count_x(slice_, bc)
+        assert out["value"] == 1, (
+            f"Single-roll field must give roll_count=1; got {out['value']} "
+            f"(sign_changes={out['sign_changes']})"
+        )
+
+    def test_side_wall_noise_rejected(self):
+        """Add huge noise spike at x=0.05·Lx (within side trim zone);
+        extractor must NOT count it as a roll boundary."""
+        slice_clean = _two_roll_velocity_field(nx=32, ny=32)
+        cxs = list(slice_clean.cxs)
+        cys = list(slice_clean.cys)
+        t_vals = list(slice_clean.t_vals)
+        u_vecs = list(slice_clean.u_vecs)
+        # Inject 4 noise spikes within side-wall trim zone (5% of Lx=4 = 0.2)
+        for _ in range(4):
+            cxs.append(0.1)        # within 0.2 trim
+            cys.append(0.5)
+            t_vals.append(300.0)
+            u_vecs.append((0.0, 999.0, 0.0))
+        slice_ = RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
+        bc = _make_bc()
+        out = extract_roll_count_x(slice_, bc)
+        # Should still report 2 rolls (noise spikes trimmed)
+        assert out["value"] == 2, (
+            f"Side-wall trim failed: roll_count={out['value']}, "
+            f"sign_changes={out['sign_changes']}"
         )

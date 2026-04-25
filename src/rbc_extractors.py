@@ -312,3 +312,91 @@ def extract_w_max(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, Any]:
         "interior_cell_count": counted,
         "status": "ok",
     }
+
+
+def extract_roll_count_x(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, Any]:
+    """Count counter-rotating rolls along x via u_y sign changes at
+    mid-cavity (y ≈ H/2) (B.3).
+
+    Definition (DEC-V61-060 §3 in_scope roll_count_x):
+        Sample u_y at the y-layer closest to H/2; sort by x; count the
+        number of times u_y crosses zero (with a noise floor of
+        max(0.10·|u_y|_peak, 1e-9) to reject side-wall noise per intake
+        atomicity_guard).
+        roll_count = (sign_changes + 1) // 2 — for the canonical AR=4
+        2-roll case, u_y(x) at mid-cavity is + (rising plume left roll)
+        → 0 → − (descending plume between rolls) → 0 → + (rising plume
+        right roll), giving 2 sign changes → 2 rolls.
+
+    Per intake A.0, ref_value=2 (canonical AR=4 2-roll structure per
+    Pandey & Schumacher Fig 4b + Fig 5). gate_status PROVISIONAL_ADVISORY
+    because steady SIMPLE can land in metastable basins (1, 2, or 3
+    rolls of unequal width) and the count is sensitive to IC.
+
+    Returns dict with:
+        - ``value``: roll count (integer ≥ 0)
+        - ``sign_changes``: number of u_y zero crossings detected
+        - ``y_layer_used``: actual y of the sampling layer
+        - ``noise_floor``: threshold used for sign-change detection
+        - ``cell_count``: number of x-samples
+        - ``status``: 'ok' on success
+    Returns ``{}`` on missing u_vecs / shape error / empty mid-layer.
+    """
+    if slice_.u_vecs is None:
+        return {}
+    if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
+        return {}
+    y_target = 0.5 * (bc.wall_coord_hot + bc.wall_coord_cold)
+    # Find the y-layer closest to mid-cavity
+    unique_y = sorted({round(y, 6) for y in slice_.cys})
+    if not unique_y:
+        return {}
+    y_layer = min(unique_y, key=lambda y: abs(y - y_target))
+    y_tol = (
+        0.6 * max(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
+        if len(unique_y) >= 2 else 1e-3
+    )
+    samples: List[Tuple[float, float]] = []
+    for i in range(len(slice_.cxs)):
+        if abs(slice_.cys[i] - y_layer) <= y_tol:
+            samples.append((slice_.cxs[i], slice_.u_vecs[i][1]))
+    if len(samples) < 3:
+        return {}
+    samples.sort(key=lambda s: s[0])
+    # Reject side-wall noise: ignore samples within 5% of either side wall
+    side_trim = 0.05 * bc.Lx
+    interior = [(x, u) for x, u in samples if side_trim < x < bc.Lx - side_trim]
+    if len(interior) < 3:
+        return {}
+    u_peak = max(abs(u) for _, u in interior)
+    noise_floor = max(0.10 * u_peak, 1e-9)
+
+    sign_changes = 0
+    prev_sign = 0  # 0 = below noise floor (treat as zero)
+    for _, u in interior:
+        if abs(u) < noise_floor:
+            cur_sign = 0
+        else:
+            cur_sign = 1 if u > 0 else -1
+        if prev_sign != 0 and cur_sign != 0 and cur_sign != prev_sign:
+            sign_changes += 1
+        if cur_sign != 0:
+            prev_sign = cur_sign
+    # Roll count from sign changes (mid-height u_y signature):
+    #   N=0 → 1 roll  (degenerate single vortex / no rotation detected)
+    #   N=1 → 1 roll  (one pair of opposite-sign zones, single asymmetric roll)
+    #   N=2 → 2 rolls (canonical 2-roll: + − + with descending plume at center)
+    #   N=4 → 3 rolls
+    # Formula: (N // 2) + 1; N=0 special-cased to 1.
+    if sign_changes == 0:
+        roll_count = 1
+    else:
+        roll_count = (sign_changes // 2) + 1
+    return {
+        "value": roll_count,
+        "sign_changes": sign_changes,
+        "y_layer_used": y_layer,
+        "noise_floor": noise_floor,
+        "cell_count": len(interior),
+        "status": "ok",
+    }
