@@ -2398,3 +2398,78 @@ class TestPopulateIjNusseltFromSampleDict:
             tmp_path, task, original
         )
         assert out["nusselt_number"] == 15.0  # untouched
+
+
+# ============================================================================
+# DEC-V61-060 — Rayleigh-Bénard Convection multi-dim validation
+# ============================================================================
+class TestRBCMultiDim:
+    """DEC-V61-060 RBC canonical-contract repair tests (Stage A.1+).
+
+    Test class is RBC-exclusive per DEC-V61-060 intake constraint
+    (no test-class collision with parallel V61-058/V61-059 sessions).
+    """
+
+    def test_a1_rbc_emits_4x1_rectangle_not_4x4_square(self, tmp_path):
+        """DEC-V61-060 Stage A.1 (Codex v1 F-HIGH rbc_geometry_lx_eq_ly_bug):
+        the natural-convection generator must emit a 4×1 rectangle for RBC
+        (per A.0 pivot to Pandey & Schumacher 2018 TU Ilmenau benchmark
+        AR=4), NOT a 4×4 square. Pre-A.1 the generator hard-coded Lx=Ly=L
+        which produced an AR×AR square instead of the declared rectangle.
+
+        Asserts vertex coordinates show distinct Lx (=4.0) and Ly (=1.0).
+        """
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+
+        # Vertex layout: (0 0 0), (Lx 0 0), (Lx Ly 0), (0 Ly 0), ...
+        # For AR=4 with H=1: Lx=4, Ly=1 → expect "(4 0 0)" + "(4 1 0)" + "(0 1 0)".
+        assert "(4 0 0)" in blockmesh, (
+            "Stage A.1 must emit Lx=4 (was Lx=Ly=AR=4 → 4×4 square pre-fix). "
+            f"blockMeshDict head:\n{blockmesh[:600]}"
+        )
+        assert "(4 1 0)" in blockmesh, (
+            "Stage A.1 must emit Lx=4, Ly=1 distinct (rectangle, NOT square). "
+            f"Got blockMeshDict:\n{blockmesh[:600]}"
+        )
+        # Strong negative: 4×4 vertex pattern (the bug) must be absent.
+        assert "(4 4 0)" not in blockmesh, (
+            "Pre-A.1 bug regression: Lx=Ly=4 emits a 4×4 square instead of the "
+            "declared 4×1 rectangle. "
+            f"blockMeshDict:\n{blockmesh}"
+        )
+
+    def test_a1_dhc_still_emits_1x1_square(self, tmp_path):
+        """DEC-V61-060 Stage A.1 must NOT regress DHC. DHC keeps AR=1 → 1×1
+        square per de Vahl Davis 1983. Assert the Lx≠Ly split is benign for
+        the AR=1 case."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+        assert "(1 0 0)" in blockmesh
+        assert "(1 1 0)" in blockmesh
+        # DHC must NOT pick up the RBC nLx scaling (would 4× the cell count).
+        assert "(4 1 0)" not in blockmesh and "(4 0 0)" not in blockmesh
+
+    def test_a1_rbc_mesh_cell_count_scales_per_axis(self, tmp_path):
+        """Stage A.1 must emit per-axis cell counts (nLx, nLy). For RBC AR=4
+        with H=1 baseline 80 cells: nLy=80, nLx=320 (cells stay ~square).
+        Pre-A.1 single nL gave nLx=nLy → severely under-resolved x for AR=4."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+        # blocks line: hex (0 1 2 3 4 5 6 7) (nLx nLy 1) simpleGrading ...
+        assert "(320 80 1)" in blockmesh, (
+            "RBC AR=4 must scale x-cells to 4× y-cells (320×80). "
+            f"blockMeshDict:\n{blockmesh[:800]}"
+        )

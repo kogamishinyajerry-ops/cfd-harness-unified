@@ -2190,7 +2190,18 @@ fields          (U);
                 aspect_ratio = 2.0  # legacy: mid-Ra RBC heuristic
             else:
                 aspect_ratio = 1.0  # safe square default
-        L = aspect_ratio  # cavity length in x-direction (m)
+        # DEC-V61-060 Stage A.1 (Codex v1 F-HIGH rbc_geometry_lx_eq_ly_bug):
+        # explicit Lx ≠ Ly split. Pre-A.1 the generator used L=aspect_ratio for
+        # both axes, producing 2×2 (RBC) instead of the declared 2:1 rectangle.
+        # Post-A.1 + A.0 citation pivot: H is the cavity height in y (fixed at
+        # 1.0), aspect_ratio is Lx/Ly, so Lx = aspect_ratio · H.
+        # DHC: aspect_ratio=1.0 → Lx=Ly=1.0 (square per de Vahl Davis 1983).
+        # RBC: aspect_ratio=4.0 → Lx=4.0 Ly=1.0 (matches Pandey & Schumacher
+        #      2018 TU Ilmenau benchmark Lx/H=4, Table 1 p.6).
+        H = 1.0  # cavity height in y-direction (m); fixed reference length
+        Lx = aspect_ratio * H  # cavity length in x-direction (m)
+        Ly = H                  # cavity height in y-direction (m)
+        L = Ly                  # legacy alias: characteristic length for Ra/grading reuses Ly
         beta = 1.0 / ((T_hot + T_cold) / 2.0)  # Boussinesq beta at mean temperature
         nu = 1.0e-5  # kinematic viscosity (air, m^2/s)
         alpha = nu / Pr  # thermal diffusivity
@@ -2227,21 +2238,36 @@ fields          (U);
             "differential_heated_cavity"
             in _normalize_task_name_to_case_id(task_spec.name or "").lower()
         )
+        # DEC-V61-060 Stage A.1: cell counts now per-axis (nLx, nLy) so the
+        # mesh resolution scales with each side independently. nLy is the
+        # height-resolved count; nLx scales with aspect_ratio so cells stay
+        # ~square. Wall-grading still applies in y for DHC; RBC uses uniform
+        # in both axes pre-Stage-A.4 (A.4 will add horizontal-wall BL grading).
         if Ra >= 1e9 or is_dhc:
-            # graded mesh — symmetric wall packing
+            # DHC: graded mesh — symmetric wall packing in both axes for now
             if is_dhc and Ra < 1e9:
-                # DHC at moderate Ra (e.g. de Vahl Davis 1e6 benchmark): 80 cells
+                # DHC at moderate Ra (de Vahl Davis 1e6 benchmark): 80 cells
                 # with 4:1 packing gives wall cell ≈ 0.006L (≥5 BL cells at Ra=1e6).
-                nL = max(int(80 * L), 80)
-                grading_str = "((0.5 0.5 4) (0.5 0.5 0.25))"
+                nLy = max(int(80 * Ly), 80)
+                nLx = max(int(80 * Lx), 80)  # DHC AR=1 → nLx=nLy
+                grading_str_x = "((0.5 0.5 4) (0.5 0.5 0.25))"
+                grading_str_y = "((0.5 0.5 4) (0.5 0.5 0.25))"
             else:
-                # DHC at Ra>=1e9 (legacy turbulent regime): 256 cells + 6:1 packing.
-                nL = max(int(256 * L), 128)
-                grading_str = "((0.5 0.5 6) (0.5 0.5 0.1667))"
+                # DHC at Ra>=1e9 (turbulent regime): 256 cells + 6:1 packing.
+                nLy = max(int(256 * Ly), 128)
+                nLx = max(int(256 * Lx), 128)
+                grading_str_x = "((0.5 0.5 6) (0.5 0.5 0.1667))"
+                grading_str_y = "((0.5 0.5 6) (0.5 0.5 0.1667))"
         else:
-            # RBC and other non-DHC NC cavities: uniform mesh
-            nL = max(int(80 * L), 40)
-            grading_str = "1"
+            # RBC and other non-DHC NC cavities: uniform mesh in both axes.
+            # Per A.0 pivot: RBC = AR=4 → nLx=4·nLy keeps cells ~square.
+            nLy = max(int(80 * Ly), 40)
+            nLx = max(int(80 * Lx), 40)  # RBC AR=4 → nLx≈320, nLy=80
+            grading_str_x = "1"
+            grading_str_y = "1"
+        # Legacy nL alias for any downstream code that still references the old
+        # symmetric-mesh assumption (TaskSpec / extractor / log paths).
+        nL = nLy
         mean_T = (T_hot + T_cold) / 2.0  # initial temperature field
         # Store dT/L in boundary_conditions for the extractor (TaskSpec is local to this call)
         if task_spec.boundary_conditions is None:
@@ -2254,10 +2280,14 @@ fields          (U);
         # two interior cells to difference. Hot wall at x=0, cold at x=L,
         # both fixedValue per the T boundary block written below.
         task_spec.boundary_conditions["wall_coord_hot"] = 0.0
-        task_spec.boundary_conditions["wall_coord_cold"] = L
+        task_spec.boundary_conditions["wall_coord_cold"] = Lx  # x=Lx pre-A.3; A.3 will branch to Ly for RBC bottom-heated
         task_spec.boundary_conditions["T_hot_wall"] = T_hot
         task_spec.boundary_conditions["T_cold_wall"] = T_cold
         task_spec.boundary_conditions["wall_bc_type"] = "fixedValue"
+        # DEC-V61-060 Stage A.1: expose Lx/Ly to extractor + downstream consumers
+        task_spec.boundary_conditions["Lx"] = Lx
+        task_spec.boundary_conditions["Ly"] = Ly
+        task_spec.boundary_conditions["H"] = H
         # h = Cp*(T - T0) with T0=300K
         Cp = 1005.0
         T0 = 300.0
@@ -2283,6 +2313,7 @@ fields          (U);
         # 1. system/blockMeshDict — cavity with configurable aspect ratio
         # --------------------------------------------------------------------------
         # Build dynamic mesh geometry from L (aspect_ratio) and nL (cell count)
+        # DEC-V61-060 Stage A.1: Lx ≠ Ly per-axis blockMesh (rectangle, not square).
         _vertices = """vertices
 (
     (0 0 0)
@@ -2293,11 +2324,11 @@ fields          (U);
     ({Lx:g} 0 0.1)
     ({Lx:g} {Ly:g} 0.1)
     (0 {Ly:g} 0.1)
-);""".format(Lx=L, Ly=L)
+);""".format(Lx=Lx, Ly=Ly)
         _blocks = """blocks
 (
     hex (0 1 2 3 4 5 6 7) ({nLx} {nLy} 1) simpleGrading ({gx} {gy} 1)
-);""".format(nLx=nL, nLy=nL, gx=grading_str, gy=grading_str)
+);""".format(nLx=nLx, nLy=nLy, gx=grading_str_x, gy=grading_str_y)
         _bnd = """boundary
 (
     hot_wall
