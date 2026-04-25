@@ -6423,10 +6423,62 @@ boundaryField
         chord = float(bc.get("chord_length", 1.0))
         U_inf = 1.0  # freestream velocity
         nu_val = U_inf * chord / Re
+        # DEC-V61-058 Batch B1 (Codex DEC-V61-058 F2): α routing via single
+        # canonical case_id `naca0012_airfoil`. The whitelist canonical key is
+        # `angle_of_attack` (knowledge/whitelist.yaml parameters block); the
+        # adapter ALSO accepts `alpha_deg` as a programmatic alias for callers
+        # that don't go through the whitelist→task_runner→bc pipeline.
+        #
+        # Codex round 1 F1 fix (2026-04-25): precedence is now
+        # `angle_of_attack` (whitelist SoT) FIRST, `alpha_deg` (alias) SECOND.
+        # Adapter does NOT persist the resolved value back into bc — every
+        # call resolves freshly from the caller-supplied input. This avoids
+        # the round-1 reuse bug where a persisted canonical `alpha_deg=4`
+        # would mask a subsequent caller's `angle_of_attack=8`.
+        #
+        # Sign convention (PINNED, OF airFoil2D tutorial precedent):
+        #   α positive → freestream rotates upward in x-z plane:
+        #     U_inf_vec = U_inf · (cos α, 0, sin α)
+        #   liftDir = (-sin α, 0, cos α);  dragDir = (cos α, 0, sin α)
+        #   At α=+8°, upper-surface suction (z>0 side of airfoil) generates
+        #   force in +liftDir = +z direction → Cl > 0 (asserted in Stage E
+        #   sign-convention smoke test per intake §9 close checklist).
+        # Mesh is geometry-locked to x-z plane (lines below);
+        # rotation happens in 0/U only — no mesh re-rotation.
+        _alpha_raw = bc.get("angle_of_attack")
+        if _alpha_raw is None:
+            _alpha_raw = bc.get("alpha_deg", 0.0)
+        # Fail closed on non-numeric (Codex round 1 Q1(a): the prior `or 0.0`
+        # silently masked `""` / `False` as α=0). Accept int/float/None only.
+        if _alpha_raw is None:
+            alpha_deg = 0.0
+        elif isinstance(_alpha_raw, bool):
+            # bool is a subclass of int in Python — reject explicitly so
+            # bc["angle_of_attack"]=False isn't read as 0.0.
+            raise ParameterPlumbingError(
+                f"naca0012_airfoil: angle_of_attack/alpha_deg must be numeric; "
+                f"got bool={_alpha_raw!r}"
+            )
+        elif isinstance(_alpha_raw, (int, float)):
+            alpha_deg = float(_alpha_raw)
+        else:
+            raise ParameterPlumbingError(
+                f"naca0012_airfoil: angle_of_attack/alpha_deg must be numeric; "
+                f"got type={type(_alpha_raw).__name__} value={_alpha_raw!r}"
+            )
+        alpha_rad = math.radians(alpha_deg)
+        cos_a = math.cos(alpha_rad)
+        sin_a = math.sin(alpha_rad)
+        Ux_inf = U_inf * cos_a   # streamwise component (≈ U_inf for small α)
+        Uz_inf = U_inf * sin_a   # vertical component (0 at α=0; +0.139 at α=8°)
         # DEC-V61-044: plumb chord + U_inf + rho into boundary_conditions
         # so the airfoil_surface_sampler.compute_cp helper can normalize
         # p → Cp without re-deriving the freestream from other sources.
         # simpleFoam is incompressible kinematic-pressure, so rho=1.0.
+        # DEC-V61-058 round 1 F1 fix: do NOT persist alpha_deg / U_inf_x /
+        # U_inf_z back into bc. They have no downstream consumer
+        # (airfoil_extractors.compute_cl_cd takes alpha_deg as a direct
+        # function argument), and persistence created the round-1 reuse bug.
         task_spec.boundary_conditions = bc
         bc.setdefault("chord_length", chord)
         bc["U_inf"] = U_inf
@@ -6702,8 +6754,12 @@ RAS
             encoding="utf-8",
         )
 
-        (case_dir / "system" / "controlDict").write_text(
-            """\
+        # controlDict is split into a static preamble + an α-aware functions{}
+        # block. The functions{} block is built as an f-string so that
+        # forceCoeffs liftDir/dragDir + Aref are α-derived. Static prefix uses
+        # plain string to avoid mass-escaping `{` `}` (python_version_parity
+        # risk on 3.9 nested f-strings).
+        controlDict_static = """\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -6737,30 +6793,99 @@ timeFormat      general;
 timePrecision   6;
 runTimeModifiable true;
 
+"""
+        # DEC-V61-058 B1.2: forceCoeffs FO on aerofoil patch (per-α) for Cl/Cd
+        # extraction. Aref + lRef + rhoInf pinned per Codex DEC-V61-058 Q3.
+        # liftDir/dragDir derived from cos_a/sin_a so multi-α runs use the
+        # correct rotation convention: liftDir = (-sin α, 0, cos α);
+        # dragDir = (cos α, 0, sin α). At α=+8°, Cl > 0 by upper-suction (Stage E
+        # smoke test asserts this).
+        #
+        # DEC-V61-058 B1.3: yPlus FO on aerofoil patch — wall-resolution
+        # diagnostic emitted as PROVISIONAL_ADVISORY (Codex F5: NOT HARD-gated;
+        # band [11, 500] applied at extractor level).
+        thin_span = y_hi - y_lo  # = 0.002 m
+        Aref_m2 = chord * thin_span  # = 0.002 m² for chord=1.0
+        controlDict_functions = f"""\
 // DEC-V61-044: in-solver surface sampler on the `aerofoil` patch
 // (note British spelling — matches blockMesh patch name). Emits
 // postProcessing/airfoilSurface/<t>/p_aerofoil.raw with columns
 // `x y z p` per face. Parser lives in src/airfoil_surface_sampler.py.
 // Runs at writeTime (every 200 iterations via writeInterval above).
+//
+// DEC-V61-058 B1.2 + B1.3: forceCoeffs1 + yPlus FOs added.
+//   forceCoeffs Aref = chord × thin_span = {chord:.4f} × {thin_span:.4f}
+//                    = {Aref_m2:.6e} m² (Codex Q3a verified).
+//   forceCoeffs lRef = chord = {chord:.4f} m (Codex Q3b: only affects Cm).
+//   forceCoeffs rhoInf = 1.0 (incompressible kinematic, Codex Q3c).
+//   liftDir = (-sin α, 0, cos α); dragDir = (cos α, 0, sin α);
+//     alpha_deg = {alpha_deg:.4f}°.
 functions
-{
+{{
     airfoilSurface
-    {
+    {{
         type            surfaces;
         libs            ("libsampling.so");
         writeControl    writeTime;
         surfaceFormat   raw;
         fields          (p);
         interpolationScheme cellPoint;
+        // DEC-V61-058 Stage E live-run fix (2026-04-25): OpenFOAM 10
+        // sampledSurfaces expects `surfaces` as a LIST (parens), not
+        // a dict (curlies). The dict-form inherited from DEC-V61-044
+        // (commit a267d2a) parsed as "Attempt to return dictionary
+        // entry as a primitive" at runtime — this case was not in any
+        // live-run sweep between V61-044 (Apr 22) and V61-058 (Apr 25),
+        // so the latent syntax bug went unnoticed until now.
         surfaces
-        {
-            aerofoil { type patch; patches (aerofoil); interpolate false; }
-        }
-    }
-}
+        (
+            aerofoil
+            {{
+                type            patch;
+                patches         (aerofoil);
+                interpolate     false;
+            }}
+        );
+    }}
+
+    forceCoeffs1
+    {{
+        type            forceCoeffs;
+        libs            ("libforces.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        patches         (aerofoil);
+        rho             rhoInf;
+        rhoInf          1.0;
+        CofR            (0.25 0 0);  // 1/4-chord moment ref (NACA convention)
+        liftDir         ({-sin_a:.6e} 0 {cos_a:.6e});
+        dragDir         ({cos_a:.6e} 0 {sin_a:.6e});
+        pitchAxis       (0 1 0);     // y-axis (thin-span normal)
+        magUInf         {U_inf:.6e};
+        lRef            {chord:.6e};
+        Aref            {Aref_m2:.6e};
+        log             false;
+    }}
+
+    yPlus
+    {{
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        // y+ field written to postProcessing/yPlus/<t>/yPlus.dat with
+        // columns: `Time  patch  min  max  average` per wall patch.
+        // Extractor (compute_y_plus_max) filters by `patch == aerofoil`
+        // and reads the `max` column from the final-time row (Codex
+        // round 1 Q3(a) clarification: yPlus FO has no `patches` field
+        // surface — every wall patch in the case is automatically
+        // emitted).
+    }}
+}}
 
 // ************************************************************************* //
-""",
+"""
+        (case_dir / "system" / "controlDict").write_text(
+            controlDict_static + controlDict_functions,
             encoding="utf-8",
         )
 
@@ -6860,7 +6985,10 @@ relaxationFactors
         )
         (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
-        Ux = U_inf
+        # DEC-V61-058 B1: Ux/Uz come from α-rotated freestream (Ux_inf, Uz_inf
+        # computed above). Y component stays zero — thin-span x-z plane mesh.
+        Ux = Ux_inf
+        Uz = Uz_inf
         # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
         # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
@@ -6896,14 +7024,16 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -1 0 0 0 0];
-internalField   uniform ({Ux} 0 0);
+// DEC-V61-058 B1: α-rotated freestream U_inf·(cos α, 0, sin α).
+// alpha_deg = {alpha_deg:.4f}, |U_inf| = {U_inf:.4f}.
+internalField   uniform ({Ux:.6e} 0 {Uz:.6e});
 boundaryField
 {{
     freestream
     {{
         type            freestreamVelocity;
-        freestreamValue uniform ({Ux} 0 0);
-        value           uniform ({Ux} 0 0);
+        freestreamValue uniform ({Ux:.6e} 0 {Uz:.6e});
+        value           uniform ({Ux:.6e} 0 {Uz:.6e});
     }}
     aerofoil {{ type noSlip; }}
     front {{ type empty; }}
@@ -7062,11 +7192,16 @@ boundaryField
         # system/sampleDict — gold-anchored Cp sampling (C3b).
         # docs/c3_sampling_strategy_design.md §3.2 Option B: sample p at
         # upper-surface points for each x_over_c in whitelist reference_values.
-        # NACA0012 is symmetric at AoA=0 (current adapter does not implement
-        # non-zero AoA), so upper-surface sampling captures the full Cp
-        # distribution; lower surface would mirror. cellPoint interpolation at
-        # wall points extrapolates from first interior cell — standard for
-        # wall-pressure extraction in OpenFOAM.
+        # The Cp profile gold YAML is anchored at α=0° (NACA0012 symmetric);
+        # at α=0° upper and lower surfaces mirror, so upper-surface sampling
+        # captures the full distribution. DEC-V61-058 B1 added α-routing for
+        # the force-coefficient gates (Cl/Cd via forceCoeffs FO), but the Cp
+        # PROFILE_GATE remains an α=0 measurement — runs at α=4°/α=8° produce
+        # forceCoeffs Cl/Cd but the Cp sampleDict block here still reads the
+        # α=0 gold values (intake §3 design: Cp at α=0 only; upper-surface
+        # asymmetric sampling at α≠0 is out-of-scope, deferred). cellPoint
+        # interpolation at wall points extrapolates from first interior cell
+        # — standard for wall-pressure extraction in OpenFOAM.
         gold_values = _load_gold_reference_values(task_spec.name) or []
         xoc_values = [
             float(rv["x_over_c"])
@@ -8599,6 +8734,141 @@ mergePatchPairs
         return key_quantities
 
     @staticmethod
+    def _populate_naca_force_coeffs_from_forceCoeffs(
+        case_dir: Path,
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """DEC-V61-058 Batch C: emit Cl, Cd, alpha_deg, y+_max into
+        key_quantities by reading the forceCoeffs1 + yPlus FO outputs
+        registered in B1.2/B1.3 controlDict.
+
+        Per Codex round 2 round-3-readiness C-priority-1: failures must
+        propagate as explicit gate failures, never silently default. We
+        mirror the pattern at _populate_naca_cp_from_sampledict (DEC-V61-
+        044): on extractor error, write an `*_emitter_error` key into
+        key_quantities and DROP any stale scalar so DEC-V61-036 G1
+        MISSING_TARGET_QUANTITY fires at the comparator.
+
+        Per Codex round 2 round-3-readiness C-priority-2: alpha_deg from
+        task_spec (resolved exactly as in B1 with `angle_of_attack`-first
+        precedence) is plumbed alongside Cl/Cd so the audit fixture
+        surfaces α provenance end-to-end.
+
+        Mock-executor case (no postProcessing/forceCoeffs1 directory):
+        the extractor raises; we record the emitter_error and return.
+        Comparator stays MISSING_TARGET_QUANTITY which is the desired
+        behaviour for non-live runs.
+        """
+        # Resolve α with the same precedence as the adapter B1.fix1
+        # ruleset (angle_of_attack first, alpha_deg fallback). Don't
+        # mutate bc — read-only here.
+        bc = task_spec.boundary_conditions or {}
+        _alpha_raw = bc.get("angle_of_attack")
+        if _alpha_raw is None:
+            _alpha_raw = bc.get("alpha_deg", 0.0)
+        if _alpha_raw is None:
+            alpha_deg = 0.0
+        elif isinstance(_alpha_raw, bool):
+            # Mirror B1.fix1 fail-closed; in the populator path we surface
+            # via emitter_error rather than raise (different layer of the
+            # pipeline — populators are best-effort, dispatch already ran).
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"alpha_deg/angle_of_attack invalid bool={_alpha_raw!r}"
+            )
+            return key_quantities
+        elif isinstance(_alpha_raw, (int, float)):
+            alpha_deg = float(_alpha_raw)
+        else:
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"alpha_deg/angle_of_attack non-numeric type="
+                f"{type(_alpha_raw).__name__}"
+            )
+            return key_quantities
+
+        # Force-coefficient extraction.
+        try:
+            from src.airfoil_extractors import (
+                AirfoilExtractorError,
+                compute_cl_cd,
+                compute_y_plus_max,
+            )
+        except ImportError as exc:  # pragma: no cover — import-time failure
+            key_quantities["lift_coefficient_emitter_error"] = (
+                f"airfoil_extractors import failure: {exc}"
+            )
+            return key_quantities
+
+        try:
+            coeffs = compute_cl_cd(case_dir, alpha_deg=alpha_deg)
+        except AirfoilExtractorError as exc:
+            # Codex C-priority-1: propagate as gate failure. Drop any
+            # stale Cl/Cd/alpha keys so MISSING_TARGET_QUANTITY fires.
+            key_quantities["lift_coefficient_emitter_error"] = str(exc)
+            for stale in (
+                "lift_coefficient",
+                "drag_coefficient",
+                "lift_coefficient_alpha_eight",
+                "drag_coefficient_alpha_zero",
+                "alpha_deg",
+                "cl_drift_pct_last_100",
+                "cd_drift_pct_last_100",
+            ):
+                key_quantities.pop(stale, None)
+        else:
+            # α-aware naming: keep generic `lift_coefficient` /
+            # `drag_coefficient` for slope orchestration + the α-suffixed
+            # variants matching gold YAML observable names so the
+            # comparator's _lookup_with_alias resolves directly.
+            key_quantities["lift_coefficient"] = coeffs.Cl
+            key_quantities["drag_coefficient"] = coeffs.Cd
+            key_quantities["alpha_deg"] = coeffs.alpha_deg
+            key_quantities["force_coeffs_final_time"] = coeffs.final_time
+            key_quantities["force_coeffs_n_samples"] = coeffs.n_samples
+            key_quantities["cl_drift_pct_last_100"] = coeffs.cl_drift_pct_last_100
+            key_quantities["cd_drift_pct_last_100"] = coeffs.cd_drift_pct_last_100
+            key_quantities["force_coeffs_source"] = "forceCoeffs_FO_aerofoil"
+            # α-suffixed canonical-observable population matches gold YAML:
+            #   lift_coefficient_alpha_eight (HEADLINE) at α=8°
+            #   drag_coefficient_alpha_zero  (CROSS_CHECK) at α=0°
+            # Slope (lift_slope_dCl_dalpha_linear_regime) is computed at
+            # the orchestration layer across multiple runs (Stage E driver).
+            if abs(coeffs.alpha_deg - 8.0) < 0.5:
+                key_quantities["lift_coefficient_alpha_eight"] = coeffs.Cl
+            elif abs(coeffs.alpha_deg) < 0.5:
+                key_quantities["drag_coefficient_alpha_zero"] = coeffs.Cd
+                # SANITY_CHECK band per gold YAML sanity_checks block.
+                key_quantities["lift_coefficient_alpha_zero_sanity"] = coeffs.Cl
+                key_quantities["lift_coefficient_alpha_zero_sanity_ok"] = (
+                    abs(coeffs.Cl) < 0.005
+                )
+            elif abs(coeffs.alpha_deg - 4.0) < 0.5:
+                # Helper-anchor for slope; not a HARD gate per gold YAML.
+                key_quantities["lift_coefficient_alpha_four"] = coeffs.Cl
+
+        # y+_max extraction (PROVISIONAL_ADVISORY per Codex F5).
+        try:
+            yplus = compute_y_plus_max(case_dir)
+        except AirfoilExtractorError as exc:
+            key_quantities["y_plus_max_emitter_error"] = str(exc)
+            for stale in (
+                "y_plus_max",
+                "y_plus_min",
+                "y_plus_avg",
+                "y_plus_max_advisory_status",
+            ):
+                key_quantities.pop(stale, None)
+        else:
+            key_quantities["y_plus_max"] = yplus.y_plus_max
+            key_quantities["y_plus_min"] = yplus.y_plus_min
+            key_quantities["y_plus_avg"] = yplus.y_plus_avg
+            key_quantities["y_plus_max_on_aerofoil"] = yplus.y_plus_max
+            key_quantities["y_plus_max_advisory_status"] = yplus.advisory_status
+            key_quantities["y_plus_source"] = "yPlus_FO_aerofoil"
+
+        return key_quantities
+
+    @staticmethod
     def _populate_ij_nusselt_from_sampledict(
         case_dir: Path,
         task_spec: TaskSpec,
@@ -8683,6 +8953,14 @@ mergePatchPairs
             )
         if task_spec.geometry_type == GeometryType.AIRFOIL or "airfoil" in name_lower or "naca" in name_lower:
             key_quantities = self._populate_naca_cp_from_sampledict(
+                case_dir, task_spec, key_quantities
+            )
+            # DEC-V61-058 Batch C: forceCoeffs + yPlus FOs (B1.2/B1.3) emit
+            # Cl/Cd/y+ to postProcessing/. Populator surfaces them into
+            # key_quantities; on extractor failure, an *_emitter_error key is
+            # written and stale scalars are dropped so DEC-V61-036 G1 fires
+            # (Codex round 2 round-3-readiness C-priority-1 wiring).
+            key_quantities = self._populate_naca_force_coeffs_from_forceCoeffs(
                 case_dir, task_spec, key_quantities
             )
         if task_spec.geometry_type == GeometryType.IMPINGING_JET or "impinging" in name_lower:

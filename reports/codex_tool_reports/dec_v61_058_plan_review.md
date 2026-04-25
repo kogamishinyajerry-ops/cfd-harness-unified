@@ -1,0 +1,108 @@
+# Codex Pre-Stage-A Plan Review · DEC-V61-058 NACA0012 Multi-Dim
+
+**Run:** 2026-04-25 · gpt-5.4 · cx-auto picassoer651@gmail.com (81% quota)
+**Reviewing:** `.planning/intake/DEC-V61-058_naca0012_airfoil.yaml` v1 (commit c323085)
+**Verdict:** `REQUEST_CHANGES`
+**Tokens used:** 327,018
+**Track:** B SESSION 2 (`[line-b]`), parallel SESSION 1 DHC + SESSION 3 plane_channel
+
+---
+
+## Codex output (curated, verbatim from log)
+
+**Verdict**
+
+`REQUEST_CHANGES`
+
+**Findings Table**
+
+| ID | Severity | Section | Required edit | Rationale |
+|---|---|---|---|---|
+| F1 | HIGH | §1 Classification | Rework the gate set so Type I is backed by 3 genuinely physical families, or explicitly downgrade before Stage A. | The draft itself says `Cp_at_xoc_0p5_upper` is from the same α=0 run as `Cd_at_alpha_zero` and `y_plus_max_on_aerofoil` is a wall-resolution probe, not a physics observable; that is not enough for a 3-family Type I claim. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:53), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:61), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:66) |
+| F2 | HIGH | §4 Risk Flags / §7 Batch B1 | Lock α handling to one canonical `case_id` (`naca0012_airfoil`) with explicit `alpha_deg` routing and sign convention; remove the unresolved `_alpha_4/_alpha_8` whitelist-id branch unless verifier/report/case-profile routing is also expanded. | The intake leaves this unresolved, but current routing is keyed on the canonical case id. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:168), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:170), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:413), [knowledge_db.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/knowledge_db.py:66), [config.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/config.py:55) |
+| F3 | MED | §4 `wall_function_validity_at_re_3e6` | Correct the y+ derivation and stop using the current estimate as justification for family-counting or a hard 300 upper bound. | The text says `u_tau ≈ U_inf·sqrt(Cf/2)` but numerically evaluates it as `sqrt(0.004)`; that overstates `y+_min`. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:217), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:218) |
+| F4 | MED | §2 References / Batch A | Replace broad source labels with exact source conditions: paper + table/figure + Mach + transition state + α row. Also repair the current gold provenance mismatch in Batch A. | The intake cites Ladson/Abbott/Gregory broadly, while the current gold still carries uncertain `Thomas 1979 / Lada & Gostling 2007` provenance. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:94), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:99), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:399), [naca0012_airfoil.yaml](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:3) |
+| F5 | MED | §7 Batch B3 | Keep `y_plus_max_on_aerofoil` advisory/measured in v2; do not pre-commit it to `HARD_GATED [11,300]` while the same intake also argues `[11,500] PROVISIONAL`. | Internal conflict between risk-flag mitigation and Batch B3 scope. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:225), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:430) |
+| F6 | MED | §9 Stage E | Add close conditions for CaseProfile update, canonical α routing proof, and sign-convention smoke assertions (`α=+8° -> Cl>0`, `α=0° -> |Cl|` sanity bound). | The intake itself says the CaseProfile needs updating, but the close checklist does not require it. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:149), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:464), [case_profile](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/case_profiles/naca0012_airfoil.yaml:12) |
+
+**Recommended Pass-Rate Adjustment**
+
+Pre-edits, `0.30` is mildly optimistic; I would call v1 `0.20-0.25`.  
+Post-edits, I’d reset to `0.45`.
+
+**Recommended Codex Budget Adjustment**
+
+Keep `4` rounds. `3` is too tight for the Type-I rewrite, α-routing lock, and live-run closure.
+
+**Per-Question Response**
+
+`Q1.` Verdict: `(a) REQUEST_CHANGES`, `(b) keep `Cl_at_alpha_eight` as final headline but use `Cd_at_alpha_zero` as the bring-up/smoke gate`, `(c) y+ is not a physical Family 3.` Same-run `Cd@0` and `Cp@0.5` are a valid cross-check pair, but not a third physically independent family; `y_plus_max_on_aerofoil` is a mesh-validity diagnostic by the intake’s own wording. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:45), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:61), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:67)
+
+`Q2.` Verdict: `(a) freestream rotation is correct`, `(b) single canonical whitelist entry + task_spec parameterization fits better`, `(c) v2 must specify source-of-truth, sign convention, no-mesh-rotation rule, and smoke assertions.` OpenFOAM’s `airFoil2D` tutorial rotates the freestream vector in `0/U` instead of rotating the mesh, and `forceCoeffs` lets you rotate `liftDir`/`dragDir` independently. The current adapter is also explicitly geometry-locked to the x-z plane, so mesh rotation is the wrong risk to take. Sources: `airFoil2D 0/U` (OpenFOAM-9 raw), `forceCoeffs.H/C` (OpenFOAM-13 raw); [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6435), [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6898)
+
+`Q3.` Verdict: `(a) yes, Aref=0.002 is correct`, `(b) use lRef=1.0 chord`, `(c) use rhoInf=1.0.` The span is `0.001 - (-0.001) = 0.002` in the current mesh. OpenFOAM uses `Aref` for `Cl/Cd` and `Aref*lRef` only for `Cm`, so `lRef=chord` is the standard choice here and does not affect `Cl/Cd`. [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6440), [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6453), [forceCoeffs precedent](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:5100)
+
+`Q4.` Verdict: `(a) zero-reference divide-by-zero is already hardened`, `(b) include `Cl@α=0` as `SANITY_CHECK`, not as a hard gate.` `GoldStandardComparator` already uses an absolute zero-reference branch and has a test for `ref_value: 0.0`; `ResultComparator` also flips to absolute-error mode near zero. What is still missing is domain-specific semantics like `|Cl| < 0.005`, not a core divide-by-zero patch. [gold_standard_comparator.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/gold_standard_comparator.py:68), [config.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/config.py:83), [test_gold_standard.py](/Users/Zhuanz/Desktop/cfd-s2-naca/tests/test_auto_verifier/test_gold_standard.py:52), [result_comparator.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/result_comparator.py:203)
+
+`Q5.` Verdict: `(a) the current TE `Cp=0.2` anchor is not defensible; treat it as wrong/untrusted`, `(b) yes, pivot sources, but pin the exact condition.` The present gold YAML source/DOI pairing is unreliable, and the intake itself already flags the TE point as likely wrong. For the TE logic, the useful canonical statement is Kutta/zero trailing-edge loading, not a free-floating `0.2` anchor; the exact replacement value still needs Stage A source re-digitization or point removal because the current sampler is TE-degenerate. [gold YAML](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:3), [gold YAML](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:44), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:232)
+
+`Q6.` Verdict: `(a) the derivation is wrong as written`, `(b) yes, keep the upper bound provisional and higher than 300 until live-run measurement.` If you actually evaluate `u_tau = sqrt(Cf/2)` with `Cf=0.004`, `u_tau≈0.0447` and `y+≈84`, not `118`; using common turbulent flat-plate correlations at `Re=3e6` gives `y+≈73-80`. Whether the α=8 adverse-pressure-gradient zone pushes local `y+` past `300` needs Stage A live-run measurement. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:214), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:225)
+
+`Q7.` Verdict: `4 rounds is correct.` This is not just a scalar-addition slice; it has a hard-gate classification rewrite, α-routing, new extractors, and mandatory live runs.
+
+`Q8.` Verdict: `(a) `0.30` is optimistic for v1`, `(b) `2 HIGH + 2 MED + 2 LOW` understates the medium findings.` My round-1 expectation for v1 is closer to `2 HIGH + 3-4 MED + 0-1 LOW`: Type-I family failure, α-routing architecture, y+ math/family misuse, source specificity, and close-condition gaps.
+
+`Q9.` Verdict: `partially sufficient, but incomplete.` Keep the existing smoke-test, `Cl@0` exclusion test, and `signal_above_noise` rendering, but add: CaseProfile update, canonical α-routing proof, sign-convention smoke assertions, and final confirmation that the approved v2 family count/gate statuses were actually the ones closed. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:469), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:476), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:478)
+
+External sources used: [OpenFOAM `airFoil2D/0/U`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-9/master/tutorials/incompressible/simpleFoam/airFoil2D/0/U), [OpenFOAM `forceCoeffs.H`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-13/master/src/functionObjects/forces/forceCoeffs/forceCoeffs.H), [OpenFOAM `forceCoeffs.C`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-13/master/src/functionObjects/forces/forceCoeffs/forceCoeffs.C), [NASA TM-4074](https://ntrs.nasa.gov/api/citations/19880019495/downloads/19880019495.pdf), [ARC R&M 3726](https://naca.central.cranfield.ac.uk/bitstream/handle/1826.2/3003/arc-rm-3726.pdf?sequence=1), [NASA trailing-edge/Kutta report](https://ntrs.nasa.gov/api/citations/19790016785/downloads/19790016785.pdf), [OpenFOAM wall-functions overview](https://doc.openfoam.com/2312/tools/processing/models/turbulence/ras/wall-functions/), [OpenFOAM `yPlus` FO](https://doc.openfoam.com/2312/tools/post-processing/function-objects/field/yPlus/)
+
+
+tokens used
+327,018
+**Verdict**
+
+`REQUEST_CHANGES`
+
+**Findings Table**
+
+| ID | Severity | Section | Required edit | Rationale |
+|---|---|---|---|---|
+| F1 | HIGH | §1 Classification | Rework the gate set so Type I is backed by 3 genuinely physical families, or explicitly downgrade before Stage A. | The draft itself says `Cp_at_xoc_0p5_upper` is from the same α=0 run as `Cd_at_alpha_zero` and `y_plus_max_on_aerofoil` is a wall-resolution probe, not a physics observable; that is not enough for a 3-family Type I claim. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:53), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:61), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:66) |
+| F2 | HIGH | §4 Risk Flags / §7 Batch B1 | Lock α handling to one canonical `case_id` (`naca0012_airfoil`) with explicit `alpha_deg` routing and sign convention; remove the unresolved `_alpha_4/_alpha_8` whitelist-id branch unless verifier/report/case-profile routing is also expanded. | The intake leaves this unresolved, but current routing is keyed on the canonical case id. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:168), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:170), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:413), [knowledge_db.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/knowledge_db.py:66), [config.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/config.py:55) |
+| F3 | MED | §4 `wall_function_validity_at_re_3e6` | Correct the y+ derivation and stop using the current estimate as justification for family-counting or a hard 300 upper bound. | The text says `u_tau ≈ U_inf·sqrt(Cf/2)` but numerically evaluates it as `sqrt(0.004)`; that overstates `y+_min`. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:217), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:218) |
+| F4 | MED | §2 References / Batch A | Replace broad source labels with exact source conditions: paper + table/figure + Mach + transition state + α row. Also repair the current gold provenance mismatch in Batch A. | The intake cites Ladson/Abbott/Gregory broadly, while the current gold still carries uncertain `Thomas 1979 / Lada & Gostling 2007` provenance. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:94), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:99), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:399), [naca0012_airfoil.yaml](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:3) |
+| F5 | MED | §7 Batch B3 | Keep `y_plus_max_on_aerofoil` advisory/measured in v2; do not pre-commit it to `HARD_GATED [11,300]` while the same intake also argues `[11,500] PROVISIONAL`. | Internal conflict between risk-flag mitigation and Batch B3 scope. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:225), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:430) |
+| F6 | MED | §9 Stage E | Add close conditions for CaseProfile update, canonical α routing proof, and sign-convention smoke assertions (`α=+8° -> Cl>0`, `α=0° -> |Cl|` sanity bound). | The intake itself says the CaseProfile needs updating, but the close checklist does not require it. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:149), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:464), [case_profile](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/case_profiles/naca0012_airfoil.yaml:12) |
+
+**Recommended Pass-Rate Adjustment**
+
+Pre-edits, `0.30` is mildly optimistic; I would call v1 `0.20-0.25`.  
+Post-edits, I’d reset to `0.45`.
+
+**Recommended Codex Budget Adjustment**
+
+Keep `4` rounds. `3` is too tight for the Type-I rewrite, α-routing lock, and live-run closure.
+
+**Per-Question Response**
+
+`Q1.` Verdict: `(a) REQUEST_CHANGES`, `(b) keep `Cl_at_alpha_eight` as final headline but use `Cd_at_alpha_zero` as the bring-up/smoke gate`, `(c) y+ is not a physical Family 3.` Same-run `Cd@0` and `Cp@0.5` are a valid cross-check pair, but not a third physically independent family; `y_plus_max_on_aerofoil` is a mesh-validity diagnostic by the intake’s own wording. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:45), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:61), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:67)
+
+`Q2.` Verdict: `(a) freestream rotation is correct`, `(b) single canonical whitelist entry + task_spec parameterization fits better`, `(c) v2 must specify source-of-truth, sign convention, no-mesh-rotation rule, and smoke assertions.` OpenFOAM’s `airFoil2D` tutorial rotates the freestream vector in `0/U` instead of rotating the mesh, and `forceCoeffs` lets you rotate `liftDir`/`dragDir` independently. The current adapter is also explicitly geometry-locked to the x-z plane, so mesh rotation is the wrong risk to take. Sources: `airFoil2D 0/U` (OpenFOAM-9 raw), `forceCoeffs.H/C` (OpenFOAM-13 raw); [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6435), [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6898)
+
+`Q3.` Verdict: `(a) yes, Aref=0.002 is correct`, `(b) use lRef=1.0 chord`, `(c) use rhoInf=1.0.` The span is `0.001 - (-0.001) = 0.002` in the current mesh. OpenFOAM uses `Aref` for `Cl/Cd` and `Aref*lRef` only for `Cm`, so `lRef=chord` is the standard choice here and does not affect `Cl/Cd`. [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6440), [adapter](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:6453), [forceCoeffs precedent](/Users/Zhuanz/Desktop/cfd-s2-naca/src/foam_agent_adapter.py:5100)
+
+`Q4.` Verdict: `(a) zero-reference divide-by-zero is already hardened`, `(b) include `Cl@α=0` as `SANITY_CHECK`, not as a hard gate.` `GoldStandardComparator` already uses an absolute zero-reference branch and has a test for `ref_value: 0.0`; `ResultComparator` also flips to absolute-error mode near zero. What is still missing is domain-specific semantics like `|Cl| < 0.005`, not a core divide-by-zero patch. [gold_standard_comparator.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/gold_standard_comparator.py:68), [config.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/auto_verifier/config.py:83), [test_gold_standard.py](/Users/Zhuanz/Desktop/cfd-s2-naca/tests/test_auto_verifier/test_gold_standard.py:52), [result_comparator.py](/Users/Zhuanz/Desktop/cfd-s2-naca/src/result_comparator.py:203)
+
+`Q5.` Verdict: `(a) the current TE `Cp=0.2` anchor is not defensible; treat it as wrong/untrusted`, `(b) yes, pivot sources, but pin the exact condition.` The present gold YAML source/DOI pairing is unreliable, and the intake itself already flags the TE point as likely wrong. For the TE logic, the useful canonical statement is Kutta/zero trailing-edge loading, not a free-floating `0.2` anchor; the exact replacement value still needs Stage A source re-digitization or point removal because the current sampler is TE-degenerate. [gold YAML](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:3), [gold YAML](/Users/Zhuanz/Desktop/cfd-s2-naca/knowledge/gold_standards/naca0012_airfoil.yaml:44), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:232)
+
+`Q6.` Verdict: `(a) the derivation is wrong as written`, `(b) yes, keep the upper bound provisional and higher than 300 until live-run measurement.` If you actually evaluate `u_tau = sqrt(Cf/2)` with `Cf=0.004`, `u_tau≈0.0447` and `y+≈84`, not `118`; using common turbulent flat-plate correlations at `Re=3e6` gives `y+≈73-80`. Whether the α=8 adverse-pressure-gradient zone pushes local `y+` past `300` needs Stage A live-run measurement. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:214), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:225)
+
+`Q7.` Verdict: `4 rounds is correct.` This is not just a scalar-addition slice; it has a hard-gate classification rewrite, α-routing, new extractors, and mandatory live runs.
+
+`Q8.` Verdict: `(a) `0.30` is optimistic for v1`, `(b) `2 HIGH + 2 MED + 2 LOW` understates the medium findings.` My round-1 expectation for v1 is closer to `2 HIGH + 3-4 MED + 0-1 LOW`: Type-I family failure, α-routing architecture, y+ math/family misuse, source specificity, and close-condition gaps.
+
+`Q9.` Verdict: `partially sufficient, but incomplete.` Keep the existing smoke-test, `Cl@0` exclusion test, and `signal_above_noise` rendering, but add: CaseProfile update, canonical α-routing proof, sign-convention smoke assertions, and final confirmation that the approved v2 family count/gate statuses were actually the ones closed. [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:469), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:476), [intake](/Users/Zhuanz/Desktop/cfd-s2-naca/.planning/intake/DEC-V61-058_naca0012_airfoil.yaml:478)
+
+External sources used: [OpenFOAM `airFoil2D/0/U`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-9/master/tutorials/incompressible/simpleFoam/airFoil2D/0/U), [OpenFOAM `forceCoeffs.H`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-13/master/src/functionObjects/forces/forceCoeffs/forceCoeffs.H), [OpenFOAM `forceCoeffs.C`](https://raw.githubusercontent.com/OpenFOAM/OpenFOAM-13/master/src/functionObjects/forces/forceCoeffs/forceCoeffs.C), [NASA TM-4074](https://ntrs.nasa.gov/api/citations/19880019495/downloads/19880019495.pdf), [ARC R&M 3726](https://naca.central.cranfield.ac.uk/bitstream/handle/1826.2/3003/arc-rm-3726.pdf?sequence=1), [NASA trailing-edge/Kutta report](https://ntrs.nasa.gov/api/citations/19790016785/downloads/19790016785.pdf), [OpenFOAM wall-functions overview](https://doc.openfoam.com/2312/tools/processing/models/turbulence/ras/wall-functions/), [OpenFOAM `yPlus` FO](https://doc.openfoam.com/2312/tools/post-processing/function-objects/field/yPlus/)
+
+

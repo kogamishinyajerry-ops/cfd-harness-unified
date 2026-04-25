@@ -9,24 +9,36 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 547002a）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 56fe04f）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
   expected_verdict: FAIL
+  actual_verdict: FAIL
 case_id: naca0012_airfoil
 source: phase5_audit_run_foam_agent
 measurement:
-  value: 0.4715347399306972
+  value: null
   unit: dimensionless
-  run_id: audit_naca0012_airfoil_547002a
-  commit_sha: 547002a
-  measured_at: '2026-04-21T14:25:59Z'
-  quantity: pressure_coefficient[x_over_c=0.0000]
-  extraction_source: comparator_deviation
+  run_id: audit_naca0012_airfoil_56fe04f
+  commit_sha: 56fe04f
+  measured_at: '2026-04-25T10:50:44Z'
+  quantity: lift_coefficient_alpha_eight
+  extraction_source: no_numeric_quantity
   solver_success: true
   comparator_passed: false
 audit_concerns:
+- concern_type: MISSING_TARGET_QUANTITY
+  summary: Extractor could not locate gold quantity 'lift_coefficient_alpha_eight'
+    in run key_quantities.
+  detail: Gold standard expected a measurement of 'lift_coefficient_alpha_eight' (with
+    result_comparator alias resolution), but the case-specific extractor did not emit
+    that key. Prior harness behaviour (pre-DEC-V61-036) silently substituted the first
+    numeric key_quantities entry and compared it against the gold's tolerance band
+    — that PASS-washing path is now closed. The adapter needs a case-specific extractor
+    for this quantity; the verdict is hard-FAIL until that lands.
+  decision_refs:
+  - DEC-V61-036
 - concern_type: CONTRACT_STATUS
   summary: 'Quantity: pressure_coefficient | Tolerance: 20.0% | Failed: 3 deviation(s)'
   detail: 'Quantity: pressure_coefficient | Tolerance: 20.0% | Failed: 3 deviation(s)'
@@ -44,6 +56,13 @@ decisions_trail:
   date: '2026-04-21'
   title: Phase 5a audit pipeline — real-solver fixtures
   autonomous: true
+- decision_id: DEC-V61-036
+  date: '2026-04-22'
+  title: Hard comparator gate G1 (missing-target-quantity)
+  autonomous: true
+attestation:
+  overall: ATTEST_NOT_APPLICABLE
+  checks: []
 field_artifacts:
   manifest_path_rel: reports/phase5_fields/naca0012_airfoil/runs/audit_real_run.json
   run_label: audit_real_run

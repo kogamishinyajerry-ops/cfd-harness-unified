@@ -1,0 +1,136 @@
+dec_id: DEC-V61-058
+case_id: naca0012_airfoil
+timestamp: 20260425T104455Z
+runs:
+- alpha_deg: 0.0
+  success: true
+  exit_code: null
+  wall_clock_s: 17.750160458032042
+  Cl: -7.181938e-08
+  Cd: 0.02009736
+  y_plus_max: 138.8755
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca/reports/phase5_audit/dec_v61_058_live_run_20260425T104455Z_alpha0.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 0.0
+  cl_drift_pct_last_100: 153.82013948255008
+  cd_drift_pct_last_100: 0.0002487894700585146
+  sign_convention_smoke: PASS
+- alpha_deg: 4.0
+  success: true
+  exit_code: null
+  wall_clock_s: 19.001779624959454
+  Cl: 0.2837673
+  Cd: 0.03009573
+  y_plus_max: 141.6187
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca/reports/phase5_audit/dec_v61_058_live_run_20260425T104455Z_alpha4.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 4.0
+  cl_drift_pct_last_100: 0.0013038862717956478
+  cd_drift_pct_last_100: 0.0016281276069627412
+  sign_convention_smoke: PASS
+- alpha_deg: 8.0
+  success: true
+  exit_code: null
+  wall_clock_s: 31.214738874929026
+  Cl: 0.4907218
+  Cd: 0.06230849
+  y_plus_max: 138.962
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca/reports/phase5_audit/dec_v61_058_live_run_20260425T104455Z_alpha8.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 8.0
+  cl_drift_pct_last_100: 0.008497424960316797
+  cd_drift_pct_last_100: 0.005392408616260849
+  sign_convention_smoke: PASS
+gates:
+  lift_coefficient_alpha_eight:
+    value: 0.4907218
+    gold: 0.815
+    rel_error: 0.3978873619631902
+    tolerance: 0.05
+    pass: false
+    role: HEADLINE_PRIMARY_SCALAR
+  drag_coefficient_alpha_zero:
+    value: 0.02009736
+    gold: 0.008
+    rel_error: 1.5121700000000002
+    tolerance: 0.15
+    pass: false
+    role: SAME_RUN_CROSS_CHECK
+  lift_slope_dCl_dalpha_linear_regime:
+    value: 0.06134023397742252
+    intercept: 0.01280207348384991
+    linearity_check_applicable: true
+    linearity_ok: false
+    linearity_residual: 0.07826519202858268
+    n_points: 3
+    gold: 0.105
+    rel_error: 0.41580729545311884
+    tolerance: 0.1
+    pass: false
+    role: QUALITATIVE_GATE
+smoke_assertions:
+  sanity_cl_at_alpha_zero:
+    value: -7.181938e-08
+    abs_band: 0.005
+    pass: true
+  sign_convention_alpha_eight:
+    Cl: 0.4907218
+    expected: '>0'
+    pass: true
+headline_verdict: 'FAIL: [''lift_coefficient_alpha_eight'', ''drag_coefficient_alpha_zero'',
+  ''lift_slope_dCl_dalpha_linear_regime'']'
+
+# RETRO-V61-053 post-R3 defect addendum (recorded Stage E, 2026-04-25):
+defect_addendum:
+  category: solver_stability_on_novel_geometry  # RETRO-V61-053 risk_flag
+  classification: numerical_under_resolution_NOT_methodology_bug
+  evidence:
+    methodology_layer_correct:
+      - sanity_cl_at_alpha_zero PASS (|Cl| < 0.005)
+      - sign_convention_alpha_eight PASS (Cl@α=8° > 0)
+      - α-routing produces correct U_inf_vec & lift/drag dirs (B1.1 commit 5bbda96)
+      - forceCoeffs/yPlus FOs register at startup (post-fix 2fe31eb)
+      - extractor surfaces Cl/Cd/y+ correctly into key_quantities (B2 + Stage C)
+      - solver converges with all residuals < 1e-6 in 17–31s wall clock
+      - 4 of 5 risk_flags resolved; only `solver_stability_on_novel_geometry` open
+    physics_under_prediction:
+      Cl_alpha_eight: {value: 0.491, gold: 0.815, rel_under: 0.398}
+      Cd_alpha_zero: {value: 0.020, gold: 0.008, rel_over: 1.512}
+      slope_dCl_dalpha: {value: 0.061, gold: 0.105, rel_under: 0.416}
+    mesh_resolution_diagnostics:
+      cell_count: 16000
+      airfoil_surface_faces: 120
+      y_plus_max: 138.96  # in PASS band [11,500] but high in log-layer
+      max_aspect_ratio: 108.35
+      max_non_orthogonality_deg: 68.95
+      domain_extent_chord: ±5  # likely too small; literature uses ±20
+    root_cause_analysis: |
+      All three failing gates point to the same physical origin:
+      under-resolved boundary layer + wake. With 120 airfoil surface
+      faces and y+_max ≈ 139 (high-end of log-law validity), kOmegaSST
+      with wall functions systematically under-predicts the
+      pressure-side suction peak and over-predicts skin friction.
+      Recommended remediation (out-of-scope for V61-058): airfoil
+      surface points 120→300, near-wall layer for y+~30, domain
+      extent ±5→±20 chord. Estimated runtime impact: 17s → ~5min
+      per α at structured-grid kOmegaSST.
+  status_at_close: known_limitation_documented
+  recommended_followup: |
+    Open a follow-up DEC for high-resolution NACA0012 mesh profile
+    (proposed: V61-060, scope = mesh refinement only, reuses Stage A
+    gold YAML + Stage B extractors + Stage E driver verbatim).
+  why_not_fix_in_this_arc: |
+    Mesh refinement requires adapter-level changes to
+    `_generate_airfoil_flow` mesh generation (not just controlDict),
+    plus per-α 5-min runtime that would push past intake §4
+    executable_smoke_test budget. The methodology-quality assertions
+    (SANITY + sign_convention) PASS; the physics-fidelity gates FAIL
+    honestly. Per RETRO-V61-053, this is a documented post-R3
+    defect — addendum, not arc retry.
+

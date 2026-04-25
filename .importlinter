@@ -32,6 +32,7 @@ source_modules =
     src.airfoil_surface_sampler
     src.cylinder_centerline_extractor
     src.cylinder_strouhal_fft
+    src.airfoil_extractors
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -63,6 +64,7 @@ forbidden_modules =
     src.airfoil_surface_sampler
     src.cylinder_centerline_extractor
     src.cylinder_strouhal_fft
+    src.airfoil_extractors
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -83,6 +85,7 @@ forbidden_modules =
     src.airfoil_surface_sampler
     src.cylinder_centerline_extractor
     src.cylinder_strouhal_fft
+    src.airfoil_extractors
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -111,6 +114,7 @@ forbidden_modules =
     src.airfoil_surface_sampler
     src.cylinder_centerline_extractor
     src.cylinder_strouhal_fft
+    src.airfoil_extractors
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -141,6 +145,7 @@ forbidden_modules =
     src.airfoil_surface_sampler
     src.cylinder_centerline_extractor
     src.cylinder_strouhal_fft
+    src.airfoil_extractors
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
