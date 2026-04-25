@@ -628,13 +628,22 @@ def _audit_fixture_doc(
         for c in attestation.concerns:
             doc["audit_concerns"].append(check_to_audit_concern_dict(c))
 
-    # DEC-V61-036b gates — post-extraction physics checks.
+    # DEC-V61-036b/059 gates — post-extraction physics checks.
+    # G2 (canonical-band shortcut, plane channel u+/y+) reads case_id +
+    # key_quantities. G3/G4/G5 (overflow/turbulence/continuity) read the
+    # solver log + VTK. Both groups are folded into one call with
+    # backward-compatible kw defaults — callers that never pass kq skip
+    # G2 silently (no false-positives). Phase7a artifacts gate G3/G4/G5;
+    # G2 is artifact-independent and runs whenever case_id+kq are
+    # present, which is always inside this driver path.
     if phase7a_timestamp is not None:
         try:
             gate_violations = check_all_gates(
                 log_path=solver_log,
                 vtk_dir=vtk_dir if vtk_dir and vtk_dir.is_dir() else None,
                 U_ref=u_ref,
+                case_id=case_id,
+                key_quantities=kq,
             )
             for v in gate_violations:
                 doc["audit_concerns"].append(violation_to_audit_concern_dict(v))
