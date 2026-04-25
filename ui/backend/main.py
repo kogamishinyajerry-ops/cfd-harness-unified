@@ -53,6 +53,7 @@ from ui.backend.routes import (
     decisions,
     field_artifacts,
     health,
+    mesh_metrics,
     run_monitor,
     validation,
     workbench_basics,
@@ -94,3 +95,4 @@ app.include_router(case_export.router,  prefix="/api", tags=["case-export"])
 app.include_router(field_artifacts.router, prefix="/api", tags=["field-artifacts"])
 app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
 app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basics"])
+app.include_router(mesh_metrics.router, prefix="/api", tags=["mesh-metrics"])

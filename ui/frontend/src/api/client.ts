@@ -19,6 +19,7 @@ import type {
   RunCheckpointsResponse,
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
+import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 
 async function request<T>(
@@ -115,5 +116,11 @@ export const api = {
   getWorkbenchBasics: (caseId: string) =>
     request<WorkbenchBasics>(
       `/api/cases/${encodeURIComponent(caseId)}/workbench-basics`,
+    ),
+
+  // Stage 3 — MeshTrust QC band
+  getMeshMetrics: (caseId: string) =>
+    request<MeshMetrics>(
+      `/api/cases/${encodeURIComponent(caseId)}/mesh-metrics`,
     ),
 };

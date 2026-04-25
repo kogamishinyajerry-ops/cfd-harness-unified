@@ -11,6 +11,7 @@ import { api } from "@/api/client";
 import type { ContractStatus, ValidationReport } from "@/types/validation";
 
 import { GRID_CONVERGENCE_CASES, STATUS_CLASS, STATUS_TEXT } from "./constants";
+import { MeshQC } from "./MeshQC";
 import { formatNumber } from "./shared";
 
 
@@ -35,14 +36,18 @@ export function MeshTab({ caseId }: { caseId: string }) {
 
   if (!sweep) {
     return (
-      <div className="rounded-md border border-surface-800 bg-surface-900/40 p-6">
-        <p className="card-title mb-2">网格收敛演示尚未为此案例准备</p>
-        <p className="text-[13px] leading-relaxed text-surface-400">
-          这个案例目前只有一套默认网格的 fixture。目前有网格收敛 sweep 的案例：
-          <span className="mono ml-1 text-surface-300">
-            {Object.keys(GRID_CONVERGENCE_CASES).join(" · ")}
-          </span>
-        </p>
+      <div className="space-y-6">
+        <div className="rounded-md border border-surface-800 bg-surface-900/40 p-6">
+          <p className="card-title mb-2">网格收敛 slider 尚未为此案例准备</p>
+          <p className="text-[13px] leading-relaxed text-surface-400">
+            该案例缺少前端 sweep 配置（GRID_CONVERGENCE_CASES）。Mesh QC 信任带
+            仍可读取 fixture 数据。已配置 sweep 的案例：
+            <span className="mono ml-1 text-surface-300">
+              {Object.keys(GRID_CONVERGENCE_CASES).join(" · ")}
+            </span>
+          </p>
+        </div>
+        <MeshQC caseId={caseId} />
       </div>
     );
   }
@@ -161,6 +166,12 @@ export function MeshTab({ caseId }: { caseId: string }) {
           <span className="mono text-surface-500">run_id: {activeDensity.id}</span>
         </div>
       </section>
+
+      {/* Stage 3 MVP: GCI + Richardson QC band — color-semantic threshold
+          chips, density ladder visualization, Richardson summary table.
+          Codex meeting Lin/Sarah disagreement guarded inside MeshQC: the
+          panel itself includes a "metrics-pass ≠ physics-pass" footer. */}
+      <MeshQC caseId={caseId} />
 
       <section className="rounded-md border border-surface-800/60 bg-surface-900/20 p-5 text-[12px] leading-relaxed text-surface-400">
         <p className="mb-1 font-medium text-surface-300">读图指南</p>
