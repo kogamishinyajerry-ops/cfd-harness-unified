@@ -383,7 +383,9 @@ function PreviewAndCreate({
             ? "rendering..."
             : previewError
               ? "render error"
-              : "server-rendered · byte-exact"}
+              : yamlPreview
+                ? "server-rendered · byte-exact"
+                : "waiting..."}
         </span>
       </div>
       <pre className="mono overflow-x-auto rounded-sm border border-surface-800 bg-surface-950 p-4 text-[12px] leading-relaxed text-surface-200">
