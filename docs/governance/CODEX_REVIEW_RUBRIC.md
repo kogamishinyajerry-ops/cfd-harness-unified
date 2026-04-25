@@ -37,6 +37,22 @@ Cat 3 "Policy Commitment" 的**必要性检验**：
 
 若同一 "不做" 条目确实跨类（罕见），SPEC_PROMOTION_GATE §7.4 要求**拆成两条写**。Codex 遇到看似合理但跨类的条目 → 要求作者拆分。
 
+### §1.4 Writer-without-callsite challenge (MP-A · 2026-04-25)
+
+For PRs introducing observability writers / observers / hooks (functions matching `record_*`, `emit_*`, `log_*`, `snapshot_*`, `report_*`, `track_*`, etc.), Codex MUST grep for non-test callsites before APPROVE:
+
+```bash
+# For each new public function (e.g., `record_fixture_frame_confusion`):
+grep -rn "<function_name>(" src/ scripts/ ui/ \
+  | grep -v "^tests/" | grep -v "_test\.py:" | grep -v "/test_"
+```
+
+**Pass criterion**: at least one non-test callsite OR explicit author docstring stating the function is intended for direct external invocation only (e.g., a CLI tool entrypoint).
+
+**Fail mode** (RETRO-V61-006 F1): the writer existed with comprehensive unit tests and a docstring claiming a `@pytest.mark.plane_guard_bypass` driver, but **had zero real callsites**. Result: the §2.4 rollback counter would never increment in actual dogfood usage.
+
+The Claude-side mirror of this challenge is `docs/methodology/pre_codex_self_review_checklist.md §2.1` — Claude is expected to run the same grep BEFORE invoking Codex, so writers without callsites are caught pre-review and Codex's budget goes to harder findings.
+
 ## §2 未来扩展
 
 以下 challenge 义务待后续 DEC 细化：
@@ -50,3 +66,4 @@ Cat 3 "Policy Commitment" 的**必要性检验**：
 | 版本 | 日期 | 修订者 | 说明 |
 |---|---|---|---|
 | v1.0-stub | 2026-04-24 | Claude Code · Opus Gate Option X V-5 | 首发 stub；只含 G-D 类别伪装 challenge；其他门的 rubric 留给后续 DEC |
+| v1.1 | 2026-04-25 | Claude Code Opus 4.7 CLI · RETRO-V61-006 MP-A promotion | 加 §1.4 Writer-without-callsite challenge — 镜像 Claude-side `docs/methodology/pre_codex_self_review_checklist.md §2.1`. Trigger: W4 prep R1 0.85 → CHANGES_REQUIRED 3 HIGH 中 F1 即 record_fixture_frame_confusion writer 无 production callsite，Codex 通过 grep 抓到。Promotion 不等 counter-40 cadence retro，因为本次 incident retro 影响范围明确（observability writers 这一类） |

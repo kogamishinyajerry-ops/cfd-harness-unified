@@ -74,6 +74,11 @@ EXPIRED (auto · file stays in git for audit, status flipped)
 - **No counter increment**: `counter_impact: none`. OPS notes are infrastructure, not decisions.
 - **Doc-only by default**: An OPS note that ships code (e.g., a coordination script) lands the code via the related ADR/DEC's Codex audit window, NOT via a separate OPS-specific Codex round. The OPS doc itself does not get Codex-reviewed.
 - **Amendment log required**: Every revision adds a line to `amendment_log` (timestamp + author + one-line summary). Even doc-drift fixes log.
+- **Pre-flight CI sanity required (MP-G · 2026-04-25)**: any OPS note that depends on CI signal (dogfood window, observation period, shadow-mode evaluation, signal-collection plan) MUST satisfy ONE of:
+  - **(a)** an `expected_signal_source: <CI workflow name>` field in frontmatter pointing to a workflow whose **last 5 runs include ≥1 success** (verified at OPS DRAFT → ACTIVE flip via `gh run list --workflow=<name> --limit=5 | grep success`); OR
+  - **(b)** the §3 isolation / mechanism block must include **"CI infrastructure healthy as pre-flight #1"** with the explicit check command + last-success commit SHA at the time of OPS authoring.
+
+  **Authority**: RETRO-V61-006 addendum 2 — OPS-2026-04-25-001 was authored against 40 consecutive CI failures dating well before the dogfood window opened, producing empty .jsonl artifacts that would have been mis-read as "0 incidents = GO" at signal review. The window was dead-on-arrival from 2026-04-25T00:00 → 2026-04-25T20:50 until commit `0208929` fixed deps. **Fail mode**: signal review reads zero data and certifies a flip that has zero evidence.
 
 ## 6. Filename + location
 

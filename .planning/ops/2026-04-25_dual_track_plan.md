@@ -14,6 +14,8 @@ related:
   - DEC-V61-047 / V61-048 / V61-049 (line B)
 amendment_log:
   - 2026-04-25T19:30 Claude Code CLI · §5 BLOCKER + §2/§7 COMMENT amendments per Opus 4.7 audit
+  - 2026-04-25T21:25 Claude Code CLI · MP-G retroactive — added §3 CI pre-flight assertion per RETRO-V61-006 addendum 2 + ops_note_protocol.md §5 sixth mandatory rule
+expected_signal_source: ".github/workflows/ci.yml backend-tests · last success commit 0229af9 (run 24925115531) · 2026-04-25T06:55"
 ---
 
 # OPS-2026-04-25-001 · Dual-Track Parallel Development Plan
@@ -74,9 +76,17 @@ ADR-002 W4 prep 在 2026-04-25 单日交付 6 个 commit (b10ca9e → e213bbe), 
 
 ### 程序隔离 (硬加固 · per Opus §3 audit recommendation)
 - **`scripts/check_track_isolation.py`** + `.pre-commit-config.yaml` `commit-msg` hook (warn-not-block)
-- 检测 commit diff 中跨线文件改动; commit message 未标 `[shared]` / `[cross-track-ack]` / `[deps]` / `[ops]` / `[line-a]` / `[line-b]` tag 时 stderr warn 但不阻断 commit
+- 检测 commit diff 中跨线文件改动; commit message 未标 `[shared]` / `[cross-track-ack]` / `[deps]` / `[ops]` 之一时 stderr warn 但不阻断 commit
 - 拒绝 CODEOWNERS (重型工具与单 user 双 AI 会话场景错配); 拒绝 hard-block (false-positive 阻碍合法跨线如 §4.1 新增 src 模块)
 - 自动随 OPS expires (2026-05-19) 失效; 该日期后该 hook 仍在 config 中但脚本本身可短路
+
+### CI infrastructure pre-flight (MP-G retroactive · 2026-04-25T21:25)
+
+Per `docs/methodology/ops_note_protocol.md` §5 sixth mandatory rule (added in same commit), this OPS has been retroactively augmented with the CI-healthy pre-flight assertion:
+
+- **Frontmatter**: `expected_signal_source: ".github/workflows/ci.yml backend-tests · last success commit 0229af9 (run 24925115531) · 2026-04-25T06:55"`
+- **Verification command**: `gh run list --limit=5 --json conclusion | jq -r '.[].conclusion' | sort | uniq -c` — at least 1 of last 5 must be `success`
+- **At OPS authoring (2026-04-25T18:55)**: this assertion would have **failed** (40 consecutive failures pre-`0208929`). The dogfood window was effectively dead-on-arrival until commit `0208929` (CI deps fix) + `0229af9` (first successful run). RETRO-V61-006 addendum 2 captures the post-mortem. Going forward, any future OPS must satisfy this pre-flight at DRAFT → ACTIVE flip time.
 
 ## 4. 协调协议 · 3 个潜在交叉点 (都不阻塞)
 
