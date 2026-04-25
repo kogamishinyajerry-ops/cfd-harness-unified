@@ -416,8 +416,18 @@ def _load_case_observable_gold(case_id: str, name: str) -> dict | None:
         if not isinstance(obs, dict) or obs.get("name") != name:
             continue
         ref_value = obs.get("ref_value")
-        if not isinstance(ref_value, (int, float)):
-            return None
+        # DEC-V61-060 Stage D-final-fix (Codex R6 F2-MED, verbatim diff
+        # suggestion): non-numeric `ref_value` is no longer a hard skip.
+        # Advisory observables can carry an explicit sentinel string
+        # (e.g. RBC's `w_max_nondim` ref_value =
+        # "ADVISORY_NO_LITERATURE_LOCATOR"), and the UI is expected to
+        # surface them as a neutral / non-scored advisory card so the
+        # promised observable count matches the intake taxonomy.
+        # Numeric refs continue to flow through `value` (float) AND the
+        # new `has_numeric_reference=True` flag; non-numeric refs set
+        # `value=None` + `has_numeric_reference=False` and let callers
+        # branch on the flag instead of guessing from `value is None`.
+        is_numeric_ref = isinstance(ref_value, (int, float))
         tol_block = obs.get("tolerance") or {}
         if isinstance(tol_block, dict):
             tol_value = float(tol_block.get("value", 0.10))
@@ -426,7 +436,8 @@ def _load_case_observable_gold(case_id: str, name: str) -> dict | None:
             tol_value = float(tol_block)
             tol_mode = "relative"
         return {
-            "value": float(ref_value),
+            "value": float(ref_value) if is_numeric_ref else None,
+            "has_numeric_reference": is_numeric_ref,
             "unit": obs.get("unit", "dimensionless"),
             "tolerance": tol_value,
             "tolerance_mode": tol_mode,
@@ -445,9 +456,14 @@ def _load_dhc_observable_gold(name: str) -> dict | None:
     """Backwards-compat shim — DHC-specific wrapper over the generalized
     loader. Default source/doi fall back to de Vahl Davis 1983 when the YAML
     omits them (legacy behaviour the DHC block depends on).
+
+    DEC-V61-060 Stage D-final-fix (R6 F2): the DHC block depends on a
+    numeric `value`; if a future DHC observable is converted to a
+    non-numeric advisory sentinel, treat it as missing here for
+    backwards-compat (the DHC loop still uses `if gold is None: continue`).
     """
     out = _load_case_observable_gold("differential_heated_cavity", name)
-    if out is None:
+    if out is None or not out.get("has_numeric_reference"):
         return None
     if not out["source"]:
         out["source"] = "de Vahl Davis 1983"
@@ -1030,6 +1046,35 @@ def _build_visual_only_context(
                     expected = gold["value"]
                     tol_value = gold["tolerance"]
                     tol_mode = gold["tolerance_mode"]
+                    # DEC-V61-060 Stage D-final-fix (Codex R6 F2-MED): if
+                    # gold has a non-numeric ref sentinel (e.g. RBC's
+                    # `w_max_nondim` ADVISORY_NO_LITERATURE_LOCATOR), render
+                    # a neutral / non-scored advisory card so the 4-card
+                    # taxonomy promise from the intake is honoured. Scoring
+                    # is skipped because the literature anchor is absent.
+                    if not gold.get("has_numeric_reference"):
+                        rbc_observables.append({
+                            "label": label,
+                            "label_zh": label_zh,
+                            "symbol": symbol,
+                            "name": obs_name,
+                            "actual": (
+                                float(actual) if isinstance(actual, (int, float)) else None
+                            ),
+                            "expected": None,
+                            "deviation_pct": None,
+                            "deviation_abs": None,
+                            "tolerance_pct": None,
+                            "tolerance_abs": None,
+                            "tolerance_mode": tol_mode,
+                            "within_tolerance": None,
+                            "gate_status": gold["gate_status"],
+                            "family": gold["family"],
+                            "role": gold["role"],
+                            "source_table": gold["source_table"],
+                            "no_literature_reference": True,
+                        })
+                        continue
                     if isinstance(actual, (int, float)):
                         actual_f = float(actual)
                         if tol_mode == "absolute":

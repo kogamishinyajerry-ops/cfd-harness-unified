@@ -1584,8 +1584,30 @@ function MultiDimensionComparePanel({
                 </span>
               )}
               {isInvariant && (
-                <span className="mono text-[10px] text-rose-300/80" title="Conservation invariant — violation forces verdict=FAIL but excluded from primary_gate_count denominator (DEC-V61-060 Stage C.2)">
+                // DEC-V61-060 Stage D-final-fix (Codex R6 F3-LOW, verbatim
+                // diff suggestion): badge color was hard-coded rose for all
+                // states, contradicting the requested semantics. Compute
+                // from isPending / failing / passing — neutral for pending,
+                // rose for violated, emerald for within tolerance.
+                <span
+                  className={`mono text-[10px] ${
+                    isPending
+                      ? "text-surface-400/80"
+                      : failing
+                        ? "text-rose-300/80"
+                        : "text-emerald-300/80"
+                  }`}
+                  title="Conservation invariant — violation forces verdict=FAIL but excluded from primary_gate_count denominator (DEC-V61-060 Stage C.2)"
+                >
                   · 守恒不变量
+                </span>
+              )}
+              {!!o.no_literature_reference && (
+                <span
+                  className="mono text-[10px] text-amber-300/80"
+                  title="Advisory observable with no literature anchor (BRANCH-B per DEC-V61-060 intake §3) — measurement surfaced for transparency, not scored"
+                >
+                  · 无文献基线
                 </span>
               )}
             </div>
@@ -3252,6 +3274,7 @@ type ComparisonReportContext = {
       role: string;
       source_table: string;
       pending?: boolean;
+      no_literature_reference?: boolean;
     }[];
     hard_gated_count: number;
     invariant_count: number;
