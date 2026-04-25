@@ -148,9 +148,19 @@ function GeometryPanel({
         </span>
       </div>
 
-      {geometry.shape === "rectangle" ? (
+      {geometry.shape === "rectangle" && (
         <RectangleSVG geometry={geometry} patches={patches} />
-      ) : (
+      )}
+      {geometry.shape === "step" && (
+        <StepSVG geometry={geometry} patches={patches} />
+      )}
+      {geometry.shape === "airfoil" && (
+        <AirfoilSVG geometry={geometry} patches={patches} />
+      )}
+      {geometry.shape === "cylinder" && (
+        <CylinderSVG geometry={geometry} patches={patches} />
+      )}
+      {!["rectangle", "step", "airfoil", "cylinder"].includes(geometry.shape) && (
         <UnsupportedShapeStub shape={geometry.shape} patches={patches} />
       )}
 
@@ -423,6 +433,315 @@ function RectangleSVG({
         </p>
       )}
     </div>
+  );
+}
+
+// --- Step renderer (BFS) -------------------------------------------------
+// Draws an L-shaped flow domain. We pick a fixed visual proportion (step
+// at x≈25% of width, step takes 25% of height) rather than reading exact
+// dimensions from bbox, since the YAML's ratio (40:9 = 4.4:1) would render
+// the step almost invisibly small. Step shape is schematic, not metric —
+// the bbox label still shows the true ER and dimensions for honesty.
+
+function StepSVG({
+  geometry: _geometry,
+  patches,
+}: {
+  geometry: Geometry;
+  patches: Patch[];
+}) {
+  void _geometry; // bbox shown via the parent header strip
+  const VW = 320;
+  const VH = 200;
+  const PAD = 36;
+  const W = VW - 2 * PAD;
+  const H = VH - 2 * PAD;
+  const rx = PAD;
+  const ry = PAD;
+
+  // Step at 25% from the left, step height = 25% of full height.
+  const stepX = rx + W * 0.25;
+  const stepTop = ry + H * 0.75; // y where the upstream channel floor sits
+  const floorBottom = ry + H; // downstream channel floor (lower than upstream)
+
+  // L-shape outline (clockwise from upper-left):
+  // (rx,ry) → (rx+W,ry) → (rx+W,ry+H) → (stepX,ry+H) → (stepX,stepTop) → (rx,stepTop) → close
+  const path = [
+    `M ${rx} ${ry}`,
+    `L ${rx + W} ${ry}`,
+    `L ${rx + W} ${ry + H}`,
+    `L ${stepX} ${ry + H}`,
+    `L ${stepX} ${stepTop}`,
+    `L ${rx} ${stepTop}`,
+    "Z",
+  ].join(" ");
+
+  const role = (id: string) =>
+    patches.find((p) => p.id === id)?.role ?? "wall";
+
+  return (
+    <svg
+      viewBox={`0 0 ${VW} ${VH}`}
+      className="w-full"
+      style={{ maxHeight: "220px" }}
+      role="img"
+      aria-label="Backward-facing step domain"
+    >
+      <path d={path} fill="#0f172a" stroke="#334155" strokeWidth="1" />
+
+      {/* inlet edge: only the upstream channel (left edge from ry to stepTop) */}
+      <line
+        x1={rx}
+        y1={ry}
+        x2={rx}
+        y2={stepTop}
+        stroke={ROLE_FILL[role("inlet")] ?? "#10b981"}
+        strokeWidth="4"
+      />
+      {/* outlet edge: full right edge */}
+      <line
+        x1={rx + W}
+        y1={ry}
+        x2={rx + W}
+        y2={ry + H}
+        stroke={ROLE_FILL[role("outlet")] ?? "#f59e0b"}
+        strokeWidth="4"
+      />
+      {/* upper wall */}
+      <line
+        x1={rx}
+        y1={ry}
+        x2={rx + W}
+        y2={ry}
+        stroke={ROLE_FILL[role("upper_wall")] ?? "#475569"}
+        strokeWidth="4"
+      />
+      {/* lower wall (3-piece composite) */}
+      <polyline
+        points={`${rx},${stepTop} ${stepX},${stepTop} ${stepX},${floorBottom} ${rx + W},${floorBottom}`}
+        fill="none"
+        stroke={ROLE_FILL[role("lower_wall")] ?? "#475569"}
+        strokeWidth="4"
+      />
+
+      {/* Driver arrow: inlet → downstream */}
+      <line
+        x1={rx + 8}
+        y1={(ry + stepTop) / 2}
+        x2={rx + W - 12}
+        y2={(ry + stepTop) / 2}
+        stroke="#10b981"
+        strokeWidth="1.2"
+        markerEnd="url(#arrowhead-step)"
+        opacity="0.7"
+      />
+      {/* Recirculation hint inside the step pocket */}
+      <text
+        x={(stepX + (rx + W) / 2) / 1.6}
+        y={(stepTop + floorBottom) / 2 + 14}
+        fontSize="9"
+        textAnchor="middle"
+        fill="#94a3b8"
+      >
+        recirc → reattach (X_r/H≈6.26)
+      </text>
+
+      {/* Labels */}
+      <text x={rx - 4} y={(ry + stepTop) / 2} fontSize="11" textAnchor="end" dominantBaseline="central" fill={ROLE_FILL.inlet}>
+        入口
+      </text>
+      <text x={rx + W + 4} y={ry + H / 2} fontSize="11" textAnchor="start" dominantBaseline="central" fill={ROLE_FILL.outlet}>
+        出口
+      </text>
+      <text x={rx + W / 2} y={ry - 6} fontSize="11" textAnchor="middle" fill="#cbd5e1">
+        上壁
+      </text>
+      <text x={(stepX + rx + W) / 2} y={floorBottom + 14} fontSize="11" textAnchor="middle" fill="#cbd5e1">
+        下壁（含台阶）
+      </text>
+      <text x={stepX + 4} y={(stepTop + floorBottom) / 2} fontSize="9" textAnchor="start" dominantBaseline="central" fill="#64748b" className="mono">
+        step face
+      </text>
+
+      <defs>
+        <marker id="arrowhead-step" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#10b981" />
+        </marker>
+      </defs>
+    </svg>
+  );
+}
+
+// --- Airfoil renderer (NACA0012) -----------------------------------------
+// Draws a far-field box + a NACA-symmetric airfoil silhouette at center.
+// The airfoil is a thin lens approximated by quadratic Bézier paths (good
+// enough at this size; 12% thickness ratio matches NACA0012). This is
+// schematic — chord length and bbox shown in the parent header strip.
+
+function AirfoilSVG({
+  geometry: _geometry,
+  patches: _patches,
+}: {
+  geometry: Geometry;
+  patches: Patch[];
+}) {
+  void _geometry;
+  void _patches;
+  const VW = 340;
+  const VH = 200;
+  const PAD = 30;
+  const fx = PAD;
+  const fy = PAD;
+  const fw = VW - 2 * PAD;
+  const fh = VH - 2 * PAD;
+
+  // Airfoil chord rendered horizontally, centered, occupying ~40% of width.
+  const cx0 = fx + fw * 0.35;
+  const cx1 = fx + fw * 0.75;
+  const cy = fy + fh / 2;
+  const halfThick = (cx1 - cx0) * 0.06; // ≈ 12% chord total thickness
+
+  // Lens path: leading edge at cx0, trailing edge at cx1, max thickness at 30% chord.
+  const maxX = cx0 + (cx1 - cx0) * 0.3;
+  const upper = `M ${cx0} ${cy} Q ${maxX} ${cy - halfThick * 1.6} ${cx1} ${cy}`;
+  const lower = `M ${cx0} ${cy} Q ${maxX} ${cy + halfThick * 1.6} ${cx1} ${cy}`;
+
+  return (
+    <svg
+      viewBox={`0 0 ${VW} ${VH}`}
+      className="w-full"
+      style={{ maxHeight: "220px" }}
+      role="img"
+      aria-label="NACA airfoil external flow"
+    >
+      {/* Far-field box */}
+      <rect x={fx} y={fy} width={fw} height={fh} fill="#0f172a" stroke="#334155" strokeWidth="1" />
+
+      {/* Inlet — left + top + bottom (C-grid envelope) */}
+      <line x1={fx} y1={fy} x2={fx} y2={fy + fh} stroke={ROLE_FILL.inlet} strokeWidth="4" />
+      <line x1={fx} y1={fy} x2={fx + fw * 0.5} y2={fy} stroke={ROLE_FILL.inlet} strokeWidth="4" />
+      <line x1={fx} y1={fy + fh} x2={fx + fw * 0.5} y2={fy + fh} stroke={ROLE_FILL.inlet} strokeWidth="4" />
+
+      {/* Outlet — right + downstream halves of top/bottom */}
+      <line x1={fx + fw} y1={fy} x2={fx + fw} y2={fy + fh} stroke={ROLE_FILL.outlet} strokeWidth="4" />
+      <line x1={fx + fw * 0.5} y1={fy} x2={fx + fw} y2={fy} stroke={ROLE_FILL.outlet} strokeWidth="3" opacity="0.6" />
+      <line x1={fx + fw * 0.5} y1={fy + fh} x2={fx + fw} y2={fy + fh} stroke={ROLE_FILL.outlet} strokeWidth="3" opacity="0.6" />
+
+      {/* Freestream arrow */}
+      <line x1={fx + 10} y1={cy} x2={cx0 - 18} y2={cy} stroke="#10b981" strokeWidth="1.4" markerEnd="url(#arrowhead-air)" />
+      <text x={fx + 14} y={cy - 6} fontSize="9" fill="#10b981" className="mono">U_∞</text>
+
+      {/* Airfoil — chord line + upper/lower curves */}
+      <line x1={cx0} y1={cy} x2={cx1} y2={cy} stroke="#475569" strokeWidth="0.5" strokeDasharray="2 2" />
+      <path d={upper} fill="none" stroke={ROLE_FILL.airfoil} strokeWidth="2" />
+      <path d={lower} fill="none" stroke={ROLE_FILL.airfoil} strokeWidth="2" />
+      {/* Surface fill */}
+      <path d={`${upper} L ${cx1} ${cy} L ${cx0} ${cy} Z`} fill={ROLE_FILL.airfoil} opacity="0.18" />
+      <path d={`${lower} L ${cx1} ${cy} L ${cx0} ${cy} Z`} fill={ROLE_FILL.airfoil} opacity="0.18" />
+
+      {/* LE / TE markers */}
+      <circle cx={cx0} cy={cy} r="2" fill="#cbd5e1" />
+      <text x={cx0 - 4} y={cy + 14} fontSize="9" textAnchor="end" fill="#94a3b8" className="mono">LE</text>
+      <circle cx={cx1} cy={cy} r="2" fill="#cbd5e1" />
+      <text x={cx1 + 4} y={cy + 14} fontSize="9" textAnchor="start" fill="#94a3b8" className="mono">TE</text>
+
+      {/* Labels */}
+      <text x={fx + 4} y={fy + 12} fontSize="10" fill={ROLE_FILL.inlet}>远场入口</text>
+      <text x={fx + fw - 4} y={fy + 12} fontSize="10" textAnchor="end" fill={ROLE_FILL.outlet}>远场出口</text>
+      <text x={(cx0 + cx1) / 2} y={cy - halfThick * 1.6 - 6} fontSize="10" textAnchor="middle" fill={ROLE_FILL.airfoil}>NACA 0012</text>
+
+      <defs>
+        <marker id="arrowhead-air" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#10b981" />
+        </marker>
+      </defs>
+    </svg>
+  );
+}
+
+// --- Cylinder renderer (Karman wake) -------------------------------------
+// Channel + circular cylinder near upstream end. Cylinder size and offset
+// are schematic so the wake tail downstream remains visible.
+
+function CylinderSVG({
+  geometry: _geometry,
+  patches: _patches,
+}: {
+  geometry: Geometry;
+  patches: Patch[];
+}) {
+  void _geometry;
+  void _patches;
+  const VW = 360;
+  const VH = 180;
+  const PAD = 28;
+  const cx = PAD;
+  const cy = PAD;
+  const cw = VW - 2 * PAD;
+  const ch = VH - 2 * PAD;
+  // Cylinder centered at ~25% from inlet, radius = 12% of channel height.
+  const cylX = cx + cw * 0.25;
+  const cylY = cy + ch / 2;
+  const cylR = ch * 0.12;
+
+  return (
+    <svg
+      viewBox={`0 0 ${VW} ${VH}`}
+      className="w-full"
+      style={{ maxHeight: "200px" }}
+      role="img"
+      aria-label="Cylinder in cross-flow channel"
+    >
+      <rect x={cx} y={cy} width={cw} height={ch} fill="#0f172a" stroke="#334155" strokeWidth="1" />
+
+      {/* edges colored by role */}
+      <line x1={cx} y1={cy} x2={cx} y2={cy + ch} stroke={ROLE_FILL.inlet} strokeWidth="4" />
+      <line x1={cx + cw} y1={cy} x2={cx + cw} y2={cy + ch} stroke={ROLE_FILL.outlet} strokeWidth="4" />
+      <line x1={cx} y1={cy} x2={cx + cw} y2={cy} stroke={ROLE_FILL.symmetry} strokeWidth="3" strokeDasharray="6 4" />
+      <line x1={cx} y1={cy + ch} x2={cx + cw} y2={cy + ch} stroke={ROLE_FILL.symmetry} strokeWidth="3" strokeDasharray="6 4" />
+
+      {/* Freestream arrows */}
+      {[0.3, 0.5, 0.7].map((f) => (
+        <g key={f}>
+          <line
+            x1={cx + 8}
+            y1={cy + ch * f}
+            x2={cylX - cylR - 6}
+            y2={cy + ch * f}
+            stroke="#10b981"
+            strokeWidth="1"
+            opacity="0.7"
+            markerEnd="url(#arrowhead-cyl)"
+          />
+        </g>
+      ))}
+
+      {/* Cylinder */}
+      <circle cx={cylX} cy={cylY} r={cylR} fill={ROLE_FILL.airfoil} opacity="0.25" stroke={ROLE_FILL.airfoil} strokeWidth="2" />
+      <text x={cylX} y={cylY + 3} fontSize="10" textAnchor="middle" fill="#cbd5e1" className="mono">D</text>
+
+      {/* Vortex shedding hint — alternating circles in the wake */}
+      {[0.45, 0.6, 0.75, 0.9].map((f, i) => {
+        const wx = cx + cw * f;
+        const wy = cylY + (i % 2 === 0 ? -cylR * 0.7 : cylR * 0.7);
+        return (
+          <circle key={f} cx={wx} cy={wy} r={cylR * 0.5} fill="none" stroke="#ec4899" strokeWidth="1" opacity={0.7 - i * 0.12} strokeDasharray="2 2" />
+        );
+      })}
+
+      {/* Labels */}
+      <text x={cx - 4} y={cy + ch / 2} fontSize="11" textAnchor="end" dominantBaseline="central" fill={ROLE_FILL.inlet}>入口</text>
+      <text x={cx + cw + 4} y={cy + ch / 2} fontSize="11" textAnchor="start" dominantBaseline="central" fill={ROLE_FILL.outlet}>出口</text>
+      <text x={cx + cw / 2} y={cy - 4} fontSize="9" textAnchor="middle" fill={ROLE_FILL.symmetry} className="mono">slip (远场近似)</text>
+      <text x={cx + cw / 2} y={cy + ch + 12} fontSize="9" textAnchor="middle" fill={ROLE_FILL.symmetry} className="mono">slip (远场近似)</text>
+      <text x={cx + cw * 0.7} y={cylY + cylR + 22} fontSize="9" textAnchor="middle" fill="#ec4899">卡门涡街 St=0.165</text>
+
+      <defs>
+        <marker id="arrowhead-cyl" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#10b981" />
+        </marker>
+      </defs>
+    </svg>
   );
 }
 

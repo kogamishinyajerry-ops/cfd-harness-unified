@@ -1,0 +1,198 @@
+# Workbench Basics · Backward-Facing Step
+#
+# Authoring sources:
+#   - whitelist.yaml line 51 (case spec)
+#   - knowledge/gold_standards/backward_facing_step.yaml
+#   - src/foam_agent_adapter.py:1330 _generate_backward_facing_step
+#     + :7319 _render_bfs_block_mesh_dict
+#     (3-block step topology, ER=1.125: H=1, H_inlet=8H, H_ch=9H,
+#      L_up=10H, L_down=30H)
+#
+# CONTRACT: working with kOmegaSST (round 2c X_r/H ≈ 5.63, ~10% from
+# Driver & Seegmiller 1985 Xr/H=6.26).
+
+case_id: backward_facing_step
+display_name: "Backward-Facing Step (Re=7600)"
+display_name_zh: "后向台阶（再附长度）"
+canonical_ref: "Driver & Seegmiller 1985"
+
+dimension: 2
+
+geometry:
+  shape: step
+  bbox:
+    x_min: -10.0
+    x_max: 30.0
+    y_min: 0.0
+    y_max: 9.0
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: H
+    value: 1.0
+    unit: m
+    description_zh: "台阶高度 H=1 m；扩展比 ER = H_ch/H_inlet = 9/8 = 1.125。再附点 X_r 以 H 为单位"
+
+# Step shape needs additional geometry hint for the renderer:
+# step_x_at = 0 (where the floor drops), step_height = 1, inlet_height = 8.
+# The renderer reads geometry.shape="step" and inspects bbox + this case's
+# patches to draw the L-shape.
+
+patches:
+  - id: inlet
+    role: inlet
+    location: left
+    label_zh: "入口（上游通道左端）"
+    label_en: "Inlet"
+    description_zh: "fixedValue U=(1,0,0) 在 y∈[1,9] 段；台阶 void 在 y∈[0,1] 段不属于流域"
+
+  - id: outlet
+    role: outlet
+    location: right
+    label_zh: "出口（下游通道右端）"
+    label_en: "Outlet"
+    description_zh: "zeroGradient U, fixedValue p=0；y∈[0,9] 全高"
+
+  - id: upper_wall
+    role: wall
+    location: top
+    label_zh: "上壁（直壁）"
+    label_en: "Upper wall"
+    description_zh: "noSlip；上游+下游合并为单一 patch"
+
+  - id: lower_wall
+    role: wall
+    location: bottom
+    label_zh: "下壁（含台阶面）"
+    label_en: "Lower wall (incl. step face)"
+    description_zh: "复合壁：x∈[-10,0] y=1 段 + x=0 y∈[0,1] 垂直台阶面 + x∈[0,30] y=0 下游底；OpenFOAM 中合并为单一 noSlip lower_wall"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      inlet:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U=(1, 0, 0)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      upper_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      lower_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outlet:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0"
+      upper_wall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      lower_wall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: k
+    quantity: turbulence_kinetic_energy
+    units: "m^2/s^2"
+    description_zh: "kOmegaSST 湍流模型"
+    per_patch:
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue (turbulent inlet)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂k/∂n = 0"
+      upper_wall:
+        type: kqRWallFunction
+        display_zh: "kqRWallFunction"
+      lower_wall:
+        type: kqRWallFunction
+        display_zh: "kqRWallFunction"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: omega
+    quantity: turbulence_specific_dissipation
+    units: "1/s"
+    per_patch:
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂ω/∂n = 0"
+      upper_wall:
+        type: omegaWallFunction
+        display_zh: "omegaWallFunction"
+      lower_wall:
+        type: omegaWallFunction
+        display_zh: "omegaWallFunction"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: channel_fluid
+    label_zh: "通道流体"
+    label_en: "Channel fluid"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 1.31579e-4
+        unit: "m²/s"
+        note_zh: "ν = 1/Re = 1/7600（U_bulk=1, H=1）"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 7600
+    formula: "Re = U·H/ν"
+    note_zh: "基于台阶高度 H 的 Re；湍流 separated shear-layer 区"
+  - symbol: ER
+    name: expansion_ratio
+    value: 1.125
+    formula: "H_ch / H_inlet = 9/8"
+    note_zh: "Driver-Seegmiller 1985 经典扩展比"
+
+solver:
+  name: simpleFoam
+  family: incompressible
+  steady_state: true
+  laminar: false
+  display_zh: "simpleFoam（稳态 SIMPLE，kOmegaSST 湍流）"
+  reasoning_zh: "kOmegaSST F1/F2 在 separated shear layer 比 k-ε 更准（k-ε X_r/H=3.99 偏低 36%；SST 5.63 仅偏低 10%）"
+
+hints:
+  geometry_zh: "3-block 拓扑：上游入口段 A + 下游回流区 B1 + 下游恢复段 B2；step void 不是流域"
+  driver_zh: "上游 8H 通道流到台阶处突然下扩 → 形成回流泡 + 再附点"
+  physical_intuition_zh: "金标准是再附长度 X_r/H=6.26（无量纲）；SST 给 5.63（误差 -10.1%）勉强落在 10% 容差边缘"

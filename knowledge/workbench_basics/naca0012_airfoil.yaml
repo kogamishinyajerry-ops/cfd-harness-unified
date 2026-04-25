@@ -1,0 +1,173 @@
+# Workbench Basics · NACA 0012 Airfoil External Flow
+#
+# Authoring sources:
+#   - whitelist.yaml line 234 (case spec)
+#   - knowledge/gold_standards/naca0012_airfoil.yaml
+#   - src/foam_agent_adapter.py:6407 _generate_airfoil_flow
+#     (C-grid in x-z plane, x∈[-5c,5c], z∈[-2c,2c], thin y-span)
+#
+# CONTRACT: Cp distribution at α=0° external flow, Re=3e6 with k-ω SST.
+# Note: harness mesh axes are x-z (not x-y). Workbench surface uses x-y
+# convention to match the user's mental model (chord horizontal, lift up).
+
+case_id: naca0012_airfoil
+display_name: "NACA 0012 Airfoil External Flow"
+display_name_zh: "NACA 0012 翼型外流"
+canonical_ref: "Thomas 1979 / OpenFOAM airFoil2D tutorial"
+
+dimension: 2
+
+geometry:
+  shape: airfoil
+  bbox:
+    x_min: -5.0
+    x_max: 5.0
+    y_min: -2.0
+    y_max: 2.0
+    z_min: -0.001
+    z_max: 0.001
+  characteristic_length:
+    name: c
+    value: 1.0
+    unit: m
+    description_zh: "弦长 c=1 m；翼型在 x∈[0,1]，C-grid 远场半径 5c。注：adapter 实际坐标轴为 x-z，UI 取 x-y 与用户直觉一致"
+
+patches:
+  - id: aerofoil
+    role: airfoil
+    location: airfoil_upper
+    label_zh: "翼型表面（上下合并）"
+    label_en: "Aerofoil surface"
+    description_zh: "OBJ projected NACA0012；4 个 block face 共同构成翼型周边；Cp 沿表面采样"
+
+  - id: inlet
+    role: inlet
+    location: left
+    label_zh: "远场入口（C-grid 上游半圆）"
+    label_en: "Inlet (C-grid upstream)"
+    description_zh: "fixedValue U=(U_∞·cos α, 0, U_∞·sin α)；包含左、上半远场、下半远场（C-grid 包络上游半圆）"
+
+  - id: outlet
+    role: outlet
+    location: right
+    label_zh: "远场出口（下游）"
+    label_en: "Outlet (downstream)"
+    description_zh: "zeroGradient U, fixedValue p=0；x=+5c 右端面"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty 薄展向）"
+    label_en: "Front/back (2D empty thin span)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    description_zh: "α=0° → U_inf=(1, 0, 0)；α≠0 时分量 (cos α, 0, sin α)"
+    per_patch:
+      aerofoil:
+        type: noSlip
+        display_zh: "U = 0"
+      inlet:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U_∞=(1, 0, 0) at α=0°"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      aerofoil:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outlet:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0（参考压力）"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: k
+    quantity: turbulence_kinetic_energy
+    units: "m^2/s^2"
+    per_patch:
+      aerofoil:
+        type: kqRWallFunction
+        display_zh: "kqRWallFunction"
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂k/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: omega
+    quantity: turbulence_specific_dissipation
+    units: "1/s"
+    per_patch:
+      aerofoil:
+        type: omegaWallFunction
+        display_zh: "omegaWallFunction"
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂ω/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: airfoil_freestream
+    label_zh: "自由来流"
+    label_en: "Freestream"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 3.33e-7
+        unit: "m²/s"
+        note_zh: "ν = U·c/Re = 1/3e6"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 3000000
+    formula: "Re = U·c/ν"
+    note_zh: "高 Re 完全湍流外流；wall function 替代 LES near-wall 解析"
+  - symbol: α
+    name: angle_of_attack
+    value: 0.0
+    formula: "α 为来流速度向量与 x 轴夹角"
+    note_zh: "0° 时翼型对称 → Cp 关于弦中线对称，理论 Cl=0"
+
+solver:
+  name: simpleFoam
+  family: incompressible
+  steady_state: true
+  laminar: false
+  display_zh: "simpleFoam（稳态 SIMPLE，kOmegaSST 湍流）"
+  reasoning_zh: "Re=3e6 完全湍流；kOmegaSST 在 adverse pressure gradient + transition 表现好"
+
+hints:
+  geometry_zh: "C-grid 拓扑：上游入口包络包括左、上半远场、下半远场；下游 outlet 仅一个面"
+  driver_zh: "对称翼型 + α=0 → 上下表面 Cp 镜像"
+  physical_intuition_zh: "Cp 在 LE 驻点为 +1.0，在最大厚度 ~30% 弦处达最低（约 -0.5），TE 接近 +0.2"

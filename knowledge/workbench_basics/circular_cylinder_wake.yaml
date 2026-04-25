@@ -1,0 +1,162 @@
+# Workbench Basics · Circular Cylinder Wake (Re=100)
+#
+# Authoring sources:
+#   - whitelist.yaml line 71 (case spec)
+#   - knowledge/gold_standards/circular_cylinder_wake.yaml
+#   - src/foam_agent_adapter.py:4655 _generate_circular_cylinder_wake
+#     (DEC-V61-053 B1 grown domain: L_inlet=10D, L_outlet=20D, half-height 6D)
+#
+# CONTRACT: laminar at Re=100 (3D transition ~Re=190). Karman vortex
+# shedding produces St ≈ 0.165 (Williamson 1996).
+
+case_id: circular_cylinder_wake
+display_name: "Circular Cylinder Wake (Re=100)"
+display_name_zh: "圆柱绕流尾迹（卡门涡街）"
+canonical_ref: "Williamson 1996"
+
+dimension: 2
+
+geometry:
+  shape: cylinder
+  bbox:
+    x_min: -1.0
+    x_max: 2.0
+    y_min: -0.6
+    y_max: 0.6
+    z_min: -0.005
+    z_max: 0.005
+  characteristic_length:
+    name: D
+    value: 0.1
+    unit: m
+    description_zh: "圆柱直径 D=0.1 m；通道 L_inlet=10D 上游 + L_outlet=20D 下游，full-height 12D（~8% blockage）"
+
+patches:
+  - id: cylinder
+    role: airfoil
+    location: cylinder_surface
+    label_zh: "圆柱表面"
+    label_en: "Cylinder surface"
+    description_zh: "noSlip wall；通过 topoSet+createBaffles 在矩形域内插入圆柱 baffle 而非真正抠空"
+
+  - id: inlet
+    role: inlet
+    location: left
+    label_zh: "入口（远上游）"
+    label_en: "Inlet"
+    description_zh: "fixedValue U=(1,0,0) m/s 均匀来流"
+
+  - id: outlet
+    role: outlet
+    location: right
+    label_zh: "出口（远下游 20D）"
+    label_en: "Outlet"
+    description_zh: "fixedValue p=0；20D 下游捕捉 4-5 个完整脱涡周期供 FFT"
+
+  - id: upper_wall
+    role: symmetry
+    location: top
+    label_zh: "上界（slip 近似）"
+    label_en: "Upper wall (slip)"
+    description_zh: "slip 边界近似无限远场；6D 半高 → ~8% blockage（Williamson unconfined wake 基准）"
+
+  - id: lower_wall
+    role: symmetry
+    location: bottom
+    label_zh: "下界（slip 近似）"
+    label_en: "Lower wall (slip)"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      cylinder:
+        type: noSlip
+        display_zh: "U = 0"
+      inlet:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U=(1, 0, 0)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      upper_wall:
+        type: slip
+        display_zh: "slip"
+      lower_wall:
+        type: slip
+        display_zh: "slip"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      cylinder:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outlet:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0"
+      upper_wall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      lower_wall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: cylinder_freestream
+    label_zh: "自由来流"
+    label_en: "Freestream"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 0.001
+        unit: "m²/s"
+        note_zh: "ν = U·D/Re = 1·0.1/100 = 1e-3"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 100
+    formula: "Re = U·D/ν"
+    note_zh: "层流二维卡门涡街域；3D transition 在 Re~190"
+  - symbol: St
+    name: Strouhal_number
+    value: 0.165
+    formula: "St = f·D/U（Williamson 1996 经验值）"
+    note_zh: "脱涡频率 f≈1.65 Hz（D=0.1, U=1）→ 周期 T≈0.61 s"
+
+solver:
+  name: pimpleFoam
+  family: incompressible
+  steady_state: false
+  laminar: true
+  display_zh: "pimpleFoam（瞬态 PIMPLE，层流——无湍流模型）"
+  reasoning_zh: "Re=100 层流；瞬态求解必须，否则错过涡街脱落。涡街从静止初值经过几秒发展期"
+
+hints:
+  geometry_zh: "矩形域 + 圆柱 baffle；网格 600×240=144k cell（dx=dy=0.05D 与 Williamson 等价）"
+  driver_zh: "均匀来流绕过钝体 → Helmholtz 不稳定性触发周期性涡脱落"
+  physical_intuition_zh: "下游交替顺/逆时针涡形成卡门涡街；金标准 St=0.165 来自频谱主峰"
