@@ -6730,8 +6730,12 @@ RAS
             encoding="utf-8",
         )
 
-        (case_dir / "system" / "controlDict").write_text(
-            """\
+        # controlDict is split into a static preamble + an α-aware functions{}
+        # block. The functions{} block is built as an f-string so that
+        # forceCoeffs liftDir/dragDir + Aref are α-derived. Static prefix uses
+        # plain string to avoid mass-escaping `{` `}` (python_version_parity
+        # risk on 3.9 nested f-strings).
+        controlDict_static = """\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -6765,15 +6769,37 @@ timeFormat      general;
 timePrecision   6;
 runTimeModifiable true;
 
+"""
+        # DEC-V61-058 B1.2: forceCoeffs FO on aerofoil patch (per-α) for Cl/Cd
+        # extraction. Aref + lRef + rhoInf pinned per Codex DEC-V61-058 Q3.
+        # liftDir/dragDir derived from cos_a/sin_a so multi-α runs use the
+        # correct rotation convention: liftDir = (-sin α, 0, cos α);
+        # dragDir = (cos α, 0, sin α). At α=+8°, Cl > 0 by upper-suction (Stage E
+        # smoke test asserts this).
+        #
+        # DEC-V61-058 B1.3: yPlus FO on aerofoil patch — wall-resolution
+        # diagnostic emitted as PROVISIONAL_ADVISORY (Codex F5: NOT HARD-gated;
+        # band [11, 500] applied at extractor level).
+        thin_span = y_hi - y_lo  # = 0.002 m
+        Aref_m2 = chord * thin_span  # = 0.002 m² for chord=1.0
+        controlDict_functions = f"""\
 // DEC-V61-044: in-solver surface sampler on the `aerofoil` patch
 // (note British spelling — matches blockMesh patch name). Emits
 // postProcessing/airfoilSurface/<t>/p_aerofoil.raw with columns
 // `x y z p` per face. Parser lives in src/airfoil_surface_sampler.py.
 // Runs at writeTime (every 200 iterations via writeInterval above).
+//
+// DEC-V61-058 B1.2 + B1.3: forceCoeffs1 + yPlus FOs added.
+//   forceCoeffs Aref = chord × thin_span = {chord:.4f} × {thin_span:.4f}
+//                    = {Aref_m2:.6e} m² (Codex Q3a verified).
+//   forceCoeffs lRef = chord = {chord:.4f} m (Codex Q3b: only affects Cm).
+//   forceCoeffs rhoInf = 1.0 (incompressible kinematic, Codex Q3c).
+//   liftDir = (-sin α, 0, cos α); dragDir = (cos α, 0, sin α);
+//     alpha_deg = {alpha_deg:.4f}°.
 functions
-{
+{{
     airfoilSurface
-    {
+    {{
         type            surfaces;
         libs            ("libsampling.so");
         writeControl    writeTime;
@@ -6781,14 +6807,45 @@ functions
         fields          (p);
         interpolationScheme cellPoint;
         surfaces
-        {
-            aerofoil { type patch; patches (aerofoil); interpolate false; }
-        }
-    }
-}
+        {{
+            aerofoil {{ type patch; patches (aerofoil); interpolate false; }}
+        }}
+    }}
+
+    forceCoeffs1
+    {{
+        type            forceCoeffs;
+        libs            ("libforces.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        patches         (aerofoil);
+        rho             rhoInf;
+        rhoInf          1.0;
+        CofR            (0.25 0 0);  // 1/4-chord moment ref (NACA convention)
+        liftDir         ({-sin_a:.6e} 0 {cos_a:.6e});
+        dragDir         ({cos_a:.6e} 0 {sin_a:.6e});
+        pitchAxis       (0 1 0);     // y-axis (thin-span normal)
+        magUInf         {U_inf:.6e};
+        lRef            {chord:.6e};
+        Aref            {Aref_m2:.6e};
+        log             false;
+    }}
+
+    yPlus
+    {{
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        // y+ field written to postProcessing/yPlus/<t>/yPlus.dat with
+        // columns: time min max average (per patch). Extractor reads
+        // patch=aerofoil row's max column.
+    }}
+}}
 
 // ************************************************************************* //
-""",
+"""
+        (case_dir / "system" / "controlDict").write_text(
+            controlDict_static + controlDict_functions,
             encoding="utf-8",
         )
 
