@@ -1,0 +1,50 @@
+name: Plane-Guard Rollback Trigger Eval
+
+# ADR-002 §2.4 minor #2 wiring: weekly evaluation of the §2.4 Option A → B
+# rollback trigger from accumulated CI dogfood artifacts. The script counts
+# fixture-frame confusion incidents in a rolling 14-day window and exits 1
+# if the count is ≥3, surfacing the trigger to the human-driven follow-up
+# DEC opener (per §2.4 text: "rollback itself does not auto-amend ADR-002
+# — a human-driven follow-up DEC opens within 1 week of trigger fire").
+#
+# Note (W4 stage-1, 2026-04-25): During the dogfood window 4/25 → 5/9, this
+# cron evaluates against any reports/plane_guard/fixture_frame_confusion.jsonl
+# committed to the repo (initially empty / non-existent). When the W4
+# hard-fail toggle PR (target ≤ 5/11) lands, this cron will download recent
+# CI artifacts and aggregate. For now it is graceful on missing data.
+
+on:
+  schedule:
+    # Every Monday 09:00 UTC (per ADR-002 §2.4 weekly cadence)
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    name: Evaluate 14-day rolling window
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run rollback evaluator
+        id: eval
+        continue-on-error: true
+        run: |
+          if [ -f reports/plane_guard/fixture_frame_confusion.jsonl ]; then
+            python scripts/plane_guard_rollback_eval.py \
+              --log-path reports/plane_guard/fixture_frame_confusion.jsonl
+          else
+            echo "OK: no fixture_frame_confusion.jsonl present yet (dogfood window pre-flip)"
+          fi
+
+      - name: Surface trigger as workflow failure
+        if: steps.eval.outcome == 'failure'
+        run: |
+          echo "::error::ADR-002 §2.4 Option A → B rollback trigger fired."
+          echo "::error::Open a follow-up DEC within 1 week per §2.4 spec."
+          exit 1

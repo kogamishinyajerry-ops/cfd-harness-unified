@@ -53,6 +53,40 @@ jobs:
         run: |
           python -m pytest tests/ -q
 
+      # ADR-002 §5 W4 dogfood window 2026-04-25 → 2026-05-09:
+      # Re-run pytest with the runtime guard installed in WARN mode so any
+      # forbidden import emits a structured JSON line WITHOUT failing the
+      # build. The .jsonl artifacts feed plane_guard_rollback_eval.py for
+      # the §2.4 14-day rolling-window trigger. continue-on-error=true
+      # keeps PRs green during dogfood; W4 hard-fail toggle PR (target
+      # ≤ 2026-05-11) flips this to required-passing once the dogfood
+      # signal review confirms zero new violations.
+      - name: Plane-guard WARN-mode dogfood (ADR-002 §5 · non-blocking)
+        if: always()
+        continue-on-error: true
+        env:
+          EXECUTOR_MODE: mock
+          CFD_HARNESS_PLANE_GUARD: warn
+        run: |
+          mkdir -p reports/plane_guard
+          python -m pytest tests/ -q --no-header -p no:cacheprovider \
+            -o "log_cli=true" -o "log_cli_level=WARNING" \
+            2>&1 | tee reports/plane_guard/ci_warn_pytest.log
+          python scripts/plane_guard_rollback_eval.py \
+            --log-path reports/plane_guard/fixture_frame_confusion.jsonl \
+            || true
+
+      - name: Upload plane-guard dogfood artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plane-guard-dogfood-${{ github.sha }}
+          path: |
+            reports/plane_guard/*.jsonl
+            reports/plane_guard/*.log
+          if-no-files-found: ignore
+          retention-days: 30
+
   frontend-build:
     name: Frontend · tsc + vite build
     runs-on: ubuntu-latest

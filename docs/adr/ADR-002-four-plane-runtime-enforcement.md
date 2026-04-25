@@ -650,8 +650,11 @@ CHANGES_REQUIRED, revise + re-submit within W2.
 | W2 Impl Late | 2026-05-02 → 2026-05-03 | A3 (e-g) dynamic-import patterns + A10 fork-safety + A10c forkserver (linux CI only) + A11 thread-safety + A14 reload matrix + A15 namespace package + A16 C-extension trampoline + A12 bootstrapping zero-src-deps verification + A7b log JSON schema test |
 | W3 CI | 2026-05-04 → 2026-05-05 | Opt-in `runtime-plane-guard` CI job + perf benchmark (A4) + WARN mode becomes dev + CI default (node-advance per §2.3); §2.2 byte-identical CI check active; A18 rollback plumbing + §2.9 watchdog shipped in dev logs |
 | W3 Accept | 2026-05-06 | All AC pass; ADR flips Draft → Accepted; Opus W3 confirmation |
-| W4 hard-fail | 2026-05-12 | CI `backend-tests` flips to ON (hard-fail); dev stays WARN; rollback trigger (§4.1 A6) armed |
-| W5 ON-everywhere | 2026-05-19 | Default env var `"1"` in `src/__init__.py`; P2 ExecutorMode refactor unblocked (meets §2.3 P2 startup-PR precondition) |
+| **W3 PR landed** | **2026-04-25 (commit 498d14e/2d725ff)** | **Pulled forward 9 days under user time-bypass authorization. §2.5 verbatim message + exec/eval logger + dedup cap + tests/conftest.py session fixture + A1-A18 wording correction. Codex CHANGES_REQUIRED 3/3 closed. PR landed.** |
+| **W4 prep landed** | **2026-04-25 (commit b10ca9e)** | **A13 sys.modules pollution watchdog (snapshot/diff with §2.9 R-new-1 double criterion) + A18 fixture-frame confusion .jsonl writer + scripts/plane_guard_rollback_eval.py (14-day rolling window) + 11 tests passing. Pre-staged ahead of dogfood window per Opus G-9 binding 2.** |
+| **W4 stage-1 CI** | **2026-04-25 (this commit)** | **CI `backend-tests` adds non-blocking `CFD_HARNESS_PLANE_GUARD=warn` pytest pass + plane-guard artifact upload. New `plane_guard_rollback_cron.yml` weekly workflow runs `scripts/plane_guard_rollback_eval.py` (Mondays 09:00 UTC). Hard-fail flip itself awaits dogfood signal review.** |
+| W4 hard-fail toggle | 2026-05-09 → 2026-05-11 | After dogfood signal review (zero new violations): CI `backend-tests` WARN-mode pytest step flips to required-passing (set `continue-on-error: false`); src/__init__.py default may stay "off" (W5 separates default flip). Rollback trigger (§4.1 A6) armed via `plane_guard_rollback_cron.yml`. |
+| W5 ON-everywhere | 2026-05-19 | Default env var `"warn"` (not yet `"on"` until dogfood-2 round) in `src/__init__.py`; P2 ExecutorMode refactor unblocked (meets §2.3 P2 startup-PR precondition) |
 
 **Split rationale (Opus round-1 follow-up #8)**: the original
 W2-Mid single-day delivery of finder + 7 tests compressed
