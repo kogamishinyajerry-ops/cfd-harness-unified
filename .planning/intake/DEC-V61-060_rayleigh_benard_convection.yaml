@@ -1,0 +1,540 @@
+# Stage 0 · Case Intake Assessment · DEC-V61-060 · rayleigh_benard_convection
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
+#
+# Revision history:
+#   v1 (2026-04-25 18:30 +0800): initial draft, pass rate 0.40.
+#       authored by Claude Code Opus 4.7 1M (Track B autonomous mandate,
+#       fourth-apply of v2.0 methodology · cases V61-050 LDC, V61-053
+#       cylinder, V61-057 DHC are first/second/third-applies).
+#   v2 (2026-04-25 19:30 +0800): Codex pre-Stage-A review REQUEST_CHANGES
+#       (NO_GO Stage A) — applied all 7 required edits. Pass rate
+#       prediction raised by Codex to 0.45 after edits.
+#       Codex log: reports/codex_tool_reports/dec_v61_060_plan_review.log
+#
+#       v1 → v2 edit summary:
+#         F1-HIGH (Type-I relaxation): downgraded case_type I → II;
+#                  removed pre-declared "≥2 families" relaxation; aligned
+#                  Batch C / Stage E text. Type-I promotion deferred to
+#                  a future intake version IF a 3rd independently-anchored
+#                  hard family is sourced post-Stage-A.
+#         F2-HIGH (broken DOI / Chaivat citation): removed the broken
+#                  whitelist-era "Chaivat 2006" attribution
+#                  (10.1016/j.ijheatmasstransfer.2005.07.039 actually
+#                  resolves to a rectangular-jets cooling paper, NOT a
+#                  Rayleigh-Bénard study). Replaced with Goldhirsch et al.
+#                  1989 (J. Fluid Mech. 199) as primary 2D RBC benchmark
+#                  and Werne 1993 (PRE 48) for 2D hard-turbulence cross-
+#                  check. Stage A.0 commits a knowledge/whitelist.yaml
+#                  citation correction.
+#         F3-HIGH (provenance gates): Stage A.0 promoted to mandatory
+#                  pre-code GO precondition; nusselt_top redefined as a
+#                  conservation-invariant cross-check (NOT a literature
+#                  copy of nusselt_number); w_max_nondim demoted from
+#                  HARD_GATED to PROVISIONAL_ADVISORY pending exact figure
+#                  citation in A.0.
+#         F4-HIGH (vague mitigations): committed to insulated side-wall
+#                  BC (zero-flux T) per OF tutorial heatTransfer/
+#                  buoyantSimpleFoam/hotRoom convention; replaced solver-
+#                  stability prose with measurable triggers (continuity
+#                  > 1e-3 after 500 SIMPLE iters → swap GAMG→PCG+DIC;
+#                  oscillation between 2-roll and 3-roll basins detected
+#                  via std(Nu_bottom_per_x) > 30 % between iters 200-500
+#                  → re-init with 2-roll perturbation seed); Stage A
+#                  smoke is dispatch-path FoamAgentExecutor.execute(...)
+#                  through blockMesh only, NOT a full live solver run.
+#         F5-MED  (commit ordering): reordered Stage A as
+#                  A.0 = citation/provenance, A.1 = geometry split,
+#                  A.2 = wall_orientation + y-axis Nu extractor (LANDS
+#                  BEFORE topology flip so unit tests stay green),
+#                  A.3 = bottom-heated topology + gravity y-direction,
+#                  A.4 = horizontal-wall BL grading,
+#                  A.5 = dispatch smoke + invariant.
+#         F6-MED  (commit count + budget): Batch B count 3 → 4 explicit
+#                  (B.1, B.2, B.3, B-final integration); total 17;
+#                  codex_budget_rounds 4 → 5; pass-rate kept at 0.40
+#                  for v1 transparency, predicted post-v2 0.45 per Codex.
+#         F7-LOW  (template hygiene): added required_edits_v1_to_v2: []
+#                  bookkeeping field.
+
+case_id: rayleigh_benard_convection
+dec_id: DEC-V61-060
+case_number: 5  # LDC=1, BFS=2, cylinder=3, DHC=4, RBC=5
+intake_authored_at: "2026-04-25"
+intake_author: "Claude Code (Opus 4.7, 1M context · Track B mandate)"
+methodology_version: "v2.0"
+intake_version: 2
+codex_plan_review_verdict: REQUEST_CHANGES_v1_then_REWRITTEN_v2  # final disposition pending Codex re-review of v2
+
+# ============================================================================
+# §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
+# ============================================================================
+case_type: II
+case_type_rationale: |
+  Two scalar gates planned at Ra=1e6, Pr=0.71, AR=2:1 (the canonical 2D
+  RBC setup in Goldhirsch 1989). Two observables, one independent family +
+  one same-surface conservation cross-check:
+
+  Family 1 · WALL-GRADIENT-DERIVED (top + bottom hot walls; cross-check
+  is conservation-driven, not literature-driven):
+    1. Nu_avg (bottom hot wall) — HEADLINE GATE — wall-averaged Nusselt
+       at the bottom hot wall. Reference value pending Stage A.0
+       documentation commit (see §3 ref_value_pending notes).
+    2. Nu_top — SAME_SURFACE_CONSERVATION_CROSS_CHECK — by mass + energy
+       conservation Nu_top must equal Nu_bottom within numerical noise
+       (asymmetry > 5 % indicates either solver imbalance or BL under-
+       resolution). DEFINED as |Nu_top - Nu_bottom| / |Nu_bottom| with
+       its own tolerance; NOT a copy of the literature Nu_avg value.
+
+  Two further observables are tracked as PROVISIONAL_ADVISORY (rendered
+  for the user, NOT counted toward the verdict):
+    3. w_max_nondim — peak |u_y| nondim by U_ff = sqrt(g·β·ΔT·H);
+       Werne 1993 / Goldhirsch 1989 give 0.18-0.22 in the 2D weakly-
+       turbulent regime, but exact figure citation pending A.0.
+    4. roll_count_x — number of counter-rotating rolls along the bottom
+       hot wall. Canonical 2:1 cavity at Ra=1e6 → 2 rolls; sensitive to
+       initial conditions and side-wall BCs in steady SIMPLE.
+
+  Type-II rationale (NOT Type-I): only 1 independent family from
+  literature (wall-gradient at bottom). The conservation cross-check
+  (Nu_top) shares the wall-gradient measurement surface and therefore
+  does NOT count as an independent family per §3b strict reading. The
+  velocity-field family (w_max) requires literature provenance that
+  Stage A.0 must establish before promotion to HARD_GATED — until then
+  it is advisory and does not contribute to the Type count.
+
+  PATH TO TYPE-I PROMOTION (post-Stage-A only, NEW intake version):
+  if Stage A.0 produces a clean Werne 1993 / Goldhirsch 1989 figure
+  citation for w_max_nondim with quantified tolerance band, write a
+  v3 intake with case_type promoted to I + w_max promoted to
+  HARD_GATED + new commit_count_estimate. NO MID-ARC RECLASSIFICATION
+  per §3b strict.
+
+  HEADLINE = Nu_avg (bottom). Gold ref pending A.0 commit.
+
+primary_gate_count: 2  # HARD_GATED count: nusselt_number + nusselt_top_asymmetry
+case_type_hard_gate_signed: true
+headline_gate: nusselt_number  # quantity_id matches gold YAML observables[].name
+
+# ============================================================================
+# §2 Reference papers
+# ============================================================================
+reference_paper:
+  primary:
+    citation: "Goldhirsch, I., Pelz, R.B., Orszag, S.A. (1989). Numerical simulation of thermal convection in a two-dimensional finite box. Journal of Fluid Mechanics 199, 1-28."
+    doi: "10.1017/S0022112089000273"
+    providing: [Nu_avg, w_max_canonical_scaling]
+    locator: "Stage A.0 must cite specific Table or Figure for Nu(Ra=1e6, AR=2:1, Pr=0.71-7) value. Goldhirsch 1989 §3 Tables I-III span Ra=1e4-1e8 in 2:1 box. Pending re-read."
+    review_status: "primary candidate; Stage A.0 confirms or pivots"
+  secondary:
+    - citation: "Werne, J. (1993). Structure of hard-turbulent convection in two dimensions: numerical evidence. Physical Review E 48, 1020-1035."
+      doi: "10.1103/PhysRevE.48.1020"
+      providing: [w_max_scaling_2D_hard_turbulence, roll_count_2D_RBC]
+      locator: "Werne 1993 Fig. 4 (u_max vs Ra) + Fig. 7 (roll structure) — pending exact panel locator in A.0."
+    - citation: "Whitelist note about 'Chaivat et al. 2006' / DOI 10.1016/j.ijheatmasstransfer.2005.07.039 is INCORRECT. The cited DOI resolves to a rectangular-jets impingement cooling paper, NOT a Rayleigh-Bénard study. Stage A.0 commits a knowledge/whitelist.yaml correction. The historical 0.229·Ra^0.269 correlation comment in adapter sources is unattributed and may also need retirement."
+      doi: ""
+      providing: []
+  note: |
+    The current adapter Nu=10.5 PASS-within-15%-tolerance result is for
+    a 2×2 side-heated cavity (the Lx=Ly bug + DHC topology), NOT for
+    proper RBC. The "PASS" is coincidental: any wall-driven NC at
+    Ra=1e6 with similar dimensions produces O(10) Nu values. Post-Stage-A
+    Nu must be re-validated against the Goldhirsch primary in the
+    correctly-bottom-heated 2:1 cavity.
+
+# ============================================================================
+# §3 Observable scope (HARD_GATED + PROVISIONAL_ADVISORY split)
+# ============================================================================
+observable_scope:
+  - name: nusselt_number
+    role: HEADLINE
+    family: wall_gradient_derived
+    extractor: src.foam_agent_adapter._extract_nc_nusselt (existing; Stage A.2 adds y-axis branch + wall_orientation BC plumb so the same stencil works on a horizontal wall)
+    ref_value: PENDING_STAGE_A_0  # numeric value committed by A.0 with Goldhirsch locator
+    ref_value_pending: true
+    tolerance: { mode: relative, value: 0.15 }  # widened to absorb post-A.0 provenance shift
+    gate_status: HARD_GATED
+    source_table: "Goldhirsch 1989 §3 (specific table/figure cited in A.0)"
+
+  - name: nusselt_top_asymmetry  # NOTE: no longer "nusselt_top with copied 10.5"
+    role: SAME_SURFACE_CONSERVATION_CROSS_CHECK
+    family: wall_gradient_derived
+    extractor: src.rbc_extractors.extract_nu_asymmetry  # Stage B B.1
+    ref_value: 0.0  # by mass + energy conservation, asymmetry should be 0
+    ref_value_pending: false
+    tolerance: { mode: absolute, value: 0.05 }  # 5 % relative imbalance band
+    gate_status: HARD_GATED
+    source_table: "conservation invariant: |Nu_top - Nu_bottom| / |Nu_bottom| ≤ 0.05"
+    rationale: |
+      NOT a literature value — defined as a derived invariant. Asymmetry
+      > 5 % indicates BL under-resolution or solver imbalance, both of
+      which would also degrade the headline Nu. Hard-gated because
+      conservation is a physics requirement, not a literature lookup.
+
+  - name: w_max_nondim
+    role: ADVISORY_INTERIOR_VELOCITY  # demoted from HARD_GATED per F3-HIGH
+    family: interior_velocity_field
+    extractor: src.rbc_extractors.extract_w_max  # Stage B B.2
+    ref_value: PENDING_STAGE_A_0  # Werne/Goldhirsch exact figure value
+    ref_value_pending: true
+    tolerance: { mode: relative, value: 0.20 }
+    gate_status: PROVISIONAL_ADVISORY
+    advisory_rationale: |
+      Werne 1993 Fig. 4 + Goldhirsch 1989 §4 give u_max ~ 0.18-0.22·U_ff
+      for 2D RBC at Ra=1e6 in the soft-turbulence band, but no single
+      authoritative point value with tolerance is cited in either paper
+      directly for AR=2:1. Stage A.0 must produce a defensible figure
+      citation OR keep this advisory. Promote to HARD_GATED only if
+      A.0 produces a clean (figure, panel, x-coordinate) locator.
+
+  - name: roll_count_x
+    role: ADVISORY_STRUCTURAL
+    family: structural
+    extractor: src.rbc_extractors.extract_roll_count_x  # Stage B B.3
+    ref_value: 2  # canonical 2:1 cavity at Ra=1e6 → 2 counter-rotating rolls
+    ref_value_pending: false
+    tolerance: { mode: absolute, value: 0 }  # exact match required when gated
+    gate_status: PROVISIONAL_ADVISORY
+    advisory_rationale: |
+      Roll count is sensitive to initial conditions + side-wall BCs in
+      steady SIMPLE. Multiple metastable solutions exist (1 stretched
+      roll, 2 rolls, 3 rolls of unequal width). Not a hard gate; rendered
+      for user inspection. Demote to advisory by default; promote to
+      hard gate only if Stage B.3 verifies the SIMPLE solver lands in
+      the 2-roll basin reproducibly across mesh refinements.
+
+# ============================================================================
+# §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
+# ============================================================================
+risk_flags:
+  # --- case-specific flags ---
+
+  - flag: rbc_geometry_lx_eq_ly_bug
+    severity: high
+    codex_flagged: false  # discovered by author during intake
+    description: |
+      src/foam_agent_adapter.py:2298 emits blockMesh vertices with
+      Lx=L Ly=L where L=aspect_ratio. For RBC with aspect_ratio=2.0 this
+      produces a 2×2 cavity, NOT the 2:1 rectangle declared in
+      knowledge/whitelist.yaml:175 ("aspect_ratio: 2.0" with intended
+      semantic = 2:1 rectangle). Result: solver runs a 2L×2L domain
+      scaled by 2 (so Ra evaluated at L=2 is wrong by factor 8 from the
+      L^3 term in the Ra definition).
+    mitigation_in_batch: |
+      Stage A.1: introduce explicit Lx, Ly variables in the natural-
+      convection generator. For DHC: Lx=Ly=1.0 (square per de Vahl Davis).
+      For RBC: Lx=2·H, Ly=H where H=1 is the cavity height (the canonical
+      Goldhirsch 1989 setup uses H=1, Lx=2). Update Ra = g·β·ΔT·H^3 / (ν·α)
+      to use H not L. Update blockMesh vertices + grading + nL_x / nL_y
+      independently. Add unit test asserting RBC mesh is 2×1, not 2×2,
+      and that Ra is computed against H not L.
+
+  - flag: rbc_topology_side_heated_vs_bottom_heated
+    severity: high
+    codex_flagged: false
+    description: |
+      src/foam_agent_adapter.py:2300+ writes hot_wall at x=0 and cold_wall
+      at x=L for ALL natural-convection cases including RBC. Canonical
+      Rayleigh-Bénard configuration heats from BELOW (y=0) and cools from
+      ABOVE (y=H), with insulated side walls (zero-flux temperature BC).
+      Gravity also acts in the wrong direction relative to the temperature
+      gradient.
+    mitigation_in_batch: |
+      Stage A.3: branch the boundary topology emit on case_id. For RBC:
+        - hot_wall at y=0 (bottom), cold_wall at y=Ly (top), both
+          fixedValue T (T_hot, T_cold).
+        - left_wall + right_wall: INSULATED (fixedGradient T = 0)
+          per OF tutorial heatTransfer/buoyantSimpleFoam/hotRoom
+          convention. Periodic option REJECTED at intake to avoid
+          two-variant solver-tuning surface.
+        - gravity vector = (0, -g, 0) instead of (-g, 0, 0).
+      Wall_orientation BC plumb already lands in A.2 so this commit only
+      flips the topology + gravity, not the extractor.
+
+  - flag: nu_extractor_wall_orientation_mismatch
+    severity: high
+    codex_flagged: false  # follow-on of rbc_topology_*
+    description: |
+      _extract_nc_nusselt currently reads x-direction temperature gradient
+      at hot wall x=0 (the DHC wall). After Stage A.3 topology fix, the
+      RBC hot wall is at y=0, requiring y-direction gradient extraction.
+      task_spec.boundary_conditions.wall_coord_hot is plumbed but the
+      extractor's y-layer grouping logic assumes the wall is x-oriented.
+      Without this fix landing BEFORE the topology flip (per F5-MED
+      reorder), post-A.3 unit tests would break.
+    mitigation_in_batch: |
+      Stage A.2 (BEFORE topology flip per F5-MED reorder): extend BC
+      plumbing to carry wall_orientation ('x' or 'y'). Branch
+      _extract_nc_nusselt to swap x/y axes when wall_orientation='y'.
+      Add unit test asserting RBC + bottom-wall topology (synthesized
+      cell-center field) produces nusselt_number > 5.0 (sanity check;
+      gold pending Stage A.0).
+
+  - flag: ref_value_chaivat_correlation_pointed_to_wrong_paper
+    severity: high  # bumped from med per Codex F2-HIGH
+    codex_flagged: true  # F2-HIGH cited in plan-review
+    description: |
+      whitelist.yaml:175-194 cites "Chaivat et al. 2006" + DOI
+      10.1016/j.ijheatmasstransfer.2005.07.039. Codex pre-Stage-A
+      review verified the DOI resolves to a rectangular-jets impingement
+      cooling paper, NOT a Rayleigh-Bénard study. The historical
+      0.229·Ra^0.269 correlation comment is unattributed and the gold
+      Nu=10.5 value cannot be defended against this broken citation.
+    mitigation_in_batch: |
+      Stage A.0 (mandatory pre-code commit): re-source Goldhirsch 1989
+      §3 Tables I-III for Nu(Ra=1e6, AR=2:1) AND/OR Werne 1993 Fig. 4
+      for w_max scaling. Commit knowledge/whitelist.yaml citation
+      correction (remove broken DOI; add Goldhirsch DOI as primary).
+      Commit knowledge/gold_standards/rayleigh_benard_convection.yaml
+      ref_value update with documented locator (table/figure/equation).
+      If Goldhirsch 1989 lookup fails OR contradicts the prior 10.5 by
+      > 30 %, escalate to a sub-batch retro and refit gold + tolerance
+      band BEFORE Stage A.1 starts.
+
+  # --- mandatory v2.0+ template slots ---
+
+  - flag: python_version_parity
+    severity: med
+    codex_flagged: false
+    description: |
+      Python 3.9 (Codex shim) vs 3.12 (.venv) f-string parser differ.
+      RBC extractors (Stage B) will involve nested f-strings for
+      sampleDict generation — high risk surface.
+    mitigation_in_batch: |
+      Run `python3 -m py_compile` before each Stage A+ commit. Hoist
+      nested f-string parts into separate variables.
+
+  - flag: mesh_density_on_domain_change
+    severity: med
+    codex_flagged: false
+    description: |
+      Stage A topology fix changes the cavity from 2L×2L to 2H×H
+      (factor-2 reduction in y-direction). Cell count must update so
+      Δy_wall stays consistent or improves. Lesson from RETRO-V61-053 P1:
+      domain shrink without cell count adjustment can over-resolve, and
+      domain grow without cell count adjustment loses BL resolution.
+    mitigation_in_batch: |
+      Stage A.4 blockMesh emit: nL_x = 2·base_nL, nL_y = base_nL where
+      base_nL is the per-side cell count (default 80). At Ra=1e6 with
+      δ_T/H ≈ Ra^(-1/4) = 0.032·H, uniform 80 cells in y gives
+      Δy=H/80 → 2.56 BL cells; needs 4:1 wall grading on top + bottom
+      walls (mirroring V61-057 DHC fix) for ≥5 BL cells. Document the
+      numerical values in adapter comments.
+
+  - flag: executable_smoke_test
+    severity: high
+    codex_flagged: false  # implicit per RETRO-V61-053 P0
+    description: |
+      Per RETRO-V61-053 P0: unit tests via direct generator call bypass
+      dispatch. Stage A.5 must run the dispatch path
+      (FoamAgentExecutor.execute(...) all the way to blockMesh) on a
+      synthesized RBC TaskSpec — but NOT a full live solver run, which
+      remains Stage E. Past F4-HIGH refactor: live-run is not part of
+      Stage A acceptance.
+    mitigation_in_batch: |
+      Stage A.5 commits: a pytest that constructs FoamAgentExecutor +
+      a minimal RBC TaskSpec and runs .execute(...) at least through
+      blockMesh in a tmp_path; asserts case_dir contains expected
+      blockMeshDict + 0/T + system/g (no full solver). Stage E remains
+      the live OpenFOAM run via scripts/phase5_audit_run.py.
+
+  - flag: solver_stability_on_novel_geometry
+    severity: high  # bumped from med — RBC bottom-heated is a topologically novel branch
+    codex_flagged: false
+    description: |
+      buoyantFoam laminar bottom-heated is established in OF tutorials
+      (heatTransfer/buoyantSimpleFoam/hotRoom is bottom-heated). But the
+      adapter's specific side-wall insulated BC + gravity vector +
+      scheme combination is NEW to this codebase's natural-convection
+      branch. SIMPLE may not converge on a clean roll pattern; may
+      oscillate between 2-roll and 3-roll basins.
+    mitigation_in_batch: |
+      Stage E executable_smoke_test catches divergence. Pre-emptive
+      fallbacks with MEASURABLE TRIGGERS:
+        - Trigger A: continuity_residual > 1e-3 after 500 SIMPLE iters
+          → action: swap p solver GAMG → PCG+DIC.
+        - Trigger B: std(Nu_bottom_per_x) > 30 % between iters 200-500
+          (oscillation between roll-count basins)
+          → action: re-init T field with explicit 2-roll perturbation seed.
+        - Trigger C: solver returns success=False after 5000 iters
+          → action: log + escalate to retro; do NOT silently switch
+          turbulence model.
+      All three triggers + actions encoded as fallback metadata in the
+      Stage A generator emit so phase5_audit_run.py can apply them
+      deterministically.
+
+  - flag: numerical_noise_snr
+    severity: med
+    codex_flagged: false
+    description: |
+      Per RETRO-V61-050: extraction methods can have noise floor that
+      makes argmax/extremum coincide with noise rather than physics.
+      For RBC: w_max_nondim is sensitive to where in the roll the sample
+      lands; roll_count_x argmax over wall heat-flux signal can pick up
+      sub-grid noise as a "roll".
+    mitigation_in_batch: |
+      Stage B: each extractor returns {value, profile_spread,
+      peak_to_profile_spread} non-gating diagnostics (V61-057 Codex R2
+      F2-MED rename pattern). roll_count_x specifically:
+      derivative-based roll counter must reject zero-crossings within
+      0.1H of side walls (suppresses corner noise).
+
+# ============================================================================
+# §5 Pre-Stage-A Codex plan review
+# ============================================================================
+codex_pre_stage_a_plan_review:
+  v1_review:
+    requested_at: "2026-04-25 18:50 +0800"
+    completed_at: "2026-04-25 19:20 +0800"
+    verdict: REQUEST_CHANGES
+    log_path: reports/codex_tool_reports/dec_v61_060_plan_review.log
+    findings_count: { H: 4, M: 2, L: 1 }
+    estimated_pass_rate_after_edits: 0.45
+    go_no_go_for_stage_a: NO_GO
+    required_edits_v1_to_v2:
+      - F1-HIGH: "Type-I relaxation removed; case_type demoted I → II; promotion path requires NEW intake version, NOT mid-arc reclassification"
+      - F2-HIGH: "Broken Chaivat 2006 / 10.1016/j.ijheatmasstransfer.2005.07.039 citation removed; Goldhirsch 1989 + Werne 1993 promoted to primary/secondary; whitelist.yaml correction lands in A.0"
+      - F3-HIGH: "Stage A.0 promoted to mandatory pre-code GO precondition; nusselt_top_asymmetry redefined as conservation invariant (NOT literature copy); w_max_nondim demoted to PROVISIONAL_ADVISORY pending exact figure citation"
+      - F4-HIGH: "Side-wall BC committed (insulated, hotRoom-tutorial convention); solver-stability triggers replaced with measurable thresholds + actions; Stage A smoke = dispatch path only, NOT full live solver"
+      - F5-MED:  "Stage A reordered: A.0 citation, A.1 geometry split, A.2 wall_orientation + y-axis extractor (BEFORE topology flip), A.3 topology + gravity, A.4 BL grading, A.5 dispatch smoke"
+      - F6-MED:  "Batch B count 3 → 4; total 17 commits; codex_budget_rounds 4 → 5"
+      - F7-LOW:  "required_edits_v1_to_v2 bookkeeping field added"
+  v2_review:
+    requested_at: PENDING  # to be set when v2 is re-submitted
+    verdict: PENDING
+
+# ============================================================================
+# §6 Self-estimated pass rate (F1-M1 honesty clause)
+# ============================================================================
+estimated_pass_rate_round1: 0.40
+estimated_pass_rate_rationale: |
+  v1 said 0.40; Codex predicted 0.45 after v2 edits; honest landing point 0.40.
+  Reasoning:
+    - Codex's 0.45 assumes intake edits land cleanly AND the actual code
+      changes (Stage A 6-commit cluster) are then implemented without new
+      defects. That's optimistic — Stage A has 4 coupled changes (geometry,
+      topology, gravity, extractor axis) all of which must land in the
+      right sequence per F5-MED.
+    - Drivers carried over from v1 still applicable:
+        rbc_geometry_lx_eq_ly_bug (HIGH, 25 % hit) — single-file fix
+        but mesh propagates through Ra calculation → care needed.
+        rbc_topology_side_heated_vs_bottom_heated (HIGH, 30 % hit) —
+        boundary block emit + gravity vector + extractor axis swap
+        all interact; A.2/A.3/A.4 ordering is fragile.
+        ref_value_chaivat_correlation_pointed_to_wrong_paper (HIGH, 20 %
+        hit) — A.0 research task may take significant effort if
+        Goldhirsch 1989 lookup contradicts current 10.5.
+        solver_stability_on_novel_geometry (HIGH, 15 % hit) — bottom-
+        heated topology is new to adapter; may need 2-roll IC seed.
+    - V61-057 calibration: 4 rounds, 0% R1 actual vs 0.45 estimate.
+      V61-060 has more coupled changes; expect 4-5 rounds.
+  Honest 0.40 means I expect CHANGES_REQUIRED at round 1 with 2-3 HIGH
+  + 2-3 MED findings; clean APPROVE_WITH_COMMENTS at round 4 or 5.
+  F1-M2 clean-close target round = 4 (matches V61-053/V61-057 R3-R4
+  precedent + buffer for novel-topology surprises).
+
+# ============================================================================
+# §7 Batch plan
+# ============================================================================
+# v2 EDIT: Stage A reordered per F5-MED; Batch B count 3 → 4 explicit;
+# A.0 promoted to mandatory pre-code GO precondition per F3-HIGH.
+batch_plan:
+  - batch: A
+    scope: |
+      CITATION + CANONICAL CONTRACT REPAIR — Goldhirsch 1989 / Werne 1993
+      provenance documented; explicit Lx/Ly split (rectangle); wall_orientation
+      BC plumb + y-axis Nu extractor branch; bottom-heated topology + gravity
+      vector y-direction; horizontal-wall BL grading; dispatch-path smoke.
+      All commits prefix [line-b].
+    commit_count_estimate: 6
+    atomicity_guard: |
+      A.0 — citation/provenance: Goldhirsch + Werne re-read, knowledge/
+            whitelist.yaml + knowledge/gold_standards/rayleigh_benard_
+            convection.yaml citation correction with locator (table/figure
+            /equation). MANDATORY pre-code GO precondition.
+      A.1 — adapter Lx ≠ Ly split: explicit Lx, Ly variables per case_id;
+            Ra computed against H (not L); blockMesh vertices + grading
+            independent per axis; unit test RBC=2×1 not 2×2.
+      A.2 — wall_orientation BC plumb + _extract_nc_nusselt y-axis branch
+            (LANDS BEFORE topology flip so existing tests pass after this
+            commit; only adds the y-axis code path, doesn't change RBC
+            dispatch).
+      A.3 — bottom-heated boundary topology + gravity vector y-direction;
+            RBC dispatch wired to use the new wall_orientation='y'.
+      A.4 — adapter horizontal-wall BL grading (mirrors DHC A.3 fix).
+      A.5 — Stage-A integration smoke + invariant test
+            (FoamAgentExecutor.execute → blockMesh dispatch path,
+            NO live solver per F4-HIGH; assert case_dir has correct
+            blockMeshDict + 0/T + system/g for RBC).
+
+  - batch: B
+    scope: |
+      MULTI-DIM EXTRACTORS. (B.1) Nu_top + nu_asymmetry as conservation-
+      invariant cross-check. (B.2) w_max in interior — sample on
+      x=L/4, x=L/2, x=3L/4 vertical lines, take max|u_y|, nondim by
+      U_ff = sqrt(g·β·ΔT·H). (B.3) roll_count_x — derivative sign-change
+      counter on the bottom hot wall heat-flux signal, side-wall noise
+      rejected. Each: own commit + tests. Module: src/rbc_extractors.py.
+      (B-final) integration sweep + Codex review round 2.
+    commit_count_estimate: 4
+    atomicity_guard: "B.1 Nu_top, B.2 w_max, B.3 roll_count, B-final integration + Codex R2"
+
+  - batch: C
+    scope: |
+      PREFLIGHT GATE WIRING. Gold YAML schema_v2 observables[] expansion
+      to 2 HARD_GATED + 2 PROVISIONAL_ADVISORY per §3. comparator
+      gate_status logic shipped by V61-057 Stage C — V61-060 inherits
+      without re-shipping. Single commit. Register 4 case-specific
+      risk_flags to risk_flag_registry. CaseProfile triggered=true
+      backfill.
+    commit_count_estimate: 1
+    atomicity_guard: "All observables + gate_status + risk_flags + CaseProfile in one atomic commit"
+
+  - batch: D
+    scope: |
+      COMPARE-TAB MULTI-DIM ANCHOR CARDS. Backend: comparison_report.py
+      emit metrics_rbc 4-card block. Frontend: LearnCaseDetailPage.tsx
+      RBC case branch (mirrors DHC card pattern from V61-057 Stage D.2).
+      audit_run secondary_scalars allowlist extended for nu_top,
+      w_max_nondim, roll_count_x.
+    commit_count_estimate: 3
+    atomicity_guard: "D.1-backend, D.2-frontend, D.3-fixture-schema"
+
+  - batch: E
+    scope: |
+      LIVE OPENFOAM RUN via scripts/phase5_audit_run.py + DEC closeout +
+      Notion sync + PR merge. Solver stability fallbacks per §4 trigger
+      table A/B/C.
+    commit_count_estimate: 2
+    atomicity_guard: "E.1-live-run-fixture, E.2-DEC-closeout+Notion-sync"
+
+# Total commits: A=6 + B=4 + C=1 + D=3 + E=2 = 16. (Inclusive of Stage A.0.)
+# Note: discrepancy with Codex F6-MED count 17 reconciled by counting the
+# Codex review round commits separately (B-final commit IS the one Codex
+# reviews at round 2, so it IS the integration commit per §B-final guard).
+
+# ============================================================================
+# §8 Codex budget (F6-M1 halt criterion · v2 BUMP per F6-MED)
+# ============================================================================
+codex_budget_rounds: 5  # F6-MED: raised 4 → 5 per Codex (Stage A 6-commit cluster + novel topology)
+round_5_action: "normal planned review checkpoint — NOT early halt trigger"
+round_6_action: "health check — halt_risk_flag if CHANGES_REQUIRED"
+round_7_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
+
+# ============================================================================
+# §9 Stage-E close conditions
+# ============================================================================
+stage_e_close_checklist:
+  - item: "All Codex round-N findings landed in commits"
+    required: true
+  - item: "Clean Codex round-(N+1) verdict ∈ {APPROVE, APPROVE_WITH_COMMENTS} per F1-M2"
+    required: true
+  - item: "Executable smoke test passes — scripts/phase5_audit_run.py rayleigh_benard_convection emits ≥2 hard-gated values within tolerance (w_max + roll_count remain advisory unless A.0 + Stage B promote)"
+    required: true
+    waiver_allowed: "w_max_nondim + roll_count_x may stay advisory if A.0 doesn't produce defensible exact figure citation OR if Stage B SIMPLE solver oscillates between roll-count basins"
+  - item: "DEC frontmatter notion_sync_status = synced"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented to 42"
+    required: true
+  - item: "RETRO-V61-060 written if any post-R3 defect surfaces (per RETRO-V61-053 addendum protocol)"
+    required: conditional
