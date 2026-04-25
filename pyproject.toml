@@ -20,6 +20,13 @@ requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
     "notion-client>=2.2.1",
+    # Runtime deps for line B case-analysis pipeline (had been implicit
+    # imports causing 40 consecutive CI failures pre-2026-04-25T20:30):
+    #   - numpy: src/cylinder_centerline_extractor.py + many extractors
+    #   - jinja2: src/report_engine/generator.py
+    # See RETRO-V61-006 dogfood-window critical-path fix (commit body).
+    "numpy>=1.26",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]

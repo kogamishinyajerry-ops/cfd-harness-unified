@@ -14,7 +14,15 @@ repos:
       - id: import-linter
         name: import-linter · four-plane contract (ADR-001)
         entry: lint-imports
-        language: system
+        # `language: python` + additional_dependencies makes the hook
+        # self-contained — pre-commit creates an isolated venv with
+        # import-linter installed, regardless of the dev shell's PATH.
+        # Previously `language: system` required `lint-imports` to be
+        # globally installed, which broke `pre-commit install` on
+        # fresh dev environments.
+        language: python
+        additional_dependencies:
+          - "import-linter>=2.0"
         pass_filenames: false
         # Per Codex G-5 round 1 Low #4: avoid running on docs-only commits.
         # The contract graph is repo-global so we can't use stale staged files,
@@ -31,6 +39,10 @@ repos:
       # readable. Exit 0 always (warn-not-block per Opus §3 recommendation).
       - id: dual-track-isolation
         name: dual-track isolation guard (OPS-2026-04-25-001)
+        # `language: python` so pre-commit creates its own python venv —
+        # the script is stdlib-only so no additional_dependencies needed.
+        # Also self-contained against shells where `python` is not on
+        # PATH (macOS has python3, not python).
         entry: python scripts/check_track_isolation.py
-        language: system
+        language: python
         stages: [commit-msg]
