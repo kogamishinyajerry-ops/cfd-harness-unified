@@ -64,11 +64,18 @@ goal: |
   PASS on a live OpenFOAM kEpsilon run at the existing whitelist
   mesh budget.
 
-  Acceptance signal (PASS condition, all 4 HARD_GATED):
-    friction_factor                  rel_error < 10%
-    friction_velocity_u_tau          rel_error < 10%
-    bulk_velocity_ratio_u_max        rel_error < 10%
-    log_law_inner_layer_residual     within tolerance band
+  Acceptance signal (PASS condition, 3 HARD_GATED + 1 PROVISIONAL_ADVISORY
+  per Codex R1 F#3 downgrade):
+    friction_factor                  rel_error < 10%   HARD_GATED
+    bulk_velocity_ratio_u_max        rel_error < 10%   HARD_GATED
+    log_law_inner_layer_residual     |Δu+| ≤ 0.5 abs   HARD_GATED
+    friction_velocity_u_tau          rel_error < 10%   PROVISIONAL_ADVISORY
+                                                       (reported, NOT counted
+                                                        in pass-fraction —
+                                                        anchor is √(f/8) so
+                                                        gate has partial
+                                                        tautology with the
+                                                        primary friction_factor)
 
 # ============================================================================
 # §3 Type II observable schema (Codex F1-aware)

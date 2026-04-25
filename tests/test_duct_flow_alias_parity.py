@@ -203,6 +203,40 @@ class TestAliasParityKeys:
                 f"{extractor_path} but {func_name} not exported"
             )
 
+    def test_friction_velocity_u_tau_is_provisional_advisory(
+        self, gold_yaml: Dict[str, Any]
+    ):
+        """Codex R1 F#3 (MEDIUM/F1): friction_velocity_u_tau anchor 0.04811
+        is √(0.0185/8) — derived from friction_factor anchor. Even though
+        the extractor extracts u_τ directly from τ_w (not from f), the
+        GATE is a partial tautology. Downgrade to PROVISIONAL_ADVISORY
+        so it's reported but not counted toward pass-fraction.
+        """
+        u_tau_obs = next(
+            o for o in gold_yaml["observables"]
+            if o["name"] == "friction_velocity_u_tau"
+        )
+        assert u_tau_obs["gate_status"] == "PROVISIONAL_ADVISORY", (
+            f"R1 F#3 not landed: friction_velocity_u_tau still "
+            f"gate_status={u_tau_obs['gate_status']}"
+        )
+        assert "advisory_rationale" in u_tau_obs
+
+    def test_three_observables_remain_hard_gated(
+        self, gold_yaml: Dict[str, Any]
+    ):
+        """After R1 F#3, the 3 HARD_GATED observables are: friction_factor,
+        bulk_velocity_ratio_u_max, log_law_inner_layer_residual."""
+        hard_gated = {
+            o["name"] for o in gold_yaml["observables"]
+            if o.get("gate_status") == "HARD_GATED"
+        }
+        assert hard_gated == {
+            "friction_factor",
+            "bulk_velocity_ratio_u_max",
+            "log_law_inner_layer_residual",
+        }, f"Unexpected HARD_GATED set: {hard_gated}"
+
 
 class TestComparatorRoutingOnJonesPerfectEmit:
     """Drive GoldStandardComparator on a Jones-anchored emit dict.

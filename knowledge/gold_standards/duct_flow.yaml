@@ -78,17 +78,24 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
-    gate_status: HARD_GATED
+    gate_status: PROVISIONAL_ADVISORY  # R1 F#3 downgrade: anchor derived from f anchor → contract-level partial tautology
     family: wall_shear_normalized
     extractor: src.duct_flow_extractors.extract_friction_velocity
     role: SAME_RUN_CROSS_CHECK
     source_table: "derived from Jones 1976 f via u_τ = U_bulk·√(f/8)"
-    note: |
-      Codex F1 trap (V61-063 R1 precedent): the gate MUST be backed by
-      an INDEPENDENT extraction of u_τ from τ_w (not a re-derivation
-      via √(f/8) using the just-extracted f, which would be tautological).
-      The src.duct_flow_extractors module enforces this separation —
-      extract_friction_velocity reads τ_w directly, never f.
+    advisory_rationale: |
+      Codex R1 F#3 (MEDIUM/F1 partial tautology): the gold anchor 0.04811
+      is explicitly √(0.0185/8) — derived from the friction_factor anchor
+      via the U_bulk=1 normalization. Even though the EXTRACTOR avoids
+      the worst form of the tautology (extract_friction_velocity reads
+      τ_w directly, never f), the GATE is still a SAME_RUN_CROSS_CHECK
+      restatement of the same wall-shear signal already consumed by
+      friction_factor. Under V61-058/V61-063 F1 rubric, that means the
+      gate has weaker teeth than HARD_GATED implies. Downgraded to
+      PROVISIONAL_ADVISORY so the comparator reports the value but does
+      NOT count it toward the pass-fraction overall verdict (mirror of
+      DHC psi_max_center pattern at V61-057). The extractor + alias-
+      parity test still validate algebraic consistency.
 
   - name: bulk_velocity_ratio_u_max
     description: ratio of streamwise velocity at duct cross-section centroid to bulk velocity (probes core momentum redistribution, Hartnett 1962 / Nikuradse 1932)
