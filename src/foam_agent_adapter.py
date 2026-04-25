@@ -6489,11 +6489,20 @@ boundaryField
         # works with the C-grid hex ordering. The adapter's previous x-y plane
         # approach produced inside-out errors because block vertex ordering
         # depends on z being the normal direction.
+        # DEC-V61-061: mesh refinement to close V61-058 physics-fidelity gap.
+        # V61-058 had: 16k cells, 120 airfoil surface faces, y+_max=139,
+        # domain ±5 chord — Cl@α=8°=0.491 vs gold 0.815 (40% under).
+        # V61-061 refinement (single-axis, monotone):
+        #   - domain ±5→±10 chord (x), ±2→±4 chord (z) — far-field cleaner
+        #   - airfoil surface 120→240 (nx 30→60 on 4 aerofoil blocks)
+        #   - z-normal nz 80→120, simpleGrading 40→200 → y+~30-50
+        #   - wake blocks nx 40→60 (better wake resolution)
+        # Estimated cells: 43.2k (~2.7× V61-058). Estimated runtime: ~2min/α.
         y_lo = -0.001
         y_hi = 0.001
-        z_far = 2.0 * chord
-        x_min = -5.0 * chord
-        x_max = 5.0 * chord
+        z_far = 4.0 * chord  # V61-061: 2.0→4.0 chord (domain z-extent)
+        x_min = -10.0 * chord  # V61-061: -5.0→-10.0 chord
+        x_max = 10.0 * chord   # V61-061: +5.0→+10.0 chord
         x_upper = 0.3 * chord
         z_upper = self._naca0012_half_thickness(0.3) * chord
         x_lower = x_upper
@@ -6583,29 +6592,31 @@ blocks
     // blockMesh local ordering matches the tutorial:
     //   direction 1 = streamwise, direction 2 = thin span (1 cell), direction 3 = z-normal.
     // simpleGrading avoids block-interface inconsistencies caused by edgeGrading.
+    // DEC-V61-061: nx 30→60 on aerofoil blocks (240 surface faces total),
+    // nx 40→60 on wake blocks, nz 80→120, simpleGrading 40→200 (y+ target ~30-50).
     hex ( 7 4 16 19 0 3 15 12)
-    (30 1 80)
-    simpleGrading (1 1 40)
+    (60 1 120)
+    simpleGrading (1 1 200)
 
     hex ( 5 7 19 17 1 0 12 13)
-    (30 1 80)
-    simpleGrading (1 1 40)
+    (60 1 120)
+    simpleGrading (1 1 200)
 
     hex ( 17 18 6 5 13 14 2 1)
-    (40 1 80)
-    simpleGrading (10 1 40)
+    (60 1 120)
+    simpleGrading (10 1 200)
 
     hex ( 20 16 4 8 21 15 3 9)
-    (30 1 80)
-    simpleGrading (1 1 40)
+    (60 1 120)
+    simpleGrading (1 1 200)
 
     hex ( 17 20 8 5 22 21 9 10)
-    (30 1 80)
-    simpleGrading (1 1 40)
+    (60 1 120)
+    simpleGrading (1 1 200)
 
     hex ( 5 6 18 17 10 11 23 22)
-    (40 1 80)
-    simpleGrading (10 1 40)
+    (60 1 120)
+    simpleGrading (10 1 200)
 );
 
 edges
@@ -6781,10 +6792,13 @@ application     simpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-endTime         2000;
+// DEC-V61-061: endTime 2000→5000 — refined mesh (43k cells, y+~30-50)
+// needs more iterations to satisfy residualControl (p<1e-6, U/k/omega<1e-5).
+// V61-058 converged in 439 iters at 16k cells; V61-061 expected ~2500-4000.
+endTime         5000;
 deltaT          1;
 writeControl    runTime;
-writeInterval   200;
+writeInterval   500;
 purgeWrite      0;
 writeFormat     ascii;
 writePrecision  6;
