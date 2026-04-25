@@ -21,6 +21,13 @@ repos:
         # globally installed, which broke `pre-commit install` on
         # fresh dev environments.
         language: python
+        # Pin to project Python (per pyproject.toml requires-python =
+        # ">=3.12"). Per Codex audit on 0208929 (R1 LOW): without this
+        # the hook env follows whatever interpreter launched pre-commit,
+        # which can drift from the project runtime (verified locally
+        # the hook passes from a Python 3.9 pre-commit env, but that
+        # is fragile against future syntax-version regressions).
+        language_version: python3.12
         additional_dependencies:
           - "import-linter>=2.0"
         pass_filenames: false
@@ -45,4 +52,6 @@ repos:
         # PATH (macOS has python3, not python).
         entry: python scripts/check_track_isolation.py
         language: python
+        # Same project-Python pin as import-linter (Codex audit R1 LOW).
+        language_version: python3.12
         stages: [commit-msg]

@@ -25,8 +25,17 @@ dependencies = [
     #   - numpy: src/cylinder_centerline_extractor.py + many extractors
     #   - jinja2: src/report_engine/generator.py
     # See RETRO-V61-006 dogfood-window critical-path fix (commit body).
+    # numpy floor is 1.26 (first release with Python 3.12 support per
+    # NumPy 1.26.0 release notes; matches requires-python = ">=3.12").
+    # jinja2 floor is 3.1.6 not 3.1.0 — Codex audit on commit 0208929
+    # (R1 LOW) flagged that 3.1.0-3.1.5 admit versions with published
+    # security advisories (GHSA-gmj6-6f8f-6699, GHSA-cpwx-vrp4-4pq7).
+    # Repo code uses regular Environment, not SandboxedEnvironment, so
+    # no immediate exploit path; this floor encodes the security
+    # baseline rather than the functional minimum (3.1.0 had StrictUndefined
+    # already).
     "numpy>=1.26",
-    "jinja2>=3.1",
+    "jinja2>=3.1.6",
 ]
 
 [project.optional-dependencies]
