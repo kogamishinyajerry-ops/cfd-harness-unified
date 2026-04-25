@@ -85,15 +85,16 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 - **Risk** (resolved): schema drift surfaces as soft amber banner via `validate_patch_consistency()`, never 500s. Aspect ratio clamped to [0.25, 5] for legibility on long/thin geometries.
 - **Anti-pattern guard observed**: hints intentionally terse (3 captions × 1 line); long-form prose stays in StoryTab. Honesty hints surface known gaps (e.g., plane_channel laminar-vs-DNS contract incompatibility, RBC-vs-classical-textbook side-vs-bottom heating divergence).
 
-### Stage 3 · MeshTrust QC band
+### Stage 3 · MeshTrust QC band ✅ MVP LANDED (commit f44386a, 2026-04-25)
 
-- **Trigger (start)**: Stage 2 close 满足 (≥8 case basics) **AND** `mesh-metrics` endpoint 返回 skew / non-orthogonality / y+ / GCI 至少 1 case
-- **MVP scope**: `/api/cases/{id}/mesh-metrics` 后端 endpoint + `<MeshQC>` 前端 SVG bars (4 档 mesh 密度切换 · 每个 metric 独立条 · 红/黄/绿三态)
-- **Trigger (close)**: `4 档 mesh 数据 ≥8 case` (8 case 有完整 mesh sweep + QC metrics)
-- **主交付 viz**: QC band (3-tier color-semantic) + mesh ladder selector + 单 metric 详情 popover
-- **Predecessor**: Stage 2
-- **Risk**: "假安全感" — metrics 全绿但物理仍错 (Codex/Lin disagreement: 必须配合 contract_status panel 解释 "metric pass ≠ physics pass")
-- **Anti-pattern**: 把网格 metrics 搞成"网格质量证书"伪装
+- **Trigger (start)**: ✅ MET — Stage 2 closed (10/10 basics) + mesh-metrics endpoint serves 10/10 cases.
+- **MVP scope** (delivered): `/api/cases/{id}/mesh-metrics` FastAPI route reuses existing `grid_convergence` service (Celik 2008 Richardson + GCI). 4-chip QcBand (n_levels / GCI₃₂ / Richardson p / asymptotic range) wired into MeshTab below the existing sweep slider. Red/yellow/green threshold bands documented in schema.
+- **Trigger (close)**: ✅ MET — 10/10 cases serve mesh-metrics (HTTP 200). 8/10 yield computable Richardson GCI; 2 (RBC, impinging_jet) honestly degrade to gray verdict on oscillating convergence — close trigger satisfied without manufactured greenwashing.
+- **主交付 viz** (delivered): QC band (3-tier red/yellow/green chips) + density ladder SVG (|value − f_∞| bars per density) + Richardson summary table.
+- **Predecessor**: Stage 2 ✅
+- **Risk** (resolved): "假安全感" guarded inline in MeshQC footer ("Mesh QC 全绿 ≠ 案例物理对") and via gray-state honesty for cases that can't compute Richardson. Metrics-pass and physics-pass kept distinct.
+- **Anti-pattern guard observed**: no "网格质量证书" decoration; band shows real cross-case variance (LDC 2Y/2G, DHC 1R/3G, RBC 3 gray, BFS/cyl/flat_plate/plane_ch/NACA/duct mostly green).
+- **Future polish (not blocking close)**: skew / non-orthogonality / y+ — those need real `checkMesh` log parsing (only NACA0012 has logs today; others would need live OpenFOAM runs).
 
 ### Stage 4 · GuardedRun · checkpoint rail + first-visit tour
 
