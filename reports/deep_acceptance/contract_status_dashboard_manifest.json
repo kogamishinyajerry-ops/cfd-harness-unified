@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-04-22T23:51:39",
-  "head_sha": "5c90ea1",
+  "generated_at": "2026-04-25T13:05:37",
+  "head_sha": "2d725ff",
   "branch_name": "main",
   "canonical_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard.html",
-  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard_20260422_235139.html",
+  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard_20260425_130537.html",
   "manifest_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard_manifest.json",
   "case_count": 10,
   "class_counts": {
-    "SATISFIED": 4,
-    "PARTIALLY_COMPATIBLE": 2,
+    "SATISFIED": 5,
     "COMPATIBLE_WITH_SILENT_PASS_HAZARD": 1,
     "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE": 2,
+    "PARTIALLY_COMPATIBLE": 1,
     "COMPATIBLE": 1
   },
   "open_gate_refs": [

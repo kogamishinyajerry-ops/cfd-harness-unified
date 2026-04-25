@@ -283,15 +283,15 @@ a:hover { text-decoration: underline; }
       <div class="version-grid">
         <div class="version-card">
           <div class="label">Generated</div>
-          <div class="value">2026-04-22 23:51:39</div>
+          <div class="value">2026-04-25 13:05:37</div>
         </div>
         <div class="version-card">
           <div class="label">Head SHA</div>
-          <div class="value">5c90ea1</div>
+          <div class="value">2d725ff</div>
         </div>
         <div class="version-card">
           <div class="label">Canonical / Snapshot</div>
-          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260422_235139.html</div>
+          <div class="value">reports/deep_acceptance/contract_status_dashboard.html<br>reports/deep_acceptance/contract_status_dashboard_20260425_130537.html</div>
         </div>
         <div class="version-card">
           <div class="label">Manifest / Linked Surfaces</div>
@@ -308,17 +308,9 @@ a:hover { text-decoration: underline; }
         
         <article class="distribution-card">
           <div class="label">SATISFIED</div>
-          <div class="value">4</div>
+          <div class="value">5</div>
           <div class="note">Physics contract 完整满足：几何、流态、数值、比较链全部 evidence-backed。PASS 是真 PASS。</div>
           <div class="pill-row"><span class="status-pill fail">Satisfied</span></div>
-        </article>
-        
-
-        <article class="distribution-card">
-          <div class="label">PARTIALLY_COMPATIBLE</div>
-          <div class="value">2</div>
-          <div class="note">偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。</div>
-          <div class="pill-row"><span class="status-pill warn">Partially compatible</span></div>
         </article>
         
 
@@ -335,6 +327,14 @@ a:hover { text-decoration: underline; }
           <div class="value">2</div>
           <div class="note">最危险的类型：表面 PASS，但 observable 和 literature 根本不是一回事。</div>
           <div class="pill-row"><span class="status-pill warn">Observable mismatch</span></div>
+        </article>
+        
+
+        <article class="distribution-card">
+          <div class="label">PARTIALLY_COMPATIBLE</div>
+          <div class="value">1</div>
+          <div class="note">偏差存在，但方向和成因可归因，适合做“有解释的偏差”案例。</div>
+          <div class="pill-row"><span class="status-pill warn">Partially compatible</span></div>
         </article>
         
 
@@ -386,7 +386,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane B · 可展示但必须带 caveat</div>
           <div class="lane-note">这些 case 不是不能展示，而是展示时必须把 runtime hazard 或已知偏差一起抬到台面上。</div>
           <ul class="lane-list">
-            <li><strong>后台阶分离再附着</strong> · Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。</li><li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
+            <li><strong>圆柱绕流卡门涡街</strong> · Cd / Cl_rms / wake deficit 可信，但 Strouhal 仍带 canonical-band shortcut 风险。</li><li><strong>NACA0012 翼型外流</strong> · 偏差集中在前缘 / 吸力峰，但方向已知、归因明确，属于可解释偏差。</li><li><strong>Rayleigh-Benard 自然对流</strong> · Ra=1e6 当前是 compatible，但这个结论不应被偷渡到高 Ra 腔体问题上。</li>
           </ul>
         </article>
         
@@ -395,7 +395,7 @@ a:hover { text-decoration: underline; }
           <div class="label">Lane C · 治理 / 结构阻塞</div>
           <div class="lane-note">这些 case 目前的主要问题不是“再调一点参数”，而是 physics contract / governance 语义还没闭环。</div>
           <ul class="lane-list">
-            <li><strong>方腔顶盖驱动流</strong> · u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。</li><li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>全发展湍流方管流</strong> · Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · canonical gold 已明确这是 solver-choice incompatibility：laminar icoFoam 在 Re_bulk=5600 下不可能复现 Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile。ATTEST_PASS 是 comparator-path artifact，物理上应读为 FAIL。</li><li><strong>轴对称冲击射流</strong> · canonical gold 暴露两条复合 hazard：(1) adapter axis patch 是 `empty` 不是 `wedge`，真实产出 2D 平面切片而非 axisymmetric；(2) A4 p_rgh iteration-cap ATTEST_FAIL — 当前 solver-config 未收敛（症状；根因仍需 solver-config audit）。历史 fixture 把 Cf=0.0042 当 Nu=25 报告，属纯维度错位。</li>
+            <li><strong>方腔顶盖驱动流</strong> · u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。</li><li><strong>后台阶分离再附着</strong> · Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。</li><li><strong>湍流平板边界层</strong> · Cf 数值对了，但要继续把 Spalding fallback 是否触发暴露出来。</li><li><strong>全发展湍流方管流</strong> · Q-2 Path A 落地：从 pipe → duct 诚实重标。f=0.0185 Jones 1976 correlation，同时在 Colebrook pipe 2% 以内。</li><li><strong>差分加热方腔自然对流</strong> · 测量链已到 Nu=77.82，但 gold=30.0 与文献区间冲突仍未裁决。</li><li><strong>平面通道流 DNS</strong> · canonical gold 已明确这是 solver-choice incompatibility：laminar icoFoam 在 Re_bulk=5600 下不可能复现 Kim 1987 / Moser 1999 Re_τ=180 turbulent DNS u+ profile。ATTEST_PASS 是 comparator-path artifact，物理上应读为 FAIL。</li><li><strong>轴对称冲击射流</strong> · canonical gold 暴露两条复合 hazard：(1) adapter axis patch 是 `empty` 不是 `wedge`，真实产出 2D 平面切片而非 axisymmetric；(2) A4 p_rgh iteration-cap ATTEST_FAIL — 当前 solver-config 未收敛（症状；根因仍需 solver-config audit）。历史 fixture 把 Cf=0.0042 当 Nu=25 报告，属纯维度错位。</li>
           </ul>
         </article>
         
@@ -420,7 +420,7 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>方腔顶盖驱动流</strong><br><span class="case-subtitle">lid_driven_cavity_benchmark</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill ok">SATISFIED</span><br>SATISFIED_FOR_U_CENTERLINE_ONLY</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</td>
             <td>u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</td>
             <td>保持 SATISFIED_FOR_U_CENTERLINE_ONLY 语义；等 Phase 5c 独立 audit 再解锁 v/vortex 观测量。</td>
           </tr>
@@ -429,7 +429,7 @@ a:hover { text-decoration: underline; }
           <tr>
             <td><strong>后台阶分离再附着</strong><br><span class="case-subtitle">backward_facing_step_steady</span></td>
             <td><span class="status-pill ok">PASS</span><br>PASS</td>
-            <td><span class="status-pill warn">PARTIALLY_COMPATIBLE</span><br>PARTIALLY_COMPATIBLE</td>
+            <td><span class="status-pill ok">SATISFIED</span><br>SATISFIED</td>
             <td>Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</td>
             <td>保持 PARTIALLY_COMPATIBLE 叙事；任何 PASS 只属于 RANS 语义，不是 DNS PASS。</td>
           </tr>
@@ -529,7 +529,7 @@ a:hover { text-decoration: underline; }
           </div>
           <p>u_centerline 对齐 Ghia 1982 Table I；v_centerline + primary_vortex_location provenance 已在 canonical gold 里显式标 false，PASS 不涵盖这两条。</p>
           <div class="case-callout"><strong>当前观测：</strong> u / v 中心线与主涡核位置都在低误差区，是 textbook-grade baseline。</div>
-          <div class="case-callout"><strong>风险说明：</strong> SATISFIED_FOR_U_CENTERLINE_ONLY</div>
+          <div class="case-callout"><strong>风险说明：</strong> SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</div>
           <div class="case-callout"><strong>下一步：</strong> 保持 SATISFIED_FOR_U_CENTERLINE_ONLY 语义；等 Phase 5c 独立 audit 再解锁 v/vortex 观测量。</div>
           <div class="pill-row">
             <span class="pill">Governance / structural blocker</span>
@@ -548,16 +548,16 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="pill-row">
               <span class="status-pill ok">PASS</span>
-              <span class="status-pill warn">Partially compatible</span>
+              <span class="status-pill ok">Satisfied</span>
             </div>
           </div>
           <p>Re_H=7600 adapter vs 5100 Le/Moin/Kim DNS，处于弱-Re-敏感 regime；adapter 实际是 kEpsilon（非早期 yaml 错标的 kOmegaSST），RANS-vs-DNS 的方法学差距由 10% tolerance 吸收。</p>
           <div class="case-callout"><strong>当前观测：</strong> Xr/H=6.30 vs 6.26，速度剖面误差约 2.5%，适合作为 separation / reattachment anchor。</div>
-          <div class="case-callout"><strong>风险说明：</strong> PARTIALLY_COMPATIBLE</div>
+          <div class="case-callout"><strong>风险说明：</strong> SATISFIED</div>
           <div class="case-callout"><strong>下一步：</strong> 保持 PARTIALLY_COMPATIBLE 叙事；任何 PASS 只属于 RANS 语义，不是 DNS PASS。</div>
           <div class="pill-row">
-            <span class="pill">Caveat-required</span>
-            <span class="pill">Le, Moin &amp; Kim 1997, J. Fluid Mech. (DNS at Re_H=5100)</span>
+            <span class="pill">Governance / structural blocker</span>
+            <span class="pill">Le, Moin &amp; Kim 1997, J. Fluid Mech. (DNS at Re_H=5100; blended with Driver &amp; Seegmiller 1985 Xr/H=6.26 for whitelist continuity — see gold-file header for anchor rationale)</span>
           </div>
           <p class="artifact-link"><a href="../../knowledge/gold_standards/backward_facing_step.yaml">gold standard</a> · <a href="../backward_facing_step_steady/auto_verify_report.yaml">runtime report</a> · <a href="../backward_facing_step_steady/report.md">deep evidence</a></p>
         </article>
@@ -758,8 +758,8 @@ a:hover { text-decoration: underline; }
     </section>
 
     <div class="footer">
-      <span>Generated · 2026-04-22 23:51:39</span>
-      <span>Head · 5c90ea1</span>
+      <span>Generated · 2026-04-25 13:05:37</span>
+      <span>Head · 2d725ff</span>
       <span>Source · knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml + reports/*/auto_verify_report.yaml</span>
       <span><a href="visual_acceptance_report.html">Open 5-case visual acceptance report</a></span>
       <span><a href="2026-04-18_contract_status_dashboard.md">Open historical markdown snapshot</a></span>
