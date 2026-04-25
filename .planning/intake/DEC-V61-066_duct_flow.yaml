@@ -1,0 +1,388 @@
+# DEC-V61-066 · Fully Developed Turbulent Square-Duct Flow ·
+# Type II multi-dim validation · Methodology v2.0 fifth-apply
+# Intake v1 · 2026-04-26
+#
+# This is the FIFTH apply of the V61-053 → V61-057 → V61-058 → V61-063
+# methodology. duct_flow is the only remaining FAIL case in the 10-case
+# whitelist (memory: "FAIL (1): fully_developed_turbulent_pipe_flow" —
+# canonical name post-V61-011 rename is `duct_flow`). Stage A wires up
+# the missing extractor (P6-TD-003 queued since 2026-04-21) on top of
+# the existing dispatch + gold-contract scaffolding.
+
+decision_id: DEC-V61-066
+title: Fully Developed Turbulent Square-Duct Flow · Type II multi-dim validation · Jones 1976 anchor · case 5 · methodology v2.0 fifth-apply
+case_id: duct_flow
+case_type: II
+status: DRAFT
+proposed_at: "2026-04-26"
+intake_version: 1
+parent_decision: null  # net-new DEC, not derived from a closeout
+related_decisions:
+  - DEC-V61-011  # Q-2 Path A rename: fully_developed_pipe → duct_flow (Jones 1976 contract)
+  - DEC-V61-053  # cylinder Type II precedent (1st apply)
+  - DEC-V61-057  # DHC Type II precedent (2nd apply)
+  - DEC-V61-058  # NACA Type II precedent (3rd apply, Codex F1 case_type II downgrade)
+  - DEC-V61-063  # turbulent_flat_plate Type II precedent (4th apply)
+
+# ============================================================================
+# §1 Trigger
+# ============================================================================
+trigger:
+  type: gap_closure  # last whitelist case without v2.0 multi-dim treatment
+  source: |
+    Memory whitelist outcome map (2026-04-21 baseline):
+      PASS (6):                  ldc, BFS, cylinder, flat_plate, channel, jet
+      PASS_WITH_DEVIATIONS (3):  RBC, NACA, DHC
+      FAIL (1):                  fully_developed_turbulent_pipe_flow (now duct_flow)
+
+    duct_flow is the only FAIL case remaining and the only whitelist
+    case without a v2.0 multi-dim DEC. The dispatch is already in
+    place (src/foam_agent_adapter.py:8460-8477) but the extractor was
+    queued as P6-TD-003 and never built — current behavior is to
+    emit `duct_flow_extractor_pending=True` and exit with no
+    measurement, producing a MISSING_TARGET_QUANTITY hard-fail.
+
+    Active branches deliberately avoided per OPS-2026-04-25-001 §3
+    cross-track isolation:
+      - dec-v61-058-naca       (NACA work)
+      - dec-v61-059-pc         (plane_channel)
+      - dec-v61-060-rbc        (rayleigh_benard)
+      - dec-v61-061-naca-mesh  (NACA mesh refinement)
+      - dec-v61-062-naca-cgrid (NACA C-grid)
+      - feat/c3c-impinging-jet-wallheatflux (impinging_jet)
+    DEC-V61-063 closed 2026-04-26 on dec-v61-063-flat-plate; this
+    branch is forked from origin/main (commit at 2026-04-26 fetch).
+
+# ============================================================================
+# §2 Goal
+# ============================================================================
+goal: |
+  Lift duct_flow from FAIL (extractor missing) to a multi-dim Type II
+  validation suite. Build the friction_factor primary extractor and
+  three physically independent secondary observables, wire them
+  through the existing comparator pipeline, and demonstrate Stage B
+  PASS on a live OpenFOAM kEpsilon run at the existing whitelist
+  mesh budget.
+
+  Acceptance signal (PASS condition, all 4 HARD_GATED):
+    friction_factor                  rel_error < 10%
+    friction_velocity_u_tau          rel_error < 10%
+    bulk_velocity_ratio_u_max        rel_error < 10%
+    log_law_inner_layer_residual     within tolerance band
+
+# ============================================================================
+# §3 Type II observable schema (Codex F1-aware)
+# ============================================================================
+# NACA V61-058 round 1 forced an I→II downgrade because the gate set
+# "lacked 3 physically independent families". Apply that lesson up
+# front: each observable must come from a distinct physics family.
+
+observable_schema:
+  - name: friction_factor
+    role: PRIMARY
+    family: wall_shear_momentum_flux
+    extraction: |
+      f = 8·τ_w / (ρ·U_bulk²) — Darcy form. τ_w averaged over the
+      four wall faces of the square cross-section at the
+      streamwise-mid plane. ρ=1 (incompressible normalized).
+    reference: Jones 1976 / Jones & Launder 1973
+    ref_value: 0.0185
+    tolerance: 0.10  # 10% relative
+    gate_status: HARD_GATED
+    backcompat: |
+      Existing observable in knowledge/gold_standards/duct_flow.yaml.
+      No rename — extractor only adds new sibling observables.
+
+  - name: friction_velocity_u_tau
+    role: SAME_RUN_CROSS_CHECK
+    family: wall_shear_normalized
+    extraction: |
+      u_tau = √(τ_w / ρ) extracted from the same wall-normal gradient
+      stencil as friction_factor but reported in velocity units. Provides
+      a numerical cross-check: u_tau / U_bulk must agree with √(f/8)
+      to within solver round-off. A divergence between the two would
+      indicate an extraction-side bug, not a physics issue.
+    reference: |
+      For Jones 1976 anchor f=0.0185 at U_bulk=1: u_tau = √(0.0185/8) =
+      0.04811. Agreement with this independently-computed value validates
+      that the wall-shear stencil + bulk-velocity normalization are both
+      operating on the same wall-cell layer.
+    ref_value: 0.04811
+    tolerance: 0.10
+    gate_status: HARD_GATED
+
+  - name: bulk_velocity_ratio_u_max
+    role: PROFILE_QUALITATIVE
+    family: cross_section_momentum_distribution
+    extraction: |
+      u_max / U_bulk where u_max is the streamwise velocity at the
+      duct cross-section centroid (y=0, z=0) and U_bulk is the
+      face-area-averaged inlet velocity. For fully-developed AR=1
+      smooth duct turbulent flow at Re=5e4, classical correlations
+      (Nikuradse / Hartnett 1962) give u_max/U_bulk ≈ 1.19-1.21.
+      This is INDEPENDENT of wall shear: it probes the core-region
+      momentum redistribution caused by Prandtl's secondary flow.
+    reference: Hartnett 1962 / Nikuradse 1932 (square duct AR=1, Re~5e4)
+    ref_value: 1.20  # mid of [1.19, 1.21]
+    tolerance: 0.10  # 10% relative
+    gate_status: HARD_GATED
+
+  - name: log_law_inner_layer_residual
+    role: PROFILE_DIAGNOSTIC
+    family: turbulence_BL_structure
+    extraction: |
+      Sample the wall-normal velocity profile along the symmetry plane
+      (z=0, varying y) at the streamwise-mid station. Convert to (y+,
+      u+) using the measured u_tau. Fit u+ = (1/κ)·ln(y+) + B over the
+      log-law band 30 ≤ y+ ≤ 200 with κ=0.41, B=5.0 (Pope 2000 Ch. 7).
+      Report mean residual (1/N)·Σ |u+_measured - u+_log| across the
+      band. A small residual confirms the turbulence model is
+      reproducing the universal inner-layer structure independently
+      of the bulk friction match.
+    reference: Pope 2000 Ch. 7 / Schlichting Ch. 18 (universal inner law)
+    ref_value: 0.0  # log-law-perfect target
+    tolerance:
+      mode: absolute
+      value: 0.5  # |Δu+| ≤ 0.5 across the band — wider than f tol because log-law is asymptotic
+    gate_status: HARD_GATED
+
+independence_justification: |
+  The 4 observables span 4 physically distinct mechanisms:
+    - friction_factor:                wall-shear momentum flux (boundary)
+    - friction_velocity_u_tau:        same wall shear, different normalization
+                                      (this is SAME_RUN_CROSS_CHECK, not an
+                                       independent family — included for
+                                       extractor sanity, not gate-independence)
+    - bulk_velocity_ratio_u_max:      core momentum distribution (interior,
+                                      driven by secondary flow)
+    - log_law_inner_layer_residual:   inner-layer turbulence structure
+                                      (vertical, log-law universality)
+
+  Per the Codex F1 rubric (V61-058 round 1), this gives ≥3
+  physically-independent families:
+    family A: wall_shear_momentum_flux        (friction_factor)
+    family B: cross_section_momentum_distribution (u_max ratio)
+    family C: turbulence_BL_structure         (log-law residual)
+  + 1 SAME_RUN_CROSS_CHECK (u_tau vs √(f/8))
+
+  Pre-emptive Codex F1 ack: case_type II is correct on this gate set.
+
+# ============================================================================
+# §3a IN scope
+# ============================================================================
+in_scope:
+  - "New module src/duct_flow_extractors.py with 4 public functions"
+  - "Adapter wiring in foam_agent_adapter.py:8460-8477 — replace `extractor_pending=True` flag with real extraction call"
+  - "Gold YAML observables[] expansion — keep existing friction_factor as PRIMARY, add 3 new HARD_GATED observables"
+  - "Adapter contract field cf_extractor_path style stamp: `duct_flow_extractor_path = wall_shear_v1`"
+  - "Unit-test module tests/test_duct_flow_extractors.py + adapter tests + alias-parity test"
+  - "Stage B live OpenFOAM run on existing whitelist mesh budget"
+
+# §3b Out of scope (explicit exclusion to bound blast radius)
+out_of_scope:
+  - "Turbulence-model canonicalization (whitelist `k-epsilon` with hyphen does not match canonical `kEpsilon` — same shared-limitation Codex R3 noted on V61-063 A.6). Belongs in a separate methodology DEC."
+  - "Mesh refinement or grading study — fixed at the current `_generate_steady_internal_flow` mesh template (same one V61-063 A.7 made laminar-aware)."
+  - "Secondary-flow corner-vortex extraction — well-known weakness of k-ε (Reynolds Stress Models needed). Out of scope for k-ε contract."
+  - "Periodic-BC fully-developed setup. Current case is inlet/outlet with sufficient L/D_h; if Stage B reveals development insufficient, escalate to a separate DEC, NOT scope creep here."
+  - "Re-validation of existing friction_factor=0.0185 ref_value (Jones 1976 anchor). DEC-V61-011 closed this contract."
+
+# ============================================================================
+# §4 Cross-plane wiring
+# ============================================================================
+cross_plane_imports:
+  - plane: Execution
+    surface: src/duct_flow_extractors.py (NEW), src/foam_agent_adapter.py (REPLACE pending flag)
+    constraint: |
+      `_is_duct_flow_case()` already classifies; A.2 just routes to
+      the new extractor instead of stamping the pending flag. Adapter
+      task-name aliases at line 252-253 (both "Square-Duct Flow" and
+      legacy "Pipe Flow" map to `duct_flow`) stay UNTOUCHED.
+
+  - plane: Evaluation
+    surface: src/auto_verifier/gold_standard_comparator.py + ui/backend/services/validation_report.py
+    constraint: |
+      The 3 new observables follow the same scalar/profile shape as
+      V61-063 — no new comparator branches needed. log_law residual
+      uses absolute tolerance mode (already supported per
+      _compare_number's `tolerance.mode == "absolute"` branch).
+
+  - plane: Knowledge
+    surface: knowledge/gold_standards/duct_flow.yaml + knowledge/whitelist.yaml
+    constraint: |
+      schema_version stays at 2. The legacy_case_ids alias list
+      (DEC-V61-011) stays untouched. whitelist gold_standard.quantity
+      stays at friction_factor for the quick-glance scalar reference
+      — multi-point reference lives in gold_standards/duct_flow.yaml.
+
+  - plane: Observation
+    surface: reports/phase5_audit/, reports/phase5_fields/
+    constraint: |
+      No new reporting infrastructure required. Live run logs at
+      reports/phase5_audit/dec_v61_066_stage_b_live_run_v{1,2,...}.log
+
+# ============================================================================
+# §5 Stage A batch breakdown (planned commits)
+# ============================================================================
+stage_a_batches:
+  - batch: A.1
+    scope: |
+      src/duct_flow_extractors.py module + unit tests:
+        - extract_friction_factor(wall_tau_w, U_bulk, rho)
+        - extract_friction_velocity(wall_tau_w, rho)
+        - extract_bulk_velocity_ratio(u_at_centroid, U_bulk)
+        - extract_log_law_residual(u_line, u_tau, kappa=0.41, B=5.0)
+        - DuctFlowExtractorError exception class
+        - Conservative validation per V61-063 R2 F4 pattern
+    commit_count_estimate: 1
+    test_target: ~25 tests (4 functions × ~6 cases)
+
+  - batch: A.2
+    scope: |
+      Wire the new extractors into foam_agent_adapter.py at the
+      duct_flow dispatch site (line 8460-8477). Replace the
+      `extractor_pending=True` flag emit with actual extraction.
+      Stamp `duct_flow_extractor_path = "wall_shear_v1"`.
+      Need to gather wall τ_w from the cell-centred U field and
+      cell-volume-weighted U_bulk integral.
+    commit_count_estimate: 1
+    test_target: ~5 adapter unit tests
+
+  - batch: A.3
+    scope: |
+      Gold YAML observables[] expansion: keep friction_factor as
+      PRIMARY (back-compat); add friction_velocity_u_tau,
+      bulk_velocity_ratio_u_max, log_law_inner_layer_residual as
+      HARD_GATED siblings with the §3 ref_values + tolerances.
+      Update `legacy_source_files` if ref_value layout changes.
+    commit_count_estimate: 1
+    test_target: ~3 schema tests
+
+  - batch: A.4
+    scope: |
+      Alias-parity test driving GoldStandardComparator end-to-end on
+      a synthetic Jones-consistent emit. Mirror V61-063 A.5 design:
+        - TestAliasParityKeys: every gold name appears in adapter emit
+        - TestEndToEndComparison: synthetic emit yields PASS verdict
+        - TestF1_corrupted_profile_fails: regression guard for the
+          F1-class gate-tautology defect (V61-063 R1 precedent —
+          friction_velocity_u_tau being "always √(f/8)" is the same
+          tautology trap that V61-063 R1 caught).
+    commit_count_estimate: 1
+    test_target: ~8 alias tests
+
+# ============================================================================
+# §6 Risk register
+# ============================================================================
+risk_flags:
+  - id: turbulence_model_canonicalization_inheritance
+    severity: HIGH
+    description: |
+      Whitelist `turbulence_model: k-epsilon` (with hyphen) doesn't
+      match the canonical `kEpsilon` spelling. `_load_whitelist_turbulence_model`
+      returns "k-epsilon" but the dispatch guard
+      `if whitelist_turb in ("laminar", "kOmegaSST", "kEpsilon")`
+      fails, falling through to the Re-based heuristic which returns
+      kOmegaSST. Net effect: case-gen runs kOmegaSST not kEpsilon.
+      DOES NOT BLOCK V61-066 because the friction_factor extraction
+      is turbulence-model-agnostic on the wall layer; but Stage B
+      verdict tolerance budget tightens because kOmegaSST + log-law
+      residual is on average 5-10% wider than kEpsilon's
+      (Wilcox 2008).
+    mitigation: |
+      Document the inheritance and accept the tighter Stage B budget.
+      If Stage B fails the log_law gate by 10-15%, escalate to a
+      separate methodology DEC for turbulence-model canonicalization
+      (whitelist normalization + dispatch). Do NOT scope-creep.
+
+  - id: extractor_wall_face_aggregation_method
+    severity: MED
+    description: |
+      For a square duct with 4 walls, τ_w is direction-dependent
+      (top/bottom vs left/right are equivalent by symmetry, but the
+      magnitudes still need consistent extraction). If the extractor
+      averages |τ_w| over arbitrary cell faces it will pick up
+      side-wall contributions that aren't on the streamwise gradient
+      path, biasing f high.
+    mitigation: |
+      A.1 must use the wall-shear stress projected onto the
+      streamwise direction (τ_w · ê_x), not magnitude. Validate via
+      a unit test with synthetic uniform U_bulk and known τ_w
+      per-wall.
+
+  - id: log_law_band_selection_sensitivity
+    severity: MED
+    description: |
+      The log-law residual is sensitive to the (y+_min, y+_max)
+      band selection. Too low a y+_min hits the buffer-layer
+      transition; too high a y+_max hits the wake region.
+      Standard band [30, 200] requires u_tau to be known a priori
+      (chicken-and-egg with the friction_velocity_u_tau gate).
+    mitigation: |
+      A.1 implements a 2-pass extraction: pass 1 estimates u_tau
+      from the wall-cell gradient (same as friction_factor); pass 2
+      uses that u_tau to convert the y-profile to (y+, u+) and
+      apply the log-law fit on the [30, 200] band. Document the
+      circular dependency in the docstring.
+
+  - id: u_max_centroid_mesh_alignment
+    severity: LOW
+    description: |
+      Cell centroids do not exactly land on (y=0, z=0) unless the
+      mesh has odd-numbered ncy/ncz. For even-numbered meshes,
+      u_max must be interpolated from the 4 nearest cells.
+    mitigation: |
+      A.1 uses bilinear interpolation if no cell is within
+      max(0.5·dy, 1e-3) of the centroid. Document expectation.
+
+  - id: stage_b_runtime_budget
+    severity: LOW
+    description: |
+      simpleFoam kOmegaSST steady at Re=50000 on existing duct mesh
+      converges in 200-500 iterations. Estimated 3-5 min wall.
+    mitigation: |
+      Existing controlDict caps ensure bounded runtime.
+
+# ============================================================================
+# §7 Codex budget
+# ============================================================================
+codex_budget:
+  estimated_rounds: 3
+  reason: |
+    Methodology stack inherited verbatim from V61-063 (A.1-A.5 pattern).
+    Pre-Stage-A review optional (intake §3 gate set is well-justified
+    pre-emptively). R1 reviews A.1-A.4 + Stage B; R2 confirms fixes;
+    R3 reserve for Stage B disposition (post-R3 RETRO-V61-053 protocol
+    if a structural defect surfaces — analogous to V61-063 A.6/A.7).
+  halt_risk_flag: |
+    If Stage B fails by >20% on friction_factor, halt and investigate
+    whether the turbulence_model_canonicalization_inheritance risk
+    has elevated to BLOCKING. That would mean kOmegaSST vs kEpsilon
+    differs more than the Jones 1976 ±10% band allows, escalating to
+    the separate canonicalization DEC.
+
+external_gate_self_estimated_pass_rate: 0.55
+external_gate_self_estimated_pass_rate_source: |
+  §6 risk register · methodology stack is well-precedented (5th apply);
+  highest-risk item is the turbulence-model canonicalization
+  inheritance (HIGH) which can degrade log-law gate. Friction_factor
+  primary is straightforward extractor work. 0.55 reflects mild
+  uncertainty on the log-law band fit and the turbulence-model
+  inheritance impact.
+
+# ============================================================================
+# §8 Acceptance criteria recap
+# ============================================================================
+stage_a_acceptance: |
+  - All 4 stage_a_batches landed with passing tests
+  - Alias-parity test (A.4) drives GoldStandardComparator on synthetic
+    Jones-consistent emit and yields PASS overall
+  - Codex round 1 verdict: APPROVE or APPROVE_WITH_COMMENTS
+  - No regressions on existing duct_flow tests / fixtures
+
+stage_b_acceptance: |
+  - Live OpenFOAM run produces solver_success=True
+  - All 4 HARD_GATED observables within tolerance OR documented
+    FAIL_PHYSICS_BORDERLINE (V61-063 precedent: methodology success +
+    physics-fidelity gap traced to inherited limitation)
+  - Audit fixture regenerated; no MISSING_TARGET_QUANTITY concerns
+  - Codex round 2/3 disposition: ACCEPT or APPROVE
