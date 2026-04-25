@@ -332,3 +332,90 @@ class TestExtractRollCountB3:
             f"Side-wall trim failed: roll_count={out['value']}, "
             f"sign_changes={out['sign_changes']}"
         )
+
+
+# ============================================================================
+# Stage B-final · Integration tests (all 3 extractors on shared field)
+# ============================================================================
+
+class TestStageBFinalIntegration:
+    """DEC-V61-060 Stage B-final: integration sweep asserting all 3
+    extractors operate coherently on a shared canonical RBC field.
+    
+    Per intake §7 Batch B atomicity_guard, this is the closing commit
+    of Stage B before Codex R3 review.
+    """
+
+    def test_canonical_two_roll_field_yields_consistent_observables(self):
+        """A single synthetic 2-roll RBC field must produce:
+          - nu_asymmetry value ≈ 0 (linear T → conduction baseline,
+            both walls give Nu ≈ 1 → asymmetry ≈ 0; passes 5% gate)
+          - w_max_nondim positive O(1)
+          - roll_count = 2 (canonical 2-roll pattern)
+        """
+        slice_ = _two_roll_velocity_field(nx=32, ny=32)
+        bc = _make_bc()
+        nu_out = extract_nu_asymmetry(slice_, bc)
+        wmax_out = extract_w_max(slice_, bc)
+        rc_out = extract_roll_count_x(slice_, bc)
+
+        # All three extractors must succeed
+        assert nu_out and wmax_out and rc_out, (
+            f"Extractor failure — nu={nu_out}, w_max={wmax_out}, rc={rc_out}"
+        )
+        # nu_asymmetry within gate threshold (5%)
+        assert nu_out["value"] < 0.05, (
+            f"Conservation invariant violated: asymmetry={nu_out['value']}"
+        )
+        # w_max nondim positive (PROVISIONAL_ADVISORY — value reasonable)
+        assert wmax_out["value"] > 0
+        # roll count = 2 (PROVISIONAL_ADVISORY — matches benchmark)
+        assert rc_out["value"] == 2
+
+    def test_unbalanced_field_fails_only_invariant(self):
+        """When the temperature field is asymmetric (BL underresolved at
+        top), the conservation invariant FAILs but other extractors are
+        unaffected (different physics).
+        
+        Demonstrates that the NON_TYPE_HARD_INVARIANT fires correctly
+        without contaminating PROVISIONAL_ADVISORY observables.
+        """
+        # Combine convective T (asymmetric) with 2-roll u_y
+        nx, ny = 16, 16
+        Lx, Ly, U_pk = 4.0, 1.0, 0.005
+        cxs, cys, t_vals, u_vecs = [], [], [], []
+        for i in range(nx):
+            x = (i + 0.5) * Lx / nx
+            for j in range(ny):
+                y = (j + 0.5) * Ly / ny
+                cxs.append(x); cys.append(y)
+                t_vals.append(305.0 - 10.0 * (2 * y - y * y))  # asymmetric BL
+                u_vecs.append((
+                    0.0,
+                    U_pk * math.cos(2 * math.pi * x / Lx) * math.sin(math.pi * y / Ly),
+                    0.0,
+                ))
+        slice_ = RBCFieldSlice(cxs=cxs, cys=cys, t_vals=t_vals, u_vecs=u_vecs)
+        bc = _make_bc()
+        nu_out = extract_nu_asymmetry(slice_, bc)
+        wmax_out = extract_w_max(slice_, bc)
+        rc_out = extract_roll_count_x(slice_, bc)
+        # Invariant FAILs (asymmetry > 5%)
+        assert nu_out["value"] > 0.05
+        # But other observables are uncontaminated
+        assert wmax_out["value"] > 0
+        assert rc_out["value"] == 2
+
+    def test_extractor_output_keys_compatible_with_comparator(self):
+        """All three extractors emit a 'value' field — the comparator
+        consumes this uniform key. Other fields are diagnostic."""
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc()
+        for fn in (extract_nu_asymmetry, extract_w_max, extract_roll_count_x):
+            out = fn(slice_, bc)
+            assert "value" in out, (
+                f"{fn.__name__} must emit 'value' for comparator; got {out}"
+            )
+            assert "status" in out, (
+                f"{fn.__name__} must emit 'status'; got {out}"
+            )
