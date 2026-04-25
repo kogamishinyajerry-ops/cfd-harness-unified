@@ -9020,6 +9020,17 @@ mergePatchPairs
         bc = task_spec.boundary_conditions or {}
         nu = bc.get("nu")
         half_height = bc.get("channel_half_height")
+        # DEC-V61-059 Stage A.2: pull U_bulk + turbulence model declaration
+        # from boundary_conditions so the emitter can compute friction_
+        # coefficient and stamp turbulence_model_used (consumed by
+        # comparator_gates.G2 to discriminate canonical-band shortcuts).
+        # Both kwargs default to None on the emitter side, so existing
+        # MOCK / legacy callers without these bc keys see the original
+        # 6-key emit dict — no behavioural change for those paths.
+        u_bulk_bc = bc.get("U_bulk")
+        turbulence_declared = bc.get("turbulence_model_used")
+        if turbulence_declared is None:
+            turbulence_declared = getattr(task_spec, "turbulence_model", None)
         if (
             case_dir is not None
             and nu is not None
@@ -9034,6 +9045,8 @@ mergePatchPairs
                     case_dir,
                     nu=float(nu),
                     half_height=float(half_height),
+                    U_bulk=float(u_bulk_bc) if u_bulk_bc is not None else None,
+                    turbulence_model_declared=turbulence_declared,
                 )
             except PlaneChannelEmitterError as exc:
                 # Malformed postProcessing input — surface as a clearly

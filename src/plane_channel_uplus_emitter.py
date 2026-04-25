@@ -297,6 +297,8 @@ def emit_uplus_profile(
     *,
     nu: float,
     half_height: float,
+    U_bulk: Optional[float] = None,
+    turbulence_model_declared: Optional[str] = None,
 ) -> Optional[Dict[str, object]]:
     """End-to-end: read FO output, normalize, emit key_quantities.
 
@@ -304,6 +306,14 @@ def emit_uplus_profile(
     FO output is absent (so caller can fall back to scalar U_max path).
     Malformed FO output raises PlaneChannelEmitterError — corruption
     must surface, not silently degrade.
+
+    DEC-V61-059 Stage A.2: when U_bulk and/or turbulence_model_declared
+    are provided, the result dict carries SecondaryObservables
+    (friction_coefficient, turbulence_model_used, u+ profile SNR
+    metrics) computed by `src.plane_channel_extractors`. Both kwargs
+    default to None for backward compatibility — pre-DEC-V61-059
+    callers see the original 6-key dict; DEC-V61-059-aware callers
+    see the enriched dict that comparator_gates.G2 can read.
     """
     tau_w = _read_wall_shear_stress(case_dir)
     u_line = _read_uline_profile(case_dir)
@@ -335,7 +345,7 @@ def emit_uplus_profile(
         half_height=half_height,
     )
 
-    return {
+    emitted: Dict[str, object] = {
         "u_mean_profile": list(profile.u_plus),
         "u_mean_profile_y_plus": list(profile.y_plus),
         "u_tau": profile.u_tau,
@@ -343,3 +353,21 @@ def emit_uplus_profile(
         "wall_shear_stress": profile.wall_shear_stress,
         "u_mean_profile_source": "wallShearStress_fo_v1",
     }
+
+    # DEC-V61-059 Stage A.2 secondary observables. Lazy import so the
+    # base DEC-V61-043 emitter remains importable even if the extractors
+    # module is removed in a future refactor (Evaluation/Execution plane
+    # decoupling). Failure to enrich does not invalidate the base emit.
+    if U_bulk is not None or turbulence_model_declared is not None:
+        from src.plane_channel_extractors import (  # noqa: WPS433 — lazy
+            enrich_emitted_profile,
+            merge_secondary_into_key_quantities,
+        )
+        secondary = enrich_emitted_profile(
+            emitted,
+            U_bulk=U_bulk,
+            turbulence_model_declared=turbulence_model_declared,
+        )
+        merge_secondary_into_key_quantities(emitted, secondary)
+
+    return emitted
