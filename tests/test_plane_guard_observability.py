@@ -218,10 +218,16 @@ def test_install_guard_registers_atexit_hook_once():
 
 
 def test_atexit_pollution_check_runs_diff_when_snapshot_active(tmp_path, monkeypatch):
-    """The atexit callback runs diff_pollution_snapshot when a snapshot is active."""
+    """The atexit callback runs diff_pollution_snapshot when a snapshot is active.
+
+    Test hygiene (RETRO-V61-006 MP-D): monkeypatch _find_repo_root so the
+    writer anchors to tmp_path, not the real repo root. Without this the
+    test would leak one sys_modules_pollution.jsonl line into reports/
+    on every run, polluting CI dogfood artifacts.
+    """
     uninstall_guard()
     import src.task_runner  # noqa: F401
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(guard_module, "_find_repo_root", lambda: str(tmp_path))
     install_guard(Mode.WARN)
     # Pollute one src.* key so the diff has something to log.
     polluted_key = "src.task_runner"
@@ -235,10 +241,8 @@ def test_atexit_pollution_check_runs_diff_when_snapshot_active(tmp_path, monkeyp
         if saved is not None:
             sys.modules[polluted_key] = saved
         uninstall_guard(run_pollution_check=False)
-    # diff_pollution_snapshot wrote to repo-root anchored path.
-    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
-        guard_module._POLLUTION_LOG_FILENAME  # noqa: SLF001
-    ))
+    # diff_pollution_snapshot wrote to tmp_path-anchored path (not repo root).
+    expected_log = tmp_path / "reports" / "plane_guard" / guard_module._POLLUTION_LOG_FILENAME  # noqa: SLF001
     assert expected_log.exists()
 
 
@@ -258,12 +262,18 @@ def test_atexit_pollution_check_noops_when_no_snapshot():
 def test_a18_records_incident_when_fixture_frame_masks_forbidden_transition(
     tmp_path, monkeypatch
 ):
-    """Fixture-frame bypass of forbidden transition records A18 incident."""
+    """Fixture-frame bypass of forbidden transition records A18 incident.
+
+    Test hygiene (RETRO-V61-006 MP-D): monkeypatch _find_repo_root so the
+    A18 writer anchors to tmp_path, not the real repo root. Without this
+    the test would leak one fixture_frame_confusion.jsonl line into reports/
+    on every CI run, which IS the file the rollback evaluator reads —
+    leak would inject false-positive incidents toward the §2.4 trigger.
+    """
     from src._plane_guard import PlaneGuardFinder
-    from src._plane_assignment import Plane
 
     uninstall_guard()
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(guard_module, "_find_repo_root", lambda: str(tmp_path))
 
     finder = PlaneGuardFinder(mode=Mode.WARN)
 
@@ -282,11 +292,7 @@ def test_a18_records_incident_when_fixture_frame_masks_forbidden_transition(
         guard_module.sys, "_getframe", lambda depth=0: test_frame
     )
 
-    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
-        guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
-    ))
-    if expected_log.exists():
-        expected_log.unlink()
+    expected_log = tmp_path / "reports" / "plane_guard" / guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
 
     # Calling find_spec on src.result_comparator from this fake stack
     # → Evaluation target + Execution source via tests.* bypass = A18 hit.
@@ -304,11 +310,15 @@ def test_a18_records_incident_when_fixture_frame_masks_forbidden_transition(
 def test_a18_does_not_record_when_no_forbidden_transition_masked(
     tmp_path, monkeypatch
 ):
-    """If the bypassed transition would have been allowed anyway, no A18 record."""
+    """If the bypassed transition would have been allowed anyway, no A18 record.
+
+    Test hygiene (RETRO-V61-006 MP-D): monkeypatch _find_repo_root for
+    same isolation reason as the positive case above.
+    """
     from src._plane_guard import PlaneGuardFinder
 
     uninstall_guard()
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(guard_module, "_find_repo_root", lambda: str(tmp_path))
     finder = PlaneGuardFinder(mode=Mode.WARN)
 
     class FakeFrame:
@@ -325,11 +335,7 @@ def test_a18_does_not_record_when_no_forbidden_transition_masked(
         guard_module.sys, "_getframe", lambda depth=0: test_frame
     )
 
-    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
-        guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
-    ))
-    if expected_log.exists():
-        expected_log.unlink()
+    expected_log = tmp_path / "reports" / "plane_guard" / guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
 
     finder.find_spec("src.foam_agent_adapter", None, None)
 

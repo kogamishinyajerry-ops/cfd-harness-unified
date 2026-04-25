@@ -61,7 +61,18 @@ reports/phase5_reports/
 
 # ADR-002 plane-guard runtime telemetry (per OPS-2026-04-25-001 §2 ownership;
 # .jsonl files are per-process and should not pollute git).
-reports/plane_guard/
+# reports/plane_guard/ — runtime telemetry (.jsonl + .log) ignored;
+# governance-class docs (baseline anchors, READMEs) tracked. Per-file
+# pattern (rather than directory ignore + negation) because Git's
+# negation rules cannot re-include files inside an excluded directory.
+reports/plane_guard/*.jsonl
+reports/plane_guard/*.log
+
+# Codex raw execution logs — curated .md summaries are the tracked
+# pattern under reports/codex_tool_reports/. Raw .log files are
+# redundant; the verdicts are captured in the matching .md file
+# and/or the relevant retrospective.
+reports/codex_tool_reports/*.log
 
 # Auto-corrections evidence trail — runtime emits a new YAML on every comparator
 # deviation. They're a local audit aid; the DEC system tracks the canonical state.
