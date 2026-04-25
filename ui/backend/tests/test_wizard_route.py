@@ -147,6 +147,58 @@ def test_run_stream_validates_case_id() -> None:
     assert r.status_code in (400, 404)  # FastAPI may 404 the path before our check
 
 
+def test_q13_schema_accepts_forward_compat_fields() -> None:
+    """Round-3 Q13 schema audit: the level / stream / exit_code fields are
+    optional now (mock leaves them None) but Stage 8b real-solver runs
+    will populate them. Validate the schema accepts each field with
+    realistic values so the wire contract is locked before the Stage 8b
+    PR."""
+    from ui.backend.schemas.wizard import RunPhaseEvent
+
+    # Mock-style event: forward-compat fields absent
+    mock_ev = RunPhaseEvent(
+        type="log", phase="solver", t=1.0, line="Time = 0.05s residual 1e-3",
+    )
+    assert mock_ev.level is None
+    assert mock_ev.stream is None
+    assert mock_ev.exit_code is None
+
+    # Real-solver-style event: warning to stderr
+    real_warn = RunPhaseEvent(
+        type="log", phase="solver", t=1.0,
+        line="--> FOAM Warning : non-orthogonality > 70°",
+        level="warning", stream="stderr",
+    )
+    assert real_warn.level == "warning"
+    assert real_warn.stream == "stderr"
+
+    # phase_done with exit_code (subprocess wait result)
+    done_ev = RunPhaseEvent(
+        type="phase_done", phase="solver", t=2.0,
+        status="ok", summary="converged · 200 iterations",
+        exit_code=0,
+    )
+    assert done_ev.exit_code == 0
+
+
+def test_q13_event_serialization_omits_none_fields() -> None:
+    """SSE wire format should be lean. Pydantic .model_dump() with
+    `exclude_none` keeps the mock event payload at the same size as
+    pre-audit (no schema bloat). Stage 8b can keep the SSE message
+    body minimal by serializing this way."""
+    from ui.backend.schemas.wizard import RunPhaseEvent
+
+    ev = RunPhaseEvent(type="log", phase="mesh", t=1.0, line="Reading blockMeshDict")
+    payload = ev.model_dump(exclude_none=True)
+    # Forward-compat fields should be absent
+    assert "level" not in payload
+    assert "stream" not in payload
+    assert "exit_code" not in payload
+    # Core fields present
+    assert payload["type"] == "log"
+    assert payload["phase"] == "mesh"
+
+
 # --- Opus round-2 Q11: server-rendered preview must be byte-exact ----------
 
 def test_preview_matches_create_byte_for_byte() -> None:

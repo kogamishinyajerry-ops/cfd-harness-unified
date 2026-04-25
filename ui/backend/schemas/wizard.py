@@ -108,6 +108,12 @@ class WizardPreviewResponse(BaseModel):
 PhaseId = Literal["geometry", "mesh", "boundary", "solver", "compare"]
 PhaseStatus = Literal["ok", "fail", "running"]
 EventType = Literal["phase_start", "log", "metric", "phase_done", "run_done"]
+# Stage 8b prep (round-3 Q13 schema audit, 2026-04-26): real solver
+# subprocess will surface log severity. Adding here as an optional
+# discriminant so the schema is forward-compatible without a breaking
+# wire format change in the Stage 8b PR.
+LogLevel = Literal["debug", "info", "warning", "error"]
+LogStream = Literal["stdout", "stderr"]
 
 
 class RunPhaseEvent(BaseModel):
@@ -116,14 +122,54 @@ class RunPhaseEvent(BaseModel):
     Discriminated by `type`. `phase_start` opens a phase; `log` and
     `metric` carry per-phase telemetry; `phase_done` closes a phase
     with a status + 1-line summary; `run_done` closes the whole run.
+
+    Round-3 Q13 schema audit (2026-04-26): all originally-defined fields
+    were verified to be facts about a run (type/phase/t/line/message/
+    summary/status/metric_key/metric_value), not properties of the mock
+    pacing. The `routes/wizard.py:_PHASE_SCRIPT` carries mock-shape
+    fields (`delay_per_log`, `summary_template`, `patch_count`) but
+    those never go on the wire. So the round-2 prediction "Stage 8b is
+    a single-file swap" holds for the schema; the Stage 8b PR replaces
+    the script generator without changing this contract.
+
+    The `level` / `stream` / `exit_code` fields below are **additive
+    forward-compat** — a real OpenFOAM subprocess yields warning lines
+    on stderr and a process exit code that the mock script does not
+    need to populate. Existing frontend code reads these as undefined
+    and renders unchanged; Stage 8b can populate them without a schema
+    migration.
     """
 
     type: EventType
     phase: Optional[PhaseId] = None
-    t: float = Field(..., description="Unix timestamp seconds")
+    t: float = Field(..., description="Wall-clock timestamp (unix seconds)")
     line: Optional[str] = None
     message: Optional[str] = None
     summary: Optional[str] = None
     status: Optional[PhaseStatus] = None
     metric_key: Optional[str] = None
     metric_value: Optional[float] = None
+    # --- Stage 8b forward-compat (round-3 Q13 audit additions) ---
+    level: Optional[LogLevel] = Field(
+        None,
+        description=(
+            "Log severity for `log` events. None for legacy/mock streams "
+            "(frontend treats as 'info'). Real solver runs populate from "
+            "OpenFOAM's '--> FOAM Warning :' / '--> FOAM FATAL ERROR :' "
+            "prefixes."
+        ),
+    )
+    stream: Optional[LogStream] = Field(
+        None,
+        description=(
+            "Source stream for `log` events. None when stream is implicit "
+            "(mock / single-stream)."
+        ),
+    )
+    exit_code: Optional[int] = Field(
+        None,
+        description=(
+            "Subprocess exit code for `phase_done` / `run_done` events. "
+            "None for events emitted before subprocess wait()."
+        ),
+    )

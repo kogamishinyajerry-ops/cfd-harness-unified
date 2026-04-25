@@ -59,6 +59,10 @@ export type WizardEventType =
   | "metric"
   | "phase_done"
   | "run_done";
+// Stage 8b prep (round-3 Q13 audit): forward-compat fields for real
+// solver subprocess. Mock script leaves these undefined.
+export type LogLevel = "debug" | "info" | "warning" | "error";
+export type LogStream = "stdout" | "stderr";
 
 export interface RunPhaseEvent {
   type: WizardEventType;
@@ -70,4 +74,8 @@ export interface RunPhaseEvent {
   status?: PhaseStatus | null;
   metric_key?: string | null;
   metric_value?: number | null;
+  // Stage 8b forward-compat
+  level?: LogLevel | null;
+  stream?: LogStream | null;
+  exit_code?: number | null;
 }
