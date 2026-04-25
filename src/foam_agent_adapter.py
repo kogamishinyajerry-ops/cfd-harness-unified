@@ -8933,22 +8933,31 @@ mergePatchPairs
         task_spec: TaskSpec,
         key_quantities: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """NC Cavity: 从侧壁温度梯度计算 Nusselt number。
+        """NC Cavity: 从壁面温度梯度计算 Nusselt number。
 
         DEC-V61-042: uses src.wall_gradient.extract_wall_gradient — a
         3-point one-sided stencil that differences the hot-wall BC value
-        against the two nearest interior cells in each y-layer. This is
-        O(h²) accurate at the wall. The previous 1-point midpoint method
-        differenced two interior cells and got the gradient at their
-        midpoint, not at the wall — a systematic O(h) error that ran
-        ~30% on coarse meshes (DHC Ra=1e6: reported Nu=11.37 vs gold 8.8).
+        against the two nearest interior cells. This is O(h²) accurate
+        at the wall.
 
-        BC metadata (wall_coord_hot / T_hot_wall / wall_bc_type) is
-        plumbed through task_spec.boundary_conditions by the generator
-        (_generate_natural_convection_cavity). If it's absent, the
-        extractor fails closed — emits NO nusselt_number so the
-        comparator's MISSING_TARGET_QUANTITY path fires instead of a
-        silent fallback.
+        DEC-V61-060 Stage A.2: added wall_orientation branch so the same
+        stencil works on a horizontal wall (RBC bottom-heated) as well
+        as the historical vertical wall (DHC side-heated).
+          wall_orientation = 'x' (default, DHC):
+              hot wall is at x=wall_coord_hot (vertical wall);
+              group cells by y, profile along x within each y-layer,
+              gradient is dT/dx at x=wall_coord_hot.
+          wall_orientation = 'y' (RBC bottom-heated, lit at A.3):
+              hot wall is at y=wall_coord_hot (horizontal wall);
+              group cells by x, profile along y within each x-column,
+              gradient is dT/dy at y=wall_coord_hot.
+        Stage A.2 LANDS THIS BRANCH WITHOUT FLIPPING RBC DISPATCH so
+        existing tests stay green. Stage A.3 will set
+        wall_orientation='y' on the RBC dispatch path.
+
+        BC metadata (wall_coord_hot / T_hot_wall / wall_bc_type /
+        wall_orientation) is plumbed through task_spec.boundary_conditions
+        by the generator. If wall_orientation is absent, defaults to 'x'.
         """
         if not cxs or not cys or not t_vals:
             return key_quantities
@@ -8959,42 +8968,54 @@ mergePatchPairs
         bc_type = bc.get("wall_bc_type")
         if wall_coord_hot is None or T_hot_wall is None or bc_type is None:
             # Generator did not plumb wall metadata — fail closed.
-            # Do NOT leak into key_quantities (Codex DEC-042 round-1 FLAG:
-            # measurement state must not carry extractor-internal flags).
-            # The absence of nusselt_number is the signal; DEC-036 G1
-            # picks it up as MISSING_TARGET_QUANTITY at the comparator.
             return key_quantities
+
+        # DEC-V61-060 Stage A.2: select orthogonal-to-wall axis based on
+        # orientation. Default 'x' preserves DHC behavior verbatim.
+        wall_orientation = str(bc.get("wall_orientation", "x")).lower()
+        if wall_orientation not in ("x", "y"):
+            wall_orientation = "x"  # safe fallback
 
         from collections import defaultdict
         from src.wall_gradient import extract_wall_gradient, BCContractViolation
 
-        y_target = 0.5 * (min(cys) + max(cys))
-        unique_y = sorted({round(y, 6) for y in cys})
-        if len(unique_y) >= 2:
-            # EX-1-007 B1 hotfix: use max adjacent dy so the preserved mid-plane
-            # visualization slice still finds the coarse center cells on wall-packed meshes.
-            dy_cell = max(unique_y[i + 1] - unique_y[i] for i in range(len(unique_y) - 1))
-            y_tol = max(0.6 * dy_cell, 1e-6)
+        # Map (parallel-to-wall coord, normal-to-wall coord) per orientation.
+        if wall_orientation == "x":
+            # Hot wall is vertical (x=const); profile runs along x at each y.
+            parallel_axis = cys      # group key (one layer per y)
+            normal_axis = cxs        # profile axis (along x within each y-layer)
+        else:  # 'y'
+            # Hot wall is horizontal (y=const); profile runs along y at each x.
+            parallel_axis = cxs      # group key (one column per x)
+            normal_axis = cys        # profile axis (along y within each x-column)
+
+        target = 0.5 * (min(parallel_axis) + max(parallel_axis))
+        unique_p = sorted({round(p, 6) for p in parallel_axis})
+        if len(unique_p) >= 2:
+            dp_cell = max(unique_p[i + 1] - unique_p[i] for i in range(len(unique_p) - 1))
+            p_tol = max(0.6 * dp_cell, 1e-6)
         else:
-            y_tol = 0.015
-        y_layers: Dict[float, Dict[float, List[float]]] = defaultdict(lambda: defaultdict(list))
+            p_tol = 0.015
+        layers: Dict[float, Dict[float, List[float]]] = defaultdict(lambda: defaultdict(list))
 
         for i in range(min(len(cxs), len(cys), len(t_vals))):
-            y_layers[round(cys[i], 6)][round(cxs[i], 4)].append(t_vals[i])
+            pkey = round(parallel_axis[i], 6)
+            nkey = round(normal_axis[i], 4)
+            layers[pkey][nkey].append(t_vals[i])
 
         layer_profiles: Dict[float, List[Tuple[float, float]]] = {}
         wall_gradients: List[float] = []
-        for yr, x_groups in y_layers.items():
-            x_t_pairs = [(xr, sum(ts) / len(ts)) for xr, ts in sorted(x_groups.items())]
-            layer_profiles[yr] = x_t_pairs
-            if len(x_t_pairs) < 2:
+        for pkey, n_groups in layers.items():
+            n_t_pairs = [(nr, sum(ts) / len(ts)) for nr, ts in sorted(n_groups.items())]
+            layer_profiles[pkey] = n_t_pairs
+            if len(n_t_pairs) < 2:
                 continue
             try:
                 grad = extract_wall_gradient(
                     wall_coord=float(wall_coord_hot),
                     wall_value=float(T_hot_wall),
-                    coords=[x for x, _ in x_t_pairs],
-                    values=[T for _, T in x_t_pairs],
+                    coords=[n for n, _ in n_t_pairs],
+                    values=[T for _, T in n_t_pairs],
                     bc_type=bc_type,
                     bc_gradient=bc.get("wall_bc_gradient"),
                 )
@@ -9004,19 +9025,30 @@ mergePatchPairs
 
         if wall_gradients:
             dT_bulk = float(bc.get("dT", 10.0))
-            L = float(bc.get("L", bc.get("aspect_ratio", 1.0)))
+            # DEC-V61-060 Stage A.2: Nu = grad·H/ΔT where H is the
+            # characteristic length normal-to-wall. For DHC: H=Lx (cavity
+            # width perpendicular to vertical hot wall). For RBC bottom-
+            # heated: H=Ly (cavity height perpendicular to horizontal hot
+            # wall). Pre-Stage-A.1 these were the same value (square cavity
+            # bug); post-A.1 they're distinct.
+            if wall_orientation == "y":
+                H_char = float(bc.get("Ly", bc.get("H", bc.get("L", 1.0))))
+            else:
+                H_char = float(bc.get("Lx", bc.get("L", bc.get("aspect_ratio", 1.0))))
             key_quantities["nusselt_number"] = (
                 sum(wall_gradients) / len(wall_gradients)
-            ) * L / dT_bulk
-            key_quantities["nusselt_number_source"] = "wall_gradient_stencil_3pt"
+            ) * H_char / dT_bulk
+            key_quantities["nusselt_number_source"] = (
+                "wall_gradient_stencil_3pt_" + wall_orientation
+            )
 
         if layer_profiles:
-            mid_candidates = [yr for yr in layer_profiles if abs(yr - y_target) < y_tol]
-            mid_y = min(mid_candidates or list(layer_profiles), key=lambda yr: abs(yr - y_target))
-            mid_profile = layer_profiles[mid_y]
+            mid_candidates = [pr for pr in layer_profiles if abs(pr - target) < p_tol]
+            mid_p = min(mid_candidates or list(layer_profiles), key=lambda pr: abs(pr - target))
+            mid_profile = layer_profiles[mid_p]
             if len(mid_profile) >= 2:
                 key_quantities["midPlaneT"] = [T for _, T in mid_profile]
-                key_quantities["midPlaneT_y"] = [x for x, _ in mid_profile]
+                key_quantities["midPlaneT_y"] = [n for n, _ in mid_profile]
 
         return key_quantities
 

@@ -2473,3 +2473,103 @@ class TestRBCMultiDim:
             "RBC AR=4 must scale x-cells to 4× y-cells (320×80). "
             f"blockMeshDict:\n{blockmesh[:800]}"
         )
+
+    def test_a2_extractor_y_axis_branch_computes_horizontal_wall_nu(self, tmp_path):
+        """DEC-V61-060 Stage A.2: _extract_nc_nusselt must accept
+        wall_orientation='y' and compute Nu against a horizontal hot wall
+        (RBC bottom-heated geometry). Validates the new branch in
+        isolation; the RBC dispatch flip itself lands in Stage A.3.
+
+        Synthetic field: linear T profile in y, hot wall at y=0 T_hot=305,
+        cold at y=1 T_cold=295. Expected: dT/dy at y=0 = (305-295)/1 = -10
+        (i.e. magnitude 10 for an evenly-spaced linear profile, but the
+        3-point stencil is one-sided + O(h²) so result depends on cell
+        layout). The test asserts (a) extractor returns a positive Nu,
+        (b) source tag is suffixed with "_y", (c) Nu is sane (1-100).
+        """
+        # Two columns x=0.25, x=0.75; per column 4 y-cells linearly spaced
+        # 0.125, 0.375, 0.625, 0.875 with T = 305 - 10·y (linear)
+        cxs = []
+        cys = []
+        t_vals = []
+        # Nonlinear T = 305 - 10·(2y - y²) (BL-thinning) so wall gradient
+        # |dT/dy|_{y=0} = 20 ≫ 10 (linear conduction baseline) → Nu > 1.
+        for x in (0.25, 0.75):
+            for y in (0.125, 0.375, 0.625, 0.875):
+                cxs.append(x)
+                cys.append(y)
+                t_vals.append(305.0 - 10.0 * (2 * y - y * y))
+
+        spec = TaskSpec(
+            name="rayleigh_benard_convection",
+            geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+            flow_type=FlowType.NATURAL_CONVECTION,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Ra=1e6,
+            boundary_conditions={
+                "wall_coord_hot": 0.0,           # y=0
+                "T_hot_wall": 305.0,
+                "wall_bc_type": "fixedValue",
+                "wall_orientation": "y",          # NEW: A.2 branch
+                "dT": 10.0,
+                "Lx": 4.0,
+                "Ly": 1.0,
+                "H": 1.0,
+            },
+        )
+        out = FoamAgentExecutor._extract_nc_nusselt(
+            cxs, cys, t_vals, spec, {}
+        )
+        assert "nusselt_number" in out, (
+            f"y-axis branch produced no Nu. out={out}"
+        )
+        nu = out["nusselt_number"]
+        assert nu > 0, f"Nu must be positive, got {nu}"
+        assert 1 < nu < 100, f"Nu out of sane range: {nu}"
+        assert out.get("nusselt_number_source", "").endswith("_y"), (
+            f"source tag must end with '_y', got {out.get('nusselt_number_source')}"
+        )
+
+    def test_a2_extractor_x_axis_branch_unchanged_for_dhc(self, tmp_path):
+        """DEC-V61-060 Stage A.2: must NOT regress DHC. The default
+        wall_orientation='x' branch must compute Nu identically to
+        pre-A.2 behavior. Synthetic linear-T-in-x profile with hot wall
+        at x=0; expected positive Nu with source tag suffix '_x'.
+        """
+        # Two y-layers; per layer 4 x-cells linearly spaced
+        cxs = []
+        cys = []
+        t_vals = []
+        for y in (0.25, 0.75):
+            for x in (0.125, 0.375, 0.625, 0.875):
+                cxs.append(x)
+                cys.append(y)
+                t_vals.append(305.0 - 10.0 * x)
+
+        spec = TaskSpec(
+            name="differential_heated_cavity",
+            geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+            flow_type=FlowType.NATURAL_CONVECTION,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Ra=1e6,
+            boundary_conditions={
+                "wall_coord_hot": 0.0,           # x=0
+                "T_hot_wall": 305.0,
+                "wall_bc_type": "fixedValue",
+                # wall_orientation absent → defaults to 'x' (legacy DHC path)
+                "dT": 10.0,
+                "Lx": 1.0,
+                "Ly": 1.0,
+                "L": 1.0,
+            },
+        )
+        out = FoamAgentExecutor._extract_nc_nusselt(
+            cxs, cys, t_vals, spec, {}
+        )
+        assert "nusselt_number" in out
+        assert out["nusselt_number"] > 0
+        assert out.get("nusselt_number_source", "").endswith("_x"), (
+            f"default orientation must be x, got {out.get('nusselt_number_source')}"
+        )
