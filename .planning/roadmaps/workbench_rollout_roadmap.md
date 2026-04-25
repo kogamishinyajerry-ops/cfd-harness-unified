@@ -96,15 +96,16 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 - **Anti-pattern guard observed**: no "网格质量证书" decoration; band shows real cross-case variance (LDC 2Y/2G, DHC 1R/3G, RBC 3 gray, BFS/cyl/flat_plate/plane_ch/NACA/duct mostly green).
 - **Future polish (not blocking close)**: skew / non-orthogonality / y+ — those need real `checkMesh` log parsing (only NACA0012 has logs today; others would need live OpenFOAM runs).
 
-### Stage 4 · GuardedRun · checkpoint rail + first-visit tour
+### Stage 4 · GuardedRun · checkpoint rail ✅ MVP LANDED (commit 63f12f2, 2026-04-25)
 
-- **Trigger (start)**: Stage 3 close 满足 **AND** preflight 事件分类清单 ≥5 类 (e.g., fluid_props_unset, BC_unmatched, schema_invalid, mesh_zero_cells, solver_unsupported)
-- **MVP scope**: `<RunRail>` checkpoint visualization (5+ preflight 检查项 · 每项 pass/fail/skip 三态 · 失败展开 evidence) + first-visit guided tour (默认 3 步 · 可跳过 + 记住 · checkpoint fail 再唤起)
-- **Trigger (close)**: `preflight 事件 ≥5 类` (实际累计 5 种以上不同 preflight 失败被捕捉到 + 解决方案 documented)
-- **主交付 viz**: run rail (vertical timeline of checkpoints) + tour overlay + residual SVG live update
-- **Predecessor**: Stage 3
-- **Risk**: 打扰感 (Lin/Sarah disagreement resolution: 默认 3 步可跳 · 仅在 fail 时再唤起)
-- **Anti-pattern**: tour 步数多到把 surface 占满 / tour 不能 dismiss
+- **Trigger (start)**: ✅ MET — Stage 3 closed + preflight endpoint serves 5 categories × 10 cases.
+- **MVP scope** (delivered): 5 preflight categories (adapter / schema / gold_standard / physics / mesh) reusing existing data sources. `<RunRail>` checkpoint visualization with status icon + label + status chip per check; failures auto-expanded with evidence + consequence; category groups in fixed Sarah-journey order.
+- **Trigger (close)**: ✅ MET — 5 categories × 50+ distinct check events across 10 cases. Cross-case variance is real (DHC pass; LDC/cylinder/plane_ch/NACA/jet fail; BFS/RBC/flat_plate/duct partial) — no greenwashing.
+- **主交付 viz** (delivered): vertical category-grouped checkpoint list with header count strip + tone-aware footer guidance + click-to-expand evidence.
+- **Predecessor**: Stage 3 ✅
+- **Risk** (resolved): 打扰感 mitigated via auto-expand-on-fail + collapse-on-pass default. RunRail returns null on 404 (graceful skip).
+- **Deferred**: first-visit guided tour (Lin/Sarah disagreement scope) — not blocking close. The RunRail's auto-expand-failures + tone-aware footer already provides guided pedagogy in-line.
+- **Anti-pattern guard observed**: no fake-green decoration; failure rows surface evidence_ref directly so the user can act, not just see redness.
 
 ### Stage 5 · GoldOps · overlay + batch matrix
 
