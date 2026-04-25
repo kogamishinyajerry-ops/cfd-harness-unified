@@ -42,7 +42,18 @@ FRONTEND_LOG="$(mktemp -t cfd-ui-frontend.XXXXXX)"
 echo "→ backend log:  $BACKEND_LOG"
 echo "→ frontend log: $FRONTEND_LOG"
 
-python3 -m uvicorn ui.backend.main:app --reload --host 127.0.0.1 --port "$CFD_BACKEND_PORT" \
+# --reload-dir scoping (2026-04-25): default --reload watches the entire
+# repo. Line B test runs constantly mutate tests/ + src/ files, which
+# triggers reload churn and eventually kills the server (observed:
+# repeated WatchFiles → "Invalid HTTP request received" → process death,
+# leaving the UI gold-validation report unreachable while frontend still
+# served stale HTML). Scope reload to ui/backend only — that is the only
+# directory whose changes the dev backend actually needs to pick up.
+# Other watched paths (templates / static) explicit-add as needed.
+python3 -m uvicorn ui.backend.main:app \
+  --reload \
+  --reload-dir ui/backend \
+  --host 127.0.0.1 --port "$CFD_BACKEND_PORT" \
   >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 echo "→ backend PID:  $BACKEND_PID  (http://127.0.0.1:$CFD_BACKEND_PORT/api/docs)"
