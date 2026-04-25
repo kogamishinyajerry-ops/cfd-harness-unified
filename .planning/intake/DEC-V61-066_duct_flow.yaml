@@ -116,7 +116,7 @@ observable_schema:
       operating on the same wall-cell layer.
     ref_value: 0.04811
     tolerance: 0.10
-    gate_status: HARD_GATED
+    gate_status: PROVISIONAL_ADVISORY  # R1 F#3 downgrade — anchor √(0.0185/8) is derived from primary f anchor; gate has partial-tautology weakness even though extractor reads τ_w directly. Reported by comparator, NOT counted in pass-fraction.
 
   - name: bulk_velocity_ratio_u_max
     role: PROFILE_QUALITATIVE
@@ -180,7 +180,7 @@ independence_justification: |
 in_scope:
   - "New module src/duct_flow_extractors.py with 4 public functions"
   - "Adapter wiring in foam_agent_adapter.py:8460-8477 — replace `extractor_pending=True` flag with real extraction call"
-  - "Gold YAML observables[] expansion — keep existing friction_factor as PRIMARY, add 3 new HARD_GATED observables"
+  - "Gold YAML observables[] expansion — keep existing friction_factor as HEADLINE/HARD_GATED, add 2 new HARD_GATED siblings (bulk_velocity_ratio_u_max, log_law_inner_layer_residual) + 1 PROVISIONAL_ADVISORY (friction_velocity_u_tau, R1 F#3 downgrade)"
   - "Adapter contract field cf_extractor_path style stamp: `duct_flow_extractor_path = wall_shear_v1`"
   - "Unit-test module tests/test_duct_flow_extractors.py + adapter tests + alias-parity test"
   - "Stage B live OpenFOAM run on existing whitelist mesh budget"
@@ -257,10 +257,13 @@ stage_a_batches:
   - batch: A.3
     scope: |
       Gold YAML observables[] expansion: keep friction_factor as
-      PRIMARY (back-compat); add friction_velocity_u_tau,
-      bulk_velocity_ratio_u_max, log_law_inner_layer_residual as
-      HARD_GATED siblings with the §3 ref_values + tolerances.
-      Update `legacy_source_files` if ref_value layout changes.
+      HEADLINE/HARD_GATED (back-compat); add bulk_velocity_ratio_u_max
+      and log_law_inner_layer_residual as HARD_GATED siblings + add
+      friction_velocity_u_tau as PROVISIONAL_ADVISORY (R1 F#3 downgrade
+      — anchor √(0.0185/8) derived from primary f anchor, partial
+      tautology even though extractor reads τ_w directly). All §3
+      ref_values + tolerances unchanged. Update `legacy_source_files`
+      if ref_value layout changes.
     commit_count_estimate: 1
     test_target: ~3 schema tests
 
@@ -388,8 +391,11 @@ stage_a_acceptance: |
 
 stage_b_acceptance: |
   - Live OpenFOAM run produces solver_success=True
-  - All 4 HARD_GATED observables within tolerance OR documented
+  - 3 HARD_GATED observables within tolerance OR documented
     FAIL_PHYSICS_BORDERLINE (V61-063 precedent: methodology success +
-    physics-fidelity gap traced to inherited limitation)
+    physics-fidelity gap traced to inherited limitation). The
+    PROVISIONAL_ADVISORY observable (friction_velocity_u_tau) is
+    reported but excluded from the pass-fraction per R1 F#3 +
+    V61-057 DHC psi_max precedent.
   - Audit fixture regenerated; no MISSING_TARGET_QUANTITY concerns
   - Codex round 2/3 disposition: ACCEPT or APPROVE
