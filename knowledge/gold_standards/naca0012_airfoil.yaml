@@ -1,48 +1,210 @@
 schema_version: 2
 case_id: naca0012_airfoil
-source: "Thomas 1979 / Lada & Gostling 2007"
-literature_doi: "10.1017/S0001924000001169"
+# DEC-V61-058 Batch A (2026-04-25): provenance pivoted from "Thomas 1979 /
+# Lada & Gostling 2007" (DOI 10.1017/S0001924000001169 — Aeronautical Quarterly,
+# unreliable provenance flagged by Codex F4 round-1 plan review) to multi-source
+# pinned anchors:
+#   PRIMARY · Cl(α∈{0,4,8}), Cd(α=0), dCl/dα slope:
+#     Ladson, C.L. (1988). NASA TM-4074, §3.2 Table 1, Re=3.0e6 grit-roughness
+#     FIXED-TRANSITION row, M=0.15. Archive ID NTRS 19880019495.
+#     URL: https://ntrs.nasa.gov/api/citations/19880019495/downloads/19880019495.pdf
+#   SECONDARY · Cp(x/c) profile shape at α=0° (PROFILE_GATE, qualitative):
+#     Abbott, I.H., & von Doenhoff, A.E. (1959). Theory of Wing Sections, Fig.
+#     4-7 (NACA0012 chordwise pressure distribution at α=0°, Re ≈ 6e6 free-
+#     transition; USED FOR PROFILE-SHAPE QUALITATIVE MATCH only — Re differs).
+#     Cross-check against Gregory, N. & O'Reilly, C.L. (1970). ARC R&M 3726,
+#     Fig. 7 (Cp vs x/c at α=0°, Re=2.88e6 ≈ 3e6, M=0.16, transition free).
+#     URL: https://naca.central.cranfield.ac.uk/bitstream/handle/1826.2/3003/arc-rm-3726.pdf
+source: "Ladson 1988 NASA TM-4074 §3.2 Tab.1 Re=3e6 fixed-transition; Abbott & von Doenhoff 1959 Fig. 4-7; Gregory & O'Reilly 1970 ARC R&M 3726 Fig. 7"
+literature_archive_ids:
+  primary: "NASA-TM-4074 / NTRS 19880019495"
+  secondary: ["Abbott & von Doenhoff 1959 (Dover, ISBN 0-486-60586-8)", "ARC R&M 3726 (Cranfield)"]
 note: >
+  DEC-V61-058 Type II multi-dim arc (downgraded from Type I per Codex F1):
+  1 PRIMARY scalar (Cl@α=8°) + 2 PROFILE/QUALITATIVE (Cp_distribution +
+  Cl_alpha_linear_regime_slope) + 1 SAME_RUN_CROSS_CHECK (Cd@α=0) + 1
+  PROVISIONAL_ADVISORY (y+_max). Cl@α=0° EXCLUDED from gate set (gold = 0
+  by symmetry; SANITY_CHECK only with absolute band |Cl| < 0.005).
+
   Mesh: x-z plane (z=normal, 80 cells; y=thin span ±0.001, empty boundaries).
-  Direct blockMesh around NACA0012 OBJ — no transformPoints/extrudeMesh.
-  Solver: simpleFoam + kOmegaSST, Re=3e6.
-  fvSolution: p GAMG relTol=0.05 tolerance=1e-6; fields p URF=0.3;
-    equations U/k/omega URF=0.5 each; I_turb=0.005.
-  Docker E2E: converged (p=9.7e-7), 224 Cp values extracted.
-  Gold comparison deviations ~30-50% — extracted values are near-surface cell
-  averages; reference values are exact surface points. Cp profile shape correct.
+  Solver: simpleFoam + kOmegaSST, Re=3e6, single canonical case_id with
+  task_spec.alpha_deg parameter (default 0.0). Multi-α delivered by 3 separate
+  runs at α∈{0°,4°,8°} via task_spec parameterization (NO whitelist multi-
+  entry; see DEC-V61-058 Codex F2 ruling).
+
+  Pre-V61-058 history: Wave 3 (DEC-EX-A, 2026-04-18) accepted PASS_WITH_
+  DEVIATIONS permanent under blockMesh 6-block scope. snappyHexMesh rewrite
+  deferred to Tier-1 future work. V61-058 reframes the case as multi-dim with
+  Cl/Cd as primary gates (lower variance than Cp profile magnitudes).
 physics_contract:
-  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at 0° angle of attack; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported)"
-  reference_correlation_context: "Thomas 1979 / Lada 2007 ref_values are *exact surface* pressure coefficients at the tabulated x/c stations. The adapter CANNOT deliver exact-surface values — it samples a near-surface band of cell centres and averages. A shape-faithful but value-attenuated Cp distribution is the expected outcome, and the 20% tolerance + PASS_WITH_DEVIATIONS verdict reflect this."
+  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at parameterized angle of attack α∈{0°,4°,8°}; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported); freestream-rotation convention U_inf_vec = U·(cos α, 0, sin α) — mesh stays geometry-locked to x-z plane (Codex DEC-V61-058 F2 ruling, OF airFoil2D tutorial precedent). Sign convention: α positive → upper-suction → Cl > 0."
+  reference_correlation_context: "Ladson 1988 TM-4074 Table 1 reports Cl/Cd at Re=3.0e6 with grit-roughness fixed-transition (matches kOmegaSST + wall-function adapter). Tunnel uncertainty ±1.2% at α=8° per §3.4. Cp profile anchors (Abbott Fig. 4-7 + Gregory Fig. 7) used QUALITATIVELY — adapter samples a near-surface band of cell centres and averages, while reference is exact-surface; 20% tolerance preserves PASS_WITH_DEVIATIONS shape-match acceptance (V61-058 Type II: profile is QUALITATIVE_GATE, not absolute scalar)."
   physics_precondition:
-    - condition: "Flow is attached and steady at α=0° (no stall, no unsteady shedding) so a steady RANS solve is physically meaningful"
+    - condition: "Flow is attached and steady at α∈[0°, 8°] (no stall, no unsteady shedding) so steady RANS solve is physically meaningful"
       satisfied_by_current_adapter: true
-      evidence_ref: "whitelist uses simpleFoam + kOmegaSST at α=0 (symmetric airfoil, zero lift at symmetric condition); no shedding regime concerns"
-    - condition: "Mesh resolves the boundary layer sufficiently for near-wall gradients (appropriate y+ for kOmegaSST with Automatic Wall Treatment)"
-      satisfied_by_current_adapter: true
-      evidence_ref: "kOmegaSST in OpenFOAM 2.x+ handles both low-Re (y+<1) and high-Re (y+>30) wall placement via blended omega wall function; surface_band sampling at src/foam_agent_adapter.py:7068 tolerates either"
-    - condition: "Cp extraction sampling geometry aligns with 'exact surface' gold standard"
+      evidence_ref: "Ladson 1988 §3.5 reports stall onset at α≈16° for Re=3e6 fixed-transition; α=8° is well within attached-flow linear regime. Cl(α) Table 1 confirms linearity over α∈[0°,12°]."
+    - condition: "Mesh resolves the boundary layer for kOmegaSST wall functions (y+ in [11, 500] over most of the chord)"
+      satisfied_by_current_adapter: partially
+      evidence_ref: "Wall-distance estimate at first cell (corrected math per Codex DEC-V61-058 F3): u_τ = U_inf·sqrt(Cf/2) ≈ sqrt(0.0040/2) ≈ 0.0447. dz_min = z_far/(n_z·expansion) = 2.0/(80·40) = 6.25e-4. y+_min ≈ 0.0447·6.25e-4/3.33e-7 ≈ 84. Inside wall-function high-Re branch at α=0 mid-chord; y+_max in adverse-pressure-gradient region at α=8 upper may exceed 300. yPlus FO measures live."
+      consequence_if_unsatisfied: "y+ outside [11, 500] under-resolves wall blending; risk lift/drag undershoot 5-10%."
+      resolution_plan: "DEC-V61-058 Batch B3 emits y+_max as PROVISIONAL_ADVISORY (NOT HARD-GATED per Codex F5)."
+    - condition: "α-routing reads single canonical task_spec parameter; sign convention enforced (α=+8° → Cl>0)"
       satisfied_by_current_adapter: false
-      evidence_ref: "src/foam_agent_adapter.py:7068 surface_band = max(8.0*dz_min, 0.02*chord) — the extracted Cp is averaged over a ~2% chord thick band above the surface, not the exact surface. Lines 7073-7089 split into upper/lower candidates within search_envelope=0.25*chord."
-      consequence_if_unsatisfied: "The adapter's Cp values are systematically attenuated vs the ref (magnitudes reduced ~30-50%), while the x-station *shape* of the Cp curve remains faithful. PASS_WITH_DEVIATIONS is the honest verdict. A future R-A-style slice could add a 'cell_vs_surface' kind field to each Cp observable to make the comparator aware of the sampling difference."
-  contract_status: "PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk."
-  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
+      evidence_ref: "Pre-V61-058 adapter at src/foam_agent_adapter.py:6407-7164 hardcodes α=0°. task_spec.parameters.angle_of_attack declared at knowledge/whitelist.yaml line ~261 but not honored."
+      consequence_if_unsatisfied: "Multi-α gates (Cl@α=8, Cl_alpha_slope) cannot be evaluated."
+      resolution_plan: "DEC-V61-058 Batch B1: adapter reads alpha_deg, rotates 0/U freestream, configures forceCoeffs liftDir/dragDir per α. Single canonical case_id preserved (Codex F2)."
+    - condition: "Cp extraction sampling geometry aligns with QUALITATIVE shape match (not exact-surface absolute values)"
+      satisfied_by_current_adapter: partially
+      evidence_ref: "DEC-V61-044 added in-solver `airfoilSurface` FO writing p_aerofoil.raw; src/airfoil_surface_sampler.py reads + computes Cp. cellPoint interpolation samples a near-surface band; magnitudes are systematically attenuated 30-50% vs exact-surface gold."
+      consequence_if_unsatisfied: "Profile magnitudes biased low; shape preserved; PASS_WITH_DEVIATIONS verdict per DEC-EX-A 2026-04-18."
+      resolution_plan: "Profile gate retains 20% tolerance for QUALITATIVE match; magnitudes deferred to future snappyHexMesh DEC."
+  contract_status: "PARTIALLY_COMPATIBLE — Cp profile magnitudes attenuated 30-50% by cell-band extraction (precondition #4 partially satisfied) AND new V61-058 primary scalar gates (Cl@α=8°, Cd@α=0°, dCl/dα slope) introduced but pending Stage A-E live-run validation (precondition #3 not yet satisfied; α-routing not yet implemented). Status promotes to SATISFIED at V61-058 Stage E closeout."
+  precondition_last_reviewed: "2026-04-25 (DEC-V61-058 Batch A intake integration v2; Codex F1-F6 verbatim edits applied)"
+relationships:
+  solver_reuse: turbulent_flat_plate  # both kOmegaSST + wall-function high-Re branch
+  # geometry_similarity intentionally omitted (no current canonical case shares
+  # NACA0012's airfoil topology; cylinder is rounded body but not airfoil)
+  physics_analogy:
+    reference_case: turbulent_flat_plate
+    analogy_basis: kOmegaSST_wall_function_validation
+    matched_dimensionless_group: y_plus_first_cell
+
 observables:
-  - name: pressure_coefficient
-    description: pressure coefficient distribution along the NACA 0012 chord
-    ref_value:
-      - x: 0.0
-        Cp: 1.0
-      - x: 0.1
-        Cp: -0.3
-      - x: 0.3
-        Cp: -0.5
-      - x: 0.5
-        Cp: -0.2
-      - x: 0.7
-        Cp: 0.0
-      - x: 1.0
-        Cp: 0.2
+  # ── PRIMARY SCALAR (HEADLINE GATE per V61-058 Type II §1) ──
+  - name: lift_coefficient_alpha_eight
+    description: "lift coefficient at α=8° (Ladson 1988 TM-4074 Table 1, Re=3.0e6 grit-roughness fixed-transition, M=0.15)"
+    ref_value: 0.815
+    ref_uncertainty: 0.010  # ±0.010 tunnel repeatability §3.4
+    unit: dimensionless
     tolerance:
       mode: relative
-      value: 0.20
+      value: 0.05  # 5%, tight — load-bearing benchmark
+    role: HEADLINE_PRIMARY_SCALAR
+    extraction:
+      method: forceCoeffs_FO_aerofoil_patch
+      file: postProcessing/forceCoeffs1/0/coefficient.dat
+      column: Cl
+      reduction: final_time_row
+      Aref_m2: 0.002  # chord × thin_span = 1.0 × (0.001 - (-0.001))
+      lRef_m: 1.0  # chord
+      magUInf_m_per_s: 1.0
+      rhoInf_kg_per_m3: 1.0  # incompressible kinematic
+      liftDir_at_alpha8_deg: [-0.1392, 0.0, 0.9903]   # (-sin 8°, 0, cos 8°)
+      dragDir_at_alpha8_deg: [0.9903, 0.0, 0.1392]    # (cos 8°, 0, sin 8°)
+
+  # ── PROFILE/QUALITATIVE GATE 1 (Cp shape match at α=0°) ──
+  - name: pressure_coefficient
+    description: "Cp(x/c) chordwise distribution along NACA0012 upper surface at α=0° (Abbott & von Doenhoff 1959 Fig. 4-7; cross-check Gregory & O'Reilly 1970 ARC R&M 3726 Fig. 7 at Re=2.88e6 free transition)"
+    ref_value:
+      # x=1.0 TE point DROPPED (Codex F4: Kutta condition → Cp_TE ≈ 0; v1 anchor
+      # Cp=0.2 was inconsistent and the sampler is degenerate at zero-thickness).
+      # x=0.5 ADDED (Abbott Fig. 4-7 cross-check anchor) per Codex F4.
+      - x_over_c: 0.0
+        Cp: 1.0   # stagnation, exact analytic for symmetric airfoil at α=0°
+      - x_over_c: 0.1
+        Cp: -0.30  # Abbott Fig. 4-7 ± 0.05 read; matches Gregory Fig. 7
+      - x_over_c: 0.3
+        Cp: -0.50  # Abbott Fig. 4-7 (peak suction region for NACA0012 α=0°)
+      - x_over_c: 0.5
+        Cp: -0.40  # Abbott Fig. 4-7 cross-check anchor (Codex F4 added)
+      - x_over_c: 0.7
+        Cp: -0.20  # Abbott Fig. 4-7 (recovery region)
+      - x_over_c: 0.9
+        Cp:  0.05  # Gregory Fig. 7 (TE neighborhood, before singularity)
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.20  # 20% — QUALITATIVE_GATE (shape match, not magnitude); known
+                   # 30-50% systematic attenuation from cell-band sampling per
+                   # physics_contract physics_precondition #4
+    role: PROFILE_GATE
+
+  # ── PROFILE/QUALITATIVE GATE 2 (Cl(α) linear-regime slope) ──
+  - name: lift_slope_dCl_dalpha_linear_regime
+    description: "lift slope dCl/dα over α∈[0°, 8°] linear regime, 3-point fit through Ladson 1988 TM-4074 Table 1 grit-roughness Re=3.0e6 row (α=0°/4°/8° columns)"
+    ref_value: 0.105  # /deg, from least-squares fit through (0°, 0), (4°, 0.434), (8°, 0.815)
+    ref_uncertainty: 0.005
+    unit: per_degree
+    tolerance:
+      mode: relative
+      value: 0.10  # 10% — qualitative-shape gate for linearity
+    role: QUALITATIVE_GATE
+    extraction:
+      method: three_point_linear_fit
+      input_runs: ["alpha_deg=0", "alpha_deg=4", "alpha_deg=8"]
+      input_observable: lift_coefficient  # Cl extracted from forceCoeffs FO at each α
+      reduction: least_squares_slope
+      linearity_check: |
+        |Cl(4°) - 0.5·(Cl(0°) + Cl(8°))| / |Cl(8°)| < 0.05
+        (PASS = linear regime preserved; FAIL = unphysical curvature
+         indicates solver instability OR stall onset before α=8°)
+
+  # ── SAME_RUN_CROSS_CHECK (Cd@α=0, scalar; same physical run as Cp profile) ──
+  - name: drag_coefficient_alpha_zero
+    description: "drag coefficient at α=0° (Ladson 1988 TM-4074 Table 1, Re=3.0e6 grit-roughness fixed-transition, M=0.15) — SAME PHYSICAL RUN as Cp profile (Codex DEC-V61-058 F1: same-run cross-check, NOT independent family)"
+    ref_value: 0.0080
+    ref_uncertainty: 0.0010
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.15  # 15% — Cd0 small, wall-function discretization noise floor real
+    role: SAME_RUN_CROSS_CHECK
+    extraction:
+      method: forceCoeffs_FO_aerofoil_patch
+      file: postProcessing/forceCoeffs1/0/coefficient.dat
+      column: Cd
+      reduction: final_time_row
+      Aref_m2: 0.002
+      lRef_m: 1.0
+      liftDir_at_alpha0_deg: [0.0, 0.0, 1.0]   # (-sin 0°, 0, cos 0°) = (0, 0, 1)
+      dragDir_at_alpha0_deg: [1.0, 0.0, 0.0]   # (cos 0°, 0, sin 0°) = (1, 0, 0)
+
+# ── PROVISIONAL_ADVISORY OBSERVABLES (mesh-quality diagnostic; NOT a HARD gate per Codex F5) ──
+provisional_advisory_observables:
+  - name: y_plus_max_on_aerofoil
+    description: "maximum y+ on the aerofoil patch at α=0° run (yPlus FO mesh-resolution diagnostic, threshold-mode)"
+    expected_band: [11, 500]  # PROVISIONAL pending live-run measurement (Codex F5: NOT HARD-GATED in this DEC)
+    unit: dimensionless
+    role: PROVISIONAL_ADVISORY
+    extraction:
+      method: yPlus_FO_aerofoil_patch
+      file: postProcessing/yPlus/<t>/yPlus.dat
+      column: max
+      reduction: final_time_row
+    advisory_action: |
+      y+ in [11, 500] → ADVISORY_PASS (case proceeds);
+      y+ outside [11, 500] → ADVISORY_FLAG (rendered in UI, does NOT fail case;
+        triggers follow-up DEC consideration for mesh refinement / solver switch);
+      y+ outside [5, 1000] → ADVISORY_BLOCK (rendered as RED, signals unphysical
+        regime; case-level verdict still uses HARD gates only).
+
+# ── SANITY_CHECK SUB-STATUSES (NOT a gate; passive surface only) ──
+sanity_checks:
+  - name: lift_coefficient_alpha_zero
+    description: "Cl at α=0° symmetry sanity check (gold = 0 EXACTLY for symmetric airfoil)"
+    expected_value: 0.0
+    expected_band_absolute: 0.005  # |Cl| < 0.005 confirms symmetric solve
+    unit: dimensionless
+    role: SANITY_CHECK
+    excluded_from_gate_set: true
+    excluded_reason: "gold = 0 by symmetry; numerical_noise_snr trap (RETRO-V61-050 instance specific to NACA0012 per DEC-V61-058 risk_flags.lift_signal_at_alpha_zero_snr_trap). Comparator zero-reference handling (gold_standard_comparator.py:68 + result_comparator.py:203) auto-flips to absolute-error mode but the gate has no physical content, so we don't include it in the HARD gate set per Codex F1+Q4."
+    surface_in_ui: true
+    surface_label: "Symmetry sanity (|Cl@α=0°| < 0.005)"
+
+# ── HELPER REFERENCE VALUES (used by lift_slope_dCl_dalpha_linear_regime computation; NOT independent gates) ──
+helper_reference_values:
+  - quantity: lift_coefficient_alpha_zero
+    ref_value: 0.0  # symmetric airfoil, exact
+    role: HELPER_FOR_SLOPE_FIT
+    note: "Used as anchor in 3-point linear fit; also evaluated via SANITY_CHECK above."
+  - quantity: lift_coefficient_alpha_four
+    ref_value: 0.434
+    ref_uncertainty: 0.008  # Ladson 1988 §3.4 tunnel repeatability
+    role: HELPER_FOR_SLOPE_FIT
+    note: "Used as middle anchor in 3-point linear fit; also enables linearity_check (|Cl(4°) - mean| / Cl(8°) < 0.05). NOT a separate HARD gate per DEC-V61-058 §3 (Codex F1 ruling: avoiding same-extraction-path family inflation)."
+    extraction:
+      method: forceCoeffs_FO_aerofoil_patch
+      file: postProcessing/forceCoeffs1/0/coefficient.dat
+      column: Cl
+      reduction: final_time_row
+      run_at_alpha_deg: 4
