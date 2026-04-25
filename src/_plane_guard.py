@@ -61,6 +61,9 @@ __all__ = [
     "is_installed",
     "strict_scope",
     "FORBIDDEN_PAIRS",
+    "snapshot_src_modules",
+    "diff_pollution_snapshot",
+    "record_fixture_frame_confusion",
 ]
 
 
@@ -193,6 +196,11 @@ _INSTALLED_FINDER: Optional["PlaneGuardFinder"] = None
 # and clear (Opus G-9 follow-up B-Q4 explicit-cap defensive guard).
 _DEDUP_KEYS: set[Tuple[str, str, str]] = set()
 _DEDUP_MAX_ENTRIES = 10_000  # default; overridden via install_guard kwarg
+# A13 pollution watchdog snapshot (ADR-002 §2.9, Opus G-9 binding 2).
+# Captured at install_guard time; diffed at uninstall / atexit /
+# pytest session-finish to detect post-hoc sys.modules['src.*']
+# pollution that meta_path finders cannot intercept.
+_POLLUTION_SNAPSHOT: Optional[Dict[str, Tuple[int, Optional[str]]]] = None
 # strict_scope nesting depth (per-thread).
 _STRICT_DEPTH = threading.local()
 
@@ -564,6 +572,168 @@ class PlaneGuardFinder(MetaPathFinder):
 
 
 # ---------------------------------------------------------------------------
+# A13 sys.modules pollution watchdog (ADR-002 §2.9, Opus G-9 binding 2)
+# A18 fixture-frame confusion .jsonl rollback counter (§2.4, binding 2)
+# ---------------------------------------------------------------------------
+
+
+_POLLUTION_REPORTS_DIR = "reports/plane_guard"
+_POLLUTION_LOG_FILENAME = "sys_modules_pollution.jsonl"
+_FIXTURE_CONFUSION_LOG_FILENAME = "fixture_frame_confusion.jsonl"
+
+
+def snapshot_src_modules() -> Dict[str, Tuple[int, Optional[str]]]:
+    """Snapshot ``sys.modules`` entries for ``src.*`` keys (A13).
+
+    Captures ``(id(module), getattr(module, '__file__', None))`` per
+    key. Stored in module-level ``_POLLUTION_SNAPSHOT`` for later diff.
+    Called by ``install_guard`` automatically; callers may call
+    directly for explicit baseline reset.
+    """
+    global _POLLUTION_SNAPSHOT
+    snapshot: Dict[str, Tuple[int, Optional[str]]] = {}
+    for key, module in list(sys.modules.items()):
+        if not key.startswith("src."):
+            continue
+        snapshot[key] = (id(module), getattr(module, "__file__", None))
+    with _STATE_LOCK:
+        _POLLUTION_SNAPSHOT = snapshot
+    return snapshot
+
+
+def diff_pollution_snapshot(
+    *,
+    write_jsonl: bool = True,
+    log_path: Optional[str] = None,
+) -> list[Dict[str, object]]:
+    """Diff current ``sys.modules['src.*']`` state against the snapshot.
+
+    Returns a list of pollution-event dicts. By default also appends
+    each event as one JSON line to
+    ``reports/plane_guard/sys_modules_pollution.jsonl`` (creates the
+    directory if missing). Pass ``write_jsonl=False`` to skip the
+    file write (used by tests).
+
+    Pollution detection per ADR-002 §2.9 Draft-rev3 minor #3 +
+    Draft-rev4 R-new-1:
+      * id mismatch AND ``__file__`` mismatch (or missing) → pollution
+      * id mismatch but same ``__file__`` → legitimate reload (debug
+        log only, not classified as pollution)
+      * Either side ``__file__`` missing → conservative fallback to
+        id-only criterion, classified as pollution (fail-loud)
+    """
+    if _POLLUTION_SNAPSHOT is None:
+        return []  # No baseline — nothing to compare against.
+
+    pollution_events: list[Dict[str, object]] = []
+    debug_logger = logging.getLogger("src._plane_guard.pollution.debug")
+
+    for key, (snap_id, snap_file) in _POLLUTION_SNAPSHOT.items():
+        current = sys.modules.get(key)
+        if current is None:
+            continue  # Module unloaded — not pollution.
+        cur_id = id(current)
+        if cur_id == snap_id:
+            continue  # Same object, no change.
+        cur_file = getattr(current, "__file__", None)
+        # Conservative double-criterion: id mismatch AND
+        # (__file__ mismatch OR either side __file__ missing).
+        either_file_missing = (snap_file is None) or (cur_file is None)
+        file_mismatch = snap_file != cur_file
+        if either_file_missing or file_mismatch:
+            event = {
+                "timestamp": _utc_iso8601(),
+                "incident_id": str(uuid.uuid4()),
+                "module": key,
+                "old_id": snap_id,
+                "new_id": cur_id,
+                "old_file": snap_file,
+                "new_file": cur_file,
+                "criterion": "id_mismatch_and_file_mismatch_or_missing",
+                "severity": "warn",
+            }
+            pollution_events.append(event)
+        else:
+            # Same __file__ but different id → legitimate reload.
+            debug_logger.debug(
+                "src.%s legitimate reload (id %s → %s, file %s)",
+                key.split(".", 1)[1],
+                snap_id,
+                cur_id,
+                snap_file,
+            )
+
+    pollution_logger = logging.getLogger("src._plane_guard.pollution")
+    for event in pollution_events:
+        pollution_logger.warning(json.dumps(event))
+
+    if write_jsonl and pollution_events:
+        path = log_path or _resolve_jsonl_path(_POLLUTION_LOG_FILENAME)
+        _append_jsonl(path, pollution_events)
+
+    return pollution_events
+
+
+def record_fixture_frame_confusion(
+    *,
+    test_path: str,
+    source_module: str,
+    target_module: str,
+    contract_name: str,
+    stack_snippet: str = "",
+    log_path: Optional[str] = None,
+) -> Dict[str, object]:
+    """Record one fixture-frame confusion incident to the rollback .jsonl (A18).
+
+    Used by the test-side fixture that catches ``LayerViolationError``
+    on tests marked with ``@pytest.mark.plane_guard_bypass``. Each
+    incident becomes one line in
+    ``reports/plane_guard/fixture_frame_confusion.jsonl``. The
+    rollback evaluator (``scripts/plane_guard_rollback_eval.py``)
+    reads this log to apply the §2.4 14-day rolling-window ≥3 trigger.
+    """
+    event: Dict[str, object] = {
+        "timestamp": _utc_iso8601(),
+        "incident_id": str(uuid.uuid4()),
+        "test_path": test_path,
+        "source_module": source_module,
+        "target_module": target_module,
+        "contract_name": contract_name,
+        "stack_snippet": stack_snippet,
+    }
+    path = log_path or _resolve_jsonl_path(_FIXTURE_CONFUSION_LOG_FILENAME)
+    _append_jsonl(path, [event])
+    return event
+
+
+def _utc_iso8601() -> str:
+    """Return current UTC time in ISO-8601 with 'Z' suffix."""
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _resolve_jsonl_path(filename: str) -> str:
+    """Resolve ``reports/plane_guard/<filename>`` relative to repo root.
+
+    Falls back to current working directory if no clear repo root is
+    discoverable (cwd-relative is acceptable for tests + CI runners
+    that always cd to repo root).
+    """
+    return os.path.join(_POLLUTION_REPORTS_DIR, filename)
+
+
+def _append_jsonl(path: str, events: list[Dict[str, object]]) -> None:
+    """Append events as JSON lines, creating parent directory if needed."""
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        for event in events:
+            f.write(json.dumps(event))
+            f.write("\n")
+
+
+# ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
 
@@ -603,19 +773,37 @@ def install_guard(
         sys.meta_path.insert(0, finder)
         _INSTALLED_FINDER = finder
         _DEDUP_MAX_ENTRIES = max_dedup_entries
-        return finder
+    # Take baseline snapshot OUTSIDE the lock to avoid holding it during
+    # sys.modules iteration (sys.modules can be huge).
+    snapshot_src_modules()
+    return finder
 
 
-def uninstall_guard() -> None:
+def uninstall_guard(*, run_pollution_check: bool = True) -> None:
     """Remove the finder from ``sys.meta_path`` and reset module state.
 
     Idempotent: calling when no guard is installed is a no-op. Resets
     the WARN-mode dedup set so a fresh install starts with empty state
     (important for tests that flip modes within a single process).
+
+    A13: when ``run_pollution_check=True`` (default), runs
+    ``diff_pollution_snapshot`` before tearing down the snapshot
+    state, surfacing any sys.modules pollution events accumulated
+    during the install. Pass ``run_pollution_check=False`` from tests
+    that explicitly orchestrate the diff themselves.
     """
-    global _INSTALLED_FINDER
+    global _INSTALLED_FINDER, _POLLUTION_SNAPSHOT
+    if run_pollution_check:
+        # Run OUTSIDE the lock — diff iterates sys.modules + writes
+        # JSON lines, both unsafe to do under _STATE_LOCK.
+        try:
+            diff_pollution_snapshot()
+        except Exception:  # pragma: no cover - defensive only
+            # Pollution check is observability; never let it block teardown.
+            pass
     with _STATE_LOCK:
         if _INSTALLED_FINDER is None:
+            _POLLUTION_SNAPSHOT = None
             return
         try:
             sys.meta_path.remove(_INSTALLED_FINDER)
@@ -623,6 +811,7 @@ def uninstall_guard() -> None:
             pass
         _INSTALLED_FINDER = None
         _DEDUP_KEYS.clear()
+        _POLLUTION_SNAPSHOT = None
 
 
 def is_installed() -> bool:
