@@ -125,7 +125,7 @@ class TestDHCMultiDim:
         assert out["source"] == "wall_gradient_stencil_3pt_max"
 
     def test_nu_max_uniform_bl_gives_uniform_nu(self) -> None:
-        """Constant BL thickness → all layers same Nu → noise_floor≈0, SNR=None."""
+        """Constant BL thickness → uniform Nu → profile_spread≈0, ratio=None."""
         L, dT, T_cold = 1.0, 10.0, 290.0
         cxs, cys, t_vals = _build_field(
             n_x=40, n_y=40, L=L, dT=dT, T_cold=T_cold,
@@ -139,12 +139,13 @@ class TestDHCMultiDim:
         out = extract_nu_max(slice_, bc)
         # Uniform δ=0.05: Nu_local = 0.9*dT/0.05 * L/dT = 18.
         assert out["value"] == pytest.approx(18.0, rel=0.10)
-        # noise_floor measures interior-layer Nu spread; for a perfectly
+        # profile_spread measures interior-layer Nu spread; for a perfectly
         # uniform synthetic, this is at the floating-point noise level.
-        # Either snr is None (floor==0) or extremely large (>>1000).
-        if out["snr"] is not None:
-            assert out["snr"] > 1000.0, (
-                f"snr={out['snr']} but uniform field should have ~infinite SNR"
+        # Either ratio is None (spread==0) or extremely large (>>1000).
+        if out["peak_to_profile_spread"] is not None:
+            assert out["peak_to_profile_spread"] > 1000.0, (
+                f"peak_to_profile_spread={out['peak_to_profile_spread']} but "
+                "uniform field should have ~infinite ratio"
             )
 
     def test_nu_max_fails_closed_on_empty_input(self) -> None:
@@ -400,3 +401,39 @@ class TestDHCMultiDim:
         """Guard against drift from intake §B.3 declared values."""
         assert PSI_MAX_GOLD_NONDIM == pytest.approx(16.750)
         assert PSI_CLOSURE_FRACTION_THRESHOLD == pytest.approx(0.01)
+
+    # ----- B-final · Codex round-2 fix-coverage ----------------------------
+
+    def test_nu_max_fails_closed_on_mismatched_thermal_arrays(self) -> None:
+        """Codex round-2 F1-HIGH: mismatched array lengths must NOT silently
+        clip-and-emit; the extractor returns {} so the comparator fires
+        MISSING_TARGET_QUANTITY instead of trusting a partial measurement.
+        """
+        # 4 coordinate cells, only 3 temperatures — corrupt input shape.
+        slice_ = DHCFieldSlice(
+            cxs=[0.01, 0.02, 0.01, 0.02],
+            cys=[0.10, 0.10, 0.20, 0.20],
+            t_vals=[299.0, 298.0, 297.0],
+        )
+        bc = DHCBoundary(
+            L=1.0, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue",
+        )
+        assert extract_nu_max(slice_, bc) == {}
+
+    def test_velocity_extractors_fail_closed_on_mismatched_arrays(self) -> None:
+        """Codex round-2 F1-HIGH: u_max, v_max, ψ_max all return {} when the
+        velocity vector array length disagrees with the coordinate arrays."""
+        # 4 coordinate cells, only 3 velocity vectors.
+        slice_ = DHCFieldSlice(
+            cxs=[0.49, 0.51, 0.49, 0.51],
+            cys=[0.25, 0.25, 0.75, 0.75],
+            u_vecs=[(1e-3, 0.0, 0.0), (1e-3, 0.0, 0.0), (1e-3, 0.0, 0.0)],
+        )
+        bc = DHCBoundary(
+            L=1.0, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        assert extract_u_max_vertical(slice_, bc) == {}
+        assert extract_v_max_horizontal(slice_, bc) == {}
+        assert extract_psi_max(slice_, bc) == {}

@@ -90,6 +90,20 @@ class DHCBoundary:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _input_lengths_consistent(*arrays: Optional[Sequence[Any]]) -> bool:
+    """Return True iff all non-None inputs have identical length.
+
+    DEC-V61-057 Codex round-2 F1-HIGH: previously the extractors silently
+    clipped to ``min(len(...))`` and produced apparently-valid measurements
+    from corrupt inputs (4-cell coordinate array + 3-cell field would emit
+    a benchmark number from 3 cells, hiding the lost cell). Callers MUST
+    early-return ``{}`` when this guard returns False so the comparator's
+    MISSING_TARGET_QUANTITY path fires instead of a silent truncation.
+    """
+    lens = [len(a) for a in arrays if a is not None]
+    return not lens or all(n == lens[0] for n in lens)
+
+
 def _y_layer_resolution(cys: Sequence[float]) -> float:
     """Compute the y-tolerance used for layer grouping.
 
@@ -118,7 +132,9 @@ def _wall_gradients_per_layer(
     cxs, cys, t_vals = slice_.cxs, slice_.cys, slice_.t_vals
     if not cxs or not cys or not t_vals:
         return []
-    n = min(len(cxs), len(cys), len(t_vals))
+    if not _input_lengths_consistent(cxs, cys, t_vals):
+        return []
+    n = len(cxs)
 
     y_layers: Dict[float, Dict[float, List[float]]] = defaultdict(lambda: defaultdict(list))
     for i in range(n):
@@ -144,13 +160,19 @@ def _wall_gradients_per_layer(
     return out
 
 
-def _interior_layer_stdev(values: Sequence[float], trim_frac: float = 0.10) -> float:
+def _interior_profile_spread(values: Sequence[float], trim_frac: float = 0.10) -> float:
     """Sample stdev of the interior fraction of ``values`` (sorted-tail trim).
 
+    DEC-V61-057 Codex round-2 F2-MED rename: previously called
+    ``_interior_layer_stdev`` and surfaced as ``noise_floor`` / ``snr``.
+    For Nu_max, u_max, v_max the profile spread is mostly *real physics*
+    variation (e.g. v_max@y=L/2 is close to 0 in the cavity middle and
+    peaks at the rising plume) — labeling it as numerical noise floor was
+    misleading. Renamed to ``profile_spread`` and the derived ratio to
+    ``peak_to_profile_spread``; both surface as non-gating diagnostics.
+
     Trims ``trim_frac`` from each end of the sorted sequence to drop the
-    near-corner singular layers (Nu spikes at top/bottom corners on the
-    hot wall are geometric, not part of the BL physics we want SNR over).
-    Returns 0.0 for sequences with fewer than 4 retained samples.
+    near-corner singular samples. Returns 0.0 for fewer than 4 retained.
     """
     if not values:
         return 0.0
@@ -203,16 +225,20 @@ def extract_nu_max(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
     nu_pairs = [(y, g * bc.L / bc.dT) for (y, g) in pairs]
     y_at_max, nu_max = max(nu_pairs, key=lambda p: p[1])
     nu_values = [n for (_, n) in nu_pairs]
-    noise_floor = _interior_layer_stdev(nu_values)
-    snr: Optional[float] = (nu_max / noise_floor) if noise_floor > 0.0 else None
+    profile_spread = _interior_profile_spread(nu_values)
+    spread_ratio: Optional[float] = (
+        nu_max / profile_spread if profile_spread > 0.0 else None
+    )
 
     return {
         "value": float(nu_max),
         "y_at_max": float(y_at_max),
         "y_at_max_over_L": float(y_at_max) / float(bc.L),
         "num_layers_used": len(nu_pairs),
-        "noise_floor": float(noise_floor),
-        "snr": float(snr) if snr is not None else None,
+        "profile_spread": float(profile_spread),
+        "peak_to_profile_spread": (
+            float(spread_ratio) if spread_ratio is not None else None
+        ),
         "source": "wall_gradient_stencil_3pt_max",
     }
 
@@ -286,6 +312,8 @@ def extract_u_max_vertical(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, 
     """
     if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
         return {}
+    if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
+        return {}
     if bc.alpha == 0.0 or bc.L == 0.0:
         return {}
     # u_x is the first component of each velocity tuple.
@@ -306,8 +334,10 @@ def extract_u_max_vertical(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, 
     y_at_max, u_max_abs = max(abs_pairs, key=lambda p: p[1])
     u_nondim = u_max_abs * bc.L / bc.alpha
     nondim_values = [a * bc.L / bc.alpha for (_, a) in abs_pairs]
-    noise_floor = _interior_layer_stdev(nondim_values)
-    snr: Optional[float] = (u_nondim / noise_floor) if noise_floor > 0.0 else None
+    profile_spread = _interior_profile_spread(nondim_values)
+    spread_ratio: Optional[float] = (
+        u_nondim / profile_spread if profile_spread > 0.0 else None
+    )
 
     return {
         "value": float(u_nondim),
@@ -316,8 +346,10 @@ def extract_u_max_vertical(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, 
         "y_at_max_over_L": float(y_at_max) / float(bc.L),
         "num_samples_used": len(samples),
         "across_tolerance": float(tol_x),
-        "noise_floor": float(noise_floor),
-        "snr": float(snr) if snr is not None else None,
+        "profile_spread": float(profile_spread),
+        "peak_to_profile_spread": (
+            float(spread_ratio) if spread_ratio is not None else None
+        ),
         "source": "vertical_midplane_sample_max_abs",
     }
 
@@ -333,6 +365,8 @@ def extract_v_max_horizontal(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str
     of the horizontal mid-plane.
     """
     if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
+        return {}
+    if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
         return {}
     if bc.alpha == 0.0 or bc.L == 0.0:
         return {}
@@ -354,8 +388,10 @@ def extract_v_max_horizontal(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str
     x_at_max, v_max_abs = max(abs_pairs, key=lambda p: p[1])
     v_nondim = v_max_abs * bc.L / bc.alpha
     nondim_values = [a * bc.L / bc.alpha for (_, a) in abs_pairs]
-    noise_floor = _interior_layer_stdev(nondim_values)
-    snr: Optional[float] = (v_nondim / noise_floor) if noise_floor > 0.0 else None
+    profile_spread = _interior_profile_spread(nondim_values)
+    spread_ratio: Optional[float] = (
+        v_nondim / profile_spread if profile_spread > 0.0 else None
+    )
 
     return {
         "value": float(v_nondim),
@@ -364,8 +400,10 @@ def extract_v_max_horizontal(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str
         "x_at_max_over_L": float(x_at_max) / float(bc.L),
         "num_samples_used": len(samples),
         "across_tolerance": float(tol_y),
-        "noise_floor": float(noise_floor),
-        "snr": float(snr) if snr is not None else None,
+        "profile_spread": float(profile_spread),
+        "peak_to_profile_spread": (
+            float(spread_ratio) if spread_ratio is not None else None
+        ),
         "source": "horizontal_midplane_sample_max_abs",
     }
 
@@ -420,9 +458,11 @@ def extract_psi_max(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
     """
     if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
         return {}
+    if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
+        return {}
     if bc.alpha == 0.0 or bc.L == 0.0:
         return {}
-    n = min(len(slice_.cxs), len(slice_.cys), len(slice_.u_vecs))
+    n = len(slice_.cxs)
     if n == 0:
         return {}
 
