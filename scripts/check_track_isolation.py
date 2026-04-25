@@ -50,11 +50,14 @@ LINE_A_PATTERNS = [
     r"^\.importlinter$",
     r"^scripts/gen_importlinter\.py$",
     r"^scripts/plane_guard_rollback_eval\.py$",
+    r"^scripts/check_track_isolation\.py$",
     r"^\.github/workflows/plane_guard_rollback_cron\.yml$",
     r"^docs/adr/ADR-002.*\.md$",
     r"^tests/test_plane_guard.*\.py$",
     r"^tests/test_plane_assignment_ssot\.py$",
     r"^tests/test_gen_importlinter\.py$",
+    # Plane-guard governance docs (baseline anchors, READMEs)
+    r"^reports/plane_guard/.*\.md$",
 ]
 
 LINE_B_PATTERNS = [
@@ -68,6 +71,9 @@ LINE_B_PATTERNS = [
     r"^ui/frontend/public/flow-fields/.*",
     r"^tests/test_phase_e2e\.py$",
     r"^tests/test_foam_agent_adapter\.py$",
+    # DEC intakes (line B owns 10-case DEC-V61-04x / 05x / 057 arc)
+    r"^\.planning/intake/.+\.yaml$",
+    r"^\.planning/decisions/.+\.md$",
 ]
 
 SHARED_PATTERNS = [
@@ -76,12 +82,22 @@ SHARED_PATTERNS = [
     r"^requirements.*\.txt$",
     r"^\.pre-commit-config\.yaml$",
     r"^\.planning/STATE\.md$",
+    r"^\.planning/ROADMAP\.md$",
     r"^tests/conftest\.py$",
+    # Retrospectives + ops + methodology — both lines may author/edit
+    r"^\.planning/retrospectives/.*\.md$",
+    r"^\.planning/ops/.*\.md$",
+    r"^docs/methodology/.*\.md$",
 ]
 
 
+# ACK tags by category:
+#   [shared] [cross-track-ack] [deps] [ops] — explicit ack of impact
+#   [line-a] [line-b] — pure ownership identification, NOT impact ack
+# Only the explicit-ack tags silence the warn. Owning-tag commits that
+# touch shared/cross-track files MUST add an explicit ack tag.
 ACK_TAG_RE = re.compile(
-    r"\[(shared|cross-track-ack|deps|ops|line-a|line-b)\]", re.IGNORECASE
+    r"\[(shared|cross-track-ack|deps|ops)\]", re.IGNORECASE
 )
 
 
@@ -139,9 +155,8 @@ def _format_warn(a: Set[str], b: Set[str], shared: Set[str], msg_file: str) -> s
     lines = [
         "",
         "⚠️  OPS-2026-04-25-001 dual-track isolation WARN",
-        "    Commit touches files from multiple tracks but commit message",
-        "    lacks an explicit ack tag ([shared] / [cross-track-ack] /",
-        "    [deps] / [ops] / [line-a] / [line-b]).",
+        "    Commit touches files from multiple tracks or shared paths",
+        "    but commit message lacks an explicit impact-ack tag.",
         "",
     ]
     if a:
@@ -155,11 +170,13 @@ def _format_warn(a: Set[str], b: Set[str], shared: Set[str], msg_file: str) -> s
         lines.extend(f"      - {p}" for p in sorted(shared))
     lines.extend([
         "",
-        "    Add one of [shared] / [cross-track-ack] / [deps] / [ops] /",
-        "    [line-a] / [line-b] to your commit message subject to",
-        "    silence this warning. The commit is NOT blocked — this is",
-        "    a discipline reminder for dogfood window 2026-04-25 →",
-        "    2026-05-19.",
+        "    Add ONE of [shared] / [cross-track-ack] / [deps] / [ops]",
+        "    to your commit message subject to silence this warning.",
+        "    Note: [line-a] / [line-b] tags identify ownership but do",
+        "    NOT count as impact-ack — they're independent.",
+        "",
+        "    The commit is NOT blocked. This is a discipline reminder",
+        "    for dogfood window 2026-04-25 → 2026-05-19.",
         "",
     ])
     return "\n".join(lines)
