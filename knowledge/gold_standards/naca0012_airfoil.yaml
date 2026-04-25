@@ -161,10 +161,18 @@ observables:
       dragDir_at_alpha0_deg: [1.0, 0.0, 0.0]   # (cos 0°, 0, sin 0°) = (1, 0, 0)
 
 # ── PROVISIONAL_ADVISORY OBSERVABLES (mesh-quality diagnostic; NOT a HARD gate per Codex F5) ──
+# DEC-V61-062 (2026-04-25): advisory band shifted from [11, 500] (high-Re
+# wall-function regime, V61-058/V61-061) to [0, 5] (LowRe regime). Coupled
+# to the architectural switch in `_generate_airfoil_flow` from nutkWallFunction
+# → nutLowReWallFunction + 0/k aerofoil → fixedValue 0 (Menter 1994 LowRe
+# k-ω SST canonical BC). HARD-GATE GOLD VALUES (Cl@α=8°, Cd@α=0°, dCl/dα,
+# Cp profile) UNCHANGED — only the y+_max ADVISORY band shifts to match the
+# new regime. Per DEC-V61-062 intake §1, this is the ONE permitted gold
+# YAML edit, scoped narrowly with explicit rationale.
 provisional_advisory_observables:
   - name: y_plus_max_on_aerofoil
     description: "maximum y+ on the aerofoil patch at α=0° run (yPlus FO mesh-resolution diagnostic, threshold-mode)"
-    expected_band: [11, 500]  # PROVISIONAL pending live-run measurement (Codex F5: NOT HARD-GATED in this DEC)
+    expected_band: [0, 5]  # DEC-V61-062 LowRe regime; was [11, 500] V61-058/V61-061 wall-function
     unit: dimensionless
     role: PROVISIONAL_ADVISORY
     extraction:
@@ -173,11 +181,13 @@ provisional_advisory_observables:
       column: max
       reduction: final_time_row
     advisory_action: |
-      y+ in [11, 500] → ADVISORY_PASS (case proceeds);
-      y+ outside [11, 500] → ADVISORY_FLAG (rendered in UI, does NOT fail case;
-        triggers follow-up DEC consideration for mesh refinement / solver switch);
-      y+ outside [5, 1000] → ADVISORY_BLOCK (rendered as RED, signals unphysical
-        regime; case-level verdict still uses HARD gates only).
+      DEC-V61-062 LowRe regime (replaces V61-058/V61-061 wall-function bands):
+      y+ in [0, 5]   → ADVISORY_PASS (LowRe wall function valid);
+      y+ in (5, 30]  → ADVISORY_FLAG (buffer-layer; nutLowReWallFunction
+        blends but accuracy degrades; rendered in UI, does NOT fail case);
+      y+ > 30        → ADVISORY_BLOCK (rendered as RED, log-layer regime
+        no longer matches LowRe BC formulation — mesh refinement needed;
+        case-level verdict still uses HARD gates only).
 
 # ── SANITY_CHECK SUB-STATUSES (NOT a gate; passive surface only) ──
 sanity_checks:

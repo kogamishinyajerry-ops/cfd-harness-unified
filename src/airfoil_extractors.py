@@ -129,7 +129,7 @@ class YPlusResult:
     y_plus_min: float
     y_plus_avg: float
     final_time: float
-    advisory_status: str  # 'PASS' if in [11,500]; 'FLAG' if outside;
+    advisory_status: str  # DEC-V61-062 LowRe band: 'PASS' if in [0,5]; 'FLAG' if (5,30]; 'BLOCK' if >30
                           # 'BLOCK' if outside [5, 1000].
 
 
@@ -371,9 +371,10 @@ def compute_y_plus_max(
 
     Returns:
         YPlusResult with min/max/avg + advisory_status:
-          'PASS'  if y+_max in [11, 500]   (PROVISIONAL band per Codex F5)
-          'FLAG'  if y+_max outside [11, 500] but inside [5, 1000]
-          'BLOCK' if y+_max outside [5, 1000]
+          DEC-V61-062 LowRe regime (replaces V61-058/V61-061 wall-function bands):
+          'PASS'  if y+_max in [0, 5]      (LowRe wall function valid range)
+          'FLAG'  if y+_max in (5, 30]     (buffer-layer; degraded accuracy)
+          'BLOCK' if y+_max > 30           (log-layer regime, mismatched BC)
     """
     fo_dir = case_dir / "postProcessing" / fo_name
     time_dir = _latest_time_dir(fo_dir)
@@ -448,10 +449,12 @@ def compute_y_plus_max(
             f"degenerate face."
         )
 
-    # Threshold band per Codex F5 (PROVISIONAL_ADVISORY).
-    if 11.0 <= ymax <= 500.0:
+    # DEC-V61-062: LowRe advisory band (was [11,500] V61-058 wall-function regime).
+    # Tightly coupled to nutLowReWallFunction + 0/k aerofoil → fixedValue 0
+    # adapter change. HARD-GATE GOLD VALUES UNCHANGED.
+    if 0.0 <= ymax <= 5.0:
         status = "PASS"
-    elif 5.0 <= ymax <= 1000.0:
+    elif 5.0 < ymax <= 30.0:
         status = "FLAG"
     else:
         status = "BLOCK"

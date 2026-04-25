@@ -7162,10 +7162,11 @@ application     simpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-061 iter 2: endTime 5000→8000 — even finer mesh (96k cells,
-// y+ target ~10-20) needs more iters. V61-061 iter 1 (43k cells) hit
-// 1e-7 residuals around iter 4500.
-endTime         8000;
+// DEC-V61-062 Stage B: endTime 8000→15000 — LowRe simulations converge
+// 2-3× slower than wall-function regime (smaller first cells → larger
+// viscous-diffusion stiffness → smaller effective SIMPLE step).
+// Per intake §6 risk_flag lowre_convergence_slowness mitigation.
+endTime         15000;
 deltaT          1;
 writeControl    runTime;
 writeInterval   500;
@@ -7355,9 +7356,10 @@ SIMPLE
         k       1e-5;
         omega   1e-5;
     }
-    // DEC-V61-061 iter 2: nNOC 0→1 to handle higher non-orthogonality
-    // from refined mesh near LE/TE (max non-orth was 69° in V61-058).
-    nNonOrthogonalCorrectors 1;
+    // DEC-V61-062 Stage B: nNOC 1→2 to handle higher non-orthogonality from
+    // C-grid + BL-split mesh near airfoil curvature (158 severely-non-ortho
+    // faces at max 83° per Stage A iter3 checkMesh).
+    nNonOrthogonalCorrectors 2;
 }
 
 relaxationFactors
@@ -7495,7 +7497,12 @@ internalField   uniform {k_init};
 boundaryField
 {{
     freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
-    aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
+    // DEC-V61-062 Stage B: LowRe k boundary condition. With y+~1 first cell
+    // and nutLowReWallFunction, the canonical k-omega SST LowRe BC is
+    // k=0 at the wall (Menter 1994 §3). kqRWallFunction was for high-Re
+    // wall-function regime (V61-061 V61-058) which assumed log-layer first
+    // cell. Switching to fixedValue 0 forces correct viscous-sublayer behavior.
+    aerofoil {{ type fixedValue; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
@@ -7565,7 +7572,12 @@ internalField   uniform 0.0;
 boundaryField
 {{
     freestream {{ type calculated; value uniform 0; }}
-    aerofoil {{ type nutkWallFunction; value uniform 0; }}
+    // DEC-V61-062 Stage B: LowRe nut boundary condition. nutkWallFunction
+    // was high-Re wall-function regime (V61-058/V61-061; first cell in
+    // log layer y+>11). With y+~1 first cell, nutLowReWallFunction is
+    // the canonical OpenFOAM LowRe variant: it sets nut directly per
+    // viscous-sublayer scaling rather than the log-law fit.
+    aerofoil {{ type nutLowReWallFunction; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
