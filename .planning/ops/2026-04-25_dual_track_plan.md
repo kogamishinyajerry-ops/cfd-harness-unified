@@ -17,6 +17,7 @@ amendment_log:
   - 2026-04-25T21:25 Claude Code CLI · MP-G retroactive — added §3 CI pre-flight assertion per RETRO-V61-006 addendum 2 + ops_note_protocol.md §5 sixth mandatory rule
   - 2026-04-25T15:10 Claude Code CLI · §3 v2 supersede (graduated severity, two-stage hooks) + §6.1 Session Bootstrap + §9.1 MP-E permanent rule per Notion Opus 4.7 OPS audit block 31
   - 2026-04-25T15:50 Claude Code CLI · frontmatter retroactive 5-field upgrade per Opus 4.7 §3 v2 audit Item 3 — structured expected_signal_source + 7-day rolling threshold + RED→GREEN transition anchor at commit 0229af9
+  - 2026-04-25T16:05 Claude Code CLI · Notion round-trip · 22 blocks appended to OPS page (34dc68942bed81d88ef5f8add0d01d0a) + 15 blocks to RETRO-V61-006 (34dc68942bed813c86e3e3da4c5c3806) + 15 blocks to methodology page (34bc68942bed8189be77c703cc62d0f4) recording Phase 1/2/3 amendment landing across commits 3e8dc01 / a84948d / 1034c20
 expected_signal_source:
   workflow_path: .github/workflows/ci.yml  # FILE PATH (not display name) — per ops_note_protocol.md §5 (a)
   job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"
