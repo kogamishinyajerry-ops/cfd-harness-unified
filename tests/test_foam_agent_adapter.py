@@ -1529,6 +1529,39 @@ class TestBuoyantCasePlumbingVerification:
                     f"DHC laminar should not write 0/{fname}; got phantom turbulent field"
                 )
 
+    def test_dhc_ra_1e6_uses_graded_mesh(self):
+        """DEC-V61-057 Batch A.3 (Codex F1-HIGH): DHC at Ra=1e6 needs BL grading.
+        At Ra=1e6, δ_T/L ≈ 0.032; uniform 80 cells gives 2.56 BL cells, below
+        the 5-cell minimum. Solution: 4:1 symmetric wall-packing → wall cell
+        ≈ 0.006L → 5.3 BL cells. blockMeshDict must contain the graded
+        simpleGrading expression, not the uniform '1'."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # 4:1 symmetric wall-packing string for DHC at moderate Ra
+            assert "((0.5 0.5 4) (0.5 0.5 0.25))" in blockmesh, (
+                f"DHC Ra=1e6 should use 4:1 wall grading; got blockMesh:\n"
+                f"{blockmesh[blockmesh.find('hex'):blockmesh.find('hex')+400]}"
+            )
+
+    def test_rbc_keeps_uniform_mesh(self):
+        """DEC-V61-057 Batch A.3: RBC convection rolls span full domain — no
+        thin BL to resolve, uniform mesh is fine. The case-id-aware mesh
+        dispatch must not over-grade RBC just because it's an NC cavity."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0, name="rayleigh_benard_convection")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # Uniform grading "1" still expected for RBC.
+            # The simpleGrading line for uniform should look like "(1 1 1)"
+            # in the hex block (not the multi-segment graded form).
+            assert "(0.5 0.5 4)" not in blockmesh and "(0.5 0.5 6)" not in blockmesh, (
+                "RBC should not use DHC's graded mesh"
+            )
+
     def test_rbc_still_emits_ras_when_whitelist_silent(self):
         """DEC-V61-057 Batch A.2: rayleigh_benard_convection's whitelist also
         declares turbulence_model=laminar today, so we use a synthetic case

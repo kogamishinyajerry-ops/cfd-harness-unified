@@ -2157,11 +2157,28 @@ fields          (U);
         # Symmetric wall-packing: first half expansion=6 (small cells at wall x=0),
         # second half expansion=1/6 (small cells at wall x=L). Midline cells large.
         # blockMesh smoke-check verified min cell ≈ 1.4mm, max ≈ 8.4mm, aspect=6.
-        # Lower Ra (Ra=1e6 rayleigh_benard) keeps original 80-uniform mesh.
-        if Ra >= 1e9:
-            nL = max(int(256 * L), 128)
-            grading_str = "((0.5 0.5 6) (0.5 0.5 0.1667))"
+        #
+        # DEC-V61-057 Batch A.3 (Codex F1-HIGH): DHC at Ra=1e6 (de Vahl Davis 1983)
+        # also needs BL grading. At Ra=1e6, δ_T/L ≈ Ra^(-1/4) ≈ 0.032; uniform
+        # 80 cells gives Δ=0.0125L → 2.56 cells in BL, BELOW 5-cell minimum.
+        # Solution: reuse the high-Ra grading branch for DHC at any Ra (square
+        # cavity δ_T scales with Ra^-0.25 across all Ra). 4:1 wall-packing
+        # gives wall cell ≈ 0.006L → 5.3 BL cells at Ra=1e6 (sufficient).
+        # RBC stays uniform: rolls span full domain, no thin BL to resolve.
+        is_dhc = "differential_heated_cavity" in (task_spec.name or "").lower()
+        if Ra >= 1e9 or is_dhc:
+            # graded mesh — symmetric wall packing
+            if is_dhc and Ra < 1e9:
+                # DHC at moderate Ra (e.g. de Vahl Davis 1e6 benchmark): 80 cells
+                # with 4:1 packing gives wall cell ≈ 0.006L (≥5 BL cells at Ra=1e6).
+                nL = max(int(80 * L), 80)
+                grading_str = "((0.5 0.5 4) (0.5 0.5 0.25))"
+            else:
+                # DHC at Ra>=1e9 (legacy turbulent regime): 256 cells + 6:1 packing.
+                nL = max(int(256 * L), 128)
+                grading_str = "((0.5 0.5 6) (0.5 0.5 0.1667))"
         else:
+            # RBC and other non-DHC NC cavities: uniform mesh
             nL = max(int(80 * L), 40)
             grading_str = "1"
         mean_T = (T_hot + T_cold) / 2.0  # initial temperature field
