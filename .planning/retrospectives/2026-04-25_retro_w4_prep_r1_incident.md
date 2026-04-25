@@ -36,6 +36,8 @@ All 3 fixes landed in commit `264121c` (270 insertions / 15 deletions; +6 new te
 
 **Stair-anchor (RETRO-V61-004 convention)**: 0.87 ceiling **held** — Codex APPROVE-clean (zero comments) was not produced in either round, so 0.90 unlock did not trigger. Next round opportunity: any future risky-PR Codex review on plane-guard surface.
 
+**Stair-anchor probationary drop (Opus 4.7 audit 2026-04-25T15:10)**: 0.87 → **0.85** for the **NEXT SINGLE PR** (W4 toggle PR). Auto-recovery to 0.87 on a clean Codex APPROVE (zero comments) of that PR. Rationale: R1 0.85 → CHANGES_REQUIRED was the 0.20+ delta single-PR miss in post-pivot history; one probationary PR confirms the calibration recovery is real, not lucky. Note: applies in addition to MP-C-revised cap 0.70 for instrumentation+CI-workflow PRs (W4 toggle is both, so the binding cap is `min(0.85, 0.70) = 0.70` for that PR specifically).
+
 **Calibration health**: R1 0.85 was the most over-confident self-estimate in the post-pivot arc to date. Three previous risky-PR rounds (V61-053 R3, ADR-001 G-5 R1, ADR-002 W2 R3) all came in within 0.05 of actual. R1 0.85 → CHANGES_REQUIRED 3 HIGH = 0.20 + delta — exceeded prior worst (V61-018 60% honest → CHANGES_REQUIRED, 0.10 delta).
 
 ## What worked
@@ -62,6 +64,10 @@ All 3 fixes landed in commit `264121c` (270 insertions / 15 deletions; +6 new te
 
 4. **R1 self-estimate 0.85 was sourced from "clean tests + simple semantics"** without weighting the runtime-integration surface. The 3 HIGH findings all involve runtime paths that unit tests skipped because they didn't simulate the full process-exit / cwd-divergence / find_spec-bypass-with-forbidden-pair scenarios. **Calibration anchor**: when introducing observability instrumentation (writers, watchdogs, hooks), pre-emptively assume self-est cap 0.75 until subprocess / real-stack repro is part of the test matrix.
 
+5. **CI installation surface ≠ local dev surface (Gap #5 · Opus 4.7 audit 2026-04-25T15:10)**. Pyproject deps were sufficient for local dev (numpy + jinja2 already in user's global Python / .venv) but insufficient for fresh CI install (`pip install -e ".[dev]"` on a fresh ubuntu-latest container). The 40-CI-failure streak proves "tests pass locally" does not certify "tests pass on a clean environment". **Pattern**: any time a runtime import is added without a matching pyproject declaration, the bug is silent locally. **Action**: future PRs that add a top-level third-party import must run `grep -rhE "^(import|from) [a-zA-Z]" src/ tests/` then diff against `pyproject.toml` `[project].dependencies` BEFORE commit; the pre-Codex checklist (`docs/methodology/pre_codex_self_review_checklist.md`) gains §2.6 for this.
+
+6. **Artifact emptiness ≠ artifact absence (Gap #6 · Opus 4.7 audit 2026-04-25T15:10)**. CI artifacts that are empty (zero `.jsonl` lines because pytest never executed) read identically to artifacts that are correctly empty (zero incidents because zero violations occurred). The 5/9 review template's "0 incidents = GO" rule is ambiguous between these two semantics. **Pattern**: silence-as-signal protocols must distinguish "process completed cleanly with zero events" from "process never ran". **Action**: 5/9 review template `.planning/dogfood/2026-05-09_review_template.md` Step 1 should explicitly verify the `ci_warn_pytest.log` shows `<N> passed` (process ran) before reading `.jsonl` count. Without `ci_warn_pytest.log` confirmation, an empty-`.jsonl` artifact is INDETERMINATE, not "0 incidents".
+
 ## Methodology patches (proposed for next risky-PR)
 
 | Patch | Description | Authority |
@@ -71,6 +77,16 @@ All 3 fixes landed in commit `264121c` (270 insertions / 15 deletions; +6 new te
 | **MP-2026-04-25-C** | Self-est cap 0.75 (override 0.87 stair ceiling) for any PR introducing observability instrumentation (writers / watchdogs / hooks) until subprocess / real-stack repro is part of the test matrix | RETRO-V61-006 §"What broke" #4 |
 
 These are proposals, not committed methodology changes — `MP-XXX` patches sit in retro until a future risky-PR consumes them or a counter-N retro promotes them to STATE.md / CLAUDE.md updates.
+
+**Update 2026-04-25T21:25 + 2026-04-25T21:50 (Opus 4.7 audit Item b expansion)**: immediate-promotion set expanded from 2 (originally MP-A + MP-G per Kogami batch approval) to **4**:
+- ✅ **MP-A LANDED** (commit `8e74606`): `docs/methodology/pre_codex_self_review_checklist.md` §2.1 + `docs/governance/CODEX_REVIEW_RUBRIC.md` §1.4
+- ✅ **MP-C-revised LANDED** (commit `<phase 1 hash>`): cap 0.75 → **0.70** for instrumentation+CI-workflow PRs. Binding: W4 toggle PR drafting MUST cap self-est at min(0.85 stair-anchor probationary, 0.70 MP-C) = **0.70**. The 5/9 review template (`.planning/dogfood/2026-05-09_review_template.md`) commit-message draft is updated accordingly.
+- ✅ **MP-E LANDED** (commit `<phase 2 hash>`): permanent rule added to OPS-2026-04-25-001 §9 — `git add -p` (interactive patch) discipline during dogfood window; `git add -A` / `git add .` strongly discouraged. Lands in same PR as the §3 dual-track-isolation v2 supersede.
+- ✅ **MP-G LANDED** (commit `8e74606` + Opus revisions in `<phase 1 hash>`): `docs/methodology/ops_note_protocol.md` §5 sixth mandatory rule, Opus-revised to 7-day rolling 3-tier (Green ≥80% / Yellow 70-80% / Red <70%) + `workflow_path` (file path) + (c) attestation fallback for first-of-kind no-prior-runs corner case.
+
+Still **deferred** to counter-40 cadence retro:
+- MP-B (atexit registration as design step) — covered in pre-Codex checklist §2.2; doesn't need separate promotion document yet
+- MP-F (line B `pre-commit install` on session start) — operational reminder; addressed by `bin/dev-session-init` script in §3 v2 supersede landing
 
 ## Counter status
 

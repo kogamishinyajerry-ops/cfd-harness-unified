@@ -74,11 +74,40 @@ EXPIRED (auto · file stays in git for audit, status flipped)
 - **No counter increment**: `counter_impact: none`. OPS notes are infrastructure, not decisions.
 - **Doc-only by default**: An OPS note that ships code (e.g., a coordination script) lands the code via the related ADR/DEC's Codex audit window, NOT via a separate OPS-specific Codex round. The OPS doc itself does not get Codex-reviewed.
 - **Amendment log required**: Every revision adds a line to `amendment_log` (timestamp + author + one-line summary). Even doc-drift fixes log.
-- **Pre-flight CI sanity required (MP-G · 2026-04-25)**: any OPS note that depends on CI signal (dogfood window, observation period, shadow-mode evaluation, signal-collection plan) MUST satisfy ONE of:
-  - **(a)** an `expected_signal_source: <CI workflow name>` field in frontmatter pointing to a workflow whose **last 5 runs include ≥1 success** (verified at OPS DRAFT → ACTIVE flip via `gh run list --workflow=<name> --limit=5 | grep success`); OR
-  - **(b)** the §3 isolation / mechanism block must include **"CI infrastructure healthy as pre-flight #1"** with the explicit check command + last-success commit SHA at the time of OPS authoring.
+- **Pre-flight CI sanity required (MP-G · 2026-04-25 · Opus 4.7 revised 2026-04-25T15:10)**: any OPS note that depends on CI signal (dogfood window, observation period, shadow-mode evaluation, signal-collection plan) MUST satisfy ONE of:
 
-  **Authority**: RETRO-V61-006 addendum 2 — OPS-2026-04-25-001 was authored against 40 consecutive CI failures dating well before the dogfood window opened, producing empty .jsonl artifacts that would have been mis-read as "0 incidents = GO" at signal review. The window was dead-on-arrival from 2026-04-25T00:00 → 2026-04-25T20:50 until commit `0208929` fixed deps. **Fail mode**: signal review reads zero data and certifies a flip that has zero evidence.
+  - **(a) `expected_signal_source` structured field in frontmatter** pointing to a specific workflow file path:
+    ```yaml
+    expected_signal_source:
+      workflow_path: .github/workflows/ci.yml  # FILE PATH (not display name) — display names rename without notice
+      job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"  # optional sub-target
+    pre_flight_ci_health_check_command: |
+      gh run list --workflow=ci.yml --branch=main --limit 35 \
+        --json conclusion,createdAt --jq \
+        '[.[] | select((now - (.createdAt | fromdateiso8601)) < 604800)] |
+         (map(select(.conclusion == "success")) | length) /
+         (length // 1) * 100'
+    signal_health_status_at_draft: <Green | Yellow | Red>  # measured at OPS DRAFT → ACTIVE flip
+    ```
+    **Threshold (7-day rolling success ratio)**:
+    - **Green ≥80%** → OPS may proceed to ACTIVE without further qualification
+    - **Yellow 70-80%** → OPS may proceed to ACTIVE but `signal_health_status: yellow` MUST be set in frontmatter and §3 must include explicit risk acknowledgement + remediation timeline
+    - **Red <70%** → **HARD BLOCK** — OPS cannot promote to ACTIVE until the signal source recovers to Green or Yellow. Existing OPS that drop to Red mid-window must add an addendum acknowledging the signal degradation.
+
+  - **(b) §3 isolation / mechanism block** must include **"CI infrastructure healthy as pre-flight #1"** with the explicit check command + last-success commit SHA + 7-day rolling ratio at the time of OPS authoring.
+
+  - **(c) `signal_attestation` first-of-kind fallback** (NEW · Opus 4.7 §3 v2 corner case): when the OPS authors a brand-new signal source that has **no prior runs to check** (e.g., a workflow that ships in the same PR as the OPS), the OPS author may assert in frontmatter:
+    ```yaml
+    signal_attestation:
+      first_of_kind: true
+      reason: <one-line · why no prior runs · expected first-run SHA>
+      first_signal_landing_commit: <expected commit hash; backfilled when first run lands>
+    ```
+    On the first successful run after authoring, the OPS author MUST amend the OPS frontmatter to switch from `signal_attestation` to `expected_signal_source` form (a) above.
+
+  **Authority**: RETRO-V61-006 addendum 2 — OPS-2026-04-25-001 was authored against 40 consecutive CI failures dating well before the dogfood window opened, producing empty .jsonl artifacts that would have been mis-read as "0 incidents = GO" at signal review. The window was dead-on-arrival from 2026-04-25T00:00 → 2026-04-25T20:50 until commit `0208929` fixed deps. The 7-day rolling 3-tier threshold (Green/Yellow/Red) supersedes the original binary 80%-or-bust formulation per Opus 4.7 audit Item 3 — single transient flake should not block legitimate OPS authoring; sustained <70% should hard-block.
+
+  **Fail mode**: signal review reads zero data and certifies a flip that has zero evidence (W4 toggle PR scenario at 2026-05-09 if dogfood window had remained Red throughout).
 
 ## 6. Filename + location
 

@@ -73,13 +73,33 @@ gh run list --limit=5 --json conclusion | jq -r '.[].conclusion' | sort | uniq -
 
 **Fail mode** (RETRO-V61-006 addendum 2): 40 consecutive CI failures masked the W4 stage-1 dogfood pytest. CI runs produced empty .jsonl artifacts that would have been mis-read as "0 incidents = GO" at 5/9 review.
 
-### 2.5 Subprocess / real-stack repro coverage (MP-C)
+### 2.5 Subprocess / real-stack repro coverage (MP-C-revised)
 
-For any PR introducing observability instrumentation (writers / watchdogs / hooks):
+For any PR introducing observability instrumentation (writers / watchdogs / hooks) AND/OR shipping CI workflow changes:
 
-**Pass criterion**: the PR's test matrix includes ≥1 test that exercises the instrumentation via subprocess (`subprocess.run`) or real-stack frame walk (`sys._getframe()`), not just monkeypatched fakes. If absent, **self-est cap = 0.70** (was 0.75 pre-RETRO-V61-006 addendum 2).
+**Pass criterion**: the PR's test matrix includes ≥1 test that exercises the instrumentation via subprocess (`subprocess.run`) or real-stack frame walk (`sys._getframe()`), not just monkeypatched fakes. If absent, **self-est cap = 0.70** (was 0.75 pre-RETRO-V61-006 addendum 2 · revised 0.75 → 0.70 per Opus 4.7 audit Item b).
+
+**Binding rule (W4 toggle PR · 2026-05-11 deadline)**: the W4 toggle PR is BOTH instrumentation (flips dogfood pytest from non-blocking to blocking) AND CI workflow change (modifies `.github/workflows/ci.yml`). Combined with the stair-anchor probationary drop 0.87 → 0.85, the binding self-est cap for W4 toggle PR is `min(0.85, 0.70) = 0.70`. The 5/9 review template's commit-message draft self-est must reflect this.
 
 **Fail mode** (RETRO-V61-006 calibration): 11 unit tests passed but real-stack repro caught 3 HIGH findings Codex used to verify F1/F2/F3.
+
+### 2.6 CI installation surface ≠ local dev surface (Gap #5)
+
+For any PR that adds a new top-level third-party `import` statement OR removes one:
+
+```bash
+# Find all top-level third-party imports in src/ + tests/
+grep -rhE "^(import|from) [a-zA-Z][a-zA-Z0-9_]*" src/ tests/ \
+  | awk '{print $2}' | awk -F'.' '{print $1}' | sort -u \
+  > /tmp/imports.txt
+
+# Diff against pyproject.toml [project].dependencies
+grep -A20 "^dependencies = \[" pyproject.toml | head -30 > /tmp/declared.txt
+```
+
+**Pass criterion**: every top-level third-party import in `/tmp/imports.txt` (excluding stdlib, first-party `src.*` / `tests.*`) must appear in `pyproject.toml` `[project].dependencies` OR in an `[project.optional-dependencies]` group that the CI install command activates (default: `pip install -e ".[dev]"`).
+
+**Fail mode** (RETRO-V61-006 Gap #5): local dev environments had `numpy` + `jinja2` in global Python / .venv so all tests passed locally; CI's fresh `pip install -e ".[dev]"` had no such fallback → 40 consecutive CI failures with `ModuleNotFoundError`. Tests "passing locally" does NOT certify "tests passing on a clean CI environment".
 
 ## 3. Calibration coupling
 
@@ -89,8 +109,11 @@ These checks correspond directly to MP-A through MP-G in RETRO-V61-006:
 - §2.3 ↔ implicit (4th recurrence triggers `src/_path_utils.py` extraction)
 - §2.4 ↔ MP-G
 - §2.5 ↔ MP-C (revised cap 0.75 → 0.70)
+- §2.6 ↔ Gap #5 (CI installation surface)
 
-MP-D (test pollution fix) and MP-E (cross-track add-all discipline) and MP-F (`pre-commit install` on session start) are operational, not pre-Codex; they live in OPS-2026-04-25-001 + commit-message-tag protocol.
+MP-D (test pollution fix), MP-E (cross-track `git add -p` discipline) and MP-F (`pre-commit install` on session start) are operational, not pre-Codex; they live in OPS-2026-04-25-001 §9 + commit-message-tag protocol + `bin/dev-session-init` script.
+
+Gap #6 (artifact emptiness ≠ artifact absence) is a 5/9 review template rule, not pre-Codex; it lives in `.planning/dogfood/2026-05-09_review_template.md` Step 1 (verify `ci_warn_pytest.log` shows `<N> passed` BEFORE reading `.jsonl` count).
 
 ## 4. When to run
 

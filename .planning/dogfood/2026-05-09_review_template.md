@@ -14,17 +14,26 @@
 
 ## Step 1 · Aggregate dogfood artifacts (10 min)
 
-```bash
-# List all CI runs since dogfood window start
-gh run list --created='>=2026-04-25' --limit=100 --json databaseId,headSha,conclusion,createdAt > /tmp/dogfood_runs.json
+> **CRITICAL · Gap #6 distinction (RETRO-V61-006 audit Item a)**: an empty `.jsonl` artifact has TWO possible meanings:
+> - **(a)** the dogfood pytest ran cleanly with zero plane-guard violations (correct interpretation, "0 incidents = GO")
+> - **(b)** the dogfood pytest never executed (e.g., import error before pytest collection) → "0 incidents" is an artifact of process death, not a real signal
+>
+> The W4 prep arc had this exact ambiguity from 2026-04-25T00:00 to 2026-04-25T20:50 (40 consecutive CI failures with empty .jsonl artifacts that would have read as "0 incidents = GO" without further verification).
+>
+> **Mandatory pre-aggregation check**: every artifact's `ci_warn_pytest.log` MUST show `<N> passed` (process actually ran) before its `.jsonl` count is admitted as evidence. An artifact missing `ci_warn_pytest.log` OR showing pytest collection error is INDETERMINATE, not "0 incidents".
 
-# Download artifacts for each successful run (failed runs may have partial artifacts but skip for v1)
+```bash
+# Step 1a: List all CI runs since the FIRST genuine dogfood signal anchor (commit 0229af9 · 2026-04-25T06:55)
+# CI runs before 0229af9 are instrumentation-only (numpy/jinja2 missing) and MUST be excluded
+gh run list --created='>=2026-04-25T06:55' --limit=200 --json databaseId,headSha,conclusion,createdAt > /tmp/dogfood_runs.json
+
+# Step 1b: Download artifacts for each completed run (success OR failure — the dogfood pytest step has continue-on-error: true so a failed overall run may still have the dogfood artifact)
 mkdir -p /tmp/dogfood_artifacts
 python3 -c "
 import json, subprocess, os
 runs = json.load(open('/tmp/dogfood_runs.json'))
 for r in runs:
-    if r['conclusion'] == 'success':
+    if r['conclusion'] in ('success', 'failure'):
         rid = r['databaseId']
         sha = r['headSha'][:7]
         os.makedirs(f'/tmp/dogfood_artifacts/{sha}', exist_ok=True)
@@ -38,14 +47,33 @@ for r in runs:
             print(f'  skip {sha}: {e}')
 "
 
-# Aggregate all fixture_frame_confusion.jsonl into one
-find /tmp/dogfood_artifacts -name 'fixture_frame_confusion.jsonl' -exec cat {} \; \
+# Step 1c: Gap #6 sanity — only artifacts whose ci_warn_pytest.log shows '<N> passed' are valid
+mkdir -p /tmp/dogfood_validated
+for d in /tmp/dogfood_artifacts/*/; do
+  sha=$(basename "$d")
+  log="$d/ci_warn_pytest.log"
+  if [ ! -f "$log" ]; then
+    echo "INDETERMINATE $sha: ci_warn_pytest.log missing"
+    continue
+  fi
+  if ! grep -qE "[0-9]+ passed" "$log"; then
+    echo "INDETERMINATE $sha: pytest did not report passed (likely collection error)"
+    continue
+  fi
+  # Valid run — copy .jsonl files (or note absence as 0-incidents)
+  cp "$d/"*.jsonl /tmp/dogfood_validated/ 2>/dev/null || echo "  $sha: 0-incident clean"
+done
+
+# Step 1d: Aggregate validated jsonl
+find /tmp/dogfood_validated -name 'fixture_frame_confusion.jsonl' -exec cat {} \; \
   > /tmp/dogfood_aggregated_ffc.jsonl
-find /tmp/dogfood_artifacts -name 'sys_modules_pollution.jsonl' -exec cat {} \; \
+find /tmp/dogfood_validated -name 'sys_modules_pollution.jsonl' -exec cat {} \; \
   > /tmp/dogfood_aggregated_smp.jsonl
 
+echo "----- Validated dogfood signal -----"
 echo "fixture_frame_confusion lines: $(wc -l < /tmp/dogfood_aggregated_ffc.jsonl)"
 echo "sys_modules_pollution lines:   $(wc -l < /tmp/dogfood_aggregated_smp.jsonl)"
+echo "INDETERMINATE runs (excluded from decision): $(grep -c INDETERMINATE <(grep INDETERMINATE /tmp/dogfood_aggregated_*.jsonl 2>/dev/null) || echo 0)"
 ```
 
 ## Step 2 · Run rollback evaluator (2 min)
@@ -104,6 +132,12 @@ Per RETRO-V61-001 verbatim 5/5 exception eligibility (≤20 LOC,
 1 file, no public API surface change, references review log) — no
 Codex round required for the toggle flip itself; Codex audit window
 reset begins after this commit.
+
+Self-estimate: 0.70 (binding cap per RETRO-V61-006 audit Item b ·
+MP-C-revised cap 0.70 for instrumentation+CI-workflow PRs ·
+combined with stair-anchor probationary drop 0.85 the binding cap
+is min(0.85, 0.70) = 0.70). A clean Codex APPROVE on this PR
+auto-recovers stair-anchor 0.87 ceiling per Opus 4.7 audit Item c.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
