@@ -588,14 +588,17 @@ class TestFoamAgentExecutor:
             assert p_match is not None
             assert float(p_match.group(1)) == pytest.approx(0.05)
 
-            for field_name in ("U", "k", "omega"):
+            # DEC-V61-062 Stage E.iter2: URFs tightened for LowRe stiffness.
+            # U=0.4, k=0.3, omega=0.3 (was U=k=omega=0.5 V61-061 baseline).
+            expected_urf = {"U": 0.4, "k": 0.3, "omega": 0.3}
+            for field_name, expected in expected_urf.items():
                 field_match = re.search(
                     rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
                     fv_solution,
                     re.S,
                 )
                 assert field_match is not None
-                assert float(field_match.group(1)) == pytest.approx(0.5)
+                assert float(field_match.group(1)) == pytest.approx(expected)
 
             k_text = (case_dir / "0" / "k").read_text()
             omega_text = (case_dir / "0" / "omega").read_text()

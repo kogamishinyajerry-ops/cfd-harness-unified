@@ -7364,8 +7364,15 @@ SIMPLE
 
 relaxationFactors
 {
-    fields { p 0.3; }
-    equations { U 0.5; k 0.5; omega 0.5; }
+    // DEC-V61-062 Stage E.iter2: tightened URFs for LowRe stiffness.
+    // Previous URF p=0.3, U=0.5, k=0.5, omega=0.5 (V61-061 baseline) caused
+    // divergence to NaN at time~209s on iter1. Conservative iter2 URFs:
+    //   p:     0.3 → 0.2 (smoother pressure correction)
+    //   U:     0.5 → 0.4
+    //   k:     0.5 → 0.3 (LowRe k-equation is stiff with fine first cell)
+    //   omega: 0.5 → 0.3 (LowRe omega ramp from large freestream to wall)
+    fields { p 0.2; }
+    equations { U 0.4; k 0.3; omega 0.3; }
 }
 
 // ************************************************************************* //
@@ -7497,12 +7504,14 @@ internalField   uniform {k_init};
 boundaryField
 {{
     freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
-    // DEC-V61-062 Stage B: LowRe k boundary condition. With y+~1 first cell
-    // and nutLowReWallFunction, the canonical k-omega SST LowRe BC is
-    // k=0 at the wall (Menter 1994 §3). kqRWallFunction was for high-Re
-    // wall-function regime (V61-061 V61-058) which assumed log-layer first
-    // cell. Switching to fixedValue 0 forces correct viscous-sublayer behavior.
-    aerofoil {{ type fixedValue; value uniform 0; }}
+    // DEC-V61-062 Stage E.iter1 diverged with `fixedValue 0` (NaN residuals at
+    // time~209s, k bounded to 0 globally, nut decoupled). Stage E.iter2
+    // reverts to `kqRWallFunction` — zero-gradient wall BC that's the
+    // OpenFOAM-standard pairing for `nutLowReWallFunction`. zeroGradient
+    // means wall k = first-cell k ≈ small (LowRe regime) without forcing
+    // the singular k=0 condition. Practical equivalent of Menter 1994 §3
+    // for OpenFOAM's near-wall blending.
+    aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}
