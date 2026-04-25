@@ -555,9 +555,13 @@ class TestFoamAgentExecutor:
         assert "aerofoil" in block_mesh
         assert "leadingArc" not in block_mesh
         assert "searchableCylinder" not in block_mesh
-        assert "(30 1 80)" in block_mesh
-        assert "(40 1 80)" in block_mesh
-        assert "simpleGrading (10 1 40)" in block_mesh
+        # DEC-V61-061 mesh refinement: nx 30→100 (all blocks unified at 100),
+        # nz 80→160, simpleGrading 40→400 (aerofoil), wake-x simpleGrading 10
+        # retained for streamwise expansion. The old V61-058 sentinels
+        # `(30 1 80)`, `(40 1 80)`, `simpleGrading (10 1 40)` are gone.
+        assert "(100 1 160)" in block_mesh
+        assert "simpleGrading (1 1 400)" in block_mesh
+        assert "simpleGrading (10 1 400)" in block_mesh
         assert "type            empty;" in block_mesh
 
         u_file = (tmp_path / "0" / "U").read_text()
