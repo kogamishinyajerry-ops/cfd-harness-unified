@@ -1,6 +1,6 @@
 # ADR-002 · Four-Plane Runtime Import Enforcement (sys.meta_path Layer)
 
-**Status**: Draft-rev2 (Claude Code · 2026-04-25 · revised per Opus W2 Gate CHANGES_REQUIRED verdict) — awaiting Opus 4.7 W2 Gate re-review
+**Status**: Draft-rev3 (Claude Code · 2026-04-25 · all round-1 follow-ups + round-2 minors landed) — awaiting Opus 4.7 W2 Gate re-re-review before W3 init Accepted flip
 **Deciders**: Opus 4.7 (W2 Gate) · Claude Code (main session) · Codex GPT-5.4 (independent verification pending)
 **Consulted**: CFDJerry (indirect — this ADR inherits §2 SSOT authority from the pivot charter)
 **Scope**: W2-W3 runtime layer — `sys.meta_path` finder raising `LayerViolationError` on
@@ -30,7 +30,7 @@ Opus Post-Hoc Review §3 末 explicitly called out that static analysis
 | 1 | `importlib.import_module("src.comparator_gates")` | Module name computed at runtime; `import-linter` only walks the AST of `import` / `from ... import ...` statements | Routes through `sys.meta_path` → finder catches at §2.1 hot path |
 | 2 | `__import__("src.comparator_gates")` | Same — dynamic dispatch | Routes through `sys.meta_path` → finder catches |
 | 3 | `getattr(importlib, "import_module")("src.comparator_gates")` | Indirect attribute access obscures the call | Same as #1 — resolution still hits `meta_path` |
-| 4 | Factory pattern: `loader.load("src.comparator_gates")` | Bypasses even `importlib` — e.g. `pkgutil.iter_modules` + `spec_from_file_location` | `spec_from_file_location` + `Loader.exec_module` still consults `sys.meta_path`; AC-C1 deliberate-violation fixture proves capture |
+| 4 | Factory / entry-point loaders: `loader.load("src.comparator_gates")`, `importlib.metadata.entry_points()`, `pkg_resources.iter_entry_points()`, `pkgutil.iter_modules` + `spec_from_file_location` | Bypasses surface-level `importlib` call syntax but all still consult `sys.meta_path` at resolution time | `spec_from_file_location` + `Loader.exec_module` still consults `sys.meta_path`; AC-C1 deliberate-violation fixture proves capture. `importlib.metadata` and `pkg_resources` entry-point dispatch both resolve through `__import__` → `meta_path` |
 | 5 | Test fixtures that legitimately cross planes but leak into prod code | Cannot be distinguished by static analysis | Test-mode allowlist §2.4 (tests/ prefix regex) + reverse-test asserting no `src/**/_test.py` or `src/**/test_*.py` |
 | 6 | Lazy import inside a function body whose module path is f-string'd | Syntactic, but `import-linter` doesn't flow-analyze | Same as #1 — f-string result still imports at runtime |
 | 7 | `sys.modules["src.foo"] = stub` monkeypatching (pytest-mock, unittest.mock, manual fakery) | Bypasses finder entirely — Python's import machinery short-circuits when `sys.modules` already has the key | **Partial** — finder cannot intercept post-hoc pollution. Closure strategy: (a) restrict to test scope via allowlist — monkeypatch in prod code would itself fail static `import-linter` review; (b) optional §2.9 polling watchdog (cheap dict-diff at `src/__init__` + post-test hook) raises if prod code introduced a non-src pollution to an `src.*` key. AC-A13 tracks this. |
@@ -125,11 +125,27 @@ denotes internal infrastructure, not a public plane) that:
    - Otherwise returns `None` (allow the real finder to load the
      module — the guard does NOT load modules itself).
 
-**Why N = 20**: typical `src.*` → `src.*` import stack depth observed
-in the repo is 3-8 frames (measured via `sys.settrace` on the `pytest`
-suite). 20 covers conftest fixture chains + helper decorators +
-contextlib-wrapped helpers with slack. Walk cost at N=20 is still
-sub-microsecond per frame on M1 (`_getframe` + two dict lookups).
+**Why N = 20 (env-configurable)**: typical `src.*` → `src.*` import
+stack depth observed in the repo is 3-8 frames (measured via
+`sys.settrace` on the `pytest` suite). 20 covers conftest fixture
+chains + helper decorators + contextlib-wrapped helpers with slack.
+Walk cost at N=20 is still sub-microsecond per frame on M1
+(`_getframe` + two dict lookups). Per Opus W2 Gate round-2 minor #1,
+the limit is **env-configurable**: `CFD_PLANE_GUARD_FRAME_LIMIT=<int>`
+overrides N at `install_guard()` time. Future fixture nesting growth
+does not require an ADR amendment.
+
+**`exec()` / `eval()` injected frames**: a frame created via `exec`
+or `eval` inherits its caller's `f_globals` unless the code explicitly
+passes fresh globals, in which case neither `__spec__` nor `__name__`
+may be set. Revised-Draft-rev3 rule: if walk reaches a frame whose
+`f_globals` contains neither `__spec__` nor `__name__`, **and** the
+target `fullname` is `src.*`, the guard emits a WARN-level log line
+via `logging.getLogger("src._plane_guard.external_dynamic_import")`
+and returns `None` (still permissive — not a raise). This closes the
+observability gap for legitimate external code dynamically importing
+`src.*` from `exec` scopes, without introducing false positives.
+Log format matches the §2.5 / §4.1 A7b structured-JSON schema.
 
 **Cython / C-extension handling**: C code calling
 `PyImport_ImportModule` does not push a Python frame, so frame[1]
@@ -170,6 +186,16 @@ read plane assignment from the **same table**. Proposal:
 This decouples "what the planes are" from "how they're enforced" and
 eliminates drift between the two enforcement layers.
 
+**Byte-identical CI check (Opus round-1 follow-up #5)**: CI runs
+`python scripts/gen_importlinter.py --check` which regenerates
+`.importlinter` from `PLANE_OF` in-memory and compares byte-for-byte
+against the committed `.importlinter`. Non-empty diff fails the CI
+step with a message: "PLANE_OF / .importlinter drift detected — run
+`python scripts/gen_importlinter.py` locally and commit the result".
+This closes ADR-001 AC-A7 (hand-enumerated brittleness) and makes
+`PLANE_OF` the unambiguous SSOT. Job wired into `backend-tests`
+before `lint-imports`.
+
 ### 2.3 Activation model
 
 Guard activation happens at `src/__init__.py` import time, gated
@@ -183,20 +209,38 @@ if os.environ.get("CFD_HARNESS_PLANE_GUARD", "0") != "0":
     install_guard()
 ```
 
-Default: **OFF** in v1.0 runtime layer (W2-W3). W4+ flips the
-default to `"1"` once the P2 refactor is stable. Gradual rollout
-avoids silent test breakage on day 1.
+Default: **OFF** in v1.0 runtime layer (W2 dogfood only). Opus
+round-1 follow-up #6 node-advance applies: **P2 ExecutorMode
+refactor startup PR is hard-bound to the rhythm** (see below).
 
-Activation lifecycle:
-- **OFF** (default, W2-W3): no guard installed; only static layer
+Activation lifecycle (revised per Opus round-1 follow-up #6):
+- **OFF** (default, W2 early): no guard installed; only static layer
   enforces. ADR-002 Draft exists; `src/_plane_guard.py` + tests
   exist; CI has an opt-in `runtime-plane-guard` job exercising the
-  guard against a deliberate violation fixture.
-- **WARN** (W3-W4): `CFD_HARNESS_PLANE_GUARD=warn` logs a warning
-  via `logging.getLogger("src._plane_guard")` instead of raising.
-  Optional stopover for a sprint to shake out unknown violations.
-- **ON** (W4+): `CFD_HARNESS_PLANE_GUARD=1` raises on violation in
-  all processes. CI default for `backend-tests` job.
+  guard against the A7 4×3 deliberate-violation matrix.
+- **WARN** (**default W3**): `CFD_HARNESS_PLANE_GUARD=warn` logs a
+  structured JSON line via
+  `logging.getLogger("src._plane_guard")` instead of raising. Both
+  dev environments and CI fire warnings; neither blocks. WARN is
+  the **W3 default**, not an optional stopover — this is the
+  node-advance step.
+- **ON in CI, WARN in dev** (**W4**): CI `backend-tests` switches to
+  `CFD_HARNESS_PLANE_GUARD=1` (hard-fail on violation). Dev remains
+  `warn` to avoid friction on local experimentation. One sprint of
+  green CI at this state is the promotion gate to full ON.
+- **ON everywhere** (**W5+**): default env var flips to `"1"` in
+  `src/__init__.py`; prod + dev + CI all raise. Release notes call
+  out the flip.
+
+**P2 ExecutorMode refactor hard-binding (Opus round-1 follow-up #6)**:
+the PR that opens P2 ExecutorMode refactor (the first PR that
+introduces `importlib.import_module(f"src.executor_mode.{mode}_...")`
+dynamic dispatch) **must cite in its body the commit hash of an
+`ADR-002 WARN mode active` state**. If no such commit exists, the
+PR is blocked at review. This locks the rhythm to P2's technical
+prerequisite rather than to a calendar date, and ensures the
+runtime layer is at least warning on the dynamic-import path before
+the path is introduced.
 
 ### 2.4 Test-mode allowlist (revised Draft · Option A with strengthened conditions)
 
@@ -210,9 +254,19 @@ considered:
 `PlaneGuardFinder` walks the call stack (using the same multi-frame
 walk defined in §2.1, up to N=20 frames) and, if **any** frame's
 resolved module name (via the same `__spec__.name` → `__name__`
-priority chain) matches the literal regex **`^tests($|/)`** (i.e. the
-root package is exactly `tests` OR the module path is rooted under a
-`tests` directory), skips the forbidden-plane check.
+priority chain) matches the literal regex **`^tests($|\.)`**
+(dotted-form match, e.g. `tests`, `tests.conftest`, or
+`tests.integration.test_foo` — not a filesystem path), skips the
+forbidden-plane check.
+
+> **Clarification (revised Draft-rev3 · Opus round-2 minor #2)**: the
+> regex matches against the **dotted module name** read from
+> `frame.f_globals["__spec__"].name` / `frame.f_globals["__name__"]`
+> (same chain as §2.1 source-plane resolution), not against
+> `frame.f_code.co_filename`. This keeps the allowlist consistent
+> with `PLANE_OF` keys (both dotted). A filesystem-path regex would
+> create dual-source-of-truth and fail on `importlib`-loaded tests
+> where `co_filename` is synthetic.
 
 - **Pros**: zero test-side changes; no fixture coordination.
 - **Cons**: (i) production code that happens to live in a `_test.py`
@@ -241,10 +295,13 @@ skips when the contextvar is set.
 
 All three conditions are **blocking** for Draft → Accepted:
 
-1. **Regex literal is frozen as `^tests($|/)`**. `tests_integration/`
-   or `test_utils/` in repo root would NOT match — repo convention
-   stays on single `tests/` root. `src/foo/tests/`-style nested test
-   directories would also NOT match (prevents escape).
+1. **Regex literal is frozen as `^tests($|\.)`** (dotted-name
+   match). `tests_integration` or `test_utils` as root package
+   would NOT match — repo convention stays on single `tests/`
+   root (dotted: `tests.*`). `src.foo.tests.*` would NOT match
+   (anchored at start). This prevents both horizontal-sibling
+   escape (`test_utils.*`) and vertical-nested escape
+   (`src.foo.tests.*`).
 
 2. **Reverse-test MUST land before W3 ends**:
    `tests/test_plane_guard_escape.py` asserts via `glob` that the
@@ -253,20 +310,33 @@ All three conditions are **blocking** for Draft → Accepted:
    - `src/**/test_*.py`
    - `src/**/tests/` (no nested `tests/` subdirectories under `src`)
 
-   This closes escape (i) and (ii). AC-A17 tracks this.
+   This closes escape (i) and (ii). AC-A17 tracks this. Note:
+   `ui/backend/**` and `scripts/**` are **excluded** from the glob
+   per ADR-001 §2.7 Plane Assignment Extensibility Clause (those
+   trees are out of contract scope for v1.0). If either of those
+   trees grows to ADR-001 §2.7 trigger size (single PR net >500 LOC
+   in `ui/backend` or `scripts`), the reverse-test scope amends
+   alongside the ADR-001 plane-assignment audit.
 
-3. **Rollback trigger for Option A → B**: if during the W4 dogfood
-   period the guard observability log records **≥3 distinct incidents**
-   of fixture-frame confusion (symptom: guard raised on a legitimate
-   test execution that was subsequently marker'd as
+3. **Rollback trigger for Option A → B** (revised per Opus round-2
+   minor #2): if during the W4 dogfood period the guard observability
+   log records **≥3 distinct incidents of fixture-frame confusion
+   within any rolling 14-day window** (symptom: guard raised on a
+   legitimate test execution that was subsequently marker'd as
    `@pytest.mark.plane_guard_bypass`), ADR-002 auto-amends to Option
    B and a migration DEC is opened within 1 week. Counter location:
    `reports/plane_guard/fixture_frame_confusion.jsonl`, one line per
-   incident with timestamp + `tests/...` path + stack snippet.
-   Migration counter + incident schema live in `src/_plane_guard.py`
-   docstring for reviewability. AC-A18 tracks the incident-log
-   infrastructure; the rollback itself does not ship in v1.0 but the
-   measurement plumbing does.
+   incident with timestamp (ISO-8601) + `tests/...` dotted path +
+   stack snippet. **Rolling-window rationale**: a lifetime-cumulative
+   ≥3 counter would take a year to trigger and effectively deactivate
+   the rollback; 14 days is the shortest window that smooths over
+   a single bad day of infra noise while still firing within one
+   sprint if a systematic problem exists. Counter evaluation script
+   lives at `scripts/plane_guard_rollback_eval.py`; runs weekly via
+   CI cron. Migration counter + incident schema live in
+   `src/_plane_guard.py` docstring for reviewability. AC-A18 tracks
+   the incident-log infrastructure; the rollback itself does not
+   ship in v1.0 but the measurement plumbing does.
 
 **Strict scope for self-tests**: the guard exposes
 `plane_guard.strict_scope()` context manager that **disables** the
@@ -319,18 +389,28 @@ Verified via a deliberate-violation fixture:
 `tests/fixtures/plane_violation/load_by_path.py` constructs a spec
 from file path and triggers the guard. This is AC-C1.
 
-### 2.8 Interaction with pickle / dill deserialization
+### 2.8 Interaction with pickle / dill deserialization (revised · Opus round-1 follow-up #7)
 
-Pickle's `find_class(module, name)` ultimately calls `__import__`,
-which consults `sys.meta_path`. Any pickled object whose class lives
-in a cross-plane module (relative to the unpickler's caller frame)
-will trigger `LayerViolationError` at unpickle time. This is
-**intentional** — pickled state crossing planes is a known refactor
-hazard and the guard surfaces it loudly.
+Pickle/cloudpickle deserialization triggering an `src.*` class
+import naturally falls into the `sys.meta_path` finder path —
+`pickle.find_class(module, name)` routes through `__import__` →
+`meta_path` → `PlaneGuardFinder.find_spec`. Therefore cross-plane
+unpickle **carries `LayerViolationError` as a built-in side effect**;
+no pickle-specific code is needed in the guard. Standard types
+(`dict`, `list`, primitives) do not carry plane identity and never
+trigger the finder. This is coincident observability rather than
+active design.
+
+Cross-plane pickled state is a known hidden-coupling refactor hazard
+(e.g. Knowledge-plane pickle containing Evaluation-plane objects
+suffers silent schema drift when Evaluation rename lands). The
+coincident loud-surface is a **net positive**: it catches the
+refactor hazard at unpickle time with an actionable error pointing
+at ADR-001 §2.2.
 
 If an application has legitimate cross-plane pickle (none known in
 the repo today), it uses `plane_guard.test_scope()` around the
-unpickle. Tracked as known-limitation in §3.
+unpickle. Tracked as known-limitation in §6.
 
 ### 2.9 Partial-closure for Pattern 7 (sys.modules pollution) · added revised Draft
 
@@ -346,25 +426,46 @@ targeting an `src.*` key as an obvious anti-pattern for review
 comment, even though `.importlinter` itself does not check
 `sys.modules` assignments).
 
-**Optional polling watchdog** (tracked by AC-A13, not blocking for
-Draft → Accepted):
+**Structural prerequisite (Opus round-2 minor #3)**: `src/` **MUST
+remain a regular package** (with `src/__init__.py`), never a PEP 420
+namespace package. The §2.9 snapshot anchors on the single
+`src/__init__.py` load event; if `src` ever became a namespace
+package with multiple roots, the snapshot would be ambiguous (which
+root? first? all?) and Pattern 9 coverage would need rework
+simultaneously. This constraint is enforced by AC-A5
+(`tests/test_plane_assignment.py` asserts `src/__init__.py` exists
+and is non-empty) and mirrors the closure strategy for §1.1 Pattern
+9. If the repo ever needs a namespace split, a new ADR supersedes
+ADR-002 at minimum §1.1 and §2.9.
 
-- At `src/__init__` import, snapshot the set `S0 = {k for k in
-  sys.modules if k.startswith("src.")}` along with each module's
-  `id()` (object identity, not content).
+**Polling watchdog** (tracked by AC-A13, SHOULD-have per Opus
+round-2 A13 framing clarification — observability not enforcement):
+
+- At `src/__init__` import, snapshot the mapping
+  `S0 = {k: (id(v), getattr(v, "__file__", None))
+        for k, v in sys.modules.items() if k.startswith("src.")}`
+  — both object identity AND file path.
 - A pytest session-finish hook (and, if guard is ON in prod, a
   `atexit` handler) diffs the current `src.*` snapshot against `S0`:
-  - Keys present in `S0` but with different `id()` → pollution (a
-    stub was swapped in or `reload` re-created the module).
+  - Key present in `S0`, current `id()` differs **AND** current
+    `__file__` differs (or is `None`) → **pollution** (stub swap)
+  - Key present in `S0`, current `id()` differs BUT `__file__` is
+    identical → **legitimate reload**; logged at DEBUG only, no
+    pollution incident. This carves out `importlib.reload` + jupyter
+    autoreload + pytest `--forked` which are valid dev workflows.
   - Keys added post-`S0` → expected (lazy imports legitimately load
     `src.*` as the session runs).
-- Diff lines go to `reports/plane_guard/sys_modules_pollution.jsonl`
+- Pollution lines go to `reports/plane_guard/sys_modules_pollution.jsonl`
   one line per event with timestamp, key, old `id()`, new `id()`,
-  and best-effort stack trace (captured on the hook).
+  old `__file__`, new `__file__`, and best-effort stack trace
+  (captured on the hook).
 
-The watchdog does NOT raise — it is observability-only. The decision
-to upgrade to a hard fail is deferred to W5 GA retro if pollution
-events ever originate from prod code (they should not).
+The watchdog does NOT raise — it is observability-only and classified
+as a **detect-not-prevent** mitigation (§1.1 Pattern 7 is structurally
+unreachable from `meta_path`; finder is enforcement, watchdog is
+observability). The decision to upgrade to a hard fail is deferred
+to W5 GA retro if pollution events ever originate from prod code
+(they should not).
 
 ## 3. Consequences
 
@@ -428,12 +529,14 @@ test + §2.8 rollback measurement).
 | A5 | `tests/test_plane_assignment.py` asserts every top-level `src.*` package has a `PLANE_OF` entry | pytest green · satisfies ADR-001 AC-2 |
 | A6 | CI has new opt-in job `runtime-plane-guard` that runs `pytest` with `CFD_HARNESS_PLANE_GUARD=1` — one green run required before flipping default ON in W4. Hard-fail switchover PR MUST name a specific commit owner and include a rollback trigger: **auto-revert to opt-in if CI false-positive rate >1% across any 7-day rolling window** (measured via `.github/workflows/plane-guard-metrics.yml`) | `.github/workflows/ci.yml` diff + switchover PR description |
 | A7 | **Deliberate-violation fixture matrix**: `tests/fixtures/plane_violation/` contains **one fixture per forbidden contract** (4 total: Execution→Evaluation, Evaluation→Execution, Knowledge→anything, models→anything). Each fixture is exercised under **all 3 modes** (OFF silent / WARN log-no-raise / ON raise). Matrix = 4 × 3 = 12 test cases. `tests/test_plane_guard_fixtures.py` drives the matrix with pytest parametrize | pytest green · 12 cases pass |
+| **A7b** | **WARN/ON log JSON schema stability** (Opus round-2 minor #4): WARN and ON modes emit violation/warn events as structured JSON with a stable minimum schema — 5 required fields: `incident_id` (UUID4), `source_module` (dotted str), `target_module` (dotted str), `contract_name` (from `.importlinter` contract id), `severity` (`violation` / `warn` / `dynamic_external`). Fields may be extended but never removed/renamed without ADR-002 revision. Schema test asserts every emitted line parses to this minimum shape | `tests/test_plane_guard_log_schema.py` · pytest green |
 | A8 | Activation remains OFF by default in v1.0; env var toggle documented in README + ADR | README §"Runtime plane guard" |
 | A9 | Error message format is stable and matches §2.5 verbatim in at least one test assertion | pytest green |
 | **A10** | **fork-safety**: `tests/test_plane_guard_fork.py` spawns a child via `multiprocessing.get_context('fork')` with guard in ON mode; child inherits `sys.meta_path` finder and `CFD_HARNESS_PLANE_GUARD=1`; child raises `LayerViolationError` on a deliberate violation. Also tests `spawn` context (env var survives). If guard uses contextvar for any state, `tests/test_plane_guard_fork.py` asserts that state is re-initialized in child (no stale parent state leaks) | pytest green |
+| **A10c** | **forkserver context** (Opus round-2 minor #4): Linux-specific `multiprocessing.get_context('forkserver')` pre-forks a clean interpreter used in some prod deployments; must be covered in a Linux-only CI matrix row. On macOS CI, test skips with pytest marker `@pytest.mark.skipif(sys.platform != 'linux')` and documents the gap | pytest green on linux-ci · skipped on macOS |
 | **A11** | **thread-safety**: `tests/test_plane_guard_thread.py` runs 100 concurrent imports across 8 threads with guard in ON mode; no deadlock, no dropped `LayerViolationError`, no false positive. Internal state (any dedupe `set` or counter) protected by `threading.Lock` if mutable; or proven immutable | pytest green + `grep -n "Lock\|RLock" src/_plane_guard.py` diff review |
 | **A12** | **bootstrapping zero-src-deps**: `src/_plane_guard.py` and `src/_plane_assignment.py` import **only from stdlib** (no `from src.*` anywhere in either module). Enforced by a dedicated `import-linter` contract (`contract:plane-guard-bootstrap-purity`) declaring `src._plane_guard` + `src._plane_assignment` have forbidden_modules = all other `src.*`. Without this, guard loading would chain-load `src.*` modules which would themselves trigger the guard → infinite recursion. This is **the** most critical AC | `.importlinter` diff shows the new contract + `lint-imports` green |
-| **A13** | **sys.modules pollution watchdog** (partial closure of Pattern 7): optional §2.9 watchdog diffs `sys.modules` keys tagged `src.*` at `src/__init__` load vs. post-test-session hook; logs any key whose module identity changed since install. Test scope only; prod code writing to `sys.modules['src.*']` already fails static `import-linter`. Logging lives in `reports/plane_guard/sys_modules_pollution.jsonl` | `tests/test_plane_guard_sys_modules.py` · 1 pytest-mock case + 1 negative case |
+| **A13** | **sys.modules pollution watchdog** (partial closure of Pattern 7 · **SHOULD-have, not MUST-have** per Opus round-2 minor #4 framing clarification): §2.9 watchdog diffs `sys.modules` keys tagged `src.*` at `src/__init__` load vs. post-test-session hook using the double-criterion (id mismatch AND file mismatch) to carve out legitimate reload. Test scope only; prod code writing to `sys.modules['src.*']` already fails static `import-linter` review. Logging lives in `reports/plane_guard/sys_modules_pollution.jsonl`. **Framing**: Pattern 7 in §1.1 is BLOCKING for documentation completeness (the bypass exists and must be acknowledged); A13 watchdog is non-blocking because `sys.modules` post-hoc writes are unreachable from `meta_path` by Python's design — no finder could ever "prevent" the write, so the watchdog is detect-not-prevent mitigation, not enforcement. An enforcement-level AC would be fictitious | `tests/test_plane_guard_sys_modules.py` · 1 pytest-mock case (pollution detected) + 1 negative case (legitimate reload not flagged) |
 | **A14** | **importlib.reload matrix** (Pattern 8): `tests/test_plane_guard_reload.py` parametrized across Python 3.11 / 3.12 (CI matrix); asserts `importlib.reload(src.task_runner)` still triggers finder. Python 3.9 row documented in §6 Known Limitations if finder is skipped on that version; 3.9 row NOT in the `runtime-plane-guard` CI job | pytest green on 3.11/3.12 · §6 ADR amendment if 3.9 divergence |
 | **A15** | **PEP 420 namespace package** (Pattern 9): `tests/fixtures/plane_violation/namespace_pkg/` constructs a two-root namespace package for `src.<synthetic>`; asserts finder classifies by `spec.name` not file path | pytest green |
 | **A16** | **C-extension trampoline**: synthetic C-calls-Python test via `ctypes` or a minimal C extension stub; asserts no false positive when C code is in the caller chain. If synthetic stub is infeasible, document as §6 known limitation and cover via `pyo3`-compiled dummy | pytest green OR §6 amendment |
@@ -472,16 +575,26 @@ reviews the Draft for:
 Expected verdict: ACCEPT or ACCEPT_WITH_COMMENTS. If
 CHANGES_REQUIRED, revise + re-submit within W2.
 
-## 5. Implementation timeline
+## 5. Implementation timeline (revised Draft-rev3 · Opus round-1 follow-up #8 split)
 
 | W | Date | Deliverable |
 |---|---|---|
-| W2 Draft | 2026-04-28 | This ADR in Draft + Opus W2 Gate review |
-| W2 Impl Start | 2026-04-29 | `src/_plane_assignment.py` + `scripts/gen_importlinter.py` + regenerate `.importlinter` with zero diff on main |
-| W2 Impl Mid | 2026-05-01 | `src/_plane_guard.py` + `tests/test_plane_guard.py` covering A3(a-g) |
-| W3 CI | 2026-05-02 | Opt-in `runtime-plane-guard` CI job; WARN mode active |
-| W3 Accept | 2026-05-05 | All AC pass; ADR flips Draft → Accepted; Opus W3 confirmation |
-| W4 ON | 2026-05-12 | Default env var flip to ON pending one sprint of WARN-mode green CI |
+| W2 Draft | 2026-04-25 → 2026-04-28 | Draft-rev3 on origin/main + Opus W2 Gate re-re-review (expected ACCEPT) |
+| W2 Impl Start | 2026-04-29 | `src/_plane_assignment.py` + `scripts/gen_importlinter.py` + regenerate `.importlinter` with zero diff on main. `tests/test_plane_assignment.py` (A5 orphan check + A12 bootstrap-purity contract added to `.importlinter`) |
+| W2 Impl Mid | 2026-05-01 | `src/_plane_guard.py` (finder + multi-frame walk + env-var N limit) + `tests/test_plane_guard.py` basic suite (A3 a-d: allowed no-op / forbidden raise / allowlist permits / strict_scope disables) + reverse-test scaffold (AC-A17) |
+| W2 Impl Late | 2026-05-02 → 2026-05-03 | A3 (e-g) dynamic-import patterns + A10 fork-safety + A10c forkserver (linux CI only) + A11 thread-safety + A14 reload matrix + A15 namespace package + A16 C-extension trampoline + A12 bootstrapping zero-src-deps verification + A7b log JSON schema test |
+| W3 CI | 2026-05-04 → 2026-05-05 | Opt-in `runtime-plane-guard` CI job + perf benchmark (A4) + WARN mode becomes dev + CI default (node-advance per §2.3); §2.2 byte-identical CI check active; A18 rollback plumbing + §2.9 watchdog shipped in dev logs |
+| W3 Accept | 2026-05-06 | All AC pass; ADR flips Draft → Accepted; Opus W3 confirmation |
+| W4 hard-fail | 2026-05-12 | CI `backend-tests` flips to ON (hard-fail); dev stays WARN; rollback trigger (§4.1 A6) armed |
+| W5 ON-everywhere | 2026-05-19 | Default env var `"1"` in `src/__init__.py`; P2 ExecutorMode refactor unblocked (meets §2.3 P2 startup-PR precondition) |
+
+**Split rationale (Opus round-1 follow-up #8)**: the original
+W2-Mid single-day delivery of finder + 7 tests compressed
+edge-case coverage (fork / threading / Cython / pickle /
+bootstrapping). The revised schedule separates basic suite (A3 a-d,
+W2-Mid) from edge-case suite (A10/A11/A14-A16/A7b, W2-Late), giving
+each ~one full day. P1 arc density (V61-054 single-day) used as
+precedent; the split is a defensive margin, not a re-estimate.
 
 ## 6. Known limitations (revised Draft)
 
@@ -507,6 +620,38 @@ CHANGES_REQUIRED, revise + re-submit within W2.
 - **Multi-interpreter (`PEP 554` subinterpreters)** — untested and
   out of scope for v1.0. Documented here; AC-A19 may be added in
   a future revision if the repo introduces subinterpreter usage.
+- **Attribute-level reverse pollution** (Opus round-2 minor #5) —
+  `setattr(sys.modules['external_pkg'], 'helper', src.evaluation.foo)`
+  mutates a foreign namespace to hold a reference to an `src.*`
+  module. The guard sees **no import event** (the reference was
+  assigned, not imported), so runtime enforcement cannot catch this.
+  Covered by static review + ADR-001 `import-linter` at the original
+  `import src.evaluation.foo` site (which the static layer does
+  catch). If the reference originates from legitimate code and is
+  passed around post-import, it is outside runtime-guard scope and
+  static-review territory.
+- **GIL-free build (PEP 703 · 3.13t / free-threading)** — removing
+  the GIL removes the implicit `import lock` that currently
+  serializes concurrent imports. Guard-internal mutable state
+  (incident counter, dedup set) requires stronger synchronization
+  under free-threading. **ADR-002 v1.0 declares undefined behavior
+  on 3.13t builds**; a follow-up ADR must re-audit A11 and §2.9
+  snapshot-read concurrency once 3.13t lands in the project's CI
+  matrix.
+- **asyncio / eventloop** — `asyncio.to_thread(importlib.import_module, ...)`
+  dispatches the import to a worker thread; finder is invoked on
+  that thread, frame walk still sees the Python call frame chain
+  through the `to_thread` boundary. Functional correctness holds,
+  but incident attribution via `logging.exception()` captures the
+  worker-thread stack which omits the async context that scheduled
+  the work. This is a **diagnostic quality** limitation, not a
+  correctness gap. Documented for future async-heavy consumers.
+- **Subinterpreters (PEP 684 · Python 3.12+)** — each subinterpreter
+  owns an independent `sys.modules` and independent `sys.meta_path`.
+  If code spawns a subinterpreter, `install_guard()` must be invoked
+  in each subinterpreter for the finder to be active there.
+  **ADR-002 v1.0 supports main interpreter only**; subinterpreter
+  support requires a follow-up ADR.
 
 ## 7. Related decisions
 
@@ -527,3 +672,4 @@ CHANGES_REQUIRED, revise + re-submit within W2.
 |---|---|---|---|
 | Draft | 2026-04-25T05:30 | Claude Code (Opus 4.7 CLI) | Initial draft; pending Opus W2 Gate review |
 | Draft-rev2 | 2026-04-25T08:00 | Claude Code (Opus 4.7 CLI) | CHANGES_REQUIRED verdict response. 4 blocking items landed: (1) §2.1 single-frame → bounded multi-frame walk (N=20) with `__spec__.name` priority chain + Cython/external fallback; (2) §1.1 table expanded from 6 to 9 patterns (sys.modules pollution, reload, PEP 420 namespace) with per-pattern closure strategy column; (3) §2.4 Option A strengthened — regex literal `^tests($|/)` frozen, reverse-test AC-A17 required, Option A→B rollback trigger plumbing AC-A18 shipped in v1.0; (4) §4.1 AC expanded A7 to 4-contracts × 3-modes matrix, added A10 fork-safety / A11 thread-safety / A12 bootstrapping zero-src-deps / A13-A16 for patterns 7-9 + C-extension / A17-A18 for §2.4 conditions. New §2.9 sys.modules watchdog. New §6 Known Limitations. Revision history promoted to §8. |
+| Draft-rev3 | 2026-04-25T09:30 | Claude Code (Opus 4.7 CLI) | ACCEPT_WITH_COMMENTS verdict response · 5 round-2 minors + 4 round-1 follow-ups landed in one pass (pre-emptive zero-outstanding close). Round-2 minors: (1) §2.1 `CFD_PLANE_GUARD_FRAME_LIMIT` env-configurable N + `exec()/eval()` frames WARN-level monitoring log; (2) §2.4 regex changed to `^tests($|\.)` dotted form + 14-day rolling window for rollback counter + AC-A17 ui/backend+scripts exclusion inline note; (3) §2.9 `src/` must remain regular package constraint + pollution double-criterion (id AND `__file__` mismatch) carving out legitimate reload; (4) §4.1 A7b log JSON schema stability AC + A10c forkserver linux-only AC + A13 framing clarified as SHOULD-have detect-not-prevent mitigation; (5) §6 additions — attribute-level reverse pollution + GIL-free 3.13t undefined behavior + asyncio diagnostic-quality limitation + subinterpreter follow-up ADR flag + §1.1 pattern 4 explicit `importlib.metadata`/`pkg_resources` listing. Round-1 follow-ups: §2.2 byte-identical CI check wired; §2.3 node-advance rhythm (W3 WARN default dev+CI / W4 CI hard-fail / W5 ON-everywhere) + P2 ExecutorMode startup-PR hard-binding; §2.8 pickle prose reframed as coincident side-effect (not active design); §5 timeline split W2 Impl Mid (A3 a-d basic) vs W2 Impl Late (A3 e-g + edge matrix). |
