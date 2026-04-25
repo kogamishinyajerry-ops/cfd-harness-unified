@@ -1,6 +1,7 @@
 """tests/test_foam_agent_adapter.py — MockExecutor 和 FoamAgentExecutor 测试"""
 
 import io
+import math
 import re
 import shutil
 import subprocess
@@ -8,7 +9,7 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 import pytest
 from unittest.mock import patch, MagicMock
 from src.foam_agent_adapter import (
@@ -477,6 +478,154 @@ class TestFoamAgentExecutor:
         assert result["cf_spalding_fallback_activated"] is False
         assert result["cf_spalding_fallback_count"] == 0
         assert result["cf_skin_friction"] == pytest.approx(4e-05)
+
+    # ------------------------------------------------------------------
+    # DEC-V61-063 Stage A.2: multi-x Cf profile sampling
+    # ------------------------------------------------------------------
+
+    def test_extract_flat_plate_cf_emits_multi_x_profile(self):
+        """A.2: extractor must populate cf_x_profile at all targets
+        in _FLAT_PLATE_CF_X_TARGETS, with cells available at each.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        # Provide 3 wall-normal samples (wall + 2 interior) at each of
+        # the 4 target x positions. Choose Δu/Δy that produces a
+        # plausible laminar Cf around 0.001 — well below the 0.01
+        # Spalding-fallback cap so no fallback fires.
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        for x in (0.25, 0.5, 0.75, 1.0):
+            for y, u in [(0.0, 0.0), (0.005, 0.05), (0.010, 0.10)]:
+                cxs.append(x)
+                cys.append(y)
+                u_vecs.append((u, 0.0, 0.0))
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        # Multi-x profile populated
+        assert "cf_x_profile" in result
+        profile = result["cf_x_profile"]
+        assert len(profile) == 4
+        # Sorted by x ascending
+        xs = [p[0] for p in profile]
+        assert xs == sorted(xs)
+        assert xs == [0.25, 0.5, 0.75, 1.0]
+        # Each Cf is finite, positive, and below the fallback cap
+        for x, cf in profile:
+            assert math.isfinite(cf) and cf > 0.0 and cf < 0.01, (
+                f"x={x}: Cf={cf}"
+            )
+        assert result["cf_x_profile_n_samples"] == 4
+        assert result["cf_extractor_path"] == "wall_gradient_v1"
+        assert result["cf_spalding_fallback_activated"] is False
+
+    def test_extract_flat_plate_cf_keeps_back_compat_scalar_at_x_05(self):
+        """A.2: legacy `cf_skin_friction` scalar still emitted, equal to
+        the Cf at x=0.5 in the new profile. Existing fixtures depend
+        on this back-compat anchor.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        cxs, cys, u_vecs = [], [], []
+        for x in (0.25, 0.5, 0.75, 1.0):
+            for y, u in [(0.0, 0.0), (0.005, 0.05), (0.010, 0.10)]:
+                cxs.append(x); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        # Find Cf at x=0.5 in the profile and assert it matches
+        # the back-compat scalar.
+        cf_at_05 = next(cf for x, cf in result["cf_x_profile"] if x == 0.5)
+        assert result["cf_skin_friction"] == pytest.approx(cf_at_05, abs=1e-12)
+        assert result["cf_location_x"] == 0.5
+
+    def test_extract_flat_plate_cf_partial_coverage_emits_partial_profile(self):
+        """A.2: if cells exist only at 2 of the 4 target x's, the
+        emitted profile must contain those 2 entries (not None-padded,
+        not failed). The comparator gate decides whether 2 is enough
+        for the invariant — the extractor's job is to faithfully
+        report what's there.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        cxs, cys, u_vecs = [], [], []
+        # Realistic mesh density: a tight cluster of cells at x=0.5 and at
+        # x=1.0, with NO cells at x=0.25 or x=0.75. The clustered spacing
+        # keeps x_tol tight enough that the 0.25/0.75 targets find no
+        # neighbours, so cf_x_profile reports only the 2 covered x's.
+        for x in (0.495, 0.500, 0.505, 0.995, 1.000, 1.005):
+            for y, u in [(0.0, 0.0), (0.005, 0.05), (0.010, 0.10)]:
+                cxs.append(x); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        assert result["cf_x_profile_n_samples"] == 2
+        xs = [p[0] for p in result["cf_x_profile"]]
+        assert xs == [0.5, 1.0]
+        # Back-compat scalar still populated since x=0.5 was sampled.
+        assert "cf_skin_friction" in result
+
+    def test_extract_flat_plate_cf_emits_extractor_path_stamp(self):
+        """A.2 audit-trail: cf_extractor_path is a stable string
+        identifying the wall-gradient extraction path. Stage A.3 will
+        use it to assert no Spalding fallback fired under the laminar
+        contract.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        cxs = [0.5, 0.5, 0.5]
+        cys = [0.0, 0.005, 0.010]
+        u_vecs = [(0.0, 0.0, 0.0), (0.05, 0.0, 0.0), (0.10, 0.0, 0.0)]
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        assert result["cf_extractor_path"] == "wall_gradient_v1"
+
+    def test_extract_flat_plate_cf_x_targets_includes_back_compat_x(self):
+        """Frozen contract: _FLAT_PLATE_CF_X_TARGETS must include
+        _FLAT_PLATE_CF_BACKCOMPAT_X. Without this, a future tuple edit
+        could silently drop the back-compat anchor (existing fixtures
+        would all break with no test catching it).
+        """
+        assert (
+            FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X
+            in FoamAgentExecutor._FLAT_PLATE_CF_X_TARGETS
+        )
+        # Targets are at the canonical Blasius gold positions per the
+        # intake §1 secondary_gates.cf_x_profile spec.
+        assert set(FoamAgentExecutor._FLAT_PLATE_CF_X_TARGETS) == {
+            0.25, 0.5, 0.75, 1.0,
+        }
 
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests

@@ -9474,6 +9474,16 @@ mergePatchPairs
     # Turbulent Flat Plate — 提取局部摩擦系数 Cf
     # ------------------------------------------------------------------
 
+    # DEC-V61-063 A.2: streamwise sampling positions for the multi-x
+    # Cf profile. The 4-point sample exercises the laminar Blasius
+    # similarity scaling (Cf · √Re_x = 0.664) — see intake §1
+    # secondary_gates.cf_x_profile. x=0.5 stays first in the tuple
+    # because the back-compat `cf_skin_friction` scalar is still
+    # extracted from that position (existing fixtures depend on it).
+    _FLAT_PLATE_CF_X_TARGETS: Tuple[float, ...] = (0.5, 0.25, 0.75, 1.0)
+    # Back-compat anchor — `cf_skin_friction` scalar is the Cf at this x.
+    _FLAT_PLATE_CF_BACKCOMPAT_X: float = 0.5
+
     @staticmethod
     def _extract_flat_plate_cf(
         cxs: List[float],
@@ -9484,9 +9494,21 @@ mergePatchPairs
     ) -> Dict[str, Any]:
         """Turbulent Flat Plate: 从壁面速度梯度计算局部摩擦系数 Cf。
 
-        Gold Standard: Cf ≈ 0.0576/Re_x^0.2 (Spalding formula)
-        方法: 找 y=0（壁面）单元格的速度梯度 du/dy，
-        然后 Cf = tau_w / (0.5*rho*U_ref^2) = nu * (du/dy) / (0.5*U_ref^2)
+        DEC-V61-063 Stage A.2: generalized from single x_target=0.5 to
+        multi-x sampling at x ∈ {0.5, 0.25, 0.75, 1.0}. Emits both the
+        legacy single-scalar `cf_skin_friction` (from x=0.5) and the
+        new `cf_x_profile` list of (x, Cf) pairs that the V61-063
+        Type II comparator gates iterate over.
+
+        Method: per x in _FLAT_PLATE_CF_X_TARGETS, gather cell-centre
+        velocity samples within x_tol of the target, compute du/dy at
+        the wall via interior-cell gradient, then Cf = τ_w / (½·ρ·U_ref²)
+        = (ν + ν_t) · (du/dy) / (½·U_ref²).
+
+        Spalding fallback (Cf > 0.01 cap) remains in place but is now
+        per-x; emits cf_spalding_fallback_count for audit transparency.
+        Under the laminar Blasius contract (V61-006), this fallback
+        should NEVER fire — Stage A.3 will add an explicit assertion.
         """
         if not cxs or not u_vecs:
             return key_quantities
@@ -9535,8 +9557,7 @@ mergePatchPairs
                 return gradient, nut_eff
             return None
 
-        # 找 x=0.5 位置（无因次化后）和 y≈0（壁面）速度
-        x_target = 0.5
+        # 计算 x_tol 一次，所有 x_target 共享。
         unique_x = sorted({round(x, 6) for x in cxs})
         if len(unique_x) >= 2:
             dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
@@ -9544,64 +9565,110 @@ mergePatchPairs
         else:
             x_tol = 0.01
 
-        # 按 x 位置分组，找壁面（cy≈min(cy)）的速度
+        # 内部 helper: 在单个 x_target 上聚合并计算 Cf。返回 (Cf, fallback_used,
+        # sign_corrected) 或 None（采样失败/数据不足）。
         from collections import defaultdict
-        x_groups: Dict[float, List[Tuple]] = defaultdict(list)
 
-        for i in range(min(len(cxs), len(cys), len(u_vecs))):
-            if abs(cxs[i] - x_target) < x_tol:
-                cz_val = czs[i] if czs is not None else None
-                nut_val = nut_vals[i] if nut_vals is not None else 0.0
-                x_groups[round(cxs[i], 5)].append((cys[i], cz_val, u_vecs[i][0], nut_val))
-
-        cf_values = []
-        cf_spalding_fallback_count = 0
-        sign_corrected = False
-        for x_pos, cy_u_pairs in x_groups.items():
-            grad_data = _compute_wall_gradient(
-                [(cy, u_parallel, nut_val) for cy, _, u_parallel, nut_val in cy_u_pairs]
-            )
-
-            # 2D 薄层网格里 Cy 可能全部塌缩到 0；此时退化到 Cz 方向梯度。
-            if grad_data is None and czs is not None:
-                z_samples = [
-                    (cz, u_parallel, nut_val)
-                    for _, cz, u_parallel, nut_val in cy_u_pairs
-                    if cz is not None
-                ]
-                grad_data = _compute_wall_gradient(z_samples)
-
-            if grad_data is not None:
+        def _cf_at_x(x_target: float) -> Optional[Tuple[float, bool, bool]]:
+            x_groups: Dict[float, List[Tuple]] = defaultdict(list)
+            for i in range(min(len(cxs), len(cys), len(u_vecs))):
+                if abs(cxs[i] - x_target) < x_tol:
+                    cz_val = czs[i] if czs is not None else None
+                    nut_val = nut_vals[i] if nut_vals is not None else 0.0
+                    x_groups[round(cxs[i], 5)].append(
+                        (cys[i], cz_val, u_vecs[i][0], nut_val)
+                    )
+            cf_values: List[float] = []
+            local_fallback = False
+            local_sign_flip = False
+            for _, cy_u_pairs in x_groups.items():
+                grad_data = _compute_wall_gradient(
+                    [(cy, u_parallel, nv) for cy, _, u_parallel, nv in cy_u_pairs]
+                )
+                # 2D 薄层网格里 Cy 可能全部塌缩到 0；此时退化到 Cz 方向梯度。
+                if grad_data is None and czs is not None:
+                    z_samples = [
+                        (cz, u_parallel, nv)
+                        for _, cz, u_parallel, nv in cy_u_pairs
+                        if cz is not None
+                    ]
+                    grad_data = _compute_wall_gradient(z_samples)
+                if grad_data is None:
+                    continue
                 du_dn, nut_eff = grad_data
                 tau_w = (nu_val + nut_eff) * du_dn
-                Cf = tau_w / (0.5 * U_ref**2)
-                if math.isfinite(Cf):
-                    if Cf < 0.0:
-                        sign_corrected = True
-                        Cf = abs(Cf)
-                    # Cap Cf at physically reasonable max (~0.01 for flat plates).
-                    # Spalding: Cf ≈ 0.0576/Re_x^0.2; at Re_x=25000 (x=0.5,Re=50000)→Cf≈0.0076.
-                    # If extraction gives >0.01, the cell-centre gradient is unreliable — use formula.
-                    if Cf > 0.01:
-                        x_local = x_target / U_ref  # physical x position
-                        Re_x = U_ref * x_local / nu_val
-                        Cf = 0.0576 / (Re_x**0.2) if Re_x > 0 else Cf
-                        cf_spalding_fallback_count += 1
-                    cf_values.append(Cf)
+                Cf_local = tau_w / (0.5 * U_ref**2)
+                if not math.isfinite(Cf_local):
+                    continue
+                if Cf_local < 0.0:
+                    local_sign_flip = True
+                    Cf_local = abs(Cf_local)
+                # Spalding fallback per x: if cell-centre gradient gives an
+                # implausibly large Cf (>0.01), substitute the formula
+                # 0.0576/Re_x^0.2. Under V61-006 laminar contract this
+                # branch should never fire — Stage A.3 adds an assertion.
+                if Cf_local > 0.01:
+                    Re_x = U_ref * x_target / nu_val
+                    if Re_x > 0:
+                        Cf_local = 0.0576 / (Re_x**0.2)
+                    local_fallback = True
+                cf_values.append(Cf_local)
+            if not cf_values:
+                return None
+            return sum(cf_values) / len(cf_values), local_fallback, local_sign_flip
 
-        if cf_values:
-            if sign_corrected:
+        # 多 x 采样: 每个 x_target 独立计算 Cf，组成 cf_x_profile。
+        cf_x_profile: List[Tuple[float, float]] = []
+        cf_spalding_fallback_count = 0
+        sign_corrected_overall = False
+        cf_at_backcompat_x: Optional[float] = None
+        for x_target in FoamAgentExecutor._FLAT_PLATE_CF_X_TARGETS:
+            result = _cf_at_x(x_target)
+            if result is None:
+                continue
+            Cf_at_x, fallback_used, sign_flip = result
+            cf_x_profile.append((x_target, Cf_at_x))
+            if fallback_used:
+                cf_spalding_fallback_count += 1
+            if sign_flip:
+                sign_corrected_overall = True
+            if math.isclose(
+                x_target, FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X, abs_tol=1e-9
+            ):
+                cf_at_backcompat_x = Cf_at_x
+
+        if cf_x_profile:
+            # Sort by x ascending so audit consumers see a deterministic
+            # profile order (the input tuple has x=0.5 first for the
+            # back-compat lookup but the emitted profile should be
+            # ordered by streamwise position).
+            cf_x_profile.sort(key=lambda pair: pair[0])
+            if sign_corrected_overall:
                 warnings.warn(
                     "Negative flat-plate Cf corrected to absolute value; "
                     "check wall-normal orientation in extracted cell-centre data.",
                     RuntimeWarning,
                     stacklevel=2,
                 )
-            Cf_mean = sum(cf_values) / len(cf_values)
-            key_quantities["cf_skin_friction"] = Cf_mean
-            key_quantities["cf_location_x"] = x_target
+            # Back-compat scalar (x=0.5) — kept so existing fixtures and
+            # the legacy single-scalar comparator path keep working.
+            if cf_at_backcompat_x is not None:
+                key_quantities["cf_skin_friction"] = cf_at_backcompat_x
+                key_quantities["cf_location_x"] = (
+                    FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X
+                )
+            # New A.2 emit: full multi-x profile.
+            key_quantities["cf_x_profile"] = list(cf_x_profile)
+            key_quantities["cf_x_profile_n_samples"] = len(cf_x_profile)
+            # Audit-package stamp distinguishing wall-gradient extraction
+            # from any future correlation-based path. Stage A.3 will use
+            # this to assert no Spalding fallback fired under the laminar
+            # contract.
+            key_quantities["cf_extractor_path"] = "wall_gradient_v1"
             key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
-            key_quantities["cf_spalding_fallback_activated"] = cf_spalding_fallback_count > 0
+            key_quantities["cf_spalding_fallback_activated"] = (
+                cf_spalding_fallback_count > 0
+            )
 
         return key_quantities
 
