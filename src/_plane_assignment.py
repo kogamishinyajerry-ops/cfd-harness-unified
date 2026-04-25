@@ -56,6 +56,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.plane_channel_uplus_emitter": Plane.EXECUTION,
     "src.wall_gradient": Plane.EXECUTION,
     "src.dhc_extractors": Plane.EXECUTION,
+    "src.rbc_extractors": Plane.EXECUTION,  # DEC-V61-060 Stage B
     # ----- Evaluation Plane -----
     "src.comparator_gates": Plane.EVALUATION,
     "src.convergence_attestor": Plane.EVALUATION,
