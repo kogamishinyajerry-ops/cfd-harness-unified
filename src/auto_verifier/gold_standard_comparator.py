@@ -21,21 +21,42 @@ class GoldStandardComparator:
         for observable in observables:
             checks.append(self._compare_observable(observable, sim_results))
 
-        pass_count = sum(1 for check in checks if check.within_tolerance)
-        ratio = pass_count / len(checks)
-        if pass_count == len(checks):
+        # DEC-V61-057 Stage C: PROVISIONAL_ADVISORY observables are rendered
+        # for the user but excluded from the pass-fraction verdict. They
+        # represent reconstructions whose SNR is not yet validated (e.g. ψ_max
+        # when top-wall closure residual exceeds the threshold).
+        hard_checks = [c for c in checks if c.gate_status != "PROVISIONAL_ADVISORY"]
+        warnings: List[str] = []
+        if not hard_checks:
+            return GoldStandardComparison(
+                overall="SKIPPED",
+                observables=checks,
+                warnings=["no_hard_gated_observables"],
+            )
+
+        pass_count = sum(1 for check in hard_checks if check.within_tolerance)
+        ratio = pass_count / len(hard_checks)
+        if pass_count == len(hard_checks):
             overall = "PASS"
         elif ratio >= THRESHOLDS["TH-8"]:
             overall = "PASS_WITH_DEVIATIONS"
         else:
             overall = "FAIL"
 
-        return GoldStandardComparison(overall=overall, observables=checks)
+        # If any PROVISIONAL_ADVISORY observable failed its tolerance check,
+        # surface that as a non-blocking warning so the UI can render the
+        # advisory caveat without changing the verdict.
+        for c in checks:
+            if c.gate_status == "PROVISIONAL_ADVISORY" and not c.within_tolerance:
+                warnings.append(f"advisory_observable_outside_tolerance:{c.name}")
+
+        return GoldStandardComparison(overall=overall, observables=checks, warnings=warnings)
 
     def _compare_observable(self, observable: Dict[str, Any], sim_results: Dict[str, Any]) -> ObservableCheck:
         name = observable["name"]
         ref_value = observable["ref_value"]
         tolerance = observable.get("tolerance", {"mode": "relative", "value": THRESHOLDS["TH-5"]})
+        gate_status = observable.get("gate_status", "HARD_GATED")
         sim_value = sim_results.get(name)
 
         if sim_value is None:
@@ -47,13 +68,17 @@ class GoldStandardComparator:
                 abs_error=None,
                 tolerance=tolerance,
                 within_tolerance=False,
+                gate_status=gate_status,
             )
 
         if isinstance(ref_value, list):
-            return self._compare_profile(name, ref_value, sim_value, sim_results, tolerance)
-        if isinstance(ref_value, dict):
-            return self._compare_mapping(name, ref_value, sim_value, tolerance)
-        return self._compare_scalar(name, ref_value, sim_value, tolerance)
+            check = self._compare_profile(name, ref_value, sim_value, sim_results, tolerance)
+        elif isinstance(ref_value, dict):
+            check = self._compare_mapping(name, ref_value, sim_value, tolerance)
+        else:
+            check = self._compare_scalar(name, ref_value, sim_value, tolerance)
+        check.gate_status = gate_status
+        return check
 
     def _compare_scalar(
         self,

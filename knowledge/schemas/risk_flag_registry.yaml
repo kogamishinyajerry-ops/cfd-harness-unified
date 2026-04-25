@@ -151,6 +151,104 @@ flags:
       - mesh-density-limited integral quantities
       - re-run candidates awaiting parameter-only bump DEC
 
+  # -- DEC-V61-057 Codex round-1 case-specific flags (registered Stage C) --
+
+  - flag_id: ra_aspect_ratio_dispatch_inversion
+    severity_default: high
+    origin: DEC-V61-057 Codex round-1 F1-HIGH
+    origin_date: "2026-04-25"
+    origin_commit: "a7b1e58"  # Stage A.1 fix
+    description: |
+      Adapter natural-convection branch inferred aspect_ratio from a Ra
+      threshold heuristic (Ra<1e9 → 2.0 RBC branch; Ra>=1e9 → 1.0 DHC
+      branch) even though knowledge/whitelist.yaml carries an explicit
+      parameters.aspect_ratio per case. DHC at Ra=1e6 (de Vahl Davis 1983
+      benchmark, AR=1.0 square cavity) was therefore trapped on the 2:1
+      RBC branch — extracted Nu cannot match gold regardless of mesh.
+    mitigation_pattern: |
+      Adapter dispatch must consult the whitelist parameters block first
+      via _load_whitelist_parameter("aspect_ratio") with
+      _normalize_task_name_to_case_id alias resolution. Fallback chain:
+      (1) task_spec.boundary_conditions.aspect_ratio,
+      (2) whitelist parameters.aspect_ratio (canonical case_id),
+      (3) case-id-aware default (DHC=1.0, RBC=2.0).
+      Bake DHC=1.0 + RBC=2.0 into tests against any future Ra change.
+    applies_to:
+      - natural-convection cavity adapter generators
+      - whitelist-parameter dispatch fallback chains
+      - any case where geometry is shared across multiple Ra regimes
+
+  - flag_id: turbulence_emit_vs_whitelist_mismatch
+    severity_default: high
+    origin: DEC-V61-057 Codex round-1 F1-HIGH
+    origin_date: "2026-04-25"
+    origin_commit: "aae2567"  # Stage A.2 fix
+    description: |
+      Adapter natural-convection branch hard-wrote
+      "simulationType RAS / RASModel kOmegaSST" with k/omega initial
+      fields regardless of whitelist.cases[].turbulence_model. Whitelist
+      sets turbulence_model=laminar for DHC at Ra=1e6 (well below
+      turbulent onset at Ra≈1.5e8). Result: solver runs full RAS budget
+      for a regime with no turbulence to model — adds dissipation,
+      mis-tunes Nu.
+    mitigation_pattern: |
+      Adapter must consult task_spec.turbulence_model (mapped from
+      whitelist) before emitting constant/turbulenceProperties. When
+      laminar: emit "simulationType laminar" only; do NOT write k/omega
+      initial fields; do NOT add RASModel block. Add unit test that
+      asserts case_dir/constant/turbulenceProperties contains
+      "simulationType  laminar" for whitelist-laminar cases.
+    applies_to:
+      - adapter generators for laminar regimes (NC cavities, low-Re flows)
+      - cases where whitelist.turbulence_model differs from solver default
+
+  - flag_id: mesh_resolution_at_ra_1e6_marginal
+    severity_default: high
+    origin: DEC-V61-057 Codex round-1 F1-HIGH
+    origin_date: "2026-04-25"
+    origin_commit: "2cc2f94"  # Stage A.3 fix
+    description: |
+      Adapter Ra<1e9 path emitted a uniform 80-cell mesh (no grading).
+      At Ra=1e6 the thermal BL thickness δ_T/L ≈ Ra^(-1/4) ≈ 0.032;
+      uniform 80 cells gives Δ=0.0125L → 2.56 cells inside the BL,
+      below the 5-cell BL minimum used by V61-053 (cylinder) and
+      standard NC benchmarks (Hortmann 1990).
+    mitigation_pattern: |
+      Activate the existing high-Ra grading branch for any DHC case
+      regardless of Ra. Use 4:1 wall grading symmetric (smaller cells
+      at both walls). blockMesh smoke-check must report
+      min(dx, dy)_wall ≤ δ_T/L/5 (= 0.0064L at Ra=1e6); document
+      numerical values in adapter comment for future audit.
+    applies_to:
+      - natural-convection cavities at moderate Ra (1e5 - 1e8)
+      - any case where wall-BL resolution governs the headline scalar
+
+  - flag_id: validation_artifact_lineage_drift
+    severity_default: high
+    origin: DEC-V61-057 Codex round-1 F2-HIGH
+    origin_date: "2026-04-25"
+    origin_commit: "8f7120b"  # Stage A.4 fix
+    description: |
+      Three-source split: (1) gold YAML observables[].ref_value;
+      (2) auto_verify_report.yaml gold_standard_comparison block (could
+      be stale from a prior gold revision); (3) audit fixture
+      audit_real_run_measurement.yaml. Different rendering passes
+      (templates/partials/gold_standard_ref.md.j2 vs
+      results_comparison.md.j2) read from different stages, so a
+      single rendered report.md/.html can emit inconsistent ref_values
+      across its own tables.
+    mitigation_pattern: |
+      Require a 3-way invariant check: gold YAML ref_value ==
+      auto_verify_report.gold_standard_comparison.observables[].ref_value
+      == report.md/html reference cell, byte-identical. After any gold
+      bump, regenerate auto_verify_report.yaml from the current schema
+      and assert the invariant in CI. Do NOT hand-fix rendered output —
+      always fix the source of truth.
+    applies_to:
+      - any gold-value bump (ref_value, tolerance, or schema_version)
+      - cases with hand-authored report.html narrative (incl. DHC pre-A.6)
+      - render-engine pipelines reading from cached intermediates
+
 # ===========================================================================
 # How to reference from a CaseProfile
 # ===========================================================================

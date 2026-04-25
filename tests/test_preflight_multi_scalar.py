@@ -170,3 +170,136 @@ def test_unknown_secondary_key_is_ignored(
     assert "secondary scalar (cd_mean)" in names
     assert "secondary scalar (wake_width_diagnostic)" not in names
     assert "secondary scalar (cl_rms)" not in names
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-057 Codex round-4 F1-MED · schema_v2 normalization
+# ---------------------------------------------------------------------------
+
+
+def _dhc_schema_v2_gold_doc() -> list[dict]:
+    """Synthetic single-doc schema_v2 gold YAML mirroring the DHC shape."""
+    return [
+        {
+            "schema_version": 2,
+            "case_id": "differential_heated_cavity_test",
+            "source": "test fixture",
+            "observables": [
+                {
+                    "name": "nusselt_number",
+                    "ref_value": 8.8,
+                    "tolerance": {"mode": "relative", "value": 0.10},
+                    "gate_status": "HARD_GATED",
+                },
+                {
+                    "name": "nusselt_max",
+                    "ref_value": 17.925,
+                    "tolerance": {"mode": "relative", "value": 0.07},
+                    "gate_status": "HARD_GATED",
+                },
+                {
+                    "name": "psi_max_center",
+                    "ref_value": 16.750,
+                    "tolerance": {"mode": "relative", "value": 0.08},
+                    "gate_status": "PROVISIONAL_ADVISORY",
+                },
+            ],
+        }
+    ]
+
+
+def test_schema_v2_primary_is_evaluated_not_warned(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex round-4 F1-MED regression: schema_v2 gold YAML (no per-doc
+    `quantity:` blocks) must be normalized + evaluated, not silently
+    dropped to `warn` with 'no quantity block'."""
+    case_id = "dhc_schema_v2_test"
+    measurement = {
+        "measurement": {
+            "value": 8.7,
+            "quantity": "nusselt_number",
+        },
+    }
+    _install_fixtures(monkeypatch, tmp_path,
+                      case_id=case_id,
+                      gold_docs=_dhc_schema_v2_gold_doc(),
+                      measurement=measurement)
+    checks = pf._check_scalar_contract(case_id)
+    primary = next(c for c in checks if c.name == "scalar contract")
+    assert primary.level == "pass", (
+        f"expected pass, got {primary.level}: {primary.detail}"
+    )
+
+
+def test_schema_v2_secondary_observables_evaluated(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """schema_v2 secondaries (e.g. nusselt_max, psi_max_center) coming via
+    measurement.secondary_scalars must look up observables[] entries —
+    previously only the legacy `quantity:` doc-walk was consulted."""
+    case_id = "dhc_schema_v2_secondary_test"
+    measurement = {
+        "measurement": {
+            "value": 8.7,
+            "quantity": "nusselt_number",
+            "secondary_scalars": {
+                "nusselt_max": 17.5,         # within 7% → pass
+                "psi_max_center": 16.5,      # within 8% → advisory pass
+            },
+        },
+    }
+    _install_fixtures(monkeypatch, tmp_path,
+                      case_id=case_id,
+                      gold_docs=_dhc_schema_v2_gold_doc(),
+                      measurement=measurement)
+    checks = pf._check_scalar_contract(case_id)
+    by_name = {c.name: c for c in checks}
+    assert "secondary scalar (nusselt_max)" in by_name
+    assert by_name["secondary scalar (nusselt_max)"].level == "pass"
+    psi_check = by_name["secondary scalar (psi_max_center)"]
+    assert psi_check.level in ("pass", "warn"), (
+        f"advisory observable should never be 'fail', got {psi_check.level}"
+    )
+    assert "[advisory]" in psi_check.detail
+
+
+def test_schema_v2_advisory_outside_tolerance_emits_warn_not_fail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Out-of-tolerance PROVISIONAL_ADVISORY observable returns 'warn'
+    (yellow), not 'fail' (red) — so preflight does not block live run on
+    an advisory miss."""
+    case_id = "dhc_advisory_outside_test"
+    measurement = {
+        "measurement": {
+            "value": 8.7,
+            "quantity": "nusselt_number",
+            "secondary_scalars": {
+                "psi_max_center": 25.0,  # +49%, way outside 8% — still advisory
+            },
+        },
+    }
+    _install_fixtures(monkeypatch, tmp_path,
+                      case_id=case_id,
+                      gold_docs=_dhc_schema_v2_gold_doc(),
+                      measurement=measurement)
+    checks = pf._check_scalar_contract(case_id)
+    psi_check = next(
+        c for c in checks if c.name == "secondary scalar (psi_max_center)"
+    )
+    assert psi_check.level == "warn"
+    assert "[advisory]" in psi_check.detail
+
+
+def test_schema_v2_real_dhc_gold_yaml_still_loads() -> None:
+    """End-to-end smoke against the real on-disk DHC gold YAML (schema_v2):
+    the primary scalar contract is evaluated (pass or fail), NOT silently
+    warned about a missing `quantity:` block."""
+    checks = pf._check_scalar_contract("differential_heated_cavity")
+    primary = next(c for c in checks if c.name == "scalar contract")
+    assert primary.level in ("pass", "fail"), (
+        f"expected pass/fail, got {primary.level}: {primary.detail}"
+    )
+    assert "no quantity block" not in primary.detail
+    assert "no observable for" not in primary.detail

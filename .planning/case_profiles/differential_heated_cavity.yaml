@@ -6,23 +6,72 @@
 
 case_id: differential_heated_cavity
 schema_version: 1
-last_assessed: "2026-04-24"
-last_assessed_by: "Claude Code (G-6 backfill · Opus Pivot Review §7)"
+last_assessed: "2026-04-25"  # DEC-V61-057 Stage C update
+last_assessed_by: "Claude Code (DEC-V61-057 Stage C · Codex round-1 risk_flag backfill)"
 
 risk_flags:
   - flag_id: executable_smoke_test
-    triggered: false
+    triggered: true
     justification: |
-      No post-R3 dispatch-layer defect recorded for this case on main.
-      Flag re-evaluated if future DEC touches adapter dispatch path.
+      DEC-V61-057 §4 mandates a live OpenFOAM run via
+      scripts/phase5_audit_run.py differential_heated_cavity at Stage E
+      to verify the Stage A canonical-contract repairs land at the live
+      dispatch path. Until Stage E closes, this flag is triggered.
   - flag_id: solver_stability_on_novel_geometry
     triggered: false
     justification: |
-      Case uses established OpenFOAM tutorial solver topology; no
-      smoother-vs-BC divergence reported to date on main.
+      buoyantFoam laminar @ Ra=1e6 maps to the OF tutorial
+      heatTransfer/buoyantSimpleFoam/hotRoom topology. Risk lower than
+      cylinder which had no equivalent tutorial. Pre-emptive PCG+DIC
+      fallback documented in intake §4 for any post-A.3 mesh-grading
+      stability issues.
+  # DEC-V61-057 Codex round-1 case-specific flags (registered Stage C).
+  - flag_id: ra_aspect_ratio_dispatch_inversion
+    triggered: true
+    justification: |
+      Original defect (Codex round-1 F1-HIGH). Mitigated in Stage A.1
+      (commit a7b1e58) via _load_whitelist_parameter + alias
+      normalization. Flag remains triggered as a historical record of
+      the regression class; preflight comparator must verify
+      AR=1.0 dispatches correctly on every DHC run.
+  - flag_id: turbulence_emit_vs_whitelist_mismatch
+    triggered: true
+    justification: |
+      Original defect (Codex round-1 F1-HIGH). Mitigated in Stage A.2
+      (commit aae2567) via whitelist-driven turbulence_model emit.
+      Flag remains triggered as a historical record; preflight asserts
+      constant/turbulenceProperties contains "simulationType laminar"
+      for whitelist-laminar cases (Stage A.2 unit test).
+  - flag_id: mesh_resolution_at_ra_1e6_marginal
+    triggered: true
+    justification: |
+      Original defect (Codex round-1 F1-HIGH). Mitigated in Stage A.3
+      (commit 2cc2f94) via 4:1 wall grading at Ra=1e6. Flag triggered
+      because mesh resolution is the dominant remaining error source
+      at moderate Ra; Stage E live run must confirm the BL-cell
+      assertion (≥5 cells inside δ_T/L=0.032).
+  - flag_id: validation_artifact_lineage_drift
+    triggered: true
+    justification: |
+      Original defect (Codex round-1 F2-HIGH). Mitigated in Stage A.4
+      (commit 8f7120b) via 3-way invariant test (gold YAML ↔
+      auto_verify_report.yaml ↔ report.md). Flag triggered because
+      the underlying coupling between gold YAML and rendered reports
+      remains a known-fragile surface (DHC pre-A.6 banner is the
+      historical evidence).
+
 # P1-T3b · per-observable tolerance overrides.
 # Source: knowledge/gold_standards/differential_heated_cavity.yaml
-# (de Vahl Davis 1983 benchmark @ Ra=1e6).
+# (de Vahl Davis 1983 benchmark @ Ra=1e6 · 5-observable schema after
+# DEC-V61-057 Stage C expansion).
 tolerance_policy:
   nusselt_number:
     tolerance: 0.10        # 10% · wall-averaged Nu, hot wall
+  nusselt_max:
+    tolerance: 0.07        # 7%  · peak local Nu, hot wall
+  u_max_centerline_v:
+    tolerance: 0.05        # 5%  · peak |u_x| on x=L/2 mid-plane
+  v_max_centerline_h:
+    tolerance: 0.05        # 5%  · peak |u_y| on y=L/2 mid-plane
+  psi_max_center:
+    tolerance: 0.08        # 8%  · ψ_max trapezoidal (PROVISIONAL_ADVISORY)

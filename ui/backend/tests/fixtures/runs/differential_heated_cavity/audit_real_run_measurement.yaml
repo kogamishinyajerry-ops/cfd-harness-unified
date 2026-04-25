@@ -9,32 +9,28 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 547002a）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 63e915e）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
-  expected_verdict: FAIL
+  expected_verdict: PASS
+  actual_verdict: PASS
 case_id: differential_heated_cavity
 source: phase5_audit_run_foam_agent
 measurement:
-  value: 11.367641129032233
+  value: 8.838721264368287
   unit: dimensionless
-  run_id: audit_differential_heated_cavity_547002a
-  commit_sha: 547002a
-  measured_at: '2026-04-21T14:23:07Z'
+  run_id: audit_differential_heated_cavity_63e915e
+  commit_sha: 63e915e
+  measured_at: '2026-04-25T09:03:03Z'
   quantity: nusselt_number
-  extraction_source: comparator_deviation
+  extraction_source: key_quantities_direct
   solver_success: true
-  comparator_passed: false
+  comparator_passed: true
 audit_concerns:
 - concern_type: CONTRACT_STATUS
-  summary: 'Quantity: nusselt_number | Tolerance: 10.0% | Failed: 1 deviation(s)'
-  detail: 'Quantity: nusselt_number | Tolerance: 10.0% | Failed: 1 deviation(s)'
-  decision_refs:
-  - DEC-V61-028
-- concern_type: DEVIATIONS
-  summary: 1 deviation(s) over tolerance
-  detail: 'nusselt_number: actual=11.367641129032233 expected=8.8'
+  summary: 'Quantity: nusselt_number | Tolerance: 10.0% | PASS'
+  detail: 'Quantity: nusselt_number | Tolerance: 10.0% | PASS'
   decision_refs:
   - DEC-V61-028
 decisions_trail:
@@ -42,6 +38,13 @@ decisions_trail:
   date: '2026-04-21'
   title: Phase 5a audit pipeline — real-solver fixtures
   autonomous: true
+- decision_id: DEC-V61-036
+  date: '2026-04-22'
+  title: Hard comparator gate G1 (missing-target-quantity)
+  autonomous: true
+attestation:
+  overall: ATTEST_NOT_APPLICABLE
+  checks: []
 field_artifacts:
   manifest_path_rel: reports/phase5_fields/differential_heated_cavity/runs/audit_real_run.json
   run_label: audit_real_run

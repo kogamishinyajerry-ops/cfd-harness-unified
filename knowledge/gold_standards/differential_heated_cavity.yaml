@@ -34,6 +34,7 @@ note: >
   already corrected to use writeCellCentres (line 4422). The Docker run used
   an older cached adapter version. Rerunning with current adapter should resolve.
 observables:
+  # ─── HEADLINE GATE ──────────────────────────────────────────────
   - name: nusselt_number
     description: wall-averaged Nusselt number for the hot wall at Ra = 1e6 (de Vahl Davis 1983 benchmark)
     ref_value: 8.8
@@ -41,3 +42,73 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
+    gate_status: HARD_GATED
+    family: wall_gradient_derived
+    extractor: src.foam_agent_adapter._extract_nc_nusselt
+    role: HEADLINE
+    source_table: "de Vahl Davis 1983 Table IV"
+
+  # ─── DEC-V61-057 Stage C · multi-dim observable expansion ───────
+  # Added per intake §3 + §C: 3 HARD_GATED + 1 PROVISIONAL_ADVISORY.
+  # Tolerances per intake §B (B.1 7%, B.2 5%, B.3 8%).
+
+  - name: nusselt_max
+    description: peak local Nusselt along the hot wall at y/L ≈ 0.0378 (de Vahl Davis 1983 Table III)
+    ref_value: 17.925
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.07
+    gate_status: HARD_GATED
+    family: wall_gradient_derived
+    extractor: src.dhc_extractors.extract_nu_max
+    role: SAME_SURFACE_CROSS_CHECK
+    source_table: "de Vahl Davis 1983 Table III"
+
+  - name: u_max_centerline_v
+    description: peak |u_x| sampled along the x=L/2 vertical mid-plane, non-dim u·L/α (de Vahl Davis 1983 Table II Run 4)
+    ref_value: 64.63
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.05
+    gate_status: HARD_GATED
+    family: interior_velocity_profile
+    extractor: src.dhc_extractors.extract_u_max_vertical
+    role: INDEPENDENT_CROSS_CHECK
+    source_table: "de Vahl Davis 1983 Table II Run 4"
+
+  - name: v_max_centerline_h
+    description: peak |u_y| sampled along the y=L/2 horizontal mid-plane, non-dim v·L/α (de Vahl Davis 1983 Table II Run 4)
+    ref_value: 219.36
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.05
+    gate_status: HARD_GATED
+    family: interior_velocity_profile
+    extractor: src.dhc_extractors.extract_v_max_horizontal
+    role: INDEPENDENT_CROSS_CHECK
+    source_table: "de Vahl Davis 1983 Table II Run 4"
+
+  - name: psi_max_center
+    description: peak |ψ| via trapezoidal ∫ u_x dy reconstruction, non-dim ψ_raw/α (de Vahl Davis 1983 Table I Run 4)
+    ref_value: 16.750
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.08
+    gate_status: PROVISIONAL_ADVISORY
+    family: stream_function_derived
+    extractor: src.dhc_extractors.extract_psi_max
+    role: ADVISORY_RECONSTRUCTION
+    source_table: "de Vahl Davis 1983 Table I Run 4"
+    advisory_rationale: |
+      ψ is reconstructed by cumulative trapezoidal ∫_0^y u_x dy with the
+      no-slip bottom-wall BC. Closure residual at the top wall (which
+      should be 0 by mass conservation) measures the integration noise
+      floor. The extractor demotes the value from HARD_GATED to
+      PROVISIONAL_ADVISORY when closure_residual_max_nondim /
+      |PSI_MAX_GOLD_NONDIM| ≥ 0.01 (1 %). PROVISIONAL_ADVISORY observables
+      are reported by the comparator but are NOT counted toward the
+      pass-fraction overall verdict.

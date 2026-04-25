@@ -347,14 +347,18 @@ risk_flags:
       makes argmax/extremum coincide with noise rather than physics.
       For DHC: psi_max requires reconstruction with closure residual at
       both walls (ψ=0 at x=0 AND x=L); u_max/v_max via sampleSet have
-      interpolation noise. Each extractor must report noise_floor vs
-      |gold_value| ratio.
+      interpolation noise. ψ-style residual SNR is gating; for the other
+      extractors a profile-spread diagnostic is reported but is NOT a
+      gate (Codex round-2 F2-MED · DEC-V61-057 Batch B-final).
     mitigation_in_batch: |
-      Batch B: each new extractor returns {value, numerical_floor,
-      signal_above_noise_ratio}. UI surfaces SNR < 10× as a warning
-      flag (not auto-FAIL but visible). For ψ specifically: closure
-      residual at top wall (ψ_top - 0) / |psi_max_gold| must be < 0.01;
-      otherwise demote to advisory per Batch C wiring.
+      Batch B (post round-2 rename): Nu_max / u_max / v_max return
+      {value, profile_spread, peak_to_profile_spread} as non-gating
+      diagnostics — the gate trigger remains the comparator's tolerance
+      compare. Only ψ_max retains a residual-based SNR gate
+      (closure_fraction_of_gold + snr_pass + advisory_status):
+      closure residual at top wall (ψ_top - 0) / |psi_max_gold_nondim|
+      must be < 0.01; otherwise the extractor flags advisory_status=
+      PROVISIONAL_ADVISORY and Batch C does NOT hard-gate on ψ.
 
 # ============================================================================
 # §5 Pre-Stage-A Codex plan review

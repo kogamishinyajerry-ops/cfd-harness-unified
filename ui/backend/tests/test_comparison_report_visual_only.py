@@ -372,3 +372,157 @@ def test_cylinder_batch_d_out_of_tolerance_flagged(
     assert ctx["metrics_strouhal"]["within_tolerance"] is True
     assert ctx["metrics_cd_mean"]["within_tolerance"] is False
     assert ctx["metrics_cl_rms"]["within_tolerance"] is True
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-057 Stage D · DHC 5-observable anchor emission
+# ---------------------------------------------------------------------------
+
+
+def _plant_dhc_fixture(
+    repo_root: Path,
+    measurement: dict,
+    timestamp: str = "20260101T000000Z",
+) -> None:
+    """Plant a differential_heated_cavity fixture (run manifest + measurement)."""
+    case_id = "differential_heated_cavity"
+    _plant_run_manifest(repo_root, case_id, timestamp)
+    import yaml as _yaml
+    meas_dir = (repo_root / "ui" / "backend" / "tests" / "fixtures" / "runs"
+                / case_id)
+    meas_dir.mkdir(parents=True, exist_ok=True)
+    (meas_dir / "audit_real_run_measurement.yaml").write_text(
+        _yaml.safe_dump(measurement), encoding="utf-8",
+    )
+    # Plant a copy of the live gold YAML so _load_dhc_observable_gold finds it
+    # under the monkeypatched _GOLD_ROOT (when the test repoints _GOLD_ROOT).
+    # Fixtures don't override _GOLD_ROOT, so the loader reads the real one
+    # which already lives in knowledge/ — nothing to copy. Helper is a no-op
+    # for gold; structure preserved for symmetry with cylinder version.
+
+
+def test_dhc_stage_d_all_5_observables_when_fresh_fixture(tmp_path, monkeypatch):
+    """Stage D · fresh fixture with primary nusselt_number + 4 secondary
+    scalars → metrics_dhc emits 5 cards (4 HARD_GATED + 1 PROVISIONAL_ADVISORY)."""
+    measurement = {
+        "measurement": {
+            "quantity": "nusselt_number",
+            "value": 8.7,                    # gold 8.8, dev -1.1%, within 10%
+            "unit": "dimensionless",
+            "secondary_scalars": {
+                "nusselt_max": 17.5,         # gold 17.925, dev -2.4%, within 7%
+                "u_max_centerline_v": 64.0,  # gold 64.63, dev -0.97%, within 5%
+                "v_max_centerline_h": 215.0, # gold 219.36, dev -2.0%, within 5%
+                "psi_max_center": 16.5,      # gold 16.750, dev -1.5%, advisory
+            },
+        },
+    }
+    _plant_dhc_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    ctx = build_report_context("differential_heated_cavity", "audit_real_run")
+    assert ctx["visual_only"] is True
+    assert ctx["metrics_dhc"] is not None
+    obs = ctx["metrics_dhc"]["observables"]
+    by_name = {o["name"]: o for o in obs}
+    assert set(by_name) == {
+        "nusselt_number", "nusselt_max",
+        "u_max_centerline_v", "v_max_centerline_h", "psi_max_center",
+    }
+    assert ctx["metrics_dhc"]["hard_gated_count"] == 4
+    assert ctx["metrics_dhc"]["advisory_count"] == 1
+    # All 4 hard gates should be within tolerance on these test values.
+    for n in ("nusselt_number", "nusselt_max",
+              "u_max_centerline_v", "v_max_centerline_h"):
+        assert by_name[n]["gate_status"] == "HARD_GATED"
+        assert by_name[n]["within_tolerance"] is True
+    assert by_name["psi_max_center"]["gate_status"] == "PROVISIONAL_ADVISORY"
+    assert by_name["psi_max_center"]["within_tolerance"] is True
+
+
+def test_dhc_stage_d_pending_observables_render_as_placeholders(
+    tmp_path, monkeypatch,
+):
+    """Stage D pre-Stage-E: only the headline nusselt_number is populated;
+    the 4 secondary observables are pending. UI must surface the 5-card
+    promise with `pending=True` for the missing ones rather than hiding them.
+    """
+    measurement = {
+        "measurement": {
+            "quantity": "nusselt_number",
+            "value": 11.367,  # current pre-fix audit value
+            "unit": "dimensionless",
+            "extraction_source": "comparator_deviation",
+        },
+    }
+    _plant_dhc_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    ctx = build_report_context("differential_heated_cavity", "audit_real_run")
+    obs = ctx["metrics_dhc"]["observables"]
+    by_name = {o["name"]: o for o in obs}
+    # Headline emitted with actual value.
+    assert by_name["nusselt_number"]["actual"] == 11.367
+    assert by_name["nusselt_number"].get("pending") is not True
+    # All 4 secondaries marked pending.
+    for n in ("nusselt_max", "u_max_centerline_v",
+              "v_max_centerline_h", "psi_max_center"):
+        assert by_name[n]["actual"] is None
+        assert by_name[n]["pending"] is True
+        # Expected gold value still propagated so UI can render the target.
+        assert by_name[n]["expected"] is not None
+
+
+def test_dhc_stage_d_failed_hard_gate_does_not_affect_advisory(
+    tmp_path, monkeypatch,
+):
+    """Out-of-tolerance HARD_GATED observable surfaces within_tolerance=False;
+    the advisory ψ_max card stays independently within_tolerance regardless."""
+    measurement = {
+        "measurement": {
+            "quantity": "nusselt_number",
+            "value": 12.0,  # gold 8.8, dev +36% → FAIL
+            "secondary_scalars": {
+                "nusselt_max": 17.9,         # near-gold → PASS
+                "u_max_centerline_v": 64.7,  # near-gold → PASS
+                "v_max_centerline_h": 220.0, # near-gold → PASS
+                "psi_max_center": 16.7,      # near-gold → advisory PASS
+            },
+        },
+    }
+    _plant_dhc_fixture(tmp_path, measurement)
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._FIELDS_ROOT",
+        tmp_path / "reports" / "phase5_fields",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._RENDERS_ROOT",
+        tmp_path / "reports" / "phase5_renders",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.comparison_report._REPO_ROOT", tmp_path,
+    )
+    ctx = build_report_context("differential_heated_cavity", "audit_real_run")
+    by_name = {o["name"]: o for o in ctx["metrics_dhc"]["observables"]}
+    assert by_name["nusselt_number"]["within_tolerance"] is False
+    assert by_name["nusselt_max"]["within_tolerance"] is True
+    assert by_name["psi_max_center"]["within_tolerance"] is True
+    assert by_name["psi_max_center"]["gate_status"] == "PROVISIONAL_ADVISORY"

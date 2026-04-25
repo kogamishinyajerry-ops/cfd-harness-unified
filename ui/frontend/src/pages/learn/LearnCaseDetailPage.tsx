@@ -1382,6 +1382,122 @@ function MultiDimensionComparePanel({
       );
     }
 
+    // DHC 5-observable anchor cards (DEC-V61-057 Stage D · de Vahl Davis 1983)
+    // 4 HARD_GATED + 1 PROVISIONAL_ADVISORY. Mirrors cylinder Stage-D pattern
+    // but adds an "Advisory" badge for ψ_max and supports pending placeholders.
+    if (data.case_id === "differential_heated_cavity") {
+      const dhc = data.metrics_dhc;
+      if (!dhc || !dhc.observables || dhc.observables.length === 0) return null;
+
+      const renderDhcCard = (o: typeof dhc.observables[number]) => {
+        const isAdvisory = o.gate_status === "PROVISIONAL_ADVISORY";
+        const isPending = !!o.pending;
+        const passing = o.within_tolerance === true;
+        const failing = o.within_tolerance === false;
+
+        // Border / background per state (advisory uses amber; hard pending uses surface-800).
+        let borderBg: string;
+        if (isPending) {
+          borderBg = "border-surface-800 bg-surface-900/40";
+        } else if (isAdvisory) {
+          // Advisory observables: emerald when within, amber when out (not red,
+          // because they don't gate the verdict — surface as informational).
+          borderBg = passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-amber-800/60 bg-amber-900/15";
+        } else {
+          borderBg = passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-rose-800/60 bg-rose-900/15";
+        }
+
+        let statusLabel: string;
+        let statusColor: string;
+        if (isPending) {
+          statusLabel = "PENDING";
+          statusColor = "text-surface-400";
+        } else if (passing) {
+          statusLabel = isAdvisory ? "ADVISORY · WITHIN" : "PASS";
+          statusColor = "text-emerald-300";
+        } else if (failing) {
+          statusLabel = isAdvisory ? "ADVISORY · OUTSIDE" : "FAIL";
+          statusColor = isAdvisory ? "text-amber-300" : "text-rose-300";
+        } else {
+          statusLabel = "—";
+          statusColor = "text-surface-400";
+        }
+
+        return (
+          <div key={o.name} className={`rounded-md border p-3 ${borderBg}`}>
+            <div className="mb-2 flex items-baseline gap-2">
+              <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+                {o.label} · {o.symbol}
+              </span>
+              <span className={`mono text-[10.5px] font-semibold ${statusColor}`}>
+                {statusLabel}
+              </span>
+              {isAdvisory && (
+                <span className="mono text-[10px] text-amber-300/80" title="Excluded from overall verdict — Stage C gate_status=PROVISIONAL_ADVISORY">
+                  · 不计入裁决
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-[10.5px] text-surface-500">测量</div>
+                <div className="mono text-surface-100">
+                  {o.actual !== null && o.actual !== undefined ? o.actual.toFixed(3) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">金标准</div>
+                <div className="mono text-surface-100">
+                  {o.expected !== null && o.expected !== undefined ? o.expected.toFixed(3) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">偏差</div>
+                <div className={`mono ${
+                  isPending ? "text-surface-500" : (passing ? "text-emerald-300" : (isAdvisory ? "text-amber-300" : "text-rose-300"))
+                }`}>
+                  {o.deviation_pct !== null && o.deviation_pct !== undefined
+                    ? `${o.deviation_pct.toFixed(1)}%`
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">容差带</div>
+                <div className="mono text-surface-100">±{o.tolerance_pct.toFixed(0)}%</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10.5px] text-surface-500">
+              {o.label_zh}
+              {o.source_table ? <> · 来源：<span className="mono">{o.source_table}</span></> : null}
+              {isPending && (
+                <span className="ml-1 text-amber-300/80">
+                  · Stage E live run 待跑（secondary_scalars 未填）
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <section className="space-y-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+            <p className="text-[11px] text-surface-500">
+              {dhc.short} · {dhc.hard_gated_count} 个 HARD_GATED + {dhc.advisory_count} 个 PROVISIONAL_ADVISORY (Type I 自然对流方腔)
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {dhc.observables.map(renderDhcCard)}
+          </div>
+        </section>
+      );
+    }
+
     // Other visual_only cases: no scalar-anchor cards yet.
     return null;
   }
@@ -2934,6 +3050,35 @@ type ComparisonReportContext = {
     doi?: string;
     short: string;
     tolerance_pct: number;
+  } | null;
+  // DEC-V61-057 Stage D: differential_heated_cavity 5-observable Compare-tab
+  // block (4 HARD_GATED + 1 PROVISIONAL_ADVISORY).
+  // null when fixture is missing the measurement YAML or the gold YAML can't
+  // be parsed; pending entries (actual=null) when secondary_scalars haven't
+  // been populated by Stage E live run yet — UI renders them as placeholder
+  // cards so users see the 5-observable promise instead of empty space.
+  metrics_dhc?: {
+    observables: {
+      label: string;
+      label_zh: string;
+      symbol: string;
+      name: string;
+      actual: number | null;
+      expected: number | null;
+      deviation_pct: number | null;
+      tolerance_pct: number;
+      within_tolerance: boolean | null;
+      gate_status: string;
+      family: string;
+      role: string;
+      source_table: string;
+      pending?: boolean;
+    }[];
+    hard_gated_count: number;
+    advisory_count: number;
+    source: string;
+    literature_doi: string;
+    short: string;
   } | null;
 };
 
