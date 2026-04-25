@@ -6719,10 +6719,17 @@ boundaryField
         #   - simpleGrading_z = last_cell_size / first_cell_size
         # If airfoil is at NORTH face (NW-NE edge): grading < 1 (cells shrink k=0 → k=N)
         # If airfoil is at SOUTH face (SW-SE edge): grading > 1 (cells grow k=0 → k=N)
-        BL_INNER_RATIO = 2000.0       # last/first ratio for fine-cell side → first ~1.33e-5 m → y+~2
-        BL_OUTER_RATIO = 41.0         # last/first ratio for BL-outer (interface→far)
-        WAKE_GRADING_X = 1.0          # uniform wake (DEC-V61-062 iter3; was 10 V61-061)
-        INLET_GRADING_X = 1.0         # uniform inlet x-cells to keep AR < 10000 (iter3; was 0.5 iter2, 0.1 iter1)
+        # DEC-V61-062 Stage E.iter4: REVERT LowRe (which produced unstable
+        # force integration on extreme-AR cells in iter1+iter2+iter3 — Cl@α=0
+        # oscillating from -456 to +106 across 80 iters despite bounded
+        # residuals). Hybrid V61-062 mesh + V61-061 wall-function regime:
+        #   BL_INNER_RATIO 2000 → 200 (first cell ~1.5e-4 m → y+~22 log-layer)
+        # The C-grid + BL-split topology architectural change (Stage A) is
+        # PRESERVED. Only the LowRe wall treatment is reverted.
+        BL_INNER_RATIO = 200.0        # iter4: log-layer first cell ~1.5e-4 m (was 2000=LowRe iter1-3, FAIL)
+        BL_OUTER_RATIO = 41.0         # last/first ratio for BL-outer (interface→far) — UNCHANGED
+        WAKE_GRADING_X = 1.0          # uniform wake — UNCHANGED
+        INLET_GRADING_X = 1.0         # uniform inlet x-cells — UNCHANGED
 
         # ── Aerofoil-region BL-INNER blocks (4) ──
         # In each BL-inner block, the airfoil edge is at NORTH (A1/A2) or
@@ -7162,11 +7169,10 @@ application     simpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-062 Stage B: endTime 8000→15000 — LowRe simulations converge
-// 2-3× slower than wall-function regime (smaller first cells → larger
-// viscous-diffusion stiffness → smaller effective SIMPLE step).
-// Per intake §6 risk_flag lowre_convergence_slowness mitigation.
-endTime         15000;
+// DEC-V61-062 Stage E.iter4: revert endTime to 8000 (V61-061 baseline)
+// after reverting LowRe → wall-function regime. The 15000 was set for
+// LowRe slow convergence which is no longer applicable.
+endTime         8000;
 deltaT          1;
 writeControl    runTime;
 writeInterval   500;
@@ -7360,19 +7366,17 @@ SIMPLE
     // C-grid + BL-split mesh near airfoil curvature (158 severely-non-ortho
     // faces at max 83° per Stage A iter3 checkMesh).
     nNonOrthogonalCorrectors 2;
+    // DEC-V61-062 Stage E.iter4 retains nNOC=2 — necessary for the new mesh
+    // topology regardless of wall-function regime.
 }
 
 relaxationFactors
 {
-    // DEC-V61-062 Stage E.iter2: tightened URFs for LowRe stiffness.
-    // Previous URF p=0.3, U=0.5, k=0.5, omega=0.5 (V61-061 baseline) caused
-    // divergence to NaN at time~209s on iter1. Conservative iter2 URFs:
-    //   p:     0.3 → 0.2 (smoother pressure correction)
-    //   U:     0.5 → 0.4
-    //   k:     0.5 → 0.3 (LowRe k-equation is stiff with fine first cell)
-    //   omega: 0.5 → 0.3 (LowRe omega ramp from large freestream to wall)
-    fields { p 0.2; }
-    equations { U 0.4; k 0.3; omega 0.3; }
+    // DEC-V61-062 Stage E.iter4: revert URFs to V61-061 baseline (was
+    // tightened iter2-3 for LowRe stiffness). With wall-function regime
+    // restored, V61-061's URFs are the proven-stable baseline.
+    fields { p 0.3; }
+    equations { U 0.5; k 0.5; omega 0.5; }
 }
 
 // ************************************************************************* //
@@ -7386,24 +7390,17 @@ relaxationFactors
         Uz = Uz_inf
         # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6.
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
-        # DEC-V61-062 Stage E.iter3: omega_init formula switched from log-layer
-        # length-scale formula (omega = sqrt(k)/(Cmu^0.25 * L_t) ≈ 0.109) to
-        # LowRe convention (omega such that nut/nu_freestream ≈ 0.005 → ~10^4).
-        #
-        # Why: with y+~1 LowRe BL, omegaWallFunction sets wall omega ≈
-        # 6*nu/(beta_1*y_p^2) ≈ 6e5. Initializing internalField at log-layer 0.109
-        # creates a 6e6:1 wall-internal omega gradient that triggers k production
-        # explosion (Stage E.iter1 + iter2 both diverged with k bounded to 4e8 by
-        # iter ~40, then NaN). Setting omega_init = 1e4 keeps wall-internal
-        # gradient ~60:1 — manageable for kOmegaSST stiffness.
-        #
-        # Reference: NASA TMR / Spalart freestream convention for LowRe NACA0012:
-        # nut/nu_freestream ≈ 0.001-0.01; omega = k/nut = k/(C*nu) where C is the
-        # target ratio. With k=3.75e-5, nu=3.33e-7, target nut/nu=0.003: nut=1e-9,
-        # omega = 3.75e-5/1e-9 = 3.75e4. Round to 1e4 for headroom.
+        # DEC-V61-062 Stage E.iter4: omega_init reverted to V61-061 log-layer
+        # length-scale formula (omega = sqrt(k)/(Cmu^0.25 * L_t), L_t=0.1·chord).
+        # iter3 LowRe convention (1e4) was tried but coupled with extreme-AR
+        # LowRe BL produced oscillating force integration (Cl swung -456→+106
+        # at α=0). iter4 hybrid: keep C-grid + BL-split mesh, revert wall
+        # functions + omega_init to V61-061 high-Re convention.
         I_turb = 0.005
         k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
-        omega_init = 1.0e4   # DEC-V61-062 Stage E.iter3 LowRe (was 0.109 log-layer V61-061)
+        L_turb = 0.1 * chord
+        Cmu = 0.09
+        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)
 
         (case_dir / "0" / "U").write_text(
             f"""\
@@ -7510,13 +7507,8 @@ internalField   uniform {k_init};
 boundaryField
 {{
     freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
-    // DEC-V61-062 Stage E.iter1 diverged with `fixedValue 0` (NaN residuals at
-    // time~209s, k bounded to 0 globally, nut decoupled). Stage E.iter2
-    // reverts to `kqRWallFunction` — zero-gradient wall BC that's the
-    // OpenFOAM-standard pairing for `nutLowReWallFunction`. zeroGradient
-    // means wall k = first-cell k ≈ small (LowRe regime) without forcing
-    // the singular k=0 condition. Practical equivalent of Menter 1994 §3
-    // for OpenFOAM's near-wall blending.
+    // DEC-V61-062 Stage E.iter4: kqRWallFunction is V61-061 baseline — paired
+    // with nutkWallFunction (high-Re log-layer wall treatment).
     aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
     front {{ type empty; }}
     back  {{ type empty; }}
@@ -7587,12 +7579,12 @@ internalField   uniform 0.0;
 boundaryField
 {{
     freestream {{ type calculated; value uniform 0; }}
-    // DEC-V61-062 Stage B: LowRe nut boundary condition. nutkWallFunction
-    // was high-Re wall-function regime (V61-058/V61-061; first cell in
-    // log layer y+>11). With y+~1 first cell, nutLowReWallFunction is
-    // the canonical OpenFOAM LowRe variant: it sets nut directly per
-    // viscous-sublayer scaling rather than the log-law fit.
-    aerofoil {{ type nutLowReWallFunction; value uniform 0; }}
+    // DEC-V61-062 Stage E.iter4: reverted to V61-061 high-Re wall function.
+    // LowRe variant (nutLowReWallFunction) was tried in iter1-3 but coupled
+    // with extreme-AR BL cells produced unstable force integration. iter4
+    // keeps mesh refactor (C-grid + BL-split) but pairs it with V61-061's
+    // proven wall-function regime — first cell at log-layer y+.
+    aerofoil {{ type nutkWallFunction; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
 }}

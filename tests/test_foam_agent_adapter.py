@@ -567,8 +567,10 @@ class TestFoamAgentExecutor:
         # New cell-count signature reflects direction-1=z (40 cells BL-inner OR BL-outer),
         # direction-2=x (80 cells per block), direction-3=y (1 cell thin span).
         assert "(40 80 1)" in block_mesh        # BL-inner aerofoil + I2/W2 z-band cells
-        assert "simpleGrading (0.0005" in block_mesh    # 1/2000 = 0.0005, BL-inner toward NORTH airfoil
-        assert "simpleGrading (2000" in block_mesh      # 2000 toward SOUTH airfoil (A3, A4)
+        # DEC-V61-062 Stage E.iter4: BL_INNER_RATIO 2000→200 (LowRe FAIL → high-Re).
+        # 1/200 = 0.005 toward NORTH airfoil (BL-inner above), 200 toward SOUTH (A3,A4).
+        assert "simpleGrading (0.005" in block_mesh     # 1/200 = 0.005, BL-inner toward NORTH airfoil
+        assert "simpleGrading (200" in block_mesh       # 200 toward SOUTH airfoil (A3, A4)
         # BL-outer + inlet/wake outer blocks
         assert "0.024390" in block_mesh                 # 1/41 = 0.0244, BL-outer toward interface (NW)
         assert "type            empty;" in block_mesh
@@ -588,9 +590,10 @@ class TestFoamAgentExecutor:
             assert p_match is not None
             assert float(p_match.group(1)) == pytest.approx(0.05)
 
-            # DEC-V61-062 Stage E.iter2: URFs tightened for LowRe stiffness.
-            # U=0.4, k=0.3, omega=0.3 (was U=k=omega=0.5 V61-061 baseline).
-            expected_urf = {"U": 0.4, "k": 0.3, "omega": 0.3}
+            # DEC-V61-062 Stage E.iter4: reverted to V61-061 baseline URFs.
+            # U=k=omega=0.5 (iter2 LowRe-tight URFs reverted along with wall
+            # functions). p URF stays 0.3 (V61-061 baseline).
+            expected_urf = {"U": 0.5, "k": 0.5, "omega": 0.5}
             for field_name, expected in expected_urf.items():
                 field_match = re.search(
                     rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
@@ -608,10 +611,11 @@ class TestFoamAgentExecutor:
             assert k_match is not None
             assert omega_match is not None
             assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
-            # DEC-V61-062 Stage E.iter3: omega_init = 1e4 (LowRe convention,
-            # was 0.109 log-layer V61-061 — caused divergence at iter ~40 with
-            # k bounded to 4e8 via wall-internal omega gradient explosion).
-            assert float(omega_match.group(1)) == pytest.approx(1.0e4, rel=1e-6)
+            # DEC-V61-062 Stage E.iter4: reverted to V61-061 log-layer formula
+            # omega = sqrt(k)/(Cmu^0.25 * L_t) (Cmu=0.09, L_t=0.1*chord, chord=1.0)
+            # = sqrt(3.75e-5)/(0.5477*0.1) ≈ 0.1118
+            # iter3 LowRe convention 1e4 reverted along with wall functions.
+            assert float(omega_match.group(1)) == pytest.approx(0.1118, rel=2e-2)
         finally:
             shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -2595,29 +2599,38 @@ class TestNACA0012MultiDim:
     # ------------------------------------------------------------------
 
     def test_yplus_max_in_band_returns_PASS(self, tmp_path):
-        # DEC-V61-062 LowRe band [0, 5]: y+~2 is the LowRe regime PASS
+        # DEC-V61-062 Stage E.iter4: reverted to V61-058 high-Re band [11, 500]
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 12.0, 30.0, 22.0),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.y_plus_max == pytest.approx(30.0)
+        assert result.advisory_status == "PASS"
+
+    def test_yplus_max_in_buffer_returns_FLAG(self, tmp_path):
+        # high-Re band: y+ in [5, 11) is buffer-layer FLAG
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 5.0, 9.0, 7.0),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.advisory_status == "FLAG"
+
+    def test_yplus_max_below_5_returns_BLOCK(self, tmp_path):
+        # high-Re band: y+ < 5 is sublayer BLOCK (regime mismatch with nutkWallFunction)
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
         _write_synthetic_yplus_dat(yplus_path, [
             (200.0, "aerofoil", 0.5, 2.0, 1.2),
         ])
         result = compute_y_plus_max(tmp_path)
-        assert result.y_plus_max == pytest.approx(2.0)
-        assert result.advisory_status == "PASS"
+        assert result.advisory_status == "BLOCK"
 
-    def test_yplus_max_above_5_returns_FLAG(self, tmp_path):
-        # DEC-V61-062 LowRe band: y+ in (5, 30] is buffer-layer FLAG
+    def test_yplus_max_above_500_returns_BLOCK(self, tmp_path):
+        # high-Re band: y+ > 500 is BLOCK (mesh too coarse near wall)
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
         _write_synthetic_yplus_dat(yplus_path, [
-            (200.0, "aerofoil", 5.0, 15.0, 9.0),
-        ])
-        result = compute_y_plus_max(tmp_path)
-        assert result.advisory_status == "FLAG"
-
-    def test_yplus_max_above_30_returns_BLOCK(self, tmp_path):
-        # DEC-V61-062 LowRe band: y+ > 30 is log-layer BLOCK (regime mismatch)
-        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
-        _write_synthetic_yplus_dat(yplus_path, [
-            (200.0, "aerofoil", 50.0, 100.0, 70.0),
+            (200.0, "aerofoil", 100.0, 600.0, 350.0),
         ])
         result = compute_y_plus_max(tmp_path)
         assert result.advisory_status == "BLOCK"
@@ -2919,9 +2932,9 @@ class TestNACA0012MultiDim:
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
         rows = [(float(i), 0.815, 0.0145) for i in range(1, 201)]
         _write_synthetic_coefficient_dat(coeff_path, rows)
-        # yPlus also emitted (DEC-V61-062 LowRe: y+~2 in PASS band [0,5])
+        # yPlus also emitted (iter4 high-Re band [11,500]: y+~30 PASS)
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
-        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 0.5, 2.0, 1.2)])
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 12.0, 30.0, 22.0)])
 
         task = self._make_naca_task(alpha_deg=8.0)
         kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
@@ -2932,8 +2945,8 @@ class TestNACA0012MultiDim:
         assert kq["alpha_deg"] == 8.0
         assert kq["lift_coefficient_alpha_eight"] == pytest.approx(0.815)  # HEADLINE
         assert kq["force_coeffs_source"] == "forceCoeffs_FO_aerofoil"
-        # y+ advisory (DEC-V61-062 LowRe band [0,5])
-        assert kq["y_plus_max"] == pytest.approx(2.0)
+        # y+ advisory (iter4 high-Re band [11,500])
+        assert kq["y_plus_max"] == pytest.approx(30.0)
         assert kq["y_plus_max_advisory_status"] == "PASS"
 
     def test_populator_emits_cd_alpha_zero_and_sanity_at_alpha_zero(self, tmp_path):
@@ -2942,9 +2955,9 @@ class TestNACA0012MultiDim:
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
         rows = [(float(i), 0.001, 0.0080) for i in range(1, 201)]  # Cl≈0 (symmetric), Cd=0.008
         _write_synthetic_coefficient_dat(coeff_path, rows)
-        # DEC-V61-062 LowRe band: y+~1.5 in PASS [0,5]
+        # iter4 high-Re band [11,500]: y+~25 PASS
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
-        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 0.3, 1.5, 0.9)])
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 11.0, 25.0, 18.0)])
 
         task = self._make_naca_task(alpha_deg=0.0)
         kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
