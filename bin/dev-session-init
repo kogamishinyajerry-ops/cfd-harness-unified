@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# dev-session-init · idempotent session bootstrap for cfd-harness-unified.
+#
+# Authority: OPS-2026-04-25-001 §6.1 Session Bootstrap (Notion Opus 4.7
+# §3 v2 audit 2026-04-25T15:10) + RETRO-V61-006 MP-F. Run this at the
+# start of every dev session so pre-commit + commit-msg hooks are
+# installed AND the .gitmessage template is wired into git config.
+#
+# Idempotent: re-running is a no-op if everything is already set up.
+#
+# Usage:
+#   bin/dev-session-init
+#
+# What it does:
+#   1. pre-commit install --hook-type pre-commit --hook-type commit-msg
+#      (registers BOTH hook stages — pre-commit framework's default
+#       `pre-commit install` only installs the pre-commit stage and
+#       silently skips commit-msg hooks; this is the bug RETRO-V61-006
+#       MP-F closes.)
+#   2. git config commit.template .gitmessage
+#      (so `git commit` (no -m) opens the editor with cross-track
+#       tag reminders pre-rendered.)
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Resolve pre-commit invocation. Prefer `pre-commit` on PATH; fall back
+# to `python3 -mpre_commit` (the .git/hooks/pre-commit script's own
+# fallback path on macOS systems where Command Line Tools python3 has
+# pre-commit installed but it is not exposed as a PATH entry point).
+if command -v pre-commit >/dev/null 2>&1; then
+    PRE_COMMIT=(pre-commit)
+elif /Library/Developer/CommandLineTools/usr/bin/python3 -mpre_commit --version >/dev/null 2>&1; then
+    PRE_COMMIT=(/Library/Developer/CommandLineTools/usr/bin/python3 -mpre_commit)
+elif python3 -mpre_commit --version >/dev/null 2>&1; then
+    PRE_COMMIT=(python3 -mpre_commit)
+else
+    echo "dev-session-init: pre-commit not available. Install with:"
+    echo "    pip install pre-commit"
+    echo "  OR (macOS Command Line Tools python3):"
+    echo "    /Library/Developer/CommandLineTools/usr/bin/python3 -m pip install pre-commit"
+    exit 1
+fi
+
+# Step 1: dual-stage hook install (idempotent — pre-commit overwrites
+# its own hook scripts cleanly on re-run).
+"${PRE_COMMIT[@]}" install --hook-type pre-commit --hook-type commit-msg >/dev/null
+echo "✓ pre-commit + commit-msg hooks installed"
+
+# Step 2: wire commit.template (idempotent — git config -- replace
+# semantics).
+if [ -f .gitmessage ]; then
+    git config commit.template .gitmessage
+    echo "✓ git config commit.template = .gitmessage"
+else
+    echo "⚠  .gitmessage missing; skipping commit.template wiring"
+fi
+
+echo ""
+echo "Session bootstrap complete. Cross-track tag taxonomy:"
+echo "  [line-a]              · pure line A (governance / runtime guard)"
+echo "  [line-b]              · pure line B (case simulation arc)"
+echo "  [cross-track-ack: …]  · legitimate cross-track edit + reason"
+echo "  [shared]              · intentional shared infrastructure"
+echo "  [deps]                · pure dep/lockfile bump"
+echo "  [ops]                 · governance doc touching both tracks"

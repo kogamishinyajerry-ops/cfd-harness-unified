@@ -1,211 +1,165 @@
 #!/usr/bin/env python3
-"""Warn-not-block isolation guard for OPS-2026-04-25-001 dual-track development.
+"""Pre-commit-stage block-with-env-escape isolation guard for OPS-2026-04-25-001.
 
-Authority: ``.planning/ops/2026-04-25_dual_track_plan.md`` §3 isolation
-strength + Opus 4.7 audit recommendation (Notion page
-34dc6894-2bed-81d8-8ef5-f8add0d01d0a). Active during dogfood window
-2026-04-25 → 2026-05-19; auto-retires after expires date.
+v2 (2026-04-25T21:50 · Opus 4.7 §3 v2 supersede): graduated severity
+model. This script is the **pre-commit stage** half (looks at
+``git diff --cached`` only, NEVER at commit message). The commit-msg
+stage half is ``scripts/check_track_isolation_msg.py``.
 
-Detects commits that touch files from BOTH tracks (line A · ADR-002
-governance · line B · 10-case simulation) and emits a stderr warning
-if the commit message lacks an explicit ``[shared]`` or
-``[cross-track-ack]`` acknowledgement tag. **Does not block** — false
-positives on legitimate cross-track edits (e.g., line B adding a new
-``src/<new>.py`` module requires editing
-``src/_plane_assignment.py`` PLANE_OF dict per §4.1) would be more
-costly than the warn fatigue.
+Authority: ``.planning/ops/2026-04-25_dual_track_plan.md`` §3 v2 +
+Notion Opus 4.7 audit on OPS page block 31
+(id 29c8696d-84e9-4484-94db-1391f43d0df4) · 2026-04-25T15:10 +0800.
+Active during dogfood window 2026-04-25 → 2026-05-19; the script
+itself auto-retires after expires date (header docstring of OPS).
 
-Usage:
-  python scripts/check_track_isolation.py                # check staged diff
-  python scripts/check_track_isolation.py <commit-hash>  # check that commit
-  python scripts/check_track_isolation.py --since=HEAD~3 # check last 3 commits
+# Severity model
+
+- **CORE line A files** (LINE_A_SOLE_PATTERNS below): the 7 strict
+  line A authority files. Touching these from a commit that ALSO
+  touches LINE_B files triggers a HARD BLOCK at pre-commit stage.
+  Escape: per-invocation env var ``CROSS_TRACK_ACK=1``.
+- **Soft line A files / SHARED files**: handled by the commit-msg
+  stage hook (block with [cross-track-ack: <reason>] / [shared] tag
+  escape). Pre-commit stage ignores these.
+
+# Usage
+
+```
+python scripts/check_track_isolation.py
+```
+
+(Pre-commit framework invokes this with no args at pre-commit stage.)
 
 Exit codes:
-  0 — no cross-track touches OR explicit ack tag present (clean)
-  0 — cross-track touches detected, warning emitted to stderr (still 0)
-  2 — invocation error (bad args, no git, etc.)
+- 0 = no cross-track touch OR ``CROSS_TRACK_ACK=1`` set (clean)
+- 1 = cross-track touch detected without env escape (BLOCK)
+- 2 = invocation error (no git, etc.)
 
-The pre-commit hook in ``.pre-commit-config.yaml`` runs this in
-"commit message available" mode via ``commit-msg`` stage so the tag
-detection is reliable.
+# Why no commit message access here
+
+The commit message file (`.git/COMMIT_EDITMSG`) does not exist yet at
+pre-commit stage — it is created later, before commit-msg stage. This
+script intentionally does not try to read it; tag-based escape lives
+in the sibling commit-msg hook.
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import subprocess
 import sys
-from typing import Iterable, List, Set, Tuple
+from typing import List, Set
 
 
-# Ownership rules per OPS-2026-04-25-001 §2 + Opus 4.7 §2 audit amendments.
-# Keep in sync with .planning/ops/2026-04-25_dual_track_plan.md.
-
-LINE_A_PATTERNS = [
+# CORE line A authority files — pre-commit-stage hard-block scope.
+# These are the 7 files Opus 4.7 §3 v2 enumerates as "line A SOLE".
+LINE_A_SOLE_PATTERNS = [
     r"^src/_plane_guard\.py$",
     r"^src/_plane_assignment\.py$",
     r"^src/__init__\.py$",
     r"^\.importlinter$",
     r"^scripts/gen_importlinter\.py$",
     r"^scripts/plane_guard_rollback_eval\.py$",
-    r"^scripts/check_track_isolation\.py$",
     r"^\.github/workflows/plane_guard_rollback_cron\.yml$",
-    r"^docs/adr/ADR-002.*\.md$",
-    r"^tests/test_plane_guard.*\.py$",
-    r"^tests/test_plane_assignment_ssot\.py$",
-    r"^tests/test_gen_importlinter\.py$",
-    # Plane-guard governance docs (baseline anchors, READMEs)
-    r"^reports/plane_guard/.*\.md$",
 ]
 
-LINE_B_PATTERNS = [
-    r"^knowledge/gold_standards/.+\.yaml$",
-    r"^src/foam_agent_adapter\.py$",
-    r"^src/comparator_gates\.py$",
-    r"^src/result_comparator\.py$",
-    r"^src/(cylinder|airfoil|wall_gradient|plane_channel)_.*\.py$",
-    r"^reports/(?!plane_guard|codex_tool_reports).*",
-    r"^whitelist_cases/.*",
-    r"^ui/frontend/public/flow-fields/.*",
-    r"^tests/test_phase_e2e\.py$",
-    r"^tests/test_foam_agent_adapter\.py$",
-    # DEC intakes (line B owns 10-case DEC-V61-04x / 05x / 057 arc)
-    r"^\.planning/intake/.+\.yaml$",
-    r"^\.planning/decisions/.+\.md$",
-]
-
-SHARED_PATTERNS = [
-    r"^\.gitignore$",
-    r"^pyproject\.toml$",
-    r"^requirements.*\.txt$",
-    r"^\.pre-commit-config\.yaml$",
-    r"^\.planning/STATE\.md$",
-    r"^\.planning/ROADMAP\.md$",
-    r"^tests/conftest\.py$",
-    # Retrospectives + ops + methodology — both lines may author/edit
-    r"^\.planning/retrospectives/.*\.md$",
-    r"^\.planning/ops/.*\.md$",
-    r"^docs/methodology/.*\.md$",
-]
-
-
-# ACK tags by category:
-#   [shared] [cross-track-ack] [deps] [ops] — explicit ack of impact
-#   [line-a] [line-b] — pure ownership identification, NOT impact ack
-# Only the explicit-ack tags silence the warn. Owning-tag commits that
-# touch shared/cross-track files MUST add an explicit ack tag.
-ACK_TAG_RE = re.compile(
-    r"\[(shared|cross-track-ack|deps|ops)\]", re.IGNORECASE
+# Line B file path prefixes (case simulation arc).
+LINE_B_PREFIXES = (
+    "knowledge/gold_standards/",
+    "reports/phase5_audit/",
+    "reports/phase5_fields/",
+    "reports/cylinder_crossflow/",
+    "reports/differential_heated_cavity/",
+    "reports/rayleigh_benard_convection/",
+    "reports/turbulent_flat_plate/",
+    "reports/deep_acceptance/",
+    "whitelist_cases/",
+    "ui/frontend/public/flow-fields/",
+    ".planning/intake/DEC-V61-",
+    ".planning/decisions/",
 )
 
 
-def _classify(path: str) -> str:
-    """Return 'A', 'B', 'shared', or 'other' for a path."""
-    for pat in LINE_A_PATTERNS:
-        if re.match(pat, path):
-            return "A"
-    for pat in LINE_B_PATTERNS:
-        if re.match(pat, path):
-            return "B"
-    for pat in SHARED_PATTERNS:
-        if re.match(pat, path):
-            return "shared"
-    return "other"
+def _is_line_a_sole(path: str) -> bool:
+    return any(re.match(pat, path) for pat in LINE_A_SOLE_PATTERNS)
 
 
-def _git_diff_files(rev: str = "") -> List[str]:
-    """Return paths changed in staged diff or specific commit."""
-    if rev:
-        cmd = ["git", "diff", "--name-only", f"{rev}~1..{rev}"]
-    else:
-        cmd = ["git", "diff", "--cached", "--name-only"]
+def _is_line_b(path: str) -> bool:
+    if path.startswith(LINE_B_PREFIXES):
+        return True
+    # Per-case extractors and adapters (line B Execution + Evaluation planes)
+    if re.match(r"^src/(foam_agent_adapter|comparator_gates|result_comparator)\.py$", path):
+        return True
+    if re.match(r"^src/(cylinder|airfoil|wall_gradient|plane_channel)_.*\.py$", path):
+        return True
+    if re.match(r"^tests/test_(phase_e2e|foam_agent_adapter|cylinder|airfoil|naca|rayleigh|differential_heated|turbulent_flat|backward_facing|axisymmetric)", path):
+        return True
+    return False
+
+
+def _staged_files() -> List[str]:
     try:
-        out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
+        out = subprocess.check_output(
+            ["git", "diff", "--cached", "--name-only"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return []
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def _read_commit_msg(msg_file: str) -> str:
-    if not msg_file or not os.path.exists(msg_file):
-        return ""
-    with open(msg_file, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-def _check(files: Iterable[str], commit_msg: str) -> Tuple[Set[str], Set[str], Set[str], bool]:
-    a_hits: Set[str] = set()
-    b_hits: Set[str] = set()
-    shared_hits: Set[str] = set()
-    for path in files:
-        cat = _classify(path)
-        if cat == "A":
-            a_hits.add(path)
-        elif cat == "B":
-            b_hits.add(path)
-        elif cat == "shared":
-            shared_hits.add(path)
-    has_ack = bool(ACK_TAG_RE.search(commit_msg))
-    return a_hits, b_hits, shared_hits, has_ack
-
-
-def _format_warn(a: Set[str], b: Set[str], shared: Set[str], msg_file: str) -> str:
-    lines = [
-        "",
-        "⚠️  OPS-2026-04-25-001 dual-track isolation WARN",
-        "    Commit touches files from multiple tracks or shared paths",
-        "    but commit message lacks an explicit impact-ack tag.",
-        "",
-    ]
-    if a:
-        lines.append("    Line A (ADR-002 governance) files:")
-        lines.extend(f"      - {p}" for p in sorted(a))
-    if b:
-        lines.append("    Line B (10-case simulation) files:")
-        lines.extend(f"      - {p}" for p in sorted(b))
-    if shared:
-        lines.append("    Shared files (require explicit ack):")
-        lines.extend(f"      - {p}" for p in sorted(shared))
-    lines.extend([
-        "",
-        "    Add ONE of [shared] / [cross-track-ack] / [deps] / [ops]",
-        "    to your commit message subject to silence this warning.",
-        "    Note: [line-a] / [line-b] tags identify ownership but do",
-        "    NOT count as impact-ack — they're independent.",
-        "",
-        "    The commit is NOT blocked. This is a discipline reminder",
-        "    for dogfood window 2026-04-25 → 2026-05-19.",
-        "",
-    ])
-    return "\n".join(lines)
-
-
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__ or "")
-    p.add_argument("commit_msg_file", nargs="?", default="",
-                   help="Path to .git/COMMIT_EDITMSG (commit-msg hook context)")
-    p.add_argument("--rev", default="", help="Git rev to inspect (default: staged)")
-    args = p.parse_args()
-
-    files = _git_diff_files(rev=args.rev)
+    files = _staged_files()
     if not files:
         return 0
-    commit_msg = _read_commit_msg(args.commit_msg_file)
 
-    a, b, shared, has_ack = _check(files, commit_msg)
+    a_sole_hits: Set[str] = set()
+    b_hits: Set[str] = set()
+    for path in files:
+        if _is_line_a_sole(path):
+            a_sole_hits.add(path)
+        if _is_line_b(path):
+            b_hits.add(path)
 
-    cross_track = bool(a and b)
-    shared_touched = bool(shared)
+    if not (a_sole_hits and b_hits):
+        return 0  # No cross-track between CORE line A and line B.
 
-    if not cross_track and not shared_touched:
+    if os.environ.get("CROSS_TRACK_ACK") == "1":
+        # Explicit per-invocation escape — caller has acknowledged.
         return 0
-    if has_ack:
-        return 0
 
-    sys.stderr.write(_format_warn(a, b, shared, args.commit_msg_file))
-    return 0  # warn-not-block per Opus 4.7 §3 audit recommendation
+    sys.stderr.write(
+        "\n"
+        "🛑  OPS-2026-04-25-001 §3 v2 dual-track isolation BLOCK (pre-commit stage)\n"
+        "    Commit touches CORE line A authority files AND line B files\n"
+        "    in the same index. This is the most likely path to silent\n"
+        "    cross-track absorption (e.g., `git add -A` / `git add .`\n"
+        "    sweeping both lines into one commit · 2x occurred 2026-04-25).\n"
+        "\n"
+        "    Line A SOLE files staged:\n"
+    )
+    for p in sorted(a_sole_hits):
+        sys.stderr.write(f"      - {p}\n")
+    sys.stderr.write("\n    Line B files staged:\n")
+    for p in sorted(b_hits):
+        sys.stderr.write(f"      - {p}\n")
+    sys.stderr.write(
+        "\n"
+        "    To proceed (legitimate cross-track edit, e.g. §4.1 PLANE_OF\n"
+        "    dict update for a new src.* module added by line B):\n"
+        "        CROSS_TRACK_ACK=1 git commit ...\n"
+        "\n"
+        "    OR un-stage either line A or line B files and commit each\n"
+        "    track separately (recommended for non-§4.1 cases).\n"
+        "\n"
+        "    The commit-msg stage hook ALSO requires either a\n"
+        "    [cross-track-ack: <reason>] or [shared] tag in the message\n"
+        "    once you proceed past this block (block-with-tag-escape).\n"
+        "\n"
+    )
+    return 1
 
 
 if __name__ == "__main__":

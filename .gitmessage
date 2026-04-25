@@ -1,0 +1,28 @@
+# <type>(<scope>): <short summary>     <-- max 72 chars on this line
+#
+# <body — what + why; not how, the diff is the how>
+#
+# Cross-track tag (REQUIRED while OPS-2026-04-25-001 dogfood window is
+# active · 2026-04-25 → 2026-05-19). Pick exactly one of the single-track
+# tags OR one of the cross-track escapes. Hooks BLOCK on uncommitted-tag
+# cross-track stages.
+#
+#   [line-a]              · pure line A (governance / runtime guard /
+#                            ADR-002 / plane_guard / dogfood scaffolding)
+#   [line-b]              · pure line B (case simulation arc /
+#                            DEC-V61-* / whitelist_cases / extractors)
+#   [cross-track-ack: …]  · legitimate cross-track edit + one-line reason
+#                            (e.g. "PLANE_OF dict update for new src.* module")
+#   [shared]              · intentional shared infrastructure
+#                            (CLAUDE.md / pyproject.toml / pre-commit config)
+#   [deps]                · pure dependency / lockfile bump
+#   [ops]                 · governance doc touching both tracks
+#                            (OPS notes / RETROs / methodology pages)
+#
+# Pre-commit stage hook (CORE line A SOLE ∧ line B) escapes via
+# CROSS_TRACK_ACK=1 env var. Commit-msg stage hook (SHARED line A ∧
+# line B) escapes via the tags above. See:
+#   .planning/ops/2026-04-25_dual_track_plan.md §3 v2
+#   docs/methodology/pre_codex_self_review_checklist.md
+#
+# Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

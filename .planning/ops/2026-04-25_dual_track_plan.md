@@ -74,11 +74,43 @@ ADR-002 W4 prep 在 2026-04-25 单日交付 6 个 commit (b10ca9e → e213bbe), 
 - CI: W4 stage-1 的 WARN-mode dogfood pytest step 是 `continue-on-error: true` (non-blocking)
 - Notion 决策 DB: 两条线的 DEC frontmatter 互不引用
 
-### 程序隔离 (硬加固 · per Opus §3 audit recommendation)
-- **`scripts/check_track_isolation.py`** + `.pre-commit-config.yaml` `commit-msg` hook (warn-not-block)
-- 检测 commit diff 中跨线文件改动; commit message 未标 `[shared]` / `[cross-track-ack]` / `[deps]` / `[ops]` 之一时 stderr warn 但不阻断 commit
-- 拒绝 CODEOWNERS (重型工具与单 user 双 AI 会话场景错配); 拒绝 hard-block (false-positive 阻碍合法跨线如 §4.1 新增 src 模块)
-- 自动随 OPS expires (2026-05-19) 失效; 该日期后该 hook 仍在 config 中但脚本本身可短路
+### 程序隔离 v2 · 两阶段 graduated 严重度 (Opus §3 v2 supersede 2026-04-25T15:10)
+
+**Authority**: Notion Opus 4.7 OPS audit block 31 (id `29c8696d-84e9-4484-94db-1391f43d0df4`) supersedes the v1 single warn-not-block hook. RETRO-V61-006 captured 2 cross-track absorption incidents in one day (commit `e7909ac` + `0229af9`) under v1; v2 addresses MP-E directly.
+
+**Two-stage hook design**:
+
+| Stage | Trigger | Severity | Escape mechanism |
+|---|---|---|---|
+| **pre-commit** | CORE line A SOLE files (7 enumerated) ∧ line B in same index | **HARD BLOCK** | Per-invocation env var: `CROSS_TRACK_ACK=1 git commit ...` |
+| **commit-msg** | SHARED line A files (ADR-002, CI workflow, OPS, RETRO, methodology, tests/conftest, CLAUDE.md, pyproject) ∧ line B | **BLOCK** | Tag in message body: `[cross-track-ack: <reason>]` / `[shared]` / `[deps]` / `[ops]` |
+
+**CORE line A SOLE (pre-commit hard-block scope · Opus enumerated 7)**:
+- `src/_plane_guard.py`
+- `src/_plane_assignment.py`
+- `src/__init__.py`
+- `.importlinter`
+- `scripts/gen_importlinter.py`
+- `scripts/plane_guard_rollback_eval.py`
+- `.github/workflows/plane_guard_rollback_cron.yml`
+
+**Implementation**:
+- `scripts/check_track_isolation.py` — pre-commit stage block-with-env-escape
+- `scripts/check_track_isolation_msg.py` — commit-msg stage block-with-tag-escape
+- `.pre-commit-config.yaml` — registers BOTH hooks (`stages: [pre-commit]` + `stages: [commit-msg]`)
+- `bin/dev-session-init` — idempotent bootstrap: `pre-commit install --hook-type pre-commit --hook-type commit-msg` + `git config commit.template .gitmessage` (closes RETRO-V61-006 MP-F: default `pre-commit install` silently skips commit-msg hooks)
+- `.gitmessage` — commit template with cross-track tag taxonomy + reminders
+
+**Tag semantics** (commit-msg stage only):
+- `[cross-track-ack: <reason>]` — explicit acknowledgement + one-line reason (legitimate cross-track edits like §4.1 PLANE_OF dict update)
+- `[shared]` — intentional shared infrastructure (CLAUDE.md, pyproject, pre-commit config)
+- `[deps]` — pure dependency / lockfile bump
+- `[ops]` — governance doc touching both tracks (OPS, RETRO, methodology)
+- `[line-a]` / `[line-b]` alone DO NOT escape — single-track tags; using one while staging the other track is exactly the cross-track-absorption mistake we are catching
+
+**Why not pure CODEOWNERS / pure hard-block**: CODEOWNERS is a heavy tool mismatched to a single-user-two-AI-session topology; pure hard-block on all line A files would obstruct legitimate §4.1 cross-track flows. Graduated severity (hard-block on the 7 SOLE files where automation should never legitimately straddle, block-with-tag-escape on SHARED files where cross-track edits are routine and intentional) keeps the false-positive rate low while closing the 2x absorption incident class.
+
+**Auto-retirement**: both scripts read OPS expires (2026-05-19) from header docstring and short-circuit after that date; `.pre-commit-config.yaml` entries can stay (no-op) or be cleaned up in the post-window followup PR.
 
 ### CI infrastructure pre-flight (MP-G retroactive · 2026-04-25T21:25)
 
@@ -126,6 +158,23 @@ Per `docs/methodology/ops_note_protocol.md` §5 sixth mandatory rule (added in s
 2. 如有 STATE.md `status` 字段冲突: 保留两条线的内容, 用 `" · "` 分隔 (不是覆盖)
 3. `last_updated` 取较新者
 
+### 6.1 Session Bootstrap (RETRO-V61-006 MP-F · 2026-04-25)
+
+每个 dev session 开始时**必须**跑一次:
+
+```bash
+bin/dev-session-init
+```
+
+幂等 — 重跑无副作用. 该脚本做两件事:
+
+1. `pre-commit install --hook-type pre-commit --hook-type commit-msg` — 注册两阶段 hook (默认 `pre-commit install` 只装 pre-commit 阶段, commit-msg 阶段被静默跳过, 这是 RETRO-V61-006 MP-F 关闭的 bug)
+2. `git config commit.template .gitmessage` — 让 `git commit` (无 `-m`) 打开编辑器时预渲染 cross-track tag 提醒
+
+**Why required**: pre-commit framework 的默认 install 不装 commit-msg hooks; 不做 §6.1 bootstrap 等于 v1 时代的 warn-not-block 状态. v2 严重度模型依赖 commit-msg 阶段 tag-escape 才能拦住 SHARED ∧ line B 跨线; 缺 bootstrap 等于自动失效一半防御.
+
+**Failure mode**: 没跑 bootstrap 的 session 把 SHARED line A + line B 同 commit 推 origin/main — 历史已发生 2x (e7909ac, 0229af9). MP-F + v2 hook 联合修复.
+
 ## 7. 时间线
 
 - **2026-04-25 → 2026-05-09** · 双线并行 (线 A 静默 dogfood + 线 B 主动 case 优化)
@@ -147,6 +196,26 @@ Per `docs/methodology/ops_note_protocol.md` §5 sixth mandatory rule (added in s
 
 - **线 A**: W4 toggle PR 之前不再向 main push (dogfood window 静默期). 例外: bug-fix 致命缺陷 + 需要重启 dogfood window
 - **线 B**: 每个 case 优化推荐独立 commit, commit message 标 `[case-N]` 或 `[line-b]` 前缀方便与线 A 区分
+
+### 9.1 MP-E permanent rule · `git add -p` discipline (RETRO-V61-006 · 2026-04-25)
+
+**Rule**: never use `git add -A`, `git add .`, `git add -u`, or `git commit -a` while OPS-2026-04-25-001 dogfood window is active. ONLY `git add <explicit-path>` or `git add -p` (interactive hunk-by-hunk).
+
+**Why**: cross-track absorption 2x in one day under v1 (commits `e7909ac` + `0229af9`) traced to broad-scope staging commands sweeping unintended files into a tracked-track commit. The pre-commit + commit-msg hooks (§3 v2) are the safety net; `git add -p` is the primary discipline.
+
+**How to apply**:
+- Before any commit: `git status` to enumerate the actual changed set
+- `git add <path>` only the files that match the commit's intent
+- For multi-file edits where some files belong to a different track: stage and commit them separately (one `git add` + one `git commit` per track), not one bundle
+- If you must straddle tracks (legitimate §4.1 / shared infra): use the appropriate tag (`[cross-track-ack: ...]` / `[shared]` / `[deps]` / `[ops]`) and the commit-msg hook lets it through
+
+**Enforcement layering**:
+1. `git add -p` discipline (this rule) — first line of defense, behavioral
+2. pre-commit stage hook (§3 v2) — second line, hard-block on CORE 7 ∧ line B
+3. commit-msg stage hook (§3 v2) — third line, block-with-tag on SHARED ∧ line B
+4. RETRO addendum on any breach (this rule) — fourth line, methodology feedback
+
+Skipping any layer is acceptable only when one of the upstream layers caught it cleanly; skipping ALL layers for a multi-track commit is the failure mode we are closing.
 
 ## 10. OPS 类型规范 (first-of-kind 配套)
 

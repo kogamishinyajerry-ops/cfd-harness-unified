@@ -37,21 +37,35 @@ repos:
         # config actually changes.
         files: ^(src/.*\.py|\.importlinter|pyproject\.toml|\.pre-commit-config\.yaml|\.github/workflows/ci\.yml)$
 
-      # OPS-2026-04-25-001 dual-track isolation guard (warn-not-block).
-      # Authority: .planning/ops/2026-04-25_dual_track_plan.md §3 + Notion
-      # Opus 4.7 audit 2026-04-25 §3 mandatory amendment. Active through
-      # dogfood window 2026-04-25 → 2026-05-19; the script auto-retires
-      # after expires date (see scripts/check_track_isolation.py header).
-      # Runs at commit-msg stage so the [shared]/[cross-track-ack] tag is
-      # readable. Exit 0 always (warn-not-block per Opus §3 recommendation).
-      - id: dual-track-isolation
-        name: dual-track isolation guard (OPS-2026-04-25-001)
-        # `language: python` so pre-commit creates its own python venv —
-        # the script is stdlib-only so no additional_dependencies needed.
-        # Also self-contained against shells where `python` is not on
-        # PATH (macOS has python3, not python).
+      # OPS-2026-04-25-001 dual-track isolation guard · two-stage v2.
+      # Authority: .planning/ops/2026-04-25_dual_track_plan.md §3 v2 +
+      # Notion Opus 4.7 audit 2026-04-25T15:10 (block id
+      # 29c8696d-84e9-4484-94db-1391f43d0df4) — supersedes the v1 single
+      # warn-not-block hook with a graduated severity model:
+      #
+      #   - pre-commit stage (CORE line A SOLE ∧ line B → BLOCK,
+      #     env-escape via CROSS_TRACK_ACK=1)
+      #   - commit-msg stage (SHARED line A ∧ line B → BLOCK,
+      #     tag-escape via [cross-track-ack: ...] / [shared] / [deps] / [ops])
+      #
+      # Active through dogfood window 2026-04-25 → 2026-05-19; both
+      # scripts auto-retire after expires date (see header docstrings).
+      # `language: python` so pre-commit creates an isolated venv — both
+      # scripts are stdlib-only so no additional_dependencies needed.
+      # Self-contained against shells where `python` is not on PATH
+      # (macOS has python3, not python).
+      - id: dual-track-isolation-precommit
+        name: dual-track isolation guard · pre-commit (OPS-2026-04-25-001 §3 v2)
         entry: python scripts/check_track_isolation.py
         language: python
-        # Same project-Python pin as import-linter (Codex audit R1 LOW).
+        language_version: python3.12
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+
+      - id: dual-track-isolation-msg
+        name: dual-track isolation guard · commit-msg (OPS-2026-04-25-001 §3 v2)
+        entry: python scripts/check_track_isolation_msg.py
+        language: python
         language_version: python3.12
         stages: [commit-msg]
