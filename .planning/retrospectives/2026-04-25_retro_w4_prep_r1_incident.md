@@ -117,3 +117,14 @@ While installing pre-commit hooks and running line A's first dogfood-period CI v
 - The W4 prep R1 self-est miss (0.85 → CHANGES_REQUIRED 3 HIGH) plus this 40-failure CI miss together suggest the cap should be **even lower** for instrumentation that depends on CI being functional. The prior cap of 0.75 was based on "subprocess repro is part of test matrix"; the new evidence is that the repro can pass locally while CI is silently broken. **Revised cap**: 0.70 for any PR introducing observability instrumentation that ships CI workflow changes (W4 stage-1 was both — it added the WARN-mode dogfood pytest step + assumed CI was running).
 
 **Counter-40 cadence retro should consume MP-A through MP-G** for arc-wide methodology promotion.
+
+### Confirmation 2026-04-25T21:05 +0800 · first genuine dogfood signal captured
+
+Post deps fix (`0208929`), commit `0229af9` triggered CI run `24925115531`:
+- **Backend pytest job: SUCCESS** — `748 passed, 1 skipped in 55.54s` (was 0 passed / 5 collection errors per all 40 prior runs)
+- **W4 stage-1 dogfood pytest step: SUCCESS** — `748 passed, 1 skipped in 54.65s` under `CFD_HARNESS_PLANE_GUARD=warn`
+- **Rollback evaluator output**: `OK: 0 fixture-frame confusion incidents in last 14d (threshold 3)`
+- **Artifact `plane-guard-dogfood-0229af9...` uploaded** (13.5 KB) containing only `ci_warn_pytest.log`; no `.jsonl` files = 0 incidents recorded (matches local baseline `reports/plane_guard/baseline_2026-04-25.md` exactly)
+- Frontend job: still failing (separate `ui/frontend/package-lock.json` cache-path issue · pre-existing · NOT a dogfood-window blocker · line A leaves to another time)
+
+This commit (`0229af9`) is the **first run that produced genuine dogfood signal**. Prior 40 runs were instrumentation-equivalent of a sensor in a dead circuit. The 5/9 review now has a real anchor: CI runs 0229af9 onwards are the data set.
