@@ -2137,6 +2137,17 @@ fields          (U);
         beta = 1.0 / ((T_hot + T_cold) / 2.0)  # Boussinesq beta at mean temperature
         nu = 1.0e-5  # kinematic viscosity (air, m^2/s)
         alpha = nu / Pr  # thermal diffusivity
+        # DEC-V61-057 Batch A.2 (Codex F1-HIGH): natural-convection path
+        # historically hard-wrote `simulationType RAS` + `kOmegaSST` plus
+        # k/epsilon/omega/nut initial fields, regardless of whitelist
+        # turbulence_model. For DHC at Ra=1e6 (de Vahl Davis, laminar
+        # regime), this added spurious dissipation budget and mis-tuned Nu.
+        # Resolution: consult whitelist; default kOmegaSST for legacy cases.
+        wl_turb = _load_whitelist_turbulence_model(task_spec.name)
+        turbulence_model = wl_turb or "kOmegaSST"
+        if turbulence_model not in ("laminar", "kEpsilon", "kOmegaSST"):
+            turbulence_model = "kOmegaSST"  # safe fallback
+        is_laminar_nc = (turbulence_model == "laminar")
 
         # Derived
         # Ra = g * beta * dT * L^3 / (nu * alpha)
@@ -2364,9 +2375,10 @@ value           (0 -{g:.16e} 0);
 
         # --------------------------------------------------------------------------
         # 4. constant/turbulenceProperties
+        # DEC-V61-057 Batch A.2 (Codex F1-HIGH): consult whitelist turbulence_model
+        # before falling back to RAS+kOmegaSST default.
         # --------------------------------------------------------------------------
-        (case_dir / "constant" / "turbulenceProperties").write_text(
-            """\
+        _turb_props_header = """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -2384,19 +2396,22 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-simulationType  RAS;
-
-RAS
-{
-    RASModel      kOmegaSST;
-
-    turbulence    on;
-
-    printCoeffs   on;
-}
-
-// ************************************************************************* //
-""",
+"""
+        if is_laminar_nc:
+            _turb_props_body = "simulationType  laminar;\n"
+        else:
+            _turb_props_body = (
+                "simulationType  RAS;\n\n"
+                "RAS\n{\n"
+                f"    RASModel      {turbulence_model};\n\n"
+                "    turbulence    on;\n\n"
+                "    printCoeffs   on;\n"
+                "}\n"
+            )
+        (case_dir / "constant" / "turbulenceProperties").write_text(
+            _turb_props_header
+            + _turb_props_body
+            + "\n// ************************************************************************* //\n",
             encoding="utf-8",
         )
 
@@ -3015,8 +3030,10 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 11. 0/k — Turbulent kinetic energy [m2/s2]
+        # DEC-V61-057 Batch A.2: skipped for laminar regime (no RAS transport
+        # equations to seed). For laminar buoyantFoam, k field is never read.
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "k").write_text(
+        if not is_laminar_nc: (case_dir / "0" / "k").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -3056,8 +3073,10 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 11b. 0/epsilon — Turbulent dissipation rate [m2/s3]
+        # DEC-V61-057 Batch A.2: skipped for laminar regime (k-epsilon transport
+        # equations not active in laminar buoyantFoam).
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "epsilon").write_text(
+        if not is_laminar_nc: (case_dir / "0" / "epsilon").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -3098,8 +3117,9 @@ boundaryField
         # --------------------------------------------------------------------------
         # 11c. 0/omega — Specific dissipation rate [1/s] (required by kOmegaSST)
         # omega_init and omega_wall already computed at lines 1334-1343
+        # DEC-V61-057 Batch A.2: skipped for laminar regime.
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "omega").write_text(
+        if not is_laminar_nc: (case_dir / "0" / "omega").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -3155,8 +3175,10 @@ boundaryField
 
         # --------------------------------------------------------------------------
         # 12. 0/nut — Turbulent viscosity (for k-omega SST)
+        # DEC-V61-057 Batch A.2: skipped for laminar regime (nut not used by
+        # laminar momentum equation; would be a phantom field).
         # --------------------------------------------------------------------------
-        (case_dir / "0" / "nut").write_text(
+        if not is_laminar_nc: (case_dir / "0" / "nut").write_text(
             """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -3198,9 +3220,12 @@ boundaryField
         # 12b. 0/omega — Specific dissipation rate [1/s] (for k-omega SST)
         # omega = sqrt(k) / (Cmu^0.25 * L), Cmu=0.09 so Cmu^0.25=0.5623
         # With k=1e-4 and L=1.0: omega ≈ 0.0178
+        # DEC-V61-057 Batch A.2: skipped for laminar regime. NOTE: this is the
+        # second omega write in this method (after 11c) — appears to be a pre-
+        # existing duplicate. Both blocks are now laminar-guarded.
         # --------------------------------------------------------------------------
         omega_init = (1e-4 ** 0.5) / ((0.09 ** 0.25) * max(L, 1.0))
-        (case_dir / "0" / "omega").write_text(
+        if not is_laminar_nc: (case_dir / "0" / "omega").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |

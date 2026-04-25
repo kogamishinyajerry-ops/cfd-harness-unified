@@ -1504,6 +1504,47 @@ class TestBuoyantCasePlumbingVerification:
         ar = _load_whitelist_parameter("nonexistent_case_xyz", "aspect_ratio")
         assert ar is None
 
+    def test_dhc_emits_laminar_turbulence_props(self):
+        """DEC-V61-057 Batch A.2 (Codex F1-HIGH): whitelist declares laminar
+        for DHC at Ra=1e6 (de Vahl Davis benchmark). Adapter must emit
+        simulationType laminar, NOT RAS+kOmegaSST hard-write."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "simulationType  laminar" in tp, (
+                f"DHC turbulenceProperties should be laminar, got:\n{tp}"
+            )
+            assert "kOmegaSST" not in tp, "DHC must not seed RAS kOmegaSST"
+
+    def test_dhc_skips_turbulent_initial_fields(self):
+        """DEC-V61-057 Batch A.2: laminar regime → no k/epsilon/omega/nut written."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            for fname in ("k", "epsilon", "omega", "nut"):
+                assert not (case_dir / "0" / fname).exists(), (
+                    f"DHC laminar should not write 0/{fname}; got phantom turbulent field"
+                )
+
+    def test_rbc_still_emits_ras_when_whitelist_silent(self):
+        """DEC-V61-057 Batch A.2: rayleigh_benard_convection's whitelist also
+        declares turbulence_model=laminar today, so we use a synthetic case
+        name that has no whitelist entry to exercise the kOmegaSST fallback."""
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0, name="nc-test-fallback-ra1e6")
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "simulationType  RAS" in tp, (
+                f"Synthetic case (no whitelist) must fall back to RAS, got:\n{tp}"
+            )
+            assert "kOmegaSST" in tp
+            # Turbulent fields should be written for kOmegaSST regime.
+            assert (case_dir / "0" / "k").exists()
+
     def test_tampered_gravity_raises_plumbing_error(self):
         """If someone bumps |g| post-write, Ra_effective drifts — detect it."""
         spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0)
