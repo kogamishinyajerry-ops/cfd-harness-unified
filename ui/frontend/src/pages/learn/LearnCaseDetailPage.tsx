@@ -7,6 +7,7 @@ import { getLearnCase } from "@/data/learnCases";
 import type { RunDescriptor, ValidationReport } from "@/types/validation";
 
 import { AdvancedTab } from "./case_detail/AdvancedTab";
+import { CaseFrame } from "./case_detail/CaseFrame";
 import { CompareTab } from "./case_detail/CompareTab";
 import { MeshTab } from "./case_detail/MeshTab";
 import { RunTab } from "./case_detail/RunTab";
@@ -154,6 +155,12 @@ export function LearnCaseDetailPage() {
           <CaseIllustration caseId={caseId} className="h-auto w-full text-surface-100" />
         </div>
       </header>
+
+      {/* Workbench first-screen (Stage 2 MVP). Soft-skips with `return null`
+          when the case lacks a knowledge/workbench_basics/<id>.yaml authored,
+          so cases not yet covered by Stage 2 fall through to the existing
+          hero illustration + tabs unchanged. */}
+      <CaseFrame caseId={caseId} />
 
       {/* Tab nav */}
       <div className="sticky top-0 -mx-6 mb-8 border-b border-surface-800 bg-surface-950/80 px-6 py-2 backdrop-blur">

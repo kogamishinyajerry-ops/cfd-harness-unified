@@ -19,6 +19,7 @@ import type {
   RunCheckpointsResponse,
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
+import type { WorkbenchBasics } from "@/types/workbench_basics";
 
 async function request<T>(
   path: string,
@@ -108,5 +109,11 @@ export const api = {
     request<AuditPackageBuildResponse>(
       `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}/audit-package/build`,
       { method: "POST", body: "{}" },
+    ),
+
+  // Stage 2 — industrial workbench first-screen
+  getWorkbenchBasics: (caseId: string) =>
+    request<WorkbenchBasics>(
+      `/api/cases/${encodeURIComponent(caseId)}/workbench-basics`,
     ),
 };

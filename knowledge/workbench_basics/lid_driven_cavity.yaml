@@ -1,0 +1,164 @@
+# Workbench Basics · Lid-Driven Cavity (Re=100)
+#
+# Purpose: structured first-screen geometry / patches / BC / materials
+# data for the CFD workbench `<CaseFrame>` SVG primitive (Stage 2 MVP).
+# Per Codex industrial-workbench meeting 2026-04-25 — this is the
+# "看几何 / 设物性 / 设边界 / 选模型" surface that Sarah sees first.
+#
+# Authoring source: physics_contract.geometry_assumption from
+#   knowledge/gold_standards/lid_driven_cavity.yaml (line 62).
+# Cross-check: 0/U + 0/p + constant/transportProperties from any
+#   real OpenFOAM run dir (e.g. reports/phase5_fields/lid_driven_cavity/).
+#
+# Schema version: v1 (informal — when 8 cases populated, ratify schema
+# in docs/schemas/workbench_basics_v1.md per Stage 2 close trigger).
+
+case_id: lid_driven_cavity
+display_name: "Lid-Driven Cavity"
+display_name_zh: "顶盖驱动方腔"
+canonical_ref: "Ghia, Ghia & Shin 1982"
+
+# 2D / 3D distinction. 2 → SVG topology renders xy plane only;
+# front/back patches marked `empty` and visually deemphasized.
+dimension: 2
+
+# Bounding box in physical units. SVG <CaseFrame> uses bbox to set
+# viewBox aspect ratio so the geometry isn't distorted.
+geometry:
+  shape: rectangle
+  bbox:
+    x_min: 0.0
+    x_max: 0.1
+    y_min: 0.0
+    y_max: 0.1
+    z_min: 0.0
+    z_max: 0.01  # depth in 2D extruded mesh (single cell)
+  characteristic_length:
+    name: L
+    value: 0.1
+    unit: m
+    description_zh: "腔体边长（OpenFOAM convertToMeters=0.1，blockMeshDict 单位坐标 1×1 → 物理 0.1m×0.1m）"
+
+# Patch list — each entry maps a boundary surface to its physical
+# location on the SVG outline. `location` ∈ {top|bottom|left|right|
+# front|back|inlet|outlet|airfoil|step|cylinder|...}. SVG renderer
+# decides how to draw it given the geometry.shape.
+patches:
+  - id: lid
+    role: moving_wall
+    location: top
+    label_zh: "顶盖（移动壁）"
+    label_en: "Lid (moving wall)"
+    description_zh: "U=(1, 0, 0) m/s 强制驱动，剪切层从 lid 注入腔体"
+
+  - id: leftWall
+    role: wall
+    location: left
+    label_zh: "左壁"
+    label_en: "Left wall"
+
+  - id: rightWall
+    role: wall
+    location: right
+    label_zh: "右壁"
+    label_en: "Right wall"
+
+  - id: bottomWall
+    role: wall
+    location: bottom
+    label_zh: "底壁"
+    label_en: "Bottom wall"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+    description_zh: "OpenFOAM 2D 模拟约定：z 方向单 cell，empty BC 跳过求解"
+
+# Boundary conditions per field. Field names match OpenFOAM 0/<field>
+# convention. Each per_patch entry references a patch.id from above.
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      lid:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U = (1, 0, 0)"
+      leftWall:
+        type: noSlip
+        display_zh: "U = (0, 0, 0)"
+      rightWall:
+        type: noSlip
+        display_zh: "U = (0, 0, 0)"
+      bottomWall:
+        type: noSlip
+        display_zh: "U = (0, 0, 0)"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    description_zh: "OpenFOAM incompressible 求解器存的是 p/ρ"
+    per_patch:
+      lid:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      leftWall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      rightWall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      bottomWall:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+# Materials — incompressible single-fluid case, kinematic ν is enough.
+materials:
+  - id: cavity_fluid
+    label_zh: "腔体流体"
+    label_en: "Cavity fluid"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+        note_zh: "incompressible 求解器中 ρ 不进方程，仅供 Re 推导参考"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 0.001
+        unit: "m²/s"
+        note_zh: "OpenFOAM constant/transportProperties 中 nu = 1e-3"
+
+# Derived quantities — computed from materials + characteristic length.
+# UI shows these prominently as the "physics anchor" of the case.
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 100
+    formula: "Re = U·L/ν = 1.0 × 0.1 / 0.001"
+    note_zh: "Re=100 远低于腔体过渡 Re≈7500，确保层流稳态可达"
+
+# Solver / model selection — the "选模型" step of Sarah's journey.
+solver:
+  name: simpleFoam
+  family: incompressible
+  steady_state: true
+  laminar: true
+  display_zh: "simpleFoam（稳态 SIMPLE 算法，层流）"
+  reasoning_zh: "Re=100 层流，无湍流模型；稳态求解（流场不随时间变化）"
+
+# Optional pedagogical hints rendered as tooltips/captions in CaseFrame.
+# Keep terse — full prose lives in StoryTab.
+hints:
+  geometry_zh: "Ghia 1982 用 129² 网格（无量纲坐标）；本仓库 audit 路径 = 129×129×1 = 16641 cells"
+  driver_zh: "唯一的能量源是 lid 的剪切——所有其他 wall 都是 no-slip"
+  physical_intuition_zh: "类比：装满水的盒子，顶盖以 1 m/s 向 +x 方向滑过 → 主涡（顺时针）+ 角部二级涡"

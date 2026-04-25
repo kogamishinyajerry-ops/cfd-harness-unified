@@ -55,6 +55,7 @@ from ui.backend.routes import (
     health,
     run_monitor,
     validation,
+    workbench_basics,
 )
 
 app = FastAPI(
@@ -92,3 +93,4 @@ app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])
 app.include_router(case_export.router,  prefix="/api", tags=["case-export"])
 app.include_router(field_artifacts.router, prefix="/api", tags=["field-artifacts"])
 app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
+app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basics"])
