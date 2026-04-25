@@ -28,9 +28,11 @@ note: >
 
   Mesh: x-z plane (z=normal, 80 cells; y=thin span ±0.001, empty boundaries).
   Solver: simpleFoam + kOmegaSST, Re=3e6, single canonical case_id with
-  task_spec.alpha_deg parameter (default 0.0). Multi-α delivered by 3 separate
-  runs at α∈{0°,4°,8°} via task_spec parameterization (NO whitelist multi-
-  entry; see DEC-V61-058 Codex F2 ruling).
+  task_spec.boundary_conditions.angle_of_attack parameter (whitelist canonical
+  key; alias `alpha_deg` accepted, `angle_of_attack` wins on collision per
+  Codex round 1 F1 fix; default 0.0). Multi-α delivered by 3 separate runs at
+  α∈{0°,4°,8°} via task_spec parameterization (NO whitelist multi-entry;
+  see DEC-V61-058 Codex F2 ruling).
 
   Pre-V61-058 history: Wave 3 (DEC-EX-A, 2026-04-18) accepted PASS_WITH_
   DEVIATIONS permanent under blockMesh 6-block scope. snappyHexMesh rewrite
@@ -57,7 +59,7 @@ physics_contract:
       evidence_ref: "DEC-V61-044 added in-solver `airfoilSurface` FO writing p_aerofoil.raw; src/airfoil_surface_sampler.py reads + computes Cp. cellPoint interpolation samples a near-surface band; magnitudes are systematically attenuated 30-50% vs exact-surface gold."
       consequence_if_unsatisfied: "Profile magnitudes biased low; shape preserved; PASS_WITH_DEVIATIONS verdict per DEC-EX-A 2026-04-18."
       resolution_plan: "Profile gate retains 20% tolerance for QUALITATIVE match; magnitudes deferred to future snappyHexMesh DEC."
-  contract_status: "PARTIALLY_COMPATIBLE — Cp profile magnitudes attenuated 30-50% by cell-band extraction (precondition #4 partially satisfied) AND new V61-058 primary scalar gates (Cl@α=8°, Cd@α=0°, dCl/dα slope) introduced but pending Stage A-E live-run validation (precondition #3 not yet satisfied; α-routing not yet implemented). Status promotes to SATISFIED at V61-058 Stage E closeout."
+  contract_status: "PARTIALLY_COMPATIBLE — Cp profile magnitudes attenuated 30-50% by cell-band extraction (precondition #4 partially satisfied); V61-058 primary scalar gates (Cl@α=8°, Cd@α=0°, dCl/dα slope) introduced and α-routing IMPLEMENTED (B1 commits 5bbda96 + 032623b + a00ff88), but pending Stage E live-run validation. Status promotes to SATISFIED at V61-058 Stage E closeout."
   precondition_last_reviewed: "2026-04-25 (DEC-V61-058 Batch A intake integration v2; Codex F1-F6 verbatim edits applied)"
 relationships:
   solver_reuse: turbulent_flat_plate  # both kOmegaSST + wall-function high-Re branch

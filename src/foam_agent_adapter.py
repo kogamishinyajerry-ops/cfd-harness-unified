@@ -7180,11 +7180,16 @@ boundaryField
         # system/sampleDict — gold-anchored Cp sampling (C3b).
         # docs/c3_sampling_strategy_design.md §3.2 Option B: sample p at
         # upper-surface points for each x_over_c in whitelist reference_values.
-        # NACA0012 is symmetric at AoA=0 (current adapter does not implement
-        # non-zero AoA), so upper-surface sampling captures the full Cp
-        # distribution; lower surface would mirror. cellPoint interpolation at
-        # wall points extrapolates from first interior cell — standard for
-        # wall-pressure extraction in OpenFOAM.
+        # The Cp profile gold YAML is anchored at α=0° (NACA0012 symmetric);
+        # at α=0° upper and lower surfaces mirror, so upper-surface sampling
+        # captures the full distribution. DEC-V61-058 B1 added α-routing for
+        # the force-coefficient gates (Cl/Cd via forceCoeffs FO), but the Cp
+        # PROFILE_GATE remains an α=0 measurement — runs at α=4°/α=8° produce
+        # forceCoeffs Cl/Cd but the Cp sampleDict block here still reads the
+        # α=0 gold values (intake §3 design: Cp at α=0 only; upper-surface
+        # asymmetric sampling at α≠0 is out-of-scope, deferred). cellPoint
+        # interpolation at wall points extrapolates from first interior cell
+        # — standard for wall-pressure extraction in OpenFOAM.
         gold_values = _load_gold_reference_values(task_spec.name) or []
         xoc_values = [
             float(rv["x_over_c"])
