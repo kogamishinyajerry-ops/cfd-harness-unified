@@ -15,7 +15,23 @@ related:
 amendment_log:
   - 2026-04-25T19:30 Claude Code CLI · §5 BLOCKER + §2/§7 COMMENT amendments per Opus 4.7 audit
   - 2026-04-25T21:25 Claude Code CLI · MP-G retroactive — added §3 CI pre-flight assertion per RETRO-V61-006 addendum 2 + ops_note_protocol.md §5 sixth mandatory rule
-expected_signal_source: ".github/workflows/ci.yml backend-tests · last success commit 0229af9 (run 24925115531) · 2026-04-25T06:55"
+  - 2026-04-25T15:10 Claude Code CLI · §3 v2 supersede (graduated severity, two-stage hooks) + §6.1 Session Bootstrap + §9.1 MP-E permanent rule per Notion Opus 4.7 OPS audit block 31
+  - 2026-04-25T15:50 Claude Code CLI · frontmatter retroactive 5-field upgrade per Opus 4.7 §3 v2 audit Item 3 — structured expected_signal_source + 7-day rolling threshold + RED→GREEN transition anchor at commit 0229af9
+expected_signal_source:
+  workflow_path: .github/workflows/ci.yml  # FILE PATH (not display name) — per ops_note_protocol.md §5 (a)
+  job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"
+pre_flight_ci_health_check_command: |
+  gh run list --workflow=ci.yml --branch=main --limit 35 \
+    --json conclusion,createdAt --jq \
+    '[.[] | select((now - (.createdAt | fromdateiso8601)) < 604800)] |
+     (map(select(.conclusion == "success")) | length) /
+     (length // 1) * 100'
+signal_health_status_at_draft: RED  # 0/40 GREEN at 2026-04-25T18:55 (40 consecutive failures pre-`0208929` deps fix)
+signal_health_status_at_first_genuine_signal: GREEN  # transition at commit 0229af9 (run 24925115531) · 2026-04-25T06:55 · 748 tests passed + 0 incidents + 13.5 KB artifact
+# 5/9 dogfood review anchor: only CI runs ≥ 0229af9 are admissible signal data.
+# CI runs before 0229af9 are instrumentation-only (numpy/jinja2 missing) and
+# MUST be excluded per .planning/dogfood/2026-05-09_review_template.md Step 1a.
+signal_attestation_first_of_kind: false  # superseded by GREEN transition anchor above; retained as field for schema completeness
 ---
 
 # OPS-2026-04-25-001 · Dual-Track Parallel Development Plan
