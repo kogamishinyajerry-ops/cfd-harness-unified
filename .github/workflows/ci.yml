@@ -41,6 +41,9 @@ jobs:
             --schema knowledge/schemas/gold_standard_schema.json \
             --gold-dir knowledge/gold_standards
 
+      - name: PLANE_OF SSOT byte-identical check (ADR-002 §2.2)
+        run: python scripts/gen_importlinter.py --check
+
       - name: Four-plane import contract (ADR-001)
         run: lint-imports
 

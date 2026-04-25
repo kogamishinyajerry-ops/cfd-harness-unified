@@ -13,6 +13,11 @@
 # `layers` contract is not enforced top-down because Control already reads
 # all planes by design; we only forbid the two HARD NOs and Knowledge
 # reverse-import.
+#
+# This file is GENERATED from src/_plane_assignment.py via
+# scripts/gen_importlinter.py. Do not hand-edit; update PLANE_OF and
+# re-run the generator instead. CI enforces byte-identical parity
+# (ADR-002 §2.2).
 
 [importlinter]
 root_package = src
@@ -114,3 +119,32 @@ forbidden_modules =
     src.report_engine
     src.metrics
     src.knowledge_db
+
+# ===== Contract 5: plane-guard bootstrap stays stdlib-only (ADR-002 §4.1 A12) =====
+[importlinter:contract:plane-guard-bootstrap-purity]
+name = src._plane_assignment (+ future src._plane_guard) must not import any other src module to avoid meta_path finder self-recursion
+type = forbidden
+source_modules =
+    src._plane_assignment
+forbidden_modules =
+    src.task_runner
+    src.orchestrator
+    src.notion_client
+    src.notion_sync
+    src.audit_package
+    src.foam_agent_adapter
+    src.airfoil_surface_sampler
+    src.cylinder_centerline_extractor
+    src.cylinder_strouhal_fft
+    src.plane_channel_uplus_emitter
+    src.wall_gradient
+    src.comparator_gates
+    src.convergence_attestor
+    src.error_attributor
+    src.result_comparator
+    src.correction_recorder
+    src.auto_verifier
+    src.report_engine
+    src.metrics
+    src.knowledge_db
+    src.models
