@@ -9,32 +9,33 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 547002a）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit 4862545）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
   expected_verdict: FAIL
+  actual_verdict: FAIL
 case_id: rayleigh_benard_convection
 source: phase5_audit_run_foam_agent
 measurement:
-  value: 26.396975806451643
+  value: 6.2692169540235385
   unit: dimensionless
-  run_id: audit_rayleigh_benard_convection_547002a
-  commit_sha: 547002a
-  measured_at: '2026-04-21T15:29:41Z'
+  run_id: audit_rayleigh_benard_convection_4862545
+  commit_sha: '4862545'
+  measured_at: '2026-04-25T19:16:10Z'
   quantity: nusselt_number
   extraction_source: comparator_deviation
   solver_success: true
   comparator_passed: false
 audit_concerns:
 - concern_type: CONTRACT_STATUS
-  summary: 'Quantity: nusselt_number | Tolerance: 15.0% | Failed: 1 deviation(s)'
-  detail: 'Quantity: nusselt_number | Tolerance: 15.0% | Failed: 1 deviation(s)'
+  summary: 'Quantity: nusselt_number | Tolerance: 25.0% | Failed: 1 deviation(s)'
+  detail: 'Quantity: nusselt_number | Tolerance: 25.0% | Failed: 1 deviation(s)'
   decision_refs:
   - DEC-V61-028
 - concern_type: DEVIATIONS
   summary: 1 deviation(s) over tolerance
-  detail: 'nusselt_number: actual=26.396975806451643 expected=10.5'
+  detail: 'nusselt_number: actual=6.2692169540235385 expected=17.7'
   decision_refs:
   - DEC-V61-028
 decisions_trail:
@@ -42,6 +43,13 @@ decisions_trail:
   date: '2026-04-21'
   title: Phase 5a audit pipeline — real-solver fixtures
   autonomous: true
+- decision_id: DEC-V61-036
+  date: '2026-04-22'
+  title: Hard comparator gate G1 (missing-target-quantity)
+  autonomous: true
+attestation:
+  overall: ATTEST_NOT_APPLICABLE
+  checks: []
 field_artifacts:
   manifest_path_rel: reports/phase5_fields/rayleigh_benard_convection/runs/audit_real_run.json
   run_label: audit_real_run
