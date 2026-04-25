@@ -49,6 +49,7 @@ physics_contract:
   precondition_last_reviewed: "2026-04-20 (DEC-V61-011 · Gate Q-2 Path A)"
 
 observables:
+  # ─── HEADLINE GATE ──────────────────────────────────────────────
   - name: friction_factor
     description: Darcy friction factor for smooth square-duct flow at Re = 50000 (Jones 1976)
     ref_value: 0.0185
@@ -56,6 +57,81 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
+    gate_status: HARD_GATED
+    family: wall_shear_momentum_flux
+    extractor: src.duct_flow_extractors.extract_friction_factor
+    role: HEADLINE
+    source_table: "Jones 1976 Int. J. Heat Mass Transfer"
+
+  # ─── DEC-V61-066 Stage A.3 · Type II multi-dim observable expansion ─
+  # 3 HARD_GATED siblings spanning 3 physically-independent families
+  # (per Codex F1 rubric, V61-058 round 1 precedent):
+  #   family A (wall_shear_momentum_flux)         — friction_factor (HEADLINE)
+  #   family A' (wall_shear_normalized)           — friction_velocity_u_tau (SAME_RUN_CROSS_CHECK)
+  #   family B (cross_section_momentum_distribution) — bulk_velocity_ratio_u_max
+  #   family C (turbulence_BL_structure)          — log_law_inner_layer_residual
+
+  - name: friction_velocity_u_tau
+    description: friction velocity u_τ = √(τ_w/ρ) extracted from the same wall-cell stencil as friction_factor (Jones 1976 anchor at Re=50000, U_bulk=1)
+    ref_value: 0.04811  # √(0.0185 / 8) for Jones 1976 f
+    unit: dimensionless  # normalized adapter run (U_bulk=1, ρ=1)
+    tolerance:
+      mode: relative
+      value: 0.10
+    gate_status: HARD_GATED
+    family: wall_shear_normalized
+    extractor: src.duct_flow_extractors.extract_friction_velocity
+    role: SAME_RUN_CROSS_CHECK
+    source_table: "derived from Jones 1976 f via u_τ = U_bulk·√(f/8)"
+    note: |
+      Codex F1 trap (V61-063 R1 precedent): the gate MUST be backed by
+      an INDEPENDENT extraction of u_τ from τ_w (not a re-derivation
+      via √(f/8) using the just-extracted f, which would be tautological).
+      The src.duct_flow_extractors module enforces this separation —
+      extract_friction_velocity reads τ_w directly, never f.
+
+  - name: bulk_velocity_ratio_u_max
+    description: ratio of streamwise velocity at duct cross-section centroid to bulk velocity (probes core momentum redistribution, Hartnett 1962 / Nikuradse 1932)
+    ref_value: 1.20  # mid of Hartnett [1.19, 1.21] band for AR=1 smooth duct at Re~5e4
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+    gate_status: HARD_GATED
+    family: cross_section_momentum_distribution
+    extractor: src.duct_flow_extractors.extract_bulk_velocity_ratio
+    role: PROFILE_QUALITATIVE
+    source_table: "Hartnett 1962 / Nikuradse 1932"
+    note: |
+      Independent of wall-shear measurement: a working friction_factor
+      gate does NOT automatically imply u_max/U_bulk is correct. This
+      observable detects core-region momentum-redistribution errors
+      (e.g. RSM-vs-eddy-viscosity model differences in secondary-flow
+      capture). On a 2D thin-slice channel run (current adapter case-gen),
+      this ratio approaches the plane-channel asymptote ~1.16, which is
+      ~3% below the AR=1 anchor 1.20 — within the 10% tolerance band.
+
+  - name: log_law_inner_layer_residual
+    description: mean |u+_measured - u+_log| over 30 ≤ y+ ≤ 200 with κ=0.41, B=5.0 (Pope 2000 Ch. 7 universal inner law)
+    ref_value: 0.0  # log-law-perfect target
+    unit: dimensionless  # u+ residual is wall-units velocity diff
+    tolerance:
+      mode: absolute
+      value: 0.5  # |Δu+| ≤ 0.5 across the band — wider than f (relative 10%) because log-law is asymptotic
+    gate_status: HARD_GATED
+    family: turbulence_BL_structure
+    extractor: src.duct_flow_extractors.extract_log_law_residual
+    role: PROFILE_DIAGNOSTIC
+    source_table: "Pope 2000 Ch. 7 / Schlichting Ch. 18 universal log-law"
+    note: |
+      Independent of bulk friction: a κ-ε model can match f (which is an
+      integral wall-shear quantity) while mis-predicting the inner-layer
+      profile shape. Residual fit band [30, 200] sits above the buffer
+      layer (y+~5-30) and well below the wake region (~y+ > 1000 for
+      Re_h=50000), so it isolates the universal log-law region.
+      Absolute tolerance 0.5 acknowledges that κ=0.41 + B=5.0 is one
+      of several literature fits (5.2, 5.5 also seen) and the band-mean
+      is asymptotic.
 
 relationships:
   geometry_similarity:
