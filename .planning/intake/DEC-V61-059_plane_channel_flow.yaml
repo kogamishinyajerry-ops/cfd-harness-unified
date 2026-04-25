@@ -1,0 +1,604 @@
+# Stage 0 · Case Intake Assessment · DEC-V61-059 · plane_channel_flow
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
+#
+# Context: Track B SESSION 3 (parallel with SESSION 1 = DHC / V61-057,
+# SESSION 2 = NACA / V61-058). This DEC absorbs the lingering DEC-V61-036c
+# G2 territory marker (STATE.md:1313) — plane_channel_flow is currently
+# `ATTEST_PASS but Codex-physics-FAIL` because the comparator semantics
+# (ref-scalar key + axis resolution) was widened in DEC-036c to read
+# u_plus / y_plus, BUT no GATE rejects the unit-mismatch shortcut where
+# a laminar Poiseuille profile gets re-presented through a self-
+# consistent u_tau and lands as a numerically-valid but physics-wrong
+# u+ curve. v6.1-canonical wording: G2 (canonical-band shortcut detector)
+# in src/comparator_gates.py is missing a u+/y+ branch parallel to the
+# Strouhal canonical_band_shortcut_fired flag in error_attributor.py.
+# This DEC adds that branch + multi-dim gate set, enabling honest PASS.
+#
+# Revision history:
+#   v1 (2026-04-25): initial draft authored by Claude Code Opus 4.7 1M
+#       (Track B SESSION 3 autonomous mandate). Pre-Codex pass rate 0.40.
+#       Cross-case G2 fix routed as standalone PR per session-coordination
+#       protocol (so SESSION 1 / SESSION 2 can rebase).
+
+case_id: fully_developed_plane_channel_flow
+legacy_alias: plane_channel_flow  # see knowledge/whitelist.yaml:177 ; canonical id is fully_developed_*
+dec_id: DEC-V61-059
+case_number: 6  # LDC=1, BFS=2, cylinder=3, DHC=4, NACA=5, plane_channel=6
+intake_authored_at: "2026-04-25"
+intake_author: "Claude Code (Opus 4.7, 1M context · Track B SESSION 3)"
+methodology_version: "v2.0"
+intake_version: 1
+codex_plan_review_verdict: PENDING
+
+# ============================================================================
+# §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
+# ============================================================================
+case_type: II
+case_type_rationale: |
+  Type II = 1 primary scalar gate + ≥2 qualitative/profile gates.
+  Rationale: u+/y+ is intrinsically a PROFILE rather than a single scalar
+  (DNS Kim 1987 / Moser 1999 publishes u+(y+) as a curve; the 5-point
+  reference {y+ ∈ [0, 5, 30, 100]} in the legacy gold YAML is a profile-
+  sampling, not 5 independent scalars). Type I (≥3 independent scalar
+  families) is therefore not natural here — the most candid framing is:
+
+    Family 1 · WALL-DERIVED SCALARS (Execution-plane wallShearStress FO):
+      1. friction_velocity u_tau   — HEADLINE_GATE (single scalar from
+                                     τ_w/ρ averaged over wall patch).
+                                     Direct derivative; smallest noise
+                                     surface; load-bearing for all log-
+                                     law derived quantities downstream.
+      2. friction_coefficient C_f  — same wallShearStress field, scalar
+                                     reduction τ_w/(½ρU_b²); SAME-SURFACE
+                                     CROSS_CHECK of u_tau (same input,
+                                     different reduction).
+      3. Re_tau                    — u_tau · h / ν; algebraic propagation
+                                     of u_tau; DEPENDENT_DERIVATIVE — not
+                                     independent scalar, kept as sanity
+                                     for whitelist parameter alignment.
+
+    Family 2 · INTERIOR-PROFILE (sampleSet uLine, mid-channel y-line):
+      4. u_plus_profile @ y+ ≈ {5, 30, 100}  — PRIMARY_PROFILE GATE.
+         3 representative points: viscous sublayer (y+=5: u+≈5.4),
+         log-law region (y+=30: u+≈13.5 from κ=0.41 B=5.2), centerline
+         band (y+=100: u+≈18.3 Moser DNS; gold pins 22.8 with audit
+         note flagging anomaly — profile gate tolerates the y+=100
+         anomaly via per-point tolerance widening, NOT collapse).
+
+  Headline = u_tau (Path P-1: small-scalar load-bearing). Fallback
+  Path P-2 = C_f if u_tau extraction degrades (both share the same
+  postProcessing/wallShearStress FO).
+
+  Profile gate counts as 1 unit at gate-list level even when it
+  sub-samples 3 y+ points; per RETRO-V61-053, `primary_gate_count`
+  counts gate-list-entry, not per-point sampling.
+
+  Type II independence: WALL-DERIVED and INTERIOR-PROFILE are
+  extraction-path INDEPENDENT — wallShearStress comes from boundary
+  patch FO, uLine from interior cell sampling. A defect that
+  corrupts both simultaneously must be solver-level (turbulence model
+  or mesh resolution), which is precisely what this case is meant to
+  detect.
+
+primary_gate_count: 4  # u_tau + C_f + Re_tau + u_plus_profile
+case_type_hard_gate_signed: true
+headline_gate: friction_velocity  # quantity_id (case_type II primary scalar)
+
+# Reynolds stress gates (uu/vv/uw) considered but EXPLICITLY DEFERRED —
+# see §3 explicitly_out_of_scope for rationale.
+
+# ============================================================================
+# §2 Reference papers
+# ============================================================================
+reference_paper:
+  primary:
+    citation: "Moser, R.D., Kim, J., & Mansour, N.N. (1999). Direct numerical simulation of turbulent channel flow up to Re_τ = 590. Physics of Fluids, 11(4), 943-945."
+    doi: "10.1063/1.869966"
+    providing: [u_plus_profile, friction_velocity_reference, Re_tau_target]
+  secondary:
+    - citation: "Kim, J., Moin, P., & Moser, R.D. (1987). Turbulence statistics in fully developed channel flow at low Reynolds number. JFM 177, 133-166."
+      doi: "10.1017/S0022112087000892"
+      providing: [u_plus_profile_low_re, near_wall_turbulence_statistics]
+    - citation: "Pope, S.B. (2000). Turbulent Flows. Cambridge University Press, ch. 7."
+      providing: [log_law_constants_kappa_0.41_B_5.2, viscous_sublayer_u_plus_eq_y_plus]
+
+# ============================================================================
+# §3 Observable scope (hardens against breadth drift / scope creep)
+# ============================================================================
+observable_scope:
+  in_scope:
+    - quantity: friction_velocity
+      tolerance_pct: 5.0
+      extraction_method: |
+        From src.plane_channel_uplus_emitter._read_wall_shear_stress
+        (already present per DEC-V61-043). u_tau = sqrt(|τ_w/ρ|) where
+        τ_w/ρ comes from postProcessing/wallShearStress/<latest>/
+        wallShearStress.dat (patch=walls, latest time, mean of |min|/|max|).
+        Extracted via RANS solver run; emitted as scalar in key_quantities
+        under key `u_tau`. This DEC promotes it to a HARD gate (gold YAML
+        observables[].name = friction_velocity).
+      status_pre_DEC: EXTRACTOR_EXISTS
+      role: HEADLINE_GATE
+      gold_value_target: 0.0418  # m/s, derived for Re_tau=395 with h=1.0, ν=2.5e-5 (set via Stage A whitelist update); v=Re_tau·ν/h
+      gold_source: "Moser et al. 1999, Re_τ=395 case definition"
+      gate_status_target: HARD_GATED
+
+    - quantity: friction_coefficient
+      tolerance_pct: 7.0
+      extraction_method: |
+        Scalar reduction C_f = 2·(u_tau/U_b)² emitted alongside u_tau in
+        plane_channel_uplus_emitter (extension required: today the
+        emitter returns u_tau and Re_tau but not C_f; trivial addition
+        in Stage A.2 extractor refactor).
+      status_pre_DEC: EXTRACTOR_PARTIAL  # u_tau computed; C_f reduction not yet emitted
+      role: SAME_SURFACE_CROSS_CHECK  # shares wallShearStress field with u_tau
+      gold_value_target: 0.00715  # ~Dean's correlation C_f = 0.073 Re_b^(-0.25) at Re_b=14000 (matches Re_tau=395)
+      gold_source: "Dean, R.B. (1978). Reynolds number dependence of skin friction. JFE 100, 215-223."
+      gate_status_target: HARD_GATED
+
+    - quantity: Re_tau
+      tolerance_pct: 5.0
+      extraction_method: |
+        Re_tau = u_tau · h / ν computed in plane_channel_uplus_emitter
+        from u_tau (above) + boundary_conditions.channel_half_height
+        + boundary_conditions.nu. Already emitted under key `Re_tau` per
+        DEC-V61-043.
+      status_pre_DEC: EXTRACTOR_EXISTS
+      role: DEPENDENT_DERIVATIVE_SANITY  # not independent of u_tau but checks ν / h plumbing
+      gold_value_target: 395  # whitelist parameter (will be raised from 180 in Stage A.4)
+      gold_source: "Moser et al. 1999, target friction Reynolds number"
+      gate_status_target: HARD_GATED  # tight enough that ν or h plumbing bug would visibly break it
+
+    - quantity: u_plus_profile
+      tolerance_pct: 8.0  # widened from legacy 5% to 8% per per-point Moser DNS uncertainty + audit-flagged y+=100 anomaly
+      extraction_method: |
+        Existing src.plane_channel_uplus_emitter.emit_uplus_profile reads
+        postProcessing/uLine/<latest>/line_U.xy (mid-channel y-line) and
+        normalizes to (y+, u+) tuples via u_tau computed from the wall
+        FO. Emitted as `u_mean_profile` (list of u+ floats) +
+        `u_mean_profile_y_plus` (list of y+ floats) per the comparator's
+        DEC-036c G2 alias path (already wired in result_comparator.py).
+      status_pre_DEC: EXTRACTOR_EXISTS
+      role: PRIMARY_PROFILE_GATE  # the one Type-II profile gate
+      gold_value_target: |
+        Per Moser 1999 Re_tau=395:
+        - y+ = 5   → u+ = 5.0  (viscous sublayer; u+ ≈ y+ holds)
+        - y+ = 30  → u+ = 13.5 (log-law region: (1/0.41)·ln(30)+5.2 = 13.49)
+        - y+ = 100 → u+ ≈ 18.3 (Moser centerline DNS; previous gold 22.8
+                                in legacy whitelist pinned at Re_tau=180
+                                is anomalous per audit note — Stage A
+                                regenerates gold reference for Re_tau=395)
+      gold_source: "Moser et al. 1999 Table 4 (Re_tau=395 mean velocity profile)"
+      gate_status_target: HARD_GATED
+
+  explicitly_out_of_scope:
+    - item: "Reynolds stress profiles (u'u', v'v', u'w')"
+      reason: |
+        DNS Reynolds stresses require LES or DNS-grade turbulence
+        resolution + budget for run + per-point sampleSet at multiple
+        y planes. RANS k-omega-SST does NOT directly emit ⟨u'_i u'_j⟩
+        — recovering Reynolds stresses from RANS is a closure
+        approximation, not a measurement. Adding this as a gate would
+        be a Type-IV physics extension (turbulence-model-dependent
+        rather than turbulence-model-tested) and violates the v2.0
+        Type II framing. Queued for a future LES/DNS DEC if the
+        infrastructure supports it.
+    - item: "Re_tau bracketing sweep ({395, 590, 1000})"
+      reason: |
+        Single Re_tau gold standard suffices for v2.0 contract validation.
+        Multi-Re sensitivity is a separate DEC (mesh/solver scaling study).
+    - item: "y+ < 5 viscous-sublayer near-wall sampling"
+      reason: |
+        First cell at y+ < 1 is required for resolved log-law; sampling
+        AT y+ ≈ 1 risks first-cell-dependency drift (per risk_flags
+        below). Profile gate samples y+ ∈ {5, 30, 100} which are firmly
+        inside cell-interior range; viscous sublayer asymptote
+        u+ = y+ is structurally tested by extractor unit-tests but not
+        as a live gate.
+    - item: "Bulk velocity / mass flux gate"
+      reason: |
+        Bulk velocity is set by inlet BC and is NOT an emergent measurement
+        — it cannot detect physics defects. Same family as "lid velocity =
+        gold" non-gate in LDC.
+    - item: "G3/G4/G5 retuning for plane_channel"
+      reason: |
+        G3 (velocity overflow) / G4 (turbulence negativity) / G5 (continuity
+        divergence) thresholds are case-shared per DEC-V61-036b. Live run
+        either passes or surfaces them as legitimate physics flags. NOT in
+        scope for this DEC.
+
+# ============================================================================
+# §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
+# ============================================================================
+risk_flags:
+  # --- case-specific (registry strictness deferred per DEC-V61-057 §3 NOTE) ---
+
+  - flag: u_plus_unit_canonicalization
+    severity: high
+    codex_flagged: false  # to be flipped after pre-Stage-A Codex review if explicitly cited
+    description: |
+      DEC-V61-036c added u_plus key recognition to ResultComparator
+      (`_compare_vector` ref-scalar tuple includes u_plus; `_resolve_
+      profile_axis` adds y_plus axis candidates). What it did NOT add:
+      a CANONICAL-BAND SHORTCUT DETECTOR akin to error_attributor's
+      strouhal_canonical_band_shortcut_fired flag. Concretely: a
+      simulation that emits a numerically self-consistent (u+, y+)
+      profile derived from a LAMINAR Poiseuille u_tau (τ_w from
+      laminar wall shear at Re_bulk where Re_tau computed from this
+      laminar u_tau is ≈ Re_tau_target by parameter coincidence)
+      would produce values close to the Moser DNS canonical band
+      because u+/y+ is dimensionally normalized — yet encode no
+      turbulence physics. STATE.md:1313 marks plane_channel_flow as
+      ATTEST_PASS but DEC-036c G2 territory; the gate to close that
+      territory is what this risk_flag formalizes.
+    mitigation_in_batch: |
+      Stage A.1 (standalone PR `fix-comparator-g2-uplus-yplus`):
+      add `_check_g2_canonical_band_shortcut` to src/comparator_gates.py
+      (Evaluation-plane only; ADR-001-compliant — reads case_id +
+      key_quantities + LogStats, does NOT import from foam_agent_adapter).
+      Trigger: case_id ∈ {fully_developed_plane_channel_flow,
+      plane_channel_flow} AND key_quantities['turbulence_model_used']
+      ∈ {'laminar', None} AND emitted u+ profile lands within tolerance
+      band of Moser canonical values. Emits GateViolation with
+      gate_id='G2', concern_type='CANONICAL_BAND_SHORTCUT_LAMINAR_DNS'.
+      Adapter (Stage A.4) emits `turbulence_model_used` into
+      key_quantities so the gate has visibility without crossing planes.
+      4 new tests in test_comparator_gates.py covering: laminar-shortcut
+      fires, RANS-honest passes, missing key_quantities WARNs (not
+      FAILs), edge-band tolerance.
+
+  - flag: yplus_extraction_first_cell_dependency
+    severity: high
+    codex_flagged: false
+    description: |
+      y+ at the first cell off the wall is the calibration scale for
+      the entire u+ curve. If the mesh wall-grading produces a first
+      cell with y+ > 1 (≥ viscous sublayer ceiling), the entire
+      profile is anchored on a bad reference and downstream u+ values
+      rotate around the wrong fulcrum. Currently the adapter
+      _generate_steady_internal_channel emits uniform meshing
+      (simpleGrading 1 1 1) at default ncx/ncy — at Re_tau=395 with
+      h=1.0 this gives wall-cell y+ ≈ 1.6 (above the y+<1 minimum).
+      RANS k-omega-SST tolerates higher y+ via wall functions but the
+      resulting near-wall profile is wall-function-shape, not DNS-
+      shape — collides with the gold which assumes resolved log-law.
+    mitigation_in_batch: |
+      Stage A.3 adapter mesh-resolution upgrade: extend the existing
+      blockMesh emission with simpleGrading wall-symmetric (e.g.,
+      "1 ((0.5 0.85 0.25) (0.5 0.15 4)) 1" pattern from DHC §F1
+      pattern at L2087-2090, mirrored). Compute and assert in
+      adapter comment: dy_wall = h / (ncy · grading_factor) yields
+      first-cell y+ ≤ 1 at target Re_tau. blockMesh smoke-check log
+      grep verifies min cell size in stdout against expected band.
+
+  - flag: turbulence_model_emit_vs_whitelist_mismatch
+    severity: high
+    codex_flagged: false
+    description: |
+      Whitelist (knowledge/whitelist.yaml:177-205) currently sets
+      `solver: icoFoam` + `turbulence_model: laminar` for
+      plane_channel_flow. The existing gold standard
+      (knowledge/gold_standards/fully_developed_plane_channel_flow.yaml)
+      explicitly marks contract_status: INCOMPATIBLE with the laminar
+      icoFoam path because Moser DNS u+ requires turbulence-resolving
+      solver. DEC-V61-059 must reconcile this by switching the
+      whitelist + adapter dispatch to a RANS path (simpleFoam +
+      kOmegaSST is the canonical RANS choice for fully-developed
+      channel; cf. of-tutorials/incompressible/simpleFoam/
+      pipeCyclic). Gold YAML observables[] must regenerate to point
+      at Re_tau=395 reference values and remove the INCOMPATIBLE
+      contract_status block.
+    mitigation_in_batch: |
+      Stage A.4 adapter wire: _generate_steady_internal_channel
+      consults task_spec.turbulence_model (whitelist-fed) and emits
+      simulationType=RAS with kOmegaSST RASModel + k/omega initial
+      fields when not laminar. simpleFoam control instead of icoFoam.
+      Whitelist update: solver=simpleFoam, turbulence_model=kOmegaSST,
+      Re_tau=395, half_channel_height=1.0, ν=2.5e-5 (Re_tau=395 with
+      h=1.0 implies u_tau=0.0099, Re_b≈14000 with U_b=0.35 m/s; tune
+      to match Moser bracket). Gold YAML regen: observables block
+      replaces single u_mean_profile entry with 4 entries (u_tau,
+      C_f, Re_tau, u_mean_profile @ Re_tau=395 reference points).
+
+  - flag: reynolds_stress_dns_alignment
+    severity: med
+    codex_flagged: false
+    description: |
+      Even with RANS + good first-cell y+ resolution, comparing RANS-
+      emitted u+ profile to Moser DNS u+ profile carries a
+      structural ~10% discrepancy in the buffer-layer transition
+      (5 < y+ < 30) because RANS log-law is shape-fitted while DNS
+      is statistical. Tolerance must absorb this without FALSE FAIL.
+      Also: a RETRO-V61-050-style noise-floor warning may surface if
+      sampleSet sample density is below ~20 points across the half-
+      channel (current default 80 ncy → 40 effective points after
+      half-fold ≈ acceptable but worth checking).
+    mitigation_in_batch: |
+      Stage A.2 extractor: emit `numerical_floor` and
+      `signal_above_noise_ratio` for u_plus_profile per
+      RETRO-V61-050 contract. Tolerance_pct=8 (above default 5%) for
+      u_plus_profile gate accepts buffer-layer RANS-vs-DNS structural
+      discrepancy.
+
+  # --- mandatory v2.0+ slots (per RETRO-V61-053 + RETRO-V61-050) ---
+
+  - flag: python_version_parity
+    severity: med
+    codex_flagged: false
+    description: |
+      Python 3.9 (Codex shim) vs 3.12 (.venv) f-string parser differ.
+      G2 comparator gate code adds new GateViolation construction
+      blocks with formatted strings — high risk surface.
+    mitigation_in_batch: |
+      Run `python3 -m py_compile <changed .py>` before each Stage A
+      commit. Hoist nested f-string parts.
+
+  - flag: mesh_density_on_domain_change
+    severity: med
+    codex_flagged: false
+    description: |
+      Stage-A mesh upgrade (uniform → graded with first-cell y+ < 1)
+      changes ncy semantics. RETRO-V61-053 P1 lesson: cylinder grew
+      domain 3× but cells only 2×, lost 33% wall resolution. Same
+      class of regression can hit if grading is misapplied.
+    mitigation_in_batch: |
+      Stage A.3: compute dy_wall numerically in adapter blockMesh
+      emit comment; assert blockMesh smoke-check stdout contains
+      expected min-cell-size band.
+
+  - flag: executable_smoke_test
+    severity: high
+    codex_flagged: false
+    description: |
+      RETRO-V61-053 P0: unit tests via direct generator call bypass
+      dispatch layer. Need actual OpenFOAM run through
+      FoamAgentExecutor.execute(task) before accepting Codex APPROVE.
+    mitigation_in_batch: |
+      Stage E: scripts/phase5_audit_run.py
+      fully_developed_plane_channel_flow against attempt-1 with new
+      extractors. Live solver must converge and emit all 4 gates
+      within tolerance.
+
+  - flag: solver_stability_on_novel_geometry
+    severity: med
+    codex_flagged: false
+    description: |
+      simpleFoam + kOmegaSST on plane channel is mature
+      (incompressible/simpleFoam/pipeCyclic tutorial exists). Risk
+      lower than cylinder. Still: switching from icoFoam (transient
+      PISO) to simpleFoam (steady SIMPLE) changes solver-control
+      regime; GAMG p-solver may oscillate if y+ resolution is
+      borderline. PCG+DIC is the robust fallback per
+      RETRO-V61-053.
+    mitigation_in_batch: |
+      Stage E executable_smoke_test catches this. Pre-emptive fallback
+      ready: if p oscillates >3 SIMPLE iters, swap GAMG → PCG+DIC.
+
+  - flag: numerical_noise_snr
+    severity: med
+    codex_flagged: false
+    description: |
+      Per RETRO-V61-050: u+ profile extraction via uLine sampleSet
+      has interpolation noise. signal_above_noise_ratio must report
+      vs |gold_value| at each sampled y+ point.
+    mitigation_in_batch: |
+      Stage A.2 extractor returns SNR per y+ sample point. UI
+      surfaces SNR < 10× as warning flag; not auto-FAIL but
+      visible.
+
+# ============================================================================
+# §5 Pre-Stage-A Codex plan review
+# ============================================================================
+codex_pre_stage_a_plan_review:
+  v1_review:
+    requested_at: PENDING  # to be set when v1 submitted via /codex-gpt54
+    completed_at: PENDING
+    verdict: PENDING  # → APPROVE_PLAN / APPROVE_PLAN_WITH_CHANGES / REQUEST_CHANGES
+    log_path: reports/codex_tool_reports/dec_v61_059_plan_review.log
+    estimated_pass_rate_after_edits: PENDING
+    go_no_go_for_stage_a: PENDING
+
+# ============================================================================
+# §6 Self-estimated pass rate (F1-M1 honesty clause)
+# ============================================================================
+estimated_pass_rate_round1: 0.40
+estimated_pass_rate_rationale: |
+  Honest 0.40. Drivers (in expected-finding order):
+    - u_plus_unit_canonicalization (HIGH, ~30% Codex-finding hit) — new G2
+      gate is defense-in-depth code on the Evaluation plane. Codex
+      historically pessimistic on new gate definitions (DEC-036b
+      Codex_independent_pass_rate=0.42 vs claude-estimated 0.60). Likely
+      surface: threshold calibration (what counts as "within canonical
+      band"?), tolerance interaction with existing tolerance_pct on
+      profile gate, test coverage gaps (laminar-shortcut MUST fire,
+      RANS-honest MUST NOT fire on near-canonical values).
+    - turbulence_model_emit_vs_whitelist_mismatch (HIGH, ~25%
+      Codex-finding hit) — adapter dispatch + whitelist + gold YAML
+      three-way coordination. Stage A.4 has multiple coupled changes
+      (4 files: foam_agent_adapter.py + whitelist.yaml +
+      fully_developed_plane_channel_flow.yaml + tests). Plus risk of
+      breaking the existing icoFoam path used by other tests.
+    - yplus_extraction_first_cell_dependency (HIGH, ~20% Codex-finding hit)
+      — mesh grading details on RETRO-V61-053 territory. Likely surface:
+      grading expression syntax in blockMeshDict, dy_wall numerical
+      assertion phrasing, smoke-check grep regex.
+    - executable_smoke_test (HIGH but RETRO-mandated, ~10%
+      Codex-finding hit) — actually running the live OpenFOAM Docker
+      smoke typically uncovers PCG+DIC fallback need or
+      first-time-step divergence. Pre-emptive fallback prep should
+      catch this.
+    - reynolds_stress_dns_alignment / numerical_noise_snr (MED, ~10%
+      combined hit) — tolerance_pct=8 calibration may need adjustment;
+      SNR reporting surface may need to extend to all 4 gates not just
+      profile.
+  Honest 0.40 means I expect CHANGES_REQUIRED at round 1 with 2-3 HIGH
+  + 1-2 MED findings; clean APPROVE_WITH_COMMENTS at round 3 (matching
+  V61-053 R3 clean precedent and V61-057 expected R3 close target).
+  Per RETRO-V61-001: ≤0.70 → pre-merge Codex review mandatory.
+
+# ============================================================================
+# §7 Batch plan
+# ============================================================================
+# Stage A is split: A.1 lands as STANDALONE PR (cross-case G2 fix needed
+# by SESSION 1 + SESSION 2 to rebase). A.2-A.6 land on the
+# dec-v61-059-pc branch.
+batch_plan:
+  - batch: A.1
+    scope: |
+      G2 CANONICAL-BAND SHORTCUT DETECTOR for u+/y+ (Evaluation plane).
+      src/comparator_gates.py: add G2 constants + _check_g2_canonical_
+      band_shortcut + integrate into check_all_gates dispatch list.
+      tests/test_comparator_gates.py: 4 new tests (laminar-shortcut
+      fires, RANS-honest passes, missing key_qty WARN, edge-band
+      tolerance). Standalone PR `fix-comparator-g2-uplus-yplus` so
+      SESSION 1 (V61-057 DHC) and SESSION 2 (V61-058 NACA) can rebase.
+    commit_count_estimate: 2
+    atomicity_guard: |
+      A.1.a — G2 implementation + 4 tests (single commit).
+      A.1.b — integrate into check_all_gates() dispatch + audit
+              concern types in scripts/phase5_audit_run.py
+              (single commit).
+    pr_branch: fix-comparator-g2-uplus-yplus
+    pr_target: main
+
+  - batch: A.2
+    scope: |
+      Extractor refactor: src/plane_channel_extractors.py NEW MODULE
+      that wraps plane_channel_uplus_emitter + adds C_f reduction +
+      SNR/numerical_floor reporting. Adapter
+      _extract_plane_channel_profile call-site rewires to new wrapper.
+      Tests: test_plane_channel_extractors.py.
+    commit_count_estimate: 2
+    atomicity_guard: |
+      A.2.a — new module + tests
+      A.2.b — adapter call-site rewire + integration test
+
+  - batch: A.3
+    scope: |
+      Adapter mesh resolution upgrade: blockMesh emit grading
+      symmetric wall-clustering. Numerical assertion on dy_wall in
+      comment. blockMesh smoke-check log grep validation in test.
+    commit_count_estimate: 1
+
+  - batch: A.4
+    scope: |
+      Split into A.4.a (LANDED · cb6737b) + A.4.b (deferred).
+      A.4.a: turbulence_model_used contract — generator stamps
+      bc["turbulence_model_used"] from whitelist + emits
+      constant/turbulenceProperties matching the resolved model.
+      Tests: 3 in TestPlaneChannelMultiDim (laminar default, RAS
+      block when overridden, bc stamping).
+      A.4.b: full simpleFoam + RAS file emission (k/omega/nut
+      initial fields, fvSchemes/fvSolution for SST, dispatch line
+      solver_name update) + whitelist flip to kOmegaSST + Re_τ=395.
+      Lands after Codex round-1 review feedback.
+    commit_count_estimate: "1 landed (a) + 1 pending (b)"
+
+  - batch: A.5
+    scope: |
+      Validation-artifact lineage repair (DEC-V61-057 A.4 pattern).
+      DEFERRED to A.5.b alongside A.4.b — gold YAML observables[]
+      regen to match new HARD-GATED layout (u_tau, C_f, Re_tau,
+      u_plus_profile @ Re_τ=395) is tightly coupled to A.4.b's
+      whitelist flip. Until then, the gold YAML retains its
+      contract_status: INCOMPATIBLE marker which honestly reflects
+      the laminar icoFoam path.
+      A.5.a (deferrable): 3-way invariant test (gold YAML ↔
+      auto_verify_report.yaml fixture ↔ rendered report.md/html)
+      can land before A.4.b — it pins the CURRENT state and
+      catches future drift.
+    commit_count_estimate: 2
+
+  - batch: A.6
+    scope: |
+      LANDED · c3c347f. Alias normalization parity tests:
+      verifies adapter (Execution plane) and auto_verifier
+      (Evaluation plane) tables agree on the plane-channel
+      mapping. 6 tests cover display-title resolution, _normalize
+      helper, and cross-table drift detection.
+    commit_count_estimate: 1
+
+  - batch: B
+    scope: |
+      MULTI-DIM EXTRACTORS LIVE: run scripts/phase5_audit_run.py
+      fully_developed_plane_channel_flow with new extractor stack.
+      Capture audit fixture. Verify 4 gates emit within tolerance
+      bands.
+
+      LANDED · 0a90dea. Stage B production audit on commit 42158e2
+      (cumulative post-R3 stack: a71e8ec + 4af21a2 + 59198cf +
+      42158e2) ran end-to-end in 520.7s wall:
+        - solver_success: true
+        - measurement.value: 1.9176 @ y_plus=5
+        - 3 deviations vs Moser/Kim DNS gold (laminar profile far
+          below turbulent reference — physics-honest hard FAIL)
+        - G2 silent (correct: profile far outside canonical band)
+        - extraction path: comparator_deviation (full u+/y+ profile
+          + secondary observables emitted)
+
+      Surfaced 3 post-R3 live-run defects (RETRO-V61-053 addendum
+      class — runtime-emergent OpenFOAM-version-emitter API drift;
+      none catchable by static review):
+        1. constant/turbulenceProperties → constant/momentumTransport
+           (OF10 incompressible rename; commit a71e8ec)
+        2. icoFoam → pisoFoam swap (icoFoam doesn't register
+           momentumTransportModel in the registry, so the
+           wallShearStress FO crashed on lookupObject; commit
+           4af21a2)
+        3. uLine FO emits `<set_name>.xy` not `<set_name>_<field>.xy`
+           (OF10 sets-FO packs all fields into one file; reader
+           was looking for the legacy form; commit 42158e2)
+
+      Plus a runtime-budget tuning commit (59198cf): endTime 50→5,
+      deltaT 0.002→0.05, p-solver PCG/DIC→GAMG/GaussSeidel —
+      reduced wall-clock from ~3 hours to ~9 minutes per run.
+    commit_count_estimate: 5  # 4 fixes + 1 fixture refresh
+
+  - batch: C
+    scope: |
+      PREFLIGHT GATE WIRING. Update gold YAML schema_v2 observables[]
+      to 4 HARD_GATED entries. Comparator gates G1-G5 iterate over
+      HARD_GATED only. Single commit.
+    commit_count_estimate: 1
+
+  - batch: D
+    scope: |
+      COMPARE-TAB MULTI-DIM ANCHOR CARDS + audit fixture regen +
+      report.md template update for the active gate set.
+    commit_count_estimate: 2
+
+  - batch: E
+    scope: |
+      LIVE OPENFOAM RUN closeout via phase5_audit_run.py + retro +
+      Notion sync + DEC closeout.
+    commit_count_estimate: 2
+
+# ============================================================================
+# §8 Codex budget (F6-M1 halt criterion)
+# ============================================================================
+codex_budget_rounds: 4  # matches DEC-V61-057 budget; new G2 gate + adapter+gold-YAML coordination justify 4
+round_4_action: "normal planned review checkpoint — NOT early halt trigger"
+round_5_action: "health check — halt_risk_flag if CHANGES_REQUIRED"
+round_6_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
+
+# ============================================================================
+# §9 Stage-E close conditions
+# ============================================================================
+stage_e_close_checklist:
+  - item: "All Codex round-N findings landed in commits"
+    required: true
+  - item: "Clean Codex round-(N+1) verdict ∈ {APPROVE, APPROVE_WITH_COMMENTS} per F1-M2"
+    required: true
+  - item: "Executable smoke test passes — scripts/phase5_audit_run.py fully_developed_plane_channel_flow emits 4 hard-gated values within tolerance"
+    required: true
+  - item: "DEC-036c G2 territory marker cleared from STATE.md (line 1313 region)"
+    required: true
+  - item: "DEC frontmatter notion_sync_status = synced"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented (+1 from main HEAD value at closeout)"
+    required: true
+  - item: "RETRO-V61-059 written if any post-R3 defect surfaces (per RETRO-V61-053 addendum protocol)"
+    required: conditional
+  - item: "G2 standalone PR (fix-comparator-g2-uplus-yplus) MERGED before V61-057 / V61-058 stage close (cross-session coordination)"
+    required: true

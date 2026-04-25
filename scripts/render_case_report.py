@@ -371,7 +371,21 @@ def _parse_residuals_from_log(log_path: Path) -> tuple[np.ndarray, dict[str, np.
 
 
 def _find_latest_solver_log(artifact_dir: Path) -> Optional[Path]:
-    for logname in ("log.simpleFoam", "log.icoFoam", "log.pimpleFoam", "log.buoyantFoam"):
+    # Codex round-6 F10: order aligned with `_resolve_log_path` in
+    # src/metrics/residual.py and `_load_run_outputs` in
+    # src/audit_package/manifest.py so a mixed-log artifact dir
+    # resolves the same primary log everywhere.
+    # DEC-V61-059 Stage B added `log.pisoFoam` for the plane-channel
+    # laminar route (icoFoam couldn't register a
+    # momentumTransportModel for the wallShearStress FO).
+    for logname in (
+        "log.simpleFoam",
+        "log.icoFoam",
+        "log.pisoFoam",
+        "log.pimpleFoam",
+        "log.buoyantFoam",
+        "log.buoyantBoussinesqSimpleFoam",
+    ):
         p = artifact_dir / logname
         if p.is_file():
             return p

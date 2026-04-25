@@ -323,6 +323,53 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+def test_validation_report_hard_fails_on_g2_canonical_band_shortcut() -> None:
+    """DEC-V61-059 Codex round-2 F3 regression: a fixture carrying the
+    G2 CANONICAL_BAND_SHORTCUT_LAMINAR_DNS concern must hard-FAIL the
+    verdict even when the scalar measurement lands inside the gold
+    tolerance band. Without this wiring, G2's emit was toothless —
+    the gate would surface in audit_concerns[] but the verdict engine
+    would still resolve to PASS/HAZARD, defeating the laminar-shortcut
+    detection DEC-V61-059 was meant to enforce.
+    """
+    from ui.backend.schemas.validation import (
+        AuditConcern,
+        GoldStandardReference,
+        MeasuredValue,
+    )
+    from ui.backend.services.validation_report import _derive_contract_status
+
+    gs = GoldStandardReference(
+        quantity="u_mean_profile",
+        ref_value=13.5,  # Moser DNS u+ at y+=30
+        unit="dimensionless",
+        tolerance_pct=0.05,
+        citation="Moser et al. 1999",
+    )
+    # Scalar IS within the band (PASS-wash scenario the gate exists to block).
+    m = MeasuredValue(
+        value=13.5,
+        source="fixture",
+        quantity="u_mean_profile",
+        extraction_source="comparator_deviation",
+    )
+    concerns = [
+        AuditConcern(
+            concern_type="CANONICAL_BAND_SHORTCUT_LAMINAR_DNS",
+            summary=(
+                "u+/y+ matches Moser DNS at 3 canonical points "
+                "(turbulence_model='laminar') — laminar physics cannot "
+                "produce this; unit-mismatch shortcut suspected"
+            ),
+        )
+    ]
+    status, deviation, within, _, _ = _derive_contract_status(
+        gs, m, preconditions=[], audit_concerns=concerns
+    )
+    assert status == "FAIL"
+    assert within is None  # nulled per DEC-036b Codex round-1 nit pattern
+
+
 def test_validation_report_hard_fails_on_velocity_overflow_concern() -> None:
     """Fixture with VELOCITY_OVERFLOW concern must hard-FAIL the verdict."""
     from ui.backend.schemas.validation import (

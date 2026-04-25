@@ -1310,7 +1310,7 @@ circular_cylinder_wake       ATTEST_HAZARD     [G4,G5]     ← G5 hard-FAILs con
 turbulent_flat_plate         ATTEST_HAZARD     [G3,G4,G5]
 duct_flow                    ATTEST_HAZARD     [G3,G4,G5]
 differential_heated_cavity   ATTEST_PASS       []
-plane_channel_flow           ATTEST_PASS       []  ← DEC-036c G2 territory (u+/y+)
+plane_channel_flow           ATTEST_FAIL       [G2]  ← DEC-V61-059 closed G2 territory · physics-honest laminar≠DNS hard-FAIL
 impinging_jet                ATTEST_FAIL       []  ← A4 p_rgh cap (post-round-2 fix)
 naca0012_airfoil             ATTEST_PASS       []  ← tolerance band too loose
 rayleigh_benard_convection   ATTEST_PASS       []  ← Nu extractor bug
@@ -1320,13 +1320,15 @@ LDC stays clean across attestor + gates — the gold-overlay reference
 hasn't been destabilised. 5 cases (LDC/DHC/plane_channel/NACA/RBC) show
 ATTEST_PASS but Codex physics audit says they physically FAIL — those
 are comparator/extractor bugs (DEC-036c G2 + case-specific fix DECs)
-not convergence bugs.
+not convergence bugs. (DEC-036c G2 itself CLOSED by DEC-V61-059 on
+2026-04-25; plane_channel now reports ATTEST_FAIL with physics-honest
+laminar≠DNS deviations rather than ATTEST_PASS-via-extractor-bug.)
 
 **Test baseline**: 142 → 150 (G1) → 166 (G3/G4/G5) → 168 (Codex nits)
 → 184 (DEC-038 attestor) → 190 (DEC-038 round 2 regression tests). All green.
 
 **Still queued** in Phase 8 Sprint 1:
-- DEC-V61-036c G2: unit/profile canonicalization + plane_channel u+/y+ comparator fix
+- DEC-V61-036c G2: ✅ CLOSED 2026-04-25 by DEC-V61-059. G2 canonical-band shortcut detector landed in `src/comparator_gates.py::_check_g2_canonical_band_shortcut`; verdict-engine wiring fixed (DEC-V61-059 R2 F3, hard-FAIL set); plane_channel_flow now ATTEST_FAIL with physics-honest laminar≠DNS deviations on canonical y+ ∈ {5, 30, 100}.
 - DEC-V61-037: 8 per-case validation plots (FO refactor + renderers)
 - DEC-V61-039: LDC verdict reconciliation (PARTIAL vs FAIL)
 - DEC-V61-040: UI 3-tier semantics (reference / audit_real_run / visual_only)

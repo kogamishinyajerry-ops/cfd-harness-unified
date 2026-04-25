@@ -1796,6 +1796,201 @@ class TestInternalChannelPlumbingVerification:
                 ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
 
 
+class TestPlaneChannelMultiDim:
+    """DEC-V61-059 Stage A.3: plane-channel adapter mesh upgrade.
+
+    Asserts:
+      1. blockMeshDict emits wall-symmetric simpleGrading on the y-axis
+         so first-cell y+ < ~2 at Re_τ=395 (kOmegaSST low-Re bracket).
+      2. ncy is locked to the case-specific value (80) regardless of
+         FoamAgentExecutor's _ncy default — earlier _ncy // 2 = 10
+         was incompatible with the Moser DNS gold reference.
+      3. boundary_conditions carries plane_channel_ncy +
+         plane_channel_grading_X so post-extraction diagnostics can
+         verify the numerical assertion without re-parsing the mesh
+         file (RETRO-V61-053 P1 mesh-density-on-domain-change pattern).
+      4. U_bulk + nu + half-channel-height keys are still plumbed
+         (DEC-V61-043 contract preserved).
+    """
+
+    def _make_spec(self, Re: float = 5600) -> TaskSpec:
+        return TaskSpec(
+            name="plane-channel",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=Re,
+        )
+
+    def test_blockMeshDict_emits_wall_symmetric_grading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            ex = FoamAgentExecutor()
+            ex._generate_steady_internal_channel(case_dir, self._make_spec())
+            mesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # simpleGrading 1 on x; multi-block grading on y; 1 on z.
+            assert "simpleGrading (1 ((0.5 0.5 15)" in mesh
+            # Reciprocal block for upper-half symmetric clustering.
+            # (1/15 = 0.066667 to 6 dp).
+            assert "0.066667" in mesh
+            # x and z still uniform (1 prefix and 1 suffix outside the
+            # multi-block group).
+            assert "simpleGrading (1 (" in mesh
+            assert ")) 1)" in mesh
+
+    def test_blockMeshDict_uses_case_locked_ncy_80(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            # Construct executor with a small _ncy to verify the case
+            # generator OVERRIDES it. Default _ncy // 2 = 10 was the
+            # legacy bug; case-locked ncy=80 must win regardless.
+            ex = FoamAgentExecutor(ncy=20)
+            ex._generate_steady_internal_channel(case_dir, self._make_spec())
+            mesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # blocks line: hex (...) (ncx ncy ncz) simpleGrading ...
+            # Find the cell-count tuple — must contain 80 in the y slot.
+            import re
+
+            match = re.search(r"hex \([^)]+\) \((\d+) (\d+) (\d+)\)", mesh)
+            assert match is not None, "blockMeshDict missing hex cell-count line"
+            ncx_emitted = int(match.group(1))
+            ncy_emitted = int(match.group(2))
+            ncz_emitted = int(match.group(3))
+            assert ncy_emitted == 80, (
+                f"plane channel must override _ncy to 80, got {ncy_emitted}"
+            )
+            # ncx must be at least 40 (case-locked floor).
+            assert ncx_emitted >= 40
+
+    def test_boundary_conditions_carry_mesh_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec()
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            assert bc.get("plane_channel_ncy") == 80
+            assert bc.get("plane_channel_grading_X") == 15
+
+    def test_dec_v61_043_plumbing_contract_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec(Re=5600)
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            assert bc.get("channel_D") == 1.0
+            assert bc.get("channel_half_height") == 0.5
+            assert bc.get("nu") == pytest.approx(1.0 / 5600)
+            assert bc.get("U_bulk") == 1.0
+
+    def test_a4a_turbulence_model_used_stamped_in_bc(self):
+        """DEC-V61-059 A.4.a: bc carries turbulence_model_used so the
+        emitter (via canonicalize_turbulence_model) and comparator
+        gate G2 can discriminate honest turbulent runs from canonical-
+        band laminar shortcuts.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec()
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            # whitelist plane_channel_flow currently sets turbulence_model=laminar
+            # → bc reflects that.
+            assert bc.get("turbulence_model_used") == "laminar"
+
+    def test_a4a_momentum_transport_file_emitted_laminar(self):
+        """OF10 renamed turbulenceProperties → momentumTransport for
+        incompressible cases. wallShearStress FO requires this file
+        to exist (Stage B live-run defect fix).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec())
+            tp = (case_dir / "constant" / "momentumTransport").read_text()
+            # Whitelist says laminar; momentumTransport must reflect that.
+            assert "simulationType  laminar" in tp
+            # Must NOT contain RAS block in laminar mode.
+            assert "RASModel" not in tp
+            # The legacy `turbulenceProperties` filename is NOT created
+            # under OF10 — verify cleanly so a future regression that
+            # reverts to the older filename is caught.
+            assert not (case_dir / "constant" / "turbulenceProperties").exists()
+
+    def test_a4a_solver_is_pisofoam_with_required_div_scheme(self):
+        """Stage B post-R3 fix lock: the laminar plane-channel case
+        must declare `application pisoFoam;` in controlDict (NOT
+        icoFoam) and fvSchemes must include the
+        `div((nuEff*dev2(T(grad(U)))))` entry that pisoFoam's
+        momentumTransport framework requires. Regression catches a
+        future revert to icoFoam — which would resurrect the FOAM
+        FATAL ERROR `Unable to find turbulence model in the database`
+        from the wallShearStress function-object.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec())
+            cd = (case_dir / "system" / "controlDict").read_text()
+            assert "application     pisoFoam;" in cd, (
+                "controlDict MUST declare pisoFoam (icoFoam does not "
+                "register a momentumTransportModel and breaks the "
+                "wallShearStress FO)."
+            )
+            assert "icoFoam" not in cd, (
+                "Stale icoFoam reference in controlDict will resurrect "
+                "the Stage B post-R3 defect."
+            )
+            schemes = (case_dir / "system" / "fvSchemes").read_text()
+            assert "div((nuEff*dev2(T(grad(U)))))" in schemes, (
+                "pisoFoam needs the explicit deviatoric-stress div "
+                "scheme entry; without it the solver crashes with "
+                "`keyword div((nuEff*dev2(T(grad(U))))) is undefined`."
+            )
+
+    def test_a4a_locks_bc_to_laminar_even_when_caller_overrides(self):
+        """Codex round-1 F1 regression: A.4.a is the laminar pisoFoam
+        emission path only — the bc["turbulence_model_used"] field
+        and the constant/momentumTransport file content MUST both
+        reflect the actually-emitted laminar path, regardless of any
+        forward-compat caller override via
+        boundary_conditions["turbulence_model"]. Otherwise a metadata-
+        only declaration of "kOmegaSST" would silence comparator-gate
+        G2 and let a laminar Poiseuille u+/y+ profile PASS-wash
+        against the Moser DNS gold via canonical-band match.
+
+        A.4.b will introduce the _emits_rans_path flag flip alongside
+        full simpleFoam + RAS file emission; until then this lock is
+        load-bearing.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            # Name not in the whitelist so the override-path code is
+            # exercised: bc["turbulence_model"]="kOmegaSST" enters the
+            # generator's resolution but MUST NOT propagate to the
+            # bc["turbulence_model_used"] field nor the turbulenceProperties
+            # file under A.4.a.
+            spec = TaskSpec(
+                name="plane-channel-forward-compat-test",
+                geometry_type=GeometryType.BODY_IN_CHANNEL,
+                flow_type=FlowType.INTERNAL,
+                steady_state=SteadyState.STEADY,
+                compressibility=Compressibility.INCOMPRESSIBLE,
+                Re=5600,
+                boundary_conditions={"turbulence_model": "kOmegaSST"},
+            )
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            tp = (case_dir / "constant" / "momentumTransport").read_text()
+            assert "simulationType  laminar" in tp, (
+                "A.4.a must emit laminar momentumTransport — RAS path is "
+                "deferred to A.4.b alongside the actual simpleFoam files."
+            )
+            assert "RASModel" not in tp
+            bc = spec.boundary_conditions or {}
+            assert bc.get("turbulence_model_used") == "laminar", (
+                "A.4.a F1 lock: bc field MUST reflect the actually-emitted "
+                "pisoFoam path, not the caller's declaration override."
+            )
+
+
 # ---------------------------------------------------------------------------
 # C3 — Gold-anchored sampleDict helpers
 # ---------------------------------------------------------------------------

@@ -1,0 +1,6 @@
+[audit] commit: 42158e2 · cases: ['plane_channel_flow']
+[audit] plane_channel_flow → start
+[audit] plane_channel_flow → FAIL · 520.7s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+plane_channel_flow                     FAIL  520.7s

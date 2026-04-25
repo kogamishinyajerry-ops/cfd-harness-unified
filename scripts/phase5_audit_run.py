@@ -638,20 +638,43 @@ def _audit_fixture_doc(
         for c in attestation.concerns:
             doc["audit_concerns"].append(check_to_audit_concern_dict(c))
 
-    # DEC-V61-036b gates — post-extraction physics checks.
-    if phase7a_timestamp is not None:
-        try:
-            gate_violations = check_all_gates(
-                log_path=solver_log,
-                vtk_dir=vtk_dir if vtk_dir and vtk_dir.is_dir() else None,
-                U_ref=u_ref,
-            )
-            for v in gate_violations:
-                doc["audit_concerns"].append(violation_to_audit_concern_dict(v))
-        except Exception as exc:  # noqa: BLE001 — gates must not crash the audit
-            print(
-                f"[audit] [WARN] gates failed on {case_id}: {exc!r}", flush=True
-            )
+    # DEC-V61-036b/059 gates — post-extraction physics checks.
+    # G2 (canonical-band shortcut, plane channel u+/y+) reads case_id +
+    # key_quantities. G3/G4/G5 (overflow/turbulence/continuity) read the
+    # solver log + VTK. All four fold into one `check_all_gates` call
+    # with backward-compatible kw defaults — when log_path / vtk_dir
+    # are None, G3/G4/G5 silently no-op via internal None-guards, so
+    # the gate battery is safe to invoke on every audit fixture, not
+    # just phase7a-equipped runs.
+    #
+    # Codex round-3 F6 (DEC-V61-059): the prior `if phase7a_timestamp
+    # is not None` wrapper kept G2 inactive on direct-call
+    # `_audit_fixture_doc()` paths that several `ui/backend/tests/*`
+    # helpers exercise — a plane-channel canonical-band shortcut
+    # would never get the G2 concern appended there and the verdict
+    # could still resolve to PASS/HAZARD. G2 is artifact-independent
+    # so we lift it out: phase7a artifacts (when present) gate
+    # G3/G4/G5 inputs only.
+    log_path_arg = solver_log if (phase7a_timestamp is not None) else None
+    vtk_dir_arg = (
+        vtk_dir
+        if (phase7a_timestamp is not None and vtk_dir and vtk_dir.is_dir())
+        else None
+    )
+    try:
+        gate_violations = check_all_gates(
+            log_path=log_path_arg,
+            vtk_dir=vtk_dir_arg,
+            U_ref=u_ref,
+            case_id=case_id,
+            key_quantities=kq,
+        )
+        for v in gate_violations:
+            doc["audit_concerns"].append(violation_to_audit_concern_dict(v))
+    except Exception as exc:  # noqa: BLE001 — gates must not crash the audit
+        print(
+            f"[audit] [WARN] gates failed on {case_id}: {exc!r}", flush=True
+        )
 
     # DEC-V61-036 G1: stamp a first-class concern when the extractor could
     # not resolve the gold's quantity. The verdict engine hard-FAILs

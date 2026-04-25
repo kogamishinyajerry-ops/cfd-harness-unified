@@ -166,8 +166,28 @@ def _read_uline_profile(
     latest = _latest_time_dir(root)
     if latest is None:
         return None
-    xy = latest / f"{set_name}_{field}.xy"
-    if not xy.is_file():
+    # OpenFOAM 10 writes the line-sampling output as `<set_name>.xy`
+    # with every field packed into the same file (columns: y Ux Uy Uz);
+    # older OpenFOAM versions wrote a separate `<set_name>_<field>.xy`
+    # per field. Stage B post-R3 live-run surfaced this — the OF10
+    # filename was emitted by the FO but the reader only checked the
+    # legacy form, so the case died with "uLine output absent" even
+    # though the file was right there.
+    #
+    # Codex round-5 F7: the OF10 packed file holds U specifically.
+    # If the caller requests any other field (e.g. `field="p"`) we
+    # MUST NOT silently return Ux from the packed file — that would
+    # be a wrong-field/wrong-column read masquerading as success.
+    # Restrict the OF10-form path to `field == "U"`; for any other
+    # field, the legacy per-field naming is the only correct source,
+    # and absence of that legacy file means truly absent.
+    of10_path = latest / f"{set_name}.xy"
+    legacy_path = latest / f"{set_name}_{field}.xy"
+    if field == "U" and of10_path.is_file():
+        xy = of10_path
+    elif legacy_path.is_file():
+        xy = legacy_path
+    else:
         return None
     try:
         text = xy.read_text(encoding="utf-8", errors="replace")
@@ -297,6 +317,8 @@ def emit_uplus_profile(
     *,
     nu: float,
     half_height: float,
+    U_bulk: Optional[float] = None,
+    turbulence_model_declared: Optional[str] = None,
 ) -> Optional[Dict[str, object]]:
     """End-to-end: read FO output, normalize, emit key_quantities.
 
@@ -304,6 +326,14 @@ def emit_uplus_profile(
     FO output is absent (so caller can fall back to scalar U_max path).
     Malformed FO output raises PlaneChannelEmitterError — corruption
     must surface, not silently degrade.
+
+    DEC-V61-059 Stage A.2: when U_bulk and/or turbulence_model_declared
+    are provided, the result dict carries SecondaryObservables
+    (friction_coefficient, turbulence_model_used, u+ profile SNR
+    metrics) computed by `src.plane_channel_extractors`. Both kwargs
+    default to None for backward compatibility — pre-DEC-V61-059
+    callers see the original 6-key dict; DEC-V61-059-aware callers
+    see the enriched dict that comparator_gates.G2 can read.
     """
     tau_w = _read_wall_shear_stress(case_dir)
     u_line = _read_uline_profile(case_dir)
@@ -335,7 +365,7 @@ def emit_uplus_profile(
         half_height=half_height,
     )
 
-    return {
+    emitted: Dict[str, object] = {
         "u_mean_profile": list(profile.u_plus),
         "u_mean_profile_y_plus": list(profile.y_plus),
         "u_tau": profile.u_tau,
@@ -343,3 +373,21 @@ def emit_uplus_profile(
         "wall_shear_stress": profile.wall_shear_stress,
         "u_mean_profile_source": "wallShearStress_fo_v1",
     }
+
+    # DEC-V61-059 Stage A.2 secondary observables. Lazy import so the
+    # base DEC-V61-043 emitter remains importable even if the extractors
+    # module is removed in a future refactor (Evaluation/Execution plane
+    # decoupling). Failure to enrich does not invalidate the base emit.
+    if U_bulk is not None or turbulence_model_declared is not None:
+        from src.plane_channel_extractors import (  # noqa: WPS433 — lazy
+            enrich_emitted_profile,
+            merge_secondary_into_key_quantities,
+        )
+        secondary = enrich_emitted_profile(
+            emitted,
+            U_bulk=U_bulk,
+            turbulence_model_declared=turbulence_model_declared,
+        )
+        merge_secondary_into_key_quantities(emitted, secondary)
+
+    return emitted
