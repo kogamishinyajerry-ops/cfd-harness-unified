@@ -19,6 +19,7 @@ import type {
   RunCheckpointsResponse,
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
+import type { BatchMatrix } from "@/types/batch_matrix";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
@@ -130,4 +131,7 @@ export const api = {
     request<PreflightSummary>(
       `/api/cases/${encodeURIComponent(caseId)}/preflight`,
     ),
+
+  // Stage 5 — GoldOps batch matrix
+  getBatchMatrix: () => request<BatchMatrix>(`/api/batch-matrix`),
 };

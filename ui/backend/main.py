@@ -45,6 +45,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ui.backend.routes import (
     audit_package,
+    batch_matrix,
     case_editor,
     case_export,
     cases,
@@ -98,3 +99,4 @@ app.include_router(comparison_report.router, prefix="/api", tags=["comparison-re
 app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basics"])
 app.include_router(mesh_metrics.router, prefix="/api", tags=["mesh-metrics"])
 app.include_router(preflight.router, prefix="/api", tags=["preflight"])
+app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { api } from "@/api/client";
+import { BatchMatrix } from "@/components/learn/BatchMatrix";
 import { CaseIllustration } from "@/components/learn/CaseIllustration";
 import { LEARN_CASES, type LearnCase } from "@/data/learnCases";
 import type { CaseIndexEntry } from "@/types/validation";
@@ -115,6 +116,13 @@ export function LearnHomePage() {
             Pilot / bring-your-own-case inquiry
           </a>
         </div>
+      </section>
+
+      {/* Stage 5 GoldOps · BatchMatrix system-pulse view. Sits between the
+          buyer hero and the student framing so a casual visitor sees
+          actual cross-case verdict status before drilling into a card. */}
+      <section className="mb-10">
+        <BatchMatrix />
       </section>
 
       {/* Student-facing framing moved below the buyer hero — supporting teaser,
