@@ -284,7 +284,16 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
         return [Check("scalar contract", "warn",
                       f"audit measurement missing value/quantity (got {actual!r}/{quantity!r})")]
 
-    # Walk the multi-doc gold YAML for the matching `quantity` block.
+    # Walk the gold YAML for the matching observable. Two shapes coexist:
+    #   (a) legacy multi-doc files with `quantity:` + `reference_values:`
+    #       (LDC, BFS, cylinder, etc.)
+    #   (b) DEC-V61-057 schema_v2 files with a single document carrying
+    #       an `observables:` array (each entry has `name`, `ref_value`,
+    #       `tolerance: {mode, value}`, and optional `gate_status`)
+    # Codex round-4 F1-MED: the multi-doc walk silently dropped DHC after
+    # Stage C migrated it to schema_v2. Both shapes now normalize to one
+    # `(expected, tolerance)` tuple; advisory observables in shape (b) are
+    # not enforced here (they remain advisory at the comparator).
     gold_path = _GOLD_ROOT / f"{case_id}.yaml"
     if not gold_path.is_file():
         return [Check("scalar contract", "warn",
@@ -293,17 +302,41 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
         docs = list(yaml.safe_load_all(gold_path.read_text(encoding="utf-8")))
     except yaml.YAMLError as exc:
         return [Check("scalar contract", "warn", f"gold YAML parse failed: {exc!r}")]
-    gold_doc = next((d for d in docs
-                     if isinstance(d, dict) and d.get("quantity") == quantity), None)
-    if gold_doc is None:
+    expected: float | None = None
+    tolerance: float | None = None
+    gate_status: str = "HARD_GATED"
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        # Shape (a): per-document `quantity:` block.
+        if doc.get("quantity") == quantity:
+            refs = doc.get("reference_values") or []
+            if refs and "value" in refs[0]:
+                expected = float(refs[0]["value"])
+                tolerance = float(doc.get("tolerance", 0.10))
+                break
+        # Shape (b): structured `observables:` array within a single document.
+        observables = doc.get("observables")
+        if isinstance(observables, list):
+            for obs in observables:
+                if not isinstance(obs, dict) or obs.get("name") != quantity:
+                    continue
+                ref_value = obs.get("ref_value")
+                if not isinstance(ref_value, (int, float)):
+                    continue
+                expected = float(ref_value)
+                tol_block = obs.get("tolerance") or {}
+                if isinstance(tol_block, dict):
+                    tolerance = float(tol_block.get("value", 0.10))
+                else:
+                    tolerance = float(tol_block)
+                gate_status = obs.get("gate_status", "HARD_GATED")
+                break
+            if expected is not None:
+                break
+    if expected is None or tolerance is None:
         return [Check("scalar contract", "warn",
-                      f"gold has no quantity block for {quantity!r}")]
-    refs = gold_doc.get("reference_values") or []
-    if not refs or "value" not in refs[0]:
-        return [Check("scalar contract", "warn",
-                      f"gold {quantity} has no reference_values[].value")]
-    expected = float(refs[0]["value"])
-    tolerance = float(gold_doc.get("tolerance", 0.10))
+                      f"gold has no observable for {quantity!r}")]
 
     try:
         actual_f = float(actual)
@@ -324,11 +357,20 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
         "tolerance_pct": tolerance * 100,
         "deviation_pct": pct,
         "method": measurement.get("extraction_source"),
+        "gate_status": gate_status,
     }
-    if abs(rel_dev) <= tolerance:
-        checks.append(Check("scalar contract", "pass", summary, evidence=evidence))
+    within = abs(rel_dev) <= tolerance
+    if gate_status == "PROVISIONAL_ADVISORY":
+        # Advisory observables don't block preflight; surface as warn so
+        # the operator sees the deviation but the gate doesn't go RED.
+        level = "pass" if within else "warn"
+        checks.append(Check("scalar contract", level,
+                            f"[advisory] {summary}", evidence=evidence))
     else:
-        checks.append(Check("scalar contract", "fail", summary, evidence=evidence))
+        if within:
+            checks.append(Check("scalar contract", "pass", summary, evidence=evidence))
+        else:
+            checks.append(Check("scalar contract", "fail", summary, evidence=evidence))
 
     # DEC-V61-053 Batch C: multi-scalar gate for Type I cases (cylinder's
     # 4 observables: St headline + cd_mean + cl_rms + u_mean_centerline).
@@ -338,14 +380,44 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
     # block iterates over each additional gold quantity.
     secondary = measurement.get("secondary_scalars") or {}
     if isinstance(secondary, dict) and secondary:
-        # Collect every non-primary gold quantity doc keyed by its `quantity:`.
-        gold_secondary_docs = {
-            d["quantity"]: d for d in docs
-            if isinstance(d, dict)
-            and isinstance(d.get("quantity"), str)
-            and d["quantity"] != quantity  # skip primary (already checked)
-            and d.get("reference_values")
-        }
+        # Collect every non-primary gold observable into a {name: (expected,
+        # tolerance, gate_status)} map. Two shapes again:
+        #   (a) legacy multi-doc `quantity:` blocks
+        #   (b) DEC-V61-057 schema_v2 single-doc `observables:` array
+        # Codex round-4 F1-MED follow-up: previously only shape (a) was
+        # consulted, so DHC's 4 schema_v2 cross-checks were silently ignored.
+        sec_lookup: dict[str, tuple[float, float, str]] = {}
+        for d in docs:
+            if not isinstance(d, dict):
+                continue
+            # Shape (a)
+            if isinstance(d.get("quantity"), str) and d["quantity"] != quantity:
+                refs = d.get("reference_values") or []
+                if refs and "value" in refs[0]:
+                    sec_lookup[d["quantity"]] = (
+                        float(refs[0]["value"]),
+                        float(d.get("tolerance", 0.10)),
+                        "HARD_GATED",
+                    )
+            # Shape (b)
+            for obs in d.get("observables", []) or []:
+                if not isinstance(obs, dict):
+                    continue
+                obs_name = obs.get("name")
+                ref_value = obs.get("ref_value")
+                if not isinstance(obs_name, str) or obs_name == quantity:
+                    continue
+                if not isinstance(ref_value, (int, float)):
+                    continue
+                tol_block = obs.get("tolerance") or {}
+                tol_val = (
+                    float(tol_block.get("value", 0.10))
+                    if isinstance(tol_block, dict) else float(tol_block)
+                )
+                sec_lookup[obs_name] = (
+                    float(ref_value), tol_val,
+                    obs.get("gate_status", "HARD_GATED"),
+                )
         for sec_name, sec_val in secondary.items():
             if not isinstance(sec_val, (int, float)):
                 continue
@@ -354,14 +426,10 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
             # simplicity in Batch C, check only canonical scalar-named
             # entries (cd_mean, cl_rms); profile-keyed entries go through
             # the LDC-style comparator pipeline downstream.
-            sec_gold = gold_secondary_docs.get(sec_name)
-            if sec_gold is None:
+            sec_meta = sec_lookup.get(sec_name)
+            if sec_meta is None:
                 continue
-            sec_refs = sec_gold.get("reference_values") or []
-            if not sec_refs or "value" not in sec_refs[0]:
-                continue
-            sec_expected = float(sec_refs[0]["value"])
-            sec_tol = float(sec_gold.get("tolerance", 0.10))
+            sec_expected, sec_tol, sec_gate = sec_meta
             sec_actual = float(sec_val)
             sec_rel_dev = (sec_actual - sec_expected) / sec_expected if sec_expected != 0 else float("inf")
             sec_pct = sec_rel_dev * 100
@@ -376,8 +444,16 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
                 "tolerance_pct": sec_tol * 100,
                 "deviation_pct": sec_pct,
                 "gate_role": "secondary",
+                "gate_status": sec_gate,
             }
-            if abs(sec_rel_dev) <= sec_tol:
+            within_sec = abs(sec_rel_dev) <= sec_tol
+            if sec_gate == "PROVISIONAL_ADVISORY":
+                level = "pass" if within_sec else "warn"
+                checks.append(Check(
+                    f"secondary scalar ({sec_name})", level,
+                    f"[advisory] {sec_summary}", evidence=sec_evidence,
+                ))
+            elif within_sec:
                 checks.append(Check(
                     f"secondary scalar ({sec_name})", "pass",
                     sec_summary, evidence=sec_evidence,

@@ -89,8 +89,19 @@ class ReportGenerator:
         verify = context.auto_verify_report
         comparison = verify["gold_standard_comparison"]
         observables = comparison.get("observables", [])
-        pass_count = sum(1 for observable in observables if observable.get("within_tolerance"))
-        total_count = len(observables)
+        # DEC-V61-057 Codex round-4 F2-LOW: match_rate must exclude
+        # PROVISIONAL_ADVISORY observables so the markdown report agrees
+        # with the comparator's overall verdict (Stage C: advisory checks
+        # don't degrade the pass-fraction). Backward compat: legacy
+        # ObservableCheck.to_dict() omitting gate_status defaults to
+        # HARD_GATED, so match_rate semantics are unchanged for cases
+        # that haven't migrated to schema_v2.
+        hard_observables = [
+            o for o in observables
+            if o.get("gate_status", "HARD_GATED") != "PROVISIONAL_ADVISORY"
+        ]
+        pass_count = sum(1 for observable in hard_observables if observable.get("within_tolerance"))
+        total_count = len(hard_observables)
         match_rate = (pass_count / total_count) if total_count else 0.0
         return {
             "case_id": context.case_id,
