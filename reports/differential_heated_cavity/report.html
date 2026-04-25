@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DHC Case Report · Differential Heated Cavity Ra=1e10</title>
+<title>DHC Case Report · Differential Heated Cavity (Historical archive · pre-DEC-V61-006 demotion)</title>
 <style>
 :root {
   --bg: #0b0d10;
@@ -109,25 +109,39 @@ blockquote { margin: 12px 0; padding: 12px 20px; border-left: 3px solid var(--fu
 <body>
 <div class="wrap">
 
-<div class="hero">
-  <div class="eyebrow">Case Report · whitelist case #7</div>
-  <h1>Differential Heated Cavity</h1>
-  <div class="sub">Natural convection at Ra=10<sup>10</sup> · buoyantFoam · k-ω SST · <span class="mono">2D air</span></div>
+<div class="hero" style="border-top: 4px solid #f59e0b; background: linear-gradient(180deg, #2a1f0c 0%, var(--bg-card) 100%);">
+  <div class="eyebrow" style="color:#fbbf24">⚠ HISTORICAL ARCHIVE · pre-DEC-V61-006 (Gate Q-new Path P-2) demotion</div>
+  <h1>Differential Heated Cavity · Ra=1e10 narrative <span style="color:var(--fg-mute);font-weight:400">(SUPERSEDED 2026-04-20)</span></h1>
+  <div class="sub" style="color:var(--fg-dim)">
+    The narrative below describes the FUSE-era analysis at Ra=1e10 with gold Nu=30 (Dhir 2001 / Ampofo &amp; Karayiannis 2003). DEC-V61-006 demoted the case to Ra=1e6 (de Vahl Davis 1983, Nu_avg=8.8) on 2026-04-20.
+  </div>
   <div class="badges">
-    <span class="badge fail">Verdict: FAIL</span>
-    <span class="badge fuse">FUSE → external Gate</span>
-    <span class="badge ok">Physics: PASS</span>
-    <span class="badge ok">Convergence: CONVERGED</span>
-    <span class="badge neutral">Ra=1e10</span>
-    <span class="badge neutral">Pr=0.71</span>
-    <span class="badge neutral">AR=1.0</span>
+    <span class="badge neutral">⚠ ARCHIVED 2026-04-25</span>
+    <span class="badge neutral">Ra=1e10 narrative</span>
+    <span class="badge neutral">Superseded by DEC-V61-006 · DEC-V61-057</span>
   </div>
 </div>
 
+<div style="padding: 16px 20px; margin: 16px 0; border-left: 4px solid #f59e0b; background: var(--bg-alt); border-radius: 4px;">
+  <strong>Current canonical sources for DHC physics validation:</strong>
+  <ul style="margin: 8px 0 0 0; padding-left: 24px;">
+    <li>Gold YAML: <code>knowledge/gold_standards/differential_heated_cavity.yaml</code> — Ra=1e6, Nu=8.8 ±10%</li>
+    <li>Auto-verify report: <code>reports/differential_heated_cavity/auto_verify_report.yaml</code> — current measurement chain</li>
+    <li>Rendered case report: <code>reports/differential_heated_cavity/report.md</code> — auto-generated from gold YAML + auto_verify_report.yaml; this is the surface that should be linked from dashboards.</li>
+    <li>Active multi-dim arc: DEC-V61-057 (planned 5-gate Type I expansion: Nu_avg + Nu_max + u_max + v_max + ψ_max).</li>
+    <li>Adapter contract repair: commits a7b1e58 → 3283135 (DEC-V61-057 Stage A.1-A.5 — case-id-aware AR + laminar emit + BL grading + lineage repair + alias normalization).</li>
+  </ul>
+  <p style="margin: 8px 0 0 0; color:var(--fg-dim); font-size: 0.92em;">
+    The Ra=1e10 narrative below is preserved for audit history (FUSE decision trail per DEC-ADWM-004). Do not consume the numbers as current state.
+  </p>
+</div>
+
 <p class="lede">
+<strong>[Historical 2026-04-18 narrative — preserved for FUSE audit trail]:</strong>
 这是 whitelist 里唯一一个 <strong>FAIL + FUSE</strong> 的算例。经过五次递进式测量，最终收敛到一个出乎意料的判断：
 <strong>不是 solver 错，是 gold_standard 的 ref_value 可能本身就错。</strong>
 ADWM 自主治理层无权修改 gold 数值（hard floor #1），所以把决策熔断 (FUSE) 上交外部 Gate，附上两条可选路径和三个文献交叉验证。
+<em>(Resolution: DEC-V61-006 chose Path P-2 — regime demotion to Ra=1e6 — closing the FUSE on 2026-04-20.)</em>
 </p>
 
 <h2><span class="num">§1</span>Case Summary</h2>
