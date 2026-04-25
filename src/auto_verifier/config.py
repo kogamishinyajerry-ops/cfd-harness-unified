@@ -37,6 +37,9 @@ TASK_NAME_TO_CASE_ID = {
     "Fully Developed Turbulent Pipe Flow": "duct_flow",          # pre-rename legacy
     "Rayleigh-Benard Convection (Ra=10^6)": "rayleigh_benard_convection",
     "Rayleigh-Bénard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    # DEC-V61-060 Stage A.0 rename — keep both alias maps in sync (ADR-001).
+    "Rayleigh-Benard Convection (Ra=10^6, TU Ilmenau benchmark)": "rayleigh_benard_convection",
+    "Rayleigh-Bénard Convection (Ra=10^6, TU Ilmenau benchmark)": "rayleigh_benard_convection",
     "Differential Heated Cavity (Natural Convection)": "differential_heated_cavity",
     "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
     "NACA 0012 Airfoil External Flow": "naca0012_airfoil",

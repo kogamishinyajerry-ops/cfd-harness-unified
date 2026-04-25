@@ -253,6 +253,14 @@ _TASK_NAME_TO_CASE_ID_ALIASES = {
     "Fully Developed Turbulent Pipe Flow": "duct_flow",
     "Rayleigh-Benard Convection (Ra=10^6)": "rayleigh_benard_convection",
     "Rayleigh-Bénard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    # DEC-V61-060 Stage A.0 (commit c59b38e) renamed the whitelist case_name
+    # to include the TU Ilmenau benchmark suffix. The alias map was not
+    # updated atomically, so all is_rbc=True branches in this adapter were
+    # silently bypassed at runtime — the live OpenFOAM run executed with
+    # DHC side-heated topology + DHC Nu extractor + DHC endTime=500. Stage
+    # E.1 caught this as a post-R3 live-run defect (RETRO addendum).
+    "Rayleigh-Benard Convection (Ra=10^6, TU Ilmenau benchmark)": "rayleigh_benard_convection",
+    "Rayleigh-Bénard Convection (Ra=10^6, TU Ilmenau benchmark)": "rayleigh_benard_convection",
     "Differential Heated Cavity (Natural Convection)": "differential_heated_cavity",
     "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
     "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
@@ -2607,7 +2615,22 @@ FoamFile
         # endTime=500 (1000 steps) would take ~19h. Characteristic time τ=L/v_buoy
         # ≈ 0.84s at Ra=1e10, so endTime=10 (~12τ) is sufficient for quasi-steady
         # Nu extraction. 80²-uniform baseline (Ra=1e6) keeps endTime=500 unchanged.
-        _dhc_end_time = 10 if Ra >= 1e9 else 500
+        # DEC-V61-060 Stage E.1 RBC tuning (post-R3 live-run defect): RBC at
+        # AR=4 + 4:1 wall-graded mesh = 320×80 = 25,600 cells (4× DHC) and
+        # Pr=10 (10× thermal coupling iterations vs DHC's air Pr=0.71). Per-step
+        # cost measured at 14.8s on the killed first attempt → endTime=500 ⇒
+        # ~4 hours wall. Characteristic free-fall time τ_ff = sqrt(H/(g·β·ΔT))
+        # ≈ 1s at Ra=10^6 Pr=10; ~50τ_ff is plenty for the two-roll structure
+        # to develop and the Nu_avg to plateau. We trade endTime=500 → 50 and
+        # keep deltaT=0.5 (CFL-bounded by U_ff ≈ H/τ_ff). 100 steps × 14.8s
+        # ≈ 25 min wall, comparable to DHC at Ra=1e9 budget. RETRO-V61-060
+        # addendum will register this as the 2nd post-R3 defect.
+        if is_rbc:
+            _dhc_end_time = 50
+        elif Ra >= 1e9:
+            _dhc_end_time = 10
+        else:
+            _dhc_end_time = 500
         _ctrl_dict_text = """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -2661,7 +2684,16 @@ runTimeModifiable true;
         # EX-1-007 B1: writeInterval must be <= endTime, else postProcess -latestTime
         # finds no field output. Original heredoc had a duplicate writeInterval
         # (100 then 200) — collapsed to single 200, now parameterized to endTime.
-        _write_interval = _dhc_end_time if Ra >= 1e9 else 200
+        # DEC-V61-060 Stage E.1: RBC writes only at endTime (single field
+        # snapshot used by the steady-style Nu_avg extractor). DHC pattern
+        # at Ra<1e9 keeps writeInterval=200 to land at t=200 + t=400; for
+        # Ra>=1e9 the DHC short-circuit sets writeInterval=endTime.
+        if is_rbc:
+            _write_interval = _dhc_end_time
+        elif Ra >= 1e9:
+            _write_interval = _dhc_end_time
+        else:
+            _write_interval = 200
         (case_dir / "system" / "controlDict").write_text(
             _ctrl_dict_text.replace(
                 "endTime         500;",
