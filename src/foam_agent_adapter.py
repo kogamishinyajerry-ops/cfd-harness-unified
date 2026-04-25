@@ -7796,7 +7796,11 @@ mergePatchPairs
             # any other case registering the wallShearStress FO) can run
             # tau_x-based extractors instead of Ux proxies. When the FO
             # is absent the file simply doesn't exist — skipped safely.
-            field_files = ["U", "p", "Cx", "Cy", "Cz", "T", "wallShearStress", "yPlus"]
+            # DEC-V61-066 R1 F#2: include nut so duct_flow extractor
+            # can compute total-stress wall shear (ν + ν_t)·du/dy on
+            # k-ε / k-ω runs. Without this stage step the extractor
+            # silently falls back to molecular-only ν, biasing τ_w low.
+            field_files = ["U", "p", "Cx", "Cy", "Cz", "T", "nut", "wallShearStress", "yPlus"]
             host_time_dir = case_host_dir / latest_time
 
             for field_file in field_files:
@@ -9691,13 +9695,27 @@ mergePatchPairs
         rho = 1.0  # incompressible normalized adapter run
 
         # Optional turbulent-viscosity field for total-stress wall gradient.
+        # DEC-V61-066 R1 F#2: surface the nut path / fallback explicitly
+        # via audit keys so downstream audit can distinguish a real
+        # total-stress run (nu + nut) from a silent molecular-only path.
         nut_vals: Optional[List[float]] = None
+        nut_source = "absent"
+        nut_fallback_activated = True
+        nut_length_mismatch = False
         if isinstance(latest_dir, Path):
             nut_path = latest_dir / "nut"
             if nut_path.exists():
                 nut_candidate = FoamAgentExecutor._read_openfoam_scalar_field(nut_path)
                 if len(nut_candidate) == len(cxs):
                     nut_vals = nut_candidate
+                    nut_source = "staged_latest_dir"
+                    nut_fallback_activated = False
+                else:
+                    nut_source = "length_mismatch"
+                    nut_length_mismatch = True
+        key_quantities["duct_flow_nut_source"] = nut_source
+        key_quantities["duct_flow_nut_fallback_activated"] = nut_fallback_activated
+        key_quantities["duct_flow_nut_length_mismatch"] = nut_length_mismatch
 
         # Streamwise-mid sampling: case-gen uses x ∈ [0, 5L=5], y ∈ [0, 0.5];
         # mid-plane x_target=2.5 sits well past inlet entry length and well

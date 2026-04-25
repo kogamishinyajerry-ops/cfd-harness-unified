@@ -396,3 +396,78 @@ class TestUBulkDyWeighted:
         u_bulk = kq["duct_flow_U_bulk"]
         f_expected = 8.0 * tau_w / (1.0 * u_bulk ** 2)
         assert kq["friction_factor"] == pytest.approx(f_expected, rel=1e-9)
+
+
+class TestNutAuditKeys:
+    """DEC-V61-066 Codex R1 finding #2 regression.
+
+    The extractor uses (ν + ν_t)·du/dy for τ_w, but the postprocess
+    copy list (`_copy_postprocess_fields`) historically did not stage
+    `nut`. Real turbulent runs would silently fall back to molecular-
+    only ν without surfacing the path divergence — same V61-063 R2
+    audit-key failure class. Verify the fix:
+      a) nut is in field_files
+      b) extractor stamps duct_flow_nut_{source,fallback_activated,
+         length_mismatch} on every run
+      c) fallback flag flips correctly with/without staged nut file
+    """
+
+    def test_nut_in_postprocess_field_files(self):
+        """`nut` must be in the staged-fields list so docker→host copy
+        carries the turbulent-viscosity field for the extractor."""
+        import inspect
+        source = inspect.getsource(
+            FoamAgentExecutor._copy_postprocess_fields
+        )
+        assert '"nut"' in source, (
+            f"`nut` missing from _copy_postprocess_fields field_files. "
+            f"R1 F#2 fix not landed."
+        )
+
+    def test_audit_keys_stamped_on_every_run(self):
+        cells = _build_minimal_extractor_input()
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=None,
+        )
+        assert "duct_flow_nut_source" in kq
+        assert "duct_flow_nut_fallback_activated" in kq
+        assert "duct_flow_nut_length_mismatch" in kq
+
+    def test_fallback_flag_true_when_no_latest_dir(self):
+        """latest_dir=None (MOCK / pre-extractor stage) ⇒ fallback path."""
+        cells = _build_minimal_extractor_input()
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=None,
+        )
+        assert kq["duct_flow_nut_fallback_activated"] is True
+        assert kq["duct_flow_nut_source"] == "absent"
+        assert kq["duct_flow_nut_length_mismatch"] is False
+
+    def test_fallback_flag_false_when_nut_staged(self, tmp_path):
+        """Staged nut file with matching length ⇒ no fallback, source
+        reads `staged_latest_dir`."""
+        cells = _build_minimal_extractor_input()
+        n_cells = len(cells["cxs"])
+        # Synthesize a minimal OpenFOAM-style scalar field file with one
+        # nut value per cell. _read_openfoam_scalar_field expects the
+        # internalField nonuniform List<scalar> layout used elsewhere.
+        nut_lines = [f"{n_cells}\n", "(\n"]
+        nut_lines.extend(f"{0.001 * (i + 1)}\n" for i in range(n_cells))
+        nut_lines.append(")\n")
+        nut_path = tmp_path / "nut"
+        nut_path.write_text("".join(nut_lines))
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=tmp_path,
+        )
+        assert kq["duct_flow_nut_fallback_activated"] is False
+        assert kq["duct_flow_nut_source"] == "staged_latest_dir"
+        assert kq["duct_flow_nut_length_mismatch"] is False
