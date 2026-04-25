@@ -8462,10 +8462,12 @@ mergePatchPairs
             and task_spec.Re is not None
             and task_spec.Re >= 2300
         ):
-            # Duct flow detected; no dedicated extractor yet (queued as
-            # P6-TD-003). Emit producer flags so audit surfaces can
-            # distinguish "duct pending" from "flat plate Spalding".
-            key_quantities["duct_flow_extractor_pending"] = True
+            # DEC-V61-066 A.2: Type II multi-observable duct extraction.
+            # Replaces pending-flag stub; produces friction_factor (PRIMARY)
+            # + friction_velocity_u_tau + bulk_velocity_ratio_u_max +
+            # log_law_inner_layer_residual. Geometry mismatch (2D thin-slice
+            # channel vs gold AR=1 3D duct) is documented in extractor
+            # docstring and surfaced via duct_flow_extractor_path audit key.
             hd = (task_spec.boundary_conditions or {}).get("hydraulic_diameter")
             if hd is not None:
                 key_quantities["duct_flow_hydraulic_diameter"] = hd
@@ -8475,6 +8477,10 @@ mergePatchPairs
                 # downstream audit sees malformed-input explicitly rather
                 # than a silent-reroute masquerading as a valid measurement.
                 key_quantities["duct_flow_hydraulic_diameter_missing"] = True
+            key_quantities = self._extract_duct_flow_observables(
+                cxs, cys, u_vecs, task_spec, key_quantities,
+                czs=czs, latest_dir=latest_dir,
+            )
         elif (
             geom == GeometryType.SIMPLE_GRID
             and task_spec.Re is not None
@@ -9602,6 +9608,225 @@ mergePatchPairs
             key_quantities["cf_location_x"] = x_target
             key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
             key_quantities["cf_spalding_fallback_activated"] = cf_spalding_fallback_count > 0
+
+        return key_quantities
+
+    # ------------------------------------------------------------------
+    # Duct Flow — Type II multi-observable extractor (DEC-V61-066 A.2)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_duct_flow_observables(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+        *,
+        czs: Optional[List[float]] = None,
+        latest_dir: Optional[Path] = None,
+    ) -> Dict[str, Any]:
+        """Duct flow Type II observable extraction (DEC-V61-066 A.2).
+
+        Builds the four V61-066 observables from cell-centred OpenFOAM
+        data sampled at the streamwise mid-plane and delegates the
+        per-quantity scalar math to ``src.duct_flow_extractors``:
+
+            friction_factor              ← extract_friction_factor(τ_w, U_bulk)
+            friction_velocity_u_tau      ← extract_friction_velocity(τ_w)
+            bulk_velocity_ratio_u_max    ← extract_bulk_velocity_ratio(u_c, U_bulk)
+            log_law_inner_layer_residual ← extract_log_law_residual(u_line, u_τ, ν)
+
+        Each extractor failure is folded into a ``duct_flow_*_error``
+        audit key rather than propagated; primary friction_factor MUST
+        succeed for the case to be considered measurable.
+
+        **Geometry mismatch documented (DEC-V61-066 §3 risk_flag M1):**
+        ``_generate_steady_internal_flow`` produces a 2D thin-slice
+        channel (``hex (...) (100 80 1)`` with ncz=1, walls=top+bottom,
+        front/back empty), NOT the AR=1 3D smooth duct that the gold
+        contract (Jones 1976, f=0.0185) anchors against. For Re_h=50000
+        the 2D plane channel canonical f is Dean 1978 ≈ 0.00488 — about
+        3.8× lower than the 3D duct anchor. This extractor extracts the
+        observable HONESTLY from whatever geometry the run produced; the
+        physics-fidelity gap is the domain of the gate, NOT the extractor
+        (V61-063 R3 precedent: separate extractor correctness from physics
+        fidelity).
+
+        Caller responsibility: pass ``czs`` and ``latest_dir`` explicitly
+        when the source 3D thin-slice mesh emits Cz/nut. Unlike
+        ``_extract_flat_plate_cf`` we avoid the ``inspect`` hack — the
+        call site at line ~8460 has both names in scope already.
+
+        Args:
+            cxs/cys: cell-centre coordinates (m, normalized to L=1).
+            u_vecs: list of velocity 3-vectors (m/s).
+            task_spec: TaskSpec carrying Re + boundary_conditions.
+            key_quantities: dict to populate (returned as-is on early
+                exit to keep audit-key visibility).
+            czs: optional Cz field (None if 2D xy run).
+            latest_dir: optional path to read nut field (Reynolds-stress
+                turbulent-viscosity contribution to τ_w for k-ε / k-ω
+                runs); if None or absent, τ_w uses molecular ν only.
+
+        Returns:
+            ``key_quantities`` with the 4 observables + audit keys
+            populated (or error-folded keys on degenerate input).
+        """
+        if not cxs or not u_vecs:
+            key_quantities["duct_flow_extractor_error"] = "empty_field_data"
+            return key_quantities
+
+        from collections import defaultdict
+        from src.duct_flow_extractors import (  # noqa: PLC0415
+            DuctFlowExtractorError,
+            extract_bulk_velocity_ratio,
+            extract_friction_factor,
+            extract_friction_velocity,
+            extract_log_law_residual,
+        )
+
+        Re = float(task_spec.Re or 50000)
+        nu_val = 1.0 / Re  # nu = 1/Re convention (U_bulk=1, L=1)
+        rho = 1.0  # incompressible normalized adapter run
+
+        # Optional turbulent-viscosity field for total-stress wall gradient.
+        nut_vals: Optional[List[float]] = None
+        if isinstance(latest_dir, Path):
+            nut_path = latest_dir / "nut"
+            if nut_path.exists():
+                nut_candidate = FoamAgentExecutor._read_openfoam_scalar_field(nut_path)
+                if len(nut_candidate) == len(cxs):
+                    nut_vals = nut_candidate
+
+        # Streamwise-mid sampling: case-gen uses x ∈ [0, 5L=5], y ∈ [0, 0.5];
+        # mid-plane x_target=2.5 sits well past inlet entry length and well
+        # before outlet zeroGradient artefacts.
+        x_target = 2.5
+        unique_x = sorted({round(x, 6) for x in cxs})
+        if len(unique_x) >= 2:
+            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
+            x_tol = max(0.6 * dx, 1e-3)
+        else:
+            x_tol = 0.025  # ~half a cell at default 100-cell streamwise grid
+
+        # Group cells at x_mid by their (cy, cz, u_x, nut) tuple.
+        cross_section: List[Tuple[float, Optional[float], float, float]] = []
+        for i in range(min(len(cxs), len(cys), len(u_vecs))):
+            if abs(cxs[i] - x_target) < x_tol:
+                cz_val = czs[i] if czs is not None else None
+                nut_val = nut_vals[i] if nut_vals is not None else 0.0
+                cross_section.append((cys[i], cz_val, u_vecs[i][0], nut_val))
+
+        if len(cross_section) < 2:
+            key_quantities["duct_flow_extractor_error"] = (
+                f"insufficient_cells_at_x={x_target}: {len(cross_section)} found"
+            )
+            return key_quantities
+
+        # ----- τ_w via wall-normal gradient at y=0 (skip wall cells) -----
+        # On a 2D thin-slice run, all cells at x_mid sit on the symmetry
+        # plane (cz≈0.05) so we group only by cy. Top wall (y=0.5) is
+        # ignored — pick bottom wall (y=0) for the canonical extraction
+        # to mirror flat-plate convention.
+        y_sorted = sorted(cross_section, key=lambda item: item[0])
+        # Skip wall cells with U≈0 (no-slip). Wall-adjacent interior cell
+        # is the first entry with |u_x| > 1e-4 — same threshold as flat
+        # plate extractor (V61-063 R3 precedent).
+        interior = [(y, u, nut) for y, _, u, nut in y_sorted if abs(u) > 1e-4]
+
+        if len(interior) < 2:
+            key_quantities["duct_flow_extractor_error"] = "no_interior_cells_above_wall"
+            return key_quantities
+
+        (y0, u0, n0), (y1, u1, n1) = interior[0], interior[1]
+        delta = y1 - y0
+        if abs(delta) < 1e-12:
+            key_quantities["duct_flow_extractor_error"] = "wall_grad_zero_spacing"
+            return key_quantities
+
+        du_dy = (u1 - u0) / delta
+        nut_eff = max(n0, n1, 0.0)
+        tau_w = (nu_val + nut_eff) * du_dy * rho
+        # Sign-flip audit (mirror V61-063 R2 F2 fix pattern).
+        tau_w_sign_flipped = tau_w < 0.0
+        tau_w = abs(tau_w)
+
+        # ----- U_bulk: cross-section mean u_x (uniform-cell approximation) -----
+        # 2D thin-slice ncz=1 → cell volumes are uniform in z; arithmetic
+        # mean over cy is equivalent to face-area-weighted average for
+        # this mesh topology. For a true 3D AR=1 duct refactor (V61-067
+        # candidate) this would need volume weighting.
+        u_x_values = [u for _, _, u, _ in cross_section]
+        U_bulk = sum(u_x_values) / len(u_x_values)
+        if U_bulk <= 0.0:
+            key_quantities["duct_flow_extractor_error"] = (
+                f"U_bulk_non_positive: {U_bulk}"
+            )
+            return key_quantities
+
+        # ----- u_centroid: u_x at y nearest H/2 = 0.25 (channel half-height) -----
+        H_half = 0.25
+        u_centroid_entry = min(cross_section, key=lambda item: abs(item[0] - H_half))
+        u_centroid = u_centroid_entry[2]
+
+        # ----- u_line: sorted (cy, u_x) for log-law residual fit -----
+        # On the 2D thin-slice the symmetry plane *is* the whole xy slice,
+        # so all cross-section points qualify. Pass them all; the residual
+        # extractor filters by [y+_min, y+_max] band itself.
+        u_line: List[Tuple[float, float]] = sorted(
+            ((y, u) for y, _, u, _ in cross_section),
+            key=lambda pair: pair[0],
+        )
+
+        # ----- Delegate to extractors -----
+        key_quantities["duct_flow_extractor_path"] = "wall_shear_v1"
+        key_quantities["duct_flow_extractor_x_target"] = x_target
+        key_quantities["duct_flow_extractor_n_cross_section"] = len(cross_section)
+        key_quantities["duct_flow_tau_w"] = tau_w
+        key_quantities["duct_flow_tau_w_sign_flipped"] = tau_w_sign_flipped
+        key_quantities["duct_flow_U_bulk"] = U_bulk
+
+        try:
+            f_darcy = extract_friction_factor(tau_w, U_bulk, rho=rho)
+            key_quantities["friction_factor"] = f_darcy
+        except DuctFlowExtractorError as exc:
+            key_quantities["friction_factor_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        try:
+            u_tau = extract_friction_velocity(tau_w, rho=rho)
+            key_quantities["friction_velocity_u_tau"] = u_tau
+        except DuctFlowExtractorError as exc:
+            key_quantities["friction_velocity_u_tau_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+            u_tau = None
+
+        try:
+            ratio = extract_bulk_velocity_ratio(u_centroid, U_bulk)
+            key_quantities["bulk_velocity_ratio_u_max"] = ratio
+        except DuctFlowExtractorError as exc:
+            key_quantities["bulk_velocity_ratio_u_max_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        if u_tau is not None and u_tau > 0.0:
+            try:
+                residual = extract_log_law_residual(u_line, u_tau, nu_val)
+                key_quantities["log_law_inner_layer_residual"] = residual.mean_residual
+                key_quantities["log_law_n_points_in_band"] = residual.n_points_in_band
+                key_quantities["log_law_y_plus_min_observed"] = residual.y_plus_min
+                key_quantities["log_law_y_plus_max_observed"] = residual.y_plus_max
+            except DuctFlowExtractorError as exc:
+                key_quantities["log_law_inner_layer_residual_error"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+        else:
+            key_quantities["log_law_inner_layer_residual_error"] = (
+                "skipped_u_tau_unavailable"
+            )
 
         return key_quantities
 
