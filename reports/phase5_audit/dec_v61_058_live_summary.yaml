@@ -123,7 +123,7 @@ defect_addendum:
   status_at_close: known_limitation_documented
   recommended_followup: |
     Open a follow-up DEC for high-resolution NACA0012 mesh profile
-    (proposed: V61-060, scope = mesh refinement only, reuses Stage A
+    (proposed: V61-061, scope = mesh refinement only, reuses Stage A
     gold YAML + Stage B extractors + Stage E driver verbatim).
   why_not_fix_in_this_arc: |
     Mesh refinement requires adapter-level changes to
