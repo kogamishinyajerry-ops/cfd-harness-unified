@@ -17,8 +17,9 @@ and Nu(y_other) is strictly less. We verify both:
 
   1. The extractor recovers Nu_max within numerical-stencil error.
   2. The y_at_max location matches the seeded peak.
-  3. SNR diagnostics behave (noise_floor>0 when there's variation;
-     None-snr returned for degenerate flat-Nu inputs).
+  3. Diagnostic semantics behave (profile_spread>0 when the field has
+     real variation; None peak_to_profile_spread for degenerate flat
+     inputs whose spread underflows to 0).
 """
 from __future__ import annotations
 

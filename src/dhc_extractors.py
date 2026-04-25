@@ -210,8 +210,8 @@ def extract_nu_max(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
               "y_at_max": float,         # y location of max (m)
               "y_at_max_over_L": float,  # normalized y/L
               "num_layers_used": int,    # how many y-layers contributed
-              "noise_floor": float,      # interior-layer stdev of Nu_local
-              "snr": float | None,       # value / noise_floor (None if floor==0)
+              "profile_spread": float,   # interior-layer stdev of Nu_local
+              "peak_to_profile_spread": float | None,  # value / spread (None if spread==0)
               "source": "wall_gradient_stencil_3pt_max",
             }
     """
