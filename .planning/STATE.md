@@ -25,13 +25,18 @@ pivot:
     G-6_caseprofile_risk_flags: DONE_2026-04-24_commit_88d7a8e
     G-7_retro_5th_trigger: DONE_2026-04-24_commit_f0b1c0d
     G-8_state_stamp: DONE_2026-04-24
-    G-9_opus_w2_phase_transition: pending_W2
+    G-9_opus_w2_phase_transition: DONE_2026-04-25T12:38_opus_signed_with_2_follow_up_bindings_W3_auto_install_PR_target_5_4_W4_hard_fail_PR_target_5_11
   claude_owned_w1_closed: true
   opus_signoff_w1_closed: true  # 2026-04-25 ITEM 1 + ITEM 2 + ITEM 3 all ACCEPTED
   external_blockers:
     - "G-1 · CFDJerry sign DEC-PIVOT-2026-04-22-001 in Notion Decisions DB (Pivot trigger)"
     - "DEC-POLICY-VCP-001 · CFDJerry sign first Cat 3 commitment (跨 solver apples-to-apples)"
-    - "G-9 · W2 (targeted 2026-04-28 Tuesday) Opus Gate Phase transition: Foundation-Freeze Done + P1 Active"
+    # G-9 CLOSED 2026-04-25T12:38 by Opus 4.7 — Foundation-Freeze Done + P1 Active.
+    # Attestation: ADR-002 §2.3 + .planning/decisions/g9_attestation_2026_04_25.md
+    # Follow-up bindings (Opus-attested deadlines):
+    #   - W3 auto-install PR (target ≤ 2026-05-04): A.1 exec/eval logger + A.2 verbatim "Most likely fixes:" + A.5 bootstrap-pair lock text + B-Q3 conftest autouse OFF + B-Q4 dedup cap + B-Q5 footnote
+    #   - W4 hard-fail toggle PR (target ≤ 2026-05-11): A13 sys.modules pollution watchdog + A18 incident.jsonl rollback counter (14-day rolling)
+    # Risk-buffer: ≥5 day dogfood window between W3 PR and W4 PR (5/4 → ≥5/9)
     - "ADR-002 runtime layer draft · due 2026-04-28 23:59 (missed deadline auto-triggers RETRO-V61-001 trigger #3)"
 ---
 

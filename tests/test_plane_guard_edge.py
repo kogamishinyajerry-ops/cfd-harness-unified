@@ -363,6 +363,188 @@ def test_a10_child_process_inherits_guard_behavior(ctx_method):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# B-Q4 · WARN-mode dedup cap (defensive memory bound)
+# ---------------------------------------------------------------------------
+
+
+def test_b_q4_dedup_cap_logs_and_clears(caplog):
+    """install_guard(max_dedup_entries=N): on overflow, log "dedup cap hit"
+    + clear set + accept new entries (Opus G-9 follow-up B-Q4)."""
+    uninstall_guard()
+    caplog.set_level(logging.WARNING, logger="src._plane_guard")
+    install_guard(Mode.WARN, max_dedup_entries=3)
+    try:
+        finder = next(
+            (f for f in sys.meta_path if isinstance(f, PlaneGuardFinder)),
+            None,
+        )
+        assert finder is not None
+        # Generate 4 distinct violations to force a cap-hit on the 4th.
+        violations = [
+            ("src.foam_agent_adapter", "src.result_comparator"),
+            ("src.foam_agent_adapter", "src.metrics"),
+            ("src.cylinder_strouhal_fft", "src.result_comparator"),
+            ("src.airfoil_surface_sampler", "src.metrics"),
+        ]
+        for source, target in violations:
+            fake_spec = ModuleSpec(name=source, loader=None)
+            exec_globals = {
+                "__spec__": fake_spec,
+                "__name__": source,
+                "_finder": finder,
+                "_target": target,
+            }
+            with strict_scope():
+                exec(
+                    "_finder.find_spec(_target)",
+                    exec_globals,
+                )
+        records = [r for r in caplog.records if r.name == "src._plane_guard"]
+        # Expect 4 violation logs + 1 dedup_cap_hit notice = 5
+        cap_hit_records = [
+            r for r in records
+            if json.loads(r.getMessage()).get("contract_name") == "dedup_cap_hit"
+        ]
+        assert len(cap_hit_records) == 1, (
+            f"Expected exactly 1 dedup_cap_hit notice, got {len(cap_hit_records)}"
+        )
+        cap_payload = json.loads(cap_hit_records[0].getMessage())
+        assert cap_payload["cap"] == 3
+    finally:
+        uninstall_guard()
+
+
+def test_b_q4_install_rejects_invalid_cap():
+    """max_dedup_entries < 1 must raise ValueError at install time."""
+    uninstall_guard()
+    with pytest.raises(ValueError):
+        install_guard(Mode.WARN, max_dedup_entries=0)
+    with pytest.raises(ValueError):
+        install_guard(Mode.WARN, max_dedup_entries=-5)
+
+
+# ---------------------------------------------------------------------------
+# Codex Open Q 1 · ON-mode concurrent imports thread-safety
+# ---------------------------------------------------------------------------
+
+
+def test_on_mode_concurrent_find_spec_no_corruption():
+    """ON-mode: concurrent finder.find_spec across threads — no
+    corruption, all forbidden calls raise. Codex post-merge open
+    question 1: ON-mode concurrent imports were not previously
+    thread-safety tested (only WARN dedup + install/uninstall were)."""
+    uninstall_guard()
+    install_guard(Mode.ON)
+    try:
+        finder = next(
+            (f for f in sys.meta_path if isinstance(f, PlaneGuardFinder)),
+            None,
+        )
+        assert finder is not None
+
+        # Use distinct fake-source modules so each thread generates a
+        # unique forbidden-import call without contention on a single
+        # cache key. All threads target the same Evaluation module to
+        # cross plane boundary (Execution → Evaluation).
+        sources = [
+            "src.foam_agent_adapter",
+            "src.cylinder_strouhal_fft",
+            "src.airfoil_surface_sampler",
+            "src.cylinder_centerline_extractor",
+            "src.plane_channel_uplus_emitter",
+            "src.wall_gradient",
+        ]
+        target = "src.result_comparator"
+        raised: list[bool] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def worker(source: str):
+            fake_spec = ModuleSpec(name=source, loader=None)
+            exec_globals = {
+                "__spec__": fake_spec,
+                "__name__": source,
+                "_finder": finder,
+                "_target": target,
+            }
+            try:
+                for _ in range(20):
+                    try:
+                        with strict_scope():
+                            exec(
+                                "_finder.find_spec(_target)",
+                                exec_globals,
+                            )
+                        with lock:
+                            raised.append(False)
+                    except LayerViolationError:
+                        with lock:
+                            raised.append(True)
+            except BaseException as e:  # noqa: BLE001
+                with lock:
+                    errors.append(e)
+
+        threads = [threading.Thread(target=worker, args=(s,)) for s in sources]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+        for t in threads:
+            assert not t.is_alive(), "Thread deadlocked"
+        assert not errors, f"Thread errors: {errors}"
+        # All 6 × 20 = 120 calls should have raised (ON mode, no dedup).
+        assert len(raised) == 120
+        assert all(raised), "Some calls did not raise — ON-mode regression"
+    finally:
+        uninstall_guard()
+
+
+# ---------------------------------------------------------------------------
+# Codex Open Q 5 · Cold-start vs warm-path perf separation
+# ---------------------------------------------------------------------------
+
+
+def test_a4_perf_cold_start_separated(perf_guard):
+    """Codex post-merge open Q 5: §2.6 cold-start budget should be
+    measured separately. First-call perf may include thread-local
+    init etc.; warm-call perf is the steady state."""
+    finder = next(
+        (f for f in sys.meta_path if isinstance(f, PlaneGuardFinder)),
+        None,
+    )
+    assert finder is not None
+
+    # Cold call: first-ever find_spec since fresh install.
+    t0 = time.perf_counter_ns()
+    finder.find_spec("src.foam_agent_adapter")
+    cold_us = (time.perf_counter_ns() - t0) / 1000.0
+
+    # Warm calls.
+    iterations = 500
+    samples: list[float] = []
+    for _ in range(iterations):
+        t0 = time.perf_counter_ns()
+        finder.find_spec("src.foam_agent_adapter")
+        samples.append((time.perf_counter_ns() - t0) / 1000.0)
+    samples.sort()
+    warm_p95 = samples[int(0.95 * len(samples))]
+    warm_median = samples[len(samples) // 2]
+
+    # Cold-start budget per §2.6: ≤ 2 ms (generous; one-time cost).
+    assert cold_us < 2000.0, f"Cold-start {cold_us:.2f} µs exceeds 2 ms"
+    # Warm budget per §2.6 implicit guidance ≤ 100 µs p95 (same as A4).
+    assert warm_p95 < 100.0, (
+        f"Warm find_spec p95 {warm_p95:.2f} µs exceeds 100 µs "
+        f"(median {warm_median:.2f} µs)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# A12 bootstrap purity AST walk (parametrized)
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.parametrize(
     "module_name",
     ["_plane_assignment", "_plane_guard"],

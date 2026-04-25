@@ -188,8 +188,11 @@ def _frame_limit() -> int:
 
 _STATE_LOCK = threading.Lock()
 _INSTALLED_FINDER: Optional["PlaneGuardFinder"] = None
-# Per-process dedup set for WARN mode (§2.3 R-new-2).
+# Per-process dedup set for WARN mode (§2.3 R-new-2). Bounded by
+# ``max_dedup_entries`` on install; exceeded → log "dedup cap hit"
+# and clear (Opus G-9 follow-up B-Q4 explicit-cap defensive guard).
 _DEDUP_KEYS: set[Tuple[str, str, str]] = set()
+_DEDUP_MAX_ENTRIES = 10_000  # default; overridden via install_guard kwarg
 # strict_scope nesting depth (per-thread).
 _STRICT_DEPTH = threading.local()
 
@@ -247,10 +250,12 @@ def _frame_module_name(frame: object) -> Optional[str]:
     return name if name else None
 
 
-def _resolve_source_plane(start_frame: object) -> Tuple[Optional[Plane], Optional[str], bool]:
+def _resolve_source_plane(
+    start_frame: object,
+) -> Tuple[Optional[Plane], Optional[str], bool, bool]:
     """Walk frames from ``start_frame`` up to the limit looking for an ``src.*`` caller.
 
-    Returns ``(plane, module_name, found_test_frame)``:
+    Returns ``(plane, module_name, found_test_frame, saw_unmapped_dynamic)``:
       * ``plane`` — first ``src.*`` plane encountered, or ``None`` if
         the walk reaches the limit / stack top without a hit (treat as
         external; permissive fallback per ADR-002 §2.1).
@@ -260,6 +265,11 @@ def _resolve_source_plane(start_frame: object) -> Tuple[Optional[Plane], Optiona
         intentionally continues past the first ``src.*`` hit so that a
         fixture chain ``tests.conftest → src.x → src.y`` still grants
         test scope.
+      * ``saw_unmapped_dynamic`` — ``True`` if any frame had truly
+        empty globals (no ``__spec__``, no ``__name__``); typical of
+        ``exec()`` / ``eval()`` injected scopes. Draft-rev3 minor #1
+        uses this to log an external_dynamic_import WARN observability
+        event when the walk exits without a ``src.*`` hit.
     """
     limit = _frame_limit()
     frame = start_frame
@@ -267,10 +277,21 @@ def _resolve_source_plane(start_frame: object) -> Tuple[Optional[Plane], Optiona
     src_plane: Optional[Plane] = None
     src_name: Optional[str] = None
     found_test = False
+    saw_unmapped_dynamic = False
 
     while frame is not None and walked < limit:
         name = _frame_module_name(frame)
-        if name is not None:
+        if name is None:
+            # Frame had neither __spec__ nor __name__ set — typical of
+            # exec()/eval() with truly empty globals. Walk-internal
+            # importlib frames also report None here (their __name__
+            # exists but is `_frozen_importlib_external` etc., NOT
+            # None). The None signal therefore specifically picks out
+            # the dynamic-injection case.
+            f_globals = getattr(frame, "f_globals", None)
+            if f_globals is not None and not f_globals.get("__name__"):
+                saw_unmapped_dynamic = True
+        else:
             if not found_test and _TEST_ALLOWLIST_RE.match(name):
                 found_test = True
             if src_plane is None and name.startswith("src."):
@@ -281,12 +302,88 @@ def _resolve_source_plane(start_frame: object) -> Tuple[Optional[Plane], Optiona
         frame = getattr(frame, "f_back", None)
         walked += 1
 
-    return src_plane, src_name, found_test
+    return src_plane, src_name, found_test, saw_unmapped_dynamic
+
+
+def _emit_external_dynamic_import_warning(*, target_module: str) -> None:
+    """Log an external dynamic-import observability event.
+
+    Draft-rev3 minor #1: when ``exec()`` / ``eval()`` scopes with empty
+    globals dynamically import an ``src.*`` module from outside the
+    project, classify as ``<external>`` (permissive — do not raise) but
+    surface a WARN-level structured-JSON line via the
+    ``src._plane_guard.external_dynamic_import`` sub-logger so the
+    bypass route is auditable rather than silent.
+    """
+    log_record = {
+        "incident_id": str(uuid.uuid4()),
+        "source_module": "<external_dynamic>",
+        "target_module": target_module,
+        "contract_name": "external_dynamic_import",
+        "severity": "dynamic_external",
+    }
+    logging.getLogger(
+        "src._plane_guard.external_dynamic_import"
+    ).warning(json.dumps(log_record))
 
 
 # ---------------------------------------------------------------------------
 # Violation message format (stable; A7b log schema parses these fields)
 # ---------------------------------------------------------------------------
+
+
+# ADR-002 §2.5 verbatim message format — AC-A9 mandates the "Most
+# likely fixes:" section. Suggestions are derived from the contract
+# name so the dev sees the canonical fix path for the specific
+# forbidden pair rather than a generic prose blob.
+_FIX_SUGGESTIONS: Dict[str, Tuple[str, str, str]] = {
+    "execution-never-imports-evaluation": (
+        "read the comparator output from an ExecutionResult artifact field "
+        "rather than invoking the comparator directly from Execution.",
+        "move the needed logic down to src.models (shared types) if the "
+        "helper is pure type logic.",
+        "if this is a legitimate test, mark the caller file with a tests/ "
+        "prefix or use src._plane_guard.strict_scope() in reverse for the "
+        "self-test pathway.",
+    ),
+    "evaluation-never-imports-execution": (
+        "read the execution artifact via ExecutionResult fields rather "
+        "than importing the executor module directly from Evaluation.",
+        "move shared scaffolding (e.g. solver-log shape) to src.models so "
+        "Evaluation can consume the type without depending on Execution.",
+        "if this is a legitimate test, mark the caller file with a tests/ "
+        "prefix or use src._plane_guard.strict_scope() to assert from a "
+        "self-test.",
+    ),
+    "knowledge-no-reverse-import": (
+        "Knowledge Plane is downstream-only; replace this import with the "
+        "read-only view or write-only event interface defined in "
+        "src.knowledge_db.",
+        "if you need a richer Knowledge → Control coupling, open an ADR "
+        "amendment — the four-plane invariant prohibits the reverse edge "
+        "without an explicit governance decision.",
+        "if this is a legitimate test, mark the caller file with a tests/ "
+        "prefix or use src._plane_guard.strict_scope().",
+    ),
+    "models-stays-pure": (
+        "src.models is the type-only escape hatch — keep it dependency-free. "
+        "If the helper needs runtime logic, host it in the consuming plane.",
+        "if the helper is pure types, place it in src.models directly "
+        "rather than importing from another plane into models.",
+        "if this is a legitimate test, mark the caller file with a tests/ "
+        "prefix or use src._plane_guard.strict_scope().",
+    ),
+    "plane-guard-bootstrap-purity": (
+        "Bootstrap modules (src._plane_assignment, src._plane_guard) MUST "
+        "stay stdlib-only to avoid meta_path finder self-recursion. Refactor "
+        "the dependency to keep the leaf bootstrap.",
+        "if you genuinely need a bootstrap helper, open ADR-002 v1.1 — the "
+        "v1.0 single-pair invariant locks bootstrap unit to exactly two "
+        "files (Draft-rev4 R-new-3).",
+        "if this is a legitimate test, mark the caller file with a tests/ "
+        "prefix or use src._plane_guard.strict_scope().",
+    ),
+}
 
 
 def _format_violation_message(
@@ -297,12 +394,32 @@ def _format_violation_message(
     target_plane: str,
     contract_name: str,
 ) -> str:
+    fixes = _FIX_SUGGESTIONS.get(
+        contract_name,
+        (
+            "review ADR-001 §2.1 plane assignment to confirm both modules' "
+            "planes are correctly classified.",
+            "if a new plane crossing is genuinely required, open an ADR "
+            "amendment rather than working around the contract.",
+            "if this is a legitimate test, mark the caller file with a "
+            "tests/ prefix or use src._plane_guard.strict_scope().",
+        ),
+    )
+    # ADR-002 §2.5 message format uses Title-case plane names in the
+    # user-facing string. Canonical lowercase ``Plane.value`` is
+    # preserved on the exception instance attributes and structured
+    # log JSON for downstream-tool stability.
     return (
         f"runtime plane-crossing import forbidden.\n"
-        f"  source module: {source_module} ({source_plane} plane)\n"
-        f"  target module: {target_module} ({target_plane} plane)\n"
+        f"  source module: {source_module} ({source_plane.capitalize()} plane)\n"
+        f"  target module: {target_module} ({target_plane.capitalize()} plane)\n"
         f"  rule: {contract_name}\n"
-        f"  authority: ADR-001 §2.2 · SYSTEM_ARCHITECTURE v1.0 §2"
+        f"  authority: ADR-001 §2.2 · SYSTEM_ARCHITECTURE v1.0 §2\n"
+        f"\n"
+        f"Most likely fixes:\n"
+        f"  (a) {fixes[0]}\n"
+        f"  (b) {fixes[1]}\n"
+        f"  (c) {fixes[2]}"
     )
 
 
@@ -350,7 +467,9 @@ class PlaneGuardFinder(MetaPathFinder):
         except ValueError:
             return None  # No caller frame; unusual path, stay permissive.
 
-        src_plane, src_name, found_test = _resolve_source_plane(start_frame)
+        src_plane, src_name, found_test, saw_unmapped_dynamic = _resolve_source_plane(
+            start_frame
+        )
 
         # Test-allowlist: any ``tests.*`` frame in the walk grants
         # bypass UNLESS strict_scope is active (self-test pathway).
@@ -359,13 +478,25 @@ class PlaneGuardFinder(MetaPathFinder):
 
         if src_plane is None:
             # External code (no ``src.*`` frame in the walk) — permissive.
+            # Draft-rev3 minor #1 (Opus W2 Gate round-2): if at least
+            # one frame in the walk had EMPTY globals (typical of
+            # `exec()` / `eval()` injected scopes), surface this as a
+            # WARN-level observability event so external dynamic
+            # imports of `src.*` are auditable. Does NOT raise — pure
+            # logging.
+            if saw_unmapped_dynamic:
+                _emit_external_dynamic_import_warning(target_module=fullname)
             return None
 
         contract = FORBIDDEN_PAIRS.get((src_plane, target_plane))
         if contract is None:
             return None  # Allowed transition.
 
-        # Forbidden pair detected.
+        # Forbidden pair detected. Pass canonical lowercase
+        # ``Plane.value`` strings; the error message renders
+        # Title-case for user-facing display per ADR-002 §2.5; the
+        # structured-log JSON and the LayerViolationError instance
+        # attributes keep lowercase for downstream-tool stability.
         self._handle_violation(
             source_module=src_name or "<unknown>",
             source_plane=src_plane.value,
@@ -398,11 +529,26 @@ class PlaneGuardFinder(MetaPathFinder):
 
         # WARN-mode dedup by (source, target, contract) tuple — Draft-rev4
         # R-new-2 anti-flood. Each unique tuple emits exactly one log
-        # line per process lifetime.
+        # line per process lifetime, bounded by ``_DEDUP_MAX_ENTRIES``
+        # (B-Q4 defensive cap). At cap, log a "dedup cap hit" notice
+        # and clear so subsequent unique violations are still
+        # observable rather than silently dropped.
         key = (source_module, target_module, contract_name)
         with _STATE_LOCK:
             if key in _DEDUP_KEYS:
                 return
+            if len(_DEDUP_KEYS) >= _DEDUP_MAX_ENTRIES:
+                logging.getLogger("src._plane_guard").warning(
+                    json.dumps({
+                        "incident_id": str(uuid.uuid4()),
+                        "source_module": "<dedup_cap>",
+                        "target_module": "<dedup_cap>",
+                        "contract_name": "dedup_cap_hit",
+                        "severity": "warn",
+                        "cap": _DEDUP_MAX_ENTRIES,
+                    })
+                )
+                _DEDUP_KEYS.clear()
             _DEDUP_KEYS.add(key)
 
         # A7b structured log payload (5 required fields, extensions
@@ -422,7 +568,11 @@ class PlaneGuardFinder(MetaPathFinder):
 # ---------------------------------------------------------------------------
 
 
-def install_guard(mode: str = Mode.ON) -> Optional[PlaneGuardFinder]:
+def install_guard(
+    mode: str = Mode.ON,
+    *,
+    max_dedup_entries: int = 10_000,
+) -> Optional[PlaneGuardFinder]:
     """Install the finder at ``sys.meta_path[0]`` if not already present.
 
     ``Mode.OFF`` is a no-op (returns ``None``) for caller symmetry —
@@ -430,9 +580,20 @@ def install_guard(mode: str = Mode.ON) -> Optional[PlaneGuardFinder]:
     Repeat ``install_guard`` calls return the existing finder; the
     mode is **not** updated by repeat calls (uninstall first if you
     need to change mode).
+
+    ``max_dedup_entries`` (Opus G-9 follow-up B-Q4) bounds the WARN-mode
+    dedup set so a long-lived prod process cannot accumulate
+    unbounded memory on novel violation tuples. Default 10000 is
+    ~100× expected steady-state (~100 unique tuples). On cap-hit a
+    "dedup_cap_hit" event is logged and the set is cleared so
+    subsequent unique violations are still observable.
     """
     Mode._validate(mode)
-    global _INSTALLED_FINDER
+    if max_dedup_entries < 1:
+        raise ValueError(
+            f"max_dedup_entries must be >= 1, got {max_dedup_entries}"
+        )
+    global _INSTALLED_FINDER, _DEDUP_MAX_ENTRIES
     with _STATE_LOCK:
         if mode == Mode.OFF:
             return None
@@ -441,6 +602,7 @@ def install_guard(mode: str = Mode.ON) -> Optional[PlaneGuardFinder]:
         finder = PlaneGuardFinder(mode=mode)
         sys.meta_path.insert(0, finder)
         _INSTALLED_FINDER = finder
+        _DEDUP_MAX_ENTRIES = max_dedup_entries
         return finder
 
 

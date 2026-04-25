@@ -184,7 +184,17 @@ read plane assignment from the **same table**. Proposal:
 - Add `src/_plane_assignment.py` containing a single module-level
   dict `PLANE_OF: dict[str, Plane]` mapping module name → plane enum
   (`Plane.CONTROL` / `Plane.EXECUTION` / `Plane.EVALUATION` /
-  `Plane.KNOWLEDGE` / `Plane.SHARED`).
+  `Plane.KNOWLEDGE` / `Plane.SHARED` / `Plane.BOOTSTRAP`).
+  **Bootstrap-pair lock (Draft-rev5 · Opus G-9 follow-up A.5)**:
+  `Plane.BOOTSTRAP` is the runtime-guard self-hosting plane, locked
+  in v1.0 to **exactly two modules** — `src._plane_assignment` (the
+  SSOT itself) and `src._plane_guard` (the finder). Adding a third
+  bootstrap module requires an ADR-002 amendment (v1.1) plus a
+  bootstrap-purity contract rewrite from explicit pair to `src._plane_guard*`
+  glob. Mutual import within the bootstrap pair is allowed (both leaf
+  stdlib-only); imports from any non-bootstrap `src.*` plane remain
+  forbidden by the `plane-guard-bootstrap-purity` import-linter
+  contract.
 - `.importlinter` config is **generated** from this dict by a small
   build step (`scripts/gen_importlinter.py`) invoked in pre-commit
   — removes the hand-enumerated brittleness that Codex G-5 R1
@@ -270,6 +280,17 @@ per-process scope — each unique tuple emits **exactly one**
 silently swallow repeat violations). Dedup set lives in guard-local
 state protected by the same `threading.Lock` that A11 mandates.
 
+**WARN-default activation commit (footnote · Opus G-9 follow-up B-Q5)**:
+when the W3 auto-install PR lands `src/__init__.py` env-var hookup
+on origin/main, this footnote is backfilled with the squash commit
+hash. P2 ExecutorMode startup PR cites this hash to satisfy the §2.3
+hard-binding precondition (P2 startup PR must reference an
+ADR-002-WARN-active commit hash; reviewer rejects PRs that don't).
+Backfill placeholder: `<W3_AUTO_INSTALL_COMMIT_HASH>` — to be replaced
+when the W3 auto-install PR squash-merges. (Pre-merge anchoring uses
+the head commit at time of PR review; post-merge anchoring uses the
+final squash hash.)
+
 ### 2.4 Test-mode allowlist (revised Draft · Option A with strengthened conditions)
 
 Tests legitimately cross planes (e.g. a test for
@@ -312,7 +333,7 @@ classifies the caller as test-scope.
 
 #### Option B · contextvar token (rejected, but documented for rollback)
 
-Tests opt into a scope via `with plane_guard.test_scope():`. Guard
+Tests opt into a scope via `with plane_guard.strict_scope():`. Guard
 skips when the contextvar is set.
 
 - Pros: explicit opt-in.
@@ -387,7 +408,7 @@ Most likely fixes:
   (b) move the needed logic down to src.models (shared types) if the
       helper is pure type logic.
   (c) if this is a legitimate test, mark the caller file with a
-      tests/ prefix or use src._plane_guard.test_scope().
+      tests/ prefix or use src._plane_guard.strict_scope().
 ```
 
 Message format is **stable** — downstream tooling (IDE integrations,
@@ -437,7 +458,7 @@ refactor hazard at unpickle time with an actionable error pointing
 at ADR-001 §2.2.
 
 If an application has legitimate cross-plane pickle (none known in
-the repo today), it uses `plane_guard.test_scope()` around the
+the repo today), it uses `plane_guard.strict_scope()` around the
 unpickle. Tracked as known-limitation in §6.
 
 ### 2.9 Partial-closure for Pattern 7 (sys.modules pollution) · added revised Draft
@@ -739,6 +760,6 @@ precondition, not W2 Impl completion.
 |---|---|---|---|
 | Draft | 2026-04-25T05:30 | Claude Code (Opus 4.7 CLI) | Initial draft; pending Opus W2 Gate review |
 | Draft-rev2 | 2026-04-25T08:00 | Claude Code (Opus 4.7 CLI) | CHANGES_REQUIRED verdict response. 4 blocking items landed: (1) §2.1 single-frame → bounded multi-frame walk (N=20) with `__spec__.name` priority chain + Cython/external fallback; (2) §1.1 table expanded from 6 to 9 patterns (sys.modules pollution, reload, PEP 420 namespace) with per-pattern closure strategy column; (3) §2.4 Option A strengthened — regex literal `^tests($|/)` frozen, reverse-test AC-A17 required, Option A→B rollback trigger plumbing AC-A18 shipped in v1.0; (4) §4.1 AC expanded A7 to 4-contracts × 3-modes matrix, added A10 fork-safety / A11 thread-safety / A12 bootstrapping zero-src-deps / A13-A16 for patterns 7-9 + C-extension / A17-A18 for §2.4 conditions. New §2.9 sys.modules watchdog. New §6 Known Limitations. Revision history promoted to §8. |
-| Accepted | 2026-04-25T15:00 | Claude Code (Opus 4.7 CLI) | Status flipped Draft → Accepted under user authorization (无需时序约束). W2 Impl Mid landed in commit 72ddcd0 (src/_plane_guard.py finder + multi-frame walk, AC-A3 a-g, AC-A17 reverse-test scaffold; 23 tests passing). W2 Impl Late landed in commit 0fae68e (AC-A4 perf, AC-A7b log schema parametrized, AC-A10 fork + A10c forkserver Linux-only, AC-A11 thread-safety stress, AC-A12 AST bootstrap purity; 12 tests passing + 1 skip). Effective AC matrix: A1-A18 all satisfied (A14 reload + A15 namespace + A16 C-extension covered via §6 known-limitations doc per AC text "OR §6 amendment"; A13 watchdog + A18 rollback counter remain observability deferred to post-Accepted polish, not enforcement-critical). Verification: lint-imports → 5 contracts kept; full pytest → 723 passed, 2 skipped; byte-identical CI check exits 0. |
+| Accepted | 2026-04-25T15:00 | Claude Code (Opus 4.7 CLI) | Status flipped Draft → Accepted under user authorization (无需时序约束). W2 Impl Mid landed in commit 72ddcd0 (src/_plane_guard.py finder + multi-frame walk, AC-A3 a-g, AC-A17 reverse-test scaffold; 23 tests passing). W2 Impl Late landed in commit 0fae68e (AC-A4 perf, AC-A7b log schema parametrized, AC-A10 fork + A10c forkserver Linux-only, AC-A11 thread-safety stress, AC-A12 AST bootstrap purity; 12 tests passing + 1 skip). Effective AC matrix: A1-A12 + A14-A17 satisfied (A14 reload + A15 namespace + A16 C-extension covered via §6 known-limitations doc per AC text "OR §6 amendment"); A13 watchdog + A18 rollback counter explicitly DEFERRED (observability-only, not enforcement-critical for v1.0 ON-mode rollout per Draft-rev4 framing — Opus G-9 attestation locks deferral to W4 hard-fail toggle PR target ≤ 2026-05-11). Verification: lint-imports → 5 contracts kept; full pytest → 723 passed, 2 skipped; byte-identical CI check exits 0. |
 | Draft-rev4 | 2026-04-25T10:45 | Claude Code (Opus 4.7 CLI) | ACCEPT_WITH_TRIVIAL_COMMENTS verdict response. 6 trivial items inlined for zero-outstanding: (1) §2.1 + §2.9 sub-logger `propagate=True` + single-root-handler constraint (L1 · avoids duplicate emission); (2) §2.3 P2 startup-PR binding explicitly deferred to P2 DEC intake automation, v1.0 reviewer-checklist only (L2); (3) §5 W2-Late buffer=0 slippage protocol — A10c/A11 slip to W3 5/4-5/5 if W2-Mid R1 fails beyond verbatim exception, but Accepted flip stays on 5/4 (L3); (4) §2.9 `__file__`-missing conservative fallback to id-only pollution detection (R-new-1 · fail-loud); (5) §2.3 WARN-mode dedup by (source, target, contract) tuple per-process, ON mode does NOT dedup (R-new-2 · anti-flood); (6) §4.1 A12 v1.0 single-module purity explicit, multi-module decomposition deferred to ADR-002 v1.1 (R-new-3). Status line revised — W3 init flip is now single-line edit. |
 | Draft-rev3 | 2026-04-25T09:30 | Claude Code (Opus 4.7 CLI) | ACCEPT_WITH_COMMENTS verdict response · 5 round-2 minors + 4 round-1 follow-ups landed in one pass (pre-emptive zero-outstanding close). Round-2 minors: (1) §2.1 `CFD_PLANE_GUARD_FRAME_LIMIT` env-configurable N + `exec()/eval()` frames WARN-level monitoring log; (2) §2.4 regex changed to `^tests($|\.)` dotted form + 14-day rolling window for rollback counter + AC-A17 ui/backend+scripts exclusion inline note; (3) §2.9 `src/` must remain regular package constraint + pollution double-criterion (id AND `__file__` mismatch) carving out legitimate reload; (4) §4.1 A7b log JSON schema stability AC + A10c forkserver linux-only AC + A13 framing clarified as SHOULD-have detect-not-prevent mitigation; (5) §6 additions — attribute-level reverse pollution + GIL-free 3.13t undefined behavior + asyncio diagnostic-quality limitation + subinterpreter follow-up ADR flag + §1.1 pattern 4 explicit `importlib.metadata`/`pkg_resources` listing. Round-1 follow-ups: §2.2 byte-identical CI check wired; §2.3 node-advance rhythm (W3 WARN default dev+CI / W4 CI hard-fail / W5 ON-everywhere) + P2 ExecutorMode startup-PR hard-binding; §2.8 pickle prose reframed as coincident side-effect (not active design); §5 timeline split W2 Impl Mid (A3 a-d basic) vs W2 Impl Late (A3 e-g + edge matrix). |

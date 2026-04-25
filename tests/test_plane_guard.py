@@ -149,6 +149,39 @@ def test_a3b_forbidden_execution_to_evaluation_raises(guard_on):
     assert isinstance(err, ImportError)
 
 
+def test_a9_message_format_matches_adr_002_section_2_5(guard_on):
+    """AC-A9 — error message format is verbatim §2.5: Title-case plane
+    names + 'Most likely fixes:' three-suggestion block + remediation hint
+    pointing at strict_scope (not the obsolete test_scope name)."""
+    with strict_scope():
+        try:
+            _exec_in_fake_plane(
+                "src.foam_agent_adapter",
+                "import src.result_comparator",
+            )
+        except LayerViolationError as e:
+            message = str(e)
+        else:
+            pytest.fail("LayerViolationError not raised")
+
+    # Header matches §2.5 verbatim (Title-case plane names).
+    assert "runtime plane-crossing import forbidden." in message
+    assert "src.foam_agent_adapter (Execution plane)" in message
+    assert "src.result_comparator (Evaluation plane)" in message
+    assert "rule: execution-never-imports-evaluation" in message
+    assert "authority: ADR-001 §2.2 · SYSTEM_ARCHITECTURE v1.0 §2" in message
+    # "Most likely fixes:" block (the AC-A9 verbatim requirement).
+    assert "Most likely fixes:" in message
+    assert "(a) " in message
+    assert "(b) " in message
+    assert "(c) " in message
+    # Test-scope hint must point at the implemented name (strict_scope),
+    # not the historical / obsolete test_scope() name. Codex post-merge
+    # finding 1 corrected this drift.
+    assert "strict_scope" in message
+    assert "test_scope()" not in message
+
+
 # ---------------------------------------------------------------------------
 # AC-A3 (c) · test-allowlist permits forbidden pair without strict_scope
 # ---------------------------------------------------------------------------
@@ -283,6 +316,50 @@ def test_external_caller_is_permissive(guard_on):
             "some.external.package",
             "import src.result_comparator",
         )
+
+
+def test_external_dynamic_import_emits_warn_log(guard_on, caplog):
+    """ADR-002 §2.1 Draft-rev3 minor #1 — exec()/eval() with empty
+    globals dynamically importing src.* must surface a WARN-level
+    structured-JSON line via the
+    ``src._plane_guard.external_dynamic_import`` sub-logger.
+    Permissive (no raise), but auditable. Codex post-merge finding 2
+    drove this implementation."""
+    caplog.set_level(logging.WARNING, logger="src._plane_guard")
+    sys.modules.pop("src.result_comparator", None)
+    with strict_scope():
+        # Empty globals dict — exec() frame has neither __spec__ nor
+        # __name__. No raise (would be permissive external fallback)
+        # but the sub-logger MUST emit one structured WARN line.
+        exec("import src.result_comparator", {})
+
+    records = [
+        r
+        for r in caplog.records
+        if r.name == "src._plane_guard.external_dynamic_import"
+    ]
+    assert len(records) == 1, (
+        f"Expected exactly one external_dynamic_import WARN, got "
+        f"{len(records)}"
+    )
+    payload = json.loads(records[0].getMessage())
+    assert payload["target_module"] == "src.result_comparator"
+    assert payload["source_module"] == "<external_dynamic>"
+    assert payload["contract_name"] == "external_dynamic_import"
+    assert payload["severity"] == "dynamic_external"
+    # incident_id is a UUID (36 chars).
+    assert isinstance(payload["incident_id"], str)
+    assert len(payload["incident_id"]) == 36
+
+
+def test_external_dynamic_import_logger_propagates(guard_on):
+    """Draft-rev4 L1 — sub-logger must propagate=True so root-attached
+    handlers receive the event. Single source of handler attachment."""
+    sub_logger = logging.getLogger("src._plane_guard.external_dynamic_import")
+    assert sub_logger.propagate is True, (
+        "external_dynamic_import sub-logger must propagate to root "
+        "src._plane_guard logger"
+    )
 
 
 # ---------------------------------------------------------------------------
