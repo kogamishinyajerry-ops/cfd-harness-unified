@@ -33,6 +33,12 @@ class ObservableCheck:
     abs_error: Optional[float]
     tolerance: Any
     within_tolerance: bool
+    # DEC-V61-057 Stage C: gate_status governs whether the check counts
+    # toward the overall pass-fraction verdict. "HARD_GATED" (default —
+    # backward-compatible for all existing case YAMLs) contributes;
+    # "PROVISIONAL_ADVISORY" is rendered for the user but not enforced
+    # (e.g. ψ_max when its closure-residual SNR fails).
+    gate_status: str = "HARD_GATED"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -43,6 +49,7 @@ class ObservableCheck:
             "abs_error": self.abs_error,
             "tolerance": self.tolerance,
             "within_tolerance": self.within_tolerance,
+            "gate_status": self.gate_status,
         }
 
 
