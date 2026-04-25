@@ -35,8 +35,12 @@ Stage B ships three public extractors:
 
 DEC-V61-060 R3+R4 fail-closed contract: every extractor returns ``{}``
 on shape error, malformed u_vecs (arity), or non-finite (NaN/Inf)
-inputs in field arrays OR boundary metadata, instead of crashing or
-emitting ``status: 'ok'`` with NaN value.
+inputs in field arrays or in the BOUNDARY METADATA THAT THE EXTRACTOR
+ACTUALLY CONSUMES — NOT every field on RBCBoundary. Per Codex R5
+F1-LOW: each extractor validates only the bc.* scalars it reads, so
+e.g. extract_nu_asymmetry tolerates NaN in bc.g (not consumed), while
+extract_w_max rejects it. If a future extractor consumes a new bc.*
+field, it MUST add the corresponding _is_finite guard.
 """
 from __future__ import annotations
 
