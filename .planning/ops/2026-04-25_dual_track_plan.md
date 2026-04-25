@@ -18,6 +18,7 @@ amendment_log:
   - 2026-04-25T15:10 Claude Code CLI · §3 v2 supersede (graduated severity, two-stage hooks) + §6.1 Session Bootstrap + §9.1 MP-E permanent rule per Notion Opus 4.7 OPS audit block 31
   - 2026-04-25T15:50 Claude Code CLI · frontmatter retroactive 5-field upgrade per Opus 4.7 §3 v2 audit Item 3 — structured expected_signal_source + 7-day rolling threshold + RED→GREEN transition anchor at commit 0229af9
   - 2026-04-25T16:05 Claude Code CLI · Notion round-trip · 22 blocks appended to OPS page (34dc68942bed81d88ef5f8add0d01d0a) + 15 blocks to RETRO-V61-006 (34dc68942bed813c86e3e3da4c5c3806) + 15 blocks to methodology page (34bc68942bed8189be77c703cc62d0f4) recording Phase 1/2/3 amendment landing across commits 3e8dc01 / a84948d / 1034c20
+  - 2026-04-25T16:50 Claude Code CLI · CI health sample finding · added pre_flight_check_known_issue field flagging §5#6 query workflow-vs-job-level disconnect (backend post-anchor 8/8=100% but workflow 0/35=0%); fix deferred to 5/19 PR per RETRO-V61-006 Addendum 4 (sample-only, no behavioral change)
 expected_signal_source:
   workflow_path: .github/workflows/ci.yml  # FILE PATH (not display name) — per ops_note_protocol.md §5 (a)
   job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"
@@ -33,6 +34,25 @@ signal_health_status_at_first_genuine_signal: GREEN  # transition at commit 0229
 # CI runs before 0229af9 are instrumentation-only (numpy/jinja2 missing) and
 # MUST be excluded per .planning/dogfood/2026-05-09_review_template.md Step 1a.
 signal_attestation_first_of_kind: false  # superseded by GREEN transition anchor above; retained as field for schema completeness
+pre_flight_check_known_issue:
+  status: deferred-to-5-19-PR
+  description: |
+    The pre_flight_ci_health_check_command jq pipeline reads workflow-level
+    conclusion, but the dogfood signal source is the Backend pytest job /
+    "Plane-guard WARN-mode dogfood" step. Frontend job has a pre-existing
+    pkg-lock cache-path bug producing workflow-level conclusion=failure
+    even when backend signal is GREEN. Mid-window sampling (2026-04-25T16:50,
+    35 runs): workflow-level 0/35=0% RED, but backend-job post-anchor
+    8/8=100% GREEN. The job_or_step frontmatter field exists but is not
+    queried.
+  impact_assessment: |
+    NOT impacting 5/9 dogfood review (review template Step 1 uses Gap #6
+    per-step ci_warn_pytest.log <N> passed sanity, not workflow-level
+    conclusion). NOT impacting current OPS (already ACTIVE, pre-flight
+    fires only at DRAFT→ACTIVE flip). Would falsely HARD-BLOCK any future
+    OPS authoring during this window if attempted.
+  fix_landing: 2026-05-19 W5 default flip + OPS retire same PR (Opus
+    direction-survey verdict 3 P1 scope). See RETRO-V61-006 Addendum 4.
 ---
 
 # OPS-2026-04-25-001 · Dual-Track Parallel Development Plan

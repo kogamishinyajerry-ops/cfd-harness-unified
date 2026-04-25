@@ -196,3 +196,73 @@ This locks in the dogfood-window discipline: line A's job between 2026-04-25 and
 - `.planning/dogfood/2026-05-09_review_template.md` — Step 1.5 escape rate sanity, Step 2 dedup default + `--no-dedup` diagnostic, Step 3 dedup-count basis, §4.1 Codex data-validity prompt
 - This RETRO addendum 3 — direction-survey verdicts and posture lock-in
 - (No changes to `src/_plane_guard.py` or `src/__init__.py` — writers are CORE line A SOLE and must remain frozen during dogfood window)
+
+---
+
+## Addendum 4 · CI health sampling finding · §5#6 query-field disconnect (2026-04-25T16:50)
+
+### What was sampled
+
+Per OPS-2026-04-25-001 §5#6 mandatory pre-flight rule, the canonical 7-day rolling success ratio query was executed on origin/main mid-window:
+
+```bash
+gh run list --workflow=ci.yml --branch=main --limit 35 \
+  --json conclusion,createdAt --jq '...'
+```
+
+### Result
+
+| Granularity | Success ratio | OPS §5#6 verdict |
+|---|---|---|
+| **Workflow-level** (current §5#6 query) | 0/35 = **0%** | **RED HARD BLOCK** |
+| Backend pytest job (all 35) | 8/35 = 23% | (RED if used) |
+| Backend pytest job (post-`0229af9` anchor, completed runs only) | **8/8 = 100%** | **GREEN** |
+| Frontend job | 0/35 = 0% | (pre-existing pkg-lock cache-path issue, addendum 2 documented) |
+
+### Root cause: spec/query disconnect in §5#6
+
+The OPS frontmatter encodes:
+
+```yaml
+expected_signal_source:
+  workflow_path: .github/workflows/ci.yml
+  job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"  # <-- this field exists
+pre_flight_ci_health_check_command: |
+  gh run list --workflow=ci.yml --branch=main --limit 35 \
+    --json conclusion,createdAt ...                              # <-- but query reads workflow-level only
+```
+
+The `job_or_step` field is informational; the actual query reads **workflow-level** `conclusion`. When any unrelated job in the workflow (e.g., the Frontend `tsc + vite build` job, which has a pre-existing cache-path bug) fails, workflow `conclusion=failure` even though the backend dogfood signal step passes cleanly. Result: false-positive RED that would HARD-BLOCK any future OPS authoring during this window.
+
+### Why this is NOT being fixed in static period
+
+1. **5/9 dogfood review unaffected**: review template Step 1 uses Gap #6 sanity (per-step `ci_warn_pytest.log <N> passed` check), not workflow-level conclusion. The §2.4 trigger pipeline is independent of this query.
+2. **Current OPS unaffected**: OPS-2026-04-25-001 is already ACTIVE; pre-flight check fires only at DRAFT → ACTIVE flip, not on existing OPS. The frontmatter `signal_health_status_at_first_genuine_signal: GREEN` was set manually based on backend-job inspection, correctly.
+3. **No future OPS authoring scheduled**: Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS direction 6 explicitly REJECTED OPS protocol v2 / OPS-002 authoring during this window (N=1, premature generalization).
+4. **Static period discipline**: per RETRO Addendum 3 posture lock-in, line A is in static mode through 5/9. Fixing this jq pipeline = Phase 5 commit, breaks "sole exception" status of Phase 4. Methodology bugs that don't affect signal validity are NOT cause to break static period.
+
+### How this gets fixed (deferred to 5/19 W5 default flip + OPS retire PR)
+
+The §5#6 query needs to switch from workflow-level to job-level conclusion. The fix path uses GitHub's per-run jobs API (already validated in this addendum):
+
+```bash
+# replace the §5#6 jq pipeline with a per-job query
+gh run list --workflow=ci.yml --branch=main --limit 35 \
+  --json databaseId,createdAt --jq '.[]|"\(.databaseId)\t\(.createdAt)"' \
+  | while IFS=$'\t' read -r rid created; do
+      conc=$(gh api "repos/{owner}/{repo}/actions/runs/$rid/jobs" \
+        --jq '.jobs[] | select(.name == "Backend · pytest (py3.12)") | .conclusion')
+      echo "$created $conc"
+    done \
+  | <7-day-rolling-aggregation>
+```
+
+This will be landed in the same 5/19 PR as the OPS retirement, alongside `ops_note_protocol.md` §5#6 spec text update (clarify that `job_or_step` is REQUIRED to be matched in the query, not informational). Per Opus direction-survey verdict 3 (P1, execute 5/19 same PR).
+
+### Methodology pattern proposal: MP-H (deferred candidate)
+
+The bug class is "spec field exists in frontmatter but query doesn't read it" — this is generalizable. Candidate MP-H rule: **any structured frontmatter field that the spec mandates SHOULD be exercised by every reader/checker that consumes that part of the spec; otherwise the field is decoration, and decoration drifts**. NOT promoted now (over-generalization risk, want to see if it recurs in OPS-002 / non-OPS contexts before crystallizing). Logged here to seed the next retro's pattern review.
+
+### Sample-only summary
+
+This addendum captures an observation. NO code change, NO test change, NO behavioral change. RETRO-V61-006 status remains: closed-with-three-addenda (1 = Codex R2 closeout, 2 = 40-CI-failure post-mortem + first GREEN signal, 3 = Opus direction-survey, 4 = this CI health sample finding).
