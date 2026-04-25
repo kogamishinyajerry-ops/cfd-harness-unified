@@ -1,0 +1,19 @@
+{
+  "case_id": "backward_facing_step",
+  "measured_at": "2026-04-23T08:27:52Z",
+  "duration_s": 11.047,
+  "solver_success": true,
+  "key_quantities": {
+    "U_residual_magnitude": 0.5851857319199093,
+    "reattachment_length": 1.4872168707068976
+  },
+  "comparator_passed": false,
+  "comparator_summary": "Quantity: reattachment_length | Tolerance: 10.0% | Failed: 1 deviation(s)",
+  "deviations": [
+    {
+      "quantity": "reattachment_length",
+      "actual": 1.4872168707068976,
+      "expected": 6.26
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+DEC-V61-054 R2 verification review
+Repo: /Users/Zhuanz/Desktop/cfd-harness-unified
+Target commit: 83f1161a6aae8fcf2f6a0a90b652f26a66244427
+Scope: src/result_comparator.py, src/metrics/_comparator_wrap.py, src/metrics/registry.py, src/metrics/residual.py, tests/test_metrics/test_pointwise_integrated.py
+
+VERDICT: APPROVE_WITH_COMMENTS
+
+Findings
+
+COMMENT [src/metrics/_comparator_wrap.py:41] / [src/result_comparator.py:193]
+The R1 blocker is fixed for the repo's real numeric dict-based `reference_values`, but the new wrapper docstring still overstates parity slightly. `_extract_first_reference_scalar()` only accepts numeric values and can coerce bare numeric entries, while `ResultComparator._compare_scalar()` still treats any non-`None` recognized value as comparable and still assumes each entry is a dict. Direct probes show `{"value": "one"}` still raises `TypeError` in the comparator and `[1.0]` still raises `AttributeError` before the wrapper can help. This is non-blocking for DEC-V61-054 because:
+- `knowledge/schemas/gold_standard_schema.json` requires `reference_values[*]` to be objects.
+- A scan of `knowledge/gold_standards/*.yaml` found 0 non-dict entries, 0 non-numeric recognized scalar values, and 0 entries carrying multiple recognized scalar keys.
+The fix should therefore be read as "wrapper and comparator now agree for the supported numeric dict shapes used in this repo", not literally "any heterogeneous shape".
+
+Review summary
+
+1. R1 finding #1 is fixed on supported shapes.
+   - Shared `REF_SCALAR_KEYS` now lives at [src/result_comparator.py:33].
+   - `_compare_scalar()` now walks those keys in order for each entry and still stops at the first entry that yields a recognized scalar [src/result_comparator.py:193-218].
+   - `_extract_first_reference_scalar()` now imports the same tuple and walks all entries in order [src/metrics/_comparator_wrap.py:38-58].
+   - The specific R1 repro now behaves consistently on both sides:
+     `reference_values=[{"u": 2.0}, {"value": 1.0}]`, `actual=1.0`, `tolerance=0.1`
+     -> first recognized scalar is `entry[0]["u"] == 2.0`
+     -> deviation = 0.5
+     -> metric FAIL, `reference_value == 2.0`
+
+2. R1 finding #2 is fixed.
+   - `MetricsRegistry.evaluate_all()` now dispatches only the named policy entry or `None` [src/metrics/registry.py:105-113].
+   - The old whole-dict fallback at parent commit `83f1161^` line 107 leaked top-level `tolerance` into unrelated metrics.
+   - The new code stops that leak and preserves the intended "per observable name only" semantics.
+
+3. `_compare_scalar()` behavior did not regress apart from the intended key-set expansion.
+   - The prior implementation already skipped entries with no recognized scalar and only broke after the first entry that produced one.
+   - The rewrite preserves that outer-loop behavior; it just replaces the hand-unrolled key chain with `REF_SCALAR_KEYS`.
+   - The user prompt's wording "old code only checked the FIRST entry" is slightly imprecise: it only broke after the first recognized entry, not after the first list entry unconditionally.
+
+4. `REF_SCALAR_KEYS` ordering is defensible for scalar comparison.
+   - `value` stays first, preserving previous scalar precedence.
+   - Previously supported scalar keys still follow in a compatible order.
+   - `u` and `St` are newly supported in scalar comparison; adding them closes the exact mismatch that caused the R1 blocker.
+   - Live gold data scan found no entries with multiple recognized scalar keys, so this ordering does not change any existing gold pick in the current repo.
+
+5. Cross-plane import remains valid.
+   - `_comparator_wrap` importing `REF_SCALAR_KEYS` from `src.result_comparator` stays within Evaluation-plane boundaries.
+   - `uv run lint-imports` reports `Contracts: 4 kept, 0 broken`.
+
+Claim-by-claim verification
+
+Claim 1: wrapper/comparator identical scalar pick from heterogeneous `reference_values`
+- Verified TRUE for the supported repo shapes:
+  - All entries missing recognized scalar keys:
+    both sides effectively perform no comparison; `PointwiseMetric.evaluate()` returns PASS with `reference_value=None` and `deviation=None`.
+  - First entry has multiple recognized scalar keys:
+    `{"value": 1.0, "u": 2.0}` picks `value` first and PASSes when actual is `1.0`.
+  - Heterogeneous recognized keys across entries:
+    `[{u: 2.0}, {value: 1.0}]` now FAILs consistently with `reference_value == 2.0`.
+- Verified FALSE for unsupported / out-of-contract shapes:
+  - `{"value": "one"}` still raises `TypeError` in comparator path.
+  - `[1.0]` still raises `AttributeError` in comparator path.
+
+Claim 2: registry respects only per-name tolerance entries
+- Verified TRUE.
+- `None` -> `per_metric_tol is None` by inspection.
+- `{}` -> `.get(name)` returns `None`.
+- `{name: None}` -> metric receives `None`, which falls through to `observable_def.tolerance`.
+- Missing keys do not inherit the outer dict anymore.
+- A custom mapping whose `.get()` returns a sentinel is not guarded, but the public contract here is `Optional[Dict[str, Any]]`; no new regression was introduced.
+
+Claim 3: `_compare_scalar` rewrite preserved prior behavior
+- Verified TRUE.
+- Old behavior:
+  scan entries until one of the recognized keys is found, compare once, then break.
+- New behavior:
+  same scan-until-first-recognized-entry pattern, with the recognized key set centralized in `REF_SCALAR_KEYS`.
+
+Claim 4: `REF_SCALAR_KEYS` ordering `(value, u, u_plus, Nu, Cp, Cf, f, St)` is defensible
+- Verified TRUE for current repo data.
+- Why `value` first:
+  preserves the old scalar comparator's highest-precedence field.
+- Why `St` last:
+  it is newly added scalar support and does not displace pre-existing scalar precedence.
+- Gold-data regression risk:
+  none found in current `knowledge/gold_standards/*.yaml`; scan result was:
+  `multikey_count=0`, `non_dict_count=0`, `non_numeric_count=0`.
+
+Claim 5: cross-plane import validity
+- Verified TRUE.
+- Command:
+  `uv run lint-imports`
+- Result:
+  `Contracts: 4 kept, 0 broken.`
+
+Claim 6: new regression test for finding #1 expects FAIL with `reference_value == 2.0`
+- Verified TRUE.
+- Reason:
+  `REF_SCALAR_KEYS` checks `value` before `u`, but the first entry is `{"u": 2.0}` and has no `value`, so the first recognized scalar remains `u=2.0`.
+
+Verification commands
+
+1. Diff and context inspection
+   - `git show --stat --oneline --decorate 83f1161`
+   - `git show --unified=80 83f1161 -- src/result_comparator.py`
+   - `git show --unified=80 83f1161 -- src/metrics/_comparator_wrap.py`
+   - `git show --unified=80 83f1161 -- src/metrics/registry.py`
+   - `git show --unified=80 83f1161 -- src/metrics/residual.py`
+   - `git show --unified=80 83f1161 -- tests/test_metrics/test_pointwise_integrated.py`
+   - `git show 83f1161^:src/result_comparator.py | nl -ba | sed -n '180,230p'`
+   - `git show 83f1161^:src/metrics/_comparator_wrap.py | nl -ba | sed -n '30,70p'`
+   - `git show 83f1161^:src/metrics/registry.py | nl -ba | sed -n '98,116p'`
+
+2. Targeted regression tests
+   - Command:
+     `uv run pytest tests/test_metrics/test_pointwise_integrated.py`
+   - Result:
+     `15 passed in 0.04s`
+
+3. Import-plane verification
+   - Command:
+     `uv run lint-imports`
+   - Result:
+     `Contracts: 4 kept, 0 broken.`
+
+4. Direct runtime edge probes
+   - Heterogeneous dict repro:
+     `status=FAIL reference=2.0 deviation=0.49999999999975`
+   - Empty first entry:
+     `status=PASS reference=1.0 deviation=0.0`
+   - Multi-key first dict:
+     `status=PASS reference=1.0 deviation=0.0`
+   - No scalar keys anywhere:
+     `status=PASS reference=None deviation=None`
+   - String recognized scalar:
+     raised `TypeError: unsupported operand type(s) for -: 'float' and 'str'`
+   - Bare numeric list entry:
+     raised `AttributeError: 'float' object has no attribute 'get'`
+   - Registry leak repro:
+     `a PASS 0.3`
+     `b FAIL 0.05`
+
+5. Gold-data shape scan
+   - Multi-document YAML scan over `knowledge/gold_standards/*.yaml`
+   - Result:
+     `multikey_count=0`
+     `non_dict_count=0`
+     `non_numeric_count=0`
+
+Notes on verification scope
+
+- I did not rerun the full claimed suite (`622 passed, 1 skipped`).
+- I did rerun the exact touched metric test file plus direct probes for the edge cases called out in the review request.
+- Worktree is currently dirty and ahead of `origin/main`; this review was scoped to commit `83f1161` and the five files listed above.
+
+Bottom line
+
+The two R1 blocking findings are fixed correctly for the repository's supported gold-standard shapes, the new regression tests cover the intended failure modes, and I did not find a new blocking regression in `83f1161`. The only remaining note is that the parity claim in `_extract_first_reference_scalar()` is narrower than the docstring suggests because comparator-side guards for non-numeric / non-dict `reference_values` entries still do not exist.

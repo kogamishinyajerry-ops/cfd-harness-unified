@@ -1,0 +1,10 @@
+{
+  "case_id": "backward_facing_step",
+  "measured_at": "2026-04-23T09:14:08Z",
+  "duration_s": 2.086,
+  "solver_success": false,
+  "key_quantities": {},
+  "comparator_passed": null,
+  "comparator_summary": null,
+  "deviations": []
+}

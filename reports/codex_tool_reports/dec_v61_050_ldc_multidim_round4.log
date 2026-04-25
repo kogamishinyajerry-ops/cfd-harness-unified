@@ -1,0 +1,1377 @@
+2026-04-24T01:52:24.957375Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-24T01:52:24.957394Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dbd30-33fc-7792-82a7-61fea15b42c5
+--------
+user
+# Codex round-4 review — DEC-V61-050 LDC (F1-M2 clean-close gate, 2nd attempt)
+
+Round 3 returned CHANGES_REQUIRED with 1 MED + 1 LOW. Both addressed in commit **`715786e`**.
+
+## Round 3 findings — verify each fix at HEAD
+
+**Round 3 MED** — Fail-branch truth table wrong in mixed state (one eddy pass+above-noise, other noise-floor passes via coincidence). `!all_pass && any_above_noise` fired for both "genuine above-noise fail" and that mixed pass-+-noise case, printing "至少一个角涡…未通过 tolerance" which was false.
+
+Fix:
+- `comparison_report.py`: new aggregate `any_above_noise_fail = any(e.signal_above_noise AND NOT e.all_pass for e in eddies)` — true only when at least one eddy is above noise AND failed tolerance.
+- `LearnCaseDetailPage.tsx`: footer fail-branch now gated on `any_above_noise_fail`. New state matrix:
+  - `ok`: all_pass && all_above_noise → 4/4 validated
+  - `fail`: any_above_noise_fail → genuine physics deviation
+  - `noise`: otherwise (includes the mixed state — honest "some noise-floor, stop at <4/4")
+
+Truth-table simulation (5 cases including both mixed variants) matches Codex's analysis:
+```
+all pass + all above noise                  => ok
+pure noise floor (curr state)               => noise
+genuine above-noise fail                    => fail
+mixed: one pass+above, one noise-pass       => noise
+mixed: one pass+above, one above-fail       => fail
+```
+
+→ Verify: read the updated `comparison_report.py` aggregate + the new footer JS. Confirm all 5 cases in the truth table render correctly.
+
+**Round 3 LOW** — TS type for `metrics_secondary_vortices` omitted `all_above_noise`/`any_above_noise` so footer read via `as any`.
+
+Fix: extended the TS type with all 3 new fields (`all_above_noise`, `any_above_noise`, `any_above_noise_fail`) and removed the `as any` casts.
+
+→ Verify: read the TS type definition at the bottom of LearnCaseDetailPage.tsx and the footer block; confirm no `as any` remains.
+
+## Validation performed
+
+- 30/30 comparison_report tests pass
+- frontend `npx tsc --noEmit` clean
+- footer truth-table JS simulation matches Codex expected outcomes
+
+## Requested verdict
+
+`APPROVE` — arc clean-closes under v2.0 F1-M2; I'll update DEC frontmatter to `codex_verdict: APPROVE (round 4, F1-M2 clean-close)`.
+
+Or CHANGES_REQUIRED if there's still a real blocker.
+
+Format:
+```
+VERDICT: ...
+FINDINGS:
+  HIGH: ...
+  MEDIUM: ...
+  LOW: ...
+OUT_OF_SCOPE_FOLLOWUPS: ...
+```
+
+Please inspect `git show 715786e` and the current files on disk.
+
+codex
+I’m treating this as a strict review pass on `715786e` plus current HEAD, with focus on the two Round 3 findings and whether the fixes are actually complete. I’ll load the repo-specific review context, inspect the commit diff, then read the touched files and verify the truth table and TS typing claims against the code.
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/f09cfd210e21e96a0031f4d247be5f2e416d23b1/skills/using-superpowers/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+ succeeded in 0ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
+2. **Superpowers skills** — override default system behavior where they conflict
+3. **Default system prompt** — lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|review|DEC-V61-050|F1-M2|clean-close" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+57:- Symptom: coordination docs stay internally inconsistent after a governance refresh -> cause: only `plan.md` and `dev_handoff.md` were checked while `qa_report.md` kept the older baseline text -> fix: review the full coordination-doc set together when baseline wording or control-plane truth changes [Task 1][Task 3]
+63:scope: Add candidate-only C919 workstation analysis features, keep them off the main worktree until reviewed, and hand them off through GitHub + Notion so Claude Code can decide whether to adopt them.
+84:- isolated-branch, candidate commit, codex/failure_simulation_function_module, ac87a6b, 45381e7, Notion handoff, Claude Code review, cherry-pick, branch URL, commit URL, Asset Type Handoff
+158:- Missing local paths yield critical blockers; dirty git worktrees yield warning blockers and a "review local changes" next action; if no issue is detected, the scanner still returns a deterministic "prepare next task pack" next action [Task 2]
+194:- codex-cli, gpt-5.4, xhigh, fast mode, priority processing, service_tier, codex debug models, additional_speed_tiers, ~/.codex/config.toml, codex exec, codex review, cx-auto
+280:- when taking over an active repo, the user said "接手项目的开发" and "指挥Claude APP或者Claude CLI对项目进行深度开发优化" -> default to fixing the execution path and implementing, not staying in review/planning mode [Task 1][Task 2]
+281:- when control-plane review would slow execution, the user said "决策权完全绕过Kogami和Notion里的Opus 4.7" -> if this workflow comes up again, own the local execution decisions instead of waiting on Notion-side approval unless a real gate appears [Task 1][Task 2]
+312:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+328:- when naming available tools as "Codex、Claude code、Minimax", the user implicitly wanted explicit role assignment between these tool families -> future configs should assign conductor/builder/review/sync responsibilities instead of assuming a single generic agent [Task 1]
+332:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+333:- The validated four-agent split was `main` as conductor, `codex-builder` for implementation/test/bugfix, `claude-review` for architecture/risk review, and `notion-sync` for spec translation/sync summaries, with separate workspaces and handoff/status artifacts under `project_state/openclaw-live-setup/` [Task 1]
+336:- The usable routing at the end of the rollout was pragmatic: `main`, `codex-builder`, and `claude-review` ran on `claude-cli/opus-4.6`, while `notion-sync` used `deepseek/deepseek-chat`; Codex remained configured as fallback only [Task 2]
+375:- rollout_summaries/2026-04-17T09-59-05-XzK5-ai_fea_adr006_autonomous_merges_smoke_e2e_demo_gate.md (cwd=/Users/Zhuanz/20260408 AI StructureAnalysis, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T17-59-05-019d9ae1-3a62-7232-9e44-28537fac30dd.jsonl, updated_at=2026-04-18T07:10:00+00:00, thread_id=019d9ae1-3a62-7232-9e44-28537fac30dd, review note appended without changing verdict)
+379:- Review Summary, verdict unchanged, gate review note, AI-FEA-P0-10, results.vtp not visually validated, manifest contract incomplete
+384:- when defining stop conditions, the user wrote "仅在以下三类情况写 REVIEW_REQUEST 到 Notion 并停机" -> stop only for ADR changes, repeated/unknown reviewer failures, or visual/demo milestones; do not create extra pauses [Task 1]
+387:- when reviewing solver realism, the user said "CalculiX 是主求解器" -> future smoke/demo work must distinguish CI-safe stubs from a real solver path and must not over-claim a pass [Task 2]
+395:- For milestone/demo PRs, `Review Summary` and final `Verdict` must stay separate; appending a gate review note to Notion is allowed while the PR stays open [Task 3]
+400:- Symptom: CI is green but the demo gate is still not actually satisfied -> cause: the smoke test used stubs and the gate required human visual validation plus manifest-contract proof -> fix: stop at the demo gate, append a review note, and keep the PR unmerged until the human check is done [Task 2][Task 3]
+457:- git status --short --branch, 287 passed, dirty worktree, .notion-cache, .planning, __pycache__, reviewable implementation path
+465:- the user wanted a reviewable implementation path, so future similar runs should distinguish "suite green" from "ready to hand off" and clean or separate unrelated local artifacts before stopping [Task 5]
+483:- Symptom: `287 passed` but the deliverable is still messy -> cause: local artifacts and unrelated files remained in the worktree -> fix: review the diff and clean/commit only intended changes before calling the branch handoff-ready [Task 5]
+540:- `scripts/notion_sync.py` became the reusable AI-Notebooklm sync surface with `doctor`, `search`, `sync`, `writeback-phase`, `create-artifact`, `upsert-review`, and `upsert-task` commands [Task 3]
+542:- Local completion was substantial in the V4.0 rollout: retrieval eval tooling, RRF tuning, staging/UAT runbooks, README updates, Notion artifact/task/review rows, and `210 passed` regression validation [Task 4]
+553:# Task Group: cfd-harness-unified demo-first assessment and Claude Code execution briefs
+555:scope: Assess whether `cfd-harness-unified` is actually moving toward the user’s demo goal, narrow the product story toward `/learn` plus Pro Workbench, and package a Chinese Claude Code brief without making direct repo edits.
+556:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s demo-first architecture review and executor-handoff workflow, but exact failing tests, anchor cases, and runtime paths are checkout-specific.
+562:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+566:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+572:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+601:# Task Group: cfd-harness-unified governance closeout and planning gates
+603:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+604:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+610:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+620:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+630:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+634:- Opus 4.7 activation review, self-dispatch, planning-only, single-engine OpenFOAM, SU2 reference-only, CFX hold, review packet
+638:- when working this repo, the user phrased the boundary as "继续推进开发，直至需要Opus 4.7介入" -> keep executing autonomously until a real gate is reached, then stop with a ready review packet [Task 1][Task 2][Task 3]
+645:- Phase 9 must start from a bounded decision tree: keep single-engine OpenFOAM, allow reference-only external solver surfaces, or open one bounded proof slice; anything broader still needs review [Task 2]
+651:- Symptom: planning work accidentally looks like activation -> cause: Phase 9 docs/task text are not explicit enough about `Planned` vs `Active` -> fix: state planning-only mode in phase page, tasks, dashboard summary, and review packet [Task 2]
+684:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+699:- bounded_action_plan, Phase1BoundedActionPlan, supported, clarification_needed, unsupported, result_output_surface, phase1_bounded_action_plan_only, local_review_surface, workbench upstream integration, narrow Phase 1 bounded planning boundary
+705:- rollout_summaries/2026-04-02T04-41-46-kVGb-phase1_ui_distance_and_interactive_postprocess_workbench.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/02/rollout-2026-04-02T12-41-46-019d4c7f-5489-7a63-be71-48d72549d01b.jsonl, updated_at=2026-04-07T19:00:24+00:00, thread_id=019d4c7f-5489-7a63-be71-48d72549d01b, static review seed distinguished from the desired interactive workbench)
+709:- UI demo, 整个真实工作流程的UI界面, 不能只是静态UI, 自然语言交互, interactive_postprocess_workbench_v1, local_review_surface, phase1_report_review_seed_page.py, 37 passed, workflow visualization
+720:- when accepted, the user wanted one concrete next step rather than options -> end this repo’s review/acceptance slices with a single next named direction [Task 1][Task 4]
+730:- `local_review_surface/phase1_copilot_workbench.py` now consumes the real upstream `build_bounded_action_plan(...)` output, carries `action_plan_support_status` / `action_plan_note` / `action_plan_output_kind`, and should remain a local HTML-only, advisory-only surface [Task 4]
+732:- The currently implemented UI surface is still a deterministic local HTML review seed; an NL-driven postprocess cockpit belongs to a separate governed proposal such as `interactive_postprocess_workbench_v1`, not to the already-accepted static Phase 1 path [Task 5]
+741:- Symptom: a future agent overstates how close the repo is to a "real UI" -> cause: the deterministic review seed was mistaken for an interactive workbench -> fix: say clearly that the static Phase 1 chain is real and tested, but NL-triggered postprocessing and workflow control need a new governed phase [Task 5]
+745:scope: Continue AI FANTUI LogicMVP automatically from `.planning` and Notion-synced state, keep the control tower current, and use approved/no-review gate state to decide whether to keep moving.
+756:- AI FANTUI LogicMVP 控制塔, NOTION_API_KEY, gsd_notion_sync.py, prepare-opus-review, writeback timeout, stronger QA baseline, 175 tests OK, 10 demo smoke scenarios pass, 8/8 shared validation checks pass
+782:- the user’s repeated instruction was: "根据Notion上下文、开发规则，继续全自动推进，不要停止，除非需要我手动让Opus 4.6介入审查" -> default to uninterrupted autonomous execution when the gate is approved, and only interrupt for manual Opus review [Task 2][Task 3]
+865:- when reviewing the early demo, the user said "大量的文字全都放到页面次要的位置" and asked for a "简化版的拉杆" with "实时显示目前的拉杆相关的参数" -> default demo iterations to a visual-first cockpit with collapsed backstory, not prompt-first Q&A [Task 5]
+888:scope: Build and sync an independent Notion control tower for AI ControlLogicMaster, integrate it with GSD automation, and treat freeze-signoff planning review as a strict read-only acceptance gate where navigation/routing text can block acceptance.
+902:## Task 2: Upgrade the repo into a GSD-driven automated cockpit with manual Opus review pauses
+916:- rollout_summaries/2026-04-07T14-48-14-t3g6-post_phase7_final_freeze_signoff_governance_planning_review.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/07/rollout-2026-04-07T22-48-14-019d686a-5f10-79f2-9918-ff5cdc98e6aa.jsonl, updated_at=2026-04-08T15:13:06+00:00, thread_id=019d686a-5f10-79f2-9918-ff5cdc98e6aa, initial rejection then accepted rerun after README/docs routing fix)
+920:- independent planning review, do not write acceptance_audit_log.yaml, do not modify freeze_gate_status.yaml, accepted_for_review, freeze-complete, docs incomplete, README routing, docs/README.md, MILESTONE_BOARD.md
+927:- rollout_summaries/2026-04-02T16-11-48-lkTw-aplh_post_phase7_manual_review_intake_action_review.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/03/rollout-2026-04-03T00-11-48-019d4ef7-13d3-7311-a159-a08420027a5a.jsonl, updated_at=2026-04-08T12:29:35+00:00, thread_id=019d4ef7-13d3-7311-a159-a08420027a5a, manual intake accepted but explicitly not freeze approval)
+931:- FORMAL-POP-APPROVAL-20260407-002, 49 != 50, FormalPopulationExecutor, preflight_targets, manual_review_intake, accepted_for_review, pending_manual_decision, freeze-complete, checklist incomplete, freeze_gate_status hash
+933:## Task 5: Create a non-executable manual review intake request package and keep routing pointed at independent review
+937:- rollout_summaries/2026-04-02T18-05-38-tXWd-post_phase7_manual_review_intake_request_package.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/03/rollout-2026-04-03T02-05-38-019d4f5f-4b79-7e92-8037-4ad30697428d.jsonl, updated_at=2026-04-08T01:38:10+00:00, thread_id=019d4f5f-4b79-7e92-8037-4ad30697428d, markdown-only request packet plus review input)
+947:- the user asked to integrate GSD and make it "完全自动化的开发，除了需要暂停下来让我定期手动触发Opus 4.6审查" -> automate by default but preserve hard manual review pauses [Task 2]
+948:- for freeze-signoff governance review, the user required a strict independent review with no writes to freeze artifacts -> treat this as review-only until the user explicitly changes scope [Task 3]
+949:- when the user said "你是 independent approval authority… 你不是 corrected request packet 作者… 你不是 Phase 8 executor" -> preserve strict role separation between approval, review, execution, and freeze authority in this repo [Task 4]
+951:- when the request-package input said the executor "must not write manual intake state" and "must not be valid input to any CLI command" -> default manual-review-intake packaging work to markdown-only, non-mutating deliverables [Task 5]
+952:- when the user said acceptance "must not equal freeze approval" and "cannot directly enter final freeze signoff" -> always restate that `accepted_for_review` is not `freeze-complete`, even when readiness evidence looks strong [Task 3][Task 4]
+961:- In freeze-governance review, README/docs/milestone-board routing is a real acceptance criterion; stale navigation can block acceptance even when substantive planning logic is correct [Task 3]
+963:- `freeze_readiness_report.yaml` can show `formal_state: accepted_for_review`, `population_state: populated`, `validation_state: post-validated`, and `G6-E passed: true` while `freeze-readiness --dir artifacts` still fails on `Checklist Completed: Fail (Docs incomplete)`; that is planning evidence, not permission to sign off [Task 3][Task 4]
+965:- The manual review intake request package in this repo is a non-executable artifact pair: `docs/POST_PHASE7_MANUAL_REVIEW_INTAKE_REQUEST.md` and `docs/POST_PHASE7_MANUAL_REVIEW_INTAKE_REQUEST_REVIEW_INPUT.md`, with README/docs routing updated so the next step is independent review rather than manual intake or freeze [Task 5]
+972:- Symptom: a governance review package seems technically sound but still should not be accepted -> cause: operator-facing docs still route users to the wrong gate -> fix: verify README/docs index/milestone-board navigation before acceptance [Task 3]
+974:- Symptom: a repo state labeled `accepted_for_review` is treated as manual signoff complete -> cause: manual intake acceptance, pending manual decision, and freeze completion were collapsed -> fix: keep those states distinct in reports, docs, and next-step selection [Task 3][Task 4]
+975:- Symptom: a manual-review-intake packet accidentally starts behaving like an executable step -> cause: the request package, action review, and freeze flows were collapsed together -> fix: keep the packet markdown-only, keep `.aplh` state untouched, and re-read rendered README/docs routing after patching [Task 5]
+1131:- Phase 3, KnowledgeCompiler, orchestrator, TaskWizard, baseline freeze, publish_contract, diff_engine, benchmark validators, Opus review, task decomposition
+1143:- `BASELINE_MANIFEST.json` is the authoritative inventory for diff-engine work, and `publish_contract.md` plus `diff_engine.md` are the rule sources for automatic review triggers such as `EVIDENCE_EDIT` and `CHART_RULE_EDIT` [Task 4][Task 6]
+1151:- Symptom: Phase 3 planning overstates the readiness of the baseline -> cause: manifest counts or follow-up review items do not match the repo snapshot -> fix: start by reconciling the baseline inventory and missing follow-up items before decomposing new orchestrator work [Task 6]
+1208:- g3_gate, GateConfig, trigger_gate, g4_gate, g5_gate, g6_gate, tests/test_p4_07_g3_gate.py, tests/test_p4_08_g4_g6_gates.py, trigger_code_review.sh, requests, yaml, numpy, matplotlib
+1214:- rollout_summaries/2026-04-07T15-56-06-sCzN-p4_09_notion_reviews_sync.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/07/rollout-2026-04-07T23-56-06-019d68a8-8151-76c3-8c63-ea47fc4c3843.jsonl, updated_at=2026-04-07T16:09:37+00:00, thread_id=019d68a8-8151-76c3-8c63-ea47fc4c3843, Reviews DB sync with schema-aware mapping)
+1441:# Task Group: notion-cfd-harness correctness-review contract
+1443:scope: Perform read-only correctness reviews in `notion-cfd-harness` with line-cited findings only, no edits, no style commentary, and explicit handling for missing files or ambiguous paths.
+1444:applies_to: cwd=/Users/Zhuanz/Desktop/notion-cfd-harness; reuse_rule=safe for review-style tasks in this repo family, but keep file targets and findings tied to the inspected checkout.
+1446:## Task 1: Preserve the strict review-only deliverable format
+1450:- rollout_summaries/2026-04-08T17-18-40-2J04-phase3_code_review_correctness_and_edge_cases.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/09/rollout-2026-04-09T01-18-40-019d6e1a-733a-7141-80bd-cb62aa056db8.jsonl, updated_at=2026-04-08T17:18:49+00:00, thread_id=019d6e1a-733a-7141-80bd-cb62aa056db8, review contract and formatting expectations)
+1454:- read-only review, BUG WARNING OK, exact file path and line number, summary table, Do NOT refactor or change style, only report findings
+1460:- rollout_summaries/2026-04-08T16-32-28-Z8XS-phase3_correctness_review_analogy_planner_cad.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/09/rollout-2026-04-09T00-32-28-019d6df0-25d0-7081-b84e-20b46a8ea338.jsonl, updated_at=2026-04-08T16:41:56+00:00, thread_id=019d6df0-25d0-7081-b84e-20b46a8ea338, concrete defects in analogy scoring, E6 relaxation, planner coverage, and STL parsing)
+1468:- when the user asks for a review here, they mean it literally: "Do NOT refactor or change style — only flag genuine defects or missing guards" -> stay in correctness/edge-case/type-safety mode and avoid style commentary [Task 1][Task 2]
+1471:- the user said "This is a read-only review. Only report findings" -> do not edit files in this workflow [Task 1]
+1475:- The expected deliverable shape is one section per area with reviewed line ranges, `BUG / WARNING / OK` findings, exact snippets for non-OK items, and a final table `| Area | BUGs | WARNINGs | Status |` [Task 1]
+1480:- Symptom: a review answer drifts into general commentary or architecture advice -> cause: treating “review” as broad feedback instead of a defect audit -> fix: report only grounded correctness findings with file/line references [Task 1]
+1481:- Symptom: a path looks missing and the review stops there -> cause: failing to search for similarly named files first -> fix: search nearby names/locations before concluding absence, then say explicitly what was and was not found [Task 1]
+1506:- /Applications/Codex.app/Contents/Resources/codex, codex exec, codex review, codex app, codex resume, cx-auto 20, CLAUDE.md, quota exhaustion, subprocess
+1519:- Codex CLI itself is a normal local executable at `/Applications/Codex.app/Contents/Resources/codex`, and the available subprocess/session surfaces include `exec`, `review`, `resume`, and `app` [Task 2]
+1561:- 直接复制给claude code的提示词, Opus 4.6, MiniMax, 不要从零开始, 不要推翻已有优化, GitHub integration, Claude Code on the web, scan.md, implement.md, fix.md, review-local.md, Claude March 2026 usage promotion
+
+codex
+I’ve loaded the repo-specific review constraints and the review skill guidance. Next I’m reading `715786e`, then I’ll compare that diff against the current HEAD versions of the touched Python and TS files to verify the state machine and type cleanup directly.
+exec
+/bin/zsh -lc 'git show --stat --oneline --decorate=short 715786e' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+715786e (HEAD -> main) fix(ldc): DEC-V61-050 Codex round 3 fixes — 1 MED + 1 LOW
+ ui/backend/services/comparison_report.py           |  8 ++++++
+ .../src/pages/learn/LearnCaseDetailPage.tsx        | 33 +++++++++++++---------
+ 2 files changed, 28 insertions(+), 13 deletions(-)
+
+exec
+/bin/zsh -lc 'git show --unified=80 715786e -- $(rg --files | rg '"'comparison_report\\.py"'$|LearnCaseDetailPage'"\\.tsx"'$'"')" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+commit 715786e2d7d503bbd688a086f0b8660903559085
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri Apr 24 09:51:59 2026 +0800
+
+    fix(ldc): DEC-V61-050 Codex round 3 fixes — 1 MED + 1 LOW
+    
+    Round 3 verdict: CHANGES_REQUIRED. Findings:
+    
+    [MED] Footer fail-branch truth table is wrong in the mixed state.
+       Previous condition `!all_pass && any_above_noise → fail` also
+       fires when "one eddy passes above noise, the other is noise-
+       floor" — the `!all_pass` comes from the noise-floor half, not
+       from any genuine above-noise tolerance miss, but the UI still
+       renders "至少一个角涡…ψ 信号已高于墙面残差 但未通过 tolerance,"
+       which is false. Need a distinct aggregate.
+    
+    [LOW] TS type for `metrics_secondary_vortices` omits the new
+       aggregate fields; footer reads via `as any`, so typecheck no
+       longer guards the API contract.
+    
+    Round 3 fixes:
+    
+    1. [MED] comparison_report.py: add `any_above_noise_fail` aggregate —
+       `any(e.signal_above_noise AND NOT e.all_pass for e in eddies)`.
+       This is true only when at least one eddy is above noise AND missed
+       tolerance — the exact condition for "genuine physics deviation."
+    
+    2. [MED] LearnCaseDetailPage.tsx closure footer: switch `fail` branch
+       to `any_above_noise_fail`. New state matrix:
+         ok:    all_pass && all_above_noise         → 4/4 validated
+         fail:  any_above_noise_fail                → genuine deviation
+         noise: otherwise                           → includes mixed pass
+                                                      + noise-floor state
+       Simulated truth table (5 cases including both mixed variants)
+       matches Codex's analysis.
+    
+    3. [LOW] Extend TS type with `all_above_noise`, `any_above_noise`,
+       `any_above_noise_fail` + remove all `as any` reads.
+    
+    Validation:
+    - 30/30 comparison_report tests pass
+    - frontend tsc --noEmit clean
+    - footer truth-table simulation matches Codex expected outcomes
+    
+    Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/ui/backend/services/comparison_report.py b/ui/backend/services/comparison_report.py
+index 00bb263..9773d86 100644
+--- a/ui/backend/services/comparison_report.py
++++ b/ui/backend/services/comparison_report.py
+@@ -983,160 +983,168 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for
+                                 "psi_gold": vortex_gold["psi_min"],
+                                 "position_error": pos_err,
+                                 "psi_error_pct": psi_err_pct,
+                                 "position_tolerance": vortex_gold["position_tolerance"],
+                                 "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
+                                 "position_pass": pos_pass,
+                                 "psi_pass": psi_pass,
+                                 "all_pass": pos_pass and psi_pass,
+                                 "signal_to_residual_ratio": snr,
+                                 "signal_above_noise": snr is not None and snr >= 3.0,
+                             }
+                     # --- Secondary vortices BL/BR (D8) ---
+                     if secondary_gold is not None:
+                         eddy_results: list[dict] = []
+                         for eddy in secondary_gold["eddies"]:
+                             core = find_vortex_core(
+                                 psi, xs, ys,
+                                 x_window_norm=eddy["x_window_norm"],
+                                 y_window_norm=eddy["y_window_norm"],
+                                 mode=eddy["mode"],
+                             )
+                             if core is None:
+                                 continue
+                             x_m, y_m, psi_m = core
+                             pos_err = float(
+                                 ((x_m - eddy["x_gold"]) ** 2
+                                  + (y_m - eddy["y_gold"]) ** 2) ** 0.5
+                             )
+                             psi_gold_abs = abs(eddy["psi_gold"])
+                             psi_err_pct = (
+                                 100.0 * abs(psi_m - eddy["psi_gold"]) / psi_gold_abs
+                                 if psi_gold_abs > 1e-12 else 0.0
+                             )
+                             pos_pass = pos_err <= secondary_gold["position_tolerance"]
+                             psi_pass = psi_err_pct <= secondary_gold["psi_tolerance"] * 100.0
+                             # Per-eddy SNR vs wall-closure residual. Codex
+                             # round 1 MED #2: BL ψ gold is O(1e-6), wall
+                             # residual on 129² trapezoidal is O(1e-3), so
+                             # BL signal is 2000× BELOW the numerical floor —
+                             # the coordinate match is a coincidence of
+                             # argmax landing near the Ghia point, NOT a
+                             # validated physics reproduction. Expose this
+                             # so the UI can flag it honestly.
+                             snr = (
+                                 psi_gold_abs / psi_wall_residuals["max"]
+                                 if psi_wall_residuals and psi_wall_residuals["max"] > 0
+                                 else None
+                             )
+                             signal_above_noise = snr is not None and snr >= 3.0
+                             eddy_results.append({
+                                 "name": eddy["name"],
+                                 "description": eddy["description"],
+                                 "x_meas": x_m,
+                                 "y_meas": y_m,
+                                 "psi_meas": psi_m,
+                                 "x_gold": eddy["x_gold"],
+                                 "y_gold": eddy["y_gold"],
+                                 "psi_gold": eddy["psi_gold"],
+                                 "position_error": pos_err,
+                                 "psi_error_pct": psi_err_pct,
+                                 "position_pass": pos_pass,
+                                 "psi_pass": psi_pass,
+                                 "all_pass": pos_pass and psi_pass and signal_above_noise,
+                                 "signal_to_residual_ratio": snr,
+                                 "signal_above_noise": signal_above_noise,
+                             })
+                         if eddy_results:
+                             metrics_secondary_vortices = {
+                                 "eddies": eddy_results,
+                                 "position_tolerance": secondary_gold["position_tolerance"],
+                                 "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+                                 "all_pass": all(e["all_pass"] for e in eddy_results),
+                                 "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+                                 "n_total": len(eddy_results),
+                                 "all_above_noise": all(
+                                     e["signal_above_noise"] for e in eddy_results
+                                 ),
+                                 "any_above_noise": any(
+                                     e["signal_above_noise"] for e in eddy_results
+                                 ),
++                                # Codex round 3 MED: distinguish "at least one
++                                # eddy is above noise AND fails tolerance" from
++                                # "one passes above-noise + one is noise-floor".
++                                # Only the former is a genuine physics deviation.
++                                "any_above_noise_fail": any(
++                                    e["signal_above_noise"] and not e["all_pass"]
++                                    for e in eddy_results
++                                ),
+                             }
+         except Exception:
+             # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide
+             # variety of exceptions (RuntimeError, TypeError, KeyError,
+             # pyvista.core.errors.*, VTK C++ exceptions surfaced as Python
+             # RuntimeError, etc.). The D7/D8 dimensions are optional viz
+             # augmentations — a pyvista internal failure must not 500 the
+             # whole report endpoint. Broad catch is warranted here because
+             # the comparator for u_centerline (D1-D5) is a separate code
+             # path that's already run above and is not guarded by this
+             # try/except. Real programmer bugs in psi_extraction itself
+             # are caught in tests + by the module's __main__ smoke test.
+             metrics_primary_vortex = None
+             metrics_secondary_vortices = None
+             psi_wall_residuals = None
+ 
+     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
+     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
+     # Phase 7d: Richardson extrapolation + GCI over the finest 3 meshes.
+     try:
+         from ui.backend.services.grid_convergence import compute_gci_from_fixtures
+         gci = compute_gci_from_fixtures(case_id, fixture_root=_FIXTURE_ROOT)
+     except (ValueError, ImportError, OverflowError, ArithmeticError):
+         # Pathological mesh triples can still raise from deep math — the
+         # grid_convergence module already catches these internally on the
+         # documented branches, but belt-and-suspenders keeps report
+         # generation from 500'ing on a numerical corner we did not predict.
+         gci = None
+ 
+     # Verdict logic: all-pass OR tolerance met.
+     is_all_pass = metrics["n_pass"] == metrics["n_total"] and metrics["n_total"] > 0
+     majority_pass = metrics["n_pass"] >= math.ceil(metrics["n_total"] * 0.6)
+     if is_all_pass:
+         verdict, verdict_gradient, subtitle = "PASS", "#059669 0%, #10b981 100%", (
+             f"全部 {metrics['n_total']} 个 gold 点在 ±{tolerance:.1f}% 容差内。"
+         )
+     elif majority_pass:
+         verdict, verdict_gradient, subtitle = "PARTIAL", "#d97706 0%, #f59e0b 100%", (
+             f"{metrics['n_pass']}/{metrics['n_total']} 点通过；"
+             f"{metrics['n_total'] - metrics['n_pass']} 点残差为已记录物理项 "
+             f"(见 DEC-V61-030 关于 Ghia 非均匀网格 vs 均匀网格的插值误差)。"
+         )
+     else:
+         verdict, verdict_gradient, subtitle = "FAIL", "#dc2626 0%, #ef4444 100%", (
+             f"仅 {metrics['n_pass']}/{metrics['n_total']} 点通过 — "
+             f"需要诊断 (solver, mesh, 或 gold 本身)。"
+         )
+ 
+     # Renders — use Phase 7b manifest if available; else None placeholders.
+     # Codex round 1 HIGH: every manifest-supplied output path is validated to
+     # resolve inside reports/phase5_renders/ before being emitted into HTML.
+     renders_manifest = _load_renders_manifest(case_id, run_label)
+     renders_dir = _RENDERS_ROOT / case_id / timestamp
+ 
+     def _rel(key: str, default: str = "") -> str:
+         candidate: Optional[str] = None
+         if renders_manifest:
+             raw = renders_manifest.get("outputs", {}).get(key)
+             if isinstance(raw, str):
+                 validated = _safe_rel_under(raw, _RENDERS_ROOT)
+                 if validated:
+                     candidate = validated
+         if candidate is None:
+             guess = renders_dir / default
+             if guess.is_file():
+                 try:
+                     rel = str(guess.resolve().relative_to(_REPO_ROOT.resolve()))
+                     if _safe_rel_under(rel, _RENDERS_ROOT):
+                         candidate = rel
+                 except ValueError:
+                     pass
+         return candidate or ""
+ 
+     # _rel = repo-relative (PDF base_url=_REPO_ROOT resolves it).
+     # _url = browser URL — fixes "all comparison report images fail to
+     # load" when the HTML is served at /api/cases/.../comparison-report
+     # (browser otherwise resolves `reports/...` src against the URL
+     # path → /api/cases/X/runs/Y/reports/... which 404s; the working
+     # renders route is /api/cases/X/runs/Y/renders/{basename}).
+     def _url(basename: str) -> str:
+diff --git a/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx b/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
+index 95809c8..274f434 100644
+--- a/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
++++ b/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
+@@ -1811,176 +1811,180 @@ function MultiDimensionComparePanel({
+                     {eddy.all_pass ? "PASS" : "PARTIAL"}
+                   </span>
+                 </div>
+                 <p className="text-[10.5px] text-surface-500">{eddy.description}</p>
+                 <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10.5px]">
+                   <div>
+                     <div className="text-surface-500">x/L</div>
+                     <div className="mono text-surface-100">{eddy.x_meas.toFixed(4)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.x_gold.toFixed(4)}</div>
+                   </div>
+                   <div>
+                     <div className="text-surface-500">y/L</div>
+                     <div className="mono text-surface-100">{eddy.y_meas.toFixed(4)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.y_gold.toFixed(4)}</div>
+                   </div>
+                   <div>
+                     <div className="text-surface-500">ψ</div>
+                     <div className="mono text-surface-100">{eddy.psi_meas.toExponential(3)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.psi_gold.toExponential(3)}</div>
+                   </div>
+                 </div>
+                 <div className="mt-1.5 flex justify-between text-[10px]">
+                   <span className={eddy.position_pass ? "text-emerald-300" : "text-rose-300"}>
+                     pos_err {eddy.position_error.toExponential(2)} {eddy.position_pass ? "✓" : "✗"}
+                   </span>
+                   <span className={eddy.psi_pass ? "text-emerald-300" : "text-rose-300"}>
+                     |ψ|_err {eddy.psi_error_pct.toFixed(2)}% {eddy.psi_pass ? "✓" : "✗"}
+                   </span>
+                 </div>
+                 {eddy.signal_to_residual_ratio !== null && (
+                   <div className="mt-1 text-[10px]">
+                     <span className="text-surface-500">SNR: </span>
+                     <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+                       {eddy.signal_to_residual_ratio < 0.01
+                         ? eddy.signal_to_residual_ratio.toExponential(2)
+                         : eddy.signal_to_residual_ratio.toFixed(3)}×
+                     </span>
+                     <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+                   </div>
+                 )}
+               </div>
+             ))}
+           </div>
+           <p className="mono mt-2 text-[10px] text-surface-500">
+             tol: pos ≤ {data.metrics_secondary_vortices.position_tolerance.toFixed(3)} · |ψ| ≤ {data.metrics_secondary_vortices.psi_tolerance_pct.toFixed(1)}%
+           </p>
+         </div>
+       )}
+ 
+       {/* Final closure footer — honest assessment of which Ghia
+           observables are validated at what strength level. Codex round 1
+           MED #2 / HIGH: the original footer claimed FULLY_SATISFIED for
+           all 4 Ghia observables, but D8 BL/BR signals are 2-3 decades
+           below the ∫U_x dy' wall-closure residual — argmax coincidences
+           in a noise-dominated field, not validated physics. Post-fix,
+           the footer distinguishes present-but-validated vs present-but-
+           noise-dominated vs missing. */}
+       {(() => {
+         const missing: string[] = [];
+         if (!data.metrics_v_centerline) missing.push("D6 v_centerline");
+         if (!data.metrics_primary_vortex) missing.push("D7 primary vortex");
+         if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+         if (missing.length > 0) {
+           return (
+             <div className="rounded-md border border-amber-900/40 bg-amber-950/10 p-4">
+               <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-amber-300">
+                 降级模式 · 部分 Ghia 观测量缺失
+               </p>
+               <p className="text-[12px] leading-relaxed text-surface-300">
+                 本次 audit run 以下维度未返回 metrics，当前 Compare tab 仅展示已有的维度：
+                 <span className="mono block mt-1 text-amber-200">
+                   缺失: {missing.join(" · ")}
+                 </span>
+                 <span className="block mt-1 text-[11px] text-surface-400">
+                   常见原因：后端缺 pyvista 且 <span className="mono">.psi_cache</span> 未预生成（需跑 <span className="mono">python3.11 ui/backend/services/psi_extraction.py</span>）；VTK 文件缺失或格式变更；gold YAML schema 漂移导致 loader 拒绝。
+                 </span>
+               </p>
+             </div>
+           );
+         }
+-        // Codex round 2 MED: derive D8 state from signal_above_noise
+-        // aggregate (not !all_pass) so we can distinguish:
+-        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
+-        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
+-        //   (c) !all_pass && any_above_noise → genuine physics deviation
++        // Codex round 3 MED: the fail branch must only fire when there
++        // is genuinely above-noise deviation — `any_above_noise_fail` =
++        // "at least one eddy is above noise AND failed tolerance". That
++        // excludes the mixed state where one eddy passes above noise and
++        // the other is noise-floor; in that case `noise` is the honest
++        // label. State matrix:
++        //   ok:    all_pass && all_above_noise → 4/4 validated
++        //   fail:  any_above_noise_fail → genuine above-noise deviation
++        //   noise: otherwise (!all_pass && !any_above_noise_fail)
+         const d8 = data.metrics_secondary_vortices!;
+         const d8_all_pass = d8.all_pass === true;
+-        const d8_all_above_noise = (d8 as any).all_above_noise === true;
+-        const d8_any_above_noise = (d8 as any).any_above_noise === true;
+-        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
++        const d8_all_above_noise = d8.all_above_noise === true;
++        const d8_any_fail_above_noise = d8.any_above_noise_fail === true;
+         const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+-        const footer_tone = d8_all_pass && d8_all_above_noise
+-          ? "ok"
+-          : d8_noise_floor
+-            ? "noise"
+-            : "fail";
++        const footer_tone: "ok" | "noise" | "fail" =
++          d8_all_pass && d8_all_above_noise
++            ? "ok"
++            : d8_any_fail_above_noise
++              ? "fail"
++              : "noise";
+         return (
+           <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
+             <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
+               DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+             </p>
+             <p className="text-[12px] leading-relaxed text-surface-300">
+               <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+               {footer_tone === "ok" && (
+                 <span className="block mt-1">
+                   <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+                 </span>
+               )}
+               {footer_tone === "noise" && (
+                 <span className="block mt-1">
+                   <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+                 </span>
+               )}
+               {footer_tone === "fail" && (
+                 <span className="block mt-1">
+                   <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
+                 </span>
+               )}
+               <span className="block mt-1 text-[11px] text-surface-500">
+                 角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+               </span>
+             </p>
+           </div>
+         );
+       })()}
+     </section>
+   );
+ }
+ 
+ function StatBlock({
+   label,
+   subLabel,
+   value,
+   unit,
+   quantity,
+   accent,
+ }: {
+   label: string;
+   subLabel: string;
+   value: number | null;
+   unit: string;
+   quantity: string;
+   accent?: boolean;
+ }) {
+   return (
+     <div
+       className={`rounded-lg border px-5 py-4 ${
+         accent ? "border-sky-800/60 bg-sky-950/20" : "border-surface-800 bg-surface-900/40"
+       }`}
+     >
+       <p className="text-[11px] uppercase tracking-[0.14em] text-surface-500">{label}</p>
+       <p className="mono mt-3 text-[28px] font-medium leading-none text-surface-100">
+         {value === null ? "—" : value.toPrecision(4)}
+       </p>
+       <div className="mt-3 flex items-baseline justify-between text-[12px] text-surface-400">
+         <span className="mono">{quantity}</span>
+         <span>{unit || "—"}</span>
+       </div>
+       <p className="mt-2 text-[11px] leading-snug text-surface-500">{subLabel}</p>
+     </div>
+   );
+ }
+ 
+ function ToleranceBand({
+   goldValue,
+   lower,
+   upper,
+   measured,
+ }: {
+   goldValue: number;
+   tolerancePct: number;
+   lower: number;
+   upper: number;
+   measured: number | null;
+ }) {
+   // Compute a display range that includes gold, both tolerance bounds,
+@@ -2672,160 +2676,163 @@ type ComparisonReportContext = {
+     max_dev_pct: number;
+     l2: number;
+     linf: number;
+     rms: number;
+     n_pass: number;
+     n_total: number;
+     // DEC-V61-049 batch C1 — backend already computes this array in
+     // comparison_report.py:_compute_metrics (line 210) but the frontend
+     // type previously omitted it, so the pointwise bars could only be
+     // viewed via the rendered PNG. Adding it lets CompareTab render a
+     // native live chart if we want to (currently still PNG-first for
+     // simplicity; field is populated regardless).
+     per_point_dev_pct?: number[];
+   } | null;
+   // DEC-V61-050 batch 1 — v_centerline observable (Ghia Table II).
+   // Optional: null when the case has no v_centerline gold block or
+   // the audit fixture has no vCenterline.xy. For LDC post-batch-1 it
+   // is populated from the post-hoc VTK interpolation onto Ghia's 17
+   // native x points on y=0.5 horizontal centerline.
+   metrics_v_centerline?: {
+     max_dev_pct: number;
+     l2: number;
+     linf: number;
+     rms: number;
+     n_pass: number;
+     n_total: number;
+     per_point_dev_pct?: number[];
+   } | null;
+   // DEC-V61-050 batch 3: primary vortex (x_c, y_c, ψ_min) from 2D
+   // argmin of ψ. Fields match comparison_report.py exactly.
+   metrics_primary_vortex?: {
+     x_meas: number;
+     y_meas: number;
+     psi_meas: number;
+     x_gold: number;
+     y_gold: number;
+     psi_gold: number;
+     position_error: number;
+     psi_error_pct: number;
+     position_tolerance: number;
+     psi_tolerance_pct: number;
+     position_pass: boolean;
+     psi_pass: boolean;
+     all_pass: boolean;
+     signal_to_residual_ratio: number | null;
+     signal_above_noise: boolean;
+   } | null;
+   paper_primary_vortex?: {
+     source: string;
+     doi?: string;
+     short: string;
+     position_tolerance: number;
+     psi_tolerance_pct: number;
+   } | null;
+   // DEC-V61-050 batch 4: secondary corner eddies (BL + BR) from
+   // Ghia Table III cells 3-4. Mirror shape of primary_vortex but
+   // as a list so Re≥1000 TL can be added without another key.
+   metrics_secondary_vortices?: {
+     eddies: {
+       name: string;
+       description: string;
+       x_meas: number;
+       y_meas: number;
+       psi_meas: number;
+       x_gold: number;
+       y_gold: number;
+       psi_gold: number;
+       position_error: number;
+       psi_error_pct: number;
+       position_pass: boolean;
+       psi_pass: boolean;
+       all_pass: boolean;
+       signal_to_residual_ratio: number | null;
+       signal_above_noise: boolean;
+     }[];
+     position_tolerance: number;
+     psi_tolerance_pct: number;
+     all_pass: boolean;
+     n_pass: number;
+     n_total: number;
++    all_above_noise: boolean;
++    any_above_noise: boolean;
++    any_above_noise_fail: boolean;
+   } | null;
+   psi_wall_residuals?: {
+     left: number;
+     right: number;
+     bottom: number;
+     top: number;
+     max: number;
+     L: number;
+   } | null;
+   paper_secondary_vortices?: {
+     source: string;
+     doi?: string;
+     short: string;
+     position_tolerance: number;
+     psi_tolerance_pct: number;
+   } | null;
+   paper?: {
+     title: string;
+     source: string;
+     doi?: string;
+     short: string;
+     gold_count: number;
+     tolerance_pct: number;
+   } | null;
+   paper_v_centerline?: {
+     source: string;
+     doi?: string;
+     short: string;
+     gold_count: number;
+     tolerance_pct: number;
+   } | null;
+   renders: {
+     profile_png_rel?: string;
+     pointwise_png_rel?: string;
+     contour_png_rel: string;
+     residuals_png_rel: string;
+   };
+   meta?: {
+     commit_sha: string;
+     report_generated_at: string;
+   };
+   // DEC-V61-049 batch C1 — grid convergence + GCI + residual info are
+   // all already returned by comparison_report.py build_report_context
+   // (lines 516, 524-526) but were not previously surfaced in the
+   // frontend type. CompareTab now consumes them for the grid-convergence
+   // dim and the residual/iteration dim.
+   // Shapes match comparison_report.py exactly:
+   // - grid_conv row: _load_grid_convergence (line 275 at 2026-04-23)
+   // - gci: _gci_to_template_dict (line 290)
+   // - residual_info: _parse_residuals_csv (line 239)
+   grid_conv?: Array<{
+     mesh: string;
+     value: number;
+     dev_pct: number;
+     verdict: "PASS" | "WARN" | "FAIL";
+     verdict_class: "pass" | "warn" | "fail";
+   }> | null;
+   grid_conv_note?: string | null;
+   gci?: {
+     coarse_label: string;
+     coarse_n: number;
+     coarse_value: number;
+     medium_label: string;
+     medium_n: number;
+     medium_value: number;
+     fine_label: string;
+     fine_n: number;
+     fine_value: number;
+     r_21: number;
+     r_32: number;
+     p_obs: number | null;
+     f_extrapolated: number | null;
+     gci_21_pct: number | null;
+     gci_32_pct: number | null;
+     asymptotic_range_ok: boolean;
+     note: string | null;
+   } | null;
+   residual_info?: {
+     total_iter: number;
+     final_ux: number | null;
+
+exec
+/bin/zsh -lc 'rg -n "metrics_secondary_vortices|any_above_noise_fail|all_above_noise|any_above_noise|as any|至少一个角涡|4/4|noise-floor|secondary vortices|footer" -S .' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 103ms:
+codex
+`715786e` is at `HEAD`, and the diff is confined to the two files you named. I’m now verifying the exact on-disk line ranges, checking for any remaining `as any` in the TS file, and running a small state-matrix simulation to confirm the five-case footer behavior matches the new aggregates.
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/comparison_report.py | sed -n '1038,1075p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | sed -n '1888,1935p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  1038	                                "x_gold": eddy["x_gold"],
+  1039	                                "y_gold": eddy["y_gold"],
+  1040	                                "psi_gold": eddy["psi_gold"],
+  1041	                                "position_error": pos_err,
+  1042	                                "psi_error_pct": psi_err_pct,
+  1043	                                "position_pass": pos_pass,
+  1044	                                "psi_pass": psi_pass,
+  1045	                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+  1046	                                "signal_to_residual_ratio": snr,
+  1047	                                "signal_above_noise": signal_above_noise,
+  1048	                            })
+  1049	                        if eddy_results:
+  1050	                            metrics_secondary_vortices = {
+  1051	                                "eddies": eddy_results,
+  1052	                                "position_tolerance": secondary_gold["position_tolerance"],
+  1053	                                "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+  1054	                                "all_pass": all(e["all_pass"] for e in eddy_results),
+  1055	                                "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+  1056	                                "n_total": len(eddy_results),
+  1057	                                "all_above_noise": all(
+  1058	                                    e["signal_above_noise"] for e in eddy_results
+  1059	                                ),
+  1060	                                "any_above_noise": any(
+  1061	                                    e["signal_above_noise"] for e in eddy_results
+  1062	                                ),
+  1063	                                # Codex round 3 MED: distinguish "at least one
+  1064	                                # eddy is above noise AND fails tolerance" from
+  1065	                                # "one passes above-noise + one is noise-floor".
+  1066	                                # Only the former is a genuine physics deviation.
+  1067	                                "any_above_noise_fail": any(
+  1068	                                    e["signal_above_noise"] and not e["all_pass"]
+  1069	                                    for e in eddy_results
+  1070	                                ),
+  1071	                            }
+  1072	        except Exception:
+  1073	            # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide
+  1074	            # variety of exceptions (RuntimeError, TypeError, KeyError,
+  1075	            # pyvista.core.errors.*, VTK C++ exceptions surfaced as Python
+
+ succeeded in 0ms:
+  1888	            </div>
+  1889	          );
+  1890	        }
+  1891	        // Codex round 3 MED: the fail branch must only fire when there
+  1892	        // is genuinely above-noise deviation — `any_above_noise_fail` =
+  1893	        // "at least one eddy is above noise AND failed tolerance". That
+  1894	        // excludes the mixed state where one eddy passes above noise and
+  1895	        // the other is noise-floor; in that case `noise` is the honest
+  1896	        // label. State matrix:
+  1897	        //   ok:    all_pass && all_above_noise → 4/4 validated
+  1898	        //   fail:  any_above_noise_fail → genuine above-noise deviation
+  1899	        //   noise: otherwise (!all_pass && !any_above_noise_fail)
+  1900	        const d8 = data.metrics_secondary_vortices!;
+  1901	        const d8_all_pass = d8.all_pass === true;
+  1902	        const d8_all_above_noise = d8.all_above_noise === true;
+  1903	        const d8_any_fail_above_noise = d8.any_above_noise_fail === true;
+  1904	        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+  1905	        const footer_tone: "ok" | "noise" | "fail" =
+  1906	          d8_all_pass && d8_all_above_noise
+  1907	            ? "ok"
+  1908	            : d8_any_fail_above_noise
+  1909	              ? "fail"
+  1910	              : "noise";
+  1911	        return (
+  1912	          <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
+  1913	            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
+  1914	              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+  1915	            </p>
+  1916	            <p className="text-[12px] leading-relaxed text-surface-300">
+  1917	              <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+  1918	              {footer_tone === "ok" && (
+  1919	                <span className="block mt-1">
+  1920	                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+  1921	                </span>
+  1922	              )}
+  1923	              {footer_tone === "noise" && (
+  1924	                <span className="block mt-1">
+  1925	                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+  1926	                </span>
+  1927	              )}
+  1928	              {footer_tone === "fail" && (
+  1929	                <span className="block mt-1">
+  1930	                  <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
+  1931	                </span>
+  1932	              )}
+  1933	              <span className="block mt-1 text-[11px] text-surface-500">
+  1934	                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+  1935	              </span>
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | sed -n '2730,2762p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  2730	  // DEC-V61-050 batch 4: secondary corner eddies (BL + BR) from
+  2731	  // Ghia Table III cells 3-4. Mirror shape of primary_vortex but
+  2732	  // as a list so Re≥1000 TL can be added without another key.
+  2733	  metrics_secondary_vortices?: {
+  2734	    eddies: {
+  2735	      name: string;
+  2736	      description: string;
+  2737	      x_meas: number;
+  2738	      y_meas: number;
+  2739	      psi_meas: number;
+  2740	      x_gold: number;
+  2741	      y_gold: number;
+  2742	      psi_gold: number;
+  2743	      position_error: number;
+  2744	      psi_error_pct: number;
+  2745	      position_pass: boolean;
+  2746	      psi_pass: boolean;
+  2747	      all_pass: boolean;
+  2748	      signal_to_residual_ratio: number | null;
+  2749	      signal_above_noise: boolean;
+  2750	    }[];
+  2751	    position_tolerance: number;
+  2752	    psi_tolerance_pct: number;
+  2753	    all_pass: boolean;
+  2754	    n_pass: number;
+  2755	    n_total: number;
+  2756	    all_above_noise: boolean;
+  2757	    any_above_noise: boolean;
+  2758	    any_above_noise_fail: boolean;
+  2759	  } | null;
+  2760	  psi_wall_residuals?: {
+  2761	    left: number;
+  2762	    right: number;
+
+exec
+/bin/zsh -lc 'rg -n "as any" ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from dataclasses import dataclass
+
+@dataclass
+class Eddy:
+    signal_above_noise: bool
+    all_pass: bool
+
+def aggregate(eddies):
+    return {
+        'all_pass': all(e.all_pass for e in eddies),
+        'all_above_noise': all(e.signal_above_noise for e in eddies),
+        'any_above_noise': any(e.signal_above_noise for e in eddies),
+        'any_above_noise_fail': any(e.signal_above_noise and not e.all_pass for e in eddies),
+    }
+
+def footer_tone(d8):
+    return (
+        'ok' if d8['all_pass'] and d8['all_above_noise']
+        else 'fail' if d8['any_above_noise_fail']
+        else 'noise'
+    )
+
+cases = {
+    'all pass + all above noise': [Eddy(True, True), Eddy(True, True)],
+    'pure noise floor (curr state)': [Eddy(False, False), Eddy(False, False)],
+    'genuine above-noise fail': [Eddy(True, False), Eddy(False, False)],
+    'mixed: one pass+above, one noise-pass': [Eddy(True, True), Eddy(False, False)],
+    'mixed: one pass+above, one above-fail': [Eddy(True, True), Eddy(True, False)],
+}
+for name, eddies in cases.items():
+    d8 = aggregate(eddies)
+    print(f\"{name:40} => {footer_tone(d8)} | {d8}\")
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+all pass + all above noise               => ok | {'all_pass': True, 'all_above_noise': True, 'any_above_noise': True, 'any_above_noise_fail': False}
+pure noise floor (curr state)            => noise | {'all_pass': False, 'all_above_noise': False, 'any_above_noise': False, 'any_above_noise_fail': False}
+genuine above-noise fail                 => fail | {'all_pass': False, 'all_above_noise': False, 'any_above_noise': True, 'any_above_noise_fail': True}
+mixed: one pass+above, one noise-pass    => noise | {'all_pass': False, 'all_above_noise': False, 'any_above_noise': True, 'any_above_noise_fail': False}
+mixed: one pass+above, one above-fail    => fail | {'all_pass': False, 'all_above_noise': True, 'any_above_noise': True, 'any_above_noise_fail': True}
+
+codex
+The code path now looks internally consistent. I’m doing one last pass over the test surface to see whether the mixed-state logic is covered in committed tests or only in ad hoc simulation, so I can separate blockers from follow-up hardening.
+exec
+/bin/zsh -lc 'rg -n "any_above_noise_fail|all_above_noise|metrics_secondary_vortices|secondary vortices|signal_above_noise" tests ui/frontend -S' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/frontend/src/data/learnCases.ts:174:    physics_intuition_zh: `站在腔体里看这个流动：头顶是一块以 U=1 向右匀速拖动的盖子，另外三面静止的墙把你圈住。盖子黏住紧贴它的那层流体，把它们也拖向右；这层流体又粘连下面的流体，一层层传下去——但左墙和底墙又拦着不让右行，流体只能在腔体里打转。于是形成一个占据腔体大部分体积的顺时针大主涡 (primary vortex)，它的中心在 Re=100 时大约在 (0.62, 0.74)——偏右偏上，因为顶盖把能量输入集中在右上角。右下角和左下角会看到两个反向转动的小二级涡 (secondary vortices)，它们是主涡下洗流撞到底墙后被迫反转产生的——这两个小涡的大小和清晰程度是"你的代码和网格够不够细"的 litmus test，粗网格会把它们抹平。\n\n当你把 Re 从 100 推到 400、1000、5000，这个流场逐渐演化：Re=400 主涡中心移到 (0.55, 0.61) 更向腔体几何中心靠；Re=1000 主涡拖成椭圆、二级涡变大并出现**三级涡**在左下角内部嵌套；Re=5000 以后 2D 稳态解开始变得物理不稳定，真正的 3D 实验会看到沿深度方向的 Taylor-Görtler 螺旋涡（2D 模拟看不到，这是 2D 理想化的边界）；Re≈10000 附近流动进入弱湍流 regime，稳态解仍然数学存在但实验里看到的是时均场，瞬时场已是涡脱 + chaos。本 case 跑 Re=100 深意在此：它是 2D 稳态 laminar 假设**完全正确**的少数几个 Re 之一，你看到的网格独立解就是真解。\n\n这个问题最深的教学点不是"顶盖拖流体"这么简单，而是它是整个 CFD 验证文化的起点——Burggraf 1966 第一次用流函数-涡量公式在 Re=400 证明数值 N-S 可解，Ghia 1982 用 multigrid + FMG 第一次把 Re=10000 压到完全收敛，这两次工作定义了 "benchmark" 这个词在计算流体力学里的含义：不只是一个数字，而是一整套（几何 + BC + observable + 容差）可被下一代代码重复验证的协议。你在这里学的不是腔体流动本身，是"如何可信地主张一个代码算对了"这套方法论。`,
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1148://   D8 · secondary vortices BL + BR — DEC-V61-050 batch 4:
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1410:          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0) + (data.metrics_v_centerline ? 1 : 0) + (data.metrics_primary_vortex ? 1 : 0) + (data.metrics_secondary_vortices ? 1 : 0)} 个独立维度
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1737:              <span className={data.metrics_primary_vortex.signal_above_noise ? "text-emerald-300" : "text-rose-300"}>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1740:              {" "}· {data.metrics_primary_vortex.signal_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1748:      {/* D8 · Secondary vortices BL/BR — DEC-V61-050 batch 4.
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1751:      {data.metrics_secondary_vortices && data.paper_secondary_vortices && (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1753:          data.metrics_secondary_vortices.all_pass
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1759:              data.metrics_secondary_vortices.all_pass ? "text-emerald-300" : "text-amber-300"
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1764:              data.metrics_secondary_vortices.all_pass
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1768:              {data.metrics_secondary_vortices.n_pass}/{data.metrics_secondary_vortices.n_total}
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1777:          {data.psi_wall_residuals && !data.metrics_secondary_vortices.all_pass && (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1797:            {data.metrics_secondary_vortices.eddies.map((eddy) => (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1843:                    <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1848:                    <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1855:            tol: pos ≤ {data.metrics_secondary_vortices.position_tolerance.toFixed(3)} · |ψ| ≤ {data.metrics_secondary_vortices.psi_tolerance_pct.toFixed(1)}%
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1872:        if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1892:        // is genuinely above-noise deviation — `any_above_noise_fail` =
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1897:        //   ok:    all_pass && all_above_noise → 4/4 validated
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1898:        //   fail:  any_above_noise_fail → genuine above-noise deviation
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1899:        //   noise: otherwise (!all_pass && !any_above_noise_fail)
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1900:        const d8 = data.metrics_secondary_vortices!;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1902:        const d8_all_above_noise = d8.all_above_noise === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1903:        const d8_any_fail_above_noise = d8.any_above_noise_fail === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1904:        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1906:          d8_all_pass && d8_all_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2721:    signal_above_noise: boolean;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2733:  metrics_secondary_vortices?: {
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2749:      signal_above_noise: boolean;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2756:    all_above_noise: boolean;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2758:    any_above_noise_fail: boolean;
+
+exec
+/bin/zsh -lc 'git status --short --branch' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+## main...origin/main [ahead 30]
+ M reports/deep_acceptance/contract_status_dashboard.html
+ M reports/deep_acceptance/contract_status_dashboard_manifest.json
+ M scripts/flow-field-gen/generate_contours.py
+?? .claude/
+?? .planning/reviews/case_deep_dive_round_1_codex.log
+?? .planning/reviews/case_deep_dive_round_1_findings.md
+?? .planning/reviews/case_pilot_ldc_codex.log
+?? .planning/reviews/case_pilot_ldc_codex_run1_readonly_blocked.log
+?? .planning/reviews/case_pilot_ldc_findings.md
+?? .planning/reviews/pedagogy_round_1_codex.log
+?? .planning/reviews/pedagogy_round_2_codex.log
+?? .planning/reviews/pedagogy_round_3_codex.log
+?? .planning/reviews/round_1_codex.log
+?? .planning/reviews/round_1_findings.md
+?? .planning/reviews/round_2_codex.log
+?? .planning/reviews/round_3_codex.log
+?? knowledge/corrections/
+?? outputs/
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_review.log
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_round2.log
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_round3.log
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_round4.log
+?? reports/deep_acceptance/20260421_000138_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000139_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000231_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000232_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135406_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135407_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135452_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135453_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145436_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145437_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151428_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154122_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154123_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_212242_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220456_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220457_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221125_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221215_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221557_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224520_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224939_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224940_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233648_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233649_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234027_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234028_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234345_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234430_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_235141_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_001613_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_002022_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011135_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011136_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001450_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001451_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001618_visual_acceptance_package.md
+?? reports/deep_acceptance/contract_status_dashboard_20260422_220732.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221123.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221213.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221555.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224518.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224937.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224938.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_233647.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234025.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234329.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234342.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234343.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234427.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234428.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_235139.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_000536.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_001611.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_002020.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_011134.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001535.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001616.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001645.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000138.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000139.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000231.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000232.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135406.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135407.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135452.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135453.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145436.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145437.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151428.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154122.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154123.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_212242.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220456.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220457.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221125.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221215.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221557.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224520.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224939.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224940.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233648.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233649.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234027.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234028.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234345.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234430.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_235141.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_001613.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_002022.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011135.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011136.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001450.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001451.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001618.html
+?? reports/phase5_audit/20260423T082752Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T082959Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085717Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085904Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T090128Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091335Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091408Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091515Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091746Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091857Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+?? reports/phase5_reports/
+
+codex
+I don’t see a remaining correctness blocker in the patched logic. I’m pulling the exact memory line range I relied on so the final review note can cite it cleanly, then I’ll issue the verdict in the format you requested.
+exec
+/bin/zsh -lc "nl -ba /Users/Zhuanz/.codex/memories/MEMORY.md | sed -n '601,646p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   601	# Task Group: cfd-harness-unified governance closeout and planning gates
+   602	
+   603	scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+   604	applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+   605	
+   606	## Task 1: Close Phase 8 and reconcile stale governance evidence
+   607	
+   608	### rollout_summary_files
+   609	
+   610	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+   611	
+   612	### keywords
+   613	
+   614	- Phase 8, AutoVerifier, 13/13, knowledge/whitelist.yaml, ai_cfd_cold_start_whitelist.yaml, Canonical Docs Type=Report, Phase 8 Done, naming drift
+   615	
+   616	## Task 2: Open Phase 9 as planning-only and keep solver expansion bounded
+   617	
+   618	### rollout_summary_files
+   619	
+   620	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+   621	
+   622	### keywords
+   623	
+   624	- Phase 9 planning-only, PHASE9_EXTERNAL_SOLVER_DECISION_TREE.md, PHASE9_MODEL_ROUTING_BASELINE_PLAN.md, PHASE9_ACTIVATION_REVIEW_PACKET.md, replay_manifest, SU2 CLI Harness Skill, foam_agent_adapter.py
+   625	
+   626	## Task 3: Stop cleanly at the Opus 4.7 activation gate
+   627	
+   628	### rollout_summary_files
+   629	
+   630	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+   631	
+   632	### keywords
+   633	
+   634	- Opus 4.7 activation review, self-dispatch, planning-only, single-engine OpenFOAM, SU2 reference-only, CFX hold, review packet
+   635	
+   636	## User preferences
+   637	
+   638	- when working this repo, the user phrased the boundary as "继续推进开发，直至需要Opus 4.7介入" -> keep executing autonomously until a real gate is reached, then stop with a ready review packet [Task 1][Task 2][Task 3]
+   639	- the rollout also showed a preference for explicit gate-aware staging rather than silent activation -> preserve the planning-only vs active distinction clearly in Notion and repo docs [Task 2][Task 3]
+   640	
+   641	## Reusable knowledge
+   642	
+   643	- Notion phase/task closure here requires updating both page properties and page body text; one surface alone leaves stale recovery state [Task 1]
+   644	- `knowledge/whitelist.yaml` is the active whitelist source; older references to `knowledge/ai_cfd_cold_start_whitelist.yaml` are naming drift to normalize, not a fresh design change [Task 1]
+   645	- Phase 9 must start from a bounded decision tree: keep single-engine OpenFOAM, allow reference-only external solver surfaces, or open one bounded proof slice; anything broader still needs review [Task 2]
+   646	- The presence of SU2 tooling in skill inventory does not mean runtime support is already widened; `src/foam_agent_adapter.py` remained OpenFOAM-centered in this phase [Task 2]
+
+codex
+```text
+VERDICT: APPROVE
+
+FINDINGS:
+  HIGH: none.
+  MEDIUM: none remaining. [comparison_report.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/comparison_report.py:1050) now computes `any_above_noise_fail` only for `signal_above_noise && !all_pass`, and the footer in [LearnCaseDetailPage.tsx](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1891) now routes `fail` only through that aggregate. I re-simulated the 5 requested cases and got `ok / noise / fail / noise / fail`, which matches the intended matrix.
+  LOW: none remaining. The `metrics_secondary_vortices` TS contract in [LearnCaseDetailPage.tsx](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2733) now includes `all_above_noise`, `any_above_noise`, and `any_above_noise_fail`, and `rg "as any"` returns no hits in that file.
+
+OUT_OF_SCOPE_FOLLOWUPS: No blocker for F1-M2 clean-close. I did not find committed test files that pin the 5-case D8 footer matrix directly, so if you want regression hardening beyond this approval, add a tiny pure reducer/unit test for the footer-state mapping.
+```
+
+tokens used
+316,014
+```text
+VERDICT: APPROVE
+
+FINDINGS:
+  HIGH: none.
+  MEDIUM: none remaining. [comparison_report.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/comparison_report.py:1050) now computes `any_above_noise_fail` only for `signal_above_noise && !all_pass`, and the footer in [LearnCaseDetailPage.tsx](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1891) now routes `fail` only through that aggregate. I re-simulated the 5 requested cases and got `ok / noise / fail / noise / fail`, which matches the intended matrix.
+  LOW: none remaining. The `metrics_secondary_vortices` TS contract in [LearnCaseDetailPage.tsx](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2733) now includes `all_above_noise`, `any_above_noise`, and `any_above_noise_fail`, and `rg "as any"` returns no hits in that file.
+
+OUT_OF_SCOPE_FOLLOWUPS: No blocker for F1-M2 clean-close. I did not find committed test files that pin the 5-case D8 footer matrix directly, so if you want regression hardening beyond this approval, add a tiny pure reducer/unit test for the footer-state mapping.
+```
+

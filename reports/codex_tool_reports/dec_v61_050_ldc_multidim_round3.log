@@ -1,0 +1,1763 @@
+2026-04-24T01:46:55.406972Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-24T01:46:55.406991Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dbd2b-2ca1-7082-9eaa-844286c533b1
+--------
+user
+# Codex round-3 review — DEC-V61-050 LDC (F1-M2 clean-close gate)
+
+Round 2 returned CHANGES_REQUIRED with 2 MEDs. Both are now addressed in commit **`793aca2`**. Under v2.0 F1-M2, round 3 must return **APPROVE** (not APPROVE_WITH_COMMENTS) for clean-close.
+
+## Round 2 findings — verify each fix at HEAD (`793aca2`)
+
+**Round 2 MED #1** — `LearnCaseDetailPage.tsx:1868` advertised 3-state footer not implemented; `d8_noise_floor` derived from `!all_pass`, hard-coded "3 / 4", future 4/4 would still print "3/4", genuine physics fail would be misexplained as noise-floor.
+
+Fix applied:
+- Backend (`comparison_report.py` ~line 1054): `metrics_secondary_vortices` now surfaces `all_above_noise` + `any_above_noise` aggregates.
+- Frontend (`LearnCaseDetailPage.tsx` same block): 3 render modes — `ok` (green, all-pass + all-above-noise), `noise` (amber, current state, unchanged wording), `fail` (red, "genuine physics deviation, not noise coincidence"); `validated_count` computed dynamically as `3 + (d8_all_pass && d8_all_above_noise ? 1 : 0)`.
+
+→ Verify: read the updated footer block + the backend emission; confirm all 3 branches render correctly for their intended states; confirm the dynamic counter.
+
+**Round 2 MED #2** — `psi_extraction.py:118` cache-key fix partial; write stored `np.array(bounds_key, dtype=object)` = size-5 array, read did `.item()` → ValueError on explicit bounds → silent recompute.
+
+Fix applied:
+- Write path: `bounds_store = np.empty(1, dtype=object); bounds_store[0] = bounds_key; np.savez(..., bounds=bounds_store)` — 1-element object array holds the tuple as one opaque value.
+- Read path: `cached["bounds"][0]` (not `.item()`).
+- Round-trip smoke test under python3.12 verified for both tuple and None keys.
+
+→ Verify: read the updated write/read paths; confirm the 1-element object array pattern is correct; confirm the round-trip works for explicit bounds.
+
+## Validation already performed
+
+- **Tests**: 30/30 pass (`test_comparison_report_service.py` + `test_comparison_report_visual_only.py` + `test_comparison_report_route.py`)
+- **Frontend typecheck**: `npx tsc --noEmit` clean (after removing an unused `d8_genuine_fail` binding)
+- **Cache round-trip**: smoke-test under python3.12 confirms both tuple and None bounds round-trip correctly
+- **Python 3.9 parity**: `python3 -m py_compile` on both backend files OK (no f-string traps this time)
+
+## Requested verdict
+
+`APPROVE` (F1-M2 clean-close — arc formally closes; I'll update DEC frontmatter with `codex_verdict: APPROVE (round 3, F1-M2 clean-close)`)
+
+`APPROVE_WITH_COMMENTS` (acceptable but NOT clean-close under v2.0; triggers round 4 or a follow-up DEC)
+
+`CHANGES_REQUIRED` (round 4 fix required; report blockers)
+
+Format:
+```
+VERDICT: <APPROVE | APPROVE_WITH_COMMENTS | CHANGES_REQUIRED>
+FINDINGS:
+  HIGH:
+    - ...
+  MEDIUM:
+    - ...
+  LOW:
+    - ...
+OUT_OF_SCOPE_FOLLOWUPS:
+  - ...
+```
+
+Please `git show 793aca2` and inspect the current files on disk.
+
+codex
+Reviewing `793aca2` as a correctness-only pass against the two Round 2 MEDs. I’m pulling the relevant repo memory pointers first, then I’ll inspect the exact commit diff and current file state side by side.
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|DEC-V61-050|F1-M2|clean-close|LDC" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+312:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+332:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+553:# Task Group: cfd-harness-unified demo-first assessment and Claude Code execution briefs
+555:scope: Assess whether `cfd-harness-unified` is actually moving toward the user’s demo goal, narrow the product story toward `/learn` plus Pro Workbench, and package a Chinese Claude Code brief without making direct repo edits.
+556:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s demo-first architecture review and executor-handoff workflow, but exact failing tests, anchor cases, and runtime paths are checkout-specific.
+562:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+566:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+572:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+601:# Task Group: cfd-harness-unified governance closeout and planning gates
+603:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+604:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+610:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+620:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+630:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+684:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+
+exec
+/bin/zsh -lc 'git rev-parse --show-toplevel && git status --short && git rev-parse HEAD && git show --stat --oneline --decorate 793aca2' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+/Users/Zhuanz/Desktop/cfd-harness-unified
+ M reports/deep_acceptance/contract_status_dashboard.html
+ M reports/deep_acceptance/contract_status_dashboard_manifest.json
+ M scripts/flow-field-gen/generate_contours.py
+?? .claude/
+?? .planning/reviews/case_deep_dive_round_1_codex.log
+?? .planning/reviews/case_deep_dive_round_1_findings.md
+?? .planning/reviews/case_pilot_ldc_codex.log
+?? .planning/reviews/case_pilot_ldc_codex_run1_readonly_blocked.log
+?? .planning/reviews/case_pilot_ldc_findings.md
+?? .planning/reviews/pedagogy_round_1_codex.log
+?? .planning/reviews/pedagogy_round_2_codex.log
+?? .planning/reviews/pedagogy_round_3_codex.log
+?? .planning/reviews/round_1_codex.log
+?? .planning/reviews/round_1_findings.md
+?? .planning/reviews/round_2_codex.log
+?? .planning/reviews/round_3_codex.log
+?? knowledge/corrections/
+?? outputs/
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_review.log
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_round2.log
+?? reports/codex_tool_reports/dec_v61_050_ldc_multidim_round3.log
+?? reports/deep_acceptance/20260421_000138_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000139_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000231_visual_acceptance_package.md
+?? reports/deep_acceptance/20260421_000232_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135406_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135407_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135452_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_135453_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145436_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_145437_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151428_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_151429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154122_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_154123_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_212242_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220456_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_220457_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221125_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221215_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_221557_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224520_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224939_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_224940_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233648_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_233649_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234027_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234028_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234345_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234429_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_234430_visual_acceptance_package.md
+?? reports/deep_acceptance/20260422_235141_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_001613_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_002022_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011135_visual_acceptance_package.md
+?? reports/deep_acceptance/20260423_011136_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001450_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001451_visual_acceptance_package.md
+?? reports/deep_acceptance/20260424_001618_visual_acceptance_package.md
+?? reports/deep_acceptance/contract_status_dashboard_20260422_220732.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221123.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221213.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_221555.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224518.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224937.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_224938.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_233647.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234025.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234329.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234342.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234343.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234427.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_234428.html
+?? reports/deep_acceptance/contract_status_dashboard_20260422_235139.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_000536.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_001611.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_002020.html
+?? reports/deep_acceptance/contract_status_dashboard_20260423_011134.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001448.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001535.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001616.html
+?? reports/deep_acceptance/contract_status_dashboard_20260424_001645.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000138.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000139.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000231.html
+?? reports/deep_acceptance/visual_acceptance_report_20260421_000232.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135406.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135407.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135452.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_135453.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145436.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_145437.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151428.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_151429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154122.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_154123.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_212242.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220456.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_220457.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221125.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221215.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_221557.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224520.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224939.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_224940.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233648.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_233649.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234027.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234028.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234345.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234429.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_234430.html
+?? reports/deep_acceptance/visual_acceptance_report_20260422_235141.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_001613.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_002022.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011135.html
+?? reports/deep_acceptance/visual_acceptance_report_20260423_011136.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001450.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001451.html
+?? reports/deep_acceptance/visual_acceptance_report_20260424_001618.html
+?? reports/phase5_audit/20260423T082752Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T082959Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085717Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T085904Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T090128Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091335Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091408Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091515Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091746Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T091857Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T094736Z_backward_facing_step_raw.json
+?? reports/phase5_audit/20260423T102448Z_backward_facing_step_raw.json
+?? reports/phase5_reports/
+793aca24af321e98f33f3da104a29c33701ad38a
+793aca2 (HEAD -> main) fix(ldc): DEC-V61-050 Codex round 2 fixes — 2 MED findings
+ ui/backend/services/comparison_report.py           |  6 +++
+ ui/backend/services/psi_extraction.py              | 14 ++++++-
+ .../src/pages/learn/LearnCaseDetailPage.tsx        | 46 ++++++++++++++++------
+ 3 files changed, 53 insertions(+), 13 deletions(-)
+
+codex
+The tree is dirty, but `HEAD` is `793aca2`, so I’m reviewing the exact requested commit against the live file contents without touching unrelated changes. Next I’m reading the review workflow notes plus the three changed files and then I’ll run a targeted cache round-trip probe instead of relying on the prior report.
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/f09cfd210e21e96a0031f4d247be5f2e416d23b1/skills/using-superpowers/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
+2. **Superpowers skills** — override default system behavior where they conflict
+3. **Default system prompt** — lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+exec
+/bin/zsh -lc 'git show --unified=80 793aca2 -- ui/backend/services/comparison_report.py ui/backend/services/psi_extraction.py ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+commit 793aca24af321e98f33f3da104a29c33701ad38a
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri Apr 24 09:46:25 2026 +0800
+
+    fix(ldc): DEC-V61-050 Codex round 2 fixes — 2 MED findings
+    
+    Codex round 2 (F1-M2 two-tier close gate) on `3189048..HEAD` returned
+    CHANGES_REQUIRED with 2 real MEDs:
+    
+    [MED #1] ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1868 —
+       The advertised 3-state closure footer was not implemented. The
+       non-degraded branch always rendered "3 / 4 Ghia 观测量已验证" +
+       D8 noise-floor explanation. `d8_noise_floor` was derived from
+       `!all_pass`, not from a dedicated signal-above-noise aggregate.
+       Consequence: a future real 4/4 D8 pass would still print "3/4";
+       any D8 fail for a non-noise reason would be misexplained as
+       noise-floor coincidence.
+    
+    [MED #2] ui/backend/services/psi_extraction.py:118 — The cache-key
+       fix was only partial. Write path stored `bounds=np.array(
+       bounds_key, dtype=object)` which splatted a 5-tuple into a
+       size-5 object array. Read path expected `.item()` which raises
+       `ValueError` on arrays with size > 1. Net: explicit-bounds
+       callers silently fall back to recompute every time. `bounds=None`
+       path happened to work so current LDC runtime was unaffected, but
+       the "cache key now fully covers explicit bounds" claim was false.
+    
+    Round 2 fixes:
+    
+    1. [MED #1] LearnCaseDetailPage closure footer: surface `all_above_
+       noise` + `any_above_noise` aggregates from the backend; three
+       render modes gated on the aggregates:
+       - `ok`: d8_all_pass && all_above_noise → green, "4 / 4 validated"
+       - `noise`: !all_pass && !any_above_noise → amber, current
+         noise-floor explanation (unchanged wording)
+       - `fail`: !all_pass && any_above_noise → red, "genuine physics
+         deviation, not noise coincidence" copy
+       `validated_count` now computed dynamically — no more hard-coded
+       "3 / 4".
+    
+    2. [MED #1 backend half] comparison_report.py:1054 — extend
+       metrics_secondary_vortices with `all_above_noise` and
+       `any_above_noise` aggregates for the frontend to consume.
+    
+    3. [MED #2] psi_extraction.py: write path wraps `bounds_key` in a
+       1-element object array (`np.empty(1, dtype=object); [0]=key`);
+       read path uses `[0]` instead of `.item()`. Round-trip verified
+       for both tuple and None keys under python3.12.
+    
+    Validation:
+    - 30/30 comparison_report tests pass (unchanged coverage)
+    - frontend npx tsc --noEmit clean
+    - psi cache round-trip smoke-test for tuple + None bounds PASS
+    
+    No DEC frontmatter update yet — awaiting round 3 APPROVE verdict
+    before flipping codex_verdict field to close the arc.
+    
+    Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+diff --git a/ui/backend/services/comparison_report.py b/ui/backend/services/comparison_report.py
+index e856e91..00bb263 100644
+--- a/ui/backend/services/comparison_report.py
++++ b/ui/backend/services/comparison_report.py
+@@ -977,160 +977,166 @@ def build_report_context(case_id: str, run_label: str = "audit_real_run", *, for
+                             metrics_primary_vortex = {
+                                 "x_meas": x_c_meas,
+                                 "y_meas": y_c_meas,
+                                 "psi_meas": psi_meas,
+                                 "x_gold": vortex_gold["vortex_center_x"],
+                                 "y_gold": vortex_gold["vortex_center_y"],
+                                 "psi_gold": vortex_gold["psi_min"],
+                                 "position_error": pos_err,
+                                 "psi_error_pct": psi_err_pct,
+                                 "position_tolerance": vortex_gold["position_tolerance"],
+                                 "psi_tolerance_pct": vortex_gold["psi_tolerance"] * 100.0,
+                                 "position_pass": pos_pass,
+                                 "psi_pass": psi_pass,
+                                 "all_pass": pos_pass and psi_pass,
+                                 "signal_to_residual_ratio": snr,
+                                 "signal_above_noise": snr is not None and snr >= 3.0,
+                             }
+                     # --- Secondary vortices BL/BR (D8) ---
+                     if secondary_gold is not None:
+                         eddy_results: list[dict] = []
+                         for eddy in secondary_gold["eddies"]:
+                             core = find_vortex_core(
+                                 psi, xs, ys,
+                                 x_window_norm=eddy["x_window_norm"],
+                                 y_window_norm=eddy["y_window_norm"],
+                                 mode=eddy["mode"],
+                             )
+                             if core is None:
+                                 continue
+                             x_m, y_m, psi_m = core
+                             pos_err = float(
+                                 ((x_m - eddy["x_gold"]) ** 2
+                                  + (y_m - eddy["y_gold"]) ** 2) ** 0.5
+                             )
+                             psi_gold_abs = abs(eddy["psi_gold"])
+                             psi_err_pct = (
+                                 100.0 * abs(psi_m - eddy["psi_gold"]) / psi_gold_abs
+                                 if psi_gold_abs > 1e-12 else 0.0
+                             )
+                             pos_pass = pos_err <= secondary_gold["position_tolerance"]
+                             psi_pass = psi_err_pct <= secondary_gold["psi_tolerance"] * 100.0
+                             # Per-eddy SNR vs wall-closure residual. Codex
+                             # round 1 MED #2: BL ψ gold is O(1e-6), wall
+                             # residual on 129² trapezoidal is O(1e-3), so
+                             # BL signal is 2000× BELOW the numerical floor —
+                             # the coordinate match is a coincidence of
+                             # argmax landing near the Ghia point, NOT a
+                             # validated physics reproduction. Expose this
+                             # so the UI can flag it honestly.
+                             snr = (
+                                 psi_gold_abs / psi_wall_residuals["max"]
+                                 if psi_wall_residuals and psi_wall_residuals["max"] > 0
+                                 else None
+                             )
+                             signal_above_noise = snr is not None and snr >= 3.0
+                             eddy_results.append({
+                                 "name": eddy["name"],
+                                 "description": eddy["description"],
+                                 "x_meas": x_m,
+                                 "y_meas": y_m,
+                                 "psi_meas": psi_m,
+                                 "x_gold": eddy["x_gold"],
+                                 "y_gold": eddy["y_gold"],
+                                 "psi_gold": eddy["psi_gold"],
+                                 "position_error": pos_err,
+                                 "psi_error_pct": psi_err_pct,
+                                 "position_pass": pos_pass,
+                                 "psi_pass": psi_pass,
+                                 "all_pass": pos_pass and psi_pass and signal_above_noise,
+                                 "signal_to_residual_ratio": snr,
+                                 "signal_above_noise": signal_above_noise,
+                             })
+                         if eddy_results:
+                             metrics_secondary_vortices = {
+                                 "eddies": eddy_results,
+                                 "position_tolerance": secondary_gold["position_tolerance"],
+                                 "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+                                 "all_pass": all(e["all_pass"] for e in eddy_results),
+                                 "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+                                 "n_total": len(eddy_results),
++                                "all_above_noise": all(
++                                    e["signal_above_noise"] for e in eddy_results
++                                ),
++                                "any_above_noise": any(
++                                    e["signal_above_noise"] for e in eddy_results
++                                ),
+                             }
+         except Exception:
+             # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide
+             # variety of exceptions (RuntimeError, TypeError, KeyError,
+             # pyvista.core.errors.*, VTK C++ exceptions surfaced as Python
+             # RuntimeError, etc.). The D7/D8 dimensions are optional viz
+             # augmentations — a pyvista internal failure must not 500 the
+             # whole report endpoint. Broad catch is warranted here because
+             # the comparator for u_centerline (D1-D5) is a separate code
+             # path that's already run above and is not guarded by this
+             # try/except. Real programmer bugs in psi_extraction itself
+             # are caught in tests + by the module's __main__ smoke test.
+             metrics_primary_vortex = None
+             metrics_secondary_vortices = None
+             psi_wall_residuals = None
+ 
+     residual_info = _parse_residuals_csv(artifact_dir / "residuals.csv")
+     grid_conv_rows, grid_note = _load_grid_convergence(case_id, gold_y, gold_u)
+     # Phase 7d: Richardson extrapolation + GCI over the finest 3 meshes.
+     try:
+         from ui.backend.services.grid_convergence import compute_gci_from_fixtures
+         gci = compute_gci_from_fixtures(case_id, fixture_root=_FIXTURE_ROOT)
+     except (ValueError, ImportError, OverflowError, ArithmeticError):
+         # Pathological mesh triples can still raise from deep math — the
+         # grid_convergence module already catches these internally on the
+         # documented branches, but belt-and-suspenders keeps report
+         # generation from 500'ing on a numerical corner we did not predict.
+         gci = None
+ 
+     # Verdict logic: all-pass OR tolerance met.
+     is_all_pass = metrics["n_pass"] == metrics["n_total"] and metrics["n_total"] > 0
+     majority_pass = metrics["n_pass"] >= math.ceil(metrics["n_total"] * 0.6)
+     if is_all_pass:
+         verdict, verdict_gradient, subtitle = "PASS", "#059669 0%, #10b981 100%", (
+             f"全部 {metrics['n_total']} 个 gold 点在 ±{tolerance:.1f}% 容差内。"
+         )
+     elif majority_pass:
+         verdict, verdict_gradient, subtitle = "PARTIAL", "#d97706 0%, #f59e0b 100%", (
+             f"{metrics['n_pass']}/{metrics['n_total']} 点通过；"
+             f"{metrics['n_total'] - metrics['n_pass']} 点残差为已记录物理项 "
+             f"(见 DEC-V61-030 关于 Ghia 非均匀网格 vs 均匀网格的插值误差)。"
+         )
+     else:
+         verdict, verdict_gradient, subtitle = "FAIL", "#dc2626 0%, #ef4444 100%", (
+             f"仅 {metrics['n_pass']}/{metrics['n_total']} 点通过 — "
+             f"需要诊断 (solver, mesh, 或 gold 本身)。"
+         )
+ 
+     # Renders — use Phase 7b manifest if available; else None placeholders.
+     # Codex round 1 HIGH: every manifest-supplied output path is validated to
+     # resolve inside reports/phase5_renders/ before being emitted into HTML.
+     renders_manifest = _load_renders_manifest(case_id, run_label)
+     renders_dir = _RENDERS_ROOT / case_id / timestamp
+ 
+     def _rel(key: str, default: str = "") -> str:
+         candidate: Optional[str] = None
+         if renders_manifest:
+             raw = renders_manifest.get("outputs", {}).get(key)
+             if isinstance(raw, str):
+                 validated = _safe_rel_under(raw, _RENDERS_ROOT)
+                 if validated:
+                     candidate = validated
+         if candidate is None:
+             guess = renders_dir / default
+             if guess.is_file():
+                 try:
+                     rel = str(guess.resolve().relative_to(_REPO_ROOT.resolve()))
+                     if _safe_rel_under(rel, _RENDERS_ROOT):
+                         candidate = rel
+                 except ValueError:
+                     pass
+         return candidate or ""
+ 
+     # _rel = repo-relative (PDF base_url=_REPO_ROOT resolves it).
+     # _url = browser URL — fixes "all comparison report images fail to
+     # load" when the HTML is served at /api/cases/.../comparison-report
+     # (browser otherwise resolves `reports/...` src against the URL
+     # path → /api/cases/X/runs/Y/reports/... which 404s; the working
+     # renders route is /api/cases/X/runs/Y/renders/{basename}).
+     def _url(basename: str) -> str:
+diff --git a/ui/backend/services/psi_extraction.py b/ui/backend/services/psi_extraction.py
+index e6681b4..d6ce122 100644
+--- a/ui/backend/services/psi_extraction.py
++++ b/ui/backend/services/psi_extraction.py
+@@ -44,229 +44,239 @@ import numpy as np
+ 
+ 
+ class PsiExtractionError(RuntimeError):
+     """Any recoverable failure in ψ extraction or vortex-core location.
+ 
+     Introduced (Codex round 1 MED on DEC-V61-050 batch 4): gives callers
+     a single type to catch rather than forcing them to enumerate pyvista
+     / VTK / numpy / OS errors. The module still returns None from its
+     public functions on soft failures (keeping the existing contract);
+     this exception class exists so that callers who WANT to distinguish
+     a genuine extractor failure from a "no data at all" result can.
+     """
+ 
+ 
+ def pick_latest_internal_vtk(vtk_dir: Path) -> Optional[Path]:
+     """Return the newest internal-field VTK in vtk_dir, or None.
+ 
+     Matches the pattern used by src/comparator_gates.py:read_final_
+     velocity_max — skips 'allPatches' boundary files, requires a
+     trailing '_<iter>.vtk' suffix so we can order by iteration.
+     """
+     if not vtk_dir.is_dir():
+         return None
+     candidates: list[tuple[int, Path]] = []
+     for p in vtk_dir.rglob("*.vtk"):
+         if "allPatches" in p.parts:
+             continue
+         m = re.search(r"_(\d+)\.vtk$", p.name)
+         if m is None:
+             continue
+         candidates.append((int(m.group(1)), p))
+     if not candidates:
+         return None
+     candidates.sort()
+     return candidates[-1][1]
+ 
+ 
+ def compute_streamfunction_from_vtk(
+     vtk_path: Path,
+     nx: int = 129,
+     ny: int = 129,
+     bounds: Optional[tuple[float, float, float, float, float]] = None,
+ ) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+     """Return (psi, xs, ys) on a uniform nx × ny grid, or None on failure.
+ 
+     psi.shape == (ny, nx) in physical m²/s.
+     xs, ys in physical m (uniform).
+     bounds: optional explicit (xmin, xmax, ymin, ymax, z_mid). If None,
+     derived from mesh.bounds with z at the midplane (2D slab convention).
+ 
+     Returns None when pyvista is unavailable, the VTK is unreadable,
+     or the mesh lacks a U vector field.
+     """
+     if not vtk_path.is_file():
+         return None
+ 
+     # Cache schema version — bump when the on-disk npz layout changes.
+     CACHE_SCHEMA_VERSION = 2
+     cache_dir = vtk_path.parent
+     cache_file = cache_dir / f".psi_cache_{nx}x{ny}.npz"
+     stat = vtk_path.stat()
+     vtk_mtime_ns = int(stat.st_mtime_ns)
+     vtk_size = int(stat.st_size)
+     # Codex round 1 MED #3: prior cache key was {nx, ny, st_mtime float,
+     # 1e-6 tol}; this misses APFS sub-µs updates and ext4 same-second
+     # overwrites, and also ignored `bounds`. Use mtime_ns (integer, exact)
+     # + size (catches content change when mtime is reused) + bounds
+     # (explicit-bounds call shouldn't be served cached-default result) +
+     # schema version (invalidates when this serialization format changes).
+     bounds_key = tuple(bounds) if bounds is not None else None
+     # Cache hit path is deliberately pyvista-free so a backend whose
+     # python interpreter lacks a working pyvista/vtk install can still
+     # serve ψ-derived dimensions as long as the cache was populated
+     # out-of-band (e.g. by python3.11 via this module's __main__).
+     if cache_file.is_file():
+         try:
+             cached = np.load(cache_file, allow_pickle=True)
+             cached_schema = int(cached["schema_version"]) if "schema_version" in cached else 1
+             cached_mtime_ns = int(cached["vtk_mtime_ns"]) if "vtk_mtime_ns" in cached else None
+             cached_size = int(cached["vtk_size"]) if "vtk_size" in cached else None
+-            cached_bounds = cached["bounds"].item() if "bounds" in cached else None
++            # Codex round 2 MED: `bounds` is a 1-element object array
++            # wrapping the bounds_key tuple. Index [0] works for both
++            # size-1 object arrays and 0-d arrays; `.item()` fails on
++            # the size-5 legacy write path, which silently forced recompute.
++            cached_bounds = cached["bounds"][0] if "bounds" in cached else None
+             if (
+                 cached_schema == CACHE_SCHEMA_VERSION
+                 and cached_mtime_ns == vtk_mtime_ns
+                 and cached_size == vtk_size
+                 and cached_bounds == bounds_key
+             ):
+                 return cached["psi"], cached["xs"], cached["ys"]
+         except Exception:
+             pass  # cache miss → recompute below
+ 
+     try:
+         import pyvista as pv
+     except ImportError:
+         return None
+ 
+     try:
+         grid = pv.read(str(vtk_path))
+     except Exception:
+         return None
+ 
+     point_fields = set(grid.point_data.keys()) if hasattr(grid, "point_data") else set()
+     cell_fields = set(grid.cell_data.keys()) if hasattr(grid, "cell_data") else set()
+ 
+     if "U" not in point_fields and "U" in cell_fields:
+         try:
+             grid = grid.cell_data_to_point_data()
+             point_fields = set(grid.point_data.keys())
+         except Exception:
+             return None
+     if "U" not in point_fields:
+         return None
+ 
+     if bounds is None:
+         xmin, xmax, ymin, ymax, zmin, zmax = grid.bounds
+         z_mid = 0.5 * (zmin + zmax)
+     else:
+         xmin, xmax, ymin, ymax, z_mid = bounds
+ 
+     if xmax <= xmin or ymax <= ymin:
+         return None
+ 
+     xs = np.linspace(xmin, xmax, nx)
+     ys = np.linspace(ymin, ymax, ny)
+     XX, YY = np.meshgrid(xs, ys)  # shape (ny, nx)
+     points = np.column_stack([
+         XX.ravel(),
+         YY.ravel(),
+         np.full(XX.size, z_mid),
+     ])
+     probe = pv.PolyData(points).sample(grid)
+     U = np.asarray(probe["U"])
+     if U.ndim != 2 or U.shape[1] < 2:
+         return None
+     U_x = U[:, 0].reshape(YY.shape)
+ 
+     # ψ(x, y) = ∫₀^y U_x(x, y') dy', trapezoidal along axis 0 (y).
+     dy = ys[1] - ys[0] if ny > 1 else 0.0
+     psi = np.zeros_like(U_x)
+     for i in range(1, ny):
+         psi[i, :] = psi[i - 1, :] + 0.5 * (U_x[i - 1, :] + U_x[i, :]) * dy
+ 
+     try:
++        # Wrap bounds_key in a 1-element object array so the tuple
++        # round-trips as a single opaque value; `np.array(bounds_key,
++        # dtype=object)` would splat a 5-tuple into a size-5 array and
++        # break the read-side `.item()`/`[0]` unwrap.
++        bounds_store = np.empty(1, dtype=object)
++        bounds_store[0] = bounds_key
+         np.savez(
+             cache_file,
+             psi=psi, xs=xs, ys=ys,
+             vtk_mtime_ns=np.array([vtk_mtime_ns]),
+             vtk_size=np.array([vtk_size]),
+-            bounds=np.array(bounds_key, dtype=object),
++            bounds=bounds_store,
+             schema_version=np.array([CACHE_SCHEMA_VERSION]),
+         )
+     except Exception:
+         pass  # cache write best-effort
+ 
+     return psi, xs, ys
+ 
+ 
+ def psi_wall_closure_residuals(
+     psi: np.ndarray,
+     xs: np.ndarray,
+     ys: np.ndarray,
+     u_ref: float = 1.0,
+ ) -> Optional[dict]:
+     """Return max |ψ| on each of the 4 walls, normalized by U_ref·L.
+ 
+     For LDC with no-slip everywhere except the lid, the stream function
+     should satisfy ψ = 0 on all 4 walls. Numerical integration along
+     columns plus resampling interpolation leak some residual. These
+     residuals bound the credibility of derived observables:
+       - primary vortex ψ_min ≈ 0.1 → residual O(1e-3) is fine
+       - secondary eddies ψ ≈ 1e-6 to 1e-5 → residual must be << those
+         or the match is coincidence, not physics.
+ 
+     Introduced (Codex round 1 MED on DEC-V61-050 batch 4): caller can
+     compare these residuals against observable scales and warn/fail.
+ 
+     Returns {left, right, bottom, top, max, L} (all dimensionless, ψ/UL)
+     or None if inputs invalid.
+     """
+     if xs.size == 0 or ys.size == 0 or psi.shape != (ys.size, xs.size):
+         return None
+     L = float(xs[-1]) if xs[-1] > 0 else 1.0
+     denom = max(u_ref * L, 1e-12)
+     left = float(np.max(np.abs(psi[:, 0]))) / denom
+     right = float(np.max(np.abs(psi[:, -1]))) / denom
+     bottom = float(np.max(np.abs(psi[0, :]))) / denom
+     top = float(np.max(np.abs(psi[-1, :]))) / denom
+     return {
+         "left": left,
+         "right": right,
+         "bottom": bottom,
+         "top": top,
+         "max": max(left, right, bottom, top),
+         "L": L,
+     }
+ 
+ 
+ def find_vortex_core(
+     psi: np.ndarray,
+     xs: np.ndarray,
+     ys: np.ndarray,
+     x_window_norm: tuple[float, float] = (0.0, 1.0),
+     y_window_norm: tuple[float, float] = (0.0, 1.0),
+     mode: str = "min",
+     u_ref: float = 1.0,
+ ) -> Optional[tuple[float, float, float]]:
+     """Find local extremum of ψ inside the normalized (x/L, y/L) window.
+ 
+     Returns (x_c_norm, y_c_norm, psi_ghia) where:
+         x_c_norm, y_c_norm ∈ [0, 1] are normalized by L = xs[-1].
+         psi_ghia = ψ / (U_ref · L) follows Ghia's non-dimensionalization
+                    (matches Table III convention).
+     Returns None if the window is empty or has no cells.
+ 
+     Conventions for LDC Re=100 (Ghia 1982 Table III):
+         primary  : window=(0,1)×(0,1),       mode='min'  (clockwise → ψ_min)
+         BL eddy  : window=(0,0.25)×(0,0.25), mode='max'  (counter-rotate → ψ_max)
+         BR eddy  : window=(0.75,1)×(0,0.25), mode='max'  (counter-rotate → ψ_max)
+     """
+     if xs.size == 0 or ys.size == 0:
+         return None
+     L = float(xs[-1])
+     if L <= 0 or u_ref <= 0:
+         return None
+ 
+     xs_norm = xs / L
+     ys_norm = ys / L
+ 
+     x_lo, x_hi = x_window_norm
+diff --git a/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx b/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
+index 1161db6..95809c8 100644
+--- a/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
++++ b/ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx
+@@ -1811,176 +1811,200 @@ function MultiDimensionComparePanel({
+                     {eddy.all_pass ? "PASS" : "PARTIAL"}
+                   </span>
+                 </div>
+                 <p className="text-[10.5px] text-surface-500">{eddy.description}</p>
+                 <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10.5px]">
+                   <div>
+                     <div className="text-surface-500">x/L</div>
+                     <div className="mono text-surface-100">{eddy.x_meas.toFixed(4)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.x_gold.toFixed(4)}</div>
+                   </div>
+                   <div>
+                     <div className="text-surface-500">y/L</div>
+                     <div className="mono text-surface-100">{eddy.y_meas.toFixed(4)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.y_gold.toFixed(4)}</div>
+                   </div>
+                   <div>
+                     <div className="text-surface-500">ψ</div>
+                     <div className="mono text-surface-100">{eddy.psi_meas.toExponential(3)}</div>
+                     <div className="mono text-[9.5px] text-surface-500">g: {eddy.psi_gold.toExponential(3)}</div>
+                   </div>
+                 </div>
+                 <div className="mt-1.5 flex justify-between text-[10px]">
+                   <span className={eddy.position_pass ? "text-emerald-300" : "text-rose-300"}>
+                     pos_err {eddy.position_error.toExponential(2)} {eddy.position_pass ? "✓" : "✗"}
+                   </span>
+                   <span className={eddy.psi_pass ? "text-emerald-300" : "text-rose-300"}>
+                     |ψ|_err {eddy.psi_error_pct.toFixed(2)}% {eddy.psi_pass ? "✓" : "✗"}
+                   </span>
+                 </div>
+                 {eddy.signal_to_residual_ratio !== null && (
+                   <div className="mt-1 text-[10px]">
+                     <span className="text-surface-500">SNR: </span>
+                     <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+                       {eddy.signal_to_residual_ratio < 0.01
+                         ? eddy.signal_to_residual_ratio.toExponential(2)
+                         : eddy.signal_to_residual_ratio.toFixed(3)}×
+                     </span>
+                     <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+                   </div>
+                 )}
+               </div>
+             ))}
+           </div>
+           <p className="mono mt-2 text-[10px] text-surface-500">
+             tol: pos ≤ {data.metrics_secondary_vortices.position_tolerance.toFixed(3)} · |ψ| ≤ {data.metrics_secondary_vortices.psi_tolerance_pct.toFixed(1)}%
+           </p>
+         </div>
+       )}
+ 
+       {/* Final closure footer — honest assessment of which Ghia
+           observables are validated at what strength level. Codex round 1
+           MED #2 / HIGH: the original footer claimed FULLY_SATISFIED for
+           all 4 Ghia observables, but D8 BL/BR signals are 2-3 decades
+           below the ∫U_x dy' wall-closure residual — argmax coincidences
+           in a noise-dominated field, not validated physics. Post-fix,
+           the footer distinguishes present-but-validated vs present-but-
+           noise-dominated vs missing. */}
+       {(() => {
+         const missing: string[] = [];
+         if (!data.metrics_v_centerline) missing.push("D6 v_centerline");
+         if (!data.metrics_primary_vortex) missing.push("D7 primary vortex");
+         if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+         if (missing.length > 0) {
+           return (
+             <div className="rounded-md border border-amber-900/40 bg-amber-950/10 p-4">
+               <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-amber-300">
+                 降级模式 · 部分 Ghia 观测量缺失
+               </p>
+               <p className="text-[12px] leading-relaxed text-surface-300">
+                 本次 audit run 以下维度未返回 metrics，当前 Compare tab 仅展示已有的维度：
+                 <span className="mono block mt-1 text-amber-200">
+                   缺失: {missing.join(" · ")}
+                 </span>
+                 <span className="block mt-1 text-[11px] text-surface-400">
+                   常见原因：后端缺 pyvista 且 <span className="mono">.psi_cache</span> 未预生成（需跑 <span className="mono">python3.11 ui/backend/services/psi_extraction.py</span>）；VTK 文件缺失或格式变更；gold YAML schema 漂移导致 loader 拒绝。
+                 </span>
+               </p>
+             </div>
+           );
+         }
+-        const d8_noise_floor =
+-          data.metrics_secondary_vortices !== null &&
+-          data.metrics_secondary_vortices !== undefined &&
+-          !data.metrics_secondary_vortices.all_pass;
++        // Codex round 2 MED: derive D8 state from signal_above_noise
++        // aggregate (not !all_pass) so we can distinguish:
++        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
++        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
++        //   (c) !all_pass && any_above_noise → genuine physics deviation
++        const d8 = data.metrics_secondary_vortices!;
++        const d8_all_pass = d8.all_pass === true;
++        const d8_all_above_noise = (d8 as any).all_above_noise === true;
++        const d8_any_above_noise = (d8 as any).any_above_noise === true;
++        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
++        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
++        const footer_tone = d8_all_pass && d8_all_above_noise
++          ? "ok"
++          : d8_noise_floor
++            ? "noise"
++            : "fail";
+         return (
+-          <div className={`rounded-md border p-4 ${d8_noise_floor ? "border-amber-900/40 bg-amber-950/10" : "border-emerald-900/40 bg-emerald-950/10"}`}>
+-            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${d8_noise_floor ? "text-amber-300" : "text-emerald-300"}`}>
+-              DEC-V61-050 closure · 3 / 4 Ghia 观测量已验证（诚实等级）
++          <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
++            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
++              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+             </p>
+             <p className="text-[12px] leading-relaxed text-surface-300">
+               <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+-              <span className="block mt-1">
+-                <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+-              </span>
++              {footer_tone === "ok" && (
++                <span className="block mt-1">
++                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
++                </span>
++              )}
++              {footer_tone === "noise" && (
++                <span className="block mt-1">
++                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
++                </span>
++              )}
++              {footer_tone === "fail" && (
++                <span className="block mt-1">
++                  <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
++                </span>
++              )}
+               <span className="block mt-1 text-[11px] text-surface-500">
+-                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 已尽其所能——诚实停在 3 / 4，而不是伪装 4 / 4。这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
++                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+               </span>
+             </p>
+           </div>
+         );
+       })()}
+     </section>
+   );
+ }
+ 
+ function StatBlock({
+   label,
+   subLabel,
+   value,
+   unit,
+   quantity,
+   accent,
+ }: {
+   label: string;
+   subLabel: string;
+   value: number | null;
+   unit: string;
+   quantity: string;
+   accent?: boolean;
+ }) {
+   return (
+     <div
+       className={`rounded-lg border px-5 py-4 ${
+         accent ? "border-sky-800/60 bg-sky-950/20" : "border-surface-800 bg-surface-900/40"
+       }`}
+     >
+       <p className="text-[11px] uppercase tracking-[0.14em] text-surface-500">{label}</p>
+       <p className="mono mt-3 text-[28px] font-medium leading-none text-surface-100">
+         {value === null ? "—" : value.toPrecision(4)}
+       </p>
+       <div className="mt-3 flex items-baseline justify-between text-[12px] text-surface-400">
+         <span className="mono">{quantity}</span>
+         <span>{unit || "—"}</span>
+       </div>
+       <p className="mt-2 text-[11px] leading-snug text-surface-500">{subLabel}</p>
+     </div>
+   );
+ }
+ 
+ function ToleranceBand({
+   goldValue,
+   lower,
+   upper,
+   measured,
+ }: {
+   goldValue: number;
+   tolerancePct: number;
+   lower: number;
+   upper: number;
+   measured: number | null;
+ }) {
+   // Compute a display range that includes gold, both tolerance bounds,
+   // and measured — with sensible margin. Clamp width to avoid division
+   // by zero for PASS cases where measured ≈ gold.
+   const values = [lower, upper, goldValue, measured].filter(
+     (v): v is number => v !== null && Number.isFinite(v),
+   );
+   const rawMin = Math.min(...values);
+   const rawMax = Math.max(...values);
+   const span = Math.max(rawMax - rawMin, Math.abs(goldValue) * 0.3, 0.01);
+   const padding = span * 0.2;
+   const displayMin = rawMin - padding;
+   const displayMax = rawMax + padding;
+   const toPct = (v: number) =>
+     ((v - displayMin) / (displayMax - displayMin)) * 100;
+ 
+   const goldX = toPct(goldValue);
+   const lowerX = toPct(lower);
+   const upperX = toPct(upper);
+   const measuredX = measured !== null ? toPct(measured) : null;
+   const measuredInside = measured !== null && measured >= lower && measured <= upper;
+ 
+   return (
+     <div className="relative mt-1">
+       {/* Track */}
+       <div className="relative h-2 rounded-full bg-surface-800">
+
+codex
+The diff matches the stated fix description so far. I’m checking the live line numbers, the frontend type shape around `metrics_secondary_vortices`, and whether the new backend fields are actually exercised rather than only computed.
+exec
+/bin/zsh -lc "rg -n \"all_above_noise|any_above_noise|metrics_secondary_vortices|signal_above_noise\" ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx ui/backend/services/comparison_report.py ui/backend -g '"'!**/*.pyc'"'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/comparison_report.py:936:    metrics_secondary_vortices: dict[str, Any] | None = None
+ui/backend/services/comparison_report.py:992:                                "signal_above_noise": snr is not None and snr >= 3.0,
+ui/backend/services/comparison_report.py:1031:                            signal_above_noise = snr is not None and snr >= 3.0
+ui/backend/services/comparison_report.py:1045:                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+ui/backend/services/comparison_report.py:1047:                                "signal_above_noise": signal_above_noise,
+ui/backend/services/comparison_report.py:1050:                            metrics_secondary_vortices = {
+ui/backend/services/comparison_report.py:1057:                                "all_above_noise": all(
+ui/backend/services/comparison_report.py:1058:                                    e["signal_above_noise"] for e in eddy_results
+ui/backend/services/comparison_report.py:1060:                                "any_above_noise": any(
+ui/backend/services/comparison_report.py:1061:                                    e["signal_above_noise"] for e in eddy_results
+ui/backend/services/comparison_report.py:1076:            metrics_secondary_vortices = None
+ui/backend/services/comparison_report.py:1229:        "metrics_secondary_vortices": metrics_secondary_vortices,
+ui/backend/services/comparison_report.py:1238:            if secondary_gold is not None and metrics_secondary_vortices is not None
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1410:          {data.paper.short} · 当前支持 {1 + (profileVerdict ? 1 : 0) + (profileUrl ? 1 : 0) + (pointwiseUrl ? 1 : 0) + (data.grid_conv && data.grid_conv.length ? 1 : 0) + (data.metrics_v_centerline ? 1 : 0) + (data.metrics_primary_vortex ? 1 : 0) + (data.metrics_secondary_vortices ? 1 : 0)} 个独立维度
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1737:              <span className={data.metrics_primary_vortex.signal_above_noise ? "text-emerald-300" : "text-rose-300"}>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1740:              {" "}· {data.metrics_primary_vortex.signal_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1751:      {data.metrics_secondary_vortices && data.paper_secondary_vortices && (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1753:          data.metrics_secondary_vortices.all_pass
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1759:              data.metrics_secondary_vortices.all_pass ? "text-emerald-300" : "text-amber-300"
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1764:              data.metrics_secondary_vortices.all_pass
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1768:              {data.metrics_secondary_vortices.n_pass}/{data.metrics_secondary_vortices.n_total}
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1777:          {data.psi_wall_residuals && !data.metrics_secondary_vortices.all_pass && (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1797:            {data.metrics_secondary_vortices.eddies.map((eddy) => (
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1843:                    <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1848:                    <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1855:            tol: pos ≤ {data.metrics_secondary_vortices.position_tolerance.toFixed(3)} · |ψ| ≤ {data.metrics_secondary_vortices.psi_tolerance_pct.toFixed(1)}%
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1872:        if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1891:        // Codex round 2 MED: derive D8 state from signal_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1893:        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1894:        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1895:        //   (c) !all_pass && any_above_noise → genuine physics deviation
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1896:        const d8 = data.metrics_secondary_vortices!;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1898:        const d8_all_above_noise = (d8 as any).all_above_noise === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1899:        const d8_any_above_noise = (d8 as any).any_above_noise === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1900:        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1901:        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1902:        const footer_tone = d8_all_pass && d8_all_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2717:    signal_above_noise: boolean;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2729:  metrics_secondary_vortices?: {
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2745:      signal_above_noise: boolean;
+ui/backend/services/comparison_report.py:936:    metrics_secondary_vortices: dict[str, Any] | None = None
+ui/backend/services/comparison_report.py:992:                                "signal_above_noise": snr is not None and snr >= 3.0,
+ui/backend/services/comparison_report.py:1031:                            signal_above_noise = snr is not None and snr >= 3.0
+ui/backend/services/comparison_report.py:1045:                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+ui/backend/services/comparison_report.py:1047:                                "signal_above_noise": signal_above_noise,
+ui/backend/services/comparison_report.py:1050:                            metrics_secondary_vortices = {
+ui/backend/services/comparison_report.py:1057:                                "all_above_noise": all(
+ui/backend/services/comparison_report.py:1058:                                    e["signal_above_noise"] for e in eddy_results
+ui/backend/services/comparison_report.py:1060:                                "any_above_noise": any(
+ui/backend/services/comparison_report.py:1061:                                    e["signal_above_noise"] for e in eddy_results
+ui/backend/services/comparison_report.py:1076:            metrics_secondary_vortices = None
+ui/backend/services/comparison_report.py:1229:        "metrics_secondary_vortices": metrics_secondary_vortices,
+ui/backend/services/comparison_report.py:1238:            if secondary_gold is not None and metrics_secondary_vortices is not None
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | sed -n '1835,1915p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  1835	                  </span>
+  1836	                  <span className={eddy.psi_pass ? "text-emerald-300" : "text-rose-300"}>
+  1837	                    |ψ|_err {eddy.psi_error_pct.toFixed(2)}% {eddy.psi_pass ? "✓" : "✗"}
+  1838	                  </span>
+  1839	                </div>
+  1840	                {eddy.signal_to_residual_ratio !== null && (
+  1841	                  <div className="mt-1 text-[10px]">
+  1842	                    <span className="text-surface-500">SNR: </span>
+  1843	                    <span className={`mono ${eddy.signal_above_noise ? "text-emerald-300" : "text-rose-300"}`}>
+  1844	                      {eddy.signal_to_residual_ratio < 0.01
+  1845	                        ? eddy.signal_to_residual_ratio.toExponential(2)
+  1846	                        : eddy.signal_to_residual_ratio.toFixed(3)}×
+  1847	                    </span>
+  1848	                    <span className="text-surface-500"> · signal {eddy.signal_above_noise ? "> 3× noise ✓" : "< 3× noise ✗"}</span>
+  1849	                  </div>
+  1850	                )}
+  1851	              </div>
+  1852	            ))}
+  1853	          </div>
+  1854	          <p className="mono mt-2 text-[10px] text-surface-500">
+  1855	            tol: pos ≤ {data.metrics_secondary_vortices.position_tolerance.toFixed(3)} · |ψ| ≤ {data.metrics_secondary_vortices.psi_tolerance_pct.toFixed(1)}%
+  1856	          </p>
+  1857	        </div>
+  1858	      )}
+  1859	
+  1860	      {/* Final closure footer — honest assessment of which Ghia
+  1861	          observables are validated at what strength level. Codex round 1
+  1862	          MED #2 / HIGH: the original footer claimed FULLY_SATISFIED for
+  1863	          all 4 Ghia observables, but D8 BL/BR signals are 2-3 decades
+  1864	          below the ∫U_x dy' wall-closure residual — argmax coincidences
+  1865	          in a noise-dominated field, not validated physics. Post-fix,
+  1866	          the footer distinguishes present-but-validated vs present-but-
+  1867	          noise-dominated vs missing. */}
+  1868	      {(() => {
+  1869	        const missing: string[] = [];
+  1870	        if (!data.metrics_v_centerline) missing.push("D6 v_centerline");
+  1871	        if (!data.metrics_primary_vortex) missing.push("D7 primary vortex");
+  1872	        if (!data.metrics_secondary_vortices) missing.push("D8 secondary vortices");
+  1873	        if (missing.length > 0) {
+  1874	          return (
+  1875	            <div className="rounded-md border border-amber-900/40 bg-amber-950/10 p-4">
+  1876	              <p className="mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider text-amber-300">
+  1877	                降级模式 · 部分 Ghia 观测量缺失
+  1878	              </p>
+  1879	              <p className="text-[12px] leading-relaxed text-surface-300">
+  1880	                本次 audit run 以下维度未返回 metrics，当前 Compare tab 仅展示已有的维度：
+  1881	                <span className="mono block mt-1 text-amber-200">
+  1882	                  缺失: {missing.join(" · ")}
+  1883	                </span>
+  1884	                <span className="block mt-1 text-[11px] text-surface-400">
+  1885	                  常见原因：后端缺 pyvista 且 <span className="mono">.psi_cache</span> 未预生成（需跑 <span className="mono">python3.11 ui/backend/services/psi_extraction.py</span>）；VTK 文件缺失或格式变更；gold YAML schema 漂移导致 loader 拒绝。
+  1886	                </span>
+  1887	              </p>
+  1888	            </div>
+  1889	          );
+  1890	        }
+  1891	        // Codex round 2 MED: derive D8 state from signal_above_noise
+  1892	        // aggregate (not !all_pass) so we can distinguish:
+  1893	        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
+  1894	        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
+  1895	        //   (c) !all_pass && any_above_noise → genuine physics deviation
+  1896	        const d8 = data.metrics_secondary_vortices!;
+  1897	        const d8_all_pass = d8.all_pass === true;
+  1898	        const d8_all_above_noise = (d8 as any).all_above_noise === true;
+  1899	        const d8_any_above_noise = (d8 as any).any_above_noise === true;
+  1900	        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
+  1901	        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+  1902	        const footer_tone = d8_all_pass && d8_all_above_noise
+  1903	          ? "ok"
+  1904	          : d8_noise_floor
+  1905	            ? "noise"
+  1906	            : "fail";
+  1907	        return (
+  1908	          <div className={`rounded-md border p-4 ${footer_tone === "ok" ? "border-emerald-900/40 bg-emerald-950/10" : footer_tone === "noise" ? "border-amber-900/40 bg-amber-950/10" : "border-red-900/40 bg-red-950/10"}`}>
+  1909	            <p className={`mb-1 mono text-[10.5px] font-semibold uppercase tracking-wider ${footer_tone === "ok" ? "text-emerald-300" : footer_tone === "noise" ? "text-amber-300" : "text-red-300"}`}>
+  1910	              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+  1911	            </p>
+  1912	            <p className="text-[12px] leading-relaxed text-surface-300">
+  1913	              <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+  1914	              {footer_tone === "ok" && (
+  1915	                <span className="block mt-1">
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/comparison_report.py | sed -n '1030,1075p'
+nl -ba ui/backend/services/psi_extraction.py | sed -n '70,145p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  1030	                            )
+  1031	                            signal_above_noise = snr is not None and snr >= 3.0
+  1032	                            eddy_results.append({
+  1033	                                "name": eddy["name"],
+  1034	                                "description": eddy["description"],
+  1035	                                "x_meas": x_m,
+  1036	                                "y_meas": y_m,
+  1037	                                "psi_meas": psi_m,
+  1038	                                "x_gold": eddy["x_gold"],
+  1039	                                "y_gold": eddy["y_gold"],
+  1040	                                "psi_gold": eddy["psi_gold"],
+  1041	                                "position_error": pos_err,
+  1042	                                "psi_error_pct": psi_err_pct,
+  1043	                                "position_pass": pos_pass,
+  1044	                                "psi_pass": psi_pass,
+  1045	                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+  1046	                                "signal_to_residual_ratio": snr,
+  1047	                                "signal_above_noise": signal_above_noise,
+  1048	                            })
+  1049	                        if eddy_results:
+  1050	                            metrics_secondary_vortices = {
+  1051	                                "eddies": eddy_results,
+  1052	                                "position_tolerance": secondary_gold["position_tolerance"],
+  1053	                                "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+  1054	                                "all_pass": all(e["all_pass"] for e in eddy_results),
+  1055	                                "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+  1056	                                "n_total": len(eddy_results),
+  1057	                                "all_above_noise": all(
+  1058	                                    e["signal_above_noise"] for e in eddy_results
+  1059	                                ),
+  1060	                                "any_above_noise": any(
+  1061	                                    e["signal_above_noise"] for e in eddy_results
+  1062	                                ),
+  1063	                            }
+  1064	        except Exception:
+  1065	            # Codex round 1 MED #4: pyvista/VTK sampling can raise a wide
+  1066	            # variety of exceptions (RuntimeError, TypeError, KeyError,
+  1067	            # pyvista.core.errors.*, VTK C++ exceptions surfaced as Python
+  1068	            # RuntimeError, etc.). The D7/D8 dimensions are optional viz
+  1069	            # augmentations — a pyvista internal failure must not 500 the
+  1070	            # whole report endpoint. Broad catch is warranted here because
+  1071	            # the comparator for u_centerline (D1-D5) is a separate code
+  1072	            # path that's already run above and is not guarded by this
+  1073	            # try/except. Real programmer bugs in psi_extraction itself
+  1074	            # are caught in tests + by the module's __main__ smoke test.
+  1075	            metrics_primary_vortex = None
+    70	            continue
+    71	        m = re.search(r"_(\d+)\.vtk$", p.name)
+    72	        if m is None:
+    73	            continue
+    74	        candidates.append((int(m.group(1)), p))
+    75	    if not candidates:
+    76	        return None
+    77	    candidates.sort()
+    78	    return candidates[-1][1]
+    79	
+    80	
+    81	def compute_streamfunction_from_vtk(
+    82	    vtk_path: Path,
+    83	    nx: int = 129,
+    84	    ny: int = 129,
+    85	    bounds: Optional[tuple[float, float, float, float, float]] = None,
+    86	) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    87	    """Return (psi, xs, ys) on a uniform nx × ny grid, or None on failure.
+    88	
+    89	    psi.shape == (ny, nx) in physical m²/s.
+    90	    xs, ys in physical m (uniform).
+    91	    bounds: optional explicit (xmin, xmax, ymin, ymax, z_mid). If None,
+    92	    derived from mesh.bounds with z at the midplane (2D slab convention).
+    93	
+    94	    Returns None when pyvista is unavailable, the VTK is unreadable,
+    95	    or the mesh lacks a U vector field.
+    96	    """
+    97	    if not vtk_path.is_file():
+    98	        return None
+    99	
+   100	    # Cache schema version — bump when the on-disk npz layout changes.
+   101	    CACHE_SCHEMA_VERSION = 2
+   102	    cache_dir = vtk_path.parent
+   103	    cache_file = cache_dir / f".psi_cache_{nx}x{ny}.npz"
+   104	    stat = vtk_path.stat()
+   105	    vtk_mtime_ns = int(stat.st_mtime_ns)
+   106	    vtk_size = int(stat.st_size)
+   107	    # Codex round 1 MED #3: prior cache key was {nx, ny, st_mtime float,
+   108	    # 1e-6 tol}; this misses APFS sub-µs updates and ext4 same-second
+   109	    # overwrites, and also ignored `bounds`. Use mtime_ns (integer, exact)
+   110	    # + size (catches content change when mtime is reused) + bounds
+   111	    # (explicit-bounds call shouldn't be served cached-default result) +
+   112	    # schema version (invalidates when this serialization format changes).
+   113	    bounds_key = tuple(bounds) if bounds is not None else None
+   114	    # Cache hit path is deliberately pyvista-free so a backend whose
+   115	    # python interpreter lacks a working pyvista/vtk install can still
+   116	    # serve ψ-derived dimensions as long as the cache was populated
+   117	    # out-of-band (e.g. by python3.11 via this module's __main__).
+   118	    if cache_file.is_file():
+   119	        try:
+   120	            cached = np.load(cache_file, allow_pickle=True)
+   121	            cached_schema = int(cached["schema_version"]) if "schema_version" in cached else 1
+   122	            cached_mtime_ns = int(cached["vtk_mtime_ns"]) if "vtk_mtime_ns" in cached else None
+   123	            cached_size = int(cached["vtk_size"]) if "vtk_size" in cached else None
+   124	            # Codex round 2 MED: `bounds` is a 1-element object array
+   125	            # wrapping the bounds_key tuple. Index [0] works for both
+   126	            # size-1 object arrays and 0-d arrays; `.item()` fails on
+   127	            # the size-5 legacy write path, which silently forced recompute.
+   128	            cached_bounds = cached["bounds"][0] if "bounds" in cached else None
+   129	            if (
+   130	                cached_schema == CACHE_SCHEMA_VERSION
+   131	                and cached_mtime_ns == vtk_mtime_ns
+   132	                and cached_size == vtk_size
+   133	                and cached_bounds == bounds_key
+   134	            ):
+   135	                return cached["psi"], cached["xs"], cached["ys"]
+   136	        except Exception:
+   137	            pass  # cache miss → recompute below
+   138	
+   139	    try:
+   140	        import pyvista as pv
+   141	    except ImportError:
+   142	        return None
+   143	
+   144	    try:
+   145	        grid = pv.read(str(vtk_path))
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/psi_extraction.py | sed -n '160,215p'
+nl -ba ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | sed -n '2710,2760p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   160	
+   161	    if bounds is None:
+   162	        xmin, xmax, ymin, ymax, zmin, zmax = grid.bounds
+   163	        z_mid = 0.5 * (zmin + zmax)
+   164	    else:
+   165	        xmin, xmax, ymin, ymax, z_mid = bounds
+   166	
+   167	    if xmax <= xmin or ymax <= ymin:
+   168	        return None
+   169	
+   170	    xs = np.linspace(xmin, xmax, nx)
+   171	    ys = np.linspace(ymin, ymax, ny)
+   172	    XX, YY = np.meshgrid(xs, ys)  # shape (ny, nx)
+   173	    points = np.column_stack([
+   174	        XX.ravel(),
+   175	        YY.ravel(),
+   176	        np.full(XX.size, z_mid),
+   177	    ])
+   178	    probe = pv.PolyData(points).sample(grid)
+   179	    U = np.asarray(probe["U"])
+   180	    if U.ndim != 2 or U.shape[1] < 2:
+   181	        return None
+   182	    U_x = U[:, 0].reshape(YY.shape)
+   183	
+   184	    # ψ(x, y) = ∫₀^y U_x(x, y') dy', trapezoidal along axis 0 (y).
+   185	    dy = ys[1] - ys[0] if ny > 1 else 0.0
+   186	    psi = np.zeros_like(U_x)
+   187	    for i in range(1, ny):
+   188	        psi[i, :] = psi[i - 1, :] + 0.5 * (U_x[i - 1, :] + U_x[i, :]) * dy
+   189	
+   190	    try:
+   191	        # Wrap bounds_key in a 1-element object array so the tuple
+   192	        # round-trips as a single opaque value; `np.array(bounds_key,
+   193	        # dtype=object)` would splat a 5-tuple into a size-5 array and
+   194	        # break the read-side `.item()`/`[0]` unwrap.
+   195	        bounds_store = np.empty(1, dtype=object)
+   196	        bounds_store[0] = bounds_key
+   197	        np.savez(
+   198	            cache_file,
+   199	            psi=psi, xs=xs, ys=ys,
+   200	            vtk_mtime_ns=np.array([vtk_mtime_ns]),
+   201	            vtk_size=np.array([vtk_size]),
+   202	            bounds=bounds_store,
+   203	            schema_version=np.array([CACHE_SCHEMA_VERSION]),
+   204	        )
+   205	    except Exception:
+   206	        pass  # cache write best-effort
+   207	
+   208	    return psi, xs, ys
+   209	
+   210	
+   211	def psi_wall_closure_residuals(
+   212	    psi: np.ndarray,
+   213	    xs: np.ndarray,
+   214	    ys: np.ndarray,
+   215	    u_ref: float = 1.0,
+  2710	    psi_error_pct: number;
+  2711	    position_tolerance: number;
+  2712	    psi_tolerance_pct: number;
+  2713	    position_pass: boolean;
+  2714	    psi_pass: boolean;
+  2715	    all_pass: boolean;
+  2716	    signal_to_residual_ratio: number | null;
+  2717	    signal_above_noise: boolean;
+  2718	  } | null;
+  2719	  paper_primary_vortex?: {
+  2720	    source: string;
+  2721	    doi?: string;
+  2722	    short: string;
+  2723	    position_tolerance: number;
+  2724	    psi_tolerance_pct: number;
+  2725	  } | null;
+  2726	  // DEC-V61-050 batch 4: secondary corner eddies (BL + BR) from
+  2727	  // Ghia Table III cells 3-4. Mirror shape of primary_vortex but
+  2728	  // as a list so Re≥1000 TL can be added without another key.
+  2729	  metrics_secondary_vortices?: {
+  2730	    eddies: {
+  2731	      name: string;
+  2732	      description: string;
+  2733	      x_meas: number;
+  2734	      y_meas: number;
+  2735	      psi_meas: number;
+  2736	      x_gold: number;
+  2737	      y_gold: number;
+  2738	      psi_gold: number;
+  2739	      position_error: number;
+  2740	      psi_error_pct: number;
+  2741	      position_pass: boolean;
+  2742	      psi_pass: boolean;
+  2743	      all_pass: boolean;
+  2744	      signal_to_residual_ratio: number | null;
+  2745	      signal_above_noise: boolean;
+  2746	    }[];
+  2747	    position_tolerance: number;
+  2748	    psi_tolerance_pct: number;
+  2749	    all_pass: boolean;
+  2750	    n_pass: number;
+  2751	    n_total: number;
+  2752	  } | null;
+  2753	  psi_wall_residuals?: {
+  2754	    left: number;
+  2755	    right: number;
+  2756	    bottom: number;
+  2757	    top: number;
+  2758	    max: number;
+  2759	    L: number;
+  2760	  } | null;
+
+codex
+One thing surfaced while reading: the runtime fix is present, but the `metrics_secondary_vortices` TS interface still doesn’t declare the two new aggregate fields, so the footer reads them through `as any`. I’m treating that as a possible maintainability nit unless it hides a real behavioral issue; I’m checking whether coverage now exercises the new branches.
+exec
+/bin/zsh -lc 'rg -n "all_above_noise|any_above_noise|genuine physics deviation|noise coincidence|validated_count|SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES|FULLY_SATISFIED_ALL_4_GHIA_TABLES" ui/backend/tests ui/frontend src tests' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1893:        //   (a) D8 all_pass + all_above_noise → genuine 4/4 future state
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1894:        //   (b) !all_pass && !any_above_noise → noise-floor (current state)
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1895:        //   (c) !all_pass && any_above_noise → genuine physics deviation
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1898:        const d8_all_above_noise = (d8 as any).all_above_noise === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1899:        const d8_any_above_noise = (d8 as any).any_above_noise === true;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1900:        const d8_noise_floor = !d8_all_pass && !d8_any_above_noise;
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1901:        const validated_count = 3 + (d8_all_pass && d8_all_above_noise ? 1 : 0);
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1902:        const footer_tone = d8_all_pass && d8_all_above_noise
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1910:              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1916:                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1921:                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1930:                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+
+exec
+/bin/zsh -lc "python3.12 - <<'PY'
+import numpy as np, tempfile, pathlib
+with tempfile.TemporaryDirectory() as d:
+    p = pathlib.Path(d) / 'legacy.npz'
+    np.savez(p, bounds=np.array((0.0, 1.0, 0.0, 1.0, 0.5), dtype=object))
+    cached = np.load(p, allow_pickle=True)
+    arr = cached['bounds']
+    print('legacy shape=', arr.shape, 'dtype=', arr.dtype)
+    try:
+        print('item=', arr.item())
+    except Exception as e:
+        print(type(e).__name__, str(e))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "python3.12 - <<'PY'
+import numpy as np, tempfile, pathlib
+
+def roundtrip(bounds_key):
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / 'cache.npz'
+        bounds_store = np.empty(1, dtype=object)
+        bounds_store[0] = bounds_key
+        np.savez(p, bounds=bounds_store)
+        cached = np.load(p, allow_pickle=True)
+        recovered = cached['bounds'][0] if 'bounds' in cached else None
+        print(repr(bounds_key), '->', repr(recovered), 'equal=', recovered == bounds_key, 'shape=', cached['bounds'].shape, 'dtype=', cached['bounds'].dtype)
+
+roundtrip((0.0, 1.0, 0.0, 1.0, 0.5))
+roundtrip(None)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'numpy'
+
+ exited 1 in 0ms:
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ModuleNotFoundError: No module named 'numpy'
+
+codex
+The repo shell I’m in doesn’t have `numpy` on `python3.12`, so I’m checking the actual project interpreter next rather than assuming the earlier smoke test is reproducible from this shell. That’s an environment blocker, not a code blocker unless the project itself lacks a runnable Python with dependencies.
+exec
+/bin/zsh -lc "nl -ba /Users/Zhuanz/.codex/memories/MEMORY.md | sed -n '601,610p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   601	# Task Group: cfd-harness-unified governance closeout and planning gates
+   602	
+   603	scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+   604	applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+   605	
+   606	## Task 1: Close Phase 8 and reconcile stale governance evidence
+   607	
+   608	### rollout_summary_files
+   609	
+   610	- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+
+exec
+/bin/zsh -lc "if [ -x .venv/bin/python ]; then .venv/bin/python - <<'PY'
+try:
+    import numpy
+    print('.venv numpy OK', numpy.__version__)
+except Exception as e:
+    print('.venv numpy FAIL', type(e).__name__, e)
+PY
+else
+  echo '.venv missing'
+fi" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+.venv numpy OK 2.4.4
+
+exec
+/bin/zsh -lc "ls -d .venv venv env 2>/dev/null || true
+python3 - <<'PY'
+try:
+    import numpy
+    print('python3 numpy OK', numpy.__version__)
+except Exception as e:
+    print('python3 numpy FAIL', type(e).__name__, e)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 230ms:
+python3 numpy OK 1.26.4
+
+exec
+/bin/zsh -lc "sed -n '1910,1935p' ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+              DEC-V61-050 closure · {validated_count} / 4 Ghia 观测量已验证（诚实等级）
+            </p>
+            <p className="text-[12px] leading-relaxed text-surface-300">
+              <strong className="text-emerald-200">D2-D4（u_centerline Table I）· D6（v_centerline Table II）· D7（primary vortex Table III 主行）</strong> — 三个观测量的信号都远高于数值噪声地板，裁决可信，physics_contract 生效。
+              {footer_tone === "ok" && (
+                <span className="block mt-1">
+                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+                </span>
+              )}
+              {footer_tone === "noise" && (
+                <span className="block mt-1">
+                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+                </span>
+              )}
+              {footer_tone === "fail" && (
+                <span className="block mt-1">
+                  <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
+                </span>
+              )}
+              <span className="block mt-1 text-[11px] text-surface-500">
+                角涡真正验证需后续 DEC：Poisson 解 <span className="mono">∇²ψ = -ω_z</span>（ψ=0 边界消除积分常数漂移）或 OpenFOAM 原生 ψ 场采样。当前 pipeline 在诚实等级停于 <span className="mono">{validated_count} / 4</span> — 这个 D8 banner 本身是 DEC-V61-050 Codex round 1 MED 补丁的结果。
+              </span>
+            </p>
+          </div>
+        );
+      })()}
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import numpy as np, tempfile, pathlib
+
+def roundtrip(bounds_key):
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / 'cache.npz'
+        bounds_store = np.empty(1, dtype=object)
+        bounds_store[0] = bounds_key
+        np.savez(p, bounds=bounds_store)
+        cached = np.load(p, allow_pickle=True)
+        recovered = cached['bounds'][0] if 'bounds' in cached else None
+        print(repr(bounds_key), '->', repr(recovered), 'equal=', recovered == bounds_key, 'shape=', cached['bounds'].shape, 'dtype=', cached['bounds'].dtype)
+
+roundtrip((0.0, 1.0, 0.0, 1.0, 0.5))
+roundtrip(None)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import numpy as np, tempfile, pathlib
+with tempfile.TemporaryDirectory() as d:
+    p = pathlib.Path(d) / 'legacy.npz'
+    np.savez(p, bounds=np.array((0.0, 1.0, 0.0, 1.0, 0.5), dtype=object))
+    cached = np.load(p, allow_pickle=True)
+    arr = cached['bounds']
+    print('legacy shape=', arr.shape, 'dtype=', arr.dtype)
+    try:
+        print('item=', arr.item())
+    except Exception as e:
+        print(type(e).__name__, str(e))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 172ms:
+(0.0, 1.0, 0.0, 1.0, 0.5) -> (0.0, 1.0, 0.0, 1.0, 0.5) equal= True shape= (1,) dtype= object
+None -> None equal= True shape= (1,) dtype= object
+
+ succeeded in 198ms:
+legacy shape= (5,) dtype= object
+ValueError can only convert an array of size 1 to a Python scalar
+
+codex
+The cache fix is behaving correctly under the project interpreter. I found one remaining logic gap in the footer state machine, and I’m confirming it with a minimal truth-table probe before I finalize the verdict.
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | sed -n '1914,1928p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  1914	              {footer_tone === "ok" && (
+  1915	                <span className="block mt-1">
+  1916	                  <strong className="text-emerald-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 信号已高于墙面闭合残差，argmax 裁决来自物理而非噪声，contract_status = <span className="mono text-emerald-200">FULLY_SATISFIED_ALL_4_GHIA_TABLES</span>。
+  1917	                </span>
+  1918	              )}
+  1919	              {footer_tone === "noise" && (
+  1920	                <span className="block mt-1">
+  1921	                  <strong className="text-amber-200">D8 BL/BR（Table III secondary 行）</strong>：ψ 量级 <span className="mono">1e-6 ~ 1e-5</span> 低于 <span className="mono">∫U_x dy'</span> 在 129² 墙面的闭合残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>)，<strong>argmax 找到的点是噪声巧合，不是物理复现</strong>。contract_status 为 <span className="mono text-amber-200">SATISFIED_FOR_U_V_AND_PRIMARY_VORTEX_NOT_SECONDARIES</span>。
+  1922	                </span>
+  1923	              )}
+  1924	              {footer_tone === "fail" && (
+  1925	                <span className="block mt-1">
+  1926	                  <strong className="text-red-200">D8 BL/BR（Table III secondary 行）</strong>：至少一个角涡的 ψ 信号已高于墙面残差 (<span className="mono">{data.psi_wall_residuals ? data.psi_wall_residuals.max.toExponential(2) : "~3e-3"}</span>) 但未通过 tolerance，属于真实物理偏差 (非噪声巧合)。检查 mesh resolution / 流场对称性 / audit fixture 是否过期。
+  1927	                </span>
+  1928	              )}
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/comparison_report.py | sed -n '1042,1062p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  1042	                                "psi_error_pct": psi_err_pct,
+  1043	                                "position_pass": pos_pass,
+  1044	                                "psi_pass": psi_pass,
+  1045	                                "all_pass": pos_pass and psi_pass and signal_above_noise,
+  1046	                                "signal_to_residual_ratio": snr,
+  1047	                                "signal_above_noise": signal_above_noise,
+  1048	                            })
+  1049	                        if eddy_results:
+  1050	                            metrics_secondary_vortices = {
+  1051	                                "eddies": eddy_results,
+  1052	                                "position_tolerance": secondary_gold["position_tolerance"],
+  1053	                                "psi_tolerance_pct": secondary_gold["psi_tolerance"] * 100.0,
+  1054	                                "all_pass": all(e["all_pass"] for e in eddy_results),
+  1055	                                "n_pass": sum(1 for e in eddy_results if e["all_pass"]),
+  1056	                                "n_total": len(eddy_results),
+  1057	                                "all_above_noise": all(
+  1058	                                    e["signal_above_noise"] for e in eddy_results
+  1059	                                ),
+  1060	                                "any_above_noise": any(
+  1061	                                    e["signal_above_noise"] for e in eddy_results
+  1062	                                ),
+
+exec
+/bin/zsh -lc "node - <<'JS'
+function footerTone(d8_all_pass, d8_all_above_noise, d8_any_above_noise) {
+  const d8_noise_floor = "'!d8_all_pass && !d8_any_above_noise;
+  return d8_all_pass && d8_all_above_noise ? '"'ok' : d8_noise_floor ? 'noise' : 'fail';
+}
+const cases = [
+  ['all pass, all above noise', true, true, true],
+  ['current pure noise floor', false, false, false],
+  ['genuine above-noise fail', false, false, true],
+  ['mixed: one above-noise pass, one below-noise pass', false, false, true],
+];
+for (const [label, allPass, allAbove, anyAbove] of cases) {
+  console.log(label + ' => ' + footerTone(allPass, allAbove, anyAbove));
+}
+JS" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+all pass, all above noise => ok
+current pure noise floor => noise
+genuine above-noise fail => fail
+mixed: one above-noise pass, one below-noise pass => fail
+
+codex
+VERDICT: CHANGES_REQUIRED
+FINDINGS:
+  HIGH:
+    - none
+  MEDIUM:
+    - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1897-1906,1924-1926` with backend aggregates from `ui/backend/services/comparison_report.py:1054-1061`: Round 2 MED #1 is only partially closed. The red `fail` branch is selected for any state where `all_pass=false` and `any_above_noise=true`, but that condition also includes the mixed case “one corner vortex is above noise and passes, the other is still noise-dominated.” In that mixed state the UI still renders the red copy claiming an above-noise vortex “未通过 tolerance,” which is false. I verified the current truth table: `all_pass=false, all_above_noise=false, any_above_noise=true` maps to `fail` for both a genuine above-noise tolerance miss and that mixed pass-plus-noise case. For the red branch to mean “genuine physics deviation, not noise coincidence,” the backend needs a distinct aggregate such as `any_above_noise_fail`, or the frontend needs to derive it from the per-eddy rows.
+  LOW:
+    - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2729-2752`: the TS type for `metrics_secondary_vortices` still omits `all_above_noise` and `any_above_noise`, so the footer reads them through `as any`. Runtime behavior is fine today, but typecheck no longer guards this API contract.
+OUT_OF_SCOPE_FOLLOWUPS:
+  - Add an explicit footer-state test matrix covering `ok`, pure `noise`, genuine above-noise `fail`, and the mixed “one above-noise pass + one noise-floor pass” case.
+  - Declare the new aggregate fields in the frontend type instead of relying on `as any`.
+
+
+tokens used
+109,550
+VERDICT: CHANGES_REQUIRED
+FINDINGS:
+  HIGH:
+    - none
+  MEDIUM:
+    - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1897-1906,1924-1926` with backend aggregates from `ui/backend/services/comparison_report.py:1054-1061`: Round 2 MED #1 is only partially closed. The red `fail` branch is selected for any state where `all_pass=false` and `any_above_noise=true`, but that condition also includes the mixed case “one corner vortex is above noise and passes, the other is still noise-dominated.” In that mixed state the UI still renders the red copy claiming an above-noise vortex “未通过 tolerance,” which is false. I verified the current truth table: `all_pass=false, all_above_noise=false, any_above_noise=true` maps to `fail` for both a genuine above-noise tolerance miss and that mixed pass-plus-noise case. For the red branch to mean “genuine physics deviation, not noise coincidence,” the backend needs a distinct aggregate such as `any_above_noise_fail`, or the frontend needs to derive it from the per-eddy rows.
+  LOW:
+    - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:2729-2752`: the TS type for `metrics_secondary_vortices` still omits `all_above_noise` and `any_above_noise`, so the footer reads them through `as any`. Runtime behavior is fine today, but typecheck no longer guards this API contract.
+OUT_OF_SCOPE_FOLLOWUPS:
+  - Add an explicit footer-state test matrix covering `ok`, pure `noise`, genuine above-noise `fail`, and the mixed “one above-noise pass + one noise-floor pass” case.
+  - Declare the new aggregate fields in the frontend type instead of relying on `as any`.
+
+

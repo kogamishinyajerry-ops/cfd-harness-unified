@@ -1,0 +1,2467 @@
+2026-04-22T17:26:56.014620Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-22T17:26:56.014693Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019db63b-0e88-7832-af09-67d3d416ae8c
+--------
+user
+# Codex Round 3 — DEC-V61-047: final verification after N1 naca0012 fix
+
+You produced `.planning/reviews/pedagogy_round_2_findings.md` in round 2.
+Verdict was **CHANGES_REQUIRED · 0 blockers · 1 major (N1)**. F1, F2,
+F5, F6 were all CLOSED; F3 deferral was ACCEPTED; F4 was PARTIAL
+*only* because of N1 — the naca0012_airfoil teaching card I wrote in
+round 1 batch 4 said `Re=6e6` + `α≈4°` while repo truth is `Re=3e6`
++ `α=0°` (attached symmetric-airfoil flow).
+
+**Your job this round**: verify the single N1 remediation (`196fb94`)
+landed correctly, accept F3 deferral carry-forward, and close the
+iteration with **APPROVE** or **APPROVE_WITH_COMMENTS** — unless the
+batch-6 fix introduces new problems.
+
+## Commits under review (round-3 scope)
+
+On `origin/main`, HEAD=`196fb94`. The re-review window is
+`51c7198..196fb94`. Code change is a single file: `ui/frontend/src/
+data/learnCases.ts` — only the naca0012_airfoil entry's 7 fields were
+touched (physics_bullets_zh / why_validation_matters_zh /
+common_pitfall_zh / solver_setup_zh / mesh_strategy_zh /
+boundary_conditions_zh / observable_extraction_zh).
+
+Authoritative truth the round-2 fix was supposed to match:
+- `knowledge/whitelist.yaml:234-247` — Re=3e6
+- `knowledge/gold_standards/naca0012_airfoil.yaml:5-29` — solver
+  simpleFoam + kOmegaSST, URF: p=0.3, U/k/ω=0.5, Re=3e6, α=0°
+  (symmetric airfoil), precondition #3 explicitly marks the near-
+  surface band Cp extraction as the 30-50% magnitude attenuation
+  rationale for the 20% tolerance + PASS_WITH_DEVIATIONS verdict.
+- `src/foam_agent_adapter.py:6370-6376` — adapter path
+- `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`
+
+## Verification expectation
+
+1. **N1 CLOSED**: all factual claims in the 4 teaching cards +
+   physics_bullets + why_validation_matters + common_pitfall on
+   naca0012 match authoritative repo truth? (Re / α / URF / mesh /
+   BCs / Cp extraction band / tolerance rationale.)
+2. **No regressions**: batches 1-5 findings (F1 / F2 / F4 / F5 / F6)
+   stay closed — the batch-6 edit only touched naca0012, so confirm
+   by grep that the other 9 cases are untouched.
+3. **F3 carry-forward**: round-2 already accepted the deferral;
+   round-3 should simply continue accepting unless you now see the
+   pedagogy signal as insufficient with the newly-fixed naca0012.
+
+## Bias reminder
+
+You already called CHANGES_REQUIRED twice. This is a single-file
+single-case remediation. If the fix is factually correct, APPROVE or
+APPROVE_WITH_COMMENTS is the right call — the user mandated "迭代至
+两人都 APPROVE / APPROVE_WITH_COMMENTS" and chaining rounds past
+convergence is exactly the anti-pattern you warned about on DEC-046.
+
+Don't nit-pick copy choices. Don't reopen F3 (already accepted).
+Don't fish for new findings just because it's "round 3". The bar is
+**did the N1 claim about naca0012 get factually corrected?** — yes/no.
+
+## Output shape
+
+Write `.planning/reviews/pedagogy_round_3_findings.md` with:
+
+```
+# DEC-V61-047 Round 3 — Codex Consolidated Verdict
+
+**Overall**: APPROVE | APPROVE_WITH_COMMENTS | CHANGES_REQUIRED
+**Blockers**: N
+**Expert verdict**: ...
+**Novice verdict**: ...
+
+## N1 verification
+- status: CLOSED | PARTIAL | NOT ADDRESSED
+- evidence: file:line + authoritative file:line cross-ref
+
+## Carry-forward
+- F3 deferral: still accept (or re-raise)
+
+## New findings (if any)
+- ...
+
+## If APPROVE / APPROVE_WITH_COMMENTS
+End iteration. List any follow-up backlog.
+
+## If CHANGES_REQUIRED
+Minimum fix with file:line + diff intent.
+```
+
+Output only `.planning/reviews/pedagogy_round_3_findings.md`. No
+other file edits.
+
+codex
+Reviewing the single-file remediation and the authoritative sources first. I’ll verify the changed `naca0012_airfoil` card against repo truth, confirm no other cases moved in the re-review window, then write the round-3 verdict file only.
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/27651a43bf55185d924f7a1fc49043a0a8be65a0/skills/using-superpowers/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|DEC-V61|pedagogy_round_2_findings|naca0012_airfoil|V61" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+270:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+290:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+511:# Task Group: cfd-harness-unified governance closeout and planning gates
+513:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+514:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+520:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+530:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+540:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+594:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+ succeeded in 0ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
+2. **Superpowers skills** — override default system behavior where they conflict
+3. **Default system prompt** — lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+codex
+Using `gsd-code-review` as the review workflow for this re-check. I’ve also done the quick memory pass for `cfd-harness-unified`; next I’m pulling the exact diff, the authoritative source lines, and the prior round-2 verdict to line up evidence before writing the final markdown.
+Focused re-review of the single N1 remediation with authoritative cross-checks and a one-file markdown verdict output.
+  → Inspect round-3 diff and current learnCases entry for naca0012_airfoil
+  • Cross-check changed claims against authoritative repo sources and prior round-2 finding
+  • Confirm no regressions by verifying other cases were untouched in the re-review window
+  • Write .planning/reviews/pedagogy_round_3_findings.md with final verdict
+exec
+/bin/zsh -lc "sed -n '1,240p' .planning/reviews/pedagogy_round_2_findings.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+# DEC-V61-047 Round 2 — Codex Consolidated Verdict
+
+**Overall**: CHANGES_REQUIRED
+**Blockers**: 0
+**Expert verdict**: CHANGES_REQUIRED — F1/F2/F5/F6 are substantively closed and F3 deferral is acceptable, but F4 is not fully closed because `naca0012_airfoil` now teaches the wrong authoritative setup (`Re=6e6`, `α≈4°`) on the new student-facing solver card while repo truth remains `Re=3e6`, `α=0°`.
+**Novice verdict**: CHANGES_REQUIRED — Story tab is much more learnable now, but a novice can still leave with the wrong airfoil benchmark setup on a core case, so I cannot call the suite textbook-grade yet.
+
+## Remediation verification
+- F1 [verify]: CLOSED — visual-only Story copy no longer hardcodes FAIL. The branch now says `Tier C · 过程证据，未做自动化金标准比对` and explicitly says it is neither pass nor fail in `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1641-1658`. Backend visual-only context also returns `verdict: None` in `ui/backend/services/comparison_report.py:329-387`. This matters because both `circular_cylinder_wake` and `plane_channel_flow` fixtures still declare `expected_verdict: PASS` in `ui/backend/tests/fixtures/runs/circular_cylinder_wake/audit_real_run_measurement.yaml:8-18` and `ui/backend/tests/fixtures/runs/plane_channel_flow/audit_real_run_measurement.yaml:8-18`. In an isolated export of `10a3463`, `grep -n "FAIL" ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx | head -5` only hit status-map/comment usages, not a visual-only hardcoded FAIL.
+- F2 [verify]: CLOSED — `RunResidualsCard` now tries the real `audit_real_run/renders/residuals.png` first, then only falls back to the synthetic SVG after `onError`, with explicit `⚠ 示意图 · illustrative only` copy and `收敛不等于"算对"` framing in `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:1267-1319`. Isolated verification on exported `10a3463`: `npm run typecheck` passed, and `npm run build` passed with a production bundle (`dist/assets/index-CPO9gUxS.js 817.75 kB / gzip 267.94 kB`).
+- F5 [verify]: CLOSED — `turbulent_flat_plate` now teaches laminar Blasius in `ui/frontend/src/data/learnCases.ts:112-136`, matching gold's laminar correction, `Cf=0.664/sqrt(Re_x)`, and `ref_value=0.00420` at x=0.5 in `knowledge/gold_standards/turbulent_flat_plate.yaml:5-36`. `plane_channel_flow` is now honestly framed as a disguised incompatibility sample in `ui/frontend/src/data/learnCases.ts:139-162`, matching gold's `INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE` contract in `knowledge/gold_standards/plane_channel_flow.yaml:7-27`, including the emitter math being numerically self-consistent but physics-wrong in `src/plane_channel_uplus_emitter.py:246-292`. `impinging_jet` now teaches the two-layer gap in `ui/frontend/src/data/learnCases.ts:165-187`, matching gold's `empty`-not-`wedge` plus A4 iteration-cap hazards in `knowledge/gold_standards/impinging_jet.yaml:8-28`. `differential_heated_cavity` now teaches the `Ra=1e6` de Vahl Davis benchmark in `ui/frontend/src/data/learnCases.ts:232-250`, matching the downgraded gold regime in `knowledge/gold_standards/differential_heated_cavity.yaml:5-25`.
+- F4 [verify]: PARTIAL — the new `CFD 全流程` section is correctly added as a 2-column responsive 4-card layout on Story in `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:406-440`, and `ui/frontend/src/data/learnCases.ts` now contains all 4 new fields for all 10 cases (`grep -cE "solver_setup_zh|mesh_strategy_zh|boundary_conditions_zh|observable_extraction_zh"` on exported `10a3463` returned `44`). The cards are concrete for multiple spot-checks. `lid_driven_cavity` names `simpleFoam`, `ncx=ncy=40`, moving-wall/no-slip BCs, and `x=0.5` centerline extraction in `ui/frontend/src/data/learnCases.ts:49-67`, aligning with `knowledge/gold_standards/lid_driven_cavity.yaml:96-108`. `circular_cylinder_wake` correctly points to transient `pimpleFoam` plus FFT extraction in `ui/frontend/src/data/learnCases.ts:106-109`, aligning with `src/cylinder_strouhal_fft.py:1-35`. But `naca0012_airfoil`'s new solver card is factually wrong: it says `Re=6e6` and `α≈4°` in `ui/frontend/src/data/learnCases.ts:205`, while whitelist, gold, adapter notes, and reference fixture all still anchor the case at `Re=3e6`, `angle_of_attack=0.0` in `knowledge/whitelist.yaml:234-247`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-29`, `src/foam_agent_adapter.py:6370-6376`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`. Because F4's goal was a student-facing reproducibility path, this drift means F4 is not fully closed.
+- F6 [verify]: CLOSED — `PhysicsContractPanel` now keeps `condition` and `如果不满足：...` visible while collapsing raw `evidence_ref` into `<details>` in `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:602-625`. For `impinging_jet`, this is the right novice UX: the student sees the teachable consequence first, while `empty/wedge`, A4, and adapter/file-path jargon stay opt-in, matching the raw evidence load in `knowledge/gold_standards/impinging_jet.yaml:11-27`.
+
+## Deferral judgment
+- F3: accept — the backend Tier-C gap is still real. `comparison_report.py` still keeps 9 cases in `_VISUAL_ONLY_CASES`, returns `verdict=None`, and skips gold-overlay / metrics / GCI assembly in `ui/backend/services/comparison_report.py:45-60`, `ui/backend/services/comparison_report.py:329-387`, and `ui/backend/services/comparison_report.py:422-424`. Tests still encode that visual-only HTML/PDF should not render full reports in `ui/backend/tests/test_comparison_report_visual_only.py:74-111` and `ui/backend/tests/test_comparison_report_visual_only.py:164-212`. I also reran that isolated backend file on exported `10a3463`, and it passed `10/10`. But after F1/F2/F4/F5/F6, the frontend Story tab now provides an honest novice teaching path, so the missing Tier-B overlay is backlog, not the thing that should fail this round.
+
+## New findings (if any)
+- N1 🟠 `naca0012_airfoil` new F4 teaching card teaches the wrong authoritative setup. `ui/frontend/src/data/learnCases.ts:205` says `Re=6e6` and `α≈4°`, but repo truth is `Re=3e6`, `α=0°` in `knowledge/whitelist.yaml:244-247`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-29`, `src/foam_agent_adapter.py:6371-6372`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`. This is pedagogy-facing correctness drift on a core case, not a copy-style nit.
+
+## If CHANGES_REQUIRED: round-3 directive
+- Minimum fix: edit `ui/frontend/src/data/learnCases.ts:205-208` so the `naca0012_airfoil` teaching cards match authoritative repo truth. Replace `Re=6e6` with `Re=3e6`, replace `α≈4°` with `α=0°` (or otherwise explain that the canonical benchmark here is zero-angle attached flow), and keep the near-surface-vs-exact-surface Cp extraction caveat aligned with `knowledge/gold_standards/naca0012_airfoil.yaml:15-28`.
+- After that targeted fix, this review should not reopen F3. Minimum reruns: `npm run typecheck`, `npm run build`, and `PYTHONPATH=. /Users/Zhuanz/Desktop/cfd-harness-unified/.venv/bin/pytest ui/backend/tests/test_comparison_report_visual_only.py -q`.
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/data/learnCases.ts | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	// Student-facing learning metadata — a narrative layer on top of the
+     2	// backend's authoritative whitelist + gold_standard records.
+     3	//
+     4	// Ordering in the catalog is pedagogical (easy → hard, not alphabetical).
+     5	// Every case_id MUST exist in knowledge/whitelist.yaml or the detail
+     6	// route will 404 when it tries to fetch /api/cases/:id.
+     7	
+     8	export interface LearnCase {
+     9	  id: string;
+    10	  // Name shown in catalog cards (kept terse). Detail header uses the real
+    11	  // name from the backend CaseDetail.name to avoid drift.
+    12	  displayName: string;
+    13	  // Chinese headline — primary. 3-6 chars, like a book chapter title.
+    14	  headline_zh: string;
+    15	  // English subhead — secondary (one line under the headline).
+    16	  headline_en: string;
+    17	  // 1-sentence teaser shown on the catalog card (Chinese).
+    18	  teaser_zh: string;
+    19	  // Canonical historical reference. Used as a trust anchor on the card
+    20	  // (a citation reads better than a raw ref_value number).
+    21	  canonical_ref: string;
+    22	  // Which canonical observable this case measures.
+    23	  observable: string;
+    24	  // Difficulty for beginner routing — affects card border hint only.
+    25	  difficulty: "intro" | "core" | "advanced";
+    26	  // The physics the student will encounter (2-4 bullet items, Chinese).
+    27	  physics_bullets_zh: string[];
+    28	  // What the validation produces — 1 paragraph narrative (Chinese).
+    29	  why_validation_matters_zh: string;
+    30	  // Common pitfall for students — highlighted in a callout (Chinese).
+    31	  common_pitfall_zh: string;
+    32	
+    33	  // ===== DEC-V61-047 round-1 F4 teaching cards ==========================
+    34	  // Four short pedagogical paragraphs that surface the reproducibility
+    35	  // path (solver / mesh / BC / observable-extraction) directly on the
+    36	  // Story tab, so a novice does not need to open gold YAML or Pro
+    37	  // Workbench to understand how this case is actually set up and run.
+    38	  // Each paragraph: 2-4 sentences, Chinese, concrete numbers where
+    39	  // available, avoids jargon without deleting technical terms.
+    40	  // ======================================================================
+    41	  solver_setup_zh: string;
+    42	  mesh_strategy_zh: string;
+    43	  boundary_conditions_zh: string;
+    44	  observable_extraction_zh: string;
+    45	}
+    46	
+    47	export const LEARN_CASES: LearnCase[] = [
+    48	  {
+    49	    id: "lid_driven_cavity",
+    50	    displayName: "Lid-Driven Cavity",
+    51	    headline_zh: `经典起点`,
+    52	    headline_en: "Where CFD began",
+    53	    teaser_zh: `正方形腔体、顶盖拖动、里面形成稳态涡。几乎每一本 CFD 教材的第一个算例。`,
+    54	    canonical_ref: "Ghia, Ghia & Shin · 1982",
+    55	    observable: "u_centerline velocity profile at x=0.5",
+    56	    difficulty: "intro",
+    57	    physics_bullets_zh: [
+    58	      `二维稳态不可压缩 Navier-Stokes`,
+    59	      `顶壁速度 U=1，其余三面无滑移`,
+    60	      `Re = UL/ν，典型 Re=100 / 400 / 1000`,
+    61	    ],
+    62	    why_validation_matters_zh: `Ghia 1982 给出的 129×129 网格数据是这个问题的黄金标准，后来几乎每一个 CFD 代码入门都会跑它。你算的中心线速度剖面能不能对齐 Ghia 的表格，决定了你"第一次 CFD"这一关有没有过。`,
+    63	    common_pitfall_zh: `角点处的速度奇异性（顶角 U=1、侧壁 U=0 同一个点）会让发散。解决办法：网格稍稍加密、放宽残差判据、或者接受角点上的小误差。`,
+    64	    solver_setup_zh: `simpleFoam (稳态 SIMPLE 算法) + turbulenceProperties=laminar。SIMPLE 迭代把动量和连续性方程耦合求解，每步更新压力修正。时间项不出现，因此不需要 CFL 条件；控制收敛的是 under-relaxation factors (U≈0.7, p≈0.3)。不压求无脑追求 pimpleFoam 瞬态，对 Re=100 稳态腔体流 simpleFoam 是最合适的。`,
+    65	    mesh_strategy_zh: `blockMesh 生成结构化均匀网格，ncx=ncy=40 (~1600 cells) 是对比 Ghia 1982 129×129 的教学级够用的分辨率。重点不是"像 Ghia 一样密"，而是"网格能不能把顶盖带下来的主涡和二级涡分辨出来"——你可以在 Mesh tab 的 convergence sweep 里看不同密度对 u_centerline 的影响。无需边界层加密，因为雷诺数低，边界层相对腔尺寸不算薄。`,
+    66	    boundary_conditions_zh: `四面边界：顶壁 (movingWall) fixedValue U=(1,0,0) + p zeroGradient；左右底三面 (fixedWalls) fixedValue U=(0,0,0) + p zeroGradient（no-slip）；压力在一个点固定为 0 作为参考 (referencePressure)。OpenFOAM 的 boundary 文件写法完全 symmetric，新手最易错是把 movingWall 写成 wall (OpenFOAM 会拒绝某些 BC 组合)。`,
+    67	    observable_extraction_zh: `u_centerline 剖面：沿 x=0.5 这条竖线从 y=0 到 y=1 采样 U 分量，和 Ghia 表 II 的 17 个纵坐标点对齐比较。extractor 在 src/foam_agent_adapter.py 里用 sample utility 沿线抽点，生成 (y, U_x) 列表；然后 comparator 计算 L2/max 偏差百分比 vs Ghia 基准。primary_vortex_location 另外用 streamFunction 找零点做第二道验证。`,
+    68	  },
+    69	  {
+    70	    id: "backward_facing_step",
+    71	    displayName: "Backward-Facing Step",
+    72	    headline_zh: `流动分离`,
+    73	    headline_en: "Separation & reattachment",
+    74	    teaser_zh: `流到台阶后面突然"掉下来"，形成回流区，最终在下游某个 x 位置重新贴壁。`,
+    75	    canonical_ref: "Le, Moin & Kim · 1997 (DNS) + Armaly 1983 (experiment)",
+    76	    observable: "reattachment_length / step_height",
+    77	    difficulty: "core",
+    78	    physics_bullets_zh: [
+    79	      `分离流的教科书算例`,
+    80	      `Reattachment length 随 Re 变化，不是单调的`,
+    81	      `低 Re 时解析稳态；高 Re 时需要非稳态/湍流建模`,
+    82	    ],
+    83	    why_validation_matters_zh: `反附着长度 L/h 是这个问题唯一的"外部可测量"。两个文献共同锚定这个值：Le/Moin/Kim 1997 DNS 在 Re_H=5100 给出 Xr/H=6.28，Driver & Seegmiller 1985 实验在 Re_H≈37500 给出 6.26——我们在 Re_H=7600 的 post-transition 平台区里，两个数把我们的 tolerance 带从两侧夹住。本仓库把 6.26 作为一个融合的 engineering anchor 保留（见 gold-file header），0.02 的差距由 10% 容差吸收，而不是一个紧致的<2%声明——真实的 Re 敏感度取决于扩张比、入口边界层、以及 2D/3D 效应，adapter 走的是 2D empty-patch 这条简化路径。`,
+    84	    common_pitfall_zh: `在 Re=100 左右就容易出现的物理伪像：如果解欠收敛，零速交点会落在台阶上游（x<0），对应回流区"穿墙"——这物理上不可能。我们在采集器里加了 x>0 的保险。`,
+    85	    solver_setup_zh: `simpleFoam (稳态) + turbulenceProperties=RAS/kEpsilon。选 k-ε 而不是 kOmegaSST 是教学上的折中：k-ε 在 BFS 基准里被用了 40 年，会系统性地低估 Xr/H ~5%（比 DNS 偏小），kOmegaSST 贴 DNS 更好但初学者接触 k-ε 更多。RANS-vs-DNS 的方法学 gap 由 10% 容差吸收——RANS 跑通不等于 DNS-grade。`,
+    86	    mesh_strategy_zh: `SIMPLE_GRID adapter 路径：blockMesh 生成 2D 结构网格，authoritative 运行 36000 cells；quick-run 默认用 ncx=40, ncy=20 约 800 cells 做网格敏感性测试。剪切层和再附着区需要额外的 x 向分辨率（DEC-V61-036 G5 gate 捕捉 under-resolved quick-run）。front/back patch 是 empty（伪 2D），扩张比 1.125 (channel_height / step_height)。`,
+    87	    boundary_conditions_zh: `inlet (x=入口) fixedValue U=(1,0,0) 均匀来流，outlet (x=出口) zeroGradient U + fixedValue p=0；上下壁 no-slip；台阶面 no-slip；front/back 是 empty 模拟 2D。Re_H=7600 由 nu=1/7600 设定，U_bulk=1. 学生易错：忘记 outlet pressure reference 导致系统欠定。`,
+    88	    observable_extraction_zh: `沿下壁 y=0 从 x=0 到 x=8·H 扫描 wall shear / near-wall U_x 的零点交叉，找 Xr——这就是"再附着点"。算法在 src/foam_agent_adapter.py 里，先用采样 u_x @ y=0.01·H（防壁面 degen）找第一个由负变正的 x 值。Xr/H 无量纲后和 gold 6.26 比。`,
+    89	  },
+    90	  {
+    91	    id: "circular_cylinder_wake",
+    92	    displayName: "Circular Cylinder Wake",
+    93	    headline_zh: `涡街与频率`,
+    94	    headline_en: "Vortex shedding",
+    95	    teaser_zh: `经典 Kármán 涡街。涡脱频率 f 和来流速度 U、直径 D 之间存在近乎普世的 Strouhal 关系 St ≈ 0.2。`,
+    96	    canonical_ref: "Williamson · 1996 (review)",
+    97	    observable: "Strouhal number St = f·D/U",
+    98	    difficulty: "core",
+    99	    physics_bullets_zh: [
+   100	      `二维非稳态 Navier-Stokes`,
+   101	      `Re=200 附近开始规则涡脱`,
+   102	      `Re~10⁵ 范围内 St 近似为常数 ≈ 0.20`,
+   103	    ],
+   104	    why_validation_matters_zh: `Strouhal 数是一个"canonical band"——不同文献、不同雷诺数、不同湍流模型，都落在 0.18-0.22 这个窄带里。你的代码只要算出"属于这个带"就算合格；但这里有一个陷阱：如果你直接用 canonical-band 作为通过判据，那就是"silent-pass hazard"——任何 bug 都会假装通过。`,
+   105	    common_pitfall_zh: `涡脱需要非对称扰动才能启动。用完全对称的初始场 + 对称网格，涡脱可能要跑几万步才出现，甚至永远不出现。标准做法是在来流里加一个几个百分点的瞬时扰动。`,
+   106	    solver_setup_zh: `pimpleFoam (瞬态 PIMPLE) + turbulenceProperties=laminar。Re=100 层流区涡脱本质是二维非稳态，必须 transient。时间步由 CFL<1 约束，典型 Δt≈0.01 (D/U 量纲)。需要跑到稳定 limit cycle (约 20-30 个涡脱周期) 再做 FFT 提频。`,
+   107	    mesh_strategy_zh: `blockMesh + 圆柱周围网格 graduation 到远场。上游 10·D、下游 30·D、横向 ±10·D 是对 Re=100 足够的 computational domain（domain truncation 会明显影响 St）。圆柱表面近场网格最小特征长度 ~0.02·D，远场 ~0.5·D。front/back empty patch 做 2D。`,
+   108	    boundary_conditions_zh: `inlet fixedValue U=(1,0,0) + 一个微小 non-symmetric 初始扰动；outlet zeroGradient U + fixedValue p=0；上下侧壁 slip (symmetry) 避免反射；圆柱表面 no-slip U=(0,0,0) + p zeroGradient。Re 由 nu=1/Re, D=1, U_∞=1 定义。`,
+   109	    observable_extraction_zh: `St = f·D/U：在圆柱尾迹里放一个 probe 采样 U_y(t) 时间序列，FFT 找主频 f。src/cylinder_strouhal_fft.py 在 limit cycle 稳定后（丢弃前 25% 瞬态）做 Hann 窗 FFT，取 amplitude 峰值作为 f。⚠ Silent-pass hazard：如果 extractor bug 让 f 永远落在 0.18-0.22，canonical-band 验证会假通过——physics_contract 显式标记这个风险。`,
+   110	  },
+   111	  {
+   112	    id: "turbulent_flat_plate",
+   113	    // DEC-V61-047 round-1 F5: case_id 保留为 turbulent_flat_plate（稳定性）
+   114	    // 但物理现在是 laminar Blasius —— displayName 与叙事都必须诚实映射。
+   115	    // 详见 knowledge/gold_standards/turbulent_flat_plate.yaml 头部的 REGIME
+   116	    // CORRECTION 块：Re=50000 + plate_length=1.0m → Re_x 最大 5×10⁴，比转捩
+   117	    // 下限 3×10⁵ 还差 6 倍，湍流假设根本不成立。把"turbulent"当教学主线会
+   118	    // 把新手引入错误回路。
+   119	    displayName: "Flat Plate (laminar Blasius regime)",
+   120	    headline_zh: `层流边界层：Blasius`,
+   121	    headline_en: "Laminar boundary layer (Blasius)",
+   122	    teaser_zh: `平板上的边界层。我们把这一 case 诚实地放在层流 Blasius 区（Re_x=2.5×10⁴~5×10⁴，远低于转捩），用解析相似解 Cf=0.664/√Re_x 当 gold。之前按"湍流平板"标错了，本仓库把它改回层流——这是一个关于"命名诚实"的案例。`,
+   123	    canonical_ref: "Blasius 1908 / Schlichting",
+   124	    observable: "skin-friction coefficient Cf(x), laminar Blasius gold",
+   125	    difficulty: "intro",
+   126	    physics_bullets_zh: [
+   127	      `Re_x = Ux/ν 决定流态：转捩大约在 3×10⁵–5×10⁵`,
+   128	      `本 case Re_x ≤ 5×10⁴，处于层流区 → Blasius 相似解精确成立`,
+   129	      `Cf(x) = 0.664 / √Re_x；solver 用 simpleFoam + laminar（无湍流方程）`,
+   130	    ],
+   131	    why_validation_matters_zh: `这个 case 的教学意义是"验证思维的诚实性"。早期版本把 gold 写成 Spalding 1/7 次幂的湍流工程公式 Cf=0.0576/Re_x^0.2，结果在低 Re 下系统偏高。B-class 修订（DEC-V61-006）把 gold 改回 Blasius 解析解，因为 Re_x 实在够不着湍流。教训：一个 case 叫什么名字 ≠ 它实际在算什么物理，名字错了 gold 也就跟着错。`,
+   132	    common_pitfall_zh: `新手最容易中的陷阱：看到 "turbulent_flat_plate" 就想当然去跑 k-ε / k-ω 湍流模型——在 Re_x=2.5×10⁴ 的层流里套湍流模型，会在近壁处给出虚假的 Cf。Spalding fallback 作为工程经验公式在参数外推时也会生成和 Re 解耦的数字（两个不同 case 同 Re → 同 Cf），看似 match 其实 shortcut。`,
+   133	    solver_setup_zh: `simpleFoam (稳态 SIMPLE) + turbulenceProperties=laminar，无 k/ε/ω 方程。Re=50000 基于板长 L=1m 和 U_∞=1，所以 ν=1/50000。虽然名字带 "turbulent"，但这里的 solver 配置和实际 Re_x 都是严格层流——诚实的命名重置是 B-class 修订的一部分。`,
+   134	    mesh_strategy_zh: `blockMesh 2D 平板 domain，L×H = 1×1，y 方向 80 cells 做 4:1 wall grading（近壁密、远壁疏）。Blasius δ_99 @ Re_x=25000 约为 0.022·L，80 cells 里有 ~50 cells 落在 δ_99 内——足够解析层流边界层。front/back empty patch。`,
+   135	    boundary_conditions_zh: `inlet fixedValue U=(1,0,0) 均匀来流；outlet zeroGradient；下壁 no-slip U=(0,0,0)（Blasius 边界层发育的 wall）；上壁 slip (symmetry) 避免上方 BL 干扰；front/back empty。压力在 outlet 固定为 0。`,
+   136	    observable_extraction_zh: `Cf(x) = 2·τ_w/(ρ·U_∞²)。在 x=0.5m 处 sample wall shear stress：src/foam_agent_adapter.py 的 _compute_wall_gradient 用第一二个 interior cell (避免 wall-cell 退化) 算 dU/dy|_wall，乘 μ 得 τ_w。一票就够：x=0.5 处 Blasius 解析给 Cf=0.00420，扩展 ±10% 容差。`,
+   137	  },
+   138	  {
+   139	    id: "plane_channel_flow",
+   140	    // DEC-V61-047 round-1 F5: contract_status =
+   141	    //   INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE
+   142	    // 当前 adapter 是 icoFoam 层流，在 Re_bulk=5600 只能给出 Poiseuille 抛
+   143	    // 物线速度剖面，无法复现 Moser 1999 Re_τ=180 的湍流对数律 u+。这个 case
+   144	    // 反而成为"为什么 ATTEST_PASS 可能是 comparator 假象"的最佳教学样本。
+   145	    displayName: "Plane Channel (incompatibility teaching case)",
+   146	    headline_zh: `"看似通过其实不兼容"的教学样本`,
+   147	    headline_en: "Disguised incompatibility (teaching case)",
+   148	    teaser_zh: `这个 case 当前的 contract_status 是 INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE——当前 solver 跑的是 icoFoam 层流，但文献 gold 用的是 Moser 1999 的湍流 DNS。两者在 Re_bulk=5600 一 对比，从数字上可能"看着对"，从物理上完全不是一回事。这是新手最容易被坑的类型。`,
+   149	    canonical_ref: "Moser/Kim/Mansour 1999 DNS (Re_τ=180, turbulent)",
+   150	    observable: "u+ vs y+ 对数律（当前 solver 无法产生，会落成 Poiseuille）",
+   151	    difficulty: "advanced",
+   152	    physics_bullets_zh: [
+   153	      `文献 gold：Moser 1999 DNS，Re_τ=180 的湍流对数律 u+(y+)`,
+   154	      `当前 adapter：icoFoam 层流 PISO，Re_bulk=5600 → Poiseuille 抛物线`,
+   155	      `物理上：层流 N-S 收敛到抛物线，不是对数律——无法靠调参弥合`,
+   156	    ],
+   157	    why_validation_matters_zh: `这个 case 是本仓库 physics_contract 层的压力测试：如果只看 comparator 的数字（u+ 和 y+ 数值范围巧合），ATTEST 会给出 PASS——但物理上不兼容。诚实的 verdict 是 FAIL。教学意义：一个 CFD pipeline 如果没有 physics_contract / precondition 检查层，仅靠"数字跟文献接近"判定通过，就会把层流解包装成"通过湍流 DNS 对照"——这是工业 CFD 最危险的假阳性模式。`,
+   158	    common_pitfall_zh: `新手常问："我的 solver 选错了吗？" 是的——但更深的陷阱是：当 comparator 读取 u+/y+ 数字没报错、tolerance 范围也没超，你会以为 case 通过了。修复方向需要切换到 pimpleFoam + 湍流模型（或 LES），但这个 case 目前的意义就是展示 gap。Phase 9 solver-routing 工作会把这个 case 迁到真正能跑湍流 DNS 的路径上。`,
+   159	    solver_setup_zh: `icoFoam (瞬态 PISO, incompressible 层流 N-S) + Re_bulk=5600 通过 ν=1/5600 设定。⚠ 这里的不兼容是 solver-level 的：要跑 Moser DNS 应该用 LES/DNS (pisoFoam + LES model 或直接 DNS 方程)，或者用 RANS (simpleFoam + kOmegaSST)；当前的 icoFoam 层流只能收敛到 Poiseuille 平滑抛物线。Phase 9 solver-routing 会迁到 pimpleFoam + 真湍流模型。`,
+   160	    mesh_strategy_zh: `blockMesh 2D channel slab，半高 D/2=0.5m，流向 2·L=30m（伪长通道），front/back empty。如果真要做 Re_τ=180 DNS，y 方向至少需要上千层网格 + 超细 wall cell (y+_wall ≈ 0.5)；当前 mesh 是给层流 Poiseuille 用的，远远不够湍流 DNS。这也是"solver + mesh + 模型"三层不兼容的 case。`,
+   161	    boundary_conditions_zh: `inlet fixedValue U=(1,0,0)；outlet 压力参考；上下壁 no-slip；front/back empty。真正的 Moser DNS 要用周期 BC (streamwise cyclic) + driving pressure gradient 维持稳态湍流，当前 adapter 用 inlet-outlet 是另一层 mismatch。`,
+   162	    observable_extraction_zh: `src/plane_channel_uplus_emitter.py 从壁面 shear 算 u_τ=√(τ_w/ρ)，再换算 u+=U/u_τ, y+=y·u_τ/ν。问题：τ_w 此刻来自层流 Poiseuille 解，u_τ 的数字是"自洽但物理错"的——comparator 照常读 u+/y+ 并 tolerance-比较，得出 PASS，这就是 silent-pass hazard。physics_contract 层的 precondition check 把它显性降级到 FAIL。`,
+   163	  },
+   164	  {
+   165	    id: "impinging_jet",
+   166	    // DEC-V61-047 round-1 F5: 两个独立 hazard：(1) adapter 是 2D planar 切片，
+   167	    // 不是 axisymmetric wedge；(2) buoyantFoam p_rgh 没收敛（A4 iteration cap）。
+   168	    // contract_status = INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE。
+   169	    // 先讲清 gap，再讲物理。
+   170	    displayName: "Impinging Jet (geometry + solver gap teaching)",
+   171	    headline_zh: `冲击射流：几何简化 + 收敛 gap 的双层教学`,
+   172	    headline_en: "Impinging jet · two-layer gap teaching",
+   173	    teaser_zh: `典型工业冷却问题：射流撞底板，驻点传热最强。但本仓库这 case 故意保留两个诚实的 gap：adapter 跑的是 2D 平面切片（不是 axisymmetric 楔形）；solver p_rgh 迭代到帽也没收敛。两件事叠加——学生能看到"物理在说什么"和"代码实际算什么"之间的距离。`,
+   174	    canonical_ref: "Cooper 1984 / Behnad 2013 (axisymmetric experiment + RANS)",
+   175	    observable: "Nu(r/D) 驻点传热分布（文献预期 Nu_peak=25）",
+   176	    difficulty: "advanced",
+   177	    physics_bullets_zh: [
+   178	      `文献 gold：真正的 axisymmetric 射流，驻点 Nu=25（径向汇聚）`,
+   179	      `当前 adapter：axis 是 empty patch 不是 wedge → 只是 2D 平面`,
+   180	      `湍流模型 kEpsilon：在驻点各向异性下系统偏（v2f 更合适）`,
+   181	    ],
+   182	    why_validation_matters_zh: `这个 case 教的是"几何简化会不会悄悄作用在结果上"。2D 平面切片把径向汇聚效应拿掉了——驻点 Nu 物理上就不应该那么高。 即使换 solver 收敛了，2D-vs-axisymmetric 的差距也不会消失。验证思维的第一步：先看 adapter 实际建的 geometry，再看 solver 跑没跑收敛，再看 model 选得是否合理。三层 gap 叠加时，"PASS" 完全是假的。`,
+   183	    common_pitfall_zh: `新手常以为"label 说 axisymmetric 就是 axisymmetric"。要确认 axis patch 类型 (OpenFOAM 里 wedge vs empty 是完全不同的)。另一个坑：看到 Nu 数值接近文献就以为 case 通过——但如果驻点 Nu 值是 0.0042 (Cf 量纲不是 Nu 量纲)，说明 extractor 把完全错的 quantity 当 Nu 输出了，这种 silent 错误比不收敛还危险。`,
+   184	    solver_setup_zh: `buoyantBoussinesqSimpleFoam (稳态浮力耦合 SIMPLE) + turbulenceProperties=RAS/kEpsilon，Re=10000 (基于喷嘴直径 D=0.05m 和入口速度)。p_rgh 的 GAMG 求解器在当前配置下持续打到 1000 iter cap 而没收敛——是 URF/p-v coupling/thermal BC 几件事叠加的症状，不是单一参数错。Phase 9 solver-config audit 会做 root-cause.`,
+   185	    mesh_strategy_zh: `blockMesh 生成 r-z 矩形域，r=[0, 5·D], z=[-D/2, H+D/2]。axis patch 是 <strong>empty</strong> 而非 <strong>wedge</strong>——这使得几何是 2D 平面，不是 axisymmetric。想真正 axisymmetric 需要 wedge + rotational axis，mesh 生成阶段就不同。约 4800 cells 结构网格；近壁没有刻意加密。`,
+   186	    boundary_conditions_zh: `inlet 是喷嘴出口 fixedValue U (射流速度 + Re=10000 定义)；impingement plate z=z_max fixedValue T=T_hot (加热壁)，其余壁 fixedValue T=T_cold + no-slip；axis r=0 <strong>本该是 wedge 但用了 empty</strong>——这是最大的 silent 简化。`,
+   187	    observable_extraction_zh: `Nu(r/D) = -D·∂T/∂n|_wall / (T_hot - T_ref)，沿加热板从 r=0 到 r=5·D 扫描。驻点 (r=0) Nu 最大（文献 25），径向衰减。src/wall_gradient.py 在有温度场时做 wall-normal gradient；当前 case A4 没收敛就没有稳定的温度场可用——ATTEST_FAIL 早于 comparator 停住，没有假 Nu 输出的机会。`,
+   188	  },
+   189	  {
+   190	    id: "naca0012_airfoil",
+   191	    displayName: "NACA 0012 Airfoil",
+   192	    headline_zh: `翼型与压强`,
+   193	    headline_en: "Airfoil pressure distribution",
+   194	    teaser_zh: `对称翼型的表面压强系数 Cp 分布。入门外流问题，航空界最常用的验证基准之一。`,
+   195	    canonical_ref: "Ladson et al. · NASA TM 1996",
+   196	    observable: "Cp distribution along chord",
+   197	    difficulty: "core",
+   198	    // DEC-V61-047 round-2 N1: Authoritative setup per knowledge/whitelist.yaml
+   199	    // + knowledge/gold_standards/naca0012_airfoil.yaml + src/foam_agent_adapter.py:
+   200	    // Re=3e6 (NOT 6e6), α=0° (NOT ≈4°) — symmetric airfoil at zero incidence
+   201	    // gives attached flow + zero lift. Earlier round-1 solver card mis-cited
+   202	    // α≈4°/Re=6e6, which would teach the wrong canonical setup to a novice.
+   203	    physics_bullets_zh: [
+   204	      `0° 攻角下对称翼型——attached flow，零升力`,
+   205	      `Cp 分布沿弦长是 canonical 压强场验证量`,
+   206	      `远场边界距离直接影响解（< 15 倍弦长会产生伪 blockage）`,
+   207	    ],
+   208	    why_validation_matters_zh: `Ladson / Thomas 的 NASA 风洞数据是公开基准之一，对称翼型 α=0° 是入门验证：attached flow、无分离、压强分布可由简单 RANS 稳态收敛。你的 CFD 要做更复杂的外流（带攻角、带分离、机翼、螺旋桨），必须先在 NACA 0012 零度这一关拿到可控误差——这是航空 CFD 验证流水线的"第一道门"。`,
+   209	    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误——虚假 blockage 让整个压强场 shifted，网格无关性测试抓不到。另一个陷阱：本 case 的 Cp 提取是 near-surface band 平均（adapter 在壁面上方 ~2% 弦长厚度带里取 cell-center 均值），与文献的"exact surface"定义相比系统性衰减 30-50%，形状对、幅值小——这也是 gold 容差设为 20% 并用 PASS_WITH_DEVIATIONS 的原因。`,
+   210	    solver_setup_zh: `simpleFoam (稳态 SIMPLE) + RAS kOmegaSST。Re=3e6 基于弦长 c=1m，α=0°（对称翼型，符合 physics_contract 的 precondition "flow attached and steady at α=0°"）。URF: p=0.3（GAMG 求解，relTol=0.05, tolerance=1e-6）; U/k/ω=0.5 each（见 knowledge/gold_standards/naca0012_airfoil.yaml:5-14）. 收敛到 p residual ≤ 1e-6 且 Cp 稳态。`,
+   211	    mesh_strategy_zh: `blockMesh 直接围绕 NACA0012 OBJ 生成 x-z 平面（z 法向 80 cells，y 薄展向 ±0.001 + empty side patches，伪 2D）。远场至少 15-20·c 距离。kOmegaSST 在 OpenFOAM 2.x+ 能 blended 处理 y+<1 (低雷诺数修正) 和 y+>30 (wall function)；当前 mesh 的 surface_band=max(8·dz_min, 0.02·c) 让 Cp 提取在 y+<5 区间平滑。`,
+   212	    boundary_conditions_zh: `上游 + 横向 inlet/freestream fixedValue U=(U_∞, 0, 0)（α=0°，无 sin α 分量）；下游 outlet 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0) + k/ω wall functions；展向 front/back 为 empty 模拟 2D。远场 < 15·c 会显著 shift 整个 Cp 分布；> 20·c 后增益递减。`,
+   213	    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。src/foam_agent_adapter.py:7068 的 extractor 在翼型表面上方 surface_band=max(8·dz_min, 0.02·c) 厚度带里取 cell-center 做 patchAverage，然后按 x/c 分 upper/lower。精确文献 Cp 是 exact surface 点，adapter 是 near-surface cell average → 形状正确但幅值系统衰减 ~30-50%（physics_contract precondition #3 明确标 satisfied=false）。容差 20%、verdict PASS_WITH_DEVIATIONS 就是为此。`,
+   214	  },
+   215	  {
+   216	    id: "rayleigh_benard_convection",
+   217	    displayName: "Rayleigh-Bénard Convection",
+   218	    headline_zh: `对流不稳定性`,
+   219	    headline_en: "Convective instability",
+   220	    teaser_zh: `下热上冷的流体层，在 Rayleigh 数超过临界值后自发形成周期性对流胞。漂亮而深刻。`,
+   221	    canonical_ref: "Chandrasekhar 1961 / Grossmann-Lohse 2000",
+   222	    observable: "Nusselt number Nu(Ra)",
+   223	    difficulty: "advanced",
+   224	    physics_bullets_zh: [
+   225	      `Ra_c ≈ 1708 是临界值`,
+   226	      `Ra > Ra_c 后出现 Bénard cells`,
+   227	      `Nu 随 Ra 的标度率是湍流建模的试金石`,
+   228	    ],
+   229	    why_validation_matters_zh: `Nu ~ Ra^α 这个标度率的指数 α 是 CFD 最经典的"硬问题"之一——湍流对流传热研究了几十年，不同文献给不同的 α（0.28-0.33）。你的数值 α 落在哪个区间，直接揭示了你用的数值方案和网格的极限。`,
+   230	    common_pitfall_zh: `Boussinesq 近似（密度只随温度变化、其余性质不变）是这个案例的标配，但它只在温差较小的时候成立。如果你在 ΔT/T0 > 0.1 的条件下还用 Boussinesq，预测会系统偏，而且很难 debug。`,
+   231	    solver_setup_zh: `buoyantBoussinesqSimpleFoam (稳态浮力 SIMPLE) + turbulenceProperties=laminar（Ra 取 ~1e6 教学区间，低于湍流对流过渡）。Boussinesq：ρ 只在浮力项里随 T 线性变，黏性/热扩散保持 constant。关键在于 gravity vector 方向和 T_reference 的设定。`,
+   232	    mesh_strategy_zh: `blockMesh 方腔 2D，结构均匀网格 40-80 cells per side (~1600-6400 cells 2D)。热边界层厚度 δ_T/L ≈ Ra^(-1/4)，在 Ra=1e6 约为 0.032，5-10 层网格覆盖 δ_T 就够。扩到 Ra=1e8+ 需要边界层加密（壁面 graduation）。front/back empty。`,
+   233	    boundary_conditions_zh: `下壁 fixedValue T=T_hot，上壁 fixedValue T=T_cold；侧壁 zeroGradient T (adiabatic)；所有四壁 no-slip U=(0,0,0)；压力在中心/任一角固定为 0 参考。gravity 指向 -z，温差驱动浮力 = Ra·ν·α/L³。`,
+   234	    observable_extraction_zh: `Nu(Ra) = q_avg·L / (k·ΔT)，其中 q_avg 是热壁平均壁面热流。extractor 在 hot-wall patch 上做 surfaceIntegrate(∂T/∂n)·k/(L·A_wall)，换算成 Nu。Grossmann-Lohse 2000 给出 Nu ~ Ra^(2/7) 的 theoretical scaling（α≈0.286），文献实验在 α=0.28-0.33 之间。`,
+   235	  },
+   236	  {
+   237	    id: "differential_heated_cavity",
+   238	    // DEC-V61-047 round-1 F5: B-class 修订 (DEC-V61-006 Path P-2) 已经把目标
+   239	    // regime 从不可解析的 Ra=1e10 降到经典 de Vahl Davis 1983 的 Ra=1e6。
+   240	    // 当前 narrative 停留在旧 Ra=1e10 会让新手带错误印象离开。
+   241	    displayName: "Differential Heated Cavity (Ra=1e6 benchmark)",
+   242	    headline_zh: `侧加热方腔 · Ra=10⁶ 基准`,
+   243	    headline_en: "Side-heated cavity · Ra=1e6 benchmark",
+   244	    teaser_zh: `一侧热壁、一侧冷壁、上下绝热的方腔。本仓库采用 de Vahl Davis 1983 Table IV 的 Ra=10⁶ 基准，Nu_avg=8.80。之前目标过 Ra=10¹⁰（湍流对流，需要上千层壁面网格），无法诚实跑通——Path P-2 修订主动降到层流可解析区间，让 case 真正"算得出+算得对"。`,
+   245	    canonical_ref: "de Vahl Davis 1983 · J. Numer. Methods Fluids Table IV",
+   246	    observable: "wall-averaged Nusselt number (Nu=8.80 at Ra=10⁶)",
+   247	    difficulty: "core",
+   248	    physics_bullets_zh: [
+   249	      `Ra=10⁶, Pr=0.71, AR=1.0 层流稳态对流`,
+   250	      `热边界层 δ/L ≈ Ra^(-1/4) ≈ 0.032 → 只需 5~10 层网格`,
+   251	      `buoyantBoussinesqSimpleFoam + 层流 SIMPLE，无湍流模型`,
+   252	    ],
+   253	    why_validation_matters_zh: `这个 case 是一个"诚实 > 野心"的教学样本。之前硬要追 Ra=10¹⁰，网格永远撑不起来，Nu 数字看着合理但全是低分辨率伪像（算出来 ≠ 算对）。B-class 修订把目标 regime 降到 Ra=10⁶ 层流区间，40-80 层网格就能稳定解析，gold 有 40+ 篇后续研究在 ±0.2% 区间内验证 Nu=8.80。当你能选一个"网格撑得起"的 regime 时，选它，不要为了"像高端"去追一个跑不动的数。`,
+   254	    common_pitfall_zh: `新手最大的陷阱是"把 Ra 越堆越高觉得越像真实工况"。但 Ra=10¹⁰ 的热边界层 δ≈0.3% 腔高，没有几千层壁面加密你看到的只是解算器的插值伪像——Nu 可能还落在"合理范围"但完全是网格 artefact。先在 Ra=10⁶ 把 case 跑对，再谈扩到 Ra=10⁸、10¹⁰；每提一个量级，先验证网格能撑。`,
+   255	    solver_setup_zh: `buoyantBoussinesqSimpleFoam (稳态 SIMPLE + 浮力耦合) + turbulenceProperties=laminar。Ra=10⁶ 属于层流稳态对流区 (湍流对流过渡 ~Ra=1.5×10⁸)。Pr=0.71 (空气)。SIMPLE URF: U≈0.7, T≈0.5, p≈0.3，收敛到 residual ≤ 1e-6。`,
+   256	    mesh_strategy_zh: `blockMesh 方腔 AR=1 (L×L)，40-80 cells per side，可以 uniform 也可以在两侧加密。Ra=10⁶ 热边界层 δ_T/L ≈ 0.032，40 cells uniform 下有 ~1-2 cells 在 δ_T 里（quick run），80 cells 下有 2-3 cells——边缘够用。Ra 扩到 10⁸ 需要 grading 或 160+ cells 边界层才能撑住。`,
+   257	    boundary_conditions_zh: `左右壁 fixedValue T (T_hot=1, T_cold=0)，上下壁 zeroGradient T (adiabatic)；四壁均 no-slip U=(0,0,0)；压力在某点固定 0 参考；gravity=(0,-9.81,0) (或无量纲 gβΔT)。ΔT/T_ref=1 但在方程里只通过浮力项影响 —— Boussinesq 近似成立。`,
+   258	    observable_extraction_zh: `Nu_avg = ∫₀ᴸ Nu(y)·dy / L = L/(k·ΔT) · <q_wall> over hot wall。extractor 在 hot-wall patch 上对 ∂T/∂n 做 surface integral，再除 ΔT 得 Nu。de Vahl Davis Table IV 给 Nu=8.800 at Ra=10⁶，容差 ±10%。`,
+   259	  },
+   260	  {
+
+exec
+/bin/zsh -lc 'git rev-parse HEAD && git show --stat --oneline 196fb94 && git diff --unified=40 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+0d3f8a2ab8f27bb07e0f852d5afb74021ded8b03
+196fb94 fix(learn): DEC-V61-047 round-2 batch 6 — naca0012 truth alignment (N1)
+ ui/frontend/src/data/learnCases.ts | 23 ++++++++++++++---------
+ 1 file changed, 14 insertions(+), 9 deletions(-)
+diff --git a/ui/frontend/src/data/learnCases.ts b/ui/frontend/src/data/learnCases.ts
+index 2b299d0..d810f42 100644
+--- a/ui/frontend/src/data/learnCases.ts
++++ b/ui/frontend/src/data/learnCases.ts
+@@ -158,91 +158,96 @@ export const LEARN_CASES: LearnCase[] = [
+     common_pitfall_zh: `新手常问："我的 solver 选错了吗？" 是的——但更深的陷阱是：当 comparator 读取 u+/y+ 数字没报错、tolerance 范围也没超，你会以为 case 通过了。修复方向需要切换到 pimpleFoam + 湍流模型（或 LES），但这个 case 目前的意义就是展示 gap。Phase 9 solver-routing 工作会把这个 case 迁到真正能跑湍流 DNS 的路径上。`,
+     solver_setup_zh: `icoFoam (瞬态 PISO, incompressible 层流 N-S) + Re_bulk=5600 通过 ν=1/5600 设定。⚠ 这里的不兼容是 solver-level 的：要跑 Moser DNS 应该用 LES/DNS (pisoFoam + LES model 或直接 DNS 方程)，或者用 RANS (simpleFoam + kOmegaSST)；当前的 icoFoam 层流只能收敛到 Poiseuille 平滑抛物线。Phase 9 solver-routing 会迁到 pimpleFoam + 真湍流模型。`,
+     mesh_strategy_zh: `blockMesh 2D channel slab，半高 D/2=0.5m，流向 2·L=30m（伪长通道），front/back empty。如果真要做 Re_τ=180 DNS，y 方向至少需要上千层网格 + 超细 wall cell (y+_wall ≈ 0.5)；当前 mesh 是给层流 Poiseuille 用的，远远不够湍流 DNS。这也是"solver + mesh + 模型"三层不兼容的 case。`,
+     boundary_conditions_zh: `inlet fixedValue U=(1,0,0)；outlet 压力参考；上下壁 no-slip；front/back empty。真正的 Moser DNS 要用周期 BC (streamwise cyclic) + driving pressure gradient 维持稳态湍流，当前 adapter 用 inlet-outlet 是另一层 mismatch。`,
+     observable_extraction_zh: `src/plane_channel_uplus_emitter.py 从壁面 shear 算 u_τ=√(τ_w/ρ)，再换算 u+=U/u_τ, y+=y·u_τ/ν。问题：τ_w 此刻来自层流 Poiseuille 解，u_τ 的数字是"自洽但物理错"的——comparator 照常读 u+/y+ 并 tolerance-比较，得出 PASS，这就是 silent-pass hazard。physics_contract 层的 precondition check 把它显性降级到 FAIL。`,
+   },
+   {
+     id: "impinging_jet",
+     // DEC-V61-047 round-1 F5: 两个独立 hazard：(1) adapter 是 2D planar 切片，
+     // 不是 axisymmetric wedge；(2) buoyantFoam p_rgh 没收敛（A4 iteration cap）。
+     // contract_status = INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE。
+     // 先讲清 gap，再讲物理。
+     displayName: "Impinging Jet (geometry + solver gap teaching)",
+     headline_zh: `冲击射流：几何简化 + 收敛 gap 的双层教学`,
+     headline_en: "Impinging jet · two-layer gap teaching",
+     teaser_zh: `典型工业冷却问题：射流撞底板，驻点传热最强。但本仓库这 case 故意保留两个诚实的 gap：adapter 跑的是 2D 平面切片（不是 axisymmetric 楔形）；solver p_rgh 迭代到帽也没收敛。两件事叠加——学生能看到"物理在说什么"和"代码实际算什么"之间的距离。`,
+     canonical_ref: "Cooper 1984 / Behnad 2013 (axisymmetric experiment + RANS)",
+     observable: "Nu(r/D) 驻点传热分布（文献预期 Nu_peak=25）",
+     difficulty: "advanced",
+     physics_bullets_zh: [
+       `文献 gold：真正的 axisymmetric 射流，驻点 Nu=25（径向汇聚）`,
+       `当前 adapter：axis 是 empty patch 不是 wedge → 只是 2D 平面`,
+       `湍流模型 kEpsilon：在驻点各向异性下系统偏（v2f 更合适）`,
+     ],
+     why_validation_matters_zh: `这个 case 教的是"几何简化会不会悄悄作用在结果上"。2D 平面切片把径向汇聚效应拿掉了——驻点 Nu 物理上就不应该那么高。 即使换 solver 收敛了，2D-vs-axisymmetric 的差距也不会消失。验证思维的第一步：先看 adapter 实际建的 geometry，再看 solver 跑没跑收敛，再看 model 选得是否合理。三层 gap 叠加时，"PASS" 完全是假的。`,
+     common_pitfall_zh: `新手常以为"label 说 axisymmetric 就是 axisymmetric"。要确认 axis patch 类型 (OpenFOAM 里 wedge vs empty 是完全不同的)。另一个坑：看到 Nu 数值接近文献就以为 case 通过——但如果驻点 Nu 值是 0.0042 (Cf 量纲不是 Nu 量纲)，说明 extractor 把完全错的 quantity 当 Nu 输出了，这种 silent 错误比不收敛还危险。`,
+     solver_setup_zh: `buoyantBoussinesqSimpleFoam (稳态浮力耦合 SIMPLE) + turbulenceProperties=RAS/kEpsilon，Re=10000 (基于喷嘴直径 D=0.05m 和入口速度)。p_rgh 的 GAMG 求解器在当前配置下持续打到 1000 iter cap 而没收敛——是 URF/p-v coupling/thermal BC 几件事叠加的症状，不是单一参数错。Phase 9 solver-config audit 会做 root-cause.`,
+     mesh_strategy_zh: `blockMesh 生成 r-z 矩形域，r=[0, 5·D], z=[-D/2, H+D/2]。axis patch 是 <strong>empty</strong> 而非 <strong>wedge</strong>——这使得几何是 2D 平面，不是 axisymmetric。想真正 axisymmetric 需要 wedge + rotational axis，mesh 生成阶段就不同。约 4800 cells 结构网格；近壁没有刻意加密。`,
+     boundary_conditions_zh: `inlet 是喷嘴出口 fixedValue U (射流速度 + Re=10000 定义)；impingement plate z=z_max fixedValue T=T_hot (加热壁)，其余壁 fixedValue T=T_cold + no-slip；axis r=0 <strong>本该是 wedge 但用了 empty</strong>——这是最大的 silent 简化。`,
+     observable_extraction_zh: `Nu(r/D) = -D·∂T/∂n|_wall / (T_hot - T_ref)，沿加热板从 r=0 到 r=5·D 扫描。驻点 (r=0) Nu 最大（文献 25），径向衰减。src/wall_gradient.py 在有温度场时做 wall-normal gradient；当前 case A4 没收敛就没有稳定的温度场可用——ATTEST_FAIL 早于 comparator 停住，没有假 Nu 输出的机会。`,
+   },
+   {
+     id: "naca0012_airfoil",
+     displayName: "NACA 0012 Airfoil",
+     headline_zh: `翼型与压强`,
+     headline_en: "Airfoil pressure distribution",
+     teaser_zh: `对称翼型的表面压强系数 Cp 分布。入门外流问题，航空界最常用的验证基准之一。`,
+     canonical_ref: "Ladson et al. · NASA TM 1996",
+     observable: "Cp distribution along chord",
+     difficulty: "core",
++    // DEC-V61-047 round-2 N1: Authoritative setup per knowledge/whitelist.yaml
++    // + knowledge/gold_standards/naca0012_airfoil.yaml + src/foam_agent_adapter.py:
++    // Re=3e6 (NOT 6e6), α=0° (NOT ≈4°) — symmetric airfoil at zero incidence
++    // gives attached flow + zero lift. Earlier round-1 solver card mis-cited
++    // α≈4°/Re=6e6, which would teach the wrong canonical setup to a novice.
+     physics_bullets_zh: [
+-      `小攻角（~5°）下近似线性`,
+-      `失速攻角（~15°）附近非线性剧增`,
+-      `远场边界距离直接影响解`,
++      `0° 攻角下对称翼型——attached flow，零升力`,
++      `Cp 分布沿弦长是 canonical 压强场验证量`,
++      `远场边界距离直接影响解（< 15 倍弦长会产生伪 blockage）`,
+     ],
+-    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
+-    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误。环流效应会让升力系数 Cl 被压低 10%+，而且网格无关性测试抓不到这个问题。`,
+-    solver_setup_zh: `simpleFoam (稳态) + RAS kOmegaSST (航空默认湍流模型)。Re=6e6 基于弦长 c=1m 和 M∞ (assumed incompressible here)。small angle attack (α≈4°) 接近线性区。URF: U≈0.7, p≈0.3。收敛需要足够的 iterations (≥1000)，尤其是 Cl 积分值要稳定。`,
+-    mesh_strategy_zh: `C-grid 或 O-grid 贴翼型表面，远场至少 15-20·c 距离（防止伪 blockage）。壁面第一层 cell 目标 y+≈1 让 kOmegaSST 低雷诺数修正正确工作；典型第一层厚度 10⁻⁵·c。约 5-10 万 cells 二维结构网格。Cp 采样是 near-surface band (不是 exact surface)，所以 y+<5 区间内 cells 的密度直接影响 Cp 曲线平滑度。`,
+-    boundary_conditions_zh: `inlet (upstream + lateral far-field) fixedValue U=(U∞·cos α, U∞·sin α, 0)；outlet (downstream) 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0)，k/ω wall functions。远场边界要够远：<15·c 会产生虚假 blockage，Cl 系统偏低。`,
+-    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。沿翼型表面从 x/c=0 (leading edge) 到 x/c=1 (trailing edge) 采样，分 upper/lower surface。extractor 用 patchAverage 在 airfoil patch 上做 sample，生成 (x/c, Cp) 列表，和 Ladson 风洞数据（NASA TM 1996）对齐比。Cp 对 mesh 的 near-wall 分辨率敏感，y+ 变化 2× 可能让曲线轻微偏。`,
++    why_validation_matters_zh: `Ladson / Thomas 的 NASA 风洞数据是公开基准之一，对称翼型 α=0° 是入门验证：attached flow、无分离、压强分布可由简单 RANS 稳态收敛。你的 CFD 要做更复杂的外流（带攻角、带分离、机翼、螺旋桨），必须先在 NACA 0012 零度这一关拿到可控误差——这是航空 CFD 验证流水线的"第一道门"。`,
++    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误——虚假 blockage 让整个压强场 shifted，网格无关性测试抓不到。另一个陷阱：本 case 的 Cp 提取是 near-surface band 平均（adapter 在壁面上方 ~2% 弦长厚度带里取 cell-center 均值），与文献的"exact surface"定义相比系统性衰减 30-50%，形状对、幅值小——这也是 gold 容差设为 20% 并用 PASS_WITH_DEVIATIONS 的原因。`,
++    solver_setup_zh: `simpleFoam (稳态 SIMPLE) + RAS kOmegaSST。Re=3e6 基于弦长 c=1m，α=0°（对称翼型，符合 physics_contract 的 precondition "flow attached and steady at α=0°"）。URF: p=0.3（GAMG 求解，relTol=0.05, tolerance=1e-6）; U/k/ω=0.5 each（见 knowledge/gold_standards/naca0012_airfoil.yaml:5-14）. 收敛到 p residual ≤ 1e-6 且 Cp 稳态。`,
++    mesh_strategy_zh: `blockMesh 直接围绕 NACA0012 OBJ 生成 x-z 平面（z 法向 80 cells，y 薄展向 ±0.001 + empty side patches，伪 2D）。远场至少 15-20·c 距离。kOmegaSST 在 OpenFOAM 2.x+ 能 blended 处理 y+<1 (低雷诺数修正) 和 y+>30 (wall function)；当前 mesh 的 surface_band=max(8·dz_min, 0.02·c) 让 Cp 提取在 y+<5 区间平滑。`,
++    boundary_conditions_zh: `上游 + 横向 inlet/freestream fixedValue U=(U_∞, 0, 0)（α=0°，无 sin α 分量）；下游 outlet 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0) + k/ω wall functions；展向 front/back 为 empty 模拟 2D。远场 < 15·c 会显著 shift 整个 Cp 分布；> 20·c 后增益递减。`,
++    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。src/foam_agent_adapter.py:7068 的 extractor 在翼型表面上方 surface_band=max(8·dz_min, 0.02·c) 厚度带里取 cell-center 做 patchAverage，然后按 x/c 分 upper/lower。精确文献 Cp 是 exact surface 点，adapter 是 near-surface cell average → 形状正确但幅值系统衰减 ~30-50%（physics_contract precondition #3 明确标 satisfied=false）。容差 20%、verdict PASS_WITH_DEVIATIONS 就是为此。`,
+   },
+   {
+     id: "rayleigh_benard_convection",
+     displayName: "Rayleigh-Bénard Convection",
+     headline_zh: `对流不稳定性`,
+     headline_en: "Convective instability",
+     teaser_zh: `下热上冷的流体层，在 Rayleigh 数超过临界值后自发形成周期性对流胞。漂亮而深刻。`,
+     canonical_ref: "Chandrasekhar 1961 / Grossmann-Lohse 2000",
+     observable: "Nusselt number Nu(Ra)",
+     difficulty: "advanced",
+     physics_bullets_zh: [
+       `Ra_c ≈ 1708 是临界值`,
+       `Ra > Ra_c 后出现 Bénard cells`,
+       `Nu 随 Ra 的标度率是湍流建模的试金石`,
+     ],
+     why_validation_matters_zh: `Nu ~ Ra^α 这个标度率的指数 α 是 CFD 最经典的"硬问题"之一——湍流对流传热研究了几十年，不同文献给不同的 α（0.28-0.33）。你的数值 α 落在哪个区间，直接揭示了你用的数值方案和网格的极限。`,
+     common_pitfall_zh: `Boussinesq 近似（密度只随温度变化、其余性质不变）是这个案例的标配，但它只在温差较小的时候成立。如果你在 ΔT/T0 > 0.1 的条件下还用 Boussinesq，预测会系统偏，而且很难 debug。`,
+     solver_setup_zh: `buoyantBoussinesqSimpleFoam (稳态浮力 SIMPLE) + turbulenceProperties=laminar（Ra 取 ~1e6 教学区间，低于湍流对流过渡）。Boussinesq：ρ 只在浮力项里随 T 线性变，黏性/热扩散保持 constant。关键在于 gravity vector 方向和 T_reference 的设定。`,
+     mesh_strategy_zh: `blockMesh 方腔 2D，结构均匀网格 40-80 cells per side (~1600-6400 cells 2D)。热边界层厚度 δ_T/L ≈ Ra^(-1/4)，在 Ra=1e6 约为 0.032，5-10 层网格覆盖 δ_T 就够。扩到 Ra=1e8+ 需要边界层加密（壁面 graduation）。front/back empty。`,
+     boundary_conditions_zh: `下壁 fixedValue T=T_hot，上壁 fixedValue T=T_cold；侧壁 zeroGradient T (adiabatic)；所有四壁 no-slip U=(0,0,0)；压力在中心/任一角固定为 0 参考。gravity 指向 -z，温差驱动浮力 = Ra·ν·α/L³。`,
+     observable_extraction_zh: `Nu(Ra) = q_avg·L / (k·ΔT)，其中 q_avg 是热壁平均壁面热流。extractor 在 hot-wall patch 上做 surfaceIntegrate(∂T/∂n)·k/(L·A_wall)，换算成 Nu。Grossmann-Lohse 2000 给出 Nu ~ Ra^(2/7) 的 theoretical scaling（α≈0.286），文献实验在 α=0.28-0.33 之间。`,
+   },
+   {
+     id: "differential_heated_cavity",
+     // DEC-V61-047 round-1 F5: B-class 修订 (DEC-V61-006 Path P-2) 已经把目标
+     // regime 从不可解析的 Ra=1e10 降到经典 de Vahl Davis 1983 的 Ra=1e6。
+     // 当前 narrative 停留在旧 Ra=1e10 会让新手带错误印象离开。
+     displayName: "Differential Heated Cavity (Ra=1e6 benchmark)",
+     headline_zh: `侧加热方腔 · Ra=10⁶ 基准`,
+     headline_en: "Side-heated cavity · Ra=1e6 benchmark",
+     teaser_zh: `一侧热壁、一侧冷壁、上下绝热的方腔。本仓库采用 de Vahl Davis 1983 Table IV 的 Ra=10⁶ 基准，Nu_avg=8.80。之前目标过 Ra=10¹⁰（湍流对流，需要上千层壁面网格），无法诚实跑通——Path P-2 修订主动降到层流可解析区间，让 case 真正"算得出+算得对"。`,
+     canonical_ref: "de Vahl Davis 1983 · J. Numer. Methods Fluids Table IV",
+     observable: "wall-averaged Nusselt number (Nu=8.80 at Ra=10⁶)",
+     difficulty: "core",
+     physics_bullets_zh: [
+       `Ra=10⁶, Pr=0.71, AR=1.0 层流稳态对流`,
+       `热边界层 δ/L ≈ Ra^(-1/4) ≈ 0.032 → 只需 5~10 层网格`,
+       `buoyantBoussinesqSimpleFoam + 层流 SIMPLE，无湍流模型`,
+     ],
+     why_validation_matters_zh: `这个 case 是一个"诚实 > 野心"的教学样本。之前硬要追 Ra=10¹⁰，网格永远撑不起来，Nu 数字看着合理但全是低分辨率伪像（算出来 ≠ 算对）。B-class 修订把目标 regime 降到 Ra=10⁶ 层流区间，40-80 层网格就能稳定解析，gold 有 40+ 篇后续研究在 ±0.2% 区间内验证 Nu=8.80。当你能选一个"网格撑得起"的 regime 时，选它，不要为了"像高端"去追一个跑不动的数。`,
+
+codex
+The diff is as scoped: one hunk inside `naca0012_airfoil` only. I’m cross-referencing the exact source-of-truth lines now, including the Cp attenuation rationale and the adapter/fixture anchors the round-2 finding referenced.
+exec
+/bin/zsh -lc "nl -ba knowledge/gold_standards/naca0012_airfoil.yaml | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba knowledge/whitelist.yaml | sed -n '234,247p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   234	  - id: naca0012_airfoil
+   235	    name: "NACA 0012 Airfoil External Flow"
+   236	    reference: "Thomas 1979 / Lada & Gostling 2007"
+   237	    doi: "10.1017/S0001924000001169"
+   238	    flow_type: EXTERNAL
+   239	    geometry_type: AIRFOIL
+   240	    compressibility: INCOMPRESSIBLE
+   241	    steady_state: STEADY
+   242	    solver: simpleFoam
+   243	    turbulence_model: k-omega SST
+   244	    parameters:
+   245	      Re: 3000000
+   246	      angle_of_attack: 0.0
+   247	      chord_length: 1.0
+
+ succeeded in 0ms:
+     1	schema_version: 2
+     2	case_id: naca0012_airfoil
+     3	source: "Thomas 1979 / Lada & Gostling 2007"
+     4	literature_doi: "10.1017/S0001924000001169"
+     5	note: >
+     6	  Mesh: x-z plane (z=normal, 80 cells; y=thin span ±0.001, empty boundaries).
+     7	  Direct blockMesh around NACA0012 OBJ — no transformPoints/extrudeMesh.
+     8	  Solver: simpleFoam + kOmegaSST, Re=3e6.
+     9	  fvSolution: p GAMG relTol=0.05 tolerance=1e-6; fields p URF=0.3;
+    10	    equations U/k/omega URF=0.5 each; I_turb=0.005.
+    11	  Docker E2E: converged (p=9.7e-7), 224 Cp values extracted.
+    12	  Gold comparison deviations ~30-50% — extracted values are near-surface cell
+    13	  averages; reference values are exact surface points. Cp profile shape correct.
+    14	physics_contract:
+    15	  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at 0° angle of attack; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported)"
+    16	  reference_correlation_context: "Thomas 1979 / Lada 2007 ref_values are *exact surface* pressure coefficients at the tabulated x/c stations. The adapter CANNOT deliver exact-surface values — it samples a near-surface band of cell centres and averages. A shape-faithful but value-attenuated Cp distribution is the expected outcome, and the 20% tolerance + PASS_WITH_DEVIATIONS verdict reflect this."
+    17	  physics_precondition:
+    18	    - condition: "Flow is attached and steady at α=0° (no stall, no unsteady shedding) so a steady RANS solve is physically meaningful"
+    19	      satisfied_by_current_adapter: true
+    20	      evidence_ref: "whitelist uses simpleFoam + kOmegaSST at α=0 (symmetric airfoil, zero lift at symmetric condition); no shedding regime concerns"
+    21	    - condition: "Mesh resolves the boundary layer sufficiently for near-wall gradients (appropriate y+ for kOmegaSST with Automatic Wall Treatment)"
+    22	      satisfied_by_current_adapter: true
+    23	      evidence_ref: "kOmegaSST in OpenFOAM 2.x+ handles both low-Re (y+<1) and high-Re (y+>30) wall placement via blended omega wall function; surface_band sampling at src/foam_agent_adapter.py:7068 tolerates either"
+    24	    - condition: "Cp extraction sampling geometry aligns with 'exact surface' gold standard"
+    25	      satisfied_by_current_adapter: false
+    26	      evidence_ref: "src/foam_agent_adapter.py:7068 surface_band = max(8.0*dz_min, 0.02*chord) — the extracted Cp is averaged over a ~2% chord thick band above the surface, not the exact surface. Lines 7073-7089 split into upper/lower candidates within search_envelope=0.25*chord."
+    27	      consequence_if_unsatisfied: "The adapter's Cp values are systematically attenuated vs the ref (magnitudes reduced ~30-50%), while the x-station *shape* of the Cp curve remains faithful. PASS_WITH_DEVIATIONS is the honest verdict. A future R-A-style slice could add a 'cell_vs_surface' kind field to each Cp observable to make the comparator aware of the sampling difference."
+    28	  contract_status: "PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk."
+    29	  precondition_last_reviewed: "2026-04-18 (EX-1-004 annotation slice)"
+    30	observables:
+    31	  - name: pressure_coefficient
+    32	    description: pressure coefficient distribution along the NACA 0012 chord
+    33	    ref_value:
+    34	      - x: 0.0
+    35	        Cp: 1.0
+    36	      - x: 0.1
+    37	        Cp: -0.3
+    38	      - x: 0.3
+    39	        Cp: -0.5
+    40	      - x: 0.5
+    41	        Cp: -0.2
+    42	      - x: 0.7
+    43	        Cp: 0.0
+    44	      - x: 1.0
+    45	        Cp: 0.2
+    46	    tolerance:
+    47	      mode: relative
+    48	      value: 0.20
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml | sed -n '1,80p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6366,6382p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	# Reference-pass run for naca0012_airfoil at Re=3e6, α=0°.
+     2	# Ladson 1987 / Thomas 1979 exact surface Cp at leading edge is 1.0
+     3	# (stagnation point). A mesh-converged, large-domain (40 chords
+     4	# far-field), kOmegaSST transition-SST simulation samples Cp in the
+     5	# near-surface cell band and averages to 0.98 at x/c≈0 (-2% shape
+     6	# attenuation from cell-center averaging, as documented in the gold
+     7	# standard's reference_correlation_context).
+     8	# Gold tol=20% → PASS with plenty of margin.
+     9	run_metadata:
+    10	  run_id: reference_pass
+    11	  label_zh: 参考通过 · 远场 40 弦 + transition-SST
+    12	  label_en: Reference pass (40-chord far-field, transition-SST model)
+    13	  description_zh: >-
+    14	    40 弦远场 + transition-SST + 210k 结构化 C-网格 + Re=3×10⁶。Cp 前缘
+    15	    值 0.98（stagnation 理论 1.0，cell-center 平均引入 -2% 衰减 — 这是
+    16	    gold 文档里明确允许的提取误差）。20% 容差内 PASS，shape 也对。这是
+    17	    外流 CFD "做对" 的最低门槛。
+    18	  category: reference
+    19	  expected_verdict: PASS
+    20	case_id: naca0012_airfoil
+    21	source: ladson_1987_mesh_converged
+    22	measurement:
+    23	  value: 0.98
+    24	  unit: dimensionless
+    25	  run_id: synth_naca_conv_aoa0
+    26	  commit_sha: null
+    27	  measured_at: null
+    28	  quantity: Cp_leading_edge
+    29	audit_concerns: []
+    30	decisions_trail: []
+
+ succeeded in 0ms:
+  6366	"""
+  6367	        )
+  6368	        (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
+  6369	
+  6370	        Ux = U_inf
+  6371	        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
+  6372	        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
+  6373	        # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
+  6374	        # Standard turbulence length-scale formula for omega:
+  6375	        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
+  6376	        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
+  6377	        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
+  6378	        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
+  6379	        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
+  6380	        I_turb = 0.005
+  6381	        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
+  6382	        L_turb = 0.1 * chord                     # = 0.1
+
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '7060,7095p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  7060	        Mirrors _copy_postprocess_fields. Runs foamToVTK inside the container,
+  7061	        then uses docker `get_archive` to pull VTK/, postProcessing/sample/,
+  7062	        and postProcessing/residuals/ wholesale via a single tar stream.
+  7063	        Also copies log.<solver> from the host case dir (already on host).
+  7064	
+  7065	        Returns the host-side artifact_dir on success, None on failure.
+  7066	        Never raises — field capture is best-effort and must not fail the run
+  7067	        (comparator scalar extraction still needs to succeed downstream).
+  7068	        """
+  7069	        import io as _io
+  7070	        import sys as _sys
+  7071	        import tarfile as _tarfile
+  7072	
+  7073	        repo_root = Path(__file__).resolve().parents[1]
+  7074	        artifact_dir = repo_root / "reports" / "phase5_fields" / case_id / timestamp
+  7075	        try:
+  7076	            artifact_dir.mkdir(parents=True, exist_ok=True)
+  7077	
+  7078	            # (a) foamToVTK — -allPatches merges patches into a single file.
+  7079	            #     -noFaceZones: DEC-V61-034 Tier C, circular_cylinder_wake uses
+  7080	            #     createBaffles which leaves a cylinderBaffleZone faceZone; OF10
+  7081	            #     foamToVTK SEGVs when interpolating surfScalarField phi onto
+  7082	            #     the post-baffle faceZone (flux pointer inconsistent with
+  7083	            #     split owner/neighbour patches of the same name). -noFaceZones
+  7084	            #     skips the faceZone write, which is not required downstream
+  7085	            #     (the cylinder wall is already emitted as a regular patch).
+  7086	            #     No-op for the 9 cases that don't use faceZones.
+  7087	            #     Fallback without -allPatches if it trips empty-patch
+  7088	            #     assertions (07a-RESEARCH.md §3.2).
+  7089	            ok, log = self._docker_exec(
+  7090	                "foamToVTK -latestTime -noZero -allPatches -noFaceZones",
+  7091	                case_cont_dir,
+  7092	                120,
+  7093	            )
+  7094	            if not ok:
+  7095	                print(
+
+exec
+/bin/zsh -lc "python - <<'PY'
+from pathlib import Path
+import re
+text = Path('ui/frontend/src/data/learnCases.ts').read_text(encoding='utf-8')
+ids = re.findall(r'id: \"(["'^"]+)"'"', text)
+print('ids', len(ids), ids)
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "rg -n \"surface_band|max\\(8\\.0\\*dz_min, 0\\.02\\*chord\\)|search_envelope=0.25\\*chord|search_envelope = 0.25 \\* chord\" src/foam_agent_adapter.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 127 in 0ms:
+zsh:1: command not found: python
+
+ succeeded in 0ms:
+8612:        surface_band = max(8.0 * dz_min, 0.02 * chord)
+8613:        search_envelope = 0.25 * chord
+8653:                if dist <= surface_band:
+8657:                if dist <= surface_band:
+
+exec
+/bin/zsh -lc 'git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+diff --git a/ui/frontend/src/data/learnCases.ts b/ui/frontend/src/data/learnCases.ts
+index 2b299d0..d810f42 100644
+--- a/ui/frontend/src/data/learnCases.ts
++++ b/ui/frontend/src/data/learnCases.ts
+@@ -197,0 +198,5 @@ export const LEARN_CASES: LearnCase[] = [
++    // DEC-V61-047 round-2 N1: Authoritative setup per knowledge/whitelist.yaml
++    // + knowledge/gold_standards/naca0012_airfoil.yaml + src/foam_agent_adapter.py:
++    // Re=3e6 (NOT 6e6), α=0° (NOT ≈4°) — symmetric airfoil at zero incidence
++    // gives attached flow + zero lift. Earlier round-1 solver card mis-cited
++    // α≈4°/Re=6e6, which would teach the wrong canonical setup to a novice.
+@@ -199,3 +204,3 @@ export const LEARN_CASES: LearnCase[] = [
+-      `小攻角（~5°）下近似线性`,
+-      `失速攻角（~15°）附近非线性剧增`,
+-      `远场边界距离直接影响解`,
++      `0° 攻角下对称翼型——attached flow，零升力`,
++      `Cp 分布沿弦长是 canonical 压强场验证量`,
++      `远场边界距离直接影响解（< 15 倍弦长会产生伪 blockage）`,
+@@ -203,6 +208,6 @@ export const LEARN_CASES: LearnCase[] = [
+-    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
+-    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误。环流效应会让升力系数 Cl 被压低 10%+，而且网格无关性测试抓不到这个问题。`,
+-    solver_setup_zh: `simpleFoam (稳态) + RAS kOmegaSST (航空默认湍流模型)。Re=6e6 基于弦长 c=1m 和 M∞ (assumed incompressible here)。small angle attack (α≈4°) 接近线性区。URF: U≈0.7, p≈0.3。收敛需要足够的 iterations (≥1000)，尤其是 Cl 积分值要稳定。`,
+-    mesh_strategy_zh: `C-grid 或 O-grid 贴翼型表面，远场至少 15-20·c 距离（防止伪 blockage）。壁面第一层 cell 目标 y+≈1 让 kOmegaSST 低雷诺数修正正确工作；典型第一层厚度 10⁻⁵·c。约 5-10 万 cells 二维结构网格。Cp 采样是 near-surface band (不是 exact surface)，所以 y+<5 区间内 cells 的密度直接影响 Cp 曲线平滑度。`,
+-    boundary_conditions_zh: `inlet (upstream + lateral far-field) fixedValue U=(U∞·cos α, U∞·sin α, 0)；outlet (downstream) 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0)，k/ω wall functions。远场边界要够远：<15·c 会产生虚假 blockage，Cl 系统偏低。`,
+-    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。沿翼型表面从 x/c=0 (leading edge) 到 x/c=1 (trailing edge) 采样，分 upper/lower surface。extractor 用 patchAverage 在 airfoil patch 上做 sample，生成 (x/c, Cp) 列表，和 Ladson 风洞数据（NASA TM 1996）对齐比。Cp 对 mesh 的 near-wall 分辨率敏感，y+ 变化 2× 可能让曲线轻微偏。`,
++    why_validation_matters_zh: `Ladson / Thomas 的 NASA 风洞数据是公开基准之一，对称翼型 α=0° 是入门验证：attached flow、无分离、压强分布可由简单 RANS 稳态收敛。你的 CFD 要做更复杂的外流（带攻角、带分离、机翼、螺旋桨），必须先在 NACA 0012 零度这一关拿到可控误差——这是航空 CFD 验证流水线的"第一道门"。`,
++    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误——虚假 blockage 让整个压强场 shifted，网格无关性测试抓不到。另一个陷阱：本 case 的 Cp 提取是 near-surface band 平均（adapter 在壁面上方 ~2% 弦长厚度带里取 cell-center 均值），与文献的"exact surface"定义相比系统性衰减 30-50%，形状对、幅值小——这也是 gold 容差设为 20% 并用 PASS_WITH_DEVIATIONS 的原因。`,
++    solver_setup_zh: `simpleFoam (稳态 SIMPLE) + RAS kOmegaSST。Re=3e6 基于弦长 c=1m，α=0°（对称翼型，符合 physics_contract 的 precondition "flow attached and steady at α=0°"）。URF: p=0.3（GAMG 求解，relTol=0.05, tolerance=1e-6）; U/k/ω=0.5 each（见 knowledge/gold_standards/naca0012_airfoil.yaml:5-14）. 收敛到 p residual ≤ 1e-6 且 Cp 稳态。`,
++    mesh_strategy_zh: `blockMesh 直接围绕 NACA0012 OBJ 生成 x-z 平面（z 法向 80 cells，y 薄展向 ±0.001 + empty side patches，伪 2D）。远场至少 15-20·c 距离。kOmegaSST 在 OpenFOAM 2.x+ 能 blended 处理 y+<1 (低雷诺数修正) 和 y+>30 (wall function)；当前 mesh 的 surface_band=max(8·dz_min, 0.02·c) 让 Cp 提取在 y+<5 区间平滑。`,
++    boundary_conditions_zh: `上游 + 横向 inlet/freestream fixedValue U=(U_∞, 0, 0)（α=0°，无 sin α 分量）；下游 outlet 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0) + k/ω wall functions；展向 front/back 为 empty 模拟 2D。远场 < 15·c 会显著 shift 整个 Cp 分布；> 20·c 后增益递减。`,
++    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。src/foam_agent_adapter.py:7068 的 extractor 在翼型表面上方 surface_band=max(8·dz_min, 0.02·c) 厚度带里取 cell-center 做 patchAverage，然后按 x/c 分 upper/lower。精确文献 Cp 是 exact surface 点，adapter 是 near-surface cell average → 形状正确但幅值系统衰减 ~30-50%（physics_contract precondition #3 明确标 satisfied=false）。容差 20%、verdict PASS_WITH_DEVIATIONS 就是为此。`,
+
+exec
+/bin/zsh -lc "rg -n 'id: \"' ui/frontend/src/data/learnCases.ts" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+49:    id: "lid_driven_cavity",
+70:    id: "backward_facing_step",
+91:    id: "circular_cylinder_wake",
+112:    id: "turbulent_flat_plate",
+139:    id: "plane_channel_flow",
+165:    id: "impinging_jet",
+190:    id: "naca0012_airfoil",
+216:    id: "rayleigh_benard_convection",
+237:    id: "differential_heated_cavity",
+261:    id: "duct_flow",
+
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '8608,8662p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  8608	            )
+  8609	        else:
+  8610	            dz_min = 0.01 * chord
+  8611	
+  8612	        surface_band = max(8.0 * dz_min, 0.02 * chord)
+  8613	        search_envelope = 0.25 * chord
+  8614	
+  8615	        from collections import defaultdict
+  8616	
+  8617	        upper_candidates: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+  8618	        lower_candidates: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+  8619	        farfield_pressures: List[float] = []
+  8620	
+  8621	        n = min(len(cxs), len(czs), len(p_vals))
+  8622	        for i in range(n):
+  8623	            x = cxs[i]
+  8624	            z = czs[i]  # z is the normal direction in x-z plane mesh
+  8625	            p = p_vals[i]
+  8626	
+  8627	            x_norm = x / chord if chord else 0.0
+  8628	            if (x < -0.5 * chord or x > 1.5 * chord) and abs(z) < 0.5 * chord:
+  8629	                farfield_pressures.append(p)
+  8630	
+  8631	            if x_norm < 0.0 or x_norm > 1.0 or abs(z) > search_envelope:
+  8632	                continue
+  8633	
+  8634	            z_surface = FoamAgentExecutor._naca0012_half_thickness(x_norm) * chord
+  8635	            key = round(x_norm, 3)
+  8636	
+  8637	            if z >= 0.0:
+  8638	                upper_candidates[key].append((abs(z - z_surface), p))
+  8639	            else:
+  8640	                lower_candidates[key].append((abs(z + z_surface), p))
+  8641	
+  8642	        p_ref = (
+  8643	            sum(farfield_pressures) / len(farfield_pressures)
+  8644	            if farfield_pressures
+  8645	            else 0.0
+  8646	        )
+  8647	        cp_profile: List[Tuple[float, float]] = []
+  8648	
+  8649	        for x_key in sorted(set(upper_candidates) | set(lower_candidates)):
+  8650	            p_surface_samples: List[float] = []
+  8651	            if upper_candidates.get(x_key):
+  8652	                dist, p_upper = min(upper_candidates[x_key], key=lambda item: item[0])
+  8653	                if dist <= surface_band:
+  8654	                    p_surface_samples.append(p_upper)
+  8655	            if lower_candidates.get(x_key):
+  8656	                dist, p_lower = min(lower_candidates[x_key], key=lambda item: item[0])
+  8657	                if dist <= surface_band:
+  8658	                    p_surface_samples.append(p_lower)
+  8659	            if p_surface_samples:
+  8660	                p_surface = sum(p_surface_samples) / len(p_surface_samples)
+  8661	                cp_profile.append((x_key, (p_surface - p_ref) / q_ref))
+  8662	
+
+exec
+/bin/zsh -lc "git diff 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg -n 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|taylor_green_vortex'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+36:     id: "rayleigh_benard_convection",
+
+exec
+/bin/zsh -lc "git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg -n 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+codex
+I’ve confirmed the physics correction itself is in place. I’m doing one more pass on the adapter-side details now so the approval file can explicitly cover solver, mesh, BCs, and the Cp extraction/tolerance rationale rather than just Re/α.
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6280,6369p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  6280	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6281	|    \\/     M anipulation  |                                                 |
+  6282	\\*---------------------------------------------------------------------------*/
+  6283	FoamFile
+  6284	{
+  6285	    version     2.0;
+  6286	    format      ascii;
+  6287	    class       dictionary;
+  6288	    location    "system";
+  6289	    object      fvSchemes;
+  6290	}
+  6291	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6292	
+  6293	ddtSchemes { default steadyState; }
+  6294	gradSchemes {
+  6295	    default         Gauss linear;
+  6296	    limited         cellLimited Gauss linear 1;
+  6297	    grad(U)         $limited;
+  6298	    grad(k)         $limited;
+  6299	    grad(omega)     $limited;
+  6300	}
+  6301	divSchemes {
+  6302	    default         none;
+  6303	    div(phi,U)      bounded Gauss upwind;
+  6304	    div(phi,k)      bounded Gauss upwind;
+  6305	    div(phi,omega)  bounded Gauss upwind;
+  6306	    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+  6307	}
+  6308	laplacianSchemes { default Gauss linear corrected; }
+  6309	interpolationSchemes { default linear; }
+  6310	snGradSchemes { default corrected; }
+  6311	wallDist { method meshWave; }
+  6312	
+  6313	// ************************************************************************* //
+  6314	""",
+  6315	            encoding="utf-8",
+  6316	        )
+  6317	
+  6318	        fvsol = (
+  6319	            """\
+  6320	/*--------------------------------*- C++ -*---------------------------------*\
+  6321	| =========                 |                                                 |
+  6322	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6323	|  \\    /   O peration     | Version:  10                                    |
+  6324	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6325	|    \\/     M anipulation  |                                                 |
+  6326	\\*---------------------------------------------------------------------------*/
+  6327	FoamFile
+  6328	{
+  6329	    version     2.0;
+  6330	    format      ascii;
+  6331	    class       dictionary;
+  6332	    location    "system";
+  6333	    object      fvSolution;
+  6334	}
+  6335	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6336	
+  6337	solvers
+  6338	{
+  6339	    p { solver GAMG; smoother GaussSeidel; tolerance 1e-6; relTol 0.05; }
+  6340	    pFinal { $p; relTol 0; }
+  6341	    U { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+  6342	    UFinal { $U; relTol 0; }
+  6343	    k { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+  6344	    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+  6345	}
+  6346	
+  6347	SIMPLE
+  6348	{
+  6349	    residualControl
+  6350	    {
+  6351	        p       1e-6;
+  6352	        U       1e-5;
+  6353	        k       1e-5;
+  6354	        omega   1e-5;
+  6355	    }
+  6356	    nNonOrthogonalCorrectors 0;
+  6357	}
+  6358	
+  6359	relaxationFactors
+  6360	{
+  6361	    fields { p 0.3; }
+  6362	    equations { U 0.5; k 0.5; omega 0.5; }
+  6363	}
+  6364	
+  6365	// ************************************************************************* //
+  6366	"""
+  6367	        )
+  6368	        (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
+  6369	
+
+exec
+/bin/zsh -lc "rg -n \"naca0012|airfoil|freestream|empty|inletOutlet|omegaWallFunction|kqRWallFunction|noSlip\" src/foam_agent_adapter.py | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+179:    isn't present, or reference_values is empty. Callers decide fallback
+228:        raise ValueError("physical_points must not be empty")
+524:                self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
+558:            # AIRFOIL uses a direct 2D blockMesh around the projected airfoil surface.
+1042:        type            noSlip;
+1046:        type            noSlip;
+1050:        type            noSlip;
+1054:        type            empty;
+1107:        type            empty;
+1465:        type            noSlip;
+1469:        type            noSlip;
+1473:        type            empty;
+1477:        type            empty;
+1531:        type            empty;
+1535:        type            empty;
+1629:        type            empty;
+1633:        type            empty;
+1681:        type            kqRWallFunction;
+1686:        type            kqRWallFunction;
+1691:        type            empty;
+1695:        type            empty;
+1753:        type            empty;
+1757:        type            empty;
+1933:        type            empty;
+1938:        type            empty;
+2412:    front { type empty; }
+2413:    back  { type empty; }
+2469:    front { type empty; }
+2470:    back  { type empty; }
+2527:    front { type empty; }
+2528:    back  { type empty; }
+2587:    front {{ type empty; }}
+2588:    back  {{ type empty; }}
+2646:    front {{ type empty; }}
+2647:    back  {{ type empty; }}
+2704:    front {{ type empty; }}
+2705:    back  {{ type empty; }}
+2741:    hot_wall           {{ type kqRWallFunction; value uniform 1e-4; }}
+2742:    cold_wall          {{ type kqRWallFunction; value uniform 1e-4; }}
+2743:    adiabatic_top       {{ type kqRWallFunction; value uniform 1e-4; }}
+2744:    adiabatic_bottom    {{ type kqRWallFunction; value uniform 1e-4; }}
+2745:    front {{ type empty; }}
+2746:    back  {{ type empty; }}
+2786:    front {{ type empty; }}
+2787:    back  {{ type empty; }}
+2826:        type            omegaWallFunction;
+2831:        type            omegaWallFunction;
+2836:        type            omegaWallFunction;
+2841:        type            omegaWallFunction;
+2844:    front {{ type empty; }}
+2845:    back  {{ type empty; }}
+2885:    front { type empty; }
+2886:    back  { type empty; }
+2927:        type            omegaWallFunction;
+2932:        type            omegaWallFunction;
+2937:        type            omegaWallFunction;
+2942:        type            omegaWallFunction;
+2945:    front {{ type empty; }}
+2946:    back  {{ type empty; }}
+3099:        - Walls (y=±D/2, z=±D/2): noSlip
+3100:        - 2D: front/back empty
+3118:        # needs. Walls at y=±D/2 with noSlip (fixedValue U=0). Half
+3200:        type            empty;
+3208:        type            empty;
+3460:        type            noSlip;
+3462:    front {{ type empty; }}
+3463:    back  {{ type empty; }}
+3506:    front {{ type empty; }}
+3507:    back  {{ type empty; }}
+3607:        type            empty;
+3612:        type            empty;
+4001:        type            noSlip;
+4003:    front {{ type empty; }}
+4004:    back  {{ type empty; }}
+4051:    front { type empty; }
+4052:    back  { type empty; }
+4090:    front {{ type empty; }}
+4091:    back  {{ type empty; }}
+4131:    walls        {{ type omegaWallFunction; value uniform {omega_init}; }}
+4132:    front {{ type empty; }}
+4133:    back  {{ type empty; }}
+4170:    front {{ type empty; }}
+4171:    back  {{ type empty; }}
+4208:    front {{ type empty; }}
+4209:    back  {{ type empty; }}
+4362:        type            empty;
+4367:        type            empty;
+4889:    lower_wall   {{ type noSlip; }}
+4890:    upper_wall   {{ type noSlip; }}
+4891:    cylinder     {{ type noSlip; }}
+4892:    front {{ type empty; }}
+4893:    back  {{ type empty; }}
+4932:    front {{ type empty; }}
+4933:    back  {{ type empty; }}
+4972:    front {{ type empty; }}
+4973:    back  {{ type empty; }}
+5009:    lower_wall   {{ type omegaWallFunction; value uniform 1.0; }}
+5010:    upper_wall   {{ type omegaWallFunction; value uniform 1.0; }}
+5011:    cylinder     {{ type omegaWallFunction; value uniform 1.0; }}
+5012:    front {{ type empty; }}
+5013:    back  {{ type empty; }}
+5050:    front { type empty; }
+5051:    back  { type empty; }
+5184:        type            empty;
+5189:        type            empty;
+5194:        type            empty;
+5556:    plate           {{ type noSlip; }}
+5558:    axis            {{ type empty; }}
+5559:    front           {{ type empty; }}
+5560:    back            {{ type empty; }}
+5596:    axis        { type empty; }
+5597:    front       { type empty; }
+5598:    back        { type empty; }
+5634:    axis        { type empty; }
+5635:    front       { type empty; }
+5636:    back        { type empty; }
+5675:    outer           {{ type inletOutlet; inletValue uniform 0; value uniform 0; }}
+5676:    axis            {{ type empty; }}
+5677:    front           {{ type empty; }}
+5678:    back            {{ type empty; }}
+
+exec
+/bin/zsh -lc 'git diff --name-only 51c7198..196fb94' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/frontend/src/data/learnCases.ts
+
+exec
+/bin/zsh -lc 'rg -n "def _generate_airfoil_flow|AIRFOIL uses a direct 2D blockMesh|NACA0012|OBJ" src/foam_agent_adapter.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "rg -n \"inletOutlet|freestream|airfoil|empty side|front/back|front \\{ type empty|back  \\{ type empty|wall functions|omegaWallFunction|kqRWallFunction\" src/foam_agent_adapter.py | sed -n '120,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+558:            # AIRFOIL uses a direct 2D blockMesh around the projected airfoil surface.
+5914:    def _generate_airfoil_flow(
+5922:        the real NACA0012 surface for Cp extraction.
+5967:        # Only the aerofoil boundary edges remain projected onto the OBJ surface.
+5994:        file            "NACA0012.obj";
+6572:        # NACA0012 is symmetric at AoA=0 (current adapter does not implement
+6599:                    f"NACA0012 upper surface, {len(xoc_values)} gold x/c coords "
+6628:        """Write a thin-span NACA0012 OBJ aligned with the x-z airfoil plane."""
+6637:            "# Wavefront OBJ file",
+6689:        (geometry_dir / "NACA0012.obj").write_text("\n".join(lines) + "\n", encoding="utf-8")
+8584:        方法: 在 0<=x/c<=1 的 cell centres 中，寻找最接近 NACA0012 上/下表面的
+
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '520,580p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   520	                solver_name = "simpleFoam"
+   521	                turbulence_model = self._turbulence_model_for_solver(
+   522	                    solver_name, task_spec.geometry_type, task_spec.Re
+   523	                )
+   524	                self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
+   525	            elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
+   526	                self._generate_impinging_jet(case_host_dir, task_spec)
+   527	                solver_name = "buoyantFoam"
+   528	            elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
+   529	                # LDC: canonical name match, no Re-heuristic (Codex MEDIUM: the
+   530	                # `Re < 2300` fallback was too broad — any SIMPLE_GRID laminar
+   531	                # case would get routed through the cavity generator, silent
+   532	                # wrong-physics risk).
+   533	                if self._is_lid_driven_cavity_case(task_spec, "simpleFoam"):
+   534	                    self._generate_lid_driven_cavity(case_host_dir, task_spec)
+   535	                    solver_name = "simpleFoam"
+   536	                else:
+   537	                    solver_name = "simpleFoam"
+   538	                    turbulence_model = self._turbulence_model_for_solver(
+   539	                        solver_name, task_spec.geometry_type, task_spec.Re
+   540	                    )
+   541	                    self._generate_steady_internal_flow(case_host_dir, task_spec, turbulence_model)
+   542	            else:
+   543	                self._generate_lid_driven_cavity(case_host_dir, task_spec)
+   544	                solver_name = "simpleFoam"
+   545	
+   546	            # 5. 执行 blockMesh
+   547	            blockmesh_ok, blockmesh_log = self._docker_exec(
+   548	                "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
+   549	            )
+   550	            if not blockmesh_ok:
+   551	                return self._fail(
+   552	                    f"blockMesh failed:\n{blockmesh_log}",
+   553	                    time.monotonic() - t0,
+   554	                    raw_output_path=raw_output_path,
+   555	                )
+   556	
+   557	            # topoSet/createBaffles only needed for circular cylinder wake (BODY_IN_CHANNEL EXTERNAL)
+   558	            # AIRFOIL uses a direct 2D blockMesh around the projected airfoil surface.
+   559	            needs_topo = (
+   560	                task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL
+   561	                and task_spec.flow_type == FlowType.EXTERNAL
+   562	            )
+   563	            if needs_topo:
+   564	                topo_ok, topo_log = self._docker_exec(
+   565	                    "topoSet", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
+   566	                )
+   567	                if not topo_ok:
+   568	                    return self._fail(
+   569	                        f"topoSet failed:\n{topo_log}",
+   570	                        time.monotonic() - t0,
+   571	                        raw_output_path=raw_output_path,
+   572	                    )
+   573	
+   574	                baffles_ok, baffles_log = self._docker_exec(
+   575	                    "createBaffles -overwrite", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
+   576	                )
+   577	                if not baffles_ok:
+   578	                    return self._fail(
+   579	                        f"createBaffles failed:\n{baffles_log}",
+   580	                        time.monotonic() - t0,
+
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '5914,6088p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6088,6280p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6369,6475p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  5914	    def _generate_airfoil_flow(
+  5915	        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
+  5916	    ) -> None:
+  5917	        """Generate airfoil external flow case files (simpleFoam steady k-omega SST).
+  5918	
+  5919	        Uses the tutorial six-block topology in the x-z plane, but keeps all
+  5920	        shared block vertices explicit to avoid blockMesh projection drift at
+  5921	        block interfaces. Only the airfoil boundary edges are projected onto
+  5922	        the real NACA0012 surface for Cp extraction.
+  5923	        """
+  5924	        (case_dir / "system").mkdir(parents=True, exist_ok=True)
+  5925	        (case_dir / "constant").mkdir(parents=True, exist_ok=True)
+  5926	        (case_dir / "0").mkdir(parents=True, exist_ok=True)
+  5927	
+  5928	        Re = float(task_spec.Re or 3000000)
+  5929	        bc = task_spec.boundary_conditions or {}
+  5930	        chord = float(bc.get("chord_length", 1.0))
+  5931	        U_inf = 1.0  # freestream velocity
+  5932	        nu_val = U_inf * chord / Re
+  5933	        # DEC-V61-044: plumb chord + U_inf + rho into boundary_conditions
+  5934	        # so the airfoil_surface_sampler.compute_cp helper can normalize
+  5935	        # p → Cp without re-deriving the freestream from other sources.
+  5936	        # simpleFoam is incompressible kinematic-pressure, so rho=1.0.
+  5937	        task_spec.boundary_conditions = bc
+  5938	        bc.setdefault("chord_length", chord)
+  5939	        bc["U_inf"] = U_inf
+  5940	        bc["p_inf"] = 0.0  # gauge pressure matches 0/p internalField
+  5941	        bc["rho"] = 1.0  # incompressible kinematic convention
+  5942	        # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
+  5943	        # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
+  5944	        # works with the C-grid hex ordering. The adapter's previous x-y plane
+  5945	        # approach produced inside-out errors because block vertex ordering
+  5946	        # depends on z being the normal direction.
+  5947	        y_lo = -0.001
+  5948	        y_hi = 0.001
+  5949	        z_far = 2.0 * chord
+  5950	        x_min = -5.0 * chord
+  5951	        x_max = 5.0 * chord
+  5952	        x_upper = 0.3 * chord
+  5953	        z_upper = self._naca0012_half_thickness(0.3) * chord
+  5954	        x_lower = x_upper
+  5955	        z_lower = -z_upper
+  5956	        x_le = 0.0
+  5957	        x_te = chord
+  5958	        z_le = 0.0
+  5959	        z_te = 0.0
+  5960	        span = y_hi - y_lo
+  5961	
+  5962	        self._write_naca0012_surface_obj(case_dir, chord, span)
+  5963	
+  5964	        # 24 explicit vertices (12 at y=y_lo, 12 at y=y_hi), aerofoil in x-z plane.
+  5965	        # Keep all shared block vertices Cartesian to avoid "Inconsistent point
+  5966	        # locations between block pair" errors from projected block interfaces.
+  5967	        # Only the aerofoil boundary edges remain projected onto the OBJ surface.
+  5968	        (case_dir / "system" / "blockMeshDict").write_text(
+  5969	            f"""\
+  5970	/*--------------------------------*- C++ -*---------------------------------*\
+  5971	| =========                 |                                                 |
+  5972	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  5973	|  \\    /   O peration     | Version:  10                                    |
+  5974	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  5975	|    \\/     M anipulation  |                                                 |
+  5976	\\*---------------------------------------------------------------------------*/
+  5977	FoamFile
+  5978	{{
+  5979	    version     2.0;
+  5980	    format      ascii;
+  5981	    class       dictionary;
+  5982	    location    "system";
+  5983	    object      blockMeshDict;
+  5984	}}
+  5985	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  5986	
+  5987	convertToMeters 1;
+  5988	
+  5989	geometry
+  5990	{{
+  5991	    aerofoil
+  5992	    {{
+  5993	        type            triSurfaceMesh;
+  5994	        file            "NACA0012.obj";
+  5995	    }}
+  5996	}}
+  5997	
+  5998	vertices
+  5999	(
+  6000	    // Layer y = y_lo (bottom of thin span)
+  6001	    // Explicit Cartesian vertices keep block interfaces identical across blocks.
+  6002	    ({x_lower:.6f} {y_lo:.6f} {-z_far:.6f})
+  6003	    ({x_te:.6f} {y_lo:.6f} {-z_far:.6f})
+  6004	    ({x_max:.6f} {y_lo:.6f} {-z_far:.6f})
+  6005	
+  6006	    ({x_min:.6f} {y_lo:.6f} {z_le:.6f})
+  6007	    ({x_le:.6f} {y_lo:.6f} {z_le:.6f})
+  6008	    ({x_te:.6f} {y_lo:.6f} {z_te:.6f})
+  6009	    ({x_max:.6f} {y_lo:.6f} {z_te:.6f})
+  6010	
+  6011	    ({x_lower:.6f} {y_lo:.6f} {z_lower:.6f})
+  6012	    ({x_upper:.6f} {y_lo:.6f} {z_upper:.6f})
+  6013	
+  6014	    ({x_upper:.6f} {y_lo:.6f} {z_far:.6f})
+  6015	    ({x_te:.6f} {y_lo:.6f} {z_far:.6f})
+  6016	    ({x_max:.6f} {y_lo:.6f} {z_far:.6f})
+  6017	
+  6018	    // Layer y = y_hi (top of thin span) — same z coords as bottom layer
+  6019	    ({x_lower:.6f} {y_hi:.6f} {-z_far:.6f})
+  6020	    ({x_te:.6f} {y_hi:.6f} {-z_far:.6f})
+  6021	    ({x_max:.6f} {y_hi:.6f} {-z_far:.6f})
+  6022	
+  6023	    ({x_min:.6f} {y_hi:.6f} {z_le:.6f})
+  6024	    ({x_le:.6f} {y_hi:.6f} {z_le:.6f})
+  6025	    ({x_te:.6f} {y_hi:.6f} {z_te:.6f})
+  6026	    ({x_max:.6f} {y_hi:.6f} {z_te:.6f})
+  6027	
+  6028	    ({x_lower:.6f} {y_hi:.6f} {z_lower:.6f})
+  6029	    ({x_upper:.6f} {y_hi:.6f} {z_upper:.6f})
+  6030	
+  6031	    ({x_upper:.6f} {y_hi:.6f} {z_far:.6f})
+  6032	    ({x_te:.6f} {y_hi:.6f} {z_far:.6f})
+  6033	    ({x_max:.6f} {y_hi:.6f} {z_far:.6f})
+  6034	);
+  6035	
+  6036	blocks
+  6037	(
+  6038	    // blockMesh local ordering matches the tutorial:
+  6039	    //   direction 1 = streamwise, direction 2 = thin span (1 cell), direction 3 = z-normal.
+  6040	    // simpleGrading avoids block-interface inconsistencies caused by edgeGrading.
+  6041	    hex ( 7 4 16 19 0 3 15 12)
+  6042	    (30 1 80)
+  6043	    simpleGrading (1 1 40)
+  6044	
+  6045	    hex ( 5 7 19 17 1 0 12 13)
+  6046	    (30 1 80)
+  6047	    simpleGrading (1 1 40)
+  6048	
+  6049	    hex ( 17 18 6 5 13 14 2 1)
+  6050	    (40 1 80)
+  6051	    simpleGrading (10 1 40)
+  6052	
+  6053	    hex ( 20 16 4 8 21 15 3 9)
+  6054	    (30 1 80)
+  6055	    simpleGrading (1 1 40)
+  6056	
+  6057	    hex ( 17 20 8 5 22 21 9 10)
+  6058	    (30 1 80)
+  6059	    simpleGrading (1 1 40)
+  6060	
+  6061	    hex ( 5 6 18 17 10 11 23 22)
+  6062	    (40 1 80)
+  6063	    simpleGrading (10 1 40)
+  6064	);
+  6065	
+  6066	edges
+  6067	(
+  6068	    // Aerofoil surface edges — bottom (y_lo) and top (y_hi) layers
+  6069	    project 4 7 (aerofoil)
+  6070	    project 7 5 (aerofoil)
+  6071	    project 4 8 (aerofoil)
+  6072	    project 8 5 (aerofoil)
+  6073	
+  6074	    project 16 19 (aerofoil)
+  6075	    project 19 17 (aerofoil)
+  6076	    project 16 20 (aerofoil)
+  6077	    project 20 17 (aerofoil)
+  6078	);
+  6079	
+  6080	boundary
+  6081	(
+  6082	    aerofoil
+  6083	    {{
+  6084	        type            wall;
+  6085	        faces
+  6086	        (
+  6087	            (4 7 19 16)
+  6088	            (7 5 17 19)
+
+ succeeded in 0ms:
+  6088	            (7 5 17 19)
+  6089	            (5 8 20 17)
+  6090	            (8 4 16 20)
+  6091	        );
+  6092	    }}
+  6093	    inlet
+  6094	    {{
+  6095	        type            patch;
+  6096	        inGroups        (freestream);
+  6097	        faces
+  6098	        (
+  6099	            (3 0 12 15)
+  6100	            (0 1 13 12)
+  6101	            (1 2 14 13)
+  6102	            (11 10 22 23)
+  6103	            (10 9 21 22)
+  6104	            (9 3 15 21)
+  6105	        );
+  6106	    }}
+  6107	    outlet
+  6108	    {{
+  6109	        type            patch;
+  6110	        inGroups        (freestream);
+  6111	        faces
+  6112	        (
+  6113	            (2 6 18 14)
+  6114	            (6 11 23 18)
+  6115	        );
+  6116	    }}
+  6117	    back
+  6118	    {{
+  6119	        type            empty;
+  6120	        faces
+  6121	        (
+  6122	            (3 4 7 0)
+  6123	            (7 5 1 0)
+  6124	            (5 6 2 1)
+  6125	            (3 9 8 4)
+  6126	            (9 10 5 8)
+  6127	            (10 11 6 5)
+  6128	        );
+  6129	    }}
+  6130	    front
+  6131	    {{
+  6132	        type            empty;
+  6133	        faces
+  6134	        (
+  6135	            (15 16 19 12)
+  6136	            (19 17 13 12)
+  6137	            (17 18 14 13)
+  6138	            (15 16 20 21)
+  6139	            (20 17 22 21)
+  6140	            (17 18 23 22)
+  6141	        );
+  6142	    }}
+  6143	);
+  6144	
+  6145	mergePatchPairs
+  6146	(
+  6147	);
+  6148	
+  6149	// ************************************************************************* //
+  6150	""",
+  6151	            encoding="utf-8",
+  6152	        )
+  6153	
+  6154	        (case_dir / "constant" / "physicalProperties").write_text(
+  6155	            f"""\
+  6156	/*--------------------------------*- C++ -*---------------------------------*\
+  6157	| =========                 |                                                 |
+  6158	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6159	|  \\    /   O peration     | Version:  10                                    |
+  6160	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6161	|    \\/     M anipulation  |                                                 |
+  6162	\\*---------------------------------------------------------------------------*/
+  6163	FoamFile
+  6164	{{
+  6165	    version     2.0;
+  6166	    format      ascii;
+  6167	    class       dictionary;
+  6168	    location    "constant";
+  6169	    object      physicalProperties;
+  6170	}}
+  6171	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6172	
+  6173	transportModel  Newtonian;
+  6174	nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
+  6175	
+  6176	// ************************************************************************* //
+  6177	""",
+  6178	            encoding="utf-8",
+  6179	        )
+  6180	
+  6181	        (case_dir / "constant" / "turbulenceProperties").write_text(
+  6182	            f"""\
+  6183	/*--------------------------------*- C++ -*---------------------------------*\
+  6184	| =========                 |                                                 |
+  6185	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6186	|  \\    /   O peration     | Version:  10                                    |
+  6187	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6188	|    \\/     M anipulation  |                                                 |
+  6189	\\*---------------------------------------------------------------------------*/
+  6190	FoamFile
+  6191	{{
+  6192	    version     2.0;
+  6193	    format      ascii;
+  6194	    class       dictionary;
+  6195	    location    "constant";
+  6196	    object      turbulenceProperties;
+  6197	}}
+  6198	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6199	simulationType  RAS;
+  6200	RAS
+  6201	{{
+  6202	    RASModel      {turbulence_model};
+  6203	    turbulence    on;
+  6204	    printCoeffs   on;
+  6205	}}
+  6206	
+  6207	// ************************************************************************* //
+  6208	""",
+  6209	            encoding="utf-8",
+  6210	        )
+  6211	
+  6212	        (case_dir / "system" / "controlDict").write_text(
+  6213	            """\
+  6214	/*--------------------------------*- C++ -*---------------------------------*\
+  6215	| =========                 |                                                 |
+  6216	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6217	|  \\    /   O peration     | Version:  10                                    |
+  6218	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6219	|    \\/     M anipulation  |                                                 |
+  6220	\\*---------------------------------------------------------------------------*/
+  6221	FoamFile
+  6222	{
+  6223	    version     2.0;
+  6224	    format      ascii;
+  6225	    class       dictionary;
+  6226	    location    "system";
+  6227	    object      controlDict;
+  6228	}
+  6229	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6230	
+  6231	application     simpleFoam;
+  6232	startFrom       startTime;
+  6233	startTime       0;
+  6234	stopAt          endTime;
+  6235	endTime         2000;
+  6236	deltaT          1;
+  6237	writeControl    runTime;
+  6238	writeInterval   200;
+  6239	purgeWrite      0;
+  6240	writeFormat     ascii;
+  6241	writePrecision  6;
+  6242	writeCompression off;
+  6243	timeFormat      general;
+  6244	timePrecision   6;
+  6245	runTimeModifiable true;
+  6246	
+  6247	// DEC-V61-044: in-solver surface sampler on the `aerofoil` patch
+  6248	// (note British spelling — matches blockMesh patch name). Emits
+  6249	// postProcessing/airfoilSurface/<t>/p_aerofoil.raw with columns
+  6250	// `x y z p` per face. Parser lives in src/airfoil_surface_sampler.py.
+  6251	// Runs at writeTime (every 200 iterations via writeInterval above).
+  6252	functions
+  6253	{
+  6254	    airfoilSurface
+  6255	    {
+  6256	        type            surfaces;
+  6257	        libs            ("libsampling.so");
+  6258	        writeControl    writeTime;
+  6259	        surfaceFormat   raw;
+  6260	        fields          (p);
+  6261	        interpolationScheme cellPoint;
+  6262	        surfaces
+  6263	        {
+  6264	            aerofoil { type patch; patches (aerofoil); interpolate false; }
+  6265	        }
+  6266	    }
+  6267	}
+  6268	
+  6269	// ************************************************************************* //
+  6270	""",
+  6271	            encoding="utf-8",
+  6272	        )
+  6273	
+  6274	        (case_dir / "system" / "fvSchemes").write_text(
+  6275	            """\
+  6276	/*--------------------------------*- C++ -*---------------------------------*\
+  6277	| =========                 |                                                 |
+  6278	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6279	|  \\    /   O peration     | Version:  10                                    |
+  6280	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+
+ succeeded in 0ms:
+  6369	
+  6370	        Ux = U_inf
+  6371	        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
+  6372	        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
+  6373	        # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
+  6374	        # Standard turbulence length-scale formula for omega:
+  6375	        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
+  6376	        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
+  6377	        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
+  6378	        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
+  6379	        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
+  6380	        I_turb = 0.005
+  6381	        k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
+  6382	        L_turb = 0.1 * chord                     # = 0.1
+  6383	        Cmu = 0.09
+  6384	        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.069 (was 0.681)
+  6385	
+  6386	        (case_dir / "0" / "U").write_text(
+  6387	            f"""\
+  6388	/*--------------------------------*- C++ -*---------------------------------*\
+  6389	| =========                 |                                                 |
+  6390	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6391	|  \\    /   O peration     | Version:  10                                    |
+  6392	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6393	|    \\/     M anipulation  |                                                 |
+  6394	\\*---------------------------------------------------------------------------*/
+  6395	FoamFile
+  6396	{{
+  6397	    version     2.0;
+  6398	    format      ascii;
+  6399	    class       volVectorField;
+  6400	    location    "0";
+  6401	    object      U;
+  6402	}}
+  6403	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6404	
+  6405	dimensions      [0 1 -1 0 0 0 0];
+  6406	internalField   uniform ({Ux} 0 0);
+  6407	boundaryField
+  6408	{{
+  6409	    freestream
+  6410	    {{
+  6411	        type            freestreamVelocity;
+  6412	        freestreamValue uniform ({Ux} 0 0);
+  6413	        value           uniform ({Ux} 0 0);
+  6414	    }}
+  6415	    aerofoil {{ type noSlip; }}
+  6416	    front {{ type empty; }}
+  6417	    back  {{ type empty; }}
+  6418	}}
+  6419	
+  6420	// ************************************************************************* //
+  6421	""",
+  6422	            encoding="utf-8",
+  6423	        )
+  6424	
+  6425	        (case_dir / "0" / "p").write_text(
+  6426	            """\
+  6427	/*--------------------------------*- C++ -*---------------------------------*\
+  6428	| =========                 |                                                 |
+  6429	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6430	|  \\    /   O peration     | Version:  10                                    |
+  6431	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6432	|    \\/     M anipulation  |                                                 |
+  6433	\\*---------------------------------------------------------------------------*/
+  6434	FoamFile
+  6435	{
+  6436	    version     2.0;
+  6437	    format      ascii;
+  6438	    class       volScalarField;
+  6439	    location    "0";
+  6440	    object      p;
+  6441	}
+  6442	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6443	
+  6444	dimensions      [0 2 -2 0 0 0 0];
+  6445	internalField   uniform 0;
+  6446	boundaryField
+  6447	{
+  6448	    freestream
+  6449	    {
+  6450	        type            freestreamPressure;
+  6451	        freestreamValue uniform 0;
+  6452	        value           uniform 0;
+  6453	    }
+  6454	    aerofoil { type zeroGradient; }
+  6455	    front { type empty; }
+  6456	    back  { type empty; }
+  6457	}
+  6458	
+  6459	// ************************************************************************* //
+  6460	""",
+  6461	            encoding="utf-8",
+  6462	        )
+  6463	
+  6464	        # 0/k — turbulent kinetic energy
+  6465	        (case_dir / "0" / "k").write_text(
+  6466	            f"""\
+  6467	/*--------------------------------*- C++ -*---------------------------------*\
+  6468	| =========                 |                                                 |
+  6469	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6470	|  \\    /   O peration     | Version:  10                                    |
+  6471	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6472	|    \\/     M anipulation  |                                                 |
+  6473	\\*---------------------------------------------------------------------------*/
+  6474	FoamFile
+  6475	{{
+
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6565,6635p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba src/foam_agent_adapter.py | sed -n '6475,6565p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  6565	""",
+  6566	            encoding="utf-8",
+  6567	        )
+  6568	
+  6569	        # system/sampleDict — gold-anchored Cp sampling (C3b).
+  6570	        # docs/c3_sampling_strategy_design.md §3.2 Option B: sample p at
+  6571	        # upper-surface points for each x_over_c in whitelist reference_values.
+  6572	        # NACA0012 is symmetric at AoA=0 (current adapter does not implement
+  6573	        # non-zero AoA), so upper-surface sampling captures the full Cp
+  6574	        # distribution; lower surface would mirror. cellPoint interpolation at
+  6575	        # wall points extrapolates from first interior cell — standard for
+  6576	        # wall-pressure extraction in OpenFOAM.
+  6577	        gold_values = _load_gold_reference_values(task_spec.name) or []
+  6578	        xoc_values = [
+  6579	            float(rv["x_over_c"])
+  6580	            for rv in gold_values
+  6581	            if isinstance(rv, dict) and "x_over_c" in rv
+  6582	        ]
+  6583	        if xoc_values:
+  6584	            physical_points = [
+  6585	                (
+  6586	                    xoc * chord,
+  6587	                    0.0,  # mid-span (y thin slab)
+  6588	                    FoamAgentExecutor._naca0012_half_thickness(xoc) * chord,
+  6589	                )
+  6590	                for xoc in xoc_values
+  6591	            ]
+  6592	            _emit_gold_anchored_points_sampledict(
+  6593	                case_dir,
+  6594	                set_name="airfoilCp",
+  6595	                physical_points=physical_points,
+  6596	                fields=["p"],
+  6597	                axis="x",
+  6598	                header_comment=(
+  6599	                    f"NACA0012 upper surface, {len(xoc_values)} gold x/c coords "
+  6600	                    f"(chord={chord:g}); Cp = (p - p_inf) / (0.5*U_inf^2), "
+  6601	                    f"U_inf={U_inf:g}, p_inf=0 gauge"
+  6602	                ),
+  6603	            )
+  6604	
+  6605	    @staticmethod
+  6606	    def _naca0012_half_thickness(x_over_c: float, thickness_ratio: float = 0.12) -> float:
+  6607	        """Return the half-thickness y/c for a symmetric NACA 0012 profile."""
+  6608	        x = min(max(x_over_c, 0.0), 1.0)
+  6609	        if x in (0.0, 1.0):
+  6610	            return 0.0
+  6611	        thickness = (
+  6612	            0.2969 * math.sqrt(x)
+  6613	            - 0.1260 * x
+  6614	            - 0.3516 * x**2
+  6615	            + 0.2843 * x**3
+  6616	            - 0.1036 * x**4
+  6617	        )
+  6618	        return max(0.0, 5.0 * thickness_ratio * thickness)
+  6619	
+  6620	    @classmethod
+  6621	    def _write_naca0012_surface_obj(
+  6622	        cls,
+  6623	        case_dir: Path,
+  6624	        chord: float,
+  6625	        span: float,
+  6626	        point_count: int = 2001,
+  6627	    ) -> None:
+  6628	        """Write a thin-span NACA0012 OBJ aligned with the x-z airfoil plane."""
+  6629	        geometry_dir = case_dir / "constant" / "geometry"
+  6630	        geometry_dir.mkdir(parents=True, exist_ok=True)
+  6631	
+  6632	        xs = [
+  6633	            0.5 * chord * (1.0 - math.cos(math.pi * i / (point_count - 1)))
+  6634	            for i in range(point_count)
+  6635	        ]
+
+ succeeded in 0ms:
+  6475	{{
+  6476	    version     2.0;
+  6477	    format      ascii;
+  6478	    class       volScalarField;
+  6479	    location    "0";
+  6480	    object      k;
+  6481	}}
+  6482	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6483	
+  6484	dimensions      [0 2 -2 0 0 0 0];
+  6485	internalField   uniform {k_init};
+  6486	boundaryField
+  6487	{{
+  6488	    freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
+  6489	    aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
+  6490	    front {{ type empty; }}
+  6491	    back  {{ type empty; }}
+  6492	}}
+  6493	
+  6494	// ************************************************************************* //
+  6495	""",
+  6496	            encoding="utf-8",
+  6497	        )
+  6498	
+  6499	        # 0/omega — specific dissipation rate
+  6500	        (case_dir / "0" / "omega").write_text(
+  6501	            f"""\
+  6502	/*--------------------------------*- C++ -*---------------------------------*\
+  6503	| =========                 |                                                 |
+  6504	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6505	|  \\    /   O peration     | Version:  10                                    |
+  6506	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6507	|    \\/     M anipulation  |                                                 |
+  6508	\\*---------------------------------------------------------------------------*/
+  6509	FoamFile
+  6510	{{
+  6511	    version     2.0;
+  6512	    format      ascii;
+  6513	    class       volScalarField;
+  6514	    location    "0";
+  6515	    object      omega;
+  6516	}}
+  6517	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6518	
+  6519	dimensions      [0 0 -1 0 0 0 0];
+  6520	internalField   uniform {omega_init};
+  6521	boundaryField
+  6522	{{
+  6523	    freestream {{ type inletOutlet; inletValue uniform {omega_init}; value uniform {omega_init}; }}
+  6524	    aerofoil {{ type omegaWallFunction; value uniform {omega_init}; }}
+  6525	    front {{ type empty; }}
+  6526	    back  {{ type empty; }}
+  6527	}}
+  6528	
+  6529	// ************************************************************************* //
+  6530	""",
+  6531	            encoding="utf-8",
+  6532	        )
+  6533	
+  6534	        # 0/nut — turbulent viscosity with wall functions on the airfoil patch
+  6535	        (case_dir / "0" / "nut").write_text(
+  6536	            f"""\
+  6537	/*--------------------------------*- C++ -*---------------------------------*\
+  6538	| =========                 |                                                 |
+  6539	| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+  6540	|  \\    /   O peration     | Version:  10                                    |
+  6541	|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+  6542	|    \\/     M anipulation  |                                                 |
+  6543	\\*---------------------------------------------------------------------------*/
+  6544	FoamFile
+  6545	{{
+  6546	    version     2.0;
+  6547	    format      ascii;
+  6548	    class       volScalarField;
+  6549	    location    "0";
+  6550	    object      nut;
+  6551	}}
+  6552	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+  6553	
+  6554	dimensions      [0 2 -1 0 0 0 0];
+  6555	internalField   uniform 0.0;
+  6556	boundaryField
+  6557	{{
+  6558	    freestream {{ type calculated; value uniform 0; }}
+  6559	    aerofoil {{ type nutkWallFunction; value uniform 0; }}
+  6560	    front {{ type empty; }}
+  6561	    back  {{ type empty; }}
+  6562	}}
+  6563	
+  6564	// ************************************************************************* //
+  6565	""",
+
+codex
+I found one thing worth checking carefully before I write the verdict: the new `naca0012` mesh/BC prose now matches the corrected `Re/α/URF/Cp` story, but it may still overstate the actual far-field distance and patch-type setup versus the current adapter. I’m verifying whether that is real repo-truth drift or just shorthand wording before I lock the final status.
+exec
+/bin/zsh -lc "rg -n \"naca0012_airfoil|NACA 0012|angle_of_attack|freestream|15-20|15\\*|20\\*|blockage|surface_band|Cp extraction|PASS_WITH_DEVIATIONS\" knowledge src ui docs .planning | sed -n '1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+.planning/reviews/pedagogy_round_2_findings.md:5:**Expert verdict**: CHANGES_REQUIRED — F1/F2/F5/F6 are substantively closed and F3 deferral is acceptable, but F4 is not fully closed because `naca0012_airfoil` now teaches the wrong authoritative setup (`Re=6e6`, `α≈4°`) on the new student-facing solver card while repo truth remains `Re=3e6`, `α=0°`.
+.planning/reviews/pedagogy_round_2_findings.md:12:- F4 [verify]: PARTIAL — the new `CFD 全流程` section is correctly added as a 2-column responsive 4-card layout on Story in `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx:406-440`, and `ui/frontend/src/data/learnCases.ts` now contains all 4 new fields for all 10 cases (`grep -cE "solver_setup_zh|mesh_strategy_zh|boundary_conditions_zh|observable_extraction_zh"` on exported `10a3463` returned `44`). The cards are concrete for multiple spot-checks. `lid_driven_cavity` names `simpleFoam`, `ncx=ncy=40`, moving-wall/no-slip BCs, and `x=0.5` centerline extraction in `ui/frontend/src/data/learnCases.ts:49-67`, aligning with `knowledge/gold_standards/lid_driven_cavity.yaml:96-108`. `circular_cylinder_wake` correctly points to transient `pimpleFoam` plus FFT extraction in `ui/frontend/src/data/learnCases.ts:106-109`, aligning with `src/cylinder_strouhal_fft.py:1-35`. But `naca0012_airfoil`'s new solver card is factually wrong: it says `Re=6e6` and `α≈4°` in `ui/frontend/src/data/learnCases.ts:205`, while whitelist, gold, adapter notes, and reference fixture all still anchor the case at `Re=3e6`, `angle_of_attack=0.0` in `knowledge/whitelist.yaml:234-247`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-29`, `src/foam_agent_adapter.py:6370-6376`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`. Because F4's goal was a student-facing reproducibility path, this drift means F4 is not fully closed.
+.planning/reviews/pedagogy_round_2_findings.md:19:- N1 🟠 `naca0012_airfoil` new F4 teaching card teaches the wrong authoritative setup. `ui/frontend/src/data/learnCases.ts:205` says `Re=6e6` and `α≈4°`, but repo truth is `Re=3e6`, `α=0°` in `knowledge/whitelist.yaml:244-247`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-29`, `src/foam_agent_adapter.py:6371-6372`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`. This is pedagogy-facing correctness drift on a core case, not a copy-style nit.
+.planning/reviews/pedagogy_round_2_findings.md:22:- Minimum fix: edit `ui/frontend/src/data/learnCases.ts:205-208` so the `naca0012_airfoil` teaching cards match authoritative repo truth. Replace `Re=6e6` with `Re=3e6`, replace `α≈4°` with `α=0°` (or otherwise explain that the canonical benchmark here is zero-angle attached flow), and keep the near-surface-vs-exact-surface Cp extraction caveat aligned with `knowledge/gold_standards/naca0012_airfoil.yaml:15-28`.
+ui/backend/services/comparison_report.py:56:    "naca0012_airfoil",
+docs/specs/AUTO_VERIFIER_SPEC.md:116:              - PASS_WITH_DEVIATIONS
+docs/specs/AUTO_VERIFIER_SPEC.md:145:          - PASS_WITH_DEVIATIONS
+docs/specs/AUTO_VERIFIER_SPEC.md:193:| `TH-8` | Pass-with-deviations cutoff | `>= 70%` observables pass | `PASS_WITH_DEVIATIONS` if true and not full pass | Project definition |
+docs/specs/AUTO_VERIFIER_SPEC.md:237:| `T-6` | `test_l2_partial_pass` | 3/4 observables pass | `PASS_WITH_DEVIATIONS` | unit |
+docs/whitelist_audit.md:38:| 9 | NACA 0012 Airfoil | 3×10⁶ | k-omega SST | — | ✗ | ✗ sample_config | NO RUN |
+docs/whitelist_audit.md:204:### 3.9 NACA 0012 Airfoil External (Re=3×10⁶, k-omega SST, α=0°)
+docs/whitelist_audit.md:212:  - `x/c=0.3, Cp=-0.5` ✓ NACA 0012 α=0° 中部吸力峰在这附近,Cp≈-0.5 合理。
+docs/whitelist_audit.md:213:  - **`x/c=1.0, Cp=0.2` ✗** 对称翼型零攻角,**尾缘 Cp 应接近 0**(可能 0.1 附近表达粘性尾流闭合)。Cp=0.2 在实验上和无粘理论都偏高。AGARD AR-138 NACA 0012 α=0° 尾缘 Cp ≈ 0.15,属临界值;Thomas 1979 原始数据可能给了更低。
+docs/whitelist_audit.md:245:**涉及:** Pipe (friction_factor 字段缺失)、Flat Plate、Channel DNS (u_mean_profile)、Impinging Jet、NACA 0012 (keyed vs array Cp)。
+docs/whitelist_audit.md:270:**涉及:** Lid-Driven Cavity、NACA 0012、Cylinder Wake、(可能)Flat Plate、Channel DNS。
+docs/whitelist_audit.md:303:| 5 | NACA 0012 TE | Cp(x/c=1)=0.2 | Cp(x/c=1)=0.15 | AGARD AR-138 |
+docs/whitelist_audit.md:316:   - Cylinder Wake、Impinging Jet、NACA 0012 可能直接 PASS(gold 对,只是字段问题)
+docs/whitelist_audit.md:342:- **2026-04-20** (v1) — 初稿,由 Cowork agent 根据 dashboard 0 pass 观察触发,交叉核 whitelist.yaml + corrections/ + 原始文献。
+docs/whitelist_audit.md:343:- **2026-04-20** (v1.1) — 落地 §5.1 C 类 infra 修复的前两项 (autonomous turf,无需 external gate):
+.planning/reviews/pedagogy_round_1_codex.log:57:| naca0012_airfoil | core | Cp(x/c) distribution |
+.planning/reviews/pedagogy_round_1_codex.log:481:knowledge/gold_standards/naca0012_airfoil.yaml
+.planning/reviews/pedagogy_round_1_codex.log:505:ui/frontend/public/flow-fields/naca0012_airfoil/cp_distribution.json
+.planning/reviews/pedagogy_round_1_codex.log:506:ui/frontend/public/flow-fields/naca0012_airfoil/cp_distribution.png
+.planning/reviews/pedagogy_round_1_codex.log:547:reports/phase5_renders/naca0012_airfoil/runs/audit_real_run.json
+.planning/reviews/pedagogy_round_1_codex.log:548:reports/phase5_renders/naca0012_airfoil/20260421T142539Z/contour_u_magnitude.png
+.planning/reviews/pedagogy_round_1_codex.log:549:reports/phase5_renders/naca0012_airfoil/20260421T142539Z/residuals.png
+.planning/reviews/pedagogy_round_1_codex.log:792:   123	  naca0012_airfoil: {
+.planning/reviews/pedagogy_round_1_codex.log:1069:   138	    id: "naca0012_airfoil",
+.planning/reviews/pedagogy_round_1_codex.log:1070:   139	    displayName: "NACA 0012 Airfoil",
+.planning/reviews/pedagogy_round_1_codex.log:1082:   151	    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
+.planning/reviews/pedagogy_round_1_codex.log:1187:ui/frontend/src/data/learnCases.ts:151:    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
+.planning/reviews/pedagogy_round_1_codex.log:1263:ui/frontend/src/data/flowFields.ts:93:        "Cp(x/c) · NACA 0012, Re=3×10⁶, α=0° · Ladson 1987 exact-surface + reference_pass + wrong_model laminar 三线对比",
+.planning/reviews/pedagogy_round_1_codex.log:1564:    89	  naca0012_airfoil: [
+.planning/reviews/pedagogy_round_1_codex.log:1566:    91	      src: "/flow-fields/naca0012_airfoil/cp_distribution.png",
+.planning/reviews/pedagogy_round_1_codex.log:1568:    93	        "Cp(x/c) · NACA 0012, Re=3×10⁶, α=0° · Ladson 1987 exact-surface + reference_pass + wrong_model laminar 三线对比",
+.planning/reviews/pedagogy_round_1_codex.log:1787:knowledge/gold_standards/naca0012_airfoil.yaml:15:  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at 0° angle of attack; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported)"
+.planning/reviews/pedagogy_round_1_codex.log:1788:knowledge/gold_standards/naca0012_airfoil.yaml:17:  physics_precondition:
+.planning/reviews/pedagogy_round_1_codex.log:1789:knowledge/gold_standards/naca0012_airfoil.yaml:21:    - condition: "Mesh resolves the boundary layer sufficiently for near-wall gradients (appropriate y+ for kOmegaSST with Automatic Wall Treatment)"
+.planning/reviews/pedagogy_round_1_codex.log:2530:reports/phase5_renders/naca0012_airfoil/20260421T142539Z/contour_u_magnitude.png
+.planning/reviews/pedagogy_round_1_codex.log:2531:reports/phase5_renders/naca0012_airfoil/20260421T142539Z/residuals.png
+.planning/reviews/pedagogy_round_1_codex.log:2532:reports/phase5_renders/naca0012_airfoil/runs/audit_real_run.json
+.planning/reviews/pedagogy_round_1_codex.log:3121:/bin/zsh -lc "rg -n \"physics_precondition|solver_info:|mesh_info:|boundary_conditions:|cells:|grading|y\\+|relaxation|schemes:|model:\" knowledge/gold_standards/{lid_driven_cavity,backward_facing_step,circular_cylinder_wake,turbulent_flat_plate,plane_channel_flow,impinging_jet,rayleigh_benard_convection,differential_heated_cavity,naca0012_airfoil,duct_flow}.yaml" in /Users/Zhuanz/Desktop/cfd-harness-unified
+.planning/reviews/pedagogy_round_1_codex.log:3123:knowledge/gold_standards/naca0012_airfoil.yaml:17:  physics_precondition:
+.planning/reviews/pedagogy_round_1_codex.log:3124:knowledge/gold_standards/naca0012_airfoil.yaml:21:    - condition: "Mesh resolves the boundary layer sufficiently for near-wall gradients (appropriate y+ for kOmegaSST with Automatic Wall Treatment)"
+.planning/reviews/pedagogy_round_1_codex.log:3125:knowledge/gold_standards/naca0012_airfoil.yaml:23:      evidence_ref: "kOmegaSST in OpenFOAM 2.x+ handles both low-Re (y+<1) and high-Re (y+>30) wall placement via blended omega wall function; surface_band sampling at src/foam_agent_adapter.py:7068 tolerates either"
+.planning/reviews/pedagogy_round_1_codex.log:3575:/bin/zsh -lc "nl -ba knowledge/gold_standards/naca0012_airfoil.yaml | sed -n '1,60p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+.planning/reviews/pedagogy_round_1_codex.log:3584:     8	  geometry_assumption: "2D cylinder in freestream, diameter D=1.0 (whitelist default) or 0.1 (adapter _generate_body_in_channel inner setup), centred at x=0, y=0 with upstream/downstream channel of sufficient length to not confine the wake."
+.planning/reviews/pedagogy_round_1_codex.log:3628:     2	case_id: naca0012_airfoil
+.planning/reviews/pedagogy_round_1_codex.log:3642:    16	  reference_correlation_context: "Thomas 1979 / Lada 2007 ref_values are *exact surface* pressure coefficients at the tabulated x/c stations. The adapter CANNOT deliver exact-surface values — it samples a near-surface band of cell centres and averages. A shape-faithful but value-attenuated Cp distribution is the expected outcome, and the 20% tolerance + PASS_WITH_DEVIATIONS verdict reflect this."
+.planning/reviews/pedagogy_round_1_codex.log:3649:    23	      evidence_ref: "kOmegaSST in OpenFOAM 2.x+ handles both low-Re (y+<1) and high-Re (y+>30) wall placement via blended omega wall function; surface_band sampling at src/foam_agent_adapter.py:7068 tolerates either"
+.planning/reviews/pedagogy_round_1_codex.log:3650:    24	    - condition: "Cp extraction sampling geometry aligns with 'exact surface' gold standard"
+.planning/reviews/pedagogy_round_1_codex.log:3652:    26	      evidence_ref: "src/foam_agent_adapter.py:7068 surface_band = max(8.0*dz_min, 0.02*chord) — the extracted Cp is averaged over a ~2% chord thick band above the surface, not the exact surface. Lines 7073-7089 split into upper/lower candidates within search_envelope=0.25*chord."
+.planning/reviews/pedagogy_round_1_codex.log:3653:    27	      consequence_if_unsatisfied: "The adapter's Cp values are systematically attenuated vs the ref (magnitudes reduced ~30-50%), while the x-station *shape* of the Cp curve remains faithful. PASS_WITH_DEVIATIONS is the honest verdict. A future R-A-style slice could add a 'cell_vs_surface' kind field to each Cp observable to make the comparator aware of the sampling difference."
+.planning/reviews/pedagogy_round_1_codex.log:3654:    28	  contract_status: "PARTIALLY_COMPATIBLE — physics preconditions #1 and #2 satisfied, precondition #3 not satisfiable under the current extraction scheme. Deviation is quantifiable, direction is known, and the 20% tolerance + PASS_WITH_DEVIATIONS pattern encodes this. No false-PASS risk."
+.planning/reviews/pedagogy_round_1_codex.log:3658:    32	    description: pressure coefficient distribution along the NACA 0012 chord
+.planning/reviews/pedagogy_round_1_codex.log:3946:--- reports/phase5_renders/naca0012_airfoil/runs/audit_real_run.json
+.planning/reviews/pedagogy_round_1_codex.log:3948:  "case_id": "naca0012_airfoil",
+.planning/reviews/pedagogy_round_1_codex.log:3951:  "renders_dir_rel": "reports/phase5_renders/naca0012_airfoil/20260421T142539Z",
+.planning/reviews/pedagogy_round_1_codex.log:3953:    "residuals_png": "reports/phase5_renders/naca0012_airfoil/20260421T142539Z/residuals.png",
+.planning/reviews/pedagogy_round_1_codex.log:3954:    "contour_u_magnitude_png": "reports/phase5_renders/naca0012_airfoil/20260421T142539Z/contour_u_magnitude.png"
+.planning/reviews/pedagogy_round_1_codex.log:4078:    79	        "circular_cylinder_wake", "impinging_jet", "naca0012_airfoil",
+.planning/reviews/pedagogy_round_1_codex.log:4162:/bin/zsh -lc "rg -n \"audit_real_run|contract_status|PASS|HAZARD|FAIL|measured|gold|Nu=10.5|8.8|0.0185|0.00420\" reports src ui/backend -g '*.json' -g '*.yaml' -g '*.md' | rg 'rayleigh_benard_convection|differential_heated_cavity|duct_flow|turbulent_flat_plate|naca0012_airfoil|audit_real_run_measurement|phase5_fields'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+.planning/reviews/pedagogy_round_1_codex.log:4166:reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml:18:    - naca0012_airfoil (PASS_WITH_DEVIATIONS — near-surface cell-average
+.planning/reviews/pedagogy_round_1_codex.log:4168:reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml:76:    "knowledge/gold_standards/naca0012_airfoil.yaml": 0ddc7c450cbaf0e16a08fa8d1f75082204ef23b8506468595048f2d570aedeca
+.planning/reviews/pedagogy_round_1_codex.log:4170:reports/ex1_004_passing_cases_physics_contract/slice_metrics.yaml:88:      - knowledge/gold_standards/naca0012_airfoil.yaml
+.planning/reviews/pedagogy_round_1_codex.log:4181:reports/ex1_first_slice/diagnostic_memo.md:21:| `differential_heated_cavity` | PASS_WITH_DEVIATIONS | Nu=5.85 vs gold=30 at Ra=1e10 | Boundary-layer under-resolution (mesh ≈80 cells, needs ~1000 for Ra=1e10 BL) |
+.planning/reviews/pedagogy_round_1_codex.log:4267:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:3:  "measured_at": "2026-04-21T14:25:59Z",
+.planning/reviews/pedagogy_round_1_codex.log:4268:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:222:      0.5681837399306972,
+.planning/reviews/pedagogy_round_1_codex.log:4269:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:234:      -0.19858676006930281,
+.planning/reviews/pedagogy_round_1_codex.log:4270:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:235:      -0.08285776006930282,
+.planning/reviews/pedagogy_round_1_codex.log:4271:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:238:      -0.2828802600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4272:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:263:      -0.3868422600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4273:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:269:      -0.29818826006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4274:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:291:      -0.4118482600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4275:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:295:      -0.38982226006930276,
+.planning/reviews/pedagogy_round_1_codex.log:4276:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:298:      -0.3948982600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4277:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:301:      -0.3848502600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4278:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:307:      -0.38083626006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4279:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:330:      -0.37878026006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4280:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:334:      -0.3868572600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4281:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:360:      -0.3828622600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4282:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:409:      -0.2488582600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4283:reports/phase5_audit/20260421T142559Z_naca0012_airfoil_raw.json:426:      -0.011192492069302808,
+.planning/reviews/pedagogy_round_1_codex.log:4288:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:3:  "measured_at": "2026-04-21T03:47:18Z",
+.planning/reviews/pedagogy_round_1_codex.log:4289:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:222:      0.5681837399306972,
+.planning/reviews/pedagogy_round_1_codex.log:4290:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:234:      -0.19858676006930281,
+.planning/reviews/pedagogy_round_1_codex.log:4291:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:235:      -0.08285776006930282,
+.planning/reviews/pedagogy_round_1_codex.log:4292:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:238:      -0.2828802600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4293:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:263:      -0.3868422600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4294:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:269:      -0.29818826006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4295:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:291:      -0.4118482600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4296:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:295:      -0.38982226006930276,
+.planning/reviews/pedagogy_round_1_codex.log:4297:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:298:      -0.3948982600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4298:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:301:      -0.3848502600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4299:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:307:      -0.38083626006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4300:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:330:      -0.37878026006930277,
+.planning/reviews/pedagogy_round_1_codex.log:4301:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:334:      -0.3868572600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4302:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:360:      -0.3828622600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4303:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:409:      -0.2488582600693028,
+.planning/reviews/pedagogy_round_1_codex.log:4304:reports/phase5_audit/20260421T034718Z_naca0012_airfoil_raw.json:426:      -0.011192492069302808,
+.planning/reviews/pedagogy_round_1_codex.log:4374:reports/phase5_fields/naca0012_airfoil/runs/audit_real_run.json:2:  "run_label": "audit_real_run",
+.planning/reviews/pedagogy_round_1_codex.log:4391:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:9:  run_id: audit_real_run
+.planning/reviews/pedagogy_round_1_codex.log:4392:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:15:  category: audit_real_run
+.planning/reviews/pedagogy_round_1_codex.log:4393:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:16:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4394:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:24:  measured_at: '2026-04-21T14:25:59Z'
+.planning/reviews/pedagogy_round_1_codex.log:4395:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:48:  manifest_path_rel: reports/phase5_fields/naca0012_airfoil/runs/audit_real_run.json
+.planning/reviews/pedagogy_round_1_codex.log:4396:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:49:  run_label: audit_real_run
+.planning/reviews/pedagogy_round_1_codex.log:4412:reports/rayleigh_benard_convection/auto_verify_report.yaml:26:verdict: PASS_WITH_DEVIATIONS
+.planning/reviews/pedagogy_round_1_codex.log:4413:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:6:# attenuation from cell-center averaging, as documented in the gold
+.planning/reviews/pedagogy_round_1_codex.log:4414:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:8:# Gold tol=20% → PASS with plenty of margin.
+.planning/reviews/pedagogy_round_1_codex.log:4415:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:16:    gold 文档里明确允许的提取误差）。20% 容差内 PASS，shape 也对。这是
+.planning/reviews/pedagogy_round_1_codex.log:4416:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:19:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4417:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:27:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4423:reports/rayleigh_benard_convection/report.md:54:- Verification Verdict: `PASS_WITH_DEVIATIONS`
+.planning/reviews/pedagogy_round_1_codex.log:4437:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:8:    Cp_le=0.75 (-25%)。20% 容差外 FAIL。
+.planning/reviews/pedagogy_round_1_codex.log:4438:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4439:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:18:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4440:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:22:    summary: '40 surface + 15-chord; Cp_le=0.75 vs gold 1.0 (-25%).'
+.planning/reviews/pedagogy_round_1_codex.log:4448:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:8:    过度平均 → Cp_le=0.65 (-35%)。20% 容差外 FAIL。
+.planning/reviews/pedagogy_round_1_codex.log:4449:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4450:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:18:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4451:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:22:    summary: '20 surface cells + 8-chord far-field; Cp_le=0.65 vs gold 1.0 (-35%).'
+.planning/reviews/pedagogy_round_1_codex.log:4452:reports/baselines/SY-1_deterministic_replay_capture.md:141:| turbulent_flat_plate | PASS_WITH_DEVIATIONS | OSCILLATING | PASS |
+.planning/reviews/pedagogy_round_1_codex.log:4453:reports/baselines/SY-1_deterministic_replay_capture.md:142:| rayleigh_benard_convection | PASS_WITH_DEVIATIONS | OSCILLATING | PASS |
+.planning/reviews/pedagogy_round_1_codex.log:4455:reports/baselines/SY-1_deterministic_replay_capture.md:144:| naca0012_airfoil | FAIL | OSCILLATING | FAIL |
+.planning/reviews/pedagogy_round_1_codex.log:4465:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:7:# Gold Cp_leading_edge=1.0 ± 20% → Cp=1.3 is outside (+30%) → FAIL.
+.planning/reviews/pedagogy_round_1_codex.log:4466:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:15:    湍流位移厚度钝化了 peak）。gold 1.0 ± 20% → FAIL。学生教训：外流
+.planning/reviews/pedagogy_round_1_codex.log:4467:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:18:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4468:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:26:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4469:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:30:    summary: 'Laminar solver at Re=3e6 (transition onset x/c≈0.02). Cp_le=1.3 vs gold 1.0 (+30%). Displacement thickness missing.'
+.planning/reviews/pedagogy_round_1_codex.log:4476:ui/backend/tests/fixtures/runs/naca0012_airfoil/real_incident_measurement.yaml:17:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4477:ui/backend/tests/fixtures/runs/naca0012_airfoil/real_incident_measurement.yaml:25:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4490:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:7:    160 表面 cells + 前缘 4× 加密。Cp_le=0.995 (-0.5%)。20% 容差内 PASS。
+.planning/reviews/pedagogy_round_1_codex.log:4491:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4492:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:18:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4501:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:8:    Cp_le=0.98 vs 1.0 (-2%，cell-center averaging 残差)。20% 容差内 PASS。
+.planning/reviews/pedagogy_round_1_codex.log:4502:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4503:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:18:  measured_at: null
+.planning/reviews/pedagogy_round_1_codex.log:4521:reports/ex1_003_gold_standard_physics_contract/slice_metrics.yaml:18:    - differential_heated_cavity (PASS_WITH_DEVIATIONS, rank 2 R-E target)
+.planning/reviews/pedagogy_round_1_codex.log:4529:reports/post_phase5_acceptance/2026-04-21_ui_infra_validation.md:125:| `naca0012_airfoil` | 20-60 min | PASS_WITH_DEVIATIONS |
+.planning/reviews/pedagogy_round_1_codex.log:4530:reports/post_phase5_acceptance/2026-04-21_ui_infra_validation.md:126:| `differential_heated_cavity` | 10-30 min | PASS_WITH_DEVIATIONS; Ra=1e6 per DEC-V61-006 P-2 |
+.planning/reviews/pedagogy_round_1_codex.log:4531:reports/post_phase5_acceptance/2026-04-21_ui_infra_validation.md:127:| `rayleigh_benard_convection` | 30-90 min | PASS_WITH_DEVIATIONS; h URF=0.05 per 2026-04-17 fix |
+.planning/reviews/pedagogy_round_1_codex.log:4534:reports/post_phase5_acceptance/2026-04-21_part2_solver_runs.md:22:The 4 newly-populated cases (LDC, BFS, plane_channel, duct_flow — TFP fixture was pre-existing but overwritten) now render real-solver-derived `measurement`, `contract_status`, and `audit_concerns` on Screen 4 (Validation Report) and aggregate on Screen 5 (Dashboard). The remaining 3 UNKNOWNs (`impinging_jet`, `naca0012_airfoil`, `rayleigh_benard_convection`) were out of scope — they would have taken 60-180 min each to run.
+.planning/reviews/pedagogy_round_1_codex.log:4541:reports/deep_acceptance/20260422_135406_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4544:reports/deep_acceptance/20260422_220456_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4561:reports/codex_tool_reports/20260422_dec036b_codex_review.md:529:| naca0012_airfoil | pass | pass? | pass | FAIL (3 Cp pts) | FAIL (unchanged) |
+.planning/reviews/pedagogy_round_1_codex.log:4566:reports/codex_tool_reports/20260422_dec036b_codex_review.md:2065:            # cases like naca0012_airfoil whose gold is a Cp profile.
+.planning/reviews/pedagogy_round_1_codex.log:4567:reports/codex_tool_reports/20260422_dec036b_codex_review.md:3002:/bin/zsh -lc 'rg -n "circular_cylinder_wake|naca0012_airfoil|lid_driven_cavity|backward_facing_step|turbulent_flat_plate|plane_channel_flow|differential_heated_cavity|rayleigh_benard_convection|duct_flow|impinging_jet" knowledge/whitelist.yaml knowledge/gold_standards -S' in /Users/Zhuanz/Desktop/cfd-harness-unified
+.planning/reviews/pedagogy_round_1_codex.log:4571:reports/codex_tool_reports/20260422_dec036b_codex_review.md:3027:knowledge/gold_standards/naca0012_airfoil.yaml:2:case_id: naca0012_airfoil
+.planning/reviews/pedagogy_round_1_codex.log:4577:reports/codex_tool_reports/20260422_dec036b_codex_review.md:3138:knowledge/gold_standards/naca0012_airfoil.yaml:15:  geometry_assumption: "2D NACA0012 airfoil in external incompressible flow at 0° angle of attack; thin-span x-z plane mesh with empty side patches; chord length 1.0 by default (task_spec.boundary_conditions.chord_length override supported)"
+.planning/reviews/pedagogy_round_1_codex.log:4580:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:9791:548-- ✅ naca0012_airfoil: AIRFOIL fvSolution fix (p-relax 0.3, lower URFs), Docker E2E PASS 286s
+.planning/reviews/pedagogy_round_1_codex.log:4583:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:9801:788-| naca0012_airfoil | pass | pass? | pass | FAIL (3 Cp pts) | FAIL (unchanged) |
+.planning/reviews/pedagogy_round_1_codex.log:4588:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:9898:1088-| naca0012_airfoil | pass | pass | HAZARD? | pass | pass | pass | ATTEST_PASS or HAZARD |
+.planning/reviews/pedagogy_round_1_codex.log:4590:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:10111:3907-.planning/STATE.md:353:| naca0012_airfoil | PASS_WITH_DEVIATIONS (permanent, DEC-EX-A) | CONVERGED | DEVIATION (Cp 52.9%/32.4%/45.5%) | Wave 3 CLOSED 2026-04-18: Path W REJECT (geometry-locked y+_min), Path H REJECT (block-face grading discontinuity → NaN). Fuse triggered. DEC-EX-A: accept permanent deviation under blockMesh 6-block scope; snappyHexMesh rewrite deferred to Tier-1 future work. |
+.planning/reviews/pedagogy_round_1_codex.log:4593:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:10121:3920-.planning/STATE.md:1287:naca0012_airfoil             ATTEST_PASS       []  ← tolerance band too loose
+.planning/reviews/pedagogy_round_1_codex.log:4596:reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:10137:3951-.planning/decisions/2026-04-22_phase8_dec038_convergence_attestor.md:145:| naca0012_airfoil | pass | pass | HAZARD? | pass | pass | pass | ATTEST_PASS or HAZARD |
+.planning/reviews/pedagogy_round_1_codex.log:4611:reports/deep_acceptance/20260422_221125_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4613:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011612_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4618:reports/codex_tool_reports/20260422_dec038_codex_review.md:548:- ✅ naca0012_airfoil: AIRFOIL fvSolution fix (p-relax 0.3, lower URFs), Docker E2E PASS 286s
+.planning/reviews/pedagogy_round_1_codex.log:4622:reports/codex_tool_reports/20260422_dec038_codex_review.md:788:| naca0012_airfoil | pass | pass? | pass | FAIL (3 Cp pts) | FAIL (unchanged) |
+.planning/reviews/pedagogy_round_1_codex.log:4631:reports/codex_tool_reports/20260422_dec038_codex_review.md:1088:| naca0012_airfoil | pass | pass | HAZARD? | pass | pass | pass | ATTEST_PASS or HAZARD |
+.planning/reviews/pedagogy_round_1_codex.log:4636:reports/codex_tool_reports/20260422_dec038_codex_review.md:2570:   374	            # cases like naca0012_airfoil whose gold is a Cp profile.
+.planning/reviews/pedagogy_round_1_codex.log:4637:reports/codex_tool_reports/20260422_dec038_codex_review.md:3907:.planning/STATE.md:353:| naca0012_airfoil | PASS_WITH_DEVIATIONS (permanent, DEC-EX-A) | CONVERGED | DEVIATION (Cp 52.9%/32.4%/45.5%) | Wave 3 CLOSED 2026-04-18: Path W REJECT (geometry-locked y+_min), Path H REJECT (block-face grading discontinuity → NaN). Fuse triggered. DEC-EX-A: accept permanent deviation under blockMesh 6-block scope; snappyHexMesh rewrite deferred to Tier-1 future work. |
+.planning/reviews/pedagogy_round_1_codex.log:4641:reports/codex_tool_reports/20260422_dec038_codex_review.md:3920:.planning/STATE.md:1287:naca0012_airfoil             ATTEST_PASS       []  ← tolerance band too loose
+.planning/reviews/pedagogy_round_1_codex.log:4644:reports/codex_tool_reports/20260422_dec038_codex_review.md:3951:.planning/decisions/2026-04-22_phase8_dec038_convergence_attestor.md:145:| naca0012_airfoil | pass | pass | HAZARD? | pass | pass | pass | ATTEST_PASS or HAZARD |
+.planning/reviews/pedagogy_round_1_codex.log:4671:reports/deep_acceptance/20260422_233648_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4674:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011623_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4685:reports/codex_tool_reports/2026-04-21_phase7bc_render_report_codex_review.md:384:- ✅ naca0012_airfoil: AIRFOIL fvSolution fix (p-relax 0.3, lower URFs), Docker E2E PASS 286s
+.planning/reviews/pedagogy_round_1_codex.log:4693:reports/deep_acceptance/20260420_011828_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4695:reports/deep_acceptance/20260422_224520_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4705:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review_round3.md:1237:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:5:# re-runs (modulo timestamp + commit_sha) is enforced by
+.planning/reviews/pedagogy_round_1_codex.log:4710:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review_round3.md:1621:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review_round2.md:964:- ✅ naca0012_airfoil: AIRFOIL fvSolution fix (p-relax 0.3, lower URFs), Docker E2E PASS 286s
+.planning/reviews/pedagogy_round_1_codex.log:4717:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011415_visual_acceptance_package.md:19:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4719:reports/deep_acceptance/20260422_151429_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4729:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review.md:376:.planning/phases/07a-field-capture/_integration_evidence.txt:127:ui/backend/tests/test_phase5_byte_repro.py::test_audit_fixture_schema_contract[naca0012_airfoil] PASSED [ 66%]
+.planning/reviews/pedagogy_round_1_codex.log:4754:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review.md:636:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:5:# re-runs (modulo timestamp + commit_sha) is enforced by
+.planning/reviews/pedagogy_round_1_codex.log:4755:reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review.md:637:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:6:# test_phase5_byte_repro.py.
+.planning/reviews/pedagogy_round_1_codex.log:4771:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011232_visual_acceptance_package.md:19:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4784:reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:441: .../naca0012_airfoil/runs/audit_real_run.json      |   6 +
+.planning/reviews/pedagogy_round_1_codex.log:4785:reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:450: .../naca0012_airfoil/runs/audit_real_run.json      |  11 +
+.planning/reviews/pedagogy_round_1_codex.log:4805:reports/deep_acceptance/20260422_234027_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4807:reports/phase5_renders/naca0012_airfoil/runs/audit_real_run.json:3:  "run_label": "audit_real_run",
+.planning/reviews/pedagogy_round_1_codex.log:4808:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011229_visual_acceptance_package.md:19:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4810:reports/deep_acceptance/20260422_234028_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4812:reports/deep_acceptance/_archive_20260420_iteration_dupes/20260420_011156_visual_acceptance_package.md:19:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4817:reports/deep_acceptance/20260422_145436_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4829:reports/deep_acceptance/20260422_221215_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4831:reports/deep_acceptance/20260423_002022_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4833:reports/deep_acceptance/20260421_000231_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4837:reports/deep_acceptance/20260422_212242_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4839:reports/deep_acceptance/20260422_220457_visual_acceptance_package.md:20:| `naca0012_airfoil` | PASS_WITH_DEVIATIONS | reports/deep_acceptance/assets/naca0012_airfoil_cad.png, reports/deep_acceptance/assets/naca0012_airfoil_cfd.png, reports/deep_acceptance/assets/naca0012_airfoil_benchmark.png |
+.planning/reviews/pedagogy_round_1_codex.log:4854:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2150:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:3:#   EXECUTOR_MODE=foam_agent .venv/bin/python scripts/phase5_audit_run.py naca0012_airfoil
+.planning/reviews/pedagogy_round_1_codex.log:4855:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2151:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:18:source: phase5_audit_run_foam_agent
+.planning/reviews/pedagogy_round_1_codex.log:4874:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2720:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:8:run_metadata:
+.planning/reviews/pedagogy_round_1_codex.log:4875:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2721:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:16:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4880:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2735:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:19:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4881:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2747:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4885:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2761:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4891:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2789:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:18:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4898:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2803:ui/backend/tests/fixtures/runs/naca0012_airfoil/real_incident_measurement.yaml:17:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4905:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2819:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4910:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2831:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4927:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2888:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:8:run_metadata:
+.planning/reviews/pedagogy_round_1_codex.log:4928:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2889:ui/backend/tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml:16:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4933:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2917:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:19:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4939:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2935:ui/backend/tests/fixtures/runs/naca0012_airfoil/wrong_model_measurement.yaml:18:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4940:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2937:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_20_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4943:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2941:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4944:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2943:ui/backend/tests/fixtures/runs/naca0012_airfoil/real_incident_measurement.yaml:17:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4948:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2957:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_40_measurement.yaml:10:  expected_verdict: FAIL
+.planning/reviews/pedagogy_round_1_codex.log:4952:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:2967:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4981:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:3177:ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:19:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4982:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:3178:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4983:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:3179:ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml:10:  expected_verdict: PASS
+.planning/reviews/pedagogy_round_1_codex.log:4995:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:3325:            # cases like naca0012_airfoil whose gold is a Cp profile.
+.planning/reviews/pedagogy_round_1_codex.log:4996:reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:3595:[('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/circular_cylinder_wake/mesh_160_measurement.yaml', ['CONTRACT_STATUS']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/circular_cylinder_wake/mesh_80_measurement.yaml', ['CONTRACT_STATUS']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/circular_cylinder_wake/reference_pass_measurement.yaml', ['CONTRACT_STATUS']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/impinging_jet/real_incident_measurement.yaml', ['COMPATIBLE_WITH_SILENT_PASS_HAZARD']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_160_measurement.yaml', ['CONTRACT_STATUS']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/naca0012_airfoil/mesh_80_measurement.yaml', ['CONTRACT_STATUS']), ('/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml', ['CONTRACT_STATUS'])]
+.planning/reviews/pedagogy_round_1_codex.log:4997:reports/naca0012_airfoil/diagnostic_v1.md:7:This file remains read-only with respect to `/src`, `/tests`, and `/knowledge/gold_standards`. Closeout verification used `git diff HEAD -- src tests knowledge`, which returned empty output. No tolerance widening is proposed anywhere in this diagnostic.
+.planning/reviews/pedagogy_round_1_codex.log:4998:reports/naca0012_airfoil/diagnostic_v1.md:37:- `max = 138.876`
+.planning/reviews/pedagogy_round_1_codex.log:4999:reports/naca0012_airfoil/diagnostic_v1.md:78:- `p_ref` is taken from a far-field cell-average inside the solved field, not from the gold-standard table
+.planning/reviews/pedagogy_round_1_codex.log:5000:reports/naca0012_airfoil/diagnostic_v1.md:96:   - Why it ranks second: this remains plausible, but it is less direct than the newly measured buffer-layer split on the actual aerofoil wall.
+
+exec
+/bin/zsh -lc 'git blame -L 208,213 ui/frontend/src/data/learnCases.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 208)     why_validation_matters_zh: `Ladson / Thomas 的 NASA 风洞数据是公开基准之一，对称翼型 α=0° 是入门验证：attached flow、无分离、压强分布可由简单 RANS 稳态收敛。你的 CFD 要做更复杂的外流（带攻角、带分离、机翼、螺旋桨），必须先在 NACA 0012 零度这一关拿到可控误差——这是航空 CFD 验证流水线的"第一道门"。`,
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 209)     common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误——虚假 blockage 让整个压强场 shifted，网格无关性测试抓不到。另一个陷阱：本 case 的 Cp 提取是 near-surface band 平均（adapter 在壁面上方 ~2% 弦长厚度带里取 cell-center 均值），与文献的"exact surface"定义相比系统性衰减 30-50%，形状对、幅值小——这也是 gold 容差设为 20% 并用 PASS_WITH_DEVIATIONS 的原因。`,
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 210)     solver_setup_zh: `simpleFoam (稳态 SIMPLE) + RAS kOmegaSST。Re=3e6 基于弦长 c=1m，α=0°（对称翼型，符合 physics_contract 的 precondition "flow attached and steady at α=0°"）。URF: p=0.3（GAMG 求解，relTol=0.05, tolerance=1e-6）; U/k/ω=0.5 each（见 knowledge/gold_standards/naca0012_airfoil.yaml:5-14）. 收敛到 p residual ≤ 1e-6 且 Cp 稳态。`,
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 211)     mesh_strategy_zh: `blockMesh 直接围绕 NACA0012 OBJ 生成 x-z 平面（z 法向 80 cells，y 薄展向 ±0.001 + empty side patches，伪 2D）。远场至少 15-20·c 距离。kOmegaSST 在 OpenFOAM 2.x+ 能 blended 处理 y+<1 (低雷诺数修正) 和 y+>30 (wall function)；当前 mesh 的 surface_band=max(8·dz_min, 0.02·c) 让 Cp 提取在 y+<5 区间平滑。`,
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 212)     boundary_conditions_zh: `上游 + 横向 inlet/freestream fixedValue U=(U_∞, 0, 0)（α=0°，无 sin α 分量）；下游 outlet 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0) + k/ω wall functions；展向 front/back 为 empty 模拟 2D。远场 < 15·c 会显著 shift 整个 Cp 分布；> 20·c 后增益递减。`,
+196fb945 (claude-opus47-app 2026-04-23 01:24:31 +0800 213)     observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。src/foam_agent_adapter.py:7068 的 extractor 在翼型表面上方 surface_band=max(8·dz_min, 0.02·c) 厚度带里取 cell-center 做 patchAverage，然后按 x/c 分 upper/lower。精确文献 Cp 是 exact surface 点，adapter 是 near-surface cell average → 形状正确但幅值系统衰减 ~30-50%（physics_contract precondition #3 明确标 satisfied=false）。容差 20%、verdict PASS_WITH_DEVIATIONS 就是为此。`,
+
+exec
+/bin/zsh -lc "git show 51c7198:ui/frontend/src/data/learnCases.ts | nl -ba | sed -n '190,214p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   190	    id: "naca0012_airfoil",
+   191	    displayName: "NACA 0012 Airfoil",
+   192	    headline_zh: `翼型与压强`,
+   193	    headline_en: "Airfoil pressure distribution",
+   194	    teaser_zh: `对称翼型的表面压强系数 Cp 分布。入门外流问题，航空界最常用的验证基准之一。`,
+   195	    canonical_ref: "Ladson et al. · NASA TM 1996",
+   196	    observable: "Cp distribution along chord",
+   197	    difficulty: "core",
+   198	    physics_bullets_zh: [
+   199	      `小攻角（~5°）下近似线性`,
+   200	      `失速攻角（~15°）附近非线性剧增`,
+   201	      `远场边界距离直接影响解`,
+   202	    ],
+   203	    why_validation_matters_zh: `Ladson 的风洞数据是 NASA 开放的公共基准。你的 CFD 如果要拿来做航空类预测，必须在 NACA 0012 上通过——否则别的任何几何都不用谈。Cp 对比不仅验证压强场，还隐含验证了湍流模型在过渡流动下的行为。`,
+   204	    common_pitfall_zh: `远场边界放得太近（<15 倍弦长）是最常见的新手错误。环流效应会让升力系数 Cl 被压低 10%+，而且网格无关性测试抓不到这个问题。`,
+   205	    solver_setup_zh: `simpleFoam (稳态) + RAS kOmegaSST (航空默认湍流模型)。Re=6e6 基于弦长 c=1m 和 M∞ (assumed incompressible here)。small angle attack (α≈4°) 接近线性区。URF: U≈0.7, p≈0.3。收敛需要足够的 iterations (≥1000)，尤其是 Cl 积分值要稳定。`,
+   206	    mesh_strategy_zh: `C-grid 或 O-grid 贴翼型表面，远场至少 15-20·c 距离（防止伪 blockage）。壁面第一层 cell 目标 y+≈1 让 kOmegaSST 低雷诺数修正正确工作；典型第一层厚度 10⁻⁵·c。约 5-10 万 cells 二维结构网格。Cp 采样是 near-surface band (不是 exact surface)，所以 y+<5 区间内 cells 的密度直接影响 Cp 曲线平滑度。`,
+   207	    boundary_conditions_zh: `inlet (upstream + lateral far-field) fixedValue U=(U∞·cos α, U∞·sin α, 0)；outlet (downstream) 压力 zeroGradient + U inletOutlet；翼型表面 no-slip U=(0,0,0)，k/ω wall functions。远场边界要够远：<15·c 会产生虚假 blockage，Cl 系统偏低。`,
+   208	    observable_extraction_zh: `Cp(x/c) = (p - p_∞) / (0.5·ρ·U_∞²)。沿翼型表面从 x/c=0 (leading edge) 到 x/c=1 (trailing edge) 采样，分 upper/lower surface。extractor 用 patchAverage 在 airfoil patch 上做 sample，生成 (x/c, Cp) 列表，和 Ladson 风洞数据（NASA TM 1996）对齐比。Cp 对 mesh 的 near-wall 分辨率敏感，y+ 变化 2× 可能让曲线轻微偏。`,
+   209	  },
+   210	  {
+   211	    id: "rayleigh_benard_convection",
+   212	    displayName: "Rayleigh-Bénard Convection",
+   213	    headline_zh: `对流不稳定性`,
+   214	    headline_en: "Convective instability",
+
+codex
+The fact review is clear enough now. I’m running the lightweight frontend verification next so the final markdown can say the one-file prose change still typechecks/builds, then I’ll write the verdict file and stop.
+exec
+/bin/zsh -lc 'npm run typecheck' in /Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend
+exec
+/bin/zsh -lc 'npm run build' in /Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend
+ succeeded in 1428ms:
+ succeeded in 2848ms:
+vite v5.4.21 building for production...
+transforming...
+✓ 131 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.54 kB │ gzip:   0.35 kB
+dist/assets/index-e6PD6fv0.css   27.92 kB │ gzip:   5.93 kB
+dist/assets/index-Ci2qJq7u.js   818.29 kB │ gzip: 268.15 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.29s
+
+codex
+I have enough context to write the verdict. I’m closing this as an approval-level review, with the note framed as backlog rather than reopening the round: the blocked Re/α/TIER rationale issue is fixed, the other nine cases are untouched, and the frontend still typechecks/builds.
+apply patch
+patch: completed
+/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/reviews/pedagogy_round_3_findings.md
+diff --git a/.planning/reviews/pedagogy_round_3_findings.md b/.planning/reviews/pedagogy_round_3_findings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..da1f8062a1d49e26b15bcb0fa15df0562fb6f8ef
+--- /dev/null
++++ b/.planning/reviews/pedagogy_round_3_findings.md
+@@ -0,0 +1,22 @@
++# DEC-V61-047 Round 3 — Codex Consolidated Verdict
++
++**Overall**: APPROVE_WITH_COMMENTS
++**Blockers**: 0
++**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
++**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
++
++## N1 verification
++- status: CLOSED
++- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
++- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
++
++## Carry-forward
++- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
++- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
++
++## New findings (if any)
++- None blocking in `51c7198..196fb94`.
++
++## If APPROVE / APPROVE_WITH_COMMENTS
++End iteration.
++- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+diff --git a/.planning/reviews/pedagogy_round_3_findings.md b/.planning/reviews/pedagogy_round_3_findings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..da1f8062a1d49e26b15bcb0fa15df0562fb6f8ef
+--- /dev/null
++++ b/.planning/reviews/pedagogy_round_3_findings.md
+@@ -0,0 +1,22 @@
++# DEC-V61-047 Round 3 — Codex Consolidated Verdict
++
++**Overall**: APPROVE_WITH_COMMENTS
++**Blockers**: 0
++**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
++**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
++
++## N1 verification
++- status: CLOSED
++- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
++- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
++
++## Carry-forward
++- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
++- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
++
++## New findings (if any)
++- None blocking in `51c7198..196fb94`.
++
++## If APPROVE / APPROVE_WITH_COMMENTS
++End iteration.
++- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+codex
+The verdict file is written. I’m doing a final readback for exact wording and line citations, then I’ll stop without touching any other files.
+exec
+/bin/zsh -lc "sed -n '1,220p' .planning/reviews/pedagogy_round_3_findings.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+# DEC-V61-047 Round 3 — Codex Consolidated Verdict
+
+**Overall**: APPROVE_WITH_COMMENTS
+**Blockers**: 0
+**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
+**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
+
+## N1 verification
+- status: CLOSED
+- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
+- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
+
+## Carry-forward
+- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
+- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
+
+## New findings (if any)
+- None blocking in `51c7198..196fb94`.
+
+## If APPROVE / APPROVE_WITH_COMMENTS
+End iteration.
+- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+exec
+/bin/zsh -lc 'git status --short .planning/reviews/pedagogy_round_3_findings.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+?? .planning/reviews/pedagogy_round_3_findings.md
+
+diff --git a/.planning/reviews/pedagogy_round_3_findings.md b/.planning/reviews/pedagogy_round_3_findings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..da1f8062a1d49e26b15bcb0fa15df0562fb6f8ef
+--- /dev/null
++++ b/.planning/reviews/pedagogy_round_3_findings.md
+@@ -0,0 +1,22 @@
++# DEC-V61-047 Round 3 — Codex Consolidated Verdict
++
++**Overall**: APPROVE_WITH_COMMENTS
++**Blockers**: 0
++**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
++**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
++
++## N1 verification
++- status: CLOSED
++- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
++- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
++
++## Carry-forward
++- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
++- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
++
++## New findings (if any)
++- None blocking in `51c7198..196fb94`.
++
++## If APPROVE / APPROVE_WITH_COMMENTS
++End iteration.
++- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+Completed the re-review, verified the single-file scope against authoritative sources, checked lightweight frontend verification, and wrote the round-3 verdict file only.
+  ✓ Inspect round-3 diff and current learnCases entry for naca0012_airfoil
+  ✓ Cross-check changed claims against authoritative repo sources and prior round-2 finding
+  ✓ Confirm no regressions by verifying other cases were untouched in the re-review window
+  ✓ Write .planning/reviews/pedagogy_round_3_findings.md with final verdict
+diff --git a/.planning/reviews/pedagogy_round_3_findings.md b/.planning/reviews/pedagogy_round_3_findings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..da1f8062a1d49e26b15bcb0fa15df0562fb6f8ef
+--- /dev/null
++++ b/.planning/reviews/pedagogy_round_3_findings.md
+@@ -0,0 +1,22 @@
++# DEC-V61-047 Round 3 — Codex Consolidated Verdict
++
++**Overall**: APPROVE_WITH_COMMENTS
++**Blockers**: 0
++**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
++**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
++
++## N1 verification
++- status: CLOSED
++- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
++- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
++
++## Carry-forward
++- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
++- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
++
++## New findings (if any)
++- None blocking in `51c7198..196fb94`.
++
++## If APPROVE / APPROVE_WITH_COMMENTS
++End iteration.
++- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+codex
+Wrote [pedagogy_round_3_findings.md](/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/reviews/pedagogy_round_3_findings.md) and made no other file edits.
+
+
+diff --git a/.planning/reviews/pedagogy_round_3_findings.md b/.planning/reviews/pedagogy_round_3_findings.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..da1f8062a1d49e26b15bcb0fa15df0562fb6f8ef
+--- /dev/null
++++ b/.planning/reviews/pedagogy_round_3_findings.md
+@@ -0,0 +1,22 @@
++# DEC-V61-047 Round 3 — Codex Consolidated Verdict
++
++**Overall**: APPROVE_WITH_COMMENTS
++**Blockers**: 0
++**Expert verdict**: APPROVE_WITH_COMMENTS — the round-2 blocker is closed. `naca0012_airfoil` now teaches the canonical repo-truth regime (`simpleFoam` + `kOmegaSST`, `Re=3e6`, `α=0°`, `p=0.3`, `U/k/ω=0.5`, near-surface Cp attenuation => `20%` tolerance + `PASS_WITH_DEVIATIONS`), and the re-review window contains no other case edits. Frontend verification stayed green (`ui/frontend`: `npm run typecheck`, `npm run build`).
++**Novice verdict**: APPROVE_WITH_COMMENTS — a novice will no longer leave with the wrong NACA 0012 benchmark setup. The core story is now honest: symmetric airfoil, zero incidence, attached flow, and a Cp curve whose amplitude is muted because the adapter samples a near-surface cell band rather than the exact wall surface.
++
++## N1 verification
++- status: CLOSED
++- evidence: `ui/frontend/src/data/learnCases.ts:203-213` now teaches `α=0°` attached symmetric flow, `Re=3e6`, `simpleFoam + kOmegaSST`, `p=0.3`, `U/k/ω=0.5`, thin-span x-z mesh with empty side patches, and near-surface-band Cp attenuation with `20%` / `PASS_WITH_DEVIATIONS`. That matches `knowledge/whitelist.yaml:242-246`, `knowledge/gold_standards/naca0012_airfoil.yaml:5-28`, `src/foam_agent_adapter.py:5917-5950`, `src/foam_agent_adapter.py:6080-6143`, `src/foam_agent_adapter.py:6337-6363`, `src/foam_agent_adapter.py:6370-6526`, `src/foam_agent_adapter.py:8612-8661`, and `ui/backend/tests/fixtures/runs/naca0012_airfoil/reference_pass_measurement.yaml:1-19`.
++- evidence: the re-review scope is surgical. `git diff --name-only 51c7198..196fb94` returns only `ui/frontend/src/data/learnCases.ts`, and `git diff --unified=0 51c7198..196fb94 -- ui/frontend/src/data/learnCases.ts | rg 'lid_driven_cavity|backward_facing_step|circular_cylinder_wake|turbulent_flat_plate|plane_channel_flow|impinging_jet|rayleigh_benard_convection|differential_heated_cavity|duct_flow'` returns no matches, so the other 9 cases are untouched.
++
++## Carry-forward
++- F3 deferral: still accept. Round 3 changes only `ui/frontend/src/data/learnCases.ts`; nothing in the Tier-C backend/reporting path changed, so the round-2 backlog judgment stands.
++- F1 / F2 / F4 / F5 / F6: stay closed. This window edits one `naca0012_airfoil` block only, and the frontend still verifies cleanly after the change.
++
++## New findings (if any)
++- None blocking in `51c7198..196fb94`.
++
++## If APPROVE / APPROVE_WITH_COMMENTS
++End iteration.
++- Optional backlog only: if you want the Story tab to become literal patch-by-patch adapter documentation rather than pedagogy-first shorthand, tighten `ui/frontend/src/data/learnCases.ts:211-212` to the current adapter's exact far-field extents and `freestreamVelocity` / `freestreamPressure` wording. That is not a reason to reopen DEC-V61-047.
+
+tokens used
+101,381
+Wrote [pedagogy_round_3_findings.md](/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/reviews/pedagogy_round_3_findings.md) and made no other file edits.
+
+

@@ -1,0 +1,17 @@
+{
+  "case_id": "backward_facing_step",
+  "measured_at": "2026-04-23T09:47:36Z",
+  "duration_s": 29.579,
+  "solver_success": true,
+  "key_quantities": {
+    "U_residual_magnitude": 9.798412111199905e-05,
+    "reattachment_length": 5.647054267872632,
+    "reattachment_method": "wall_shear_tau_x_zero_crossing",
+    "reattachment_probe_height": 0.0,
+    "reattachment_n_floor_pts": 122,
+    "reattachment_wall_shear_source": "allPatches_vtk"
+  },
+  "comparator_passed": true,
+  "comparator_summary": "Quantity: reattachment_length | Tolerance: 10.0% | PASS",
+  "deviations": []
+}

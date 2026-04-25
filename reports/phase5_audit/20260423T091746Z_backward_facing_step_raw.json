@@ -1,0 +1,15 @@
+{
+  "case_id": "backward_facing_step",
+  "measured_at": "2026-04-23T09:17:46Z",
+  "duration_s": 28.858,
+  "solver_success": true,
+  "key_quantities": {
+    "U_residual_magnitude": 9.798412111199905e-05,
+    "reattachment_length": 5.6472863199692656,
+    "reattachment_method": "near_wall_tau_x_proxy_via_Ux",
+    "reattachment_probe_height": 0.0125
+  },
+  "comparator_passed": true,
+  "comparator_summary": "Quantity: reattachment_length | Tolerance: 10.0% | PASS",
+  "deviations": []
+}
