@@ -9,7 +9,7 @@ run_metadata:
   run_id: audit_real_run
   label_zh: 真实 solver 审计运行
   label_en: Real solver audit run
-  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit c81c0aa）。这是 audit package
+  description_zh: FoamAgentExecutor 驱动 OpenFOAM 实际跑出的结果（commit c4d89b2）。这是 audit package
     背书的权威测量——不是合成 fixture。失败的话说明 case 本身的 physics_contract 在当前 mesh 预算下无法满足，不是 harness
     bug；会进入 audit_concerns 随包交付给审查方。
   category: audit_real_run
@@ -20,16 +20,13 @@ source: phase5_audit_run_foam_agent
 measurement:
   value: 0.13784461152882208
   unit: dimensionless
-  run_id: audit_circular_cylinder_wake_c81c0aa
-  commit_sha: c81c0aa
-  measured_at: '2026-04-24T07:20:37Z'
+  run_id: audit_circular_cylinder_wake_c4d89b2
+  commit_sha: c4d89b2
+  measured_at: '2026-04-24T18:05:07Z'
   quantity: strouhal_number
   extraction_source: comparator_deviation
   solver_success: true
   comparator_passed: false
-  # DEC-V61-053 Codex R4 MED fix: Type I cross-check gates promoted from
-  # attempt-6 raw key_quantities (reports/phase5_audit/20260424T072037Z_
-  # circular_cylinder_wake_raw.json). Compare-tab reads this.
   secondary_scalars:
     cd_mean: 1.3790543620796876
     cl_rms: 0.08094277312528547
