@@ -255,32 +255,35 @@ cases:
       tolerance: 0.20  # 20% 相对误差
 
   - id: rayleigh_benard_convection
-    name: "Rayleigh-Bénard Convection (Ra=10^6)"
-    reference: "Chaivat et al. 2006"
-    doi: "10.1016/j.ijheatmasstransfer.2005.07.039"
+    name: "Rayleigh-Bénard Convection (Ra=10^6, TU Ilmenau benchmark)"
+    reference: "Pandey & Schumacher 2018 — TU Ilmenau DFG SPP 1881 Benchmark Case 1"
+    reference_url: "https://www.tu-ilmenau.de/fileadmin/Bereiche/MB/sm/DFG-Priority_Programme_1881__Turbulent_Superstructures/Benchmark_cases/Benchmark_case_1/Tutorial_RBC.pdf"
+    doi: ""  # benchmark tutorial, no DOI; primary citation is the publicly-archived PDF
     flow_type: NATURAL_CONVECTION
     geometry_type: NATURAL_CONVECTION_CAVITY
     compressibility: INCOMPRESSIBLE
-    steady_state: STEADY
+    steady_state: STEADY  # adapter emits steady SIMPLE; benchmark itself is statistically-stationary turbulent
     solver: buoyantFoam
-    # Ra=1e6 is steady-convective (fully turbulent onset ~Ra=1.5e8 for moderate Pr).
-    # k-omega SST over-dissipates at this Ra → under-predicts Nu. Chaivat correlation
-    # Nu=0.229*Ra^0.269 assumes laminar steady regime. A-class metadata correction per
-    # docs/whitelist_audit.md §3. reference_values untouched. (DEC-V61-005)
-    turbulence_model: laminar
+    # DEC-V61-060 Stage A.0 (2026-04-25): broken Chaivat 2006 / DOI
+    # 10.1016/j.ijheatmasstransfer.2005.07.039 citation REMOVED — that DOI
+    # resolves to a rectangular-jets impingement cooling paper, NOT a
+    # Rayleigh-Bénard study (Codex GPT-5.4 v1 review F2-HIGH).
+    # Pivoted to Pandey & Schumacher TU Ilmenau DFG SPP 1881 Benchmark
+    # Case 1 (publicly accessible PDF; reports Nu_avg = 17.7 in Table 1
+    # at Ra=10^6, Pr=10, Lx=4, H=1, free-slip walls all-around, T fixed
+    # top/bottom + zeroGradient T sidewalls; 5000 free-fall time integration
+    # window 2000-2500). See DEC-V61-060 §A.0-search-trail in commit body.
+    turbulence_model: laminar  # adapter regime; benchmark is mildly turbulent at Ra=1e6
     parameters:
-      Ra: 1000000
-      Pr: 0.71
-      aspect_ratio: 2.0
-    # Gate Q-new Case 10 · HOLD per Kogami 2026-04-20: initial audit claimed Chaivat
-    # correlation gives 7.2 at Ra=1e6, but recompute shows 0.229·(1e6)^0.269 = 9.4,
-    # putting current 10.5 only 11.5% off (within 15% tolerance). Small discrepancy,
-    # possibly using a different Chaivat correlation variant than the description
-    # states. Chaivat 2006 (DOI 10.1016/j.ijheatmasstransfer.2005.07.039) paper
-    # re-read pending before any edit. Values below retained.
+      Ra: 1000000           # 10^6 (matches benchmark)
+      Pr: 10.0              # PIVOT from 0.71 (water-like; matches benchmark)
+      aspect_ratio: 4.0     # PIVOT from 2.0 (4:1 box; matches benchmark Lx/H=4)
+    # Stage A.1 will update adapter generator to emit Lx=4, H=1 (was 2x2 broken).
+    # Stage A.3 will keep no-slip walls (per OF10 hotRoom tutorial convention)
+    # — benchmark uses free-slip; this deviation is acknowledged in tolerance band.
     gold_standard:
       quantity: nusselt_number
-      description: "水平层自然对流 Nu (PROVISIONAL — Gate Q-new Case 10 hold; see comment)"
+      description: "RBC time-averaged Nusselt number (Pandey & Schumacher 2018 TU Ilmenau benchmark Table 1, p.6, Pr=10 Ra=1e6 AR=4 free-slip walls)"
       reference_values:
-        - {Ra: 1e6, Nu: 10.5}
-      tolerance: 0.15  # 15% 相对误差
+        - {Ra: 1e6, Nu: 17.7}
+      tolerance: 0.25  # widened from 0.15 to 0.25 to absorb (a) steady-vs-turbulent regime mismatch (adapter SIMPLE cannot time-average true Nu fluctuations 10-30) and (b) no-slip vs free-slip wall BC deviation (intake §4 commits to no-slip per hotRoom convention)

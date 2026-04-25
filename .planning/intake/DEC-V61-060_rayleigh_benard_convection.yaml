@@ -127,26 +127,49 @@ headline_gate: nusselt_number  # quantity_id matches gold YAML observables[].nam
 # ============================================================================
 reference_paper:
   primary:
-    citation: "Goldhirsch, I., Pelz, R.B., Orszag, S.A. (1989). Numerical simulation of thermal convection in a two-dimensional finite box. Journal of Fluid Mechanics 199, 1-28."
-    doi: "10.1017/S0022112089000273"
-    providing: [Nu_avg, w_max_canonical_scaling]
-    locator: "Stage A.0 must cite specific Table or Figure for Nu(Ra=1e6, AR=2:1, Pr=0.71-7) value. Goldhirsch 1989 §3 Tables I-III span Ra=1e4-1e8 in 2:1 box. Pending re-read."
-    review_status: "primary candidate; Stage A.0 confirms or pivots"
+    citation: "Pandey, A. & Schumacher, J. (2018). Two-dimensional Rayleigh-Bénard convection in a closed box with free-slip walls. TU Ilmenau, DFG SPP 1881 Turbulent Superstructures Benchmark Case 1 (publicly archived tutorial PDF)."
+    doi: ""  # benchmark tutorial; primary citation is the publicly-archived PDF
+    url: "https://www.tu-ilmenau.de/fileadmin/Bereiche/MB/sm/DFG-Priority_Programme_1881__Turbulent_Superstructures/Benchmark_cases/Benchmark_case_1/Tutorial_RBC.pdf"
+    providing: [Nu_avg, two_roll_structure_AR4]
+    locator: "Table 1, p.6 — Pr=10, Ra=10^6, Lx=4, H=1, Nx=512, Nz=128, Nu=17.7, Re=95.5, t_eta=0.77, eta_K=0.0495, l_min=0.0078; time-averaged over t/t_f ∈ [2000, 2500] window. Fig 4b + Fig 5 confirm 2-roll structure."
+    review_status: "PIVOTED at Stage A.0 (DEC-V61-060). Replaces broken Chaivat 2006 / DOI 10.1016/j.ijheatmasstransfer.2005.07.039 (Codex v1 F2-HIGH)."
+    parameter_pivot:
+      from: "AR=2:1, Pr=0.71 (air) — intake v1-v4 pre-A.0"
+      to: "AR=4, Pr=10 (water-like) — Pandey & Schumacher benchmark exact match"
+      rationale: "Goldhirsch 1989 (J. Fluid Mech. 199) and Werne 1993 (PRE 48) are paywalled; could not extract exact (table, page, value) locator within A.0 budget. TU Ilmenau benchmark is publicly archived with Table 1 explicit Nu=17.7 → BRANCH-A satisfied."
+    bc_deviation_acknowledged:
+      benchmark_velocity_bc: "free-slip / stress-free at all walls (Fig 1: u_z=0, ∂u_x/∂z=0 top/bottom; u_x=0, ∂u_z/∂x=0 sidewalls)"
+      adapter_velocity_bc: "no-slip (fixedValue (0 0 0)) at all walls per OF10 hotRoom tutorial convention (intake §4 commitment retained)"
+      tolerance_widening: "from ±15% to ±25% (gold YAML) to absorb the no-slip vs free-slip Nu deviation"
   secondary:
+    - citation: "Verma, M.K., Chatterjee, A.G., Reddy, K.S. et al. (2013). Benchmarking and scaling studies of a pseudospectral code Tarang for turbulence simulations. Pramana 81, 617-629."
+      doi: "10.1007/s12043-013-0594-4"
+      providing: [tarang_solver_methodology_for_benchmark]
+      locator: "Pandey & Schumacher 2018 cites Verma 2013 [4,5] for the Tarang spectral solver used to generate the benchmark."
+    - citation: "Goldhirsch, I., Pelz, R.B., Orszag, S.A. (1989). Numerical simulation of thermal convection in a two-dimensional finite box. Journal of Fluid Mechanics 199, 1-28."
+      doi: "10.1017/S0022112089000273"
+      providing: []  # paywalled; could not extract exact value within A.0 budget
+      locator: "PAYWALLED — full text inaccessible during A.0; Goldhirsch describes AR=2:1 + Pr=0.71-6.8 + Ra up to 10^6 quasiperiodic regime, but exact Nu(Ra=1e6) point-value with table/page reference NOT extractable from accessible sources. Demoted from primary to secondary."
     - citation: "Werne, J. (1993). Structure of hard-turbulent convection in two dimensions: numerical evidence. Physical Review E 48, 1020-1035."
       doi: "10.1103/PhysRevE.48.1020"
-      providing: [w_max_scaling_2D_hard_turbulence, roll_count_2D_RBC]
-      locator: "Werne 1993 Fig. 4 (u_max vs Ra) + Fig. 7 (roll structure) — pending exact panel locator in A.0."
-    - citation: "Whitelist note about 'Chaivat et al. 2006' / DOI 10.1016/j.ijheatmasstransfer.2005.07.039 is INCORRECT. The cited DOI resolves to a rectangular-jets impingement cooling paper, NOT a Rayleigh-Bénard study. Stage A.0 commits a knowledge/whitelist.yaml correction. The historical 0.229·Ra^0.269 correlation comment in adapter sources is unattributed and may also need retirement."
-      doi: ""
-      providing: []
+      providing: []  # paywalled; could not extract exact figure within A.0 budget
+      locator: "PAYWALLED — full text inaccessible during A.0. Demoted from primary to secondary."
   note: |
-    The current adapter Nu=10.5 PASS-within-15%-tolerance result is for
-    a 2×2 side-heated cavity (the Lx=Ly bug + DHC topology), NOT for
-    proper RBC. The "PASS" is coincidental: any wall-driven NC at
-    Ra=1e6 with similar dimensions produces O(10) Nu values. Post-Stage-A
-    Nu must be re-validated against the Goldhirsch primary in the
-    correctly-bottom-heated 2:1 cavity.
+    Stage A.0 search trail summary (full version in A.0 commit body):
+      - Web searched Goldhirsch 1989 + Werne 1993 in JFM/PRE — both paywalled,
+        no accessible exact-locator extraction within budget.
+      - Web searched 2D RBC benchmarks publicly archived with explicit Nu values.
+      - Found TU Ilmenau Pandey & Schumacher 2018 Benchmark Case 1 (DFG SPP 1881
+        Turbulent Superstructures): publicly archived PDF, Table 1 p.6 explicit
+        Nu=17.7 at Ra=10^6 Pr=10 AR=4. → BRANCH-A satisfied.
+      - Pivoted parameters (AR=2:1 → AR=4, Pr=0.71 → Pr=10) to match benchmark
+        exact configuration. Stage A.1 will emit Lx=4, H=1 blockMesh; Stage A.3
+        will keep no-slip walls per OF hotRoom convention (BC deviation acknowledged
+        in tolerance widening from ±15 % → ±25 %).
+      - The current adapter Nu=10.5 result (pre-DEC) was for a 2×2 side-heated
+        cavity (Lx=Ly bug + DHC topology + broken Chaivat citation); coincidental
+        PASS, not physics fidelity. Post-Stage-A Nu must hit 17.7 ± 25 % against
+        the corrected AR=4 bottom-heated geometry.
 
 # ============================================================================
 # §3 Observable scope (HARD_GATED + NON_TYPE_HARD_INVARIANT + PROVISIONAL_ADVISORY split)
@@ -157,12 +180,12 @@ observable_scope:
       role: HEADLINE
       family: wall_gradient_derived
       extractor: src.foam_agent_adapter._extract_nc_nusselt (existing; Stage A.2 adds y-axis branch + wall_orientation BC plumb so the same stencil works on a horizontal wall)
-      ref_value: PENDING_STAGE_A_0  # numeric value committed by A.0 with Goldhirsch locator
-      ref_value_pending: true
-      tolerance: { mode: relative, value: 0.15 }  # widened to absorb post-A.0 provenance shift
+      ref_value: 17.7  # Stage A.0 BRANCH-A: Pandey & Schumacher 2018 TU Ilmenau benchmark Table 1 p.6
+      ref_value_pending: false  # resolved at A.0
+      tolerance: { mode: relative, value: 0.25 }  # widened from 0.15 → 0.25 to absorb steady-vs-turbulent regime mismatch + no-slip vs free-slip BC deviation; see whitelist comment
       gate_status: HARD_GATED
       counts_toward_primary_gate_count: true
-      source_table: "Goldhirsch 1989 §3 (specific table/figure cited in A.0)"
+      source_table: "Pandey & Schumacher 2018 TU Ilmenau DFG SPP 1881 Benchmark Case 1, Table 1 p.6 (URL in §2 reference_paper.primary)"
 
     - name: nusselt_top_asymmetry
       role: CONSERVATION_INVARIANT  # v3 F1-HIGH: NOT a literature gate
@@ -186,8 +209,8 @@ observable_scope:
       role: ADVISORY_INTERIOR_VELOCITY
       family: interior_velocity_field
       extractor: src.rbc_extractors.extract_w_max  # Stage B B.2
-      ref_value: PENDING_STAGE_A_0_OR_REMAIN_ADVISORY  # Werne/Goldhirsch exact figure value
-      ref_value_pending: true
+      ref_value: ADVISORY_NO_LITERATURE_LOCATOR  # Stage A.0 BRANCH-B: no exact (paper, figure, panel, x-coord) locator extractable within budget
+      ref_value_pending: false  # resolved at A.0 (BRANCH-B = permanently advisory in this DEC)
       tolerance: { mode: relative, value: 0.20 }
       gate_status: PROVISIONAL_ADVISORY
       counts_toward_primary_gate_count: false

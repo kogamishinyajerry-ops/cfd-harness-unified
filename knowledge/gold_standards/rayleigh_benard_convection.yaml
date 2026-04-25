@@ -1,31 +1,83 @@
 schema_version: 2
 case_id: rayleigh_benard_convection
-source: "Chaivat et al. 2006"
-literature_doi: "10.1016/j.ijheatmasstransfer.2005.07.039"
+source: "Pandey & Schumacher 2018 — TU Ilmenau DFG SPP 1881 Benchmark Case 1"
+literature_doi: ""  # benchmark tutorial; primary citation is the publicly-archived PDF
+literature_url: "https://www.tu-ilmenau.de/fileadmin/Bereiche/MB/sm/DFG-Priority_Programme_1881__Turbulent_Superstructures/Benchmark_cases/Benchmark_case_1/Tutorial_RBC.pdf"
 note: >
-  Docker E2E (Phase 7, 2026-04-16) ran with buoyantFoam, Boussinesq, Ra=1e6.
-  Convergence OSCILLATING but final Nu=10.5 matches ref 10.5 exactly (rel_error=0.0).
-  Gold standard comparison PASS within tolerance.
+  DEC-V61-060 Stage A.0 (2026-04-25): pivoted from broken Chaivat 2006
+  / DOI 10.1016/j.ijheatmasstransfer.2005.07.039 (which actually resolves
+  to a rectangular-jets impingement-cooling paper, NOT RBC) to the
+  publicly-archived Pandey & Schumacher TU Ilmenau benchmark.
+  Benchmark parameters: Lx=4, H=1 (AR=4), Pr=10, Ra=10^6, free-slip
+  walls all-around, fixed-T top/bottom, zeroGradient T sidewalls. The
+  reported Nu=17.7 is the time-averaged Nusselt number over the
+  statistically-stationary window t/t_f ∈ [2000, 2500] (Table 1, p.6).
+  Adapter implementation deviations: (a) steady SIMPLE solver instead of
+  time-resolved RK4 — captures a metastable steady-ish solution, not a
+  true time-average; (b) no-slip walls (OF10 hotRoom convention) instead
+  of free-slip; (c) Pr=10 retained (matches benchmark, NOT the prior
+  air-Pr=0.71 setup). Tolerance widened to ±25% to absorb (a)+(b).
 physics_contract:
-  geometry_assumption: "2D rectangular cavity heated from below, cooled from above, periodic or insulated side walls; Boussinesq approximation; Prandtl number Pr=0.71 (air)"
-  reference_correlation_context: "Chaivat 2006 reports Nu≈10.5 at Ra=1e6 in the laminar turbulent-onset regime. At Ra=1e6 the flow is in the weakly turbulent / soft-turbulence band, mostly resolvable on a moderate mesh without dedicated wall functions."
+  geometry_assumption: "2D rectangular cavity, Lx=4 H=1 (AR=4), heated from below, cooled from above, insulated zeroGradient T sidewalls; Boussinesq approximation; Pr=10 (water-like)"
+  reference_correlation_context: "Pandey & Schumacher 2018 TU Ilmenau benchmark Table 1: Nu_avg=17.7 ± large fluctuations 10-30 (Fig 2). At Ra=10^6 Pr=10 the 2D RBC flow is mildly turbulent with two dominant counter-rotating rolls (Fig 4b). Adapter steady SIMPLE captures the mean roll structure; instantaneous Nu cannot match because a time-average is unavailable from a steady solve."
   physics_precondition:
-    - condition: "Ra is in a regime the solver and mesh can resolve without BL wall functions (Ra=1e6 is the realistic upper limit for ~80-cell mid-grid Boussinesq solves)"
-      satisfied_by_current_adapter: true
-      evidence_ref: "Docker E2E 2026-04-16 produced Nu=10.5 matching ref exactly; convergence OSCILLATING but Nu-value stable. STATE.md §Known Limitations confirms this contrasts with DHC Ra=1e10 which does NOT satisfy this precondition."
-    - condition: "Nu extraction takes the bottom-wall temperature gradient on a mid-plane slice (x=midpoint) and computes Nu = |grad_T|·L/ΔT"
-      satisfied_by_current_adapter: true
-      evidence_ref: "src/foam_agent_adapter.py:7130-7188 _extract_rayleigh_benard_nusselt — filters cxs within x_tol of midpoint, groups by y, takes first two y-stations (closest to bottom wall) for gradient; L=1.0, Delta_T=10.0 hardcoded matching adapter's _generate_rayleigh_benard boundary conditions"
-    - condition: "Delta_T=10 and L=1 hardcoded values match the adapter's generator"
-      satisfied_by_current_adapter: true
-      evidence_ref: "Both _extract_rayleigh_benard_nusselt and _generate_rayleigh_benard use the same hot/cold wall ΔT and cavity height; mismatch between them would break Nu calibration. No known mismatch as of Phase 7 T4."
-  contract_status: "COMPATIBLE — all preconditions satisfied at Ra=1e6. NOT transferable to Ra≥1e9 without mesh refinement (see differential_heated_cavity physics_contract for the high-Ra regime)."
-  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice)"
+    - condition: "Mesh resolves both the 2-roll structure (Lx/2 wavelength) and the boundary layer (~10 cells across thermal BL at Ra=1e6)"
+      satisfied_by_current_adapter: pending_stage_a_4
+      evidence_ref: "Stage A.4 will add horizontal-wall BL grading; pre-A.4 mesh is uniform 80x40 — borderline for AR=4."
+    - condition: "Bottom-heated topology (hot wall y=0, cold wall y=Ly) with gravity (0,-g,0)"
+      satisfied_by_current_adapter: pending_stage_a_3
+      evidence_ref: "Pre-Stage-A.3 adapter emits side-heated topology (DEC-V61-060 risk_flag rbc_topology_side_heated_vs_bottom_heated)."
+    - condition: "Nu extracted from bottom hot-wall temperature gradient via wall_orientation='y' branch in _extract_nc_nusselt"
+      satisfied_by_current_adapter: pending_stage_a_2
+      evidence_ref: "Pre-Stage-A.2 _extract_nc_nusselt has only x-orientation branch (DEC-V61-060 risk_flag nu_extractor_wall_orientation_mismatch)."
+  contract_status: "INCOMPLETE_PRE_STAGE_A — preconditions point to Stage A.1-A.4 deliverables. Will become COMPATIBLE after Stage A.5 integration smoke."
+  precondition_last_reviewed: "2026-04-25 (DEC-V61-060 Stage A.0 citation commit)"
 observables:
   - name: nusselt_number
-    description: mean Nusselt number for Rayleigh-Benard convection at Ra = 1e6
-    ref_value: 10.5
+    description: "RBC time-averaged Nu_avg at Ra=1e6, Pr=10, AR=4 (Pandey & Schumacher 2018 TU Ilmenau benchmark Table 1 p.6)"
+    ref_value: 17.7
     unit: dimensionless
+    family: wall_gradient_derived
+    role: HEADLINE
+    gate_status: HARD_GATED
+    counts_toward_primary_gate_count: true
+    source_table: "Pandey & Schumacher 2018 TU Ilmenau DFG SPP 1881 Benchmark Case 1, Table 1, p.6 (https://www.tu-ilmenau.de/fileadmin/Bereiche/MB/sm/DFG-Priority_Programme_1881__Turbulent_Superstructures/Benchmark_cases/Benchmark_case_1/Tutorial_RBC.pdf)"
     tolerance:
       mode: relative
-      value: 0.15
+      value: 0.25  # widened from 0.15 — see physics_contract.note for rationale
+  - name: nusselt_top_asymmetry
+    description: "Conservation invariant: |Nu_top - Nu_bottom| / |Nu_bottom|; should be ~0 by mass + energy conservation"
+    ref_value: 0.0
+    unit: dimensionless
+    family: wall_gradient_derived
+    role: CONSERVATION_INVARIANT
+    gate_status: NON_TYPE_HARD_INVARIANT  # Stage C.2 will add comparator branch (DEC-V61-060 §7)
+    counts_toward_primary_gate_count: false
+    source_table: "Conservation invariant (NOT a literature value); blocking on violation but excluded from primary_gate_count denominator"
+    tolerance:
+      mode: absolute
+      value: 0.05  # 5% relative imbalance band
+  - name: w_max_nondim
+    description: "Peak |u_y| nondimensionalized by free-fall velocity U_ff=sqrt(g·β·ΔT·H); advisory only"
+    ref_value: ADVISORY_NO_LITERATURE_LOCATOR  # BRANCH-B per intake §3 advisory_rationale
+    unit: dimensionless
+    family: interior_velocity_field
+    role: ADVISORY_INTERIOR_VELOCITY
+    gate_status: PROVISIONAL_ADVISORY
+    counts_toward_primary_gate_count: false
+    source_table: "Pandey & Schumacher 2018 reports Re_rms=95.5 (Table 1) but no point-value w_max with locator. Werne 1993 / Goldhirsch 1989 paywalled — see DEC-V61-060 commit body §A.0-search-trail."
+    tolerance:
+      mode: relative
+      value: 0.20  # not enforced (advisory)
+  - name: roll_count_x
+    description: "Counter-rotating roll count along bottom hot wall; canonical 2-roll structure for AR=4 at Ra=1e6"
+    ref_value: 2  # Pandey & Schumacher Fig 4b shows dominant 2-roll structure for AR=4 Pr=10 Ra=1e6
+    unit: count
+    family: structural
+    role: ADVISORY_STRUCTURAL
+    gate_status: PROVISIONAL_ADVISORY
+    counts_toward_primary_gate_count: false
+    source_table: "Pandey & Schumacher 2018 Fig 4b (instantaneous t=2250 t_f) and Fig 5 (time-averaged): two-roll structure with hot fluid rising at center and cold fluid descending at sidewalls"
+    tolerance:
+      mode: absolute
+      value: 0  # exact match (advisory only)
