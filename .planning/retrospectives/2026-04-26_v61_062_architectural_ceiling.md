@@ -7,7 +7,7 @@ predecessor_retros: [RETRO-V61-001 (governance), RETRO-V61-053 (post-R3 protocol
 status: LANDING — follows DEC-V61-062 close.
 author: Claude Opus 4.7 (1M context, autonomous mode)
 decided_by: Claude (self-executed under auto mode; Kogami sign-off at next session touch).
-notion_sync_status: PENDING — to sync alongside DEC-V61-062
+notion_sync_status: synced 2026-04-26 alongside DEC-V61-062 (https://www.notion.so/DEC-V61-062-NACA0012-C-grid-LowRe-architectural_ceiling_reached-methodology-v2-0-fifth-apply-34dc68942bed81c39688c41e490f34de)
 ---
 
 # RETRO-V61-062 · Architectural Ceiling on NACA0012 C-grid + LowRe
