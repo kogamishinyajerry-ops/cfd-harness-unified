@@ -63,56 +63,62 @@ case_number: 5  # LDC=1, BFS=2, cylinder=3, DHC=4, RBC=5
 intake_authored_at: "2026-04-25"
 intake_author: "Claude Code (Opus 4.7, 1M context · Track B mandate)"
 methodology_version: "v2.0"
-intake_version: 2
-codex_plan_review_verdict: REQUEST_CHANGES_v1_then_REWRITTEN_v2  # final disposition pending Codex re-review of v2
+intake_version: 3
+codex_plan_review_verdict: REQUEST_CHANGES_v1_v2_then_REWRITTEN_v3  # final disposition pending Codex re-review of v3
 
 # ============================================================================
 # §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
 # ============================================================================
 case_type: II
 case_type_rationale: |
-  Two scalar gates planned at Ra=1e6, Pr=0.71, AR=2:1 (the canonical 2D
-  RBC setup in Goldhirsch 1989). Two observables, one independent family +
-  one same-surface conservation cross-check:
+  ONE scalar HARD_GATED literature gate at Ra=1e6, Pr=0.71, AR=2:1
+  (canonical 2D RBC setup in Goldhirsch 1989). Per repo Type-II semantics
+  (§3b): close on ONE headline scalar literature gate plus
+  non-Type-count conservation/profile cross-checks. v3 reduces
+  primary_gate_count to 1 to match.
 
-  Family 1 · WALL-GRADIENT-DERIVED (top + bottom hot walls; cross-check
-  is conservation-driven, not literature-driven):
+  HARD_GATED LITERATURE OBSERVABLE (counts toward Type):
     1. Nu_avg (bottom hot wall) — HEADLINE GATE — wall-averaged Nusselt
-       at the bottom hot wall. Reference value pending Stage A.0
-       documentation commit (see §3 ref_value_pending notes).
-    2. Nu_top — SAME_SURFACE_CONSERVATION_CROSS_CHECK — by mass + energy
-       conservation Nu_top must equal Nu_bottom within numerical noise
-       (asymmetry > 5 % indicates either solver imbalance or BL under-
-       resolution). DEFINED as |Nu_top - Nu_bottom| / |Nu_bottom| with
-       its own tolerance; NOT a copy of the literature Nu_avg value.
+       at the bottom hot wall. Family: WALL-GRADIENT-DERIVED.
+       Reference value pending Stage A.0 (Goldhirsch locator + numeric).
 
-  Two further observables are tracked as PROVISIONAL_ADVISORY (rendered
-  for the user, NOT counted toward the verdict):
+  CONSERVATION INVARIANT (NOT counted toward Type — derived physics
+  requirement, not literature gate):
+    2. nusselt_top_asymmetry — defined as |Nu_top - Nu_bottom| /
+       |Nu_bottom|, target ≤ 0.05 (5 %). Asymmetry above the threshold
+       indicates BL under-resolution or solver imbalance. role:
+       CONSERVATION_INVARIANT, gate_status: NON_TYPE_HARD_INVARIANT —
+       enforced (run is rejected if violated) but does NOT count toward
+       primary_gate_count because it carries no literature ref_value.
+
+  PROVISIONAL_ADVISORY OBSERVABLES (rendered for user, NOT counted
+  toward verdict):
     3. w_max_nondim — peak |u_y| nondim by U_ff = sqrt(g·β·ΔT·H);
-       Werne 1993 / Goldhirsch 1989 give 0.18-0.22 in the 2D weakly-
-       turbulent regime, but exact figure citation pending A.0.
+       Werne 1993 Fig. 4 + Goldhirsch 1989 §4 indicate u_max ~
+       0.18-0.22·U_ff at Ra=1e6, but no single exact (figure, panel,
+       x-coordinate) locator — pending Stage A.0 lookup with explicit
+       two-branch outcome (see A.0 checklist).
     4. roll_count_x — number of counter-rotating rolls along the bottom
        hot wall. Canonical 2:1 cavity at Ra=1e6 → 2 rolls; sensitive to
        initial conditions and side-wall BCs in steady SIMPLE.
 
-  Type-II rationale (NOT Type-I): only 1 independent family from
-  literature (wall-gradient at bottom). The conservation cross-check
-  (Nu_top) shares the wall-gradient measurement surface and therefore
-  does NOT count as an independent family per §3b strict reading. The
-  velocity-field family (w_max) requires literature provenance that
-  Stage A.0 must establish before promotion to HARD_GATED — until then
-  it is advisory and does not contribute to the Type count.
+  Type-II rationale: Type-I requires ≥3 strict independent literature
+  families per §3b. Type-II requires exactly 1 strict literature
+  scalar gate. RBC has exactly 1 (Nu_avg). The conservation invariant
+  is enforcement scaffolding, NOT a literature gate, so it does not
+  inflate the Type count. The advisory observables surface for user
+  inspection but do not affect the pass-fail verdict.
 
-  PATH TO TYPE-I PROMOTION (post-Stage-A only, NEW intake version):
-  if Stage A.0 produces a clean Werne 1993 / Goldhirsch 1989 figure
-  citation for w_max_nondim with quantified tolerance band, write a
-  v3 intake with case_type promoted to I + w_max promoted to
-  HARD_GATED + new commit_count_estimate. NO MID-ARC RECLASSIFICATION
-  per §3b strict.
+  PATH TO TYPE-I PROMOTION (post-DEC, NEW intake version): if Stage A.0
+  produces a clean exact (paper, figure, panel, x-coord) locator for
+  w_max_nondim AND a separate independent literature surface (e.g.
+  centerline temperature profile from Goldhirsch 1989 Fig. X), write a
+  follow-on intake (DEC-V61-061 or equivalent) with case_type=I.
+  NO MID-ARC RECLASSIFICATION per §3b strict.
 
   HEADLINE = Nu_avg (bottom). Gold ref pending A.0 commit.
 
-primary_gate_count: 2  # HARD_GATED count: nusselt_number + nusselt_top_asymmetry
+primary_gate_count: 1  # F1-HIGH v2: ONLY nusselt_number is a literature HARD_GATE; nusselt_top_asymmetry is non-Type conservation invariant
 case_type_hard_gate_signed: true
 headline_gate: nusselt_number  # quantity_id matches gold YAML observables[].name
 
@@ -146,62 +152,93 @@ reference_paper:
 # §3 Observable scope (HARD_GATED + PROVISIONAL_ADVISORY split)
 # ============================================================================
 observable_scope:
-  - name: nusselt_number
-    role: HEADLINE
-    family: wall_gradient_derived
-    extractor: src.foam_agent_adapter._extract_nc_nusselt (existing; Stage A.2 adds y-axis branch + wall_orientation BC plumb so the same stencil works on a horizontal wall)
-    ref_value: PENDING_STAGE_A_0  # numeric value committed by A.0 with Goldhirsch locator
-    ref_value_pending: true
-    tolerance: { mode: relative, value: 0.15 }  # widened to absorb post-A.0 provenance shift
-    gate_status: HARD_GATED
-    source_table: "Goldhirsch 1989 §3 (specific table/figure cited in A.0)"
+  in_scope:
+    - name: nusselt_number
+      role: HEADLINE
+      family: wall_gradient_derived
+      extractor: src.foam_agent_adapter._extract_nc_nusselt (existing; Stage A.2 adds y-axis branch + wall_orientation BC plumb so the same stencil works on a horizontal wall)
+      ref_value: PENDING_STAGE_A_0  # numeric value committed by A.0 with Goldhirsch locator
+      ref_value_pending: true
+      tolerance: { mode: relative, value: 0.15 }  # widened to absorb post-A.0 provenance shift
+      gate_status: HARD_GATED
+      counts_toward_primary_gate_count: true
+      source_table: "Goldhirsch 1989 §3 (specific table/figure cited in A.0)"
 
-  - name: nusselt_top_asymmetry  # NOTE: no longer "nusselt_top with copied 10.5"
-    role: SAME_SURFACE_CONSERVATION_CROSS_CHECK
-    family: wall_gradient_derived
-    extractor: src.rbc_extractors.extract_nu_asymmetry  # Stage B B.1
-    ref_value: 0.0  # by mass + energy conservation, asymmetry should be 0
-    ref_value_pending: false
-    tolerance: { mode: absolute, value: 0.05 }  # 5 % relative imbalance band
-    gate_status: HARD_GATED
-    source_table: "conservation invariant: |Nu_top - Nu_bottom| / |Nu_bottom| ≤ 0.05"
-    rationale: |
-      NOT a literature value — defined as a derived invariant. Asymmetry
-      > 5 % indicates BL under-resolution or solver imbalance, both of
-      which would also degrade the headline Nu. Hard-gated because
-      conservation is a physics requirement, not a literature lookup.
+    - name: nusselt_top_asymmetry
+      role: CONSERVATION_INVARIANT  # v3 F1-HIGH: NOT a literature gate
+      family: wall_gradient_derived
+      extractor: src.rbc_extractors.extract_nu_asymmetry  # Stage B B.1
+      ref_value: 0.0  # by mass + energy conservation, asymmetry should be 0
+      ref_value_pending: false
+      tolerance: { mode: absolute, value: 0.05 }  # 5 % relative imbalance band
+      gate_status: NON_TYPE_HARD_INVARIANT  # v3: enforced but does NOT count toward primary_gate_count
+      counts_toward_primary_gate_count: false  # v3 F1-HIGH explicit
+      source_table: "conservation invariant: |Nu_top - Nu_bottom| / |Nu_bottom| ≤ 0.05"
+      rationale: |
+        v3 F1-HIGH redefinition: NOT a literature value — defined as a
+        derived physics invariant. Asymmetry > 5 % indicates BL under-
+        resolution or solver imbalance, both of which would also
+        degrade the headline Nu. Run is rejected if violated, but it
+        does NOT count toward primary_gate_count because it carries no
+        literature ref_value (Type-II = exactly 1 literature gate).
 
-  - name: w_max_nondim
-    role: ADVISORY_INTERIOR_VELOCITY  # demoted from HARD_GATED per F3-HIGH
-    family: interior_velocity_field
-    extractor: src.rbc_extractors.extract_w_max  # Stage B B.2
-    ref_value: PENDING_STAGE_A_0  # Werne/Goldhirsch exact figure value
-    ref_value_pending: true
-    tolerance: { mode: relative, value: 0.20 }
-    gate_status: PROVISIONAL_ADVISORY
-    advisory_rationale: |
-      Werne 1993 Fig. 4 + Goldhirsch 1989 §4 give u_max ~ 0.18-0.22·U_ff
-      for 2D RBC at Ra=1e6 in the soft-turbulence band, but no single
-      authoritative point value with tolerance is cited in either paper
-      directly for AR=2:1. Stage A.0 must produce a defensible figure
-      citation OR keep this advisory. Promote to HARD_GATED only if
-      A.0 produces a clean (figure, panel, x-coordinate) locator.
+    - name: w_max_nondim
+      role: ADVISORY_INTERIOR_VELOCITY
+      family: interior_velocity_field
+      extractor: src.rbc_extractors.extract_w_max  # Stage B B.2
+      ref_value: PENDING_STAGE_A_0_OR_REMAIN_ADVISORY  # Werne/Goldhirsch exact figure value
+      ref_value_pending: true
+      tolerance: { mode: relative, value: 0.20 }
+      gate_status: PROVISIONAL_ADVISORY
+      counts_toward_primary_gate_count: false
+      advisory_rationale: |
+        Werne 1993 Fig. 4 + Goldhirsch 1989 §4 indicate u_max ~
+        0.18-0.22·U_ff for 2D RBC at Ra=1e6 in the soft-turbulence
+        band. Stage A.0 explicit two-branch rule:
+          BRANCH-A: A.0 finds an exact (paper, figure, panel,
+            x-coordinate) locator with a single point-value AND
+            tolerance band → record locator + value in v3-addendum,
+            BUT do NOT promote to HARD_GATED in this DEC (promotion
+            requires a NEW intake version; see PATH TO TYPE-I).
+          BRANCH-B: A.0 cannot find such a locator → permanently
+            advisory in this DEC; record A.0 search trail in commit
+            body so future intakes don't repeat the search.
+        Either branch closes A.0 cleanly. Default landing: BRANCH-B
+        (advisory remains advisory).
 
-  - name: roll_count_x
-    role: ADVISORY_STRUCTURAL
-    family: structural
-    extractor: src.rbc_extractors.extract_roll_count_x  # Stage B B.3
-    ref_value: 2  # canonical 2:1 cavity at Ra=1e6 → 2 counter-rotating rolls
-    ref_value_pending: false
-    tolerance: { mode: absolute, value: 0 }  # exact match required when gated
-    gate_status: PROVISIONAL_ADVISORY
-    advisory_rationale: |
-      Roll count is sensitive to initial conditions + side-wall BCs in
-      steady SIMPLE. Multiple metastable solutions exist (1 stretched
-      roll, 2 rolls, 3 rolls of unequal width). Not a hard gate; rendered
-      for user inspection. Demote to advisory by default; promote to
-      hard gate only if Stage B.3 verifies the SIMPLE solver lands in
-      the 2-roll basin reproducibly across mesh refinements.
+    - name: roll_count_x
+      role: ADVISORY_STRUCTURAL
+      family: structural
+      extractor: src.rbc_extractors.extract_roll_count_x  # Stage B B.3
+      ref_value: 2  # canonical 2:1 cavity at Ra=1e6 → 2 counter-rotating rolls
+      ref_value_pending: false
+      tolerance: { mode: absolute, value: 0 }  # exact match required when gated
+      gate_status: PROVISIONAL_ADVISORY
+      counts_toward_primary_gate_count: false
+      advisory_rationale: |
+        Roll count is sensitive to initial conditions + side-wall BCs in
+        steady SIMPLE. Multiple metastable solutions exist (1 stretched
+        roll, 2 rolls, 3 rolls of unequal width). Not a hard gate;
+        rendered for user inspection only. Stays advisory in this DEC.
+
+  explicitly_out_of_scope:
+    - "Periodic-side-wall RBC variant. RBC with periodic side-walls is a
+       different canonical setup (infinite horizontal extent) and is
+       deliberately NOT covered by DEC-V61-060. Insulated side-walls only."
+    - "Type-I promotion path (case_type promoted to I). Even if Stage A.0
+       finds an exact locator for w_max_nondim, promotion requires a new
+       intake version (DEC-V61-061 or equivalent), NOT mid-arc retitling."
+    - "Any additional HARD_GATED literature observable beyond Nu_avg.
+       Examples deliberately excluded from this DEC: centerline
+       temperature profile, vertical heat-flux profile, Reynolds
+       number scaling, Nusselt(Ra) regression. Each would require a
+       separate independent literature family (Type-I path)."
+    - "Time-dependent / unsteady RBC observables (RMS velocity, Nu
+       fluctuations, plume statistics). steady-SIMPLE solver only."
+    - "Non-Boussinesq RBC (compressible, large ΔT)."
+    - "3D RBC. 2D-cavity (extruded 1-cell deep) only."
+    - "Promotion of nusselt_top_asymmetry to a literature HARD_GATE.
+       It is permanently a NON_TYPE_HARD_INVARIANT in this DEC."
 
 # ============================================================================
 # §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
@@ -243,11 +280,14 @@ risk_flags:
       Stage A.3: branch the boundary topology emit on case_id. For RBC:
         - hot_wall at y=0 (bottom), cold_wall at y=Ly (top), both
           fixedValue T (T_hot, T_cold).
-        - left_wall + right_wall: INSULATED (fixedGradient T = 0)
-          per OF tutorial heatTransfer/buoyantSimpleFoam/hotRoom
-          convention. Periodic option REJECTED at intake to avoid
+        - left_wall + right_wall: INSULATED — patch type `zeroGradient`
+          on T (matches OF10 hotRoom tutorial verbatim:
+          tutorials/heatTransfer/buoyantBoussinesqSimpleFoam/hotRoom/
+          0.orig/T). Periodic option REJECTED at intake to avoid
           two-variant solver-tuning surface.
-        - gravity vector = (0, -g, 0) instead of (-g, 0, 0).
+        - gravity vector = (0, -9.81, 0) instead of (-9.81, 0, 0).
+      Solver: `buoyantFoam` (OF10 unified buoyancy solver), NOT legacy
+      `buoyantSimpleFoam` (this repo emits OF10 path).
       Wall_orientation BC plumb already lands in A.2 so this commit only
       flips the topology + gravity, not the extractor.
 
@@ -400,15 +440,32 @@ codex_pre_stage_a_plan_review:
       - F6-MED:  "Batch B count 3 → 4; total 17 commits; codex_budget_rounds 4 → 5"
       - F7-LOW:  "required_edits_v1_to_v2 bookkeeping field added"
   v2_review:
-    requested_at: PENDING  # to be set when v2 is re-submitted
+    requested_at: "2026-04-25 19:30 +0800"
+    completed_at: "2026-04-25 19:38 +0800"
+    verdict: REQUEST_CHANGES
+    log_path: reports/codex_tool_reports/dec_v61_060_plan_review_v2.md
+    findings_count: { H: 1, M: 2, L: 0 }
+    estimated_pass_rate_after_edits: 0.45
+    go_no_go_for_stage_a: NO_GO
+    required_edits_v2_to_v3:
+      - F1-HIGH: "Type-II contract over-hardened: primary_gate_count 2 → 1; nusselt_top_asymmetry demoted from HARD_GATED to NON_TYPE_HARD_INVARIANT (enforced but does NOT count toward Type)"
+      - F2-MED:  "Stage A.0 GO criterion replaced subjective words ('clean'/'defensible'/'confirms or pivots') with explicit 6-checkbox pass/fail list (numeric ref_value, source_table 4-field string, whitelist correction, w_max two-branch rule, search-trail in commit body, no source-code files in citation commit)"
+      - F3-MED:  "observable_scope flat list reshaped to canonical {in_scope, explicitly_out_of_scope}; explicitly_out_of_scope lists 7 excluded surfaces (periodic side-walls, Type-I promotion path, additional HARD_GATED literature observables, time-dependent obs, non-Boussinesq, 3D, asymmetry promotion)"
+      - INFO-1:  "Side-wall BC syntax corrected: 'fixedGradient T = 0' → 'zeroGradient' (matches OF10 hotRoom tutorial); solver name corrected: buoyantSimpleFoam → buoyantFoam"
+  v3_review:
+    requested_at: PENDING  # to be set when v3 is re-submitted
     verdict: PENDING
 
 # ============================================================================
 # §6 Self-estimated pass rate (F1-M1 honesty clause)
 # ============================================================================
-estimated_pass_rate_round1: 0.40
+estimated_pass_rate_round1: 0.45
 estimated_pass_rate_rationale: |
-  v1 said 0.40; Codex predicted 0.45 after v2 edits; honest landing point 0.40.
+  v3 raises 0.40 → 0.45 because v3 closes the structural risks Codex
+  flagged at v2: Type-II contract is now self-consistent
+  (primary_gate_count=1), A.0 GO criterion is objectively adjudicable
+  (6-checkbox), observable_scope shape matches the canonical layout.
+  Stage A code-changes risk profile is unchanged from v2.
   Reasoning:
     - Codex's 0.45 assumes intake edits land cleanly AND the actual code
       changes (Stage A 6-commit cluster) are then implemented without new
@@ -448,10 +505,35 @@ batch_plan:
       All commits prefix [line-b].
     commit_count_estimate: 6
     atomicity_guard: |
-      A.0 — citation/provenance: Goldhirsch + Werne re-read, knowledge/
-            whitelist.yaml + knowledge/gold_standards/rayleigh_benard_
-            convection.yaml citation correction with locator (table/figure
-            /equation). MANDATORY pre-code GO precondition.
+      A.0 — citation/provenance commit. MANDATORY pre-code GO
+            precondition. Objective pass/fail checklist (ALL required;
+            ANY failure blocks Stage A.1):
+              [ ] knowledge/gold_standards/rayleigh_benard_convection.yaml
+                  observables[name=nusselt_number].ref_value is a
+                  literal numeric (NOT "PENDING_*" string) committed
+                  in this commit.
+              [ ] Same observable's source_table field cites paper +
+                  DOI + table-or-figure-or-equation identifier + page
+                  number, all 4 fields populated as a single string,
+                  e.g. "Goldhirsch 1989 (DOI 10.1017/S0022112089000273)
+                  Table I row Ra=1e6 p.7".
+              [ ] knowledge/whitelist.yaml RBC entry: any reference to
+                  "Chaivat" or DOI 10.1016/j.ijheatmasstransfer.
+                  2005.07.039 is REMOVED or REPLACED with the actual
+                  source from the bullet above.
+              [ ] w_max_nondim observable in gold YAML has its
+                  ref_value set to ONE of: (a) a literal numeric
+                  (BRANCH-A: A.0 found exact locator), or (b) the
+                  literal string "ADVISORY_NO_LITERATURE_LOCATOR"
+                  (BRANCH-B: A.0 found no exact locator). NO other
+                  values permitted.
+              [ ] Commit body contains a §A.0-search-trail block
+                  listing: papers consulted, page/figure ranges
+                  scanned, and explicit (a)/(b) branch outcome.
+              [ ] No source-code files (src/**/*.py) modified in this
+                  commit (citation-only commit per F4-HIGH).
+            GO criterion: all 6 checkboxes ticked → Stage A.1 starts.
+            Any unchecked → A.0 amends or REQUEST_CHANGES at Codex R1.
       A.1 — adapter Lx ≠ Ly split: explicit Lx, Ly variables per case_id;
             Ra computed against H (not L); blockMesh vertices + grading
             independent per axis; unit test RBC=2×1 not 2×2.
