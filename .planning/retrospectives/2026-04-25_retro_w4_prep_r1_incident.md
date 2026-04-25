@@ -100,3 +100,20 @@ Methodology patches added (proposed for v6.1 amendment):
 - **MP-2026-04-25-F**: line B should `pre-commit install` immediately on session start so the dual-track-isolation warn-not-block hook fires. Until installed, it's documentation only.
 
 This addendum is a one-time post-hoc documentation. The actual fix path (move incorrectly-attributed files to a `[line-a]` revert+recommit) is rejected — git history rewrite during dogfood window is more risk than benefit, and the file *content* is correct regardless of which commit message bears the tag.
+
+## Addendum 2026-04-25T20:50 +0800 · CI dogfood window dead-on-arrival · 40-CI-failure unblocker
+
+While installing pre-commit hooks and running line A's first dogfood-period CI verification (`gh run list`), discovered **40 consecutive CI failures** dating back well before the dogfood window opened. Root cause: `numpy` and `jinja2` were never declared in `pyproject.toml` as runtime deps even though `src/cylinder_centerline_extractor.py` and `src/report_engine/generator.py` import them. Local dev shells / .venv had these in their global Python so nobody noticed. CI (which runs `pip install -e ".[dev]"` on a fresh GitHub Actions ubuntu-latest container) had nothing to fall back on, exiting with `ModuleNotFoundError: No module named 'numpy'` at pytest collection time.
+
+**Critical impact on the W4 prep arc and dogfood window**:
+- The W4 stage-1 dogfood pytest step (`if: always()` + `continue-on-error: true`) ran but ALSO failed on the same import error — produced **empty .jsonl artifacts** for every CI run since 2026-04-25T05:18 (W4 stage-1 commit `995dfc2`).
+- 5/9 review would have read empty artifacts as "0 incidents = GO" without knowing that no tests actually exercised the plane-guard. Net: the W4 toggle PR could have flipped to hard-fail mode based on no signal at all.
+- The dogfood window 2026-04-25 → 2026-05-09 was **dead-on-arrival** until 2026-04-25T20:50 (commit `0208929` fixed deps + pre-commit hook self-containment).
+
+**Methodology patch added** (proposed):
+- **MP-2026-04-25-G** · Any multi-day signal-collection plan (dogfood window / observation period / shadow-mode evaluation) must have **CI infrastructure healthy** as pre-flight check #1. The `.planning/dogfood/2026-05-09_review_template.md` already lists this — but the methodology gap is that the OPS-2026-04-25-001 plan didn't verify CI BEFORE declaring the window open. **Action**: future OPS notes that depend on CI signal must require a "last successful CI run within last 24h" assertion in the OPS frontmatter or §3 isolation mechanism block.
+
+**MP-2026-04-25-C revised** (originally "self-est cap 0.75 for observability instrumentation"):
+- The W4 prep R1 self-est miss (0.85 → CHANGES_REQUIRED 3 HIGH) plus this 40-failure CI miss together suggest the cap should be **even lower** for instrumentation that depends on CI being functional. The prior cap of 0.75 was based on "subprocess repro is part of test matrix"; the new evidence is that the repro can pass locally while CI is silently broken. **Revised cap**: 0.70 for any PR introducing observability instrumentation that ships CI workflow changes (W4 stage-1 was both — it added the WARN-mode dogfood pytest step + assumed CI was running).
+
+**Counter-40 cadence retro should consume MP-A through MP-G** for arc-wide methodology promotion.

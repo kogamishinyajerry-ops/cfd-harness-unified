@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T18:30 local"
+last_updated: "2026-04-25T20:55 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED · G-9 SIGNED · W3 PR LANDED 498d14e/2d725ff · W4 prep arc CLOSED 2026-04-25T18:30 (b10ca9e R1 init → 995dfc2 stage-1 CI → 264121c R1 CHANGES_REQUIRED 3-HIGH-fixes → 3a720f1 R2 APPROVE_WITH_COMMENTS doc-drift) · all pushed to origin/main · A1-A18 instrumentation IN PLACE: A13 atexit-driven sys.modules pollution watchdog with §2.9 R-new-1 double criterion; A18 wired inside PlaneGuardFinder.find_spec on test-allowlist bypass that masks forbidden plane transitions; .jsonl paths anchored to repo root via _find_repo_root walk; scripts/plane_guard_rollback_eval.py 14-day rolling window CLI; .github/workflows/ci.yml non-blocking WARN-mode dogfood pytest + artifact upload; .github/workflows/plane_guard_rollback_cron.yml weekly Monday 09:00 UTC · Codex independent verification: A18 real-stack repro records test_path correctly + does not record on allowed transition + does not break bypass on writer fault; A13 child-process subprocess repro emits pollution line on plain exit; repo-root resolution verified · 81 plane-guard tests pass (1 skipped) · 5 contracts KEPT byte-identical · hard-fail toggle awaits dogfood signal review 2026-04-25 → 2026-05-09 · next: W4 toggle PR final flip (target ≤ 2026-05-11; one-line continue-on-error: false) + W5 default-flip 'off'→'warn' · external_blockers G-1 + DEC-POLICY-VCP-001 (CFDJerry signature pending) · V61-057 blocked on G-1/VCP-001 · V61-058 serial-after · P1-T4 blocked on KOM Draft"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED · G-9 SIGNED · W3 PR LANDED · W4 prep arc CLOSED · OPS-2026-04-25-001 ACTIVE (dual-track + Notion Opus 4.7 ACCEPT_WITH_COMMENTS · 3 mandatory amendments landed) · RETRO-V61-006 LANDED + 2 addendums (line B git-add-all OPS §5 violation post-hoc + 40-CI-failure dogfood-window dead-on-arrival unblocker) · CI deps fix LANDED 0208929 (numpy + jinja2 declared in pyproject.toml + pre-commit hook self-containment via language: python · ends 40-run failure streak) · MP-D test pollution fix LANDED · 5/9 review template LANDED .planning/dogfood/2026-05-09_review_template.md · pre-commit hooks installed locally + dogfooded · methodology patches MP-A through MP-G proposed for counter-40 retro promotion · all line A work pushed to origin/main · hard-fail toggle awaits dogfood signal review 2026-04-25 → 2026-05-09 (genuine signal collection NOW possible post-deps fix) · next: W4 toggle PR final flip (target ≤ 2026-05-11; one-line continue-on-error: false) + W5 default-flip 'off'→'warn' · external_blockers G-1 + DEC-POLICY-VCP-001 (CFDJerry signature pending) · V61-057 blocked on G-1/VCP-001 · V61-058 serial-after · P1-T4 blocked on KOM Draft"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed

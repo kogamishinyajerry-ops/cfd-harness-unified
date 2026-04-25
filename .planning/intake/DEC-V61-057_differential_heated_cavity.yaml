@@ -3,10 +3,29 @@
 # Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
 #
 # Revision history:
-#   v1 (2026-04-25 18:30 +0800): initial draft, pass rate 0.30
+#   v1 (2026-04-25 18:30 +0800): initial draft, pass rate 0.30.
 #       authored by Claude Code Opus 4.7 1M (Track B autonomous mandate).
-#       Builds on V61-053 v2.0 first-apply pattern + V61-050 LDC 5-dim
-#       precedent. Codex pre-Stage-A review pending.
+#   v2 (2026-04-25 22:50 +0800): Codex pre-Stage-A review REQUEST_CHANGES
+#       (NO_GO Stage A) — applied all 6 required edits. Pass rate
+#       prediction raised by Codex to 0.55 after edits.
+#       Codex log: reports/codex_tool_reports/dec_v61_057_plan_review.log
+#
+#       v1 → v2 edit summary:
+#         F1-HIGH (canonical contract): Batch A scope expanded from 2 commits
+#                  → 5 commits — adapter dispatch fix (AR=1.0 from whitelist),
+#                  laminar emit fix, mesh grading upgrade, test update,
+#                  whitelist path correction.
+#         F2-HIGH (report drift): renamed Batch A item to "validation-artifact
+#                  lineage repair"; added 3-way invariant (gold YAML ↔
+#                  auto_verify_report.yaml ↔ report.md/html).
+#         F3-HIGH (psi scaling): explicit psi_raw = ∫u dy + psi_nondim =
+#                  psi_raw / α; ψ marked PROVISIONAL until B3 validates SNR.
+#                  Batch C only hard-wires VALIDATED gates.
+#         F4-MED  (Type-I claim): rewrote §1 to "5 gates planned; ≥3
+#                  independent families exist".
+#         F5-MED  (codex budget): 3 → 4 rounds; round 4 = normal checkpoint.
+#         F6-LOW  (registry hygiene): added strictness-scope note; fixed
+#                  `whitelist_cases/...` → `knowledge/whitelist.yaml` paths.
 
 case_id: differential_heated_cavity
 dec_id: DEC-V61-057
@@ -14,38 +33,50 @@ case_number: 4  # LDC=1, BFS=2, cylinder=3, DHC=4 (case-arc sequence post V61-05
 intake_authored_at: "2026-04-25"
 intake_author: "Claude Code (Opus 4.7, 1M context · Track B mandate)"
 methodology_version: "v2.0"
-intake_version: 1
-codex_plan_review_verdict: PENDING
+intake_version: 2
+codex_plan_review_verdict: REQUEST_CHANGES_v1_then_REWRITTEN_v2  # final disposition pending Codex re-review of v2
 
 # ============================================================================
 # §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
 # ============================================================================
 case_type: I
 case_type_rationale: |
-  Five physically-independent scalar gates available from de Vahl Davis 1983
-  Tables I, II, III at Ra=1e6, Pr=0.71, AR=1:
+  Five scalar gates planned at Ra=1e6, Pr=0.71, AR=1, drawn from de Vahl
+  Davis 1983 Tables I, II, III. Across these 5 gates, AT LEAST THREE
+  PHYSICALLY-INDEPENDENT FAMILIES exist (Type I requires ≥3 independent
+  families):
 
-   1. Nu_avg (hot wall)        — HEADLINE GATE — wall-averaged Nusselt, 8.800
+  Family 1 · WALL-GRADIENT-DERIVED (Nu_avg + Nu_max share extraction surface):
+    1. Nu_avg (hot wall)        — HEADLINE GATE — wall-averaged Nusselt, 8.800
                                   (Table III, primary benchmark scalar)
-   2. Nu_max (hot wall)        — peak local Nu along hot wall, 17.925 at y=0.0378
-                                  (Table III; tests BL resolution)
-   3. u_max @ x=0.5 vert plane — peak |u| along vertical mid-plane, 64.63
-                                  (Table II; nondim u·L/α)
-   4. v_max @ y=0.5 horiz plane — peak |v| along horizontal mid-plane, 219.36
-                                  (Table II; nondim v·L/α)
-   5. psi_max @ cavity center  — peak stream function, 16.750
-                                  (Table I; sole stream-function scalar)
+    2. Nu_max (hot wall)        — peak local Nu along hot wall, 17.925 at y/L=0.0378
+                                  (Table III). Same field as Nu_avg, different
+                                  reduction (max vs mean); SAME-SURFACE
+                                  CROSS-CHECK, not a separate physical family.
 
-  Independence rubric (per V61-053 plan-review clarification):
-    - Nu_avg / Nu_max share wall-temperature-gradient surface but differ by
-      operator (mean vs peak); IMPLEMENTATION_NEAR-INDEPENDENT, PHYSICS_INDEPENDENT.
-    - u_max and v_max are sampleSet-based on different planes; fully INDEPENDENT.
-    - psi_max requires stream-function reconstruction (∫U·n along ψ-isoline);
-      INDEPENDENT extraction surface.
-    - Total ≥3 INDEPENDENT physical gates → Type I requirement satisfied.
+  Family 2 · INTERIOR-VELOCITY-PROFILE (sampleSet on mid-planes; INDEPENDENT
+  surface from wall gradient):
+    3. u_max @ x=0.5L vert plane — peak |u(y)| along vertical mid-plane,
+                                   nondim u·L/α = 64.63 (Table II).
+    4. v_max @ y=0.5L horiz plane — peak |v(x)| along horizontal mid-plane,
+                                   nondim v·L/α = 219.36 (Table II).
+                                   (u_max and v_max are different sampleSet
+                                   probes on different planes; independent.)
 
-  HEADLINE = Nu_avg (load-bearing benchmark scalar; the one >40 subsequent
-  studies cite within ±0.2%). Other 4 are CROSS_CHECK / INDEPENDENT_CROSS_CHECK.
+  Family 3 · STREAM-FUNCTION-DERIVED (post-process reconstruction; INDEPENDENT
+  extraction path, but SEE §3 NOTE: status PROVISIONAL until B3 closure
+  residual validates SNR per RETRO-V61-050):
+    5. psi_max @ cavity center  — peak stream function, nondim
+                                  psi_max·1/α = 16.750 (Table I).
+
+  Independence count: 3 families guaranteed (wall-gradient, interior-profile,
+  stream-function); 5 scalar gates planned. Type I requirement (≥3
+  independent families) satisfied even if Nu_max collapses into Nu_avg
+  cross-check OR ψ demoted to advisory in B3.
+
+  HEADLINE = Nu_avg (load-bearing benchmark scalar; >40 subsequent studies
+  cite within ±0.2%). Other 4 are CROSS_CHECK / INDEPENDENT_CROSS_CHECK
+  with Nu_max specifically labeled SAME-SURFACE_CROSS_CHECK.
 
 primary_gate_count: 5
 case_type_hard_gate_signed: true
@@ -63,9 +94,6 @@ reference_paper:
     - citation: "Le Quéré, P. (1991). Accurate solutions to the square thermally driven cavity at high Rayleigh number. Computers & Fluids 20, 29-41."
       doi: "10.1016/0045-7930(91)90025-D"
       providing: [cross_check_high_ra_extension, spectral_solution_baseline]
-    - citation: "Ampofo, F. & Karayiannis, T.G. (2003). Experimental benchmark data for turbulent natural convection in an air filled square cavity. Int. J. Heat Mass Transfer 46, 3551-3572."
-      doi: "10.1016/S0017-9310(03)00147-9"
-      providing: [historical_lineage_only_NOT_USED_AT_RA_1E6]
     - citation: "Hortmann, M., Perić, M., & Scheuerer, G. (1990). Finite volume multigrid prediction of laminar natural convection: Bench-mark solutions. Int. J. Numer. Methods Fluids 11, 189-207."
       doi: "10.1002/fld.1650110206"
       providing: [cross_check_grid_convergence_pattern]
@@ -73,10 +101,18 @@ reference_paper:
 # ============================================================================
 # §3 Observable scope (hardens against breadth drift / scope creep)
 # ============================================================================
+# v2 NOTE on registry strictness: §4 risk_flags list 4 case-specific entries
+# that are NOT yet present in knowledge/schemas/risk_flag_registry.yaml.
+# Per template strictness model, registered flags only apply to the MANDATORY
+# v2.0+ slots. Case-specific flags are documented inline here pending
+# eventual promotion (deferred until at least 3 cases hit the same flag, to
+# avoid premature canonicalization). This deferral is consistent with
+# DEC-V61-053's similar slot use (intake_version=2 retained
+# `domain_blockage_mismatch` etc. case-locally).
 observable_scope:
   in_scope:
     - quantity: nusselt_number  # Nu_avg, hot wall
-      tolerance_pct: 5.0  # tightening from current 10.0 — de Vahl Davis Nu=8.800 is well-established
+      tolerance_pct: 5.0  # tightening from current 10.0 — de Vahl Davis Nu=8.800 is well-established; >40 studies within ±0.2%
       extraction_method: |
         Wall-averaged hot-wall Nu via src.wall_gradient.extract_wall_gradient.
         Currently emits via key_quantities. Surface as measurement.value.
@@ -84,44 +120,67 @@ observable_scope:
       role: HEADLINE_GATE
       gold_value: 8.800
       gold_source: "de Vahl Davis 1983 Table III, integrated over hot wall"
+      gate_status_target: HARD_GATED  # Batch C wires this as comparator-required
+
     - quantity: nusselt_max
       tolerance_pct: 7.0  # peak is more BL-resolution sensitive than mean
       extraction_method: |
         Peak local Nu along hot wall. Same wall-gradient field as Nu_avg
         but max() rather than mean(). New extractor needed
-        (src.dhc_extractors.extract_nusselt_max or similar).
+        (src.dhc_extractors.extract_nusselt_max or equivalent).
       status_pre_DEC: NOT_IMPLEMENTED
-      role: INDEPENDENT_CROSS_CHECK
+      role: SAME_SURFACE_CROSS_CHECK  # F4-MED edit: was INDEPENDENT_CROSS_CHECK; demoted because shares wall-gradient field with Nu_avg
       gold_value: 17.925
-      gold_source: "de Vahl Davis 1983 Table III, max value"
+      gold_source: "de Vahl Davis 1983 Table III, peak local"
+      gate_status_target: HARD_GATED  # extractor is straightforward; Codex-approved-with-comments-clean is feasible
+
     - quantity: u_max_vertical_midplane
       tolerance_pct: 5.0
       extraction_method: |
-        sampleSet line at x=0.5L, y∈[0,L]; extract |u(y)|, take max,
-        nondimensionalize as u·L/α. New sampleDict line + extractor.
+        sampleSet line at x=0.5L, y∈[0,L]; extract |u(y)|, take max.
+        Nondimensionalize: u_nondim = u_raw · L / α, where α = ν/Pr =
+        1.408e-5 m²/s for current adapter (ν=1e-5 m²/s, Pr=0.71).
+        New sampleDict line + extractor.
       status_pre_DEC: NOT_IMPLEMENTED
       role: INDEPENDENT_CROSS_CHECK
-      gold_value: 64.63  # nondim
+      gold_value: 64.63  # nondim u·L/α
       gold_source: "de Vahl Davis 1983 Table II, max u along vertical mid-plane"
+      gate_status_target: HARD_GATED
+
     - quantity: v_max_horizontal_midplane
       tolerance_pct: 5.0
       extraction_method: |
-        sampleSet line at y=0.5L, x∈[0,L]; extract |v(x)|, take max,
-        nondimensionalize as v·L/α. New sampleDict line + extractor.
+        sampleSet line at y=0.5L, x∈[0,L]; extract |v(x)|, take max.
+        Nondimensionalize: v_nondim = v_raw · L / α (same α as above).
+        New sampleDict line + extractor.
       status_pre_DEC: NOT_IMPLEMENTED
       role: INDEPENDENT_CROSS_CHECK
-      gold_value: 219.36  # nondim
+      gold_value: 219.36  # nondim v·L/α
       gold_source: "de Vahl Davis 1983 Table II, max v along horizontal mid-plane"
+      gate_status_target: HARD_GATED
+
     - quantity: stream_function_max
-      tolerance_pct: 8.0  # stream function reconstruction is post-process, slightly noisier
+      tolerance_pct: 8.0  # provisional; widened to absorb reconstruction noise
       extraction_method: |
-        Reconstruct ψ from velocity field via ∫U_x dy along x=0 boundary
-        (ψ=0 at wall) then propagate; OR use OpenFOAM's streamFunction FO
-        if available. Take max over interior. New extractor.
+        F3-HIGH edit (v1→v2): scaling convention NOW EXPLICIT.
+        Raw reconstruction: psi_raw(x,y) = ∫₀ʸ u(x, y') dy' (units: m²/s),
+        propagated via 2D incompressibility (ψ defined s.t. u=∂ψ/∂y,
+        v=-∂ψ/∂x). Reference column for ψ=0 is x=0 wall (no-slip implies
+        ψ=const there; pin to 0).
+        Nondim: psi_nondim = psi_raw / α (since gold psi_max=16.750 is
+        likewise nondim with α — see de Vahl Davis 1983 Table I caption).
+        Take psi_max = max(|psi_nondim|) over interior (max usually at
+        cavity geometric center).
+        Implementation choice: Batch B3 prototypes TRAPEZOIDAL ∫. If
+        closure residual at top wall (ψ should also = 0) exceeds 1e-2 of
+        psi_max, demote to advisory OR switch to Poisson solve
+        ∇²ψ = -ω_z (separate sub-batch).
       status_pre_DEC: NOT_IMPLEMENTED
-      role: CROSS_CHECK
-      gold_value: 16.750  # nondim
+      role: INDEPENDENT_CROSS_CHECK
+      gold_value: 16.750  # nondim psi/α
       gold_source: "de Vahl Davis 1983 Table I, max ψ at cavity center"
+      gate_status_target: PROVISIONAL_ADVISORY  # F3-HIGH edit: NOT mandatory until B3 SNR + closure residual validate; Batch C wires as advisory only
+
   explicitly_out_of_scope:
     - item: "Ra-sweep across {1e3, 1e4, 1e5, 1e6}"
       reason: "DEC-V61-057 targets the Ra=1e6 benchmark only. Ra-sweep was the previous (closed) scope of EX-1-007 + DEC-ADWM-004; reopening dilutes focus."
@@ -132,112 +191,141 @@ observable_scope:
     - item: "Time-dependent oscillatory regime"
       reason: "Steady solution exists at Ra=1e6; oscillatory onset at ~Ra=1.5e8. Solver is steady SIMPLE; do not enable transient."
     - item: "GCI / Richardson grid-convergence study"
-      reason: "Grid-convergence is its own follow-up DEC. Single-grid 80-cell baseline is the V61-057 deliverable; mesh-pyramid (40/80/160/320) belongs in a separate DEC-V61-XXX_dhc_grid_convergence."
+      reason: "Grid-convergence is its own follow-up DEC. Single-grid-with-grading 80-cell (or higher per Batch A mesh upgrade) baseline is the V61-057 deliverable; mesh-pyramid (40/80/160/320) belongs in a separate DEC-V61-XXX_dhc_grid_convergence."
 
 # ============================================================================
 # §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
 # ============================================================================
 risk_flags:
-  # --- case-specific ---
+  # --- case-specific (registry strictness deferred per §3 NOTE) ---
+
   - flag: ra_aspect_ratio_dispatch_inversion
     severity: high
-    codex_flagged: false
+    codex_flagged: true  # F1-HIGH cited explicitly
     description: |
-      src/foam_agent_adapter.py:2070-2075 currently sets aspect_ratio=2.0 when
-      Ra<1e9 (i.e. Ra=1e6 path). This is the Rayleigh-Bénard / NC Cavity
-      branch. DHC at Ra=1e6 needs aspect_ratio=1.0 (square cavity per de
-      Vahl Davis 1983). Without explicit boundary_conditions.aspect_ratio=1.0
-      in the whitelist, the adapter generates a 2:1 rectangle, not a square.
+      src/foam_agent_adapter.py:2070-2073 currently sets aspect_ratio=2.0
+      when Ra<1e9 (i.e. Ra=1e6 path). This is the rayleigh_benard / NC
+      Cavity branch. DHC at Ra=1e6 needs aspect_ratio=1.0 (square cavity
+      per de Vahl Davis 1983). The whitelist (knowledge/whitelist.yaml:
+      155-175) DOES specify parameters.aspect_ratio=1.0 for DHC, but the
+      adapter dispatch only inspects task_spec.boundary_conditions —
+      whitelist parameters never reach that branch.
       Result: extracted Nu won't match de Vahl Davis irrespective of mesh.
+      tests/test_foam_agent_adapter.py:1427-1429 currently encodes
+      Ra=1e6 → AR=2.0, locking the wrong default into the test suite.
     mitigation_in_batch: |
-      Batch A: verify whitelist_cases/differential_heated_cavity passes
-      aspect_ratio=1.0 explicitly. If absent, add. Add adapter assertion
-      that case_id=differential_heated_cavity → aspect_ratio==1.0
-      (inverted from rayleigh_benard which gets ar=2.0).
+      Batch A (2 commits): (a) add adapter dispatch path that consults
+      task_spec.parameters.aspect_ratio (or equivalent whitelist channel)
+      AND boundary_conditions; default fallback inverted: case_id=='differential_heated_cavity'
+      → AR=1.0; case_id=='rayleigh_benard_convection' → AR=2.0. (b) Fix
+      tests/test_foam_agent_adapter.py:1428 to use AR=1.0 + add a new
+      test asserting DHC dispatches AR=1.0 even when boundary_conditions
+      is None (whitelist defaults reach adapter).
 
-  - flag: extractor_emit_path_inconsistency
+  - flag: turbulence_emit_vs_whitelist_mismatch
     severity: high
-    codex_flagged: false
+    codex_flagged: true  # F1-HIGH cited (RAS/kOmegaSST hard-write)
     description: |
-      Audit fixture says actual=11.368 vs gold=8.8 (29% over) but report.md
-      "Results vs Reference" table shows ref=30, actual=5.85, FAIL. Two
-      different gold sources — the report-engine pipeline reads from a
-      stale cache or different YAML schema branch. This is a P0 reporting
-      bug independent of physics: same case shows two contradictory verdicts.
+      Whitelist sets turbulence_model=laminar for DHC (knowledge/whitelist.yaml:
+      167). Adapter natural-convection path emits "simulationType RAS"
+      with "RASModel kOmegaSST" + turbulence on (src/foam_agent_adapter.py
+      around L2320-2330) regardless of whitelist setting. Result: solver
+      runs full RAS budget (k, omega, turbulent fields) for a regime
+      where there is no turbulence to model, adding dissipation and
+      mis-tuning Nu.
     mitigation_in_batch: |
-      Batch A: identify which renderer path emits the "ref=30" line. Audit
-      reports/case_*/report.md generators against current gold_standards/
-      schema_version=2 path. If a v1-schema fallback is leaking through,
-      remove or reroute. Add regression test: `nusselt_number ref` cell
-      must equal observables[].ref_value byte-identically.
+      Batch A: adapter natural-convection path consults
+      task_spec.turbulence_model (mapped from whitelist). When laminar:
+      emit simulationType=laminar; do NOT write k/omega initial fields,
+      do NOT add kOmegaSST RASModel block. Add unit test asserting that
+      DHC case_dir contains 'simulationType  laminar' in
+      constant/turbulenceProperties.
 
-  - flag: stream_function_postprocess_choice
-    severity: med
-    codex_flagged: false
+  - flag: mesh_resolution_at_ra_1e6_marginal
+    severity: high
+    codex_flagged: true  # F1-HIGH cited (80² uniform → 2.56 BL cells)
     description: |
-      OpenFOAM has no built-in 2D stream-function FO equivalent to ParaView's
-      stream tracer. Two reconstruction options: (a) trapezoidal ∫U_x dy
-      along x=0 col, propagate via incompressibility; (b) Poisson solve
-      ∇²ψ = -ω_z. Option (a) is simpler but accumulates trapezoidal error
-      O(Δy²); Option (b) needs solver setup. RETRO-V61-050 (numerical_noise_snr)
-      flagged that ψ extraction can drop below physically-meaningful SNR.
+      Adapter Ra<1e9 path emits uniform 80-cell mesh (no grading). At
+      Ra=1e6, BL thickness δ_T/L ≈ Ra^(-1/4) ≈ 0.032. Uniform 80 cells
+      → Δ=0.0125L → 2.56 cells in BL. Below the 5-cell BL minimum used
+      by V61-053 (cylinder) and standard NC benchmarks (Hortmann 1990).
+      Codex-prescribed fix in F1: graded 80² + 4:1 wall grading, OR
+      higher nL (160-cell uniform).
     mitigation_in_batch: |
-      Batch B: prototype option (a) trapezoidal first; report extraction
-      noise floor vs |ψ_max_gold|=16.75. Ratio must be ≥10× per
-      RETRO-V61-050 mitigation. If <10×, switch to option (b) Poisson
-      solve OR demote stream_function_max to advisory (not gated).
+      Batch A: extend the existing Ra>=1e9 grading branch (lines 2087-2090)
+      to also activate for case_id=='differential_heated_cavity' at Ra=1e6.
+      Use 4:1 wall grading symmetric (smaller cells at both walls).
+      blockMesh smoke-check: report min cell size at wall, verify ≥5
+      cells inside δ_T/L=0.032 envelope. Document numerical values in
+      adapter comment so future readers can audit.
 
-  - flag: nondimensionalization_unit_mismatch
-    severity: med
-    codex_flagged: false
+  - flag: validation_artifact_lineage_drift
+    severity: high
+    codex_flagged: true  # F2-HIGH cited (auto_verify_report.yaml is stale source)
     description: |
-      de Vahl Davis 1983 Table II reports velocities as u·L/α (Peclet-like
-      nondim). Adapter currently emits raw |u| in m/s. Comparator must
-      multiply by L/α before comparison. L is read from boundary_conditions
-      (after Batch A fix); α = ν/Pr = 1e-5/0.71 = 1.408e-5. Mistake here =
-      O(10⁵) error, not just bias.
+      Three-source split: (1) gold YAML observables[].ref_value=8.8;
+      (2) auto_verify_report.yaml (2026-04-18, commit c3a1a4c, pre-
+      demotion) gold_standard_comparison.observables[0].ref_value=30.0
+      with sim=5.85; (3) audit fixture audit_real_run_measurement.yaml
+      (post-demotion) ref=8.8 with actual=11.4. The Jinja templates
+      (templates/partials/gold_standard_ref.md.j2 vs
+      results_comparison.md.j2) read these from DIFFERENT pipeline
+      stages, so a single rendered report.md emits inconsistent ref
+      values across its tables. Same in report.html (precondition
+      narrative @ §1 still says "ref=30.0 ±15%").
     mitigation_in_batch: |
-      Batch B: extractor for u_max/v_max emits both raw and nondim values
-      explicitly; comparator gates against nondim only. Unit-test the
-      conversion: u_raw=0.005 m/s @ L=1, α=1.408e-5 → u_nondim=355 (in
-      ballpark of gold 64-219).
+      Batch A: locate report-engine source-of-truth path. Two-step:
+      (i) regenerate auto_verify_report.yaml against current gold YAML
+      schema_v2 to wipe the 30.0/5.85 staleness. (ii) Add invariant
+      regression test: gold YAML ref_value == auto_verify_report.gold_
+      standard_comparison.observables[].ref_value == report.md/html
+      reference cell, byte-identical. If renderer reads from a cache,
+      audit cache invalidation. Do NOT hand-fix the rendered output —
+      fix the source.
 
-  # --- mandatory v2.0+ slots ---
+  # --- mandatory v2.0+ template slots (per RETRO-V61-053 + RETRO-V61-050) ---
 
   - flag: python_version_parity
     severity: med
     codex_flagged: false
     description: |
       Python 3.9 (Codex shim) vs 3.12 (.venv) f-string parser differ.
-      DHC extractors will involve nested f-strings for sampleDict
-      generation — high risk surface.
+      DHC extractors (Batch B) will involve nested f-strings for
+      sampleDict generation — high risk surface.
     mitigation_in_batch: |
-      Run `python3 -m py_compile <changed .py>` before each Stage A+ commit.
-      Hoist nested f-string parts into separate variables.
+      Run `python3 -m py_compile <changed .py>` before each Stage A+
+      commit. Hoist nested f-string parts into separate variables.
 
   - flag: mesh_density_on_domain_change
-    severity: low
+    severity: med
     codex_flagged: false
     description: |
-      DHC current mesh nL=max(80*L, 40)=80 cells per axis @ AR=1. If
-      Batch A fixes aspect_ratio dispatch, cell count will recompute;
-      need to verify mesh quality (checkMesh) and not silently coarsen.
+      Stage-A mesh upgrade (uniform → graded) changes nL semantics. If
+      grading misapplied, effective wall cell can be larger than uniform
+      base. Lesson from RETRO-V61-053 P1 (cylinder grew domain 3× but
+      cells 2×, lost 33% wall resolution).
     mitigation_in_batch: |
-      Batch A: assert nL_x and nL_y both = 80 for AR=1; comment in
-      blockMesh emit so future readers see the absolute number.
+      Batch A: compute and COMMENT in adapter blockMesh emit: dx_wall =
+      <numerical value>L; verify min(dx, dy)_wall ≤ δ_T/L/5 = 0.0064L.
+      blockMesh smoke-check captures actual min cell size into stdout
+      log; assert log contains expected min via grep.
 
   - flag: executable_smoke_test
     severity: high
-    codex_flagged: false
+    codex_flagged: false  # implicit in F1 chain (test bakes wrong AR)
     description: |
       Per RETRO-V61-053 P0: unit tests via direct generator call bypass
       dispatch layer. Need actual OpenFOAM invocation through
       FoamAgentExecutor.execute(task) before accepting Codex APPROVE.
+      Test at tests/test_foam_agent_adapter.py:1427-1429 currently
+      bakes AR=2.0 for Ra=1e6 — fixing it is part of Batch A, but the
+      P0 lesson stands: even after fix, run the full dispatch-path
+      smoke test.
     mitigation_in_batch: |
       Stage E: scripts/phase5_audit_run.py differential_heated_cavity
       against attempt-1 with new extractors. Live solver must converge
-      and emit all 5 gates. If solver.diverges, fall back to PCG+DIC for
-      p (V61-053 lesson).
+      and emit all 5 gates (or 4 if ψ demoted). If solver diverges,
+      fall back to PCG+DIC for p (V61-053 lesson).
 
   - flag: solver_stability_on_novel_geometry
     severity: med
@@ -245,102 +333,148 @@ risk_flags:
     description: |
       buoyantFoam laminar @ Ra=1e6 is well-established (matches OF tutorial
       heatTransfer/buoyantSimpleFoam/hotRoom topology). Risk lower than
-      cylinder which had no equivalent tutorial. Still: if Batch A geometry
-      fix changes mesh size, GAMG p-solver may need swap to PCG+DIC.
+      cylinder which had no equivalent tutorial. Still: AR fix changes
+      mesh dimensions; GAMG p-solver may need swap to PCG+DIC.
     mitigation_in_batch: |
       Stage E executable_smoke_test catches this. Pre-emptive fallback
       ready: if p oscillates >3 SIMPLE iters, swap GAMG → PCG+DIC.
 
   - flag: numerical_noise_snr
     severity: med
-    codex_flagged: false
+    codex_flagged: true  # F3-HIGH cited indirectly (ψ SNR precondition)
     description: |
       Per RETRO-V61-050: extraction methods can have noise floor that
       makes argmax/extremum coincide with noise rather than physics.
-      For DHC, psi_max requires reconstruction; u_max/v_max require
-      sampleSet which has interpolation noise. Each extractor must
-      report noise_floor vs |gold_value| ratio.
+      For DHC: psi_max requires reconstruction with closure residual at
+      both walls (ψ=0 at x=0 AND x=L); u_max/v_max via sampleSet have
+      interpolation noise. Each extractor must report noise_floor vs
+      |gold_value| ratio.
     mitigation_in_batch: |
       Batch B: each new extractor returns {value, numerical_floor,
       signal_above_noise_ratio}. UI surfaces SNR < 10× as a warning
-      flag (not auto-FAIL but visible).
+      flag (not auto-FAIL but visible). For ψ specifically: closure
+      residual at top wall (ψ_top - 0) / |psi_max_gold| must be < 0.01;
+      otherwise demote to advisory per Batch C wiring.
 
 # ============================================================================
 # §5 Pre-Stage-A Codex plan review
 # ============================================================================
 codex_pre_stage_a_plan_review:
-  requested_at: "2026-04-25 19:00 +0800"  # to be set when invoked
-  verdict: PENDING
-  log_path: reports/codex_tool_reports/dec_v61_057_plan_review.log
-  required_edits_v1_to_v2: []  # filled after plan review
+  v1_review:
+    requested_at: "2026-04-25 19:00 +0800"
+    completed_at: "2026-04-25 22:43 +0800"
+    verdict: REQUEST_CHANGES
+    log_path: reports/codex_tool_reports/dec_v61_057_plan_review.log
+    findings_count: { H: 3, M: 2, L: 1 }
+    estimated_pass_rate_after_edits: 0.55
+    go_no_go_for_stage_a: NO_GO
+    required_edits_v1_to_v2:
+      - F1-HIGH: "Canonical contract — Batch A scope expanded, adapter dispatch + laminar emit + mesh grading + test fix"
+      - F2-HIGH: "Validation-artifact lineage repair (auto_verify_report.yaml is stale source, not report.md)"
+      - F3-HIGH: "psi scaling explicit (psi_nondim = psi_raw/α); ψ status PROVISIONAL"
+      - F4-MED: "Type-I claim rewritten (5 gates planned; ≥3 independent families)"
+      - F5-MED: "codex_budget_rounds 3 → 4"
+      - F6-LOW: "Registry strictness scope note + whitelist path corrected to knowledge/whitelist.yaml"
+  v2_review:
+    requested_at: PENDING  # to be set when v2 is re-submitted
+    verdict: PENDING
 
 # ============================================================================
 # §6 Self-estimated pass rate (F1-M1 honesty clause)
 # ============================================================================
-estimated_pass_rate_round1: 0.30
+estimated_pass_rate_round1: 0.45
 estimated_pass_rate_rationale: |
-  Pass rate 0.30 in line with V61-053 (cylinder Type I, R1 actual=0%).
-  Drivers:
-    1. ra_aspect_ratio_dispatch_inversion (HIGH, 25% pass-rate hit) —
-       adapter dispatches AR=2.0 for Ra=1e6 today; this is a wrong-default
-       trap. Codex will surface this as 1 HIGH finding round-1 if I miss it.
-    2. extractor_emit_path_inconsistency (HIGH, 20% pass-rate hit) —
-       report.md double-source bug means there's existing renderer drift
-       that fix work will inadvertently expose; Codex will demand a
-       reproduction test.
-    3. nondimensionalization_unit_mismatch (MED, 15% pass-rate hit) — 4 of
-       5 gates require unit conversion (u/v via L/α; psi via L*α; Nu_max
-       same as Nu but extremum). Easy to mis-implement once.
-    4. stream_function_postprocess_choice (MED, 10% pass-rate hit) — first
-       cross-DEC ψ extractor; topology choice (trapezoidal vs Poisson)
-       Codex will likely scrutinize.
-  Pre-Stage-A Codex plan review expected to surface 2-3 of these as
-  required edits (intake_version v1 → v2 with applied edits).
+  v1 said 0.30; Codex predicted 0.55 after edits; honest landing point 0.45.
+  Reasoning:
+    - Codex's 0.55 assumes intake edits land cleanly AND the actual code
+      changes (Batch A 5-commit cluster) are then implemented without new
+      defects. That's optimistic — Stage A has multiple coupled pieces.
+    - Drivers carried over from v1 still applicable:
+        ra_aspect_ratio_dispatch_inversion (HIGH, 25% hit) — 4 places
+        to fix consistently (adapter dispatch, adapter mesh branch,
+        plumbing test, regression test).
+        validation_artifact_lineage_drift (HIGH, 20% hit) — needs trace
+        through report-engine to find source-of-truth path before fix.
+    - New driver from v2 plan:
+        turbulence_emit_vs_whitelist_mismatch (HIGH, 10% hit) — solo
+        fix is straightforward, but interacts with adapter
+        SimulationType branch logic at L2320-2330 (a region not yet
+        audited at line-level).
+    - Mesh resolution upgrade (mesh_resolution_at_ra_1e6_marginal):
+      reusing existing high-Ra grading branch (L2087-2090 pattern)
+      reduces risk vs designing new branch — slight downward pressure
+      on pass rate from coupled mesh+AR change.
+  Honest 0.45 means I expect CHANGES_REQUIRED at round 1 with 1-2 HIGH
+  + 2-3 MED findings; clean APPROVE_WITH_COMMENTS at round 2 or 3. F1-M2
+  clean-close target round = 3 (matches V61-053 R3 clean precedent).
 
 # ============================================================================
 # §7 Batch plan
 # ============================================================================
+# v2 EDIT: Batch A expanded from 2 commits → 5 commits per F1-HIGH/F2-HIGH.
+# Batch C rewrite per F3-HIGH (only validated gates hard-wired). Round
+# budget bump from 3 → 4 per F5-MED.
 batch_plan:
   - batch: A
     scope: |
-      Gold YAML hygiene + report.md ref-cell inconsistency fix +
-      aspect_ratio dispatch correctness + extractor_emit_path
-      reproduction test. Doc + 1 adapter assertion. No new extractors.
-    commit_count_estimate: 2
-    atomicity_guard: "Two atomic commits: (a) gold/whitelist + report-engine fix, (b) adapter aspect_ratio assertion + test"
+      CANONICAL CONTRACT REPAIR — adapter dispatch (AR=1.0 from whitelist),
+      laminar solver-contract emit (no RAS for DHC), mesh upgrade (uniform
+      → graded with ≥5 BL cells at Ra=1e6), test update (Ra=1e6→AR=1.0),
+      validation-artifact lineage repair (auto_verify_report.yaml regen
+      + 3-way invariant). All commits prefix [line-b].
+    commit_count_estimate: 5
+    atomicity_guard: |
+      A.1 — adapter dispatch: case-id-or-parameters-aware AR resolution +
+            tests/test_foam_agent_adapter.py update (single commit).
+      A.2 — adapter laminar emit: SimulationType branch consults whitelist
+            turbulence_model (single commit).
+      A.3 — adapter mesh grading: extend high-Ra grading branch to DHC
+            Ra=1e6 (single commit; blockMesh smoke-check verified).
+      A.4 — auto_verify_report.yaml regen + report-engine trace + invariant
+            regression test (single commit).
+      A.5 — Stage-A integration smoke run + adapter consistency sweep
+            (verify whitelist.parameters propagate end-to-end).
+
   - batch: B
     scope: |
-      Multi-dim extractors. (B1) Nu_max: extremum over existing wall_gradient
-      output. (B2) u_max + v_max: sampleSet + nondim conversion. (B3) psi_max:
-      trapezoidal ∫U_x dy reconstruction; report SNR vs gold; demote to
-      advisory if SNR<10×. Each extractor: own commit + unit test.
+      MULTI-DIM EXTRACTORS. (B1) Nu_max: extremum over existing
+      wall_gradient output. (B2) u_max + v_max: sampleSet + nondim
+      conversion (·L/α). (B3) ψ_max: trapezoidal ∫U_x dy reconstruction
+      with closure-residual SNR check; report SNR vs gold; demote to
+      advisory if SNR<10× or closure residual >1%. Each: own commit + tests.
     commit_count_estimate: 4
-    atomicity_guard: "B1, B2 (combined), B3, plus B-final integration"
+    atomicity_guard: "B1, B2 (combined), B3, B-final integration"
+
   - batch: C
     scope: |
-      Preflight gate wiring + comparator integration. Gold YAML schema_v2
-      observables[] expansion (5 entries). comparator gates G1-G5 iterate
-      over all 5 observables. Single commit.
+      PREFLIGHT GATE WIRING. Gold YAML schema_v2 observables[] expansion
+      to 4 HARD_GATED + 1 PROVISIONAL_ADVISORY (or 3+2 if Nu_max collapses
+      into Nu_avg per F4 cross-check). comparator gates G1-G5 iterate
+      over HARD_GATED only; PROVISIONAL_ADVISORY rendered without verdict
+      enforcement. Single commit.
     commit_count_estimate: 1
-    atomicity_guard: "All 5 observables + tolerances land in same commit (atomic schema bump)"
+    atomicity_guard: "All observables + gate_status_target lands in same atomic schema bump"
+
   - batch: D
     scope: |
-      Compare-tab 5-scalar anchor cards + audit fixture regen + report.md
-      template update + flow-fields regen for 5 observables (multi-pane).
+      COMPARE-TAB MULTI-DIM ANCHOR CARDS + audit fixture regen + report.md
+      template update + flow-fields regen for the active gate set.
     commit_count_estimate: 3
-    atomicity_guard: "D-backend, D-frontend, D-fixture-regen — separable"
+    atomicity_guard: "D-backend, D-frontend, D-fixture-regen"
+
   - batch: E
     scope: |
-      Live OpenFOAM run via scripts/phase5_audit_run.py + retro + Notion
+      LIVE OPENFOAM RUN via scripts/phase5_audit_run.py + retro + Notion
       sync + DEC closeout.
     commit_count_estimate: 2
     atomicity_guard: "E-live-run-fixture, E-retro+notion-sync"
 
 # ============================================================================
-# §8 Codex budget
+# §8 Codex budget (F6-M1 halt criterion · v2 BUMP per F5-MED)
 # ============================================================================
-codex_budget_rounds: 3
-round_4_action: "health check — halt_risk_flag if CHANGES_REQUIRED"
+codex_budget_rounds: 4  # F5-MED: raised 3 → 4 per Codex (Stage A expanded scope)
+round_4_action: "normal planned review checkpoint — NOT early halt trigger"
+round_5_action: "health check — halt_risk_flag if CHANGES_REQUIRED"
 round_6_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
 
 # ============================================================================
@@ -349,11 +483,11 @@ round_6_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
 stage_e_close_checklist:
   - item: "All Codex round-N findings landed in commits"
     required: true
-  - item: "Clean Codex round-(N+1) verdict = APPROVE (or APPROVE_WITH_COMMENTS, F1-M2 admits)"
+  - item: "Clean Codex round-(N+1) verdict ∈ {APPROVE, APPROVE_WITH_COMMENTS} per F1-M2"
     required: true
-  - item: "Executable smoke test passes — scripts/phase5_audit_run.py differential_heated_cavity emits 5/5 gates with values within tolerance OR documented physics-ceiling residual"
+  - item: "Executable smoke test passes — scripts/phase5_audit_run.py differential_heated_cavity emits ≥4 hard-gated values within tolerance (ψ may remain advisory)"
     required: true
-    waiver_allowed: "false — DHC has no documented unreachable ceiling at Ra=1e6 (unlike cylinder@10s endTime)"
+    waiver_allowed: "ψ_max may be reported as advisory; no other documented unreachable ceiling at Ra=1e6"
   - item: "DEC frontmatter notion_sync_status = synced"
     required: true
   - item: "autonomous_governance_counter_v61 incremented to 41"
