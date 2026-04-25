@@ -198,9 +198,11 @@ _INSTALLED_FINDER: Optional["PlaneGuardFinder"] = None
 _DEDUP_KEYS: set[Tuple[str, str, str]] = set()
 _DEDUP_MAX_ENTRIES = 10_000  # default; overridden via install_guard kwarg
 # A13 pollution watchdog snapshot (ADR-002 §2.9, Opus G-9 binding 2).
-# Captured at install_guard time; diffed at uninstall / atexit /
-# pytest session-finish to detect post-hoc sys.modules['src.*']
-# pollution that meta_path finders cannot intercept.
+# Captured at install_guard time; diffed at uninstall_guard() AND on
+# the process-exit atexit hook (registered once per process by
+# install_guard, see _atexit_pollution_check). Detects post-hoc
+# sys.modules['src.*'] pollution that meta_path finders cannot
+# intercept.
 _POLLUTION_SNAPSHOT: Optional[Dict[str, Tuple[int, Optional[str]]]] = None
 # A13 atexit hook idempotence flag (Codex W4 prep R1 finding 2 fix):
 # install_guard registers exactly one atexit callback per process;
@@ -717,12 +719,16 @@ def record_fixture_frame_confusion(
 ) -> Dict[str, object]:
     """Record one fixture-frame confusion incident to the rollback .jsonl (A18).
 
-    Used by the test-side fixture that catches ``LayerViolationError``
-    on tests marked with ``@pytest.mark.plane_guard_bypass``. Each
-    incident becomes one line in
-    ``reports/plane_guard/fixture_frame_confusion.jsonl``. The
-    rollback evaluator (``scripts/plane_guard_rollback_eval.py``)
-    reads this log to apply the §2.4 14-day rolling-window ≥3 trigger.
+    Wired automatically inside ``PlaneGuardFinder.find_spec()`` (Codex
+    W4 prep R1 finding 1 fix): when a ``tests.*`` allowlist bypass
+    masks a forbidden plane transition, the finder calls this writer
+    with the test-frame name as ``test_path``. May also be invoked
+    directly by callers that detect fixture-frame confusion outside
+    the finder path. Each incident becomes one line in
+    ``reports/plane_guard/fixture_frame_confusion.jsonl`` (anchored to
+    repo root, see ``_resolve_jsonl_path``). The rollback evaluator
+    (``scripts/plane_guard_rollback_eval.py``) reads this log to apply
+    the §2.4 14-day rolling-window ≥3 trigger.
     """
     event: Dict[str, object] = {
         "timestamp": _utc_iso8601(),
