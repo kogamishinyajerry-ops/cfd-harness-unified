@@ -1546,6 +1546,59 @@ class TestBuoyantCasePlumbingVerification:
                 f"{blockmesh[blockmesh.find('hex'):blockmesh.find('hex')+400]}"
             )
 
+    def test_dhc_legacy_display_name_alias_resolves_correctly(self):
+        """DEC-V61-057 Batch A.5 (Codex round-1 F1-HIGH): TaskSpecs created
+        from Notion or other display-title pipelines carry the human-
+        readable name (e.g. 'Differential Heated Cavity (Natural
+        Convection)'), NOT the canonical case_id. Without alias
+        normalization, the whitelist lookup misses, the substring fallback
+        misses, and Ra=1e6 reverts to the legacy AR=2.0 + RAS heuristic.
+        Stage A.5 normalizes through TASK_NAME_TO_CASE_ID — verify both
+        AR=1.0 and simulationType=laminar materialize correctly."""
+        spec = _make_nc_spec(
+            Ra=1e6,
+            aspect_ratio=1.0,  # ignored — see include_aspect_ratio_in_bc=False
+            name="Differential Heated Cavity (Natural Convection)",  # legacy display title
+            include_aspect_ratio_in_bc=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            # AR=1.0 means x-domain vertex (1 0 0), not (2 0 0) from RBC branch
+            assert "(1 0 0)" in blockmesh or "(1.0 0 0)" in blockmesh, (
+                "Legacy DHC display name should resolve to AR=1.0; got "
+                f"blockMesh head:\n{blockmesh[:300]}"
+            )
+            assert "simulationType  laminar" in tp, (
+                f"Legacy DHC display name should resolve to laminar (whitelist "
+                f"says laminar); got turbulenceProperties:\n{tp}"
+            )
+            # And no phantom turbulent fields
+            assert not (case_dir / "0" / "k").exists(), (
+                "Laminar DHC should not write 0/k even when alias-resolved"
+            )
+            # And the BL-graded mesh dispatch also fires
+            assert "((0.5 0.5 4) (0.5 0.5 0.25))" in blockmesh, (
+                "DHC mesh dispatch should fire BL-grading for legacy alias too"
+            )
+
+    def test_dhc_extended_alias_with_ra_1e6_benchmark_suffix(self):
+        """DEC-V61-057 Batch A.5: also exercise the extended alias 'Differential
+        Heated Cavity (Natural Convection, Ra=10^6 benchmark)' which is the
+        current whitelist `name` field — must resolve identically."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0,
+            name="Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)",
+            include_aspect_ratio_in_bc=False,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "simulationType  laminar" in tp
+
     def test_dhc_validation_artifact_lineage_invariant(self):
         """DEC-V61-057 Batch A.4 (Codex F2-HIGH): the three sources of truth
         for DHC reference Nu must agree byte-identically:

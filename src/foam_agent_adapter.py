@@ -227,11 +227,54 @@ def _load_whitelist_turbulence_model(
     except (yaml.YAMLError, OSError):
         return None
 
+    canonical = _normalize_task_name_to_case_id(task_name)
     for case in data.get("cases", []):
-        if case.get("id") == task_name or case.get("name") == task_name:
+        if (
+            case.get("id") == canonical
+            or case.get("id") == task_name
+            or case.get("name") == task_name
+        ):
             val = case.get("turbulence_model")
             return val if isinstance(val, str) else None
     return None
+
+
+# DEC-V61-057 Batch A.5: alias→case_id table inlined here (NOT imported from
+# src.auto_verifier.config) to keep the Execution-plane adapter free of
+# Evaluation-plane imports per ADR-001 four-plane contract. The two tables
+# MUST stay in sync; promotion to a shared knowledge artifact (e.g.
+# knowledge/aliases.yaml) is tracked in the F3-MED followup queue.
+_TASK_NAME_TO_CASE_ID_ALIASES = {
+    "Lid-Driven Cavity": "lid_driven_cavity_benchmark",
+    "Backward-Facing Step": "backward_facing_step_steady",
+    "Circular Cylinder Wake": "cylinder_crossflow",
+    "Turbulent Flat Plate (Zero Pressure Gradient)": "turbulent_flat_plate",
+    "Fully Developed Turbulent Square-Duct Flow": "duct_flow",
+    "Fully Developed Turbulent Pipe Flow": "duct_flow",
+    "Rayleigh-Benard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    "Rayleigh-Bénard Convection (Ra=10^6)": "rayleigh_benard_convection",
+    "Differential Heated Cavity (Natural Convection)": "differential_heated_cavity",
+    "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
+    "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
+    "Axisymmetric Impinging Jet (Re=10000)": "axisymmetric_impinging_jet",
+    "Fully Developed Plane Channel Flow (DNS)": "fully_developed_plane_channel_flow",
+}
+
+
+def _normalize_task_name_to_case_id(task_name: str) -> str:
+    """Resolve a TaskSpec.name (which may be a human-readable display title
+    like 'Differential Heated Cavity (Natural Convection)') to its canonical
+    case_id ('differential_heated_cavity').
+
+    DEC-V61-057 Batch A.5 (Codex round-1 F1-HIGH): src/auto_verifier/config.py
+    already maintains the canonical alias map. This helper duplicates the map
+    inline (see _TASK_NAME_TO_CASE_ID_ALIASES above) because the adapter is
+    in the Execution plane and ADR-001 forbids importing from Evaluation
+    plane modules. The two tables MUST stay in sync.
+    """
+    if not task_name:
+        return ""
+    return _TASK_NAME_TO_CASE_ID_ALIASES.get(task_name, task_name)
 
 
 def _load_whitelist_parameter(
@@ -252,6 +295,11 @@ def _load_whitelist_parameter(
     This loader lets callers consult the whitelist parameters block directly
     when `task_spec.boundary_conditions` does not carry the field.
 
+    DEC-V61-057 Batch A.5 (Codex round-1 F1-HIGH): the input `task_name` is
+    normalized through TASK_NAME_TO_CASE_ID first so display titles
+    (e.g. 'Differential Heated Cavity (Natural Convection)') resolve to
+    the canonical case_id used throughout whitelist.yaml.
+
     Returns None when whitelist file/case/parameter is missing or non-numeric.
     """
     import yaml
@@ -264,8 +312,13 @@ def _load_whitelist_parameter(
     except (yaml.YAMLError, OSError):
         return None
 
+    canonical = _normalize_task_name_to_case_id(task_name)
     for case in data.get("cases", []):
-        if case.get("id") == task_name or case.get("name") == task_name:
+        if (
+            case.get("id") == canonical
+            or case.get("id") == task_name
+            or case.get("name") == task_name
+        ):
             params = case.get("parameters") or {}
             val = params.get(param_name)
             if isinstance(val, (int, float)):
@@ -2121,12 +2174,16 @@ fields          (U);
         elif wl_ar is not None:
             aspect_ratio = wl_ar
         else:
-            # case-id-aware fallback before falling back to Ra threshold
-            name_lower = (task_spec.name or "").lower()
-            if "differential_heated_cavity" in name_lower:
+            # DEC-V61-057 Batch A.5 (Codex round-1 F1-HIGH): normalize through
+            # the alias map before substring fallback so Notion-supplied
+            # display titles (e.g. "Differential Heated Cavity (Natural
+            # Convection)") resolve to the canonical case_id and the
+            # case-id-aware fallback fires correctly.
+            canonical = _normalize_task_name_to_case_id(task_spec.name or "").lower()
+            if "differential_heated_cavity" in canonical:
                 aspect_ratio = 1.0  # DHC: square cavity (de Vahl Davis 1983)
-            elif "rayleigh_benard" in name_lower or "rayleigh-bénard" in name_lower:
-                aspect_ratio = 2.0  # RBC: 2:1 rectangle
+            elif "rayleigh_benard" in canonical or "rayleigh-bénard" in canonical:
+                aspect_ratio = 2.0  # RBC: 2:1 rectangle (semantic; see test_rbc_keeps_uniform_mesh)
             elif Ra >= 1e9:
                 aspect_ratio = 1.0  # legacy: high-Ra DHC heuristic
             elif Ra >= 1e5:
@@ -2165,7 +2222,11 @@ fields          (U);
         # cavity δ_T scales with Ra^-0.25 across all Ra). 4:1 wall-packing
         # gives wall cell ≈ 0.006L → 5.3 BL cells at Ra=1e6 (sufficient).
         # RBC stays uniform: rolls span full domain, no thin BL to resolve.
-        is_dhc = "differential_heated_cavity" in (task_spec.name or "").lower()
+        # DEC-V61-057 Batch A.5: same alias-aware normalization for mesh dispatch.
+        is_dhc = (
+            "differential_heated_cavity"
+            in _normalize_task_name_to_case_id(task_spec.name or "").lower()
+        )
         if Ra >= 1e9 or is_dhc:
             # graded mesh — symmetric wall packing
             if is_dhc and Ra < 1e9:
