@@ -187,3 +187,114 @@ class TestGateStatusSemantics:
             "v_max_centerline_h": "HARD_GATED",
             "psi_max_center": "PROVISIONAL_ADVISORY",
         }
+
+
+# ============================================================================
+# DEC-V61-060 Stage C.2 · NON_TYPE_HARD_INVARIANT branch tests
+# ============================================================================
+
+def test_non_type_hard_invariant_passes_when_within_tolerance():
+    """RBC scenario: HARD_GATED Nu in tolerance + invariant satisfied
+    → overall PASS, denominator = 1 (NOT 2)."""
+    gold = {
+        "observables": [
+            {"name": "nusselt_number", "ref_value": 17.7,
+             "tolerance": {"mode": "relative", "value": 0.25},
+             "gate_status": "HARD_GATED"},
+            {"name": "nusselt_top_asymmetry", "ref_value": 0.0,
+             "tolerance": {"mode": "absolute", "value": 0.05},
+             "gate_status": "NON_TYPE_HARD_INVARIANT"},
+        ]
+    }
+    sim = {"nusselt_number": 17.0, "nusselt_top_asymmetry": 0.02}
+    report = GoldStandardComparator().compare(gold, sim)
+    assert report.overall == "PASS", (
+        f"Both within tolerance → PASS; got {report.overall}"
+    )
+    # No invariant_violation warnings
+    assert not any("non_type_hard_invariant_violated" in w for w in report.warnings)
+
+
+def test_non_type_hard_invariant_violation_forces_fail():
+    """RBC scenario: HARD_GATED Nu in tolerance BUT invariant violated
+    (asymmetry > 0.05) → overall FAIL even though Nu would otherwise PASS.
+    This is intake §7C acceptance criterion (i)."""
+    gold = {
+        "observables": [
+            {"name": "nusselt_number", "ref_value": 17.7,
+             "tolerance": {"mode": "relative", "value": 0.25},
+             "gate_status": "HARD_GATED"},
+            {"name": "nusselt_top_asymmetry", "ref_value": 0.0,
+             "tolerance": {"mode": "absolute", "value": 0.05},
+             "gate_status": "NON_TYPE_HARD_INVARIANT"},
+        ]
+    }
+    sim = {"nusselt_number": 17.0,           # PASS (within ±25%)
+           "nusselt_top_asymmetry": 0.10}    # FAIL (> 0.05)
+    report = GoldStandardComparator().compare(gold, sim)
+    assert report.overall == "FAIL", (
+        f"Invariant violation must force FAIL; got {report.overall}"
+    )
+    assert any("non_type_hard_invariant_violated:nusselt_top_asymmetry" in w
+               for w in report.warnings), (
+        f"Expected violation warning; got warnings={report.warnings}"
+    )
+
+
+def test_non_type_hard_invariant_excluded_from_pass_fraction():
+    """Per intake §7C (iv): pass-fraction denominator excludes the invariant.
+    For RBC: denominator should be 1 (only nusselt_number HARD_GATED), NOT 2.
+
+    Construct a scenario where Nu PASSes but if the invariant were counted
+    it would push the ratio below the PASS_WITH_DEVIATIONS threshold. The
+    correct behavior: invariant satisfied → overall = PASS (denominator=1)."""
+    gold = {
+        "observables": [
+            {"name": "nusselt_number", "ref_value": 17.7,
+             "tolerance": {"mode": "relative", "value": 0.25},
+             "gate_status": "HARD_GATED"},
+            {"name": "nusselt_top_asymmetry", "ref_value": 0.0,
+             "tolerance": {"mode": "absolute", "value": 0.05},
+             "gate_status": "NON_TYPE_HARD_INVARIANT"},
+        ]
+    }
+    sim = {"nusselt_number": 17.0, "nusselt_top_asymmetry": 0.0}
+    report = GoldStandardComparator().compare(gold, sim)
+    # If the invariant were counted in denom, 1/2 PASS would be
+    # PASS_WITH_DEVIATIONS or FAIL. With proper exclusion, 1/1 is PASS.
+    assert report.overall == "PASS"
+
+
+def test_advisory_and_invariant_coexist():
+    """Mixed scenario: HARD_GATED + NON_TYPE_HARD_INVARIANT + 2× PROVISIONAL_ADVISORY
+    (the canonical RBC Stage C contract). All four gate_statuses must be
+    handled correctly together."""
+    gold = {
+        "observables": [
+            {"name": "nusselt_number", "ref_value": 17.7,
+             "tolerance": {"mode": "relative", "value": 0.25},
+             "gate_status": "HARD_GATED"},
+            {"name": "nusselt_top_asymmetry", "ref_value": 0.0,
+             "tolerance": {"mode": "absolute", "value": 0.05},
+             "gate_status": "NON_TYPE_HARD_INVARIANT"},
+            {"name": "w_max_nondim", "ref_value": 1.5,
+             "tolerance": {"mode": "relative", "value": 0.20},
+             "gate_status": "PROVISIONAL_ADVISORY"},
+            {"name": "roll_count_x", "ref_value": 2,
+             "tolerance": {"mode": "absolute", "value": 0},
+             "gate_status": "PROVISIONAL_ADVISORY"},
+        ]
+    }
+    # All within tolerance → overall PASS, no violations
+    sim = {"nusselt_number": 17.0, "nusselt_top_asymmetry": 0.02,
+           "w_max_nondim": 1.6, "roll_count_x": 2}
+    report = GoldStandardComparator().compare(gold, sim)
+    assert report.overall == "PASS"
+    # Now: w_max outside advisory tolerance → still PASS but warning
+    sim_with_advisory_miss = dict(sim, w_max_nondim=2.5)  # 67% off
+    report2 = GoldStandardComparator().compare(gold, sim_with_advisory_miss)
+    assert report2.overall == "PASS", (
+        f"Advisory miss must NOT degrade verdict; got {report2.overall}"
+    )
+    assert any("advisory_observable_outside_tolerance:w_max_nondim" in w
+               for w in report2.warnings)

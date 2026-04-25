@@ -22,10 +22,18 @@ class GoldStandardComparator:
             checks.append(self._compare_observable(observable, sim_results))
 
         # DEC-V61-057 Stage C: PROVISIONAL_ADVISORY observables are rendered
-        # for the user but excluded from the pass-fraction verdict. They
-        # represent reconstructions whose SNR is not yet validated (e.g. ψ_max
-        # when top-wall closure residual exceeds the threshold).
-        hard_checks = [c for c in checks if c.gate_status != "PROVISIONAL_ADVISORY"]
+        # for the user but excluded from the pass-fraction verdict.
+        # DEC-V61-060 Stage C.2: NON_TYPE_HARD_INVARIANT observables (e.g.
+        # RBC nusselt_top_asymmetry) are conservation invariants — also
+        # excluded from the pass-fraction denominator (they carry no
+        # literature ref_value), but BLOCKING on violation: if any
+        # invariant fails, run.overall = FAIL regardless of HARD_GATED
+        # pass-fraction. See intake §7C acceptance criteria i-iv.
+        hard_checks = [
+            c for c in checks
+            if c.gate_status not in ("PROVISIONAL_ADVISORY", "NON_TYPE_HARD_INVARIANT")
+        ]
+        invariant_checks = [c for c in checks if c.gate_status == "NON_TYPE_HARD_INVARIANT"]
         warnings: List[str] = []
         if not hard_checks:
             return GoldStandardComparison(
@@ -42,6 +50,19 @@ class GoldStandardComparator:
             overall = "PASS_WITH_DEVIATIONS"
         else:
             overall = "FAIL"
+
+        # DEC-V61-060 Stage C.2 acceptance criterion (i): NON_TYPE_HARD_INVARIANT
+        # violation FAILs the run even when HARD_GATED observables pass. The
+        # invariant represents a physics-conservation requirement (e.g.
+        # |Nu_top - Nu_bottom| / |Nu_bottom| ≤ 0.05); a violation indicates
+        # BL under-resolution or solver imbalance, both of which would also
+        # invalidate the headline Nu even if it numerically lands inside
+        # the wide ±25% tolerance band by coincidence.
+        invariant_failures = [c for c in invariant_checks if not c.within_tolerance]
+        if invariant_failures:
+            overall = "FAIL"
+            for c in invariant_failures:
+                warnings.append(f"non_type_hard_invariant_violated:{c.name}")
 
         # If any PROVISIONAL_ADVISORY observable failed its tolerance check,
         # surface that as a non-blocking warning so the UI can render the
@@ -251,8 +272,21 @@ class GoldStandardComparator:
     @staticmethod
     def _compare_number(ref_value: float, sim_value: float, tolerance: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], bool]:
         abs_error = abs(sim_value - ref_value)
+        # DEC-V61-060 Stage C.2: when ref_value≈0, the comparator must
+        # honor a user-supplied absolute tolerance rather than the legacy
+        # TH-6 epsilon fallback. Conservation invariants (e.g. RBC
+        # nusselt_top_asymmetry with ref_value=0.0 + absolute tol 0.05)
+        # need this; the legacy behavior was correct only for
+        # zero-pressure-offset checks where TH-6 is intentionally tiny.
         if abs(ref_value) < ZERO_REFERENCE_EPSILON:
-            threshold = THRESHOLDS["TH-6"]
+            if (
+                isinstance(tolerance, dict)
+                and tolerance.get("mode") == "absolute"
+                and "value" in tolerance
+            ):
+                threshold = float(tolerance["value"])
+            else:
+                threshold = THRESHOLDS["TH-6"]
             return None, abs_error, abs_error <= threshold
 
         tolerance_value = tolerance.get("value", THRESHOLDS["TH-5"]) if isinstance(tolerance, dict) else float(tolerance)

@@ -94,11 +94,17 @@ class ReportGenerator:
         # with the comparator's overall verdict (Stage C: advisory checks
         # don't degrade the pass-fraction). Backward compat: legacy
         # ObservableCheck.to_dict() omitting gate_status defaults to
-        # HARD_GATED, so match_rate semantics are unchanged for cases
-        # that haven't migrated to schema_v2.
+        # HARD_GATED.
+        # DEC-V61-060 Stage C.2: also exclude NON_TYPE_HARD_INVARIANT
+        # observables from match_rate. These are conservation invariants
+        # (no literature ref_value); they BLOCK the verdict on violation
+        # but DO NOT count toward the pass-fraction denominator. This
+        # matches the comparator's own hard_checks definition (RBC
+        # denominator = 1, not 2 — see intake §7C acceptance criterion iv).
         hard_observables = [
             o for o in observables
-            if o.get("gate_status", "HARD_GATED") != "PROVISIONAL_ADVISORY"
+            if o.get("gate_status", "HARD_GATED")
+                not in ("PROVISIONAL_ADVISORY", "NON_TYPE_HARD_INVARIANT")
         ]
         pass_count = sum(1 for observable in hard_observables if observable.get("within_tolerance"))
         total_count = len(hard_observables)

@@ -366,6 +366,21 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
         level = "pass" if within else "warn"
         checks.append(Check("scalar contract", level,
                             f"[advisory] {summary}", evidence=evidence))
+    elif gate_status == "NON_TYPE_HARD_INVARIANT":
+        # DEC-V61-060 Stage C.2: conservation invariants (e.g. RBC
+        # nusselt_top_asymmetry) BLOCK on violation (FAIL the gate)
+        # but render with a distinct label so the user sees they're
+        # invariants — NOT literature gates that count toward the
+        # primary_gate_count denominator. Per intake §7C acceptance
+        # criterion iii: distinct gate_status badge in HTML/markdown
+        # report. The "fail" / "pass" levels mirror the FAIL semantics
+        # for invariant violation (criterion i + iv).
+        if within:
+            checks.append(Check("scalar contract", "pass",
+                                f"[invariant] {summary}", evidence=evidence))
+        else:
+            checks.append(Check("scalar contract", "fail",
+                                f"[invariant violated] {summary}", evidence=evidence))
     else:
         if within:
             checks.append(Check("scalar contract", "pass", summary, evidence=evidence))
@@ -453,6 +468,19 @@ def _check_scalar_contract(case_id: str) -> list[Check]:
                     f"secondary scalar ({sec_name})", level,
                     f"[advisory] {sec_summary}", evidence=sec_evidence,
                 ))
+            elif sec_gate == "NON_TYPE_HARD_INVARIANT":
+                # DEC-V61-060 Stage C.2: invariant — blocking on
+                # violation, distinct badge.
+                if within_sec:
+                    checks.append(Check(
+                        f"secondary scalar ({sec_name})", "pass",
+                        f"[invariant] {sec_summary}", evidence=sec_evidence,
+                    ))
+                else:
+                    checks.append(Check(
+                        f"secondary scalar ({sec_name})", "fail",
+                        f"[invariant violated] {sec_summary}", evidence=sec_evidence,
+                    ))
             elif within_sec:
                 checks.append(Check(
                     f"secondary scalar ({sec_name})", "pass",
