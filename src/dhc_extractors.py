@@ -371,5 +371,118 @@ def extract_v_max_horizontal(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str
 
 
 # ---------------------------------------------------------------------------
-# B.3 extractor lands in next commit.
+# B.3 · ψ_max trapezoidal reconstruction (PROVISIONAL_ADVISORY status)
 # ---------------------------------------------------------------------------
+
+# Gold reference for closure-residual SNR check (de Vahl Davis 1983 Table I).
+# Used to express the cumulative trapezoidal closure error as a fraction of
+# the expected peak. If the fraction exceeds 1 % the extractor demotes the
+# result to PROVISIONAL_ADVISORY per RETRO-V61-050 / DEC-V61-057 §B.3.
+PSI_MAX_GOLD_NONDIM = 16.750
+PSI_CLOSURE_FRACTION_THRESHOLD = 0.01
+
+
+def extract_psi_max(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
+    """Reconstruct stream function via trapezoidal ∫ u_x dy and return peak.
+
+    Per the standard 2-D incompressible definition, ψ satisfies ∂ψ/∂y = u_x
+    and ∂ψ/∂x = -u_y. Integrating u_x along y at fixed x with ψ(y=0)=0 (no
+    through-flow at the bottom wall) yields ψ(x, y). Cumulative trapezoidal
+    rule is used because the input is cell-center field data (uniform or
+    graded mesh tolerated).
+
+    Top-wall closure
+    ----------------
+    Re-integrating to y=L with the no-slip BC u_x(y=L)=0 gives ψ(x, L). For
+    a strictly incompressible discrete solution this equals 0; the residual
+    is the SNR floor for ψ_max. If the worst-column closure residual (when
+    expressed as a fraction of ``PSI_MAX_GOLD_NONDIM``) exceeds
+    ``PSI_CLOSURE_FRACTION_THRESHOLD`` the extractor labels the value
+    PROVISIONAL_ADVISORY and Stage C comparator does not hard-gate on it.
+
+    Returns
+    -------
+    dict
+        Empty when ``u_vecs`` missing or no x-column has ≥2 cells. Otherwise::
+
+            {
+              "value": float,                   # ψ_max nondim (ψ_raw / α)
+              "value_raw": float,               # ψ_max raw (m²/s)
+              "x_at_max": float, "y_at_max": float,
+              "x_at_max_over_L": float, "y_at_max_over_L": float,
+              "num_columns_used": int,
+              "closure_residual_max_nondim": float,
+              "closure_fraction_of_gold": float,
+              "advisory_status": "HARD_GATED" | "PROVISIONAL_ADVISORY",
+              "snr_pass": bool,
+              "source": "trapezoidal_y_integration_of_ux",
+            }
+    """
+    if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
+        return {}
+    if bc.alpha == 0.0 or bc.L == 0.0:
+        return {}
+    n = min(len(slice_.cxs), len(slice_.cys), len(slice_.u_vecs))
+    if n == 0:
+        return {}
+
+    # Group cells by x-column. Sister cells at the same x but slightly
+    # different rounding land on the same key thanks to the 6-decimal round.
+    cells_by_x: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+    for i in range(n):
+        cells_by_x[round(slice_.cxs[i], 6)].append(
+            (slice_.cys[i], slice_.u_vecs[i][0])
+        )
+
+    psi_max_abs = 0.0
+    psi_max_x = 0.0
+    psi_max_y = 0.0
+    closure_residuals: List[float] = []
+    columns_used = 0
+
+    for xc, y_u_pairs in cells_by_x.items():
+        y_u_pairs.sort(key=lambda p: p[0])
+        if len(y_u_pairs) < 2:
+            continue
+        # Trapezoidal cumulative integral starting from ψ(y=0)=0 with the
+        # no-slip BC u_x(y=0)=0 implicit in y_prev=0, u_prev=0.
+        psi = 0.0
+        y_prev = 0.0
+        u_prev = 0.0
+        for (y_k, u_k) in y_u_pairs:
+            psi += 0.5 * (u_prev + u_k) * (y_k - y_prev)
+            y_prev = y_k
+            u_prev = u_k
+            if abs(psi) > psi_max_abs:
+                psi_max_abs = abs(psi)
+                psi_max_x = xc
+                psi_max_y = y_k
+        # Close to top wall using the no-slip BC u_x(y=L)=0.
+        psi += 0.5 * (u_prev + 0.0) * (bc.L - y_prev)
+        closure_residuals.append(abs(psi))
+        columns_used += 1
+
+    if columns_used == 0 or psi_max_abs == 0.0:
+        return {}
+
+    psi_nondim = psi_max_abs / bc.alpha
+    closure_max_raw = max(closure_residuals)
+    closure_max_nondim = closure_max_raw / bc.alpha
+    closure_fraction = closure_max_nondim / PSI_MAX_GOLD_NONDIM
+    snr_pass = closure_fraction < PSI_CLOSURE_FRACTION_THRESHOLD
+    status = "HARD_GATED" if snr_pass else "PROVISIONAL_ADVISORY"
+
+    return {
+        "value": float(psi_nondim),
+        "value_raw": float(psi_max_abs),
+        "x_at_max": float(psi_max_x),
+        "y_at_max": float(psi_max_y),
+        "x_at_max_over_L": float(psi_max_x) / float(bc.L),
+        "y_at_max_over_L": float(psi_max_y) / float(bc.L),
+        "num_columns_used": int(columns_used),
+        "closure_residual_max_nondim": float(closure_max_nondim),
+        "closure_fraction_of_gold": float(closure_fraction),
+        "advisory_status": status,
+        "snr_pass": bool(snr_pass),
+        "source": "trapezoidal_y_integration_of_ux",
+    }

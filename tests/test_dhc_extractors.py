@@ -28,9 +28,12 @@ from typing import List, Tuple
 import pytest
 
 from src.dhc_extractors import (
+    PSI_CLOSURE_FRACTION_THRESHOLD,
+    PSI_MAX_GOLD_NONDIM,
     DHCBoundary,
     DHCFieldSlice,
     extract_nu_max,
+    extract_psi_max,
     extract_u_max_vertical,
     extract_v_max_horizontal,
 )
@@ -290,3 +293,110 @@ class TestDHCMultiDim:
             bc_type="fixedValue", alpha=0.0,
         )
         assert extract_u_max_vertical(slice_, bc) == {}
+
+    # ----- B.3 · ψ_max trapezoidal reconstruction --------------------------
+
+    @staticmethod
+    def _build_streamfunction_field(
+        n_x: int, n_y: int, L: float, A: float,
+    ) -> Tuple[List[float], List[float], List[Tuple[float, float, float]]]:
+        """Seed an analytically-known ψ = A · sin(πx/L) · sin(πy/L) field.
+
+        Then u_x = ∂ψ/∂y = (Aπ/L) · sin(πx/L) · cos(πy/L)
+        and  u_y = -∂ψ/∂x = -(Aπ/L) · cos(πx/L) · sin(πy/L).
+        ψ vanishes on all four walls, so the no-slip closure assumption
+        used by extract_psi_max is exactly satisfied. ψ_max = A occurs at
+        (L/2, L/2). Cumulative trapezoidal integration recovers A within
+        the trapezoidal-rule discretization error (~O(dy²) for smooth ψ).
+        """
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        dx = L / n_x
+        dy = L / n_y
+        coef = A * math.pi / L
+        for j in range(n_y):
+            y = (j + 0.5) * dy
+            for i in range(n_x):
+                x = (i + 0.5) * dx
+                ux = coef * math.sin(math.pi * x / L) * math.cos(math.pi * y / L)
+                uy = -coef * math.cos(math.pi * x / L) * math.sin(math.pi * y / L)
+                cxs.append(x)
+                cys.append(y)
+                u_vecs.append((ux, uy, 0.0))
+        return cxs, cys, u_vecs
+
+    def test_psi_max_recovers_analytical_amplitude(self) -> None:
+        """Seed ψ=A·sin·sin → extractor recovers A within trapezoidal error."""
+        L, A = 1.0, 2.5e-5  # raw m²/s; choose A so A/α ≈ 1.78
+        cxs, cys, u_vecs = self._build_streamfunction_field(
+            n_x=40, n_y=40, L=L, A=A,
+        )
+        slice_ = DHCFieldSlice(cxs=cxs, cys=cys, u_vecs=u_vecs)
+        bc = DHCBoundary(
+            L=L, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        out = extract_psi_max(slice_, bc)
+        assert out, "extractor returned empty dict on valid input"
+        # Discrete trapezoidal recovers ψ_max exactly at the cell-center
+        # nearest (L/2, L/2). Tolerance 5% absorbs the cell-snap error.
+        expected_nondim = A / bc.alpha
+        assert out["value"] == pytest.approx(expected_nondim, rel=0.05)
+        # Peak should land near cavity center.
+        assert abs(out["x_at_max_over_L"] - 0.5) < 0.05
+        assert abs(out["y_at_max_over_L"] - 0.5) < 0.05
+        assert out["num_columns_used"] == 40
+        assert out["source"] == "trapezoidal_y_integration_of_ux"
+
+    def test_psi_max_passes_snr_for_clean_synthetic(self) -> None:
+        """Analytical ψ=0 at top wall → tiny closure residual → HARD_GATED."""
+        L, A = 1.0, 2.5e-5
+        cxs, cys, u_vecs = self._build_streamfunction_field(
+            n_x=80, n_y=80, L=L, A=A,
+        )
+        slice_ = DHCFieldSlice(cxs=cxs, cys=cys, u_vecs=u_vecs)
+        bc = DHCBoundary(
+            L=L, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        out = extract_psi_max(slice_, bc)
+        # Dense mesh + analytically closing field → closure_fraction tiny.
+        assert out["closure_fraction_of_gold"] < PSI_CLOSURE_FRACTION_THRESHOLD
+        assert out["snr_pass"] is True
+        assert out["advisory_status"] == "HARD_GATED"
+
+    def test_psi_max_demotes_when_closure_residual_too_large(self) -> None:
+        """Inject an artificial DC offset into u_x → top-wall closure fails."""
+        L, A = 1.0, 2.5e-5
+        cxs, cys, u_vecs = self._build_streamfunction_field(
+            n_x=40, n_y=40, L=L, A=A,
+        )
+        # DC offset large enough that ∫_0^L offset dy = offset · L blows past
+        # 1 % of (PSI_MAX_GOLD_NONDIM · α). The threshold = 0.01·16.75·1.408e-5
+        # = 2.36e-6 m²/s. An offset of 5e-6 m/s yields residual 5e-6 m²/s,
+        # comfortably above the threshold.
+        offset = 5.0e-6
+        u_vecs_offset = [(u + offset, v, w) for (u, v, w) in u_vecs]
+        slice_ = DHCFieldSlice(cxs=cxs, cys=cys, u_vecs=u_vecs_offset)
+        bc = DHCBoundary(
+            L=L, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        out = extract_psi_max(slice_, bc)
+        assert out["closure_fraction_of_gold"] >= PSI_CLOSURE_FRACTION_THRESHOLD
+        assert out["snr_pass"] is False
+        assert out["advisory_status"] == "PROVISIONAL_ADVISORY"
+
+    def test_psi_max_fails_closed_when_velocity_missing(self) -> None:
+        slice_ = DHCFieldSlice(cxs=[0.5], cys=[0.5], t_vals=[300.0])
+        bc = DHCBoundary(
+            L=1.0, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue",
+        )
+        assert extract_psi_max(slice_, bc) == {}
+
+    def test_psi_max_constants_match_intake(self) -> None:
+        """Guard against drift from intake §B.3 declared values."""
+        assert PSI_MAX_GOLD_NONDIM == pytest.approx(16.750)
+        assert PSI_CLOSURE_FRACTION_THRESHOLD == pytest.approx(0.01)
