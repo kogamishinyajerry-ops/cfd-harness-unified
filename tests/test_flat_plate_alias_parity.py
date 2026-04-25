@@ -149,11 +149,17 @@ class TestAliasParityKeys:
         )
 
     def test_new_a4_observables_present_in_gold(self, gold_yaml: Dict[str, object]):
-        """The 3 HARD_GATED observables added in A.4 are in the YAML."""
+        """The 3 HARD_GATED observables added in A.4 are in the YAML.
+        Codex R1 F1: switched from `cf_blasius_invariant_canonical_K`
+        (tautological constant 0.664) to `cf_blasius_invariant_mean_K`
+        (measured average) so the hard gate has teeth.
+        """
         names = {o["name"] for o in gold_yaml["observables"]}
         assert "cf_x_profile_points" in names
-        assert "cf_blasius_invariant_canonical_K" in names
+        assert "cf_blasius_invariant_mean_K" in names
         assert "delta_99_x_profile" in names
+        # Tautological canonical_K must NOT be hard-gated.
+        assert "cf_blasius_invariant_canonical_K" not in names
 
     def test_back_compat_scalar_still_present(self, gold_yaml: Dict[str, object]):
         """cf_skin_friction (DEC-V61-006 Path A anchor) must not regress."""
@@ -201,20 +207,68 @@ class TestEndToEndComparison:
         assert isinstance(check.sim_value, list)
         assert len(check.sim_value) == len(check.ref_value)
 
-    def test_blasius_invariant_scalar_matches_canonical_K(
+    def test_blasius_invariant_scalar_matches_mean_K(
         self, gold_yaml: Dict[str, object], adapter_emit: Dict[str, object],
     ):
-        """The K_x scalar should land at exactly 0.664 (Blasius-consistent
-        synthetic data was constructed for K=0.664). Within 1% confirms
-        the wall-gradient extractor is round-tripping the test inputs."""
+        """Codex R1 F1: the *measured* mean_K (not the constant canonical_K)
+        must match 0.664 within 1% on Blasius-consistent synthetic data.
+        This is the gate that has teeth: a corrupted profile shifts mean_K
+        off-target, while canonical_K stays at 0.664 and would always pass.
+        """
         report = GoldStandardComparator().compare(gold_yaml, adapter_emit)
         check = next(
             c for c in report.observables
-            if c.name == "cf_blasius_invariant_canonical_K"
+            if c.name == "cf_blasius_invariant_mean_K"
         )
         assert check.within_tolerance is True
         assert check.rel_error is not None
         assert check.rel_error < 0.01
+
+    def test_corrupted_profile_fails_after_F1_fix(self, gold_yaml: Dict[str, object]):
+        """Codex R1 F1 acceptance: a synthetic emit with correct values
+        at x ∈ {0.5, 1.0} but Spalding-fallback values at x ∈ {0.25, 0.75}
+        must FAIL the overall verdict after the gate switches from
+        canonical_K to mean_K. Pre-fix, Codex reproduced this scenario
+        passing the comparator with overall=PASS.
+        """
+        nu = 1.0 / 50000.0
+        cf_05 = 0.664 / math.sqrt(50000 * 0.5)
+        cf_10 = 0.664 / math.sqrt(50000 * 1.0)
+        # Spalding-fallback values at x=0.25, 0.75 — these are turbulent-
+        # regime estimates and break Blasius similarity.
+        cf_025_fb = 0.0576 / ((0.25 / nu) ** 0.2)
+        cf_075_fb = 0.0576 / ((0.75 / nu) ** 0.2)
+        # Compute mean_K from the corrupted profile to confirm it's off-target.
+        K_025 = cf_025_fb * math.sqrt(0.25 / nu)
+        K_05 = cf_05 * math.sqrt(0.5 / nu)
+        K_075 = cf_075_fb * math.sqrt(0.75 / nu)
+        K_10 = cf_10 * math.sqrt(1.0 / nu)
+        mean_K_corrupted = (K_025 + K_05 + K_075 + K_10) / 4.0
+        emit = {
+            "cf_skin_friction": cf_05,
+            "cf_x_profile_points": [
+                {"x": 0.25, "Cf": cf_025_fb},
+                {"x": 0.5, "Cf": cf_05},
+                {"x": 0.75, "Cf": cf_075_fb},
+                {"x": 1.0, "Cf": cf_10},
+            ],
+            "cf_blasius_invariant_mean_K": mean_K_corrupted,
+            "delta_99_x_profile": [
+                {"x": 0.5, "value": 0.01581},
+                {"x": 1.0, "value": 0.02236},
+            ],
+            "cf_spalding_fallback_count": 2,
+            "cf_spalding_fallback_activated": True,
+        }
+        report = GoldStandardComparator().compare(gold_yaml, emit)
+        # The cf_x_profile_points and mean_K both go off-target by enough
+        # to push at least one observable past 10% relative tolerance.
+        # Verdict must NOT be PASS.
+        assert report.overall != "PASS", (
+            f"F1 regression: corrupted profile got PASS verdict. "
+            f"Per-observable: "
+            f"{[(c.name, c.within_tolerance, c.rel_error) for c in report.observables]}"
+        )
 
     def test_delta_99_profile_routes_through_profile_path(
         self, gold_yaml: Dict[str, object], adapter_emit: Dict[str, object],

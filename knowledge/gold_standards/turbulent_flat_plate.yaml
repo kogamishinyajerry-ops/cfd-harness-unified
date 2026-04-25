@@ -63,8 +63,15 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
-  - name: cf_blasius_invariant_canonical_K
-    description: Blasius invariant K_x = Cf · √Re_x — exactly 0.664 for the laminar similarity solution under ZPG
+  # Codex R1 F1 fix (2026-04-25): gate on the *measured* mean K, not the
+  # constant canonical K. The canonical_K is hard-coded 0.664 in the
+  # extractor — a hard-gate against it is tautological and cannot detect
+  # a broken similarity solution. mean_K is the average of K_x = Cf·√Re_x
+  # across the actually-extracted profile points and DOES go off-target
+  # if Spalding fallback fires at any sampled x. Codex reproduced the
+  # false-pass under the old observable name on 2026-04-25.
+  - name: cf_blasius_invariant_mean_K
+    description: measured Blasius invariant K_x = Cf · √Re_x averaged across sampled x ≥ 0.25 — Blasius similarity gives 0.664
     gate_status: HARD_GATED
     ref_value: 0.664
     unit: dimensionless
