@@ -43,3 +43,33 @@ ui/backend/.audit_package_staging/
 # Keep the per-run manifest JSON so the backend route stays resolvable,
 # but exclude the timestamped artifact tree under each case.
 reports/phase5_fields/*/20*/
+
+# Auto-regenerated dashboard snapshots — only canonical .html + manifest stay tracked.
+# The deep_acceptance regen script writes a new timestamped snapshot every run;
+# they accumulated to 170+ untracked files before being gitignored 2026-04-25.
+reports/deep_acceptance/contract_status_dashboard_2*.html
+reports/deep_acceptance/visual_acceptance_report_2*.html
+reports/deep_acceptance/2*_visual_acceptance_package.md
+
+# Raw solver audit run dumps (per-run, byte-different). DEC-referenced ones
+# are explicitly force-added; everything else is regenerable from the solver.
+reports/phase5_audit/2*_raw.json
+reports/phase5_audit/live_*.log
+
+# Phase 5 7c-service audit-report PDF output (regenerable; src/audit_package/manifest.py:342)
+reports/phase5_reports/
+
+# ADR-002 plane-guard runtime telemetry (per OPS-2026-04-25-001 §2 ownership;
+# .jsonl files are per-process and should not pollute git).
+reports/plane_guard/
+
+# Auto-corrections evidence trail — runtime emits a new YAML on every comparator
+# deviation. They're a local audit aid; the DEC system tracks the canonical state.
+# Force-add individual files if a specific deviation becomes audit-relevant.
+knowledge/corrections/
+
+# SOE / external proposal output artifacts — unrelated to harness core.
+outputs/
+
+# uv lockfile — project standard is .venv + pyproject.toml; uv.lock is local tooling.
+uv.lock
