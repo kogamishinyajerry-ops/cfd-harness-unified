@@ -225,10 +225,24 @@ def compute_cl_cd(
             f"{coeff_dat} parsed zero rows (header malformed?)"
         )
 
+    # Codex round 1 F2: fail closed on NaN/inf in the final-time row. A
+    # diverged simpleFoam solve happily writes coefficient.dat with `nan`
+    # or `inf` cells; the parser converts those to float('nan') /
+    # float('inf') and they would otherwise propagate as "trustworthy"
+    # gate values into the comparator.
+    cl_final = float(cl_list[-1])
+    cd_final = float(cd_list[-1])
+    if not math.isfinite(cl_final) or not math.isfinite(cd_final):
+        raise AirfoilExtractorError(
+            f"non-finite final-time row in {coeff_dat}: "
+            f"Cl={cl_final}, Cd={cd_final}. Solver likely diverged; "
+            f"check residuals + run length."
+        )
+
     return CoeffsResult(
         alpha_deg=float(alpha_deg),
-        Cl=float(cl_list[-1]),
-        Cd=float(cd_list[-1]),
+        Cl=cl_final,
+        Cd=cd_final,
         final_time=float(t_list[-1]),
         n_samples=len(t_list),
         cl_drift_pct_last_100=_drift_pct(cl_list, window=100),
@@ -397,6 +411,17 @@ def compute_y_plus_max(
         )
     final = patch_rows[-1]
     t_val, _, ymin, ymax, yavg = final
+
+    # Codex round 1 F2: fail closed on NaN/inf in the final-time row.
+    # yPlus FO emits NaN if wallDist is mal-resolved (zero-thickness face,
+    # singularity at trailing edge, etc.). Propagating those would
+    # produce a meaningless ADVISORY_BLOCK that masks the real cause.
+    if not (math.isfinite(ymin) and math.isfinite(ymax) and math.isfinite(yavg)):
+        raise AirfoilExtractorError(
+            f"non-finite y+ values in {yplus_dat} for patch={patch_name!r}: "
+            f"min={ymin}, max={ymax}, avg={yavg}. Likely wallDist failure on "
+            f"degenerate face."
+        )
 
     # Threshold band per Codex F5 (PROVISIONAL_ADVISORY).
     if 11.0 <= ymax <= 500.0:

@@ -2483,6 +2483,32 @@ class TestNACA0012MultiDim:
         with pytest.raises(AirfoilExtractorError, match="parse failed|zero rows"):
             compute_cl_cd(tmp_path, alpha_deg=0.0)
 
+    def test_compute_cl_cd_nan_in_final_row_raises(self, tmp_path):
+        """Codex round 1 F2: NaN in Cl final row → AirfoilExtractorError (fail-closed)."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        coeff_path.parent.mkdir(parents=True, exist_ok=True)
+        coeff_path.write_text(
+            "# Time   Cm   Cd   Cl\n"
+            "1.0     0.0  0.008 0.5\n"
+            "2.0     0.0  0.008 nan\n",  # diverged final row
+            encoding="utf-8",
+        )
+        with pytest.raises(AirfoilExtractorError, match="non-finite final-time row"):
+            compute_cl_cd(tmp_path, alpha_deg=8.0)
+
+    def test_compute_cl_cd_inf_in_final_row_raises(self, tmp_path):
+        """Codex round 1 F2: inf in Cd final row → AirfoilExtractorError."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        coeff_path.parent.mkdir(parents=True, exist_ok=True)
+        coeff_path.write_text(
+            "# Time   Cm   Cd   Cl\n"
+            "1.0     0.0  0.008  0.5\n"
+            "2.0     0.0  inf    0.5\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(AirfoilExtractorError, match="non-finite final-time row"):
+            compute_cl_cd(tmp_path, alpha_deg=8.0)
+
     def test_compute_cl_cd_drift_pct_zero_when_few_samples(self, tmp_path):
         """Drift metric returns 0 when fewer than 100 samples (insufficient signal)."""
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
@@ -2560,6 +2586,24 @@ class TestNACA0012MultiDim:
         ])
         result = compute_y_plus_max(tmp_path)
         assert result.advisory_status == "BLOCK"
+
+    def test_compute_y_plus_max_nan_raises(self, tmp_path):
+        """Codex round 1 F2: NaN in y+_max (degenerate face wallDist) → fail-closed."""
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 1.0, float("nan"), 5.0),
+        ])
+        with pytest.raises(AirfoilExtractorError, match="non-finite y\\+ values"):
+            compute_y_plus_max(tmp_path)
+
+    def test_compute_y_plus_max_inf_raises(self, tmp_path):
+        """Codex round 1 F2: inf in y+_avg → fail-closed."""
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 1.0, 50.0, float("inf")),
+        ])
+        with pytest.raises(AirfoilExtractorError, match="non-finite y\\+ values"):
+            compute_y_plus_max(tmp_path)
 
     def test_yplus_missing_patch_raises(self, tmp_path):
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
