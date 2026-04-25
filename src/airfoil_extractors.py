@@ -216,10 +216,19 @@ def compute_cl_cd(
             f"(expected after running adapter B1.2 controlDict)"
         )
 
-    coeff_dat = time_dir / "coefficient.dat"
-    if not coeff_dat.is_file():
+    # OpenFOAM 10 (foundation) emits `forceCoeffs.dat`; ESI/older versions
+    # write `coefficient.dat`. Accept either — same column layout (header
+    # is parsed by name in parse_coefficient_dat).
+    coeff_dat = None
+    for name in ("coefficient.dat", "forceCoeffs.dat"):
+        candidate = time_dir / name
+        if candidate.is_file():
+            coeff_dat = candidate
+            break
+    if coeff_dat is None:
         raise AirfoilExtractorError(
-            f"coefficient.dat not found at {coeff_dat}"
+            f"forceCoeffs output not found in {time_dir} "
+            f"(checked coefficient.dat, forceCoeffs.dat)"
         )
 
     try:
@@ -227,7 +236,7 @@ def compute_cl_cd(
     except CylinderStrouhalError as exc:
         # Re-raise under our own type so callers can catch one error class.
         raise AirfoilExtractorError(
-            f"coefficient.dat parse failed: {exc}"
+            f"{coeff_dat.name} parse failed: {exc}"
         ) from exc
 
     if not t_list or not cl_list or not cd_list:

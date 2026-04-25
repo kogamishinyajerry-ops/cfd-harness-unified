@@ -6830,10 +6830,22 @@ functions
         surfaceFormat   raw;
         fields          (p);
         interpolationScheme cellPoint;
+        // DEC-V61-058 Stage E live-run fix (2026-04-25): OpenFOAM 10
+        // sampledSurfaces expects `surfaces` as a LIST (parens), not
+        // a dict (curlies). The dict-form inherited from DEC-V61-044
+        // (commit a267d2a) parsed as "Attempt to return dictionary
+        // entry as a primitive" at runtime — this case was not in any
+        // live-run sweep between V61-044 (Apr 22) and V61-058 (Apr 25),
+        // so the latent syntax bug went unnoticed until now.
         surfaces
-        {{
-            aerofoil {{ type patch; patches (aerofoil); interpolate false; }}
-        }}
+        (
+            aerofoil
+            {{
+                type            patch;
+                patches         (aerofoil);
+                interpolate     false;
+            }}
+        );
     }}
 
     forceCoeffs1

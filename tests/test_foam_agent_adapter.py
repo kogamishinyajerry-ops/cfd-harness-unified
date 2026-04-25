@@ -2509,6 +2509,15 @@ class TestNACA0012MultiDim:
         with pytest.raises(AirfoilExtractorError, match="non-finite final-time row"):
             compute_cl_cd(tmp_path, alpha_deg=8.0)
 
+    def test_compute_cl_cd_accepts_forceCoeffs_dat_filename(self, tmp_path):
+        """OpenFOAM 10 (foundation) emits forceCoeffs.dat, not coefficient.dat."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "forceCoeffs.dat"
+        rows = [(float(i), 0.815, 0.008) for i in range(1, 11)]
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        result = compute_cl_cd(tmp_path, alpha_deg=8.0)
+        assert result.Cl == pytest.approx(0.815, rel=0.01)
+        assert result.Cd == pytest.approx(0.008, rel=0.01)
+
     def test_compute_cl_cd_drift_pct_zero_when_few_samples(self, tmp_path):
         """Drift metric returns 0 when fewer than 100 samples (insufficient signal)."""
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
