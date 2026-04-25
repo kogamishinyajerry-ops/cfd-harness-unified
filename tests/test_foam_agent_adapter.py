@@ -589,6 +589,67 @@ class TestFoamAgentExecutor:
         assert "cf_skin_friction" in result
 
     # ------------------------------------------------------------------
+    # DEC-V61-063 Codex R1 F2: machine-visible sign-flip audit
+    # ------------------------------------------------------------------
+
+    def test_extract_flat_plate_cf_emits_sign_flip_audit_keys(self):
+        """Codex R1 F2: when wall-normal data is reversed (interior u
+        decreasing with y), `_compute_wall_gradient` produces a
+        negative Cf which the extractor abs()-corrects. Pre-fix this
+        was warning-only; post-fix `cf_sign_flip_count` and
+        `cf_sign_flip_activated` are populated so the audit-package
+        and gate engine can surface the orientation defect.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        # Reversed wall-normal: u DECREASES with y. The wall gradient
+        # is negative; extractor abs()-corrects but should now flag.
+        cxs, cys, u_vecs = [], [], []
+        for x in (0.5,):
+            for y, u in [(0.0, 0.10), (0.005, 0.05), (0.010, 0.0)]:
+                cxs.append(x); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        with pytest.warns(RuntimeWarning, match="Negative flat-plate Cf"):
+            result = FoamAgentExecutor._extract_flat_plate_cf(
+                cxs=cxs, cys=cys, u_vecs=u_vecs,
+                task_spec=task, key_quantities={},
+            )
+        # Both audit keys present and consistent.
+        assert "cf_sign_flip_count" in result
+        assert "cf_sign_flip_activated" in result
+        assert result["cf_sign_flip_count"] >= 1
+        assert result["cf_sign_flip_activated"] is True
+
+    def test_extract_flat_plate_cf_sign_flip_audit_inactive_on_normal_data(self):
+        """Codex R1 F2: clean monotonic-up profile must NOT trigger the
+        sign-flip flag. Pin the inactive case so a future regression
+        can't promote the flag to always-on.
+        """
+        task = TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+        cxs, cys, u_vecs = [], [], []
+        for x in (0.25, 0.5, 0.75, 1.0):
+            for y, u in [(0.0, 0.0), (0.005, 0.05), (0.010, 0.10)]:
+                cxs.append(x); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        result = FoamAgentExecutor._extract_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities={},
+        )
+        assert result["cf_sign_flip_count"] == 0
+        assert result["cf_sign_flip_activated"] is False
+
+    # ------------------------------------------------------------------
     # DEC-V61-063 Stage A.4: comparator-facing dict-shape emits
     # ------------------------------------------------------------------
 

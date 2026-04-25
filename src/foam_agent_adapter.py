@@ -9627,6 +9627,7 @@ mergePatchPairs
         # 多 x 采样: 每个 x_target 独立计算 Cf，组成 cf_x_profile。
         cf_x_profile: List[Tuple[float, float]] = []
         cf_spalding_fallback_count = 0
+        cf_sign_flip_count = 0  # Codex R1 F2: machine-visible sign audit
         sign_corrected_overall = False
         cf_at_backcompat_x: Optional[float] = None
         for x_target in FoamAgentExecutor._FLAT_PLATE_CF_X_TARGETS:
@@ -9639,6 +9640,7 @@ mergePatchPairs
                 cf_spalding_fallback_count += 1
             if sign_flip:
                 sign_corrected_overall = True
+                cf_sign_flip_count += 1
             if math.isclose(
                 x_target, FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X, abs_tol=1e-9
             ):
@@ -9683,6 +9685,17 @@ mergePatchPairs
             key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
             key_quantities["cf_spalding_fallback_activated"] = (
                 cf_spalding_fallback_count > 0
+            )
+            # Codex R1 F2 fix: sign-flip audit must be machine-visible,
+            # not warning-only. Reversed wall-normal data (e.g. domain
+            # orientation flipped) was producing valid-looking positive
+            # Cf with only a runtime warning — invisible to the
+            # comparator + audit-package surfaces. Now key_quantities
+            # carries an explicit count + boolean so the gate engine
+            # and the audit dashboard see the orientation defect.
+            key_quantities["cf_sign_flip_count"] = cf_sign_flip_count
+            key_quantities["cf_sign_flip_activated"] = (
+                cf_sign_flip_count > 0
             )
 
         return key_quantities
