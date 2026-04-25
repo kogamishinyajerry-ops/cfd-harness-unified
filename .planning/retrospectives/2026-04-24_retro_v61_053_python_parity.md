@@ -331,10 +331,22 @@ solver ran, the extractor ran, and the physics output is the
 expected 10s-endTime-budget number. The FAIL is a pre-declared
 precision ceiling, not a bug.
 
-No additional intake `risk_flag_id` needed —
-`solver_stability_on_novel_geometry` already `triggered: true` for
-this case, and the physics-precision ceiling is NOT a runtime/code
-defect class.
+**Update 2026-04-25 (Opus 4.7 P1-arc verdict)**: Opus independent review
+adjudicated candidate C ("parameter envelope precision ceiling") as
+**ADD** at medium severity. New `flag_id: parameter_envelope_precision_ceiling`
+now lives in `knowledge/schemas/risk_flag_registry.yaml` and has been
+retroactively added to this DEC's intake `risk_flags:` list (with
+`retroactive: true`, `triggered: true`, `triggered_by: endTime=10s`,
+and an `unblock_path` field pointing at the V61-058 parameter-bump re-run).
+
+The existing `solver_stability_on_novel_geometry` flag stays triggered
+for the live-run divergence blind spot (a genuine runtime-emergent class);
+the new `parameter_envelope_precision_ceiling` sits alongside it to
+annotate the *pre-declared* precision ceiling, which is NOT a defect
+class but a compute-budget contract. Per Opus hard constraint, retroactive
+triggering of this flag requires explicit verdict authority (cannot be
+self-issued) — future runs MUST pre-declare the flag in the pre-run
+frontmatter, not back-fit after seeing the FAIL number.
 
 ### Side-observation: attestation ATTEST_NOT_APPLICABLE
 

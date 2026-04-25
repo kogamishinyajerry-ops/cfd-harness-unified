@@ -211,6 +211,21 @@ cross-module consistency checking, which Codex excels at.
    Reset the ceiling at 0.90 until a round returns APPROVE (no comments),
    at which point recalibrate upward.
 
+   **ADJUSTED by Opus 4.7 (2026-04-25 independent review) → 0.87 stair-
+   anchored**. Rationale: chain deltas +0.07, +0.03 show a concave /
+   decelerating curve; 0.85 round still produced 2 non-blocking
+   findings (V61-056). Jumping to 0.90 implies a "next round 0 finding"
+   prediction without empirical anchor. Revised rule:
+
+   | State | Ceiling | Unlock condition |
+   |---|---|---|
+   | Current (2026-04-25) | **0.87** | — |
+   | Next tier | 0.90 | ≥1 Codex round returns APPROVE-clean (0 comments) |
+   | Next+1 tier | 0.93 | 2 consecutive APPROVE-clean rounds |
+
+   This is anchor-based (empirical), not extrapolation-based, consistent
+   with RETRO-V61-001's "证据先于乐观" principle.
+
 ## Counter accounting
 
 | Point | counter_v61 | Event |
@@ -228,6 +243,133 @@ checkpoint).
 ## Sign-off
 
 - Self-sign by Claude Opus 4.7 1M context under 全权自动推进 mode
-- User acknowledgment required on next session touch
-- Notion sync to follow via Sessions or Retrospectives DB (pending
-  retrospective-DB schema decision)
+- User acknowledgment received 2026-04-25 (CFDJerry forwarded to Opus 4.7
+  Notion independent-review session for adjudication)
+- Opus 4.7 Notion verdict received 2026-04-25 — see §Opus 4.7 Independent
+  Verdict addendum below
+
+---
+
+## Opus 4.7 Independent Verdict · 2026-04-25
+
+Returned from Notion independent-review session after CFDJerry forwarded
+this retro + 3 DEC pages + V61-053 addendum. Full verdict archived in
+Notion RETRO-V61-004 page (syncpending next batch). Summary of rulings:
+
+### DEC CLEAN CLOSE confirmations
+
+| DEC | Ruling | Notes |
+|---|---|---|
+| V61-054 (P1-T1) | **ACCEPT** | R2 APPROVE_WITH_COMMENTS docstring nit is zero-behavior-change; R3 not required per RETRO-V61-001 cadence (R3 triggers on "new code-path / scope creep" only) |
+| V61-055 (P1-T2+T3) | **ACCEPT with precedent flag** | 5/5 exception valid because frozen+immutable was already documented contract; fix aligned impl with contract. See RETRO-V61-001 Q4 amendment 2026-04-25 |
+| V61-056 (P1-T5) | **ACCEPT with cross-plane observation** | First Control→Evaluation integration OK at current ~30 LOC translation size. If `_build_trust_gate_report` grows past 30 LOC or gains conditional branches, push verdict-translation semantics down to Evaluation (`MetricReport.from_legacy_results()` class method). Fold into P1-T4 ObservableDef formalization. import-linter holds absolute boundary |
+
+### Recommendations sign-off
+
+| # | Original | Ruling |
+|---|---|---|
+| 1 | load_tolerance_policy call in _build_trust_gate_report | **ACCEPT** — orthogonal to #4 (KOM gate guards formalization, not wiring) |
+| 2 | V61-053 attempt-7 post-mortem | **ACCEPT** (fait accompli) |
+| 3 | 43 commits pushed | **ACCEPT** |
+| 4 | P1-T4 waits on KOM Active | **ACCEPT** — tension with #1 is illusory |
+| 5 | Self-pass-rate ceiling 0.90 | **ADJUST → 0.87 stair-anchored** (see §Recommendations update above) |
+
+### V61-053 attempt-7 classification
+
+**ACCEPT** "NOT a new defect" classification. But governance affordance
+gap identified: existing `executable_smoke_test` and
+`solver_stability_on_novel_geometry` risk_flags do not cover the
+"solver ran + physics stable + BUT controlled-parameter envelope
+truncation produces precision ceiling" class.
+
+**New risk_flag proposed**: `parameter_envelope_precision_ceiling`
+(broader than `physics_precision_ceiling` — covers endTime / mesh
+density / time-step / domain-extent envelope truncation uniformly).
+Schema requirements:
+
+- `triggered_by`: which parameter is truncated (e.g., `endTime=10s vs
+  gold-grade ≥60s`)
+- `expected_deviation_envelope`: pre-declared deviation band (e.g.,
+  10%-20%)
+- `unblock_path`: explicit DEC reference (e.g., `V61-058 endTime-bump`)
+- **Trigger condition**: must be pre-declared in DEC frontmatter
+  BEFORE the run. Runtime-emergent deviations cannot retroactively
+  add this flag (prevents cover-up use).
+
+Landing action: retroactively add to DEC-V61-053 risk_flags section;
+draft schema into risk_flag_registry.yaml and carry into
+KNOWLEDGE_OBJECT_MODEL Draft's risk_flag taxonomy for KOM Active
+promotion.
+
+### Next DEC priority
+
+**Ruling: Candidate C · Serial V61-057 (load_tolerance_policy) →
+V61-058 (endTime-bump attempt-8)**.
+
+Independent reasoning:
+1. A is dev-time only; B is ~16h overnight wall. Serial A→B total is
+   ~A_dev + B_overnight; parallel (A dev / B background) has NO gain
+   because B validation depends on A's policy path being live
+2. A-first changes attempt-8's readout semantics: after A lands,
+   attempt-8 produces two independent verdict declarations —
+   (i) PASS under policy dispatch (0.25 tolerance) verifies governance
+   path; (ii) PASS under gold-grade tolerance (0.05) verifies physics
+   ceiling is cleared. B-first would freeze attempt-8 at hardcoded 5%
+   and policy dispatch would never get production evidence
+3. A's single-DEC value > B's single-DEC value: A unlocks all 10 case
+   profiles' tolerance_policy (systemic); B unlocks cylinder alone (point)
+4. A self-pass-rate 0.85 estimate agrees with CLI prediction BUT must
+   be operated under the revised 0.87 ceiling per Recommendation #5
+
+### Hard constraints for V61-057 (CLI must honor)
+
+1. Must include regression test
+   `test_attempt7_passes_under_strouhal_policy_25pct` — inject
+   attempt-7 measured St=0.1378 + gold=0.165 + policy=0.25, assert
+   verdict=PASS. This pins attempt-7 evidence as a test-suite anchor
+2. DEC frontmatter must explicitly declare
+   `unblocks: V61-053 attempt-8 dual-criterion validation`
+3. R1 review packet must require Codex to explicitly answer "does the
+   policy dispatch call introduce a new Control→Evaluation cross-
+   surface?" (prevents §2.2 matrix re-litigation)
+
+### Hard constraints for V61-058 (CLI pre-bind)
+
+1. Must declare `parameter_envelope_precision_ceiling` in frontmatter
+   with full schema (triggered_by, expected_deviation_envelope,
+   unblock_path)
+2. After attempt-8 completes: V61-053 status upgrades
+   DEMONSTRATION-COMPLETE → **GOLD-GRADE-CONFIRMED**; landing via
+   retro addendum (not new retro, counter +0)
+
+### Same-model bias disclosure
+
+Opus 4.7 and Claude-CLI agreed on Candidate C and attempt-7
+classification — same-model bias risk acknowledged. Independent
+judgments remain on: Recommendation #5 ADJUST math (calibration
+curve is concave, not a taste call); V61-055 precedent flag (not in
+CLI's proposal). If CFDJerry wants stronger cross-check, run Gemini
+or GPT over V61-057 R1 packet for same-input compare.
+
+### Blocker preserved
+
+V61-057 code work is **blocked** until three external signatures
+close:
+- W2 G-9 Opus Gate Phase transition
+- CFDJerry G-1 DEC-PIVOT-2026-04-22-001 signature
+- DEC-POLICY-VCP-001 first Cat 3 commitment signature
+
+---
+
+## Operational items landed from Opus verdict (2026-04-25)
+
+1. RETRO-V61-001 §Q4 amendment: "no public API change" precedent
+   codified (commit TBD after this retro edit)
+2. RETRO-V61-004 Recommendation #5 ADJUST applied above
+3. `knowledge/schemas/risk_flag_registry.yaml`:
+   `parameter_envelope_precision_ceiling` added (pending formal
+   promotion via KOM Active)
+4. DEC-V61-053 frontmatter: risk_flag retroactively added
+5. RETRO-V61-053 addendum 2026-04-24: new risk_flag note appended
+6. V61-056 cross-plane TODO recorded for P1-T4 refactor queue
+7. This retro's §Opus verdict section serves as audit trail

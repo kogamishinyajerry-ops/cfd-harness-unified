@@ -219,6 +219,46 @@ Claude can frame as "mechanical". Recommend tightening the rule:
 
 PR-5c.3 met all 5 criteria. Future applications must too.
 
+### Q4 amendment 2026-04-25 · "no public API change" precedent (DEC-V61-055)
+
+Opus 4.7 independent review of the P1 arc raised a precedent question
+on the 5/5 exception's 4th criterion. DEC-V61-055 R1 APPROVE_WITH_COMMENTS
+flagged that `TrustGateReport`'s inner `list`/`dict` containers were
+mutable despite `@dataclass(frozen=True)`. The fix (commit `fd01465`)
+wrapped them as `Tuple` / `MappingProxyType`. Claude applied 5/5
+verbatim exception without R2.
+
+**Question**: mutable→immutable is a type-narrowing change. Does it
+count as "no public API change"?
+
+**Opus ruling (ACCEPT with precedent flag)**:
+- "no public API change" means **documented contract unchanged**.
+  `TrustGateReport` had already been documented as `frozen=True` /
+  immutable in the dataclass decorator and docstring. The fix aligned
+  implementation with **already-declared** contract; it did NOT change
+  the contract itself.
+- If frozen had not been declared, then mutable→immutable would be a
+  contract-widening change and must go through R2.
+
+**Amendment codified**: the 4th criterion of the 5/5 exception now
+reads explicitly:
+
+> 4. **No public API change** — defined as *no change to documented
+>    contract*. "Leaky implementation aligned with documented contract"
+>    does NOT count as an API change. "Documented contract widened or
+>    narrowed" DOES count (forces R2). When in doubt about whether
+>    the contract is documented, ERR on the side of R2.
+
+**Precedent scope**: this amendment lands precisely one free use of
+the narrow interpretation. If a second mutability / type-narrowing /
+Optional-removal fix surfaces before SPEC_PROMOTION_GATE promotes a
+policy formalization of this rule, that second fix **must** go through
+R2 Codex regardless of 5/5 criterion math. Rationale: one-off precedent
+is fine; repeat pattern needs formal policy.
+
+**Cross-refs**: DEC-V61-055 frontmatter, commit fd01465, Opus 4.7
+Notion verdict 2026-04-25 (P1-Arc Post-Delivery Review).
+
 ### Q5. What about `autonomous_governance: false` DECs (V61-006, V61-011)?
 
 Both were external-gate decisions where Kogami was the deciding vote.

@@ -206,6 +206,25 @@ risk_flags:
     detail: "4th observable has no extractor at all. Most novel code in this DEC. LDC ψ extractor (V61-050) took 3 rounds to stabilize; realistic expectation same here."
     mitigation_pre: "Unit-test extractor on mocked sampleDict output before integration (Batch B2 opens with test scaffolding)"
 
+  - flag: parameter_envelope_precision_ceiling
+    severity: medium
+    codex_flagged: false
+    retroactive: true
+    retroactive_authority: "Opus 4.7 P1-arc verdict 2026-04-25 (RETRO-V61-004 addendum · candidate C adjudication)"
+    triggered: true
+    triggered_by: "endTime=10s (CYLINDER_ENDTIME_S constant in foam_agent_adapter.py)"
+    expected_deviation_envelope: "strouhal_number: 0.13–0.14 observed vs gold 0.165 (ΔSt ~16–20%); FFT Δf-limited at 10s sampling window; attempt-6 St=0.138, attempt-7 St=0.1378 — reproducible, not a new defect"
+    unblock_path: "Follow-up DEC (V61-058) bumps CYLINDER_ENDTIME_S 10s → 60s (~16h wall overnight) for 3–5% St precision; re-runs as attempt-8; tightens case_profile tolerance_policy.strouhal_number back to 5–10%. Pure parameter bump + re-run; NO code path change. BLOCKED until V61-057 lands (MetricsRegistry wired into task_runner via load_tolerance_policy). V61-057 itself blocked until W2 G-9 + CFDJerry G-1 + DEC-POLICY-VCP-001 close."
+    detail: |
+      Attempt-6/7 live runs reproduced St=0.138/0.1378 within 0.14% of each
+      other. Solver ran successfully; all 4 gates extract (post-fdfa98a fix).
+      Deviation is a mechanically-predictable consequence of the pre-declared
+      10s endTime budget (DEC-V61-040 R2: ≥8 shedding periods for FFT
+      confidence; 10s gives ~2 periods at St=0.165 · D/U=1.0 — below threshold,
+      so SpectralMetric would demote PASS→WARN under P1-T1c once wired).
+    mitigation_pre: "(retroactive) Pre-declare this as precision ceiling, not defect. Surface via SpectralMetric WARN + case_profile tolerance_policy.strouhal_number=0.25. RETRO-V61-004 candidate C adjudicated as Opus-verdict ADD (medium, not high — no code path change required)."
+    mitigation_post: "V61-058 (endTime bump + re-run) — serial after V61-057 unblock."
+
 # ============================================================================
 # Batch plan (Codex plan-review split: B → B1/B2/B3 + Batch D preflight gate)
 # ============================================================================

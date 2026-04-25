@@ -124,6 +124,33 @@ flags:
       - integrand-based extractors
       - indirect measurement derivations
 
+  - flag_id: parameter_envelope_precision_ceiling
+    severity_default: med
+    origin: Opus 4.7 P1-arc verdict 2026-04-25 (RETRO-V61-004 addendum)
+    origin_date: "2026-04-25"
+    description: |
+      A gate's observed deviation is not a new defect but a mechanically-
+      predictable consequence of a pre-declared parameter envelope
+      (endTime, mesh density, Reynolds clamp, etc.). The solver runs
+      correctly; the physics output is known-degraded at the chosen
+      resource budget. Triggering this flag means the deviation is a
+      precision ceiling, NOT a regression — and the remediation path is
+      a parameter bump + re-run, not new code.
+    mitigation_pattern: |
+      Pre-declaration requirement: flag MUST be set `triggered: true`
+      BEFORE the run that will exhibit the deviation, not retroactively
+      after seeing the FAIL. Frontmatter must carry:
+        triggered_by: <which parameter is the ceiling, e.g. endTime=10s>
+        expected_deviation_envelope: <quantified, e.g. St 0.13-0.14 vs 0.165>
+        unblock_path: <the exact parameter bump + re-run plan>
+      Retroactive application requires explicit Opus verdict (as done
+      for DEC-V61-053 attempt-7 post-mortem, Opus 4.7 2026-04-25 verdict).
+    applies_to:
+      - runs where physics resolution is capped by compute budget
+      - FFT / spectral gates with short sampling windows
+      - mesh-density-limited integral quantities
+      - re-run candidates awaiting parameter-only bump DEC
+
 # ===========================================================================
 # How to reference from a CaseProfile
 # ===========================================================================

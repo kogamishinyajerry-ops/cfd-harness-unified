@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T05:45 local"
+last_updated: "2026-04-25T07:30 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE + RETRO-V61-004 landed · DEC-V61-053 DEMONSTRATION-COMPLETE (attempt-7 post-mortem addendum, precision-ceiling not new defect) · all pushed to origin/main · 666 passed · 4 contracts KEPT · next: DEC-V61-057+ endTime-bump for gold-grade cylinder, P1-T4 blocked on KOM Draft"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE + RETRO-V61-004 landed · Opus 4.7 P1-arc verdict operational items landed (Q4 amendment · ADJUST #5 stair-anchor · parameter_envelope_precision_ceiling risk_flag added to registry + retroactively to DEC-V61-053) · DEC-V61-053 DEMONSTRATION-COMPLETE (attempt-7 post-mortem addendum, precision-ceiling not new defect) · all pushed to origin/main · 666 passed · 4 contracts KEPT · next: V61-057 BLOCKED on G-9/G-1/VCP-001 trio, V61-058 serial-after, P1-T4 blocked on KOM Draft"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed

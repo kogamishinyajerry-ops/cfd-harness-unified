@@ -91,6 +91,21 @@ superseded by full MetricsRegistry-per-task instantiation:
 Same `RunReport.trust_gate_report` field — downstream UI consumers
 won't notice the change.
 
+### Cross-plane observation · P1-T4 TODO (Opus 4.7 2026-04-25 verdict)
+
+Opus 4.7 P1-arc verdict flagged: `_build_trust_gate_report` currently
+lives in `src/task_runner.py` (Control plane) and contains
+verdict-translation logic (ATTEST_* → MetricStatus, ComparisonResult
+deviation extraction) that semantically belongs in Evaluation plane.
+At <30 LOC the current placement is defensible; beyond that threshold
+the helper MUST migrate via a `MetricReport.from_legacy_results()`
+Evaluation-side constructor and `task_runner.py` should only import +
+call that constructor. P1-T4 landing event is the natural forcing
+function — when ObservableDef formalizes, re-evaluate helper LOC and
+push to Evaluation if ≥30 LOC. Tracked as ADVISE, not BLOCKER; no
+ADR-001 contract violation today (`from .metrics import ...` is a
+Control→Evaluation allowed edge).
+
 ## Test coverage
 
 - 7 new tests in `tests/test_task_runner_trust_gate.py`:
