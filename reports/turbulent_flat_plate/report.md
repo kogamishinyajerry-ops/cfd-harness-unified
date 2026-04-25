@@ -1,10 +1,10 @@
 ## Case Summary
 
 - Case ID: `turbulent_flat_plate`
-- Name: `Turbulent Flat Plate (Zero Pressure Gradient)`
-- Description: `Spalart & Allmaras 1992 / ISO 12048`
+- Name: `Laminar Flat Plate (Zero Pressure Gradient, Re_x ≤ 5e4)`
+- Description: `Blasius 1908 / Schlichting Boundary Layer Theory (7th ed.) Ch.7`
 - Solver: `simpleFoam`
-- Turbulence Model: `k-omega SST`
+- Turbulence Model: `laminar`
 - Mesh Strategy: `[DATA MISSING]`
 - Key Parameters:
 - `Re` = `50000`
@@ -13,12 +13,12 @@
 
 ## Gold Standard Reference
 
-- Source: `Spalding 1962 / ISO 12048`
-- DOI: `10.2172/1448408`
+- Source: `Blasius 1908 / Schlichting Boundary Layer Theory (7th ed.) Ch.7`
+- DOI: `10.1007/978-3-662-52919-5`
 
 | Observable | Reference | Tolerance |
 | --- | --- | --- |
-| `cf_skin_friction` | `0.0076` | `relative=0.1` |
+| `cf_skin_friction` | `0.0042` | `relative=0.1` |
 
 ## Results vs Reference
 

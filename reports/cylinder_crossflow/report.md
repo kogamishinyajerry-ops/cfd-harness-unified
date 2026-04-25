@@ -4,7 +4,7 @@
 - Name: `Circular Cylinder Wake`
 - Description: `Williamson 1996`
 - Solver: `pimpleFoam`
-- Turbulence Model: `k-omega SST`
+- Turbulence Model: `laminar`
 - Mesh Strategy: `[DATA MISSING]`
 - Key Parameters:
 - `Re` = `100`

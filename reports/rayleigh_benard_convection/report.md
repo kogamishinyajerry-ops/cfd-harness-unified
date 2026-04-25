@@ -4,7 +4,7 @@
 - Name: `Rayleigh-Bénard Convection (Ra=10^6)`
 - Description: `Chaivat et al. 2006`
 - Solver: `buoyantFoam`
-- Turbulence Model: `k-omega SST`
+- Turbulence Model: `laminar`
 - Mesh Strategy: `[DATA MISSING]`
 - Key Parameters:
 - `Ra` = `1000000`
