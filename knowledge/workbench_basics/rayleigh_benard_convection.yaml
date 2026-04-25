@@ -1,0 +1,169 @@
+# Workbench Basics · Rayleigh-Bénard Convection (Ra=1e6)
+#
+# Authoring sources:
+#   - whitelist.yaml line 257 (case spec, AR=2.0)
+#   - knowledge/gold_standards/rayleigh_benard_convection.yaml physics_contract
+#   - src/foam_agent_adapter.py:2132 _generate_natural_convection_cavity
+#     (shared with DHC, dispatched via aspect_ratio=2.0 → Lx=2, Ly=1)
+#
+# CONTRACT: COMPATIBLE at Ra=1e6.
+#
+# ⚠ NAMING-VS-PHYSICS NOTE: Classical Rayleigh-Bénard is heated FROM BELOW
+# (cold top, hot bottom) → buoyant rolls. This adapter reuses the DHC
+# generator with AR=2 → it is actually a SIDE-HEATED 2:1 horizontal cavity
+# (hot LEFT, cold RIGHT, adiabatic top/bottom). The case_id is retained
+# for whitelist stability; the surfaced topology faithfully reflects what
+# the harness generates, not the canonical RBC textbook setup.
+
+case_id: rayleigh_benard_convection
+display_name: "Rayleigh-Bénard / 2:1 NC Cavity (Ra=1e6)"
+display_name_zh: "Rayleigh-Bénard / 2:1 自然对流腔（Ra=1e6）"
+canonical_ref: "Chaivat et al. 2006 (Nu correlation)"
+
+dimension: 2
+
+geometry:
+  shape: rectangle
+  bbox:
+    x_min: 0.0
+    x_max: 2.0
+    y_min: 0.0
+    y_max: 1.0
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: L
+    value: 1.0
+    unit: m
+    description_zh: "高度 L=1 m（Ra 中的特征长度）；横向宽 2L 给 AR=2 的扁平腔"
+
+patches:
+  - id: hot_wall
+    role: wall
+    location: left
+    label_zh: "热壁（左壁，T_h=305 K）"
+    label_en: "Hot wall (left)"
+    description_zh: "fixedValue T=T_hot；adapter 复用 DHC 生成器，故热源在左侧而非经典 RBC 的底部"
+
+  - id: cold_wall
+    role: wall
+    location: right
+    label_zh: "冷壁（右壁，T_c=295 K）"
+    label_en: "Cold wall (right)"
+
+  - id: adiabatic_top
+    role: wall
+    location: top
+    label_zh: "上壁（绝热）"
+    label_en: "Top (adiabatic)"
+
+  - id: adiabatic_bottom
+    role: wall
+    location: bottom
+    label_zh: "下壁（绝热）"
+    label_en: "Bottom (adiabatic)"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      hot_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      cold_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      adiabatic_top:
+        type: noSlip
+        display_zh: "U = 0"
+      adiabatic_bottom:
+        type: noSlip
+        display_zh: "U = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: T
+    quantity: temperature
+    units: "K"
+    per_patch:
+      hot_wall:
+        type: fixedValue
+        value: 305.0
+        display_zh: "T = 305 K"
+      cold_wall:
+        type: fixedValue
+        value: 295.0
+        display_zh: "T = 295 K"
+      adiabatic_top:
+        type: zeroGradient
+        display_zh: "∂T/∂n = 0"
+      adiabatic_bottom:
+        type: zeroGradient
+        display_zh: "∂T/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: cavity_air
+    label_zh: "腔体空气（Boussinesq）"
+    label_en: "Cavity air (Boussinesq)"
+    properties:
+      - symbol: "ρ₀"
+        name: reference_density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 1.5e-5
+        unit: "m²/s"
+      - symbol: "α"
+        name: thermal_diffusivity
+        value: 2.11e-5
+        unit: "m²/s"
+        note_zh: "Pr = 0.71"
+      - symbol: "β"
+        name: thermal_expansion
+        value: 0.0034
+        unit: "1/K"
+      - symbol: "ΔT"
+        name: temperature_difference
+        value: 10.0
+        unit: K
+
+derived:
+  - symbol: Ra
+    name: Rayleigh_number
+    value: 1000000
+    formula: "Ra = g·β·ΔT·L³/(ν·α)"
+    note_zh: "L 取竖向高度（1 m）"
+  - symbol: Pr
+    name: Prandtl_number
+    value: 0.71
+    formula: "Pr = ν/α"
+  - symbol: AR
+    name: aspect_ratio
+    value: 2.0
+    formula: "Lx/Ly"
+    note_zh: "横向 / 竖向；AR=2 区分 RBC 案例 vs DHC（AR=1）"
+
+solver:
+  name: buoyantBoussinesqSimpleFoam
+  family: incompressible_buoyant
+  steady_state: true
+  laminar: true
+  display_zh: "buoyantBoussinesqSimpleFoam（稳态 SIMPLE，Boussinesq）"
+  reasoning_zh: "Ra=1e6 在层流稳态对流域；80 cell 均匀网格（无 wall packing）足够"
+
+hints:
+  geometry_zh: "AR=2 横向腔；与 DHC 共用同一生成器，靠 aspect_ratio 区分"
+  driver_zh: "侧壁温差驱动单一大型对流环"
+  physical_intuition_zh: "金标准 Nu=10.5（Chaivat 2006）；harness 实际为 side-heated 2:1 腔，与教科书 RBC（底加热）有别"

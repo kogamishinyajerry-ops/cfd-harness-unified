@@ -1,0 +1,156 @@
+# Workbench Basics · Laminar Flat Plate (ZPG)
+#
+# Authoring sources:
+#   - whitelist.yaml line 94 (case spec; case_id retained for stability,
+#     physics is laminar Blasius after DEC-V61-006 P-A regime correction)
+#   - knowledge/gold_standards/turbulent_flat_plate.yaml physics_contract
+#   - src/foam_agent_adapter.py:3924 _generate_steady_internal_flow
+#     (geometry: x∈[0,5L], y∈[0,0.5], z∈[0,0.1]; plate_length L=1.0)
+#
+# CONTRACT: SATISFIED_UNDER_LAMINAR_CONTRACT — Re=50000 → Re_x≤50000 < transition
+# (~3e5–5e5). Blasius Cf=0.664/√Re_x is exact analytical reference.
+
+case_id: turbulent_flat_plate
+display_name: "Laminar Flat Plate (ZPG, Re_x ≤ 5e4)"
+display_name_zh: "层流平板（零压力梯度）"
+canonical_ref: "Blasius 1908 / Schlichting Boundary Layer Theory 7th ed."
+
+dimension: 2
+
+geometry:
+  shape: rectangle
+  bbox:
+    x_min: 0.0
+    x_max: 5.0
+    y_min: 0.0
+    y_max: 0.5
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: L
+    value: 1.0
+    unit: m
+    description_zh: "板长 L=1 m；x 从前缘起算，金标准在 x=0.5 m 与 x=1.0 m 处采样 Cf。流向计算域 5L 给下游缓冲"
+
+patches:
+  - id: inlet
+    role: inlet
+    location: left
+    label_zh: "入口（前缘上游）"
+    label_en: "Inlet"
+    description_zh: "fixedValue U=(1, 0, 0) m/s 自由来流"
+
+  - id: outlet
+    role: outlet
+    location: right
+    label_zh: "出口"
+    label_en: "Outlet"
+    description_zh: "zeroGradient U, fixedValue p=0"
+
+  - id: plate
+    role: wall
+    location: bottom
+    label_zh: "平板（noSlip 壁）"
+    label_en: "Plate (no-slip wall)"
+    description_zh: "层流边界层在此发展；80 个壁向网格 + 4:1 wall grading 解析 BL"
+
+  - id: top_freestream
+    role: wall
+    location: top
+    label_zh: "上界（远场近似为壁）"
+    label_en: "Top (treated as wall)"
+    description_zh: "OpenFOAM 中与底壁合并为 'walls' 单一 patch；建议升级为 slip/symmetryPlane 但当前用 noSlip"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      inlet:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U=(1, 0, 0)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      plate:
+        type: noSlip
+        display_zh: "U = (0, 0, 0)"
+      top_freestream:
+        type: noSlip
+        display_zh: "U = (0, 0, 0) ← 限制：建议改 slip"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outlet:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0"
+      plate:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      top_freestream:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: freestream_fluid
+    label_zh: "自由流体"
+    label_en: "Free-stream fluid"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 0.00002
+        unit: "m²/s"
+        note_zh: "ν = 1/Re = 1/50000（U=1, L=1）"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 50000
+    formula: "Re = U·L/ν = 1.0 × 1.0 / 2e-5"
+    note_zh: "前缘到 x=L 的全板 Re；仍处层流域（转捩 ~3-5×10⁵）"
+  - symbol: Re_x_at_x05
+    name: Re_x_at_half_chord
+    value: 25000
+    formula: "Re_x = U·x/ν, x=0.5"
+    note_zh: "金标准采样点 1：Cf_Blasius = 0.664/√25000 = 0.00420"
+  - symbol: δ_99_at_x05
+    name: BL_thickness
+    value: 0.0224
+    formula: "δ_99 = 5·√(ν·x/U), x=0.5"
+    note_zh: "层流 Blasius BL 厚度（用于网格分辨判断）"
+
+solver:
+  name: simpleFoam
+  family: incompressible
+  steady_state: true
+  laminar: true
+  display_zh: "simpleFoam（稳态 SIMPLE，层流——无 turbulenceProperties）"
+  reasoning_zh: "Re_x ≤ 5e4 远低于平板转捩；Blasius 相似解为精确解，残差需在 10% 以内"
+
+hints:
+  geometry_zh: "5L 流向缓冲让出口扰动不污染 x≤L 的采样点"
+  driver_zh: "均匀来流 + 平板 noSlip → 边界层在板上自然增长"
+  physical_intuition_zh: "Cf 沿 x 衰减遵循 1/√Re_x；任何 >10% 偏差代表网格或离散方案 bug，不再是物理 regime 误配"

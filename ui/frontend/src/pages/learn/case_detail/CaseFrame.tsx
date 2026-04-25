@@ -174,8 +174,12 @@ function RectangleSVG({
 
   const dx = geometry.bbox.x_max - geometry.bbox.x_min;
   const dy = geometry.bbox.y_max - geometry.bbox.y_min;
-  const aspect = dx > 0 && dy > 0 ? dx / dy : 1;
-  // Fit rectangle into viewport, preserving aspect.
+  const trueAspect = dx > 0 && dy > 0 ? dx / dy : 1;
+  // Clamp visual aspect to [0.25, 5] so 30:1 channels and 1:30 columns
+  // remain legible (patch labels need vertical room). When clamped, we
+  // show a "not to scale" tag so the user knows the SVG isn't dimensional.
+  const aspect = Math.min(5, Math.max(0.25, trueAspect));
+  const notToScale = Math.abs(aspect - trueAspect) > 0.01;
   let rw = VW - 2 * PAD;
   let rh = rw / aspect;
   if (rh > VH - 2 * PAD) {
@@ -376,6 +380,19 @@ function RectangleSVG({
         >
           ({geometry.bbox.x_max},{geometry.bbox.y_max})
         </text>
+
+        {notToScale && (
+          <text
+            x={VW - 6}
+            y={12}
+            fontSize="9"
+            textAnchor="end"
+            fill="#a16207"
+            className="mono"
+          >
+            示意 · 真实 AR={trueAspect.toFixed(1)}:1
+          </text>
+        )}
 
         <defs>
           <marker

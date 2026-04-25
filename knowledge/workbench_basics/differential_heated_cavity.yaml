@@ -1,0 +1,188 @@
+# Workbench Basics · Differential Heated Cavity (Ra=1e6)
+#
+# Authoring sources:
+#   - whitelist.yaml line 149 (case spec, Ra=1e6 after DEC-V61-006)
+#   - knowledge/gold_standards/differential_heated_cavity.yaml physics_contract
+#   - src/foam_agent_adapter.py:2132 _generate_natural_convection_cavity
+#     (geometry: Lx=Ly=1.0 for AR=1; hot_wall x=0, cold_wall x=L)
+#
+# CONTRACT: SATISFIED at Ra=1e6. de Vahl Davis 1983 benchmark Nu=8.800.
+
+case_id: differential_heated_cavity
+display_name: "Differential Heated Cavity (Ra=1e6)"
+display_name_zh: "差温方腔（自然对流）"
+canonical_ref: "de Vahl Davis 1983 Table III/IV"
+
+dimension: 2
+
+geometry:
+  shape: rectangle
+  bbox:
+    x_min: 0.0
+    x_max: 1.0
+    y_min: 0.0
+    y_max: 1.0
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: L
+    value: 1.0
+    unit: m
+    description_zh: "方腔边长 L=1 m（AR=1）；网格 80×80 + 4:1 wall packing 给热边界层 ~5 cell"
+
+patches:
+  - id: hot_wall
+    role: wall
+    location: left
+    label_zh: "热壁（左壁，T_h=305 K）"
+    label_en: "Hot wall (left)"
+    description_zh: "fixedValue T=T_hot；浮升力把流体抬向上行"
+
+  - id: cold_wall
+    role: wall
+    location: right
+    label_zh: "冷壁（右壁，T_c=295 K）"
+    label_en: "Cold wall (right)"
+    description_zh: "fixedValue T=T_cold；流体在此沉降"
+
+  - id: adiabatic_top
+    role: wall
+    location: top
+    label_zh: "上壁（绝热）"
+    label_en: "Top (adiabatic)"
+    description_zh: "zeroGradient T，无热流穿过"
+
+  - id: adiabatic_bottom
+    role: wall
+    location: bottom
+    label_zh: "下壁（绝热）"
+    label_en: "Bottom (adiabatic)"
+    description_zh: "zeroGradient T"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      hot_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      cold_wall:
+        type: noSlip
+        display_zh: "U = 0"
+      adiabatic_top:
+        type: noSlip
+        display_zh: "U = 0"
+      adiabatic_bottom:
+        type: noSlip
+        display_zh: "U = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: T
+    quantity: temperature
+    units: "K"
+    per_patch:
+      hot_wall:
+        type: fixedValue
+        value: 305.0
+        display_zh: "T = 305 K"
+      cold_wall:
+        type: fixedValue
+        value: 295.0
+        display_zh: "T = 295 K"
+      adiabatic_top:
+        type: zeroGradient
+        display_zh: "∂T/∂n = 0"
+      adiabatic_bottom:
+        type: zeroGradient
+        display_zh: "∂T/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p_rgh
+    quantity: hydrostatic_pressure_residual
+    units: "Pa"
+    description_zh: "Boussinesq 求解器使用 p_rgh = p − ρ·g·h"
+    per_patch:
+      hot_wall:
+        type: fixedFluxPressure
+        display_zh: "fixedFluxPressure"
+      cold_wall:
+        type: fixedFluxPressure
+        display_zh: "fixedFluxPressure"
+      adiabatic_top:
+        type: fixedFluxPressure
+        display_zh: "fixedFluxPressure"
+      adiabatic_bottom:
+        type: fixedFluxPressure
+        display_zh: "fixedFluxPressure"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: cavity_air
+    label_zh: "腔体空气（Boussinesq）"
+    label_en: "Cavity air (Boussinesq)"
+    properties:
+      - symbol: "ρ₀"
+        name: reference_density
+        value: 1.0
+        unit: "kg/m³"
+        note_zh: "Boussinesq 参考密度"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 1.5e-5
+        unit: "m²/s"
+      - symbol: "α"
+        name: thermal_diffusivity
+        value: 2.11e-5
+        unit: "m²/s"
+        note_zh: "Pr = ν/α ≈ 0.71（空气）"
+      - symbol: "β"
+        name: thermal_expansion
+        value: 0.0034
+        unit: "1/K"
+      - symbol: "ΔT"
+        name: temperature_difference
+        value: 10.0
+        unit: K
+        note_zh: "T_hot − T_cold = 305 − 295"
+
+derived:
+  - symbol: Ra
+    name: Rayleigh_number
+    value: 1000000
+    formula: "Ra = g·β·ΔT·L³/(ν·α)"
+    note_zh: "g 由参数反推使 Ra=1e6（de Vahl Davis 基准点）"
+  - symbol: Pr
+    name: Prandtl_number
+    value: 0.71
+    formula: "Pr = ν/α"
+  - symbol: δ_T
+    name: thermal_BL_thickness
+    value: 0.032
+    formula: "δ_T/L ≈ Ra^(-1/4) = (1e6)^(-0.25)"
+    note_zh: "热边界层 ~3.2% 域宽；80 cell × 4:1 grading → ~5 cell 在 BL 内"
+
+solver:
+  name: buoyantBoussinesqSimpleFoam
+  family: incompressible_buoyant
+  steady_state: true
+  laminar: true
+  display_zh: "buoyantBoussinesqSimpleFoam（稳态 SIMPLE，Boussinesq 浮升）"
+  reasoning_zh: "Ra=1e6 < 1.5×10⁸（湍流转捩）→ 层流稳态；Boussinesq 解耦密度=ρ₀(1−β·ΔT)"
+
+hints:
+  geometry_zh: "AR=1 方腔；4:1 wall packing 是 BL 解析的关键，统一用于 Ra=1e6 与 Ra=1e10"
+  driver_zh: "唯一驱动是左右壁温差→浮升上下循环"
+  physical_intuition_zh: "热壁附近上行流形成边界层；中心是分层等温核；金标准 Nu=8.8 是壁面平均"
