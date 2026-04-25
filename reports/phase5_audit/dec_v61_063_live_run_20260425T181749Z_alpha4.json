@@ -1,0 +1,12 @@
+{
+  "alpha_deg": 4.0,
+  "success": false,
+  "is_mock": false,
+  "exit_code": null,
+  "execution_time_s": 0.3864211249165237,
+  "wall_clock_s": 0.38646083301864564,
+  "residuals": {},
+  "key_quantities": {},
+  "raw_output_path": "/tmp/cfd-harness-cases/ldc_7037_1777141302145",
+  "error_message": "blockMesh failed:\nb'OCI runtime exec failed: exec failed: unable to start container process: chdir to cwd (\"/tmp/cfd-harness-cases/ldc_7037_1777141302145\") set in config.json failed: no such file or directory\\r\\n'"
+}

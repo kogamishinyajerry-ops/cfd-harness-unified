@@ -1,0 +1,12 @@
+/Users/Zhuanz/Desktop/cfd-s2-naca-transition/scripts/dec_v61_063_live_runs.py:294: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+DEC-V61-063 Stage E live-run driver · timestamp=20260425T181749Z
+
+=== α=+0.0° run start ===
+=== α=+0.0° run complete in 233.1s (success=False, exit=None) ===
+
+=== α=+4.0° run start ===
+[WARN] _copy_file_from_container failed: 404 Client Error for http+docker://localhost/v1.53/containers/9edc5f19e7f65f8e1aa2bdfcb6a279c637cf3f148bad128af0b38095923afb63/archive?path=%2Ftmp%2Fcfd-harness-cases%2Fldc_7037_1777141302145%2Flog.blockMesh: Not Found ("Could not find the file /tmp/cfd-harness-cases/ldc_7037_1777141302145/log.blockMesh in container 9edc5f19e7f65f8e1aa2bdfcb6a279c637cf3f148bad128af0b38095923afb63")
+=== α=+4.0° run complete in 0.4s (success=False, exit=None) ===
+
+=== α=+8.0° run start ===
