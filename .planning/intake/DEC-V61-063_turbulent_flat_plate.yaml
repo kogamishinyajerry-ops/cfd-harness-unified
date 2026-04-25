@@ -189,8 +189,12 @@ cross_plane_imports:
 # ============================================================================
 # §5 Stage A batch breakdown (planned commits)
 # ============================================================================
+stage_a_status: COMPLETE  # 2026-04-25, all 5 batches landed on dec-v61-063-flat-plate
 stage_a_batches:
   - batch: A.1
+    status: DONE
+    commit: 2b52248
+    landed_at: "2026-04-25"
     scope: |
       flat_plate_extractors.py module skeleton + unit tests:
         - compute_blasius_invariant(cf_x_pairs) returning
@@ -202,16 +206,24 @@ stage_a_batches:
         - SNR metrics (numerical_floor, amplitude, snr_ratio) using
           conservative max(spacings) floor per V61-059 R2 F4
     commit_count_estimate: 1
+    actual_tests: 34
 
   - batch: A.2
+    status: DONE
+    commit: 2577b28
+    landed_at: "2026-04-25"
     scope: |
       Generalize _extract_flat_plate_cf to multi-x sampling.
       Returns list[(x, Cf)] in key_quantities["cf_x_profile"].
       Preserve key_quantities["cf_skin_friction"] back-compat.
       Stamp key_quantities["cf_extractor_path"] = "wall_gradient_v1".
     commit_count_estimate: 1
+    actual_tests: 5
 
   - batch: A.3
+    status: DONE
+    commit: a35777b
+    landed_at: "2026-04-25"
     scope: |
       Wire flat_plate_extractors into adapter post-extraction:
       after _extract_flat_plate_cf returns, compute Blasius invariant
@@ -219,22 +231,90 @@ stage_a_batches:
       Pattern mirrors plane_channel A.4.a but on the wall-gradient
       path instead of the wallShearStress FO path.
     commit_count_estimate: 1
+    actual_tests: 4
+    deviation_note: |
+      Inlined the staged enrichment in _enrich_flat_plate_cf rather
+      than calling enrich_cf_profile directly so a single δ_99 u-line
+      failure cannot strip the Blasius invariant headline. Per-class
+      error keys (cf_blasius_invariant_error,
+      delta_99_at_x_<x_key>_{error,missing_u_line}, cf_enrichment_error)
+      preserve audit observability under partial failure.
 
   - batch: A.4
+    status: DONE
+    commit: ac60303
+    landed_at: "2026-04-25"
     scope: |
       Gold YAML observables[] expansion: add 3 HARD_GATED entries
       (cf_x_profile, cf_blasius_invariant, delta_99_x_profile)
       with Blasius reference values + tolerance. Existing
       cf_skin_friction stays as schema_v1 back-compat.
     commit_count_estimate: 1
+    actual_tests: 3
+    deviation_note: |
+      Dual-emit pattern: kept tuple `cf_x_profile` (A.2 contract) +
+      added dict `cf_x_profile_points` for gold-comparator profile
+      path (PROFILE_VALUE_KEYS includes Cf). δ_99 similarly dual-
+      emits scalar `delta_99_at_x_<x_key>` (A.3) + profile shape
+      `delta_99_x_profile` (A.4). Gold YAML observable names match
+      the dict-shape keys exactly so no rename is needed.
 
   - batch: A.5
+    status: DONE
+    commit: fb61bdb
+    landed_at: "2026-04-25"
     scope: |
       Adapter alias parity test: pin Execution + Evaluation plane
       task-name → case_id agreement on
       "Laminar Flat Plate (Zero Pressure Gradient, Re_x ≤ 5e4)" /
       "turbulent_flat_plate" / legacy alias guard.
     commit_count_estimate: 1
+    actual_tests: 8
+    deviation_note: |
+      Scope expanded beyond task-name aliasing to drive the live
+      GoldStandardComparator on a Blasius-consistent synthetic emit.
+      Proves: (1) every gold YAML observable name appears in adapter
+      emit, (2) dict shapes flow through `_compare_profile` without
+      reshaping, (3) ref_value math + 10% tolerance achievable on
+      Blasius similarity (sanity-checks the YAML). Result: PASS
+      overall, every observable within tolerance, K_x rel_error <1%.
+      Test file: tests/test_flat_plate_alias_parity.py (8 tests).
+
+# Stage A summary: 5 commits (2b52248..fb61bdb), 58 flat-plate tests
+# green across test_flat_plate_extractors.py (34) +
+# test_foam_agent_adapter.py (16, of which 12 new) +
+# test_flat_plate_alias_parity.py (8). Cross-track isolation guard +
+# import-linter four-plane contract pass on every commit. 3 pre-
+# existing Python 3.9 staticmethod-call failures in unrelated LDC
+# sampledict tests are noted but predate this branch.
+
+# ============================================================================
+# §5b Codex round 1 queue (Stage A landing review)
+# ============================================================================
+codex_round_1:
+  status: QUEUED  # awaiting user-triggered /codex-gpt54 invocation
+  trigger: |
+    Stage A landed ~290 LOC in src/foam_agent_adapter.py + new module
+    src/flat_plate_extractors.py + new gold YAML observables. Per
+    project rule (CLAUDE.md MODEL_ROUTING + V61-006 Codex baseline):
+    foam_agent_adapter.py changes >5 LOC → mandatory Codex review.
+  scope_to_review:
+    - "src/flat_plate_extractors.py (new, 479 LOC)"
+    - "src/foam_agent_adapter.py:9483-9794 (_extract_flat_plate_cf multi-x + _enrich_flat_plate_cf + _build_flat_plate_u_lines)"
+    - "knowledge/gold_standards/turbulent_flat_plate.yaml (3 new HARD_GATED observables)"
+    - "tests/test_flat_plate_extractors.py + test_foam_agent_adapter.py flat-plate tests + test_flat_plate_alias_parity.py"
+  focus_areas:
+    - "Wall-gradient extractor correctness in `_cf_at_x` (sign handling, Spalding fallback under laminar contract)"
+    - "Dual-emit pattern (tuple cf_x_profile + dict cf_x_profile_points) — latent contract drift?"
+    - "Gold YAML ref_value math vs Blasius similarity at x ∈ {0.5, 1.0} — independent verify"
+    - "Robustness of per-class error keys in `_enrich_flat_plate_cf` — does any failure path silently corrupt downstream comparator input?"
+    - "x_tol heuristic in `_build_flat_plate_u_lines` reuse of A.2 logic — alignment risk if cell density diverges"
+  out_of_scope_round_1:
+    - "Stage B live-run-only defects (executable_smoke_test risk flag captured for post-R3 RETRO addendum)"
+    - "Frontend Compare-tab anchor cards (Stage D, deferred)"
+  codex_budget_consumed: 0
+  codex_budget_total: 4
+  halt_risk_flag: "After R5, halt and request human review per RETRO-V61-053 protocol"
 
 # ============================================================================
 # §6 Risk register (intake-level, ranked)
