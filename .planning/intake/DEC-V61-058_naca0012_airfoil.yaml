@@ -1,0 +1,481 @@
+# Stage 0 · Case Intake Assessment · DEC-V61-058 · naca0012_airfoil
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# Cross-ref: Notion methodology page §8 P0-1 (intake.yaml spec).
+# Track B SESSION 2 (parallel with SESSION 1 DHC dec-v61-057-stage-b
+# and SESSION 3 plane_channel dec-v61-059-pc).
+#
+# Revision history:
+#   v1 (2026-04-25, Track B SESSION 2 mandate): initial draft, pass rate 0.30.
+#       authored by Claude Code Opus 4.7 1M.
+#       Pending Codex pre-Stage-A plan review.
+
+case_id: naca0012_airfoil
+dec_id: DEC-V61-058
+case_number: 5  # LDC=1, BFS=2, cylinder=3, DHC=4, NACA=5 (per V61-053/057 arc sequence)
+intake_authored_at: "2026-04-25"
+intake_author: "Claude Code (Opus 4.7, 1M context · Track B SESSION 2 mandate)"
+methodology_version: "v2.0"
+intake_version: 1
+codex_plan_review_verdict: PENDING
+
+# ============================================================================
+# §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
+# ============================================================================
+case_type: I
+case_type_rationale: |
+  Five scalar gates planned, drawn from Ladson 1988 NASA TM-4074 (low-Re NACA
+  0012 wind-tunnel data, Re=3e6 anchor — matches whitelist Re), with the
+  Cp distribution cross-check via Abbott & von Doenhoff 1959. Across these 5
+  gates, AT LEAST THREE PHYSICALLY-INDEPENDENT FAMILIES exist (Type I
+  requires ≥3):
+
+  Family 1 · FORCE-COEFFICIENT (forceCoeffs FO; surface-integral pressure +
+  viscous on aerofoil patch; per α run independently configured):
+    1. Cl_at_alpha_eight  — HEADLINE GATE — lift coefficient at α=8°,
+                            Ladson 1988 Re=3e6 ≈ 0.815 ± 0.005 (Table I).
+                            Load-bearing benchmark for the linear-regime
+                            lift slope; thin-airfoil theory predicts
+                            2π·sin(α) ≈ 0.872, real airfoil 0.815 reflects
+                            finite-thickness + viscous deficit.
+    2. Cl_at_alpha_four   — INDEPENDENT_CROSS_CHECK (different α run) ≈ 0.434
+                            (Ladson 1988 Re=3e6). Pairs with Cl_at_alpha_eight
+                            for a 2-point dCl/dα slope sanity check (gold
+                            slope ≈ 0.0953/deg, near classical 0.105/deg
+                            because thickness reduces effective slope).
+    3. Cd_at_alpha_zero   — INDEPENDENT_CROSS_CHECK (different α=0 run) ≈
+                            0.0080 ± 0.0005 (Ladson 1988 Re=3e6, transition
+                            fixed). At α=0 by symmetry Cl=0 EXACTLY (gold =
+                            zero); Cd is the only nontrivial force-coeff gate
+                            at α=0. Cl_at_alpha_zero EXPLICITLY NOT GATED
+                            (numerical_noise_snr trap — gold=0 means signal=
+                            machine noise residual, Type-PASS lure).
+
+  Family 2 · SURFACE-PRESSURE-DISTRIBUTION (sampleDict point sampling at
+  upper-surface gold-anchored stations; α=0° run only — DIFFERENT extraction
+  surface from forceCoeffs integral path even though same physical run):
+    4. Cp_at_xoc_0p5_upper — peak suction probe at x/c=0.5 upper surface,
+                             α=0°. Abbott & von Doenhoff 1959 + Gregory &
+                             O'Reilly 1970 give Cp(x/c=0.5) ≈ -0.40 (within
+                             whitelist gold YAML's -0.20 ± 20% band; gold
+                             YAML may need cross-check refinement in Batch A).
+                             SAME-PHYSICAL-RUN as Cd_at_alpha_zero but
+                             DIFFERENT extraction path (point sample vs
+                             surface-integral). Validates the Cp/forceCoeffs
+                             cross-consistency.
+
+  Family 3 · MESH-QUALITY (yPlus FO; mesh wall-resolution probe; α=0° run):
+    5. y_plus_max_on_aerofoil — wall-function validity probe. kOmegaSST +
+                                kqRWallFunction/omegaWallFunction require
+                                y+ in [11, 300] for the high-Re branch.
+                                Threshold gate: PROVISIONAL_ADVISORY at
+                                y+_max < 5 (under-resolved low-Re branch
+                                untriggered) OR y+_max > 300 (out of valid
+                                wall-function range). HARD_GATED only after
+                                Batch B3 SNR validation against current
+                                mesh's first-cell y+ measurement.
+
+  Independence count: 3 families guaranteed (force-coeff, pressure-dist,
+  mesh-quality); 5 scalar gates planned. Type I requirement (≥3 independent
+  families) satisfied.
+
+  HEADLINE = Cl_at_alpha_eight (load-bearing canonical lift benchmark; >50
+  subsequent CFD validation studies cite Ladson 1988 Cl(α=8°, Re=3e6) within
+  ±1%). Other 4 are CROSS_CHECK / INDEPENDENT_CROSS_CHECK / PROVISIONAL.
+
+primary_gate_count: 5
+case_type_hard_gate_signed: true
+headline_gate: lift_coefficient_alpha_eight  # quantity_id matches new gold YAML observables[].name; Cd_alpha_zero candidate for downgrade per Codex.
+
+# ============================================================================
+# §2 Reference papers
+# ============================================================================
+reference_paper:
+  primary:
+    citation: "Ladson, C.L. (1988). Effects of Independent Variation of Mach and Reynolds Numbers on the Low-Speed Aerodynamic Characteristics of the NACA 0012 Airfoil Section. NASA Technical Memorandum 4074."
+    doi: "NASA-TM-4074 (no DOI; archive ID 19880014836)"
+    url: "https://ntrs.nasa.gov/citations/19880014836"
+    providing: [Cl_at_alpha_four, Cl_at_alpha_eight, Cd_at_alpha_zero, dCl_dalpha_linear_regime]
+  secondary:
+    - citation: "Abbott, I.H., & von Doenhoff, A.E. (1959). Theory of Wing Sections, Including a Summary of Airfoil Data. Dover Publications."
+      providing: [Cp_xoc_distribution_alpha_zero, cross_check_high_re_Cd]
+    - citation: "Gregory, N., & O'Reilly, C.L. (1970). Low-Speed Aerodynamic Characteristics of NACA 0012 Aerofoil Section, Including the Effects of Upper-Surface Roughness Simulating Hoar Frost. ARC R&M 3726."
+      providing: [Cp_xoc_alpha_zero_alpha_four_alpha_eight, cross_check_alpha_dependence]
+
+# ============================================================================
+# §3 Observable scope (hardens against breadth drift / scope creep)
+# ============================================================================
+observable_scope:
+  in_scope:
+    - quantity: lift_coefficient_alpha_eight
+      tolerance_pct: 5.0  # tight — load-bearing benchmark
+      extraction_method: "forceCoeffs FO writes coefficient.dat per-timestep on aerofoil patch; extractor reads final-time row's Cl column. Aref = chord × span (thin-span 0.002 m); lRef = chord; magUInf = U_inf; rhoInf = 1.0 (incompressible kinematic). liftDir = (-sin α, 0, cos α); dragDir = (cos α, 0, sin α) — α-rotated freestream convention. Run at α=8°."
+      status_pre_DEC: "NOT_IMPLEMENTED — adapter currently α=0° only; no forceCoeffs FO on aerofoil patch."
+      role: HEADLINE_GATE
+    - quantity: lift_coefficient_alpha_four
+      tolerance_pct: 7.0
+      extraction_method: "Same forceCoeffs FO; separate run at α=4°."
+      status_pre_DEC: "NOT_IMPLEMENTED — same adapter blocker."
+      role: INDEPENDENT_CROSS_CHECK
+    - quantity: drag_coefficient_alpha_zero
+      tolerance_pct: 15.0  # loose — Cd0 is small (≈0.008), wall-function discretization noise floor is real
+      extraction_method: "Same forceCoeffs FO; α=0 run (existing mesh path). Cd column of coefficient.dat final-time row."
+      status_pre_DEC: "NOT_IMPLEMENTED — forceCoeffs FO not currently emitted for naca0012."
+      role: INDEPENDENT_CROSS_CHECK
+    - quantity: pressure_coefficient_xoc_0p5_upper
+      tolerance_pct: 20.0  # inherits whitelist's existing 20% band; may tighten in Batch A after Cp gold cross-check
+      extraction_method: "Existing sampleDict at gold-anchored upper-surface points (DEC-V61-044 path); read x/c=0.5 row. Cp = (p - p_inf) / (0.5·U_inf²·rho); p_inf = 0 gauge, U_inf = 1.0, rho = 1.0."
+      status_pre_DEC: "EXTRACTOR_PARTIAL — sampleDict + airfoil_surface_sampler.compute_cp emit Cp profile; per-station scalar extraction needs reduce step."
+      role: CROSS_CHECK  # same physical run as Cd_alpha_zero, DIFFERENT extraction
+    - quantity: y_plus_max_on_aerofoil
+      tolerance_pct: null  # threshold-mode gate, not value-mode
+      extraction_method: "yPlus FO writes y+ field on aerofoil wall; postProcessing/yPlus/<t>/yPlus.dat row matched by patch=aerofoil. Read max column."
+      status_pre_DEC: "NOT_IMPLEMENTED — yPlus FO not currently emitted; mesh quality silent."
+      role: PROVISIONAL_ADVISORY  # promote to HARD_GATED after Batch B3 SNR validation
+  explicitly_out_of_scope:
+    - item: "Stall onset α≈16-18°"
+      reason: "Outside linear regime; thin-span 2D mesh + steady RANS not credible past α≈10° where flow separates and unsteady. Flagged for follow-up DEC if user requests."
+    - item: "Re sweep (Re=2e6, 6e6, 9e6)"
+      reason: "Whitelist locks Re=3e6; Re sensitivity is a separate validation axis, not multi-dim Type I scope."
+    - item: "Transition modeling (γ-Re_θt or LES)"
+      reason: "Out of scope for kOmegaSST RANS baseline; would change physics class."
+    - item: "Cp at lower surface or full upper-surface profile beyond 5 stations"
+      reason: "Whitelist gold YAML pins 6 stations; profile-mode comparator already covers the shape; we extract 1 scalar (x/c=0.5) for HARD scope and let the profile remain advisory."
+    - item: "Pitching moment Cm"
+      reason: "Ladson 1988 reports Cm but Cm at α=0° for symmetric NACA0012 = 0 by symmetry (numerical_noise_snr trap, same as Cl@α=0). Out of scope unless multi-α DEC follow-up adds it."
+
+# ============================================================================
+# §4 Risk flags (F1-M1 requires ≥1 subjective risk annotation)
+# ============================================================================
+# Canonical registry: knowledge/schemas/risk_flag_registry.yaml
+# CaseProfile: .planning/case_profiles/naca0012_airfoil.yaml
+risk_flags:
+  # --- case-specific ---
+  - flag: angle_of_attack_implementation
+    severity: high
+    codex_flagged: false
+    description: |
+      Current _generate_airfoil_flow at src/foam_agent_adapter.py:6407 is
+      HARDCODED to α=0° (symmetric flow). The adapter does NOT honor
+      task_spec.boundary_conditions["alpha_deg"] or any AoA setting.
+      Multi-α gates (Cl@4°, Cl@8°) require either:
+        (a) freestream rotation: U_inf = (U·cos α, 0, U·sin α) with
+            existing thin-span x-z mesh (mesh symmetric, OK either sign);
+            forceCoeffs liftDir/dragDir rotated to match.
+        (b) full mesh re-rotation around airfoil (much larger scope).
+      Path (a) preferred — no mesh changes, only 0/U + forceCoeffs FO
+      orientation depend on α. Comment in adapter must annotate the
+      rotation convention to prevent future drift.
+    mitigation_in_batch: B1 — implement freestream rotation behind
+      task_spec.boundary_conditions["alpha_deg"] (default 0.0); separate
+      whitelist entries naca0012_airfoil_alpha_4 / _alpha_8 OR per-run
+      task_spec param. Codex pre-Stage-A review will lock the choice.
+
+  - flag: forceCoeffs_aref_2d_thin_span
+    severity: med
+    codex_flagged: false
+    description: |
+      DEC-V61-041 (cylinder forceCoeffs FO) had a Codex round-1 BLOCKER
+      where Aref was 0.01 instead of 0.001 (10x error, all coefficients
+      reported 10x too small). Same trap exists here: thin-span y is
+      [-0.001, 0.001] = 0.002 m, chord = 1.0 m → Aref = chord·span =
+      0.002 m². If the dev hardcodes Aref = chord (as 2D convention often
+      does for "per unit span") the computed Cl/Cd are 500× too small.
+      The forceCoeffs FO definition MUST comment the Aref derivation
+      explicitly so reviewers can verify.
+    mitigation_in_batch: B1 — Aref = chord × thin_span (not chord alone).
+      Comment in the FO block must show: Aref = chord · (y_hi - y_lo) =
+      1.0 · 0.002 = 0.002. lRef = chord = 1.0.
+
+  - flag: lift_signal_at_alpha_zero_snr_trap
+    severity: med
+    codex_flagged: false
+    description: |
+      RETRO-V61-050 numerical_noise_snr instance specific to NACA0012:
+      gold Cl(α=0°, symmetric airfoil) = 0 EXACTLY. Any "PASS" of a
+      relative-tolerance gate against gold=0 reduces to the comparator
+      checking |computed - 0| / 0 (divide-by-zero) or absolute |computed|
+      vs unspecified band. The comparator's existing protections may
+      not cover this case-specific zero. Cl@α=0 MUST be EXPLICITLY
+      DROPPED from the gate set (see §3 in_scope: Cl_at_alpha_eight and
+      Cl_at_alpha_four ONLY; Cl_at_alpha_zero is absent by design).
+    mitigation_in_batch: B3 — explicit assertion in gold YAML +
+      regression test in TestNACA0012MultiDim that the gate set does
+      NOT contain Cl_at_alpha_zero. UI must render a `signal_above_noise`
+      flag; alternatively Cl@α=0 can appear as a SANITY_CHECK sub-status
+      ("|Cl| < 0.005 confirms symmetric solve") but not a HARD gate.
+
+  - flag: wall_function_validity_at_re_3e6
+    severity: med
+    codex_flagged: false
+    description: |
+      kqRWallFunction / omegaWallFunction / nutkWallFunction (current
+      adapter at lines 6982, 7017, 7052) require y+ in [11, 300] for
+      the high-Re branch (or y+<5 for low-Re via blended). At Re=3e6,
+      U_inf=1, chord=1, ν=3.33e-7 → δ_99 ≈ 0.37·chord/Re^0.2 ≈ 0.019,
+      first-cell wall-normal at top of `simpleGrading (1 1 40)` z-direction
+      (40× expansion from far-field z=2.0 to airfoil) puts dz_min ≈
+      2.0/(80·40) ≈ 0.000625 → y+ ≈ u_τ·dz_min/ν. u_τ ≈ U_inf·sqrt(Cf/2)
+      ≈ 1·sqrt(0.0040) ≈ 0.063 → y+_min ≈ 0.063·0.000625/3.33e-7 ≈ 118.
+      That's INSIDE wall-function range, but the precise number depends
+      on local Cf which varies along chord. y+_max in adverse-pressure-
+      gradient regions (x/c=0.3-0.7 upper) can exceed 300; near
+      stagnation (x/c=0) y+_min collapses below 11. The y_plus_max gate
+      surfaces this.
+    mitigation_in_batch: B3 — extract y+ from the live run; pin
+      threshold at y+_max ∈ [11, 500] PROVISIONAL band; if max > 500
+      flag mesh refinement deferred follow-up.
+
+  - flag: trailing_edge_singularity
+    severity: low
+    codex_flagged: false
+    description: |
+      sampleDict at x/c=1.0 (trailing edge) hits zero-thickness; the
+      `cellPoint` interpolation extrapolates from an effectively
+      undefined wall point. Existing 6-point gold YAML has x=1.0 with
+      Cp=0.2 — likely incorrect (TE Cp should be ≈0 or slightly
+      positive on Kutta-condition-corrected real airfoil; Abbott &
+      von Doenhoff Fig. 4-7 shows Cp(x/c=1) ≈ 0 for NACA0012 α=0°).
+      This is a gold YAML hygiene issue, not a physics one.
+    mitigation_in_batch: A — gold YAML cross-check vs Abbott & von
+      Doenhoff Fig. 4-7 / NACA Report TR-460. If x/c=1.0 Cp=0.2 is
+      wrong, replace with 0.0 ± 0.05 band OR drop the TE point.
+
+  - flag: codex_residual_attestor_naca_threshold_inheritance
+    severity: low
+    codex_flagged: false
+    description: |
+      DEC-V61-038 convergence attestor uses per-case YAML thresholds.
+      Current naca0012 thresholds (p=1e-6, U=1e-5) may be too loose
+      for forceCoeffs FO time-averaging — if p residual is at 1e-6 but
+      Cl is still drifting at the final timestep, the gate reports
+      converged but Cl is unstable. Need a `cl_drift_tolerance`
+      addition to the per-case attestor thresholds OR a sufficient
+      run-length (endTime=2000 seems OK at simpleFoam steady).
+    mitigation_in_batch: C — extend per-case attestor thresholds for
+      naca0012 with `cl_last_window_drift_pct < 1.0` over the last
+      100 timesteps. Borrow pattern from cylinder (DEC-V61-041 St
+      stationarity check).
+
+  # --- mandatory v2.0+ slots ---
+
+  - flag: python_version_parity
+    severity: med
+    codex_flagged: false
+    description: |
+      Python 3.9 (CI / Codex shim default) vs 3.12 (project .venv) have
+      different f-string parsers (PEP-701). Adapter additions for AoA
+      rotation will introduce new f-string blocks in fvSolution / 0/U;
+      nested multi-line f-strings can crash 3.9 with SyntaxError.
+    mitigation_in_batch: B1+B2 — `python3 -m py_compile` on every
+      edited .py before commit. Hoist nested f-strings to plain
+      .format() or string concat where the inner expression is itself
+      a multi-line f-string.
+
+  - flag: mesh_density_on_domain_change
+    severity: med
+    codex_flagged: false
+    description: |
+      Current domain x_min=-5·chord, x_max=5·chord, z_far=2·chord
+      (line 6442-6444). NACA0012 multi-α validation studies typically
+      use x_far ≥ 12·chord, z_far ≥ 12·chord to suppress far-field
+      blockage; current 5·chord/2·chord domain has known wake/upwash
+      truncation that could bias Cl at α=8°. If Codex pushes to grow
+      the domain, the cell count must scale proportionally to preserve
+      wall-cell density (V61-053 Batch B1 lost 33% wall resolution by
+      forgetting this).
+    mitigation_in_batch: B1 (if domain growth required by Codex) —
+      compute and COMMENT dz_min and dx_min at the airfoil; verify
+      preserved across domain change.
+
+  - flag: executable_smoke_test
+    severity: high
+    codex_flagged: false
+    description: |
+      Unit tests that exercise _generate_airfoil_flow via direct call
+      bypass the dispatch-layer code path. The α-rotation feature
+      depends on task_spec.boundary_conditions["alpha_deg"] being read
+      correctly through the dispatch chain — Codex review can verify
+      the static fvSolution/0/U content but cannot detect a stale
+      task_spec mutation between dispatch and generator.
+    mitigation_in_batch: E — Docker-based OpenFOAM smoke test for at
+      LEAST one non-zero α run (α=8°) before Stage E close. Wall-clock
+      < 20 min target per α run (simpleFoam 2000 iterations on the
+      6-block mesh ≈ 4-6 min on docker).
+
+  - flag: solver_stability_on_novel_geometry
+    severity: high
+    codex_flagged: false
+    description: |
+      simpleFoam + kOmegaSST stability on rotated-freestream NACA0012
+      is runtime-emergent. The current α=0° fvSolution (p GAMG/
+      GaussSeidel, relTol=0.05, URF p=0.3, U/k/omega=0.5) is tuned for
+      symmetric flow. At α=8° the upper surface develops adverse
+      pressure gradient peaks that may require: tighter URF (p=0.2),
+      pseudo-transient under-relaxation, or PCG+DIC fallback for p.
+      OF tutorial `incompressible/simpleFoam/airFoil2D` is the
+      closest precedent — match its fvSolution if Codex APPROVE.
+    mitigation_in_batch: B1 — comparison block-comment in adapter
+      noting the OF tutorial baseline; B3+E — live-run validation with
+      executable_smoke_test catching divergence immediately.
+
+  - flag: numerical_noise_snr
+    severity: med
+    codex_flagged: false
+    description: |
+      Per-gate numerical_floor vs |gate_gold_value| ratios:
+        Cl@α=8°:  gate_gold ≈ 0.815, p residual ≈ 1e-6 → Cl noise
+                  floor (forceCoeffs integral over ~200 wall faces) ≈
+                  Δp_noise · Aref / (0.5·rho·U²·Aref) ≈ Δp_noise ≈
+                  1e-6 → ratio ≈ 8e5. SNR ample.
+        Cl@α=4°:  gold ≈ 0.434, ratio ≈ 4e5. SNR ample.
+        Cd@α=0°:  gold ≈ 0.008, ratio ≈ 8e3. SNR adequate.
+        Cp@x/c=0.5: gold ≈ -0.20 to -0.40 (whitelist tension; resolve
+                    in Batch A), ratio with Δp_noise=1e-6 / (0.5·1·1²)
+                    = 2e-6 → Cp noise = 2e-6 → ratio ≈ 1e5. SNR ample.
+        y+_max:   gold range 11-300, sensor sub-1.0 floor → ratio ≥ 11.
+                  Borderline — y+ in stagnation region < 11 will trip
+                  the threshold gate but is not noise.
+        Cl@α=0°:  gold = 0 EXACTLY → ratio = ∞ floor / 0 → SNR
+                  UNDEFINED. EXCLUDED FROM GATE SET (see lift_signal_
+                  at_alpha_zero_snr_trap above).
+    mitigation_in_batch: B3 — commit-attached SNR table in extractor
+      module-level docstring; UI renders signal_above_noise flag for
+      each scalar gate.
+
+# ============================================================================
+# §5 Pre-Stage-A Codex plan review
+# ============================================================================
+codex_pre_stage_a_plan_review:
+  requested_at: "PENDING"
+  verdict: PENDING  # → APPROVE_PLAN / APPROVE_PLAN_WITH_CHANGES / REQUEST_CHANGES
+  log_path: reports/codex_tool_reports/dec_v61_058_plan_review.md
+  required_edits_v1_to_v2: []  # populated after Codex review
+
+# ============================================================================
+# §6 Self-estimated pass rate (F1-M1 honesty clause)
+# ============================================================================
+# RETRO-V61-001 rule: pass_rate ≤ 70% → pre-merge Codex review mandatory.
+# This DEC IS pre-merge per session mandate; rate matters for retro
+# calibration only.
+estimated_pass_rate_round1: 0.30
+estimated_pass_rate_rationale: |
+  Five biggest risk drivers lowering rate from 1.0:
+
+    1. flag-angle_of_attack_implementation (HIGH): adapter currently
+       α=0° hardcoded. Multi-α requires architectural extension
+       (rotated freestream + per-α forceCoeffs FO orientation +
+       likely whitelist multi-entry). Codex round 1 likely 1 HIGH
+       finding on rotation convention or boundary-field consistency.
+
+    2. flag-forceCoeffs_aref_2d_thin_span (MED): same trap as V61-041
+       cylinder Aref=0.01→0.001 BLOCKER. Codex round 1 likely 1 MED
+       finding. Pre-empted by explicit Aref = chord × thin_span comment
+       but Codex may demand stronger annotation.
+
+    3. flag-lift_signal_at_alpha_zero_snr_trap (MED): comparator
+       integration with gold=0 zero-divisor. Codex round 1 likely 1
+       MED finding on comparator path safety + 1 LOW on UI surface.
+
+    4. flag-executable_smoke_test (HIGH): Docker OpenFOAM live run at
+       α=8° untested. Likely 1 HIGH finding from RETRO-V61-053 post-R3
+       blind-spot if smoke test discovers solver divergence under
+       AdverseP-gradient. Mitigation: B1 borrow OF airFoil2D tutorial
+       fvSolution.
+
+    5. flag-trailing_edge_singularity + codex_residual_attestor_naca_
+       threshold_inheritance (LOW + LOW): gold YAML cross-check + Cl
+       drift convergence threshold. 2 LOW findings expected.
+
+  Sum of likely findings: ≈ 2 HIGH + 2 MED + 2 LOW. RETRO-V61-001 rate
+  bands: 2H+2M+2L → ≈ 30% round-1-clean rate. Honest 0.30 prediction.
+
+# ============================================================================
+# §7 Batch plan (arc architecture)
+# ============================================================================
+# Codex pre-Stage-A review MAY rewrite this section. Final batch_plan
+# is the one in intake_version >= 2 after plan review response.
+batch_plan:
+  - batch: A
+    scope: "gold YAML hygiene (TE Cp x/c=1.0 cross-check vs Abbott &
+            von Doenhoff Fig. 4-7) + new gold values for Cl(α=4°),
+            Cl(α=8°), Cd(α=0°) from Ladson 1988 Table I (Re=3e6) +
+            5-gate scope decision documented in DEC frontmatter +
+            validation-artifact lineage 3-way invariant per V61-057 A.4
+            (gold YAML ↔ auto_verify_report.yaml ↔ report.md/html)"
+    commit_count_estimate: 1  # doc-only, single atomic commit
+    atomicity_guard: "single commit; no code changes; doc-only"
+  - batch: B1
+    scope: "_generate_airfoil_flow extension: read alpha_deg from
+            task_spec.boundary_conditions; rotate 0/U freestream as
+            U_inf·(cos α, 0, sin α); add forceCoeffs FO on aerofoil
+            patch with α-aware liftDir/dragDir + Aref = chord × span =
+            0.002 (commented); add yPlus FO on aerofoil patch.
+            Whitelist: add naca0012_airfoil_alpha_4 + _alpha_8 entries
+            inheriting base case with override alpha_deg."
+    commit_count_estimate: 3  # adapter + whitelist + FO blocks; may grow per Codex
+  - batch: B2
+    scope: "src/airfoil_extractors.py NEW: parse forceCoeffs
+            coefficient.dat (final-time row Cl + Cd) + parse yPlus.dat
+            (final-time max y+ on aerofoil patch). TestNACA0012MultiDim
+            in tests/test_foam_agent_adapter.py: unit tests for each
+            parser using fixture coefficient.dat (synthetic) + py_compile
+            check + symmetry probe (Cl@α=0 ≈ 0)."
+    commit_count_estimate: 2
+  - batch: B3
+    scope: "numerical_noise_snr per-gate floor measurement: extract
+            Cl/Cd noise from final-100-timestep std-dev ÷ mean ratio
+            on a pilot α=0° run; commit SNR table in airfoil_extractors
+            module docstring. Cl@α=0 EXPLICIT EXCLUSION: assertion in
+            gold YAML + regression test that gate set does NOT include
+            it. y_plus_max threshold gate validation: HARD-GATED [11,300]
+            after live run confirms achievable."
+    commit_count_estimate: 1
+  - batch: C
+    scope: "Per-case attestor thresholds extension: Cl_drift_pct < 1.0
+            over last 100 timesteps, Cd_drift_pct < 1.0; preflight wires
+            5 scalar gates (Cl@8° HEADLINE, Cl@4° + Cd@0° INDEPENDENT,
+            Cp@x/c=0.5 CROSS, y+_max PROVISIONAL); audit-fixture YAML
+            schema validates."
+    commit_count_estimate: 1
+  - batch: D
+    scope: "UI/audit-fixture surface: solver_output figure (Cp profile
+            for α=0 + Cl(α) 2-point linear regression plot for α=4/8°).
+            Frontend renders signal_above_noise flag per gate. Audit
+            fixture YAML at ui/backend/tests/fixtures/runs/naca0012_
+            airfoil/auto_verify_report.yaml updated with 5-gate schema."
+    commit_count_estimate: 1
+  - batch: E
+    scope: "executable_smoke_test: docker OpenFOAM live run at α=0, 4, 8.
+            Stage E closeout: DEC frontmatter + Notion sync + counter
+            increment + attestor verdicts published."
+    commit_count_estimate: 1
+
+# ============================================================================
+# §8 Codex budget (F6-M1 halt criterion)
+# ============================================================================
+codex_budget_rounds: 4  # Type I with adapter architectural extension; V61-057 used 4 rounds for similar scope
+round_4_action: "health check — halt_risk_flag if CHANGES_REQUIRED at round 4"
+round_5_action: "halt-check decision per RETRO-V61-001 — pause for retro before continuing"
+round_6_action: "FORCE ABANDON per F6-M1 — create abandonment retro"
+
+# ============================================================================
+# §9 Stage-E close conditions (F1-M2 two-tier gate)
+# ============================================================================
+stage_e_close_checklist:
+  - item: "All Codex round-N findings landed in commits"
+    required: true
+  - item: "Clean Codex round-(N+1) verdict = APPROVE or APPROVE_WITH_COMMENTS"
+    required: true
+  - item: "Executable smoke test passes (Docker OpenFOAM α=0/4/8 each <20min wall)"
+    required: true  # RETRO-V61-053 post-R3 addendum (2026-04-24)
+    waiver_allowed: false  # NACA introduces new α-rotation code path; smoke test mandatory
+  - item: "DEC frontmatter notion_sync_status updated to synced <date>"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented (41 → 42 if SESSION 1 not closed first; coordinate via main HEAD at closeout)"
+    required: true
+  - item: "Cl_at_alpha_zero EXCLUSION regression test green (gate set does NOT contain Cl@α=0)"
+    required: true
+  - item: "5-gate schema validated in audit-fixture YAML; signal_above_noise flag rendered for each"
+    required: true
+  - item: "[line-b] tag in EVERY commit message (Track B coordination)"
+    required: true
