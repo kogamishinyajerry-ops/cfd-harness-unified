@@ -6424,10 +6424,18 @@ boundaryField
         U_inf = 1.0  # freestream velocity
         nu_val = U_inf * chord / Re
         # DEC-V61-058 Batch B1 (Codex DEC-V61-058 F2): α routing via single
-        # canonical case_id `naca0012_airfoil` with task_spec.boundary_conditions
-        # parameter (alpha_deg or angle_of_attack alias). Default 0.0.
-        # Multi-α delivered by 3 separate runs (α∈{0°,4°,8°}) with the same
-        # whitelist entry; per-run task_spec carries a different alpha_deg.
+        # canonical case_id `naca0012_airfoil`. The whitelist canonical key is
+        # `angle_of_attack` (knowledge/whitelist.yaml parameters block); the
+        # adapter ALSO accepts `alpha_deg` as a programmatic alias for callers
+        # that don't go through the whitelist→task_runner→bc pipeline.
+        #
+        # Codex round 1 F1 fix (2026-04-25): precedence is now
+        # `angle_of_attack` (whitelist SoT) FIRST, `alpha_deg` (alias) SECOND.
+        # Adapter does NOT persist the resolved value back into bc — every
+        # call resolves freshly from the caller-supplied input. This avoids
+        # the round-1 reuse bug where a persisted canonical `alpha_deg=4`
+        # would mask a subsequent caller's `angle_of_attack=8`.
+        #
         # Sign convention (PINNED, OF airFoil2D tutorial precedent):
         #   α positive → freestream rotates upward in x-z plane:
         #     U_inf_vec = U_inf · (cos α, 0, sin α)
@@ -6435,11 +6443,29 @@ boundaryField
         #   At α=+8°, upper-surface suction (z>0 side of airfoil) generates
         #   force in +liftDir = +z direction → Cl > 0 (asserted in Stage E
         #   sign-convention smoke test per intake §9 close checklist).
-        # Mesh is geometry-locked to x-z plane (lines 6440-6446 below);
+        # Mesh is geometry-locked to x-z plane (lines below);
         # rotation happens in 0/U only — no mesh re-rotation.
-        alpha_deg = float(
-            bc.get("alpha_deg", bc.get("angle_of_attack", 0.0)) or 0.0
-        )
+        _alpha_raw = bc.get("angle_of_attack")
+        if _alpha_raw is None:
+            _alpha_raw = bc.get("alpha_deg", 0.0)
+        # Fail closed on non-numeric (Codex round 1 Q1(a): the prior `or 0.0`
+        # silently masked `""` / `False` as α=0). Accept int/float/None only.
+        if _alpha_raw is None:
+            alpha_deg = 0.0
+        elif isinstance(_alpha_raw, bool):
+            # bool is a subclass of int in Python — reject explicitly so
+            # bc["angle_of_attack"]=False isn't read as 0.0.
+            raise ParameterPlumbingError(
+                f"naca0012_airfoil: angle_of_attack/alpha_deg must be numeric; "
+                f"got bool={_alpha_raw!r}"
+            )
+        elif isinstance(_alpha_raw, (int, float)):
+            alpha_deg = float(_alpha_raw)
+        else:
+            raise ParameterPlumbingError(
+                f"naca0012_airfoil: angle_of_attack/alpha_deg must be numeric; "
+                f"got type={type(_alpha_raw).__name__} value={_alpha_raw!r}"
+            )
         alpha_rad = math.radians(alpha_deg)
         cos_a = math.cos(alpha_rad)
         sin_a = math.sin(alpha_rad)
@@ -6449,17 +6475,15 @@ boundaryField
         # so the airfoil_surface_sampler.compute_cp helper can normalize
         # p → Cp without re-deriving the freestream from other sources.
         # simpleFoam is incompressible kinematic-pressure, so rho=1.0.
-        # DEC-V61-058 also plumbs alpha_deg + (cos_a, sin_a) for downstream
-        # extractors (airfoil_extractors.compute_cl_cd reads alpha_deg to
-        # cross-check forceCoeffs liftDir/dragDir consistency).
+        # DEC-V61-058 round 1 F1 fix: do NOT persist alpha_deg / U_inf_x /
+        # U_inf_z back into bc. They have no downstream consumer
+        # (airfoil_extractors.compute_cl_cd takes alpha_deg as a direct
+        # function argument), and persistence created the round-1 reuse bug.
         task_spec.boundary_conditions = bc
         bc.setdefault("chord_length", chord)
         bc["U_inf"] = U_inf
         bc["p_inf"] = 0.0  # gauge pressure matches 0/p internalField
         bc["rho"] = 1.0  # incompressible kinematic convention
-        bc["alpha_deg"] = alpha_deg  # canonical α field (alias angle_of_attack preserved if present)
-        bc["U_inf_x"] = Ux_inf
-        bc["U_inf_z"] = Uz_inf
         # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
         # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
         # works with the C-grid hex ordering. The adapter's previous x-y plane
@@ -6837,8 +6861,12 @@ functions
         libs            ("libfieldFunctionObjects.so");
         writeControl    writeTime;
         // y+ field written to postProcessing/yPlus/<t>/yPlus.dat with
-        // columns: time min max average (per patch). Extractor reads
-        // patch=aerofoil row's max column.
+        // columns: `Time  patch  min  max  average` per wall patch.
+        // Extractor (compute_y_plus_max) filters by `patch == aerofoil`
+        // and reads the `max` column from the final-time row (Codex
+        // round 1 Q3(a) clarification: yPlus FO has no `patches` field
+        // surface — every wall patch in the case is automatically
+        // emitted).
     }}
 }}
 

@@ -2702,8 +2702,11 @@ class TestNACA0012MultiDim:
         assert "yPlus" in cd_text
         assert 'libs            ("libfieldFunctionObjects.so")' in cd_text
 
-    def test_adapter_plumbs_alpha_fields_into_boundary_conditions(self):
-        """task_spec.boundary_conditions ends up with alpha_deg + U_inf_x + U_inf_z."""
+    def test_adapter_plumbs_static_constants_into_boundary_conditions(self):
+        """task_spec.boundary_conditions plumbs U_inf/rho/p_inf for downstream
+        airfoil_surface_sampler. NOTE per Codex round 1 F1 fix (2026-04-25):
+        adapter NO LONGER persists alpha_deg / U_inf_x / U_inf_z back into bc;
+        the resolved α is per-call-fresh, never sticky across reuse."""
         import tempfile
         from pathlib import Path as _Path
         task = TaskSpec(
@@ -2718,12 +2721,102 @@ class TestNACA0012MultiDim:
         with tempfile.TemporaryDirectory() as td:
             FoamAgentExecutor()._generate_airfoil_flow(_Path(td), task, "kOmegaSST")
         bc = task.boundary_conditions
-        assert bc["alpha_deg"] == 4.0
-        assert bc["U_inf_x"] == pytest.approx(0.997564, abs=1e-5)
-        assert bc["U_inf_z"] == pytest.approx(0.069756, abs=1e-5)
+        # Static constants ARE persisted (have downstream consumers in
+        # airfoil_surface_sampler.compute_cp via DEC-V61-044).
         assert bc["U_inf"] == 1.0
         assert bc["rho"] == 1.0
         assert bc["p_inf"] == 0.0
+        # The user-supplied alpha_deg is NOT overwritten by the adapter (it
+        # was supplied by the caller; we leave it untouched).
+        assert bc["alpha_deg"] == 4.0
+        # The adapter does NOT persist its own resolved alpha_deg /
+        # U_inf_x / U_inf_z. (Codex round 1 F1 — these were stateful
+        # caches that masked alias updates across reuse.)
+        assert "U_inf_x" not in bc
+        assert "U_inf_z" not in bc
+
+    def test_adapter_reuse_taskspec_alias_change_picks_up_new_alpha(self, tmp_path):
+        """Codex round 1 F1 BLOCKING reproduction: reusing the same TaskSpec
+        but updating only the `angle_of_attack` alias must produce the NEW α
+        freestream, not the previously-resolved one. Pre-fix the adapter
+        persisted bc["alpha_deg"]=4 from the first call, and the second call's
+        precedence chain (alpha_deg first) returned the stale value."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": 4.0},
+        )
+        # First call: α=4°
+        d1 = tmp_path / "call1"
+        d1.mkdir()
+        FoamAgentExecutor()._generate_airfoil_flow(d1, task, "kOmegaSST")
+        u_text_1 = (d1 / "0" / "U").read_text()
+        assert "9.975641e-01" in u_text_1  # cos 4°
+
+        # Second call on SAME task_spec: caller updates ONLY the alias.
+        task.boundary_conditions["angle_of_attack"] = 8.0
+        d2 = tmp_path / "call2"
+        d2.mkdir()
+        FoamAgentExecutor()._generate_airfoil_flow(d2, task, "kOmegaSST")
+        u_text_2 = (d2 / "0" / "U").read_text()
+        # MUST be α=8° freestream now, not stale α=4°.
+        assert "9.902681e-01" in u_text_2  # cos 8°
+        assert "1.391731e-01" in u_text_2  # sin 8°
+        # Must NOT carry the stale α=4° vertical-component tuple.
+        assert "6.975647e-02" not in u_text_2
+
+    def test_adapter_alpha_precedence_angle_of_attack_wins_over_alpha_deg(self, tmp_path):
+        """Whitelist canonical key `angle_of_attack` takes precedence over the
+        `alpha_deg` alias when both are present (Codex round 1 F1 fix)."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={
+                "chord_length": 1.0,
+                "angle_of_attack": 8.0,  # whitelist canonical
+                "alpha_deg": 4.0,         # alias (would lose if precedence honored)
+            },
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        u_text = (tmp_path / "0" / "U").read_text()
+        assert "9.902681e-01" in u_text  # cos 8° wins
+        assert "1.391731e-01" in u_text  # sin 8° wins
+
+    def test_adapter_alpha_non_numeric_raises_fail_closed(self, tmp_path):
+        """Codex round 1 Q1(a): non-numeric must FAIL CLOSED, not silently default to 0.0."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": ""},
+        )
+        with pytest.raises(ParameterPlumbingError, match="must be numeric"):
+            FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+
+    def test_adapter_alpha_bool_raises_fail_closed(self, tmp_path):
+        """Codex round 1 Q1(a): bool (subclass of int in Python) must NOT silently coerce to 0/1."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": False},
+        )
+        with pytest.raises(ParameterPlumbingError, match="must be numeric"):
+            FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
 
     # ------------------------------------------------------------------
     # Gate-set sanity: Cl@α=0° EXCLUDED (Codex F1 + numerical_noise_snr)
