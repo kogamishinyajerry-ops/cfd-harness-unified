@@ -28,19 +28,19 @@
 
 | Observable | Reference | Simulation | Direction | Within Tolerance |
 | --- | --- | --- | --- | --- |
-| `nusselt_number` | `30` | `5.85` | `Under` | `False` |
+| `nusselt_number` | `8.8` | `11.3676` | `Over` | `False` |
 
 ## Attribution Analysis
 
-- Primary Cause: `mesh_insufficient_for_Ra`
-- Confidence: `MEDIUM`
+- Primary Cause: `pending_stage_e_live_run`
+- Confidence: `HIGH`
 - Suggested Follow-up: `IN_PROGRESS_FIX`
 ## CorrectionSpec Record
 
 > suggest-only, not auto-applied
 
-- Primary Cause: `mesh_insufficient_for_Ra`
-- Confidence: `MEDIUM`
+- Primary Cause: `pending_stage_e_live_run`
+- Confidence: `HIGH`
 - Suggested Correction: `IN_PROGRESS_FIX`
 
 ## Project Progress

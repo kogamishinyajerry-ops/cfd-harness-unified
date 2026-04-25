@@ -1546,6 +1546,54 @@ class TestBuoyantCasePlumbingVerification:
                 f"{blockmesh[blockmesh.find('hex'):blockmesh.find('hex')+400]}"
             )
 
+    def test_dhc_validation_artifact_lineage_invariant(self):
+        """DEC-V61-057 Batch A.4 (Codex F2-HIGH): the three sources of truth
+        for DHC reference Nu must agree byte-identically:
+          1. knowledge/gold_standards/differential_heated_cavity.yaml ::
+             observables[].ref_value
+          2. reports/differential_heated_cavity/auto_verify_report.yaml ::
+             gold_standard_comparison.observables[].ref_value (consumed by
+             results_comparison.md.j2 template)
+          3. The rendered cell in reports/differential_heated_cavity/report.md
+             (downstream of #2 via Jinja).
+        The pre-fix state showed (1)=8.8, (2)=30.0, (3)=30.0 — split-brain
+        rendering. After A.4 regen all three must be 8.8."""
+        import yaml as _yaml
+        repo_root = Path(__file__).parent.parent
+
+        gold = _yaml.safe_load(
+            (repo_root / "knowledge/gold_standards/differential_heated_cavity.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        gold_ref = gold["observables"][0]["ref_value"]
+        assert gold["observables"][0]["name"] == "nusselt_number"
+
+        avr = _yaml.safe_load(
+            (repo_root / "reports/differential_heated_cavity/auto_verify_report.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        avr_ref = avr["gold_standard_comparison"]["observables"][0]["ref_value"]
+        assert avr["gold_standard_comparison"]["observables"][0]["name"] == "nusselt_number"
+
+        report_md = (repo_root / "reports/differential_heated_cavity/report.md").read_text(
+            encoding="utf-8"
+        )
+
+        assert gold_ref == avr_ref, (
+            f"Invariant broken: gold YAML ref_value={gold_ref!r} but "
+            f"auto_verify_report.yaml ref_value={avr_ref!r}. The "
+            f"results_comparison.md.j2 template reads from "
+            f"auto_verify_report — drift here breaks the rendered report."
+        )
+        # report.md cell text is "| `nusselt_number` | `8.8` | ..." — verify
+        # the gold value appears as a literal cell.
+        assert f"`{gold_ref}`" in report_md, (
+            f"report.md does not contain reference cell `{gold_ref}` — "
+            f"renderer regen drift. report.md head:\n{report_md[:500]}"
+        )
+
     def test_rbc_keeps_uniform_mesh(self):
         """DEC-V61-057 Batch A.3: RBC convection rolls span full domain — no
         thin BL to resolve, uniform mesh is fine. The case-id-aware mesh
