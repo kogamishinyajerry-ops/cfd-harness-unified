@@ -3512,9 +3512,49 @@ boundaryField
         D = 1.0
         L = 15.0 * D
         half_D = D / 2.0
-        ncx = max(4, self._ncx)
-        ncy = max(4, self._ncy // 2)
+        # DEC-V61-059 Stage A.3: case-locked mesh resolution + wall-
+        # symmetric grading so first-cell y+ < 1 at Re_τ=395 (target
+        # bracket for the kOmegaSST / RANS upgrade in A.4). Earlier
+        # uniform mesh with ncy = self._ncy // 2 = 10 cells in full y
+        # gave dy_uniform = 0.1 → y+ ≈ 80 at the wall — way past the
+        # log-law-resolved threshold and incompatible with the Moser
+        # DNS gold reference. Defaults below override self._ncx/_ncy.
+        # Comment math (numerical assertion for future reviewers):
+        #   ncy_total = 80 cells across full channel y∈[-h, h]
+        #   wall-symmetric grading X = 15 (lower-half cells expand
+        #     1:15 from wall to mid-channel; upper-half mirrors with
+        #     1/15 contraction for symmetric clustering at the top
+        #     wall too)
+        #   r = X**(1/(N_half-1)) = 15**(1/39) ≈ 1.0700
+        #   dy_wall = h · (r-1) / (r**N_half - 1)
+        #           = 0.5 · 0.0700 / (15·1.0700 - 1)
+        #           ≈ 2.30e-3
+        #   At Re_τ=395, ν=2.5e-5, h=0.5: u_τ = Re_τ·ν/h = 0.01975
+        #   y+_first = dy_wall · u_τ / ν ≈ 2.30e-3 · 0.01975 / 2.5e-5
+        #           ≈ 1.82
+        # That's slightly above the y+<1 strict-DNS bound but inside
+        # the wall-resolved kOmegaSST regime (typical recommendation
+        # y+<5 for low-Re wall functions; A.4 enables low-Re with
+        # damping). Bumping ncy further trades against runtime; X=15
+        # at ncy=80 is the tested DHC pattern (DEC-V61-057 §F1) and
+        # keeps blockMesh quick. Refinement to ncy=120 stays as a
+        # B-stage optimization knob if Stage E live-run shows wall
+        # gradient SNR <10× per RETRO-V61-050.
+        PLANE_CHANNEL_NCY = 80
+        PLANE_CHANNEL_NCX = max(40, self._ncx)
+        PLANE_CHANNEL_GRADING_X = 15  # wall-symmetric expansion ratio
+        ncx = PLANE_CHANNEL_NCX
+        ncy = PLANE_CHANNEL_NCY
         ncz = max(4, self._ncy // 2)
+        # simpleGrading multi-block syntax for wall-symmetric clustering:
+        # `(L_frac N_frac r)` triples — 50% of the y-length contains
+        # 50% of the cells with expansion r=15 (dense at lower wall),
+        # then 50% of length / 50% cells with r=1/15 (re-densifies at
+        # upper wall). x and z stay uniform.
+        grading_y = (
+            f"((0.5 0.5 {PLANE_CHANNEL_GRADING_X}) "
+            f"(0.5 0.5 {1.0 / PLANE_CHANNEL_GRADING_X:.6f}))"
+        )
 
         Re = float(task_spec.Re or 5600)
         nu_val = 1.0 / Re
@@ -3525,12 +3565,21 @@ boundaryField
         # channel height h = D/2. icoFoam is kinematic, so u_tau =
         # sqrt(|τ_w/ρ|) with τ_w/ρ read directly from the
         # wallShearStress FO.
+        # DEC-V61-059 Stage A.4 will additionally plumb
+        # turbulence_model_used (currently "laminar" by default for
+        # legacy icoFoam path; flipped to "kOmegaSST" when whitelist
+        # turbulence_model resolves to SST).
         if task_spec.boundary_conditions is None:
             task_spec.boundary_conditions = {}
         task_spec.boundary_conditions["channel_D"] = D
         task_spec.boundary_conditions["channel_half_height"] = half_D
         task_spec.boundary_conditions["nu"] = nu_val
         task_spec.boundary_conditions["U_bulk"] = U_bulk
+        # Track the mesh resolution actually emitted so post-extraction
+        # diagnostics (preflight + audit fixtures) can verify the
+        # numerical assertion above without re-parsing blockMeshDict.
+        task_spec.boundary_conditions["plane_channel_ncy"] = PLANE_CHANNEL_NCY
+        task_spec.boundary_conditions["plane_channel_grading_X"] = PLANE_CHANNEL_GRADING_X
 
         # 1. system/blockMeshDict
         (case_dir / "system" / "blockMeshDict").write_text(
@@ -3567,7 +3616,7 @@ vertices
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) ({ncx} {ncy} {ncz}) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) ({ncx} {ncy} {ncz}) simpleGrading (1 {grading_y} 1)
 );
 
 edges

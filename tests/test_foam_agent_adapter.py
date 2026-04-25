@@ -1792,6 +1792,94 @@ class TestInternalChannelPlumbingVerification:
                 ex._verify_internal_channel_plumbing(case_dir=case_dir, declared_Re=5600)
 
 
+class TestPlaneChannelMultiDim:
+    """DEC-V61-059 Stage A.3: plane-channel adapter mesh upgrade.
+
+    Asserts:
+      1. blockMeshDict emits wall-symmetric simpleGrading on the y-axis
+         so first-cell y+ < ~2 at Re_τ=395 (kOmegaSST low-Re bracket).
+      2. ncy is locked to the case-specific value (80) regardless of
+         FoamAgentExecutor's _ncy default — earlier _ncy // 2 = 10
+         was incompatible with the Moser DNS gold reference.
+      3. boundary_conditions carries plane_channel_ncy +
+         plane_channel_grading_X so post-extraction diagnostics can
+         verify the numerical assertion without re-parsing the mesh
+         file (RETRO-V61-053 P1 mesh-density-on-domain-change pattern).
+      4. U_bulk + nu + half-channel-height keys are still plumbed
+         (DEC-V61-043 contract preserved).
+    """
+
+    def _make_spec(self, Re: float = 5600) -> TaskSpec:
+        return TaskSpec(
+            name="plane-channel",
+            geometry_type=GeometryType.BODY_IN_CHANNEL,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=Re,
+        )
+
+    def test_blockMeshDict_emits_wall_symmetric_grading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            ex = FoamAgentExecutor()
+            ex._generate_steady_internal_channel(case_dir, self._make_spec())
+            mesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # simpleGrading 1 on x; multi-block grading on y; 1 on z.
+            assert "simpleGrading (1 ((0.5 0.5 15)" in mesh
+            # Reciprocal block for upper-half symmetric clustering.
+            # (1/15 = 0.066667 to 6 dp).
+            assert "0.066667" in mesh
+            # x and z still uniform (1 prefix and 1 suffix outside the
+            # multi-block group).
+            assert "simpleGrading (1 (" in mesh
+            assert ")) 1)" in mesh
+
+    def test_blockMeshDict_uses_case_locked_ncy_80(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            # Construct executor with a small _ncy to verify the case
+            # generator OVERRIDES it. Default _ncy // 2 = 10 was the
+            # legacy bug; case-locked ncy=80 must win regardless.
+            ex = FoamAgentExecutor(ncy=20)
+            ex._generate_steady_internal_channel(case_dir, self._make_spec())
+            mesh = (case_dir / "system" / "blockMeshDict").read_text()
+            # blocks line: hex (...) (ncx ncy ncz) simpleGrading ...
+            # Find the cell-count tuple — must contain 80 in the y slot.
+            import re
+
+            match = re.search(r"hex \([^)]+\) \((\d+) (\d+) (\d+)\)", mesh)
+            assert match is not None, "blockMeshDict missing hex cell-count line"
+            ncx_emitted = int(match.group(1))
+            ncy_emitted = int(match.group(2))
+            ncz_emitted = int(match.group(3))
+            assert ncy_emitted == 80, (
+                f"plane channel must override _ncy to 80, got {ncy_emitted}"
+            )
+            # ncx must be at least 40 (case-locked floor).
+            assert ncx_emitted >= 40
+
+    def test_boundary_conditions_carry_mesh_diagnostics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec()
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            assert bc.get("plane_channel_ncy") == 80
+            assert bc.get("plane_channel_grading_X") == 15
+
+    def test_dec_v61_043_plumbing_contract_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec(Re=5600)
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            assert bc.get("channel_D") == 1.0
+            assert bc.get("channel_half_height") == 0.5
+            assert bc.get("nu") == pytest.approx(1.0 / 5600)
+            assert bc.get("U_bulk") == 1.0
+
+
 # ---------------------------------------------------------------------------
 # C3 — Gold-anchored sampleDict helpers
 # ---------------------------------------------------------------------------
