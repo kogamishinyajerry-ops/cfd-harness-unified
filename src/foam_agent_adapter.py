@@ -3565,16 +3565,32 @@ boundaryField
         # channel height h = D/2. icoFoam is kinematic, so u_tau =
         # sqrt(|τ_w/ρ|) with τ_w/ρ read directly from the
         # wallShearStress FO.
-        # DEC-V61-059 Stage A.4 will additionally plumb
-        # turbulence_model_used (currently "laminar" by default for
-        # legacy icoFoam path; flipped to "kOmegaSST" when whitelist
-        # turbulence_model resolves to SST).
+        # DEC-V61-059 Stage A.4 (this commit) plumbs
+        # turbulence_model_used into bc so the emitter (via
+        # plane_channel_extractors.canonicalize_turbulence_model) and
+        # comparator_gates.G2 can discriminate honest turbulent
+        # runs from canonical-band laminar shortcuts. Resolution
+        # order: (1) whitelist.yaml::plane_channel_flow.turbulence_model
+        # (canonical source), (2) caller-injected override via
+        # task_spec.boundary_conditions["turbulence_model"] (used by
+        # tests + ad-hoc forward-compat specs), (3) "laminar" default.
+        # Whitelist flip to kOmegaSST lands as A.4.b alongside full
+        # RAS file emission.
+        whitelist_turbulence = _load_whitelist_turbulence_model(task_spec.name)
+        if whitelist_turbulence is None or not whitelist_turbulence:
+            _override_bc = task_spec.boundary_conditions or {}
+            whitelist_turbulence = (
+                _override_bc.get("turbulence_model") or "laminar"
+            )
         if task_spec.boundary_conditions is None:
             task_spec.boundary_conditions = {}
         task_spec.boundary_conditions["channel_D"] = D
         task_spec.boundary_conditions["channel_half_height"] = half_D
         task_spec.boundary_conditions["nu"] = nu_val
         task_spec.boundary_conditions["U_bulk"] = U_bulk
+        task_spec.boundary_conditions["turbulence_model_used"] = (
+            whitelist_turbulence
+        )
         # Track the mesh resolution actually emitted so post-extraction
         # diagnostics (preflight + audit fixtures) can verify the
         # numerical assertion above without re-parsing blockMeshDict.
@@ -3698,6 +3714,52 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 transportModel  Newtonian;
 nu              [0 2 -1 0 0 0 0] {nu_val};
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # 2b. constant/turbulenceProperties (DEC-V61-059 A.4 contract).
+        # icoFoam ignores this file (it has no turbulence-transport
+        # equations) but emitting it makes the case forward-compatible
+        # with the simpleFoam+RAS path that A.4.b will wire. Equally
+        # important: the file's `simulationType` is the canonical place
+        # for downstream tooling to read the case's declared turbulence
+        # treatment (e.g., for byte-stable audit packages, an external
+        # auditor can grep the case dir without consulting bc[]).
+        if (
+            isinstance(whitelist_turbulence, str)
+            and whitelist_turbulence
+            and whitelist_turbulence.lower() != "laminar"
+        ):
+            _turbulence_props_body = (
+                f"simulationType  RAS;\n\n"
+                f"RAS\n{{\n"
+                f"    RASModel     {whitelist_turbulence};\n\n"
+                f"    turbulence   on;\n\n"
+                f"    printCoeffs  on;\n}}\n"
+            )
+        else:
+            _turbulence_props_body = "simulationType  laminar;\n"
+        (case_dir / "constant" / "turbulenceProperties").write_text(
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+{_turbulence_props_body}
 // ************************************************************************* //
 """,
             encoding="utf-8",

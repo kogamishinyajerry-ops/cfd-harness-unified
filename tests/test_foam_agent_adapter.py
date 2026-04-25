@@ -1879,6 +1879,62 @@ class TestPlaneChannelMultiDim:
             assert bc.get("nu") == pytest.approx(1.0 / 5600)
             assert bc.get("U_bulk") == 1.0
 
+    def test_a4a_turbulence_model_used_stamped_in_bc(self):
+        """DEC-V61-059 A.4.a: bc carries turbulence_model_used so the
+        emitter (via canonicalize_turbulence_model) and comparator
+        gate G2 can discriminate honest turbulent runs from canonical-
+        band laminar shortcuts.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = self._make_spec()
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            bc = spec.boundary_conditions or {}
+            # whitelist plane_channel_flow currently sets turbulence_model=laminar
+            # → bc reflects that.
+            assert bc.get("turbulence_model_used") == "laminar"
+
+    def test_a4a_turbulence_properties_file_emitted_laminar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec())
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            # Whitelist says laminar; turbulenceProperties must reflect that.
+            assert "simulationType  laminar" in tp
+            # Must NOT contain RAS block in laminar mode.
+            assert "RASModel" not in tp
+
+    def test_a4a_turbulence_properties_file_emitted_ras_when_whitelist_overrides(self):
+        """When task_spec.turbulence_model overrides whitelist (used for
+        forward-compat tests + ad-hoc unit-test specs), the
+        turbulenceProperties file emits a RAS block. This is the rail
+        that A.4.b will travel when the whitelist itself is flipped to
+        kOmegaSST.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            spec = TaskSpec(
+                # Use a name NOT in the whitelist so
+                # _load_whitelist_turbulence_model returns None and the
+                # fallback (boundary_conditions["turbulence_model"])
+                # wins. This is the rail A.4.b will also travel once
+                # the whitelist itself is flipped to kOmegaSST.
+                name="plane-channel-forward-compat-test",
+                geometry_type=GeometryType.BODY_IN_CHANNEL,
+                flow_type=FlowType.INTERNAL,
+                steady_state=SteadyState.STEADY,
+                compressibility=Compressibility.INCOMPRESSIBLE,
+                Re=5600,
+                boundary_conditions={"turbulence_model": "kOmegaSST"},
+            )
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, spec)
+            tp = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "simulationType  RAS" in tp
+            assert "RASModel     kOmegaSST" in tp
+            assert "turbulence   on" in tp
+            bc = spec.boundary_conditions or {}
+            assert bc.get("turbulence_model_used") == "kOmegaSST"
+
 
 # ---------------------------------------------------------------------------
 # C3 — Gold-anchored sampleDict helpers
