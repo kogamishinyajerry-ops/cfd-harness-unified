@@ -42,12 +42,21 @@ def _commit(cwd: Path, message: str, fname: str = "f.txt") -> None:
     _run_git(cwd, "commit", "-m", message, "--no-verify")
 
 
-def _run_hook(cwd: Path, override: bool = False) -> tuple[int, str]:
+def _run_hook(
+    cwd: Path,
+    override: bool = False,
+    extra_env: dict[str, str] | None = None,
+) -> tuple[int, str]:
     env = {**os.environ}
     if override:
         env["CODEX_CADENCE_OVERRIDE"] = "1"
     else:
         env.pop("CODEX_CADENCE_OVERRIDE", None)
+    # Round-2 Q6: env-driven override-reason. Tests that should pass under
+    # the new gate pass extra_env={"CODEX_OVERRIDE_REASON": "..."}.
+    env.pop("CODEX_OVERRIDE_REASON", None)
+    if extra_env:
+        env.update(extra_env)
     res = subprocess.run(
         [sys.executable, str(HOOK)],
         cwd=cwd, env=env,
@@ -104,11 +113,17 @@ def test_canonical_verdict_at_threshold_blocks(fresh_repo: Path) -> None:
 
 
 def test_override_env_var_skips(fresh_repo: Path) -> None:
-    """CODEX_CADENCE_OVERRIDE=1 bypasses even past threshold."""
+    """CODEX_CADENCE_OVERRIDE=1 bypasses even past threshold. Round-2 Q6
+    now also requires CODEX_OVERRIDE_REASON (or Override-reason: trailer)
+    so the test fixture supplies one."""
     _commit(fresh_repo, "feat: x\n\nCodex-verified: CHANGES_REQUIRED then RESOLVED")
     for i in range(15):
         _commit(fresh_repo, f"chore: follow-up {i}")
-    code, out = _run_hook(fresh_repo, override=True)
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "test fixture · cadence override"},
+    )
     assert code == 0
     assert "OVERRIDE active" in out
 
@@ -257,7 +272,9 @@ def test_q14_unrelated_change_passes(fresh_repo: Path) -> None:
 
 def test_override_still_works_with_risk_triggers(fresh_repo: Path) -> None:
     """CODEX_CADENCE_OVERRIDE=1 still bypasses both gates — for
-    bootstrapping the hook's own merge or genuine emergencies."""
+    bootstrapping the hook's own merge or genuine emergencies. As of
+    round-2 Q6 the override now requires an audit reason; the test
+    fixture supplies one via env var so this case still passes."""
     _seed_verified_baseline(fresh_repo)
     _add_file_and_commit(
         fresh_repo,
@@ -265,6 +282,94 @@ def test_override_still_works_with_risk_triggers(fresh_repo: Path) -> None:
         "# new route\n",
         "feat(routes): risky",
     )
-    code, out = _run_hook(fresh_repo, override=True)
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "test fixture"},
+    )
     assert code == 0
     assert "OVERRIDE active" in out
+
+
+# --- Round-2 Q6: override double-trace (Override-reason + audit log) -------
+
+def test_q6_override_without_reason_blocked(fresh_repo: Path) -> None:
+    """Round-2 Q6: env var alone is no longer enough. Must supply
+    Override-reason: in commit body OR CODEX_OVERRIDE_REASON env var."""
+    _seed_verified_baseline(fresh_repo)
+    code, out = _run_hook(fresh_repo, override=True)
+    assert code == 1, f"override without reason must block: {out}"
+    assert "OVERRIDE BLOCKED" in out
+    assert "Override-reason" in out
+
+
+def test_q6_override_with_env_reason_logs(fresh_repo: Path) -> None:
+    """CODEX_OVERRIDE_REASON env var satisfies the audit requirement and
+    the override is logged to .governance/codex_cadence_overrides.log."""
+    _seed_verified_baseline(fresh_repo)
+    code, out = _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "emergency hotfix · ticket #999"},
+    )
+    assert code == 0
+    log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
+    assert log_path.exists(), "audit log must be written"
+    log_content = log_path.read_text(encoding="utf-8")
+    assert "emergency hotfix" in log_content
+    assert "ticket #999" in log_content
+
+
+def test_q6_override_with_trailer_reason_logs(fresh_repo: Path) -> None:
+    """`Override-reason: <text>` trailer in HEAD commit body satisfies
+    the audit requirement and is preferred over env var (durable in git)."""
+    _seed_verified_baseline(fresh_repo)
+    _commit(
+        fresh_repo,
+        "chore: rollback v3 patch\n\nOverride-reason: revert botched migration",
+    )
+    code, out = _run_hook(fresh_repo, override=True)
+    assert code == 0, f"trailer reason must satisfy: {out}"
+    log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
+    assert log_path.exists()
+    log_content = log_path.read_text(encoding="utf-8")
+    assert "revert botched migration" in log_content
+
+
+def test_q6_override_log_format_tab_separated(fresh_repo: Path) -> None:
+    """Audit log line must be tab-separated and contain SHA + timestamp
+    so post-hoc analysis tools can parse it."""
+    _seed_verified_baseline(fresh_repo)
+    _run_hook(
+        fresh_repo,
+        override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "format check"},
+    )
+    log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
+    line = log_path.read_text(encoding="utf-8").strip().splitlines()[-1]
+    parts = line.split("\t")
+    assert len(parts) == 5, f"expected 5 tab-sep parts; got {parts}"
+    iso_ts, sha, reason, n_trig, triggers = parts
+    assert iso_ts.startswith("20")  # ISO8601
+    assert len(sha) == 12
+    assert reason == "format check"
+    assert n_trig.isdigit()
+    assert triggers  # may be "(no risk triggers)" but is non-empty
+
+
+def test_q6_override_log_appends_not_overwrites(fresh_repo: Path) -> None:
+    """Two overrides → two lines. Append semantics, not overwrite."""
+    _seed_verified_baseline(fresh_repo)
+    _run_hook(
+        fresh_repo, override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "first"},
+    )
+    _run_hook(
+        fresh_repo, override=True,
+        extra_env={"CODEX_OVERRIDE_REASON": "second"},
+    )
+    log_path = fresh_repo / ".governance" / "codex_cadence_overrides.log"
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 2
+    assert "first" in lines[0]
+    assert "second" in lines[1]

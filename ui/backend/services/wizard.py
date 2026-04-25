@@ -12,6 +12,7 @@ a small param schema so the form fields stay glanceable.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Callable
 
@@ -255,12 +256,50 @@ def list_templates() -> list[TemplateSummary]:
     return [t.summary for t in _TEMPLATES.values()]
 
 
+def _validate_params(template: _Template, params: dict[str, float]) -> None:
+    """Round-2 Q9: reject NaN / ±Inf and values outside the template's
+    declared min/max. Pydantic's `float` accepts NaN and Inf by default;
+    serialising those into YAML produces `.nan` / `.inf` which downstream
+    lint and CFD code cannot interpret. Rejecting at the service boundary
+    is the right level of defense — the template carries the authoritative
+    bounds, so duplicating them in route-level Pydantic Field constraints
+    would just create drift.
+
+    Unknown keys are silently dropped (the renderer falls back to defaults
+    for any param it doesn't see) — only declared params get validated."""
+    bounds_by_key = {p.key: p for p in template.summary.params}
+    for key, value in (params or {}).items():
+        if key not in bounds_by_key:
+            continue  # extra keys are tolerated; renderer ignores them
+        if not isinstance(value, (int, float)):
+            raise ValueError(
+                f"param {key!r}: must be numeric, got {type(value).__name__}"
+            )
+        v = float(value)
+        if math.isnan(v):
+            raise ValueError(f"param {key!r}: NaN is not a valid value")
+        if math.isinf(v):
+            raise ValueError(f"param {key!r}: ±infinity is not a valid value")
+        bound = bounds_by_key[key]
+        if bound.min is not None and v < bound.min:
+            raise ValueError(
+                f"param {key!r}: {v} below min {bound.min} ({bound.unit or ''}".rstrip()
+                + ")"
+            )
+        if bound.max is not None and v > bound.max:
+            raise ValueError(
+                f"param {key!r}: {v} above max {bound.max} ({bound.unit or ''}".rstrip()
+                + ")"
+            )
+
+
 def render_yaml(
     template_id: str, case_id: str, name_display: str | None, params: dict[str, float]
 ) -> str:
     template = _TEMPLATES.get(template_id)
     if template is None:
         raise ValueError(f"unknown template_id: {template_id!r}")
+    _validate_params(template, params)
     display = name_display or f"{template.summary.name_zh} · {case_id}"
     body = template.render_fn(case_id, display, params or {})
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True)

@@ -84,3 +84,8 @@ outputs/
 
 # uv lockfile — project standard is .venv + pyproject.toml; uv.lock is local tooling.
 uv.lock
+
+# Codex-cadence override audit log — local-only (developer audit trail).
+# Per-developer log; concurrent appends would conflict if tracked. The
+# directory itself ships a tracked README explaining the contract.
+.governance/codex_cadence_overrides.log

@@ -194,6 +194,122 @@ def test_preview_renders_for_all_three_templates() -> None:
         assert "geometry_type" in text
 
 
+# --- Round-2 Q9: param input validation (inf / nan / out-of-range) ---------
+
+def test_q9_rejects_nan_param() -> None:
+    """NaN must be rejected — round-2 Q9 trust boundary."""
+    case_id = "wizard_test_nan"
+    try:
+        # JSON has no native NaN — encode as the string 'NaN' in raw body to
+        # simulate what a buggy client (or hostile actor) might send. fastapi
+        # / pydantic parse it as float NaN.
+        r = client.post(
+            "/api/wizard/preview",
+            content='{"template_id":"square_cavity","case_id":"' + case_id + '","params":{"Re":NaN,"lid_velocity":1.0}}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 400
+        detail = r.json().get("detail", "").lower()
+        assert "nan" in detail
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_q9_rejects_inf_param() -> None:
+    """+Infinity must be rejected — yaml.safe_dump would emit `.inf`
+    which downstream consumers can't compare numerically."""
+    case_id = "wizard_test_inf"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            content='{"template_id":"square_cavity","case_id":"' + case_id + '","params":{"Re":Infinity,"lid_velocity":1.0}}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 400
+        detail = r.json().get("detail", "").lower()
+        assert "infinity" in detail or "inf" in detail
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_q9_rejects_value_below_min() -> None:
+    """Re=5 is below the square_cavity Re min=10."""
+    case_id = "wizard_test_below_min"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {"Re": 5.0, "lid_velocity": 1.0},
+            },
+        )
+        assert r.status_code == 400
+        assert "below min" in r.json()["detail"].lower()
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_q9_rejects_value_above_max() -> None:
+    """lid_velocity=99 is above square_cavity max=10."""
+    case_id = "wizard_test_above_max"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {"Re": 100.0, "lid_velocity": 99.0},
+            },
+        )
+        assert r.status_code == 400
+        assert "above max" in r.json()["detail"].lower()
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_q9_unknown_param_keys_silently_dropped() -> None:
+    """Extra param keys are tolerated (forward-compat for older clients
+    sending obsolete fields). They just don't affect the rendered YAML."""
+    case_id = "wizard_test_extra_keys"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {
+                    "Re": 100.0,
+                    "lid_velocity": 1.0,
+                    "obsolete_field": 42.0,  # tolerated
+                },
+            },
+        )
+        assert r.status_code == 200
+        text = r.json()["yaml_text"]
+        assert "obsolete_field" not in text
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_q9_create_draft_also_validates() -> None:
+    """The validation must run on both /preview and /draft (otherwise
+    user could see a clean preview but write a corrupt YAML to disk)."""
+    case_id = "wizard_test_create_validates"
+    try:
+        r = client.post(
+            "/api/wizard/draft",
+            content='{"template_id":"square_cavity","case_id":"' + case_id + '","params":{"Re":NaN,"lid_velocity":1.0}}',
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 400
+        # File must NOT exist
+        path = Path(DRAFTS_DIR) / f"{case_id}.yaml"
+        assert not path.exists()
+    finally:
+        _cleanup_draft(case_id)
+
+
 def test_preview_does_not_write_user_drafts() -> None:
     """Preview MUST be side-effect free — no file written.
 

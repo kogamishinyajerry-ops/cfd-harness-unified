@@ -36,13 +36,17 @@ the risk-class gate (cadence still runs).
 """
 from __future__ import annotations
 
+import datetime
 import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 THRESHOLD = 10
 RISK_LOC_THRESHOLD = 500
+OVERRIDE_LOG_PATH = Path(".governance/codex_cadence_overrides.log")
+OVERRIDE_REASON_RE = re.compile(r"^Override-reason:\s*(.+)$", re.MULTILINE)
 
 # Canonical trailer (Round-1 spec): four explicit verdicts only.
 TRAILER_RE = (
@@ -118,6 +122,52 @@ def _head_carries_trailer() -> bool:
     if body is None:
         return False
     return bool(re.search(TRAILER_RE, body, re.MULTILINE))
+
+
+def _head_override_reason() -> str | None:
+    """Round-2 Q6: read `Override-reason:` trailer from HEAD commit body.
+
+    The override env var alone is insufficient for audit (round-2 review:
+    'stderr OVERRIDE active 不留痕，违反 RETRO-V61-001 governance bar').
+    Now the user must ALSO put a reason in the commit message body or set
+    `CODEX_OVERRIDE_REASON` env var. Either form is logged.
+    """
+    body = _try_run(["git", "log", "-1", "--pretty=%B", "HEAD"])
+    if body is None:
+        return None
+    m = OVERRIDE_REASON_RE.search(body)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _append_override_log(reason: str, head_sha: str, triggers: list[str]) -> None:
+    """Round-2 Q6: persistent audit trail. Append a single line to
+    .governance/codex_cadence_overrides.log so post-hoc review can scan
+    historical overrides without git-blame archaeology.
+
+    Format (tab-separated, append-only): `<iso8601>\\t<sha>\\t<reason>\\t<n_triggers>\\t<triggers_joined>`
+    """
+    try:
+        OVERRIDE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat(
+            timespec="seconds"
+        )
+        triggers_joined = "; ".join(triggers) if triggers else "(no risk triggers)"
+        line = (
+            f"{ts}\t{head_sha[:12]}\t{reason}\t"
+            f"{len(triggers)}\t{triggers_joined}\n"
+        )
+        with OVERRIDE_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+    except OSError:
+        # Audit log failure must not block the developer's work, but it
+        # should be loud — print to stderr so the failure is visible.
+        print(
+            f"[codex-cadence] WARNING: could not append override log at "
+            f"{OVERRIDE_LOG_PATH}",
+            file=sys.stderr,
+        )
 
 
 # --- Risk-class detection --------------------------------------------------
@@ -239,16 +289,51 @@ def _detect_risk_triggers() -> list[str]:
 # --- Main ------------------------------------------------------------------
 
 def main() -> int:
-    if os.environ.get("CODEX_CADENCE_OVERRIDE") == "1":
+    override_active = os.environ.get("CODEX_CADENCE_OVERRIDE") == "1"
+    last_verified = _find_last_verified_sha()
+    head_verified = _head_carries_trailer()
+
+    if override_active:
+        # Round-2 Q6: override now requires an audit-grade reason. Either
+        # an `Override-reason:` trailer on HEAD or a CODEX_OVERRIDE_REASON
+        # env var. The trailer is preferred (durable in git history) but
+        # env var is allowed for emergency hot-fixes (CI / cron contexts).
+        reason = (
+            _head_override_reason()
+            or os.environ.get("CODEX_OVERRIDE_REASON", "").strip()
+            or None
+        )
+        if reason is None:
+            print("", file=sys.stderr)
+            print(
+                "[codex-cadence] OVERRIDE BLOCKED · CODEX_CADENCE_OVERRIDE=1 "
+                "is set but no audit reason was provided.",
+                file=sys.stderr,
+            )
+            print(
+                "   Required (either form):",
+                file=sys.stderr,
+            )
+            print(
+                "     (a) add 'Override-reason: <text>' line to HEAD commit body",
+                file=sys.stderr,
+            )
+            print(
+                "     (b) set CODEX_OVERRIDE_REASON='<text>' alongside the env var",
+                file=sys.stderr,
+            )
+            print("", file=sys.stderr)
+            return 1
+        # Compute trigger list so the audit log captures what was bypassed.
+        triggers = _detect_risk_triggers()
+        head_sha = _try_run(["git", "rev-parse", "HEAD"]) or "(unknown)"
+        _append_override_log(reason, head_sha, triggers)
         print(
-            "[codex-cadence] OVERRIDE active (CODEX_CADENCE_OVERRIDE=1) — "
-            "skipping cadence + risk-class gates",
+            f"[codex-cadence] OVERRIDE active (reason: {reason!r}) — bypass "
+            f"logged to {OVERRIDE_LOG_PATH}",
             file=sys.stderr,
         )
         return 0
-
-    last_verified = _find_last_verified_sha()
-    head_verified = _head_carries_trailer()
 
     # --- Gate 1: cadence floor (Q5 fix: full-history, no LOOKBACK cliff) ---
     if last_verified is None:
@@ -280,8 +365,12 @@ def main() -> int:
                 file=sys.stderr,
             )
             print(
-                "   Override (audited via env): "
-                "CODEX_CADENCE_OVERRIDE=1 git push",
+                "   Override (audited): set CODEX_CADENCE_OVERRIDE=1 AND provide a reason via",
+                file=sys.stderr,
+            )
+            print(
+                "     'Override-reason: <text>' commit trailer or "
+                "CODEX_OVERRIDE_REASON='<text>' env var.",
                 file=sys.stderr,
             )
             print("", file=sys.stderr)

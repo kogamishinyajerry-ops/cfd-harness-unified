@@ -185,26 +185,58 @@ function Row({ row }: { row: MatrixRow }) {
   );
 }
 
+// Round-2 Q3: native `title` truncates around 80-100 chars in Chrome /
+// Firefox, so a long verdict_reason like "2/6 precondition unsat: Flow
+// is 2D laminar at Re=100 (unambiguously in laminar regime)…" gets
+// silently clipped. For reasons longer than this threshold we render a
+// controlled popover that shows the full text on hover/focus.
+const TOOLTIP_MAX_NATIVE = 60;
+
 function Cell({ cell, caseId }: { cell: MatrixCell; caseId: string }) {
   const dev = cell.deviation_pct;
   const devText =
     dev != null && Number.isFinite(dev)
       ? `${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`
       : "—";
-  const reason = cell.verdict_reason ? `\n${cell.verdict_reason}` : "";
-  const tooltip = `${cell.density_id} · ${cell.verdict} · dev ${devText}${reason}`;
+  const headline = `${cell.density_id} · ${cell.verdict} · dev ${devText}`;
+  const reason = cell.verdict_reason ?? "";
+  const useNativeTooltip = reason.length <= TOOLTIP_MAX_NATIVE;
+  const titleAttr = useNativeTooltip
+    ? reason
+      ? `${headline}\n${reason}`
+      : headline
+    : headline; // long reasons go in the popover instead, not the title
 
   return (
-    <Link
-      to={`/learn/cases/${encodeURIComponent(caseId)}?tab=mesh&run=${encodeURIComponent(cell.density_id)}`}
-      title={tooltip}
-      className={`mono mx-auto flex h-9 w-full max-w-[80px] items-center justify-center rounded border border-transparent transition-opacity hover:opacity-90 ${VERDICT_BG[cell.verdict]} ${VERDICT_TEXT[cell.verdict]}`}
-    >
-      <span className="text-[10px] leading-none">
-        <span className="font-medium">{VERDICT_GLYPH[cell.verdict]}</span>
-        <span className="ml-1">{devText}</span>
-      </span>
-    </Link>
+    <span className="group relative block">
+      <Link
+        to={`/learn/cases/${encodeURIComponent(caseId)}?tab=mesh&run=${encodeURIComponent(cell.density_id)}`}
+        title={titleAttr}
+        aria-describedby={
+          !useNativeTooltip && reason
+            ? `cell-reason-${caseId}-${cell.density_id}`
+            : undefined
+        }
+        className={`mono mx-auto flex h-9 w-full max-w-[80px] items-center justify-center rounded border border-transparent transition-opacity hover:opacity-90 ${VERDICT_BG[cell.verdict]} ${VERDICT_TEXT[cell.verdict]}`}
+      >
+        <span className="text-[10px] leading-none">
+          <span className="font-medium">{VERDICT_GLYPH[cell.verdict]}</span>
+          <span className="ml-1">{devText}</span>
+        </span>
+      </Link>
+      {!useNativeTooltip && reason ? (
+        <span
+          role="tooltip"
+          id={`cell-reason-${caseId}-${cell.density_id}`}
+          className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden w-64 -translate-x-1/2 rounded-sm border border-surface-700 bg-surface-950 px-2.5 py-2 text-[11px] leading-relaxed text-surface-200 shadow-lg group-hover:block group-focus-within:block"
+        >
+          <span className="mono mb-1 block text-[10px] uppercase tracking-wider text-surface-500">
+            {headline}
+          </span>
+          {reason}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
