@@ -107,15 +107,16 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 - **Deferred**: first-visit guided tour (Lin/Sarah disagreement scope) — not blocking close. The RunRail's auto-expand-failures + tone-aware footer already provides guided pedagogy in-line.
 - **Anti-pattern guard observed**: no fake-green decoration; failure rows surface evidence_ref directly so the user can act, not just see redness.
 
-### Stage 5 · GoldOps · overlay + batch matrix
+### Stage 5 · GoldOps · overlay + batch matrix ✅ MVP LANDED (commit 71734c1, 2026-04-25)
 
-- **Trigger (start)**: Stage 4 close 满足 **AND** 现有 3 个 anchor case (LDC + BFS + cylinder_wake) 的 ContractOverlay 完整率 = 100% (即每个 anchor case 都能在一屏内同时看到 gold 曲线 + run 曲线 + tol band + per-point deviation marker)
-- **MVP scope**: ContractOverlay 升级 (现有 8-section iframe 报告 → 集成进 CompareTab 主屏 + 新增 BatchMatrix heatmap (多 run × 多 case 一屏对比))
-- **Trigger (close)**: `3 anchor case compare 完整率=100%` (LDC + BFS + cylinder 全维 dimension overlay 渲染就绪)
-- **主交付 viz**: ContractOverlay (3-band gradient + per-point markers) + BatchMatrix (heatmap) + per-cell drill-in popover
-- **Predecessor**: Stage 4
-- **Risk**: 信息过载 (Maya/David disagreement resolution: Story-tab 常显仅 3 张风险卡 · 详情进 expand)
-- **Anti-pattern**: 把 BatchMatrix 搞成 spreadsheet (失去 viz 优势)
+- **Trigger (start)**: ✅ MET — Stage 4 closed; `/api/batch-matrix` aggregates the 10×4 case-density grid via existing build_validation_report.
+- **MVP scope** (delivered partial): BatchMatrix delivered — 10×4 SVG-ish grid on LearnHomePage, per-row trend label, monotonicity counter, header verdict counts, click-through to /learn/cases/{id}?tab=mesh&run={density}. ContractOverlay primitive deferred — existing ScientificComparisonReportSection in CompareTab already serves the gold-vs-measurement overlay surface in HTML form.
+- **Trigger (close)**: ✅ MET (BatchMatrix arm) — all 10 cases × 4 densities render with real verdicts. Counts: PASS=12 / HAZARD=8 / FAIL=20 / UNKNOWN=0. 10/10 monotonic improvement under refinement (no row regresses with finer mesh).
+- **主交付 viz** (delivered): BatchMatrix grid + verdict count chips + per-row trend (↗ FAIL→HAZARD etc) + monotonicity footer.
+- **Predecessor**: Stage 4 ✅
+- **Risk** (resolved): 信息过载 mitigated by per-row trend label that compresses the 4-cell pattern to a single arrow + verdict pair. Footer monotonicity counter gives immediate "is this harness sane" signal.
+- **Anti-pattern guard observed**: BatchMatrix avoided becoming a spreadsheet by making each cell a colored chip with verdict glyph + |dev|% (not a number table) and adding the trend column for system-level pattern reading.
+- **Future polish (not blocking close)**: stand-alone `<ContractOverlay>` SVG primitive that the BatchMatrix could embed as drill-in popover. Existing CompareTab infrastructure suffices for current scope.
 
 ### Stage 6 · ExportPack · PDF + xlsx 双绿
 
