@@ -79,7 +79,7 @@ For any PR introducing observability instrumentation (writers / watchdogs / hook
 
 **Pass criterion**: the PR's test matrix includes ≥1 test that exercises the instrumentation via subprocess (`subprocess.run`) or real-stack frame walk (`sys._getframe()`), not just monkeypatched fakes. If absent, **self-est cap = 0.70** (was 0.75 pre-RETRO-V61-006 addendum 2 · revised 0.75 → 0.70 per Opus 4.7 audit Item b).
 
-**Binding rule (W4 toggle PR · 2026-05-11 deadline)**: the W4 toggle PR is BOTH instrumentation (flips dogfood pytest from non-blocking to blocking) AND CI workflow change (modifies `.github/workflows/ci.yml`). Combined with the stair-anchor probationary drop 0.87 → 0.85, the binding self-est cap for W4 toggle PR is `min(0.85, 0.70) = 0.70`. The 5/9 review template's commit-message draft self-est must reflect this.
+**Binding rule (W4 toggle PR · Gate #1 trigger)**: the W4 toggle PR is BOTH instrumentation (flips dogfood pytest from non-blocking to blocking) AND CI workflow change (modifies `.github/workflows/ci.yml`). Combined with the stair-anchor probationary drop 0.87 → 0.85, the binding self-est cap for W4 toggle PR is `min(0.85, 0.70) = 0.70`. The dogfood close review template's commit-message draft self-est must reflect this. **Calendar form "2026-05-11 deadline" deprecated 2026-04-25T17:30** per Opus 4.7 ACCEPT_WITH_COMMENTS 9-gates refactor — see RETRO-V61-006 Addendum 5 + OPS-2026-04-25-001 §7 Gate #1.
 
 **Fail mode** (RETRO-V61-006 calibration): 11 unit tests passed but real-stack repro caught 3 HIGH findings Codex used to verify F1/F2/F3.
 
@@ -113,13 +113,21 @@ These checks correspond directly to MP-A through MP-G in RETRO-V61-006:
 
 MP-D (test pollution fix), MP-E (cross-track `git add -p` discipline) and MP-F (`pre-commit install` on session start) are operational, not pre-Codex; they live in OPS-2026-04-25-001 §9 + commit-message-tag protocol + `bin/dev-session-init` script.
 
-Gap #6 (artifact emptiness ≠ artifact absence) is a 5/9 review template rule, not pre-Codex; it lives in `.planning/dogfood/2026-05-09_review_template.md` Step 1 (verify `ci_warn_pytest.log` shows `<N> passed` BEFORE reading `.jsonl` count).
+Gap #6 (artifact emptiness ≠ artifact absence) is a dogfood close review template rule, not pre-Codex; it lives in `.planning/dogfood/dogfood_close_review_template.md` Step 1 (verify `ci_warn_pytest.log` shows `<N> passed` BEFORE reading `.jsonl` count). Template renamed from `2026-05-09_review_template.md` 2026-04-25T17:30 per Opus 4.7 9-gates refactor.
 
 ## 4. When to run
 
-- Always before the first Codex round on a risky-PR
-- Skip on **verbatim 5/5 exception** rounds (R2+ on already-Codex-reviewed PRs where the fix is literal-Codex-recommendation-mapping ≤20 LOC ≤2 files)
-- Skip on doc-only commits
+### 4.1 Per-PR cadence (signal-driven · Opus 4.7 9-gates refactor Gate #7)
+
+**Required**:
+- Every risky-class PR (per RETRO-V61-001 baseline + RETRO-V61-006 expansions — see CLAUDE.md "v6.1 自主治理规则 · Codex-per-risky-PR baseline")
+- Every 10th merged PR sample 1 non-risky for Codex sweep — drift detection against risk classifier itself
+
+**Skip allowed**:
+- Verbatim 5/5 exception rounds (R2+ on already-Codex-reviewed PRs where the fix is literal-Codex-recommendation-mapping ≤20 LOC ≤2 files)
+- Doc-only commits
+
+**Calendar form "weekly fallback" deprecated 2026-04-25T17:30** per Opus 4.7 ACCEPT_WITH_COMMENTS 9-gates refactor (RETRO-V61-006 Addendum 5 Gate #7). The "drift detection" purpose of weekly fallback is precisely served by 10-merge sampling and aligns with development cadence rather than wall clock. If 10 PRs take 1 day, sweep daily; if 10 PRs take 1 month, sweep monthly. **Long zero-PR periods → no sweep needed (no surface to drift)**.
 
 ## 5. Revision log
 

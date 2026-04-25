@@ -1,10 +1,16 @@
-# Plane-Guard Dogfood Window 5/9 Review Template
+# Plane-Guard Dogfood Close Review Template
 
-> **Purpose**: Drive the W4 toggle PR GO/NO-GO decision per ADR-002 §5 + Opus G-9 binding 2 (target ≤ 2026-05-11).
+> **Purpose**: Drive the W4 toggle PR GO/NO-GO decision per ADR-002 §5. Fires when **Gate #3 (dogfood close trigger)** is satisfied — see authority below.
 >
-> **Authority**: ADR-002 §5 W4 stage-1 timeline · OPS-2026-04-25-001 §7 · RETRO-V61-006 baseline anchor (`reports/plane_guard/baseline_2026-04-25.md`).
+> **Authority**: ADR-002 §5 W4 stage-1 milestone · OPS-2026-04-25-001 §7 (signal-count gates, RETRO-V61-006 Addendum 5 9-gates refactor) · `reports/plane_guard/baseline_2026-04-25.md`.
 >
-> **Window**: 2026-04-25 → 2026-05-09 (≥5 days · Opus risk-buffer).
+> **Trigger condition (Gate #3)**: ALL of —
+> 1. ≥30 backend pytest CI runs since dogfood anchor `0229af9` (2026-04-25T06:55Z)
+> 2. ≥15 cross-track commits (line A SOLE + line B SOLE + SHARED, summed)
+> 3. A13/A18 dedup'd incidents = 0 in aggregated `.jsonl`
+> 4. escape-tag usage rate <20%
+>
+> Calendar form ("2026-04-25 → 2026-05-09 ≥5 days") **deprecated 2026-04-25T17:30** per Opus 4.7 ACCEPT_WITH_COMMENTS 9-gates refactor. The window CLOSES when the signal trigger fires, not on a date.
 
 ## Pre-flight (do first · 5 min)
 
@@ -227,7 +233,7 @@ Verdict mapping:
 
 ## Step 5 · Persist review record
 
-After completing review, copy this template to `.planning/dogfood/2026-05-09_review.md` (drop `_template`), fill in actual numbers / observations / decision, and commit `[line-a]`. The template stays clean for any future dogfood-window pattern reuse.
+After completing review, copy this template to `.planning/dogfood/dogfood_close_review_<TIMESTAMP>.md` (drop `_template`, append wall-clock timestamp of the trigger-firing moment for traceability — that timestamp is data for audit, not a gate), fill in actual numbers / observations / decision, and commit `[line-a]`. The template stays clean for any future dogfood-window pattern reuse.
 
 ## Failure-mode pre-mortem (for use during review)
 

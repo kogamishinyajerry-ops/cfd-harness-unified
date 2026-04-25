@@ -4,7 +4,12 @@ id: OPS-2026-04-25-001
 title: Dual-Track Parallel Development Plan · ADR-002 Governance × 10-Case Simulation
 status: ACTIVE
 created: 2026-04-25
-expires: 2026-05-19  # W5 default flip; OPS retires after that date
+expires_trigger: |
+  Gate #4 fires: W5 default flip PR merged ∧ ≥5 post-flip backend
+  pytest CI runs all green → same PR retires this OPS. NO calendar
+  expiry. Authority: RETRO-V61-006 Addendum 5 (2026-04-25T17:30
+  Opus 4.7 ACCEPT_WITH_COMMENTS · 9 calendar→signal gates refactor).
+expires_calendar_legacy: 2026-05-19  # superseded by expires_trigger; retained for audit traceability of the original Opus G-9 binding 2 form
 authors: [Claude Code Opus 4.7 CLI]
 reviewers: [Notion Opus 4.7 (audit 2026-04-25)]
 notion_url: https://www.notion.so/OPS-2026-04-25-Claude-Code-ADR-002-10-case-34dc68942bed81d88ef5f8add0d01d0a
@@ -19,6 +24,7 @@ amendment_log:
   - 2026-04-25T15:50 Claude Code CLI · frontmatter retroactive 5-field upgrade per Opus 4.7 §3 v2 audit Item 3 — structured expected_signal_source + 7-day rolling threshold + RED→GREEN transition anchor at commit 0229af9
   - 2026-04-25T16:05 Claude Code CLI · Notion round-trip · 22 blocks appended to OPS page (34dc68942bed81d88ef5f8add0d01d0a) + 15 blocks to RETRO-V61-006 (34dc68942bed813c86e3e3da4c5c3806) + 15 blocks to methodology page (34bc68942bed8189be77c703cc62d0f4) recording Phase 1/2/3 amendment landing across commits 3e8dc01 / a84948d / 1034c20
   - 2026-04-25T16:50 Claude Code CLI · CI health sample finding · added pre_flight_check_known_issue field flagging §5#6 query workflow-vs-job-level disconnect (backend post-anchor 8/8=100% but workflow 0/35=0%); fix deferred to 5/19 PR per RETRO-V61-006 Addendum 4 (sample-only, no behavioral change)
+  - 2026-04-25T17:30 Claude Code CLI · governance-rhythm refactor · 9 calendar→signal gates landed per Notion Opus 4.7 ACCEPT_WITH_COMMENTS (maturity 0.72 → 0.76 conditional). expires field replaced with expires_trigger; §1/§3/§5/§7 calendar references stripped; Gate #3 / #1 / #2 / #4 trigger semantics encoded; review template renamed (5/9 → dogfood_close); fix_landing for known issue rebound to Gate #2 PR composition. Authority: RETRO-V61-006 Addendum 5.
 expected_signal_source:
   workflow_path: .github/workflows/ci.yml  # FILE PATH (not display name) — per ops_note_protocol.md §5 (a)
   job_or_step: backend-tests / "Plane-guard WARN-mode dogfood"
@@ -32,7 +38,7 @@ signal_health_status_at_draft: RED  # 0/40 GREEN at 2026-04-25T18:55 (40 consecu
 signal_health_status_at_first_genuine_signal: GREEN  # transition at commit 0229af9 (run 24925115531) · 2026-04-25T06:55 · 748 tests passed + 0 incidents + 13.5 KB artifact
 # 5/9 dogfood review anchor: only CI runs ≥ 0229af9 are admissible signal data.
 # CI runs before 0229af9 are instrumentation-only (numpy/jinja2 missing) and
-# MUST be excluded per .planning/dogfood/2026-05-09_review_template.md Step 1a.
+# MUST be excluded per .planning/dogfood/dogfood_close_review_template.md Step 1a (renamed from 2026-05-09_review_template.md when Phase 6 calendar→signal refactor landed).
 signal_attestation_first_of_kind: false  # superseded by GREEN transition anchor above; retained as field for schema completeness
 pre_flight_check_known_issue:
   status: deferred-to-5-19-PR
@@ -51,13 +57,16 @@ pre_flight_check_known_issue:
     conclusion). NOT impacting current OPS (already ACTIVE, pre-flight
     fires only at DRAFT→ACTIVE flip). Would falsely HARD-BLOCK any future
     OPS authoring during this window if attempted.
-  fix_landing: 2026-05-19 W5 default flip + OPS retire same PR (Opus
-    direction-survey verdict 3 P1 scope). See RETRO-V61-006 Addendum 4.
+  fix_landing: bound to Gate #2 (W5 default flip PR composition · same
+    PR retires this OPS per Gate #4 trigger). Calendar form
+    "2026-05-19" deprecated 2026-04-25T17:30. See RETRO-V61-006
+    Addendum 4 (CI health sample finding) + Addendum 5 (9-gates
+    refactor authority).
 ---
 
 # OPS-2026-04-25-001 · Dual-Track Parallel Development Plan
 
-> **Status**: ACTIVE 2026-04-25T19:30 (Notion Opus 4.7 ACCEPT_WITH_COMMENTS · 3 mandatory amendments landed). Auto-retires 2026-05-19 (W5 default flip).
+> **Status**: ACTIVE 2026-04-25T19:30 (Notion Opus 4.7 ACCEPT_WITH_COMMENTS · 3 mandatory amendments landed; 2026-04-25T17:30 governance-rhythm refactor 9 calendar→signal gates landed). Auto-retires when Gate #4 fires (W5 default flip PR merged ∧ ≥5 post-flip CI runs all green) — see frontmatter `expires_trigger` and §7 timeline.
 >
 > **Mirror**: This file is git-of-record. The Notion page (link in frontmatter) is the human-readable mirror with audit callouts.
 
@@ -65,7 +74,7 @@ pre_flight_check_known_issue:
 
 ## 1. 背景
 
-ADR-002 W4 prep 在 2026-04-25 单日交付 6 个 commit (b10ca9e → e213bbe), W4 prep 弧已在 Codex GPT-5.4-xhigh R2 APPROVE_WITH_COMMENTS 处 clean-close. 剩余 W4 任务只有一行 CI flip (`continue-on-error: true → false`), 必须等 dogfood window (2026-04-25 → 2026-05-09 ≥5 天) 观察期完成.
+ADR-002 W4 prep 在 2026-04-25 单日交付 6 个 commit (b10ca9e → e213bbe), W4 prep 弧已在 Codex GPT-5.4-xhigh R2 APPROVE_WITH_COMMENTS 处 clean-close. 剩余 W4 任务只有一行 CI flip (`continue-on-error: true → false`), 必须等 dogfood window 信号充分 (Gate #3 close trigger · 见 §7 · ≥30 CI runs ∧ ≥15 cross-track commits ∧ 0 dedup incidents ∧ <20% escape rate).
 
 用户提出在新 Claude Code 会话中并行推进 10-case 仿真深度优化 (DEC-V61-047 / V61-048 / V61-049 弧). 两条线必须并行, 不能互相污染.
 
@@ -147,7 +156,7 @@ ADR-002 W4 prep 在 2026-04-25 单日交付 6 个 commit (b10ca9e → e213bbe), 
 
 **Why not pure CODEOWNERS / pure hard-block**: CODEOWNERS is a heavy tool mismatched to a single-user-two-AI-session topology; pure hard-block on all line A files would obstruct legitimate §4.1 cross-track flows. Graduated severity (hard-block on the 7 SOLE files where automation should never legitimately straddle, block-with-tag-escape on SHARED files where cross-track edits are routine and intentional) keeps the false-positive rate low while closing the 2x absorption incident class.
 
-**Auto-retirement**: both scripts read OPS expires (2026-05-19) from header docstring and short-circuit after that date; `.pre-commit-config.yaml` entries can stay (no-op) or be cleaned up in the post-window followup PR.
+**Auto-retirement**: both scripts gate on the OPS `expires_trigger` (Gate #4 fires) rather than calendar — once the W5 default flip PR merges with ≥5 post-flip green CI runs, the script header docstrings reference this OPS as RETIRED and can short-circuit. `.pre-commit-config.yaml` entries can stay (no-op) or be cleaned up in the same W5 PR per Opus direction-survey verdict 3 (P1).
 
 ### CI infrastructure pre-flight (MP-G retroactive · 2026-04-25T21:25)
 
@@ -214,14 +223,43 @@ bin/dev-session-init
 
 ## 7. 时间线
 
-- **2026-04-25 → 2026-05-09** · 双线并行 (线 A 静默 dogfood + 线 B 主动 case 优化)
-- **2026-05-09** · 线 A dogfood signal review (artifact 0 incidents 即可推进 W4 toggle PR)
-- **2026-05-11** · W4 toggle PR deadline (Opus G-9 binding 2 · 一行 yaml flip)
-- **2026-05-19** · W5 default flip `'off' → 'warn'` + OPS-2026-04-25-001 expires
-- 线 B 节奏由该会话自定 (DEC-V61-047 / 048 弧推进)
+**Calendar form deprecated 2026-04-25T17:30** (Opus 4.7 ACCEPT_WITH_COMMENTS 9-gates refactor · RETRO-V61-006 Addendum 5). Gates are now signal-count, not calendar-anchored. Triggers fire when conditions met regardless of wall-clock time.
+
+### Gate #3 · Dogfood window CLOSE trigger
+
+Replaces the deprecated "2026-04-25 → 2026-05-09" calendar window. Window CLOSES when ALL of:
+
+1. **≥30 backend pytest CI runs** completed on origin/main since dogfood opened (anchor `0229af9` 2026-04-25T06:55Z first GREEN signal · count post-anchor only)
+2. **≥15 cross-track commits** (line A SOLE + line B SOLE + SHARED, summed) since dogfood opened — establishes meaningful surface contact
+3. **A13/A18 dedup'd incidents = 0** in the .jsonl artifacts (raw count may be higher; dedup is what feeds §2.4)
+4. **escape-tag usage rate <20%** (`[cross-track-ack:…] / [shared] / [deps] / [ops]` per §3 v2 hooks; `[line-a]` / `[line-b]` are NOT escapes)
+
+If escape rate ≥20% at any point during the window, **STOP** — hook strategy needs re-spec, NOT extension. If 60 calendar days elapse without reaching 30 CI runs, the project is paused (not the hooks broken); dogfood auto-extends until restart. (60-day soft sanity ceiling per Opus.)
+
+### Gate #1 · W4 toggle PR fires
+
+Fires when Gate #3 closes. NO independent deadline. The toggle is the canonical "dogfood-close → enforcement-on" milestone, not a calendar event.
+
+### Gate #2 · W5 default flip fires
+
+Fires when ALL of:
+1. **W4 toggle PR merged**
+2. **≥10 consecutive backend pytest CI runs all green** post-merge
+3. **A13/A18 dedup'd incidents = 0** during those 10 runs
+4. **line A SOLE escape-tag commits = 0** during those 10 runs
+
+Any incident → counter resets; 3 consecutive resets → escalate Opus to re-review W4 design (NOT extend timeline).
+
+### Gate #4 · OPS retire fires
+
+Fires when W5 PR merged ∧ ≥5 post-flip backend pytest CI runs all green. OPS retires in the SAME PR as W5 flip (not a separate event). If W5 never flips, OPS never retires — that is correct semantics (OPS records a deviation; the deviation must end before OPS retires).
+
+### Cross-track timeline (line B autonomy preserved)
+
+线 B 节奏完全自定 (DEC-V61-047 / 048 / 053 / 057 弧推进). Line A static-period discipline applies only during Gate #3 → Gate #1 → Gate #2 trigger chain — line B has no static-period coupling.
 
 ### Opus 4.7 audit 2026-04-25 §7 deferred (mandatory)
-- **DEC-V61-053 cylinder closeout** (attempt-8 endTime bump 60s 重跑) **推到 dogfood window 后** (2026-05-10+). 理由: 与线 A artifact 上传节奏共占 CI runner 时间窗口, dogfood window 内启动会让 5/9 review 难以区分 "plane_guard 噪音" vs "endTime-bump 重跑副作用". dogfood window 内 V61-053 保持 `IN_PROGRESS_DEMONSTRATION_GRADE` 不动; attempt-8 排在 W5 default flip 之后.
+- **DEC-V61-053 cylinder closeout** (attempt-8 endTime bump 60s 重跑) **推到 Gate #3 close trigger 之后**. 理由: 与线 A artifact 上传节奏共占 CI runner 时间窗口, Gate #3 close 评估期内启动会让 dedup'd incident 数据难以区分 "plane_guard 噪音" vs "endTime-bump 重跑副作用". 期间 V61-053 保持 `IN_PROGRESS_DEMONSTRATION_GRADE` 不动; attempt-8 排在 Gate #2 (W5 default flip) 之后. Calendar form ("2026-05-10+") deprecated.
 - **DEC-V61-049 LDC pilot 推到 W5 default flip 之后启动** (lid-driven cavity 是新案例引入, case_profile schema 改动概率高, 避开 schema 变更窗口). 线 B 新会话 ROADMAP 必须明示该 deferred 约束.
 - **DEC-V61-047 / V61-048 在 dogfood window 内可正常推进** (047 → 048 排序合理).
 
@@ -260,4 +298,4 @@ Skipping any layer is acceptable only when one of the upstream layers caught it 
 - `type=ops` 不进 `autonomous_governance_counter_v61`
 - 不需要 Codex review (doc-level only; isolation script 落地纳入 ADR-002-IMPL Codex post-merge audit 同窗口审查)
 - 必须 Notion-mirror (Notion URL 在 frontmatter)
-- `expires` 字段必填 (此文件 2026-05-19 自动 retire)
+- `expires_trigger` 字段必填 (signal/event-based, 替代 calendar-form `expires`; 详见 docs/methodology/ops_note_protocol.md §5 v2 update)
