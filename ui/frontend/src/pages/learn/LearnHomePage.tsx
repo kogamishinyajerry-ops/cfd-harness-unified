@@ -103,6 +103,14 @@ export function LearnHomePage() {
           </a>
           <span className="text-surface-700">·</span>
           <a
+            href="/workbench/new"
+            className="text-emerald-300 hover:text-emerald-200"
+            title="Stage 8a · Onboarding Workbench — newcomer's first-case wizard"
+          >
+            ▶ 新手向导 · 从模板建第一个案例
+          </a>
+          <span className="text-surface-700">·</span>
+          <a
             href="/pro"
             className="text-sky-300 hover:text-sky-200"
           >

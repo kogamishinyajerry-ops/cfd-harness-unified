@@ -11,6 +11,8 @@ import { LearnCaseDetailPage } from "@/pages/learn/LearnCaseDetailPage";
 import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { RunMonitorPage } from "@/pages/RunMonitorPage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
+import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
+import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 
 // Demo-first routing (convergence round, 2026-04-22): the default landing is
 // now the /learn shell — the student-facing catalog of 10 canonical cases.
@@ -48,6 +50,9 @@ export default function App() {
         <Route path="/runs" element={<RunMonitorPage />} />
         <Route path="/runs/:caseId" element={<RunMonitorPage />} />
         <Route path="/audit-package" element={<AuditPackagePage />} />
+        {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
+        <Route path="/workbench/new" element={<NewCaseWizardPage />} />
+        <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />
         <Route path="*" element={<Navigate to="/learn" replace />} />
       </Route>
     </Routes>

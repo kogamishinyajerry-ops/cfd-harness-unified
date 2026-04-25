@@ -23,6 +23,11 @@ import type { BatchMatrix } from "@/types/batch_matrix";
 import type { ExportManifest } from "@/types/exports";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
+import type {
+  DraftCreateRequest,
+  DraftCreateResponse,
+  TemplateListResponse,
+} from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 
 async function request<T>(
@@ -138,4 +143,15 @@ export const api = {
 
   // Stage 6 — ExportPack manifest (download URLs are constructed inline)
   getExportManifest: () => request<ExportManifest>(`/api/exports/manifest`),
+
+  // Stage 8a — Onboarding Workbench wizard
+  listWizardTemplates: () =>
+    request<TemplateListResponse>("/api/wizard/templates"),
+  createWizardDraft: (payload: DraftCreateRequest) =>
+    request<DraftCreateResponse>("/api/wizard/draft", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  wizardRunStreamUrl: (caseId: string) =>
+    `/api/wizard/run/${encodeURIComponent(caseId)}/stream`,
 };
