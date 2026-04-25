@@ -160,7 +160,10 @@ function GeometryPanel({
       {geometry.shape === "cylinder" && (
         <CylinderSVG geometry={geometry} patches={patches} />
       )}
-      {!["rectangle", "step", "airfoil", "cylinder"].includes(geometry.shape) && (
+      {geometry.shape === "jet_impingement" && (
+        <JetImpingementSVG geometry={geometry} patches={patches} />
+      )}
+      {!["rectangle", "step", "airfoil", "cylinder", "jet_impingement"].includes(geometry.shape) && (
         <UnsupportedShapeStub shape={geometry.shape} patches={patches} />
       )}
 
@@ -739,6 +742,165 @@ function CylinderSVG({
       <defs>
         <marker id="arrowhead-cyl" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="#10b981" />
+        </marker>
+      </defs>
+    </svg>
+  );
+}
+
+// --- Jet impingement renderer (axisymmetric r-z slice) ------------------
+// Conventional axisymmetric layout: axis on left (mirrored), outer on
+// right (open), jet inlet at bottom flowing +z toward plate at top.
+// Renders a rectangle r-z with directional arrows for the jet column,
+// cold plate up top, and a hint of radial wall jet spreading.
+
+function JetImpingementSVG({
+  geometry: _geometry,
+  patches: _patches,
+}: {
+  geometry: Geometry;
+  patches: Patch[];
+}) {
+  void _geometry;
+  void _patches;
+  const VW = 320;
+  const VH = 220;
+  const PAD_L = 36; // extra room on left for axis label
+  const PAD_R = 28;
+  const PAD_T = 24;
+  const PAD_B = 30;
+  const rx = PAD_L;
+  const ry = PAD_T;
+  const rw = VW - PAD_L - PAD_R;
+  const rh = VH - PAD_T - PAD_B;
+
+  // Nozzle width = 15% of r-extent (visual, not metric).
+  const nozzleHalfW = rw * 0.15;
+
+  return (
+    <svg
+      viewBox={`0 0 ${VW} ${VH}`}
+      className="w-full"
+      style={{ maxHeight: "240px" }}
+      role="img"
+      aria-label="Axisymmetric impinging jet domain"
+    >
+      {/* Domain box */}
+      <rect x={rx} y={ry} width={rw} height={rh} fill="#0f172a" stroke="#334155" strokeWidth="1" />
+
+      {/* Plate (top edge) — wall, drawn thick */}
+      <line x1={rx} y1={ry} x2={rx + rw} y2={ry} stroke={ROLE_FILL.wall} strokeWidth="5" />
+      {/* Cold plate hatching — short downward ticks */}
+      {Array.from({ length: 14 }).map((_, i) => {
+        const f = (i + 0.5) / 14;
+        return (
+          <line
+            key={i}
+            x1={rx + rw * f}
+            y1={ry}
+            x2={rx + rw * f - 4}
+            y2={ry + 6}
+            stroke={ROLE_FILL.wall}
+            strokeWidth="0.6"
+            opacity="0.6"
+          />
+        );
+      })}
+
+      {/* Outer (right edge) — open boundary */}
+      <line x1={rx + rw} y1={ry} x2={rx + rw} y2={ry + rh} stroke={ROLE_FILL.outlet} strokeWidth="4" />
+
+      {/* Inlet (bottom edge, only the nozzle width near axis) */}
+      <line
+        x1={rx}
+        y1={ry + rh}
+        x2={rx + nozzleHalfW}
+        y2={ry + rh}
+        stroke={ROLE_FILL.inlet}
+        strokeWidth="5"
+      />
+      {/* Bottom edge beyond nozzle (entrainment region) */}
+      <line
+        x1={rx + nozzleHalfW}
+        y1={ry + rh}
+        x2={rx + rw}
+        y2={ry + rh}
+        stroke="#475569"
+        strokeWidth="1.5"
+        strokeDasharray="3 3"
+        opacity="0.6"
+      />
+
+      {/* Axis (left edge) — symmetry empty */}
+      <line
+        x1={rx}
+        y1={ry}
+        x2={rx}
+        y2={ry + rh}
+        stroke="#94a3b8"
+        strokeWidth="1.2"
+        strokeDasharray="2 4"
+      />
+
+      {/* Jet column — multiple upward arrows from inlet toward plate */}
+      {[0.2, 0.5, 0.8].map((f) => {
+        const ax = rx + nozzleHalfW * f;
+        return (
+          <line
+            key={f}
+            x1={ax}
+            y1={ry + rh - 4}
+            x2={ax}
+            y2={ry + 18}
+            stroke="#10b981"
+            strokeWidth="1.4"
+            markerEnd="url(#arrowhead-jet)"
+            opacity="0.85"
+          />
+        );
+      })}
+
+      {/* Radial wall jet hint — small horizontal arrows just below plate */}
+      {[0.35, 0.55, 0.75].map((f) => (
+        <line
+          key={f}
+          x1={rx + rw * f}
+          y1={ry + 16}
+          x2={rx + rw * (f + 0.12)}
+          y2={ry + 16}
+          stroke="#06b6d4"
+          strokeWidth="1.0"
+          markerEnd="url(#arrowhead-jet-r)"
+          opacity="0.65"
+        />
+      ))}
+
+      {/* Labels */}
+      <text x={rx + rw / 2} y={ry - 6} fontSize="11" textAnchor="middle" fill={ROLE_FILL.wall}>
+        冲击板 (T_p=290 K)
+      </text>
+      <text x={rx + nozzleHalfW / 2} y={ry + rh + 14} fontSize="10" textAnchor="middle" fill={ROLE_FILL.inlet}>
+        喷嘴
+      </text>
+      <text x={rx + rw + 4} y={ry + rh / 2} fontSize="11" textAnchor="start" dominantBaseline="central" fill={ROLE_FILL.outlet}>
+        外开放
+      </text>
+      <text x={rx - 4} y={ry + rh / 2} fontSize="10" textAnchor="end" dominantBaseline="central" fill="#94a3b8" className="mono">
+        axis
+      </text>
+      <text x={rx + 4} y={ry + 12} fontSize="9" fill="#94a3b8" className="mono">r=0</text>
+      <text x={rx + rw - 4} y={ry + 12} fontSize="9" textAnchor="end" fill="#94a3b8" className="mono">r=5D</text>
+
+      {/* Stagnation marker */}
+      <circle cx={rx + 2} cy={ry + 2} r="3" fill="#fbbf24" opacity="0.85" />
+      <text x={rx + 8} y={ry + 30} fontSize="9" fill="#fbbf24">驻点 (Nu_max)</text>
+
+      <defs>
+        <marker id="arrowhead-jet" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#10b981" />
+        </marker>
+        <marker id="arrowhead-jet-r" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+          <path d="M0,0 L5,2.5 L0,5 Z" fill="#06b6d4" />
         </marker>
       </defs>
     </svg>

@@ -1,0 +1,188 @@
+# Workbench Basics · Axisymmetric Impinging Jet (Re=10000)
+#
+# Authoring sources:
+#   - whitelist.yaml line 206 (case spec, PROVISIONAL gold per Q-9 hold)
+#   - knowledge/gold_standards/impinging_jet.yaml
+#   - knowledge/gold_standards/axisymmetric_impinging_jet.yaml
+#   - src/foam_agent_adapter.py:5552 _generate_impinging_jet
+#     (axisymmetric r-z slice; jet from z=z_min, plate at z=z_max,
+#      axis at r=0 empty, outer at r=r_max patch)
+#
+# CONTRACT NOTE: gold Nu values are PROVISIONAL pending Behnad 2013
+# re-source (Q-9 HOLD per Kogami 2026-04-20). Hint surfaces this.
+
+case_id: impinging_jet
+display_name: "Axisymmetric Impinging Jet (Re=10000)"
+display_name_zh: "轴对称冲击射流"
+canonical_ref: "Cooper 1984 / Behnad 2013 (PROVISIONAL · Q-9 hold)"
+
+dimension: 2
+
+geometry:
+  shape: jet_impingement
+  bbox:
+    x_min: 0.0
+    x_max: 0.25
+    y_min: -0.025
+    y_max: 0.125
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: D
+    value: 0.05
+    unit: m
+    description_zh: "喷嘴直径 D=0.05 m；h/D=2 → 板距 H=0.1 m；径向计算域 5D=0.25 m"
+
+# 注：r 方向用 SVG x 坐标，z 方向用 SVG y 坐标。axis 在 SVG 左边，outer 在右边。
+# inlet 在 SVG 下边（jet from below 流向 +z），plate 在 SVG 上边。
+# 这是 axisymmetric (r,z) slice 的常用呈现。
+
+patches:
+  - id: inlet
+    role: inlet
+    location: bottom
+    label_zh: "射流入口（喷嘴出口）"
+    label_en: "Jet inlet (nozzle exit)"
+    description_zh: "fixedValue U=(0, U_jet, 0) m/s 沿 +z 方向射流；T=310 K（hot jet）"
+
+  - id: plate
+    role: wall
+    location: top
+    label_zh: "冲击板（冷壁）"
+    label_en: "Impingement plate"
+    description_zh: "noSlip + fixedValue T=290 K 冷板；Nu 沿 r 分布是金标准观测量"
+
+  - id: outer
+    role: outlet
+    location: right
+    label_zh: "外开放界（远场）"
+    label_en: "Outer (open)"
+    description_zh: "patch 类型；上下两段（z<0 和 z>0）；近似无限远场"
+
+  - id: axis
+    role: empty
+    location: left
+    label_zh: "对称轴（empty）"
+    label_en: "Symmetry axis"
+    description_zh: "r=0 在 axisymmetric 求解中是 empty；UI 显示为对称镜面"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    description_zh: "axisymmetric 求解器中速度向量 (Ur, Uz, 0)；jet 沿 +z 射出"
+    per_patch:
+      inlet:
+        type: fixedValue
+        value: [0.0, 1.0, 0.0]
+        display_zh: "U_jet=1 m/s 沿 +z"
+      plate:
+        type: noSlip
+        display_zh: "U = 0"
+      outer:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      axis:
+        type: empty
+        display_zh: "—"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: T
+    quantity: temperature
+    units: "K"
+    per_patch:
+      inlet:
+        type: fixedValue
+        value: 310.0
+        display_zh: "T = 310 K（hot jet）"
+      plate:
+        type: fixedValue
+        value: 290.0
+        display_zh: "T = 290 K（cold plate）"
+      outer:
+        type: zeroGradient
+        display_zh: "∂T/∂n = 0"
+      axis:
+        type: empty
+        display_zh: "—"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      plate:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outer:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0"
+      axis:
+        type: empty
+        display_zh: "—"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: jet_air
+    label_zh: "射流空气"
+    label_en: "Jet air"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 5.0e-6
+        unit: "m²/s"
+        note_zh: "ν = U·D/Re = 1·0.05/10000 = 5e-6"
+      - symbol: "Pr"
+        name: Prandtl_number
+        value: 0.71
+        unit: dimensionless
+      - symbol: "ΔT"
+        name: jet_to_plate_dT
+        value: 20.0
+        unit: K
+        note_zh: "T_jet − T_plate = 310 − 290"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 10000
+    formula: "Re = U·D/ν"
+    note_zh: "中等湍流喷射；buoyantFoam + Boussinesq + k-ω SST"
+  - symbol: h_over_D
+    name: jet_to_plate_distance_ratio
+    value: 2.0
+    formula: "H / D"
+    note_zh: "h/D=2 是 Cooper 1984 / Behnad 2013 经典构型"
+
+solver:
+  name: buoyantFoam
+  family: incompressible_buoyant
+  steady_state: true
+  laminar: false
+  display_zh: "buoyantFoam（稳态，Boussinesq + k-ω SST）"
+  reasoning_zh: "射流 Re=10000 主流强迫对流；浮升力可忽略但保留 Boussinesq 闭合 T 场"
+
+hints:
+  geometry_zh: "axisymmetric (r,z) slice；axis 在左、outer 在右、jet inlet 在底、plate 在顶；2 个 z-block 在 z=0 处分割"
+  driver_zh: "热射流自下喷出，撞击 0.1 m 上方冷板 → 形成径向辐射壁面射流"
+  physical_intuition_zh: "Nu 在驻点 r=0 最高（金标准 ~25，PROVISIONAL Q-9 待 Behnad 2013 复核），随 r 增大递减"

@@ -1,0 +1,198 @@
+# Workbench Basics · Fully Developed Turbulent Square-Duct Flow
+#
+# Authoring sources:
+#   - whitelist.yaml line 128 (case spec, renamed from fully_developed_pipe
+#     per Gate Q-2 Path A · DEC-V61-011)
+#   - knowledge/gold_standards/duct_flow.yaml
+#   - src/foam_agent_adapter.py:3924 _generate_steady_internal_flow
+#     (shared with turbulent_flat_plate; x∈[0,5L], y∈[0,0.5])
+#
+# CONTRACT NOTE: physical case is a SQUARE DUCT (D_h=0.1, AR=1) but adapter
+# uses the same 2D streamwise slice as turbulent_flat_plate (rectangle). The
+# Jones 1976 friction-factor correlation is approximated as f_duct ≈ 0.88·f_pipe(Re).
+# Hint surfaces this aliasing honestly per anti-pattern guard.
+
+case_id: duct_flow
+display_name: "Fully Developed Square-Duct Flow"
+display_name_zh: "完全发展方形管道流"
+canonical_ref: "Jones 1976 / Jones & Launder 1973"
+
+dimension: 2
+
+geometry:
+  shape: rectangle
+  bbox:
+    x_min: 0.0
+    x_max: 5.0
+    y_min: 0.0
+    y_max: 0.5
+    z_min: 0.0
+    z_max: 0.1
+  characteristic_length:
+    name: D_h
+    value: 0.1
+    unit: m
+    description_zh: "水力直径 D_h=0.1 m（方形截面边长）；adapter 实际渲染为 5:0.5 流向 slice，并非截面视图"
+
+patches:
+  - id: inlet
+    role: inlet
+    location: left
+    label_zh: "入口"
+    label_en: "Inlet"
+    description_zh: "fixedValue U=(1,0,0) m/s 均匀来流"
+
+  - id: outlet
+    role: outlet
+    location: right
+    label_zh: "出口"
+    label_en: "Outlet"
+    description_zh: "zeroGradient U, fixedValue p=0"
+
+  - id: walls_top
+    role: wall
+    location: top
+    label_zh: "上壁"
+    label_en: "Top wall"
+    description_zh: "noSlip；OpenFOAM 中与 walls_bottom 合并为单一 patch 'walls'"
+
+  - id: walls_bottom
+    role: wall
+    location: bottom
+    label_zh: "下壁"
+    label_en: "Bottom wall"
+    description_zh: "noSlip；与 walls_top 合并"
+
+  - id: frontAndBack
+    role: empty
+    location: front_back
+    label_zh: "前后边界（2D empty）"
+    label_en: "Front/back (2D empty)"
+
+boundary_conditions:
+  - field: U
+    quantity: velocity
+    units: "m/s"
+    per_patch:
+      inlet:
+        type: fixedValue
+        value: [1.0, 0.0, 0.0]
+        display_zh: "U=(1, 0, 0)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂U/∂n = 0"
+      walls_top:
+        type: noSlip
+        display_zh: "U = 0"
+      walls_bottom:
+        type: noSlip
+        display_zh: "U = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: p
+    quantity: kinematic_pressure
+    units: "m^2/s^2"
+    per_patch:
+      inlet:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      outlet:
+        type: fixedValue
+        value: 0.0
+        display_zh: "p = 0"
+      walls_top:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      walls_bottom:
+        type: zeroGradient
+        display_zh: "∂p/∂n = 0"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: k
+    quantity: turbulence_kinetic_energy
+    units: "m^2/s^2"
+    per_patch:
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue (turbulent inlet)"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂k/∂n = 0"
+      walls_top:
+        type: kqRWallFunction
+        display_zh: "kqRWallFunction"
+      walls_bottom:
+        type: kqRWallFunction
+        display_zh: "kqRWallFunction"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+  - field: epsilon
+    quantity: turbulence_dissipation
+    units: "m^2/s^3"
+    per_patch:
+      inlet:
+        type: fixedValue
+        display_zh: "fixedValue"
+      outlet:
+        type: zeroGradient
+        display_zh: "∂ε/∂n = 0"
+      walls_top:
+        type: epsilonWallFunction
+        display_zh: "epsilonWallFunction"
+      walls_bottom:
+        type: epsilonWallFunction
+        display_zh: "epsilonWallFunction"
+      frontAndBack:
+        type: empty
+        display_zh: "—"
+
+materials:
+  - id: duct_fluid
+    label_zh: "管道流体"
+    label_en: "Duct fluid"
+    properties:
+      - symbol: "ρ"
+        name: density
+        value: 1.0
+        unit: "kg/m³"
+      - symbol: "ν"
+        name: kinematic_viscosity
+        value: 0.00002
+        unit: "m²/s"
+        note_zh: "ν = 1/Re = 1/50000"
+
+derived:
+  - symbol: Re
+    name: Reynolds_number
+    value: 50000
+    formula: "Re = U·D_h/ν"
+    note_zh: "完全湍流域；Jones 1976 关联式 f≈0.0185 在该 Re"
+  - symbol: f
+    name: Darcy_friction_factor
+    value: 0.0185
+    formula: "f_duct ≈ 0.88·f_pipe (Jones 1976 smooth square duct, AR=1)"
+    note_zh: "金标准；与 Colebrook 圆管 0.0181 在 2% 内（命名诚实修正后留作交叉验证）"
+  - symbol: AR
+    name: cross_section_aspect_ratio
+    value: 1.0
+    formula: "side_x / side_y"
+    note_zh: "正方形截面"
+
+solver:
+  name: simpleFoam
+  family: incompressible
+  steady_state: true
+  laminar: false
+  display_zh: "simpleFoam（稳态 SIMPLE，k-ε 湍流）"
+  reasoning_zh: "Re=50000 完全湍流；k-ε + 壁面函数足以分辨 friction factor"
+
+hints:
+  geometry_zh: "渲染为 5L 流向 slice；真实物理是 D_h=0.1 m 正方形截面（AR=1），命名上原为 'pipe' 但 adapter 是矩形 duct"
+  driver_zh: "压差驱动 + 全周壁约束 → 完全发展湍流型形"
+  physical_intuition_zh: "Jones 1976 关联式给 f=0.0185；该值与 Colebrook 圆管 0.0181 仅差 2%（截面差异在湍流主流不强）"
