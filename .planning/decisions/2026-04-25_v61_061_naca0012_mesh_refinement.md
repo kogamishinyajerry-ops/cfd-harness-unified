@@ -74,8 +74,8 @@ external_gate_caveat: |
   96k cells (43.2k blocks: 4×100×160 aerofoil + 2×100×160 wake), simpleGrading
   (1 1 400) on aerofoil blocks, (10 1 400) on wake.
 codex_tool_report_path: "(no Codex review — autonomous closeout under 1M-Opus exec mode)"
-notion_sync_status: pending  # synced post-merge
-github_sync_status: pending_pr
+notion_sync_status: "synced 2026-04-25T13:30 · Status=Accepted (page_id=34dc6894-2bed-816f-9061-fdb6e891910e, URL=https://www.notion.so/DEC-V61-061-NACA0012-mesh-refinement-followup-to-V61-058-methodology-v2-0-fourth-apply-34dc68942bed816f9061fdb6e891910e). Body: HEADLINE callout + V61-058 → V61-061 progress table + iteration arc + Stage E sweep table + topology_ceiling_reached defect addendum + methodology v2.0 fourth-apply calibration + risk-flag closure + GitHub artifact links + V61-062 follow-up callout."
+github_sync_status: "merged 2026-04-25T13:27:41Z · PR #40 squash-merge commit c1e9ff8 (5 commits on dec-v61-061-naca-mesh branch · all [line-b] tagged · OPS-2026-04-25-001 dual-track guard PASS · backend pytest PASS post test-sentinel update · frontend tsc/vite FAILURE pre-existing on main, unrelated to V61-061 content)"
 related:
   - DEC-V61-058 (predecessor — defined methodology stack + gold + extractors)
   - DEC-V61-053 (RETRO-V61-053 post-R3 defect addendum protocol — V61-061 first
