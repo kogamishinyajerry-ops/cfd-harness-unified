@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T15:00 local"
+last_updated: "2026-04-25T16:30 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED 提前 9 天 (W3 init 5/4 → 4/25) · 单日全栈交付 W1+W2(Draft 三轮 + Impl Start + Mid + Late) + W3 Accepted flip · src/_plane_guard.py 330 LOC finder + multi-frame walk + N=20 env-configurable + Mode OFF/WARN/ON + structured JSON log A7b + threading.Lock + strict_scope · 41 新测试 (test_plane_guard 18 + edge 13 + escape 5 + assignment_ssot 15 + gen_importlinter 7 - 重叠) · 全 18 ACs satisfied (A14/A15/A16 §6 known-limit doc per ADR allow text) · all pushed to origin/main 12 commits · 723 passed 2 skipped · 5 contracts KEPT · next: W3-W5 时序剩余项 (src/__init__.py auto-install WARN default · CI hard-fail · ON-everywhere) deferred 等 Opus 异步审查 · Codex post-merge review pending · V61-057 BLOCKED on G-9/G-1/VCP-001 trio · V61-058 serial-after · P1-T4 blocked on KOM Draft"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED · G-9 SIGNED by Opus 2026-04-25T12:38 with W3+W4 follow-up bindings · W3 auto-install PR LANDED commit 498d14e (src/__init__.py env-var hookup + tests/conftest.py autouse OFF + B-Q4 dedup cap + A.1 exec/eval logger + A.2 verbatim message + A.5 bootstrap-pair lock + Codex CHANGES_REQUIRED 3 findings closed) · all pushed to origin/main 17 commits 单日交付 · 730 passed · 5 contracts KEPT · A1-A12+A14-A17 satisfied; A13+A18 deferred to W4 hard-fail toggle PR target ≤ 2026-05-11 · next: W4 hard-fail PR (A13 watchdog + A18 .jsonl) + W5 ON-everywhere default flip · external_blockers reduced to G-1 + DEC-POLICY-VCP-001 (CFDJerry signature pending; technical zero dependency) · V61-057 仍 blocked on G-1/VCP-001 · V61-058 serial-after · P1-T4 blocked on KOM Draft"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed

@@ -286,10 +286,12 @@ on origin/main, this footnote is backfilled with the squash commit
 hash. P2 ExecutorMode startup PR cites this hash to satisfy the §2.3
 hard-binding precondition (P2 startup PR must reference an
 ADR-002-WARN-active commit hash; reviewer rejects PRs that don't).
-Backfill placeholder: `<W3_AUTO_INSTALL_COMMIT_HASH>` — to be replaced
-when the W3 auto-install PR squash-merges. (Pre-merge anchoring uses
-the head commit at time of PR review; post-merge anchoring uses the
-final squash hash.)
+**WARN-default activation commit on origin/main**: `498d14e`
+(2026-04-25 · ADR-002 W3 auto-install PR landed same-day under user
+time-bypass authorization — `src/__init__.py` env-var hookup +
+tests/conftest.py autouse OFF + Codex CHANGES_REQUIRED findings closed).
+P2 ExecutorMode startup PR MUST cite `498d14e` (or any later commit
+on origin/main) to satisfy the §2.3 hard-binding precondition.
 
 ### 2.4 Test-mode allowlist (revised Draft · Option A with strengthened conditions)
 
