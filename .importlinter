@@ -126,6 +126,7 @@ name = src._plane_assignment (+ future src._plane_guard) must not import any oth
 type = forbidden
 source_modules =
     src._plane_assignment
+    src._plane_guard
 forbidden_modules =
     src.task_runner
     src.orchestrator

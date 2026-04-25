@@ -70,6 +70,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.models": Plane.SHARED,
     # ----- Bootstrap (runtime-guard self-hosting, stdlib-only) -----
     "src._plane_assignment": Plane.BOOTSTRAP,
+    "src._plane_guard": Plane.BOOTSTRAP,
 }
 
 

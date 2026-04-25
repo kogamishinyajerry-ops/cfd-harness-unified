@@ -110,32 +110,45 @@ def test_every_plane_has_at_least_one_module():
         assert modules_in(plane), f"Plane {plane.name} has no modules assigned"
 
 
-def test_bootstrap_plane_is_stdlib_only():
-    """ADR-002 §4.1 A12 — bootstrap module must import zero ``src.*`` packages.
+def test_bootstrap_plane_imports_at_most_other_bootstrap_modules():
+    """ADR-002 §4.1 A12 — bootstrap modules import only stdlib + each other.
 
-    This is a lexical grep rather than an import trace because the
-    purpose of the check is to catch additions at source-edit time. A
-    ``from src.foo import bar`` line gated behind ``if TYPE_CHECKING:``
-    is still a bootstrap-purity violation per A12 framing.
+    Lexical grep rather than import trace: catches additions at
+    source-edit time, including ``if TYPE_CHECKING:`` guarded ones.
+    Bootstrap members may import each other (e.g. _plane_guard imports
+    _plane_assignment) since both are stdlib-only at the leaves. Any
+    import targeting a non-bootstrap ``src.*`` module is a violation.
     """
-    bootstrap_modules = modules_in(Plane.BOOTSTRAP)
-    assert bootstrap_modules == ("src._plane_assignment",), (
-        "Bootstrap plane membership changed — ADR-002 A12 expects a single "
-        "module today (src._plane_assignment). Multi-module decomposition "
+    bootstrap_modules = set(modules_in(Plane.BOOTSTRAP))
+    expected = {"src._plane_assignment", "src._plane_guard"}
+    assert bootstrap_modules == expected, (
+        f"Bootstrap plane membership unexpected: {sorted(bootstrap_modules)}. "
+        "Multi-module decomposition beyond {_plane_assignment, _plane_guard} "
         "is deferred to ADR-002 v1.1 per Draft-rev4 R-new-3."
     )
-    source_path = SRC_ROOT / "_plane_assignment.py"
-    text = source_path.read_text(encoding="utf-8")
     forbidden_patterns = [
         re.compile(r"^\s*import\s+src(\.|\s|$)", re.MULTILINE),
-        re.compile(r"^\s*from\s+src(\.|\s)", re.MULTILINE),
+        re.compile(r"^\s*from\s+src\.([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE),
     ]
+    bootstrap_files = [
+        SRC_ROOT / "_plane_assignment.py",
+        SRC_ROOT / "_plane_guard.py",
+    ]
+    bootstrap_short_names = {m.split(".", 1)[1] for m in bootstrap_modules}
     violations: list[str] = []
-    for pattern in forbidden_patterns:
-        violations.extend(m.group(0).strip() for m in pattern.finditer(text))
+    for path in bootstrap_files:
+        text = path.read_text(encoding="utf-8")
+        # `import src.foo` form
+        for m in forbidden_patterns[0].finditer(text):
+            violations.append(f"{path.name}: {m.group(0).strip()}")
+        # `from src.X import ...` form — allowed if X is another bootstrap module.
+        for m in forbidden_patterns[1].finditer(text):
+            target_short = m.group(1)
+            if target_short not in bootstrap_short_names:
+                violations.append(f"{path.name}: from src.{target_short} ...")
     assert not violations, (
-        f"src/_plane_assignment.py imports src.* — bootstrap-purity violation:\n"
-        f"  {violations}"
+        "Bootstrap-purity violation — bootstrap module imports a non-bootstrap "
+        f"src.* module:\n  {violations}"
     )
 
 
