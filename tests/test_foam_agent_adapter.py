@@ -1648,19 +1648,29 @@ class TestBuoyantCasePlumbingVerification:
         )
 
     def test_rbc_keeps_uniform_mesh(self):
-        """DEC-V61-057 Batch A.3: RBC convection rolls span full domain — no
-        thin BL to resolve, uniform mesh is fine. The case-id-aware mesh
-        dispatch must not over-grade RBC just because it's an NC cavity."""
-        spec = _make_nc_spec(Ra=1e6, aspect_ratio=2.0, name="rayleigh_benard_convection")
+        """DEC-V61-057 Batch A.3 ORIGINAL ASSERTION (refined by V61-060
+        Stage A.4): pre-V61-060 the RBC dispatch wrote a side-heated
+        topology, so mesh-grading the y-axis would have over-graded a face
+        with no BL. V61-060 Stage A.3 flipped to bottom-heated topology
+        (hot wall y=0); V61-060 Stage A.4 then added y-direction grading
+        for the now-real horizontal BL. So:
+          x-direction stays uniform (rolls span x — no BL) — ENFORCED HERE.
+          y-direction grading is allowed (V61-060 A.4) — see
+            TestRBCMultiDim.test_a4_rbc_y_grading_for_horizontal_bl.
+        """
+        spec = _make_nc_spec(Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection")
         with tempfile.TemporaryDirectory() as tmp:
             case_dir = Path(tmp) / "case"
             FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
             blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
-            # Uniform grading "1" still expected for RBC.
-            # The simpleGrading line for uniform should look like "(1 1 1)"
-            # in the hex block (not the multi-segment graded form).
-            assert "(0.5 0.5 4)" not in blockmesh and "(0.5 0.5 6)" not in blockmesh, (
-                "RBC should not use DHC's graded mesh"
+            # The simpleGrading line for RBC post-A.4 looks like:
+            # simpleGrading (1 ((0.5 0.5 4) (0.5 0.5 0.25)) 1)
+            # First arg = x-grading must be uniform (1).
+            sg_idx = blockmesh.find("simpleGrading")
+            assert sg_idx > 0, f"no simpleGrading in blockmesh:\n{blockmesh[:500]}"
+            sg_line = blockmesh[sg_idx:sg_idx + 200]
+            assert sg_line.startswith("simpleGrading (1 "), (
+                f"RBC x-grading must remain uniform (1); got line:\n{sg_line[:250]}"
             )
 
     def test_rbc_still_emits_ras_when_whitelist_silent(self):
@@ -2655,3 +2665,29 @@ class TestRBCMultiDim:
         bc = spec.boundary_conditions
         assert bc.get("wall_orientation") == "x"
         assert bc.get("wall_coord_cold") == pytest.approx(1.0)  # Lx=1.0 for DHC
+
+    def test_a4_rbc_y_grading_for_horizontal_bl(self, tmp_path):
+        """DEC-V61-060 Stage A.4: RBC at Ra=1e6 with bottom-heated topology
+        has thermal BL at y=0 (hot) and y=Ly (cold); δ_T/H ≈ (Ra·Pr)^(-1/4)
+        ≈ 0.018 — unresolvable on uniform 80-cell mesh. A.4 adds 4:1
+        symmetric wall packing in y so cells cluster near both horizontal
+        walls. x-direction stays uniform (rolls span x)."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+        # simpleGrading (gx gy 1) — for RBC post-A.4:
+        # gx = 1 (uniform x), gy = ((0.5 0.5 4) (0.5 0.5 0.25)) (4:1 wall packing)
+        assert "((0.5 0.5 4) (0.5 0.5 0.25))" in blockmesh, (
+            "RBC must use 4:1 symmetric wall packing in y (DEC-V61-060 A.4). "
+            f"blockMesh:\n{blockmesh[:800]}"
+        )
+        # Confirm grading is in y (second arg), not x (first arg).
+        sg_idx = blockmesh.find("simpleGrading")
+        sg_line = blockmesh[sg_idx:sg_idx + 200]
+        # x-grading first; must NOT be the multi-segment form
+        assert sg_line.startswith("simpleGrading (1 "), (
+            f"RBC x-grading must stay uniform; got:\n{sg_line[:250]}"
+        )

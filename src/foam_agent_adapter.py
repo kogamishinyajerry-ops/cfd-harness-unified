@@ -2238,6 +2238,13 @@ fields          (U);
             "differential_heated_cavity"
             in _normalize_task_name_to_case_id(task_spec.name or "").lower()
         )
+        # DEC-V61-060 Stage A.4: hoist is_rbc here (was Stage A.3) so the
+        # mesh-grading branch below can read it. Used by both A.4 (mesh
+        # grading) and A.3 (BC plumb + boundary topology emit).
+        is_rbc = (
+            "rayleigh_benard"
+            in _normalize_task_name_to_case_id(task_spec.name or "").lower()
+        )
         # DEC-V61-060 Stage A.1: cell counts now per-axis (nLx, nLy) so the
         # mesh resolution scales with each side independently. nLy is the
         # height-resolved count; nLx scales with aspect_ratio so cells stay
@@ -2259,12 +2266,28 @@ fields          (U);
                 grading_str_x = "((0.5 0.5 6) (0.5 0.5 0.1667))"
                 grading_str_y = "((0.5 0.5 6) (0.5 0.5 0.1667))"
         else:
-            # RBC and other non-DHC NC cavities: uniform mesh in both axes.
+            # RBC and other non-DHC NC cavities.
             # Per A.0 pivot: RBC = AR=4 → nLx=4·nLy keeps cells ~square.
+            # DEC-V61-060 Stage A.4: RBC horizontal-wall BL grading.
+            # At Ra=1e6 Pr=10 (Pandey & Schumacher benchmark), thermal BL
+            # thickness δ_T/H ≈ (Ra·Pr)^(-1/4) ≈ 0.018 — thinner than DHC
+            # and unresolvable on uniform 80-cell mesh. Solution: 4:1
+            # symmetric wall packing in y so cells cluster near y=0
+            # (hot wall) and y=Ly (cold wall). Wall cell ≈ 0.006H gives
+            # ~3 BL cells (acceptable for steady SIMPLE).
+            # x-direction stays uniform — convection rolls span the full
+            # cavity width with no thin BL.
             nLy = max(int(80 * Ly), 40)
             nLx = max(int(80 * Lx), 40)  # RBC AR=4 → nLx≈320, nLy=80
             grading_str_x = "1"
-            grading_str_y = "1"
+            if is_rbc:
+                # DEC-V61-060 Stage A.4: y-direction symmetric wall packing
+                # for the horizontal hot/cold walls (bottom/top). Mirrors
+                # DHC at-moderate-Ra grading factor 4 (V61-057 A.3 lesson).
+                grading_str_y = "((0.5 0.5 4) (0.5 0.5 0.25))"
+            else:
+                # Other (non-RBC, non-DHC) NC cases: keep uniform fallback.
+                grading_str_y = "1"
         # Legacy nL alias for any downstream code that still references the old
         # symmetric-mesh assumption (TaskSpec / extractor / log paths).
         nL = nLy
@@ -2281,11 +2304,7 @@ fields          (U);
         # both fixedValue per the T boundary block written below.
         # DEC-V61-060 Stage A.3: RBC dispatches to y-axis (horizontal)
         # bottom-heated topology; DHC remains x-axis (vertical) side-heated.
-        # The case-id is the SSOT (matches intake §3 wall_orientation field).
-        is_rbc = (
-            "rayleigh_benard"
-            in _normalize_task_name_to_case_id(task_spec.name or "").lower()
-        )
+        # is_rbc was hoisted to the mesh section by Stage A.4 — reuse it.
         wall_orientation = "y" if is_rbc else "x"
         task_spec.boundary_conditions["wall_orientation"] = wall_orientation
         task_spec.boundary_conditions["wall_coord_hot"] = 0.0  # y=0 for RBC, x=0 for DHC
