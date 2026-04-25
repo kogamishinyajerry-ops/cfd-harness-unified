@@ -4,6 +4,22 @@
 # This fixture backs the signed audit package. Byte-identity across
 # re-runs (modulo timestamp + commit_sha) is enforced by
 # test_phase5_byte_repro.py.
+#
+# DEC-V61-057 Stage D.3 schema extension (this fixture lags Stage E):
+# After Stage E live run, measurement.secondary_scalars MUST contain the
+# 4 additional observables alongside the headline measurement.value:
+#
+#   measurement:
+#     value: <Nu_avg>                        # primary nusselt_number
+#     quantity: nusselt_number
+#     secondary_scalars:
+#       nusselt_max: <peak local Nu>         # gold 17.925 (HARD_GATED, 7%)
+#       u_max_centerline_v: <u·L/α>          # gold 64.63   (HARD_GATED, 5%)
+#       v_max_centerline_h: <v·L/α>          # gold 219.36  (HARD_GATED, 5%)
+#       psi_max_center: <ψ·1/α>              # gold 16.750  (PROVISIONAL_ADVISORY, 8%)
+#
+# Until then, the Compare-tab UI renders the 4 cross-checks as PENDING
+# placeholders (Stage D.1 backend + D.2 frontend handle this gracefully).
 
 run_metadata:
   run_id: audit_real_run

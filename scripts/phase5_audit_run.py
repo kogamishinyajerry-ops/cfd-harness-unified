@@ -532,9 +532,17 @@ def _audit_fixture_doc(
             **({
                 "secondary_scalars": {
                     k: kq[k] for k in (
+                        # DEC-V61-053 cylinder cross-checks
                         "cd_mean", "cl_rms",
                         "deficit_x_over_D_1.0", "deficit_x_over_D_2.0",
                         "deficit_x_over_D_3.0", "deficit_x_over_D_5.0",
+                        # DEC-V61-057 Stage D.3: differential_heated_cavity
+                        # 4-observable cross-checks (Stage E populates these
+                        # via src.dhc_extractors.extract_*).
+                        "nusselt_max",
+                        "u_max_centerline_v",
+                        "v_max_centerline_h",
+                        "psi_max_center",
                     ) if k in kq and kq[k] is not None
                 }
             } if any(
@@ -542,6 +550,8 @@ def _audit_fixture_doc(
                     "cd_mean", "cl_rms",
                     "deficit_x_over_D_1.0", "deficit_x_over_D_2.0",
                     "deficit_x_over_D_3.0", "deficit_x_over_D_5.0",
+                    "nusselt_max", "u_max_centerline_v",
+                    "v_max_centerline_h", "psi_max_center",
                 )
             ) else {}),
         },
