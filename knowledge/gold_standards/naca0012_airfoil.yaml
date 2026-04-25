@@ -49,10 +49,9 @@ physics_contract:
       consequence_if_unsatisfied: "y+ outside [11, 500] under-resolves wall blending; risk lift/drag undershoot 5-10%."
       resolution_plan: "DEC-V61-058 Batch B3 emits y+_max as PROVISIONAL_ADVISORY (NOT HARD-GATED per Codex F5)."
     - condition: "α-routing reads single canonical task_spec parameter; sign convention enforced (α=+8° → Cl>0)"
-      satisfied_by_current_adapter: false
-      evidence_ref: "Pre-V61-058 adapter at src/foam_agent_adapter.py:6407-7164 hardcodes α=0°. task_spec.parameters.angle_of_attack declared at knowledge/whitelist.yaml line ~261 but not honored."
-      consequence_if_unsatisfied: "Multi-α gates (Cl@α=8, Cl_alpha_slope) cannot be evaluated."
-      resolution_plan: "DEC-V61-058 Batch B1: adapter reads alpha_deg, rotates 0/U freestream, configures forceCoeffs liftDir/dragDir per α. Single canonical case_id preserved (Codex F2)."
+      satisfied_by_current_adapter: true  # B1 landed 2026-04-25 (commits 5bbda96 + 032623b + a00ff88)
+      evidence_ref: "DEC-V61-058 Batch B1 at src/foam_agent_adapter.py:6420-6478 reads `angle_of_attack` (whitelist canonical key) with `alpha_deg` alias fallback; rotates 0/U freestream as U_inf·(cos α, 0, sin α); configures forceCoeffs FO with α-aware liftDir/dragDir at src/foam_agent_adapter.py:6815-6831. Codex round 1 F1 fix (commit a00ff88) ensures the resolved value is per-call-fresh (no stateful persistence). Sign convention pinned in adapter comment block; Stage E smoke test (intake §9) asserts α=+8° → Cl>0 at runtime."
+      consequence_if_unsatisfied: "n/a — precondition is now satisfied. Stage E live-run smoke verifies the architecture end-to-end."
     - condition: "Cp extraction sampling geometry aligns with QUALITATIVE shape match (not exact-surface absolute values)"
       satisfied_by_current_adapter: partially
       evidence_ref: "DEC-V61-044 added in-solver `airfoilSurface` FO writing p_aerofoil.raw; src/airfoil_surface_sampler.py reads + computes Cp. cellPoint interpolation samples a near-surface band; magnitudes are systematically attenuated 30-50% vs exact-surface gold."
