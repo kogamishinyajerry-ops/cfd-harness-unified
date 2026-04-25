@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.6.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-04-25T13:15 local"
+last_updated: "2026-04-25T15:00 local"
 progress:
   total_phases: 9
   completed_phases: 8
@@ -15,7 +15,7 @@ pivot:
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
   opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 Draft-rev4 三轮 W2 Gate 闭环 zero-outstanding · ADR-002 W2 Impl Start 提前 4 天交付 (PLANE_OF SSOT 22-modules + byte-identical generator + 5th contract bootstrap-purity + 22 tests + CI step wired) · ADR-001 §2.7 AC-A7 closed by ADR-002 §2.2 · §4.3a (b) compliance recorded · 全部 Opus round-1 Additional Concerns 1/2/3 已收口 (1/2 actionable closed; 3 deferred to W5 GA per Opus) · all pushed to origin/main 9 commits 单日交付 · 563 passed · 5 contracts KEPT · next: W2 Impl Mid 5/1 (src/_plane_guard.py finder + multi-frame walk per ADR-002 §2.1 + A3 a-d basic suite) · V61-057 BLOCKED on G-9/G-1/VCP-001 trio · V61-058 serial-after · P1-T4 blocked on KOM Draft"
+  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED 提前 9 天 (W3 init 5/4 → 4/25) · 单日全栈交付 W1+W2(Draft 三轮 + Impl Start + Mid + Late) + W3 Accepted flip · src/_plane_guard.py 330 LOC finder + multi-frame walk + N=20 env-configurable + Mode OFF/WARN/ON + structured JSON log A7b + threading.Lock + strict_scope · 41 新测试 (test_plane_guard 18 + edge 13 + escape 5 + assignment_ssot 15 + gen_importlinter 7 - 重叠) · 全 18 ACs satisfied (A14/A15/A16 §6 known-limit doc per ADR allow text) · all pushed to origin/main 12 commits · 723 passed 2 skipped · 5 contracts KEPT · next: W3-W5 时序剩余项 (src/__init__.py auto-install WARN default · CI hard-fail · ON-everywhere) deferred 等 Opus 异步审查 · Codex post-merge review pending · V61-057 BLOCKED on G-9/G-1/VCP-001 trio · V61-058 serial-after · P1-T4 blocked on KOM Draft"
   go_no_go:
     G-1_dec_pivot_signoff: pending_cfdjerry
     G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed
