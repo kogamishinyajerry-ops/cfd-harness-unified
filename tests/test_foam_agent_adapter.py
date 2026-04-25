@@ -2398,3 +2398,354 @@ class TestPopulateIjNusseltFromSampleDict:
             tmp_path, task, original
         )
         assert out["nusselt_number"] == 15.0  # untouched
+
+
+# ============================================================================
+# DEC-V61-058 Stage B2: TestNACA0012MultiDim
+# ============================================================================
+# Tests for src/airfoil_extractors.py + Stage B1 adapter α-routing changes.
+# Test class is EXCLUSIVE per Track B SESSION 2 mandate (no overlap with
+# parallel SESSION 1 DHC / SESSION 3 plane_channel work).
+
+from src.airfoil_extractors import (
+    AirfoilExtractorError,
+    CoeffsResult,
+    LiftSlopeResult,
+    YPlusResult,
+    assert_sign_convention,
+    compute_cl_cd,
+    compute_lift_slope,
+    compute_y_plus_max,
+)
+
+
+def _write_synthetic_coefficient_dat(
+    path: Path, t_cl_cd: list, *, with_header: bool = True
+) -> None:
+    """Write a synthetic forceCoeffs coefficient.dat for unit tests.
+
+    Mirrors OpenFOAM 10 layout: ``# Time  Cm  Cd  Cl  Cd(f) Cd(r) Cl(f) Cl(r)``
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list = []
+    if with_header:
+        lines.append("# Time   Cm           Cd           Cl           Cd(f)        Cd(r)        Cl(f)        Cl(r)")
+    for t, cl, cd in t_cl_cd:
+        lines.append(
+            f"{t:.6f}    0.0000e+00    {cd:.6e}   {cl:.6e}   "
+            f"{cd*0.5:.6e}   {cd*0.5:.6e}   {cl*0.5:.6e}   {cl*0.5:.6e}"
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_synthetic_yplus_dat(
+    path: Path, rows: list, *, with_header: bool = True
+) -> None:
+    """Write a synthetic yPlus.dat. rows = [(t, patch, ymin, ymax, yavg), ...]."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list = []
+    if with_header:
+        lines.append("# Time   patch    min      max      average")
+    for t, patch, ymin, ymax, yavg in rows:
+        lines.append(f"{t:.6f}    {patch}    {ymin:.6e}    {ymax:.6e}    {yavg:.6e}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestNACA0012MultiDim:
+    """DEC-V61-058 Stage B2 — multi-α extractor + adapter integration tests."""
+
+    # ------------------------------------------------------------------
+    # compute_cl_cd: forceCoeffs final-time row extraction
+    # ------------------------------------------------------------------
+
+    def test_compute_cl_cd_alpha_eight_returns_final_row(self, tmp_path):
+        # Synthetic 200-step run at α=8°: Cl ramps to 0.815, Cd to 0.0095
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.005 + 0.815 * (i / 200.0), 0.005 + 0.0095 * (i / 200.0))
+                for i in range(1, 201)]
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        result = compute_cl_cd(tmp_path, alpha_deg=8.0)
+        assert isinstance(result, CoeffsResult)
+        assert result.alpha_deg == 8.0
+        assert result.Cl == pytest.approx(0.820, rel=0.01)  # 0.005 + 0.815·(200/200)
+        assert result.Cd == pytest.approx(0.0145, rel=0.05)  # 0.005 + 0.0095·1
+        assert result.n_samples == 200
+        assert result.final_time == 200.0
+
+    def test_compute_cl_cd_missing_dir_raises(self, tmp_path):
+        with pytest.raises(AirfoilExtractorError, match="forceCoeffs FO output dir"):
+            compute_cl_cd(tmp_path, alpha_deg=0.0)
+
+    def test_compute_cl_cd_zero_rows_raises(self, tmp_path):
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        coeff_path.parent.mkdir(parents=True, exist_ok=True)
+        coeff_path.write_text("# Time   Cm   Cd   Cl\n", encoding="utf-8")  # header only
+        with pytest.raises(AirfoilExtractorError, match="parse failed|zero rows"):
+            compute_cl_cd(tmp_path, alpha_deg=0.0)
+
+    def test_compute_cl_cd_drift_pct_zero_when_few_samples(self, tmp_path):
+        """Drift metric returns 0 when fewer than 100 samples (insufficient signal)."""
+        coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
+        rows = [(float(i), 0.815, 0.008) for i in range(1, 51)]  # 50 samples
+        _write_synthetic_coefficient_dat(coeff_path, rows)
+        result = compute_cl_cd(tmp_path, alpha_deg=8.0)
+        assert result.cl_drift_pct_last_100 == 0.0
+        assert result.cd_drift_pct_last_100 == 0.0
+
+    # ------------------------------------------------------------------
+    # compute_lift_slope: 3-point linear fit + linearity check
+    # ------------------------------------------------------------------
+
+    def test_lift_slope_canonical_ladson_anchors_recovers_gold_slope(self):
+        """Gold anchors (Ladson 1988 Tab.1 Re=3e6) → slope ≈ 0.105/deg."""
+        points = [(0.0, 0.0), (4.0, 0.434), (8.0, 0.815)]
+        result = compute_lift_slope(points)
+        # Least-squares slope through these 3 points
+        assert result.slope_per_deg == pytest.approx(0.1031, abs=0.005)
+        assert result.intercept == pytest.approx(0.005, abs=0.01)
+        assert result.linearity_ok is True
+        assert result.linearity_residual < 0.05
+        assert result.n_points == 3
+
+    def test_lift_slope_nonlinear_points_flags_linearity_violation(self):
+        """Strongly curved Cl(α) (e.g. stall onset before α=8°) → linearity_ok=False."""
+        # Cl(0°)=0, Cl(4°)=0.5, Cl(8°)=0.6 — clearly nonlinear (recovery slows)
+        points = [(0.0, 0.0), (4.0, 0.5), (8.0, 0.6)]
+        result = compute_lift_slope(points)
+        # midpoint = 0.3; |0.5 - 0.3| / |0.6| = 0.333 > 0.05
+        assert result.linearity_ok is False
+        assert result.linearity_residual > 0.05
+
+    def test_lift_slope_two_points_skips_linearity_check(self):
+        """With only 2 points, slope is computable but linearity check is N/A."""
+        points = [(0.0, 0.0), (8.0, 0.815)]
+        result = compute_lift_slope(points)
+        assert result.slope_per_deg == pytest.approx(0.815 / 8.0, abs=0.001)
+        assert result.linearity_ok is True  # default true when α∈{0,4,8} not all present
+        assert result.linearity_residual == 0.0
+
+    def test_lift_slope_one_point_raises(self):
+        with pytest.raises(AirfoilExtractorError, match="≥2 points"):
+            compute_lift_slope([(0.0, 0.0)])
+
+    def test_lift_slope_degenerate_all_same_alpha_raises(self):
+        with pytest.raises(AirfoilExtractorError, match="degenerate"):
+            compute_lift_slope([(4.0, 0.4), (4.0, 0.5), (4.0, 0.6)])
+
+    # ------------------------------------------------------------------
+    # compute_y_plus_max: yPlus FO patch-row extraction
+    # ------------------------------------------------------------------
+
+    def test_yplus_max_in_band_returns_PASS(self, tmp_path):
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 11.5, 84.0, 47.0),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.y_plus_max == pytest.approx(84.0)
+        assert result.advisory_status == "PASS"
+
+    def test_yplus_max_above_500_returns_FLAG(self, tmp_path):
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 50.0, 750.0, 300.0),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.advisory_status == "FLAG"
+
+    def test_yplus_max_above_1000_returns_BLOCK(self, tmp_path):
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 50.0, 1500.0, 500.0),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.advisory_status == "BLOCK"
+
+    def test_yplus_missing_patch_raises(self, tmp_path):
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "freestream", 0.5, 2.0, 1.0),  # wrong patch
+        ])
+        with pytest.raises(AirfoilExtractorError, match="no rows for patch"):
+            compute_y_plus_max(tmp_path, patch_name="aerofoil")
+
+    # ------------------------------------------------------------------
+    # Sign-convention smoke + symmetry probe (intake §9 close gates)
+    # ------------------------------------------------------------------
+
+    def test_sign_convention_alpha_8_positive_cl_passes(self):
+        result = CoeffsResult(
+            alpha_deg=8.0, Cl=0.815, Cd=0.0145, final_time=200.0, n_samples=200
+        )
+        assert_sign_convention(result)  # no raise
+
+    def test_sign_convention_alpha_8_negative_cl_raises(self):
+        result = CoeffsResult(
+            alpha_deg=8.0, Cl=-0.5, Cd=0.0145, final_time=200.0, n_samples=200
+        )
+        with pytest.raises(AirfoilExtractorError, match="sign-convention violation"):
+            assert_sign_convention(result)
+
+    def test_symmetry_probe_alpha_0_zero_cl_passes(self):
+        """SANITY_CHECK: α=0° symmetric airfoil → |Cl| < 0.005."""
+        result = CoeffsResult(
+            alpha_deg=0.0, Cl=0.001, Cd=0.008, final_time=200.0, n_samples=200
+        )
+        assert_sign_convention(result)  # passes, |Cl|=0.001 < 0.005
+
+    def test_symmetry_probe_alpha_0_large_cl_raises(self):
+        """Asymmetric solve at α=0° (mesh asymmetry / numerical noise) → SANITY_CHECK fail."""
+        result = CoeffsResult(
+            alpha_deg=0.0, Cl=0.05, Cd=0.008, final_time=200.0, n_samples=200
+        )
+        with pytest.raises(AirfoilExtractorError, match="sanity_check violation"):
+            assert_sign_convention(result)
+
+    # ------------------------------------------------------------------
+    # Adapter integration: B1 α-routing produces consistent forceCoeffs FO
+    # ------------------------------------------------------------------
+
+    def test_adapter_alpha_zero_emits_default_freestream(self, tmp_path):
+        """α-routing default 0° produces (1, 0, 0) freestream."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0},  # alpha_deg omitted → default 0
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        u_text = (tmp_path / "0" / "U").read_text()
+        assert "uniform (1.000000e+00 0 0.000000e+00)" in u_text
+
+    def test_adapter_alpha_eight_emits_rotated_freestream(self, tmp_path):
+        """α=+8° produces freestream (cos 8°, 0, sin 8°) ≈ (0.990, 0, 0.139)."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "alpha_deg": 8.0},
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        u_text = (tmp_path / "0" / "U").read_text()
+        assert "9.902681e-01" in u_text  # cos 8°
+        assert "1.391731e-01" in u_text  # sin 8°
+
+    def test_adapter_angle_of_attack_alias_honored(self, tmp_path):
+        """`angle_of_attack` alias (whitelist parameters→bc field) honored at adapter."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "angle_of_attack": 4.0},
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        u_text = (tmp_path / "0" / "U").read_text()
+        assert "9.975641e-01" in u_text  # cos 4°
+        assert "6.975647e-02" in u_text  # sin 4°
+
+    def test_adapter_force_coeffs_aref_is_chord_times_thin_span(self, tmp_path):
+        """V61-041 trap: Aref must be 0.002 (chord × span), not 0.01 or 1.0."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "alpha_deg": 0.0},
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        cd_text = (tmp_path / "system" / "controlDict").read_text()
+        assert "Aref            2.000000e-03" in cd_text
+        assert "lRef            1.000000e+00" in cd_text
+        assert "rhoInf          1.0" in cd_text  # incompressible kinematic
+        assert "patches         (aerofoil)" in cd_text
+
+    def test_adapter_force_coeffs_lift_drag_dirs_are_alpha_aware(self, tmp_path):
+        """liftDir/dragDir at α=8° match (-sin 8°, 0, cos 8°) / (cos 8°, 0, sin 8°)."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "alpha_deg": 8.0},
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        cd_text = (tmp_path / "system" / "controlDict").read_text()
+        assert "liftDir         (-1.391731e-01 0 9.902681e-01)" in cd_text
+        assert "dragDir         (9.902681e-01 0 1.391731e-01)" in cd_text
+
+    def test_adapter_yplus_fo_emitted(self, tmp_path):
+        """B1.3: yPlus FO present in controlDict functions{} block."""
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "alpha_deg": 0.0},
+        )
+        FoamAgentExecutor()._generate_airfoil_flow(tmp_path, task, "kOmegaSST")
+        cd_text = (tmp_path / "system" / "controlDict").read_text()
+        assert "yPlus" in cd_text
+        assert 'libs            ("libfieldFunctionObjects.so")' in cd_text
+
+    def test_adapter_plumbs_alpha_fields_into_boundary_conditions(self):
+        """task_spec.boundary_conditions ends up with alpha_deg + U_inf_x + U_inf_z."""
+        import tempfile
+        from pathlib import Path as _Path
+        task = TaskSpec(
+            name="NACA 0012 Airfoil External Flow",
+            geometry_type=GeometryType.AIRFOIL,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=3000000.0,
+            boundary_conditions={"chord_length": 1.0, "alpha_deg": 4.0},
+        )
+        with tempfile.TemporaryDirectory() as td:
+            FoamAgentExecutor()._generate_airfoil_flow(_Path(td), task, "kOmegaSST")
+        bc = task.boundary_conditions
+        assert bc["alpha_deg"] == 4.0
+        assert bc["U_inf_x"] == pytest.approx(0.997564, abs=1e-5)
+        assert bc["U_inf_z"] == pytest.approx(0.069756, abs=1e-5)
+        assert bc["U_inf"] == 1.0
+        assert bc["rho"] == 1.0
+        assert bc["p_inf"] == 0.0
+
+    # ------------------------------------------------------------------
+    # Gate-set sanity: Cl@α=0° EXCLUDED (Codex F1 + numerical_noise_snr)
+    # ------------------------------------------------------------------
+
+    def test_cl_at_alpha_zero_not_in_gate_set(self):
+        """Per Codex F1 + intake §3 sanity_checks: Cl@α=0 is SANITY_CHECK only."""
+        import yaml
+        gold_yaml = yaml.safe_load(
+            (Path(__file__).resolve().parents[1]
+             / "knowledge" / "gold_standards" / "naca0012_airfoil.yaml").read_text()
+        )
+        observable_names = [obs["name"] for obs in gold_yaml["observables"]]
+        assert "lift_coefficient_alpha_zero" not in observable_names, (
+            "Cl@α=0° must NOT be in observables[] (HARD gate set); per Codex F1 + "
+            "intake §3 it must live ONLY in sanity_checks[]."
+        )
+        # And it MUST be in sanity_checks[] with excluded_from_gate_set=true.
+        sanity_names = [s["name"] for s in gold_yaml["sanity_checks"]]
+        assert "lift_coefficient_alpha_zero" in sanity_names
+        sc = next(s for s in gold_yaml["sanity_checks"]
+                  if s["name"] == "lift_coefficient_alpha_zero")
+        assert sc["excluded_from_gate_set"] is True
+        assert sc["expected_value"] == 0.0
+        assert sc["expected_band_absolute"] == 0.005
