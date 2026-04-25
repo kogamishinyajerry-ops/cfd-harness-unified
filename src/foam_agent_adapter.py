@@ -6593,10 +6593,17 @@ boundaryField
         #   nz_BLout = 40      # BL-outer radial cells (moderate grading ~10)
         #   ny       = 1       # thin span
         # Total cells ≈ 8 aerofoil × (~80 × 1 × 40 cells) + 4 wake × (~60 × 1 × 40) ≈ 35k–40k
+        # Stage A.iter3 (DEC-V61-062): uniform inlet/wake x-grading +
+        # softer BL_INNER_RATIO so all corner aspect-ratios stay under the
+        # intake §6 gate of 10000. Iter1 grading=6000 → AR 168k FAIL.
+        # Iter2 grading=2000 INLET=0.5 → AR 10429 (just over gate).
+        # Iter3 grading=2000 INLET=1.0 + nx_inlet=80 (uniform): predicted
+        # AR = (10/80) / 1.33e-5 = 9398, under gate.
+        # First cell 1.33e-5 m → y+ ≈ 2 at Re=3e6 (LowRe regime ✓).
         nx_LE = 80
         nx_TE = 80
-        nx_inlet = 30
-        nx_wake = 60
+        nx_inlet = 80
+        nx_wake = 80
         nz_BLin = 40
         nz_BLout = 40
 
@@ -6673,16 +6680,23 @@ boundaryField
         # V61-062: 24 vertices per layer; y_hi IDs = y_lo IDs + 24.
         OFF = 26  # y_hi offset (24 in-plane vertices + 2 split vertices)
 
-        def hex_block(v0, v1, v2, v3, *, ncells, grading) -> str:
-            """Emit a hex block from 4 in-plane y_lo vertex IDs (CCW viewed from +y).
-            Span direction is y; y_hi vertices are v + OFF.
-            Returns the hex (...) (...) simpleGrading (...) text snippet.
+        def hex_block(sw, se, ne, nw, *, ncells, grading) -> str:
+            """Emit a hex block from 4 in-plane y_lo vertex IDs (caller passes
+            SW, SE, NE, NW in CCW order viewed from +y).
+            Internally re-orders to (SW, NW, NE, SE, SW_hi, NW_hi, NE_hi, SE_hi)
+            so that direction-1 = +z (SW→NW), direction-2 = +x (SW→SE),
+            direction-3 = +y (SW→SW_hi); right-handed: +z × +x = +y ✓.
+            Caller's ncells = (nx, ny=1, nz) and grading = (gx, gy=1, gz) are
+            remapped to OpenFOAM's (n_dir1, n_dir2, n_dir3) = (nz, nx, ny=1)
+            and (gz, gx, gy=1).
             """
+            nx, ny, nz = ncells
+            gx, gy, gz = grading
             return (
-                f"    hex ({v0} {v1} {v2} {v3} "
-                f"{v0+OFF} {v1+OFF} {v2+OFF} {v3+OFF}) "
-                f"({ncells[0]} {ncells[1]} {ncells[2]}) "
-                f"simpleGrading ({grading[0]} {grading[1]} {grading[2]})"
+                f"    hex ({sw} {nw} {ne} {se} "
+                f"{sw+OFF} {nw+OFF} {ne+OFF} {se+OFF}) "
+                f"({nz} {nx} {ny}) "
+                f"simpleGrading ({gz} {gx} {gy})"
             )
 
         # CCW in-plane vertex ordering (viewed from +y):
@@ -6705,10 +6719,10 @@ boundaryField
         #   - simpleGrading_z = last_cell_size / first_cell_size
         # If airfoil is at NORTH face (NW-NE edge): grading < 1 (cells shrink k=0 → k=N)
         # If airfoil is at SOUTH face (SW-SE edge): grading > 1 (cells grow k=0 → k=N)
-        BL_INNER_RATIO = 6000.0       # last/first ratio for fine-cell side ~5e-6 m
+        BL_INNER_RATIO = 2000.0       # last/first ratio for fine-cell side → first ~1.33e-5 m → y+~2
         BL_OUTER_RATIO = 41.0         # last/first ratio for BL-outer (interface→far)
-        WAKE_GRADING_X = 10.0         # wake streamwise expansion (V61-061 precedent)
-        INLET_GRADING_X = 0.1         # upstream inlet contraction toward LE (1/10)
+        WAKE_GRADING_X = 1.0          # uniform wake (DEC-V61-062 iter3; was 10 V61-061)
+        INLET_GRADING_X = 1.0         # uniform inlet x-cells to keep AR < 10000 (iter3; was 0.5 iter2, 0.1 iter1)
 
         # ── Aerofoil-region BL-INNER blocks (4) ──
         # In each BL-inner block, the airfoil edge is at NORTH (A1/A2) or
@@ -6897,23 +6911,28 @@ boundaryField
         # These all face freestream and use freestream BC.
         # x=x_min face — vertices in y_lo at this x: v0(z=-z_far), v5(-z_bl), v14(+z_bl), v19(+z_far)
         # Edges in y_lo → y_hi mating:
+        # Inlet/outlet faces: each face must be a single block's exposed face.
+        # The split-vertices v24=(x_min,0) and v25=(x_max,0) divide the
+        # x=x_min/x=x_max walls into two halves; each half is one block's face.
         inlet_faces = "\n".join([
-            face(0, 5),    # x=x_min, z ∈ [-z_far, -z_bl_band]
-            face(5, 14),   # x=x_min, z ∈ [-z_bl_band, +z_bl_band]
-            face(14, 19),  # x=x_min, z ∈ [+z_bl_band, +z_far]
-            face(0, 1),    # z=-z_far, x ∈ [x_min, x_le]
-            face(1, 2),    # z=-z_far, x ∈ [x_le, x_lower]
-            face(2, 3),    # z=-z_far, x ∈ [x_lower, x_te]
-            face(3, 4),    # z=-z_far, x ∈ [x_te, x_max]   -- THIS one is also wake-bottom; freestream OK
-            face(19, 20),  # z=+z_far, x ∈ [x_min, x_le]
-            face(20, 21),  # z=+z_far, x ∈ [x_le, x_upper]
-            face(21, 22),  # z=+z_far, x ∈ [x_upper, x_te]
-            face(22, 23),  # z=+z_far, x ∈ [x_te, x_max]   -- ditto
+            face(0, 5),    # I1   x=x_min, z ∈ [-z_far, -z_bl_band]
+            face(5, 24),   # I2lo x=x_min, z ∈ [-z_bl_band, 0]
+            face(24, 14),  # I2up x=x_min, z ∈ [0, +z_bl_band]
+            face(14, 19),  # I3   x=x_min, z ∈ [+z_bl_band, +z_far]
+            face(0, 1),    # I1   z=-z_far, x ∈ [x_min, x_le]
+            face(1, 2),    # B1a  z=-z_far, x ∈ [x_le, x_lower]
+            face(2, 3),    # B1b  z=-z_far, x ∈ [x_lower, x_te]
+            face(3, 4),    # W1   z=-z_far, x ∈ [x_te, x_max]
+            face(19, 20),  # I3   z=+z_far, x ∈ [x_min, x_le]
+            face(20, 21),  # B2a  z=+z_far, x ∈ [x_le, x_upper]
+            face(21, 22),  # B2b  z=+z_far, x ∈ [x_upper, x_te]
+            face(22, 23),  # W3   z=+z_far, x ∈ [x_te, x_max]
         ])
         outlet_faces = "\n".join([
-            face(4, 9),    # x=x_max, z ∈ [-z_far, -z_bl_band]
-            face(9, 18),   # x=x_max, z ∈ [-z_bl_band, +z_bl_band]
-            face(18, 23),  # x=x_max, z ∈ [+z_bl_band, +z_far]
+            face(4, 9),    # W1   x=x_max, z ∈ [-z_far, -z_bl_band]
+            face(9, 25),   # W2lo x=x_max, z ∈ [-z_bl_band, 0]
+            face(25, 18),  # W2up x=x_max, z ∈ [0, +z_bl_band]
+            face(18, 23),  # W3   x=x_max, z ∈ [+z_bl_band, +z_far]
         ])
 
         # back face (y=y_lo) — emit in-plane CCW viewed from -y. For each block,
