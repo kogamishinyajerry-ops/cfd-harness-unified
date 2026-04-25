@@ -642,10 +642,10 @@ class FoamAgentExecutor:
                 self._generate_natural_convection_cavity(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
             elif task_spec.geometry_type == GeometryType.BODY_IN_CHANNEL:
-                # 路由: INTERNAL (Plane Channel Flow DNS) → icoFoam laminar; EXTERNAL (Circular Cylinder Wake) → pimpleFoam
+                # 路由: INTERNAL (Plane Channel Flow DNS) → pisoFoam laminar (DEC-V61-059 Stage B post-R3 fix; pisoFoam registers momentumTransportModel that wallShearStress FO needs); EXTERNAL (Circular Cylinder Wake) → pimpleFoam
                 if task_spec.flow_type == FlowType.INTERNAL:
                     self._generate_steady_internal_channel(case_host_dir, task_spec)
-                    solver_name = "icoFoam"
+                    solver_name = "pisoFoam"
                 else:
                     solver_name = "pimpleFoam"
                     # DEC-V61-053 Batch B1: honor whitelist `turbulence_model`
@@ -3494,7 +3494,17 @@ boundaryField
             )
 
     def _generate_steady_internal_channel(self, case_dir: Path, task_spec: TaskSpec) -> None:
-        """生成平面通道层流 case 文件（icoFoam + laminar, 无湍流模型）。
+        """生成平面通道层流 case 文件（pisoFoam + laminar momentumTransport）。
+
+        Solver note (Stage B post-R3 fix): pisoFoam (not icoFoam) is
+        used because the DEC-V61-043 wallShearStress function-object
+        looks up `momentumTransportModel` from the registry, and
+        icoFoam — being a hard-coded laminar PISO solver — does not
+        register one. pisoFoam is the laminar-capable PISO solver that
+        DOES construct an `incompressible::momentumTransportModel`
+        (with `simulationType laminar`), so the FO finds what it
+        needs. Physics is identical to icoFoam in the laminar case;
+        only the solver framework differs.
 
         适用于:
         - Plane Channel Flow DNS (BODY_IN_CHANNEL + INTERNAL, Re_tau=180)
@@ -3562,9 +3572,9 @@ boundaryField
 
         # DEC-V61-043: plumb the physical constants the u+/y+ emitter
         # needs. Walls at y=±D/2 with noSlip (fixedValue U=0). Half
-        # channel height h = D/2. icoFoam is kinematic, so u_tau =
-        # sqrt(|τ_w/ρ|) with τ_w/ρ read directly from the
-        # wallShearStress FO.
+        # channel height h = D/2. pisoFoam (incompressible) reports
+        # τ_w in kinematic units (m²/s²) via the wallShearStress FO,
+        # so u_tau = sqrt(|τ_w/ρ|) is read directly.
         # DEC-V61-059 Stage A.4 (this commit) plumbs
         # turbulence_model_used into bc so the emitter (via
         # plane_channel_extractors.canonicalize_turbulence_model) and
@@ -3574,7 +3584,7 @@ boundaryField
         # Codex round-1 F1 (DEC-V61-059): the bc field MUST reflect
         # the path the generator ACTUALLY emits, not the declaration
         # the caller requested. Stage A.4.a only emits the laminar
-        # icoFoam path — A.4.b will add the simpleFoam + RAS files
+        # pisoFoam path — A.4.b will add the simpleFoam + RAS files
         # behind a `_emits_rans_path` flag and stamp the bc field
         # with the resolved model at the same moment. Until then,
         # this field is hard-pinned to "laminar" so a forward-compat
@@ -3592,7 +3602,7 @@ boundaryField
             whitelist_turbulence = (
                 _override_bc.get("turbulence_model") or "laminar"
             )
-        # A.4.a is locked to the laminar icoFoam emission path; the
+        # A.4.a is locked to the laminar pisoFoam emission path; the
         # turbulent file emit lands in A.4.b together with the
         # _emits_rans_path flip.
         _emits_rans_path = False
@@ -3744,9 +3754,13 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
         # used by the DEC-V61-043 emitter REQUIRES a registered
         # momentumTransport object — `Unable to find turbulence model
         # in the database` is the exact FOAM FATAL ERROR Stage B
-        # live-run surfaced (4.6s case death). icoFoam ignores the
-        # file's content (laminar PISO has no transport equations),
-        # but the file MUST EXIST so the FO database lookup succeeds.
+        # live-run surfaced (4.6s case death). icoFoam (the original
+        # solver choice) does not register a momentumTransportModel
+        # at all, so the rename alone was insufficient — Stage B's
+        # second iteration also flips the solver to pisoFoam (laminar-
+        # capable PISO that DOES construct an
+        # `incompressible::momentumTransportModel` even when
+        # simulationType is laminar).
         # See LDC's identical pattern at src/foam_agent_adapter.py:954.
         # The `simulationType` is also the canonical place for
         # downstream tooling to read the case's actually-active
@@ -3754,9 +3768,11 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
         # stable reviews).
         #
         # Codex round-1 F1: content MUST match `_emits_rans_path` —
-        # a "RAS" simulationType paired with `application icoFoam;`
-        # would be a contradictory case spec that misleads readers
-        # and breaks G2 trust semantics.
+        # a "RAS" simulationType paired with `application pisoFoam;`
+        # while `_emits_rans_path=False` would be a contradictory
+        # case spec that misleads readers and breaks G2 trust
+        # semantics; we hard-pin the body to `simulationType laminar`
+        # whenever `_emits_rans_path` is False.
         if _emits_rans_path and isinstance(whitelist_turbulence, str) and whitelist_turbulence.lower() != "laminar":
             _momentum_transport_body = (
                 f"simulationType  RAS;\n\n"
@@ -3810,7 +3826,7 @@ FoamFile
     object      controlDict;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-application     icoFoam;
+application     pisoFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
@@ -3832,8 +3848,9 @@ runTimeModifiable true;
 // region for our long domain). Outputs:
 //   postProcessing/wallShearStress/<t>/wallShearStress.dat
 //   postProcessing/uLine/<t>/channelCenter_U.xy
-// icoFoam works in kinematic viscosity, so wallShearStress returns
-// τ_w/ρ (kinematic stress, units m²/s²). u_τ = sqrt(|τ_w/ρ|).
+// pisoFoam (incompressible) works in kinematic viscosity, so
+// wallShearStress returns τ_w/ρ (kinematic stress, units m²/s²).
+// u_τ = sqrt(|τ_w/ρ|).
 functions
 {{
     wallShearStress
@@ -3903,10 +3920,27 @@ divSchemes
 {
     default         none;
     div(phi,U)      Gauss linear;
+    // pisoFoam constructs an incompressible momentumTransport model
+    // (laminar in our case), which adds an explicit deviatoric-stress
+    // div term to the momentum equation: ∇·(νEff·dev2(∇Uᵀ)). The
+    // earlier icoFoam path had no transport framework and therefore
+    // did not need this entry. The wallShearStress function-object
+    // likewise requires the registered momentumTransport object —
+    // switching to pisoFoam is what makes Stage B's u_τ extraction
+    // work end-to-end.
+    div((nuEff*dev2(T(grad(U)))))   Gauss linear;
 }
 laplacianSchemes
 {
     default         Gauss linear corrected;
+}
+interpolationSchemes
+{
+    default         linear;
+}
+snGradSchemes
+{
+    default         corrected;
 }
 // ************************************************************************* //
 """,
@@ -7888,6 +7922,7 @@ mergePatchPairs
             for logname in (
                 "log.simpleFoam",
                 "log.icoFoam",
+                "log.pisoFoam",
                 "log.buoyantFoam",
                 "log.pimpleFoam",
             ):

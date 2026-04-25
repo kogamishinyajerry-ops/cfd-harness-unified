@@ -1912,10 +1912,40 @@ class TestPlaneChannelMultiDim:
             # reverts to the older filename is caught.
             assert not (case_dir / "constant" / "turbulenceProperties").exists()
 
+    def test_a4a_solver_is_pisofoam_with_required_div_scheme(self):
+        """Stage B post-R3 fix lock: the laminar plane-channel case
+        must declare `application pisoFoam;` in controlDict (NOT
+        icoFoam) and fvSchemes must include the
+        `div((nuEff*dev2(T(grad(U)))))` entry that pisoFoam's
+        momentumTransport framework requires. Regression catches a
+        future revert to icoFoam — which would resurrect the FOAM
+        FATAL ERROR `Unable to find turbulence model in the database`
+        from the wallShearStress function-object.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            case_dir = Path(tmp) / "case"
+            FoamAgentExecutor()._generate_steady_internal_channel(case_dir, self._make_spec())
+            cd = (case_dir / "system" / "controlDict").read_text()
+            assert "application     pisoFoam;" in cd, (
+                "controlDict MUST declare pisoFoam (icoFoam does not "
+                "register a momentumTransportModel and breaks the "
+                "wallShearStress FO)."
+            )
+            assert "icoFoam" not in cd, (
+                "Stale icoFoam reference in controlDict will resurrect "
+                "the Stage B post-R3 defect."
+            )
+            schemes = (case_dir / "system" / "fvSchemes").read_text()
+            assert "div((nuEff*dev2(T(grad(U)))))" in schemes, (
+                "pisoFoam needs the explicit deviatoric-stress div "
+                "scheme entry; without it the solver crashes with "
+                "`keyword div((nuEff*dev2(T(grad(U))))) is undefined`."
+            )
+
     def test_a4a_locks_bc_to_laminar_even_when_caller_overrides(self):
-        """Codex round-1 F1 regression: A.4.a is the laminar icoFoam
+        """Codex round-1 F1 regression: A.4.a is the laminar pisoFoam
         emission path only — the bc["turbulence_model_used"] field
-        and the constant/turbulenceProperties file content MUST both
+        and the constant/momentumTransport file content MUST both
         reflect the actually-emitted laminar path, regardless of any
         forward-compat caller override via
         boundary_conditions["turbulence_model"]. Otherwise a metadata-
@@ -1953,7 +1983,7 @@ class TestPlaneChannelMultiDim:
             bc = spec.boundary_conditions or {}
             assert bc.get("turbulence_model_used") == "laminar", (
                 "A.4.a F1 lock: bc field MUST reflect the actually-emitted "
-                "icoFoam path, not the caller's declaration override."
+                "pisoFoam path, not the caller's declaration override."
             )
 
 
