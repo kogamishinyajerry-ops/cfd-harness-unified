@@ -163,6 +163,180 @@ def test_a13_install_guard_takes_baseline_snapshot():
 
 
 # ---------------------------------------------------------------------------
+# Codex W4 prep R1 finding 3 fix: log paths anchor to repo root, not cwd
+# ---------------------------------------------------------------------------
+
+
+def test_jsonl_paths_anchor_to_repo_root_regardless_of_cwd(tmp_path, monkeypatch):
+    """Writer + evaluator must agree on log path even when cwd differs.
+
+    Pre-fix: ``_resolve_jsonl_path`` returned cwd-relative path while
+    ``scripts/plane_guard_rollback_eval.py`` always read REPO_ROOT/...
+    → recorded incidents could be silently masked.
+
+    Post-fix: both anchor to repo root (discovered via pyproject.toml /
+    .git walk from this module's __file__).
+    """
+    monkeypatch.chdir(tmp_path)
+    expected_root = guard_module._find_repo_root()  # noqa: SLF001
+    assert expected_root is not None, "must discover repo root"
+    pollution_path = guard_module._resolve_jsonl_path(  # noqa: SLF001
+        guard_module._POLLUTION_LOG_FILENAME  # noqa: SLF001
+    )
+    confusion_path = guard_module._resolve_jsonl_path(  # noqa: SLF001
+        guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
+    )
+    assert pollution_path.startswith(expected_root)
+    assert confusion_path.startswith(expected_root)
+    # Specifically NOT cwd-relative.
+    assert not pollution_path.startswith(str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Codex W4 prep R1 finding 2 fix: A13 atexit hook auto-fires on process exit
+# ---------------------------------------------------------------------------
+
+
+def test_install_guard_registers_atexit_hook_once():
+    """install_guard registers exactly one atexit callback per process."""
+    import atexit as _atexit
+    uninstall_guard()
+    # Reset module-level flag so this test is order-independent.
+    guard_module._ATEXIT_REGISTERED = False  # noqa: SLF001
+    registered = []
+    monkeypatched = lambda fn, *a, **kw: registered.append(fn)
+    real_register = _atexit.register
+    _atexit.register = monkeypatched  # type: ignore[assignment]
+    try:
+        install_guard(Mode.WARN)
+        install_guard(Mode.WARN)  # Repeat call — must NOT re-register.
+    finally:
+        _atexit.register = real_register  # type: ignore[assignment]
+        uninstall_guard()
+    assert len(registered) == 1
+    assert registered[0] is guard_module._atexit_pollution_check  # noqa: SLF001
+
+
+def test_atexit_pollution_check_runs_diff_when_snapshot_active(tmp_path, monkeypatch):
+    """The atexit callback runs diff_pollution_snapshot when a snapshot is active."""
+    uninstall_guard()
+    import src.task_runner  # noqa: F401
+    monkeypatch.chdir(tmp_path)
+    install_guard(Mode.WARN)
+    # Pollute one src.* key so the diff has something to log.
+    polluted_key = "src.task_runner"
+    saved = sys.modules.get(polluted_key)
+    fake = ModuleType(polluted_key)
+    fake.__file__ = "/tmp/atexit_polluted.py"
+    sys.modules[polluted_key] = fake
+    try:
+        guard_module._atexit_pollution_check()  # noqa: SLF001
+    finally:
+        if saved is not None:
+            sys.modules[polluted_key] = saved
+        uninstall_guard(run_pollution_check=False)
+    # diff_pollution_snapshot wrote to repo-root anchored path.
+    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
+        guard_module._POLLUTION_LOG_FILENAME  # noqa: SLF001
+    ))
+    assert expected_log.exists()
+
+
+def test_atexit_pollution_check_noops_when_no_snapshot():
+    """The atexit callback is a no-op when the snapshot is None (idempotent + safe)."""
+    uninstall_guard()
+    assert guard_module._POLLUTION_SNAPSHOT is None  # noqa: SLF001
+    # Must not raise even with no snapshot active.
+    guard_module._atexit_pollution_check()  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# Codex W4 prep R1 finding 1 fix: A18 wired into find_spec bypass path
+# ---------------------------------------------------------------------------
+
+
+def test_a18_records_incident_when_fixture_frame_masks_forbidden_transition(
+    tmp_path, monkeypatch
+):
+    """Fixture-frame bypass of forbidden transition records A18 incident."""
+    from src._plane_guard import PlaneGuardFinder
+    from src._plane_assignment import Plane
+
+    uninstall_guard()
+    monkeypatch.chdir(tmp_path)
+
+    finder = PlaneGuardFinder(mode=Mode.WARN)
+
+    class FakeFrame:
+        def __init__(self, mod_name, back=None):
+            self.f_globals = {"__name__": mod_name}
+            self.f_back = back
+
+    # Fixture chain: tests.conftest → src.foam_agent_adapter (Execution)
+    # → import src.result_comparator (Evaluation) — would be forbidden
+    # without the allowlist.
+    src_frame = FakeFrame("src.foam_agent_adapter")
+    test_frame = FakeFrame("tests.conftest", back=src_frame)
+
+    monkeypatch.setattr(
+        guard_module.sys, "_getframe", lambda depth=0: test_frame
+    )
+
+    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
+        guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
+    ))
+    if expected_log.exists():
+        expected_log.unlink()
+
+    # Calling find_spec on src.result_comparator from this fake stack
+    # → Evaluation target + Execution source via tests.* bypass = A18 hit.
+    finder.find_spec("src.result_comparator", None, None)
+
+    assert expected_log.exists(), "A18 incident must be recorded to fixture_frame_confusion.jsonl"
+    line = expected_log.read_text(encoding="utf-8").splitlines()[-1]
+    parsed = json.loads(line)
+    assert parsed["test_path"] == "tests.conftest"
+    assert parsed["source_module"] == "src.foam_agent_adapter"
+    assert parsed["target_module"] == "src.result_comparator"
+    assert parsed["contract_name"]
+
+
+def test_a18_does_not_record_when_no_forbidden_transition_masked(
+    tmp_path, monkeypatch
+):
+    """If the bypassed transition would have been allowed anyway, no A18 record."""
+    from src._plane_guard import PlaneGuardFinder
+
+    uninstall_guard()
+    monkeypatch.chdir(tmp_path)
+    finder = PlaneGuardFinder(mode=Mode.WARN)
+
+    class FakeFrame:
+        def __init__(self, mod_name, back=None):
+            self.f_globals = {"__name__": mod_name}
+            self.f_back = back
+
+    # tests.something → src.task_runner (Control) → import src.foam_agent_adapter
+    # (Execution): Control → Execution is ALLOWED, so no incident even though
+    # bypass occurred.
+    src_frame = FakeFrame("src.task_runner")
+    test_frame = FakeFrame("tests.something", back=src_frame)
+    monkeypatch.setattr(
+        guard_module.sys, "_getframe", lambda depth=0: test_frame
+    )
+
+    expected_log = Path(guard_module._resolve_jsonl_path(  # noqa: SLF001
+        guard_module._FIXTURE_CONFUSION_LOG_FILENAME  # noqa: SLF001
+    ))
+    if expected_log.exists():
+        expected_log.unlink()
+
+    finder.find_spec("src.foam_agent_adapter", None, None)
+
+    assert not expected_log.exists(), "no A18 record when bypassed transition was allowed"
+
+
+# ---------------------------------------------------------------------------
 # A18 fixture-frame confusion .jsonl writer
 # ---------------------------------------------------------------------------
 

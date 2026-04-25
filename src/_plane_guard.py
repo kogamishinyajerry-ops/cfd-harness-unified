@@ -38,6 +38,7 @@ import) lands W2 Impl Late per §5 timeline split.
 
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
@@ -201,6 +202,12 @@ _DEDUP_MAX_ENTRIES = 10_000  # default; overridden via install_guard kwarg
 # pytest session-finish to detect post-hoc sys.modules['src.*']
 # pollution that meta_path finders cannot intercept.
 _POLLUTION_SNAPSHOT: Optional[Dict[str, Tuple[int, Optional[str]]]] = None
+# A13 atexit hook idempotence flag (Codex W4 prep R1 finding 2 fix):
+# install_guard registers exactly one atexit callback per process;
+# repeated installs/uninstalls share the registration so the diff
+# fires automatically on process exit even when src/__init__.py
+# auto-installs without an explicit uninstall_guard call.
+_ATEXIT_REGISTERED = False
 # strict_scope nesting depth (per-thread).
 _STRICT_DEPTH = threading.local()
 
@@ -260,16 +267,19 @@ def _frame_module_name(frame: object) -> Optional[str]:
 
 def _resolve_source_plane(
     start_frame: object,
-) -> Tuple[Optional[Plane], Optional[str], bool, bool]:
+) -> Tuple[Optional[Plane], Optional[str], Optional[str], bool]:
     """Walk frames from ``start_frame`` up to the limit looking for an ``src.*`` caller.
 
-    Returns ``(plane, module_name, found_test_frame, saw_unmapped_dynamic)``:
+    Returns ``(plane, module_name, test_frame_name, saw_unmapped_dynamic)``:
       * ``plane`` — first ``src.*`` plane encountered, or ``None`` if
         the walk reaches the limit / stack top without a hit (treat as
         external; permissive fallback per ADR-002 §2.1).
       * ``module_name`` — the matched module dotted name.
-      * ``found_test_frame`` — ``True`` if any frame in the walk
-        matched ``^tests($|\\.)`` (the §2.4 allowlist). The walk
+      * ``test_frame_name`` — dotted name of the first frame whose
+        module matched ``^tests($|\\.)`` (the §2.4 allowlist), or
+        ``None`` if no such frame. Truthy → allowlist bypass active;
+        also used as the ``test_path`` value in any A18 fixture-frame
+        confusion incident recorded against this resolution. The walk
         intentionally continues past the first ``src.*`` hit so that a
         fixture chain ``tests.conftest → src.x → src.y`` still grants
         test scope.
@@ -284,7 +294,7 @@ def _resolve_source_plane(
     walked = 0
     src_plane: Optional[Plane] = None
     src_name: Optional[str] = None
-    found_test = False
+    test_frame_name: Optional[str] = None
     saw_unmapped_dynamic = False
 
     while frame is not None and walked < limit:
@@ -300,8 +310,8 @@ def _resolve_source_plane(
             if f_globals is not None and not f_globals.get("__name__"):
                 saw_unmapped_dynamic = True
         else:
-            if not found_test and _TEST_ALLOWLIST_RE.match(name):
-                found_test = True
+            if test_frame_name is None and _TEST_ALLOWLIST_RE.match(name):
+                test_frame_name = name
             if src_plane is None and name.startswith("src."):
                 p = plane_of(name)
                 if p is not None:
@@ -310,7 +320,7 @@ def _resolve_source_plane(
         frame = getattr(frame, "f_back", None)
         walked += 1
 
-    return src_plane, src_name, found_test, saw_unmapped_dynamic
+    return src_plane, src_name, test_frame_name, saw_unmapped_dynamic
 
 
 def _emit_external_dynamic_import_warning(*, target_module: str) -> None:
@@ -475,13 +485,35 @@ class PlaneGuardFinder(MetaPathFinder):
         except ValueError:
             return None  # No caller frame; unusual path, stay permissive.
 
-        src_plane, src_name, found_test, saw_unmapped_dynamic = _resolve_source_plane(
+        src_plane, src_name, test_frame_name, saw_unmapped_dynamic = _resolve_source_plane(
             start_frame
         )
 
         # Test-allowlist: any ``tests.*`` frame in the walk grants
         # bypass UNLESS strict_scope is active (self-test pathway).
-        if found_test and not _is_strict_scope_active():
+        if test_frame_name and not _is_strict_scope_active():
+            # A18 (Codex W4 prep R1 finding 1 wiring): if the bypass is
+            # masking a forbidden plane transition, record a
+            # fixture-frame confusion incident for the §2.4 14-day
+            # rolling-window rollback counter. Pure observability —
+            # does NOT change the bypass decision (Option A semantics
+            # preserved; A→B rollback handled by the weekly cron).
+            if src_plane is not None:
+                masked_contract = FORBIDDEN_PAIRS.get((src_plane, target_plane))
+                if masked_contract is not None:
+                    try:
+                        record_fixture_frame_confusion(
+                            test_path=test_frame_name,
+                            source_module=src_name or "<unknown>",
+                            target_module=fullname,
+                            contract_name=masked_contract,
+                            stack_snippet=(
+                                f"{test_frame_name} → {src_name} → "
+                                f"import {fullname}"
+                            ),
+                        )
+                    except Exception:  # pragma: no cover - never break bypass on observability fault
+                        pass
             return None
 
         if src_plane is None:
@@ -713,14 +745,41 @@ def _utc_iso8601() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _find_repo_root() -> Optional[str]:
+    """Walk up from this file until a repo-root marker is found.
+
+    Markers (any wins): ``pyproject.toml`` file or ``.git`` directory.
+    Returns ``None`` if no marker is found before the filesystem root
+    (cwd fallback handled by ``_resolve_jsonl_path``).
+    """
+    cur = os.path.abspath(os.path.dirname(__file__))
+    while cur and cur != os.path.dirname(cur):
+        if os.path.exists(os.path.join(cur, "pyproject.toml")) or os.path.isdir(
+            os.path.join(cur, ".git")
+        ):
+            return cur
+        cur = os.path.dirname(cur)
+    return None
+
+
 def _resolve_jsonl_path(filename: str) -> str:
     """Resolve ``reports/plane_guard/<filename>`` relative to repo root.
 
-    Falls back to current working directory if no clear repo root is
-    discoverable (cwd-relative is acceptable for tests + CI runners
-    that always cd to repo root).
+    Codex W4 prep R1 finding 3 fix: anchor to repo root discovered by
+    walking up from this module's ``__file__`` (markers ``pyproject.toml``
+    or ``.git``), not the caller's cwd. Without this, a writer running
+    from a non-repo cwd writes to ``$cwd/reports/plane_guard/...`` while
+    the evaluator at ``scripts/plane_guard_rollback_eval.py`` always
+    reads ``REPO_ROOT/reports/plane_guard/...`` — silently masking the
+    rollback trigger.
+
+    Falls back to ``cwd`` only if no marker is found (e.g., the package
+    is vendored into a wheel without a ``.git`` dir); CI runners always
+    cd to repo root so the fallback is harmless there.
     """
-    return os.path.join(_POLLUTION_REPORTS_DIR, filename)
+    root = _find_repo_root()
+    base = root if root is not None else os.getcwd()
+    return os.path.join(base, _POLLUTION_REPORTS_DIR, filename)
 
 
 def _append_jsonl(path: str, events: list[Dict[str, object]]) -> None:
@@ -763,7 +822,7 @@ def install_guard(
         raise ValueError(
             f"max_dedup_entries must be >= 1, got {max_dedup_entries}"
         )
-    global _INSTALLED_FINDER, _DEDUP_MAX_ENTRIES
+    global _INSTALLED_FINDER, _DEDUP_MAX_ENTRIES, _ATEXIT_REGISTERED
     with _STATE_LOCK:
         if mode == Mode.OFF:
             return None
@@ -776,7 +835,29 @@ def install_guard(
     # Take baseline snapshot OUTSIDE the lock to avoid holding it during
     # sys.modules iteration (sys.modules can be huge).
     snapshot_src_modules()
+    # A13 atexit hook (Codex W4 prep R1 finding 2 fix): register exactly
+    # once per process so the pollution diff fires on plain interpreter
+    # exit. Production processes auto-installed via src/__init__.py do
+    # NOT call uninstall_guard before exit, so without this hook the
+    # watchdog is silent in its main observation path.
+    if not _ATEXIT_REGISTERED:
+        atexit.register(_atexit_pollution_check)
+        _ATEXIT_REGISTERED = True
     return finder
+
+
+def _atexit_pollution_check() -> None:
+    """atexit hook: run pollution diff if a snapshot is still active.
+
+    Idempotent + fail-safe (atexit callbacks must not raise). No-ops
+    when no snapshot is active (e.g., uninstall_guard already ran).
+    """
+    if _POLLUTION_SNAPSHOT is None:
+        return
+    try:
+        diff_pollution_snapshot()
+    except Exception:  # pragma: no cover - never raise from atexit
+        pass
 
 
 def uninstall_guard(*, run_pollution_check: bool = True) -> None:
