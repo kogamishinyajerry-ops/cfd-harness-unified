@@ -20,6 +20,7 @@ import type {
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { BatchMatrix } from "@/types/batch_matrix";
+import type { ExportManifest } from "@/types/exports";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
@@ -134,4 +135,7 @@ export const api = {
 
   // Stage 5 — GoldOps batch matrix
   getBatchMatrix: () => request<BatchMatrix>(`/api/batch-matrix`),
+
+  // Stage 6 — ExportPack manifest (download URLs are constructed inline)
+  getExportManifest: () => request<ExportManifest>(`/api/exports/manifest`),
 };

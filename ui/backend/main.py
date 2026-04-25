@@ -52,6 +52,7 @@ from ui.backend.routes import (
     comparison_report,
     dashboard,
     decisions,
+    exports,
     field_artifacts,
     health,
     mesh_metrics,
@@ -100,3 +101,4 @@ app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basi
 app.include_router(mesh_metrics.router, prefix="/api", tags=["mesh-metrics"])
 app.include_router(preflight.router, prefix="/api", tags=["preflight"])
 app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
+app.include_router(exports.router, prefix="/api", tags=["exports"])

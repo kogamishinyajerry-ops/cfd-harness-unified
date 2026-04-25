@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/api/client";
 import { BatchMatrix } from "@/components/learn/BatchMatrix";
 import { CaseIllustration } from "@/components/learn/CaseIllustration";
+import { ExportPanel } from "@/components/learn/ExportPanel";
 import { LEARN_CASES, type LearnCase } from "@/data/learnCases";
 import type { CaseIndexEntry } from "@/types/validation";
 
@@ -123,6 +124,13 @@ export function LearnHomePage() {
           actual cross-case verdict status before drilling into a card. */}
       <section className="mb-10">
         <BatchMatrix />
+      </section>
+
+      {/* Stage 6 ExportPack · dual-format download cards + manifest summary.
+          One click below the matrix lets the audience pull the same data
+          they just saw, structured for independent verification. */}
+      <section className="mb-10">
+        <ExportPanel />
       </section>
 
       {/* Student-facing framing moved below the buyer hero — supporting teaser,
