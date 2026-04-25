@@ -1,29 +1,79 @@
-# CaseProfile stub — G-6 backfill (Opus 4.7 Pivot Post-Hoc Review §7).
+# CaseProfile · DEC-V61-060 Stage C.1 backfill.
 # Schema: knowledge/schemas/risk_flag_registry.yaml (schema_version=1).
-# Only the 2 mandatory post-R3 flags are populated per Opus directive;
-# triggered=false means the audit on 2026-04-24 considered each flag
-# against this case's historical record and ruled it out.
 
 case_id: rayleigh_benard_convection
 schema_version: 1
-last_assessed: "2026-04-24"
-last_assessed_by: "Claude Code (G-6 backfill · Opus Pivot Review §7)"
+last_assessed: "2026-04-26"
+last_assessed_by: "Claude Code (DEC-V61-060 Stage C.1)"
 
 risk_flags:
+  # Mandatory v2.0+ post-R3 flags (RETRO-V61-053 addendum)
   - flag_id: executable_smoke_test
-    triggered: false
+    triggered: true
     justification: |
-      No post-R3 dispatch-layer defect recorded for this case on main.
-      Flag re-evaluated if future DEC touches adapter dispatch path.
+      DEC-V61-060 §9 mandates a live OpenFOAM run via
+      scripts/phase5_audit_run.py rayleigh_benard_convection at Stage E
+      to verify Stage A canonical-contract repairs (4 coupled changes:
+      geometry, topology, gravity, extractor axis) all land at the live
+      dispatch path. Until Stage E closes the live run, this flag is
+      triggered.
   - flag_id: solver_stability_on_novel_geometry
-    triggered: false
+    triggered: true
     justification: |
-      Case uses established OpenFOAM tutorial solver topology; no
-      smoother-vs-BC divergence reported to date on main.
-# P1-T3b · per-observable tolerance overrides.
+      Bottom-heated buoyantFoam topology + Pr=10 (water-like, more
+      viscous than DHC's 0.71 air) + 4:1 wall-graded mesh is a NEW
+      combination to this codebase. Pre-emptive PCG+DIC fallback for
+      p-solve documented in intake §4 mitigation_in_batch; 2-roll IC
+      seed available if SIMPLE oscillates between roll-count basins.
+
+  # DEC-V61-060 Stage 0 case-specific flags (registered Stage C.1)
+  - flag_id: rbc_geometry_lx_eq_ly_bug
+    triggered: true
+    justification: |
+      Pre-DEC-V61-060 generator emitted Lx=Ly=aspect_ratio for RBC,
+      producing 2×2 cavity instead of declared 2:1 rectangle. Closed
+      at Stage A.1 (commit 2bcc35d) via explicit H/Lx/Ly split.
+      Triggered=true for historical accuracy; closure verified by
+      test_a1_rbc_emits_4x1_rectangle_not_4x4_square.
+  - flag_id: rbc_topology_side_heated_vs_bottom_heated
+    triggered: true
+    justification: |
+      Pre-DEC-V61-060 generator wrote DHC side-heated topology
+      (hot_wall at x=0) for ALL natural-convection cases including
+      RBC. Closed at Stage A.3 (commit 72b647a) via case-id branched
+      boundary patch emit. Triggered=true for historical accuracy;
+      closure verified by test_a3_rbc_emits_bottom_heated_topology.
+  - flag_id: nu_extractor_wall_orientation_mismatch
+    triggered: true
+    justification: |
+      Pre-DEC-V61-060 _extract_nc_nusselt only computed Nu from x-axis
+      (DHC vertical wall). For RBC bottom-heated topology, gradient
+      direction must swap. Closed at Stage A.2 (commit e249675) via
+      wall_orientation BC field + parallel/normal axis abstraction.
+      Closure verified by
+      test_a2_extractor_y_axis_branch_computes_horizontal_wall_nu.
+  - flag_id: ref_value_chaivat_correlation_pointed_to_wrong_paper
+    triggered: true
+    justification: |
+      Pre-DEC-V61-060 whitelist + gold YAML cited "Chaivat et al. 2006"
+      with DOI that actually resolves to a rectangular-jets paper, NOT
+      RBC. Coincidental Nu=10.5 match was an artifact. Closed at Stage
+      A.0 (commit c59b38e) by pivoting to publicly-archived Pandey &
+      Schumacher 2018 TU Ilmenau benchmark (Nu=17.7 at Ra=10^6 Pr=10
+      AR=4) with explicit Table 1 p.6 locator. Triggered=true for
+      historical accuracy.
+
+# P1-T3b per-observable tolerance overrides
 # Source: knowledge/gold_standards/rayleigh_benard_convection.yaml
-# (Ra=1e6 mean Nu; looser 15% band per known mesh-refinement deviation
-# described in STATE.md Known limitations).
+# (DEC-V61-060 Stage A.0 — widened from 0.15 to 0.25 to absorb steady-vs-
+# turbulent regime mismatch + no-slip vs free-slip wall BC deviation
+# vs the Pandey & Schumacher benchmark).
 tolerance_policy:
   nusselt_number:
-    tolerance: 0.15        # 15% · includes expected DHC/RB BL undersampling at Ra=1e6
+    tolerance: 0.25
+  nusselt_top_asymmetry:
+    tolerance: 0.05  # NON_TYPE_HARD_INVARIANT 5% conservation band
+  w_max_nondim:
+    tolerance: 0.20  # PROVISIONAL_ADVISORY (not enforced)
+  roll_count_x:
+    tolerance: 0     # PROVISIONAL_ADVISORY (not enforced)

@@ -249,6 +249,106 @@ flags:
       - cases with hand-authored report.html narrative (incl. DHC pre-A.6)
       - render-engine pipelines reading from cached intermediates
 
+  # -- DEC-V61-060 RBC-specific flags (Stage C.1 registration) --
+
+  - flag_id: rbc_geometry_lx_eq_ly_bug
+    severity_default: high
+    origin: DEC-V61-060 Stage 0 intake §4 risk_flags (Codex v1)
+    origin_date: "2026-04-25"
+    origin_commit: "2bcc35d"  # Stage A.1 fix commit
+    description: |
+      Pre-DEC-V61-060 src/foam_agent_adapter.py:2298 emitted blockMesh
+      vertices with Lx=L, Ly=L where L=aspect_ratio. For RBC with
+      aspect_ratio=2.0 this produced a 2×2 cavity, NOT the declared
+      2:1 rectangle (whitelist semantic). The current Nu=10.5 PASS
+      result was a 2×2 side-heated cavity, matching gold by coincidence
+      not physics fidelity.
+    mitigation_pattern: |
+      DEC-V61-060 Stage A.1 introduced explicit H, Lx, Ly variables in
+      _generate_natural_convection_cavity. Lx=aspect_ratio·H, Ly=H,
+      with per-axis cell counts and grading. Unit test enforces
+      Lx≠Ly on RBC dispatch.
+    applies_to:
+      - any new natural-convection geometry with non-square aspect
+      - any future _generate_*_cavity method
+      - blockMesh emission paths shared across DHC/RBC
+
+  - flag_id: rbc_topology_side_heated_vs_bottom_heated
+    severity_default: high
+    origin: DEC-V61-060 Stage 0 intake §4 risk_flags (Codex v1)
+    origin_date: "2026-04-25"
+    origin_commit: "72b647a"  # Stage A.3 fix commit
+    description: |
+      Pre-DEC-V61-060 src/foam_agent_adapter.py wrote hot_wall at x=0
+      (face (0 4 7 3), DHC topology) for ALL natural-convection cases
+      including RBC. Canonical Rayleigh-Bénard heats from BELOW (y=0)
+      with insulated sidewalls. Pre-fix RBC ran with side-heated DHC
+      topology, so the buoyancy term was perpendicular to the temperature
+      gradient — completely wrong physics.
+    mitigation_pattern: |
+      DEC-V61-060 Stage A.3 branched the boundary topology emit on
+      case_id. Patch NAMES kept stable (hot_wall, cold_wall,
+      adiabatic_top, adiabatic_bottom) so downstream BC files work
+      either way; only the FACES they bind to swap. RBC dispatch sets
+      task_spec.boundary_conditions["wall_orientation"]="y" so the
+      A.2-added extractor branch lights up.
+    applies_to:
+      - new natural-convection canonical setups (e.g. side-heated vs
+        bottom-heated branches)
+      - shared boundary patch emit paths
+      - changes to wall_orientation BC plumbing
+
+  - flag_id: nu_extractor_wall_orientation_mismatch
+    severity_default: high
+    origin: DEC-V61-060 Stage 0 intake §4 risk_flags (Codex v1)
+    origin_date: "2026-04-25"
+    origin_commit: "e249675"  # Stage A.2 fix commit
+    description: |
+      Pre-DEC-V61-060 _extract_nc_nusselt only computed Nu from x-axis
+      (vertical hot wall) temperature gradients — DHC's setup. For RBC
+      bottom-heated topology, the hot wall is horizontal (y=0) so the
+      gradient direction must swap. Without this branch, post-A.3
+      topology fix would have left the Nu extractor reading the wrong
+      axis → garbage Nu output.
+    mitigation_pattern: |
+      DEC-V61-060 Stage A.2 generalized _extract_nc_nusselt with a
+      wall_orientation BC field (default 'x' for backward compat).
+      Cell-grouping logic uses parallel_axis (group key) and
+      normal_axis (profile axis) selected per orientation. The same
+      O(h²) 3-point wall_gradient stencil works on either axis.
+    applies_to:
+      - new wall-gradient extractors with both vertical and horizontal
+        wall variants
+      - extractor changes that interact with topology branches in the
+        generator
+
+  - flag_id: ref_value_chaivat_correlation_pointed_to_wrong_paper
+    severity_default: high
+    origin: DEC-V61-060 Stage 0 intake §4 risk_flags (Codex v1 F2-HIGH)
+    origin_date: "2026-04-25"
+    origin_commit: "c59b38e"  # Stage A.0 citation pivot
+    description: |
+      knowledge/whitelist.yaml + knowledge/gold_standards/
+      rayleigh_benard_convection.yaml cited "Chaivat et al. 2006"
+      with DOI 10.1016/j.ijheatmasstransfer.2005.07.039. That DOI
+      actually resolves to a rectangular-jets impingement-cooling
+      paper, NOT a Rayleigh-Bénard study. The Nu=10.5 reference was
+      a coincidental match for the broken pre-DEC RBC setup
+      (2×2 side-heated cavity).
+    mitigation_pattern: |
+      DEC-V61-060 Stage A.0 pivoted to publicly-archived Pandey &
+      Schumacher 2018 TU Ilmenau DFG SPP 1881 Benchmark Case 1 — Nu=17.7
+      at Ra=10⁶ Pr=10 AR=4 with explicit (Table 1, p.6) locator and
+      tutorial PDF URL. Established A.0 6-checkbox GO criterion
+      requiring literal numeric ref_value + paper+DOI+table/figure+page
+      source_table + whitelist/gold-YAML alignment + branch-A/B
+      explicit rule for advisory observables.
+    applies_to:
+      - any gold YAML observable with citation-only provenance
+      - cases inheriting reference_correlation_context strings
+        without a direct numeric source
+      - paywalled-source dependencies
+
 # ===========================================================================
 # How to reference from a CaseProfile
 # ===========================================================================
