@@ -1,123 +1,118 @@
 # ROADMAP
 
-## Current
+> **2026-04-26 refocus**: post-pivot user-as-first-customer reframe (Pivot Charter Addendum 1).
+> Single main-line: **Workbench Closed-Loop M1-M4** — open case → modify params → real OpenFOAM → SSE phase → verdict → run history → auto-jump.
+> Phase 1-8 / W1-W4 governance archive moved to `## Closed (do not reopen)`.
 
-### Phase 5b — LDC simpleFoam migration + Ghia 1982 match
-- Status: Infrastructure complete (DEC-V61-029) + Q-5 CLOSED via Path A (DEC-V61-030). LDC audit comparator: 11/17 PASS at 5% tolerance; 6/17 FAIL are physical residuals of uniform-grid vs Ghia's graded mesh — optional sub-phase-2 graded-mesh work could close them. 7 remaining FAIL-case sub-phases (5c..5j) queued with mandatory gold cross-check as first step.
-- Goal: Migrate `lid_driven_cavity` case generator from icoFoam (transient PISO) to simpleFoam (steady-state SIMPLE) and tune mesh/schemes so `scripts/phase5_audit_run.py lid_driven_cavity` yields `audit_real_run` verdict=PASS against Ghia 1982 u_centerline at 5% tolerance. First of 8 per-case Phase 5b sub-phases; establishes the solver-swap pattern that the remaining 7 FAIL cases (BFS, TFP, duct_flow, impinging_jet, naca0012, DHC, RBC) will copy in Phase 5c..5j.
-- Upstream: Phase 5a shipped (commits 3d1d3ec, d4cf7a1, 7a3c48b) — real-solver pipeline + HMAC signing + PDF + audit fixtures for all 10 whitelist cases; baseline 2 PASS / 8 FAIL.
-- Required outputs:
-  - Updated `src/foam_agent_adapter.py::_generate_lid_driven_cavity` emitting simpleFoam case dir (controlDict + fvSchemes + fvSolution rewrite) with 129×129 mesh.
-  - Regenerated `ui/backend/tests/fixtures/runs/lid_driven_cavity/audit_real_run_measurement.yaml` with `comparator_passed: true`.
-  - Backend 79/79 pytest green (no regression on teaching fixtures).
-  - Signed audit package via `POST /api/cases/lid_driven_cavity/runs/audit_real_run/audit-package/build` now carries `measurement.comparator_verdict=PASS`.
-- Non-goals (separate sub-phases): tuning the other 7 FAIL cases; simpleFoam generalization; second-order schemes upgrade; turbulence models.
-- Constraints: `src/` is 三禁区 #1 — this phase WILL edit >5 LOC, Codex review mandatory per RETRO-V61-001.
-- Frozen governance edges: none (Q-1/Q-2/Q-3/Q-4 all closed).
-- **Plans:** 3 plans
-  - [ ] 05b-01-PLAN.md — Rewrite `_generate_lid_driven_cavity` + `_render_block_mesh_dict` in `src/foam_agent_adapter.py` (simpleFoam + 129×129 + frontAndBack empty)
-  - [ ] 05b-02-PLAN.md — Regenerate `audit_real_run_measurement.yaml` fixture; verify backend 79/79 + frontend tsc clean
-  - [ ] 05b-03-PLAN.md — Codex post-edit review + DEC-V61-NNN + atomic git commit + STATE/ROADMAP update
+## Current main-line: Workbench Closed-Loop M1-M4
 
-### Phase 7: Scientific-grade CFD vs gold reporting
-- Status: **SPRINT 1 COMPLETE** (2026-04-21, DEC-V61-031 → DEC-V61-034). All 6 sub-phases (7a..7f) delivered. Tier C visual-only fan-out covers 9 non-LDC cases with real |U| contours + residuals from actual OpenFOAM runs. Tier B per-case gold-overlay (full 8-section report for 9 cases) deferred as Sprint 2 polish (~30hr, user discretion). RETRO-V61-002 landed at counter=20.
-- Goal: Upgrade audit reports from "single-scalar verdict" to publication-grade CFD vs gold evidence — full-field visualizations, multi-point profile overlays, formal error norms, residual histories, and Richardson grid-convergence indices — so every `audit_real_run` produces a PDF/HTML a CFD reviewer would accept alongside a paper's Figure/Table. Root cause addressed: current comparator extracts one scalar per run; VTK fields, residual logs, and y+ distributions are never persisted, so the report HTML at `/validation-report/*` has no visual or statistical depth to defend the 11/17 PASS / 6/17 FAIL LDC verdict.
-- Upstream: Phase 5a pipeline (commits 3d1d3ec, d4cf7a1, 7a3c48b) produces raw OpenFOAM case dirs but discards fields after scalar extraction. Phase 5b/Q-5 established Ghia 1982 as the reference transcription bar. `/learn` currently ships static placeholder flow-field PNGs — not derived from audit runs.
-- Required outputs (end-of-Phase-7):
-  - `scripts/phase5_audit_run.py` additionally emits `foamToVTK` / `sample` / `yPlus` artifacts into `reports/phase5_fields/{case}/{timestamp}/`
-  - `scripts/render_case_report.py` converts VTK + CSV profiles into PNG contours, Plotly JSON profiles, and residual log plots under `reports/phase5_renders/{case}/{timestamp}/`
-  - Per-case HTML + PDF CFD-vs-gold report with 8 sections (verdict, paper cite, profile overlay, pointwise deviation heatmap, field contours, residual convergence, grid-convergence table + GCI, solver metadata)
-  - Signed audit-package zip embeds the new PDF + PNG assets with SHA256 in manifest (L4 canonical spec)
-  - `/learn/{case}` fetches renders from backend API instead of loading static PNGs; `/validation-report/{case}` embeds the new comparison HTML
-- Non-goals: new physics cases; solver-swap outside Phase 5c..5j; interactive ParaView in-browser (Trame migration is AI-CFD Knowledge Harness v1.6.0 scope); DNS-grade statistics beyond RMS / L2 / L∞.
-- Constraints: Phase 7a touches `src/foam_agent_adapter.py` (三禁区 #1, >5 LOC, Codex mandatory per RETRO-V61-001). Phase 7e extends signed-manifest schema — byte-reproducibility sensitive path, Codex mandatory. Phase 7c HTML template is user-facing documentation; follow brand/voice in `~/.claude/get-shit-done/references/ui-brand.md`.
-- Frozen governance edges: none at Phase 7 start (Q-1..Q-5 all closed). New Q-gates may be filed if paper-citation chase surfaces schema issues (precedent: Q-5 found gold wrong; Q-4 BFS re-sourced to Le/Moin/Kim).
-- **Sub-phases:** 6 sub-phases (7a..7f). Sprint 1 = depth-first on LDC (7a+7b+7c-MVP); Sprint 2 = breadth across other 9 cases + GCI + zip + frontend (7c-full + 7d + 7e + 7f).
+**North star**: 你能每天打开 `/workbench`，改 LDC 参数，跑真实 Docker+OpenFOAM，看见三态 verdict，对比历史 run。30 天交付。
 
-### Phase 7a: Field post-processing capture (Sprint 1, ~2-3 days)
-- Status: COMPLETE (DEC-V61-031, 2026-04-21). 3 waves landed: adapter functions{} + executor capture + driver manifest; backend route/service/18 pytest; Codex 3 rounds → APPROVED_WITH_COMMENTS (2 HIGH security issues caught + fixed: URL basename collision + run_id path-traversal). Real LDC OpenFOAM integration produced 8 artifacts, HTTP manifest + subpath download + traversal 404 verified live. 97/97 pytest. v6.1 counter 16→17.
-- Goal: Extend `scripts/phase5_audit_run.py` + `src/foam_agent_adapter.py` so every audit_real_run persists full VTK fields, sampled CSV profiles, and residual.log to `reports/phase5_fields/{case}/{timestamp}/`.
-- Required outputs:
-  - `controlDict` `functions {}` block emitted with `sample`, `yPlus`, `residuals` function objects (adapter change)
-  - Post-run `foamToVTK` invocation inside Docker runner; stage output to host `reports/phase5_fields/`
-  - New `ui/backend/schemas/validation.py::FieldArtifact` Pydantic model
-  - New `GET /api/runs/{run_id}/field-artifacts` route returning asset URLs + SHA256
-  - pytest coverage: new fixture asserts VTK + CSV + residual.log presence for LDC
-- Constraints: Codex mandatory (三禁区 #1 + adapter >5 LOC). Must not regress 79/79 pytest.
-- **Plans:** 3 plans
-  - [x] 07a-01-PLAN.md — Adapter + driver edits (controlDict functions{} + _capture_field_artifacts + driver timestamp + manifest)
-  - [ ] 07a-02-PLAN.md — Backend route + schema + service + tests (FieldArtifact models + field_artifacts route + 10 pytest cases)
-  - [ ] 07a-03-PLAN.md — Integration + Codex review + DEC-V61-031 + atomic commit
+**Total budget**: ~650 LOC + tests, <1.5 weeks active dev time. Significantly under the 30-day estimate because `case_editor.py` + `wizard_drivers.py` SolverDriver protocol + `RunPhaseEvent` Q13 forward-compat schema + `reports/{case_id}/` artifact convention already shipped.
 
-### Phase 7b: Render pipeline (Sprint 1, ~2 days)
-- Status: **COMPLETE incl. polish** (DEC-V61-032 MVP + DEC-V61-033 polish, 2026-04-21). `scripts/render_case_report.py` produces 5 outputs per LDC run. Polish landed: PyVista parse of OpenFOAM volume VTK → 129×129 matplotlib contourf + streamplot (publication-style primary vortex + streamline whorls). LDC-only via RENDER_SUPPORTED_CASES opt-in.
-- Goal: New `scripts/render_case_report.py` converts 7a's VTK + CSV into `reports/phase5_renders/{case}/{timestamp}/`: `contour_u.png`, `contour_p.png`, `streamline.png`, `profile_u_centerline.html` (Plotly JSON), `residuals.png`.
-- Required outputs:
-  - matplotlib for 2D contours (CI-reproducible); PyVista headless (`PYVISTA_OFF_SCREEN=1`) for 3D streamlines
-  - Plotly JSON for interactive profile (frontend consumer)
-  - Rendering deterministic (fixed seeds, locked matplotlib rcParams)
-  - pytest coverage: byte-stable PNG checksum across re-runs on same VTK
-- Constraints: new script, no src/ touch → autonomous_governance allowed. Add `pyvista`, `plotly`, `matplotlib` to `pyproject.toml` [render] extra.
+### M1 — RealSolverDriver (week 1, ~200 LOC)
+- **Goal**: `wizard_drivers.py` gets a `RealSolverDriver` sibling to `MockSolverDriver`. Wraps `FoamAgentExecutor.execute(task_spec) -> ExecutionResult` (the only public method needed).
+- **Required outputs**:
+  - `RealSolverDriver(case_id)` class in `ui/backend/services/wizard_drivers.py` honoring SolverDriver protocol
+  - env: `CFD_HARNESS_WIZARD_SOLVER=real|mock` (default `mock` for backward compat with Stage 8a demo)
+  - foam_agent stdout/stderr → SSE `log` / `phase_start` / `phase_done` / `metric` / `run_done` events
+  - Q13 forward-compat fields wired: `level: warning|error`, `stream: stderr`, `exit_code` for non-zero exits
+  - Tests: subprocess mocked at `FoamAgentExecutor.execute` boundary; SSE shape regression against MockSolverDriver test scaffold
+  - **Retire `ui/backend/services/run_monitor.py` synthetic residual stream** (Phase-3 placeholder, Q11 trust-violation risk)
+- **Constraints**: line-A only — touches ONLY `wizard_drivers.py` + tests + minor `run_monitor.py` deletion. Does NOT modify `foam_agent_adapter.py` internals (line-B's territory).
 
-### Phase 7c: CFD-vs-gold comparison report template (Sprint 1 MVP + Sprint 2 fan-out, ~3 days)
-- Status: **SPRINT 1 + SPRINT 2 TIER C COMPLETE** — DEC-V61-032 (LDC MVP) + DEC-V61-034 (Tier C visual-only fan-out to 9 cases, 2026-04-21). 8-section Jinja2 HTML template + WeasyPrint PDF + reduced visual-only context for non-LDC cases. Codex 4 + 2 rounds (both APPROVED). Tier B Sprint 2 (per-case gold-overlay for 9 cases) remains future work.
-- Goal: Per-case HTML + WeasyPrint PDF report with 8 sections:
-  1. Verdict card (PASS / FAIL + L2 / L∞ / RMS / max |dev|%)
-  2. Paper citation block (Ghia 1982 / Le-Moin-Kim 1997 / etc. + Figure/Table + native tabulation)
-  3. Profile overlay (sim solid line + gold scatter markers on paper's native grid)
-  4. Pointwise deviation heatmap along sampling axis
-  5. Field contours (U / p / vorticity / Cf depending on case class)
-  6. Residual convergence (log y-axis, all solved fields)
-  7. Grid-convergence table with Richardson p_obs + GCI_21/32 (from 7d)
-  8. Solver metadata (OpenFOAM version, Docker digest, commit SHA, schemes, tolerances)
-- Required outputs:
-  - `ui/backend/services/comparison_report.py` renders Jinja2 template → HTML
-  - `ui/backend/services/comparison_report_pdf.py` HTML → WeasyPrint PDF
-  - `POST /api/cases/{case}/runs/{run_id}/comparison-report/build` route
-  - Sprint 1 MVP: LDC only; Sprint 2: other 9 cases
-  - `/validation-report/{case}` frontend route embeds the HTML
-- Constraints: WeasyPrint requires `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` (already in `.zshrc`). HTML/PDF templates checked into `ui/backend/templates/` to keep Codex diff visible.
+### M2 — `/workbench/case/{id}/edit` frontend (week 2, ~150 LOC)
+- **Goal**: New page reuses the existing `case_editor.py` backend (already complete: GET/PUT/POST-lint/DELETE on `/api/cases/{id}/yaml`, writes to `ui/backend/user_drafts/`, hard-floor protects `whitelist.yaml` + `gold_standards/`).
+- **Required outputs**:
+  - `ui/frontend/src/pages/workbench/EditCasePage.tsx` — load YAML, edit Re/mesh size/endTime, server-rendered byte-exact preview pattern (reused from Stage 8a wizard)
+  - "Run with these params" button → `POST /api/wizard/draft` → triggers RealSolverDriver via `CFD_HARNESS_WIZARD_SOLVER=real`
+  - Lint feedback inline (typo defense same as wizard)
+- **Constraints**: line-A only.
 
-### Phase 7d: Richardson grid-convergence index (Sprint 2, ~1 day)
-- Status: **COMPLETE** (DEC-V61-033, 2026-04-21). `ui/backend/services/grid_convergence.py` (~260 LOC, Celik 2008 + Roache 1994) + integration into §7 of 8-section comparison report. Degenerate-case branches: oscillating / converged-to-precision / non-uniform-r overflow / zero-order. 9 unit tests (synthetic 2nd/1st-order + edge-case rejection). LDC live result: p_obs=1.00, GCI_32=5.68%, asymptotic_range_ok=True. Codex round 1 found OverflowError on non-uniform r — fixed with try/except at every `r**p` site + ArithmeticError boundary in comparison_report.
-- Goal: Compute observed order of accuracy `p_obs` and Grid Convergence Index `GCI_21` / `GCI_32` from existing `mesh_20/40/80/160` fixtures per Roache 1994.
-- Required outputs:
-  - `ui/backend/services/grid_convergence.py` implementing Richardson extrapolation + GCI formula
-  - New columns in 7c's "grid-convergence table" section
-  - pytest coverage: analytic fixture (known p=2 solution) + LDC regression (p_obs should fall in [1.0, 2.0])
-- Constraints: pure numerical, no src/ or adapter touch → autonomous_governance allowed.
+### M3 — Run history + auto-jump (week 3, ~250 LOC)
+- **Goal**: Every real run lands in `reports/{case_id}/runs/{run_id}/{measurement.yaml, verdict.json, summary.json}`. Frontend table + auto-jump after SSE `run_done`.
+- **Required outputs**:
+  - `ui/backend/services/run_history.py` enumerating `reports/{case_id}/runs/*` directories
+  - `GET /api/cases/{case_id}/runs` + `GET /api/cases/{case_id}/runs/{run_id}` endpoints
+  - `RunHistoryPage.tsx` table — date / Re / mesh / verdict / duration
+  - SSE `run_done` handler in `WorkbenchRunPage` auto-redirects to `/workbench/case/{id}/run/{run_id}`
+- **Constraints**: line-A only. New write-domain: `reports/{case_id}/runs/{run_id}/` (not `reports/phase5_fields/` which is Phase-7 territory).
 
-### Phase 7e: Signed audit-package integration (Sprint 2, ~1 day)
-- Status: **COMPLETE** (DEC-V61-033, 2026-04-21). `src/audit_package/manifest.py` + `serialize.py` extended with L4 schema — `phase7` top-level key with {schema_level, canonical_spec, entries[], total_files, total_bytes}. `_PHASE7_TIMESTAMP_RE` shape gate + sanctioned-root containment + resolve+relative_to defense-in-depth. `docs/specs/audit_package_canonical_L4.md` spec. Codex round 1 found CRITICAL serialize/build_manifest repo_root drift (manifest advertised 5 phase7 entries while zip had 0 when non-default repo_root passed) — fixed via `serialize_zip_bytes(manifest, repo_root=None)` kwarg plumbing. 8 unit tests (happy path, traversal rejection, regex gate, opt-out, real-serialize byte equality, byte-reproducibility, repo_root mismatch hazard). Live-verified: 14 files in 1.97 MB bundle with byte-identical SHA256+HMAC across two consecutive builds.
-- Goal: Embed 7c PDF + 7b PNG/JSON into HMAC-signed audit-package zip; extend manifest schema to L4 canonical.
-- Required outputs:
-  - `audit_package.py` manifest `artifacts.field_renders[]` + `artifacts.comparison_report.pdf_sha256` blocks
-  - `docs/specs/audit_package_canonical_L4.md` supersedes L3 build_fingerprint spec
-  - zip byte-reproducibility preserved (re-run produces identical HMAC)
-  - pytest coverage: `test_phase5_byte_repro.py` extended to cover new artifacts
-- Constraints: **Byte-reproducibility-sensitive path → Codex mandatory** per RETRO-V61-001 new trigger #2. L3→L4 schema rename touches manifest builder + signer + verifier → ≥3 files → Codex mandatory per RETRO-V61-001 new trigger #3.
+### M4 — Docker fail classifier (week 3-4, ~80 LOC)
+- **Goal**: Distinguish docker_missing / openfoam_missing / mesh_failed / solver_diverged / postprocess_failed from raw FATAL, surface readable suggestion in UI.
+- **Required outputs**:
+  - `_classify_failure(stderr, exit_code) -> FailureCategory` in `wizard_drivers.py::RealSolverDriver`
+  - SSE `run_done` carries `failure_category` field (Q13 schema-forward already supports arbitrary fields)
+  - Frontend `FailureBanner` component showing category + 1-2 sentence remediation
+- **Constraints**: line-A only.
 
-### Phase 7f: Frontend render consumption (Sprint 2, ~1 day)
-- Status: **MVP COMPLETE (LDC)** — DEC-V61-032, 2026-04-21. `LearnCaseDetailPage.tsx::ScientificComparisonReportSection` fetches `/api/cases/{id}/runs/audit_real_run/comparison-report/context`, renders verdict card + metrics grid + iframe embed of HTML report + "Open in new window" + "Download PDF" buttons. Graceful 404→hide / 5xx→error banner distinction (Codex round 1 MED fix). iframe `sandbox=""` strict. Fan-out to 9 other cases deferred to 7c Sprint 2.
-- Goal: Replace static placeholder flow-field PNGs in `/learn/{case}` with live fetches from 7a's `/api/runs/{run_id}/field-artifacts` + 7b's `/api/runs/{run_id}/renders`.
-- Required outputs:
-  - `ui/frontend/src/pages/learn/LearnCaseDetailPage.tsx` flow-field block fetches real renders; falls back to reference-run renders if the slider mesh has no artifacts yet
-  - `ui/frontend/src/pages/ValidationReportPage.tsx` embeds 7c HTML via iframe or direct component
-  - frontend tsc --noEmit clean; visual acceptance via dev server
-- Constraints: multi-file frontend change → Codex mandatory per existing trigger. Must not regress the 3 deep-link buttons added in commit 7a3c48b.
+## Governance posture: downgraded (2026-04-26 standing rule)
 
-### Phase 8 — Delivery hardening
-- Status: Active (legacy lane)
-- Goal: keep the visual acceptance surface reproducible, cache-resilient, and synced to GitHub/Notion without crossing external-gate boundaries.
-- Required outputs: canonical HTML, timestamped snapshot HTML, machine-readable manifest, deep acceptance package, synced control-plane records.
-- Frozen governance edges: `Q-1 DHC gold-reference`, `Q-2 R-A-relabel`.
+Per Pivot Charter Addendum 1 + methodology v2.0 §10:
 
-### Phase 9 — Planning only
-- Status: Planned
-- Goal: comparator/model-routing follow-on work after a fresh activation review.
-- Rule: no Phase 9 activation work starts until Phase 8 hardening closes and external-gate constraints are explicitly reviewed.
+**Trust-core (Codex审查 mandatory, DEC mandatory for >5 LOC changes)**:
+- `knowledge/gold_standards/`
+- `src/auto_verifier/`
+- `src/convergence_attestor.py`
+- `src/audit_package/`
+- `src/foam_agent_adapter.py` (line-B's writes; main-line treats as read-only)
 
-## Completed
+**Routine path (no DEC, no round-2 Codex iteration, direct commit to main)**:
+- `ui/backend/routes/`, `ui/backend/services/` (except trust-core wrapping)
+- `ui/backend/schemas/`, `ui/backend/tests/`
+- `ui/frontend/src/`
+- `scripts/check_*` (governance hooks)
 
-- Phase 1–7: completed and retained as historical implementation/archive context in `.planning/STATE.md`.
-- Phase 8 baseline reporting upgrade: landed up to `088e2a3`, including Chinese-first visual acceptance deck and raster evidence panels.
+**Notion sync**: only on DEC landing or post-incident retro. No daily control-plane sync.
+
+## Line-A / Line-B isolation contract (硬约束)
+
+| Surface | line-A writes? | line-A reads? | line-B writes? |
+|---|---|---|---|
+| `ui/backend/services/wizard_drivers.py` | ✅ | ✅ | ❌ |
+| `ui/backend/services/run_history.py` (NEW) | ✅ | ✅ | ❌ |
+| `ui/frontend/src/pages/workbench/**` | ✅ | ✅ | ❌ |
+| `ui/backend/tests/**` | ✅ | ✅ | ❌ |
+| `src/foam_agent_adapter.py::FoamAgentExecutor.execute()` | ❌ | ✅ (public surface only) | ✅ |
+| `src/foam_agent_adapter.py::_generate_*` / `_emit_*` (internals) | ❌ | ❌ | ✅ |
+| `knowledge/gold_standards/**` | ❌ | ✅ | ✅ |
+| `src/auto_verifier/`, `src/convergence_attestor.py` | ❌ | ✅ | ✅ |
+| `reports/{case_id}/runs/{run_id}/` (NEW) | ✅ | ✅ | ❌ |
+| `reports/phase5_fields/` (Phase-7 territory) | ❌ | ❌ | ✅ |
+
+**Active line-B branches** (informational, do not touch from main-line):
+- `dec-v61-058-naca`, `dec-v61-059-pc`, `dec-v61-060-rbc`, `dec-v61-062-naca-cgrid`, `dec-v61-063-flat-plate`, `dec-v61-063-naca-transition`
+- `feat/c3a-ldc-gold-anchored-sampling`, `feat/c3b-naca-surfaces`, `feat/c3c-impinging-jet-wallheatflux`
+
+## 60/90-day extensions (post-M4, not in current scope)
+
+- 60-day: 3 anchor case 闭环 (LDC + cylinder + NACA-or-DHC) + run-comparison (diff two runs side-by-side) + project/workspace minimal concept
+- 90-day: import/register your own OpenFOAM case + full closed-loop on user-supplied geometry + Docker failure root-cause UI; **at this point** revisit PyPI / external-pilot / commercialization
+
+## Closed (do not reopen)
+
+### Workbench arc — COMPLETE 2026-04-25
+- Stages 1-6 + Stage 8a (Onboarding Wizard, mock solver) + Stage 8b prep (SolverDriver protocol)
+- Tier-B(1) LDC tolerance probe, Tier-B(2) wizard interaction tests, Tier-B(4) Codex-verified cadence hook
+- 4-round Opus 4.7 review (R1 → R4) ended at stop criterion: APPROVE_WITH_COMMENTS 0.76, Δ +0.04 ≤ 0.05 threshold
+- Polish bundles: round-2 P0+P1, round-3 governance polish (F11+F5+F18+F10+F3+F8), RETRO-V61-002 lite (F2+F4+F9+F13)
+
+### v6.1 W1 governance arc — COMPLETE 2026-04-25
+- G-1..G-9 closed (Pivot Charter, Charter freeze, Gov1 Version Policy v1, Spec Promotion Gate, ADR-001 import enforcement, case-profile risk_flags, retro 5th trigger, state stamp, Opus W2 phase transition)
+- ADR-002 ACCEPTED, methodology v2.0 ACTIVE
+- 37+ DECs landed, counter ~42
+
+### Phase 1-8 — COMPLETE 2026-04-13 → 2026-04-22
+- Full archive in `.planning/STATE.md` Phase Status sections (lines 64-1333)
+- 10-case whitelist: 8 PASS / 2 HOLD; convergence attestor + 5 hard gates active
+- Audit package L4 spec landed; HMAC signing + byte-reproducibility enforced
+
+## Deferred (post-M4 reactivation candidates, not blocking main-line)
+
+- **PR-5 Part A nit closure** (Q2 exit_code reshape, Q3 schema_version, Q5 F3 test verify, Q6 retro entry, Q7 EN fallback, Q12 strict mode flag) — workbench arc post-mortem nits; not main-line
+- **W4 hard-fail toggle PR** (Task #86, A13 watchdog + A18 .jsonl rollback counter) — wait for genuine dogfood signals (≥30 CI runs / ≥15 cross-track commits / 0 violations / escape <20% per ADR-002 §5)
+- **ADR-001 Codex R1 CHANGES_REQUIRED fix** (4fd9215 doc/config mismatch + filesystem-read coverage overstatement) — original author `claude-opus47-app` owns; main-line not blocking
+- **Stage 8c / Stage 9 / 50-case expansion** — out of 30/60/90 scope
+- **PyPI / external-customer pilot / commercialization** — post-M4 only; `docs/product_thesis.md` reframed as `status: candidate-future-narrative`
+- **Spec promotion (6 specs)** — methodology framework exists; promotion is governance ceremony, not main-line
+- **Retro cadence at counter=40** — already crossed without retro; counter is now telemetry-only per RETRO-V61-001 risk-tier-driven model

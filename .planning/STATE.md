@@ -1,44 +1,112 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-04-25T21:10 local"  # V61-058 closeout (counter 41→42)
+milestone: workbench-closed-loop
+milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
+status: M1_PLANNED
+last_updated: "2026-04-26T02:50 local"  # post-pivot-refinement STATE/ROADMAP rewrite
 progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 18
-  completed_plans: 18
-  percent: 89
+  closed_arcs:
+    workbench_arc: "6/6 stages + 8a + 8b prep COMPLETE (4-round Opus 4.7 review, stop criterion triggered 2026-04-25)"
+    v61_w1_governance: "G-1..G-9 closed, ADR-002 ACCEPTED, methodology v2.0 ACTIVE (2026-04-25)"
+    phase_1_to_8: "10-case whitelist 8 PASS / 2 HOLD, convergence attestor + 5 hard gates active, audit package L4 + HMAC byte-reproducibility (2026-04-22)"
+  current_arc: "M1-M4 Workbench Closed-Loop"
+  m1_status: PLANNED
+  m2_status: PLANNED
+  m3_status: PLANNED
+  m4_status: PLANNED
+  total_budget_loc: 650
+  total_budget_weeks: 1.5
+
 pivot:
   date: "2026-04-22"
+  refinement_date: "2026-04-26"  # OpenClaw user-as-first-customer reframe
   charter_notion: "https://www.notion.so/Pivot-Charter-2026-04-22-CFD-Harness-OS-70e55a0c3f924736b0cb68add01d90cd"
   charter_repo_addendum: "docs/governance/PIVOT_CHARTER_2026_04_22.md"
-  opus_post_hoc_review: "2026-04-24 Opus 4.7 independent Gate (Notion)"
-  status: "post-pivot-W1-foundation-freeze-DONE · P1 arc COMPLETE · ADR-002 ACCEPTED · G-9 SIGNED · W3 PR LANDED · W4 prep arc CLOSED · OPS-2026-04-25-001 ACTIVE (dual-track + Notion Opus 4.7 ACCEPT_WITH_COMMENTS · 3 mandatory amendments landed) · RETRO-V61-006 LANDED + 2 addendums (line B git-add-all OPS §5 violation post-hoc + 40-CI-failure dogfood-window dead-on-arrival unblocker) · CI deps fix LANDED 0208929 (numpy + jinja2 declared in pyproject.toml + pre-commit hook self-containment via language: python · ends 40-run failure streak) · MP-D test pollution fix LANDED · 5/9 review template LANDED .planning/dogfood/2026-05-09_review_template.md · pre-commit hooks installed locally + dogfooded · methodology patches MP-A through MP-G proposed for counter-40 retro promotion · all line A work pushed to origin/main · hard-fail toggle awaits dogfood signal review 2026-04-25 → 2026-05-09 (genuine signal collection NOW possible post-deps fix) · next: W4 toggle PR final flip (target ≤ 2026-05-11; one-line continue-on-error: false) + W5 default-flip 'off'→'warn' · external_blockers G-1 + DEC-POLICY-VCP-001 (CFDJerry signature pending) · V61-057 LANDED on origin/main (PR #37, headline Nu+0.44%) · V61-058 LANDED on dec-v61-058-naca branch (3-Codex-arc, R2 APPROVE_WITH_COMMENTS, Stage E live sweep PASS smoke/sanity, FAIL hard gates documented as solver_stability_on_novel_geometry per RETRO-V61-053 · counter 41→42 · methodology v2.0 third-apply) · P1-T4 blocked on KOM Draft"
-  go_no_go:
-    G-1_dec_pivot_signoff: pending_cfdjerry
-    G-2_charter_freeze_semantics: DONE_2026-04-25_commits_f0b1c0d_a32f1a9_opus_ACCEPT_WITH_COMMENTS_2AC_verbatim_landed
-    G-3_gov1_version_policy_v1: DONE_2026-04-25_commits_acb1993_41fed9d_63b02bf_cb31c9a_codex_R1_R2_CHANGES_REQUIRED_R3_CHANGES_REQUIRED_verbatim_fixed_opus_option_X_spec_promotion_gate_v1_1
-    G-4_spec_promotion_gate: DONE_2026-04-24_commit_f0b1c0d
-    G-5_adr001_import_static: DONE_2026-04-25_commits_4fd9215_9d372fb_a32f1a9_codex_R1_APPROVE_WITH_COMMENTS_verbatim_fixed_opus_ACCEPT_WITH_COMMENTS_3AC_landed_Draft_to_Active
-    G-6_caseprofile_risk_flags: DONE_2026-04-24_commit_88d7a8e
-    G-7_retro_5th_trigger: DONE_2026-04-24_commit_f0b1c0d
-    G-8_state_stamp: DONE_2026-04-24
-    G-9_opus_w2_phase_transition: DONE_2026-04-25T12:38_opus_signed_with_2_follow_up_bindings_W3_auto_install_PR_target_5_4_W4_hard_fail_PR_target_5_11
-  claude_owned_w1_closed: true
-  opus_signoff_w1_closed: true  # 2026-04-25 ITEM 1 + ITEM 2 + ITEM 3 all ACCEPTED
-  external_blockers:
-    - "G-1 · CFDJerry sign DEC-PIVOT-2026-04-22-001 in Notion Decisions DB (Pivot trigger)"
-    - "DEC-POLICY-VCP-001 · CFDJerry sign first Cat 3 commitment (跨 solver apples-to-apples)"
-    # G-9 CLOSED 2026-04-25T12:38 by Opus 4.7 — Foundation-Freeze Done + P1 Active.
-    # Attestation: ADR-002 §2.3 + .planning/decisions/g9_attestation_2026_04_25.md
-    # Follow-up bindings (Opus-attested deadlines):
-    #   - W3 auto-install PR (target ≤ 2026-05-04): A.1 exec/eval logger + A.2 verbatim "Most likely fixes:" + A.5 bootstrap-pair lock text + B-Q3 conftest autouse OFF + B-Q4 dedup cap + B-Q5 footnote
-    #   - W4 hard-fail toggle PR (target ≤ 2026-05-11): A13 sys.modules pollution watchdog + A18 incident.jsonl rollback counter (14-day rolling)
-    # Risk-buffer: ≥5 day dogfood window between W3 PR and W4 PR (5/4 → ≥5/9)
-    - "ADR-002 runtime layer draft · due 2026-04-28 23:59 (missed deadline auto-triggers RETRO-V61-001 trigger #3)"
+  charter_addendum_1: "user-as-first-customer (2026-04-26) — see Pivot Charter Addendum 1 in Notion"
+  status: "active · refined 2026-04-26 with user-as-first-customer reframe"
+
+main_line:
+  goal: "LDC real-executable closed-loop: open case → modify params → real OpenFOAM → SSE phase → verdict → run history → auto-jump"
+  arcs:
+    M1: "RealSolverDriver class in wizard_drivers.py · ~200 LOC · week 1"
+    M2: "/workbench/case/{id}/edit frontend (backend case_editor.py already done) · ~150 LOC · week 2"
+    M3: "Run history + auto-jump (run_history.py + RunHistoryPage) · ~250 LOC · week 3"
+    M4: "Docker fail classifier in RealSolverDriver · ~80 LOC · week 3-4"
+  next_action: "M1 — implement RealSolverDriver class wrapping FoamAgentExecutor.execute()"
+
+governance:
+  mode: "downgraded (standing rule, 2026-04-26)"
+  rationale: "user-as-first-customer window: dev velocity > governance ceremony for routine UI/route/service changes"
+  trust_core_codex_required:
+    - "knowledge/gold_standards/"
+    - "src/auto_verifier/"
+    - "src/convergence_attestor.py"
+    - "src/audit_package/"
+    - "src/foam_agent_adapter.py"
+  routine_path: "direct commit to main, no DEC, no round-2 Codex iteration, no Notion sync"
+  dec_threshold: "trust-core change OR security-sensitive endpoint OR cross-track byte-reproducibility"
+  notion_sync_cadence: "only on DEC landing or post-incident retro"
+  counter_v61: "telemetry-only per RETRO-V61-001 risk-tier-driven model (no STOP threshold)"
+
+line_isolation:
+  contract: ".planning/ROADMAP.md → Line-A / Line-B isolation contract (硬约束) section"
+  line_a_writes_only:
+    - "ui/backend/services/wizard_drivers.py"
+    - "ui/backend/services/run_history.py (NEW)"
+    - "ui/backend/routes/run_history.py (NEW)"
+    - "ui/frontend/src/pages/workbench/**"
+    - "ui/backend/tests/**"
+    - "reports/{case_id}/runs/{run_id}/ (NEW write-domain)"
+  line_a_reads_only:
+    - "src/foam_agent_adapter.py::FoamAgentExecutor.execute() public surface ONLY"
+    - "knowledge/gold_standards/**"
+    - "src/auto_verifier/, src/convergence_attestor.py"
+  line_b_active_branches:
+    - "dec-v61-058-naca, dec-v61-059-pc, dec-v61-060-rbc, dec-v61-062-naca-cgrid, dec-v61-063-flat-plate, dec-v61-063-naca-transition"
+    - "feat/c3a-ldc-gold-anchored-sampling, feat/c3b-naca-surfaces, feat/c3c-impinging-jet-wallheatflux"
+
+deprecated:
+  - module: "ui/backend/services/run_monitor.py"
+    reason: "Phase-3 synthetic residual stream (exponential decay + Gaussian noise, no real solver). Q11 trust-violation risk: UI demos fake data alongside real verdicts. Wizard SSE stream + MockSolverDriver covers demo path."
+    removal_milestone: "M1 (RealSolverDriver landing)"
+
+deferred:
+  - "PR-5 Part A nit closure (Q2/Q3/Q5/Q6/Q7/Q12) — workbench arc post-mortem, not main-line"
+  - "W4 hard-fail toggle PR (Task #86) — wait for ≥30 CI runs / ≥15 cross-track commits / 0 violations / escape <20%"
+  - "ADR-001 Codex R1 CHANGES_REQUIRED fix (commit 4fd9215) — original author claude-opus47-app owns"
+  - "Stage 8c / Stage 9 / 50-case expansion — out of 30/60/90 scope"
+  - "PyPI / external-pilot / commercialization — post-M4 only; product_thesis reframed as candidate-future-narrative"
+  - "Spec promotion (6 specs) — governance ceremony, not main-line"
+
+external_blockers_legacy:  # archived — no longer drive main-line
+  - "G-1 · CFDJerry sign DEC-PIVOT-2026-04-22-001 (still pending; not blocking workbench main-line)"
+  - "DEC-POLICY-VCP-001 · CFDJerry sign first Cat 3 commitment (still pending; not blocking)"
+  - "ADR-002 runtime layer draft · was due 2026-04-28; downgraded per governance降级"
 ---
+
+# CURRENT MAIN-LINE — Workbench Closed-Loop M1-M4 (2026-04-26)
+
+**Goal**: 你能每天打开 `/workbench`，改 LDC 参数，跑真实 Docker+OpenFOAM，看见三态 verdict，对比历史 run。30 天交付。
+
+**Status**: M1 PLANNED — next action is `RealSolverDriver` class in `ui/backend/services/wizard_drivers.py` wrapping `FoamAgentExecutor.execute(task_spec) -> ExecutionResult`. Detailed micro-arc breakdown in `.planning/ROADMAP.md` § Current main-line.
+
+**Why this main-line is feasible in <1.5 weeks (vs 30-day naive estimate)**:
+- `wizard_drivers.py` SolverDriver protocol + MockSolverDriver — already shipped (Stage 8b prep, commit 8b050d5)
+- `RunPhaseEvent` Q13 forward-compat schema (`level`, `stream`, `exit_code`) — already shipped (commit cf6c583)
+- `case_editor.py` backend (GET/PUT/POST-lint/DELETE on `/api/cases/{id}/yaml`) — already complete from earlier work
+- `reports/{case_id}/` artifact directory convention — already established
+- `FoamAgentExecutor.execute()` is a stable single-entry public method — line-B churns internals, not signature
+
+**Line-A / Line-B isolation contract**: see `.planning/ROADMAP.md` § Line-A / Line-B isolation contract (硬约束). Main-line writes only line-A surfaces; treats `foam_agent_adapter.py` as read-only consumer of `FoamAgentExecutor.execute()`.
+
+**Governance posture**: downgraded (standing rule, 2026-04-26). Trust-core 5 modules retain Codex审查; routine UI/route/service direct-commit no DEC. Notion sync only on DEC landing or post-incident retro.
+
+**Deprecated this arc**: `ui/backend/services/run_monitor.py` synthetic residual stream — to be removed when M1 lands. Q11 trust-violation risk if left.
+
+---
+
+# Legacy session header (2026-04-22 era — frozen, see CURRENT MAIN-LINE above for current truth)
+
 
 driving_model: claude-code-opus47 (Main Driver under Model Routing v6.2 · CLI-based · 2026-04-22 takeover from v6.1 claude-opus47-app). Subagent discipline: >5 turns / >40k tokens / >3 files / >500 LOC → fresh subagent dispatch. Codex GPT-5.4-xhigh: Joint Dev Peer with 3 invocation modes — (§A) 禁区 diff generator; (§B) independent key-claim verifier [NEW — anti-deception]; (§C) milestone joint reviewer. Notion Gate: 5 hard-floor guards (+1 new: heterogeneous verification failure).
 tier: T3-Orchestrator
