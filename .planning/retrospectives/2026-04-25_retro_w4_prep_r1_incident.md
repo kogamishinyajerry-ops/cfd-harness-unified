@@ -11,8 +11,8 @@ related_artifacts:
   - reports/codex_tool_reports/adr_002_w4_prep_round2.log (R2 verdict line 3201-3214)
   - 5 commits: b10ca9e (R1 init) → 995dfc2 (W4 stage-1 CI) → 264121c (R1 fixes) → 3a720f1 (R2 doc-drift fixes) → e213bbe (STATE.md arc-close)
 counter_at_retro: 32 (no change — R1 incident retro is `counter_impact: none` per RETRO type spec; no DEC was opened for the W4 prep arc)
-notion_page: 34dc6894-2bed-811c-9e0e-e822d11f21e0 (ADR-002 Notion page · W4 prep arc CLOSED block synced 2026-04-25T18:30)
-notion_sync_status: pending  # mirror after this commit lands
+notion_page: 34dc6894-2bed-813c-86e3-e3da4c5c3806 (Decisions DB · RETRO-V61-006 page · Status=Closed)
+notion_sync_status: synced 2026-04-25 (https://www.notion.so/RETRO-V61-006-ADR-002-W4-prep-Codex-R1-CHANGES_REQUIRED-3-HIGH-silent-runtime-failure-findings--34dc68942bed813c86e3e3da4c5c3806)
 ---
 
 ## Incident summary
