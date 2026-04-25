@@ -22,7 +22,13 @@ from src.rbc_extractors import (
 
 
 def _make_bc(**overrides) -> RBCBoundary:
-    """Canonical RBC boundary metadata (Pandey & Schumacher AR=4 setup)."""
+    """Canonical RBC boundary metadata (Pandey & Schumacher AR=4 setup).
+
+    DEC-V61-060 R3 F2-MED: g and beta are now REQUIRED on RBCBoundary
+    (no defaults — Stage C must plumb case-derived physics or the
+    extractors fail-closed). The helper supplies the canonical Pr=10
+    AR=4 Ra=1e6 values so tests stay readable.
+    """
     defaults = dict(
         Lx=4.0,
         Ly=1.0,
@@ -34,6 +40,8 @@ def _make_bc(**overrides) -> RBCBoundary:
         T_cold_wall=295.0,
         bc_type="fixedValue",
         bc_gradient=None,
+        g=3.0e-4,              # canonical AR=4 Pr=10 Ra=1e6 per Codex R2 probe
+        beta=1.0 / 300.0,      # Boussinesq, T_mean ≈ 300 K
     )
     defaults.update(overrides)
     return RBCBoundary(**defaults)
@@ -419,3 +427,118 @@ class TestStageBFinalIntegration:
             assert "status" in out, (
                 f"{fn.__name__} must emit 'status'; got {out}"
             )
+
+
+# ============================================================================
+# Stage B-final-fix · Codex R3 F1-HIGH/F2-MED regression tests
+# ============================================================================
+
+class TestStageBFinalFixR3:
+    """DEC-V61-060 Stage B-final-fix tests addressing Codex R3 findings:
+      F1-HIGH — fail-closed must hold against malformed u_vecs and
+                non-finite (NaN, Inf) inputs (don't crash, don't emit
+                'status: ok' with NaN value).
+      F2-MED  — RBCBoundary.g and beta now Optional[float] with no
+                defaults; extractors fail-closed when caller forgets
+                to plumb case-derived physics.
+    """
+
+    # --- F1-HIGH: malformed u_vecs (arity violations) ---
+
+    def test_w_max_returns_empty_on_short_uvec_tuple(self):
+        """u_vecs entries shorter than 3 elements (arity violation)
+        used to raise IndexError. Must now fail-closed."""
+        slice_ = RBCFieldSlice(
+            cxs=[0.5, 1.5], cys=[0.5, 0.5], t_vals=[300.0, 300.0],
+            u_vecs=[(0.0,), (0.0, 0.1)],   # both malformed
+        )
+        bc = _make_bc()
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Malformed u_vecs must return {{}}; got {out}"
+
+    def test_roll_count_returns_empty_on_short_uvec_tuple(self):
+        slice_ = RBCFieldSlice(
+            cxs=[0.5, 1.5, 2.5], cys=[0.5, 0.5, 0.5],
+            t_vals=[300.0, 300.0, 300.0],
+            u_vecs=[(0.0,)] * 3,
+        )
+        bc = _make_bc()
+        out = extract_roll_count_x(slice_, bc)
+        assert out == {}, f"Malformed u_vecs must return {{}}; got {out}"
+
+    # --- F1-HIGH: non-finite inputs (NaN, Inf) ---
+
+    def test_nu_asymmetry_returns_empty_on_nan_in_t_vals(self):
+        slice_ = RBCFieldSlice(
+            cxs=[0.5] * 4, cys=[0.125, 0.375, 0.625, 0.875],
+            t_vals=[303.75, float("nan"), 298.75, 296.25],
+        )
+        bc = _make_bc()
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, (
+            f"NaN in t_vals must return {{}} (not 'ok'+nan); got {out}"
+        )
+
+    def test_nu_asymmetry_returns_empty_on_nan_in_dt(self):
+        slice_ = _linear_conduction_field()
+        bc = _make_bc(dT=float("nan"))
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out == {}, f"NaN dT must return {{}}; got {out}"
+
+    def test_w_max_returns_empty_on_nan_in_uy(self):
+        slice_ = RBCFieldSlice(
+            cxs=[1.0, 2.0, 3.0], cys=[0.2, 0.5, 0.8],
+            t_vals=[300.0] * 3,
+            u_vecs=[(0.0, 0.1, 0.0), (0.0, float("nan"), 0.0), (0.0, 0.1, 0.0)],
+        )
+        bc = _make_bc()
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"NaN u_y must return {{}}; got {out}"
+
+    def test_w_max_returns_empty_on_inf_g(self):
+        slice_ = _two_roll_velocity_field()
+        bc = _make_bc(g=float("inf"))
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Inf g must return {{}}; got {out}"
+
+    # --- F2-MED: g/beta now required (no defaults) ---
+
+    def test_rbc_boundary_no_default_g(self):
+        """Without explicit g, defaults to None — and any extractor
+        that needs g must fail-closed."""
+        bc = RBCBoundary(
+            Lx=4.0, Ly=1.0, H=1.0, dT=10.0,
+            wall_coord_hot=0.0, wall_coord_cold=1.0,
+            T_hot_wall=305.0, T_cold_wall=295.0,
+            # NOTE: g and beta NOT supplied
+        )
+        assert bc.g is None
+        assert bc.beta is None
+
+    def test_w_max_returns_empty_when_g_missing(self):
+        """Stage C wiring contract: forgetting to plumb g must surface
+        as MISSING_TARGET_QUANTITY at the comparator, not silent bogus."""
+        slice_ = _two_roll_velocity_field()
+        bc = RBCBoundary(
+            Lx=4.0, Ly=1.0, H=1.0, dT=10.0,
+            wall_coord_hot=0.0, wall_coord_cold=1.0,
+            T_hot_wall=305.0, T_cold_wall=295.0,
+            g=None, beta=None,
+        )
+        out = extract_w_max(slice_, bc)
+        assert out == {}, f"Missing g must return {{}}; got {out}"
+
+    def test_nu_asymmetry_works_without_g_beta(self):
+        """nu_asymmetry doesn't need g/beta — must still succeed even
+        when those fields are None (only w_max + advisory extractors
+        consume g/beta)."""
+        slice_ = _linear_conduction_field()
+        bc = RBCBoundary(
+            Lx=4.0, Ly=1.0, H=1.0, dT=10.0,
+            wall_coord_hot=0.0, wall_coord_cold=1.0,
+            T_hot_wall=305.0, T_cold_wall=295.0,
+            g=None, beta=None,
+        )
+        out = extract_nu_asymmetry(slice_, bc)
+        assert out, f"nu_asymmetry should not require g/beta; got {out}"
+        assert out["status"] == "ok"

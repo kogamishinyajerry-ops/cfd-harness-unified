@@ -31,11 +31,45 @@ B.2 (w_max) and B.3 (roll_count) land in subsequent commits.
 """
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from src.wall_gradient import BCContractViolation, extract_wall_gradient
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-060 Stage B-final fix (Codex R3 F1-HIGH): non-finite + arity guard
+# ---------------------------------------------------------------------------
+
+def _is_finite(value: Any) -> bool:
+    """True iff value is a finite real number. Rejects NaN, ±Inf, None,
+    str, complex, etc. Used as a fail-closed gate before computation."""
+    return isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _all_finite(seq: Sequence[Any]) -> bool:
+    """True iff every element of seq is a finite real number."""
+    for v in seq:
+        if not _is_finite(v):
+            return False
+    return True
+
+
+def _u_vecs_well_formed(u_vecs: Sequence[Any]) -> bool:
+    """True iff every entry is a (ux, uy, uz) triple of finite numbers.
+
+    DEC-V61-060 R3 F1-HIGH: extract_w_max and extract_roll_count_x
+    used to index ``u_vecs[i][1]`` blindly, raising IndexError on
+    malformed inputs. This guard fails-closed instead.
+    """
+    for v in u_vecs:
+        if not (isinstance(v, (tuple, list)) and len(v) >= 2):
+            return False
+        if not _is_finite(v[1]):
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +136,14 @@ class RBCBoundary:
     T_cold_wall: float
     bc_type: str = "fixedValue"
     bc_gradient: Optional[float] = None
-    g: float = 3.0e-4
-    beta: float = 1.0 / 300.0
+    # DEC-V61-060 Stage B-final fix (Codex R3 F2-MED): `g` and `beta` were
+    # previously defaulted to canonical AR=4 / Pr=10 values (3.0e-4 and
+    # 1/300). That silently baked the current case into the contract —
+    # Stage C wiring could omit case-derived gravity and still get a
+    # plausible-looking w_max_nondim. Removing the defaults forces every
+    # caller to plumb case-derived physics or fail-closed.
+    g: Optional[float] = None
+    beta: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +253,12 @@ def extract_nu_asymmetry(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
     """
     if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.t_vals):
         return {}
-    if bc.dT == 0:
+    # DEC-V61-060 R3 F1-HIGH: fail-closed on non-finite inputs
+    if not (_all_finite(slice_.cxs) and _all_finite(slice_.cys) and _all_finite(slice_.t_vals)):
+        return {}
+    if not _is_finite(bc.dT) or bc.dT == 0:
+        return {}
+    if not _is_finite(bc.H):
         return {}
 
     grads_bottom = _column_gradient_at_horizontal_wall(
@@ -281,6 +326,16 @@ def extract_w_max(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, Any]:
         return {}
     if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
         return {}
+    # DEC-V61-060 R3 F1-HIGH: arity + non-finite guards
+    if not _u_vecs_well_formed(slice_.u_vecs):
+        return {}
+    if not (_all_finite(slice_.cxs) and _all_finite(slice_.cys)):
+        return {}
+    # DEC-V61-060 R3 F2-MED: g/beta now Optional[float]; fail-closed when
+    # caller forgot to plumb case-derived physics.
+    if not (_is_finite(bc.g) and _is_finite(bc.beta)
+            and _is_finite(bc.dT) and _is_finite(bc.H)):
+        return {}
     U_ff_sq = bc.g * bc.beta * bc.dT * bc.H
     if U_ff_sq <= 0:
         return {}
@@ -323,7 +378,7 @@ def extract_roll_count_x(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
         number of times u_y crosses zero (with a noise floor of
         max(0.10·|u_y|_peak, 1e-9) to reject side-wall noise per intake
         atomicity_guard).
-        roll_count = (sign_changes + 1) // 2 — for the canonical AR=4
+        roll_count = (sign_changes // 2) + 1 — for the canonical AR=4
         2-roll case, u_y(x) at mid-cavity is + (rising plume left roll)
         → 0 → − (descending plume between rolls) → 0 → + (rising plume
         right roll), giving 2 sign changes → 2 rolls.
@@ -345,6 +400,14 @@ def extract_roll_count_x(slice_: RBCFieldSlice, bc: RBCBoundary) -> Dict[str, An
     if slice_.u_vecs is None:
         return {}
     if not _input_lengths_consistent(slice_.cxs, slice_.cys, slice_.u_vecs):
+        return {}
+    # DEC-V61-060 R3 F1-HIGH: arity + non-finite guards
+    if not _u_vecs_well_formed(slice_.u_vecs):
+        return {}
+    if not (_all_finite(slice_.cxs) and _all_finite(slice_.cys)):
+        return {}
+    if not (_is_finite(bc.wall_coord_hot) and _is_finite(bc.wall_coord_cold)
+            and _is_finite(bc.Lx)):
         return {}
     y_target = 0.5 * (bc.wall_coord_hot + bc.wall_coord_cold)
     # Find the y-layer closest to mid-cavity
