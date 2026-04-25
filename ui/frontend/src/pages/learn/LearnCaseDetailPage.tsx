@@ -1498,6 +1498,155 @@ function MultiDimensionComparePanel({
       );
     }
 
+    // RBC 4-observable anchor cards (DEC-V61-060 Stage D · Pandey & Schumacher 2018)
+    // 1 HARD_GATED + 1 NON_TYPE_HARD_INVARIANT + 2 PROVISIONAL_ADVISORY. Mirrors DHC
+    // pattern but adds an "Invariant" badge for nusselt_top_asymmetry which uses
+    // absolute tolerance (ref_value=0) instead of relative %.
+    if (data.case_id === "rayleigh_benard_convection") {
+      const rbc = data.metrics_rbc;
+      if (!rbc || !rbc.observables || rbc.observables.length === 0) return null;
+
+      const renderRbcCard = (o: typeof rbc.observables[number]) => {
+        const isAdvisory = o.gate_status === "PROVISIONAL_ADVISORY";
+        const isInvariant = o.gate_status === "NON_TYPE_HARD_INVARIANT";
+        const isPending = !!o.pending;
+        const passing = o.within_tolerance === true;
+        const failing = o.within_tolerance === false;
+
+        let borderBg: string;
+        if (isPending) {
+          borderBg = "border-surface-800 bg-surface-900/40";
+        } else if (isAdvisory) {
+          borderBg = passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-amber-800/60 bg-amber-900/15";
+        } else if (isInvariant) {
+          // Invariant violation BLOCKS the verdict — render rose like HARD_GATED.
+          borderBg = passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-rose-800/60 bg-rose-900/15";
+        } else {
+          borderBg = passing
+            ? "border-emerald-800/60 bg-emerald-900/15"
+            : "border-rose-800/60 bg-rose-900/15";
+        }
+
+        let statusLabel: string;
+        let statusColor: string;
+        if (isPending) {
+          statusLabel = "PENDING";
+          statusColor = "text-surface-400";
+        } else if (passing) {
+          if (isAdvisory) { statusLabel = "ADVISORY · WITHIN"; statusColor = "text-emerald-300"; }
+          else if (isInvariant) { statusLabel = "INVARIANT · OK"; statusColor = "text-emerald-300"; }
+          else { statusLabel = "PASS"; statusColor = "text-emerald-300"; }
+        } else if (failing) {
+          if (isAdvisory) { statusLabel = "ADVISORY · OUTSIDE"; statusColor = "text-amber-300"; }
+          else if (isInvariant) { statusLabel = "INVARIANT · VIOLATED"; statusColor = "text-rose-300"; }
+          else { statusLabel = "FAIL"; statusColor = "text-rose-300"; }
+        } else {
+          statusLabel = "—";
+          statusColor = "text-surface-400";
+        }
+
+        const isAbsolute = o.tolerance_mode === "absolute";
+        const deviationDisplay: string =
+          isPending
+            ? "—"
+            : isAbsolute
+              ? (o.deviation_abs !== null && o.deviation_abs !== undefined
+                  ? o.deviation_abs.toFixed(4)
+                  : "—")
+              : (o.deviation_pct !== null && o.deviation_pct !== undefined
+                  ? `${o.deviation_pct.toFixed(1)}%`
+                  : "—");
+        const toleranceDisplay: string =
+          isAbsolute
+            ? (o.tolerance_abs !== null && o.tolerance_abs !== undefined
+                ? `±${o.tolerance_abs.toFixed(4)}`
+                : "—")
+            : (o.tolerance_pct !== null && o.tolerance_pct !== undefined
+                ? `±${o.tolerance_pct.toFixed(0)}%`
+                : "—");
+
+        return (
+          <div key={o.name} className={`rounded-md border p-3 ${borderBg}`}>
+            <div className="mb-2 flex items-baseline gap-2">
+              <span className="mono text-[10.5px] font-semibold uppercase tracking-wider text-surface-500">
+                {o.label} · {o.symbol}
+              </span>
+              <span className={`mono text-[10.5px] font-semibold ${statusColor}`}>
+                {statusLabel}
+              </span>
+              {isAdvisory && (
+                <span className="mono text-[10px] text-amber-300/80" title="Excluded from overall verdict — gate_status=PROVISIONAL_ADVISORY">
+                  · 不计入裁决
+                </span>
+              )}
+              {isInvariant && (
+                <span className="mono text-[10px] text-rose-300/80" title="Conservation invariant — violation forces verdict=FAIL but excluded from primary_gate_count denominator (DEC-V61-060 Stage C.2)">
+                  · 守恒不变量
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-[10.5px] text-surface-500">测量</div>
+                <div className="mono text-surface-100">
+                  {o.actual !== null && o.actual !== undefined ? o.actual.toFixed(3) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">金标准</div>
+                <div className="mono text-surface-100">
+                  {o.expected !== null && o.expected !== undefined ? o.expected.toFixed(3) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">偏差</div>
+                <div className={`mono ${
+                  isPending
+                    ? "text-surface-500"
+                    : (passing
+                        ? "text-emerald-300"
+                        : (isAdvisory ? "text-amber-300" : "text-rose-300"))
+                }`}>
+                  {deviationDisplay}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10.5px] text-surface-500">容差带</div>
+                <div className="mono text-surface-100">{toleranceDisplay}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10.5px] text-surface-500">
+              {o.label_zh}
+              {o.source_table ? <> · 来源：<span className="mono">{o.source_table}</span></> : null}
+              {isPending && (
+                <span className="ml-1 text-amber-300/80">
+                  · Stage E live run 待跑（secondary_scalars 未填）
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <section className="space-y-4">
+          <div className="flex items-baseline justify-between">
+            <h3 className="card-title">多维验证证据 · Multi-dimension evidence</h3>
+            <p className="text-[11px] text-surface-500">
+              {rbc.short} · {rbc.hard_gated_count} HARD_GATED + {rbc.invariant_count} INVARIANT + {rbc.advisory_count} ADVISORY (Type II 底加热 RBC)
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {rbc.observables.map(renderRbcCard)}
+          </div>
+        </section>
+      );
+    }
+
     // Other visual_only cases: no scalar-anchor cards yet.
     return null;
   }
@@ -3075,6 +3224,37 @@ type ComparisonReportContext = {
       pending?: boolean;
     }[];
     hard_gated_count: number;
+    advisory_count: number;
+    source: string;
+    literature_doi: string;
+    short: string;
+  } | null;
+  // DEC-V61-060 Stage D.2: rayleigh_benard_convection 4-observable Compare-tab
+  // block (1 HARD_GATED + 1 NON_TYPE_HARD_INVARIANT + 2 PROVISIONAL_ADVISORY).
+  // NON_TYPE_HARD_INVARIANT carries absolute tolerance (ref_value=0); UI renders
+  // deviation/tolerance in the observable's native units instead of %.
+  metrics_rbc?: {
+    observables: {
+      label: string;
+      label_zh: string;
+      symbol: string;
+      name: string;
+      actual: number | null;
+      expected: number | null;
+      deviation_pct: number | null;
+      deviation_abs: number | null;
+      tolerance_pct: number | null;
+      tolerance_abs: number | null;
+      tolerance_mode: string;  // "relative" | "absolute"
+      within_tolerance: boolean | null;
+      gate_status: string;
+      family: string;
+      role: string;
+      source_table: string;
+      pending?: boolean;
+    }[];
+    hard_gated_count: number;
+    invariant_count: number;
     advisory_count: number;
     source: string;
     literature_doi: string;

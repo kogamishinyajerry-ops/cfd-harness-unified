@@ -543,6 +543,16 @@ def _audit_fixture_doc(
                         "u_max_centerline_v",
                         "v_max_centerline_h",
                         "psi_max_center",
+                        # DEC-V61-060 Stage D.3: rayleigh_benard_convection
+                        # 3 secondary observables (Stage E populates via
+                        # src.rbc_extractors.extract_*). nusselt_top_asymmetry
+                        # is the NON_TYPE_HARD_INVARIANT (blocking on
+                        # violation, excluded from primary_gate_count);
+                        # w_max_nondim + roll_count_x are
+                        # PROVISIONAL_ADVISORY (rendered, not enforced).
+                        "nusselt_top_asymmetry",
+                        "w_max_nondim",
+                        "roll_count_x",
                     ) if k in kq and kq[k] is not None
                 }
             } if any(
@@ -552,6 +562,7 @@ def _audit_fixture_doc(
                     "deficit_x_over_D_3.0", "deficit_x_over_D_5.0",
                     "nusselt_max", "u_max_centerline_v",
                     "v_max_centerline_h", "psi_max_center",
+                    "nusselt_top_asymmetry", "w_max_nondim", "roll_count_x",
                 )
             ) else {}),
         },

@@ -391,14 +391,20 @@ def _load_bfs_reattachment_gold() -> dict | None:
 
 
 # DEC-V61-057 Stage D: DHC structured-schema gold loader.
-def _load_dhc_observable_gold(name: str) -> dict | None:
-    """Load a DHC named observable from the schema_v2 differential_heated_cavity
-    gold YAML. Returns None when the YAML, observables block, or named entry
-    is missing. Surfaces gate_status (HARD_GATED | PROVISIONAL_ADVISORY) so the
-    Compare tab can render advisory observables with a distinct badge per
-    DEC-V61-057 §C/§D.
+# DEC-V61-060 Stage D.2: generalized to (case_id, name) for RBC reuse.
+# Now also surfaces tolerance.mode so callers can branch on absolute vs
+# relative tolerance — required for NON_TYPE_HARD_INVARIANT observables
+# whose ref_value is 0 (relative-percent deviation is undefined).
+def _load_case_observable_gold(case_id: str, name: str) -> dict | None:
+    """Load a named observable from the schema_v2 gold YAML for `case_id`.
+
+    Returns None when YAML, observables block, or named entry is missing.
+    Surfaces gate_status (HARD_GATED | NON_TYPE_HARD_INVARIANT |
+    PROVISIONAL_ADVISORY) and tolerance.mode (absolute | relative) so the
+    Compare tab can render conservation invariants and advisory observables
+    distinctly per DEC-V61-057/060 §C/§D.
     """
-    gold_path = _GOLD_ROOT / "differential_heated_cavity.yaml"
+    gold_path = _GOLD_ROOT / f"{case_id}.yaml"
     if not gold_path.is_file():
         return None
     try:
@@ -413,23 +419,41 @@ def _load_dhc_observable_gold(name: str) -> dict | None:
         if not isinstance(ref_value, (int, float)):
             return None
         tol_block = obs.get("tolerance") or {}
-        tol_value = (
-            float(tol_block.get("value", 0.10))
-            if isinstance(tol_block, dict) else float(tol_block)
-        )
+        if isinstance(tol_block, dict):
+            tol_value = float(tol_block.get("value", 0.10))
+            tol_mode = str(tol_block.get("mode", "relative"))
+        else:
+            tol_value = float(tol_block)
+            tol_mode = "relative"
         return {
             "value": float(ref_value),
             "unit": obs.get("unit", "dimensionless"),
             "tolerance": tol_value,
+            "tolerance_mode": tol_mode,
             "gate_status": obs.get("gate_status", "HARD_GATED"),
             "family": obs.get("family", "unspecified"),
             "role": obs.get("role", "observation"),
-            "source": gold.get("source", "de Vahl Davis 1983"),
-            "literature_doi": gold.get("literature_doi", "10.1002/fld.1650030305"),
+            "source": gold.get("source", ""),
+            "literature_doi": gold.get("literature_doi", ""),
             "source_table": obs.get("source_table", ""),
             "description": obs.get("description", ""),
         }
     return None
+
+
+def _load_dhc_observable_gold(name: str) -> dict | None:
+    """Backwards-compat shim — DHC-specific wrapper over the generalized
+    loader. Default source/doi fall back to de Vahl Davis 1983 when the YAML
+    omits them (legacy behaviour the DHC block depends on).
+    """
+    out = _load_case_observable_gold("differential_heated_cavity", name)
+    if out is None:
+        return None
+    if not out["source"]:
+        out["source"] = "de Vahl Davis 1983"
+    if not out["literature_doi"]:
+        out["literature_doi"] = "10.1002/fld.1650030305"
+    return out
 
 
 def _load_sample_xy(path: Path, value_col: int = 1) -> tuple[np.ndarray, np.ndarray]:
@@ -965,6 +989,149 @@ def _build_visual_only_context(
         except (OSError, yaml.YAMLError, ValueError, TypeError):
             metrics_dhc = None
 
+    # DEC-V61-060 Stage D.2: rayleigh_benard_convection 4-observable anchor
+    # cards (1 HARD_GATED + 1 NON_TYPE_HARD_INVARIANT + 2 PROVISIONAL_ADVISORY).
+    # Headline value is `nusselt_number` carried in measurement.value; the other
+    # 3 come from measurement.secondary_scalars populated by Stage E live run.
+    # NON_TYPE_HARD_INVARIANT (nusselt_top_asymmetry) has ref_value=0 with an
+    # absolute tolerance — relative-percent deviation is undefined, so we
+    # surface deviation as the absolute |actual| and tolerance band as the
+    # absolute value (not converted to %).
+    metrics_rbc: Optional[dict] = None
+    if case_id == "rayleigh_benard_convection":
+        try:
+            meas_path = (_REPO_ROOT / "ui/backend/tests/fixtures/runs"
+                         / case_id / f"{run_label}_measurement.yaml")
+            if meas_path.is_file():
+                meas = yaml.safe_load(meas_path.read_text(encoding="utf-8")) or {}
+                m = meas.get("measurement", {}) or {}
+                primary_value = m.get("value")
+                secondary = m.get("secondary_scalars") or {}
+                rbc_observables: list[dict] = []
+                obs_to_value: dict[str, Any] = {
+                    "nusselt_number": primary_value,
+                    "nusselt_top_asymmetry": secondary.get("nusselt_top_asymmetry"),
+                    "w_max_nondim": secondary.get("w_max_nondim"),
+                    "roll_count_x": secondary.get("roll_count_x"),
+                }
+                label_map = {
+                    "nusselt_number":         ("R-Nu_avg",  "Nu",        "底部热壁平均 Nusselt"),
+                    "nusselt_top_asymmetry":  ("R-ΔNu/Nu",  "|ΔNu|/Nu",  "顶/底 Nu 守恒不对称"),
+                    "w_max_nondim":           ("R-w_max",   "w/U_ff",    "对流胞峰值垂向速度"),
+                    "roll_count_x":           ("R-N_roll",  "N_rolls",   "底壁两胞结构计数"),
+                }
+                for obs_name, actual in obs_to_value.items():
+                    gold = _load_case_observable_gold(case_id, obs_name)
+                    if gold is None:
+                        continue
+                    label, symbol, label_zh = label_map.get(
+                        obs_name, (obs_name, obs_name, obs_name)
+                    )
+                    expected = gold["value"]
+                    tol_value = gold["tolerance"]
+                    tol_mode = gold["tolerance_mode"]
+                    if isinstance(actual, (int, float)):
+                        actual_f = float(actual)
+                        if tol_mode == "absolute":
+                            # Conservation-invariant style: ref typically 0;
+                            # surface absolute deviation in same units.
+                            dev_abs = abs(actual_f - expected)
+                            within = dev_abs <= tol_value
+                            # tolerance_pct still reported as the absolute
+                            # band (units carried by the observable, not %).
+                            rbc_observables.append({
+                                "label": label,
+                                "label_zh": label_zh,
+                                "symbol": symbol,
+                                "name": obs_name,
+                                "actual": actual_f,
+                                "expected": expected,
+                                "deviation_pct": None,
+                                "deviation_abs": dev_abs,
+                                "tolerance_pct": None,
+                                "tolerance_abs": tol_value,
+                                "tolerance_mode": tol_mode,
+                                "within_tolerance": within,
+                                "gate_status": gold["gate_status"],
+                                "family": gold["family"],
+                                "role": gold["role"],
+                                "source_table": gold["source_table"],
+                            })
+                        else:
+                            dev_pct = (
+                                (actual_f - expected) / expected * 100
+                                if expected else 0.0
+                            )
+                            tol_pct = tol_value * 100.0
+                            within = abs(dev_pct) <= tol_pct
+                            rbc_observables.append({
+                                "label": label,
+                                "label_zh": label_zh,
+                                "symbol": symbol,
+                                "name": obs_name,
+                                "actual": actual_f,
+                                "expected": expected,
+                                "deviation_pct": dev_pct,
+                                "deviation_abs": None,
+                                "tolerance_pct": tol_pct,
+                                "tolerance_abs": None,
+                                "tolerance_mode": tol_mode,
+                                "within_tolerance": within,
+                                "gate_status": gold["gate_status"],
+                                "family": gold["family"],
+                                "role": gold["role"],
+                                "source_table": gold["source_table"],
+                            })
+                    else:
+                        # Pending placeholder — Stage E hasn't populated yet.
+                        rbc_observables.append({
+                            "label": label,
+                            "label_zh": label_zh,
+                            "symbol": symbol,
+                            "name": obs_name,
+                            "actual": None,
+                            "expected": expected,
+                            "deviation_pct": None,
+                            "deviation_abs": None,
+                            "tolerance_pct": (
+                                tol_value * 100.0 if tol_mode == "relative" else None
+                            ),
+                            "tolerance_abs": (
+                                tol_value if tol_mode == "absolute" else None
+                            ),
+                            "tolerance_mode": tol_mode,
+                            "within_tolerance": None,
+                            "gate_status": gold["gate_status"],
+                            "family": gold["family"],
+                            "role": gold["role"],
+                            "source_table": gold["source_table"],
+                            "pending": True,
+                        })
+                if rbc_observables:
+                    hard_gated = [
+                        o for o in rbc_observables
+                        if o["gate_status"] == "HARD_GATED"
+                    ]
+                    invariants = [
+                        o for o in rbc_observables
+                        if o["gate_status"] == "NON_TYPE_HARD_INVARIANT"
+                    ]
+                    advisory = [
+                        o for o in rbc_observables
+                        if o["gate_status"] == "PROVISIONAL_ADVISORY"
+                    ]
+                    metrics_rbc = {
+                        "observables": rbc_observables,
+                        "hard_gated_count": len(hard_gated),
+                        "invariant_count": len(invariants),
+                        "advisory_count": len(advisory),
+                        "source": "Pandey & Schumacher 2018 — TU Ilmenau DFG SPP 1881 Benchmark Case 1",
+                        "literature_doi": "",
+                        "short": "Pandey & Schumacher 2018 TU Ilmenau Table 1",
+                    }
+        except (OSError, yaml.YAMLError, ValueError, TypeError):
+            metrics_rbc = None
+
     return {
         "visual_only": True,
         "case_id": case_id,
@@ -1002,6 +1169,9 @@ def _build_visual_only_context(
         # DEC-V61-057 Stage D: DHC 5-observable Compare-tab block
         # (4 HARD_GATED + 1 PROVISIONAL_ADVISORY).
         "metrics_dhc": metrics_dhc,
+        # DEC-V61-060 Stage D.2: RBC 4-observable Compare-tab block
+        # (1 HARD_GATED + 1 NON_TYPE_HARD_INVARIANT + 2 PROVISIONAL_ADVISORY).
+        "metrics_rbc": metrics_rbc,
     }
 
 
