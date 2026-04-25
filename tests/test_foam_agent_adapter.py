@@ -2573,3 +2573,85 @@ class TestRBCMultiDim:
         assert out.get("nusselt_number_source", "").endswith("_x"), (
             f"default orientation must be x, got {out.get('nusselt_number_source')}"
         )
+
+    def test_a3_rbc_emits_bottom_heated_topology(self, tmp_path):
+        """DEC-V61-060 Stage A.3: RBC must emit hot_wall at y=0 (bottom face
+        (0 1 5 4)) and cold_wall at y=Ly (top face (3 7 6 2)). Pre-A.3 the
+        adapter wrote hot_wall at x=0 (DHC topology) for ALL natural-
+        convection cases, including RBC. This is the root canonical-contract
+        repair (Codex v1 F-HIGH rbc_topology_side_heated_vs_bottom_heated)."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+
+        # hot_wall block must bind to bottom face (0 1 5 4)
+        hot_idx = blockmesh.find("hot_wall")
+        cold_idx = blockmesh.find("cold_wall")
+        assert hot_idx > 0 and cold_idx > 0
+        hot_block = blockmesh[hot_idx:cold_idx]
+        assert "(0 1 5 4)" in hot_block, (
+            "RBC hot_wall must be at bottom face (0 1 5 4). "
+            f"Got hot_wall block:\n{hot_block}"
+        )
+        # cold_wall block must bind to top face (3 7 6 2)
+        adia_idx = blockmesh.find("adiabatic_top", cold_idx)
+        cold_block = blockmesh[cold_idx:adia_idx if adia_idx > 0 else len(blockmesh)]
+        assert "(3 7 6 2)" in cold_block, (
+            "RBC cold_wall must be at top face (3 7 6 2). "
+            f"Got cold_wall block:\n{cold_block}"
+        )
+        # Strong negative: pre-A.3 DHC face (0 4 7 3) at x=0 must NOT be
+        # in hot_wall for RBC.
+        assert "(0 4 7 3)" not in hot_block, (
+            "RBC must NOT use DHC hot_wall face (0 4 7 3) at x=0. "
+            "Topology fix regressed."
+        )
+
+    def test_a3_dhc_topology_unchanged(self, tmp_path):
+        """DEC-V61-060 Stage A.3: DHC must keep side-heated topology (hot_wall
+        at x=0 face (0 4 7 3)). Regression guard."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        blockmesh = (case_dir / "system" / "blockMeshDict").read_text()
+        hot_idx = blockmesh.find("hot_wall")
+        cold_idx = blockmesh.find("cold_wall")
+        hot_block = blockmesh[hot_idx:cold_idx]
+        assert "(0 4 7 3)" in hot_block, (
+            "DHC hot_wall must remain at x=0 face (0 4 7 3) per de Vahl Davis "
+            "1983 setup."
+        )
+
+    def test_a3_rbc_dispatch_sets_wall_orientation_y(self, tmp_path):
+        """DEC-V61-060 Stage A.3: RBC dispatch must plumb wall_orientation='y'
+        into task_spec.boundary_conditions so the A.2 extractor branch picks
+        up the horizontal-wall stencil."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=4.0, name="rayleigh_benard_convection"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        bc = spec.boundary_conditions
+        assert bc.get("wall_orientation") == "y", (
+            f"RBC must plumb wall_orientation='y'; got {bc.get('wall_orientation')}"
+        )
+        # Cold-wall coordinate is at y=Ly=1.0 for RBC (NOT x=Lx=4.0).
+        assert bc.get("wall_coord_cold") == pytest.approx(1.0), (
+            f"RBC wall_coord_cold must be Ly=1.0; got {bc.get('wall_coord_cold')}"
+        )
+
+    def test_a3_dhc_dispatch_keeps_wall_orientation_x(self, tmp_path):
+        """DEC-V61-060 Stage A.3: DHC must default to wall_orientation='x'."""
+        spec = _make_nc_spec(
+            Ra=1e6, aspect_ratio=1.0, name="differential_heated_cavity"
+        )
+        case_dir = tmp_path / "case"
+        FoamAgentExecutor()._generate_natural_convection_cavity(case_dir, spec)
+        bc = spec.boundary_conditions
+        assert bc.get("wall_orientation") == "x"
+        assert bc.get("wall_coord_cold") == pytest.approx(1.0)  # Lx=1.0 for DHC

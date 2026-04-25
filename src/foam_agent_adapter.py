@@ -2279,8 +2279,17 @@ fields          (U);
         # against the actual boundary face instead of guessing which of
         # two interior cells to difference. Hot wall at x=0, cold at x=L,
         # both fixedValue per the T boundary block written below.
-        task_spec.boundary_conditions["wall_coord_hot"] = 0.0
-        task_spec.boundary_conditions["wall_coord_cold"] = Lx  # x=Lx pre-A.3; A.3 will branch to Ly for RBC bottom-heated
+        # DEC-V61-060 Stage A.3: RBC dispatches to y-axis (horizontal)
+        # bottom-heated topology; DHC remains x-axis (vertical) side-heated.
+        # The case-id is the SSOT (matches intake §3 wall_orientation field).
+        is_rbc = (
+            "rayleigh_benard"
+            in _normalize_task_name_to_case_id(task_spec.name or "").lower()
+        )
+        wall_orientation = "y" if is_rbc else "x"
+        task_spec.boundary_conditions["wall_orientation"] = wall_orientation
+        task_spec.boundary_conditions["wall_coord_hot"] = 0.0  # y=0 for RBC, x=0 for DHC
+        task_spec.boundary_conditions["wall_coord_cold"] = Ly if is_rbc else Lx
         task_spec.boundary_conditions["T_hot_wall"] = T_hot
         task_spec.boundary_conditions["T_cold_wall"] = T_cold
         task_spec.boundary_conditions["wall_bc_type"] = "fixedValue"
@@ -2329,39 +2338,71 @@ fields          (U);
 (
     hex (0 1 2 3 4 5 6 7) ({nLx} {nLy} 1) simpleGrading ({gx} {gy} 1)
 );""".format(nLx=nLx, nLy=nLy, gx=grading_str_x, gy=grading_str_y)
+        # DEC-V61-060 Stage A.3: branch boundary topology emit on case_id.
+        # Patch NAMES are kept stable across both branches so all downstream
+        # 0/T, 0/U, 0/p_rgh BC files (which reference hot_wall/cold_wall/
+        # adiabatic_top/adiabatic_bottom) work for either topology — only
+        # the FACES they bind to swap with the canonical heating direction.
+        #
+        # DHC (vertical hot wall, side-heated):
+        #   hot_wall         = face (0 4 7 3) at x=0   (left)
+        #   cold_wall        = face (1 2 6 5) at x=Lx  (right)
+        #   adiabatic_top    = face (3 7 6 2) at y=Ly  (top)
+        #   adiabatic_bottom = face (0 1 5 4) at y=0   (bottom)
+        #
+        # RBC (horizontal hot wall, bottom-heated):
+        #   hot_wall         = face (0 1 5 4) at y=0   (bottom; was DHC adiabatic_bottom)
+        #   cold_wall        = face (3 7 6 2) at y=Ly  (top; was DHC adiabatic_top)
+        #   adiabatic_top    = face (1 2 6 5) at x=Lx  (right side; was DHC cold_wall)
+        #   adiabatic_bottom = face (0 4 7 3) at x=0   (left side; was DHC hot_wall)
+        if is_rbc:
+            hot_face = "(0 1 5 4)"
+            cold_face = "(3 7 6 2)"
+            adia_top_face = "(1 2 6 5)"
+            adia_bot_face = "(0 4 7 3)"
+        else:
+            hot_face = "(0 4 7 3)"
+            cold_face = "(1 2 6 5)"
+            adia_top_face = "(3 7 6 2)"
+            adia_bot_face = "(0 1 5 4)"
         _bnd = """boundary
 (
     hot_wall
-    {
+    {{
         type            wall;
-        faces           ((0 4 7 3));
-    }
+        faces           ({hot_face});
+    }}
     cold_wall
-    {
+    {{
         type            wall;
-        faces           ((1 2 6 5));
-    }
+        faces           ({cold_face});
+    }}
     adiabatic_top
-    {
+    {{
         type            wall;
-        faces           ((3 7 6 2));
-    }
+        faces           ({adia_top_face});
+    }}
     adiabatic_bottom
-    {
+    {{
         type            wall;
-        faces           ((0 1 5 4));
-    }
+        faces           ({adia_bot_face});
+    }}
     front
-    {
+    {{
         type            empty;
         faces           ((0 3 2 1));
-    }
+    }}
     back
-    {
+    {{
         type            empty;
         faces           ((4 5 6 7));
-    }
-);"""
+    }}
+);""".format(
+            hot_face=hot_face,
+            cold_face=cold_face,
+            adia_top_face=adia_top_face,
+            adia_bot_face=adia_bot_face,
+        )
         _header = """/*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
