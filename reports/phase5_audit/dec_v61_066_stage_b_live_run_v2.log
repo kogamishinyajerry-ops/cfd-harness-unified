@@ -1,0 +1,6 @@
+[audit] commit: 0060c4a · cases: ['duct_flow']
+[audit] duct_flow → start
+[audit] duct_flow → FAIL · 38.0s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+duct_flow                              FAIL  38.0s
