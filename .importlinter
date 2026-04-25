@@ -34,6 +34,7 @@ source_modules =
     src.cylinder_strouhal_fft
     src.plane_channel_uplus_emitter
     src.wall_gradient
+    src.dhc_extractors
 forbidden_modules =
     src.comparator_gates
     src.convergence_attestor
@@ -64,6 +65,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.plane_channel_uplus_emitter
     src.wall_gradient
+    src.dhc_extractors
 
 # ===== Contract 3: Knowledge stays downstream (no reverse imports) =====
 [importlinter:contract:knowledge-no-reverse-import]
@@ -83,6 +85,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.plane_channel_uplus_emitter
     src.wall_gradient
+    src.dhc_extractors
     src.comparator_gates
     src.convergence_attestor
     src.error_attributor
@@ -110,6 +113,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.plane_channel_uplus_emitter
     src.wall_gradient
+    src.dhc_extractors
     src.comparator_gates
     src.convergence_attestor
     src.error_attributor
@@ -139,6 +143,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.plane_channel_uplus_emitter
     src.wall_gradient
+    src.dhc_extractors
     src.comparator_gates
     src.convergence_attestor
     src.error_attributor
