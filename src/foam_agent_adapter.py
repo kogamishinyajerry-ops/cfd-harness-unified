@@ -9752,13 +9752,35 @@ mergePatchPairs
         tau_w_sign_flipped = tau_w < 0.0
         tau_w = abs(tau_w)
 
-        # ----- U_bulk: cross-section mean u_x (uniform-cell approximation) -----
-        # 2D thin-slice ncz=1 → cell volumes are uniform in z; arithmetic
-        # mean over cy is equivalent to face-area-weighted average for
-        # this mesh topology. For a true 3D AR=1 duct refactor (V61-067
-        # candidate) this would need volume weighting.
-        u_x_values = [u for _, _, u, _ in cross_section]
-        U_bulk = sum(u_x_values) / len(u_x_values)
+        # ----- U_bulk: dy-weighted mean (DEC-V61-066 R1 F#1 fix) -----
+        # Case-gen uses simpleGrading (1 4 1) at line 3987 so y-cells
+        # are non-uniform (4:1 ratio wall-adjacent to centre). Arithmetic
+        # mean over u_x over-weights the small wall cells where u≈0,
+        # biasing U_bulk DOWN and friction_factor UP. Codex R1 finding #1.
+        # Per-cell dy: midpoint between sorted cy + known wall bounds
+        # [0, 0.5] matching _generate_steady_internal_flow domain.
+        # U_bulk = Σ u_i · dy_i / Σ dy_i (face-area-weighted on the
+        # 2D thin-slice ncz=1 mesh).
+        DUCT_Y_LOWER, DUCT_Y_UPPER = 0.0, 0.5
+        sorted_by_y = sorted(cross_section, key=lambda item: item[0])
+        ys_sorted = [s[0] for s in sorted_by_y]
+        us_sorted = [s[2] for s in sorted_by_y]
+        n_y = len(sorted_by_y)
+        u_bulk_method = "arithmetic_fallback"
+        if n_y >= 2:
+            faces = [DUCT_Y_LOWER]
+            for i in range(1, n_y):
+                faces.append(0.5 * (ys_sorted[i - 1] + ys_sorted[i]))
+            faces.append(DUCT_Y_UPPER)
+            dys = [faces[i + 1] - faces[i] for i in range(n_y)]
+            if all(dy > 0 for dy in dys):
+                U_bulk = sum(u * dy for u, dy in zip(us_sorted, dys)) / sum(dys)
+                u_bulk_method = "dy_weighted_mean"
+            else:
+                U_bulk = sum(us_sorted) / n_y
+        else:
+            U_bulk = us_sorted[0] if us_sorted else 0.0
+        key_quantities["duct_flow_U_bulk_method"] = u_bulk_method
         if U_bulk <= 0.0:
             key_quantities["duct_flow_extractor_error"] = (
                 f"U_bulk_non_positive: {U_bulk}"

@@ -304,7 +304,7 @@ class TestExtractorEmitKeySurface:
             latest_dir=None,
         )
         # Friction factor: tolerance 10% relative.
-        # NOTE: U_bulk is the arithmetic mean over the synthetic cells,
+        # NOTE: U_bulk is dy-weighted (R1 F#1 fix) over the synthetic cells,
         # which is NOT exactly 1.0 by construction. The wall gradient is
         # exact, so f ≈ 0.0185 only if U_bulk happens to be near 1.0.
         # Just assert sign + magnitude order; comparator tolerance band
@@ -315,3 +315,84 @@ class TestExtractorEmitKeySurface:
         assert kq["friction_velocity_u_tau"] == pytest.approx(JONES_U_TAU, rel=0.01)
         # Tau_w sign-flip flag should be False on this monotonic input.
         assert kq.get("duct_flow_tau_w_sign_flipped") is False
+
+
+class TestUBulkDyWeighted:
+    """DEC-V61-066 Codex R1 finding #1 regression.
+
+    Case-gen mesh has simpleGrading (1 4 1) — y-cells are non-uniform.
+    Arithmetic mean over u_x over-weights small wall cells where u≈0,
+    biasing U_bulk DOWN. Verify the extractor uses dy-weighted mean
+    so non-uniform cy spacing doesn't bias the friction-factor gate.
+    """
+
+    def _build_nonuniform_input(self) -> Dict[str, Any]:
+        """Cross-section with deliberately non-uniform cy spacing.
+
+        y values: [0.0, 1e-4, 2e-4, 0.05, 0.10, 0.40, 0.49]
+        u_x values: [0.0, 0.0116, 0.0231, 0.5, 1.0, 0.6, 0.05]
+
+        Arithmetic mean ≈ 0.312 (small wall cells dominate the count
+        even though they cover almost no dy).
+        dy-weighted mean ≈ 0.639 (centre-channel cell at y=0.10 with
+        u=1.0 owns a large dy=0.175 strip).
+        """
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        for y, u in [
+            (0.0, 0.0),
+            (1e-4, 0.0116),
+            (2e-4, 0.0231),
+            (0.05, 0.5),
+            (0.10, 1.0),
+            (0.40, 0.6),
+            (0.49, 0.05),
+        ]:
+            cxs.append(2.5)
+            cys.append(y)
+            u_vecs.append((u, 0.0, 0.0))
+        return {"cxs": cxs, "cys": cys, "u_vecs": u_vecs}
+
+    def test_uses_dy_weighted_method_audit_key(self):
+        cells = self._build_nonuniform_input()
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=None,
+        )
+        assert kq.get("duct_flow_U_bulk_method") == "dy_weighted_mean"
+
+    def test_dy_weighted_differs_from_arithmetic(self):
+        """U_bulk emitted should match the hand-computed dy-weighted
+        value, NOT the arithmetic mean — proves the bias-fix landed."""
+        cells = self._build_nonuniform_input()
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=None,
+        )
+        # Arithmetic mean = 2.1847 / 7 ≈ 0.3121
+        # dy-weighted ≈ 0.6394 (see docstring derivation)
+        u_bulk = kq["duct_flow_U_bulk"]
+        assert u_bulk == pytest.approx(0.639, rel=0.02)
+        # And NOT the arithmetic mean — gap is large enough to detect.
+        assert abs(u_bulk - 0.312) > 0.1
+
+    def test_friction_factor_uses_dy_weighted_u_bulk(self):
+        """f = 8·τ_w/(ρ·U_bulk²) — verify the dy-weighted U_bulk feeds
+        the friction-factor extractor (not arithmetic), preventing the
+        wall-grading bias from inflating f."""
+        cells = self._build_nonuniform_input()
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_duct_flow_observables(
+            cxs=cells["cxs"], cys=cells["cys"], u_vecs=cells["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            czs=None, latest_dir=None,
+        )
+        tau_w = kq["duct_flow_tau_w"]
+        u_bulk = kq["duct_flow_U_bulk"]
+        f_expected = 8.0 * tau_w / (1.0 * u_bulk ** 2)
+        assert kq["friction_factor"] == pytest.approx(f_expected, rel=1e-9)
