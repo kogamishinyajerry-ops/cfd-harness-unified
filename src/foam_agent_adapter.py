@@ -6423,15 +6423,43 @@ boundaryField
         chord = float(bc.get("chord_length", 1.0))
         U_inf = 1.0  # freestream velocity
         nu_val = U_inf * chord / Re
+        # DEC-V61-058 Batch B1 (Codex DEC-V61-058 F2): α routing via single
+        # canonical case_id `naca0012_airfoil` with task_spec.boundary_conditions
+        # parameter (alpha_deg or angle_of_attack alias). Default 0.0.
+        # Multi-α delivered by 3 separate runs (α∈{0°,4°,8°}) with the same
+        # whitelist entry; per-run task_spec carries a different alpha_deg.
+        # Sign convention (PINNED, OF airFoil2D tutorial precedent):
+        #   α positive → freestream rotates upward in x-z plane:
+        #     U_inf_vec = U_inf · (cos α, 0, sin α)
+        #   liftDir = (-sin α, 0, cos α);  dragDir = (cos α, 0, sin α)
+        #   At α=+8°, upper-surface suction (z>0 side of airfoil) generates
+        #   force in +liftDir = +z direction → Cl > 0 (asserted in Stage E
+        #   sign-convention smoke test per intake §9 close checklist).
+        # Mesh is geometry-locked to x-z plane (lines 6440-6446 below);
+        # rotation happens in 0/U only — no mesh re-rotation.
+        alpha_deg = float(
+            bc.get("alpha_deg", bc.get("angle_of_attack", 0.0)) or 0.0
+        )
+        alpha_rad = math.radians(alpha_deg)
+        cos_a = math.cos(alpha_rad)
+        sin_a = math.sin(alpha_rad)
+        Ux_inf = U_inf * cos_a   # streamwise component (≈ U_inf for small α)
+        Uz_inf = U_inf * sin_a   # vertical component (0 at α=0; +0.139 at α=8°)
         # DEC-V61-044: plumb chord + U_inf + rho into boundary_conditions
         # so the airfoil_surface_sampler.compute_cp helper can normalize
         # p → Cp without re-deriving the freestream from other sources.
         # simpleFoam is incompressible kinematic-pressure, so rho=1.0.
+        # DEC-V61-058 also plumbs alpha_deg + (cos_a, sin_a) for downstream
+        # extractors (airfoil_extractors.compute_cl_cd reads alpha_deg to
+        # cross-check forceCoeffs liftDir/dragDir consistency).
         task_spec.boundary_conditions = bc
         bc.setdefault("chord_length", chord)
         bc["U_inf"] = U_inf
         bc["p_inf"] = 0.0  # gauge pressure matches 0/p internalField
         bc["rho"] = 1.0  # incompressible kinematic convention
+        bc["alpha_deg"] = alpha_deg  # canonical α field (alias angle_of_attack preserved if present)
+        bc["U_inf_x"] = Ux_inf
+        bc["U_inf_z"] = Uz_inf
         # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
         # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
         # works with the C-grid hex ordering. The adapter's previous x-y plane
@@ -6860,7 +6888,10 @@ relaxationFactors
         )
         (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
-        Ux = U_inf
+        # DEC-V61-058 B1: Ux/Uz come from α-rotated freestream (Ux_inf, Uz_inf
+        # computed above). Y component stays zero — thin-span x-z plane mesh.
+        Ux = Ux_inf
+        Uz = Uz_inf
         # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
         # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
@@ -6896,14 +6927,16 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -1 0 0 0 0];
-internalField   uniform ({Ux} 0 0);
+// DEC-V61-058 B1: α-rotated freestream U_inf·(cos α, 0, sin α).
+// alpha_deg = {alpha_deg:.4f}, |U_inf| = {U_inf:.4f}.
+internalField   uniform ({Ux:.6e} 0 {Uz:.6e});
 boundaryField
 {{
     freestream
     {{
         type            freestreamVelocity;
-        freestreamValue uniform ({Ux} 0 0);
-        value           uniform ({Ux} 0 0);
+        freestreamValue uniform ({Ux:.6e} 0 {Uz:.6e});
+        value           uniform ({Ux:.6e} 0 {Uz:.6e});
     }}
     aerofoil {{ type noSlip; }}
     front {{ type empty; }}
