@@ -218,5 +218,158 @@ def extract_nu_max(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Stage B.2 / B.3 extractors land in subsequent commits.
+# B.2 · u_max + v_max sampleSet extractors
+# ---------------------------------------------------------------------------
+
+def _cells_near_coord(
+    coords_along: Sequence[float],
+    coords_across: Sequence[float],
+    components: Sequence[float],
+    target_across: float,
+    tol: float,
+) -> List[Tuple[float, float]]:
+    """Return [(coord_along, component)] for cells within ``tol`` of ``target_across``.
+
+    Used to extract a sample line through the cavity at a fixed x or y. The
+    "along" direction is the coordinate that varies along the line; the
+    "across" direction is the one we constrain. For u_max @ x=L/2, "along" is
+    y and "across" is x.
+
+    When multiple cells share the same along-coordinate (a column on a graded
+    mesh can have several cells at the same y but different x within tol),
+    the across-distance-weighted (1/dx)-weighted mean is used so the closest
+    cell to the target plane dominates. This avoids splitting peak near the
+    plane when graded meshes pack two cells just to either side of it.
+    """
+    if not coords_along or not coords_across or not components:
+        return []
+    n = min(len(coords_along), len(coords_across), len(components))
+    raw: Dict[float, List[Tuple[float, float]]] = defaultdict(list)
+    for i in range(n):
+        d = abs(coords_across[i] - target_across)
+        if d <= tol:
+            raw[round(coords_along[i], 6)].append((d, components[i]))
+    out: List[Tuple[float, float]] = []
+    for c_along, dc_pairs in raw.items():
+        # Distance-inverse-weighted mean (clip d→0 with floor 1e-12).
+        weights = [1.0 / max(d, 1e-12) for d, _ in dc_pairs]
+        total_w = sum(weights)
+        if total_w == 0.0:
+            continue
+        v = sum(w * c for w, (_, c) in zip(weights, dc_pairs)) / total_w
+        out.append((c_along, v))
+    out.sort(key=lambda p: p[0])
+    return out
+
+
+def _across_tolerance(coords: Sequence[float]) -> float:
+    """Mid-plane cell-pick tolerance: 0.6× the largest adjacent gap among unique
+    coordinates, with a 1e-6 floor. Mirrors ``_y_layer_resolution`` semantics
+    so wall-packed graded meshes still find the coarse mid-plane cells.
+    """
+    unique = sorted({round(c, 6) for c in coords})
+    if len(unique) < 2:
+        return 0.015
+    gap = max(unique[i + 1] - unique[i] for i in range(len(unique) - 1))
+    return max(0.6 * gap, 1e-6)
+
+
+def extract_u_max_vertical(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
+    """Peak |u_x| sampled along the x=L/2 vertical mid-plane.
+
+    Returns the nondim value u_nondim = max|u_x| · L / α per de Vahl Davis
+    1983 Table II convention. Gold value at Ra=1e6: u_nondim = 64.63 at
+    y/L ≈ 0.85 (top half of cavity, returning flow).
+
+    Returns {} when ``u_vecs`` is missing or no cells fall within tolerance
+    of the vertical mid-plane.
+    """
+    if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
+        return {}
+    if bc.alpha == 0.0 or bc.L == 0.0:
+        return {}
+    # u_x is the first component of each velocity tuple.
+    ux = [v[0] for v in slice_.u_vecs]
+    target_x = 0.5 * bc.L
+    tol_x = _across_tolerance(slice_.cxs)
+    samples = _cells_near_coord(
+        coords_along=slice_.cys,
+        coords_across=slice_.cxs,
+        components=ux,
+        target_across=target_x,
+        tol=tol_x,
+    )
+    if not samples:
+        return {}
+
+    abs_pairs = [(y, abs(u)) for (y, u) in samples]
+    y_at_max, u_max_abs = max(abs_pairs, key=lambda p: p[1])
+    u_nondim = u_max_abs * bc.L / bc.alpha
+    nondim_values = [a * bc.L / bc.alpha for (_, a) in abs_pairs]
+    noise_floor = _interior_layer_stdev(nondim_values)
+    snr: Optional[float] = (u_nondim / noise_floor) if noise_floor > 0.0 else None
+
+    return {
+        "value": float(u_nondim),
+        "value_raw": float(u_max_abs),
+        "y_at_max": float(y_at_max),
+        "y_at_max_over_L": float(y_at_max) / float(bc.L),
+        "num_samples_used": len(samples),
+        "across_tolerance": float(tol_x),
+        "noise_floor": float(noise_floor),
+        "snr": float(snr) if snr is not None else None,
+        "source": "vertical_midplane_sample_max_abs",
+    }
+
+
+def extract_v_max_horizontal(slice_: DHCFieldSlice, bc: DHCBoundary) -> Dict[str, Any]:
+    """Peak |u_y| sampled along the y=L/2 horizontal mid-plane.
+
+    Returns the nondim value v_nondim = max|u_y| · L / α per de Vahl Davis
+    1983 Table II convention. Gold value at Ra=1e6: v_nondim = 219.36 at
+    x/L ≈ 0.038 (close to the hot wall, where the rising plume peaks).
+
+    Returns {} when ``u_vecs`` is missing or no cells fall within tolerance
+    of the horizontal mid-plane.
+    """
+    if slice_.u_vecs is None or not slice_.cxs or not slice_.cys:
+        return {}
+    if bc.alpha == 0.0 or bc.L == 0.0:
+        return {}
+    # u_y is the second component of each velocity tuple.
+    uy = [v[1] for v in slice_.u_vecs]
+    target_y = 0.5 * bc.L
+    tol_y = _across_tolerance(slice_.cys)
+    samples = _cells_near_coord(
+        coords_along=slice_.cxs,
+        coords_across=slice_.cys,
+        components=uy,
+        target_across=target_y,
+        tol=tol_y,
+    )
+    if not samples:
+        return {}
+
+    abs_pairs = [(x, abs(v)) for (x, v) in samples]
+    x_at_max, v_max_abs = max(abs_pairs, key=lambda p: p[1])
+    v_nondim = v_max_abs * bc.L / bc.alpha
+    nondim_values = [a * bc.L / bc.alpha for (_, a) in abs_pairs]
+    noise_floor = _interior_layer_stdev(nondim_values)
+    snr: Optional[float] = (v_nondim / noise_floor) if noise_floor > 0.0 else None
+
+    return {
+        "value": float(v_nondim),
+        "value_raw": float(v_max_abs),
+        "x_at_max": float(x_at_max),
+        "x_at_max_over_L": float(x_at_max) / float(bc.L),
+        "num_samples_used": len(samples),
+        "across_tolerance": float(tol_y),
+        "noise_floor": float(noise_floor),
+        "snr": float(snr) if snr is not None else None,
+        "source": "horizontal_midplane_sample_max_abs",
+    }
+
+
+# ---------------------------------------------------------------------------
+# B.3 extractor lands in next commit.
 # ---------------------------------------------------------------------------

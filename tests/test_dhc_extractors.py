@@ -31,6 +31,8 @@ from src.dhc_extractors import (
     DHCBoundary,
     DHCFieldSlice,
     extract_nu_max,
+    extract_u_max_vertical,
+    extract_v_max_horizontal,
 )
 
 
@@ -182,3 +184,109 @@ class TestDHCMultiDim:
         assert abs(out["y_at_max_over_L"] - 0.30) < 0.04, (
             f"y_at_max_over_L={out['y_at_max_over_L']}, expected within 0.04 of 0.30"
         )
+
+    # ----- B.2 · u_max + v_max ---------------------------------------------
+
+    @staticmethod
+    def _build_velocity_field(
+        n_x: int, n_y: int, L: float,
+        u_amplitude: float, v_amplitude: float,
+    ) -> Tuple[List[float], List[float], List[Tuple[float, float, float]]]:
+        """Build a synthetic 2D buoyant-cell velocity field.
+
+        Seed (NOT a real Navier-Stokes solution — chosen for known peaks):
+            u_x(x,y) = -u_amplitude · sin(2πy/L) · sin(πx/L)
+            u_y(x,y) =  v_amplitude · sin(πx/L)  · sin(πy/L)
+
+        Properties:
+          - At x=L/2 vertical mid-plane: |u_x| = u_amplitude · |sin(2πy/L)| · 1,
+            peaks at y=L/4 (and y=3L/4) with magnitude u_amplitude.
+          - At y=L/2 horizontal mid-plane: |u_y| = v_amplitude · sin(πx/L) · 1,
+            peaks at x=L/2 with magnitude v_amplitude.
+          - No-slip on all four walls (sin vanishes at x=0, L and y=0, L).
+        """
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        dx = L / n_x
+        dy = L / n_y
+        for j in range(n_y):
+            y = (j + 0.5) * dy
+            for i in range(n_x):
+                x = (i + 0.5) * dx
+                ux = -u_amplitude * math.sin(2 * math.pi * y / L) * math.sin(math.pi * x / L)
+                uy = v_amplitude * math.sin(math.pi * x / L) * math.sin(math.pi * y / L)
+                cxs.append(x)
+                cys.append(y)
+                u_vecs.append((ux, uy, 0.0))
+        return cxs, cys, u_vecs
+
+    def test_u_max_vertical_recovers_seeded_amplitude(self) -> None:
+        """At x=L/2, |u_x| = u_amplitude · |sin(2πy/L)| · 1 → peaks at y=L/4."""
+        L = 1.0
+        u_amp, v_amp = 0.001, 0.0  # raw m/s scale
+        cxs, cys, u_vecs = self._build_velocity_field(
+            n_x=40, n_y=40, L=L, u_amplitude=u_amp, v_amplitude=v_amp,
+        )
+        slice_ = DHCFieldSlice(cxs=cxs, cys=cys, u_vecs=u_vecs)
+        bc = DHCBoundary(
+            L=L, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        out = extract_u_max_vertical(slice_, bc)
+        assert out, "extractor returned empty dict on valid input"
+        # At cell-centers nearest x=L/2 (x=0.4875 or 0.5125), sin(πx/L) ≈
+        # cos(π·0.0125) = 0.99923. Peak |u_x| at y=L/4 is u_amp·1·0.99923.
+        # u_nondim_expected = u_amp · 0.99923 · L / α.
+        u_nondim_expected = u_amp * math.cos(math.pi * 0.0125) * L / bc.alpha
+        assert out["value"] == pytest.approx(u_nondim_expected, rel=0.05)
+        # Peak should be at y/L ∈ {0.25, 0.75} — accept either (symmetry).
+        assert (
+            abs(out["y_at_max_over_L"] - 0.25) < 0.05
+            or abs(out["y_at_max_over_L"] - 0.75) < 0.05
+        ), f"y_at_max_over_L={out['y_at_max_over_L']}, expected near 0.25 or 0.75"
+        assert out["source"] == "vertical_midplane_sample_max_abs"
+
+    def test_v_max_horizontal_recovers_seeded_amplitude(self) -> None:
+        """At y=L/2, |u_y| = v_amplitude · sin(πx/L) · 1 → peaks at x=L/2."""
+        L = 1.0
+        u_amp, v_amp = 0.0, 0.003
+        cxs, cys, u_vecs = self._build_velocity_field(
+            n_x=40, n_y=40, L=L, u_amplitude=u_amp, v_amplitude=v_amp,
+        )
+        slice_ = DHCFieldSlice(cxs=cxs, cys=cys, u_vecs=u_vecs)
+        bc = DHCBoundary(
+            L=L, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=1.408e-5,
+        )
+        out = extract_v_max_horizontal(slice_, bc)
+        assert out, "extractor returned empty dict on valid input"
+        # At cell-centers nearest y=L/2 (y=0.4875 or 0.5125), sin(πy/L) ≈
+        # sin(π·0.4875) = sin(π·0.5125) = cos(π·0.0125) ≈ 0.9992.
+        # At x=L/2: sin(π/2) = 1. So |u_y| at peak ≈ 0.003 · 1 · 0.9992 = 2.998e-3.
+        v_nondim_expected = v_amp * 1.0 * math.cos(math.pi * 0.0125) * L / bc.alpha
+        assert out["value"] == pytest.approx(v_nondim_expected, rel=0.05)
+        assert abs(out["x_at_max_over_L"] - 0.5) < 0.05
+        assert out["source"] == "horizontal_midplane_sample_max_abs"
+
+    def test_u_max_fails_closed_when_velocity_missing(self) -> None:
+        """No u_vecs → extractor returns {} (MISSING_TARGET_QUANTITY signal)."""
+        slice_ = DHCFieldSlice(cxs=[0.5], cys=[0.5], t_vals=[300.0])
+        bc = DHCBoundary(
+            L=1.0, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue",
+        )
+        assert extract_u_max_vertical(slice_, bc) == {}
+        assert extract_v_max_horizontal(slice_, bc) == {}
+
+    def test_u_max_fails_closed_on_zero_alpha(self) -> None:
+        """α=0 → divide-by-zero in nondim → must return {}."""
+        slice_ = DHCFieldSlice(
+            cxs=[0.5, 0.5], cys=[0.5, 0.6],
+            u_vecs=[(0.001, 0.0, 0.0), (0.001, 0.0, 0.0)],
+        )
+        bc = DHCBoundary(
+            L=1.0, dT=10.0, wall_coord_hot=0.0, T_hot_wall=300.0,
+            bc_type="fixedValue", alpha=0.0,
+        )
+        assert extract_u_max_vertical(slice_, bc) == {}
