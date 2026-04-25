@@ -412,13 +412,27 @@ def _load_eval_module():
     return module
 
 
-def _write_log(path: Path, timestamps: list[datetime]) -> None:
+def _write_log(
+    path: Path,
+    timestamps: list[datetime],
+    *,
+    distinct_4tuples: bool = True,
+) -> None:
+    """Write synthetic incident lines.
+
+    ``distinct_4tuples=True`` (default) varies the ``test_path`` per
+    line so each incident has a unique dedup key — preserves the
+    pre-dedup ``count == len(timestamps)`` invariant for tests that
+    assert raw incident counts. Set ``False`` to write identical
+    4-tuples (used by the dedup-collapse test).
+    """
     with path.open("w", encoding="utf-8") as f:
-        for ts in timestamps:
+        for i, ts in enumerate(timestamps):
+            test_path = f"tests.synthetic_{i}" if distinct_4tuples else "tests.synthetic"
             event = {
                 "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "incident_id": "synthetic",
-                "test_path": "tests.synthetic",
+                "incident_id": f"synthetic-{i}",
+                "test_path": test_path,
                 "source_module": "src.x",
                 "target_module": "src.y",
                 "contract_name": "execution-never-imports-evaluation",
@@ -431,9 +445,10 @@ def test_rollback_eval_empty_log_not_triggered(tmp_path):
     eval_mod = _load_eval_module()
     log_path = tmp_path / "empty.jsonl"
     log_path.touch()
-    triggered, count, _ = eval_mod.evaluate(log_path=log_path)
+    triggered, count, _, raw = eval_mod.evaluate(log_path=log_path)
     assert not triggered
     assert count == 0
+    assert raw == 0
 
 
 def test_rollback_eval_three_recent_triggers(tmp_path):
@@ -448,9 +463,10 @@ def test_rollback_eval_three_recent_triggers(tmp_path):
             now - timedelta(days=5),
         ],
     )
-    triggered, count, _ = eval_mod.evaluate(log_path=log_path, now=now)
+    triggered, count, _, raw = eval_mod.evaluate(log_path=log_path, now=now)
     assert triggered
     assert count == 3
+    assert raw == 3  # default writer emits distinct 4-tuples; dedup is no-op
 
 
 def test_rollback_eval_old_incidents_outside_window(tmp_path):
@@ -466,9 +482,46 @@ def test_rollback_eval_old_incidents_outside_window(tmp_path):
             now - timedelta(days=30),
         ],
     )
-    triggered, count, _ = eval_mod.evaluate(log_path=log_path, now=now)
+    triggered, count, _, raw = eval_mod.evaluate(log_path=log_path, now=now)
     assert not triggered
     assert count == 0
+    assert raw == 0  # outside-window events are filtered before dedup
+
+
+def test_rollback_eval_dedup_collapses_repeated_4tuple(tmp_path):
+    """Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS direction 4 P0:
+
+    3 lines with identical 4-tuple (test_path, source_module,
+    target_module, contract_name) within the rolling window must
+    collapse to 1 incident under the default dedup, NOT trigger
+    the §2.4 rollback. Without dedup, finder re-entry across
+    pytest collection inflates the same incident 2-3x and would
+    fire the threshold on noise.
+    """
+    eval_mod = _load_eval_module()
+    log_path = tmp_path / "log.jsonl"
+    now = datetime.now(timezone.utc)
+    _write_log(
+        log_path,
+        [
+            now - timedelta(days=1),
+            now - timedelta(days=2),
+            now - timedelta(days=3),
+        ],
+        distinct_4tuples=False,
+    )
+
+    triggered, count, _, raw = eval_mod.evaluate(log_path=log_path, now=now)
+    assert not triggered, "dedup default should collapse 3 same-tuple repeats to 1"
+    assert count == 1
+    assert raw == 3  # raw count exposed for diagnostics
+
+    triggered_raw, count_raw, _, raw_raw = eval_mod.evaluate(
+        log_path=log_path, now=now, dedup=False
+    )
+    assert triggered_raw, "--no-dedup must restore raw-count behavior"
+    assert count_raw == 3
+    assert raw_raw == 3
 
 
 def test_rollback_eval_cli_exit_codes(tmp_path):

@@ -144,3 +144,55 @@ Post deps fix (`0208929`), commit `0229af9` triggered CI run `24925115531`:
 - Frontend job: still failing (separate `ui/frontend/package-lock.json` cache-path issue · pre-existing · NOT a dogfood-window blocker · line A leaves to another time)
 
 This commit (`0229af9`) is the **first run that produced genuine dogfood signal**. Prior 40 runs were instrumentation-equivalent of a sensor in a dead circuit. The 5/9 review now has a real anchor: CI runs 0229af9 onwards are the data set.
+
+---
+
+## Addendum 3 · Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS direction-survey verdicts (2026-04-25T16:30)
+
+After Phase 1/2/3 amendments landed (3e8dc01 / a84948d / 1034c20 / f9b42e5), Claude Code CLI prepared a 6-direction further-optimization survey for Notion Opus 4.7 independent review. Opus returned **ACCEPT_WITH_COMMENTS** with maturity 0.68 → 0.72 (+0.04), conditional on direction 4 landing before 5/9.
+
+### Direction priority verdicts (Opus authoritative)
+
+| # | Direction | Priority | Action | Reason |
+|---|---|---|---|---|
+| 1 | `src/_path_utils.py` extraction (anti-F3-recurrence) | **P2** | Defer until 4th recurrence | Rule-of-three supports now, but dogfood static-period (no-push-main) is harder constraint; 治理一致性 > 工程洁癖 |
+| 2 | SessionStart hook auto-runs `dev-session-init` | **P3 reject** | Do not pursue | Implicit state opposes dogfood-window's "状态必须可审计" core; pre-commit install already idempotent, painless |
+| 3 | OPS retire 5/19 hook handling: (a) delete (b) generalize (c) leave | **P1** | Decide now (verdict (a)) execute 5/19 | Avoid last-minute pickup; (b) generalize is N=1 over-fit; (a) delete + git-history retention is clean |
+| 4 | A13/A18 4-tuple dedup | **P0** | **Land before 5/9** | Directly determines 5/9 GO/NO-GO; without dedup, finder re-entry inflates 1 real incident to 2-3 lines and trips §2.4 ≥3 on noise |
+| 5 | W4 toggle Codex prompt rewrite (data-validity audit, not diff audit) | **P1** | Land before 5/11 | Diff is 1 LOC and trivially correct; Codex's job is to audit the 5/9 data validity. Use Opus's draft. |
+| 6 | OPS protocol v2 full revision | **P3 reject** | Wait for OPS-002/003 | N=1 → v2 is textbook over-generalization; let patterns accumulate first |
+
+### Blind spot proposal — escape-hatch usage rate metric (P0)
+
+Opus identified a metric the 5/9 review template was missing: how many commits in the dogfood window used escape tags (`[cross-track-ack:…]` / `[shared]` / `[deps]` / `[ops]` / `CROSS_TRACK_ACK=1`)? If usage rate >20%, hook policy is too strict and 5/19 default flip will create line B / cross-track friction at scale.
+
+**Implementation**: Step 1.5 in `2026-05-09_review_template.md` (landed alongside this addendum). Decision thresholds: <10% calibrated, 10-20% acceptable + log in W4 commit, >20% defer toggle.
+
+**Initial measurement (2026-04-25T16:00, mid-window)**:
+- Total commits since 2026-04-25 00:00: **84**
+- Commits with at least one escape tag: **9** (`[ops]` × 6, `[shared]` × 3, `[deps]` × 2)
+- Escape rate: **9 / 84 = 10.7%** (well within calibrated band)
+- `[cross-track-ack:…]` usage: **0** (no legitimate §4.1 events occurred — clean signal)
+
+### Maturity calibration update
+
+| Snapshot | Maturity | Self-est | Delta | Notes |
+|---|---|---|---|---|
+| Pre-Phase-1 (2026-04-25T15:10) | 0.62 | 0.62 | 0 | At time of Opus initial OPS audit |
+| Post-Phase-1-2-3 (2026-04-25T15:50) | 0.72 | 0.62 | +0.10 | Opus +0.04 vs prior 0.68; gap to self-est = 0.10 (within calibration band) |
+
+**Conditional**: the +0.04 maturity gain is contingent on direction 4 landing before 5/9. If 5/9 finds A13/A18 signal noise-corrupted (raw lines >> dedup count without dedup having been deployed), maturity collapses to ≤0.65, W4 toggle MUST be NO-GO, RETRO addendum 4 captures the calibration miss.
+
+### Reject rationale (directions 1/2/6) — 治理姿态判断
+
+Opus's most important piece of feedback was the overall posture verdict: **"线 A 不是过早优化，但 6 个方向里只有 1 个 (方向 4) 是真实空间，其余要么违反 dogfood 静默 (方向 1)、要么与可审计性相悖 (方向 2)、要么 N=1 上过度泛化 (方向 6)、要么是 5/9 之后的事 (方向 3/5)。当前最大风险不在 '做太少'，而在 '为了显得在工作而打破静默'——治理成熟度的标志正是能在静默期保持静默。"**
+
+This locks in the dogfood-window discipline: line A's job between 2026-04-25 and 2026-05-09 is **not** to ship more amendments — it is to wait for signal. The Phase 4 amendments (this addendum + dedup + escape rate + W4 prompt) are the sole exception, justified by their direct dependency on signal validity at 5/9.
+
+### Phase 4 landing scope (this commit's amendments)
+
+- `scripts/plane_guard_rollback_eval.py` — 4-tuple dedup (default ON), `--no-dedup` for diagnostics, return-tuple bumped to 4 elements (added `raw_count`)
+- `tests/test_plane_guard_observability.py` — new `test_rollback_eval_dedup_collapses_repeated_4tuple` test + `_write_log` accepts `distinct_4tuples` parameter + 4-tuple return unpack migrated
+- `.planning/dogfood/2026-05-09_review_template.md` — Step 1.5 escape rate sanity, Step 2 dedup default + `--no-dedup` diagnostic, Step 3 dedup-count basis, §4.1 Codex data-validity prompt
+- This RETRO addendum 3 — direction-survey verdicts and posture lock-in
+- (No changes to `src/_plane_guard.py` or `src/__init__.py` — writers are CORE line A SOLE and must remain frozen during dogfood window)

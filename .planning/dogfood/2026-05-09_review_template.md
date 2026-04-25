@@ -76,24 +76,68 @@ echo "sys_modules_pollution lines:   $(wc -l < /tmp/dogfood_aggregated_smp.jsonl
 echo "INDETERMINATE runs (excluded from decision): $(grep -c INDETERMINATE <(grep INDETERMINATE /tmp/dogfood_aggregated_*.jsonl 2>/dev/null) || echo 0)"
 ```
 
-## Step 2 · Run rollback evaluator (2 min)
+## Step 1.5 · Escape-hatch usage rate sanity (3 min · Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS blind spot)
+
+> **Why this exists**: the v2 hooks provide 4 commit-msg tag-escapes (`[cross-track-ack:…] / [shared] / [deps] / [ops]`) + 1 pre-commit env-escape (`CROSS_TRACK_ACK=1`). If usage rate >20% the hook policy is too strict — 5/19 default flip will create line B / cross-track friction at scale. Authority: Notion Opus 4.7 audit 2026-04-25T16:30 — proposed as new metric, P0 for 5/9.
 
 ```bash
+# 1.5a · count escape-tagged commits in dogfood window (excludes [line-a]/[line-b] which are NOT escapes)
+TOTAL=$(git log --since='2026-04-25 00:00:00' --until='2026-05-09 23:59:59' --oneline | wc -l)
+ESCAPED=$(git log --since='2026-04-25 00:00:00' --until='2026-05-09 23:59:59' \
+  --pretty=format:'%s' \
+  | grep -cE '\[(cross-track-ack[^]]*|shared|deps|ops)\]')
+echo "escape rate: $ESCAPED / $TOTAL = $(echo "scale=3; $ESCAPED * 100 / $TOTAL" | bc)%"
+
+# 1.5b · breakdown by tag
+git log --since='2026-04-25 00:00:00' --until='2026-05-09 23:59:59' --pretty=format:'%s' \
+  | grep -oE '\[(cross-track-ack[^]]*|shared|deps|ops)\]' | sort | uniq -c | sort -rn
+```
+
+**Decision**:
+- **<10%** → hook policy well-calibrated; W4 toggle GO with no further action
+- **10-20%** → acceptable; W4 toggle GO but log the rate in W4 commit message for 5/19 review
+- **>20%** → hook policy too strict; **defer W4 toggle**, open RETRO addendum analyzing top-3 escape patterns, consider widening `LINE_A_SHARED_PATTERNS` exclusions in `scripts/check_track_isolation_msg.py` before 5/19
+
+**Special**: `[cross-track-ack:…]` use should be RARE (legitimate §4.1 events only — e.g., new `src.*` module addition). If `[cross-track-ack:…]` use ≥3, audit each: any usage that could have been a clean two-commit split is a discipline regression worth flagging.
+
+## Step 2 · Run rollback evaluator with 4-tuple dedup (2 min)
+
+```bash
+# Dedup is DEFAULT (per Opus §3 v2 ACCEPT_WITH_COMMENTS direction 4 P0).
+# 4-tuple = (test_path, source_module, target_module, contract_name).
+# Without dedup, finder re-entry across pytest collection inflates one
+# real incident to 2-3 lines and would trip §2.4 ≥3 threshold on noise.
 python scripts/plane_guard_rollback_eval.py \
   --log-path /tmp/dogfood_aggregated_ffc.jsonl
 
-# Expected: "OK: 0 fixture-frame confusion incidents in last 14d (threshold 3)"
-# Acceptable: ≤2 incidents (below threshold but worth investigation)
-# BLOCKER: ≥3 incidents (§2.4 trigger fires; opens follow-up DEC per spec)
+# Expected output format:
+#   "OK: <N> fixture-frame confusion incidents in last 14d (threshold 3) [dedup-by-4-tuple; raw lines=<M>]"
+# Where <N> is the post-dedup unique-incident count (the §2.4 signal),
+# and <M> is the raw line count (diagnostic only).
+
+# Diagnostic comparison: also run with --no-dedup to surface the
+# repeat-rate. If raw lines >> dedup count (e.g., 8 raw / 2 dedup),
+# the inflation factor is documented in the W4 commit message.
+python scripts/plane_guard_rollback_eval.py \
+  --log-path /tmp/dogfood_aggregated_ffc.jsonl \
+  --no-dedup
+
+# Expected: "OK: 0 fixture-frame confusion incidents in last 14d (threshold 3) [dedup-by-4-tuple; raw lines=0]"
+# Acceptable: dedup-count ≤2 (below threshold but worth investigation)
+# BLOCKER: dedup-count ≥3 (§2.4 trigger fires; opens follow-up DEC per spec)
 ```
 
 ## Step 3 · Decision matrix
 
-| Aggregated incidents | Decision | Action |
+**Use the dedup-count (default) for all decisions below**, not the raw line count. The raw count is diagnostic — it reveals the inflation factor from finder re-entry but does NOT feed the §2.4 trigger.
+
+| Aggregated incidents (post-dedup) | Decision | Action |
 |---|---|---|
-| **0** | ✅ GO | Land W4 toggle PR (one-line `continue-on-error: true → false`). Tag `[line-a]`. Update OPS §7 + ADR-002 §5 timeline. |
-| **1-2** | ⚠️ INVESTIGATE | Read each incident's `test_path` + `source_module` + `target_module`. If all are test-allowlist legitimate exercises → false positives, GO with `--threshold 5` override + RETRO addendum. If any are real production-path violations → defer toggle, open DEC-V61-XXX for plane re-classification. |
+| **0** | ✅ GO | Land W4 toggle PR (one-line `continue-on-error: true → false`). Tag `[line-a]`. Update OPS §7 + ADR-002 §5 timeline. Run §4.1 Codex data-validity audit before push. |
+| **1-2** | ⚠️ INVESTIGATE | Read each unique incident's `test_path` + `source_module` + `target_module` + `contract_name`. If all are test-allowlist legitimate exercises → false positives, GO with `--threshold 5` override + RETRO addendum. If any are real production-path violations → defer toggle, open DEC-V61-XXX for plane re-classification. |
 | **≥3** | 🛑 §2.4 TRIGGER | Per ADR-002 §2.4 spec: human-driven follow-up DEC opens within 1 week. **Do NOT** land W4 toggle PR. RETRO-V61-XXX captures Option A→B rollback decision. Re-evaluate ADR-002 plane assignment. |
+
+**Inflation-factor diagnostic**: if `raw_lines / dedup_count > 5` for any single 4-tuple, the writer or finder is firing pathologically often on the same incident. This is a separate signal from §2.4 — investigate `record_fixture_frame_confusion` callsite + `find_spec` re-entry pattern. Document in W4 commit message even if dedup count <3.
 
 ## Step 4 · If GO · W4 toggle PR (10 min)
 
@@ -128,10 +172,13 @@ Refs:
   * OPS-2026-04-25-001 §7 W4 toggle deadline closed
   * RETRO-V61-006 baseline anchor
 
-Per RETRO-V61-001 verbatim 5/5 exception eligibility (≤20 LOC,
-1 file, no public API surface change, references review log) — no
-Codex round required for the toggle flip itself; Codex audit window
-reset begins after this commit.
+Per RETRO-V61-001 verbatim 5/5 exception eligibility on the diff
+itself (≤20 LOC, 1 file, no public API surface change). HOWEVER per
+Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS direction 5: even though the
+diff is 1 LOC, the PR is instrumentation + CI workflow double-
+attribute, and the LOC is gating production CI behavior. Codex's
+job here is NOT to review the diff — it is to verify the 5/9
+review's data validity. See the Codex prompt in §4.1 below.
 
 Self-estimate: 0.70 (binding cap per RETRO-V61-006 audit Item b ·
 MP-C-revised cap 0.70 for instrumentation+CI-workflow PRs ·
@@ -141,6 +188,36 @@ auto-recovers stair-anchor 0.87 ceiling per Opus 4.7 audit Item c.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
+
+### 4.1 Codex pre-merge prompt (data-validity audit, not diff audit)
+
+Per Opus 4.7 §3 v2 ACCEPT_WITH_COMMENTS direction 5: the W4 toggle
+diff is 1 LOC and trivially correct. What Codex must audit is whether
+the 5/9 review *data* supports the GO decision. Run via `cx-auto 20
+&& codex exec` with the prompt below (verbatim).
+
+```
+diff 本身 = `continue-on-error: true → false`，1 LOC，无需评审。
+请审 5/9 dogfood signal 数据有效性，回答 4 问：
+(1) ci_warn_pytest.log 是否存在且 N passed > 0（Gap #6 sanity）？
+(2) A13/A18 .jsonl 在 14d window 内的 4-tuple dedup 后 rollback counter
+    是否 <3？若 ≥3 列出 incident 详情（test_path / source_module /
+    target_module / contract_name）。
+(3) escape-hatch 使用率（env-escape + 4 类 tag-escape）<20%？
+    若 ≥20% 列出 top-3 使用场景（commit hash + 用了哪个 tag）。
+(4) OPS-2026-04-25-001 RED→GREEN transition (commit 0229af9) 是否
+    仍是唯一 OPS 实例？若新增请列出 OPS id + workflow_path +
+    signal_health_status_at_draft。
+任一问 NO/INDETERMINATE → 阻断 W4 toggle PR，要求线 A 补数据。
+```
+
+Authority: Notion Opus 4.7 OPS audit 2026-04-25T16:30
+(ACCEPT_WITH_COMMENTS direction 5 P1, mandatory amendment).
+Verdict mapping:
+- All 4 NO/INDETERMINATE answers but each fixable in <2h → GO with
+  amendment commits before W4 toggle PR
+- Any 1 unfixable → NO-GO; defer toggle, open RETRO addendum
+- All 4 PASS → GO; W4 toggle PR landed
 
 ### Notion sync after toggle lands
 
