@@ -13,10 +13,12 @@
 #
 # What it does:
 #   1. pre-commit install --hook-type pre-commit --hook-type commit-msg
-#      (registers BOTH hook stages — pre-commit framework's default
+#       --hook-type pre-push
+#      (registers all three hook stages — pre-commit framework's default
 #       `pre-commit install` only installs the pre-commit stage and
-#       silently skips commit-msg hooks; this is the bug RETRO-V61-006
-#       MP-F closes.)
+#       silently skips commit-msg + pre-push hooks; this is the bug
+#       RETRO-V61-006 MP-F closes. The pre-push stage was added 2026-04-25
+#       per Opus 4.7 review for the Codex-verified cadence hook.)
 #   2. git config commit.template .gitmessage
 #      (so `git commit` (no -m) opens the editor with cross-track
 #       tag reminders pre-rendered.)
@@ -45,8 +47,9 @@ fi
 
 # Step 1: dual-stage hook install (idempotent — pre-commit overwrites
 # its own hook scripts cleanly on re-run).
-"${PRE_COMMIT[@]}" install --hook-type pre-commit --hook-type commit-msg >/dev/null
-echo "✓ pre-commit + commit-msg hooks installed"
+"${PRE_COMMIT[@]}" install --hook-type pre-commit --hook-type commit-msg \
+    --hook-type pre-push >/dev/null
+echo "✓ pre-commit + commit-msg + pre-push hooks installed"
 
 # Step 2: wire commit.template (idempotent — git config -- replace
 # semantics).

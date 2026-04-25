@@ -69,3 +69,19 @@ repos:
         language: python
         language_version: python3.12
         stages: [commit-msg]
+
+      # Opus 4.7 review 2026-04-25 governance amendment: the workbench
+      # rollout shipped 19 commits with 0 Codex-review calls. RETRO-V61-001
+      # had Codex-per-risky-PR as a baseline rule, but "risky" is judgment-
+      # dependent. This pre-push hook adds a cadence floor — block push
+      # at 10 commits without a canonical 'Codex-verified:' trailer.
+      # Override: CODEX_CADENCE_OVERRIDE=1 git push (audited via env).
+      # Install: pre-commit install --hook-type pre-push
+      - id: codex-cadence
+        name: Codex-verified cadence floor (Opus 4.7 review 2026-04-25)
+        entry: python scripts/check_codex_cadence.py
+        language: python
+        language_version: python3.12
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
