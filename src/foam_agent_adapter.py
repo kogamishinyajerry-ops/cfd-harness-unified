@@ -9720,18 +9720,27 @@ mergePatchPairs
         # Streamwise-mid sampling: case-gen uses x ∈ [0, 5L=5], y ∈ [0, 0.5];
         # mid-plane x_target=2.5 sits well past inlet entry length and well
         # before outlet zeroGradient artefacts.
-        x_target = 2.5
+        # DEC-V61-066 post-R3 defect fix (2026-04-26, RETRO-V61-053
+        # addendum class): with case-gen dx=0.05, x_target=2.5 sits
+        # exactly between cell centres at 2.475 and 2.525. The previous
+        # `x_tol = 0.6·dx = 0.03` band caught BOTH columns, duplicating
+        # every y-position in cross_section and triggering
+        # wall_grad_zero_spacing on adjacent identical-y entries.
+        # Fix: snap to the single nearest unique_x column so each cy
+        # appears at most once in cross_section.
+        x_target_nominal = 2.5
         unique_x = sorted({round(x, 6) for x in cxs})
-        if len(unique_x) >= 2:
-            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
-            x_tol = max(0.6 * dx, 1e-3)
-        else:
-            x_tol = 0.025  # ~half a cell at default 100-cell streamwise grid
+        if not unique_x:
+            key_quantities["duct_flow_extractor_error"] = "no_x_coordinates"
+            return key_quantities
+        x_target = min(unique_x, key=lambda x: abs(x - x_target_nominal))
+        x_tol = 1e-6  # exact match within rounding noise on the chosen column
+        key_quantities["duct_flow_extractor_x_target_nominal"] = x_target_nominal
 
         # Group cells at x_mid by their (cy, cz, u_x, nut) tuple.
         cross_section: List[Tuple[float, Optional[float], float, float]] = []
         for i in range(min(len(cxs), len(cys), len(u_vecs))):
-            if abs(cxs[i] - x_target) < x_tol:
+            if abs(round(cxs[i], 6) - x_target) < x_tol:
                 cz_val = czs[i] if czs is not None else None
                 nut_val = nut_vals[i] if nut_vals is not None else 0.0
                 cross_section.append((cys[i], cz_val, u_vecs[i][0], nut_val))
