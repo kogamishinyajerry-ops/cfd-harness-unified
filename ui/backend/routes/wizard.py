@@ -20,8 +20,9 @@ from ui.backend.schemas.wizard import (
     DraftCreateRequest,
     DraftCreateResponse,
     TemplateListResponse,
+    WizardPreviewResponse,
 )
-from ui.backend.services.wizard import create_draft, list_templates
+from ui.backend.services.wizard import create_draft, list_templates, render_yaml
 
 
 router = APIRouter()
@@ -44,6 +45,31 @@ def _validate_case_id(case_id: str) -> None:
 @router.get("/wizard/templates", response_model=TemplateListResponse)
 def list_templates_route() -> TemplateListResponse:
     return TemplateListResponse(templates=list_templates())
+
+
+@router.post("/wizard/preview", response_model=WizardPreviewResponse)
+def preview_yaml_route(
+    payload: DraftCreateRequest = Body(...),
+) -> WizardPreviewResponse:
+    """Render the same YAML body `POST /api/wizard/draft` would write,
+    but without the file-write side effect. Frontend renders this text
+    verbatim — closes Opus round-2 Q11 (preview-vs-create drift).
+
+    `case_id` validation runs but is non-fatal: the preview is still
+    useful while the user is still typing the id. We surface a 400 only
+    when the *template* or *params* are wrong; an in-progress case_id
+    just gets echoed back. (The /draft route still rejects unsafe ids.)
+    """
+    try:
+        yaml_text = render_yaml(
+            template_id=payload.template_id,
+            case_id=payload.case_id or "<your-case-id>",
+            name_display=payload.name_display,
+            params=payload.params,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return WizardPreviewResponse(yaml_text=yaml_text)
 
 
 @router.post("/wizard/draft", response_model=DraftCreateResponse)

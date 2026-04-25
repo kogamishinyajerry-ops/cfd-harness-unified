@@ -145,3 +145,75 @@ def test_run_stream_validates_case_id() -> None:
     """Path-traversal in the SSE URL must 400, not stream a garbage run."""
     r = client.get("/api/wizard/run/..%2Fescape/stream")
     assert r.status_code in (400, 404)  # FastAPI may 404 the path before our check
+
+
+# --- Opus round-2 Q11: server-rendered preview must be byte-exact ----------
+
+def test_preview_matches_create_byte_for_byte() -> None:
+    """Q11 trust contract: the preview YAML the user sees and the YAML
+    the server writes on /draft must be character-identical. Client-side
+    string-concat (the original implementation) said 'lid_velocity:' while
+    the server emitted 'top_wall_u:' — which broke the wizard's first
+    promise (WYSIWYG).
+    """
+    case_id = "wizard_test_preview_match"
+    payload = {
+        "template_id": "square_cavity",
+        "case_id": case_id,
+        "name_display": "preview-match guard",
+        "params": {"Re": 333.0, "lid_velocity": 0.7},
+    }
+    try:
+        preview = client.post("/api/wizard/preview", json=payload).json()["yaml_text"]
+        create = client.post("/api/wizard/draft", json=payload).json()["yaml_text"]
+        assert preview == create, (
+            "Preview drift detected — round-2 Q11 trust contract violated.\n"
+            f"--- preview ---\n{preview}\n--- create ---\n{create}"
+        )
+    finally:
+        _cleanup_draft(case_id)
+
+
+def test_preview_renders_for_all_three_templates() -> None:
+    """All starter templates must produce a non-empty preview without
+    falling back to lint errors. Frontend depends on this for step-3 UX
+    (no template should silently render an empty <pre>)."""
+    for tid in ("square_cavity", "backward_facing_step", "pipe_flow"):
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": tid,
+                "case_id": "preview_smoke",
+                "params": {},
+            },
+        )
+        assert r.status_code == 200, f"{tid}: {r.status_code} {r.text}"
+        text = r.json()["yaml_text"]
+        assert text.strip(), f"{tid}: empty preview"
+        assert "id: preview_smoke" in text
+        assert "geometry_type" in text
+
+
+def test_preview_does_not_write_user_drafts() -> None:
+    """Preview MUST be side-effect free — no file written.
+
+    Critical because users will hit /preview many times while iterating
+    on params. If preview also wrote a draft, the user_drafts dir would
+    fill up with abandoned ids."""
+    case_id = "preview_should_not_write_to_disk"
+    try:
+        r = client.post(
+            "/api/wizard/preview",
+            json={
+                "template_id": "square_cavity",
+                "case_id": case_id,
+                "params": {"Re": 100.0},
+            },
+        )
+        assert r.status_code == 200
+        path = Path(DRAFTS_DIR) / f"{case_id}.yaml"
+        assert not path.exists(), (
+            f"preview wrote {path} — must be side-effect-free"
+        )
+    finally:
+        _cleanup_draft(case_id)  # belt-and-suspenders

@@ -91,6 +91,19 @@ class DraftCreateResponse(BaseModel):
     lint_warnings: list[str] = Field(default_factory=list)
 
 
+class WizardPreviewResponse(BaseModel):
+    """Server-rendered byte-exact preview (Opus round-2 Q11 fix).
+
+    Identical body to the `yaml_text` that `POST /api/wizard/draft` will
+    eventually write — uses the same `services.wizard.render_yaml` call.
+    The wizard UI must render this text verbatim; client-side YAML
+    string-concat was the trust-killer that round-2 review flagged
+    (preview said `lid_velocity:`, server emitted `top_wall_u:`).
+    """
+
+    yaml_text: str
+
+
 # --- Run-stream events (Stage 8a-2; surfaced now so frontend types align)
 PhaseId = Literal["geometry", "mesh", "boundary", "solver", "compare"]
 PhaseStatus = Literal["ok", "fail", "running"]

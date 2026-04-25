@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
@@ -31,26 +31,29 @@ export function NewCaseWizardPage() {
     onSuccess: (res) => navigate(`/workbench/run/${encodeURIComponent(res.case_id)}`),
   });
 
-  const yamlPreview = useMemo(() => {
-    if (!selected) return "";
-    // Lazy preview — wait for createMutation to surface the real rendered
-    // YAML rather than duplicating the renderer in JS. Show a compact
-    // pseudo-YAML based on the form values so the user has a sanity check
-    // before clicking "Create".
-    const lines: string[] = [
-      `id: ${caseId || "<your-case-id>"}`,
-      `name: ${nameDisplay || `${selected.name_zh} · ${caseId || "<your-case-id>"}`}`,
-      `flow_type: ${selected.flow_type}`,
-      `geometry_type: ${selected.geometry_type}`,
-      `solver: ${selected.solver}`,
-      `parameters:`,
-    ];
-    for (const p of selected.params) {
-      const v = params[p.key] ?? p.default;
-      lines.push(`  ${p.key}: ${v}${p.unit ? `   # ${p.unit}` : ""}`);
-    }
-    return lines.join("\n");
-  }, [selected, caseId, nameDisplay, params]);
+  // Server-rendered byte-exact preview (Opus round-2 Q11 fix).
+  // Client-side string-concat used to invent labels (e.g. `lid_velocity:`)
+  // that did not match the server's emit (`top_wall_u:`) — a trust-killer
+  // for the onboarding wizard. We now mirror exactly what /draft will
+  // write by calling the same render_yaml service via /preview.
+  const previewMutation = useMutation({ mutationFn: api.previewWizardYaml });
+  const yamlPreview = previewMutation.data?.yaml_text ?? "";
+
+  useEffect(() => {
+    if (step !== 3 || !selected) return;
+    const handle = setTimeout(() => {
+      previewMutation.mutate({
+        template_id: selected.template_id,
+        case_id: caseId || "<your-case-id>",
+        name_display: nameDisplay || null,
+        params,
+      });
+    }, 150); // debounce: avoid flood while user types in step 2 then jumps
+    return () => clearTimeout(handle);
+    // previewMutation is stable from useMutation hook; intentionally
+    // omitted from deps to keep the trigger purely value-driven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selected, caseId, nameDisplay, params]);
 
   const validId = /^[A-Za-z0-9_-]+$/.test(caseId);
   const canCreate =
@@ -122,6 +125,10 @@ export function NewCaseWizardPage() {
       {step === 3 && selected && (
         <PreviewAndCreate
           yamlPreview={yamlPreview}
+          previewLoading={previewMutation.isPending}
+          previewError={
+            previewMutation.isError ? previewMutation.error : null
+          }
           canCreate={canCreate}
           isPending={createMutation.isPending}
           error={createMutation.isError ? createMutation.error : null}
@@ -343,6 +350,8 @@ function ConfigForm({
 
 function PreviewAndCreate({
   yamlPreview,
+  previewLoading,
+  previewError,
   canCreate,
   isPending,
   error,
@@ -350,6 +359,8 @@ function PreviewAndCreate({
   onCreate,
 }: {
   yamlPreview: string;
+  previewLoading: boolean;
+  previewError: unknown;
   canCreate: boolean;
   isPending: boolean;
   error: unknown;
@@ -358,14 +369,38 @@ function PreviewAndCreate({
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-surface-200">YAML 预览</h3>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold text-surface-200">YAML 预览</h3>
+        <span className="mono text-[10px] uppercase tracking-wider text-surface-500">
+          {previewLoading
+            ? "rendering..."
+            : previewError
+              ? "render error"
+              : "server-rendered · byte-exact"}
+        </span>
+      </div>
       <pre className="mono overflow-x-auto rounded-sm border border-surface-800 bg-surface-950 p-4 text-[12px] leading-relaxed text-surface-200">
-        {yamlPreview}
+        {yamlPreview ||
+          (previewLoading
+            ? "正在生成 YAML..."
+            : previewError
+              ? `预览生成失败：${
+                  previewError instanceof ApiError
+                    ? `${previewError.status}: ${previewError.message}`
+                    : previewError instanceof Error
+                      ? previewError.message
+                      : String(previewError)
+                }`
+              : "")}
       </pre>
       <p className="mt-3 text-[11px] text-surface-500">
-        点击「创建并跑」会把 YAML 写入{" "}
-        <span className="mono">ui/backend/user_drafts/&lt;case_id&gt;.yaml</span>，
-        然后跳到运行页看 5 阶段流程。
+        预览内容与点击「创建并跑」后真正落盘的 YAML{" "}
+        <span className="text-surface-300">逐字节一致</span>（同一服务端
+        render_yaml 调用）。落盘路径：
+        <span className="mono">
+          ui/backend/user_drafts/&lt;case_id&gt;.yaml
+        </span>
+        。
       </p>
       {error ? (
         <p className="mt-3 text-sm text-contract-fail">

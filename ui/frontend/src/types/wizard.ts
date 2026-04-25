@@ -47,6 +47,10 @@ export interface DraftCreateResponse {
   lint_warnings: string[];
 }
 
+export interface WizardPreviewResponse {
+  yaml_text: string;
+}
+
 export type PhaseId = "geometry" | "mesh" | "boundary" | "solver" | "compare";
 export type PhaseStatus = "ok" | "fail" | "running";
 export type WizardEventType =

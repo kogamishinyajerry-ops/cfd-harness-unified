@@ -27,6 +27,7 @@ import type {
   DraftCreateRequest,
   DraftCreateResponse,
   TemplateListResponse,
+  WizardPreviewResponse,
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 
@@ -147,6 +148,11 @@ export const api = {
   // Stage 8a — Onboarding Workbench wizard
   listWizardTemplates: () =>
     request<TemplateListResponse>("/api/wizard/templates"),
+  previewWizardYaml: (payload: DraftCreateRequest) =>
+    request<WizardPreviewResponse>("/api/wizard/preview", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   createWizardDraft: (payload: DraftCreateRequest) =>
     request<DraftCreateResponse>("/api/wizard/draft", {
       method: "POST",

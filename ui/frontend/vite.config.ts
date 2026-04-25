@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+/// <reference types="vitest/config" />
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
@@ -33,5 +34,15 @@ export default defineConfig({
   preview: {
     host: "127.0.0.1",
     port: 5180,
+  },
+  // Round-2 Q15: minimum vitest + RTL bring-up so wizard pages don't
+  // silently break on next backend response shape change. Full RTL
+  // coverage stays in deferred Tier-B(2).
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    css: false,
   },
 });
