@@ -6592,31 +6592,33 @@ blocks
     // blockMesh local ordering matches the tutorial:
     //   direction 1 = streamwise, direction 2 = thin span (1 cell), direction 3 = z-normal.
     // simpleGrading avoids block-interface inconsistencies caused by edgeGrading.
-    // DEC-V61-061: nx 30→60 on aerofoil blocks (240 surface faces total),
-    // nx 40→60 on wake blocks, nz 80→120, simpleGrading 40→200 (y+ target ~30-50).
+    // DEC-V61-061 iter 2 (revised): nx 60→100 (400 surface faces),
+    // nz 120→160, simpleGrading 200→400 (y+ target ~20-30). Total ~96k cells.
+    // Iter 2 first attempt with grading=1000 diverged (NaN in Uz/p) due to
+    // extreme aspect-ratio cells; backed off to 400 + added nNOC=1.
     hex ( 7 4 16 19 0 3 15 12)
-    (60 1 120)
-    simpleGrading (1 1 200)
+    (100 1 160)
+    simpleGrading (1 1 400)
 
     hex ( 5 7 19 17 1 0 12 13)
-    (60 1 120)
-    simpleGrading (1 1 200)
+    (100 1 160)
+    simpleGrading (1 1 400)
 
     hex ( 17 18 6 5 13 14 2 1)
-    (60 1 120)
-    simpleGrading (10 1 200)
+    (100 1 160)
+    simpleGrading (10 1 400)
 
     hex ( 20 16 4 8 21 15 3 9)
-    (60 1 120)
-    simpleGrading (1 1 200)
+    (100 1 160)
+    simpleGrading (1 1 400)
 
     hex ( 17 20 8 5 22 21 9 10)
-    (60 1 120)
-    simpleGrading (1 1 200)
+    (100 1 160)
+    simpleGrading (1 1 400)
 
     hex ( 5 6 18 17 10 11 23 22)
-    (60 1 120)
-    simpleGrading (10 1 200)
+    (100 1 160)
+    simpleGrading (10 1 400)
 );
 
 edges
@@ -6792,10 +6794,10 @@ application     simpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-061: endTime 2000→5000 — refined mesh (43k cells, y+~30-50)
-// needs more iterations to satisfy residualControl (p<1e-6, U/k/omega<1e-5).
-// V61-058 converged in 439 iters at 16k cells; V61-061 expected ~2500-4000.
-endTime         5000;
+// DEC-V61-061 iter 2: endTime 5000→8000 — even finer mesh (96k cells,
+// y+ target ~10-20) needs more iters. V61-061 iter 1 (43k cells) hit
+// 1e-7 residuals around iter 4500.
+endTime         8000;
 deltaT          1;
 writeControl    runTime;
 writeInterval   500;
@@ -6985,7 +6987,9 @@ SIMPLE
         k       1e-5;
         omega   1e-5;
     }
-    nNonOrthogonalCorrectors 0;
+    // DEC-V61-061 iter 2: nNOC 0→1 to handle higher non-orthogonality
+    // from refined mesh near LE/TE (max non-orth was 69° in V61-058).
+    nNonOrthogonalCorrectors 1;
 }
 
 relaxationFactors
