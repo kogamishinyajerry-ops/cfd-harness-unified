@@ -20,7 +20,8 @@ case_type_rationale: |
     - Cf · √Re_x invariant scalar (= 0.664 for laminar Blasius;
       a single number that pins down the entire similarity curve)
     - δ_99(x) boundary-layer thickness — secondary observable
-      (Blasius: δ_99 ≈ 5·√(ν·x/U) → 0.0224 m at x=0.5, 0.0316 m at x=1.0)
+      (Blasius: δ_99 ≈ 5·√(ν·x/U) → 0.0158 m at x=0.5, 0.0224 m at x=1.0
+      with ν=2e-5)
 
   Rationale for Type II (not Type I): the existing whitelist already
   has 2 gold points (x=0.5 and x=1.0) and the laminar Blasius
@@ -69,8 +70,8 @@ secondary_gates:
       catches mesh-resolution issues (under-resolved BL → stretched
       δ_99 / over-coalesced δ_99 gradients).
     blasius_gold_values:
-      - {x: 0.50, delta_99: 0.02236}  # 5·√(2e-5·0.5/1) = 0.02236 m
-      - {x: 1.00, delta_99: 0.03162}  # 5·√(2e-5·1.0/1) = 0.03162 m
+      - {x: 0.50, delta_99: 0.01581}  # 5·√(2e-5·0.5/1) = 5·√(1e-5) ≈ 0.01581 m
+      - {x: 1.00, delta_99: 0.02236}  # 5·√(2e-5·1.0/1) = 5·√(2e-5) ≈ 0.02236 m
     tolerance: 0.20  # 20% relative — δ_99 inherently noisier than Cf
 
 # ============================================================================
