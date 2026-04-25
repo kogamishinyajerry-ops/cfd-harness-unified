@@ -256,6 +256,47 @@ def test_read_uline_profile_reads_of10_filename(tmp_path: Path) -> None:
     assert len(loaded) == 129
 
 
+def test_read_uline_profile_does_not_silently_return_u_when_pressure_requested(
+    tmp_path: Path,
+) -> None:
+    """Codex round-5 F7 regression: the OF10-form file
+    `channelCenter.xy` packs only `U` (columns: y Ux Uy Uz). If the
+    caller asks for `field="p"` with both files present, the reader
+    must NOT silently parse Ux out of the packed file and pretend
+    that's pressure — that's a wrong-field/wrong-column read. The
+    only correct source for non-U fields is the legacy
+    `<set_name>_<field>.xy` per-field file. If neither exists for
+    the requested field, return None.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in rows)
+    # Both files present, but the caller wants `p` — the OF10 packed
+    # file holds U only.
+    (d / "channelCenter.xy").write_text("# y Ux Uy Uz\n" + body + "\n", encoding="utf-8")
+    # No `channelCenter_p.xy` — pressure data is unavailable.
+    assert _read_uline_profile(tmp_path, field="p") is None, (
+        "Reader must not return Ux from the packed-U file when caller "
+        "explicitly requested `field=\"p\"`."
+    )
+
+
+def test_read_uline_profile_field_p_uses_legacy_per_field_file(
+    tmp_path: Path,
+) -> None:
+    """Companion to F7: when the legacy `<set_name>_p.xy` exists,
+    the reader should use it (and parse y + p columns)."""
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, 1.5 * i * 0.1) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {p}" for y, p in rows)
+    (d / "channelCenter_p.xy").write_text("# y p\n" + body + "\n", encoding="utf-8")
+    loaded = _read_uline_profile(tmp_path, field="p")
+    assert loaded is not None
+    assert len(loaded) == 129
+
+
 def test_read_uline_profile_raises_on_sparse(tmp_path: Path) -> None:
     """Codex DEC-V61-043 round-1 FLAG fix: threshold raised from 4 to
     64 (half the generator's 129-point default) to catch gross

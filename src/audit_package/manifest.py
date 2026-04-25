@@ -57,6 +57,7 @@ _RUN_INPUT_FILES = (
     "constant/physicalProperties",
     "constant/transportProperties",
     "constant/turbulenceProperties",
+    "constant/momentumTransport",  # DEC-V61-059 Stage B: OF10 incompressible rename
     "constant/g",
 )
 
@@ -207,8 +208,12 @@ def _load_run_outputs(run_output_dir: Path) -> Dict[str, Any]:
     """Solver log tail + postProcessing/sets/ listing + final residuals."""
     outputs: Dict[str, Any] = {}
 
-    # Solver log — scan for common names
-    for log_name in ("log.simpleFoam", "log.icoFoam", "log.pimpleFoam",
+    # Solver log — scan for common names. DEC-V61-059 Stage B added
+    # `log.pisoFoam` for the plane-channel laminar route (icoFoam
+    # could not register a momentumTransportModel for the
+    # wallShearStress FO).
+    for log_name in ("log.simpleFoam", "log.icoFoam", "log.pisoFoam",
+                     "log.pimpleFoam",
                      "log.buoyantFoam", "log.buoyantBoussinesqSimpleFoam"):
         log_path = run_output_dir / log_name
         if log_path.is_file():

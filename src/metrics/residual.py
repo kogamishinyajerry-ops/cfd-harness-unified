@@ -95,6 +95,7 @@ def _resolve_log_path(artifacts: Any, observable_def: Dict[str, Any]) -> Optiona
                 "log.pimpleFoam",
                 "log.simpleFoam",
                 "log.buoyantFoam",
+                "log.pisoFoam",  # DEC-V61-059 Stage B: plane-channel laminar route
                 "log.icoFoam",
                 "log",
             ):

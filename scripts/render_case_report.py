@@ -371,7 +371,16 @@ def _parse_residuals_from_log(log_path: Path) -> tuple[np.ndarray, dict[str, np.
 
 
 def _find_latest_solver_log(artifact_dir: Path) -> Optional[Path]:
-    for logname in ("log.simpleFoam", "log.icoFoam", "log.pimpleFoam", "log.buoyantFoam"):
+    # DEC-V61-059 Stage B: added `log.pisoFoam` for plane-channel
+    # laminar route — icoFoam couldn't register a
+    # momentumTransportModel for the wallShearStress FO.
+    for logname in (
+        "log.simpleFoam",
+        "log.icoFoam",
+        "log.pisoFoam",
+        "log.pimpleFoam",
+        "log.buoyantFoam",
+    ):
         p = artifact_dir / logname
         if p.is_file():
             return p

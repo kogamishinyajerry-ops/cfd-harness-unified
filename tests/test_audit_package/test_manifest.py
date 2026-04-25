@@ -172,6 +172,38 @@ class TestLoadRunOutputs:
         (tmp_path / "empty_run").mkdir()
         assert _load_run_outputs(tmp_path / "empty_run") == {}
 
+    def test_pisofoam_log_tail_captured(self, tmp_path):
+        """DEC-V61-059 Codex round-5 F8 regression: plane-channel
+        Stage B artifact dirs only contain `log.pisoFoam` (the
+        icoFoam→pisoFoam swap). The manifest loader must discover
+        that filename or the audit package will record an empty
+        outputs dict and the run won't round-trip.
+        """
+        run = tmp_path / "run"
+        run.mkdir()
+        (run / "log.pisoFoam").write_text(
+            "Time = 0\nExecutionTime = 0 s\nEnd\n", encoding="utf-8"
+        )
+        outputs = _load_run_outputs(run)
+        assert outputs["solver_log_name"] == "log.pisoFoam"
+        assert "End" in outputs["solver_log_tail"]
+
+    def test_momentum_transport_input_captured(self, tmp_path):
+        """Companion F8: OF10's `constant/momentumTransport` (the
+        incompressible turbulenceProperties rename) must be picked
+        up by `_load_run_inputs` so audit packages stay complete.
+        """
+        from src.audit_package.manifest import _load_run_inputs
+
+        run = tmp_path / "run"
+        (run / "constant").mkdir(parents=True)
+        (run / "constant" / "momentumTransport").write_text(
+            "simulationType  laminar;\n", encoding="utf-8"
+        )
+        inputs = _load_run_inputs(run)
+        assert "constant/momentumTransport" in inputs
+        assert "laminar" in inputs["constant/momentumTransport"]
+
 
 class TestDecisionTrailAndFrontmatter:
     def test_extract_frontmatter_field_basic(self):

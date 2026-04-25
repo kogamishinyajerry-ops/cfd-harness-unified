@@ -172,13 +172,23 @@ def _read_uline_profile(
     # per field. Stage B post-R3 live-run surfaced this — the OF10
     # filename was emitted by the FO but the reader only checked the
     # legacy form, so the case died with "uLine output absent" even
-    # though the file was right there. Try the OF10 form first
-    # (current target), then fall back to legacy.
-    xy = latest / f"{set_name}.xy"
-    if not xy.is_file():
-        xy = latest / f"{set_name}_{field}.xy"
-        if not xy.is_file():
-            return None
+    # though the file was right there.
+    #
+    # Codex round-5 F7: the OF10 packed file holds U specifically.
+    # If the caller requests any other field (e.g. `field="p"`) we
+    # MUST NOT silently return Ux from the packed file — that would
+    # be a wrong-field/wrong-column read masquerading as success.
+    # Restrict the OF10-form path to `field == "U"`; for any other
+    # field, the legacy per-field naming is the only correct source,
+    # and absence of that legacy file means truly absent.
+    of10_path = latest / f"{set_name}.xy"
+    legacy_path = latest / f"{set_name}_{field}.xy"
+    if field == "U" and of10_path.is_file():
+        xy = of10_path
+    elif legacy_path.is_file():
+        xy = legacy_path
+    else:
+        return None
     try:
         text = xy.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
