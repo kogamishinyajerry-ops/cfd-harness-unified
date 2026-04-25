@@ -8,6 +8,7 @@ import type { RunDescriptor, ValidationReport } from "@/types/validation";
 
 import { AdvancedTab } from "./case_detail/AdvancedTab";
 import { CaseFrame } from "./case_detail/CaseFrame";
+import { CaseHealthStrip } from "./case_detail/CaseHealthStrip";
 import { CompareTab } from "./case_detail/CompareTab";
 import { MeshTab } from "./case_detail/MeshTab";
 import { RunTab } from "./case_detail/RunTab";
@@ -155,6 +156,11 @@ export function LearnCaseDetailPage() {
           <CaseIllustration caseId={caseId} className="h-auto w-full text-surface-100" />
         </div>
       </header>
+
+      {/* Post-Stage-6 polish · CaseHealthStrip ties Stages 2/3/4 status
+          into a 3-chip pulse strip. Sits above CaseFrame so the user
+          sees overall case health before reading geometry detail. */}
+      <CaseHealthStrip caseId={caseId} />
 
       {/* Workbench first-screen (Stage 2 MVP). Soft-skips with `return null`
           when the case lacks a knowledge/workbench_basics/<id>.yaml authored,

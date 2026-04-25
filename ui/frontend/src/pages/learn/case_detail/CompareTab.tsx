@@ -7,6 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
+import { RunExportPanel } from "@/components/learn/ExportPanel";
 import { getLearnCase } from "@/data/learnCases";
 import type {
   RunCategory,
@@ -141,6 +142,14 @@ export function CompareTab({
         <p className={`mt-1 text-[18px] font-medium ${STATUS_CLASS[contract_status]}`}>
           {STATUS_TEXT[contract_status]}
         </p>
+        {/* Stage 6 ExportPack · per-run download chips inline with verdict.
+            Uses resolvedRun (the actual run whose measurement is rendered)
+            so the CSV/PDF match what the user is reading. */}
+        {resolvedRun && (
+          <div className="mt-3">
+            <RunExportPanel caseId={caseId} runId={resolvedRun.run_id} />
+          </div>
+        )}
       </section>
 
       {/* Gold vs measured */}
