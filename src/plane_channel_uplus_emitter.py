@@ -166,9 +166,19 @@ def _read_uline_profile(
     latest = _latest_time_dir(root)
     if latest is None:
         return None
-    xy = latest / f"{set_name}_{field}.xy"
+    # OpenFOAM 10 writes the line-sampling output as `<set_name>.xy`
+    # with every field packed into the same file (columns: y Ux Uy Uz);
+    # older OpenFOAM versions wrote a separate `<set_name>_<field>.xy`
+    # per field. Stage B post-R3 live-run surfaced this — the OF10
+    # filename was emitted by the FO but the reader only checked the
+    # legacy form, so the case died with "uLine output absent" even
+    # though the file was right there. Try the OF10 form first
+    # (current target), then fall back to legacy.
+    xy = latest / f"{set_name}.xy"
     if not xy.is_file():
-        return None
+        xy = latest / f"{set_name}_{field}.xy"
+        if not xy.is_file():
+            return None
     try:
         text = xy.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:

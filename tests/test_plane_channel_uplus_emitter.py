@@ -238,6 +238,24 @@ def test_read_uline_profile_returns_none_when_absent(tmp_path: Path) -> None:
     assert _read_uline_profile(tmp_path) is None
 
 
+def test_read_uline_profile_reads_of10_filename(tmp_path: Path) -> None:
+    """Stage B post-R3 fix: OpenFOAM 10's `sets` FO writes
+    `<set_name>.xy` (single packed file with all components),
+    not the legacy `<set_name>_<field>.xy` per-field naming.
+    The reader MUST find the OF10 form first; otherwise the case
+    dies with `uLine output absent` even though the file exists.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in rows)
+    # OF10 form: `channelCenter.xy` (no _U suffix)
+    (d / "channelCenter.xy").write_text("# y Ux Uy Uz\n" + body + "\n", encoding="utf-8")
+    loaded = _read_uline_profile(tmp_path)
+    assert loaded is not None
+    assert len(loaded) == 129
+
+
 def test_read_uline_profile_raises_on_sparse(tmp_path: Path) -> None:
     """Codex DEC-V61-043 round-1 FLAG fix: threshold raised from 4 to
     64 (half the generator's 129-point default) to catch gross
