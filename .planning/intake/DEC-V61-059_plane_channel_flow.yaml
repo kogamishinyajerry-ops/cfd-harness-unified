@@ -525,7 +525,35 @@ batch_plan:
       fully_developed_plane_channel_flow with new extractor stack.
       Capture audit fixture. Verify 4 gates emit within tolerance
       bands.
-    commit_count_estimate: 2
+
+      LANDED · 0a90dea. Stage B production audit on commit 42158e2
+      (cumulative post-R3 stack: a71e8ec + 4af21a2 + 59198cf +
+      42158e2) ran end-to-end in 520.7s wall:
+        - solver_success: true
+        - measurement.value: 1.9176 @ y_plus=5
+        - 3 deviations vs Moser/Kim DNS gold (laminar profile far
+          below turbulent reference — physics-honest hard FAIL)
+        - G2 silent (correct: profile far outside canonical band)
+        - extraction path: comparator_deviation (full u+/y+ profile
+          + secondary observables emitted)
+
+      Surfaced 3 post-R3 live-run defects (RETRO-V61-053 addendum
+      class — runtime-emergent OpenFOAM-version-emitter API drift;
+      none catchable by static review):
+        1. constant/turbulenceProperties → constant/momentumTransport
+           (OF10 incompressible rename; commit a71e8ec)
+        2. icoFoam → pisoFoam swap (icoFoam doesn't register
+           momentumTransportModel in the registry, so the
+           wallShearStress FO crashed on lookupObject; commit
+           4af21a2)
+        3. uLine FO emits `<set_name>.xy` not `<set_name>_<field>.xy`
+           (OF10 sets-FO packs all fields into one file; reader
+           was looking for the legacy form; commit 42158e2)
+
+      Plus a runtime-budget tuning commit (59198cf): endTime 50→5,
+      deltaT 0.002→0.05, p-solver PCG/DIC→GAMG/GaussSeidel —
+      reduced wall-clock from ~3 hours to ~9 minutes per run.
+    commit_count_estimate: 5  # 4 fixes + 1 fixture refresh
 
   - batch: C
     scope: |
