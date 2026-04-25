@@ -2302,6 +2302,20 @@ class TestLoadWhitelistTurbulenceModel:
         """Production whitelist has `turbulence_model: laminar` for the cylinder case."""
         assert _load_whitelist_turbulence_model("circular_cylinder_wake") == "laminar"
 
+    def test_returns_laminar_for_turbulent_flat_plate(self):
+        """DEC-V61-063 Batch A.6 acceptance: production whitelist has
+        `turbulence_model: laminar` for turbulent_flat_plate per V61-006
+        (Re=50000, Re_x≤50000 deep in laminar regime). The case-gen
+        dispatch must consult this — Re-based heuristic alone returns
+        kOmegaSST for Re≥2300 and produced the Stage B v1 wrong-physics
+        run (k_min<0, ω_min<0, Spalding fallback 4/4, mean_K=1.254).
+        """
+        assert _load_whitelist_turbulence_model("turbulent_flat_plate") == "laminar"
+        # Same lookup by the human-readable name (alias path).
+        assert _load_whitelist_turbulence_model(
+            "Laminar Flat Plate (Zero Pressure Gradient, Re_x ≤ 5e4)"
+        ) == "laminar"
+
     def test_returns_none_when_whitelist_missing(self, tmp_path):
         missing = tmp_path / "nope.yaml"
         assert _load_whitelist_turbulence_model("x", whitelist_path=missing) is None

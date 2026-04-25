@@ -684,9 +684,23 @@ class FoamAgentExecutor:
                     solver_name = "simpleFoam"
                 else:
                     solver_name = "simpleFoam"
-                    turbulence_model = self._turbulence_model_for_solver(
-                        solver_name, task_spec.geometry_type, task_spec.Re
-                    )
+                    # DEC-V61-063 Batch A.6 (post-R3 RETRO-V61-053 addendum):
+                    # Consult whitelist `turbulence_model` BEFORE the Re-based
+                    # heuristic, mirroring the DEC-V61-053 B1 cylinder fix.
+                    # Without this, turbulent_flat_plate (whitelist: laminar)
+                    # gets kOmegaSST from `_turbulence_model_for_solver` because
+                    # Re=50000 ≥ 2300, despite V61-006 closing the regime
+                    # decision as laminar Blasius. The pre-existing dispatch
+                    # was a Knowledge↔Execution misalignment that V61-063 Stage
+                    # B exposed (k_min=-403k, ω_min=-43k, Spalding fallback at
+                    # 4/4 x positions, mean_K=1.254 vs 0.664).
+                    whitelist_turb = _load_whitelist_turbulence_model(task_spec.name)
+                    if whitelist_turb in ("laminar", "kOmegaSST", "kEpsilon"):
+                        turbulence_model = whitelist_turb
+                    else:
+                        turbulence_model = self._turbulence_model_for_solver(
+                            solver_name, task_spec.geometry_type, task_spec.Re
+                        )
                     self._generate_steady_internal_flow(case_host_dir, task_spec, turbulence_model)
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
