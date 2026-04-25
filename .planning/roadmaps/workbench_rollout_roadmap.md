@@ -79,7 +79,7 @@ Kai 的 bundle-size 数字（vtk.js 30.3 MB · three.js 37.0 MB · @react-three/
 
 - **Trigger (start)**: ✅ MET — Stage 1 落地 + LDC 通过 endpoint (commit e34f4b4)
 - **MVP scope** (delivered): `/api/cases/{id}/workbench-basics` FastAPI route + Pydantic schema + 5 SVG renderers in `<CaseFrame>` (rectangle / step / airfoil / cylinder + UnsupportedShapeStub fallback)
-- **Trigger (close)**: ✅ MET — 8/10 cases authored (LDC, plane_channel, flat_plate, DHC, RBC, BFS, NACA0012, cylinder). Remaining 2 (impinging_jet, duct_flow) soft-skip with 404 → CaseFrame returns null, falls through to legacy hero unchanged.
+- **Trigger (close)**: ✅ EXCEEDED — 10/10 cases authored as of commit 8b3ad33 (LDC, plane_channel, flat_plate, DHC, RBC, BFS, NACA0012, cylinder, duct_flow, impinging_jet). 5 shape renderers cover the full whitelist (rectangle / step / airfoil / cylinder / jet_impingement); UnsupportedShapeStub retained for future case admissions.
 - **主交付 viz** (delivered): topology SVG (4 shape renderers, role-coded patch edges, driver arrows, vortex/recirc hints) + 物理锚点 panel (Re prominent + derived) + BC pin-map table + materials/solver strip + terse hints row
 - **Predecessor**: Stage 1
 - **Risk** (resolved): schema drift surfaces as soft amber banner via `validate_patch_consistency()`, never 500s. Aspect ratio clamped to [0.25, 5] for legibility on long/thin geometries.
