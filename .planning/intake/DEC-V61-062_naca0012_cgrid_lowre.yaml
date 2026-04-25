@@ -1,0 +1,354 @@
+# DEC-V61-062 · NACA0012 C-grid + LowRe wall treatment
+# Architectural follow-up to V61-061's topology_ceiling_reached defect.
+# Intake v1 · Stage 0 · 2026-04-25
+# Predecessor stack: V61-058 (methodology) → V61-061 (mesh refinement,
+# topology_ceiling_reached @ Cl@α=8°≈0.675) → V61-062 (THIS — close gap
+# via C-grid block topology + LowRe wall treatment in
+# `_generate_airfoil_flow`). Reuses V61-058 gold YAML + extractors +
+# Stage E driver verbatim. Only block topology + wall BCs change.
+
+dec_id: DEC-V61-062
+title: "NACA0012 C-grid + LowRe · close V61-061 topology_ceiling_reached gap · methodology v2.0 fifth-apply"
+case_id: naca0012_airfoil  # SAME canonical case_id as V61-058/V61-061
+predecessor: DEC-V61-061
+predecessor_chain: [DEC-V61-058, DEC-V61-061]
+methodology_version: "v2.0 (fifth-apply, post-V61-053+057+058+061)"
+case_type: II  # inherited from V61-058
+autonomous_governance: true
+intake_authored_at: "2026-04-25"
+intake_author: "Claude Code (Opus 4.7, 1M context)"
+intake_version: 1
+
+# ============================================================================
+# §1 Scope (in/out — strict)
+# ============================================================================
+scope:
+  in:
+    - "C-grid block topology refactor in `src/foam_agent_adapter.py::_generate_airfoil_flow`"
+    - "Boundary-layer block split with first wall-cell ≈ 5e-6 m (target y+ ≈ 1) and BL expansion ratio 1.15-1.2"
+    - "LowRe wall treatment: nutLowReWallFunction on aerofoil patch, 0/k aerofoil → fixedValue uniform 0, retain omegaWallFunction (auto-blends LowRe at fine y+)"
+    - "Update y+_max ADVISORY band on the gold-standard YAML to [0, 5] (LowRe regime; was [11, 500] for wall functions). This is the ONLY gold YAML change permitted — coupled to the LowRe architectural switch, not a hard-gate relaxation."
+    - "Update `tests/test_foam_agent_adapter.py::test_generate_airfoil_flow_creates_real_surface_files` mesh sentinels to match the new C-grid topology (no logic changes; sentinel-only)"
+    - "Update endTime / fvSolution URFs as needed for LowRe convergence (URF p=0.3, U=0.5, k/omega=0.5 starting; tighten if oscillation; nNonOrthogonalCorrectors 1→2 if max non-orth >70°)"
+    - "Re-run Stage E sweep at α∈{0,4,8}° using rebranded scripts/dec_v61_062_live_runs.py (no logic changes vs V61-061 driver)"
+  out:
+    - "Hard-gate gold values (Cl@α=8°=0.815/5%, Cd@α=0°=0.008/15%, dCl/dα=0.105/10%) — locked verbatim from V61-058"
+    - "Cp profile gold anchors — locked from V61-058"
+    - "Extractor logic in `src/airfoil_extractors.py` — locked from V61-058 B2"
+    - "Audit fixture format — V61-058 D regenerates automatically"
+    - "New gates / new observables / new methodology infrastructure"
+    - "Stall regime / finite-AR / compressibility / transition modeling"
+    - "Other case meshes (cylinder, BFS, channel, DHC, plane channel, etc.)"
+    - "Stage E driver business logic (only single-line dec_id rebrand permitted)"
+
+# ============================================================================
+# §2 Hard gates (inherited verbatim from V61-058 §3 — NO RELAXATION)
+# ============================================================================
+hard_gates:
+  - id: lift_coefficient_alpha_eight
+    role: HEADLINE_PRIMARY_SCALAR
+    target: 0.815
+    tolerance: 0.05  # 5% — same as V61-058/V61-061
+    source: "Ladson 1988 NASA TM-4074 §3.2 Tab.1 Re=3e6"
+    v61_058_actual: 0.491   # 40% under
+    v61_061_actual: 0.6750  # 17.2% under (topology_ceiling_reached)
+    v61_062_pass_band: [0.7743, 0.8558]  # 0.815 ± 5%
+  - id: drag_coefficient_alpha_zero
+    role: SAME_RUN_CROSS_CHECK
+    target: 0.0080
+    tolerance: 0.15  # 15%
+    source: "Ladson 1988 same"
+    v61_058_actual: 0.0201  # 151% over
+    v61_061_actual: 0.0126  # 57% over
+    v61_062_pass_band: [0.0068, 0.0092]  # 0.008 ± 15%
+  - id: lift_slope_dCl_dalpha_linear_regime
+    role: QUALITATIVE_GATE
+    target: 0.105
+    tolerance: 0.10  # 10%
+    source: "Ladson 1988 + Abbott 1959 cross-check"
+    v61_058_actual: 0.0613  # 42% under
+    v61_061_actual: 0.0844  # 19.6% under
+    v61_062_pass_band: [0.0945, 0.1155]
+
+smoke_assertions:  # inherited from V61-058 §9
+  - "α=+8° → Cl > 0 strictly"
+  - "α=0° → |Cl| < 0.005 (numerical noise floor)"
+
+advisory:
+  y_plus_max:
+    band: [0, 5]                 # LowRe regime (was [11, 500] for wall-function regime)
+    target: ~1                   # ideal LowRe first-cell y+
+    source: "Wilcox 'Turbulence Modeling for CFD' §4.6.2 (LowRe k-omega validity); OpenFOAM nutLowReWallFunction docs"
+    note: "Updating gold-standard YAML's y_plus_max ADVISORY band as part of this DEC. The previous band [11, 500] was for high-Re wall-function regime; with first cell at y+≈1 the band must shift accordingly. Hard-gate gold values UNCHANGED."
+
+# ============================================================================
+# §3 Technical hypothesis
+# ============================================================================
+hypothesis: |
+  V61-061's topology_ceiling_reached defect (Cl@α=8°≈0.675 vs gold 0.815,
+  diminishing returns 23pp→5pp across 16k→43k→96k mesh refinements) traces
+  to two coupled architectural limitations:
+
+  1. H-grid corner singularities at LE/TE — the existing 6-hex H-grid has
+     hard-corner block junctions exactly at the leading and trailing edges,
+     where flow physics demands maximally resolved curvature. Wall functions
+     cannot fully resolve these regardless of cell count.
+
+  2. Wall-function blending regime — V61-061 ran y+_max=84 at α=8°, mid-log-
+     layer where wall functions become unreliable for adverse-pressure-
+     gradient flows (NACA0012 upper-surface at α=8° has Cp peak around x/c=0.05
+     where the BL is thin and pressure gradient is steep).
+
+  V61-062 attacks both:
+
+  (a) C-grid topology — concentric block shells around airfoil with curved
+      polyLine edges, eliminating the LE/TE corner singularities. Curve
+      naturally follows airfoil camber-line normal direction.
+  (b) BL block split — separate inner (BL) and outer (far-field) blocks,
+      so the radial expansion 5e-6 m → ~5 m doesn't have to fit in one
+      block (V61-061 iter2-first-attempt at grading=1000 diverged with
+      NaN — 2000:1 aspect-ratio cells. Block split avoids this.)
+  (c) LowRe wall treatment — y+~1 first cell with nutLowReWallFunction
+      bypasses the wall-function regime entirely. k=fixed 0 at wall is
+      the canonical LowRe k-ω SST boundary condition (Menter 1994). Retain
+      omegaWallFunction (auto-blends LowRe per OpenFOAM impl).
+
+  Expected outcome: Cl@α=8° within 5% of 0.815 first sweep ~30-60% likely;
+  ≤4-iteration ~60-80% likely (URF tuning, nNOC adjustment, BL grading
+  refinement may take 1-3 iters).
+
+# ============================================================================
+# §4 Wall-clock budget (intake §4 executable_smoke_test)
+# ============================================================================
+runtime_budget:
+  per_alpha_target_s: 1200       # 20 min target (LowRe is 2-3× slower than wall functions)
+  per_alpha_max_s: 1800          # 30 min hard ceiling per α (mandate §4)
+  total_sweep_target_s: 5400     # 90 min for 3-α sweep (mandate explicit budget)
+  per_iteration_total_max_s: 7200  # 2h hard ceiling per iteration (3 α + diagnostics)
+
+# ============================================================================
+# §5 Codex budget + self-review
+# ============================================================================
+# Codex is NOT available autonomously under 1M-Opus exec mode (per V61-061
+# precedent: `(no Codex review — autonomous closeout under 1M-Opus exec mode)`).
+# We use 7-check self-review pre-Stage-A in lieu (must score ≥6/7 PASS to proceed).
+codex_budget_rounds: 0  # autonomous self-review only (matches V61-061 protocol)
+self_review_target: "≥6 of 7 checks PASS pre-Stage-A"
+
+# Pass rate self-estimate — calibrated honestly given V61-058 (0.40 vs 0%
+# ACTUAL) and V61-061 (0.55 vs 0% ACTUAL on gates, but with monotone progress).
+external_gate_self_estimated_pass_rate: 0.30
+external_gate_self_estimated_pass_rate_ceiling_aware: 0.60
+external_gate_self_estimated_pass_rate_rationale: |
+  V61-061 calibration: 0.55 first-sweep estimate vs 0% ACTUAL gate clear,
+  but with monotone improvement. V61-062 is HARDER than V61-061 because:
+    - Architectural refactor (new vertex layout, new block topology, new
+      curved edges) is much higher-risk than V61-061's parametric mesh
+      refinement on existing topology.
+    - LowRe convergence is stiffer (smaller first cells, larger nu·grad²U
+      diffusion stiffness, slower SIMPLE pressure correction).
+    - Cell aspect ratio at first cell is ~5000:1 (chord/(5e-6) ≈ 200,000
+      tangential vs radial; bounded by tangential cell count and BL
+      expansion). Even with BL block split, this is at the edge of what
+      kOmegaSST can tolerate.
+
+  Honest first-sweep estimate: 0.30 (most likely to need ≥1 iteration on
+  URF, nNOC, or BL grading). ≤4-iteration ceiling estimate: 0.60.
+
+  V61-058: estimate 0.40 / actual 0% (Codex F1 forced I→II downgrade)
+  V61-061: estimate 0.55 / actual 0% gates (monotone progress, topology ceiling)
+  V61-062: estimate 0.30 first / 0.60 ≤4-iter (architectural refactor)
+
+# ============================================================================
+# §6 Risk flags (pre-registered honestly)
+# ============================================================================
+risk_flags:
+  - id: topology_refactor_first_apply
+    severity: high
+    note: |
+      First time touching `_generate_airfoil_flow` block topology since the
+      V61-044 6-hex H-grid origin. Expected divergence cascade: blockMesh
+      vertex ordering errors (inside-out blocks), edge projection failures
+      on curved polyLines, checkMesh max-skewness >4 at C-shape outer
+      boundary singular points. V61-061 iter2 first-attempt divergence
+      (NaN at grading=1000) is the precedent for new-mesh divergence risk.
+    mitigation: |
+      Stage A.iter1: write a small Python helper that programmatically
+      computes vertex coordinates from chord + BL offset + far-field
+      radius. Validate with checkMesh BEFORE any solver run. Reject any
+      mesh with max non-orth >75° OR max skewness >4 OR max aspect
+      ratio >10000.
+      Iteration ceiling: 4 mesh-tweak iterations.
+  - id: lowre_convergence_slowness
+    severity: high
+    note: |
+      LowRe simulations converge 2-3× slower than wall-function for the
+      same residual target (smaller first cells → larger viscous-diffusion
+      stiffness → smaller SIMPLE under-relaxation effective step).
+      Expected endTime: bump from V61-061's 8000 → 15000-20000 iterations.
+      Risk of oscillation in p/U residual at coarse URFs.
+    mitigation: |
+      Starting URFs: p=0.3, U=0.5, k=0.5, omega=0.5 (V61-061 baseline).
+      If residual oscillates: tighten p=0.2 or U=0.4. Add nNOC=2 if
+      checkMesh non-orth >70°.
+      endTime budget: 20000 iterations + writeInterval 2000.
+  - id: aspect_ratio_at_first_cell
+    severity: med
+    note: |
+      y+~1 with chord-resolution n_tang ~ 200 along airfoil + first-cell
+      radial 5e-6 m → cell aspect ratio ~5000:1 in BL block. kOmegaSST
+      with nutLowReWallFunction is documented stable up to ~10000:1
+      (Menter 1994; OpenFOAM AMI tutorials use 1000-3000:1 routinely).
+      Risk: omega gradient stiffness at first cell may oscillate.
+    mitigation: |
+      BL block expansion ratio 1.15-1.2 (smooth, not 1.4+ that V61-061
+      iter2 used). nz_BL ~ 30 cells → outer BL cell ~ 5e-6 × 1.18^30 ≈
+      9e-4 m, smooth match to outer block first cell.
+  - id: cgrid_outlet_singularity
+    severity: med
+    note: |
+      C-grid wake closure can create high-skew cells at the downstream
+      outlet where the C-shape closes onto the rectangular wake block.
+      Standard mitigation: extend wake block N chord lengths downstream
+      so that C-grid outlet is far from airfoil influence region.
+    mitigation: |
+      Wake block streamwise extent: ≥10 chord (V61-061 had ±10c domain).
+      Verify checkMesh max skewness <4 at C-shape outlet vertices.
+      If high skew persists: switch to "full O-grid + rectangular wake"
+      hybrid (drop the C-shape on the upstream half).
+  - id: executable_smoke_test
+    severity: high
+    note: |
+      Inherited from V61-058/V61-061. 3-α live sweep at ≤30 min per α
+      = 90 min total fits §4 budget but tight. Mandate §4 explicitly
+      sets 30 min/α ceiling.
+    mitigation: |
+      Stage A includes a checkMesh-only dry run BEFORE any α=0 solver
+      run — if checkMesh fails, iterate on mesh without burning solver
+      time. Stage E only runs after checkMesh PASS.
+
+# ============================================================================
+# §7 Stages
+# ============================================================================
+stages:
+  - id: A
+    scope: "C-grid blockMeshDict refactor — Python helper computes vertices,
+            curved polyLine edges along airfoil + far-field arc, BL block
+            split, checkMesh validation. Single-commit atomic change to
+            _generate_airfoil_flow."
+    commit_count_estimate: 1
+  - id: B
+    scope: "LowRe wall BCs — nutLowReWallFunction on aerofoil patch in 0/nut,
+            fixedValue uniform 0 in 0/k aerofoil, retain omegaWallFunction.
+            Update endTime + fvSolution URFs + nNOC for LowRe convergence."
+    commit_count_estimate: 1
+  - id: C
+    scope: "Update mesh sentinels in tests/test_foam_agent_adapter.py
+            (test_generate_airfoil_flow_creates_real_surface_files only —
+            the 40 TestNACA0012MultiDim tests should be unchanged since
+            they test α-routing and extractor logic, not mesh geometry).
+            Run pytest to confirm 40+ tests pass."
+    commit_count_estimate: 1
+  - id: D
+    scope: "Audit fixture regen — phase5_audit_run.py re-emits ui/backend/
+            tests/fixtures/runs/naca0012_airfoil/audit_real_run_measurement.yaml
+            (deterministic; should auto-regenerate without manual edit)."
+    commit_count_estimate: 1
+  - id: E
+    scope: "Live OpenFOAM sweep at α∈{0,4,8}° using rebranded
+            scripts/dec_v61_062_live_runs.py (single-line dec_id rebrand from
+            V61-061 driver). Iterate up to 4× if HARD gates miss: parametric
+            tweaks (nz_BL, expansion ratio, URF, nNOC) only — no further
+            architectural changes. Each iteration: 1 commit."
+    commit_count_estimate: 2-5  # depends on iteration depth
+    iteration_ceiling: 4
+
+# ============================================================================
+# §8 Stage-E close conditions
+# ============================================================================
+stage_e_close_checklist:
+  - item: "Cl@α=8° within 5% of 0.815 (HEADLINE)"
+    required: true
+  - item: "Cd@α=0° within 15% of 0.008 (CROSS_CHECK)"
+    required: true
+  - item: "dCl/dα within 10% of 0.105 (QUALITATIVE)"
+    required: true
+  - item: "|Cl@α=0°| < 0.005 (SANITY_CHECK)"
+    required: true
+  - item: "Cl@α=8° > 0 strictly (sign convention smoke)"
+    required: true
+  - item: "y+_max within [0, 5] (LowRe ADVISORY band)"
+    required: false  # advisory
+  - item: "All 3 α cases solver-converge (residuals < 1e-5)"
+    required: true
+  - item: "TestNACA0012MultiDim continues to pass (40+ tests)"
+    required: true
+  - item: "checkMesh: max skewness <4, max non-orth <75°, max aspect ratio <10000"
+    required: true
+  - item: "Per-α wall clock ≤ 30 min (mandate §4 budget)"
+    required: true
+  - item: "[line-b] tag in EVERY commit body (OPS-2026-04-25-001 dual-track guard)"
+    required: true
+  - item: "DEC frontmatter notion_sync_status updated to synced <date>"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented to 44"
+    required: true
+
+# ============================================================================
+# §9 Self-review pre-Stage-A (autonomous; 7 checks, ≥6 PASS required)
+# ============================================================================
+self_review_pre_stage_a:
+  - check: "Scope is genuinely architectural (C-grid + LowRe), not just parametric tweaking"
+    verdict: PASS
+    evidence: "§1 in/out explicitly: block topology refactor + LowRe wall BC + BL block split. None of these are parametric like V61-061 (cell counts, grading numbers). y+_max band update is the ONE coupled gold YAML change, scoped narrowly."
+  - check: "Hard gates inherited verbatim from V61-058 (no quiet relaxation)"
+    verdict: PASS
+    evidence: "§2 cites V61-058 §3 verbatim. Cl@8°=0.815/5%, Cd@0°=0.008/15%, dCl/dα=0.105/10% all unchanged. Pass bands explicitly computed (0.7743-0.8558, 0.0068-0.0092, 0.0945-0.1155)."
+  - check: "Hypothesis is pre-registered to V61-061 defect_addendum (topology_ceiling_reached), not retrofit"
+    verdict: PASS
+    evidence: "§3 directly cites V61-061 defect_addendum (H-grid corner singularities at LE/TE, wall-function blending regime). Refactor direction (C-grid + LowRe) matches addendum's recommended_followup item (a)+(b) verbatim."
+  - check: "Iteration ceiling is bounded; no infinite refactor loop risk"
+    verdict: PASS
+    evidence: "§7 Stage E iteration_ceiling=4. Architectural changes (block topology, BL split) are LOCKED at Stage A.iter1; iterations 2-4 are PARAMETRIC ONLY (nz_BL, expansion ratio, URF, nNOC). If 4 iterations don't pass, escalate to retro per RETRO-V61-001 trigger #4."
+  - check: "Pass-rate self-estimate calibrated to V61-058+V61-061 history"
+    verdict: PASS
+    evidence: "§5 explicit calibration table: V61-058 0.40→0%, V61-061 0.55→0% gates+monotone, V61-062 0.30→? first / 0.60→? ≤4-iter. Architectural refactor risk reflected in lower estimate (0.30 vs V61-061's 0.55)."
+  - check: "Risk flags pre-registered with mitigations, not post-hoc rationalizations"
+    verdict: PASS
+    evidence: "§6 has 5 risk flags, each with explicit mitigation strategy + iteration ceiling impact. topology_refactor_first_apply (HIGH) drives the Stage A.iter1 checkMesh-before-solve protocol."
+  - check: "Out-of-scope guardrails prevent scope bleed (e.g., new gates, extractor changes)"
+    verdict: PASS
+    evidence: "§1 out-list explicit: gold hard-gate values, extractor logic, audit fixture format, new gates, other case meshes ALL excluded. Only y+_max ADVISORY band update permitted (coupled to LowRe choice, scoped narrowly with explicit rationale)."
+
+self_review_summary: "7 of 7 PASS. Proceed to Stage A."
+
+# ============================================================================
+# §10 Counter governance + Notion sync plan
+# ============================================================================
+counter:
+  pre_v61_062: 43  # closing counter from V61-061
+  post_v61_062: 44
+  autonomous_governance: true
+  scope: "intra-DEC code-only changes (C-grid topology, LowRe BCs, mesh sentinels, audit fixture regen, live-run driver rebrand)"
+
+notion_sync_plan: |
+  At closeout: clone /tmp/v61_061_notion_sync.py template (per mandate),
+  swap title/IDs/body for V61-062. Body sections:
+    - HEADLINE callout: V61-061 → V61-062 progress (Cl@8°, Cd@0°, slope, y+)
+    - Architectural arc: H-grid → C-grid + BL split + LowRe progression
+    - Iteration log: Stage A.iter1...iter4 (if needed)
+    - Stage E sweep table (3 α × 4 metrics)
+    - Methodology v2.0 fifth-apply calibration row
+    - Risk-flag closure
+    - GitHub artifact links (PR #41 expected)
+    - Predecessor chain links (V61-058 → V61-061 → V61-062)
+
+# ============================================================================
+# §11 Followup (post-V61-062 hooks)
+# ============================================================================
+followup:
+  - "If V61-062 PASSes: NACA0012 case promotes from iteration_improvement to gold_validated. Update intel/cases/naca0012_airfoil_summary.md."
+  - "If V61-062 FAILs at iteration 4: write retro per RETRO-V61-001 trigger #4. Architectural conclusion: Steady RANS k-ωSST may be insufficient — propose V61-063 with γ-Reθ transition modeling or LES."
+  - "If checkMesh fails on iter1 architectural attempt: escalate to retro before iterating; the C-grid topology design itself may need revision (e.g., switch to hybrid O-grid + rectangular wake)."
+  - "RETRO addendum to V61-053/V61-058/V61-061: 'architectural-change DEC arc' as a recurring pattern (parametric → architectural → potentially modeling-stack escalation)."
+  - "Knowledge: V61-062 first-apply of `topology_refactor_first_apply` and `lowre_convergence_slowness` risk flags → propose adding to canonical risk_flag_registry.yaml if these recur in future DECs."

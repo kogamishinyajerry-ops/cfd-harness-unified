@@ -129,7 +129,7 @@ class YPlusResult:
     y_plus_min: float
     y_plus_avg: float
     final_time: float
-    advisory_status: str  # 'PASS' if in [11,500]; 'FLAG' if outside;
+    advisory_status: str  # high-Re wall-function band: 'PASS' if in [11,500]; 'FLAG' if (5,11); 'BLOCK' if <5 or >500
                           # 'BLOCK' if outside [5, 1000].
 
 
@@ -371,9 +371,10 @@ def compute_y_plus_max(
 
     Returns:
         YPlusResult with min/max/avg + advisory_status:
-          'PASS'  if y+_max in [11, 500]   (PROVISIONAL band per Codex F5)
-          'FLAG'  if y+_max outside [11, 500] but inside [5, 1000]
-          'BLOCK' if y+_max outside [5, 1000]
+          High-Re wall-function regime (V61-058/V61-061; iter4 reverted from LowRe):
+          'PASS'  if y+_max in [11, 500]    (log-layer; nutkWallFunction valid)
+          'FLAG'  if y+_max in (5, 11)      (buffer-layer; degraded accuracy)
+          'BLOCK' if y+_max < 5 or > 500    (mismatched regime; mesh refinement)
     """
     fo_dir = case_dir / "postProcessing" / fo_name
     time_dir = _latest_time_dir(fo_dir)
@@ -448,10 +449,12 @@ def compute_y_plus_max(
             f"degenerate face."
         )
 
-    # Threshold band per Codex F5 (PROVISIONAL_ADVISORY).
+    # DEC-V61-062 Stage E.iter4: reverted to V61-058/V61-061 high-Re band [11,500].
+    # LowRe band [0,5] was tried in iter1-3 but coupled with extreme-AR BL produced
+    # unstable force integration. iter4 keeps mesh refactor + V61-061 wall functions.
     if 11.0 <= ymax <= 500.0:
         status = "PASS"
-    elif 5.0 <= ymax <= 1000.0:
+    elif 5.0 <= ymax < 11.0:
         status = "FLAG"
     else:
         status = "BLOCK"

@@ -550,18 +550,29 @@ class TestFoamAgentExecutor:
 
         block_mesh = (tmp_path / "system" / "blockMeshDict").read_text()
         assert "triSurfaceMesh" in block_mesh
-        assert "project 4 7 (aerofoil)" in block_mesh
+        # DEC-V61-062: airfoil edges projected from new vertex IDs (10, 11, 12, 13)
+        # — V61-061's IDs (4, 7, 5, 8) are gone with the topology refactor.
+        # 4 in-plane airfoil edges × 2 layers (y_lo + y_hi at +OFF=26) = 8 projections.
+        assert "project 10 11 (aerofoil)" in block_mesh   # lower-front (LE → thickest-lower)
+        assert "project 11 12 (aerofoil)" in block_mesh   # lower-back  (thickest-lower → TE)
+        assert "project 10 13 (aerofoil)" in block_mesh   # upper-front (LE → thickest-upper)
+        assert "project 13 12 (aerofoil)" in block_mesh   # upper-back  (thickest-upper → TE)
         assert "project (" not in block_mesh
         assert "aerofoil" in block_mesh
         assert "leadingArc" not in block_mesh
         assert "searchableCylinder" not in block_mesh
-        # DEC-V61-061 mesh refinement: nx 30→100 (all blocks unified at 100),
-        # nz 80→160, simpleGrading 40→400 (aerofoil), wake-x simpleGrading 10
-        # retained for streamwise expansion. The old V61-058 sentinels
-        # `(30 1 80)`, `(40 1 80)`, `simpleGrading (10 1 40)` are gone.
-        assert "(100 1 160)" in block_mesh
-        assert "simpleGrading (1 1 400)" in block_mesh
-        assert "simpleGrading (10 1 400)" in block_mesh
+        # DEC-V61-062 Stage A.iter3: C-grid + BL-split topology (16 hex blocks).
+        # The old V61-058 + V61-061 sentinels `(100 1 160)`, `simpleGrading (1 1 400)`,
+        # `simpleGrading (10 1 400)` are gone with the topology refactor.
+        # New cell-count signature reflects direction-1=z (40 cells BL-inner OR BL-outer),
+        # direction-2=x (80 cells per block), direction-3=y (1 cell thin span).
+        assert "(40 80 1)" in block_mesh        # BL-inner aerofoil + I2/W2 z-band cells
+        # DEC-V61-062 Stage E.iter4: BL_INNER_RATIO 2000→200 (LowRe FAIL → high-Re).
+        # 1/200 = 0.005 toward NORTH airfoil (BL-inner above), 200 toward SOUTH (A3,A4).
+        assert "simpleGrading (0.005" in block_mesh     # 1/200 = 0.005, BL-inner toward NORTH airfoil
+        assert "simpleGrading (200" in block_mesh       # 200 toward SOUTH airfoil (A3, A4)
+        # BL-outer + inlet/wake outer blocks
+        assert "0.024390" in block_mesh                 # 1/41 = 0.0244, BL-outer toward interface (NW)
         assert "type            empty;" in block_mesh
 
         u_file = (tmp_path / "0" / "U").read_text()
@@ -579,14 +590,18 @@ class TestFoamAgentExecutor:
             assert p_match is not None
             assert float(p_match.group(1)) == pytest.approx(0.05)
 
-            for field_name in ("U", "k", "omega"):
+            # DEC-V61-062 Stage E.iter4: reverted to V61-061 baseline URFs.
+            # U=k=omega=0.5 (iter2 LowRe-tight URFs reverted along with wall
+            # functions). p URF stays 0.3 (V61-061 baseline).
+            expected_urf = {"U": 0.5, "k": 0.5, "omega": 0.5}
+            for field_name, expected in expected_urf.items():
                 field_match = re.search(
                     rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
                     fv_solution,
                     re.S,
                 )
                 assert field_match is not None
-                assert float(field_match.group(1)) == pytest.approx(0.5)
+                assert float(field_match.group(1)) == pytest.approx(expected)
 
             k_text = (case_dir / "0" / "k").read_text()
             omega_text = (case_dir / "0" / "omega").read_text()
@@ -596,8 +611,11 @@ class TestFoamAgentExecutor:
             assert k_match is not None
             assert omega_match is not None
             assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
-            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(3.75e-5) / (0.5623 * 0.1) ≈ 0.109
-            assert float(omega_match.group(1)) == pytest.approx(0.109, rel=0.05)
+            # DEC-V61-062 Stage E.iter4: reverted to V61-061 log-layer formula
+            # omega = sqrt(k)/(Cmu^0.25 * L_t) (Cmu=0.09, L_t=0.1*chord, chord=1.0)
+            # = sqrt(3.75e-5)/(0.5477*0.1) ≈ 0.1118
+            # iter3 LowRe convention 1e4 reverted along with wall functions.
+            assert float(omega_match.group(1)) == pytest.approx(0.1118, rel=2e-2)
         finally:
             shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -2581,26 +2599,38 @@ class TestNACA0012MultiDim:
     # ------------------------------------------------------------------
 
     def test_yplus_max_in_band_returns_PASS(self, tmp_path):
+        # DEC-V61-062 Stage E.iter4: reverted to V61-058 high-Re band [11, 500]
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
         _write_synthetic_yplus_dat(yplus_path, [
-            (200.0, "aerofoil", 11.5, 84.0, 47.0),
+            (200.0, "aerofoil", 12.0, 30.0, 22.0),
         ])
         result = compute_y_plus_max(tmp_path)
-        assert result.y_plus_max == pytest.approx(84.0)
+        assert result.y_plus_max == pytest.approx(30.0)
         assert result.advisory_status == "PASS"
 
-    def test_yplus_max_above_500_returns_FLAG(self, tmp_path):
+    def test_yplus_max_in_buffer_returns_FLAG(self, tmp_path):
+        # high-Re band: y+ in [5, 11) is buffer-layer FLAG
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
         _write_synthetic_yplus_dat(yplus_path, [
-            (200.0, "aerofoil", 50.0, 750.0, 300.0),
+            (200.0, "aerofoil", 5.0, 9.0, 7.0),
         ])
         result = compute_y_plus_max(tmp_path)
         assert result.advisory_status == "FLAG"
 
-    def test_yplus_max_above_1000_returns_BLOCK(self, tmp_path):
+    def test_yplus_max_below_5_returns_BLOCK(self, tmp_path):
+        # high-Re band: y+ < 5 is sublayer BLOCK (regime mismatch with nutkWallFunction)
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
         _write_synthetic_yplus_dat(yplus_path, [
-            (200.0, "aerofoil", 50.0, 1500.0, 500.0),
+            (200.0, "aerofoil", 0.5, 2.0, 1.2),
+        ])
+        result = compute_y_plus_max(tmp_path)
+        assert result.advisory_status == "BLOCK"
+
+    def test_yplus_max_above_500_returns_BLOCK(self, tmp_path):
+        # high-Re band: y+ > 500 is BLOCK (mesh too coarse near wall)
+        yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
+        _write_synthetic_yplus_dat(yplus_path, [
+            (200.0, "aerofoil", 100.0, 600.0, 350.0),
         ])
         result = compute_y_plus_max(tmp_path)
         assert result.advisory_status == "BLOCK"
@@ -2902,9 +2932,9 @@ class TestNACA0012MultiDim:
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
         rows = [(float(i), 0.815, 0.0145) for i in range(1, 201)]
         _write_synthetic_coefficient_dat(coeff_path, rows)
-        # yPlus also emitted (in-band)
+        # yPlus also emitted (iter4 high-Re band [11,500]: y+~30 PASS)
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
-        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 11.5, 84.0, 47.0)])
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 12.0, 30.0, 22.0)])
 
         task = self._make_naca_task(alpha_deg=8.0)
         kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(
@@ -2915,8 +2945,8 @@ class TestNACA0012MultiDim:
         assert kq["alpha_deg"] == 8.0
         assert kq["lift_coefficient_alpha_eight"] == pytest.approx(0.815)  # HEADLINE
         assert kq["force_coeffs_source"] == "forceCoeffs_FO_aerofoil"
-        # y+ advisory
-        assert kq["y_plus_max"] == pytest.approx(84.0)
+        # y+ advisory (iter4 high-Re band [11,500])
+        assert kq["y_plus_max"] == pytest.approx(30.0)
         assert kq["y_plus_max_advisory_status"] == "PASS"
 
     def test_populator_emits_cd_alpha_zero_and_sanity_at_alpha_zero(self, tmp_path):
@@ -2925,8 +2955,9 @@ class TestNACA0012MultiDim:
         coeff_path = tmp_path / "postProcessing" / "forceCoeffs1" / "0" / "coefficient.dat"
         rows = [(float(i), 0.001, 0.0080) for i in range(1, 201)]  # Cl≈0 (symmetric), Cd=0.008
         _write_synthetic_coefficient_dat(coeff_path, rows)
+        # iter4 high-Re band [11,500]: y+~25 PASS
         yplus_path = tmp_path / "postProcessing" / "yPlus" / "200" / "yPlus.dat"
-        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 12.0, 90.0, 50.0)])
+        _write_synthetic_yplus_dat(yplus_path, [(200.0, "aerofoil", 11.0, 25.0, 18.0)])
 
         task = self._make_naca_task(alpha_deg=0.0)
         kq = FoamAgentExecutor._populate_naca_force_coeffs_from_forceCoeffs(

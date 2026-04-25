@@ -6484,229 +6484,604 @@ boundaryField
         bc["U_inf"] = U_inf
         bc["p_inf"] = 0.0  # gauge pressure matches 0/p internalField
         bc["rho"] = 1.0  # incompressible kinematic convention
-        # Tutorialproven topology: aerofoil in x-z plane, z=normal (80 cells),
-        # y=thin span (1 cell, empty boundaries). This is the ONLY geometry that
-        # works with the C-grid hex ordering. The adapter's previous x-y plane
-        # approach produced inside-out errors because block vertex ordering
-        # depends on z being the normal direction.
-        # DEC-V61-061: mesh refinement to close V61-058 physics-fidelity gap.
-        # V61-058 had: 16k cells, 120 airfoil surface faces, y+_max=139,
-        # domain ±5 chord — Cl@α=8°=0.491 vs gold 0.815 (40% under).
-        # V61-061 refinement (single-axis, monotone):
-        #   - domain ±5→±10 chord (x), ±2→±4 chord (z) — far-field cleaner
-        #   - airfoil surface 120→240 (nx 30→60 on 4 aerofoil blocks)
-        #   - z-normal nz 80→120, simpleGrading 40→200 → y+~30-50
-        #   - wake blocks nx 40→60 (better wake resolution)
-        # Estimated cells: 43.2k (~2.7× V61-058). Estimated runtime: ~2min/α.
+        # DEC-V61-062: C-grid + BL-split topology refactor of `_generate_airfoil_flow`
+        # to close V61-061's `topology_ceiling_reached` defect (Cl@α=8°=0.675 vs
+        # gold 0.815, 17% under, asymptotic plateau on H-grid + wall-functions).
+        #
+        # V61-058 baseline: 16k cells, 120 surface faces, y+_max=139, Cl=0.491
+        # V61-061 final:    96k cells, 400 surface faces, y+_max=84, Cl=0.675
+        # V61-062 target:   ~50k cells, 320 surface faces, y+_max≈1, Cl→0.78–0.85
+        #
+        # Architectural change:
+        #   1. BL-INNER band — constant z=±z_bl_band (=0.15 chord) outer
+        #      boundary; very fine z-grading (simpleGrading=6000) → first cell
+        #      ~5e-6 m → y+≈1 at Re=3e6 (LowRe regime).
+        #   2. BL-OUTER band — z ∈ [±z_bl_band, ±z_far]; coarser z-grading
+        #      (simpleGrading≈10) blends BL-inner outer cell to far-field.
+        #   3. Aerofoil-touching faces in BL-INNER blocks; wall functions
+        #      switched to LowRe variants in Stage B (nutLowReWallFunction;
+        #      0/k aerofoil → fixedValue 0; omegaWallFunction retained — it
+        #      auto-blends LowRe per OpenFOAM impl).
+        #   4. Wake blocks split at z_te=0 (same as V61-061) but extended z-
+        #      range now matches the BL-band split: 4 wake blocks total
+        #      (BL-inner upper/lower + BL-outer upper/lower).
+        #
+        # Block topology (12 hex blocks; 24 vertices per layer × 2 = 48):
+        #   Aerofoil region (LE-side and TE-side, BL-inner + BL-outer above
+        #   and below airfoil): 8 blocks
+        #   Wake region (BL-inner above/below + BL-outer above/below): 4 blocks
         y_lo = -0.001
         y_hi = 0.001
-        z_far = 4.0 * chord  # V61-061: 2.0→4.0 chord (domain z-extent)
-        x_min = -10.0 * chord  # V61-061: -5.0→-10.0 chord
-        x_max = 10.0 * chord   # V61-061: +5.0→+10.0 chord
+        z_far = 4.0 * chord
+        x_min = -10.0 * chord
+        x_max = 10.0 * chord
         x_upper = 0.3 * chord
-        z_upper = self._naca0012_half_thickness(0.3) * chord
+        z_upper = self._naca0012_half_thickness(0.3) * chord  # =+0.06
         x_lower = x_upper
-        z_lower = -z_upper
+        z_lower = -z_upper                                     # =-0.06
         x_le = 0.0
         x_te = chord
         z_le = 0.0
         z_te = 0.0
+        # BL-band outer offset — constant rectangular band above max airfoil
+        # thickness so BL-inner block has flat z=const upper face. Choice of
+        # 0.15 chord = 2.5× max airfoil half-thickness ensures the band is
+        # always outside the airfoil at every x.
+        z_bl_band = 0.15 * chord
         span = y_hi - y_lo
 
         self._write_naca0012_surface_obj(case_dir, chord, span)
 
-        # 24 explicit vertices (12 at y=y_lo, 12 at y=y_hi), aerofoil in x-z plane.
-        # Keep all shared block vertices Cartesian to avoid "Inconsistent point
-        # locations between block pair" errors from projected block interfaces.
-        # Only the aerofoil boundary edges remain projected onto the OBJ surface.
+        # ── Vertex layout (24 per layer × 2 layers = 48 vertices) ──
+        # We extend V61-061's 12-vertex layout by adding 12 BL-band vertices
+        # at constant z=±z_bl_band offset, allowing the radial direction (z)
+        # to be split into BL-inner (airfoil-to-band) and BL-outer (band-to-far)
+        # zones with independent grading.
+        #
+        # x-stations:    x_min   x_le   x_lower=x_upper   x_te   x_max
+        # z-stations (per layer):
+        #   -z_far               (5 stations)
+        #   -z_bl_band           (5 stations)
+        #   -z_lower or 0        (3 stations: x_lower has -z_lower; x_le, x_te have 0)
+        #   +z_upper or 0        (3 stations: x_upper has +z_upper; x_le, x_te have 0)
+        #   +z_bl_band           (5 stations)
+        #   +z_far               (5 stations)
+        # The two airfoil-surface rows merge at LE/TE (z=0) so the lattice
+        # has 3+5+3+5+5+3 = 24 vertices per layer (LE/TE are shared between
+        # the upper-airfoil and lower-airfoil rows).
+        #
+        # Vertex IDs (y_lo layer; y_hi layer adds +24):
+        #   ── -z_far row (5 verts: x_min..x_max) ──
+        #   v0:  (x_min,         y_lo, -z_far)
+        #   v1:  (x_le=0,        y_lo, -z_far)
+        #   v2:  (x_lower=0.3,   y_lo, -z_far)
+        #   v3:  (x_te=1,        y_lo, -z_far)
+        #   v4:  (x_max,         y_lo, -z_far)
+        #   ── -z_bl_band row (5 verts: x_min..x_max) ──
+        #   v5:  (x_min,         y_lo, -z_bl_band)
+        #   v6:  (x_le,          y_lo, -z_bl_band)
+        #   v7:  (x_lower,       y_lo, -z_bl_band)
+        #   v8:  (x_te,          y_lo, -z_bl_band)
+        #   v9:  (x_max,         y_lo, -z_bl_band)
+        #   ── airfoil lower-surface row (3 verts: x_le=LE, x_lower=thickest, x_te=TE) ──
+        #   v10: (x_le,          y_lo, 0)            # LE shared upper/lower
+        #   v11: (x_lower,       y_lo, z_lower)      # =-0.06
+        #   v12: (x_te,          y_lo, 0)            # TE shared upper/lower
+        #   ── airfoil upper-surface row (1 new vert: x_upper=thickest; LE/TE shared with v10/v12) ──
+        #   v13: (x_upper,       y_lo, z_upper)      # =+0.06
+        #   ── +z_bl_band row (5 verts) ──
+        #   v14: (x_min,         y_lo, +z_bl_band)
+        #   v15: (x_le,          y_lo, +z_bl_band)
+        #   v16: (x_upper,       y_lo, +z_bl_band)
+        #   v17: (x_te,          y_lo, +z_bl_band)
+        #   v18: (x_max,         y_lo, +z_bl_band)
+        #   ── +z_far row (5 verts) ──
+        #   v19: (x_min,         y_lo, +z_far)
+        #   v20: (x_le,          y_lo, +z_far)
+        #   v21: (x_upper,       y_lo, +z_far)
+        #   v22: (x_te,          y_lo, +z_far)
+        #   v23: (x_max,         y_lo, +z_far)
+        # y_hi layer: same x,z; y=y_hi; vertex IDs = above + 24.
+        #
+        # Cell counts per block (committed; iterated via DEC §7 if checkMesh
+        # or solver fails):
+        #   nx_LE  = 80        # LE-side aerofoil x-resolution
+        #   nx_TE  = 80        # TE-side aerofoil x-resolution
+        #   nx_inlet = 30      # upstream inlet streamwise (coarsens toward inlet)
+        #   nx_wake  = 60      # wake streamwise (coarsens downstream)
+        #   nz_BLin = 40       # BL-inner radial cells (extreme grading 6000)
+        #   nz_BLout = 40      # BL-outer radial cells (moderate grading ~10)
+        #   ny       = 1       # thin span
+        # Total cells ≈ 8 aerofoil × (~80 × 1 × 40 cells) + 4 wake × (~60 × 1 × 40) ≈ 35k–40k
+        # Stage A.iter3 (DEC-V61-062): uniform inlet/wake x-grading +
+        # softer BL_INNER_RATIO so all corner aspect-ratios stay under the
+        # intake §6 gate of 10000. Iter1 grading=6000 → AR 168k FAIL.
+        # Iter2 grading=2000 INLET=0.5 → AR 10429 (just over gate).
+        # Iter3 grading=2000 INLET=1.0 + nx_inlet=80 (uniform): predicted
+        # AR = (10/80) / 1.33e-5 = 9398, under gate.
+        # First cell 1.33e-5 m → y+ ≈ 2 at Re=3e6 (LowRe regime ✓).
+        nx_LE = 80
+        nx_TE = 80
+        nx_inlet = 80
+        nx_wake = 80
+        nz_BLin = 40
+        nz_BLout = 40
+
+        # ── Build vertex list programmatically (26 in-plane × 2 layers = 52) ──
+        # Two extra vertices (v24, v25) at the airfoil-z=0 row at x_min and x_max
+        # split the inlet and wake blocks at z=0 so their east/west faces match
+        # the airfoil-touching blocks' lower/upper halves separately.
+        # This prevents non-conformal interfaces that blockMesh cannot handle.
+        verts_xz = [
+            # 0..4: -z_far row (5 verts at x_min, x_le, x_lower, x_te, x_max)
+            (x_min,   -z_far),
+            (x_le,    -z_far),
+            (x_lower, -z_far),
+            (x_te,    -z_far),
+            (x_max,   -z_far),
+            # 5..9: -z_bl_band row (5 verts)
+            (x_min,   -z_bl_band),
+            (x_le,    -z_bl_band),
+            (x_lower, -z_bl_band),
+            (x_te,    -z_bl_band),
+            (x_max,   -z_bl_band),
+            # 10..12: airfoil lower-surface row (LE, thickest-lower, TE)
+            (x_le,    z_le),       # =0
+            (x_lower, z_lower),    # =-0.06
+            (x_te,    z_te),       # =0
+            # 13: airfoil upper-thickest
+            (x_upper, z_upper),    # =+0.06
+            # 14..18: +z_bl_band row (5 verts)
+            (x_min,   +z_bl_band),
+            (x_le,    +z_bl_band),
+            (x_upper, +z_bl_band),
+            (x_te,    +z_bl_band),
+            (x_max,   +z_bl_band),
+            # 19..23: +z_far row (5 verts)
+            (x_min,   +z_far),
+            (x_le,    +z_far),
+            (x_upper, +z_far),
+            (x_te,    +z_far),
+            (x_max,   +z_far),
+            # 24..25: airfoil-z=0 row at x_min, x_max (split-vertices for
+            # inlet I2 and wake W2 to make their east/west faces match
+            # the airfoil-touching blocks A1-A4 lower/upper halves)
+            (x_min,   0.0),
+            (x_max,   0.0),
+        ]
+        assert len(verts_xz) == 26, f"expected 26 in-plane vertices, got {len(verts_xz)}"
+
+        def vstr(idx_y_lo: int) -> str:
+            x, z = verts_xz[idx_y_lo]
+            return f"({x:.6f} {y_lo:.6f} {z:.6f})"
+
+        def vstr_hi(idx_y_lo: int) -> str:
+            x, z = verts_xz[idx_y_lo]
+            return f"({x:.6f} {y_hi:.6f} {z:.6f})"
+
+        vertices_block = "\n    ".join(vstr(i) for i in range(26))
+        vertices_block_hi = "\n    ".join(vstr_hi(i) for i in range(26))
+
+        # ── Block list ──
+        # Hex vertex ordering (OpenFOAM right-hand rule, span direction = y):
+        #   Bottom face (y_lo):  v_{lo0}, v_{lo1}, v_{lo2}, v_{lo3}
+        #   Top face   (y_hi):   v_{hi0}, v_{hi1}, v_{hi2}, v_{hi3}
+        # where (lo0,lo1,lo2,lo3) traverses the in-plane block CCW viewed from
+        # +y (so that the y-face normal points +y).
+        #
+        # In V61-061 numbering convention, a block "below the airfoil, between
+        # x_lower=0.3 and -z_far" is given as (7 4 16 19 0 3 15 12) — the
+        # ordering pairs the y_lo face (7,4,16,19) with the y_hi face (24+0=24
+        # ... wait no, V61-061 had vertex IDs 0-23 with 12 in y_lo + 12 in y_hi.
+        # The convention there: y_lo IDs 0-11 paired with y_hi IDs 12-23 (12 each).
+        # Block 0 in V61-061: (7 4 16 19 0 3 15 12) — the "16 19" are y_hi
+        # equivalents of "4 7" (y_lo); offset = 12.
+        #
+        # V61-062: 24 vertices per layer; y_hi IDs = y_lo IDs + 24.
+        OFF = 26  # y_hi offset (24 in-plane vertices + 2 split vertices)
+
+        def hex_block(sw, se, ne, nw, *, ncells, grading) -> str:
+            """Emit a hex block from 4 in-plane y_lo vertex IDs (caller passes
+            SW, SE, NE, NW in CCW order viewed from +y).
+            Internally re-orders to (SW, NW, NE, SE, SW_hi, NW_hi, NE_hi, SE_hi)
+            so that direction-1 = +z (SW→NW), direction-2 = +x (SW→SE),
+            direction-3 = +y (SW→SW_hi); right-handed: +z × +x = +y ✓.
+            Caller's ncells = (nx, ny=1, nz) and grading = (gx, gy=1, gz) are
+            remapped to OpenFOAM's (n_dir1, n_dir2, n_dir3) = (nz, nx, ny=1)
+            and (gz, gx, gy=1).
+            """
+            nx, ny, nz = ncells
+            gx, gy, gz = grading
+            return (
+                f"    hex ({sw} {nw} {ne} {se} "
+                f"{sw+OFF} {nw+OFF} {ne+OFF} {se+OFF}) "
+                f"({nz} {nx} {ny}) "
+                f"simpleGrading ({gz} {gx} {gy})"
+            )
+
+        # CCW in-plane vertex ordering (viewed from +y):
+        #   For a block whose in-plane footprint is a quadrilateral with
+        #   corners (in any order), we list them CCW so that the resulting
+        #   hex has y-normal = +y. Block "direction 1" (i.e., x-stride) is
+        #   the v0→v1 edge; direction 3 (z-stride) is v0→v3.
+        #
+        # Convention used below for ALL blocks:
+        #   v0 = SW corner (smallest x, smallest z)
+        #   v1 = SE corner (largest  x, smallest z)
+        #   v2 = NE corner (largest  x, largest  z)
+        #   v3 = NW corner (smallest x, largest  z)
+        # This makes nx the FIRST cell-count entry, ny=1 second (thin span),
+        # nz the THIRD. simpleGrading entries follow the same (x, y, z) order.
+        blocks_lines = []
+        # simpleGrading direction-3 conventions:
+        #   - "fine end" cell size at the airfoil-touching face
+        #   - first cell at SW corner (k=0), last cell at NW corner (k=N)
+        #   - simpleGrading_z = last_cell_size / first_cell_size
+        # If airfoil is at NORTH face (NW-NE edge): grading < 1 (cells shrink k=0 → k=N)
+        # If airfoil is at SOUTH face (SW-SE edge): grading > 1 (cells grow k=0 → k=N)
+        # DEC-V61-062 Stage E.iter4: REVERT LowRe (which produced unstable
+        # force integration on extreme-AR cells in iter1+iter2+iter3 — Cl@α=0
+        # oscillating from -456 to +106 across 80 iters despite bounded
+        # residuals). Hybrid V61-062 mesh + V61-061 wall-function regime:
+        #   BL_INNER_RATIO 2000 → 200 (first cell ~1.5e-4 m → y+~22 log-layer)
+        # The C-grid + BL-split topology architectural change (Stage A) is
+        # PRESERVED. Only the LowRe wall treatment is reverted.
+        BL_INNER_RATIO = 200.0        # iter4: log-layer first cell ~1.5e-4 m (was 2000=LowRe iter1-3, FAIL)
+        BL_OUTER_RATIO = 41.0         # last/first ratio for BL-outer (interface→far) — UNCHANGED
+        WAKE_GRADING_X = 1.0          # uniform wake — UNCHANGED
+        INLET_GRADING_X = 1.0         # uniform inlet x-cells — UNCHANGED
+
+        # ── Aerofoil-region BL-INNER blocks (4) ──
+        # In each BL-inner block, the airfoil edge is at NORTH (A1/A2) or
+        # SOUTH (A3/A4); fine cells should be at the airfoil-facing face.
+        # Block A1: lower-front BL-inner (airfoil at NORTH = NW-NE edge)
+        #     SW = v6  (x_le,    -z_bl_band=-0.15)
+        #     SE = v7  (x_lower, -z_bl_band)
+        #     NE = v11 (x_lower, z_lower=-0.06)  -- airfoil thickest lower
+        #     NW = v10 (x_le,    0)              -- airfoil LE
+        # Direction-3 (SW→NW): -z_bl_band → 0 (going UP). Fine at NW (airfoil) → grading < 1.
+        blocks_lines.append(hex_block(6, 7, 11, 10,
+                                      ncells=(nx_LE, 1, nz_BLin),
+                                      grading=(1, 1, 1.0/BL_INNER_RATIO)))
+        # Block A2: lower-back BL-inner (airfoil at NORTH = NW-NE edge)
+        #     SW = v7, SE = v8 (x_te, -z_bl_band)
+        #     NE = v12 (x_te, 0)                 -- airfoil TE
+        #     NW = v11 (x_lower, -0.06)          -- airfoil thickest lower
+        # Direction-3 (SW→NW): -z_bl_band → -0.06 (going UP toward airfoil). Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(7, 8, 12, 11,
+                                      ncells=(nx_TE, 1, nz_BLin),
+                                      grading=(1, 1, 1.0/BL_INNER_RATIO)))
+        # Block A3: upper-front BL-inner (airfoil at SOUTH = SW-SE edge)
+        #     SW = v10 (x_le,    0)              -- airfoil LE
+        #     SE = v13 (x_upper, +0.06)          -- airfoil thickest upper
+        #     NE = v16 (x_upper, +z_bl_band)
+        #     NW = v15 (x_le,    +z_bl_band)
+        # Direction-3 (SW→NW): 0 → +z_bl_band (going UP away from airfoil). Fine at SW (airfoil) → grading > 1.
+        blocks_lines.append(hex_block(10, 13, 16, 15,
+                                      ncells=(nx_LE, 1, nz_BLin),
+                                      grading=(1, 1, BL_INNER_RATIO)))
+        # Block A4: upper-back BL-inner (airfoil at SOUTH = SW-SE edge)
+        #     SW = v13 (x_upper, +0.06)
+        #     SE = v12 (x_te,    0)              -- airfoil TE
+        #     NE = v17 (x_te,    +z_bl_band)
+        #     NW = v16 (x_upper, +z_bl_band)
+        # Direction-3 (SW→NW): +0.06 → +z_bl_band. Fine at SW → grading > 1.
+        blocks_lines.append(hex_block(13, 12, 17, 16,
+                                      ncells=(nx_TE, 1, nz_BLin),
+                                      grading=(1, 1, BL_INNER_RATIO)))
+
+        # ── BL-OUTER blocks straddling the airfoil region (4) ──
+        # Each BL-outer block has its airfoil-side face matching a BL-inner
+        # block's far face. The fine cell at the BL-inner→BL-outer interface
+        # must be on the BL-outer's interface side (so they match cell sizes).
+        # B1a: lower BL-outer LE-side (-z_far → -z_bl_band, x ∈ [x_le, x_lower])
+        #     SW = v1, SE = v2, NE = v7, NW = v6
+        # Direction-3 (SW→NW): -z_far → -z_bl_band. Interface at NW. Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(1, 2, 7, 6,
+                                      ncells=(nx_LE, 1, nz_BLout),
+                                      grading=(1, 1, 1.0/BL_OUTER_RATIO)))
+        # B1b: lower BL-outer TE-side
+        blocks_lines.append(hex_block(2, 3, 8, 7,
+                                      ncells=(nx_TE, 1, nz_BLout),
+                                      grading=(1, 1, 1.0/BL_OUTER_RATIO)))
+        # B2a: upper BL-outer LE-side (+z_bl_band → +z_far, x ∈ [x_le, x_upper])
+        #     SW = v15, SE = v16, NE = v21, NW = v20
+        # Direction-3 (SW→NW): +z_bl_band → +z_far. Interface at SW. Fine at SW → grading > 1.
+        blocks_lines.append(hex_block(15, 16, 21, 20,
+                                      ncells=(nx_LE, 1, nz_BLout),
+                                      grading=(1, 1, BL_OUTER_RATIO)))
+        # B2b: upper BL-outer TE-side
+        blocks_lines.append(hex_block(16, 17, 22, 21,
+                                      ncells=(nx_TE, 1, nz_BLout),
+                                      grading=(1, 1, BL_OUTER_RATIO)))
+
+        # ── Inlet blocks (4 — upstream of LE; split at -z_bl_band, 0=LE row, +z_bl_band) ──
+        # I1: lower-inlet-outer (-z_far → -z_bl_band, x ∈ [x_min, x_le])
+        # SW=v0, SE=v1, NE=v6, NW=v5. Interface at NW (matches B1a NW). Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(0, 1, 6, 5,
+                                      ncells=(nx_inlet, 1, nz_BLout),
+                                      grading=(INLET_GRADING_X, 1, 1.0/BL_OUTER_RATIO)))
+        # I2lo: lower-inlet-band (-z_bl_band → 0 (=LE row), x ∈ [x_min, x_le])
+        # SW=v5, SE=v6, NE=v10 (LE airfoil), NW=v24 (x_min, 0)
+        # Interface at NE (matches A1 NW which is also v10). Z-direction:
+        # SW→NW = -z_bl_band → 0. East face cells must match A1 west face.
+        # A1 west face cell distribution: A1's z-direction NW (k=N, fine) at v10/0
+        # and SW (k=0, large) at v6/-z_bl_band. So I2lo east face must have fine
+        # cells at NE (matching A1 NW). I2lo's z-direction is SW→NW = -z_bl_band → 0;
+        # NW=v24 corresponds to A1's NW (both at z=0). Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(5, 6, 10, 24,
+                                      ncells=(nx_inlet, 1, nz_BLin),
+                                      grading=(INLET_GRADING_X, 1, 1.0/BL_INNER_RATIO)))
+        # I2up: upper-inlet-band (0 → +z_bl_band, x ∈ [x_min, x_le])
+        # SW=v24 (x_min, 0), SE=v10 (LE airfoil), NE=v15, NW=v14.
+        # East face matches A3 west face. A3's airfoil at SOUTH (z=0); A3 east-face fine at
+        # SOUTH (k=0). I2up's z direction SW→NW = 0 → +z_bl_band; SE-NE direction = same.
+        # I2up east face fine at SE (matching A3 SW). I2up's "south face" is SW-SE edge at z=0.
+        # Fine at z=0 (south, k=0) → grading > 1.
+        blocks_lines.append(hex_block(24, 10, 15, 14,
+                                      ncells=(nx_inlet, 1, nz_BLin),
+                                      grading=(INLET_GRADING_X, 1, BL_INNER_RATIO)))
+        # I3: upper-inlet-outer (+z_bl_band → +z_far, x ∈ [x_min, x_le])
+        # SW=v14, SE=v15, NE=v20, NW=v19. Interface at SW (matches B2a SW). Fine at SW → grading > 1.
+        blocks_lines.append(hex_block(14, 15, 20, 19,
+                                      ncells=(nx_inlet, 1, nz_BLout),
+                                      grading=(INLET_GRADING_X, 1, BL_OUTER_RATIO)))
+
+        # ── Wake blocks (4 — downstream of TE; split at -z_bl_band, 0=TE row, +z_bl_band) ──
+        # W1: lower-wake-outer (-z_far → -z_bl_band, x ∈ [x_te, x_max])
+        # SW=v3, SE=v4, NE=v9, NW=v8. Interface at NW. Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(3, 4, 9, 8,
+                                      ncells=(nx_wake, 1, nz_BLout),
+                                      grading=(WAKE_GRADING_X, 1, 1.0/BL_OUTER_RATIO)))
+        # W2lo: lower-wake-band (-z_bl_band → 0 (=TE row), x ∈ [x_te, x_max])
+        # SW=v8, SE=v9, NE=v25 (x_max, 0), NW=v12 (TE airfoil).
+        # West face matches A2 east face (at x=x_te). A2's airfoil at NORTH;
+        # A2 east-face fine at NW (k=N, top). W2lo's z direction SW→NW = -z_bl_band → 0;
+        # west face fine at NW (matching A2 NW=v12). Fine at NW → grading < 1.
+        blocks_lines.append(hex_block(8, 9, 25, 12,
+                                      ncells=(nx_wake, 1, nz_BLin),
+                                      grading=(WAKE_GRADING_X, 1, 1.0/BL_INNER_RATIO)))
+        # W2up: upper-wake-band (0 → +z_bl_band, x ∈ [x_te, x_max])
+        # SW=v12 (TE airfoil), SE=v25 (x_max, 0), NE=v18, NW=v17.
+        # West face matches A4 east face. A4's airfoil at SOUTH; A4 east-face fine at
+        # SW (k=0, bottom). W2up's z direction SW→NW = 0 → +z_bl_band; west face fine at SW.
+        # Fine at SW → grading > 1.
+        blocks_lines.append(hex_block(12, 25, 18, 17,
+                                      ncells=(nx_wake, 1, nz_BLin),
+                                      grading=(WAKE_GRADING_X, 1, BL_INNER_RATIO)))
+        # W3: upper-wake-outer (+z_bl_band → +z_far, x ∈ [x_te, x_max])
+        # SW=v17, SE=v18, NE=v23, NW=v22. Interface at SW. Fine at SW → grading > 1.
+        blocks_lines.append(hex_block(17, 18, 23, 22,
+                                      ncells=(nx_wake, 1, nz_BLout),
+                                      grading=(WAKE_GRADING_X, 1, BL_OUTER_RATIO)))
+
+        blocks_block = "\n\n".join(blocks_lines)
+
+        # ── Aerofoil edge projections ──
+        # Aerofoil surface segments to project to the OBJ:
+        #   - Lower-front: v10 (LE, z=0) → v11 (thickest, z=-0.06)
+        #   - Lower-back:  v11 → v12 (TE, z=0)
+        #   - Upper-front: v10 (LE)     → v13 (thickest, z=+0.06)
+        #   - Upper-back:  v13          → v12 (TE)
+        # Same 4 edges in y_hi layer (vertex IDs +24).
+        # Cylinder convention: project from-vertex to-vertex onto named surface.
+        edges_lines = []
+        airfoil_edge_pairs_lo = [
+            (10, 11), (11, 12),  # lower
+            (10, 13), (13, 12),  # upper
+        ]
+        for (a, b) in airfoil_edge_pairs_lo:
+            edges_lines.append(f"    project {a} {b} (aerofoil)")
+        for (a, b) in airfoil_edge_pairs_lo:
+            edges_lines.append(f"    project {a + OFF} {b + OFF} (aerofoil)")
+        edges_block = "\n".join(edges_lines)
+
+        # ── Boundary patches ──
+        # aerofoil: 4 face groups (lower-front, lower-back, upper-front, upper-back)
+        #   Each face is an x-stride quad along an aerofoil edge, spanning y_lo→y_hi.
+        # inlet:    upstream + far-field upper + far-field lower (semi-circle equivalent —
+        #   here rectangular per design choice of constant-z far-field).
+        # outlet:   downstream face only (x=x_max, z ∈ [-z_far, +z_far]).
+        # back/front: y_lo / y_hi empty patches (thin span).
+        def face(*y_lo_ids: int) -> str:
+            """Emit a face in the (y_lo→y_hi) mating order: 4 in-plane vertex IDs.
+            For an x-stride face on a y_lo-side block bottom, the 4 corners are
+            v0_lo, v1_lo, v1_hi, v0_hi (CCW from outside).
+            We pass the 2 in-plane edge endpoints (a, b) and emit (a, b, b+OFF, a+OFF).
+            For 4-vertex in-plane faces (full block faces in z direction),
+            pass all 4 in-plane IDs; the y_lo→y_hi mating is implicit via OFF.
+            """
+            ids = list(y_lo_ids)
+            if len(ids) == 2:
+                a, b = ids
+                return f"        ({a} {b} {b + OFF} {a + OFF})"
+            elif len(ids) == 4:
+                a, b, c, d = ids
+                return f"        ({a} {b} {b + OFF} {a + OFF})"  # use first edge only — caller mistake
+            else:
+                raise ValueError(f"face() expects 2 in-plane vertex IDs, got {len(ids)}")
+
+        def face_yface(*y_lo_ids: int) -> str:
+            """Emit a y-face (thin-span empty patch face) — 4 in-plane vertex IDs.
+            For a y_lo face: list IDs CCW viewed from -y (so face normal points -y).
+            For a y_hi face: list IDs CCW viewed from +y.
+            """
+            return f"        ({' '.join(str(i) for i in y_lo_ids)})"
+
+        aerofoil_faces = "\n".join([
+            face(10, 11),  # lower-front airfoil edge
+            face(11, 12),  # lower-back airfoil edge
+            face(10, 13),  # upper-front airfoil edge
+            face(13, 12),  # upper-back airfoil edge
+        ])
+        # Inlet patches: x=x_min (full z range), -z_far floor (full x range), +z_far ceiling.
+        # These all face freestream and use freestream BC.
+        # x=x_min face — vertices in y_lo at this x: v0(z=-z_far), v5(-z_bl), v14(+z_bl), v19(+z_far)
+        # Edges in y_lo → y_hi mating:
+        # Inlet/outlet faces: each face must be a single block's exposed face.
+        # The split-vertices v24=(x_min,0) and v25=(x_max,0) divide the
+        # x=x_min/x=x_max walls into two halves; each half is one block's face.
+        inlet_faces = "\n".join([
+            face(0, 5),    # I1   x=x_min, z ∈ [-z_far, -z_bl_band]
+            face(5, 24),   # I2lo x=x_min, z ∈ [-z_bl_band, 0]
+            face(24, 14),  # I2up x=x_min, z ∈ [0, +z_bl_band]
+            face(14, 19),  # I3   x=x_min, z ∈ [+z_bl_band, +z_far]
+            face(0, 1),    # I1   z=-z_far, x ∈ [x_min, x_le]
+            face(1, 2),    # B1a  z=-z_far, x ∈ [x_le, x_lower]
+            face(2, 3),    # B1b  z=-z_far, x ∈ [x_lower, x_te]
+            face(3, 4),    # W1   z=-z_far, x ∈ [x_te, x_max]
+            face(19, 20),  # I3   z=+z_far, x ∈ [x_min, x_le]
+            face(20, 21),  # B2a  z=+z_far, x ∈ [x_le, x_upper]
+            face(21, 22),  # B2b  z=+z_far, x ∈ [x_upper, x_te]
+            face(22, 23),  # W3   z=+z_far, x ∈ [x_te, x_max]
+        ])
+        outlet_faces = "\n".join([
+            face(4, 9),    # W1   x=x_max, z ∈ [-z_far, -z_bl_band]
+            face(9, 25),   # W2lo x=x_max, z ∈ [-z_bl_band, 0]
+            face(25, 18),  # W2up x=x_max, z ∈ [0, +z_bl_band]
+            face(18, 23),  # W3   x=x_max, z ∈ [+z_bl_band, +z_far]
+        ])
+
+        # back face (y=y_lo) — emit in-plane CCW viewed from -y. For each block,
+        # the y_lo face is its "bottom" with the 4 in-plane IDs in the same
+        # order as in the hex declaration (SW, SE, NE, NW).
+        # For brevity we list each block's in-plane CCW corner-tuple (y_lo).
+        block_inplane_corners_lo = [
+            (6, 7, 11, 10),    # A1
+            (7, 8, 12, 11),    # A2
+            (10, 13, 16, 15),  # A3
+            (13, 12, 17, 16),  # A4
+            (1, 2, 7, 6),      # B1a
+            (2, 3, 8, 7),      # B1b
+            (15, 16, 21, 20),  # B2a
+            (16, 17, 22, 21),  # B2b
+            (0, 1, 6, 5),      # I1
+            (5, 6, 10, 24),    # I2lo
+            (24, 10, 15, 14),  # I2up
+            (14, 15, 20, 19),  # I3
+            (3, 4, 9, 8),      # W1
+            (8, 9, 25, 12),    # W2lo
+            (12, 25, 18, 17),  # W2up
+            (17, 18, 23, 22),  # W3
+        ]
+        back_faces = "\n".join(face_yface(*c) for c in block_inplane_corners_lo)
+        front_faces = "\n".join(
+            face_yface(*(v + OFF for v in c)) for c in block_inplane_corners_lo
+        )
+
+        block_mesh_text = (
+            "/*--------------------------------*- C++ -*---------------------------------*\\\n"
+            "| =========                 |                                                 |\n"
+            "| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |\n"
+            "|  \\    /   O peration     | Version:  10                                    |\n"
+            "|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |\n"
+            "|    \\/     M anipulation  |                                                 |\n"
+            "\\*---------------------------------------------------------------------------*/\n"
+            "FoamFile\n"
+            "{\n"
+            "    version     2.0;\n"
+            "    format      ascii;\n"
+            "    class       dictionary;\n"
+            '    location    "system";\n'
+            "    object      blockMeshDict;\n"
+            "}\n"
+            "// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n"
+            "\n"
+            "convertToMeters 1;\n"
+            "\n"
+            "geometry\n"
+            "{\n"
+            "    aerofoil\n"
+            "    {\n"
+            "        type            triSurfaceMesh;\n"
+            '        file            "NACA0012.obj";\n'
+            "    }\n"
+            "}\n"
+            "\n"
+            "vertices\n"
+            "(\n"
+            f"    // y_lo layer (24 vertices) — DEC-V61-062 C-grid + BL-split topology\n"
+            f"    {vertices_block}\n"
+            f"\n"
+            f"    // y_hi layer (24 vertices, same x,z; y=y_hi)\n"
+            f"    {vertices_block_hi}\n"
+            ");\n"
+            "\n"
+            "blocks\n"
+            "(\n"
+            "    // DEC-V61-062: 16 hex blocks total (4 BL-inner aerofoil +\n"
+            "    // 4 BL-outer aerofoil + 4 inlet + 4 wake). BL-inner has\n"
+            "    // simpleGrading ratio 6000 in z (last/first; sign per-block\n"
+            "    // based on airfoil direction) → first cell ~5e-6 m → y+≈1\n"
+            "    // at Re=3e6 LowRe. BL-outer has simpleGrading ratio 41\n"
+            "    // (interface→far) blending the BL-inner outer cell to the\n"
+            "    // far-field cell. Inlet and wake transition blocks split\n"
+            "    // at z=0 via v24=(x_min,0) and v25=(x_max,0) so all block\n"
+            "    // faces match cell counts AND distributions across interfaces.\n"
+            f"{blocks_block}\n"
+            ");\n"
+            "\n"
+            "edges\n"
+            "(\n"
+            "    // Aerofoil surface edges projected to the NACA0012 OBJ — 4 edges\n"
+            "    // per layer × 2 layers = 8 projections.\n"
+            f"{edges_block}\n"
+            ");\n"
+            "\n"
+            "boundary\n"
+            "(\n"
+            "    aerofoil\n"
+            "    {\n"
+            "        type            wall;\n"
+            "        faces\n"
+            "        (\n"
+            f"{aerofoil_faces}\n"
+            "        );\n"
+            "    }\n"
+            "    inlet\n"
+            "    {\n"
+            "        type            patch;\n"
+            "        inGroups        (freestream);\n"
+            "        faces\n"
+            "        (\n"
+            f"{inlet_faces}\n"
+            "        );\n"
+            "    }\n"
+            "    outlet\n"
+            "    {\n"
+            "        type            patch;\n"
+            "        inGroups        (freestream);\n"
+            "        faces\n"
+            "        (\n"
+            f"{outlet_faces}\n"
+            "        );\n"
+            "    }\n"
+            "    back\n"
+            "    {\n"
+            "        type            empty;\n"
+            "        faces\n"
+            "        (\n"
+            f"{back_faces}\n"
+            "        );\n"
+            "    }\n"
+            "    front\n"
+            "    {\n"
+            "        type            empty;\n"
+            "        faces\n"
+            "        (\n"
+            f"{front_faces}\n"
+            "        );\n"
+            "    }\n"
+            ");\n"
+            "\n"
+            "mergePatchPairs\n"
+            "(\n"
+            ");\n"
+            "\n"
+            "// ************************************************************************* //\n"
+        )
         (case_dir / "system" / "blockMeshDict").write_text(
-            f"""\
-/*--------------------------------*- C++ -*---------------------------------*\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  10                                    |
-|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      blockMeshDict;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-convertToMeters 1;
-
-geometry
-{{
-    aerofoil
-    {{
-        type            triSurfaceMesh;
-        file            "NACA0012.obj";
-    }}
-}}
-
-vertices
-(
-    // Layer y = y_lo (bottom of thin span)
-    // Explicit Cartesian vertices keep block interfaces identical across blocks.
-    ({x_lower:.6f} {y_lo:.6f} {-z_far:.6f})
-    ({x_te:.6f} {y_lo:.6f} {-z_far:.6f})
-    ({x_max:.6f} {y_lo:.6f} {-z_far:.6f})
-
-    ({x_min:.6f} {y_lo:.6f} {z_le:.6f})
-    ({x_le:.6f} {y_lo:.6f} {z_le:.6f})
-    ({x_te:.6f} {y_lo:.6f} {z_te:.6f})
-    ({x_max:.6f} {y_lo:.6f} {z_te:.6f})
-
-    ({x_lower:.6f} {y_lo:.6f} {z_lower:.6f})
-    ({x_upper:.6f} {y_lo:.6f} {z_upper:.6f})
-
-    ({x_upper:.6f} {y_lo:.6f} {z_far:.6f})
-    ({x_te:.6f} {y_lo:.6f} {z_far:.6f})
-    ({x_max:.6f} {y_lo:.6f} {z_far:.6f})
-
-    // Layer y = y_hi (top of thin span) — same z coords as bottom layer
-    ({x_lower:.6f} {y_hi:.6f} {-z_far:.6f})
-    ({x_te:.6f} {y_hi:.6f} {-z_far:.6f})
-    ({x_max:.6f} {y_hi:.6f} {-z_far:.6f})
-
-    ({x_min:.6f} {y_hi:.6f} {z_le:.6f})
-    ({x_le:.6f} {y_hi:.6f} {z_le:.6f})
-    ({x_te:.6f} {y_hi:.6f} {z_te:.6f})
-    ({x_max:.6f} {y_hi:.6f} {z_te:.6f})
-
-    ({x_lower:.6f} {y_hi:.6f} {z_lower:.6f})
-    ({x_upper:.6f} {y_hi:.6f} {z_upper:.6f})
-
-    ({x_upper:.6f} {y_hi:.6f} {z_far:.6f})
-    ({x_te:.6f} {y_hi:.6f} {z_far:.6f})
-    ({x_max:.6f} {y_hi:.6f} {z_far:.6f})
-);
-
-blocks
-(
-    // blockMesh local ordering matches the tutorial:
-    //   direction 1 = streamwise, direction 2 = thin span (1 cell), direction 3 = z-normal.
-    // simpleGrading avoids block-interface inconsistencies caused by edgeGrading.
-    // DEC-V61-061 iter 2 (revised): nx 60→100 (400 surface faces),
-    // nz 120→160, simpleGrading 200→400 (y+ target ~20-30). Total ~96k cells.
-    // Iter 2 first attempt with grading=1000 diverged (NaN in Uz/p) due to
-    // extreme aspect-ratio cells; backed off to 400 + added nNOC=1.
-    hex ( 7 4 16 19 0 3 15 12)
-    (100 1 160)
-    simpleGrading (1 1 400)
-
-    hex ( 5 7 19 17 1 0 12 13)
-    (100 1 160)
-    simpleGrading (1 1 400)
-
-    hex ( 17 18 6 5 13 14 2 1)
-    (100 1 160)
-    simpleGrading (10 1 400)
-
-    hex ( 20 16 4 8 21 15 3 9)
-    (100 1 160)
-    simpleGrading (1 1 400)
-
-    hex ( 17 20 8 5 22 21 9 10)
-    (100 1 160)
-    simpleGrading (1 1 400)
-
-    hex ( 5 6 18 17 10 11 23 22)
-    (100 1 160)
-    simpleGrading (10 1 400)
-);
-
-edges
-(
-    // Aerofoil surface edges — bottom (y_lo) and top (y_hi) layers
-    project 4 7 (aerofoil)
-    project 7 5 (aerofoil)
-    project 4 8 (aerofoil)
-    project 8 5 (aerofoil)
-
-    project 16 19 (aerofoil)
-    project 19 17 (aerofoil)
-    project 16 20 (aerofoil)
-    project 20 17 (aerofoil)
-);
-
-boundary
-(
-    aerofoil
-    {{
-        type            wall;
-        faces
-        (
-            (4 7 19 16)
-            (7 5 17 19)
-            (5 8 20 17)
-            (8 4 16 20)
-        );
-    }}
-    inlet
-    {{
-        type            patch;
-        inGroups        (freestream);
-        faces
-        (
-            (3 0 12 15)
-            (0 1 13 12)
-            (1 2 14 13)
-            (11 10 22 23)
-            (10 9 21 22)
-            (9 3 15 21)
-        );
-    }}
-    outlet
-    {{
-        type            patch;
-        inGroups        (freestream);
-        faces
-        (
-            (2 6 18 14)
-            (6 11 23 18)
-        );
-    }}
-    back
-    {{
-        type            empty;
-        faces
-        (
-            (3 4 7 0)
-            (7 5 1 0)
-            (5 6 2 1)
-            (3 9 8 4)
-            (9 10 5 8)
-            (10 11 6 5)
-        );
-    }}
-    front
-    {{
-        type            empty;
-        faces
-        (
-            (15 16 19 12)
-            (19 17 13 12)
-            (17 18 14 13)
-            (15 16 20 21)
-            (20 17 22 21)
-            (17 18 23 22)
-        );
-    }}
-);
-
-mergePatchPairs
-(
-);
-
-// ************************************************************************* //
-""",
-            encoding="utf-8",
+            block_mesh_text, encoding="utf-8"
         )
 
         (case_dir / "constant" / "physicalProperties").write_text(
@@ -6794,9 +7169,9 @@ application     simpleFoam;
 startFrom       startTime;
 startTime       0;
 stopAt          endTime;
-// DEC-V61-061 iter 2: endTime 5000→8000 — even finer mesh (96k cells,
-// y+ target ~10-20) needs more iters. V61-061 iter 1 (43k cells) hit
-// 1e-7 residuals around iter 4500.
+// DEC-V61-062 Stage E.iter4: revert endTime to 8000 (V61-061 baseline)
+// after reverting LowRe → wall-function regime. The 15000 was set for
+// LowRe slow convergence which is no longer applicable.
 endTime         8000;
 deltaT          1;
 writeControl    runTime;
@@ -6987,13 +7362,19 @@ SIMPLE
         k       1e-5;
         omega   1e-5;
     }
-    // DEC-V61-061 iter 2: nNOC 0→1 to handle higher non-orthogonality
-    // from refined mesh near LE/TE (max non-orth was 69° in V61-058).
-    nNonOrthogonalCorrectors 1;
+    // DEC-V61-062 Stage B: nNOC 1→2 to handle higher non-orthogonality from
+    // C-grid + BL-split mesh near airfoil curvature (158 severely-non-ortho
+    // faces at max 83° per Stage A iter3 checkMesh).
+    nNonOrthogonalCorrectors 2;
+    // DEC-V61-062 Stage E.iter4 retains nNOC=2 — necessary for the new mesh
+    // topology regardless of wall-function regime.
 }
 
 relaxationFactors
 {
+    // DEC-V61-062 Stage E.iter4: revert URFs to V61-061 baseline (was
+    // tightened iter2-3 for LowRe stiffness). With wall-function regime
+    // restored, V61-061's URFs are the proven-stable baseline.
     fields { p 0.3; }
     equations { U 0.5; k 0.5; omega 0.5; }
 }
@@ -7007,20 +7388,19 @@ relaxationFactors
         # computed above). Y component stays zero — thin-span x-z plane mesh.
         Ux = Ux_inf
         Uz = Uz_inf
-        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6
-        # Reduced from 0.03 (3%) to suppress nut/nu~10^3 instability with kOmegaSST
+        # Turbulence intensity I=0.005 (0.5%) for external aero at Re=3e6.
         # k = 1.5*(U_inf*I)^2  --  gives physically consistent TKE
-        # Standard turbulence length-scale formula for omega:
-        # omega = k^0.5 / (Cmu^0.25 * L),  NOT  k^0.5 / (beta_star * L)
-        # Cmu = 0.09, so Cmu^0.25 = 0.09^0.25 ≈ 0.5623
-        # beta_star (0.09) is a closure coefficient, NOT the omega denominator constant.
-        # Using beta_star directly here caused omega to be ~10x too large (0.68 vs 0.069),
-        # making nut/nu ~10^4 instead of ~10^3, over-damping the BL and biasing Cp low.
+        # DEC-V61-062 Stage E.iter4: omega_init reverted to V61-061 log-layer
+        # length-scale formula (omega = sqrt(k)/(Cmu^0.25 * L_t), L_t=0.1·chord).
+        # iter3 LowRe convention (1e4) was tried but coupled with extreme-AR
+        # LowRe BL produced oscillating force integration (Cl swung -456→+106
+        # at α=0). iter4 hybrid: keep C-grid + BL-split mesh, revert wall
+        # functions + omega_init to V61-061 high-Re convention.
         I_turb = 0.005
         k_init = 1.5 * (U_inf * I_turb) ** 2   # = 3.75e-5
-        L_turb = 0.1 * chord                     # = 0.1
+        L_turb = 0.1 * chord
         Cmu = 0.09
-        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)  # ≈ 0.069 (was 0.681)
+        omega_init = (k_init ** 0.5) / ((Cmu ** 0.25) * L_turb)
 
         (case_dir / "0" / "U").write_text(
             f"""\
@@ -7127,6 +7507,8 @@ internalField   uniform {k_init};
 boundaryField
 {{
     freestream {{ type inletOutlet; inletValue uniform {k_init}; value uniform {k_init}; }}
+    // DEC-V61-062 Stage E.iter4: kqRWallFunction is V61-061 baseline — paired
+    // with nutkWallFunction (high-Re log-layer wall treatment).
     aerofoil {{ type kqRWallFunction; value uniform {k_init}; }}
     front {{ type empty; }}
     back  {{ type empty; }}
@@ -7197,6 +7579,11 @@ internalField   uniform 0.0;
 boundaryField
 {{
     freestream {{ type calculated; value uniform 0; }}
+    // DEC-V61-062 Stage E.iter4: reverted to V61-061 high-Re wall function.
+    // LowRe variant (nutLowReWallFunction) was tried in iter1-3 but coupled
+    // with extreme-AR BL cells produced unstable force integration. iter4
+    // keeps mesh refactor (C-grid + BL-split) but pairs it with V61-061's
+    // proven wall-function regime — first cell at log-layer y+.
     aerofoil {{ type nutkWallFunction; value uniform 0; }}
     front {{ type empty; }}
     back  {{ type empty; }}
