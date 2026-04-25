@@ -208,10 +208,13 @@ def _load_run_outputs(run_output_dir: Path) -> Dict[str, Any]:
     """Solver log tail + postProcessing/sets/ listing + final residuals."""
     outputs: Dict[str, Any] = {}
 
-    # Solver log — scan for common names. DEC-V61-059 Stage B added
-    # `log.pisoFoam` for the plane-channel laminar route (icoFoam
-    # could not register a momentumTransportModel for the
-    # wallShearStress FO).
+    # Solver log — scan for common names. Codex round-6 F10:
+    # order aligned with `_resolve_log_path` in src/metrics/residual.py
+    # and `_find_latest_solver_log` in scripts/render_case_report.py
+    # so a mixed-log artifact dir resolves the same primary log
+    # everywhere. DEC-V61-059 Stage B added `log.pisoFoam` for the
+    # plane-channel laminar route (icoFoam could not register a
+    # momentumTransportModel for the wallShearStress FO).
     for log_name in ("log.simpleFoam", "log.icoFoam", "log.pisoFoam",
                      "log.pimpleFoam",
                      "log.buoyantFoam", "log.buoyantBoussinesqSimpleFoam"):

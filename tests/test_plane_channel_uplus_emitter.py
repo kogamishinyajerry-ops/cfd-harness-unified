@@ -297,6 +297,51 @@ def test_read_uline_profile_field_p_uses_legacy_per_field_file(
     assert len(loaded) == 129
 
 
+def test_read_uline_profile_coexistence_routes_field_correctly(
+    tmp_path: Path,
+) -> None:
+    """Codex round-6 F9 regression: the original round-5 bug was a
+    mixed-file precedence issue (both `<set>.xy` and `<set>_p.xy`
+    present in the same time directory). Lock down that with both
+    files coexisting, `field="U"` → packed `<set>.xy` (column 2 =
+    Ux ≈ 0.1) and `field="p"` → legacy `<set>_p.xy` (pressure
+    column ≈ 0.15). Without F7's gating, the `p` request would
+    silently return the same Ux value from the packed file.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    n = 129
+    half = n // 2
+    u_rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-half, half + 1)]
+    p_rows = [(i * 0.01, i * 0.15) for i in range(-half, half + 1)]
+    (d / "channelCenter.xy").write_text(
+        "# y Ux Uy Uz\n" + "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in u_rows) + "\n",
+        encoding="utf-8",
+    )
+    (d / "channelCenter_p.xy").write_text(
+        "# y p\n" + "\n".join(f"{y} {p}" for y, p in p_rows) + "\n",
+        encoding="utf-8",
+    )
+
+    u_loaded = _read_uline_profile(tmp_path, field="U")
+    p_loaded = _read_uline_profile(tmp_path, field="p")
+    assert u_loaded is not None and p_loaded is not None
+
+    # u-loaded came from packed `<set>.xy` (column 2 = i * 0.1).
+    # p-loaded came from legacy `<set>_p.xy` (column 2 = i * 0.15).
+    # Pick the same y-coordinate (i=10 → y=0.1) and verify the
+    # second-column values diverge per the source semantics.
+    by_y_u = {y: ux for y, ux in u_loaded}
+    by_y_p = {y: p for y, p in p_loaded}
+    target_y = 0.1
+    assert abs(by_y_u[target_y] - 1.0) < 1e-9, (
+        f"`field='U'` must read Ux from packed file → 1.0 at y=0.1, got {by_y_u[target_y]}"
+    )
+    assert abs(by_y_p[target_y] - 1.5) < 1e-9, (
+        f"`field='p'` must read pressure from legacy file → 1.5 at y=0.1, got {by_y_p[target_y]}"
+    )
+
+
 def test_read_uline_profile_raises_on_sparse(tmp_path: Path) -> None:
     """Codex DEC-V61-043 round-1 FLAG fix: threshold raised from 4 to
     64 (half the generator's 129-point default) to catch gross
