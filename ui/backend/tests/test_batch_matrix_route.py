@@ -86,3 +86,54 @@ def test_deviation_pct_is_finite_or_none() -> None:
             if dev is not None:
                 assert isinstance(dev, (int, float))
                 assert dev == dev  # not NaN
+
+
+def test_pass_cells_have_no_reason_others_do() -> None:
+    """Opus 4.7 review 2026-04-25 LDC tolerance probe outcome:
+    HAZARD/FAIL cells must carry a verdict_reason so users don't see
+    '0.19% HAZARD' as an unexplained tolerance bug. PASS cells leave
+    it null (no explanation needed)."""
+    body = client.get("/api/batch-matrix").json()
+    seen_pass_with_no_reason = False
+    seen_non_pass_with_reason = False
+    for row in body["rows"]:
+        for cell in row["cells"]:
+            if cell["verdict"] == "PASS":
+                # PASS should have no reason
+                assert cell.get("verdict_reason") in (None, ""), (
+                    f"{row['case_id']}/{cell['density_id']} PASS but reason set: "
+                    f"{cell['verdict_reason']!r}"
+                )
+                seen_pass_with_no_reason = True
+            else:
+                # HAZARD / FAIL / UNKNOWN must explain themselves
+                assert cell.get("verdict_reason"), (
+                    f"{row['case_id']}/{cell['density_id']} {cell['verdict']} "
+                    f"but no verdict_reason"
+                )
+                seen_non_pass_with_reason = True
+    assert seen_pass_with_no_reason, "no PASS cells found — fixtures regressed"
+    assert seen_non_pass_with_reason, (
+        "no non-PASS cells found — should see at least HAZARD or FAIL"
+    )
+
+
+def test_lid_driven_cavity_finest_mesh_reason_cites_precondition() -> None:
+    """Regression guard for the actual Opus probe finding: LDC mesh_160
+    has dev=0.19% which looks like a tolerance bug, but is HAZARD because
+    secondary vortices precondition is unsatisfied (DEC-V61-050 batch 4
+    noise floor). The reason must mention 'precondition' so the user knows
+    where to look."""
+    body = client.get("/api/batch-matrix").json()
+    ldc = next((r for r in body["rows"] if r["case_id"] == "lid_driven_cavity"), None)
+    assert ldc is not None
+    finest = ldc["cells"][-1]
+    assert finest["density_id"] == "mesh_160"
+    assert finest["verdict"] == "HAZARD"
+    assert abs(finest["deviation_pct"]) < 1.0, (
+        f"LDC mesh_160 deviation should be ~0.2%, got {finest['deviation_pct']}"
+    )
+    reason = finest["verdict_reason"] or ""
+    assert "precondition" in reason.lower(), (
+        f"LDC mesh_160 reason should cite precondition gap, got {reason!r}"
+    )

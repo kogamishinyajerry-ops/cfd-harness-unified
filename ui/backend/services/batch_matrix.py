@@ -42,6 +42,47 @@ def _load_whitelist_rows() -> list[dict]:
     return [r for r in rows if isinstance(r, dict) and r.get("id")]
 
 
+def _verdict_reason(report) -> Optional[str]:
+    """Short reason for HAZARD/FAIL/UNKNOWN verdicts.
+
+    Opus 4.7 review 2026-04-25 LDC probe: mesh_160 LDC shows dev=0.19%
+    HAZARD, which reads like a tolerance bug but is actually a deferred
+    precondition (secondary vortices noise floor — DEC-V61-050 batch 4).
+    Surfacing the reason in the cell tooltip + a small inline note prevents
+    users from misreading honest physics gating as comparator over-strictness.
+    """
+    if report.contract_status == "PASS":
+        return None
+    if report.contract_status == "UNKNOWN":
+        return "no measurement / fixture missing"
+
+    # Hard-fail concern types take priority — they're the loudest signal
+    hard_fail_types = {
+        "MISSING_TARGET_QUANTITY", "VELOCITY_OVERFLOW", "TURBULENCE_NEGATIVE",
+        "CONTINUITY_DIVERGED", "SOLVER_CRASH_LOG", "SOLVER_ITERATION_CAP",
+    }
+    for c in report.audit_concerns or []:
+        if c.concern_type in hard_fail_types:
+            return f"hard-fail: {c.concern_type.lower().replace('_', ' ')}"
+
+    # Precondition gap is the most common HAZARD reason
+    unsat = [p for p in (report.preconditions or []) if not p.satisfied]
+    if unsat:
+        first = unsat[0].condition
+        # Shorten to a glanceable label; full text remains in the case detail
+        head = first[:48] + ("…" if len(first) > 48 else "")
+        n_total = len(report.preconditions or [])
+        n_unsat = len(unsat)
+        return f"{n_unsat}/{n_total} precondition unsat: {head}"
+
+    # Deviation outside tolerance band
+    dev = report.deviation_pct
+    if report.contract_status == "FAIL" and dev is not None:
+        return f"deviation {dev:+.1f}% outside gold tolerance band"
+
+    return f"{report.contract_status.lower()} (no specific reason captured)"
+
+
 def _row_for_case(case_row: dict) -> Optional[MatrixRow]:
     case_id = case_row["id"]
     cells: list[MatrixCell] = []
@@ -57,6 +98,7 @@ def _row_for_case(case_row: dict) -> Optional[MatrixRow]:
                     verdict="UNKNOWN",
                     deviation_pct=None,
                     measurement_value=None,
+                    verdict_reason="no validation report (fixture missing)",
                 )
             )
             continue
@@ -70,6 +112,7 @@ def _row_for_case(case_row: dict) -> Optional[MatrixRow]:
                 verdict=report.contract_status,
                 deviation_pct=report.deviation_pct,
                 measurement_value=meas_value,
+                verdict_reason=_verdict_reason(report),
             )
         )
 

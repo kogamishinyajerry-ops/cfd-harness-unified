@@ -191,7 +191,8 @@ function Cell({ cell, caseId }: { cell: MatrixCell; caseId: string }) {
     dev != null && Number.isFinite(dev)
       ? `${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`
       : "—";
-  const tooltip = `${cell.density_id} · ${cell.verdict} · dev ${devText}`;
+  const reason = cell.verdict_reason ? `\n${cell.verdict_reason}` : "";
+  const tooltip = `${cell.density_id} · ${cell.verdict} · dev ${devText}${reason}`;
 
   return (
     <Link

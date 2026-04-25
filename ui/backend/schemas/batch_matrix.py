@@ -34,6 +34,16 @@ class MatrixCell(BaseModel):
     measurement_value: Optional[float] = Field(
         None, description="Raw observable at this density"
     )
+    verdict_reason: Optional[str] = Field(
+        None,
+        description=(
+            "Short human-readable reason when verdict is HAZARD/FAIL/UNKNOWN. "
+            "PASS leaves it null. Surfaces precondition gaps and hard-fail concerns "
+            "so users don't see '0.19% HAZARD' without an explanation (Opus 4.7 "
+            "review 2026-04-25 LDC tolerance probe — the symptom was 'tolerance "
+            "looks over-strict' but the real issue was unexplained verdict)."
+        ),
+    )
 
 
 class MatrixRow(BaseModel):

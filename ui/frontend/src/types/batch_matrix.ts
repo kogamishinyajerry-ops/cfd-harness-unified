@@ -9,6 +9,7 @@ export interface MatrixCell {
   verdict: ContractStatus;
   deviation_pct?: number | null;
   measurement_value?: number | null;
+  verdict_reason?: string | null;
 }
 
 export interface MatrixRow {
