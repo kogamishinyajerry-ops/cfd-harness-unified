@@ -588,6 +588,126 @@ class TestFoamAgentExecutor:
         # Back-compat scalar still populated since x=0.5 was sampled.
         assert "cf_skin_friction" in result
 
+    # ------------------------------------------------------------------
+    # DEC-V61-063 Stage A.3: enrichment with Blasius invariant + δ_99
+    # ------------------------------------------------------------------
+
+    def _make_flat_plate_task(self) -> TaskSpec:
+        return TaskSpec(
+            name="Turbulent Flat Plate (Zero Pressure Gradient)",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.EXTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=50000,
+        )
+
+    def test_enrich_flat_plate_cf_lays_blasius_invariant_and_delta_99(self):
+        """A.3: pre-populated cf_x_profile + wall-normal u-lines at
+        x ∈ {0.5, 1.0} produce Blasius invariant K ≈ 0.664 and δ_99
+        relative error <1% against the Blasius reference.
+        """
+        task = self._make_flat_plate_task()
+        # Blasius-consistent Cf at K=0.664: Cf = 0.664 / √Re_x.
+        K_target = 0.664
+        cf_at_05 = K_target / math.sqrt(50000 * 0.5)
+        cf_at_10 = K_target / math.sqrt(50000 * 1.0)
+        cf_x_profile = [(0.5, cf_at_05), (1.0, cf_at_10)]
+        # u-lines crossing 0.99·U_inf at the Blasius δ_99 of each x.
+        # δ_99(x=0.5) = 5·√(2e-5·0.5/1) = 0.01581
+        # δ_99(x=1.0) = 5·√(2e-5·1.0/1) = 0.02236
+        profile_05 = [(0.0, 0.0), (0.010, 0.5), (0.01581, 0.99), (0.025, 1.0)]
+        profile_10 = [(0.0, 0.0), (0.010, 0.4), (0.02236, 0.99), (0.030, 1.0)]
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        for y, u in profile_05:
+            cxs.append(0.5); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        for y, u in profile_10:
+            cxs.append(1.0); cys.append(y); u_vecs.append((u, 0.0, 0.0))
+        kq: Dict[str, object] = {
+            "cf_x_profile": cf_x_profile,
+            "cf_x_profile_n_samples": 2,
+        }
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=task, key_quantities=kq,
+        )
+        # Blasius invariant — both x's give K = 0.664 exactly.
+        assert result["cf_blasius_invariant_mean_K"] == pytest.approx(K_target, rel=1e-9)
+        assert result["cf_blasius_invariant_std_K"] == pytest.approx(0.0, abs=1e-9)
+        assert result["cf_blasius_invariant_n_samples"] == 2
+        assert result["cf_blasius_invariant_canonical_K"] == pytest.approx(K_target)
+        # δ_99 lands at both x's, within 1% of the Blasius reference.
+        assert result["delta_99_at_x_0p5"] == pytest.approx(0.01581, rel=1e-3)
+        assert result["delta_99_at_x_1"] == pytest.approx(0.02236, rel=1e-3)
+        assert abs(result["delta_99_rel_error_at_x_0p5"]) < 0.01
+        assert abs(result["delta_99_rel_error_at_x_1"]) < 0.01
+        # Audit-trail stamp.
+        assert result["cf_enrichment_path"] == "enrich_cf_profile_v1_inline"
+
+    def test_enrich_flat_plate_cf_skips_when_no_profile(self):
+        """A.3: kq without cf_x_profile is returned unchanged — A.3
+        enrichment must be a strict superset of A.2 (no regressions when
+        the upstream extractor declined to populate the profile).
+        """
+        task = self._make_flat_plate_task()
+        kq: Dict[str, object] = {"some_other_key": 42}
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=[], cys=[], u_vecs=[],
+            task_spec=task, key_quantities=kq,
+        )
+        assert result == {"some_other_key": 42}
+        assert "cf_blasius_invariant_mean_K" not in result
+        assert "cf_enrichment_path" not in result
+
+    def test_enrich_flat_plate_cf_too_short_profile_emits_error(self):
+        """A.3: 1-sample profile cannot support Blasius invariant
+        (which needs ≥2 samples post x_min filter). The adapter folds
+        this into cf_enrichment_error rather than raising.
+        """
+        task = self._make_flat_plate_task()
+        kq: Dict[str, object] = {
+            "cf_x_profile": [(0.5, 0.004)],
+            "cf_x_profile_n_samples": 1,
+        }
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=[], cys=[], u_vecs=[],
+            task_spec=task, key_quantities=kq,
+        )
+        assert result["cf_enrichment_error"] == "profile_too_short"
+        assert "cf_blasius_invariant_mean_K" not in result
+
+    def test_enrich_flat_plate_cf_missing_u_line_keeps_invariant(self):
+        """A.3: when u-line data is absent at an x, the invariant + SNR
+        must still land — only the missing δ_99 is flagged. This is the
+        crucial robustness property: a single δ_99 gap doesn't strip
+        the Blasius headline secondary from the audit surface.
+        """
+        task = self._make_flat_plate_task()
+        K_target = 0.664
+        cf_x_profile = [
+            (0.5, K_target / math.sqrt(50000 * 0.5)),
+            (1.0, K_target / math.sqrt(50000 * 1.0)),
+        ]
+        kq: Dict[str, object] = {
+            "cf_x_profile": cf_x_profile,
+            "cf_x_profile_n_samples": 2,
+        }
+        # No cell-centre data at all → u_lines = {} → both δ_99 x's flag.
+        result = FoamAgentExecutor._enrich_flat_plate_cf(
+            cxs=[], cys=[], u_vecs=[],
+            task_spec=task, key_quantities=kq,
+        )
+        # Blasius invariant landed despite missing u-lines.
+        assert result["cf_blasius_invariant_mean_K"] == pytest.approx(K_target, rel=1e-9)
+        # Per-x δ_99 missing flags surfaced.
+        assert result["delta_99_at_x_0p5_missing_u_line"] is True
+        assert result["delta_99_at_x_1_missing_u_line"] is True
+        assert "delta_99_at_x_0p5" not in result
+        # Path stamp still set since enrichment did meaningful work.
+        assert result["cf_enrichment_path"] == "enrich_cf_profile_v1_inline"
+
     def test_extract_flat_plate_cf_emits_extractor_path_stamp(self):
         """A.2 audit-trail: cf_extractor_path is a stable string
         identifying the wall-gradient extraction path. Stage A.3 will

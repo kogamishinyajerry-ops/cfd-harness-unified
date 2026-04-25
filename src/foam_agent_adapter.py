@@ -8483,6 +8483,13 @@ mergePatchPairs
             key_quantities = self._extract_flat_plate_cf(
                 cxs, cys, u_vecs, task_spec, key_quantities
             )
+            # DEC-V61-063 A.3: derive Blasius invariant K_x and δ_99(x)
+            # secondaries on top of the A.2 cf_x_profile. Failures are
+            # folded into per-class error keys so a single δ_99 u-line
+            # gap doesn't strip the rest of the audit surface.
+            key_quantities = self._enrich_flat_plate_cf(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
 
         # Impinging Jet: IMPINGING_JET -> nusselt_number
         elif geom == GeometryType.IMPINGING_JET:
@@ -9670,6 +9677,126 @@ mergePatchPairs
                 cf_spalding_fallback_count > 0
             )
 
+        return key_quantities
+
+    @staticmethod
+    def _build_flat_plate_u_lines(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        x_targets: Tuple[float, ...],
+    ) -> Dict[float, List[Tuple[float, float]]]:
+        """DEC-V61-063 A.3: group cell-centre samples into wall-normal
+        ``(y, u_x)`` lines per x_target for δ_99 extraction.
+
+        Reuses the same x_tol heuristic as ``_extract_flat_plate_cf`` so
+        a target with no nearby cells correctly drops out (rather than
+        bleeding samples in from a neighbour). Lines with <2 points are
+        omitted from the result — δ_99 needs at least a wall sample plus
+        one interior sample to bracket the 0.99·U_inf level.
+        """
+        if not cxs or not u_vecs:
+            return {}
+        unique_x = sorted({round(x, 6) for x in cxs})
+        if len(unique_x) >= 2:
+            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
+            x_tol = max(0.6 * dx, 1e-3)
+        else:
+            x_tol = 0.01
+        out: Dict[float, List[Tuple[float, float]]] = {}
+        n = min(len(cxs), len(cys), len(u_vecs))
+        for x_t in x_targets:
+            line: List[Tuple[float, float]] = []
+            for i in range(n):
+                if abs(cxs[i] - x_t) < x_tol:
+                    line.append((cys[i], u_vecs[i][0]))
+            if len(line) >= 2:
+                out[x_t] = sorted(line, key=lambda p: p[0])
+        return out
+
+    @staticmethod
+    def _enrich_flat_plate_cf(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """DEC-V61-063 A.3: lay V61-063 secondary observables on top of
+        A.2's ``cf_x_profile``.
+
+        Emits:
+          - ``cf_blasius_invariant_*`` (mean/std/rel_spread/per_x/n_samples/canonical_K)
+          - ``cf_profile_*`` (numerical_floor/amplitude/snr_ratio/sample_spacing_floor)
+          - ``delta_99_at_x_<x_key>`` + Blasius reference + relative error per x ∈ {0.5, 1.0}
+          - ``cf_enrichment_path = "enrich_cf_profile_v1_inline"``
+
+        Failure modes are folded into the dict (per-class error keys) so
+        the audit surface keeps Blasius invariant even when one δ_99
+        u-line fails, and never raises through to the caller.
+        """
+        if "cf_x_profile" not in key_quantities:
+            return key_quantities
+        profile = key_quantities["cf_x_profile"]
+        if not profile or len(profile) < 2:
+            key_quantities["cf_enrichment_error"] = "profile_too_short"
+            return key_quantities
+
+        try:
+            from src.flat_plate_extractors import (
+                FlatPlateExtractorError,
+                compute_blasius_invariant,
+                compute_delta_99_at_x,
+                profile_signal_metrics,
+            )
+        except ImportError as exc:
+            key_quantities["cf_enrichment_error"] = f"import:{exc}"
+            return key_quantities
+
+        U_inf = 1.0
+        Re = float(task_spec.Re or 50000)
+        nu = 1.0 / Re
+
+        try:
+            inv = compute_blasius_invariant(profile, U_inf=U_inf, nu=nu)
+            key_quantities["cf_blasius_invariant_mean_K"] = inv.mean_K
+            key_quantities["cf_blasius_invariant_std_K"] = inv.std_K
+            key_quantities["cf_blasius_invariant_rel_spread"] = inv.rel_spread
+            key_quantities["cf_blasius_invariant_per_x_K"] = list(inv.per_x_K)
+            key_quantities["cf_blasius_invariant_n_samples"] = inv.n_samples
+            key_quantities["cf_blasius_invariant_canonical_K"] = inv.canonical_K
+        except FlatPlateExtractorError as exc:
+            key_quantities["cf_blasius_invariant_error"] = str(exc)
+
+        try:
+            snr = profile_signal_metrics(profile)
+            key_quantities["cf_profile_numerical_floor"] = snr.numerical_floor
+            key_quantities["cf_profile_amplitude"] = snr.amplitude
+            key_quantities["cf_profile_snr_ratio"] = snr.snr_ratio
+            key_quantities["cf_profile_sample_spacing_floor"] = snr.sample_spacing_floor
+        except FlatPlateExtractorError as exc:
+            key_quantities["cf_profile_signal_metrics_error"] = str(exc)
+
+        delta_99_targets: Tuple[float, ...] = (0.5, 1.0)
+        u_lines = FoamAgentExecutor._build_flat_plate_u_lines(
+            cxs, cys, u_vecs, delta_99_targets,
+        )
+        for x_pos in delta_99_targets:
+            x_key = f"{x_pos:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+            if x_pos not in u_lines:
+                key_quantities[f"delta_99_at_x_{x_key}_missing_u_line"] = True
+                continue
+            try:
+                d = compute_delta_99_at_x(
+                    u_lines[x_pos], U_inf=U_inf, x=x_pos, nu=nu,
+                )
+                key_quantities[f"delta_99_at_x_{x_key}"] = d["delta_99"]
+                key_quantities[f"delta_99_blasius_at_x_{x_key}"] = d["delta_99_blasius"]
+                key_quantities[f"delta_99_rel_error_at_x_{x_key}"] = d["rel_error"]
+            except FlatPlateExtractorError as exc:
+                key_quantities[f"delta_99_at_x_{x_key}_error"] = str(exc)
+
+        key_quantities["cf_enrichment_path"] = "enrich_cf_profile_v1_inline"
         return key_quantities
 
     # ------------------------------------------------------------------
