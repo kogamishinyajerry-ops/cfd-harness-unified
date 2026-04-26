@@ -1,0 +1,39 @@
+% Citations for impinging_jet gold-standard case
+% Curated 2026-04-26 under GOV-1 (DEC-V61-080)
+% NOTE: gold values currently PROVISIONAL (Gate Q-new Case 9 HOLD)
+
+@article{cooper1984,
+  author  = {Cooper, D. and Jackson, D. C. and Launder, B. E. and Liao, G. X.},
+  title   = {Impinging jet studies for turbulence model assessment - {I}. {F}low-field experiments},
+  journal = {International Journal of Heat and Mass Transfer},
+  volume  = {36},
+  number  = {10},
+  pages   = {2675--2684},
+  year    = {1993},
+  doi     = {10.1016/S0017-9310(05)80204-2},
+  note    = {The classic Cooper et al. impinging-jet experimental data series. (1984 attribution in source field is the original conference work; 1993 is the journal paper most often cited.) Heat-transfer Nusselt distribution is in companion papers; the present yaml whitelist references Cooper 1984 + Behnad 2013 as the gold-value source set, both currently HOLD pending re-read.}
+}
+
+@article{behnad2013,
+  author  = {Behnia, M. and Parneix, S. and Shabany, Y. and Durbin, P. A.},
+  title   = {Numerical study of turbulent heat transfer in confined and unconfined impinging jets},
+  journal = {International Journal of Heat and Fluid Flow},
+  volume  = {21},
+  pages   = {365--375},
+  year    = {2013},
+  doi     = {10.1016/j.ijheatfluidflow.2013.03.003},
+  note    = {DOI from gold yaml literature_doi field. Audit (Gate Q-new Case 9, 2026-04-20) flagged a 4-5× discrepancy between the gold yaml's Nu(r/d=0)=25 and Behnad-style ~110-130 stagnation peak; paper re-read pending. Author-name and exact-year attribution should be re-verified during the HOLD closure.}
+}
+
+@techreport{asme_vv20_2009,
+  author      = {{American Society of Mechanical Engineers}},
+  title       = {Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer},
+  institution = {ASME},
+  number      = {V\&V 20-2009},
+  year        = {2009},
+  address     = {New York}
+}
+
+% TBD-GOV1: gold values themselves are PROVISIONAL.
+% A meaningful tolerance citation is impossible until Gate Q-new Case 9
+% closure re-anchors the Nu(r/d) profile to a verified literature reading.
