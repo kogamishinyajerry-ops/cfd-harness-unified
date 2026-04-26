@@ -29,22 +29,32 @@ relationships:
     analogy_basis: legacy_alias
     matched_dimensionless_group: Re
 observables:
+  # ─── HEADLINE GATE ──────────────────────────────────────────────
   - name: reattachment_length
-    description: reattachment length normalized by step height
+    description: reattachment length normalized by step height (blended Le/Moin/Kim 1997 DNS Re_H=5100 + Driver/Seegmiller 1985 experiment Re_H≈37500 anchor at adapter Re_H=7600 plateau)
     ref_value: 6.26
     unit: Xr/H
     tolerance:
       mode: relative
       value: 0.10
-  - name: cd_mean
-    description: mean drag coefficient based on step height
-    ref_value: 2.08
-    unit: dimensionless
-    tolerance:
-      mode: relative
-      value: 0.10
+    gate_status: HARD_GATED
+    family: wall_shear_separation_topology
+    extractor: src.foam_agent_adapter._extract_bfs_reattachment
+    role: HEADLINE
+    source_table: "Driver & Seegmiller 1985 / Le, Moin & Kim 1997 (blended)"
+
+  # ─── DEC-V61-067 Stage A.3 · Type II multi-dim observable expansion ─
+  # 2 HARD_GATED siblings + 1 PROVISIONAL_ADVISORY spanning 3
+  # physically-independent families per Codex F1 rubric (V61-058 R1
+  # precedent):
+  #   family A (wall_shear_separation_topology)   — reattachment_length (HEADLINE)
+  #   family B (pressure_recovery_at_outlet)      — pressure_recovery
+  #   family C (shear_layer_recovery_profile)     — velocity_profile_reattachment
+  # + 1 PROVISIONAL_ADVISORY (cd_mean) — partial-tautology with primary
+  #   wall-shear signal (V61-066 R1 F#3 precedent).
+
   - name: pressure_recovery
-    description: static pressure recovery from inlet to outlet
+    description: static pressure coefficient at inlet (x/H=-10) and outlet (x/H=30) plus the streamwise rise (Le/Moin/Kim 1997 DNS Re_H=5100)
     ref_value:
       inlet: -0.90
       outlet: 0.10
@@ -53,8 +63,19 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
+    gate_status: HARD_GATED
+    family: pressure_recovery_at_outlet
+    extractor: src.bfs_extractors.extract_pressure_recovery
+    role: PROFILE_QUALITATIVE
+    source_table: "Le, Moin & Kim 1997 J. Fluid Mech."
+    note: |
+      Independent of wall-shear measurement: a working reattachment_length
+      gate does NOT automatically imply pressure_recovery is correct.
+      This observable detects integrated-momentum-flux errors driven by
+      the BFS expansion ratio (ER=1.125) and inlet BL state.
+
   - name: velocity_profile_reattachment
-    description: velocity profile near reattachment zone at x/H = 6.0
+    description: streamwise velocity at x/H=6.0, y/H ∈ {0.5, 1.0, 2.0}, normalized by U_bulk (Le/Moin/Kim 1997 DNS Re_H=5100, post-reattachment recovery layer)
     ref_value:
       - x_H: 6.0
         y_H: 0.5
@@ -68,3 +89,42 @@ observables:
     tolerance:
       mode: relative
       value: 0.10
+    gate_status: HARD_GATED
+    family: shear_layer_recovery_profile
+    extractor: src.bfs_extractors.extract_velocity_profile_at_x
+    role: PROFILE_QUALITATIVE
+    source_table: "Le, Moin & Kim 1997 J. Fluid Mech. Table at x/H=6"
+    note: |
+      Independent of bulk wall shear: a κ-ε / k-ω SST model can match
+      reattachment_length (a topological observable) while mis-predicting
+      the shear-layer recovery rate. The 3-point profile at x/H=6 isolates
+      the post-reattachment u(y) shape, sensitive to mixing.
+
+  - name: cd_mean
+    description: mean |Cf| over the downstream lower_wall (V61-067 SAME_RUN_CROSS_CHECK on the wall-shear field that drives reattachment_length)
+    ref_value: 2.08
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+    gate_status: PROVISIONAL_ADVISORY  # R1 F#3-style downgrade — same wall-shear field as primary
+    family: integrated_wall_shear_cross_check
+    extractor: src.bfs_extractors.extract_cd_mean
+    role: SAME_RUN_CROSS_CHECK
+    source_table: "Le, Moin & Kim 1997 (placeholder anchor — see advisory_rationale)"
+    advisory_rationale: |
+      Codex F1 partial-tautology (V61-066 R1 F#3 precedent): cd_mean is a
+      reduction of the SAME wallShearStress field that drives the primary
+      reattachment_length gate (different reduction operator: mean |Cf|
+      vs first sign-change x). Even though the EXTRACTOR is independent
+      (extract_cd_mean reads tau_x directly), the GATE is a
+      SAME_RUN_CROSS_CHECK restatement of the same wall-shear signal.
+      Downgraded to PROVISIONAL_ADVISORY: reported by the comparator,
+      NOT counted toward the pass-fraction.
+
+      Additional caveat: ref_value 2.08 is a legacy placeholder from the
+      multi-doc backward_facing_step.yaml; the cited Le/Moin/Kim 1997 DNS
+      paper does not report a "cd_mean" scalar. Adapter extraction is
+      mean |Cf| over the downstream floor, order-of-magnitude ~10⁻³ to
+      10⁻² for kOmegaSST at Re_H=7600 — divergence from 2.08 is expected
+      and absorbed by PROVISIONAL_ADVISORY status.
