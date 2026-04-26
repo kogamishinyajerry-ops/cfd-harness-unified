@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-075
 title: P2-T2 · DockerOpenFOAMExecutor + FoamAgentExecutor substantialization + §6.3 reference-run resolver + executable_smoke_test
-status: Accepted (2026-04-27 · full P2-T2 scope landed · T2.1+T2.2 bundle at b2ea911 Codex pre-merge APPROVE round 5 · T2.3 at 9c7359f Codex post-commit APPROVE round 5 + 4 fix commits bf6aac5/6a13b31/27d4e06/2170590/30b866f closing 6 P-level findings · T2.4 LDC smoke at PENDING_COMMIT_HASH · 17 executor_modes tests + 18 task_runner_executor_mode tests + 16 reference_lookup tests + 1 LDC executable smoke + full suite 1003 passed / 2 skipped / 0 failed)
+status: Accepted (2026-04-27 · full P2-T2 scope landed · T2.1+T2.2 bundle at b2ea911 Codex pre-merge APPROVE round 5 · T2.3 at 9c7359f Codex post-commit APPROVE round 5 + 4 fix commits bf6aac5/6a13b31/27d4e06/2170590/30b866f closing 6 P-level findings · T2.4 LDC smoke at 57a0dc5 · 17 executor_modes tests + 18 task_runner_executor_mode tests + 16 reference_lookup tests + 1 LDC executable smoke + full suite 1003 passed / 2 skipped / 0 failed)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-27
 authored_under: P2-T2 substantialization session (post-T1 unblock)
@@ -33,7 +33,7 @@ external_gate_actual_outcome: |
     R5: 1 P2 (duck-type fallback) → 30b866f fix
     R6: not run (ratchet-down: defensive fallback unlikely to break;
         time pressure on T2.4 + closure)
-  T2.4 (PENDING_COMMIT_HASH): no Codex round — risk_flag
+  T2.4 (57a0dc5): no Codex round — risk_flag
     executable_smoke_test verified live on real Docker
     (24.76s LDC convergence matching DEC-V61-074 dogfood baseline).
 codex_tool_report_path: |
