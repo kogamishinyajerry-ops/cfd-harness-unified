@@ -1,0 +1,312 @@
+# Stage 0 · Case Intake Assessment · DEC-V61-067 · axisymmetric_impinging_jet
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# Track B sixth-apply (precedents: V61-053 cylinder, V61-057 DHC, V61-058 NACA,
+# V61-060 RBC, V61-063 flat_plate, V61-066 duct_flow). Other in-flight sessions:
+# V61-059 plane_channel (PR #41 OPEN); V61-060 RBC (PR #43 OPEN).
+#
+# Revision history:
+#   v1 (2026-04-26): initial Stage 0 draft.
+#       authored by Claude Code Opus 4.7 1M.
+#       Pre-Stage-A Codex review pending.
+
+case_id: axisymmetric_impinging_jet
+dec_id: DEC-V61-067
+case_number: 8  # canonical 8th case in the 10-case whitelist (impinging_jet)
+intake_authored_at: "2026-04-26"
+intake_author: "Claude Code (Opus 4.7, 1M context · Track B sixth-apply)"
+methodology_version: "v2.0"
+intake_version: 1
+codex_plan_review_verdict: PENDING
+
+# ============================================================================
+# §0 Why this case is being re-iterated (pre-existing state honesty)
+# ============================================================================
+preexisting_state_honesty: |
+  The current `knowledge/gold_standards/axisymmetric_impinging_jet.yaml` carries
+  a self-confessed broken contract:
+
+    contract_status: "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE
+       — the observable is called nusselt_number but stores a cf_skin_friction
+       value (0.0042). No solver change is required to PASS, and no solver
+       change will make it agree with the literature Nu=25 either without a
+       different thermal setup."
+
+  The note: field still claims "simpleFoam isothermal run; cf_skin_friction
+  extracted (Nu=0.0042 is Cf, not Nu)", but the adapter dispatch path was
+  upgraded post-EX-1-005 (2026-04-18): `_generate_impinging_jet` now writes
+  a buoyantFoam-path case (src/foam_agent_adapter.py:674-676), AND
+  `_extract_jet_nusselt` (src/foam_agent_adapter.py:9613-9721) computes a
+  TRUE wall-normal temperature gradient via the 3-point one-sided stencil
+  (DEC-V61-042 fix), returning Nu_stagnation + Nu(r/D) profile + r-coords.
+
+  In other words: the EXTRACTOR is correct, but the GOLD YAML still encodes
+  the stale Cf=0.0042 sentinel from before DEC-V61-042 landed. The current
+  "PASS" verdict is therefore meaningless self-comparison — the comparator
+  matches a number against itself, not against literature physics.
+
+  V61-067 will:
+    1. Citation re-anchor the gold YAML to the actual Cooper et al. 1993
+       impinging-jet measurement (NOT Cooper 1984 — see §3 Cooper-citation
+       audit; the whitelist's "Cooper et al. 1984" label is itself suspect)
+       OR a publicly-archived equivalent (Behnad et al. 2013 OR Baughn &
+       Shimizu 1989, both publicly accessible per JFE-style archives).
+    2. Promote the existing Nu(r/D) profile output to a Type II observable
+       family (one HARD_GATED stagnation Nu + one HARD_GATED profile shape
+       gate + ≥1 conservation invariant + ≥1 advisory).
+    3. Verify that the buoyantFoam dispatch + wall-gradient stencil actually
+       deliver Nu_stagnation in the Cooper-correlation band (likely needs
+       a Re mismatch audit: whitelist sets Re=10000, but most published
+       impinging-jet correlations use Re=23000 or higher).
+    4. Document the Re/h-over-d/Pr mismatches honestly in the gold YAML
+       §physics_contract.note like V61-060 did for the Pandey & Schumacher
+       benchmark.
+
+# ============================================================================
+# §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
+# ============================================================================
+case_type: II  # 1 HARD_GATED stagnation scalar + 1 HARD_GATED profile family
+               # + 1 NON_TYPE_HARD_INVARIANT (monotonic decay) + 1 PROVISIONAL
+case_type_rationale: |
+  PRIMARY SCALAR GATE (1):
+    1. nusselt_stagnation_at_r_d_zero — HEADLINE — Nu at the radial bin
+       closest to r=0 (axisymmetric stagnation point), extracted by the
+       existing `_extract_jet_nusselt` 3-point wall-normal stencil. Cooper
+       correlation: Nu_stag ~ 25-40 at Re=23000 h/d=2 (citation pending §3
+       audit). For Re=10000 h/d=2 the expected value is lower; gold YAML
+       must be re-anchored to a Re=10000 source OR the whitelist Re must
+       be bumped to match the correlation.
+
+  PROFILE/QUALITATIVE GATES:
+    2. nusselt_profile_r_over_d — HARD_GATED — Nu(r/D) shape match at 5+
+       radial stations (r/D ∈ {0, 0.5, 1.0, 1.5, 2.0}). Reuses the existing
+       `nusselt_number_profile` + `nusselt_number_profile_r` adapter outputs.
+       Profile-mode comparator: per-station tolerance 25-30% (loose because
+       Cooper-style correlations are not point-precise; the SHAPE is the
+       gate, not point values). The DEC-V61-044 NACA Cp pattern is the
+       reference implementation.
+
+  CONSERVATION INVARIANT (NON_TYPE_HARD_INVARIANT, blocks on violation but
+  excluded from primary_gate_count denominator per Stage C.2 comparator):
+    3. nu_monotonic_decay_from_stagnation — Nu(r/D) must be monotonically
+       non-increasing from the stagnation peak outward through r/D ≤ 1.5.
+       This is a known physical invariant (jet impingement decays radially
+       in the wall-jet zone; the secondary peak at r/D ≈ 2 from vortex
+       breakdown only matters at high Re). Failure ⇒ solver chose an
+       unphysical secondary maximum near the axis or the extractor binned
+       cells incorrectly. tolerance: absolute, value=0 (any non-monotone
+       step violates).
+
+  PROVISIONAL_ADVISORY (NOT a physics gate):
+    4. y_plus_first_cell_at_plate — PROVISIONAL — wall-resolution diagnostic
+       at the impingement plate. Threshold band: y+ < 5 desired (low-Re
+       wall-resolved); y+ < 30 acceptable (wall-function regime). Pure
+       diagnostic, not enforced.
+
+primary_gate_count: 2  # nusselt_stagnation_at_r_d_zero + nusselt_profile_r_over_d
+                       # The conservation invariant + advisory are excluded.
+
+# ============================================================================
+# §2 Headline observable — citation provenance (F1-M2 hard gate)
+# ============================================================================
+headline_observable: nusselt_stagnation_at_r_d_zero
+headline_reference: PENDING_CITATION_AUDIT  # see §3
+headline_reference_value: PENDING_CITATION_AUDIT
+headline_reference_tolerance: 0.30  # widened from typical 0.15 to absorb
+                                    # Re/h-over-d mismatch + steady-vs-RANS
+                                    # vs unsteady RKE, like V61-060 did for RBC
+
+# ============================================================================
+# §3 Citation provenance audit (BLOCKING — must close before Stage A)
+# ============================================================================
+citation_audit:
+  whitelist_claim:
+    label: "Cooper et al. 1984 / Behnad et al. 2013"
+    doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+    audit_status: SUSPECT
+    audit_reason: |
+      "Cooper 1984" does not match any well-known impinging-jet author/date.
+      The canonical impinging-jet experimental dataset commonly cited in
+      OpenFOAM tutorials and benchmark suites is:
+        - Cooper, D., Jackson, D.C., Launder, B.E., Liao, G.X. (1993)
+          "Impinging jet studies for turbulence model assessment — I.
+          Flow-field experiments", Int. J. Heat Mass Transfer 36(10),
+          2675-2684. DOI: 10.1016/S0017-9310(05)80204-2
+        - Baughn, J.W., Shimizu, S. (1989) "Heat transfer measurements
+          from a surface with uniform heat flux and an impinging jet",
+          ASME J. Heat Transfer 111(4), 1096-1098. DOI: 10.1115/1.3250776
+      Whitelist may have transposed digits or compressed citations. Per
+      V61-060 lesson: a wrong citation that "happened to PASS" is the
+      worst kind of stale provenance.
+    closure_action_required: |
+      Stage A.0 MUST resolve the actual paper(s) hosting the Re=10000,
+      h/d=2 Nu_stag value used by the gold YAML. Acceptance criterion:
+      a publicly accessible document with a Table or Figure number
+      locator (V61-060 set this precedent). If the original Cooper 1984
+      DOI resolves to the wrong paper (V61-060 pattern), pivot to one
+      of the publicly-archived alternatives above.
+  doi_resolves_to: NOT_VERIFIED  # Stage A.0 must run a curl/fetch on the DOI
+
+# ============================================================================
+# §4 Risk register (pre-Stage-A, surfaced for Codex review)
+# ============================================================================
+risk_register:
+  R1_re_mismatch:
+    severity: HIGH
+    description: |
+      Whitelist Re=10000 is unusual for impinging-jet benchmarks. Cooper
+      1993 ran Re=23000. Behnad 2013 may have multiple Re values. If the
+      gold YAML's ref_value was correlated from Re=23000 data and applied
+      blindly to Re=10000 simulation, deviation will be unbounded. Stage
+      A.0 must confirm Re consistency between gold ref + whitelist task_spec.
+    mitigation: |
+      (a) Verify Cooper 1993 has a Re=10000 row, OR
+      (b) Bump whitelist Re=10000 → 23000 to match the correlation, OR
+      (c) Use a Re-agnostic Nu correlation (Schlichting Nu/Re^0.5 = const
+          near stagnation) and document the assumption.
+  R2_h_over_d_mismatch:
+    severity: MED
+    description: |
+      Whitelist h/d=2 is a common stand-off. Cooper 1993 and Baughn/Shimizu
+      1989 both used h/d=2 OR h/d=6; verify alignment. h/d=2 puts the
+      stagnation in the potential core (Nu peaks); h/d=6 is post-core
+      (different Nu(r) shape). Stage A.0 must confirm.
+    mitigation: |
+      Lock h/d to whatever the chosen citation uses; if no overlap, hold
+      Stage A on a follow-up.
+  R3_turbulence_model_choice:
+    severity: MED
+    description: |
+      Whitelist sets `turbulence_model: k-omega SST`. For impinging jets
+      this is reasonable (k-ε notoriously over-predicts Nu near stagnation
+      due to round-jet stagnation anomaly). Adapter must actually emit
+      k-omega SST, not silently fall back to k-ε. Verify at Stage A.
+    mitigation: |
+      Stage A.5 alias-parity test (V61-060 lesson) must include a
+      turbulence-model-emitted-vs-declared check.
+  R4_buoyantFoam_dispatch_overlap:
+    severity: LOW
+    description: |
+      Adapter at src/foam_agent_adapter.py:676 hardcodes `solver_name =
+      "buoyantFoam"` for IMPINGING_JET, overriding the whitelist's
+      `simpleFoam` declaration. This is intentional (impinging jet needs
+      thermal) but contradicts whitelist; CASE_ID_TO_SOLVER in
+      src/auto_verifier/config.py:69 also hardcodes simpleFoam, creating
+      a 2-source-of-truth ambiguity.
+    mitigation: |
+      Stage A clean-up: align both the whitelist and CASE_ID_TO_SOLVER to
+      buoyantFoam, OR document the override path explicitly in the gold
+      YAML §physics_contract.note.
+  R5_alias_map_staleness_post_v61_060:
+    severity: HIGH
+    description: |
+      RETRO-V61-060 addendum: alias-map staleness was the #1 post-R3
+      defect. Any case_name change at Stage A.0 (e.g. citation suffix
+      added) MUST atomically update both `_TASK_NAME_TO_CASE_ID_ALIASES`
+      maps (src/foam_agent_adapter.py:247 + src/auto_verifier/config.py:30).
+      A.0 + A.3 should be ONE commit.
+    mitigation: |
+      Pre-commit check: if intake §3 demands a case_name rename, the same
+      commit MUST touch both alias maps. Codex pre-Stage-A review must
+      enforce this.
+
+# ============================================================================
+# §5 Estimated Codex round budget + pass-rate (for self-pass-rate calibration)
+# ============================================================================
+codex_budget_rounds: 5  # R5 normal checkpoint, R6 halt-risk, R7 force abandon
+estimated_pass_rate_round1: 0.40  # Lower than V61-060 (0.55) because the
+                                  # citation audit (§3) is genuinely unresolved
+                                  # — there's a non-trivial probability that
+                                  # Stage A.0 surfaces "no clean publicly-archived
+                                  # benchmark for Re=10000 h/d=2", forcing a
+                                  # whitelist Re bump (architectural change) or
+                                  # re-classification as PHYSICS_FIDELITY_GAP.
+
+# ============================================================================
+# §6 Stage A → E preview (subject to Codex pre-Stage-A review)
+# ============================================================================
+stage_preview:
+  A_0_citation_pivot:
+    purpose: Resolve §3 citation audit. Replace stale Cf=0.0042 sentinel.
+    deliverables:
+      - Verified DOI + page/table/figure locator OR pivot to alternate paper
+      - knowledge/gold_standards/axisymmetric_impinging_jet.yaml rewrite
+        (4 observables, schema_v2, Type II gate_status taxonomy)
+      - knowledge/whitelist.yaml `name` rename (if needed) → atomic with
+        BOTH alias map updates (R5 mitigation)
+  A_1_to_A_n_canonical_contract_repair:
+    purpose: Confirm adapter dispatch + extractor outputs match the new gold
+    deliverables:
+      - Whitelist+CASE_ID_TO_SOLVER alignment (R4 mitigation)
+      - Turbulence model emit-vs-declared parity test (R3 mitigation)
+      - Verify _extract_jet_nusselt's profile output matches the new
+        observable schema (Stage A is not expected to need extractor changes;
+        the extractor is already DEC-V61-042-correct)
+  B_extractors:
+    purpose: Add monotonic-decay invariant extractor; extend profile gate
+    deliverables:
+      - src/impinging_jet_extractors.py (NEW) with extract_nu_monotonicity
+      - tests/test_impinging_jet_extractors.py (≥20 unit tests)
+      - register in src/_plane_assignment.py SSOT
+  C_preflight_comparator_riskflags:
+    purpose: Atomic preflight + comparator + risk_flag registry
+    deliverables:
+      - knowledge/schemas/risk_flag_registry.yaml: 4-5 new IJ-specific flags
+        from §4 risk_register (R1, R2, R3, R5)
+      - .planning/case_profiles/axisymmetric_impinging_jet.yaml backfill
+      - Comparator branch reuse (V61-060 NON_TYPE_HARD_INVARIANT path)
+  D_ui_surface:
+    purpose: 4-card metrics_impinging_jet block in CompareTab + audit allowlist
+    deliverables:
+      - ui/backend/services/comparison_report.py: metrics_impinging_jet
+        (mirrors metrics_rbc / metrics_dhc pattern)
+      - ui/frontend/src/pages/learn/case_detail/CompareTab.tsx: rendering
+        branch (NEW architecture per main refactor — sub-component, not
+        the monolithic LearnCaseDetailPage.tsx that V61-060 wrote against)
+      - scripts/phase5_audit_run.py: secondary_scalars allowlist
+  E_live_run_dec_closeout:
+    purpose: Live OpenFOAM run + DEC frontmatter + Notion sync + PR
+    deliverables:
+      - live buoyantFoam run via phase5_audit_run.py axisymmetric_impinging_jet
+      - audit_real_run_measurement.yaml regen
+      - .planning/decisions/2026-04-2X_v61_067_impinging_jet_multidim.md
+      - PR to main
+
+# ============================================================================
+# §7 Acceptance criteria (definition of done — F1-M2 two-tier close gate)
+# ============================================================================
+acceptance_criteria:
+  i_codex_arc_complete: |
+    Final Codex round returns APPROVE OR APPROVE_WITH_COMMENTS, OR
+    CHANGES_REQUIRED with all findings closed verbatim per the 5-condition
+    exception envelope (CLAUDE.md).
+  ii_headline_validated_or_honestly_failed: |
+    EITHER: live-run Nu_stagnation falls within ±30% of the chosen literature
+    band — primary gate PASS; OR: Nu_stagnation falls outside the band and
+    the DEC documents the physics-fidelity gap explicitly (V61-063 / V61-066
+    / V61-060 closeout pattern: METHODOLOGY_COMPLETE_PHYSICS_FIDELITY_GAP_DOCUMENTED).
+  iii_profile_shape_validated: |
+    Nu(r/D) profile across r/D ∈ {0, 0.5, 1.0, 1.5, 2.0} matches Cooper-style
+    monotonic decay; the conservation invariant gate must pass UNLESS the
+    physics-fidelity gap explanation explicitly accounts for non-monotonic
+    behaviour (e.g. high-Re secondary peak from vortex breakdown).
+  iv_invariant_count_excluded_from_pass_fraction: |
+    Per V61-060 Stage C.2 comparator semantics: NON_TYPE_HARD_INVARIANT
+    blocks verdict on violation but is excluded from primary_gate_count
+    denominator. UI must surface the invariant card with the appropriate
+    "守恒不变量" badge (rose/emerald state-aware per V61-060 R6 fix).
+  v_alias_map_atomic_with_case_name_rename: |
+    Per RETRO-V61-060 addendum: any A.0 case_name rename MUST be in the
+    same commit as both `_TASK_NAME_TO_CASE_ID_ALIASES` map updates.
+
+# ============================================================================
+# §8 Out of scope (will not be addressed in this DEC)
+# ============================================================================
+out_of_scope:
+  - Cross-jet-array configurations (single-jet-only)
+  - Compressible jet effects (Ma < 0.3 assumed)
+  - Confined-jet vs free-jet variants (free-jet only per existing whitelist
+    geometry h_over_d=2)
+  - Heat-transfer-coefficient measurement at the nozzle exit (only plate
+    Nu is in scope)
+  - Multi-Re sweep (single Re=10000 OR Re=23000 after §3 audit; no profile
+    over Re — that would be a follow-up DEC)
