@@ -1,86 +1,86 @@
 dec_id: DEC-V61-063
 case_id: naca0012_airfoil
-timestamp: 20260425T182409Z
+timestamp: 20260425T195835Z
 runs:
 - alpha_deg: 0.0
   success: true
   exit_code: null
-  wall_clock_s: 1953.8735550830606
-  Cl: 0.000452973
-  Cd: 0.01204902
-  y_plus_max: 24.93814
+  wall_clock_s: 2161.971009374829
+  Cl: 1.001062e-09
+  Cd: 0.01269891
+  y_plus_max: 37.6403
   y_plus_advisory: PASS
   extractor_error: null
-  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T182409Z_alpha0.json
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T195835Z_alpha0.json
   force_coeffs_source: forceCoeffs_FO_aerofoil
   alpha_deg_observed: 0.0
-  cl_drift_pct_last_100: 0.09246454313582239
-  cd_drift_pct_last_100: 0.02066380764215067
+  cl_drift_pct_last_100: 56.993921883442006
+  cd_drift_pct_last_100: 0.0009449588629820857
   sign_convention_smoke: PASS
 - alpha_deg: 4.0
   success: true
   exit_code: null
-  wall_clock_s: 1795.5504597919062
-  Cl: 0.3619366
-  Cd: 0.01815715
-  y_plus_max: 52.98406
+  wall_clock_s: 1695.4369198749773
+  Cl: 0.3628862
+  Cd: 0.01834029
+  y_plus_max: 59.24134
   y_plus_advisory: PASS
   extractor_error: null
-  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T182409Z_alpha4.json
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T195835Z_alpha4.json
   force_coeffs_source: forceCoeffs_FO_aerofoil
   alpha_deg_observed: 4.0
-  cl_drift_pct_last_100: 2.7629152050707243e-05
-  cd_drift_pct_last_100: 0.00044059410722523384
+  cl_drift_pct_last_100: 8.267051330965687e-05
+  cd_drift_pct_last_100: 0.0008723996438289404
   sign_convention_smoke: PASS
 - alpha_deg: 8.0
   success: true
   exit_code: null
-  wall_clock_s: 1732.407251165947
-  Cl: 0.6768586
-  Cd: 0.03600873
-  y_plus_max: 57.12995
+  wall_clock_s: 1828.1726764170453
+  Cl: 0.6762544
+  Cd: 0.0363752
+  y_plus_max: 84.59005
   y_plus_advisory: PASS
   extractor_error: null
-  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T182409Z_alpha8.json
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-transition/reports/phase5_audit/dec_v61_063_live_run_20260425T195835Z_alpha8.json
   force_coeffs_source: forceCoeffs_FO_aerofoil
   alpha_deg_observed: 8.0
-  cl_drift_pct_last_100: 1.4774141027689695e-05
-  cd_drift_pct_last_100: 0.00019439669251092813
+  cl_drift_pct_last_100: 0.0
+  cd_drift_pct_last_100: 0.0
   sign_convention_smoke: PASS
 gates:
   lift_coefficient_alpha_eight:
-    value: 0.6768586
+    value: 0.6762544
     gold: 0.815
-    rel_error: 0.16949865030674843
+    rel_error: 0.1702399999999999
     tolerance: 0.05
     pass: false
     role: HEADLINE_PRIMARY_SCALAR
   drag_coefficient_alpha_zero:
-    value: 0.01204902
+    value: 0.01269891
     gold: 0.008
-    rel_error: 0.5061275000000001
+    rel_error: 0.5873637500000001
     tolerance: 0.15
     pass: false
     role: SAME_RUN_CROSS_CHECK
   lift_slope_dCl_dalpha_linear_regime:
-    value: 0.08455070337499997
-    intercept: 0.008213244166666836
+    value: 0.08453179987486725
+    intercept: 0.008253000834218316
     linearity_check_applicable: true
     linearity_ok: true
-    linearity_residual: 0.034395387012834885
+    linearity_residual: 0.036611960675497796
     n_points: 3
     gold: 0.105
-    rel_error: 0.19475520595238124
+    rel_error: 0.1949352392869785
     tolerance: 0.1
     pass: false
     role: QUALITATIVE_GATE
 smoke_assertions:
   sanity_cl_at_alpha_zero:
-    value: 0.000452973
+    value: 1.001062e-09
     abs_band: 0.005
     pass: true
   sign_convention_alpha_eight:
-    Cl: 0.6768586
+    Cl: 0.6762544
     expected: '>0'
     pass: true
 headline_verdict: 'FAIL: [''lift_coefficient_alpha_eight'', ''drag_coefficient_alpha_zero'',
