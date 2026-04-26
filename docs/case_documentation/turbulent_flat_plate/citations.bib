@@ -1,0 +1,34 @@
+% Citations for turbulent_flat_plate gold-standard case
+% (case_id retained for stability; physics is LAMINAR Blasius post-DEC-V61-006)
+% Curated 2026-04-26 under GOV-1 (DEC-V61-080)
+
+@article{blasius1908,
+  author  = {Blasius, H.},
+  title   = {Grenzschichten in Fl{\"u}ssigkeiten mit kleiner Reibung},
+  journal = {Zeitschrift f{\"u}r Mathematik und Physik},
+  volume  = {56},
+  pages   = {1--37},
+  year    = {1908},
+  note    = {Original derivation of the laminar zero-pressure-gradient flat-plate similarity solution; Cf = 0.664/sqrt(Re_x). Available in English translation as NACA TM-1256 (1950).}
+}
+
+@book{schlichting2017,
+  author    = {Schlichting, H. and Gersten, K.},
+  title     = {Boundary-Layer Theory},
+  edition   = {9},
+  publisher = {Springer},
+  year      = {2017},
+  doi       = {10.1007/978-3-662-52919-5},
+  isbn      = {978-3-662-52917-1},
+  note      = {Modern textbook reference; Chapter 7 derives Blasius solution, Section 7.2 reports Cf = 0.664/sqrt(Re_x). The literature_doi field on the gold yaml points to this volume.}
+}
+
+@techreport{asme_vv20_2009,
+  author      = {{American Society of Mechanical Engineers}},
+  title       = {Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer},
+  institution = {ASME},
+  number      = {V\&V 20-2009},
+  year        = {2009},
+  address     = {New York},
+  note        = {Engineering tolerance practice for benchmark validation. Used here for the 10\% Cf band absorbing mesh discretization on an analytically exact gold value.}
+}
