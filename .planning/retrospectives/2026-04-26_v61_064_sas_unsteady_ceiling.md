@@ -7,7 +7,7 @@ predecessor_retros: [RETRO-V61-001 (governance), RETRO-V61-053 (post-R3 protocol
 status: LANDING — follows DEC-V61-064 close.
 author: Claude Opus 4.7 (1M context, autonomous mode)
 decided_by: Claude (self-executed under auto mode; Kogami sign-off at next session touch).
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 alongside DEC-V61-064 (https://www.notion.so/DEC-V61-064-NACA0012-kOmegaSSTSAS-transient-architectural_ceiling_reached-with-progress-34ec68942bed81d3b947de91844f8ef6)
 ---
 
 # RETRO-V61-064 · Hybrid RANS-LES Ceiling on RANS-Resolved Mesh
