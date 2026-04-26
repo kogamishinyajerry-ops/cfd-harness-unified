@@ -78,27 +78,29 @@ _OK_PATH_PROPAGATED_NOTES: frozenset[str] = frozenset({
     "docker_openfoam_preflight_failed",
 })
 
-# DEC-V61-075 P2-T2.3 Codex post-commit R2 P1 fix: ``legacy_case_ids``
-# rename metadata lives in ``knowledge/gold_standards/<case>.yaml`` —
-# NOT in ``KnowledgeDB.load_gold_standard``'s return (which surfaces
-# the embedded ``whitelist.yaml::gold_standard`` block only). The
-# resolver consults this file-backed source so HYBRID_INIT lookups
-# match pre-rename manifests for renamed cases (e.g.,
-# ``fully_developed_pipe`` → ``duct_flow`` per DEC-V61-011).
-_GOLD_STANDARDS_FILE_ROOT: Path = (
-    Path(__file__).resolve().parent.parent / "knowledge" / "gold_standards"
-)
+# DEC-V61-075 P2-T2.3 Codex post-commit R2 P1 fix (refined R3 P2):
+# ``legacy_case_ids`` rename metadata lives in
+# ``<knowledge_root>/gold_standards/<case>.yaml`` — NOT in
+# ``KnowledgeDB.load_gold_standard``'s return (which surfaces the
+# embedded ``whitelist.yaml::gold_standard`` block only). The resolver
+# consults this file-backed source via the **injected** KnowledgeDB's
+# root so callers using ``TaskRunner(knowledge_db=KnowledgeDB(
+# knowledge_dir=...))`` (custom knowledge bundles, test harnesses with
+# stubbed roots) still get correct alias resolution.
 
 
-def _load_legacy_aliases(case_id: str) -> tuple[str, ...]:
-    """Read ``knowledge/gold_standards/<case_id>.yaml::legacy_case_ids``.
+def _load_legacy_aliases(case_id: str, knowledge_root: Path) -> tuple[str, ...]:
+    """Read ``<knowledge_root>/gold_standards/<case_id>.yaml::legacy_case_ids``.
 
     Returns an empty tuple on any failure (file missing, malformed
     YAML, field absent, non-list value, non-string entries) — must
     NOT raise so the HYBRID_INIT lookup degrades gracefully to
-    canonical-id-only matching when alias data is unavailable.
+    canonical-id-only matching when alias data is unavailable. The
+    ``knowledge_root`` parameter (Codex R3 P2 fix) honors the
+    KnowledgeDB injection contract: the same root the rest of the
+    runner consults for whitelist + corrections.
     """
-    yaml_path = _GOLD_STANDARDS_FILE_ROOT / f"{case_id}.yaml"
+    yaml_path = knowledge_root / "gold_standards" / f"{case_id}.yaml"
     if not yaml_path.is_file():
         return ()
     try:
@@ -573,7 +575,20 @@ class TaskRunner:
                 # Failure to resolve must NOT break the run — fall
                 # through to empty aliases and rely on direct id match
                 # only.
-                legacy_aliases = _load_legacy_aliases(canonical_case_id)
+                # Codex R3 P2 fix: source the knowledge root from the
+                # injected KnowledgeDB (``self._db._root``) so custom
+                # knowledge bundles + test harness stubs get honored.
+                # Falls back to the default root if the injected DB
+                # doesn't expose ``_root`` (defensive — KnowledgeDB
+                # always sets it, but a future drop-in replacement
+                # might not).
+                kn_root = getattr(self._db, "_root", None)
+                if not isinstance(kn_root, Path):
+                    from .knowledge_db import _DEFAULT_KNOWLEDGE_DIR  # noqa: PLC0415
+                    kn_root = _DEFAULT_KNOWLEDGE_DIR
+                legacy_aliases = _load_legacy_aliases(
+                    canonical_case_id, knowledge_root=kn_root
+                )
                 ref_present = has_docker_openfoam_reference_run(
                     case_id=canonical_case_id,
                     audit_package_root=self._audit_package_root,

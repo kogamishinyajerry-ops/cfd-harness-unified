@@ -709,6 +709,108 @@ class TestOkPathExecutorNotePropagation:
                 result.trust_gate_report.notes
             )
 
+    def test_hybrid_init_alias_lookup_honors_injected_knowledge_root(self):
+        """Codex T2.3 R3 P2 fix: ``TaskRunner(knowledge_db=KnowledgeDB(
+        knowledge_dir=custom_root))`` MUST resolve aliases from
+        ``custom_root/gold_standards/``, not from the repo's default
+        knowledge directory.
+
+        Set up a custom knowledge root with a synthetic gold standard
+        for ``custom_case`` whose legacy_case_ids list ``legacy_x``.
+        A pre-rename manifest using ``legacy_x`` then resolves only if
+        the injected root is honored.
+        """
+        import io
+        import json
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        # Custom knowledge bundle (different from the repo default)
+        custom_kn_root = Path(tempfile.mkdtemp(prefix="t2_3_custom_kn_"))
+        gold_dir = custom_kn_root / "gold_standards"
+        gold_dir.mkdir(parents=True)
+        (gold_dir / "custom_case.yaml").write_text(
+            "legacy_case_ids:\n  - legacy_x\n  - legacy_y\n"
+        )
+        # Whitelist file required by KnowledgeDB._load_whitelist
+        (custom_kn_root / "whitelist.yaml").write_text(
+            "cases:\n  - id: custom_case\n    name: Custom Case\n"
+        )
+
+        # Audit corpus with pre-rename manifest using legacy_x
+        audit_root = Path(_make_tempdir())
+        manifest = {
+            "case": {"id": "legacy_x", "legacy_ids": []},
+            "executor": {
+                "mode": "docker_openfoam", "version": "0.2",
+                "contract_hash": "deadbeef" * 8,
+            },
+            "measurement": {"comparator_verdict": "PASS"},
+        }
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+        (audit_root / "legacy_run.zip").write_bytes(buf.getvalue())
+
+        run_report = ExecutorRunReport(
+            mode=ExecutorMode.HYBRID_INIT,
+            status=ExecutorStatus.OK,
+            contract_hash="cafef00d" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=True, is_mock=False,
+                residuals={"p": 1e-6}, execution_time_s=0.01,
+            ),
+        )
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.MODE = ExecutorMode.HYBRID_INIT
+        executor_abc.VERSION = SPEC_VERSION
+        executor_abc.contract_hash = "cafef00d" * 8
+        executor_abc.execute.return_value = run_report
+
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+
+        from src.knowledge_db import KnowledgeDB
+        from src.task_runner import TaskRunner
+
+        custom_db = KnowledgeDB(knowledge_dir=custom_kn_root)
+        runner = TaskRunner(
+            notion_client=notion,
+            knowledge_db=custom_db,
+            executor_abc=executor_abc,
+            audit_package_root=audit_root,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(
+            passed=True, deviations=[], summary="ok",
+            gold_standard_id="custom_case",
+        )
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_PASS", checks=[])
+        )
+
+        spec = TaskSpec(
+            name="custom_case",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+            notion_task_id="custom-task",
+        )
+        result = runner.run_task(spec)
+
+        # Reference resolved via custom-root legacy alias → no ceiling
+        assert result.trust_gate_report is not None
+        if result.trust_gate_report.notes:
+            assert "hybrid_init_invariant_unverified" not in " ".join(
+                result.trust_gate_report.notes
+            )
+
     def test_hybrid_init_no_reference_run_emits_warn_ceiling(self):
         """When audit_package_root is configured but contains NO
         docker_openfoam reference for the case, the §6.3 ceiling fires:
