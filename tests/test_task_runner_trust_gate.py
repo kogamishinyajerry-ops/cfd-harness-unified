@@ -409,6 +409,131 @@ def test_build_trust_gate_report_handles_missing_case_profile(
     assert gold_report.provenance.get("tolerance_policy_observables") == []
 
 
+# ---------------------------------------------------------------------------
+# DEC-V61-071 R1 F#1 verbatim regression: display-title → slug resolution.
+# TaskSpec.name often comes from whitelist `name` field or Notion page title
+# ("Lid-Driven Cavity"), not the slug ("lid_driven_cavity"). Without slug
+# resolution, load_tolerance_policy silently misses real CaseProfiles.
+# ---------------------------------------------------------------------------
+
+
+def test_build_trust_gate_report_resolves_display_title_to_slug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Display-title task name resolves to canonical slug via whitelist
+    before load_tolerance_policy is called."""
+    from src.metrics import case_profile_loader
+    from src import task_runner as tr
+
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+    _write_case_profile(
+        tmp_path, "demo_case", ["alpha_obs", "beta_obs"]
+    )
+
+    fake_whitelist = {
+        "cases": [
+            {"id": "demo_case", "name": "Demo Display Title"},
+            {"id": "other_case", "name": "Other Title"},
+        ]
+    }
+
+    class _FakeDB:
+        def _load_whitelist(self) -> dict:
+            return fake_whitelist
+
+    monkeypatch.setattr(tr, "_resolve_case_slug_for_policy",
+                        lambda task_name: next(
+                            (c["id"] for c in fake_whitelist["cases"]
+                             if c["name"] == task_name or c["id"] == task_name),
+                            task_name,
+                        ))
+
+    attestation = _FakeAttestation(overall="ATTEST_PASS", checks=[])
+    comparison = ComparisonResult(
+        passed=True, deviations=[], summary="ok", gold_standard_id="demo_case"
+    )
+
+    # Display-title task_name → slug resolution → policy populated.
+    tg = _build_trust_gate_report(
+        task_name="Demo Display Title", comparison=comparison, attestation=attestation
+    )
+    assert tg is not None
+    gold_report = next(r for r in tg.reports if r.name.endswith("_gold_comparison"))
+    assert gold_report.provenance.get("tolerance_policy_observables") == [
+        "alpha_obs",
+        "beta_obs",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-071 R1 F#2 verbatim regression: lazy-load on attestation-only and
+# no-input paths. The loader must not run when there is no comparison report
+# to receive the provenance — avoids unnecessary filesystem I/O + warning
+# noise on those paths.
+# ---------------------------------------------------------------------------
+
+
+def test_build_trust_gate_report_skips_loader_on_attestation_only_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Attestation-only path does not invoke load_tolerance_policy."""
+    from src.metrics import case_profile_loader
+    from src import task_runner as tr
+
+    call_count = {"n": 0}
+    real_loader = tr.load_tolerance_policy
+
+    def _counted_loader(*args, **kwargs):
+        call_count["n"] += 1
+        return real_loader(*args, **kwargs)
+
+    monkeypatch.setattr(tr, "load_tolerance_policy", _counted_loader)
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+
+    attestation = _FakeAttestation(overall="ATTEST_FAIL", checks=[])
+    tg = _build_trust_gate_report(
+        task_name="anything", comparison=None, attestation=attestation
+    )
+    assert tg is not None
+    assert call_count["n"] == 0  # loader skipped on attestation-only
+
+
+def test_build_trust_gate_report_skips_loader_on_no_input_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """comparison=None + attestation=None → return None without loading."""
+    from src.metrics import case_profile_loader
+    from src import task_runner as tr
+
+    call_count = {"n": 0}
+    real_loader = tr.load_tolerance_policy
+
+    def _counted_loader(*args, **kwargs):
+        call_count["n"] += 1
+        return real_loader(*args, **kwargs)
+
+    monkeypatch.setattr(tr, "load_tolerance_policy", _counted_loader)
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+
+    tg = _build_trust_gate_report(
+        task_name="anything", comparison=None, attestation=None
+    )
+    assert tg is None
+    assert call_count["n"] == 0
+
+
 def test_build_trust_gate_report_handles_malformed_case_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

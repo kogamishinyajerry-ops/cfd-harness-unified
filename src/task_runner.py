@@ -55,6 +55,29 @@ logger = logging.getLogger(__name__)
 # P1-T5 · TrustGate integration helper
 # ---------------------------------------------------------------------------
 
+
+def _resolve_case_slug_for_policy(task_name: str) -> str:
+    """Resolve a TaskSpec.name (display title or slug) to the canonical
+    case-id slug expected by load_tolerance_policy.
+
+    DEC-V61-071 round-1 finding #1 (verbatim fix): TaskSpec.name often
+    comes from display titles (Notion page titles, whitelist `name`
+    field), not slugs. Walks knowledge/whitelist.yaml matching name OR
+    id; returns task_name unchanged on no match. Fail-soft — resolution
+    must not kill the run.
+    """
+    try:
+        from .knowledge_db import KnowledgeDB
+
+        whitelist = KnowledgeDB()._load_whitelist()
+    except Exception:  # noqa: BLE001 - resolution must not kill the run
+        return task_name
+    for case in whitelist.get("cases", []):
+        if case.get("name") == task_name or case.get("id") == task_name:
+            return case.get("id") or task_name
+    return task_name
+
+
 _ATTEST_VERDICT_TO_STATUS: Dict[str, MetricStatus] = {
     "ATTEST_PASS": MetricStatus.PASS,
     "ATTEST_HAZARD": MetricStatus.WARN,
@@ -80,23 +103,21 @@ def _build_trust_gate_report(
     Plane: Control → Evaluation (import src.metrics). ADR-001 matrix row
     `Control | ✓ (orchestrate) |` authorizes this.
 
-    DEC-V61-071 · P1 tail · load_tolerance_policy is invoked here so the
-    policy-dispatch path is exercised in production before P1-T4
-    (ObservableDef formalization) unblocks per-observable threshold
-    application. Today the loaded policy is stamped into provenance for
-    observability — verdict semantics are unchanged.
-    """
-    try:
-        tolerance_policy = load_tolerance_policy(task_name)
-    except CaseProfileError as exc:
-        logger.warning(
-            "load_tolerance_policy failed for %s: %s; "
-            "falling back to empty policy",
-            task_name,
-            exc,
-        )
-        tolerance_policy = {}
+    DEC-V61-071 · P1 tail · load_tolerance_policy is invoked **only** when a
+    comparison report is being built, so the policy-dispatch path is
+    exercised in production whenever there's somewhere to surface the
+    loaded observables. Verdict semantics are unchanged — the loaded
+    policy is stamped into the comparison report's provenance for
+    observability before P1-T4 (ObservableDef formalization) unblocks
+    per-observable threshold application.
 
+    Round-1 Codex fixes (DEC-V61-071 R1 verbatim):
+    - F#1 MED: TaskSpec.name is often a display title ("Lid-Driven Cavity")
+      not a slug ("lid_driven_cavity"). Resolve via the whitelist
+      name↔id mapping before calling load_tolerance_policy.
+    - F#2 LOW: Lazy-load only inside the comparison branch — no
+      filesystem I/O on attestation-only or no-input paths.
+    """
     reports: List[MetricReport] = []
 
     if attestation is not None:
@@ -133,6 +154,22 @@ def _build_trust_gate_report(
         )
 
     if comparison is not None:
+        # DEC-V61-071 R1 F#1+F#2 verbatim: resolve display-title → slug,
+        # then lazy-load the tolerance_policy here (only when there's a
+        # comparison report to receive provenance).
+        case_slug = _resolve_case_slug_for_policy(task_name)
+        try:
+            tolerance_policy = load_tolerance_policy(case_slug)
+        except CaseProfileError as exc:
+            logger.warning(
+                "load_tolerance_policy failed for %s (slug=%s): %s; "
+                "falling back to empty policy",
+                task_name,
+                case_slug,
+                exc,
+            )
+            tolerance_policy = {}
+
         status = MetricStatus.PASS if comparison.passed else MetricStatus.FAIL
         deviation: Optional[float] = None
         if comparison.deviations:
