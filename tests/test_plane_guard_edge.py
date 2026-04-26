@@ -155,32 +155,58 @@ def test_a7b_log_schema_stability(warn_guard, source, target, expected_contract)
     """All forbidden contracts emit the same 5-field minimum JSON schema."""
     caplog = warn_guard
     caplog.clear()
-    sys.modules.pop(target, None)
+    # DEC-V61-FORENSIC-FLAKE-1-FIX: pop()-then-reimport produces a NEW
+    # module object in sys.modules; any earlier `from {target} import X`
+    # in another test file binds X to the OLD module's __globals__,
+    # so subsequent monkeypatches on the NEW module never reach X.
+    # Save the original singleton and restore it after the test to
+    # keep sys.modules stable for downstream tests.
+    saved_target = sys.modules.pop(target, None)
     fake_spec = ModuleSpec(name=source, loader=None)
     exec_globals = {"__spec__": fake_spec, "__name__": source}
-    with strict_scope():
-        exec(f"import {target}", exec_globals)
+    try:
+        with strict_scope():
+            exec(f"import {target}", exec_globals)
 
-    records = [r for r in caplog.records if r.name == "src._plane_guard"]
-    assert len(records) == 1
-    payload = json.loads(records[0].getMessage())
-    # Five required fields per A7b.
-    required = {
-        "incident_id",
-        "source_module",
-        "target_module",
-        "contract_name",
-        "severity",
-    }
-    missing = required - set(payload)
-    assert not missing, f"Missing required fields: {missing}"
-    assert payload["source_module"] == source
-    assert payload["target_module"] == target
-    assert payload["contract_name"] == expected_contract
-    assert payload["severity"] == "warn"
-    # incident_id is a UUID string (36 chars including hyphens).
-    assert isinstance(payload["incident_id"], str)
-    assert len(payload["incident_id"]) == 36
+        records = [r for r in caplog.records if r.name == "src._plane_guard"]
+        assert len(records) == 1
+        payload = json.loads(records[0].getMessage())
+        # Five required fields per A7b.
+        required = {
+            "incident_id",
+            "source_module",
+            "target_module",
+            "contract_name",
+            "severity",
+        }
+        missing = required - set(payload)
+        assert not missing, f"Missing required fields: {missing}"
+        assert payload["source_module"] == source
+        assert payload["target_module"] == target
+        assert payload["contract_name"] == expected_contract
+        assert payload["severity"] == "warn"
+        # incident_id is a UUID string (36 chars including hyphens).
+        assert isinstance(payload["incident_id"], str)
+        assert len(payload["incident_id"]) == 36
+    finally:
+        # Restore the original module object so downstream tests that
+        # already bound symbols via `from {target} import X` see the
+        # same module instance their X was sourced from. Without this,
+        # monkeypatch.setattr on the freshly-reimported module fails
+        # to reach those bound symbols' __globals__.
+        # Two-step restore: sys.modules entry AND parent-package
+        # attribute (e.g. src.task_runner). The exec-triggered import
+        # mutates BOTH, so restoring only sys.modules leaves
+        # `from src import task_runner` returning the stale MODULE_B.
+        if saved_target is not None:
+            sys.modules[target] = saved_target
+            parent_name, _, child_name = target.rpartition(".")
+            if parent_name:
+                parent_mod = sys.modules.get(parent_name)
+                if parent_mod is not None:
+                    setattr(parent_mod, child_name, saved_target)
+        else:
+            sys.modules.pop(target, None)
 
 
 def test_a7b_log_does_not_propagate_to_handlers_at_sub_logger():
