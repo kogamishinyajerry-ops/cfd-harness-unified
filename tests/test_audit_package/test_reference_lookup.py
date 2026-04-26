@@ -261,6 +261,61 @@ def test_plain_manifest_json_also_resolves(tmp_path):
 # Mixed-corpus scenario: True wins as soon as any match found
 # ---------------------------------------------------------------------------
 
+def test_malformed_case_id_does_not_raise(tmp_path):
+    """Codex T2.3 R2 P2 fix: a manifest whose ``case.id`` is an
+    unhashable type (dict, list) or whose ``legacy_ids`` contains
+    one must NOT crash the resolver — it silent-skips per the
+    tolerant-corpus contract.
+
+    Without the fix, ``set((dict_value, "alias"))`` raises
+    ``TypeError: unhashable type``, aborting the whole scan and
+    breaking HYBRID_INIT routing for unrelated cases that share
+    the same audit_package_root.
+    """
+    # Manifest with case.id as a dict (malformed)
+    bad_id_manifest = {
+        "case": {"id": {"nested": "wat"}, "legacy_ids": []},
+        "executor": {"mode": "docker_openfoam"},
+        "measurement": {"comparator_verdict": "PASS"},
+    }
+    _write_zip_with_manifest(tmp_path, "bad_id", bad_id_manifest)
+
+    # Manifest with case.legacy_ids containing a list entry
+    bad_legacy_manifest = {
+        "case": {"id": "good_id", "legacy_ids": [["nested-list"], "valid_alias"]},
+        "executor": {"mode": "docker_openfoam"},
+        "measurement": {"comparator_verdict": "PASS"},
+    }
+    _write_zip_with_manifest(tmp_path, "bad_legacy", bad_legacy_manifest)
+
+    # Healthy manifest — should still resolve normally.
+    _write_zip_with_manifest(
+        tmp_path / "good_subdir",
+        "good",
+        _docker_openfoam_manifest(case_id="lid_driven_cavity"),
+    )
+
+    # Must not raise + the healthy manifest still wins.
+    assert has_docker_openfoam_reference_run(
+        "lid_driven_cavity", audit_package_root=tmp_path
+    ) is True
+
+    # bad_legacy_manifest has id="good_id" + legacy_ids=[["nested-list"],
+    # "valid_alias"]. The non-string list entry silent-skips, but
+    # "valid_alias" still matches → True (defensive: malformed entries
+    # in the same legacy_ids list don't disqualify the valid ones).
+    assert has_docker_openfoam_reference_run(
+        "valid_alias",
+        audit_package_root=tmp_path,
+    ) is True
+
+    # Querying for an id that doesn't appear anywhere → False, no raise.
+    assert has_docker_openfoam_reference_run(
+        "totally_unrelated",
+        audit_package_root=tmp_path,
+    ) is False
+
+
 def test_mixed_corpus_first_success_wins(tmp_path):
     """In a corpus with mock + failed + successful docker_openfoam,
     the resolver returns True (any successful match suffices)."""

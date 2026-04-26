@@ -607,6 +607,108 @@ class TestOkPathExecutorNotePropagation:
                 result.trust_gate_report.notes
             )
 
+    def test_hybrid_init_resolves_legacy_aliases_from_file_backed_gold_standard(self):
+        """Codex T2.3 R2 P1 fix: TaskRunner sources legacy aliases from
+        ``knowledge/gold_standards/<case>.yaml::legacy_case_ids`` (the
+        file-backed source), NOT from the embedded
+        ``whitelist.yaml::gold_standard`` block (which doesn't carry
+        rename metadata).
+
+        Concrete pre-rename scenario: query for ``duct_flow``
+        (post-DEC-V61-011 canonical) against an audit corpus
+        containing only a manifest using ``fully_developed_pipe``
+        (pre-rename id, no legacy_ids backfilled). The fix must lift
+        the alias from ``knowledge/gold_standards/duct_flow.yaml`` so
+        the lookup hits.
+        """
+        import io
+        import json
+        import zipfile
+        from pathlib import Path
+
+        audit_root = Path(_make_tempdir())
+        # Pre-rename manifest — case.id is the OLD name
+        pre_rename_manifest = {
+            "schema_version": 1,
+            "manifest_id": "fully_developed_pipe-old-run",
+            "case": {"id": "fully_developed_pipe", "legacy_ids": []},
+            "executor": {
+                "mode": "docker_openfoam",
+                "version": "0.2",
+                "contract_hash": "deadbeef" * 8,
+            },
+            "measurement": {"comparator_verdict": "PASS"},
+        }
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(pre_rename_manifest))
+        (audit_root / "old_run.zip").write_bytes(buf.getvalue())
+
+        run_report = ExecutorRunReport(
+            mode=ExecutorMode.HYBRID_INIT,
+            status=ExecutorStatus.OK,
+            contract_hash="cafef00d" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=True,
+                is_mock=False,
+                residuals={"p": 1e-6, "U": 1e-6},
+                execution_time_s=0.01,
+            ),
+        )
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.MODE = ExecutorMode.HYBRID_INIT
+        executor_abc.VERSION = SPEC_VERSION
+        executor_abc.contract_hash = "cafef00d" * 8
+        executor_abc.execute.return_value = run_report
+
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: {"observables": []}
+
+        from src.task_runner import TaskRunner
+
+        runner = TaskRunner(
+            notion_client=notion,
+            knowledge_db=db,
+            executor_abc=executor_abc,
+            audit_package_root=audit_root,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(
+            passed=True, deviations=[], summary="ok",
+            gold_standard_id="duct_flow",
+        )
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_PASS", checks=[])
+        )
+
+        # Use task_spec.name = "duct_flow" so the file-backed gold
+        # standard at knowledge/gold_standards/duct_flow.yaml is loaded
+        # and its legacy_case_ids (["fully_developed_pipe", ...]) are
+        # passed into the resolver.
+        task_spec = TaskSpec(
+            name="duct_flow",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=1000,
+            notion_task_id="task-rename",
+        )
+        result = runner.run_task(task_spec)
+
+        # Reference run was found via legacy alias → no §6.3 ceiling note
+        assert result.trust_gate_report is not None
+        if result.trust_gate_report.notes:
+            assert "hybrid_init_invariant_unverified" not in " ".join(
+                result.trust_gate_report.notes
+            )
+
     def test_hybrid_init_no_reference_run_emits_warn_ceiling(self):
         """When audit_package_root is configured but contains NO
         docker_openfoam reference for the case, the §6.3 ceiling fires:

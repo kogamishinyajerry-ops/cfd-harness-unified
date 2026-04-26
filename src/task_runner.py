@@ -78,6 +78,48 @@ _OK_PATH_PROPAGATED_NOTES: frozenset[str] = frozenset({
     "docker_openfoam_preflight_failed",
 })
 
+# DEC-V61-075 P2-T2.3 Codex post-commit R2 P1 fix: ``legacy_case_ids``
+# rename metadata lives in ``knowledge/gold_standards/<case>.yaml`` —
+# NOT in ``KnowledgeDB.load_gold_standard``'s return (which surfaces
+# the embedded ``whitelist.yaml::gold_standard`` block only). The
+# resolver consults this file-backed source so HYBRID_INIT lookups
+# match pre-rename manifests for renamed cases (e.g.,
+# ``fully_developed_pipe`` → ``duct_flow`` per DEC-V61-011).
+_GOLD_STANDARDS_FILE_ROOT: Path = (
+    Path(__file__).resolve().parent.parent / "knowledge" / "gold_standards"
+)
+
+
+def _load_legacy_aliases(case_id: str) -> tuple[str, ...]:
+    """Read ``knowledge/gold_standards/<case_id>.yaml::legacy_case_ids``.
+
+    Returns an empty tuple on any failure (file missing, malformed
+    YAML, field absent, non-list value, non-string entries) — must
+    NOT raise so the HYBRID_INIT lookup degrades gracefully to
+    canonical-id-only matching when alias data is unavailable.
+    """
+    yaml_path = _GOLD_STANDARDS_FILE_ROOT / f"{case_id}.yaml"
+    if not yaml_path.is_file():
+        return ()
+    try:
+        import yaml  # noqa: PLC0415 — optional-cost local import
+
+        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — alias lookup must not kill the run
+        logger.exception(
+            "Failed to load gold standard %s for legacy alias lookup; "
+            "continuing with no aliases",
+            yaml_path,
+        )
+        return ()
+    if not isinstance(data, dict):
+        return ()
+    legacy = data.get("legacy_case_ids")
+    if not isinstance(legacy, list):
+        return ()
+    return tuple(alias for alias in legacy if isinstance(alias, str))
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -517,26 +559,21 @@ class TaskRunner:
                 # raw display name would silently miss every real
                 # reference run.
                 canonical_case_id = _resolve_case_slug_for_policy(task_spec.name)
-                # Codex T2.3 post-commit P2-B (caller half): expand
-                # legacy aliases from the gold-standard YAML so the
-                # resolver can match pre-rename manifests too. Failure
-                # to resolve must NOT break the run — fall through to
-                # empty aliases and rely on direct id match only.
-                legacy_aliases: tuple[str, ...] = ()
-                try:
-                    gold = self._db.load_gold_standard(canonical_case_id)
-                    if gold is not None:
-                        gold_legacy = gold.get("legacy_case_ids")
-                        if isinstance(gold_legacy, list):
-                            legacy_aliases = tuple(
-                                alias for alias in gold_legacy
-                                if isinstance(alias, str)
-                            )
-                except Exception:  # noqa: BLE001 — alias lookup must not kill the run
-                    logger.exception(
-                        "Failed to resolve legacy_aliases for HYBRID_INIT "
-                        "reference-run lookup; continuing with no aliases"
-                    )
+                # Codex T2.3 post-commit R1 P2-B + R2 P1 fix: expand
+                # legacy aliases from the file-backed gold-standard
+                # YAML (``knowledge/gold_standards/<case>.yaml::
+                # legacy_case_ids``) so the resolver can match
+                # pre-rename manifests too. R1's first attempt used
+                # ``KnowledgeDB.load_gold_standard`` but that returns
+                # the embedded ``whitelist.yaml::gold_standard`` block,
+                # which does NOT carry rename metadata; the file-backed
+                # gold standard at ``knowledge/gold_standards/<case>.yaml``
+                # is the canonical source for ``legacy_case_ids`` (see
+                # also ``src/audit_package/manifest.py::_load_gold_standard``).
+                # Failure to resolve must NOT break the run — fall
+                # through to empty aliases and rely on direct id match
+                # only.
+                legacy_aliases = _load_legacy_aliases(canonical_case_id)
                 ref_present = has_docker_openfoam_reference_run(
                     case_id=canonical_case_id,
                     audit_package_root=self._audit_package_root,

@@ -186,6 +186,13 @@ def _manifest_matches_case(
       - canonical → legacy (manifest.case.legacy_ids contains case_id)
       - legacy   → canonical (caller's legacy_aliases contains
         manifest.case.id)
+
+    Codex T2.3 post-commit R2 P2 fix: malformed manifest ``case`` blobs
+    (where ``case.id`` or a ``case.legacy_ids`` entry is a dict / list /
+    other unhashable value) no longer raise ``TypeError`` from set
+    construction. Non-string ids silent-skip per the resolver's
+    tolerant-corpus contract; a single corrupt archive cannot break
+    HYBRID_INIT routing for the entire scan.
     """
     case = manifest.get("case")
     if not isinstance(case, Mapping):
@@ -195,12 +202,14 @@ def _manifest_matches_case(
     if not isinstance(manifest_legacy, list):
         manifest_legacy = []
 
-    # Build the set of identifiers that count as "this case" from the
-    # caller's perspective (case_id + caller-provided aliases) and the
-    # set the manifest claims (manifest.id + manifest.legacy_ids). A
-    # match is a non-empty intersection.
-    caller_ids = {case_id, *legacy_aliases}
-    manifest_ids = {manifest_id, *manifest_legacy} - {None}
+    # Filter to string-typed ids only — set construction below would
+    # raise TypeError on a dict/list value otherwise. Codex R2 P2.
+    manifest_ids = {
+        ident
+        for ident in (manifest_id, *manifest_legacy)
+        if isinstance(ident, str)
+    }
+    caller_ids = {ident for ident in (case_id, *legacy_aliases) if isinstance(ident, str)}
     return bool(caller_ids & manifest_ids)
 
 
