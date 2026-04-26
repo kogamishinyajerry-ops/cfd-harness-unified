@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
 status: M1_M4_COMPLETE
-last_updated: "2026-04-26T17:00 local"  # 治理收口 Day 0: DEC-V61-073 4-PC closure complete (PC-2/3/4 Codex APPROVE) · status flipped to Accepted · §10.5 + §11 promote to Active · P2-T1 unblocked
+last_updated: "2026-04-26T18:00 local"  # P2-T1.a skeleton landed at 16000ab (Codex APPROVE R3) · DEC-V61-074 status=Accepted · 46/46 executor tests · ~930 full-suite pass · trust-core untouched · T1.b queued for next session
 methodology_active_sections:
   - "§10 治理降级 (RETRO-V61-006 addendum)"
   - "§10.4 Line-A/B isolation contract (OPS-2026-04-25-001)"
@@ -20,8 +20,8 @@ governance_closure_session:
     A_signature_chain: "CLOSED (A1+A2 Status=Accepted · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 in-session DOCUMENT DOWNGRADED to preparatory analysis per DEC-V61-073 · independent Notion @Opus 4.7 audit IS the legitimate W2 G-9 gate · audit verdict RATIFY_WITH_AMENDMENTS · 30-day override window NOT consumed — fully preserved per audit constitutional finding)"
     B_ssot_alignment: "CLOSED (main page Active Phase line ✓ · Foundation-Freeze Status=Done with closeout section ✓ · P1 phase Closeout annotated ✓ · Phases DB sweep clean · Sessions DB anchor + Signature Closure ✓)"
     C_sampling_audit: "CLOSED (DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · interval 20→5 · §11 5 anti-drift rules drafted)"
-  three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS_LANDED (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 closed Accepted 2026-04-26T17:00 · all 4 PCs GREEN with Codex APPROVE · P2-T1 UNBLOCKED)"
-  p2_kickoff_status: "GO (4 PCs GREEN as of 2026-04-26T17:00 · PC1 this DEC's flip 06e5f29 · PC2 EXECUTOR_ABSTRACTION.md v0.2 50bb2eb Codex APPROVE R3 · PC3 sampling_audit.py + 24 tests 55f2642 Codex APPROVE R2 · PC4 §10.5+§11 draft chronology bridges 25c4cd8 Codex APPROVE R3)"
+  three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS_LANDED (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 closed Accepted 2026-04-26T17:00 · all 4 PCs GREEN with Codex APPROVE · P2-T1 UNBLOCKED · P2-T1.a skeleton landed 2026-04-26T18:00 · DEC-V61-074 Accepted)"
+  p2_kickoff_status: "T1.a_DONE_T1.b_QUEUED (4 PCs GREEN + skeleton landed · PC1 06e5f29 · PC2 50bb2eb Codex APPROVE R3 · PC3 55f2642 Codex APPROVE R2 · PC4 25c4cd8 Codex APPROVE R3 · T1.a 16000ab Codex APPROVE R3 · T1.b queued: manifest.py executor field + TaskRunner dispatch + TrustGate routing — trust-core write requires Codex pre-merge)"
   override_window_status: "0_days_consumed_window_fully_preserved (audit constitutional finding: 「全权执行,继续」 = operational not constitutional · Pivot Charter §7 independence-of-context invariant intact)"
   amendments_landed_2026_04_26_pc_closure:
     - "§10.5.4b token cap ≤100k/fire (DEC-V61-073 H3) · enforced by scripts/methodology/sampling_audit.py"
