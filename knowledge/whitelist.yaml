@@ -204,32 +204,41 @@ cases:
       tolerance: 0.05  # 5% 相对误差 (Moser DNS numerical uncertainty)
 
   - id: impinging_jet
-    name: "Axisymmetric Impinging Jet (Re=10000)"
-    reference: "Cooper et al. 1984 / Behnad et al. 2013"
-    doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+    name: "Axisymmetric Impinging Jet (Baughn-Shimizu 1989, Re=23000)"
+    reference: "Baughn & Shimizu 1989 — Heat Transfer Measurements From a Surface With Uniform Heat Flux and an Impinging Jet (J. Heat Transfer 111(4), 1096-1098). Cross-referenced via Behnia/Parneix/Durbin 1997 CTR Annual Research Briefs Fig 3 ● symbols at Re=23000 H/D=2."
+    doi: "10.1115/1.3250776"
+    reference_url: "https://web.stanford.edu/group/ctr/ResBriefs97/behnia.pdf"  # Behnia 1997 hosts the digitized Nu(r/D) profile in Fig 3
     flow_type: EXTERNAL
     geometry_type: IMPINGING_JET
     compressibility: INCOMPRESSIBLE
     steady_state: STEADY
-    solver: simpleFoam
+    solver: simpleFoam  # NOTE: adapter dispatch overrides to buoyantFoam (foam_agent_adapter.py:676) since the case needs a thermal solve. CASE_ID_TO_SOLVER alignment is a follow-up sub-batch.
     turbulence_model: k-omega SST
     parameters:
-      Re: 10000
+      Re: 23000  # DEC-V61-071 Stage A.0a: bumped 10000 → 23000 to match the Baughn experimental row. See .planning/intake/DEC-V61-071_a0a_context_resolution.md Q3.
       nozzle_diameter: 0.05
-      h_over_d: 2.0  # 喷口到板面距离 / 直径
-    # Gate Q-new Case 9 · HOLD per Kogami 2026-04-20: audit flagged Nu@r/d=0 = 25 vs
-    # Behnad 2013 ~110-130, but 4-5× discrepancy is too large to edit without reading
-    # Behnad et al. 2013 (DOI 10.1016/j.ijheatfluidflow.2013.03.003) directly and
-    # confirming (Re=10000, h/d=2) was the configuration cited. Possible mis-match:
-    # confined-jet vs free-jet, different h/d, different Re. Literature re-source
-    # pending. Values below are provisional; may change in future DEC.
+      h_over_d: 2.0  # matches Baughn 1989 H/D=2 row
+    # DEC-V61-071 Stage A.0a/A.0b (2026-04-26): citation pivot from broken
+    # Cooper-1984/Behnad-2013 (DOI verified by Codex Crossref query to resolve to a
+    # turbine LES paper, NOT impinging jet) to the publicly-archived Baughn-Shimizu
+    # 1989 dataset cross-referenced in Behnia 1997. Re bumped 10000 → 23000 to match
+    # the actual measured row (V61-060 lesson: derived/correlated values are worse
+    # than honest parameter alignment to a measured row). Wall-BC mismatch
+    # (adapter constant-T vs literature uniform-q) documented in
+    # gold_standards/axisymmetric_impinging_jet.yaml §physics_contract.note;
+    # absorbed by ±30% tolerance widening per intake §2.
     gold_standard:
       quantity: nusselt_number
-      description: "冲击面局部努塞尔数分布 (PROVISIONAL — Gate Q-new Case 9 hold)"
+      description: "Stagnation Nusselt number from Baughn-Shimizu 1989 Re=23000 H/D=2 (Behnia 1997 Fig 3 ● symbol)"
       reference_values:
-        - {r_over_d: 0.0, Nu: 25.0}
-        - {r_over_d: 1.0, Nu: 12.0}
-      tolerance: 0.15  # 15% 相对误差
+        - {r_over_d: 0.0, Nu: 145.0}  # HEADLINE
+        - {r_over_d: 0.5, Nu: 130.0}
+        - {r_over_d: 1.0, Nu: 105.0}
+        - {r_over_d: 1.5, Nu: 95.0}   # local minimum pre-secondary peak
+        - {r_over_d: 2.0, Nu: 130.0}  # secondary peak (transition-to-turbulence in wall jet)
+        - {r_over_d: 3.0, Nu: 95.0}
+        - {r_over_d: 5.0, Nu: 60.0}
+      tolerance: 0.30  # widened from 0.15 to absorb adapter constant-T vs literature uniform-q BC mismatch + steady-RANS vs transient experimental measurement
 
   - id: naca0012_airfoil
     name: "NACA 0012 Airfoil External Flow"

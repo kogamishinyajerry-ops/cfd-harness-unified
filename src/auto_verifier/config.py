@@ -41,6 +41,8 @@ TASK_NAME_TO_CASE_ID = {
     "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
     "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
     "Axisymmetric Impinging Jet (Re=10000)": "axisymmetric_impinging_jet",
+    # DEC-V61-071 Stage A.0b — keep both alias maps in sync (ADR-001).
+    "Axisymmetric Impinging Jet (Baughn-Shimizu 1989, Re=23000)": "axisymmetric_impinging_jet",
     "Fully Developed Plane Channel Flow (DNS)": "fully_developed_plane_channel_flow",
 }
 

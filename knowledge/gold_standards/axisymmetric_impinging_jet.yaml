@@ -2,28 +2,33 @@ schema_version: 2
 case_id: axisymmetric_impinging_jet
 legacy_case_id: impinging_jet
 legacy_source_file: knowledge/gold_standards/impinging_jet.yaml
-source: "Computed: simpleFoam flat-plate extraction (cf_skin_friction); Literature: Cooper 1984 for impinging jet Nu correlation"
-literature_doi: "10.1016/j.ijheatfluidflow.2013.03.003"
+source: "Baughn, J.W. & Shimizu, S. (1989) — Heat Transfer Measurements From a Surface With Uniform Heat Flux and an Impinging Jet, J. Heat Transfer 111(4), 1096-1098. Cross-referenced via Behnia, Parneix & Durbin (1997) CTR Annual Research Briefs (Stanford), pp. 149-160, Fig 3 ● symbols at Re=23000 H/D=2."
+literature_doi: "10.1115/1.3250776"
+literature_url: "https://web.stanford.edu/group/ctr/ResBriefs97/behnia.pdf"
+ercoftac_dataset: "ERCOFTAC Classic Collection Case025 / KBwiki UFR_3-09 (Baughn-Shimizu 1989 + Baughn et al. 1991 hydrodynamic companion)"
 note: >
-  This case ran with simpleFoam (isothermal, no heat transfer). The extracted
-  nusselt_number=0.0042 is actually a local skin-friction coefficient (Cf) from
-  the flat-plate post-processing, not a true impinging-jet Nusselt number.
-  The Gold Standard ref_value=25.0 (Cooper 1984) requires buoyantFoam with
-  thermal boundary conditions — a different solver configuration.
-  This observable is INCOMPATIBLE with simpleFoam execution.
+  Type II case classification (DEC-V61-071, methodology v2.0 §F1-M1):
+  1 HARD_GATED headline observable + 2 PROFILE_QUALITATIVE_GATES + 1 PROVISIONAL_ADVISORY.
+  Tolerance widened to ±30% to absorb three documented mismatches (see physics_contract.note).
+  Honest-FAIL is acceptable per intake §7 acceptance criterion ii.
 physics_contract:
-  geometry_assumption: "Axisymmetric jet of diameter D impinging normal to a heated flat plate at stand-off distance H/D ~ 2-6; Cooper 1984 correlation requires thermal BCs on the plate"
-  reference_correlation_context: "Cooper 1984 Nu(r/D) correlation for impinging-jet heat transfer gives peak Nu ~ 25 in the stagnation zone at Re ~ 2.3e4. The ref_value in this YAML is **not** the true Cooper Nu (which is ~25); it is the adapter-observed Cf=0.0042 from a flat-plate extraction. The YAML's note: field is the existing disclosure of this mismatch."
+  geometry_assumption: "Free (unconfined) axisymmetric jet of diameter D impinging normal to a flat plate at stand-off H/D=2. Adapter generates a pseudo-2D Cartesian r-z slab with `empty` patches on the lateral faces (NOT a true 3D axisymmetric `wedge` mesh). Slab approximation introduces sidewall-induced 2D-planar bias vs the literature axisymmetric configuration."
+  reference_correlation_context: "Stagnation Nu(r/D=0)=145 digitized from Behnia 1997 Fig 3 ● symbol at Re=23000 H/D=2. Profile values at r/D ∈ {0.5, 1.0, 1.5, 2.0, 3.0, 5.0} also from Fig 3. Secondary peak at r/D=2.0 is the wall-jet transition-to-turbulence signature; at Re=23000 it is PRESENT but less pronounced than the sharp double-peak at Re=70000. See .planning/intake/DEC-V61-071_a0a_context_resolution.md §Reference values for digitization details."
   physics_precondition:
-    - condition: "Solver has a thermal solve with plate at T_hot, jet inflow at T_cold (or equivalent) so a temperature gradient can be extracted at the plate"
+    - condition: "Solver runs an energy equation with plate at constant heat flux q'' or equivalent thermal BC, allowing Nu = q''·D / (k·(T_w - T_jet)) to be extracted from temperature gradient at the plate"
       satisfied_by_current_adapter: false
-      evidence_ref: "whitelist declares simpleFoam which is isothermal; no energy equation solved. Adapter has _generate_impinging_jet (src/foam_agent_adapter.py:4257+) that sets up a buoyantFoam-path case, but the whitelist configuration takes a simpleFoam path that never invokes this generator for the thermal observable."
-      consequence_if_unsatisfied: "No Nu can be computed from the solver output; the value stored as 'nusselt_number' is a flat-plate Cf borrowed from the skin-friction extractor path. PASS against ref_value=0.0042 only proves the adapter is self-consistent, not that the physics is correct."
-    - condition: "The ref_value in this YAML encodes the adapter's actual extraction (Cf=0.0042), NOT the literature Nu (~25)"
+      evidence_ref: "Adapter `_generate_impinging_jet` at src/foam_agent_adapter.py:6204 emits the plate as `type fixedValue; value uniform {T_plate};` → constant-temperature (Dirichlet) BC. Literature Baughn-Shimizu 1989 used a thin gold film electrically heated to constant power → uniform-q (Neumann ∂T/∂n=q/k) BC. The two BC families produce slightly different Nu(r/D) profiles: per Behnia 1997 §discussion, uniform-q is typically 5-15% higher at the stagnation point for matched effective ΔT. Order-of-magnitude estimate: BC mismatch alone could account for 10-20% Nu_stag deviation independent of mesh + turbulence-model effects."
+      consequence_if_unsatisfied: "Computed Nu_stag may underpredict the literature uniform-q value by 5-15%. Absorbed by ±30% tolerance per intake §2; gate verdict still binary PASS/FAIL on the headline."
+    - condition: "Whitelist solver=simpleFoam dispatches to buoyantFoam in the adapter executor (since simpleFoam is isothermal and cannot solve T)"
       satisfied_by_current_adapter: true
-      evidence_ref: "YAML top-level `source` field explicitly calls out 'Computed: simpleFoam flat-plate extraction (cf_skin_friction)'. The Phase 7 gold revision (bf6cb5a and surrounding) replaced the Cooper Nu=25 with the Cf=0.0042 to make the comparison self-consistent under the isothermal solver. This is an honest remediation, but it means PASS on this case demonstrates extraction self-consistency only."
-  contract_status: "INCOMPATIBLE_WITH_LITERATURE_DISGUISED_AS_COMPATIBLE — the observable is called nusselt_number but stores a cf_skin_friction value. No solver change is required to PASS, and no solver change will make it agree with the literature Nu=25 either without a different thermal setup. Future R-A-relabel slice could rename the observable to 'cf_skin_friction_at_plate' and update ref_value to match a Cf correlation; that would be a physics-valid remediation but is out of the current bounded-metadata scope."
-  precondition_last_reviewed: "2026-04-18 (EX-1-005 annotation slice)"
+      evidence_ref: "Whitelist line declares solver=simpleFoam (knowledge/whitelist.yaml impinging_jet.solver), but adapter dispatch overrides to buoyantFoam (src/foam_agent_adapter.py executor branch) because the case requires an energy equation. CASE_ID_TO_SOLVER (src/auto_verifier/config.py) currently aligns with the whitelist string and would benefit from a follow-up sub-batch to align with the actual dispatched solver."
+      consequence_if_unsatisfied: "If executor is reverted to simpleFoam without restoring buoyantFoam dispatch, no T field is solved and Nu cannot be computed → HARD_GATED observable returns NaN → FAIL."
+    - condition: "Mesh resolves the boundary layer at the plate sufficiently for the turbulence model wall function (k-ω SST + automatic wall treatment): y+ < 5 typical for first cell"
+      satisfied_by_current_adapter: unknown
+      evidence_ref: "Adapter mesh generation uses `simpleGrading` with stretching toward the plate (src/foam_agent_adapter.py:_generate_impinging_jet); actual y+ depends on chosen jet-Re and grid count and is not currently asserted at runtime. PROVISIONAL_ADVISORY observable `y_plus_first_cell_at_plate` will be reported but not gated until adapter mesh-generation review (out of scope for V61-071)."
+      consequence_if_unsatisfied: "y+ > 30 at plate degrades wall-function accuracy and inflates Nu_stag error beyond the BC-mismatch budget. Currently unverified."
+  contract_status: "PHYSICS_GAP_DOCUMENTED — three honest mismatches between adapter (constant-T Dirichlet, pseudo-2D slab, simpleFoam→buoyantFoam dispatch override) and literature (uniform-q Neumann, true 3D axisymmetric, native energy-coupled solver). Tolerance widening (0.15 → 0.30) absorbs the BC + slab effects; dispatch override is benign once verified at runtime. Honest-FAIL is acceptable per V61-060/V61-063/V61-066 closeout precedent."
+  precondition_last_reviewed: "2026-04-26 (DEC-V61-071 Stage A.0b citation pivot)"
 relationships:
   solver_reuse: impinging_jet
   geometry_similarity:
@@ -31,14 +36,46 @@ relationships:
     similarity_type: TOPOLOGICAL
   physics_analogy:
     reference_case: impinging_jet
-    analogy_basis: legacy_alias
+    analogy_basis: Baughn-Shimizu canonical configuration
     matched_dimensionless_group: Re
 observables:
   - name: nusselt_number
-    description: "INCOMPATIBLE — simpleFoam isothermal run; cf_skin_friction extracted (Nu=0.0042 is Cf, not Nu)"
-    ref_value: 0.0042
+    description: "HEADLINE — stagnation Nusselt number Nu(r/D=0) at Re=23000 H/D=2 (Baughn-Shimizu 1989, digitized from Behnia 1997 Fig 3 ● symbol)"
+    classification: HARD_GATED
+    ref_value: 145.0
     unit: dimensionless
     tolerance:
       mode: relative
-      value: 0.15
-    notes: "This is cf_skin_friction from flat-plate post-processing. True impinging jet Nu requires buoyantFoam."
+      value: 0.30
+    notes: "Tolerance widened from 0.15 to 0.30 per intake §2 to absorb (a) constant-T vs uniform-q BC mismatch (5-15% bias), (b) pseudo-2D slab vs true axisymmetric geometry, (c) steady-RANS k-ω SST vs transient experimental measurement. Honest-FAIL acceptable per intake §7.ii."
+
+  - name: nusselt_profile_r_over_d
+    description: "PROFILE — Nu(r/D) at 6 stations from Behnia 1997 Fig 3 ● symbols (Baughn-Shimizu 1989 Re=23000 H/D=2). Reported as a single profile family per Codex F2 (one PROFILE_QUALITATIVE_GATE, not 6 independent gates)."
+    classification: PROFILE_QUALITATIVE_GATE
+    ref_profile:
+      - {r_over_d: 0.5, Nu: 130.0}
+      - {r_over_d: 1.0, Nu: 105.0}
+      - {r_over_d: 1.5, Nu: 95.0}   # local minimum pre-secondary peak
+      - {r_over_d: 2.0, Nu: 130.0}  # secondary peak
+      - {r_over_d: 3.0, Nu: 95.0}
+      - {r_over_d: 5.0, Nu: 60.0}
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.30
+    notes: "Qualitative gate: profile shape (monotonic decay r/D ∈ [0.5, 1.5], local minimum near r/D=1.5, secondary peak r/D ∈ [1.5, 2.5], post-secondary decay r/D > 2.5) is the gated criterion. Per-station value tolerance is advisory band, not the gate."
+
+  - name: secondary_peak_presence_or_absence
+    description: "QUALITATIVE — presence of secondary Nu peak in wall-jet at r/D ∈ [1.5, 2.5]. Per intake §1 gate iv: at Re ≥ 20000, peak should be PRESENT (Re=23000 satisfies this threshold)."
+    classification: PROFILE_QUALITATIVE_GATE
+    expected: PRESENT
+    expected_r_over_d_range: [1.5, 2.5]
+    unit: boolean
+    notes: "Boolean gate per intake §1.iv. Less pronounced at Re=23000 than at Re=70000; just needs to be detectable as a local maximum within the r/D ∈ [1.5, 2.5] band, not a sharp double-peak."
+
+  - name: y_plus_first_cell_at_plate
+    description: "ADVISORY — y+ of first wall cell on plate; reports adapter mesh-generation quality without gating verdict"
+    classification: PROVISIONAL_ADVISORY
+    target_max: 5.0
+    unit: dimensionless
+    notes: "Not gated until adapter mesh-generation review confirms y+ control mechanism. PROVISIONAL_ADVISORY per intake §1 risk_register R6."

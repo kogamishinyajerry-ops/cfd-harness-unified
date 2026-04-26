@@ -257,6 +257,12 @@ _TASK_NAME_TO_CASE_ID_ALIASES = {
     "Differential Heated Cavity (Natural Convection, Ra=10^6 benchmark)": "differential_heated_cavity",
     "NACA 0012 Airfoil External Flow": "naca0012_airfoil",
     "Axisymmetric Impinging Jet (Re=10000)": "axisymmetric_impinging_jet",
+    # DEC-V61-071 Stage A.0b (2026-04-26) — citation pivot to Baughn-Shimizu 1989,
+    # Re bumped 10000 → 23000. Both the OLD legacy display string (above) and the
+    # NEW one are kept so cached TaskSpec / fixture references at the legacy Re
+    # still resolve to the canonical case_id (RETRO-V61-060 alias-map atomic
+    # mitigation pattern).
+    "Axisymmetric Impinging Jet (Baughn-Shimizu 1989, Re=23000)": "axisymmetric_impinging_jet",
     "Fully Developed Plane Channel Flow (DNS)": "fully_developed_plane_channel_flow",
 }
 
