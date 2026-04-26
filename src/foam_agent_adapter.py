@@ -8351,7 +8351,14 @@ mergePatchPairs
                                 key_quantities["reattachment_probe_height"] = 0.0
                                 key_quantities["reattachment_n_floor_pts"] = int(floor_mask.sum())
                                 key_quantities["reattachment_wall_shear_source"] = "allPatches_vtk"
-                                return key_quantities
+                                # DEC-V61-067 A.2: capture xs_sorted/tx_sorted
+                                # for cd_mean reuse below; do NOT early-return
+                                # so V61-067 secondary extractors get to run.
+                                tau_x_list = list(tx_sorted.tolist() if hasattr(tx_sorted, "tolist") else tx_sorted)
+                                tau_pts_list = [
+                                    (float(xs_sorted[k] if not hasattr(xs_sorted, "tolist") else xs_sorted.tolist()[k]), 0.0, 0.0)
+                                    for k in range(len(tau_x_list))
+                                ]
                             else:
                                 key_quantities["reattachment_wall_shear_no_sign_change"] = True
                         else:
@@ -8394,8 +8401,28 @@ mergePatchPairs
                     # near-wall Ux. The extractor will label the method
                     # honestly via key_quantities["reattachment_method"].
                     pass
-            key_quantities = self._extract_bfs_reattachment(
+            # DEC-V61-067 A.2 guard: only call the back-compat reattachment
+            # extractor when Path 1 (allPatches VTK) didn't already set
+            # reattachment_length. This prevents the near-wall-Ux fallback
+            # from overwriting the wall-shear-tau_x_zero_crossing measurement.
+            if "reattachment_length" not in key_quantities:
+                key_quantities = self._extract_bfs_reattachment(
+                    cxs, cys, u_vecs, task_spec, key_quantities,
+                    tau_x=tau_x_list, tau_pts=tau_pts_list,
+                )
+
+            # DEC-V61-067 A.2: secondary observable extraction (pressure
+            # recovery + velocity profile at x/H=6 + cd_mean). Runs
+            # regardless of Path 1 / Path 1b / Path 2 outcome.
+            p_path = latest_dir / "p"
+            p_vals: Optional[List[float]] = None
+            if p_path.exists():
+                p_candidate = self._read_openfoam_scalar_field(p_path)
+                if len(p_candidate) == len(cxs):
+                    p_vals = p_candidate
+            key_quantities = self._extract_bfs_secondary_observables(
                 cxs, cys, u_vecs, task_spec, key_quantities,
+                p_vals=p_vals,
                 tau_x=tau_x_list, tau_pts=tau_pts_list,
             )
 
@@ -9187,6 +9214,160 @@ mergePatchPairs
             # extends past the probe range. Explicit flag so the audit
             # can distinguish this from missing input data (Codex r2 #3).
             key_quantities["reattachment_proxy_no_sign_change"] = True
+
+        return key_quantities
+
+    # ------------------------------------------------------------------
+    # BFS Type II secondary observables (DEC-V61-067 A.2)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_bfs_secondary_observables(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+        *,
+        p_vals: Optional[List[float]] = None,
+        tau_x: Optional[List[float]] = None,
+        tau_pts: Optional[List[Tuple[float, float, float]]] = None,
+    ) -> Dict[str, Any]:
+        """BFS Type II secondary observable extraction (DEC-V61-067 A.2).
+
+        Calls 3 extractors from src.bfs_extractors and folds results into
+        ``key_quantities``:
+
+            extract_pressure_recovery(p_inlet, p_outlet, U_bulk)
+                → pressure_recovery dict {inlet, outlet, delta}
+
+            extract_velocity_profile_at_x(cells, x_target=6, y_targets=[0.5, 1, 2])
+                → list of {x_H, y_H, u_Ubulk}
+
+            extract_cd_mean(tau_x_floor_data, U_bulk)
+                → mean |Cf| (PROVISIONAL_ADVISORY)
+
+        Each extractor failure is folded into a ``bfs_*_error`` audit key
+        rather than propagated. Reattachment_length is NOT touched here —
+        the back-compat path at _extract_bfs_reattachment owns it.
+
+        Args:
+            cxs/cys: cell-centre coordinates (physical units, H=1).
+            u_vecs: list of velocity 3-vectors.
+            task_spec: TaskSpec carrying Re + boundary_conditions.
+            key_quantities: dict to populate.
+            p_vals: optional cell-centre p field. If None, pressure_recovery
+                is folded into a "p_field_missing" error key.
+            tau_x: optional list of tau_x values (downstream lower_wall).
+                If None or empty, cd_mean is folded into a
+                "tau_x_field_missing" error key.
+            tau_pts: list of (x, y, z) for the tau_x face centres.
+
+        Returns:
+            ``key_quantities`` with V61-067 secondary observables + audit keys.
+        """
+        from src.bfs_extractors import (  # noqa: PLC0415
+            BfsExtractorError,
+            extract_cd_mean,
+            extract_pressure_recovery,
+            extract_velocity_profile_at_x,
+        )
+
+        H = 1.0  # step height (DEC-V61-052 canonical 3-block mesh)
+        U_bulk = 1.0  # normalized adapter run convention
+        rho = 1.0
+        key_quantities["bfs_extractor_path"] = (
+            "wall_shear_v1+pressure_recovery_v1+velocity_profile_v1"
+        )
+
+        # ----- pressure_recovery -----
+        # Inlet face: x ≈ -10·H (V61-052 case-gen has L_up=10, so inlet at x=-10).
+        # Outlet face: x ≈ 30·H.
+        if p_vals is not None and len(p_vals) == len(cxs):
+            unique_x = sorted({round(x, 6) for x in cxs})
+            if unique_x:
+                x_inlet_target, x_outlet_target = -10.0, 30.0
+                x_inlet = min(unique_x, key=lambda x: abs(x - x_inlet_target))
+                x_outlet = min(unique_x, key=lambda x: abs(x - x_outlet_target))
+                inlet_ps = [
+                    p_vals[i] for i in range(len(cxs))
+                    if abs(round(cxs[i], 6) - x_inlet) < 1e-6
+                ]
+                outlet_ps = [
+                    p_vals[i] for i in range(len(cxs))
+                    if abs(round(cxs[i], 6) - x_outlet) < 1e-6
+                ]
+                if inlet_ps and outlet_ps:
+                    p_inlet = sum(inlet_ps) / len(inlet_ps)
+                    p_outlet = sum(outlet_ps) / len(outlet_ps)
+                    try:
+                        cp = extract_pressure_recovery(
+                            p_inlet=p_inlet, p_outlet=p_outlet,
+                            U_bulk=U_bulk, rho=rho, p_ref=0.0,
+                        )
+                        key_quantities["pressure_recovery"] = cp
+                        key_quantities["bfs_pressure_recovery_x_inlet"] = x_inlet
+                        key_quantities["bfs_pressure_recovery_x_outlet"] = x_outlet
+                        key_quantities["bfs_pressure_recovery_n_inlet"] = len(inlet_ps)
+                        key_quantities["bfs_pressure_recovery_n_outlet"] = len(outlet_ps)
+                    except BfsExtractorError as exc:
+                        key_quantities["pressure_recovery_error"] = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                else:
+                    key_quantities["pressure_recovery_error"] = (
+                        f"insufficient_face_cells: inlet={len(inlet_ps)} outlet={len(outlet_ps)}"
+                    )
+        else:
+            key_quantities["pressure_recovery_error"] = "p_field_missing"
+
+        # ----- velocity_profile_reattachment -----
+        # x/H=6, y/H ∈ {0.5, 1.0, 2.0} per Le/Moin/Kim 1997.
+        cells = [
+            (cxs[i], cys[i], u_vecs[i][0])
+            for i in range(min(len(cxs), len(cys), len(u_vecs)))
+        ]
+        try:
+            profile = extract_velocity_profile_at_x(
+                cells=cells,
+                x_target_physical=6.0 * H,
+                y_targets_physical=[0.5 * H, 1.0 * H, 2.0 * H],
+                U_bulk=U_bulk,
+                step_height=H,
+            )
+            key_quantities["velocity_profile_reattachment"] = profile
+            key_quantities["bfs_velocity_profile_n_points"] = len(profile)
+        except BfsExtractorError as exc:
+            key_quantities["velocity_profile_reattachment_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        # ----- cd_mean -----
+        # Same wallShearStress data as the primary reattachment extractor.
+        # Filter to downstream floor (x > 0).
+        if tau_x and tau_pts and len(tau_x) == len(tau_pts):
+            floor_data = [
+                (tau_pts[i][0], tau_x[i])
+                for i in range(len(tau_x))
+                if tau_pts[i][1] < 0.01 and tau_pts[i][0] > 0.05
+            ]
+            if floor_data:
+                try:
+                    cd = extract_cd_mean(
+                        tau_x_floor_data=floor_data,
+                        U_bulk=U_bulk, rho=rho,
+                    )
+                    key_quantities["cd_mean"] = cd
+                    key_quantities["bfs_cd_n_floor_samples"] = len(floor_data)
+                    key_quantities["bfs_cd_method"] = "mean_abs_cf_downstream_floor"
+                except BfsExtractorError as exc:
+                    key_quantities["cd_mean_error"] = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+            else:
+                key_quantities["cd_mean_error"] = "no_downstream_floor_samples"
+        else:
+            key_quantities["cd_mean_error"] = "tau_x_field_missing"
 
         return key_quantities
 
