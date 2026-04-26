@@ -130,6 +130,17 @@ class RunReport:
         # default is already () but callers can pass a list/iterator;
         # frozen=True prevents direct reassignment, so we use the
         # documented `object.__setattr__` escape inside __post_init__.
+        #
+        # Reject a bare string explicitly *before* iterating: `tuple("hi")`
+        # silently char-explodes to `('h', 'i')`, which would corrupt
+        # note metadata. Callers passing a single note must wrap it
+        # themselves: `notes=("hi",)`.
+        if isinstance(self.notes, str):
+            raise TypeError(
+                f"RunReport.notes must be a tuple of str entries, not a "
+                f"bare str. Wrap a single note with a trailing comma: "
+                f"got notes={self.notes!r}, expected notes=({self.notes!r},)"
+            )
         if not isinstance(self.notes, tuple):
             object.__setattr__(self, "notes", tuple(self.notes))
         for note in self.notes:

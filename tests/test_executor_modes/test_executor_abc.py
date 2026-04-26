@@ -241,6 +241,23 @@ def test_run_report_rejects_non_str_notes():
         )
 
 
+def test_run_report_rejects_bare_string_notes_to_avoid_char_explosion():
+    """Codex P2-T1.a R2 finding: a bare-string notes value would be
+    silently char-exploded by `tuple("alpha")` → ('a','l','p','h','a').
+    __post_init__ must reject the bare-string form explicitly."""
+    from src.models import ExecutionResult
+
+    with pytest.raises(TypeError, match="not a bare str"):
+        RunReport(
+            mode=ExecutorMode.MOCK,
+            status=ExecutorStatus.OK,
+            contract_hash="0" * 64,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(success=True, is_mock=True),
+            notes="alpha",  # type: ignore[arg-type]
+        )
+
+
 def test_run_report_rejects_raw_string_status():
     """Per Codex finding #2: status must be ExecutorStatus, not str.
     Without this guard, downstream comparisons that use enum identity
