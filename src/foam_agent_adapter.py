@@ -6753,6 +6753,13 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
             encoding="utf-8",
         )
 
+        # DEC-V61-064: kOmegaSSTSAS requires `delta` keyword (LES-style filter
+        # length scale for the SAS source term). Use cubeRootVol — standard for
+        # unstructured/hex meshes (V61-061 H-grid). Other models don't read it.
+        if is_transient:
+            sas_delta_block = "    delta         cubeRootVol;\n"
+        else:
+            sas_delta_block = ""
         (case_dir / "constant" / "turbulenceProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -6777,7 +6784,7 @@ RAS
     RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}}
+{sas_delta_block}}}
 
 // ************************************************************************* //
 """,
