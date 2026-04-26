@@ -93,24 +93,31 @@ def test_mock_executor_natural_convection_preset_used():
 
 
 def test_mock_executor_falls_back_to_internal_for_unknown_flow_type():
-    """Forward-compat: if a future FlowType is added to models.py and
-    MockExecutor's _PRESETS hasn't been updated yet, it must still
-    return a usable RunReport (skeleton-friendly fallback)."""
+    """Forward-compat: if a future FlowType value is added to
+    models.py and MockExecutor's _PRESETS hasn't been updated yet,
+    the executor must still return a usable RunReport (defaulting to
+    the INTERNAL preset rather than raising KeyError).
+
+    To genuinely exercise the fallback branch in
+    `src/executor/mock.py:81` (the `_PRESETS.get(flow_key, _PRESETS["INTERNAL"])`
+    line), we mutate `task_spec.flow_type` to an object whose `.value`
+    is not in the preset table. TaskSpec is a regular @dataclass
+    (mutable), so direct attribute assignment works.
+    """
+
+    class _UnknownFlowType:
+        """Stand-in for a hypothetical future FlowType enum value."""
+
+        value = "FUTURE_FLOW_NOT_IN_PRESETS"
+
     spec = _make_task_spec(FlowType.INTERNAL)
-    # Force an unknown flow_type by patching the value post-construction.
-    # We do this via dataclasses.replace because TaskSpec is a regular
-    # @dataclass (mutable); we just use the patched object directly.
-    spec_unknown = type(spec)(
-        name=spec.name,
-        geometry_type=spec.geometry_type,
-        flow_type=spec.flow_type,  # still a real FlowType enum
-        steady_state=spec.steady_state,
-        compressibility=spec.compressibility,
-    )
-    # Stash an unknown flow_type by temporarily monkey-patching value.
-    # Skipping the actual unknown-value test because FlowType is a tightly-
-    # closed enum; the fallback is a defensive guard documented but not
-    # exercisable without a lambda hack. We just assert the INTERNAL path
-    # keeps working (the canonical fallback target).
-    report = MockExecutor().execute(spec_unknown)
+    spec.flow_type = _UnknownFlowType()  # type: ignore[assignment]
+
+    report = MockExecutor().execute(spec)
+
     assert report.status == ExecutorStatus.OK
+    er = report.execution_result
+    assert er is not None
+    # The INTERNAL preset is identifiable by its `u_centerline` quantity;
+    # if the executor crashed or returned a different default, this would fail.
+    assert "u_centerline" in er.key_quantities

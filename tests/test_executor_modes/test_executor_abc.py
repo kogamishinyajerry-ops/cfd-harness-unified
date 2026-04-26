@@ -209,6 +209,84 @@ def test_run_report_default_notes_is_empty_tuple():
     assert report.notes == ()
 
 
+def test_run_report_normalizes_list_notes_to_tuple():
+    """Codex PC-3-style hardening: callers may pass a list, but the
+    contract is "immutable tuple". __post_init__ normalizes."""
+    from src.models import ExecutionResult
+
+    report = RunReport(
+        mode=ExecutorMode.MOCK,
+        status=ExecutorStatus.OK,
+        contract_hash="0" * 64,
+        version=SPEC_VERSION,
+        execution_result=ExecutionResult(success=True, is_mock=True),
+        notes=["alpha", "beta"],  # type: ignore[arg-type]
+    )
+    assert isinstance(report.notes, tuple)
+    assert report.notes == ("alpha", "beta")
+
+
+def test_run_report_rejects_non_str_notes():
+    """Notes must be string entries — type-check enforced."""
+    from src.models import ExecutionResult
+
+    with pytest.raises(TypeError, match="notes entries must be str"):
+        RunReport(
+            mode=ExecutorMode.MOCK,
+            status=ExecutorStatus.OK,
+            contract_hash="0" * 64,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(success=True, is_mock=True),
+            notes=("ok", 123),  # type: ignore[arg-type]
+        )
+
+
+def test_run_report_rejects_raw_string_status():
+    """Per Codex finding #2: status must be ExecutorStatus, not str.
+    Without this guard, downstream comparisons that use enum identity
+    (`status == ExecutorStatus.OK`) silently fail under str inputs."""
+    from src.models import ExecutionResult
+
+    with pytest.raises(TypeError, match="status must be an ExecutorStatus"):
+        RunReport(
+            mode=ExecutorMode.MOCK,
+            status="ok",  # type: ignore[arg-type]
+            contract_hash="0" * 64,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(success=True, is_mock=True),
+        )
+
+
+def test_run_report_rejects_raw_string_mode():
+    """Per Codex finding #2: mode must be ExecutorMode, not str."""
+    from src.models import ExecutionResult
+
+    with pytest.raises(TypeError, match="mode must be an ExecutorMode"):
+        RunReport(
+            mode="mock",  # type: ignore[arg-type]
+            status=ExecutorStatus.OK,
+            contract_hash="0" * 64,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(success=True, is_mock=True),
+        )
+
+
+def test_run_report_str_mode_yields_value_not_classname():
+    """Codex finding #1 verification: str(ExecutorMode.MOCK) == 'mock'
+    (StrEnum behavior), not 'ExecutorMode.MOCK' (plain Enum behavior)."""
+    assert str(ExecutorMode.MOCK) == "mock"
+    assert str(ExecutorMode.DOCKER_OPENFOAM) == "docker_openfoam"
+    assert str(ExecutorMode.HYBRID_INIT) == "hybrid_init"
+    assert str(ExecutorMode.FUTURE_REMOTE) == "future_remote"
+
+
+def test_run_report_str_status_yields_value_not_classname():
+    """Same StrEnum behavior for ExecutorStatus."""
+    assert str(ExecutorStatus.OK) == "ok"
+    assert str(ExecutorStatus.MODE_NOT_APPLICABLE) == "mode_not_applicable"
+    assert str(ExecutorStatus.MODE_NOT_YET_IMPLEMENTED) == "mode_not_yet_implemented"
+
+
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------

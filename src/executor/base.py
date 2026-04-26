@@ -28,7 +28,7 @@ from __future__ import annotations
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar, Optional, Tuple
 
 from src.models import ExecutionResult, TaskSpec
@@ -47,12 +47,13 @@ __all__ = [
 SPEC_VERSION = "0.2"
 
 
-class ExecutorMode(str, Enum):
+class ExecutorMode(StrEnum):
     """The 4 ExecutorModes per EXECUTOR_ABSTRACTION.md §2.
 
-    Inherits from `str` so that the value can be embedded directly in
-    serialized manifests (per spike F-3 byte-determinism: `mode` is an
-    enum, serialized as its string value).
+    `StrEnum` (Python 3.11+) — `str(ExecutorMode.MOCK)` yields `'mock'`
+    rather than `'ExecutorMode.MOCK'`. This matches the spec's
+    representation: the manifest's `executor.mode` field stores the
+    string value verbatim under spike F-3 byte-determinism.
     """
 
     MOCK = "mock"
@@ -61,7 +62,7 @@ class ExecutorMode(str, Enum):
     FUTURE_REMOTE = "future_remote"
 
 
-class ExecutorStatus(str, Enum):
+class ExecutorStatus(StrEnum):
     """Outcome of an `ExecutorAbc.execute(...)` call.
 
     `OK` is the only status that produces a populated `execution_result`.
@@ -70,6 +71,9 @@ class ExecutorStatus(str, Enum):
     downstream TrustGate routing per §6.1 must handle the refusal
     explicitly (e.g. surface `mode_not_yet_implemented` in the UI for
     `FUTURE_REMOTE`).
+
+    `StrEnum` keeps `str(...)` aligned with the spec value, same
+    rationale as `ExecutorMode` above.
     """
 
     OK = "ok"
@@ -108,6 +112,33 @@ class RunReport:
     notes: Tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
+        # Type guards — frozen dataclass cannot stop callers from passing
+        # raw strings ("ok") or list-typed notes; we normalize/reject here
+        # so the public contract matches what the docstring + spec promise.
+        if not isinstance(self.mode, ExecutorMode):
+            raise TypeError(
+                f"RunReport.mode must be an ExecutorMode value, "
+                f"got {type(self.mode).__name__}={self.mode!r}"
+            )
+        if not isinstance(self.status, ExecutorStatus):
+            raise TypeError(
+                f"RunReport.status must be an ExecutorStatus value, "
+                f"got {type(self.status).__name__}={self.status!r}"
+            )
+
+        # Normalize notes to an immutable tuple. The dataclass field
+        # default is already () but callers can pass a list/iterator;
+        # frozen=True prevents direct reassignment, so we use the
+        # documented `object.__setattr__` escape inside __post_init__.
+        if not isinstance(self.notes, tuple):
+            object.__setattr__(self, "notes", tuple(self.notes))
+        for note in self.notes:
+            if not isinstance(note, str):
+                raise TypeError(
+                    f"RunReport.notes entries must be str, "
+                    f"got {type(note).__name__}={note!r}"
+                )
+
         if self.status == ExecutorStatus.OK and self.execution_result is None:
             raise ValueError(
                 f"RunReport(mode={self.mode!r}, status=OK) requires a populated "
