@@ -144,35 +144,6 @@ shipped under §11.5 enforcement work) detects these surfaces and blocks
 direct-to-main commits without an `Audit-Required: <ID>` trailer
 referencing a Codex tool report.
 
-### §10.5.4a Pre-flagged audit-required surfaces (§10 amendment)
-
-Following the DEC-V61-072 first-execution finding that §10 module-only
-gating was too weak, the following **non-trust-core surfaces** are now
-audit-required at commit time even though they live outside the
-trust-core 5 modules:
-
-1. **FoamAgentExecutor call sites** — any new caller of
-   `FoamAgentExecutor.execute(...)` outside the 5 trust-core modules.
-2. **Docker / subprocess reachability changes** — any commit that adds
-   or modifies subprocess invocations reaching Docker, container
-   runtimes, or filesystem mount points.
-3. **`/api/**` route registration** — any new or renamed FastAPI route
-   under `ui/backend/routes/` (route-namespace collision check
-   mandatory; see Finding 2).
-4. **`reports/` durable persistence** — any commit that writes new
-   artifact paths under `reports/` or changes the schema/discovery of
-   existing paths.
-5. **`user_drafts/` → `TaskSpec` plumbing** — any commit that lets
-   user-drafted YAML influence `TaskSpec` or solver inputs without
-   per-case range / whitelist compatibility validation.
-
-A commit touching any of the 5 surfaces requires Codex review per §10
-baseline regardless of `autonomous_governance` flag. The pre-commit
-hook `tools/methodology_guards/audit_required_surfaces.sh` (TBD ·
-shipped under §11.5 enforcement work) detects these surfaces and blocks
-direct-to-main commits without an `Audit-Required: <ID>` trailer
-referencing a Codex tool report.
-
 ### §10.5.5 First execution result (DEC-V61-072 · 2026-04-26)
 
 See `reports/codex_tool_reports/dec_v61_072_sampling_audit_first_execution.md`.
