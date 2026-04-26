@@ -210,6 +210,140 @@ class MockSolverDriver:
 _HEARTBEAT_INTERVAL_S = 2.5  # 2-3s feels responsive without flooding
 
 
+# --- M4 · Docker / OpenFOAM failure classifier -----------------------------
+# Maps raw stderr / exception text → a small set of categories so the UI
+# can show a readable banner instead of dumping the whole FOAM FATAL trace.
+# First match wins; ordering matters — Docker-class hints precede solver-class
+# hints because a Docker-down failure can cascade into "command not found"
+# which would otherwise look like an openfoam_missing.
+
+# Keep the categories closed-set so the frontend banner can have explicit
+# colour + copy for each. Adding a new category needs both backend + frontend.
+_FAILURE_CATEGORIES = (
+    "docker_missing",
+    "openfoam_missing",
+    "mesh_failed",
+    "solver_diverged",
+    "postprocess_failed",
+    "unknown_error",
+)
+
+
+# (pattern_lowercase, category) — pattern is a plain substring match against
+# the lowercased haystack. Priority is the order of this list.
+_FAILURE_HINTS: list[tuple[str, str]] = [
+    # --- Docker daemon / CLI absent --------------------------------------
+    ("cannot connect to the docker daemon", "docker_missing"),
+    ("docker daemon is not running", "docker_missing"),
+    ("docker daemon", "docker_missing"),
+    ("error response from daemon", "docker_missing"),
+    ("docker: command not found", "docker_missing"),
+    ("docker.errors.dockerexception", "docker_missing"),
+    # --- Container not running / image missing ---------------------------
+    ("no such container", "openfoam_missing"),
+    ("not found: name=cfd-openfoam", "openfoam_missing"),
+    ("container cfd-openfoam", "openfoam_missing"),
+    # --- OpenFOAM binary missing inside container ------------------------
+    ("blockmesh: command not found", "openfoam_missing"),
+    ("simplefoam: command not found", "openfoam_missing"),
+    ("icofoam: command not found", "openfoam_missing"),
+    ("buoyantfoam: command not found", "openfoam_missing"),
+    ("pimplefoam: command not found", "openfoam_missing"),
+    # --- Mesh generation failures (priority: explicit blockMesh phase) ---
+    ("foam fatal error" , "solver_diverged"),  # default for FATAL — refined below
+    # The blockMesh-specific markers below run BEFORE the generic FATAL
+    # because we walk in order. They override solver_diverged when they
+    # appear in the same haystack.
+]
+
+
+# Markers that, when found, REFINE an earlier classification. Each rule
+# checks the haystack for a substring; if matched, it overrides the
+# category that would have been picked above.
+_FAILURE_OVERRIDES: list[tuple[str, str]] = [
+    # Mesh-specific markers — refine generic FATAL → mesh_failed. We
+    # intentionally do NOT have a bare "blockmesh" override here because
+    # "blockMesh: command not found" should classify as openfoam_missing,
+    # not mesh_failed. The non-orthogonality / negative-cell-volume markers
+    # only fire on real mesh failures during blockMesh/snappyHexMesh runs.
+    ("non-orthogonality", "mesh_failed"),
+    ("negative cell volume", "mesh_failed"),
+    # Solver-divergence markers
+    ("continuity error", "solver_diverged"),
+    ("floating point exception", "solver_diverged"),
+    ("max(co)", "solver_diverged"),
+    # Post-process failures — only after solver completed
+    ("samplefile", "postprocess_failed"),
+    ("foamtovtk", "postprocess_failed"),
+    ("post-process", "postprocess_failed"),
+]
+
+
+_REMEDIATION_HINTS: dict[str, str] = {
+    "docker_missing": (
+        "Docker daemon is not reachable. Start Docker Desktop / colima / "
+        "rootless docker and retry."
+    ),
+    "openfoam_missing": (
+        "The cfd-openfoam container or its OpenFOAM binaries are missing. "
+        "Run `docker compose up cfd-openfoam` (or your equivalent bootstrap)."
+    ),
+    "mesh_failed": (
+        "Mesh generation (blockMesh / snappyHexMesh) failed. Check geometry "
+        "parameters — non-orthogonality or negative cell volumes usually "
+        "mean Re/mesh-size combination is too aggressive for this case."
+    ),
+    "solver_diverged": (
+        "Solver diverged (continuity error, max(Co)>>1, or NaN). Lower Re, "
+        "increase under-relaxation, or use smaller endTime / Δt."
+    ),
+    "postprocess_failed": (
+        "Solver finished but post-processing (sample / foamToVTK) failed. "
+        "Solver output is still on disk — check the run dir manually."
+    ),
+    "unknown_error": (
+        "Failure didn't match any known pattern. Open the run detail page "
+        "for the full error message and stderr."
+    ),
+}
+
+
+def _classify_failure(text: str | None, _exit_code: int | None = None) -> str:
+    """Return one of `_FAILURE_CATEGORIES` for the given haystack text.
+
+    Priority: Docker / container errors first (because they cascade into
+    bogus 'command not found' lower in the stack), then specific markers
+    via _FAILURE_OVERRIDES, then a generic FOAM FATAL → solver_diverged
+    fallback, then unknown_error if nothing matches.
+    """
+    if not text:
+        return "unknown_error"
+    haystack = text.lower()
+
+    # First pass: high-priority hints (Docker / container).
+    for pattern, category in _FAILURE_HINTS:
+        if pattern in haystack:
+            initial = category
+            break
+    else:
+        initial = "unknown_error"
+
+    # Second pass: refine — overrides only fire if their pattern appears.
+    # Walk in order so later (more specific) overrides win over earlier.
+    refined = initial
+    for pattern, category in _FAILURE_OVERRIDES:
+        if pattern in haystack:
+            refined = category
+
+    return refined
+
+
+def failure_remediation(category: str) -> str:
+    """Public lookup. Returns the user-facing remediation hint for a
+    classified failure category."""
+    return _REMEDIATION_HINTS.get(category, _REMEDIATION_HINTS["unknown_error"])
+
+
 def _task_spec_from_case_id(case_id: str):
     """Build a TaskSpec for the given case_id.
 
@@ -413,7 +547,13 @@ class RealSolverDriver:
             exc = exec_exc
             err_str = str(exc)
             duration_s = time.time() - t0
-            verdict_summary = f"executor exception: {type(exc).__name__}"
+            # M4: classify the exception text for a readable verdict banner.
+            failure_category = _classify_failure(
+                f"{type(exc).__name__}: {err_str}", _exit_code=1
+            )
+            verdict_summary = (
+                f"executor exception: {type(exc).__name__} ({failure_category})"
+            )
 
             yield _sse({
                 "type": "log", "phase": "solver", "t": time.time(),
@@ -426,6 +566,7 @@ class RealSolverDriver:
                 "run_id": run_id,
                 "status": "fail",
                 "summary": verdict_summary,
+                "failure_category": failure_category,
             })
             # Persist run history artifacts even on failure — the user's
             # /workbench/case/{id}/runs table needs to show the failed run.
@@ -443,6 +584,7 @@ class RealSolverDriver:
                     key_quantities=None,
                     residuals=None,
                     error_message=f"{type(exc).__name__}: {err_str[:500]}",
+                    failure_category=failure_category,
                 )
             except Exception as write_exc:  # noqa: BLE001
                 # A failed write should never propagate up — the SSE
@@ -462,6 +604,7 @@ class RealSolverDriver:
                     f"{type(exc).__name__}: {err_str[:120]}"
                 ),
                 "exit_code": 1, "level": "error",
+                "failure_category": failure_category,
             })
             return
 
@@ -494,6 +637,13 @@ class RealSolverDriver:
 
         # --- 4. phase_done + run_done + run-history writeback ---------------
         elapsed_total = result.execution_time_s or (time.time() - t0)
+        # M4: classify failure for failed runs only. None on success.
+        failure_category: str | None = None
+        if not result.success:
+            failure_category = _classify_failure(
+                result.error_message, _exit_code=result.exit_code
+            )
+
         if result.success:
             verdict_summary = (
                 f"OpenFOAM converged · {elapsed_total:.1f}s · "
@@ -509,12 +659,13 @@ class RealSolverDriver:
             level = "info"
         else:
             err_msg = (result.error_message or "(no error message)")[:160]
-            verdict_summary = f"OpenFOAM failed · {err_msg}"
+            verdict_summary = f"OpenFOAM failed · {err_msg} ({failure_category})"
             yield _sse({
                 "type": "phase_done", "phase": "solver", "t": time.time(),
                 "run_id": run_id,
                 "status": "fail",
                 "summary": verdict_summary,
+                "failure_category": failure_category,
             })
             exit_code = result.exit_code if result.exit_code is not None else 1
             level = "error"
@@ -534,6 +685,7 @@ class RealSolverDriver:
                 key_quantities=dict(result.key_quantities or {}),
                 residuals=dict(result.residuals or {}),
                 error_message=result.error_message,
+                failure_category=failure_category,
             )
         except Exception as write_exc:  # noqa: BLE001
             yield _sse({
@@ -543,7 +695,7 @@ class RealSolverDriver:
                 "level": "warning", "stream": "stderr",
             })
 
-        yield _sse({
+        run_done_event: dict[str, object] = {
             "type": "run_done", "phase": None, "t": time.time(),
             "run_id": run_id,
             "summary": (
@@ -553,7 +705,10 @@ class RealSolverDriver:
             ),
             "exit_code": exit_code,
             "level": level,
-        })
+        }
+        if failure_category is not None:
+            run_done_event["failure_category"] = failure_category
+        yield _sse(run_done_event)
 
 
 _DRIVER_REGISTRY: dict[str, SolverDriver] = {

@@ -22,6 +22,15 @@ class RunSummaryEntry(BaseModel):
     success: bool
     exit_code: int
     verdict_summary: str = Field(description="Short human-readable verdict.")
+    # M4: failure category for failed runs. None for successful runs.
+    failure_category: Optional[str] = Field(
+        default=None,
+        description=(
+            "M4 classifier output for failed runs: docker_missing | "
+            "openfoam_missing | mesh_failed | solver_diverged | "
+            "postprocess_failed | unknown_error. None for success."
+        ),
+    )
     # The most useful task-spec params at-a-glance — listed flat so the table
     # can render them without an extra fetch. Values copied verbatim from the
     # TaskSpec at run time.
@@ -47,6 +56,14 @@ class RunDetail(BaseModel):
     exit_code: int
     verdict_summary: str
     error_message: Optional[str] = None
+    failure_category: Optional[str] = Field(
+        default=None,
+        description="M4 classifier output for failed runs (None on success).",
+    )
+    failure_remediation: Optional[str] = Field(
+        default=None,
+        description="User-facing remediation hint matching failure_category.",
+    )
     source_origin: str = Field(
         description="Where the case definition came from: 'draft' | 'whitelist'."
     )

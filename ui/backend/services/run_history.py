@@ -113,6 +113,7 @@ def write_run_artifacts(
     key_quantities: dict[str, Any] | None,
     residuals: dict[str, Any] | None,
     error_message: str | None = None,
+    failure_category: str | None = None,
     root: Path | None = None,
 ) -> Path:
     """Write the three per-run artifact files. Idempotent: overwrites any
@@ -143,6 +144,10 @@ def write_run_artifacts(
         "execution_time_s": duration_s,
         "verdict_summary": verdict_summary,
         "error_message": error_message,
+        # M4: failure_category is None on success; one of the closed-set
+        # category strings on failure (docker_missing/openfoam_missing/
+        # mesh_failed/solver_diverged/postprocess_failed/unknown_error).
+        "failure_category": failure_category,
     }
     (target / "verdict.json").write_text(
         json.dumps(verdict_doc, indent=2, ensure_ascii=False),
@@ -194,6 +199,7 @@ def list_runs(case_id: str, *, root: Path | None = None) -> list[RunSummaryEntry
                 success=bool(verdict.get("success", False)),
                 exit_code=int(verdict.get("exit_code", -1)),
                 verdict_summary=str(verdict.get("verdict_summary", "")),
+                failure_category=verdict.get("failure_category"),
                 task_spec_excerpt=summary.get("task_spec", {}) or {},
             )
         )
@@ -219,6 +225,15 @@ def get_run_detail(case_id: str, run_id: str, *, root: Path | None = None) -> Ru
     verdict = json.loads(verdict_path.read_text(encoding="utf-8"))
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
+    failure_category = verdict.get("failure_category")
+    # M4: derive the user-facing remediation hint from the category, lazily
+    # imported so test code that doesn't touch wizard_drivers can still
+    # call get_run_detail without pulling the full driver module.
+    failure_remediation = None
+    if failure_category:
+        from ui.backend.services.wizard_drivers import failure_remediation as _hint
+        failure_remediation = _hint(failure_category)
+
     return RunDetail(
         case_id=case_id,
         run_id=run_id,
@@ -229,6 +244,8 @@ def get_run_detail(case_id: str, run_id: str, *, root: Path | None = None) -> Ru
         exit_code=int(verdict.get("exit_code", -1)),
         verdict_summary=str(verdict.get("verdict_summary", "")),
         error_message=verdict.get("error_message"),
+        failure_category=failure_category,
+        failure_remediation=failure_remediation,
         source_origin=str(summary.get("source_origin", "unknown")),
         task_spec=summary.get("task_spec", {}) or {},
         key_quantities=measurement.get("key_quantities", {}) or {},

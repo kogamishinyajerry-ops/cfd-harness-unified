@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
 import type { RunDetail } from "@/types/run_history";
+import { FAILURE_CATEGORY_LABEL_ZH } from "@/types/run_history";
 
 // M3 · Workbench Closed-Loop main-line — /workbench/case/:caseId/run/:runId
 //
@@ -63,6 +64,10 @@ export function RunDetailPage() {
       </header>
 
       <VerdictCard d={d} />
+
+      {!d.success && d.failure_category && (
+        <FailureBanner category={d.failure_category} remediation={d.failure_remediation} />
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Block title="Task spec (excerpt)">
@@ -161,6 +166,29 @@ function VerdictCard({ d }: { d: RunDetail }) {
         {d.success ? "PASS" : "FAIL"} · exit_code={d.exit_code} · {d.duration_s.toFixed(1)}s
       </div>
       <div className="mt-1 text-[13px] opacity-90">{d.verdict_summary}</div>
+    </div>
+  );
+}
+
+function FailureBanner({
+  category,
+  remediation,
+}: {
+  category: NonNullable<RunDetail["failure_category"]>;
+  remediation?: string | null;
+}) {
+  const label = FAILURE_CATEGORY_LABEL_ZH[category] ?? category;
+  return (
+    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4">
+      <div className="text-[10px] uppercase tracking-wider text-amber-400/80">
+        failure category
+      </div>
+      <div className="mt-1 text-base font-semibold text-amber-300">
+        {label} <span className="font-mono text-[12px] opacity-70">· {category}</span>
+      </div>
+      {remediation && (
+        <p className="mt-2 whitespace-pre-wrap text-[13px] text-amber-200/90">{remediation}</p>
+      )}
     </div>
   );
 }

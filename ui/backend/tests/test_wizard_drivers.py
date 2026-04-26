@@ -16,6 +16,8 @@ from ui.backend.services.wizard_drivers import (
     MockSolverDriver,
     RealSolverDriver,
     SolverDriver,
+    _classify_failure,
+    failure_remediation,
     get_driver,
 )
 
@@ -453,6 +455,118 @@ def test_real_driver_writeback_failure_does_not_block_run_done(write_artifacts_c
         if e.get("type") == "log" and e.get("level") == "warning"
     ]
     assert any("writeback failed" in e["line"] for e in warn_logs)
+
+
+# --- M4 · failure classifier ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "haystack,expected",
+    [
+        # Docker daemon down
+        ("Cannot connect to the Docker daemon at unix:///var/run/docker.sock",
+         "docker_missing"),
+        ("docker.errors.DockerException: ...", "docker_missing"),
+        ("error response from daemon: ...", "docker_missing"),
+        # Container missing (cascades)
+        ("Error: No such container: cfd-openfoam", "openfoam_missing"),
+        # OpenFOAM binary missing — "command not found" wins over a bare
+        # blockmesh marker, so "blockMesh: command not found" is correctly
+        # classified as openfoam_missing rather than mesh_failed.
+        ("blockMesh: command not found", "openfoam_missing"),
+        ("simpleFoam: command not found", "openfoam_missing"),
+        # Mesh failure (FOAM FATAL + blockMesh marker → mesh_failed)
+        ("FOAM FATAL ERROR: blockMesh non-orthogonality 92.4 deg",
+         "mesh_failed"),
+        ("negative cell volume detected during snappyHexMesh",
+         "mesh_failed"),
+        # Solver divergence
+        ("Time = 4.2s  continuity error = 1.2e62", "solver_diverged"),
+        ("Floating point exception (core dumped)", "solver_diverged"),
+        ("Time = 0.5  max(Co) = 98.7", "solver_diverged"),
+        ("FOAM FATAL ERROR: simpleFoam diverged", "solver_diverged"),
+        # Post-process
+        ("foamToVTK: error converting time 0.5", "postprocess_failed"),
+        # Empty / no info
+        ("", "unknown_error"),
+        (None, "unknown_error"),
+        # Garbage that matches nothing
+        ("some random unrelated garbage text", "unknown_error"),
+    ],
+)
+def test_classify_failure_categorises_known_patterns(haystack, expected) -> None:
+    assert _classify_failure(haystack) == expected
+
+
+def test_failure_remediation_known_for_every_category() -> None:
+    """Every closed-set category must have a non-empty remediation hint —
+    so the frontend banner never shows an empty body."""
+    for cat in (
+        "docker_missing", "openfoam_missing", "mesh_failed",
+        "solver_diverged", "postprocess_failed", "unknown_error",
+    ):
+        hint = failure_remediation(cat)
+        assert hint and len(hint) > 5
+    # Unknown category falls back to unknown_error's hint.
+    assert failure_remediation("not_a_real_category") == failure_remediation("unknown_error")
+
+
+def test_real_driver_failure_emits_classified_category(write_artifacts_capture) -> None:
+    """RealSolverDriver MUST attach failure_category to phase_done/run_done
+    on the failure path, AND pass it to write_run_artifacts."""
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result(
+        success=False,
+        exit_code=1,
+        error_message="FOAM FATAL ERROR continuity error 1e62 max(Co)=98.7",
+    )
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.return_value = fake_result
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    # SSE-side: phase_done and run_done both carry failure_category.
+    phase_done = next(e for e in events if e["type"] == "phase_done")
+    run_done = events[-1]
+    assert phase_done.get("failure_category") == "solver_diverged"
+    assert run_done.get("failure_category") == "solver_diverged"
+
+    # Writeback-side: the artifact persists the same category.
+    assert len(write_artifacts_capture) == 1
+    assert write_artifacts_capture[0]["failure_category"] == "solver_diverged"
+
+
+def test_real_driver_executor_exception_classified_as_docker_missing(
+    write_artifacts_capture,
+) -> None:
+    """A RuntimeError mentioning 'docker daemon' should classify as
+    docker_missing, not bubble up as unknown_error."""
+    drv = RealSolverDriver()
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.side_effect = RuntimeError(
+            "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
+        )
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    run_done = events[-1]
+    assert run_done["exit_code"] == 1
+    assert run_done.get("failure_category") == "docker_missing"
+    assert write_artifacts_capture[0]["failure_category"] == "docker_missing"
+
+
+def test_real_driver_success_omits_failure_category(write_artifacts_capture) -> None:
+    """Success path must NOT attach a failure_category — None is the
+    semantic 'this is a healthy run' signal for the run-history table."""
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result(success=True)
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.return_value = fake_result
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    run_done = events[-1]
+    assert run_done["exit_code"] == 0
+    assert "failure_category" not in run_done
+    # Writeback gets None.
+    assert write_artifacts_capture[0]["failure_category"] is None
 
 
 def test_real_driver_terminates_with_run_done_for_all_paths() -> None:

@@ -2,6 +2,8 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
+import { FAILURE_CATEGORY_LABEL_ZH } from "@/types/run_history";
+import type { FailureCategory } from "@/types/run_history";
 
 // M3 · Workbench Closed-Loop main-line — /workbench/case/:caseId/runs
 //
@@ -134,6 +136,9 @@ export function RunHistoryPage() {
                     {r.success ? "ok" : "fail"}
                   </span>
                   <span className="ml-2 text-surface-400">{r.verdict_summary}</span>
+                  {!r.success && r.failure_category && (
+                    <FailureChip category={r.failure_category} />
+                  )}
                 </td>
               </tr>
             ))}
@@ -146,6 +151,18 @@ export function RunHistoryPage() {
 
 function Section({ children }: { children: React.ReactNode }) {
   return <section className="mx-auto max-w-6xl px-8 py-8">{children}</section>;
+}
+
+function FailureChip({ category }: { category: FailureCategory }) {
+  const label = FAILURE_CATEGORY_LABEL_ZH[category] ?? category;
+  return (
+    <span
+      title={category}
+      className="ml-2 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300"
+    >
+      {label}
+    </span>
+  );
 }
 
 function ParamsExcerpt({ excerpt }: { excerpt: Record<string, unknown> }) {
