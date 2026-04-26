@@ -9,7 +9,7 @@ parent_dec: DEC-V61-080
 parent_audit_evidence: .planning/audit_evidence/2026-04-26_v61_080_a4_flake_attribution.txt
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.95    # forensic identification only; no production-code change
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed810b90f7d3e8348f91f8)
 codex_tool_report_path: null  # forensic-investigation only; no source-code modification per this DEC
 risk_flags: []
 gov1_v1_scope:

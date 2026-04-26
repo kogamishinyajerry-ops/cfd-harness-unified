@@ -10,7 +10,7 @@ parent_authority_verdict: AUTH-V61-080-2026-04-26
 authority_class: 3
 autonomous_governance: false                # CLASS-3 explicitly forbids autonomous landing
 external_gate_self_estimated_pass_rate: n/a # not Claude Code's call
-notion_sync_status: pending  # do not sync until Opus Gate N+2 approves
+notion_sync_status: queue-only synced 2026-04-26 (https://notion.so/34ec68942bed81a990e8ca9cc8f540e8)  # DRAFT/Proposed page for queue visibility ONLY; gold-value re-anchor body still TBD-marked. Full sync (Status=Accepted, values filled) deferred until Opus Gate N+2 approval.
 codex_tool_report_path: null
 risk_flags:
   - executable_smoke_test

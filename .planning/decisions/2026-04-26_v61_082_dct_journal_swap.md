@@ -9,7 +9,7 @@ parent_dec: DEC-V61-080
 parent_authority_verdict: AUTH-V61-080-2026-04-26
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.75    # CLASS-2 with substantive correlation re-description; Codex may flag the Re* re-anchoring or the residual 0.88-claim retraction
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed8182a970c214b2f05e26)  # Status=Proposed pending Codex review verdict
 codex_tool_report_path: pending  # /codex-gpt54 review must run; report path written here when complete
 risk_flags:
   - executable_smoke_test                     # not applicable (knowledge metadata only, no executable change)

@@ -9,7 +9,7 @@ parent_dec: DEC-V61-080
 parent_authority_verdict: AUTH-V61-080-2026-04-26
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.99    # CLASS-1 trivial typo, no Codex required, no gold value change
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed81adadb0d2071fb5bded)
 codex_tool_report_path: null  # CLASS-1: no Codex review required per authority verdict §2
 risk_flags: []
 gov1_v1_scope:
