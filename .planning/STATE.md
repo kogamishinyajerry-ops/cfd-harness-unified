@@ -3,13 +3,15 @@ gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
 status: M1_M4_COMPLETE
-last_updated: "2026-04-26T11:35 local"  # 治理收口 Day 0: anchor session + DEC-V61-071 (load_tolerance_policy wiring) + DEC-V61-072 (sampling audit first execution · §10.5 §11 drafted)
+last_updated: "2026-04-26T17:00 local"  # 治理收口 Day 0: DEC-V61-073 4-PC closure complete (PC-2/3/4 Codex APPROVE) · status flipped to Accepted · §10.5 + §11 promote to Active · P2-T1 unblocked
 methodology_active_sections:
   - "§10 治理降级 (RETRO-V61-006 addendum)"
   - "§10.4 Line-A/B isolation contract (OPS-2026-04-25-001)"
-  - "§10.5 sampling audit anchor (DEC-V61-072 · provisional · pending CFDJerry sign-off)"
-  - "§10.5.4a audit-required surfaces (5 surfaces · DEC-V61-072 first-execution amendment)"
-  - "§11 anti-drift standing rules (DRAFT · pending CFDJerry sign-off)"
+  - "§10.5 sampling audit anchor (Active · DEC-V61-073 PC-3 closure 2026-04-26)"
+  - "§10.5.4a audit-required surfaces (7 surfaces · DEC-V61-073 A4 expansion)"
+  - "§10.5.4b token budget cap (≤100k per fire · DEC-V61-073 H3 · enforced by scripts/methodology/sampling_audit.py)"
+  - "§10.5.4c interval ratchet (5 → 7 → 10 → 15 → 20 · DEC-V61-073 Q1c)"
+  - "§11 anti-drift standing rules (Active · DEC-V61-073 PC-4 closure 2026-04-26)"
 governance_closure_session:
   start: "2026-04-26"
   end: "2026-05-03"
@@ -18,16 +20,17 @@ governance_closure_session:
     A_signature_chain: "CLOSED (A1+A2 Status=Accepted · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 in-session DOCUMENT DOWNGRADED to preparatory analysis per DEC-V61-073 · independent Notion @Opus 4.7 audit IS the legitimate W2 G-9 gate · audit verdict RATIFY_WITH_AMENDMENTS · 30-day override window NOT consumed — fully preserved per audit constitutional finding)"
     B_ssot_alignment: "CLOSED (main page Active Phase line ✓ · Foundation-Freeze Status=Done with closeout section ✓ · P1 phase Closeout annotated ✓ · Phases DB sweep clean · Sessions DB anchor + Signature Closure ✓)"
     C_sampling_audit: "CLOSED (DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · interval 20→5 · §11 5 anti-drift rules drafted)"
-  three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 lands them · P2 kickoff partial overturn → HOLD)"
-  p2_kickoff_status: "HOLD (audit Q5 OVERTURN · 4 PCs must turn GREEN before P2-T1 starts: PC1 DEC-V61-073 Accepted · PC2 EXECUTOR_ABSTRACTION §X.Y hybrid-init invariant landed · PC3 §10.5+§11 promotion path resolved · PC4 STATE.md p2_kickoff_status flips HOLD→GO_PENDING_PCs_GREEN→GO)"
+  three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS_LANDED (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 closed Accepted 2026-04-26T17:00 · all 4 PCs GREEN with Codex APPROVE · P2-T1 UNBLOCKED)"
+  p2_kickoff_status: "GO (4 PCs GREEN as of 2026-04-26T17:00 · PC1 this DEC's flip 06e5f29 · PC2 EXECUTOR_ABSTRACTION.md v0.2 50bb2eb Codex APPROVE R3 · PC3 sampling_audit.py + 24 tests 55f2642 Codex APPROVE R2 · PC4 §10.5+§11 draft chronology bridges 25c4cd8 Codex APPROVE R3)"
   override_window_status: "0_days_consumed_window_fully_preserved (audit constitutional finding: 「全权执行,继续」 = operational not constitutional · Pivot Charter §7 independence-of-context invariant intact)"
+  amendments_landed_2026_04_26_pc_closure:
+    - "§10.5.4b token cap ≤100k/fire (DEC-V61-073 H3) · enforced by scripts/methodology/sampling_audit.py"
+    - "§10.5.4c interval ratchet 5→7→10→15→20 (DEC-V61-073 Q1c) · §10.5.4 + §10.5.5 chronology bridges in draft"
+    - "§10.5.4a surface list 5→7 (DEC-V61-073 A4: correction_spec/ + .planning/case_profiles/) · 24 tests cover smoke audit"
+    - "EXECUTOR_ABSTRACTION §5 hybrid-init OpenFOAM-truth invariant + §6 TrustGate routing (DEC-V61-073 H4) · docs/specs/EXECUTOR_ABSTRACTION.md v0.2"
   amendments_pending_active_promotion:
-    - "§10.5.4b token cap ≤100k/fire (DEC-V61-073 H3)"
-    - "§10.5.4c interval ratchet 5→7→10→15→20 (DEC-V61-073 Q1c)"
-    - "§10.5.4a surface list 5→7 (DEC-V61-073 A4: correction_spec/ + .planning/case_profiles/)"
-    - "EXECUTOR_ABSTRACTION §X.Y hybrid-init OpenFOAM-truth invariant (DEC-V61-073 H4)"
-    - "§11.1 wire-up advisory mode (DEC-V61-073 A6)"
-    - "§11.5 umbrella for 2 pre-existing SSOT discrepancies (DEC-V61-073 A7)"
+    - "§11.1 wire-up advisory mode (DEC-V61-073 A6) — separate workstream"
+    - "§11.5 umbrella for 2 pre-existing SSOT discrepancies (DEC-V61-073 A7) — separate workstream"
   methodology_guards_shipped:
     - "tools/methodology_guards/workbench_freeze.sh (§11.1)"
     - "tools/methodology_guards/workbench_quota_check.sh (§11.4)"
