@@ -10,7 +10,7 @@ parent_session: https://www.notion.so/34ec68942bed8105a5f2f961241cd32b
 supersedes_gate: none
 autonomous_governance: false
 external_gate_self_estimated_pass_rate: 0.85
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed817e994ef2ccbd9d50a7)
 codex_tool_report_path: reports/codex_tool_reports/dec_v61_071_round1.md (R1 CHANGES_REQUIRED) + reports/codex_tool_reports/dec_v61_071_round2.md (R2 pending)
 codex_round_arc:
   R1_initial_paauhtgaiah: failed (usage limit) — retry on kogamishinyajerry

@@ -10,7 +10,7 @@ parent_session: https://www.notion.so/34ec68942bed8105a5f2f961241cd32b
 supersedes_gate: none
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.60
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed81ae9a1ff7628fba1bd7)
 codex_tool_report_path: reports/codex_tool_reports/dec_v61_072_sampling_audit_first_execution.md
 ---
 

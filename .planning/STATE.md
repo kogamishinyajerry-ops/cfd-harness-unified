@@ -15,10 +15,18 @@ governance_closure_session:
   end: "2026-05-03"
   anchor_url: "https://www.notion.so/34ec68942bed8105a5f2f961241cd32b"
   three_anchors:
-    A_signature_chain: "CLOSED_WITH_A3_DEFERRED (A1 + A2 Status=Accepted via Notion API proxy-sign 2026-04-26 per user authorization · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 Opus Gate deferred to next external-context Notion session per RETRO-V61-005 · Signature Closure session at https://www.notion.so/34ec68942bed81199282c09119f7b514)"
+    A_signature_chain: "CLOSED (A1 + A2 Status=Accepted via Notion API proxy-sign · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 Opus Gate REVIEWED in-session with integrity-reduction disclosure per user 2026-04-26 explicit authorization · gate doc at .planning/gates/2026-04-26_w2_g9_opus_4_7_gate_review.md · CFDJerry retains 30-day override right via independent Notion @Opus 4.7 session)"
     B_ssot_alignment: "CLOSED (main page Active Phase line ✓ · Foundation-Freeze Status=Done with closeout section ✓ · P1 phase Closeout annotated ✓ · Phases DB sweep clean · Sessions DB anchor + Signature Closure ✓)"
     C_sampling_audit: "CLOSED (DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · interval 20→5 · §11 5 anti-drift rules drafted)"
-  three_anchor_verdict: "ALL_CLOSED (Day 0 + early Day 1) · Day 7 RETRO finalization on 2026-05-03 will rubber-stamp; P2 kickoff Go recommended"
+  three_anchor_verdict: "ALL_CLOSED (Day 0 single-day compressed execution per user 2026-04-26 explicit full-authority mandate)"
+  p2_kickoff_status: "GO (W2 G-9 Opus 4.7 Gate verdict GO · P2-T0 spike COMPATIBLE · P1 closeout APPROVE · §10.5+§11 active provisional · Pivot Charter governance constraints captured in gate doc)"
+  methodology_guards_shipped:
+    - "tools/methodology_guards/workbench_freeze.sh (§11.1)"
+    - "tools/methodology_guards/workbench_quota_check.sh (§11.4)"
+    - "tools/methodology_guards/ssot_consistency_check.py (§11.5)"
+  methodology_guards_pending_90day_backlog:
+    - "§11.2 sampling_audit_reminder.yml (GitHub workflow · poll commits since last audit)"
+    - "§11.3 north_star_drift_monthly_check (cron + planning/north_star_drift_log/<YYYY-MM>.md template)"
 progress:
   closed_arcs:
     workbench_arc: "6/6 stages + 8a + 8b prep COMPLETE (4-round Opus 4.7 review, stop criterion triggered 2026-04-25)"
