@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-071
 title: Wire load_tolerance_policy into task_runner._build_trust_gate_report (P1 Metrics & Trust tail)
-status: IMPLEMENTED_PENDING_CODEX_REVIEW (2026-04-26 · trust-core boundary item · Codex review queued post-E1 audit)
+status: R1_VERBATIM_FIXED_PENDING_R2 (2026-04-26 · trust-core boundary item · R1 CHANGES_REQUIRED → 2 findings fixed verbatim → R2 fired)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-26
 authored_under: 治理收口 2026-04-26 → 2026-05-03 anchor session · Workflow B
@@ -11,7 +11,16 @@ supersedes_gate: none
 autonomous_governance: false
 external_gate_self_estimated_pass_rate: 0.85
 notion_sync_status: pending
-codex_tool_report_path: pending (Codex review fires after DEC-V61-072 land · single-account quota)
+codex_tool_report_path: reports/codex_tool_reports/dec_v61_071_round1.md (R1 CHANGES_REQUIRED) + reports/codex_tool_reports/dec_v61_071_round2.md (R2 pending)
+codex_round_arc:
+  R1_initial_paauhtgaiah: failed (usage limit) — retry on kogamishinyajerry
+  R1_kogamishinyajerry: failed (usage limit · cx-auto Score-vs-actual drift)
+  R1_picassoer651: SUCCESS (61% Score) → CHANGES_REQUIRED · F#1 MED slug resolution + F#2 LOW lazy load
+  R2_picassoer651: TBD (verbatim fix verification)
+r1_findings_summary:
+  F1_MED_slug_resolution: "TaskSpec.name often display title not slug → load_tolerance_policy silently misses real CaseProfiles. Fix: _resolve_case_slug_for_policy helper walks knowledge/whitelist.yaml name↔id mapping."
+  F2_LOW_lazy_load: "Loader was eager (filesystem I/O on attestation-only and no-input paths). Fix: moved load call inside `if comparison is not None:` branch."
+r1_fix_commit: f0f0f80
 ---
 
 # DEC-V61-071 · load_tolerance_policy wiring (P1 Metrics & Trust tail)
