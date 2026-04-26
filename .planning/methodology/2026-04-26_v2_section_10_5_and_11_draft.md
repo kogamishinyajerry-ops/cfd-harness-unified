@@ -166,7 +166,10 @@ artifacts, /api routes, user-draft → solver plumbing) crossed into
 audit-required territory.
 
 **Action taken** (per Codex recommendation §10.5.4a):
-- 5 surfaces added to §10.5.4a pre-flagged audit-required list (above).
+- 5 surfaces added to §10.5.4a pre-flagged audit-required list at the
+  time of this first execution (DEC-V61-072). The list was later
+  expanded to 7 surfaces by DEC-V61-073 A4 — see §10.5.4a above for
+  the current canonical 7-surface enumeration.
 - Sampling interval dropped 20 → 5 commits until 2 consecutive clean
   audits.
 - Merges **kept** (no trust-core bleed; commits are functional). Mini-
