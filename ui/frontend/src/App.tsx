@@ -15,6 +15,7 @@ import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
+import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 
 // Demo-first routing (convergence round, 2026-04-22): the default landing is
@@ -54,6 +55,10 @@ export default function App() {
             residual stream retired. Real solver SSE lives at
             /workbench/run/:caseId driven by RealSolverDriver. */}
         <Route path="/audit-package" element={<AuditPackagePage />} />
+        {/* Workbench 60-day extension (2026-04-26) · landing index — case
+            picker grid for the closed-loop entry point so users don't have
+            to know case_ids by URL. */}
+        <Route path="/workbench" element={<WorkbenchIndexPage />} />
         {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
         <Route path="/workbench/new" element={<NewCaseWizardPage />} />
         <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />
