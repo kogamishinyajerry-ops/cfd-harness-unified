@@ -163,6 +163,7 @@ def extract_velocity_profile_at_x(
     U_bulk: float,
     step_height: float = 1.0,
     x_tol: float = 0.0,
+    y_target_max_distance: float = 0.0,
 ) -> List[Dict[str, float]]:
     """Sample u_x at (x_target, y_targets) and return gold-YAML-shape dicts.
 
@@ -170,11 +171,23 @@ def extract_velocity_profile_at_x(
     centre to y_target) and return u_x normalized by U_bulk. Output
     keys match the gold YAML schema exactly: {"x_H", "y_H", "u_Ubulk"}.
 
+    DEC-V61-067 R1 F#2 conservative validation:
+      - Every cells entry validated as (x, y, u_x) of finite floats;
+        BfsExtractorError raised on malformed tuples or non-finite data.
+      - Each y_target requires a nearest cell within
+        ``y_target_max_distance``; if the nearest cell is farther,
+        BfsExtractorError raised (prevents 1-cell column from
+        fabricating a 3-point profile).
+      - Tie-break is explicit: when two cells are equidistant from a
+        y_target, the LOWER-y cell wins (sort key (|Δy|, y)).
+
     Args:
-        cells: list of (cx, cy, u_x) tuples in PHYSICAL units. The adapter
-            should pre-filter to a band near x_target if needed (or pass
-            all cells and let this function snap to the single nearest
-            x column — V61-066 post-R3 #1 lesson).
+        cells: list of (cx, cy, u_x) tuples in PHYSICAL units. Each
+            tuple must have exactly 3 numeric finite entries; otherwise
+            BfsExtractorError raised. The adapter should pre-filter to
+            a band near x_target if needed (or pass all cells and let
+            this function snap to the single nearest x column — V61-066
+            post-R3 #1 lesson).
         x_target_physical: target x position (m). For BFS at Re_H=7600
             with H=1, the canonical near-reattachment station is x = 6.0.
         y_targets_physical: list of target y positions (m). For BFS,
@@ -186,6 +199,12 @@ def extract_velocity_profile_at_x(
             function snaps to the SINGLE nearest unique x column to
             avoid x-tol-aliasing duplicates (V61-066 R1 post-R3 #1
             precedent). If > 0, picks all cells within ±x_tol.
+        y_target_max_distance: maximum admissible distance |cy - y_target|
+            in physical units. If 0.0 (default), no coverage guard
+            (legacy behaviour for unit tests that don't gate on coverage).
+            If > 0, any y_target whose nearest column cell exceeds this
+            distance triggers BfsExtractorError. Adapter passes 0.4·H
+            for V61-067 BFS to fail-close on undersampled columns.
 
     Returns:
         List of dicts, one per y_target, with keys "x_H", "y_H",
@@ -194,8 +213,10 @@ def extract_velocity_profile_at_x(
         (2.0, 1.05)].
 
     Raises:
-        BfsExtractorError: if cells is empty, U_bulk/step_height non-
-            positive, or no cells within the x-target band.
+        BfsExtractorError: if cells is empty, malformed, contains
+            non-finite values, U_bulk/step_height non-positive, no cells
+            within the x-target band, or any y_target has no cell within
+            y_target_max_distance.
     """
     if not cells:
         raise BfsExtractorError("cells is empty")
@@ -204,39 +225,78 @@ def extract_velocity_profile_at_x(
     x_target_physical = _validate_finite("x_target_physical", x_target_physical)
     if not y_targets_physical:
         raise BfsExtractorError("y_targets_physical is empty")
+    if y_target_max_distance != 0.0:
+        y_target_max_distance = _validate_positive(
+            "y_target_max_distance", y_target_max_distance,
+        )
+
+    # DEC-V61-067 R1 F#2: validate every cells entry up front.
+    # Wrap float() in try/except so non-numeric types raise the typed
+    # BfsExtractorError, not a raw ValueError leak.
+    validated_cells: List[Tuple[float, float, float]] = []
+    for idx, entry in enumerate(cells):
+        if not isinstance(entry, (tuple, list)) or len(entry) != 3:
+            raise BfsExtractorError(
+                f"cells[{idx}] must be a (cx, cy, u_x) 3-tuple, got {entry!r}"
+            )
+        try:
+            cx_raw = float(entry[0])
+            cy_raw = float(entry[1])
+            ux_raw = float(entry[2])
+        except (TypeError, ValueError) as exc:
+            raise BfsExtractorError(
+                f"cells[{idx}] contains non-numeric data: {entry!r} ({exc})"
+            ) from exc
+        cx_v = _validate_finite(f"cells[{idx}].cx", cx_raw)
+        cy_v = _validate_finite(f"cells[{idx}].cy", cy_raw)
+        ux_v = _validate_finite(f"cells[{idx}].u_x", ux_raw)
+        validated_cells.append((cx_v, cy_v, ux_v))
 
     # V61-066 post-R3 #1 lesson: snap to single nearest unique x column
     # to avoid duplicate-column aliasing.
     if x_tol == 0.0:
-        unique_x = sorted({round(float(c[0]), 6) for c in cells})
+        unique_x = sorted({round(c[0], 6) for c in validated_cells})
         if not unique_x:
             raise BfsExtractorError("no x-coordinates in cells")
         x_chosen = min(unique_x, key=lambda x: abs(x - x_target_physical))
         column = [
-            (float(cx), float(cy), float(ux))
-            for cx, cy, ux in cells
-            if abs(round(float(cx), 6) - x_chosen) < 1e-6
+            (cx, cy, ux)
+            for cx, cy, ux in validated_cells
+            if abs(round(cx, 6) - x_chosen) < 1e-6
         ]
     else:
         x_tol = _validate_positive("x_tol", x_tol)
         column = [
-            (float(cx), float(cy), float(ux))
-            for cx, cy, ux in cells
-            if abs(float(cx) - x_target_physical) <= x_tol
+            (cx, cy, ux)
+            for cx, cy, ux in validated_cells
+            if abs(cx - x_target_physical) <= x_tol
         ]
 
     if not column:
         raise BfsExtractorError(
             f"no cells found near x_target={x_target_physical} "
-            f"(unique x values: {sorted({c[0] for c in cells})[:5]}...)"
+            f"(unique x values: {sorted({c[0] for c in validated_cells})[:5]}...)"
         )
 
     out: List[Dict[str, float]] = []
-    x_H_actual = (column[0][0]) / step_height  # all column cells share x
+    x_H_actual = column[0][0] / step_height  # all column cells share x
     for y_target in y_targets_physical:
         y_target_v = _validate_finite("y_target", y_target)
-        # Pick the single cell nearest to y_target.
-        nearest = min(column, key=lambda cell: abs(cell[1] - y_target_v))
+        # DEC-V61-067 R1 F#2 explicit tie-break: sort key (|Δy|, y) so
+        # equidistant cells resolve deterministically by lower-y wins.
+        nearest = min(
+            column,
+            key=lambda cell: (abs(cell[1] - y_target_v), cell[1]),
+        )
+        nearest_distance = abs(nearest[1] - y_target_v)
+        # DEC-V61-067 R1 F#2 coverage guard: reject undersampled columns.
+        if (y_target_max_distance > 0.0
+                and nearest_distance > y_target_max_distance):
+            raise BfsExtractorError(
+                f"no cell within y_target_max_distance={y_target_max_distance} "
+                f"of y_target={y_target_v}; nearest cell at y={nearest[1]} "
+                f"(distance {nearest_distance})"
+            )
         out.append({
             "x_H": x_H_actual,
             "y_H": nearest[1] / step_height,

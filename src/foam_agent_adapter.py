@@ -9283,46 +9283,65 @@ mergePatchPairs
         # ----- pressure_recovery -----
         # Inlet face: x ≈ -10·H (V61-052 case-gen has L_up=10, so inlet at x=-10).
         # Outlet face: x ≈ 30·H.
+        # DEC-V61-067 R1 F#1 fix: x_station_tol guard. The previous
+        # implementation snapped to the nearest available x column even
+        # when no column existed near the canonical (-10, 30) target —
+        # silently re-using inlet=-1 / outlet=8 from a non-canonical mesh.
+        # A HARD_GATED observable measured at the wrong stations MUST fail
+        # closed. Tolerance fixed at 0.5·H = 0.5 (looser than typical dx
+        # for V61-052 mesh ~0.25; tight enough to reject [-1, 8] geometry).
+        X_STATION_TOL = 0.5
+        x_inlet_target, x_outlet_target = -10.0, 30.0
         if p_vals is not None and len(p_vals) == len(cxs):
             unique_x = sorted({round(x, 6) for x in cxs})
             if unique_x:
-                x_inlet_target, x_outlet_target = -10.0, 30.0
                 x_inlet = min(unique_x, key=lambda x: abs(x - x_inlet_target))
                 x_outlet = min(unique_x, key=lambda x: abs(x - x_outlet_target))
-                inlet_ps = [
-                    p_vals[i] for i in range(len(cxs))
-                    if abs(round(cxs[i], 6) - x_inlet) < 1e-6
-                ]
-                outlet_ps = [
-                    p_vals[i] for i in range(len(cxs))
-                    if abs(round(cxs[i], 6) - x_outlet) < 1e-6
-                ]
-                if inlet_ps and outlet_ps:
-                    p_inlet = sum(inlet_ps) / len(inlet_ps)
-                    p_outlet = sum(outlet_ps) / len(outlet_ps)
-                    try:
-                        cp = extract_pressure_recovery(
-                            p_inlet=p_inlet, p_outlet=p_outlet,
-                            U_bulk=U_bulk, rho=rho, p_ref=0.0,
-                        )
-                        key_quantities["pressure_recovery"] = cp
-                        key_quantities["bfs_pressure_recovery_x_inlet"] = x_inlet
-                        key_quantities["bfs_pressure_recovery_x_outlet"] = x_outlet
-                        key_quantities["bfs_pressure_recovery_n_inlet"] = len(inlet_ps)
-                        key_quantities["bfs_pressure_recovery_n_outlet"] = len(outlet_ps)
-                    except BfsExtractorError as exc:
-                        key_quantities["pressure_recovery_error"] = (
-                            f"{type(exc).__name__}: {exc}"
-                        )
-                else:
-                    key_quantities["pressure_recovery_error"] = (
-                        f"insufficient_face_cells: inlet={len(inlet_ps)} outlet={len(outlet_ps)}"
+                if (abs(x_inlet - x_inlet_target) > X_STATION_TOL or
+                    abs(x_outlet - x_outlet_target) > X_STATION_TOL):
+                    key_quantities["bfs_pressure_recovery_error"] = (
+                        f"required_x_station_missing: "
+                        f"target_inlet={x_inlet_target} actual={x_inlet}; "
+                        f"target_outlet={x_outlet_target} actual={x_outlet}; "
+                        f"tol={X_STATION_TOL}"
                     )
+                else:
+                    inlet_ps = [
+                        p_vals[i] for i in range(len(cxs))
+                        if abs(round(cxs[i], 6) - x_inlet) < 1e-6
+                    ]
+                    outlet_ps = [
+                        p_vals[i] for i in range(len(cxs))
+                        if abs(round(cxs[i], 6) - x_outlet) < 1e-6
+                    ]
+                    if inlet_ps and outlet_ps:
+                        p_inlet = sum(inlet_ps) / len(inlet_ps)
+                        p_outlet = sum(outlet_ps) / len(outlet_ps)
+                        try:
+                            cp = extract_pressure_recovery(
+                                p_inlet=p_inlet, p_outlet=p_outlet,
+                                U_bulk=U_bulk, rho=rho, p_ref=0.0,
+                            )
+                            key_quantities["pressure_recovery"] = cp
+                            key_quantities["bfs_pressure_recovery_x_inlet"] = x_inlet
+                            key_quantities["bfs_pressure_recovery_x_outlet"] = x_outlet
+                            key_quantities["bfs_pressure_recovery_n_inlet"] = len(inlet_ps)
+                            key_quantities["bfs_pressure_recovery_n_outlet"] = len(outlet_ps)
+                        except BfsExtractorError as exc:
+                            key_quantities["bfs_pressure_recovery_error"] = (
+                                f"{type(exc).__name__}: {exc}"
+                            )
+                    else:
+                        key_quantities["bfs_pressure_recovery_error"] = (
+                            f"insufficient_face_cells: inlet={len(inlet_ps)} outlet={len(outlet_ps)}"
+                        )
         else:
-            key_quantities["pressure_recovery_error"] = "p_field_missing"
+            key_quantities["bfs_pressure_recovery_error"] = "p_field_missing"
 
         # ----- velocity_profile_reattachment -----
         # x/H=6, y/H ∈ {0.5, 1.0, 2.0} per Le/Moin/Kim 1997.
+        # DEC-V61-067 R1 F#2 fix: caller passes y_target_max_distance so
+        # extract_velocity_profile_at_x rejects undersampled columns.
         cells = [
             (cxs[i], cys[i], u_vecs[i][0])
             for i in range(min(len(cxs), len(cys), len(u_vecs)))
@@ -9334,11 +9353,12 @@ mergePatchPairs
                 y_targets_physical=[0.5 * H, 1.0 * H, 2.0 * H],
                 U_bulk=U_bulk,
                 step_height=H,
+                y_target_max_distance=0.4 * H,
             )
             key_quantities["velocity_profile_reattachment"] = profile
             key_quantities["bfs_velocity_profile_n_points"] = len(profile)
         except BfsExtractorError as exc:
-            key_quantities["velocity_profile_reattachment_error"] = (
+            key_quantities["bfs_velocity_profile_reattachment_error"] = (
                 f"{type(exc).__name__}: {exc}"
             )
 
@@ -9361,13 +9381,13 @@ mergePatchPairs
                     key_quantities["bfs_cd_n_floor_samples"] = len(floor_data)
                     key_quantities["bfs_cd_method"] = "mean_abs_cf_downstream_floor"
                 except BfsExtractorError as exc:
-                    key_quantities["cd_mean_error"] = (
+                    key_quantities["bfs_cd_mean_error"] = (
                         f"{type(exc).__name__}: {exc}"
                     )
             else:
-                key_quantities["cd_mean_error"] = "no_downstream_floor_samples"
+                key_quantities["bfs_cd_mean_error"] = "no_downstream_floor_samples"
         else:
-            key_quantities["cd_mean_error"] = "tau_x_field_missing"
+            key_quantities["bfs_cd_mean_error"] = "tau_x_field_missing"
 
         return key_quantities
 

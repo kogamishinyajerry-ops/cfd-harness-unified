@@ -327,7 +327,11 @@ class TestExtractorEmitKeySurface:
         assert kq["cd_mean"] == pytest.approx(0.009, rel=1e-9)
 
     def test_extractor_folds_p_field_missing_into_audit_key(self):
-        """p_vals=None ⇒ pressure_recovery_error stamped, observable absent."""
+        """p_vals=None ⇒ bfs_pressure_recovery_error stamped, observable absent.
+
+        DEC-V61-067 R1 F#3 fix: audit-key naming follows bfs_*_error
+        pattern (was unprefixed pressure_recovery_error).
+        """
         d = _build_minimal_extractor_input()
         kq: Dict[str, Any] = {}
         kq = FoamAgentExecutor._extract_bfs_secondary_observables(
@@ -337,13 +341,13 @@ class TestExtractorEmitKeySurface:
             tau_x=d["tau_x"], tau_pts=d["tau_pts"],
         )
         assert "pressure_recovery" not in kq
-        assert kq.get("pressure_recovery_error") == "p_field_missing"
+        assert kq.get("bfs_pressure_recovery_error") == "p_field_missing"
         # Other observables should still emit.
         assert "velocity_profile_reattachment" in kq
         assert "cd_mean" in kq
 
     def test_extractor_folds_tau_x_missing_into_audit_key(self):
-        """tau_x=None ⇒ cd_mean_error stamped."""
+        """tau_x=None ⇒ bfs_cd_mean_error stamped (R1 F#3 prefixed)."""
         d = _build_minimal_extractor_input()
         kq: Dict[str, Any] = {}
         kq = FoamAgentExecutor._extract_bfs_secondary_observables(
@@ -353,7 +357,167 @@ class TestExtractorEmitKeySurface:
             tau_x=None, tau_pts=None,
         )
         assert "cd_mean" not in kq
-        assert kq.get("cd_mean_error") == "tau_x_field_missing"
+        assert kq.get("bfs_cd_mean_error") == "tau_x_field_missing"
         # Other observables should still emit.
         assert "pressure_recovery" in kq
         assert "velocity_profile_reattachment" in kq
+
+
+class TestR1F1XStationGuard:
+    """DEC-V61-067 R1 F#1 regression — pressure_recovery x-station fail-close."""
+
+    def test_required_x_station_missing_fails_closed(self):
+        """When p field is present but x stations are NOT near canonical
+        (-10, 30), pressure_recovery MUST NOT be published.
+
+        Codex R1 reproducer: emit only x={-1, 8, 6} cells; old code
+        snapped to nearest column and published a meaningless Cp from
+        x=-1 / x=8 (the legacy [-1, 8] domain). Fix-closes via
+        bfs_pressure_recovery_error="required_x_station_missing".
+        """
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        cells_p: List[float] = []
+        # Non-canonical mesh: x ∈ {-1, 6, 8} (Codex reproducer)
+        for x in [-1.0, 6.0, 8.0]:
+            for y in [0.5, 1.0, 2.0]:
+                cxs.append(x)
+                cys.append(y)
+                u_vecs.append((0.5, 0.0, 0.0))
+                cells_p.append(0.0)
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_bfs_secondary_observables(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=_make_task(), key_quantities=kq,
+            p_vals=cells_p, tau_x=None, tau_pts=None,
+        )
+        assert "pressure_recovery" not in kq
+        err = kq.get("bfs_pressure_recovery_error", "")
+        assert "required_x_station_missing" in err, (
+            f"Expected 'required_x_station_missing' fail-close; got: {err!r}"
+        )
+
+    def test_canonical_mesh_passes_guard(self):
+        """Canonical mesh (x near -10, 30) passes the guard and publishes
+        pressure_recovery."""
+        d = _build_minimal_extractor_input()  # uses x=-9.5 and 29.5
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_bfs_secondary_observables(
+            cxs=d["cxs"], cys=d["cys"], u_vecs=d["u_vecs"],
+            task_spec=_make_task(), key_quantities=kq,
+            p_vals=d["p_vals"], tau_x=d["tau_x"], tau_pts=d["tau_pts"],
+        )
+        assert "pressure_recovery" in kq
+        assert "bfs_pressure_recovery_error" not in kq
+
+
+class TestR1F2VelocityProfileValidation:
+    """DEC-V61-067 R1 F#2 regression — extract_velocity_profile_at_x
+    conservative validation."""
+
+    def test_malformed_cell_tuple_raises_typed_exception(self):
+        """A 2-element tuple instead of (cx, cy, u_x) raises
+        BfsExtractorError, NOT raw ValueError."""
+        from src.bfs_extractors import BfsExtractorError, extract_velocity_profile_at_x
+        with pytest.raises(BfsExtractorError, match="3-tuple|cells"):
+            extract_velocity_profile_at_x(
+                cells=[(6.0, 1.0)],  # missing u_x
+                x_target_physical=6.0,
+                y_targets_physical=[0.5],
+                U_bulk=1.0,
+            )
+
+    def test_non_finite_u_x_in_cell_raises(self):
+        """A NaN u_x raises BfsExtractorError instead of returning a
+        fabricated profile with non-finite output."""
+        from src.bfs_extractors import BfsExtractorError, extract_velocity_profile_at_x
+        with pytest.raises(BfsExtractorError, match="u_x|finite"):
+            extract_velocity_profile_at_x(
+                cells=[(6.0, 0.5, float("nan"))],
+                x_target_physical=6.0,
+                y_targets_physical=[0.5],
+                U_bulk=1.0,
+            )
+
+    def test_non_string_in_cell_raises(self):
+        """A string in the tuple raises BfsExtractorError, not raw
+        ValueError."""
+        from src.bfs_extractors import BfsExtractorError, extract_velocity_profile_at_x
+        with pytest.raises(BfsExtractorError):
+            extract_velocity_profile_at_x(
+                cells=[(6.0, "bad", 0.4)],
+                x_target_physical=6.0,
+                y_targets_physical=[0.5],
+                U_bulk=1.0,
+            )
+
+    def test_undersampled_column_with_max_distance_fails(self):
+        """A 1-cell column should NOT fabricate a 3-point profile when
+        y_target_max_distance is enforced."""
+        from src.bfs_extractors import BfsExtractorError, extract_velocity_profile_at_x
+        with pytest.raises(BfsExtractorError, match="y_target_max_distance"):
+            extract_velocity_profile_at_x(
+                cells=[(6.0, 0.5, 0.40)],  # only ONE cell
+                x_target_physical=6.0,
+                y_targets_physical=[0.5, 1.0, 2.0],  # 3 targets
+                U_bulk=1.0,
+                y_target_max_distance=0.4,
+            )
+
+    def test_legacy_no_max_distance_still_works(self):
+        """y_target_max_distance=0 (default) preserves legacy fabrication
+        behaviour for unit tests that don't gate on coverage."""
+        from src.bfs_extractors import extract_velocity_profile_at_x
+        result = extract_velocity_profile_at_x(
+            cells=[(6.0, 0.5, 0.40)],
+            x_target_physical=6.0,
+            y_targets_physical=[0.5, 1.0, 2.0],
+            U_bulk=1.0,
+            # y_target_max_distance defaults to 0 → coverage guard off
+        )
+        assert len(result) == 3
+        # All 3 entries reuse the same (only) cell — documented behaviour
+        # when caller doesn't enforce coverage.
+        assert all(r["y_H"] == pytest.approx(0.5) for r in result)
+
+    def test_explicit_tie_break_lower_y_wins(self):
+        """When two cells are equidistant from y_target, the LOWER-y
+        cell wins (sort key (|Δy|, y))."""
+        from src.bfs_extractors import extract_velocity_profile_at_x
+        result = extract_velocity_profile_at_x(
+            cells=[
+                (6.0, 0.5, 0.40),  # y=0.5
+                (6.0, 1.5, 0.85),  # y=1.5 (both equidistant from y=1.0)
+            ],
+            x_target_physical=6.0,
+            y_targets_physical=[1.0],  # exact midpoint
+            U_bulk=1.0,
+        )
+        # Lower-y wins: y=0.5 (NOT y=1.5).
+        assert result[0]["y_H"] == pytest.approx(0.5)
+        assert result[0]["u_Ubulk"] == pytest.approx(0.40)
+
+    def test_adapter_dispatch_passes_max_distance_to_extractor(self):
+        """Adapter at _extract_bfs_secondary_observables MUST pass
+        y_target_max_distance=0.4·H so undersampled columns fail-close
+        via bfs_velocity_profile_reattachment_error."""
+        # Sparse mesh: x=6 column with cells too far from y_targets.
+        cxs: List[float] = []
+        cys: List[float] = []
+        u_vecs: List[Tuple[float, float, float]] = []
+        # Only one cell at y=8 (far from targets 0.5/1/2)
+        cxs.append(6.0)
+        cys.append(8.0)
+        u_vecs.append((0.5, 0.0, 0.0))
+        kq: Dict[str, Any] = {}
+        kq = FoamAgentExecutor._extract_bfs_secondary_observables(
+            cxs=cxs, cys=cys, u_vecs=u_vecs,
+            task_spec=_make_task(), key_quantities=kq,
+            p_vals=None, tau_x=None, tau_pts=None,
+        )
+        assert "velocity_profile_reattachment" not in kq
+        err = kq.get("bfs_velocity_profile_reattachment_error", "")
+        assert "y_target_max_distance" in err, (
+            f"Expected coverage-guard fail-close; got: {err!r}"
+        )
