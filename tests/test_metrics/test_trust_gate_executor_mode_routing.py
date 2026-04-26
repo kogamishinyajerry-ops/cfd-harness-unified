@@ -101,6 +101,38 @@ class TestMockCeiling:
         assert routed.overall is MetricStatus.FAIL
         assert "mock_executor_no_truth_source" in routed.notes
 
+    def test_ceiling_synthesizes_coherent_warning_state(self):
+        """Codex post-commit MED fix: when the ceiling promotes
+        ``overall`` PASS → WARN, ``count_by_status``, ``has_warnings``,
+        and ``summary()`` MUST also reflect the routing-imposed WARN.
+        Pre-fix: ``overall=WARN`` while ``has_warnings=False`` and
+        summary read ``WARN=0`` (a public-API correctness bug)."""
+        base = _all_pass_base()
+        assert base.has_warnings is False  # sanity — no per-metric WARN
+        routed = apply_executor_mode_routing(base, {"mode": "mock"})
+
+        assert routed.overall is MetricStatus.WARN
+        assert routed.has_warnings is True
+        assert routed.count_by_status[MetricStatus.WARN] >= 1
+        # Summary surfaces the routing-imposed WARN truthfully.
+        summary = routed.summary()
+        assert "WARN" in summary
+        # The synthetic count is exactly 1 (ceiling itself, not a
+        # per-metric finding); per-metric reports stay PASS.
+        assert routed.count_by_status[MetricStatus.WARN] == 1
+        assert routed.count_by_status[MetricStatus.FAIL] == 0
+
+    def test_ceiling_does_not_double_count_existing_warnings(self):
+        """When the base report already has WARN entries, the ceiling
+        must NOT add an extra synthetic WARN — the histogram already
+        reflects warning state truthfully."""
+        warn_base = reduce_reports(
+            [_r("alpha", MetricStatus.WARN, "drift"), _r("beta", MetricStatus.PASS)]
+        )
+        routed = apply_executor_mode_routing(warn_base, {"mode": "mock"})
+        # Histogram unchanged: 1 WARN from the underlying report stands.
+        assert routed.count_by_status[MetricStatus.WARN] == 1
+
 
 class TestHybridInitGate:
     """§6.3: a hybrid_init run with no reference docker_openfoam run
@@ -167,3 +199,17 @@ class TestLegacyAndUnknownModes:
         base = _all_pass_base()
         routed = apply_executor_mode_routing(base, {"mode": "spacetime_warp"})
         assert routed.overall is MetricStatus.PASS
+
+    @pytest.mark.parametrize(
+        "non_mapping",
+        ["mock", ["mock"], 123, ("mode", "mock"), b"mock"],
+        ids=["str", "list", "int", "tuple", "bytes"],
+    )
+    def test_non_mapping_executor_section_falls_through(self, non_mapping):
+        """Codex post-commit LOW fix: a malformed manifest where
+        ``executor`` is not a dict at all (e.g., a bare string, list,
+        or scalar) must NOT raise AttributeError. Routing falls
+        through to the truth-source mode, conservative."""
+        base = _all_pass_base()
+        routed = apply_executor_mode_routing(base, executor_section=non_mapping)
+        assert routed.overall is MetricStatus.PASS  # fell through to docker_openfoam

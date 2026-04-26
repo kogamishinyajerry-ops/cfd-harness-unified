@@ -241,3 +241,80 @@ class TestRunTaskDispatchPerMode:
         assert "mode_not_yet_implemented" in result.summary
         assert "future_remote_stub_only" in result.summary
         assert result.trust_gate_report is None  # nothing fed to trust-gate
+
+
+# ---------------------------------------------------------------------------
+# Codex T1.b.2 post-commit MED fix · short-circuit Notion write-back
+# ---------------------------------------------------------------------------
+
+
+class TestShortCircuitWritesBackToNotion:
+    """Codex post-commit review (R1) MED finding: a refused
+    ExecutorAbc run must surface to Notion through the same
+    failure-handling contract as the legacy CFDExecutor failure path.
+    `notion_client.write_execution_result` maps `success=False` to
+    `Status=Review`; without this write-back the Notion task stays
+    stuck in `Ready` even though the executor refused to run.
+    """
+
+    def _refused(self, mode, status, note):
+        return ExecutorRunReport(
+            mode=mode,
+            status=status,
+            contract_hash="cafef00d" * 8,
+            version=SPEC_VERSION,
+            execution_result=None,
+            notes=(note,),
+        )
+
+    def test_hybrid_init_short_circuit_calls_notion_write_back(self):
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.execute.return_value = self._refused(
+            ExecutorMode.HYBRID_INIT,
+            ExecutorStatus.MODE_NOT_APPLICABLE,
+            "hybrid_init_skeleton_no_surrogate",
+        )
+        runner = _stub_runner(executor_abc)
+        result = runner.run_task(_task_spec())
+
+        # Short-circuit happened (comparator skipped) AND Notion write-
+        # back fired exactly once with success=False payload — refusal
+        # surfaces to operators through the standard Review channel.
+        runner._comparator.compare.assert_not_called()
+        runner._notion.write_execution_result.assert_called_once()
+        (called_task, called_exec_result, called_summary), _ = (
+            runner._notion.write_execution_result.call_args
+        )
+        assert called_task is _task_spec.__defaults__ or called_task.name == "lid_driven_cavity"
+        assert called_exec_result.success is False
+        assert "Short-circuit" in called_summary
+
+    def test_future_remote_short_circuit_calls_notion_write_back(self):
+        executor_abc = MagicMock(spec=FutureRemoteExecutor)
+        executor_abc.execute.return_value = self._refused(
+            ExecutorMode.FUTURE_REMOTE,
+            ExecutorStatus.MODE_NOT_YET_IMPLEMENTED,
+            "future_remote_stub_only",
+        )
+        runner = _stub_runner(executor_abc)
+        runner.run_task(_task_spec())
+
+        runner._notion.write_execution_result.assert_called_once()
+
+    def test_short_circuit_notion_unconfigured_does_not_kill_run(self):
+        """When Notion is not configured (write_execution_result raises
+        NotImplementedError — the legacy path's contract), the short-
+        circuit must still return its report cleanly."""
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.execute.return_value = self._refused(
+            ExecutorMode.HYBRID_INIT,
+            ExecutorStatus.MODE_NOT_APPLICABLE,
+            "hybrid_init_skeleton_no_surrogate",
+        )
+        runner = _stub_runner(executor_abc)
+        runner._notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        # Must not raise.
+        result = runner.run_task(_task_spec())
+        assert "Short-circuit" in result.summary

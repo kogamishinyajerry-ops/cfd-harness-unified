@@ -340,9 +340,26 @@ class TaskRunner:
         if self._executor_abc is not None:
             executor_run_report = self._executor_abc.execute(task_spec)
             if executor_run_report.status is not ExecutorStatus.OK:
-                return self._build_short_circuit_report(
+                short_report = self._build_short_circuit_report(
                     task_spec, executor_run_report
                 )
+                # Codex P2-T1.b.2 post-commit MED fix: surface the
+                # refusal to Notion so the existing failure-handling
+                # contract (notion_client maps success=False →
+                # Status=Review) is honored. Without this, a refused
+                # run leaves the Notion task stuck in Ready instead
+                # of advancing to Review.
+                try:
+                    self._notion.write_execution_result(
+                        task_spec,
+                        short_report.execution_result,
+                        short_report.summary,
+                    )
+                except NotImplementedError:
+                    logger.debug(
+                        "Notion not configured, skipping short-circuit write-back"
+                    )
+                return short_report
             assert executor_run_report.execution_result is not None  # OK invariant
             exec_result = executor_run_report.execution_result
         else:

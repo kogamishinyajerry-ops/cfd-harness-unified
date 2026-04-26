@@ -139,10 +139,15 @@ def _extract_mode(executor_section: Optional[Mapping[str, Any]]) -> str:
     Absent section / missing ``mode`` → ``docker_openfoam`` (legacy
     forward-compat per EXECUTOR_ABSTRACTION §3 + spike F-3 — pre-P2
     zips have no ``executor`` field and must be treated as the truth-
-    source mode). Non-string values are also coerced to the legacy
-    fallback so a malformed manifest doesn't blow up routing.
+    source mode). Non-string mode values, non-mapping payloads (str /
+    list / int — i.e. a malformed manifest where ``executor`` is not
+    a dict at all), and ``None`` are all coerced to the legacy fallback
+    so routing never raises ``AttributeError`` on a malformed input.
+    Codex T1.b.3 post-commit LOW fix.
     """
     if not executor_section:
+        return _EXECUTOR_MODE_DOCKER_OPENFOAM
+    if not isinstance(executor_section, Mapping):
         return _EXECUTOR_MODE_DOCKER_OPENFOAM
     mode = executor_section.get("mode")
     if not isinstance(mode, str):
@@ -157,17 +162,38 @@ def _ceiling_to_warn(
 
     A FAIL stays FAIL (worst-wins is monotone — capping never *raises*
     severity); PASS / WARN both become WARN. The original per-metric
-    ``reports`` tuple + ``count_by_status`` are preserved so the audit
-    trail still shows the underlying gold-comparison verdict.
+    ``reports`` tuple is preserved so the audit trail still shows the
+    underlying gold-comparison verdict.
+
+    Codex T1.b.3 post-commit MED fix: when the ceiling promotes
+    ``overall`` from PASS to WARN, ``count_by_status`` MUST also reflect
+    the routing-imposed WARN — otherwise ``has_warnings`` /
+    ``summary()`` would derive ``WARN=0`` from the unchanged histogram
+    while ``overall=WARN``, which is a public-API correctness bug
+    (consumers see "WARN with no warnings"). The fix bumps
+    ``count_by_status[WARN]`` by 1 to represent the ceiling itself
+    when the underlying histogram had no WARN entry, leaving
+    ``count_by_status[PASS]`` and the ``reports`` tuple intact —
+    the ceiling is a synthetic source of warning information separate
+    from per-metric reports, and consumers querying the histogram now
+    see ``PASS=N WARN=1 FAIL=0`` truthfully.
     """
     if base.overall is MetricStatus.FAIL:
         new_overall = MetricStatus.FAIL
     else:
         new_overall = MetricStatus.WARN
+
+    new_counts = dict(base.count_by_status)
+    if (
+        new_overall is MetricStatus.WARN
+        and new_counts.get(MetricStatus.WARN, 0) == 0
+    ):
+        new_counts[MetricStatus.WARN] = 1
+
     return TrustGateReport(
         overall=new_overall,
         reports=base.reports,
-        count_by_status=base.count_by_status,
+        count_by_status=MappingProxyType(new_counts),
         notes=base.notes + (ceiling_note,),
     )
 
