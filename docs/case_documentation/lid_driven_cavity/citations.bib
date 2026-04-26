@@ -1,0 +1,30 @@
+% Citations for lid_driven_cavity gold-standard case
+% Curated 2026-04-26 under GOV-1 (DEC-V61-080)
+
+@article{ghia1982,
+  author  = {Ghia, U. and Ghia, K. N. and Shin, C. T.},
+  title   = {High-{Re} Solutions for Incompressible Flow Using the {Navier}-{Stokes} Equations and a Multigrid Method},
+  journal = {Journal of Computational Physics},
+  volume  = {47},
+  number  = {3},
+  pages   = {387--411},
+  year    = {1982},
+  doi     = {10.1016/0021-9991(82)90058-4},
+  note    = {Table I (u along vertical centerline), Table II (v along horizontal centerline), Table III (primary + secondary vortex coordinates and stream function); Re=100 column}
+}
+
+@techreport{asme_vv20_2009,
+  author      = {{American Society of Mechanical Engineers}},
+  title       = {Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer},
+  institution = {ASME},
+  number      = {V\&V 20-2009},
+  year        = {2009},
+  address     = {New York},
+  note        = {Canonical reference for engineering tolerance bands (5--10\% relative) used to absorb mesh + numerical-scheme deviations in benchmark validation}
+}
+
+% TBD-GOV1: secondary_vortices.psi_tolerance = 0.10
+% Rationale: relaxed from primary's 0.05 because corner-eddy ψ magnitudes
+% are 5--6 orders of magnitude smaller than primary ψ_min, so any truncation
+% error in the ψ field is amplified when divided by ~1e-6 ψ_gold.
+% No published reference quantifies this relaxation factor.
