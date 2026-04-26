@@ -48,7 +48,7 @@ external_gate_caveat: |
 
   This is the second time in the post-V61-080 GOV-1 arc that "naive expected count" has been honest-corrected downward by methodology rigor (first: v0.5 → v0.6 split surfaced 8 tier-(c) entries previously bundled under "27 cited"; second: v0.6 → v0.7 honest count reveals only 1 valid upgrade out of 8). RETRO-V61-006 R3 forensic-honesty standard is being applied: hypothesis labeled, expectations vs reality declared, no inflated claims.
 codex_tool_report_path: not_applicable_codex_skipped
-notion_sync_status: synced 2026-04-26 · Status=Accepted (page_id=34ec6894-2bed-81e3-b56b-f6dae19614ec, URL=https://www.notion.so/34ec68942bed81e3b56bf6dae19614ec). Body sections: headline + methodology summary + per-entry trace verdict (8 rows) + honest delta vs ≥52% expectation + files changed + Codex skip rationale + counter provenance hypothesis + cross-references.
+notion_sync_status: synced 2026-04-26 · Status=Accepted (page_id=34ec6894-2bed-81e3-b56b-f6dae19614ec, URL=https://www.notion.so/34ec68942bed81e3b56bf6dae19614ec). Body sections: headline + methodology summary + per-entry trace verdict (8 rows) + honest delta vs ≥52% expectation + files changed + Codex skip rationale + counter provenance hypothesis + cross-references. Post-sync addendum 2026-04-26: LDC TBD-GOV1 follow-up section appended (commit 0a01b8a + STATE.md sync 8b9f955) documenting v0.7 methodology applied to LDC `secondary_vortices.psi`; trace fails §1.1, TBD retained pending CFDJerry direction on promotion path. Aggregate: 9 entries evaluated, 1 upgrade + 8 honest fallback; tier-(a) count unchanged at 11/29 = 38%.
 github_sync_status: not_pushed_yet (origin/main 64+ commits ahead, CFDJerry controls push)
 ---
 
