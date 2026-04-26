@@ -328,6 +328,119 @@ def test_comparison_with_none_relative_errors_yields_no_deviation() -> None:
 
 
 # ---------------------------------------------------------------------------
+# DEC-V61-071 · P1 tail · load_tolerance_policy dispatch wiring
+# ---------------------------------------------------------------------------
+
+
+def _write_case_profile(tmp_path: Path, case_id: str, observables: list[str]) -> None:
+    body_lines = [
+        f"case_id: {case_id}",
+        "schema_version: 1",
+        'last_assessed: "2026-04-26"',
+        "tolerance_policy:",
+    ]
+    for obs in observables:
+        body_lines.append(f"  {obs}:")
+        body_lines.append("    tolerance: 0.05")
+    (tmp_path / f"{case_id}.yaml").write_text("\n".join(body_lines) + "\n")
+
+
+def test_build_trust_gate_report_invokes_load_tolerance_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DEC-V61-071: verify load_tolerance_policy is dispatched and the
+    loaded observables surface on the comparison report's provenance.
+    Today (pre-P1-T4) this is a wiring exercise — verdict semantics are
+    unchanged. The provenance trail makes the dispatch path observable
+    so the eventual ObservableDef migration has live test coverage."""
+    from src.metrics import case_profile_loader
+
+    monkeypatch.setattr(
+        case_profile_loader, "_DEFAULT_CASE_PROFILES_DIR", tmp_path
+    )
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+
+    _write_case_profile(
+        tmp_path, "wired_case", ["u_centerline", "v_centerline", "p_drop"]
+    )
+
+    attestation = _FakeAttestation(overall="ATTEST_PASS", checks=[])
+    comparison = ComparisonResult(
+        passed=True,
+        deviations=[],
+        summary="ok",
+        gold_standard_id="wired_case",
+    )
+    tg = _build_trust_gate_report(
+        task_name="wired_case", comparison=comparison, attestation=attestation
+    )
+    assert tg is not None
+    gold_report = next(r for r in tg.reports if r.name.endswith("_gold_comparison"))
+    obs = gold_report.provenance.get("tolerance_policy_observables")
+    assert obs == ["p_drop", "u_centerline", "v_centerline"]
+
+
+def test_build_trust_gate_report_handles_missing_case_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Loader fail-soft: missing CaseProfile file yields empty observables
+    list on provenance — wiring is exercised, no crash."""
+    from src.metrics import case_profile_loader
+
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+
+    attestation = _FakeAttestation(overall="ATTEST_PASS", checks=[])
+    comparison = ComparisonResult(
+        passed=True, deviations=[], summary="ok", gold_standard_id="absent"
+    )
+    tg = _build_trust_gate_report(
+        task_name="absent", comparison=comparison, attestation=attestation
+    )
+    assert tg is not None
+    gold_report = next(r for r in tg.reports if r.name.endswith("_gold_comparison"))
+    assert gold_report.provenance.get("tolerance_policy_observables") == []
+
+
+def test_build_trust_gate_report_handles_malformed_case_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Loader CaseProfileError is caught and logged; wiring degrades to
+    empty observables rather than killing the run."""
+    from src.metrics import case_profile_loader
+
+    monkeypatch.setattr(
+        case_profile_loader,
+        "_resolve_case_profiles_dir",
+        lambda override: tmp_path if override is None else override,
+    )
+    # Malformed: tolerance_policy is a list instead of a mapping → CaseProfileError
+    (tmp_path / "broken.yaml").write_text(
+        "case_id: broken\nschema_version: 1\ntolerance_policy:\n  - not\n  - a\n  - mapping\n"
+    )
+
+    attestation = _FakeAttestation(overall="ATTEST_PASS", checks=[])
+    comparison = ComparisonResult(
+        passed=True, deviations=[], summary="ok", gold_standard_id="broken"
+    )
+    import logging
+    with caplog.at_level(logging.WARNING, logger="src.task_runner"):
+        tg = _build_trust_gate_report(
+            task_name="broken", comparison=comparison, attestation=attestation
+        )
+    assert tg is not None
+    gold_report = next(r for r in tg.reports if r.name.endswith("_gold_comparison"))
+    assert gold_report.provenance.get("tolerance_policy_observables") == []
+    assert any("load_tolerance_policy failed" in rec.message for rec in caplog.records)
+
+# ---------------------------------------------------------------------------
 # Codex V61-056 finding #2b: E2E TaskRunner with gold present (comparison
 # branch actually exercised, not just attestation-only).
 # ---------------------------------------------------------------------------

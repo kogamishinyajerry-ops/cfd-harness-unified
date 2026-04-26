@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
 from .metrics import (
+    CaseProfileError,
     MetricClass,
     MetricReport,
     MetricStatus,
     TrustGateReport,
+    load_tolerance_policy,
     reduce_reports,
 )
 from .models import (
@@ -77,7 +79,24 @@ def _build_trust_gate_report(
 
     Plane: Control → Evaluation (import src.metrics). ADR-001 matrix row
     `Control | ✓ (orchestrate) |` authorizes this.
+
+    DEC-V61-071 · P1 tail · load_tolerance_policy is invoked here so the
+    policy-dispatch path is exercised in production before P1-T4
+    (ObservableDef formalization) unblocks per-observable threshold
+    application. Today the loaded policy is stamped into provenance for
+    observability — verdict semantics are unchanged.
     """
+    try:
+        tolerance_policy = load_tolerance_policy(task_name)
+    except CaseProfileError as exc:
+        logger.warning(
+            "load_tolerance_policy failed for %s: %s; "
+            "falling back to empty policy",
+            task_name,
+            exc,
+        )
+        tolerance_policy = {}
+
     reports: List[MetricReport] = []
 
     if attestation is not None:
@@ -127,6 +146,7 @@ def _build_trust_gate_report(
         provenance: Dict[str, Any] = {
             "source": "task_runner._build_trust_gate_report",
             "comparator_summary": comparison.summary,
+            "tolerance_policy_observables": sorted(tolerance_policy.keys()),
         }
         if comparison.gold_standard_id:
             provenance["gold_standard_id"] = comparison.gold_standard_id
