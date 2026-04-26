@@ -1,0 +1,47 @@
+% Citations for duct_flow gold-standard case
+% (renamed from fully_developed_pipe per DEC-V61-011, 2026-04-20)
+% Curated 2026-04-26 under GOV-1 (DEC-V61-080)
+
+@article{jones1976,
+  author  = {Jones, O. C.},
+  title   = {An Improvement in the Calculation of Turbulent Friction in Rectangular Ducts},
+  journal = {International Journal of Heat and Mass Transfer},
+  volume  = {19},
+  pages   = {1067--1074},
+  year    = {1976},
+  doi     = {10.1016/0017-9310(76)90033-4},
+  note    = {Smooth rectangular-duct Darcy f correlation: f_duct ≈ 0.88·f_pipe(Re_h). Source of the gold value 0.0185 at Re=50000 for AR=1 (square). Tolerance 10\% reflects this correlation's stated uncertainty band.}
+}
+
+@article{jones_launder_1973,
+  author  = {Jones, W. P. and Launder, B. E.},
+  title   = {The Calculation of Low-{R}eynolds-Number Phenomena with a Two-Equation Model of Turbulence},
+  journal = {International Journal of Heat and Mass Transfer},
+  volume  = {16},
+  number  = {6},
+  pages   = {1119--1130},
+  year    = {1973},
+  doi     = {10.1016/0017-9310(73)90125-7},
+  note    = {Original k-epsilon turbulence model used by the whitelist solver configuration.}
+}
+
+@article{colebrook1939,
+  author  = {Colebrook, C. F.},
+  title   = {Turbulent flow in pipes, with particular reference to the transition region between the smooth and rough pipe laws},
+  journal = {Journal of the Institution of Civil Engineers},
+  volume  = {11},
+  number  = {4},
+  pages   = {133--156},
+  year    = {1939},
+  doi     = {10.1680/ijoti.1939.13150},
+  note    = {Smooth-pipe friction factor; cross-check: at Re=50000 gives f ≈ 0.0206, of which Jones rectangular-duct ≈ 0.88x = 0.0181.}
+}
+
+@techreport{asme_vv20_2009,
+  author      = {{American Society of Mechanical Engineers}},
+  title       = {Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer},
+  institution = {ASME},
+  number      = {V\&V 20-2009},
+  year        = {2009},
+  address     = {New York}
+}
