@@ -8,6 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from .executor import (
+    DockerOpenFOAMExecutor,
+    ExecutorAbc,
+    ExecutorMode,
+    ExecutorStatus,
+    FutureRemoteExecutor,
+    HybridInitExecutor,
+)
+from .executor import MockExecutor as _ExecutorPlaneMockExecutor  # noqa: F401 (registry lookup)
+from .executor.base import RunReport as ExecutorRunReport
 from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
 from .metrics import (
@@ -240,11 +250,33 @@ class TaskRunner:
         deviation_threshold: float = 0.10,
         post_execute_hook: Optional[PostExecuteHook] = None,
         correction_policy: str = "legacy_auto_save",
+        executor_mode: Optional[ExecutorMode] = None,
+        executor_abc: Optional[ExecutorAbc] = None,
     ) -> None:
         if correction_policy not in CORRECTION_POLICIES:
             raise ValueError(
                 f"correction_policy must be one of {CORRECTION_POLICIES}, got {correction_policy!r}"
             )
+        # DEC-V61-074 P2-T1.b dispatch (EXECUTOR_ABSTRACTION §6.1):
+        # `executor_abc` (explicit ExecutorAbc instance) wins; else
+        # `executor_mode` resolves the canonical subclass via
+        # `_resolve_executor_abc`; else None means "stay on the legacy
+        # CFDExecutor protocol path" — required for backwards compat
+        # with all pre-P2 callers that hand in an `executor=` kwarg or
+        # rely on EXECUTOR_MODE env-var. Both new fields are additive
+        # and mutually exclusive (ValueError on conflict).
+        if executor_abc is not None and executor_mode is not None:
+            raise ValueError(
+                "executor_abc and executor_mode are mutually exclusive — "
+                "pass exactly one (or neither, to keep the legacy path)"
+            )
+        if executor_abc is not None:
+            self._executor_abc: Optional[ExecutorAbc] = executor_abc
+        elif executor_mode is not None:
+            self._executor_abc = self._resolve_executor_abc(executor_mode)
+        else:
+            self._executor_abc = None
+
         # Precedence: explicit executor kwarg > EXECUTOR_MODE env var > MockExecutor
         if executor is not None:
             self._executor: CFDExecutor = executor
@@ -266,6 +298,31 @@ class TaskRunner:
         self._post_execute_hook = post_execute_hook
         self._correction_policy = correction_policy
 
+    @staticmethod
+    def _resolve_executor_abc(mode: ExecutorMode) -> ExecutorAbc:
+        """Map an `ExecutorMode` to its skeleton-class instance per
+        EXECUTOR_ABSTRACTION.md §2 + §6.1.
+
+        Raises `KeyError` (with the unknown mode value) if the enum is
+        ever extended without updating this table — keeps the routing
+        contract falsifiable per RETRO-V61-001 baseline (any new
+        `ExecutorMode` value must add a row here under Codex review).
+        """
+        registry: Dict[ExecutorMode, type[ExecutorAbc]] = {
+            ExecutorMode.DOCKER_OPENFOAM: DockerOpenFOAMExecutor,
+            ExecutorMode.MOCK: _ExecutorPlaneMockExecutor,
+            ExecutorMode.HYBRID_INIT: HybridInitExecutor,
+            ExecutorMode.FUTURE_REMOTE: FutureRemoteExecutor,
+        }
+        try:
+            cls = registry[mode]
+        except KeyError as exc:
+            raise KeyError(
+                f"No ExecutorAbc subclass registered for ExecutorMode={mode!r}; "
+                "add a row to TaskRunner._resolve_executor_abc"
+            ) from exc
+        return cls()
+
     # ------------------------------------------------------------------
     # 公开接口
     # ------------------------------------------------------------------
@@ -274,8 +331,22 @@ class TaskRunner:
         """执行单个任务，返回完整报告"""
         logger.info("Running task: %s", task_spec.name)
 
-        # 1. 执行 CFD
-        exec_result = self._executor.execute(task_spec)
+        # 1. 执行 CFD — DEC-V61-074 P2-T1.b dispatch.
+        # When an ExecutorAbc instance is configured (via executor_mode
+        # or executor_abc kwarg), route through the new abstraction:
+        # non-OK statuses (MODE_NOT_APPLICABLE / MODE_NOT_YET_IMPLEMENTED)
+        # short-circuit before comparator/correction so downstream
+        # extractors never see synthetic-or-absent ExecutionResult.
+        if self._executor_abc is not None:
+            executor_run_report = self._executor_abc.execute(task_spec)
+            if executor_run_report.status is not ExecutorStatus.OK:
+                return self._build_short_circuit_report(
+                    task_spec, executor_run_report
+                )
+            assert executor_run_report.execution_result is not None  # OK invariant
+            exec_result = executor_run_report.execution_result
+        else:
+            exec_result = self._executor.execute(task_spec)
         logger.info("Execution success=%s is_mock=%s", exec_result.success, exec_result.is_mock)
 
         # 2. 先做收敛 attestation；ATTEST_FAIL 不再进入 compare/correction。
@@ -506,6 +577,44 @@ class TaskRunner:
     # ------------------------------------------------------------------
     # 内部辅助
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_short_circuit_report(
+        task_spec: TaskSpec, executor_run_report: ExecutorRunReport
+    ) -> "RunReport":
+        """Build a TaskRunner.RunReport for a non-OK ExecutorAbc result.
+
+        Per EXECUTOR_ABSTRACTION.md §6.1, MODE_NOT_APPLICABLE
+        (hybrid_init §5.2 escape) and MODE_NOT_YET_IMPLEMENTED
+        (future_remote stub) statuses MUST NOT feed comparator /
+        correction / attestor — those expect a populated
+        ExecutionResult. Surface the executor's notes verbatim so the
+        UI / CLI can render the refusal reason.
+        """
+        synthetic = ExecutionResult(
+            success=False,
+            is_mock=False,
+            error_message=(
+                f"executor_mode={executor_run_report.mode.value} "
+                f"status={executor_run_report.status.value}"
+            ),
+            execution_time_s=0.0,
+        )
+        notes_repr = ", ".join(executor_run_report.notes) or "(no notes)"
+        summary = (
+            f"⏭ Short-circuit: {executor_run_report.mode.value} → "
+            f"{executor_run_report.status.value} | notes: {notes_repr}"
+        )
+        return RunReport(
+            task_spec=task_spec,
+            execution_result=synthetic,
+            comparison_result=None,
+            correction_spec=None,
+            summary=summary,
+            attestation=None,
+            auto_verify_report=None,
+            trust_gate_report=None,
+        )
 
     @staticmethod
     def _build_summary(
