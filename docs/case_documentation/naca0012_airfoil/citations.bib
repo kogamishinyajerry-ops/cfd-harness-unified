@@ -1,0 +1,57 @@
+% Citations for naca0012_airfoil gold-standard case
+% Provenance pivoted in DEC-V61-058 Batch A from Thomas 1979 / Lada & Gostling 2007
+% (DOI 10.1017/S0001924000001169 — flagged unreliable by Codex F4 round-1) to:
+% Curated 2026-04-26 under GOV-1 (DEC-V61-080)
+
+@techreport{ladson1988,
+  author      = {Ladson, C. L.},
+  title       = {Effects of Independent Variation of {M}ach and {R}eynolds Numbers on the Low-Speed Aerodynamic Characteristics of the {NACA} 0012 Airfoil Section},
+  institution = {NASA Langley Research Center},
+  number      = {NASA TM-4074},
+  year        = {1988},
+  url         = {https://ntrs.nasa.gov/api/citations/19880019495/downloads/19880019495.pdf},
+  note        = {NTRS archive ID 19880019495. \S 3.2 Table 1 grit-roughness fixed-transition row at Re=3.0e6, M=0.15: Cl(α=0°)=0, Cl(4°)=0.434, Cl(8°)=0.815, Cd(0°)=0.0080. \S 3.4 reports tunnel repeatability ±1.2\% at α=8° — basis for the 5\% Cl@α=8° tolerance. \S 3.5 reports stall onset at α≈16°.}
+}
+
+@book{abbott1959,
+  author    = {Abbott, I. H. and von Doenhoff, A. E.},
+  title     = {Theory of Wing Sections},
+  publisher = {Dover Publications},
+  year      = {1959},
+  isbn      = {0-486-60586-8},
+  note      = {Fig. 4-7 NACA0012 chordwise pressure distribution at α=0°, Re ≈ 6e6 free-transition. SECONDARY anchor used for Cp(x/c) profile shape qualitative match (USED FOR QUALITATIVE only — Re differs from the 3e6 Ladson primary anchor).}
+}
+
+@techreport{gregory_oreilly_1970,
+  author      = {Gregory, N. and O'Reilly, C. L.},
+  title       = {Low-Speed Aerodynamic Characteristics of {NACA} 0012 Aerofoil Section, including the Effects of Upper-Surface Roughness Simulating Hoar Frost},
+  institution = {Aeronautical Research Council, UK},
+  number      = {R\&M 3726},
+  year        = {1970},
+  url         = {https://naca.central.cranfield.ac.uk/bitstream/handle/1826.2/3003/arc-rm-3726.pdf},
+  note        = {Fig. 7 Cp vs x/c at α=0°, Re=2.88e6 (≈ 3e6, M=0.16) free transition. Cross-check anchor for Cp profile shape; Re much closer to the Ladson primary anchor than Abbott 1959.}
+}
+
+@misc{dec_v61_058_intake,
+  author       = {{cfd-harness-unified governance}},
+  title        = {DEC-V61-058 intake: naca0012\_airfoil multi-dim observable expansion (Type II arc)},
+  year         = {2026},
+  howpublished = {.planning/intake/DEC-V61-058\_naca0012\_airfoil.yaml},
+  note         = {Internal decision document. \S 3 sets per-observable roles (HEADLINE\_PRIMARY\_SCALAR / PROFILE\_GATE / QUALITATIVE\_GATE / SAME\_RUN\_CROSS\_CHECK / PROVISIONAL\_ADVISORY) and tolerances. Codex F1--F6 fixes applied verbatim.}
+}
+
+@techreport{asme_vv20_2009,
+  author      = {{American Society of Mechanical Engineers}},
+  title       = {Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer},
+  institution = {ASME},
+  number      = {V\&V 20-2009},
+  year        = {2009},
+  address     = {New York}
+}
+
+% RETIRED PROVENANCE (per DEC-V61-058 Batch A, 2026-04-25):
+% The pre-V61-058 source field cited "Thomas 1979 / Lada & Gostling 2007"
+% with DOI 10.1017/S0001924000001169 (Aeronautical Quarterly). This was
+% flagged by Codex F4 round-1 plan review as unreliable provenance.
+% The retired DOI is preserved here as a back-pointer for historical
+% correction-log references; it should NOT be used in new work.
