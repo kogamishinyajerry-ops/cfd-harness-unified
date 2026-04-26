@@ -7,7 +7,7 @@ predecessor_retros: [RETRO-V61-001 (governance), RETRO-V61-053 (post-R3 protocol
 status: LANDING — follows DEC-V61-063 close.
 author: Claude Opus 4.7 (1M context, autonomous mode)
 decided_by: Claude (self-executed under auto mode; Kogami sign-off at next session touch).
-notion_sync_status: PENDING — to sync alongside DEC-V61-063
+notion_sync_status: synced 2026-04-26 alongside DEC-V61-063 (https://www.notion.so/DEC-V61-063-NACA0012-Re_-t-SST-architectural_ceiling_reached-methodology-v2-1-first-apply-34ec68942bed8114addde5b7bf89c7fc)
 ---
 
 # RETRO-V61-063 · Transition Modeling Ceiling on NACA0012
