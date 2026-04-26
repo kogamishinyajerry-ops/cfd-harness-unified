@@ -12,6 +12,7 @@ import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { EditCasePage } from "@/pages/workbench/EditCasePage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
+import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
@@ -66,6 +67,10 @@ export default function App() {
             run_done in WorkbenchRunPage auto-jumps to the detail. */}
         <Route path="/workbench/case/:caseId/runs" element={<RunHistoryPage />} />
         <Route path="/workbench/case/:caseId/run/:runId" element={<RunDetailPage />} />
+        {/* Workbench 60-day extension (2026-04-26) · two-up overlay of two
+            runs of the same case. Reads run IDs from ?a=…&b=… so the URL is
+            shareable. Reuses /run-history/{run_id} detail surface for data. */}
+        <Route path="/workbench/case/:caseId/compare" element={<RunComparePage />} />
         <Route path="*" element={<Navigate to="/learn" replace />} />
       </Route>
     </Routes>

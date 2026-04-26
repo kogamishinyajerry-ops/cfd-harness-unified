@@ -1,4 +1,5 @@
-import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
@@ -15,11 +16,28 @@ import type { FailureCategory } from "@/types/run_history";
 
 export function RunHistoryPage() {
   const { caseId = "" } = useParams<{ caseId: string }>();
+  const navigate = useNavigate();
   const runsQuery = useQuery({
     queryKey: ["workbenchRuns", caseId],
     queryFn: () => api.listRuns(caseId),
     enabled: Boolean(caseId),
   });
+  // Multi-select for /compare. At most two runs at a time — toggling a third
+  // drops the oldest selection. Order is preserved so A=first-clicked,
+  // B=second-clicked, which the URL contract honors.
+  const [selected, setSelected] = useState<string[]>([]);
+  const toggle = (runId: string) =>
+    setSelected((prev) => {
+      if (prev.includes(runId)) return prev.filter((x) => x !== runId);
+      if (prev.length >= 2) return [prev[1], runId];
+      return [...prev, runId];
+    });
+  const compareHref =
+    selected.length === 2
+      ? `/workbench/case/${encodeURIComponent(caseId)}/compare?a=${encodeURIComponent(
+          selected[0],
+        )}&b=${encodeURIComponent(selected[1])}`
+      : null;
 
   if (!caseId) {
     return (
@@ -84,6 +102,9 @@ export function RunHistoryPage() {
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-surface-800 text-[11px] uppercase tracking-wider text-surface-500">
+              <th className="w-8 px-2 py-2 text-center" title="Pick two to compare">
+                cmp
+              </th>
               <th className="px-3 py-2 text-left">started</th>
               <th className="px-3 py-2 text-left">params</th>
               <th className="px-3 py-2 text-right">duration</th>
@@ -97,6 +118,15 @@ export function RunHistoryPage() {
                 key={r.run_id}
                 className="group border-b border-surface-900 transition hover:bg-surface-900/40"
               >
+                <td className="w-8 px-2 py-2 text-center align-top">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select run ${r.run_id} for comparison`}
+                    checked={selected.includes(r.run_id)}
+                    onChange={() => toggle(r.run_id)}
+                    className="h-3.5 w-3.5 cursor-pointer accent-emerald-500"
+                  />
+                </td>
                 <td className="px-3 py-2 align-top">
                   <Link
                     to={`/workbench/case/${encodeURIComponent(caseId)}/run/${encodeURIComponent(r.run_id)}`}
@@ -144,6 +174,29 @@ export function RunHistoryPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {selected.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-10 flex items-center gap-3 rounded-md border border-emerald-500/40 bg-surface-950/90 px-4 py-2 shadow-lg backdrop-blur">
+          <span className="text-[11px] uppercase tracking-wider text-surface-400">
+            selected {selected.length}/2
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelected([])}
+            className="text-[11px] text-surface-400 transition hover:text-surface-200"
+          >
+            clear
+          </button>
+          <button
+            type="button"
+            disabled={!compareHref}
+            onClick={() => compareHref && navigate(compareHref)}
+            className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Compare →
+          </button>
+        </div>
       )}
     </Section>
   );
