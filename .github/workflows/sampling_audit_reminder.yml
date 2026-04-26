@@ -1,0 +1,92 @@
+# Methodology v2.0 §11.2 · Sampling audit reminder (DEC-V61-072 + RETRO-V61-005 · 2026-04-26)
+#
+# Posts a reminder comment on the most recent commit on origin/main when 5
+# non-trust-core commits have elapsed since the last DEC-V61-XXX-SAMPLING-AUDIT-N.
+# Threshold is 5 (not 20) because DEC-V61-072 first execution returned
+# DEGRADATION_RULE_AT_RISK; sampling interval drop 20→5 stays in effect until
+# 2 consecutive clean audits.
+#
+# Authority: §10.5 + §11.2 (active provisional · pending CFDJerry sign-off).
+# Trust-core 5 modules per §10:
+#   src/gold_standards/, src/auto_verifier/, src/convergence_attestor.py,
+#   src/audit_package/, src/foam_agent_adapter.py
+#
+# This workflow is a NUDGE, not a block. The nudge fires every push to main
+# until the next DEC-V61-XXX-SAMPLING-AUDIT-N lands.
+
+name: §11.2 Sampling Audit Reminder
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  check_sampling_audit_due:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50  # enough to walk 5+ commits
+
+      - name: Count non-trust-core commits since last sampling audit
+        id: count
+        run: |
+          set -euo pipefail
+          # Last sampling audit DEC reference (commit body or DEC file)
+          last_audit_sha=$(git log --format=%H --grep="DEC-V61-.*sampling.audit" main | head -1)
+          if [ -z "$last_audit_sha" ]; then
+            # No audit ever fired (shouldn't happen post-V61-072)
+            range="HEAD~50..HEAD"
+          else
+            range="${last_audit_sha}..HEAD"
+          fi
+
+          # Count commits in range that DO NOT touch trust-core modules
+          non_trust_core=$(git log "$range" --pretty=format:'%H' --name-only -- \
+            ':!src/gold_standards/' \
+            ':!src/auto_verifier/' \
+            ':!src/convergence_attestor.py' \
+            ':!src/audit_package/' \
+            ':!src/foam_agent_adapter.py' \
+            ':!.planning/' \
+            ':!docs/' \
+            ':!reports/' \
+            ':!tests/' \
+            | grep -E '^[a-f0-9]{40}$' | wc -l | tr -d ' ')
+
+          echo "last_audit_sha=$last_audit_sha" >> "$GITHUB_OUTPUT"
+          echo "non_trust_core_count=$non_trust_core" >> "$GITHUB_OUTPUT"
+
+      - name: Post reminder if threshold reached
+        if: steps.count.outputs.non_trust_core_count >= 5
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const count = "${{ steps.count.outputs.non_trust_core_count }}";
+            const lastAudit = "${{ steps.count.outputs.last_audit_sha }}".slice(0, 7);
+            const body = `## §11.2 Sampling Audit Reminder
+
+            ${count} non-trust-core commits have landed since the last sampling audit (\`${lastAudit}\`).
+            Per §10.5 (interval 20→5 since DEC-V61-072 DEGRADATION_RULE_AT_RISK), the next
+            retroactive Codex audit is now due.
+
+            **Action**: Trigger \`/codex-gpt54\` with the prompt template at
+            \`.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md\` §10.5.2.
+            File the resulting DEC-V61-XXX-SAMPLING-AUDIT-N + audit report under
+            \`reports/codex_tool_reports/\`.
+
+            Interval relaxes back to 20 after 2 consecutive subsequent audits return
+            zero category 2-5 findings.`;
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });
+
+      - name: Status summary
+        run: |
+          echo "Last sampling audit: ${{ steps.count.outputs.last_audit_sha }}"
+          echo "Non-trust-core commits since: ${{ steps.count.outputs.non_trust_core_count }}"
+          echo "Threshold: 5 (per §10.5.4 sampling interval drop)"
