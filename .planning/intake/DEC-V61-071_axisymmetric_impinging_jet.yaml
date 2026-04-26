@@ -1,4 +1,4 @@
-# Stage 0 · Case Intake Assessment · DEC-V61-067 · axisymmetric_impinging_jet
+# Stage 0 · Case Intake Assessment · DEC-V61-071 · axisymmetric_impinging_jet
 # Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
 # Track B sixth-apply (precedents: V61-053 cylinder, V61-057 DHC, V61-058 NACA,
 # V61-060 RBC, V61-063 flat_plate, V61-066 duct_flow). Other in-flight sessions:
@@ -9,7 +9,7 @@
 #       authored by Claude Code Opus 4.7 1M.
 #   v2 (2026-04-26): Codex pre-Stage-A R1 returned REQUEST_CHANGES with
 #       1 HIGH + 1 MED + 1 LOW. All findings applied verbatim.
-#       Codex log: reports/codex_tool_reports/dec_v61_067_plan_review_v1.md
+#       Codex log: reports/codex_tool_reports/dec_v61_071_plan_review_v1.md
 #
 #       v1 → v2 edit summary:
 #         F1-HIGH (citation_audit closure too loose): rewrite §3 with
@@ -47,7 +47,7 @@
 #                  hazard-flag-absent verifiable criterion.
 
 case_id: axisymmetric_impinging_jet
-dec_id: DEC-V61-067
+dec_id: DEC-V61-071
 case_number: 8  # canonical 8th case in the 10-case whitelist (impinging_jet)
 intake_authored_at: "2026-04-26"
 intake_author: "Claude Code (Opus 4.7, 1M context · Track B sixth-apply)"
@@ -81,7 +81,7 @@ preexisting_state_honesty: |
   "PASS" verdict is therefore meaningless self-comparison — the comparator
   matches a number against itself, not against literature physics.
 
-  V61-067 will:
+  V61-071 will:
     1. Citation re-anchor the gold YAML to the actual Cooper et al. 1993
        impinging-jet measurement (NOT Cooper 1984 — see §3 Cooper-citation
        audit; the whitelist's "Cooper et al. 1984" label is itself suspect)
@@ -375,9 +375,10 @@ risk_register:
       If the flag fires post-Stage-E, that is a HARD-FAIL signal even
       if the headline Nu falls within tolerance.
     mitigation: |
-      §7 acceptance criterion v explicitly requires "hazard flag absent
+      §7 acceptance criterion vi explicitly requires "hazard flag absent
       OR explicitly excused in DEC closeout" before headline-PASS verdict
-      can land.
+      can land. (R2-LOW fix: pointer corrected v → vi after R6/R7/R8
+      shifted §7 numbering.)
   R7_plate_bc_constant_temperature_vs_uniform_heat_flux:
     severity: HIGH
     description: |
@@ -400,6 +401,7 @@ risk_register:
       mismatch as primary cause" (V61-063/V61-066 honest-FAIL pattern).
       Optional Stage A sub-batch: add fixedGradient T plate BC variant
       to the adapter (~30 LOC, separate DEC).
+      Acceptance pointer: §7 criterion vii (vii_bc_family_documented_in_gold_yaml).
   R8_pseudo_2d_slab_geometry_vs_true_axisymmetric:
     severity: MED
     description: |
@@ -426,6 +428,7 @@ risk_register:
       the plate) WILL differ. §1 gates 1+2+3 are all LOCAL, so R8
       stays MED severity (not HIGH) — but Stage E DEC must mention
       the slab approximation as a known limitation.
+      Acceptance pointer: §7 criterion viii (viii_pseudo_2d_slab_geometry_acknowledgement).
 
 # ============================================================================
 # §5 Estimated Codex round budget + pass-rate (for self-pass-rate calibration)
@@ -465,7 +468,7 @@ stage_preview:
         (4) Wall-BC family — confirm constant-T (Dirichlet) vs uniform-q
             (Neumann); §4 R7 risk crystallises here.
     deliverables:
-      - .planning/intake/DEC-V61-067_a0a_context_resolution.md (NEW)
+      - .planning/intake/DEC-V61-071_a0a_context_resolution.md (NEW)
         with one bullet per question + DOI + Table/Figure locator OR
         explicit "no clean match — gap documented" finding
       - Decision: PROCEED (anchor + Re + h/D + BC all match) vs
@@ -493,11 +496,24 @@ stage_preview:
         observable schema (Stage A is not expected to need extractor changes;
         the extractor is already DEC-V61-042-correct)
   B_extractors:
-    purpose: Add monotonic-decay invariant extractor; extend profile gate
+    purpose: |
+      Add the secondary-peak detector + extend profile gate. (R2-MED fix:
+      v1 listed extract_nu_monotonicity here, but v2 §1 retired the
+      monotonic-decay invariant by folding the same physics into
+      secondary_peak_presence_or_absence — Codex R2 caught the stale
+      reference. v2 deliverable is the new gate, not the retired one.)
     deliverables:
-      - src/impinging_jet_extractors.py (NEW) with extract_nu_monotonicity
-      - tests/test_impinging_jet_extractors.py (≥20 unit tests)
-      - register in src/_plane_assignment.py SSOT
+      - src/impinging_jet_extractors.py (NEW) with:
+        - extract_secondary_peak_status(profile, profile_r, Re_jet)
+          implementing §7.iv boolean gate (peak ABSENT for Re ≤ 15000;
+          PRESENT at r/D ∈ [1.5, 2.5] for Re ≥ 20000; ADVISORY otherwise)
+        - extract_profile_at_stations(profile, profile_r, station_targets)
+          → per-station Nu values + per-station deviation vs gold for
+          §7.iii profile-shape qualitative gate
+      - tests/test_impinging_jet_extractors.py (≥20 unit tests covering
+        boundary regimes Re=10000/15000/20000/23000 + edge cases
+        empty-profile / single-station / monotonic-vs-bumpy / all-NaN)
+      - register src.impinging_jet_extractors in src/_plane_assignment.py SSOT
   C_preflight_comparator_riskflags:
     purpose: Atomic preflight + comparator + risk_flag registry
     deliverables:
@@ -519,7 +535,7 @@ stage_preview:
     deliverables:
       - live buoyantFoam run via phase5_audit_run.py axisymmetric_impinging_jet
       - audit_real_run_measurement.yaml regen
-      - .planning/decisions/2026-04-2X_v61_067_impinging_jet_multidim.md
+      - .planning/decisions/2026-04-2X_v61_071_impinging_jet_multidim.md
       - PR to main
 
 # ============================================================================
