@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-071
 title: Wire load_tolerance_policy into task_runner._build_trust_gate_report (P1 Metrics & Trust tail)
-status: R1_VERBATIM_FIXED_PENDING_R2 (2026-04-26 · trust-core boundary item · R1 CHANGES_REQUIRED → 2 findings fixed verbatim → R2 fired)
+status: ACCEPTED_R2_APPROVE_WITH_COMMENTS (2026-04-26 · trust-core boundary item · R1 CHANGES_REQUIRED → verbatim fix → R2 APPROVE_WITH_COMMENTS · 1 non-blocking test-fidelity comment addressed in follow-up commit · 17/17 trust-gate + 132/132 broader suite pass)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-26
 authored_under: 治理收口 2026-04-26 → 2026-05-03 anchor session · Workflow B
@@ -16,7 +16,7 @@ codex_round_arc:
   R1_initial_paauhtgaiah: failed (usage limit) — retry on kogamishinyajerry
   R1_kogamishinyajerry: failed (usage limit · cx-auto Score-vs-actual drift)
   R1_picassoer651: SUCCESS (61% Score) → CHANGES_REQUIRED · F#1 MED slug resolution + F#2 LOW lazy load
-  R2_picassoer651: TBD (verbatim fix verification)
+  R2_picassoer651: APPROVE_WITH_COMMENTS · 0 blocking findings · 1 non-blocking test-fidelity comment (real-whitelist regression test added in follow-up)
 r1_findings_summary:
   F1_MED_slug_resolution: "TaskSpec.name often display title not slug → load_tolerance_policy silently misses real CaseProfiles. Fix: _resolve_case_slug_for_policy helper walks knowledge/whitelist.yaml name↔id mapping."
   F2_LOW_lazy_load: "Loader was eager (filesystem I/O on attestation-only and no-input paths). Fix: moved load call inside `if comparison is not None:` branch."

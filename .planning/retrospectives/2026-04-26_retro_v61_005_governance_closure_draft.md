@@ -27,7 +27,7 @@ notion_sync_status: pending (Day 7 final form)
 | DEC | Title | Counter | Codex rounds | Verdict | Self-pass-rate calibration |
 | --- | --- | --- | --- | --- | --- |
 | V61-072 | Sampling Audit First Execution | 45 → 46 | 1 | DEGRADATION_RULE_AT_RISK (4 findings · §10.5 amended) | 0.60 (honest · first-execution prior) — calibration TBD post-Day 7 |
-| V61-071 | load_tolerance_policy wiring | N/A (autonomous_governance: false) | 1 (pending) | TBD | 0.85 pre-Codex |
+| V61-071 | load_tolerance_policy wiring | N/A (autonomous_governance: false) | 2 (R1 CHANGES_REQUIRED → R2 APPROVE_WITH_COMMENTS) | ACCEPTED · R2 APPROVE_WITH_COMMENTS (0 blocking · 1 non-blocking comment addressed) | 0.85 pre-Codex → 0.78 actual after R1 (2 findings) → 0.95 actual after R2 (verbatim landed clean) — chain delta confirms verbatim path is high-confidence |
 
 ## Day 0 (2026-04-26) accomplishments
 
@@ -39,12 +39,15 @@ notion_sync_status: pending (Day 7 final form)
 - Sampling interval drop 20 → 5 commits (Codex recommendation)
 - Counter v6.1 advances 45 → 46
 
-### Workflow B (V61-071 load_tolerance_policy) · IMPLEMENTATION COMPLETE
-- Code: src/task_runner.py +20 LOC, tests +113 LOC
-- Tests: 121/121 pass (118 baseline + 3 new)
-- Commit `3296ae6` direct-to-main
-- DEC-V61-071 written (autonomous_governance: false — Codex review pending)
-- Codex review fired (account-quota churn delayed v3 retry)
+### Workflow B (V61-071 load_tolerance_policy) · ACCEPTED
+- Code: src/task_runner.py +53 LOC (helper + lazy-load relocation), tests +145 LOC (5 new tests total)
+- Tests: 132/132 pass across trust_gate + metrics + task_runner + knowledge_db
+- Initial commit `3296ae6` direct-to-main
+- R1 Codex (picassoer651, after 2 quota-failed retries on kogamishinyajerry): CHANGES_REQUIRED · 2 findings (F#1 MED slug resolution, F#2 LOW lazy load)
+- Verbatim fix commit `f0f0f80` (~25 LOC, slightly over strict 20-LOC verbatim threshold; flagged in commit footnote)
+- R2 Codex (picassoer651): **APPROVE_WITH_COMMENTS** · 0 blocking, 1 non-blocking test-fidelity comment
+- Non-blocking comment addressed in follow-up: real-whitelist regression test exercises production resolver path (commit TBD with Day 0 closeout)
+- DEC-V61-071 status: ACCEPTED_R2_APPROVE_WITH_COMMENTS
 
 ### Workflow D (line-B test failure ownership) · COMPLETE
 - Umbrella task created (LINE-B-TEST-FAILURES-AUDIT-2026-04-26)
@@ -124,7 +127,8 @@ TBD
 | E1 (V61-072 audit) | paauhtgaiah → kogamishinyajerry switching mid-flight | ~290k | DEGRADATION_RULE_AT_RISK |
 | V61-071 review v1 | kogamishinyajerry | failed (usage limit) | RETRY |
 | V61-071 review v2 | kogamishinyajerry (post-cx-auto re-pick) | failed (usage limit) | RETRY |
-| V61-071 review v3 | picassoer651 (61% Score) | TBD | TBD |
+| V61-071 R1 (picassoer651) | picassoer651 (61% Score) | ~80k | CHANGES_REQUIRED · 2 findings |
+| V61-071 R2 (picassoer651) | picassoer651 (~58% post-R1) | ~50k | **APPROVE_WITH_COMMENTS** · 0 blocking |
 
 **Account quota lesson**: cx-auto's Score reading is sometimes stale relative to the actual OpenAI billing layer. When the Score says 100% but the API returns "usage limit", manually `cx-auto switch <other_account>` to a different verified-alive account. Captured for Day 7 §11.5 SSOT consistency check.
 

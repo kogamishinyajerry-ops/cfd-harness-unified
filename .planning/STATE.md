@@ -15,7 +15,7 @@ governance_closure_session:
   end: "2026-05-03"
   anchor_url: "https://www.notion.so/34ec68942bed8105a5f2f961241cd32b"
   three_anchors:
-    A_signature_chain: "PENDING_CFDJERRY (DEC-PIVOT + DEC-POLICY-VCP + W2 G-9 Opus Gate + DEC-V61-071 Codex review)"
+    A_signature_chain: "PARTIAL (DEC-V61-071 Codex review COMPLETE · R1 verbatim fix → R2 APPROVE_WITH_COMMENTS) · still PENDING_CFDJERRY for DEC-PIVOT + DEC-POLICY-VCP + W2 G-9 Opus Gate"
     B_ssot_alignment: "IN_PROGRESS (main page Active Phase line updated · Foundation-Freeze archive pending A1)"
     C_sampling_audit: "FIRST_EXECUTION_LANDED (DEC-V61-072 · DEGRADATION_RULE_AT_RISK · §10.5 provisional active · interval 20→5)"
 progress:

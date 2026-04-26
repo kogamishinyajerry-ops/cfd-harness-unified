@@ -469,6 +469,20 @@ def test_build_trust_gate_report_resolves_display_title_to_slug(
     ]
 
 
+def test_resolve_case_slug_for_policy_via_real_whitelist() -> None:
+    """DEC-V61-071 R2 non-blocking comment: exercise the real whitelist
+    walker (not a monkeypatched stub) to prove production-path slug
+    resolution works against `knowledge/whitelist.yaml`. Display title
+    "Lid-Driven Cavity" must resolve to slug "lid_driven_cavity"; an
+    unknown name must pass through unchanged."""
+    from src.task_runner import _resolve_case_slug_for_policy
+
+    assert _resolve_case_slug_for_policy("Lid-Driven Cavity") == "lid_driven_cavity"
+    assert _resolve_case_slug_for_policy("lid_driven_cavity") == "lid_driven_cavity"
+    # Unknown name passes through (fail-soft per docstring contract)
+    assert _resolve_case_slug_for_policy("totally_unknown_xyz") == "totally_unknown_xyz"
+
+
 # ---------------------------------------------------------------------------
 # DEC-V61-071 R1 F#2 verbatim regression: lazy-load on attestation-only and
 # no-input paths. The loader must not run when there is no comparison report
