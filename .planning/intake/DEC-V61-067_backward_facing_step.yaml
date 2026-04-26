@@ -1,0 +1,423 @@
+# DEC-V61-067 · Backward-Facing Step Type II multi-dim validation · case 3 · v2.0 sixth-apply
+#
+# Methodology: v2.0 (sixth-apply, post-V61-053 first + V61-057 second +
+# V61-058 third + V61-063 fourth + V61-066 fifth)
+#
+# Status: Stage 0 v1 draft (2026-04-26)
+
+decision_id: DEC-V61-067
+title: BFS Type II multi-dim validation · Driver & Seegmiller 1985 anchor · case 3 · v2.0 sixth-apply
+methodology_version: "v2.0 (sixth-apply, post-V61-066 fifth-apply lessons applied)"
+case_type: II
+intake_revision: v1
+intake_date: 2026-04-26
+related_decisions:
+  - DEC-V61-046  # BFS regime correction (Re_H=7600 anchor)
+  - DEC-V61-052  # BFS canonical 3-block mesh + wallShearStress extractor
+  - DEC-V61-058  # Type II precedent (NACA airfoil) — methodology v2.0 origin
+  - DEC-V61-063  # Type II precedent (flat plate) — fourth-apply (F2 audit-key class)
+  - DEC-V61-066  # Type II precedent (duct flow) — fifth-apply (dy-weighted U_bulk + nut-staging)
+
+# ============================================================================
+# §1 Background
+# ============================================================================
+background: |
+  BFS is whitelist case 3 of 10. The current state is asymmetric vs the V61-066
+  duct_flow predecessor:
+
+    - Gold YAML ALREADY exists in schema_version=2 form at
+      `knowledge/gold_standards/backward_facing_step_steady.yaml` with 4
+      observables defined: reattachment_length, cd_mean, pressure_recovery,
+      velocity_profile_reattachment. (DEC-V61-046 + DEC-V61-052 work.)
+    - But the schema_v2 YAML does NOT carry Type II metadata
+      (gate_status / family / extractor / role / source_table) — it predates
+      the V61-058 Type II convention.
+    - The adapter extractor `_extract_bfs_reattachment` (foam_agent_adapter.py:
+      9066+) emits ONLY `reattachment_length` from wallShearStress tau_x sign-
+      change. Three of the four gold observables (cd_mean, pressure_recovery,
+      velocity_profile_reattachment) have NO extractor wiring.
+    - The legacy multi-doc `backward_facing_step.yaml` is still used by some
+      reporting paths (phase5_audit_run, contract_dashboard, render_case_report).
+      OUT OF SCOPE for V61-067 — the comparator's canonical path is already on
+      the schema_v2 file (`src/auto_verifier/config.py:18,32,49,62`).
+
+  V61-067 closes the asymmetry: add Type II metadata to all 4 observables in
+  the schema_v2 YAML, add 3 missing extractors (cd_mean + pressure_recovery
+  + velocity_profile_reattachment), wire them in the adapter, alias-parity
+  test, Codex R1, Stage B live OpenFOAM.
+
+# ============================================================================
+# §2 Acceptance signal
+# ============================================================================
+acceptance_signal: |
+  Define Type II observable contract for BFS such that the gold YAML carries
+  full gate_status/family/extractor/role/source_table metadata; the adapter
+  emits all 4 observable keys character-for-character matching the YAML;
+  the comparator routes each through the right tolerance branch; and Stage
+  B live OpenFOAM (kOmegaSST, simpleFoam, V61-052 hardened config) PASSES on
+  reattachment_length (back-compat anchor) plus AT LEAST 1 of the 3 new
+  HARD_GATED observables.
+
+  Acceptance signal (PASS condition, 3 HARD_GATED + 1 PROVISIONAL_ADVISORY):
+    reattachment_length              rel_error < 10%   HARD_GATED
+    pressure_recovery                rel_error < 10%   HARD_GATED
+    velocity_profile_reattachment    rel_error < 10%   HARD_GATED
+    cd_mean                          rel_error < 10%   PROVISIONAL_ADVISORY
+                                                       (Le/Moin/Kim 1997 DNS at
+                                                        Re_H=5100 reports cd
+                                                        directly; adapter runs
+                                                        Re_H=7600 in transitional/
+                                                        turbulent — same regime
+                                                        but cd is integral over
+                                                        full step face and is
+                                                        redundant cross-check vs
+                                                        wall-shear extraction.
+                                                        See V61-066 R1 F#3
+                                                        precedent for partial-
+                                                        tautology downgrade.)
+
+  Pre-emptive Codex F1 ack: case_type II is correct on this gate set per the
+  V61-058 R1 rubric. The 3 HARD_GATED observables span 3 physically-
+  independent families:
+    family A: wall_shear_separation_topology    (reattachment_length)
+    family B: pressure_recovery_at_outlet       (pressure_recovery, integrated
+                                                 momentum flux)
+    family C: shear_layer_recovery_profile      (velocity_profile_reattachment,
+                                                 interior near-reattachment u(y))
+  + 1 PROVISIONAL_ADVISORY (cd_mean, integrated wall-shear cross-check)
+
+# ============================================================================
+# §3 Type II observable schema
+# ============================================================================
+observable_schema:
+  - name: reattachment_length
+    role: HEADLINE
+    family: wall_shear_separation_topology
+    extraction: |
+      Existing extractor at foam_agent_adapter.py:_extract_bfs_reattachment
+      (DEC-V61-052 round 3). Reads `lower_wall` patch wallShearStress tau_x
+      from the allPatches VTK + finds first pos→neg sign change downstream
+      of the step. Falls back to near-wall Ux proxy when the FO is absent.
+      No change in extraction methodology in this DEC; only Type II metadata
+      added to the gold YAML observable.
+    reference: Le, Moin & Kim 1997 (DNS Re_H=5100, Xr/H=6.28) blended with
+               Driver & Seegmiller 1985 (experiment Re_H≈37500, Xr/H=6.26).
+               The 0.02 spread bracket is well inside the 10% tolerance.
+    ref_value: 6.26
+    tolerance: 0.10  # 10% relative
+    gate_status: HARD_GATED
+    backcompat: |
+      Existing observable in knowledge/gold_standards/backward_facing_step_
+      steady.yaml. Extractor unchanged.
+
+  - name: pressure_recovery
+    role: PROFILE_QUALITATIVE
+    family: pressure_recovery_at_outlet
+    extraction: |
+      Compute static pressure coefficient at inlet (x/H = 0) and outlet
+      (x/H = 30):
+        Cp(x) = (p(x) - p_ref) / (0.5 · ρ · U_bulk²)
+      where p_ref is taken as the inlet centreline value, ρ=1, U_bulk=1 in
+      the normalized adapter run. Report the dict {inlet, outlet, delta} with
+      delta = Cp(outlet) - Cp(inlet). The delta is the integrated momentum
+      flux recovery driven by the BFS expansion (ER=1.125 → ideal Cp_recovery
+      ≈ 1 - 1/ER² = 0.21, but adapter run's secondary recirculation makes
+      the actual recovery higher — Le/Moin/Kim 1997 reports Cp_inlet=-0.90,
+      Cp_outlet=0.10, delta=1.00).
+    reference: Le, Moin & Kim 1997 J. Fluid Mech. (DNS Re_H=5100)
+    ref_value:
+      inlet: -0.90
+      outlet: 0.10
+      delta: 1.00
+    tolerance: 0.10
+    gate_status: HARD_GATED
+
+  - name: velocity_profile_reattachment
+    role: PROFILE_QUALITATIVE
+    family: shear_layer_recovery_profile
+    extraction: |
+      Sample u_x at x/H = 6.0 (near reattachment per Le/Moin/Kim) at three
+      heights y/H ∈ {0.5, 1.0, 2.0}, normalize by U_bulk. Use cell-centre
+      data with x_tol = 0.6 · dx (or snap to single nearest column —
+      mirror V61-066 post-R3 #1 fix). Report list of {x_H, y_H, u_Ubulk}
+      tuples that match the gold structure character-for-character.
+    reference: Le, Moin & Kim 1997 (DNS Re_H=5100, post-reattachment
+               recovery layer)
+    ref_value:
+      - {x_H: 6.0, y_H: 0.5, u_Ubulk: 0.40}
+      - {x_H: 6.0, y_H: 1.0, u_Ubulk: 0.85}
+      - {x_H: 6.0, y_H: 2.0, u_Ubulk: 1.05}
+    tolerance: 0.10
+    gate_status: HARD_GATED
+
+  - name: cd_mean
+    role: SAME_RUN_CROSS_CHECK
+    family: integrated_wall_shear_cross_check
+    extraction: |
+      Mean drag coefficient based on step height H:
+        Cd = (1/L_total) · ∫ (-tau_x(x) · sign(downstream_recovery)) dx / (0.5 · ρ · U_bulk² · H)
+      using the same wallShearStress face data the reattachment extractor
+      consumes. Pre-existing partial-tautology risk: the wall-shear field
+      that drives reattachment_length also drives cd_mean (different reduction
+      operator, same source field). Per V61-066 R1 F#3 precedent, downgrade
+      to PROVISIONAL_ADVISORY so it's reported but not counted in the pass
+      fraction.
+    reference: Le, Moin & Kim 1997 (DNS Re_H=5100, integrated step-face Cd)
+    ref_value: 2.08
+    tolerance: 0.10
+    gate_status: PROVISIONAL_ADVISORY  # SAME_RUN_CROSS_CHECK on wallShearStress
+
+independence_justification: |
+  Per the Codex F1 rubric (V61-058 round 1), the 3 HARD_GATED observables
+  span 3 physically-independent families:
+
+    family A (wall_shear_separation_topology) — reattachment_length:
+      a topological / sign-change observable; sensitive to the wall-shear
+      sign reversal point.
+    family B (pressure_recovery_at_outlet) — pressure_recovery:
+      an integrated pressure-field observable at the outlet boundary;
+      independent of where the shear layer reattaches AS LONG AS it
+      reattaches inside the domain.
+    family C (shear_layer_recovery_profile) — velocity_profile_reattachment:
+      an interior near-reattachment u(y) profile; sensitive to the shear-
+      layer mixing rate, which can be miscalibrated even when the
+      reattachment-X position is correct.
+
+  + 1 PROVISIONAL_ADVISORY (cd_mean):
+      another reduction of the SAME wallShearStress field that drives
+      reattachment_length — partial tautology, rationale per V61-066 R1
+      F#3.
+
+  Pre-emptive Codex F1 ack: case_type II is correct on this gate set.
+
+# ============================================================================
+# §3a IN scope
+# ============================================================================
+in_scope:
+  - "New module src/bfs_extractors.py with 3 public functions:
+       extract_pressure_recovery(p_field, x_inlet, x_outlet, ...)
+       extract_velocity_profile_at_x(cell_data, x_H_target, y_H_targets, ...)
+       extract_cd_mean(tau_x_field, step_height, U_bulk, rho)
+    + DuctFlowExtractorError-style typed exception class"
+  - "Adapter wiring at foam_agent_adapter.py BFS dispatch site:
+       call new extractors alongside existing _extract_bfs_reattachment;
+       stamp duct_flow-style audit keys (bfs_extractor_path,
+       bfs_pressure_recovery_method, bfs_cd_method, bfs_velocity_profile_n_points)"
+  - "Augment knowledge/gold_standards/backward_facing_step_steady.yaml with
+    Type II metadata: gate_status, family, extractor, role, source_table on
+    all 4 observables. Downgrade cd_mean to PROVISIONAL_ADVISORY."
+  - "Unit-test module tests/test_bfs_extractors.py + alias-parity test
+    tests/test_bfs_alias_parity.py"
+  - "Stage B live OpenFOAM run on the existing V61-052 hardened mesh
+    (kOmegaSST, 7360-cell quick-run fixture)"
+
+# §3b Out of scope
+out_of_scope:
+  - "Mesh refinement / mesh-independence study (DEC-V61-052 deferred this).
+    The 7360-cell fixture is the existing whitelist mesh budget."
+  - "Migrating the legacy multi-doc backward_facing_step.yaml to
+    schema_version=2. The auto_verifier comparator already uses the
+    schema_v2 sibling file. Legacy reporting paths (phase5_audit_run /
+    contract_dashboard / render_case_report) keep using the multi-doc
+    file unchanged. A future DEC-V61-* may consolidate."
+  - "Changing the back-compat reattachment_length extractor methodology.
+    Code path stays at wallShearStress + near-wall Ux fallback per
+    DEC-V61-052 round 3. V61-067 only adds Type II metadata + 3 NEW
+    extractors."
+  - "Re-validation of the existing reattachment_length=6.26 ref_value
+    (Driver & Seegmiller / Le-Moin-Kim blend, DEC-V61-046 closed)."
+  - "Cd_mean methodology rework. Even though it gates as PROVISIONAL_
+    ADVISORY, the extraction still requires a Cd integration that may
+    have its own physics-fidelity gaps with kOmegaSST + wall functions
+    — out of scope, advisory-tier disposition absorbs the noise."
+
+# ============================================================================
+# §4 Cross-plane wiring
+# ============================================================================
+cross_plane_imports:
+  - plane: Execution
+    surface: src/bfs_extractors.py (NEW), src/foam_agent_adapter.py BFS dispatch
+    constraint: |
+      Existing _extract_bfs_reattachment stays untouched. New extractors
+      slotted ALONGSIDE the existing call. The dispatch site already filters
+      on `geom == GeometryType.BACKWARD_FACING_STEP` (foam_agent_adapter.py:
+      8281). Add new method calls in the same elif block, fold each result
+      into key_quantities, fold each error into a `bfs_*_error` audit key.
+
+  - plane: Evaluation
+    surface: src/auto_verifier/gold_standard_comparator.py (no changes)
+    constraint: |
+      Comparator already handles list-of-dicts ref_value (cylinder centerline
+      profile pattern, DHC u_max profile pattern) and dict ref_value
+      (V61-066 already established for nested observables). pressure_recovery
+      uses dict-ref shape; velocity_profile_reattachment uses list-of-dicts
+      shape. Both match existing comparator branches.
+
+  - plane: Knowledge
+    surface: knowledge/gold_standards/backward_facing_step_steady.yaml
+    constraint: |
+      schema_version stays at 2. legacy_case_id alias stays at
+      "backward_facing_step". Type II metadata added IN-PLACE to the
+      observables[] entries — no rename, no ref_value change, no
+      tolerance change.
+
+  - plane: Observation
+    surface: reports/phase5_audit/, reports/codex_tool_reports/
+    constraint: |
+      No new reporting infrastructure required. Live run logs at
+      reports/phase5_audit/dec_v61_067_stage_b_live_run_v{1,2,...}.log
+
+# ============================================================================
+# §5 Stage A batch breakdown
+# ============================================================================
+stage_a_batches:
+  - batch: A.1
+    scope: |
+      src/bfs_extractors.py module + unit tests:
+        - extract_pressure_recovery(p_at_inlet, p_at_outlet, U_bulk, rho)
+        - extract_velocity_profile_at_x(cell_data, x_H_target, y_H_targets,
+                                        U_bulk, H)
+        - extract_cd_mean(tau_x_field_with_positions, step_height, U_bulk, rho)
+        - BfsExtractorError exception class
+        - Conservative validation per V61-066 R1 F4 pattern
+    commit_count_estimate: 1
+    test_target: ~25 tests (3 functions × ~8 cases)
+
+  - batch: A.2
+    scope: |
+      Wire the new extractors at foam_agent_adapter.py BFS dispatch site.
+      Stamp `bfs_extractor_path = "wall_shear_v1+pressure_recovery_v1+
+      velocity_profile_v1"`. Apply V61-066 post-R3 #1 lesson — snap x_H
+      target to nearest unique column for velocity_profile_reattachment
+      to avoid x_tol-aliasing duplicate columns.
+    commit_count_estimate: 1
+    test_target: ~5 adapter dispatch tests
+
+  - batch: A.3
+    scope: |
+      Augment knowledge/gold_standards/backward_facing_step_steady.yaml:
+      add gate_status, family, extractor, role, source_table on all 4
+      observables. Downgrade cd_mean to PROVISIONAL_ADVISORY.
+    commit_count_estimate: 1
+    test_target: ~3 schema tests
+
+  - batch: A.4
+    scope: |
+      tests/test_bfs_alias_parity.py: drive GoldStandardComparator end-to-
+      end with a Driver-1985-consistent synthetic emit. Mirror V61-066 A.4
+      structure (parity / comparator routing / extractor key surface).
+    commit_count_estimate: 1
+    test_target: ~10 tests
+
+# ============================================================================
+# §6 Codex round budget
+# ============================================================================
+codex_budget:
+  rounds: 3  # standard for sixth-apply
+  expected_arc: |
+    Per V61-058/063/066 precedent: R1 likely CHANGES_REQUIRED on either
+    extractor methodology or audit-key class; R2 → APPROVE_WITH_COMMENTS
+    or APPROVE; R3 → APPROVE. Verbatim discipline 5-condition envelope
+    applies for each Codex Required-edit fix.
+  pre_r1_review: skipped  # V61-058 precedent — pre-R1 plan review not
+                          # adding signal beyond intake self-review
+
+# ============================================================================
+# §7 Self-pass-rate
+# ============================================================================
+self_estimated_pass_rate: 0.65
+self_estimated_pass_rate_rationale: |
+  Higher than V61-066 pre-R1 estimate (0.55) because:
+    - The schema_v2 gold YAML already exists; no new file creation needed.
+    - reattachment_length extractor already works (DEC-V61-052 stable).
+    - The Type II metadata addition is mechanical.
+    - V61-066 R1 lessons learned: dy-weighting issues don't apply here
+      (BFS uses tau_x sign-change, not bulk-velocity averaging).
+
+  Risks that hold the estimate below 0.80:
+    - 3 NEW extractors mean 3 new methodology surfaces → at least one
+      likely to surface a Codex finding on input validation or audit-key
+      visibility.
+    - cd_mean integration over the step face might surface a Cd-sign-
+      convention issue (reverse flow region contributes pos vs neg to
+      the integral).
+    - velocity_profile_reattachment routes through the dict-list-shape
+      comparator branch which may surface alias-key issues.
+
+  Per V61-066 lesson: Codex's R1 recalibration target is more accurate
+  than self-estimate. Will defer to Codex's R1 number for R2 estimate.
+
+# ============================================================================
+# §8 Risk flags
+# ============================================================================
+risk_flags:
+  - id: cd_mean_sign_convention
+    severity: MEDIUM
+    description: |
+      Integrating tau_x over the step face for Cd_mean is sensitive to
+      the OpenFOAM wallShearStress sign convention (pos = fluid moves
+      forward on a bottom floor, neg = reverse flow). Wrong sign on
+      EITHER the step face or the recirculation zone will give Cd values
+      off by 2× or sign-flipped. Mitigation: borrow the sign-convention
+      reasoning from `_extract_bfs_reattachment` (foam_agent_adapter.py:
+      8332-8354 — explicit sign documentation).
+
+  - id: velocity_profile_dict_shape_alias
+    severity: LOW-MEDIUM
+    description: |
+      Gold YAML uses list-of-dicts ref_value with keys {x_H, y_H, u_Ubulk}.
+      Adapter must emit the SAME dict structure (not separate scalars,
+      not a flat list). V61-058 NACA airfoil + V61-063 flat plate already
+      established the pattern; cross-check during alias-parity test.
+
+  - id: kOmegaSST_wall_function_extraction
+    severity: HIGH-INHERITED-V61-066
+    description: |
+      V61-066 post-R3 defect #2 — cell-centre (ν+ν_t)·du/dy doesn't work
+      with k-ε / k-ω SST wall functions. BFS uses kOmegaSST default per
+      DEC-V61-052 round 2c. NEW extractors that require wall-shear
+      derivatives MUST use the wallShearStress field (already staged) or
+      turbulence-model-aware formulas, NOT cell-centre du/dy. Mitigation:
+      cd_mean uses the wallShearStress field directly (matches reattachment
+      extractor's path).
+
+  - id: x_tol_aliasing_duplicate_columns
+    severity: LOW-INHERITED-V61-066
+    description: |
+      V61-066 post-R3 defect #1 — x_tol = 0.6·dx caught duplicate columns
+      when x_target sat between cell centres. velocity_profile extractor
+      MUST snap to single nearest unique x column (mirror V61-066 fix
+      cb1a9b9). Extractor unit tests should include a non-uniform x grid
+      synthetic to exercise this.
+
+  - id: executable_smoke_test
+    severity: STANDARD
+    description: |
+      Per RETRO-V61-053, every Type II Stage A SHALL be followed by an
+      executable smoke test (Stage B live OpenFOAM run). V61-067 is no
+      exception. Live run on dec-v61-067-bfs branch using the existing
+      V61-052 7360-cell mesh.
+
+  - id: solver_stability_on_novel_geometry
+    severity: STANDARD
+    description: |
+      Per RETRO-V61-053. BFS is NOT novel geometry (DEC-V61-052 stabilized
+      the 3-block mesh + kOmegaSST + Spalding wall function), so this
+      flag is RESOLVED-INHERITED. Stage B should converge on the existing
+      V61-052 schedule (1500 iters, ~38s on Docker).
+
+# ============================================================================
+# Stage B acceptance
+# ============================================================================
+stage_b_acceptance: |
+  - Live OpenFOAM run produces solver_success=True (V61-052 baseline)
+  - reattachment_length within 10% tolerance (back-compat anchor, was
+    PASS at Xr/H=5.647 in V61-052 round 2d)
+  - At least 1 of {pressure_recovery, velocity_profile_reattachment}
+    HARD_GATED siblings within tolerance
+  - cd_mean reported (PROVISIONAL_ADVISORY, not counted in pass-fraction)
+  - Audit fixture regenerated; bfs_extractor_path stamped
+  - Per V61-066 R3 precedent, FAIL_PHYSICS_BORDERLINE acceptable IF the
+    methodology is sound but a kOmegaSST + 7360-cell mesh limitation
+    causes one HARD_GATED to drift outside tolerance — document and
+    queue follow-up DEC.
