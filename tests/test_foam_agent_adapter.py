@@ -595,9 +595,42 @@ class TestFoamAgentExecutor:
             omega_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", omega_text)
             assert k_match is not None
             assert omega_match is not None
-            assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
-            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(3.75e-5) / (0.5623 * 0.1) ≈ 0.109
-            assert float(omega_match.group(1)) == pytest.approx(0.109, rel=0.05)
+            # DEC-V61-063 Stage E.iter2: Tu=1.0% (bumped from iter1's 0.18%) → k=1.5e-4
+            # k = 1.5*(1.0*0.01)^2 = 1.5e-4
+            assert float(k_match.group(1)) == pytest.approx(1.5e-4, rel=1e-3)
+            # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(1.5e-4) / (0.5477 * 0.1) ≈ 0.2236
+            assert float(omega_match.group(1)) == pytest.approx(0.2236, rel=0.05)
+
+            # DEC-V61-063 Stage A: kOmegaSSTLM transition fields present.
+            turbulence_text = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "kOmegaSSTLM" in turbulence_text
+            gamma_int_path = case_dir / "0" / "gammaInt"
+            re_thetat_path = case_dir / "0" / "ReThetat"
+            assert gamma_int_path.is_file()
+            assert re_thetat_path.is_file()
+            gamma_text = gamma_int_path.read_text()
+            re_thetat_text = re_thetat_path.read_text()
+            # gammaInt internalField = 1.0
+            gamma_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", gamma_text)
+            assert gamma_match is not None
+            assert float(gamma_match.group(1)) == pytest.approx(1.0, abs=1e-6)
+            # iter2 ReThetat for Tu=1.0% (low-Tu Langtry-Menter branch):
+            # ReThetat = 1173.51 - 589.428*1.0 + 0.2196/1.0² ≈ 584.30
+            re_thetat_match = re.search(r"internalField\s+uniform\s+([0-9.eE+-]+);", re_thetat_text)
+            assert re_thetat_match is not None
+            assert float(re_thetat_match.group(1)) == pytest.approx(584.30, rel=0.01)
+            # Aerofoil BC for both transition fields = zeroGradient (no surface model).
+            assert "aerofoil" in gamma_text and "zeroGradient" in gamma_text
+            assert "aerofoil" in re_thetat_text and "zeroGradient" in re_thetat_text
+            # gammaInt + ReThetat URFs present in fvSolution.
+            for field_name in ("gammaInt", "ReThetat"):
+                urf_match = re.search(
+                    rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
+                    fv_solution,
+                    re.S,
+                )
+                assert urf_match is not None, f"missing {field_name} URF"
+                assert float(urf_match.group(1)) == pytest.approx(0.7)
         finally:
             shutil.rmtree(case_dir, ignore_errors=True)
 

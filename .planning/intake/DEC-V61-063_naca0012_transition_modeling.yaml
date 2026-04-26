@@ -1,0 +1,238 @@
+# DEC-V61-063 · NACA0012 γ-Re_θt SST transition modeling (followup to V61-062)
+# Intake v1 · Stage 0 · 2026-04-26
+# Target: address V61-061 + V61-062 ceilings via turbulence model upgrade
+# (Langtry-Menter γ-Re_θt SST). Reuses V61-061 H-grid mesh + V61-058
+# methodology stack verbatim.
+
+dec_id: DEC-V61-063
+title: NACA0012 γ-Re_θt SST transition modeling · close V61-061+V61-062 ceilings · methodology v2.1 first-apply
+case_id: naca0012_airfoil  # SAME canonical case_id as V61-058/V61-061/V61-062
+predecessor: DEC-V61-062
+predecessor_chain: [DEC-V61-058, DEC-V61-061, DEC-V61-062]
+methodology_version: "v2.0+v2.1-amendments (sixth-apply, post-V61-053+057+058+061+062)"
+case_type: II  # inherited from V61-058
+autonomous_governance: true
+
+# §1 Scope (in/out)
+scope:
+  in:
+    - "Switch turbulence model in `src/foam_agent_adapter.py::_generate_airfoil_flow` from `kOmegaSST` to `kOmegaSSTLM` (Langtry-Menter γ-Re_θt SST, OF10 RAS module)"
+    - "Add 0/gammaInt initial field (intermittency, dimensionless, init=1, freestream fixedValue, aerofoil zeroGradient)"
+    - "Add 0/ReThetat initial field (transition Reynolds number, dimensionless, init derived from Tu via Langtry-Menter empirical formula)"
+    - "Mesh: V61-061 H-grid 96k cells UNCHANGED (PRIMARY recommendation per RETRO-V61-062 lesson L1: avoid C-grid topology that V61-062 showed unstable)"
+    - "Wall functions: V61-061 baseline UNCHANGED (nutkWallFunction + kqRWallFunction; first cell at log-layer y+)"
+    - "Solver: simpleFoam UNCHANGED; URFs may need tightening (4 transport equations now: U/k/omega/gamma/ReThetat)"
+    - "Re-run Stage E sweep at α∈{0,4,8}° using cloned scripts/dec_v61_063_live_runs.py (single-line dec_id rebrand from V61-061 driver)"
+    - "Verify V61-058 hard gates: Cl@α=8°≈0.815 (5%), Cd@α=0°≈0.008 (15%), dCl/dα≈0.105/deg (10%)"
+    - "Verify smoke + sanity: |Cl@α=0°|<0.005, sign convention Cl@α=+8°>0"
+  out:
+    - "Mesh changes (V61-062 attempted C-grid, ceiling reached; V61-063 explicitly stays on V61-061 H-grid)"
+    - "Gold YAML hard-gate value changes (locked since V61-058 A1)"
+    - "Extractor logic core (yPlus advisory band stays at V61-061 [11,500])"
+    - "Audit fixture format (Stage D regenerates from new run)"
+    - "New gates / new observables (gammaInt + ReThetat are diagnostic INTERNAL fields, not gated)"
+    - "LES (deferred to V61-064 if V61-063 also fails)"
+    - "Stall regime / finite-AR / compressibility"
+    - "Other case meshes"
+
+# §2 Hard gates (inherited verbatim from V61-058 §3)
+hard_gates:
+  - id: lift_coefficient_alpha_eight
+    role: HEADLINE_PRIMARY_SCALAR
+    target: 0.815
+    tolerance: 0.05
+    source: "Ladson 1988 NASA TM-4074 §3.2 Tab.1 Re=3e6"
+    v61_058_actual: 0.491   # 40% under (kOmegaSST 16k cells)
+    v61_061_actual: 0.677   # 17% under (kOmegaSST 96k cells)
+    v61_062_actual: NaN     # diverged (kOmegaSST 51k C-grid)
+  - id: drag_coefficient_alpha_zero
+    role: SAME_RUN_CROSS_CHECK
+    target: 0.0080
+    tolerance: 0.15
+    source: "Ladson 1988 same"
+    v61_058_actual: 0.0201
+    v61_061_actual: 0.0126
+    v61_062_actual: NaN
+  - id: lift_slope_dCl_dalpha_linear_regime
+    role: QUALITATIVE_GATE
+    target: 0.105
+    tolerance: 0.10
+    source: "Ladson 1988 + Abbott 1959 cross-check"
+    v61_058_actual: 0.061
+    v61_061_actual: 0.0844
+    v61_062_actual: NaN
+
+smoke_assertions:  # SANITY_CHECK + sign convention (intake §9 inherited)
+  - "α=+8° → Cl > 0 strictly"
+  - "α=0° → |Cl| < 0.005 (numerical noise floor)"
+
+advisory:
+  y_plus_max:
+    band: [11, 500]
+    target: ~30  # log-layer wall-function sweet spot (UNCHANGED from V61-061)
+
+# §3 Technical hypothesis
+hypothesis: |
+  V61-058 → V61-061 → V61-062 progression isolated TWO ceilings:
+  (1) Mesh density / wall resolution (V61-058→V61-061 closed 23 pp on Cl@α=8°
+      via 16k→96k cells refinement; remaining 17 pp gap)
+  (2) Topology + wall-function regime (V61-062 C-grid with both LowRe and high-Re
+      wall functions diverged; ceiling = topology change INCOMPATIBLE with
+      steady RANS k-ω SST on this geometry)
+
+  RETRO-V61-062 L1: "Mesh quality gates ≠ solver convergence" — even passing
+  checkMesh, 158 severe non-orthogonal faces drove k production to NaN.
+
+  RETRO-V61-062 followup PRIMARY: γ-Re_θt SST transition modeling on V61-061's
+  H-grid (THIS DEC). Rationale: NACA0012 at Re=3e6 has natural transition near
+  x/c ≈ 0.3-0.5 (Ladson exp.); fully-turbulent kOmegaSST treats the entire BL
+  as turbulent → over-predicts Cd and under-predicts Cl. Activating γ-Re_θt
+  transition modeling (Langtry-Menter 2009 4-equation formulation) lets the
+  solver detect the laminar-to-turbulent transition front, correctly modeling
+  pressure-side suction over the LE laminar region.
+
+  Expected improvement direction (single-axis change vs V61-061):
+  - Cl@α=8°: under-prediction reduces (extended laminar BL → less momentum loss)
+  - Cd@α=0°: over-prediction reduces (laminar Cf < turbulent Cf over leading 30%)
+  - dCl/dα: closer to 0.105 (Cl@α=8° improvement dominates over Cl@α=0°≈0)
+
+  Risk: kOmegaSSTLM has 4 transport equations vs kOmegaSST's 2; convergence
+  budget may need bumping. Tu_inf must be set carefully — Tu too high suppresses
+  transition (model converges to fully-turbulent kOmegaSST limit); Tu too low
+  may cause numerical issues with ReThetat init. Ladson 1988 wind-tunnel had
+  Tu ≈ 0.18% per documented LTPT facility characterization.
+
+# §4 Wall-clock budget (intake §4 executable_smoke_test)
+runtime_budget:
+  per_alpha_target_s: 900   # 15 min (kOmegaSSTLM 4 eqns, ~1.5x kOmegaSST budget)
+  per_alpha_max_s: 1800     # 30 min hard ceiling
+  total_sweep_target_s: 3600  # 60 min for 3-α sweep
+  iteration_max_count: 4    # per RETRO-V61-062 L5 (validated as correct)
+
+# §5 Codex budget + self-pass-rate calibration
+codex_budget_rounds: 0  # autonomous closeout per V61-061+V61-062 precedent
+                        # (failure modes are runtime-emergent per RETRO-V61-053)
+external_gate_self_estimated_pass_rate: 0.20
+# Per RETRO-V61-062 v2.1 amendment 4: architectural arcs on geometries with
+# prior *_ceiling_reached defect history anchor at ≤0.20.
+# V61-058 estimated 0.40 → 0% (-40 pp)
+# V61-061 estimated 0.55 → 0% (-55 pp)
+# V61-062 estimated 0.30 → 0% (-30 pp; tightening trend)
+# V61-063 estimated 0.20 (per v2.1 anchor; tightening continues)
+external_gate_self_estimated_pass_rate_4iter: 0.45
+# 4-iter estimate higher because γ-Re_θt provides a NEW physics axis
+# (transition front modeling) that the prior 3 DECs didn't have access to.
+# This is the first attempt at modeling NACA0012 transition; if 4 iter
+# of Tu_inf tuning + URF tuning + endTime extension don't move Cl,
+# the conclusion is "transition modeling alone insufficient" → V61-064 LES.
+
+# §6 Risk flags (incorporates RETRO-V61-062 v2.1 new flags)
+risk_flags:
+  - id: solver_stability_on_novel_geometry
+    note: "OPEN from V61-053/V61-058. New turbulence model = new convergence behavior. kOmegaSSTLM has stiffer ReThetat equation than kOmegaSST."
+    mitigation: "URF guardrails: gammaInt 0.7, ReThetat 0.7 (default OF tutorial T3A); fall back to 0.5 each if divergence; endTime budget +50% if needed."
+  - id: executable_smoke_test
+    note: "OPEN from V61-061+V61-062. Live-run driver cloned from V61-061; same Docker container path."
+  - id: tu_inf_initialization_sensitivity  # NEW for V61-063
+    note: "Langtry-Menter ReThetat empirical formula has different branches at Tu=1.3%. NACA0012 LTPT Tu≈0.18% → low-Tu branch (ReThetat = 1173.51 - 589.428·Tu + 0.2196/Tu²). Tu_inf bump may shift transition onset."
+    mitigation: "Pre-pin Tu_inf=0.0018 (0.18%) per Ladson 1988 LTPT facility characterization. If transition not detected (gammaInt stays ≈1 throughout BL), fall back to default tutorial Tu=3.3% to verify model-stack health."
+  - id: gammaInt_rethetat_field_initialization  # NEW for V61-063
+    note: "Field BCs at the aerofoil patch (zeroGradient per OF tutorial T3A) and freestream (fixedValue inletOutlet)."
+    mitigation: "Pin to T3A tutorial pattern verbatim. Aerofoil noSlip patch gets zeroGradient on both gammaInt and ReThetat (no surface model)."
+  - id: kOmegaSSTLM_solver_convergence_in_OF10  # NEW for V61-063
+    note: "OF10 has kOmegaSSTLM in RAS module (verified at /opt/openfoam10/src/MomentumTransportModels/momentumTransportModels/RAS/kOmegaSSTLM); should be ABI-stable with simpleFoam."
+    mitigation: "blockMesh + simpleFoam invocation unchanged from V61-061; only constant/turbulenceProperties + 0/gammaInt + 0/ReThetat change."
+  - id: post_r3_executable_smoke_test  # from V61-061+V61-062 lineage
+    note: "Pure code change: only convergence + Cl/Cd extraction needs live-run validation. Test fixtures synthetic; mesh + extractor pipeline unchanged."
+  - id: transition_at_high_alpha  # NEW for V61-063
+    note: "At α=8°, NACA0012 LE laminar BL is much shorter (transition near x/c≈0.05 on suction side). γ-Re_θt's improvement may concentrate at α=0°/α=4° rather than α=8°."
+    mitigation: "Pre-register expected per-α improvements: Cd@α=0° biggest gain; Cl@α=8° smallest gain. If Cl@α=8° improves > Cd@α=0°, model is mis-tuned."
+  - id: regression_on_v61_058_test_class
+    note: "TestNACA0012MultiDim's 40 unit tests must continue to pass — they test extractor + α-routing logic, not turbulence model. Synthetic fixtures don't depend on real mesh or model."
+
+# §7 Stages
+stages:
+  - id: A
+    scope: "Single-commit atomic change to `_generate_airfoil_flow`: turbulence model + 2 new initial fields. Preserves V61-061 mesh/wall-function/URF stack."
+    commit_count_estimate: 1-2  # may need test sentinel updates
+    iteration_ceiling: 1  # code-only, not iterating
+  - id: E
+    scope: "Live OpenFOAM sweep at α∈{0,4,8}° using cloned scripts/dec_v61_063_live_runs.py. Iterate if any HARD gate FAILs OR solver diverges: Tu_inf tuning, URF tightening, endTime extension. Each iteration: single-axis change, single Stage E sweep."
+    commit_count_estimate: 2-4  # depends on iteration depth
+    iteration_ceiling: 4  # per RETRO-V61-062 L5 validated
+    early_termination: "k bounding event with k_max > 1e6 → hard early-termination per RETRO-V61-062 v2.1 amendment 3"
+
+# §8 Stage-E close conditions
+stage_e_close_checklist:
+  - item: "Cl@α=8° within 5% of 0.815 (HEADLINE)"
+    required: true
+  - item: "Cd@α=0° within 15% of 0.0080 (CROSS_CHECK)"
+    required: true
+  - item: "dCl/dα within 10% of 0.105 (QUALITATIVE)"
+    required: true
+  - item: "|Cl@α=0°| < 0.005 (SANITY)"
+    required: true
+  - item: "Cl@α=+8° > 0 strictly (sign convention smoke)"
+    required: true
+  - item: "y+_max in [11, 500] (advisory PASS band)"
+    required: false  # advisory
+  - item: "All 3 α cases solver-converge (residuals U/p < 1e-4 over last 100 iterations)"
+    required: true
+  - item: "TestNACA0012MultiDim continues to pass (40+ tests)"
+    required: true
+  - item: "Per-α wall clock ≤ 30 min (intake §4 budget ceiling)"
+    required: true
+  - item: "Transition front detected (gammaInt < 0.5 over leading X% of chord at α=0°)"
+    required: false  # diagnostic, not gate
+
+# §9 Self-review pre-Stage-A (no Codex available autonomously — Claude self-checks)
+self_review_pre_stage_a:
+  - check: "Scope is genuinely narrower than V61-061+V61-062 (turbulence-model-only, no mesh/extractor/UI changes)"
+    verdict: PASS
+    evidence: "§1 out-of-scope explicitly excludes: mesh changes, gold YAML hard gates, extractor logic core, audit fixture format, new gates, LES, other case meshes."
+  - check: "Hard gates inherited verbatim from V61-058 (no quiet relaxation)"
+    verdict: PASS
+    evidence: "§2 cites V61-058 §3 verbatim; tolerances unchanged; predecessor actuals tabulated."
+  - check: "Hypothesis pre-registered (RETRO-V61-062 L1+L2-aligned, not retrofit)"
+    verdict: PASS
+    evidence: "§3 references RETRO-V61-062 directly; turbulence-model upgrade is the PRIMARY recommendation; mesh kept at V61-061 baseline per L2 (topology change incompatible with steady RANS)."
+  - check: "Iteration ceiling bounded (no infinite Tu/URF tuning loop)"
+    verdict: PASS
+    evidence: "§7 Stage E iteration_ceiling=4 (per RETRO-V61-062 L5 validation). If 4 iter exhaust, escalate to retro and propose V61-064 LES."
+  - check: "Smoke + sanity assertions robust against the model change (won't pass-wash via init-field artifact)"
+    verdict: PASS
+    evidence: "α=0° |Cl|<0.005 is an absolute SNR floor; gammaInt + ReThetat are diagnostic INTERNAL fields (not gated). The α-routing logic that V61-058 R1 fixed and V61-061+V61-062 inherited is unchanged."
+  - check: "Pass rate self-estimate (0.20 / 0.45) calibrated per RETRO-V61-062 v2.1 amendment 4"
+    verdict: PASS
+    evidence: |
+      RETRO-V61-062 v2.1 amendment 4: architectural arcs on geometries with prior
+      *_ceiling_reached defect history anchor at ≤0.20. V61-063 estimate 0.20 is
+      AT THE ANCHOR (not above). 4-iter estimate 0.45 reflects the new physics
+      axis (transition modeling) that the prior 3 DECs didn't have.
+  - check: "Out-of-scope guardrails prevent scope creep mid-arc"
+    verdict: PASS
+    evidence: "§1 explicit out list. If iteration reveals need to touch extractors/gold/mesh, halt and open V61-064 instead of bleeding scope."
+  - check: "RETRO-V61-062 v2.1 amendments incorporated (4 items)"
+    verdict: PASS
+    evidence: |
+      Amendment 1 (non_orthogonal_face_count_severe gate): N/A — V61-063 stays on
+        V61-061 H-grid with 0 severe non-orth faces (intake §1 mesh out-of-scope).
+      Amendment 2 (topology_change_with_steady_rans risk flag): N/A — V61-063
+        is turbulence-model change, not topology.
+      Amendment 3 (k bounding > 1e6 → hard early-termination): INTEGRATED at
+        §7 Stage E `early_termination` clause.
+      Amendment 4 (pre-sweep estimate ≤0.20 anchor): INTEGRATED at §5.
+
+# §10 Followup if V61-063 closes successfully
+followup:
+  - "RETRO addendum: 'turbulence model upgrade' as a recurring pattern when mesh ceilings reached → propose intake template field for predecessor.physics_axis_explored"
+  - "Knowledge: case_profile risk_flag tu_inf_initialization_sensitivity → reusable template for future transition-sensitive cases"
+  - "NACA0012 case status: iteration_improvement → gold_validated (if all 3 hard gates clear)"
+
+# §11 Followup if V61-063 reaches architectural_ceiling_reached
+ceiling_protocol:
+  - "Write retro per RETRO-V61-001 trigger #4 (iter ceiling reached)"
+  - "Post-R3 defect addendum if Stage E reveals new failure mode (per RETRO-V61-053 protocol)"
+  - "V61-064 PRIMARY recommendation: LES on V61-061 H-grid (V61-063 secondary becomes V61-064 primary)"
+  - "V61-064 SECONDARY: SST-SAS hybrid (less compute than full LES)"
+  - "If V61-064 also fails: park NACA0012 at V61-061 iteration_improvement baseline; document as 'physics modeling ceiling reached for steady-state methodology, requires unsteady'"
