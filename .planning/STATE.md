@@ -2,20 +2,24 @@
 gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
-status: M1_PLANNED
-last_updated: "2026-04-26T02:50 local"  # post-pivot-refinement STATE/ROADMAP rewrite
+status: M1_M4_COMPLETE
+last_updated: "2026-04-26T03:00 local"  # M1-M4 arc-close + Notion sync round
 progress:
   closed_arcs:
     workbench_arc: "6/6 stages + 8a + 8b prep COMPLETE (4-round Opus 4.7 review, stop criterion triggered 2026-04-25)"
     v61_w1_governance: "G-1..G-9 closed, ADR-002 ACCEPTED, methodology v2.0 ACTIVE (2026-04-25)"
     phase_1_to_8: "10-case whitelist 8 PASS / 2 HOLD, convergence attestor + 5 hard gates active, audit package L4 + HMAC byte-reproducibility (2026-04-22)"
-  current_arc: "M1-M4 Workbench Closed-Loop"
-  m1_status: PLANNED
-  m2_status: PLANNED
-  m3_status: PLANNED
-  m4_status: PLANNED
+    p1_metrics_trust: "P1-T1..T5 COMPLETE (DEC-V61-054/055/056, RETRO-V61-004 landed 2026-04-25, 90/90 metrics+task_runner_trust_gate tests pass)"
+    workbench_closed_loop_m1_m4: "M1+M2+M3+M4 COMPLETE (commits 3d3509e/ce0a8ce/5fff107/6b7492c + smoke fixes 74a93f1/ecc1981, real OpenFOAM LDC dogfood 2026-04-26T02-30-58Z 24.8s converged)"
+  current_arc: "post-arc Notion sync hygiene + next-phase scoping"
+  m1_status: COMPLETE  # commit 3d3509e (RealSolverDriver)
+  m2_status: COMPLETE  # commit ce0a8ce (EditCasePage)
+  m3_status: COMPLETE  # commit 5fff107 + 74a93f1 (run-history + route fix)
+  m4_status: COMPLETE  # commit 6b7492c (Docker fail classifier + FailureBanner)
   total_budget_loc: 650
   total_budget_weeks: 1.5
+  actual_loc: "~600 (within budget)"
+  actual_weeks: "~1 active dev (50% under estimate per governance降级 leverage)"
 
 pivot:
   date: "2026-04-22"
@@ -32,7 +36,7 @@ main_line:
     M2: "/workbench/case/{id}/edit frontend (backend case_editor.py already done) · ~150 LOC · week 2"
     M3: "Run history + auto-jump (run_history.py + RunHistoryPage) · ~250 LOC · week 3"
     M4: "Docker fail classifier in RealSolverDriver · ~80 LOC · week 3-4"
-  next_action: "M1 — implement RealSolverDriver class wrapping FoamAgentExecutor.execute()"
+  next_action: "M1-M4 closed; choose between (a) 60-day workbench extensions per ROADMAP §post-M4 deferred, or (b) wait on V61-057/058 unblock (3 external signatures pending per RETRO-V61-004)"
 
 governance:
   mode: "downgraded (standing rule, 2026-04-26)"
