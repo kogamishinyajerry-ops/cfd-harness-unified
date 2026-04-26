@@ -1,15 +1,38 @@
 ---
 decision_id: DEC-V61-080
 title: GOV-1 Gold Case CaseProfile enrichment + tolerance citation backfill (10/10 cases, Option B docs-only)
-status: ACCEPTED (2026-04-26 · 10/10 case docs landed · 27/29 = 93% tolerance citation coverage · 132/132 trust-gate baseline preserved · no tolerance values changed, no baseline recomputed, no new gold case added, no KOM schema field added)
+status: ACCEPTED_WITH_AMENDMENTS_LANDED (2026-04-26 · independent Notion @Opus 4.7 audit verdict RATIFY_WITH_AMENDMENTS · A1+A2+A3+A4-evidence+A5 landed in this commit · A4 forensic-mini-DEC owner=CFDJerry remains pending)
 authored_by: Claude Code Opus 4.7 (1M context · Session B concurrent with Session A's PC-2/3/4 + DEC-V61-073)
 authored_at: 2026-04-26
 authored_under: GOV-1 v0.5 enrichment arc · Session B
 parent_session: anchor session post-independent-audit
 autonomous_governance: true
-external_gate_self_estimated_pass_rate: 0.90
+external_gate_self_estimated_pass_rate: 0.85    # downgraded 0.90 → 0.85 per audit constitutional finding 3 honest-rate calibration
 notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed81e88714f78500757f54)
 codex_tool_report_path: null  # docs-only changes; no source-code review needed
+session_close_head: 4cb2aad                        # absolute-last-commit HEAD; supersedes prior 764efd7 reference (audit A1 reconciliation)
+audit_verdict_url: pending  # to be filled when CFDJerry pastes audit verdict to a Notion sub-page
+audit_amendments_landed:
+  - id: A1
+    desc: hard-boundary diff attestation evidence file
+    artifact: .planning/audit_evidence/2026-04-26_v61_080_diff_attestation.txt
+    status: landed
+  - id: A2
+    desc: citation tier 3-way split (a literature / b ASME-V&V / c internal-decision) in case_documentation/README.md
+    artifact: docs/case_documentation/README.md
+    status: landed
+  - id: A3
+    desc: P4 schema mapping table to Pivot Charter §3 8-class KOM + non-normative banner; P-12 LOW→HIGH escalation
+    artifact: docs/case_documentation/_p4_schema_input.md
+    status: landed
+  - id: A4
+    desc: empirical evidence file for test-flake attribution; rejected Session-A-PC-3-R2 hypothesis (flake exists at 50bb2eb already, predates 55f2642)
+    artifact: .planning/audit_evidence/2026-04-26_v61_080_a4_flake_attribution.txt
+    status: evidence_landed_dec_amendment_pending  # CFDJerry owns the formal cross-session DEC amendment
+  - id: A5
+    desc: Concurrent Session Protocol v2 draft
+    artifact: .planning/protocols/concurrent_session_protocol_v2.md
+    status: landed_pending_opus_gate_ratification
 risk_flags:
   - executable_smoke_test                           # not applicable (docs-only, no executable change)
   - solver_stability_on_novel_geometry              # not applicable (no solver/geometry change)
@@ -19,7 +42,11 @@ gov1_scope:
   cases_with_failure_notes: 10
   tolerance_citation_coverage_numerator: 27
   tolerance_citation_coverage_denominator: 29
-  tolerance_citation_coverage_pct: 93
+  tolerance_citation_coverage_pct: 93               # all-tier total; tier (a) literature-only is 10/29 = 34% per audit A2
+  tolerance_coverage_tier_a_literature: 10          # case-specific paper-anchored
+  tolerance_coverage_tier_b_standards: 9            # ASME V&V 20-2009 engineering V&V band
+  tolerance_coverage_tier_c_internal_decision: 8    # dec_v61_057_intake + dec_v61_058_intake
+  tolerance_coverage_tbd: 2                         # LDC secondary-vortex psi + IJ Behnia HOLD
   hard_boundaries_violated: 0
 ---
 
@@ -241,10 +268,16 @@ were **NOT** performed by GOV-1 v0.5:
 
 3. **Pre-existing test-isolation flake** in
    `test_build_trust_gate_report_resolves_display_title_to_slug`: this
-   is **not** a GOV-1 issue, but the Notion @Opus 4.7 audit cycle should
-   surface it as a Session A follow-up. (Domain: tolerance_policy
-   observables registry; suggests global state pollution from a
-   sibling test in the same module or in `test_task_runner.py`.)
+   is **not** a GOV-1 issue. **AMENDED post-audit A4 (2026-04-26)**: the
+   flake is **deeper-historical**, NOT a Session A PC-3 R2 regression.
+   Empirical evidence in `.planning/audit_evidence/2026-04-26_v61_080_a4_flake_attribution.txt`
+   shows the same flake exists at HEAD `50bb2eb` (= `55f2642^`, the parent
+   of PC-3 R2). Forensic git bisect from V6.1 counter start to `50bb2eb`
+   is required to identify the introducing commit. Recommend opening
+   `DEC-V61-FORENSIC-FLAKE-1` under CFDJerry authority. (Domain:
+   `tolerance_policy_observables` registry; suggests global state pollution
+   from a sibling test in `tests/test_task_runner_trust_gate.py` or peer
+   modules.)
 
 ## Notion sync checklist
 
@@ -254,21 +287,25 @@ were **NOT** performed by GOV-1 v0.5:
 
 ## Self-pass-rate calibration (RETRO-V61-001 honest principle)
 
-`external_gate_self_estimated_pass_rate: 0.90`. Rationale:
-- Hard-boundaries 1-7 self-attested clean (high confidence)
-- Tolerance citation coverage 93% > 80% target (high confidence)
-- 10/10 case docs delivered (high confidence)
-- Test baseline preserved (high confidence; flake confirmed pre-existing)
-- Risk: external Notion @Opus 4.7 audit may flag (a) the
-  `legacy_doi_retired` note in the NACA citations.bib retired-provenance
-  block, (b) my 1993 attribution for Cooper et al. (vs the 1984 cited in
-  the gold yaml — both refer to the Cooper jet data series; I cited the
-  journal paper rather than the conference, which the audit may want
-  reconciled), (c) the tolerance-coverage tally methodology (some
-  reviewers may argue ASME V&V 20 should not be counted as
-  "literature-anchored")
-- Estimate 90% leaves 10% probability of a CHANGES_REQUIRED return
+`external_gate_self_estimated_pass_rate: 0.85` (downgraded 0.90 → 0.85 post-audit, 2026-04-26).
 
-If returned, expected fixes are localized to citations.bib edits and a
-README clarification — no architectural rework, no `knowledge/**`
-touches needed.
+Pre-audit rationale (preserved for retro):
+- Hard-boundaries 1-7 self-attested clean (high confidence) ✅
+- Tolerance citation coverage 93% > 80% target (high confidence) — **partial: audit A2 amended to require 3-tier split**
+- 10/10 case docs delivered (high confidence) ✅
+- Test baseline preserved (high confidence; flake confirmed pre-existing) — **partial: audit A4 found attribution to Session A's PC-3 R2 was wrong; flake is deeper-historical**
+- Risk: external audit may flag tally methodology — **realized**
+
+Post-audit reality (2026-04-26):
+- Independent Notion @Opus 4.7 audit returned **RATIFY_WITH_AMENDMENTS** with 5 amendments (A1-A5)
+- Audit's stricter reading recommended self-pass-rate **0.85** to down-weight (a) the
+  unverified hard-boundary claim (now landed via A1 evidence file) and (b) the
+  dirty-working-tree handoff (now formalized via A5 protocol v2)
+- 4 of 5 amendments landed in this DEC update commit (A1, A2, A3 + A5 + A4 evidence)
+- A4 formal cross-session DEC amendment remains CFDJerry's authority
+
+The audit verdict is **NOT a CHANGES_REQUIRED**; RATIFY_WITH_AMENDMENTS
+preserves DEC Status as `Accepted` per the V61-073 precedent
+(amendments-pending-landing closes when the amendments land). With
+A1+A2+A3+A4-evidence+A5 landed, the DEC's `Accepted` status is now
+substantively defended.

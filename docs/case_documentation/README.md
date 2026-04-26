@@ -27,6 +27,24 @@ This tree distils each whitelist Gold Standard case into three artifacts:
 
 **Overall**: 27/29 = 93% tolerance citations covered; 2 honest `TBD-GOV1`.
 
+### Citation tier breakdown (post-audit A2 transparency split, 2026-04-26)
+
+The "27 cited" tally above conflates three distinct anchor tiers. Per the
+independent audit verdict (RATIFY_WITH_AMENDMENTS, A2), these are surfaced
+explicitly so consumers can apply their own rigor bar:
+
+| Tier | Anchor type | Count | Pct of 29 | Notes |
+|---|---|---|---|---|
+| (a) | Case-specific literature (primary paper for the gold value) | 10 | 34% | Ghia 1982, Williamson 1996, de Vahl Davis 1983, Kim/Moser 1987-1999, Ladson 1988, Jones 1976, Chaivat 2006 — direct paper anchors. Note: per the DOI integrity audit, several tier-(a) DOIs have integrity issues separate from tier classification (CCW typo, DCT wrong journal, IJ + RBC mismatch) — see [`_research_notes/gov1_paper_reread_2026-04-26.md`](_research_notes/gov1_paper_reread_2026-04-26.md) |
+| (b) | Standards-anchored (ASME V&V 20-2009 engineering V&V band) | 9 | 31% | Methodologically defensible per Pivot Charter §5 (no per-paper anchoring mandate), but NOT the same rigor class as (a). Engineering tolerance band absorbing mesh + scheme uncertainty. |
+| (c) | Internal-decision anchor (`dec_v61_057_intake`, `dec_v61_058_intake`) | 8 | 28% | Per-observable tolerance values set by internal DEC §B intake decisions (DHC §B.1/B.2/B.3, NACA §3 PROFILE/QUALITATIVE/SAME_RUN gates). Traceable to DEC + ultimately to Ladson 1988 §3.4 / de Vahl Davis 1983, but NOT direct paper anchors. |
+| TBD | `TBD-GOV1` | 2 | 7% | LDC secondary-vortex ψ relaxation (no published reference); IJ Behnia HOLD (gold value itself PROVISIONAL pending paper re-read) |
+| **Total** | — | **29** | **100%** | — |
+
+**Literature-coverage metric (tier a only)**: **10/29 = 34%** — this is the
+strict "case-specific paper-anchored" headline. The 93% figure remains
+valid as the all-tier total but should not be read as 93% literature-anchored.
+
 ## Open HOLDs requiring external paper re-read (input to GOV-1 v1.0)
 
 These three cases are blocked from full citation closure until a primary-source verification:

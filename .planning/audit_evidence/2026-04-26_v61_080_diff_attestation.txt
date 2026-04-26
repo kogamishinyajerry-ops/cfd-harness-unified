@@ -1,0 +1,39 @@
+# A1 · Hard-boundary diff attestation for DEC-V61-080
+# Audit reference: Session B GOV-1 v0.5 audit verdict (RATIFY_WITH_AMENDMENTS, 2026-04-26)
+# Range: 55f2642..4cb2aad (pre-Session-B HEAD .. session close HEAD)
+# HEAD reconciliation: audit prompt cited 4cb2aad (literal last commit, frontmatter sync);
+#                     DEC §Source cited 764efd7 (last substantive content commit before sync).
+#                     Both are accurate at different layers; 4cb2aad is the absolute HEAD used here.
+
+## §1 · git log over forbidden paths (must show ZERO non-empty hunks)
+
+### Boundary 5/6/7: knowledge/, src/cfd_harness/trust_core/, Session A spec/methodology paths
+
+```
+```
+
+### Boundary 1/2: whitelist + gold standards (no tolerance/gold value/baseline change)
+
+```
+```
+
+## §2 · Verdict
+
+If both `git log` blocks above are EMPTY (no commit headers, no file stats), then:
+- Boundary 1: ✅ no tolerance value change
+- Boundary 2: ✅ no gold value change / no baseline recompute / no new gold case
+- Boundary 5: ✅ knowledge/** untouched (no new file format / new field)
+- Boundary 6: ✅ src/cfd_harness/trust_core/** untouched
+- Boundary 7: ✅ Session A's exclusive write paths untouched
+
+## §3 · Reproducibility
+
+Anyone with a clone of this repo can reproduce by running:
+```bash
+git log --stat 55f2642..4cb2aad -- knowledge/ src/cfd_harness/trust_core/ \
+  docs/specs/EXECUTOR_ABSTRACTION.md docs/methodology/ \
+  scripts/methodology/sampling_audit.py knowledge/whitelist.yaml \
+  knowledge/gold_standards/
+```
+
+Generated: 2026-04-26T09:12:44Z by Claude Code Opus 4.7 under audit amendment A1.

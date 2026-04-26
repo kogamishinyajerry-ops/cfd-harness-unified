@@ -288,9 +288,34 @@ gold_value:
 | P-9 advisory_promoted | NACA | LOW (resolved by Codex F5) |
 | P-10 family_double_count | NACA | LOW (resolved by Codex F1) |
 | P-11 key_name_drift | CCW | MEDIUM (managed via aliases) |
-| P-12 unreliable_provenance | NACA | LOW (resolved by multi-source pivot) |
+| P-12 unreliable_provenance | NACA + IJ + RBC + DCT + CCW (5/10) | **HIGH** (escalated 2026-04-26 from LOW; 40% case prevalence — see addendum below) |
+
+### P-12 severity escalation (post-audit, 2026-04-26)
+
+The post-DEC `_research_notes/gov1_paper_reread_2026-04-26.md` full DOI
+integrity audit revealed that P-12 prevalence is **4 of 10 active cases (40%)**,
+not 1 of 10 as originally framed:
+
+- IJ: DOI resolves to **unrelated paper** (Rao 2013 LES turbines, not Behnia)
+- RBC: DOI resolves to **unrelated paper** (Meyer 2006 jet array cooling); author "Chaivat" not findable
+- DCT: cited under **wrong journal** (IJHMT vs actual ASME J Fluids Eng)
+- CCW: DOI **typo** (`.002421` should be `.002401`)
+- NACA: previously resolved via DEC-V61-058 multi-source pivot
+
+The independent audit verdict (RATIFY_WITH_AMENDMENTS, 2026-04-26) confirmed
+this escalation as supported by the evidence base. Severity therefore moves
+LOW → **HIGH**: P-12 is recurring, latent, and undetectable by reading the
+YAML alone. P4 schema MUST encode automated DOI integrity at ingest time.
 
 ## Recommended P4 schema architecture (high-level)
+
+> ⚠️ **Non-normative banner (post-audit A3, 2026-04-26)**: The 7-class
+> proposal below is **illustrative only**. Final field names, class
+> boundaries, and gate semantics are normatively defined by the P4 KOM
+> ratification process, NOT by this document. The 12 P-patterns are the
+> binding acceptance-test set; the class structure to encode them is
+> P4 design freedom. See "§ Mapping to Pivot Charter §3 8-class KOM"
+> below for compatibility analysis.
 
 Based on the patterns above, a P4 KNOWLEDGE_OBJECT_MODEL should encode:
 
@@ -303,3 +328,44 @@ Based on the patterns above, a P4 KNOWLEDGE_OBJECT_MODEL should encode:
 7. **`Gate`** (verdict aggregation): pass_rule, role taxonomy, extraction_independence_class
 
 The 12 patterns cataloged here are the **acceptance test set** for P4: a P4 schema that cannot encode all 12 patterns is incomplete; a P4 schema that encodes them all gives the harness a real chance to detect each failure mode automatically rather than relying on Codex review or post-hoc audits.
+
+## Mapping to Pivot Charter §3 8-class KOM
+
+The Pivot Charter §3 defines 8 canonical knowledge classes:
+
+> CaseProfile / SolverRecipe / MeshRecipe / BCRecipe / ObservableDefinition /
+> FailurePattern / CorrectionPattern / ProvenanceRecord
+
+Mapping the illustrative 7-class proposal above onto the Charter's 8 classes:
+
+| Session B 7-class proposal | Pivot Charter §3 8-class KOM | Mapping notes |
+|---|---|---|
+| `CaseProfile` | `CaseProfile` | Direct match. Charter's CaseProfile is the umbrella; SolverRecipe / MeshRecipe / BCRecipe are separate but referenced by it. |
+| `Observable` | `ObservableDefinition` | Direct match. Charter naming is more explicit. |
+| `GoldValue` | (subsumed in `ObservableDefinition`) | Charter does not split GoldValue from Observable. P4 design choice: split (Session B proposal) vs unified (Charter literal). Either is encoder-equivalent for the 12 P-patterns. |
+| `Extractor` | (not in Charter's 8) | New class required for P-3 (extractor_emits_wrong_observable). P4 may add it OR encode as a method/field on `ObservableDefinition`. |
+| `RunManifest` | `ProvenanceRecord` | Charter naming. RunManifest's "effective vs declared" comparison is part of provenance. |
+| `FailurePattern` | `FailurePattern` | Direct match. |
+| `Gate` | (not in Charter's 8) | Verdict aggregation rule. P4 may add it as new class OR encode as method on `ProvenanceRecord` / `CaseProfile`. |
+| (not in Session B proposal) | `SolverRecipe` | Implicit in Session B's `CaseProfile.solver` field. P4 should hoist to first-class per Charter. |
+| (not in Session B proposal) | `MeshRecipe` | Implicit in Session B's `CaseProfile.mesh` field. P4 should hoist to first-class per Charter. |
+| (not in Session B proposal) | `BCRecipe` | Implicit in Session B's `CaseProfile.boundary_conditions` field. P4 should hoist to first-class per Charter. |
+| (not in Session B proposal) | `CorrectionPattern` | NOT addressed by the 12 P-patterns. Charter pairs FailurePattern with CorrectionPattern; P4 should design them together. |
+
+**Compatibility verdict**: Session B's 7-class proposal is **non-normative**
+and partially overlaps with the Charter's 8-class KOM. Three Charter classes
+(SolverRecipe, MeshRecipe, BCRecipe) are absent from Session B's proposal
+because the 12 P-patterns do not surface failure modes that distinguish
+them from `CaseProfile` umbrella fields — but Charter §3 names them as
+first-class and P4 should respect that.
+
+One Charter class (`CorrectionPattern`) is **not addressed by the P-pattern
+set at all**. This is a real gap: the 12 patterns cover failure detection
+but not failure remediation. P4 will need a separate input set for
+CorrectionPattern design (e.g., the historical Codex-fix patterns from
+Session A's PR 4d/c arc, or the per-case `failure_notes.md` "Status:
+RESOLVED" entries which are de facto correction patterns).
+
+Two Session B classes (`Extractor`, `Gate`) are net-new vs the Charter.
+Whether P4 adopts them as separate classes, folds them into existing
+classes as methods, or rejects them entirely is **P4 design freedom**.

@@ -1,0 +1,74 @@
+# A4 · Test-isolation flake attribution evidence for DEC-V61-080
+# Audit reference: Session B GOV-1 v0.5 audit verdict (RATIFY_WITH_AMENDMENTS, 2026-04-26)
+# Hypothesis under test: is `test_build_trust_gate_report_resolves_display_title_to_slug`
+#                       failure introduced by Session A's PC-3 R2 (commit 55f2642)?
+
+## §1 · Method
+
+Run the full pytest suite at three HEADs and compare:
+- HEAD `55f2642^` (= `50bb2eb`, parent of PC-3 R2): pre-PC-3-R2 baseline
+- HEAD `55f2642` (PC-3 R2 itself, also the pre-Session-B baseline)
+- HEAD `4cb2aad` (Session B close)
+
+Command: `EXECUTOR_MODE=mock python -m pytest tests/ -q --no-header`
+
+## §2 · Results
+
+| HEAD | Commit message | passed | skipped | failed | flake present? |
+|---|---|---|---|---|---|
+| `50bb2eb` | docs(specs): PC-2 R3 · close residual HIGH-1 + HIGH-2 from Codex R2 | 868 | 2 | 1 | ✅ YES (same test, same error message) |
+| `55f2642` | fix(methodology): PC-3 R2 · address Codex 4 findings + 2 regex bugs in sampling_audit | 884 | 2 | 1 | ✅ YES |
+| `4cb2aad` | chore(dec): DEC-V61-080 frontmatter notion_sync_status synced | 884 | 2 | 1 | ✅ YES |
+
+The +16 passed count from `50bb2eb` → `55f2642` is consistent with PC-3 R2's
+8 new sampling_audit unit tests landing (announced in the V61-073 commit
+chain as "§10.5 sampling-audit budget gate + 8 unit tests").
+
+## §3 · Verdict
+
+**The flake `test_build_trust_gate_report_resolves_display_title_to_slug` is
+NOT introduced by Session A's PC-3 R2 (commit 55f2642).** It pre-exists at
+its parent `50bb2eb` (PC-2 R3) and likely earlier.
+
+This corresponds to A4's branch (iii): "if flake present, re-classify as
+deeper-historical and trace separately." The flake is a deeper-historical
+issue and cannot be attributed to Session A's most recent work.
+
+## §4 · Recommended next action (out of A4 scope)
+
+A forensic git bisect is required to identify the specific commit that
+introduced the test_isolation issue. Suggested bisect range: from V6.1
+counter start (likely DEC-V61-001 era) to `50bb2eb`.
+
+The flake is in `tests/test_task_runner_trust_gate.py` line 466 — the
+test asserts `gold_report.provenance.get("tolerance_policy_observables")`
+returns `['alpha_obs', 'beta_obs']`, but in the full-suite run gets `[]`.
+This suggests global state pollution: another test in the same module
+or a sibling module mutates a `tolerance_policy_observables` registry
+without cleanup.
+
+Probable root cause vectors:
+- Module-level fixture in `tests/test_task_runner_trust_gate.py` creating
+  state that subsequent tests don't isolate
+- A `conftest.py` autouse fixture that doesn't reset state
+- A class-level setUp in a peer test class
+
+This is a Claude Code-actionable forensic task but **separate from GOV-1
+v0.5 / Session B v2 scope**. Recommend opening a small DEC (e.g.,
+`DEC-V61-FORENSIC-FLAKE-1`) under CFDJerry authority for the bisect +
+fix.
+
+## §5 · Implications for DEC-V61-080 § "Open questions" §3
+
+The current text says:
+> "Pre-existing test-isolation flake ... is not a GOV-1 issue, but the
+> Notion @Opus 4.7 audit cycle should surface it as a Session A
+> follow-up."
+
+This needs amendment: A4 evidence shows it is **deeper-historical**, not
+a Session A PC-3 R2 follow-up. The correct framing is:
+> "Pre-existing test-isolation flake ... predates 55f2642^ (PC-2 R3,
+> commit 50bb2eb). NOT a Session A PC-3 R2 regression. Forensic bisect
+> needed to identify the introducing commit."
+
+Generated 2026-04-26 by Claude Code Opus 4.7 under audit amendment A4.
