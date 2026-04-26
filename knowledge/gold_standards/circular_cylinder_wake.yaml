@@ -64,7 +64,7 @@ reference_values:
     description: "St = fD/U, 2D laminar vortex shedding at Re=100"
 tolerance: 0.05
 source: "Williamson 1996, Annu. Rev. Fluid Mech."
-literature_doi: "10.1146/annurev.fl.28.010196.002421"
+literature_doi: "10.1146/annurev.fl.28.010196.002401"
 mesh_info:
   cells: 40000
   type: structured
@@ -87,7 +87,7 @@ reference_values:
     description: "mean drag coefficient at Re=100"
 tolerance: 0.05
 source: "Williamson 1996, Annu. Rev. Fluid Mech."
-literature_doi: "10.1146/annurev.fl.28.010196.002421"
+literature_doi: "10.1146/annurev.fl.28.010196.002401"
 mesh_info:
   cells: 40000
   type: structured
@@ -110,7 +110,7 @@ reference_values:
     description: "RMS lift coefficient at Re=100"
 tolerance: 0.05
 source: "Williamson 1996, Annu. Rev. Fluid Mech."
-literature_doi: "10.1146/annurev.fl.28.010196.002421"
+literature_doi: "10.1146/annurev.fl.28.010196.002401"
 mesh_info:
   cells: 40000
   type: structured
@@ -142,7 +142,7 @@ reference_values:
     description: "centerline velocity deficit at x/D=5.0"
 tolerance: 0.05
 source: "Williamson 1996, Annu. Rev. Fluid Mech."
-literature_doi: "10.1146/annurev.fl.28.010196.002421"
+literature_doi: "10.1146/annurev.fl.28.010196.002401"
 mesh_info:
   cells: 40000
   type: structured
