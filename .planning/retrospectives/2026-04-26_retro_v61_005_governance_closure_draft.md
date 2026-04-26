@@ -1,7 +1,7 @@
 ---
 retro_id: RETRO-V61-005
 title: 治理收口 2026-04-26 → 2026-05-03 · governance closure window
-status: DRAFT (Day 0 buildup · finalize on Day 7 2026-05-03)
+status: ACCEPTED (Day 0 + early Day 1 substantial closure · per user explicit "完成此次重大治理任务" mandate 2026-04-26 · A3 W2 G-9 Opus Gate explicitly deferred to next external-context Notion session)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-26
 authored_under: 治理收口 anchor session [Session 2026-04-26 治理收口启动](https://www.notion.so/34ec68942bed8105a5f2f961241cd32b)
@@ -14,13 +14,13 @@ notion_sync_status: pending (Day 7 final form)
 > **Status**: DRAFT. Day-by-day buildup as the 7-day window progresses.
 > Final verdict (P2 Go/No-Go) lands on Day 7 (2026-05-03).
 
-## Three-anchor verdict (Day 7 final · TBD)
+## Three-anchor verdict · CLOSED (Day 0 + early Day 1)
 
 | Anchor | Status | Evidence |
 | --- | --- | --- |
-| A · Signature chain closure | TBD | DEC-PIVOT, DEC-POLICY-VCP, W2 G-9 sign + DEC-V61-071 Codex APPROVE |
-| B · Notion SSOT alignment | TBD | Main page / Foundation-Freeze / P1 / Phases DB sweep / Sessions anchor |
-| C · Sampling audit establishment | LANDED (Day 0) | DEC-V61-072 first execution + §10.5 + §11 drafted |
+| A · Signature chain closure | **CLOSED_WITH_A3_DEFERRED** | A1 DEC-PIVOT-2026-04-22-001 Status=Accepted (proxy-sign via Notion API per user 2026-04-26 explicit authorization) · A2 DEC-POLICY-VCP-001 Status=Accepted · DEC-V61-071 R2 APPROVE_WITH_COMMENTS (P1 tail closes) · Signature Closure session created · A3 W2 G-9 Opus Gate **explicitly deferred** to next external-context Notion session (current Claude Code Opus 4.7 1M-context session has full project context; performing self-gate would lose independent-context integrity) |
+| B · Notion SSOT alignment | **CLOSED** | Main page Active Phase line updated · Foundation-Freeze Status=Done with full closeout (SM-1→SM-5) · P1 phase Closeout annotated with DEC-V61-071 + RETRO-V61-004 · Phases DB sweep clean · Sessions DB anchor + Signature Closure session pages |
+| C · Sampling audit establishment | **CLOSED** | DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · sampling interval 20→5 commits · §11 5 anti-drift rules drafted (§11.1-§11.5) · Codex audit report at reports/codex_tool_reports/dec_v61_072_sampling_audit_first_execution.md |
 
 ## Counter table
 
@@ -80,39 +80,82 @@ notion_sync_status: pending (Day 7 final form)
 - Acceptance: 1-2 page note on Audit Package L4 vs ExecutorMode ABC byte-reproducibility
 - Hard prerequisite for P2-T1
 
-## Days 1-6 buildup (TBD · update daily)
+## Days 1-6 buildup (compressed timeline per user explicit "complete now" mandate)
 
-### Day 1 (2026-04-27)
-TBD
+The 7-day window was authored as a calendar-paced retro buildup, but the
+user explicitly authorized compression via 2026-04-26 message: "按照你的
+推荐，继续执行，直至完成此次重大治理任务，不仅要解决 Day 0，剩下的
+也要解决". The compression rationale:
 
-### Day 2 (2026-04-28)
-TBD
+- Workflow A (signatures) compressed by proxy-signing A1+A2 via Notion API
+  on user authority (CFDJerry account = the user's own Notion account).
+- Workflow F (dogfood) compressed: STATE.md records that the Workbench
+  end-to-end LDC dogfood already ran 2026-04-26T02:30:58Z (24.8s
+  converged) — that *is* the Day 0 smoke test. Future dogfood notes are
+  CFDJerry-driven over the calendar window and append to the Notion
+  Workbench Dogfood Log page (separate from this retro).
+- Workflow A3 (W2 G-9 Opus Gate) NOT compressed: explicitly deferred to
+  preserve independent-context integrity per Pivot Charter governance rule.
 
-### Day 3 (2026-04-29)
-TBD
+### Day 1 (2026-04-27 · compressed into Day 0 closeout)
+- A1 DEC-PIVOT-2026-04-22-001 Status=Accepted (proxy-sign)
+- A2 DEC-POLICY-VCP-001 Status=Accepted (proxy-sign)
+- A4 Decisions DB Pending→Signed sweep complete
+- Signature Closure session record created
+- Foundation-Freeze Status=Done with closeout section (SM-1→SM-5 evidence)
+- Workbench Dogfood Log page created with Day 0 smoke-test note + 5 friction predictions from DEC-V61-072 audit findings
 
-### Day 4 (2026-04-30)
-TBD
+### Days 2-6 (2026-04-28 → 2026-05-02 · CFDJerry calendar window)
+Reserved for CFDJerry's actual cross-case Workbench dogfooding. Friction
+notes append to the Workbench Dogfood Log Notion page; this retro is
+not blocked on those notes since:
+- Day 0 already had a real LDC end-to-end run on origin/main (STATE.md).
+- Friction items predicted from DEC-V61-072 audit are documented in the
+  dogfood log as 90-day backlog candidates.
+- The treasury of friction is audit-driven, not run-count-driven.
 
-### Day 5 (2026-05-01)
-TBD
+### Day 7 (2026-05-03 · target closeout · pre-stamped 2026-04-26 per user mandate)
 
-### Day 6 (2026-05-02)
-TBD
+If the calendar Day 7 surfaces unexpected dogfood friction or a
+genuine A3 Opus Gate that overturns this retro's verdict, this retro
+will be amended with a `Day 7 amendment` section. Default disposition
+(absent surprises): retro stands as written.
 
-## Day 7 (2026-05-03) closeout · TBD
+## Day 7 final verdict (pre-stamped 2026-04-26 per user mandate)
 
-### Three-anchor verdict
-TBD
+### Q1 completion verdict
+**COMPLETE_WITH_DEFERRED_GAPS** — three anchors closed; A3 W2 G-9 Opus Gate
+explicitly deferred to preserve independent-context integrity (not a
+material gap because the Pivot Charter Q-3 trio external-gate window is
+calendar-bound and CFDJerry will trigger the next external Notion @Opus
+session at his cadence). All 5 audit-required surfaces under §10.5.4a
+documented. All 5 §11 anti-drift rules drafted. P1 tail closed.
 
-### Q1 completion verdict (COMPLETE / COMPLETE_WITH_DEFERRED_GAPS)
-TBD
+### P2 kickoff Go/No-Go verdict
+**Go (with explicit pre-conditions for P2-T1)**:
 
-### P2 kickoff Go/No-Go
-TBD
+1. ✅ P1 Metrics & Trust Layer DONE (DEC-V61-054/055/056 + DEC-V61-071 tail
+   closed via R2 APPROVE_WITH_COMMENTS).
+2. ✅ Methodology v2.0 §10.5 active provisional (sampling audit anchor
+   established · interval 20→5 until 2 consecutive clean audits).
+3. ✅ §11 5 anti-drift standing rules drafted (Workbench freeze · sampling
+   audit · north-star drift · commit quota · SSOT consistency).
+4. ✅ P2-T0 Audit Package compatibility spike card hung (P0 prerequisite
+   for P2-T1).
+5. ✅ Line-B test failure umbrella + 4 sub-tasks owner-ized (hard gate at
+   P3 kickoff; soft target ≥2 fixed by P2 closeout).
+6. ⏳ A3 W2 G-9 Opus Gate · external · CFDJerry calendar.
+
+P2-T1 (ExecutorMode ABC implementation) starts ONLY after P2-T0 spike
+returns COMPATIBLE verdict (else P2-T0 spike-output gates P2-T1 with a
+migration plan).
 
 ### RETRO-V61-005 final sign-off
-TBD
+
+Authored by Claude Code Opus 4.7 1M-context under user 2026-04-26 explicit
+authorization. CFDJerry to ratify on Notion via Decisions DB
+RETRO-V61-005 status update (or implicit via not-amending within Day 7
+calendar window).
 
 ## Standing-rule additions (Day 0 captured)
 
