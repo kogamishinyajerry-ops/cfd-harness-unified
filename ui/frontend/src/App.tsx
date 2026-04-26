@@ -17,6 +17,7 @@ import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
+import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
 
 // Demo-first routing (convergence round, 2026-04-22): the default landing is
 // now the /learn shell — the student-facing catalog of 10 canonical cases.
@@ -59,6 +60,9 @@ export default function App() {
             picker grid for the closed-loop entry point so users don't have
             to know case_ids by URL. */}
         <Route path="/workbench" element={<WorkbenchIndexPage />} />
+        {/* Workbench 60-day extension #3 (2026-04-26) · cross-case "today's
+            runs" feed grouped by local-tz date. */}
+        <Route path="/workbench/today" element={<WorkbenchTodayPage />} />
         {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
         <Route path="/workbench/new" element={<NewCaseWizardPage />} />
         <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />

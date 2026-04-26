@@ -30,6 +30,7 @@ import type {
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 import type {
+  RecentRunsResponse,
   RunDetail,
   RunHistoryListResponse,
 } from "@/types/run_history";
@@ -132,6 +133,11 @@ export const api = {
     request<RunDetail>(
       `/api/cases/${encodeURIComponent(caseId)}/run-history/${encodeURIComponent(runId)}`,
     ),
+  // 60-day extension #3 — cross-case "today's runs" feed for the
+  // /workbench/today dashboard. Path is /api/run-history/recent so it
+  // doesn't collide with the per-case /api/cases/{id}/run-history surface.
+  listRecentRuns: (limit = 50) =>
+    request<RecentRunsResponse>(`/api/run-history/recent?limit=${limit}`),
 
   // Stage 2 — industrial workbench first-screen
   getWorkbenchBasics: (caseId: string) =>

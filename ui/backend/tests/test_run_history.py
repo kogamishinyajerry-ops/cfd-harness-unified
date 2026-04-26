@@ -15,6 +15,7 @@ import yaml
 
 from ui.backend.services.run_history import (
     get_run_detail,
+    list_recent_runs_across_cases,
     list_runs,
     new_run_id,
     run_dir,
@@ -174,6 +175,78 @@ def test_get_run_detail_404_on_partial_dir(tmp_path: Path) -> None:
     (rogue / "summary.json").write_text("{}")  # no verdict, no measurement
     with pytest.raises(FileNotFoundError):
         get_run_detail("lid_driven_cavity", "2026-04-26T03-00-00Z", root=tmp_path)
+
+
+def test_list_recent_runs_across_cases_newest_first(tmp_path: Path) -> None:
+    """Cross-case feed must merge runs from multiple case buckets and
+    sort by started_at descending. Pre-existing legacy reports/ buckets
+    (deep_acceptance/, phase5_audit/, ...) that don't follow the M3
+    case_id alphabet must be silently ignored, not crash."""
+    # Two LDC runs and one cylinder run, intentionally written out of
+    # chronological order to exercise the sort.
+    plan = [
+        ("lid_driven_cavity", datetime(2026, 4, 26, 5, 0, 0, tzinfo=timezone.utc)),
+        ("circular_cylinder_wake", datetime(2026, 4, 26, 6, 0, 0, tzinfo=timezone.utc)),
+        ("lid_driven_cavity", datetime(2026, 4, 26, 4, 0, 0, tzinfo=timezone.utc)),
+    ]
+    for case_id, started in plan:
+        rid = started.isoformat().replace("+00:00", "Z").replace(":", "-")
+        write_run_artifacts(
+            case_id=case_id,
+            run_id=rid,
+            started_at=started,
+            task_spec=_make_fake_task_spec(),
+            source_origin="whitelist",
+            success=True,
+            exit_code=0,
+            verdict_summary=f"converged · {case_id}",
+            duration_s=10.0,
+            key_quantities={},
+            residuals={},
+            root=tmp_path,
+        )
+    # Legacy bucket that uses an alphabet outside the case_id rule —
+    # underscore is fine but we add a name with a forbidden char to
+    # confirm it's skipped, not crashed on.
+    legacy = tmp_path / "phase5_audit" / "live_2026-04-21.log"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text("not a run dir")
+
+    recent = list_recent_runs_across_cases(limit=50, root=tmp_path)
+    assert len(recent) == 3
+    # Newest first by started_at.
+    assert recent[0].case_id == "circular_cylinder_wake"
+    assert recent[0].run_id.startswith("2026-04-26T06-")
+    assert recent[1].run_id.startswith("2026-04-26T05-")
+    assert recent[2].run_id.startswith("2026-04-26T04-")
+
+
+def test_list_recent_runs_respects_limit(tmp_path: Path) -> None:
+    for hour in range(5):
+        started = datetime(2026, 4, 26, hour, 0, 0, tzinfo=timezone.utc)
+        rid = started.isoformat().replace("+00:00", "Z").replace(":", "-")
+        write_run_artifacts(
+            case_id="lid_driven_cavity",
+            run_id=rid,
+            started_at=started,
+            task_spec=_make_fake_task_spec(),
+            source_origin="whitelist",
+            success=True,
+            exit_code=0,
+            verdict_summary="ok",
+            duration_s=1.0,
+            key_quantities={},
+            residuals={},
+            root=tmp_path,
+        )
+    recent = list_recent_runs_across_cases(limit=2, root=tmp_path)
+    assert len(recent) == 2
+    # Highest hour comes first.
+    assert recent[0].run_id.startswith("2026-04-26T04-")
+
+
+def test_list_recent_runs_empty_root(tmp_path: Path) -> None:
+    assert list_recent_runs_across_cases(limit=50, root=tmp_path) == []
 
 
 def test_failure_run_persists_error_message(tmp_path: Path) -> None:

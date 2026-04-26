@@ -29,6 +29,11 @@ export interface RunHistoryListResponse {
   runs: RunSummaryEntry[];
 }
 
+export interface RecentRunsResponse {
+  runs: RunSummaryEntry[];
+  total: number;
+}
+
 export interface RunDetail {
   case_id: string;
   run_id: string;

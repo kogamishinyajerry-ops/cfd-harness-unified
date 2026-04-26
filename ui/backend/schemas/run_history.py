@@ -44,6 +44,15 @@ class RunHistoryListResponse(BaseModel):
     runs: list[RunSummaryEntry] = Field(default_factory=list)
 
 
+class RecentRunsResponse(BaseModel):
+    """Body of GET /api/run-history/recent — cross-case newest-first list."""
+
+    runs: list[RunSummaryEntry] = Field(default_factory=list)
+    total: int = Field(
+        description="Number of entries returned. Capped by ?limit=… (default 50)."
+    )
+
+
 class RunDetail(BaseModel):
     """Body of GET /api/cases/{case_id}/runs/{run_id}."""
 

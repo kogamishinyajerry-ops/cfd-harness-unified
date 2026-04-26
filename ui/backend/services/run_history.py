@@ -170,6 +170,32 @@ def write_run_artifacts(
     return target
 
 
+def _entry_from_run_dir(case_id: str, run_dir_path: Path) -> RunSummaryEntry | None:
+    """Parse a single run dir into a RunSummaryEntry. Returns None when
+    the dir is missing summary.json/verdict.json or either is unparseable
+    — caller decides whether to skip silently or surface an error."""
+    summary_path = run_dir_path / "summary.json"
+    verdict_path = run_dir_path / "verdict.json"
+    if not (summary_path.exists() and verdict_path.exists()):
+        return None
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        verdict = json.loads(verdict_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return RunSummaryEntry(
+        case_id=case_id,
+        run_id=run_dir_path.name,
+        started_at=summary.get("started_at", ""),
+        duration_s=float(summary.get("duration_s", 0.0)),
+        success=bool(verdict.get("success", False)),
+        exit_code=int(verdict.get("exit_code", -1)),
+        verdict_summary=str(verdict.get("verdict_summary", "")),
+        failure_category=verdict.get("failure_category"),
+        task_spec_excerpt=summary.get("task_spec", {}) or {},
+    )
+
+
 def list_runs(case_id: str, *, root: Path | None = None) -> list[RunSummaryEntry]:
     """Newest-first list of runs for a case_id. Silently skips dirs that
     are missing summary.json or verdict.json (partial / in-progress
@@ -181,29 +207,52 @@ def list_runs(case_id: str, *, root: Path | None = None) -> list[RunSummaryEntry
     for run_dir_path in sorted(case_runs_root.iterdir(), reverse=True):
         if not run_dir_path.is_dir():
             continue
-        summary_path = run_dir_path / "summary.json"
-        verdict_path = run_dir_path / "verdict.json"
-        if not (summary_path.exists() and verdict_path.exists()):
-            continue
-        try:
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            verdict = json.loads(verdict_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        entries.append(
-            RunSummaryEntry(
-                case_id=case_id,
-                run_id=run_dir_path.name,
-                started_at=summary.get("started_at", ""),
-                duration_s=float(summary.get("duration_s", 0.0)),
-                success=bool(verdict.get("success", False)),
-                exit_code=int(verdict.get("exit_code", -1)),
-                verdict_summary=str(verdict.get("verdict_summary", "")),
-                failure_category=verdict.get("failure_category"),
-                task_spec_excerpt=summary.get("task_spec", {}) or {},
-            )
-        )
+        entry = _entry_from_run_dir(case_id, run_dir_path)
+        if entry is not None:
+            entries.append(entry)
     return entries
+
+
+def list_recent_runs_across_cases(
+    *, limit: int = 50, root: Path | None = None
+) -> list[RunSummaryEntry]:
+    """Newest-first list across all cases under ``reports/*/runs/{run_id}/``.
+
+    Powers the /workbench/today cross-case dashboard. Walks one level deep:
+    each child of ``reports/`` whose name passes the same case_id alphabet
+    as ``case_drafts._draft_path`` is treated as a case bucket; everything
+    else (e.g. ``reports/deep_acceptance/``, ``reports/phase5_audit/``) is
+    skipped. Sort key is ``started_at`` (ISO-8601, lexicographic order is
+    chronological), ties broken by run_id (also ISO-8601).
+    """
+    runs_root = root or RUNS_ROOT
+    if not runs_root.exists():
+        return []
+    if limit <= 0:
+        return []
+
+    entries: list[RunSummaryEntry] = []
+    for case_dir in runs_root.iterdir():
+        if not case_dir.is_dir():
+            continue
+        # Reject buckets whose name isn't a valid case_id (e.g. legacy
+        # phase5_audit/, deep_acceptance/) — they share the reports/ root
+        # but aren't M3-managed run dirs.
+        if not _SAFE_SEGMENT_RE.match(case_dir.name):
+            continue
+        case_runs_root = case_dir / "runs"
+        if not case_runs_root.exists():
+            continue
+        for run_dir_path in case_runs_root.iterdir():
+            if not run_dir_path.is_dir():
+                continue
+            entry = _entry_from_run_dir(case_dir.name, run_dir_path)
+            if entry is not None:
+                entries.append(entry)
+    # Newest-first by started_at; secondary key run_id for stable ordering
+    # of runs that share a wall-clock second.
+    entries.sort(key=lambda e: (e.started_at, e.run_id), reverse=True)
+    return entries[:limit]
 
 
 def get_run_detail(case_id: str, run_id: str, *, root: Path | None = None) -> RunDetail:

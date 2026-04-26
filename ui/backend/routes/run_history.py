@@ -17,13 +17,37 @@ input rather than letting the service layer ValueError bubble.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
-from ui.backend.schemas.run_history import RunDetail, RunHistoryListResponse
-from ui.backend.services.run_history import get_run_detail, list_runs
+from ui.backend.schemas.run_history import (
+    RecentRunsResponse,
+    RunDetail,
+    RunHistoryListResponse,
+)
+from ui.backend.services.run_history import (
+    get_run_detail,
+    list_recent_runs_across_cases,
+    list_runs,
+)
 
 
 router = APIRouter()
+
+
+@router.get("/run-history/recent", response_model=RecentRunsResponse)
+def recent_runs_route(
+    limit: int = Query(50, ge=1, le=500),
+) -> RecentRunsResponse:
+    """Cross-case newest-first feed for the /workbench/today dashboard.
+
+    Walks one level under ``reports/`` for any case bucket whose name
+    passes the same alphabet ``case_drafts._draft_path`` enforces. Caps
+    output at ``limit`` (default 50, max 500) so a workspace with
+    thousands of historical runs doesn't pay the full sort cost on
+    every poll.
+    """
+    runs = list_recent_runs_across_cases(limit=limit)
+    return RecentRunsResponse(runs=runs, total=len(runs))
 
 
 @router.get("/cases/{case_id}/run-history", response_model=RunHistoryListResponse)
