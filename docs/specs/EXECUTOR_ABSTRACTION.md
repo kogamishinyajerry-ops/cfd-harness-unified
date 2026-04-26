@@ -125,21 +125,33 @@ where:
 
 - `canonical_artifacts(...)` is the set of fields the AuditPackage
   manifest pins as **physical-truth-source artifacts** for a run. As
-  of `src/audit_package/manifest.py` (SCHEMA_VERSION = 1), this set is:
-  - **Run inputs** (`inputs` dict): `system/controlDict`,
-    `system/blockMeshDict`, `system/fvSchemes`, `system/fvSolution`,
-    `0/` (initial-field files **after the OpenFOAM solver writes them
-    back** — i.e., the post-solve `0/` snapshot, not the pre-solve
-    initializer-warm-start state).
+  of `src/audit_package/manifest.py` (SCHEMA_VERSION = 1, `_RUN_INPUT_FILES`
+  at line 51), this set is:
+  - **Run inputs** (`inputs` dict, every entry collected when present —
+    optional members do not break the contract if absent):
+      - `system/controlDict`
+      - `system/blockMeshDict`
+      - `system/fvSchemes`
+      - `system/fvSolution`
+      - `system/sampleDict`
+      - `constant/physicalProperties`
+      - `constant/transportProperties`
+      - `constant/turbulenceProperties`
+      - `constant/g`
+      - `0/` initial-field files **after the OpenFOAM solver writes
+        them back** — i.e., the post-solve `0/` snapshot, not the
+        pre-solve initializer-warm-start state. Recognized field
+        filenames: `U`, `p`, `T`, `k`, `epsilon`, `omega`, `nut`,
+        `alphat` (`_INITIAL_FIELD_FILES` at manifest.py:65).
   - **Run outputs** (`outputs` dict): `solver_log_name`,
-    `solver_log_tail` (the tail of the solver log, which embeds final
-    residuals + completion banner — see manifest.py docstring at line
-    207), and `postProcessing_sets_files` (sorted listing of
-    `postProcessing/sets/` output files).
-  These fields are extracted by `manifest.py:_collect_run_outputs` /
-  `_collect_run_inputs` and serialized byte-deterministically by
-  `serialize.py` (`json.dumps(..., sort_keys=True)`, repo-relative
-  POSIX paths, caller-injectable timestamps).
+    `solver_log_tail` (the last `_LOG_TAIL_LINES` (=120) of the solver
+    log, which embeds final residuals + completion banner per
+    manifest.py:67), and `postProcessing_sets_files` (sorted listing
+    of `postProcessing/sets/` output files).
+  These fields are extracted by `manifest.py:_load_run_inputs` (line
+  186) / `_load_run_outputs` (line 206) and serialized byte-
+  deterministically by `serialize.py` (`json.dumps(..., sort_keys=True)`,
+  repo-relative POSIX paths, caller-injectable timestamps).
 - `≡_bytes` is byte-for-byte equality of the serialized manifest's
   `inputs` + `outputs` subtrees (the rest of the manifest — git SHA,
   decision-trail glob, comparator verdict — is not part of the
@@ -213,7 +225,7 @@ throughout to stay consistent with the implementation.
 | --- | --- | --- |
 | `docker_openfoam` | full triad `PASS` / `WARN` / `FAIL` | Full triad. The case-profile `tolerance_policy` resolves the verdict per `METRICS_AND_TRUST_GATES`. |
 | `foam_agent` *(adapter identity for docker_openfoam at this layer)* | same as above | Full triad — adapter identity is a manifest field, not a routing dimension. |
-| `mock` | **ceiling = `WARN`** with note `mock_executor_no_truth_source` | A `mock` run can NEVER reach `PASS`. Even if synthetic deviations are zero, the gate emits `WARN` with that note. The note string is the operator-visible analogue of the brief's "PASS_WITH_DISCLAIMER" shorthand. |
+| `mock` | **ceiling = `WARN`** with note `mock_executor_no_truth_source` | A `mock` run can NEVER reach `PASS`. Even if synthetic deviations are zero, the gate emits `WARN` with that note string. |
 | `hybrid_init` | full triad on the **OpenFOAM** artifacts only | TrustGate consumes `canonical_artifacts(run)` per §5.1. Initializer artifacts are out-of-scope for verdict. The surrogate's contribution is **not** scored. |
 | `future_remote` | (stub-only this milestone) | TrustGate refuses to score a `future_remote` manifest. The CLI/UI surfaces `mode_not_yet_implemented`. DEC-V61-078 sets the real contract. |
 
