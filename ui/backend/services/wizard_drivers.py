@@ -190,20 +190,19 @@ class MockSolverDriver:
         })
 
 
-# --- Real implementation (M1 · Workbench Closed-Loop main-line) ------------
+# --- Real implementation (M1+M2 · Workbench Closed-Loop main-line) ---------
 # Wraps `src.foam_agent_adapter.FoamAgentExecutor.execute()` (synchronous,
 # blocking, ~10-300s for real Docker+OpenFOAM runs) into the same async-iter
 # SSE contract MockSolverDriver satisfies.
 #
-# M1 scope (2026-04-26): whitelist defaults only — no user-draft parameter
-# overrides yet (that's M2 territory: read ui/backend/user_drafts/{id}.yaml
-# first, fall back to whitelist). Single combined "solver" phase rather than
-# the mock's 5-phase script — real solver doesn't expose explicit
-# geometry/mesh/solver/compare boundaries to the wizard layer.
+# Source priority (M2):
+#   1. ui/backend/user_drafts/{case_id}.yaml — what /workbench/case/{id}/edit
+#      most recently saved (matches case_editor.py PUT semantics).
+#   2. knowledge/whitelist.yaml entry — vanilla baseline.
 #
 # Bursty SSE warning: heartbeat log lines flow during the blocking execute()
 # (every HEARTBEAT_INTERVAL_S), then a sudden burst of metric+phase_done
-# +run_done events when execute() returns. This is acceptable for M1 —
+# +run_done events when execute() returns. This is acceptable —
 # proves the integration. Real-time log tailing during execute() is M3/M4
 # scope if it turns out to be necessary.
 
@@ -211,15 +210,16 @@ class MockSolverDriver:
 _HEARTBEAT_INTERVAL_S = 2.5  # 2-3s feels responsive without flooding
 
 
-def _task_spec_from_whitelist(case_id: str):
-    """Build a TaskSpec from knowledge/whitelist.yaml for the given case_id.
+def _task_spec_from_case_id(case_id: str):
+    """Build a TaskSpec for the given case_id.
 
-    M1 scope: whitelist defaults only. M2 will check
-    ``ui/backend/user_drafts/{case_id}.yaml`` first to honour parameter
-    overrides from /workbench/case/{id}/edit.
+    Source priority:
+      1. ``ui/backend/user_drafts/{case_id}.yaml`` (single-case YAML doc as
+         saved by ``case_editor.py``'s ``PUT /api/cases/{id}/yaml``) — lets
+         /workbench/case/{id}/edit param overrides flow to the real solver.
+      2. ``knowledge/whitelist.yaml`` entry — vanilla case definition.
 
-    Raises KeyError if case_id not in whitelist. Returns the constructed
-    TaskSpec on success.
+    Raises KeyError if neither source resolves the case_id.
 
     NOTE: imports from `src.*` are deferred to call-time so module import
     of `wizard_drivers` doesn't pull in the 8000+ LOC foam_agent_adapter
@@ -237,16 +237,36 @@ def _task_spec_from_whitelist(case_id: str):
     )
 
     repo_root = Path(__file__).resolve().parents[3]
-    whitelist_path = repo_root / "knowledge" / "whitelist.yaml"
-    with whitelist_path.open("r", encoding="utf-8") as fh:
-        doc = yaml.safe_load(fh) or {}
 
-    entry = next(
-        (c for c in doc.get("cases", []) if c.get("id") == case_id),
-        None,
-    )
+    # 1. Try user_drafts first (M2 override surface).
+    draft_path = repo_root / "ui" / "backend" / "user_drafts" / f"{case_id}.yaml"
+    entry: dict | None = None
+    source_origin = "whitelist"
+    if draft_path.exists():
+        with draft_path.open("r", encoding="utf-8") as fh:
+            entry = yaml.safe_load(fh) or {}
+        if not isinstance(entry, dict) or "geometry_type" not in entry:
+            # Malformed draft — refuse to silently fall through to whitelist;
+            # surface a clean error so the user can fix the YAML in the editor.
+            raise KeyError(
+                f"user draft {draft_path} for {case_id!r} is malformed "
+                "(must be a single-case dict with geometry_type field)"
+            )
+        source_origin = "draft"
+
+    # 2. Fall back to whitelist.
     if entry is None:
-        raise KeyError(f"case_id {case_id!r} not in knowledge/whitelist.yaml")
+        whitelist_path = repo_root / "knowledge" / "whitelist.yaml"
+        with whitelist_path.open("r", encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh) or {}
+        entry = next(
+            (c for c in doc.get("cases", []) if c.get("id") == case_id),
+            None,
+        )
+        if entry is None:
+            raise KeyError(
+                f"case_id {case_id!r} not in user_drafts nor knowledge/whitelist.yaml"
+            )
 
     params = entry.get("parameters") or {}
     bcs = entry.get("boundary_conditions") or {}
@@ -261,8 +281,16 @@ def _task_spec_from_whitelist(case_id: str):
         Re_tau=params.get("Re_tau"),
         Ma=params.get("Ma"),
         boundary_conditions=dict(bcs),
-        description=f"M1 RealSolverDriver run · ref={entry.get('reference', 'no ref')}",
+        description=(
+            f"RealSolverDriver run · source={source_origin} · "
+            f"ref={entry.get('reference', 'no ref')}"
+        ),
     )
+
+
+# Backward-compat alias retained for any pre-M2 callers that imported the
+# whitelist-only name. Drops in a future cleanup pass.
+_task_spec_from_whitelist = _task_spec_from_case_id
 
 
 class RealSolverDriver:
@@ -291,13 +319,13 @@ class RealSolverDriver:
             "type": "log", "phase": None, "t": time.time(),
             "line": (
                 f"[wizard] case_id={case_id} starting REAL solver pipeline "
-                "(M1 · RealSolverDriver — whitelist defaults, no draft overrides yet)"
+                "(RealSolverDriver — user_drafts override → whitelist fallback)"
             ),
         })
 
         # --- 1. Resolve case_id → TaskSpec ----------------------------------
         try:
-            task_spec = _task_spec_from_whitelist(case_id)
+            task_spec = _task_spec_from_case_id(case_id)
         except KeyError as exc:
             yield _sse({
                 "type": "log", "phase": None, "t": time.time(),

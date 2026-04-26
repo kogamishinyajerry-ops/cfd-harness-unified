@@ -10,6 +10,7 @@ import { DecisionsQueuePage } from "@/pages/DecisionsQueuePage";
 import { LearnCaseDetailPage } from "@/pages/learn/LearnCaseDetailPage";
 import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
+import { EditCasePage } from "@/pages/workbench/EditCasePage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 
@@ -53,6 +54,11 @@ export default function App() {
         {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
         <Route path="/workbench/new" element={<NewCaseWizardPage />} />
         <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />
+        {/* M2 (2026-04-26) · Workbench Closed-Loop main-line — param-form
+            editor for an existing whitelist case. Saves to user_drafts/ and
+            navigates to /workbench/run/:caseId where RealSolverDriver picks
+            up the override (CFD_HARNESS_WIZARD_SOLVER=real). */}
+        <Route path="/workbench/case/:caseId/edit" element={<EditCasePage />} />
         <Route path="*" element={<Navigate to="/learn" replace />} />
       </Route>
     </Routes>

@@ -124,6 +124,16 @@ export function LearnCaseDetailPage() {
             </span>
           </Link>
           <Link
+            to={`/workbench/case/${encodeURIComponent(caseId ?? "")}/edit`}
+            className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-emerald-700/60 hover:bg-surface-900 hover:text-emerald-300"
+            title="Edit numeric params (Re/Ra/Mach…) and run against the real OpenFOAM solver. Saves to user_drafts/."
+          >
+            <span>改参数 + 跑求解器</span>
+            <span className="mono text-surface-600 group-hover:text-emerald-400">
+              Edit & Run →
+            </span>
+          </Link>
+          <Link
             to={`/cases/${caseId}/report`}
             className="group inline-flex items-center gap-1.5 rounded-sm border border-surface-800 bg-surface-900/60 px-2.5 py-1 text-[11px] text-surface-400 transition-colors hover:border-sky-700/60 hover:bg-surface-900 hover:text-sky-300"
             title="Switch to the evidence-heavy audit surface (Validation Report, Decisions Queue, Audit Package)"
