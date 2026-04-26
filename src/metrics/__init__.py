@@ -34,7 +34,12 @@ from .pointwise import PointwiseMetric
 from .integrated import IntegratedMetric
 from .spectral import SpectralMetric
 from .residual import ResidualMetric
-from .trust_gate import TrustGateReport, reduce_reports
+from .trust_gate import (
+    ModeNotYetImplementedError,
+    TrustGateReport,
+    apply_executor_mode_routing,
+    reduce_reports,
+)
 from .case_profile_loader import (
     CaseProfileError,
     load_case_profile,
@@ -52,6 +57,8 @@ __all__ = [
     "SpectralMetric",
     "ResidualMetric",
     "TrustGateReport",
+    "ModeNotYetImplementedError",
+    "apply_executor_mode_routing",
     "reduce_reports",
     "CaseProfileError",
     "load_case_profile",
