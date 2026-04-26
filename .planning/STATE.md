@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
 status: M1_M4_COMPLETE
-last_updated: "2026-04-26T20:30 local"  # P2-T1.b full scope CLOSED (manifest tagging f599129 + dispatch 69c0ed6 + routing c7ede01 + post-commit fix 8d7f990) · DEC-V61-074 status=Accepted · ALL Codex rounds GREEN: T1.a R3 APPROVE · T1.b.1 R2 APPROVE_WITH_COMMENTS+LOW verbatim · T1.b.2+T1.b.3 post-commit R2 APPROVE_WITH_COMMENTS 0-blocking after 8d7f990 closed 2 MED + 1 LOW · 966/968 full-suite pass / 0 failed / 2 skipped · counter v6.1 49→50 · T2 unblocked
+last_updated: "2026-04-26T22:30 local"  # GOV-1 v0.7 tier-(c)→tier-(a) trace pass CLOSED (DEC-V61-086 c382b47 Status=Accepted Notion-synced) · 1 upgrade (NACA lift_slope_dCl_dalpha → dual-citation Ladson §3.4 + dec_v61_058_intake) + 7 honest fallbacks (4 DHC + 3 NACA) per _research_notes/_trace_methodology.md no-circular-citation rule · literature-anchored metric 10/29 = 34% → 11/29 = 38%, +1 from v0.6 baseline · honest delta vs ≥15/29 = ≥52% expectation explicitly declared (DHC primary paper has no per-grid scatter §X; NACA cross-checks are harness-internal numerical/extractor decisions) · CLASS-1 docs-only autonomous per Pivot Charter §4.7 framework (DEC-V61-085) · counter v6.1 50 → 51 (Interpretation B per STATE.md-canonical convention; intermediate V61-080/081/082/FORENSIC-FLAKE-1/-FIX silent on advances; pure telemetry per RETRO-V61-001) · zero touches to knowledge/, src/, tests/, docs/specs/. Prior anchor: 2026-04-26T20:30 P2-T1.b full scope CLOSED (DEC-V61-074, counter 49→50, 966/968 full-suite pass, T2 unblocked).
 methodology_active_sections:
   - "§10 治理降级 (RETRO-V61-006 addendum)"
   - "§10.4 Line-A/B isolation contract (OPS-2026-04-25-001)"
@@ -45,6 +45,7 @@ progress:
     phase_1_to_8: "10-case whitelist 8 PASS / 2 HOLD, convergence attestor + 5 hard gates active, audit package L4 + HMAC byte-reproducibility (2026-04-22)"
     p1_metrics_trust: "P1-T1..T5 COMPLETE (DEC-V61-054/055/056, RETRO-V61-004 landed 2026-04-25, 90/90 metrics+task_runner_trust_gate tests pass)"
     workbench_closed_loop_m1_m4: "M1+M2+M3+M4 COMPLETE (commits 3d3509e/ce0a8ce/5fff107/6b7492c + smoke fixes 74a93f1/ecc1981, real OpenFOAM LDC dogfood 2026-04-26T02-30-58Z 24.8s converged)"
+    gov1_v07_citation_trace: "GOV-1 v0.7 tier-(c)→tier-(a) trace pass CLOSED (DEC-V61-086 c382b47, 2026-04-26T22:30) · methodology codified at docs/case_documentation/_research_notes/_trace_methodology.md (4 §1 conditions + 4 anti-patterns, gold-value-by-association forbidden) · 1 upgrade + 7 honest fallback / 8 evaluated · literature-anchored metric 34% → 38% (10/29 → 11/29) · honest shortfall vs ≥52% expectation declared (DHC primary paper is converged-numerical-benchmark without per-grid scatter §X; NACA cross-checks are harness-internal) · second consecutive GOV-1 pass where rigorous count < optimistic naive count (v0.5→v0.6 was first) · CFDJerry-pending NOT nudged: V61-082 Codex / V61-085 Charter §4.7 ratify / Opus Gates N+1/N+2 / DOI integrity CI / verdict format codification"
   current_arc: "post-arc Notion sync hygiene + next-phase scoping"
   m1_status: COMPLETE  # commit 3d3509e (RealSolverDriver)
   m2_status: COMPLETE  # commit ce0a8ce (EditCasePage)
