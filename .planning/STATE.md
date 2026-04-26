@@ -1331,3 +1331,48 @@ not convergence bugs.
 - DEC-V61-039: LDC verdict reconciliation (PARTIAL vs FAIL)
 - DEC-V61-040: UI 3-tier semantics (reference / audit_real_run / visual_only)
 - DEC-V61-041: cylinder Strouhal FFT (split from 037, needs forceCoeffs FO + runtime)
+
+---
+
+# DEC-V61-064 closeout (2026-04-26 local) — `dec-v61-064-naca-sas` worktree
+
+**Status**: ARCHITECTURAL_CEILING_REACHED (with progress) · counter 45 → 46
+
+**Predecessor chain**: V61-058 (16k H-grid solver_stability) → V61-061 (96k H-grid topology_ceiling 0.677) → V61-062 (C-grid NaN ceiling) → V61-063 (kOmegaSSTLM no-movement ceiling 0.6763) → **V61-064 (kOmegaSSTSAS pimpleFoam transient — first +Δ since V61-061)**.
+
+**Stage A** (3 commits, 2 runtime fixes):
+- 52f917f wiring (kOmegaSSTSAS dispatch + pimpleFoam routing + transient controlDict/fvSchemes/fvSolution)
+- 65fce0a fix #1 (`delta cubeRootVol;` for SAS LES filter length scale)
+- acba70e fix #2 (kFinal/omegaFinal solvers for PIMPLE nOuterCorrectors=2)
+
+Both runtime defects = OF10 dict-completeness class (RETRO-V61-053 protocol). Caught at Stage E smoke. Static review cannot catch these — only OF10 dict parser surfaces missing keywords at solver init.
+
+**Stage E iter1c** (single sweep, 232 min wall-clock):
+- Cl@α=0° = 2.48e-5 (sanity PASS), Cd@α=0° = 0.01258 (essentially identical to V61-061's 0.0126)
+- Cl@α=4° = 0.3667, Cd@α=4° = 0.01832
+- **Cl@α=8° = 0.7057** (gold 0.815±5%, rel_error -13.4% → FAIL HEADLINE) — first non-zero progress since V61-061's 0.677 plateau (+4.3 pp)
+- Cd@α=8° = 0.0356 (-5.3% vs V61-061's 0.0376) — consistent with reduced over-turbulent BL dissipation
+- dCl/dα = 0.0882 (-16.0% vs gold 0.105; +4.5% vs V61-061's 0.0844)
+- cl_drift_pct_last_100 at α=8° = 3.18% — **statistically converged**
+- 0 bounding events, 0 NaN events
+
+**Iter ceiling judgment**: closed at 1/4 via NEW statistical-convergence pattern (RETRO-V61-064 L1). Pre-conditions met: cl_drift ≤ 5%, gap ≥ 2× tolerance (13.4% vs 5%), opposite-bound parameter is "redesigned LES mesh" which is OUT OF SCOPE per intake. Iter2 cannot close 13.4% gap when time-mean has settled.
+
+**Pre-arc estimate calibration**: 0.10 → 0% gate-pass (delta -10 pp, smallest in V61-058 → V61-064 series; tightening trend continues -40 → -55 → -30 → -20 → **-10**).
+
+**Methodology v2.2 first-apply** (post RETRO-V61-063 amendments) — proposes v2.3 amendments:
+1. 1-iter statistical-convergence ceiling pattern (new, complements 4-iter exhaustion + 2-iter ceiling-test)
+2. Pre-register expected per-α partial-activation distribution for hybrid-RANS-LES arcs
+3. Stage A 1-step canary protocol for transient model swaps (catches OF10 dict-completeness defects)
+4. ≤0.10-0.20 pre-arc anchor confirmed
+5. Register `v61_061_h_grid_rans_plateau` known-bound (any RANS-class or hybrid-RANS-LES arc on this mesh ≤ 0.05 gate-pass)
+
+**V61-065 followup**: PRIMARY = wall-resolved LES on REDESIGNED mesh (target 500k-1M cells, y+_max ≤ 1, 100-150h per α, exits autonomous-overnight regime, **needs Kogami sign-off**). DEPRECATED: further hybrid RANS-LES on V61-061 H-grid (V61-064 evidence: ≤5 pp partial-activation bound).
+
+**Closeout artifacts**:
+- `.planning/decisions/2026-04-26_v61_064_naca0012_sas_unsteady.md`
+- `.planning/retrospectives/2026-04-26_v61_064_sas_unsteady_ceiling.md`
+- `reports/phase5_audit/dec_v61_064_live_run_iter1c.log`
+- `reports/phase5_audit/dec_v61_064_live_run_20260426T014430Z_alpha{0,4,8}.json`
+- `reports/phase5_audit/dec_v61_064_live_summary.yaml`
+- `scripts/dec_v61_064_live_runs.py`

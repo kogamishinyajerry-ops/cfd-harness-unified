@@ -1,0 +1,87 @@
+dec_id: DEC-V61-064
+case_id: naca0012_airfoil
+timestamp: 20260426T014430Z
+runs:
+- alpha_deg: 0.0
+  success: true
+  exit_code: null
+  wall_clock_s: 3938.938467916101
+  Cl: 2.47963e-05
+  Cd: 0.01257944
+  y_plus_max: 37.62566
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-sas/reports/phase5_audit/dec_v61_064_live_run_20260426T014430Z_alpha0.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 0.0
+  cl_drift_pct_last_100: 133.7956217570785
+  cd_drift_pct_last_100: 0.008105536114535187
+  sign_convention_smoke: PASS
+- alpha_deg: 4.0
+  success: true
+  exit_code: null
+  wall_clock_s: 4863.105785334017
+  Cl: 0.3666702
+  Cd: 0.01832386
+  y_plus_max: 58.90824
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-sas/reports/phase5_audit/dec_v61_064_live_run_20260426T014430Z_alpha4.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 4.0
+  cl_drift_pct_last_100: 11.985782252083409
+  cd_drift_pct_last_100: 0.02301422541222312
+  sign_convention_smoke: PASS
+- alpha_deg: 8.0
+  success: true
+  exit_code: null
+  wall_clock_s: 5128.405746249948
+  Cl: 0.7057213
+  Cd: 0.03556988
+  y_plus_max: 86.10932
+  y_plus_advisory: PASS
+  extractor_error: null
+  raw_path: /Users/Zhuanz/Desktop/cfd-s2-naca-sas/reports/phase5_audit/dec_v61_064_live_run_20260426T014430Z_alpha8.json
+  force_coeffs_source: forceCoeffs_FO_aerofoil
+  alpha_deg_observed: 8.0
+  cl_drift_pct_last_100: 3.1841549892521117
+  cd_drift_pct_last_100: 7.777252352462189
+  sign_convention_smoke: PASS
+gates:
+  lift_coefficient_alpha_eight:
+    value: 0.7057213
+    gold: 0.815
+    rel_error: 0.13408429447852754
+    tolerance: 0.05
+    pass: false
+    role: HEADLINE_PRIMARY_SCALAR
+  drag_coefficient_alpha_zero:
+    value: 0.01257944
+    gold: 0.008
+    rel_error: 0.5724300000000001
+    tolerance: 0.15
+    pass: false
+    role: SAME_RUN_CROSS_CHECK
+  lift_slope_dCl_dalpha_linear_regime:
+    value: 0.08821206296250002
+    intercept: 0.004623846916666545
+    linearity_check_applicable: true
+    linearity_ok: true
+    linearity_residual: 0.019550425713352384
+    n_points: 3
+    gold: 0.105
+    rel_error: 0.15988511464285693
+    tolerance: 0.1
+    pass: false
+    role: QUALITATIVE_GATE
+smoke_assertions:
+  sanity_cl_at_alpha_zero:
+    value: 2.47963e-05
+    abs_band: 0.005
+    pass: true
+  sign_convention_alpha_eight:
+    Cl: 0.7057213
+    expected: '>0'
+    pass: true
+headline_verdict: 'FAIL: [''lift_coefficient_alpha_eight'', ''drag_coefficient_alpha_zero'',
+  ''lift_slope_dCl_dalpha_linear_regime'']'
