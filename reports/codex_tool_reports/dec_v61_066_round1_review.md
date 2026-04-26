@@ -1,0 +1,23 @@
+# DEC-V61-066 Round 1 Codex Review
+
+**Verdict:** `CHANGES_REQUIRED`
+
+## Findings
+
+1. **[HIGH] [NEW] [src/foam_agent_adapter.py:9755-9761, src/foam_agent_adapter.py:3985-3988, src/duct_flow_extractors.py:157-158, src/duct_flow_extractors.py:227-228]**
+   **Issue:** The adapter computes `duct_flow_U_bulk` as a plain arithmetic mean over cross-section cells, but the generated duct mesh is explicitly graded in `y` via `simpleGrading (1 4 1)`. On that mesh, cell heights are not uniform, so an unweighted average is not a face-area-weighted bulk velocity. This directly biases both `friction_factor = 8*tau_w/(rho*U_bulk^2)` and `bulk_velocity_ratio_u_max = u_centroid/U_bulk`, and it violates the extractor contract text that says `U_bulk` is face-area-weighted / face-area-averaged. This is an extractor-correctness defect, not the known 2D-vs-3D physics mismatch.
+   **Suggested fix:** Replace the arithmetic mean with a cross-section-weighted mean. On the current thin-slice mesh, weighting by per-cell `dy` is sufficient; derive `dy` from sorted unique `cy` midpoints plus the known wall bounds `[0.0, 0.5]`, then compute `U_bulk = sum(u_i * dy_i) / sum(dy_i)`. Add a regression test with a nonuniform synthetic `cy` grid where weighted and unweighted means differ, and assert the adapter uses the weighted result.
+
+2. **[HIGH] [F2] [src/foam_agent_adapter.py:7794-7803, src/foam_agent_adapter.py:9693-9700, src/foam_agent_adapter.py:9717-9719, src/foam_agent_adapter.py:9750-9753]**
+   **Issue:** The extractor is written to use `nut` when available, but the postprocess copy list never stages `nut` into the host-side latest-time directory. As a result, real turbulent duct runs will usually take the silent molecular-only fallback (`nut_vals=None -> nut_val=0.0`) even though `tau_w` is documented as including turbulent-viscosity contribution. That fallback is also not surfaced in `key_quantities`, so downstream audit cannot distinguish “total-stress wall shear” from “molecular-only emergency path.” This is exactly the V61-063 R2 audit-key failure class: a materially different extraction path exists, but it is machine-invisible.
+   **Suggested fix:** Add `"nut"` to `field_files` in `_copy_postprocess_fields`, then stamp audit keys such as `duct_flow_nut_source`, `duct_flow_nut_fallback_activated`, and `duct_flow_nut_length_mismatch`. Keep `wall_shear_v1` only for the algorithm family; expose whether the run actually used `(nu + nut)` or `nu` only. Add one adapter test that stages a `nut` file and one that omits it and asserts the fallback flag.
+
+3. **[MEDIUM] [F1] [knowledge/gold_standards/duct_flow.yaml:74-91, .planning/intake/DEC-V61-066_duct_flow.yaml:67-71, .planning/intake/DEC-V61-066_duct_flow.yaml:96-112, src/foam_agent_adapter.py:9786-9800, src/foam_agent_adapter.py:3944-3945]**
+   **Issue:** `friction_velocity_u_tau` is still counted as a fourth `HARD_GATED` pass/fail observable even though its gold anchor is explicitly derived from the primary gate’s anchor (`sqrt(0.0185/8)`), and the run is normalized around `U_bulk = 1`. The implementation avoids the worst form of the tautology by extracting `u_tau` directly from `tau_w`, but the contract-level gate still adds almost no new physics information: it is a SAME_RUN_CROSS_CHECK restatement of the same wall-shear signal already consumed by `friction_factor`. Under the V61-058 / V61-063 F1 rubric, that means the gate has much weaker teeth than the report language “all 4 HARD_GATED” implies.
+   **Suggested fix:** Do not count `friction_velocity_u_tau` as a hard-gated independent observable. The lowest-churn repair is to downgrade it to `PROVISIONAL_ADVISORY` (or equivalent audit-only status), keep the direct extractor, and retain the algebraic consistency check in tests. If the intent is to keep four hard gates, replace this slot with a genuinely independent observable rather than a derived wall-shear restatement.
+
+## Self-pass-rate calibration
+
+`self_estimated_pass_rate=0.55` was a bit high. The slice is cleaner than an early methodology apply on alias parity, public input guards, and schema hygiene: the duct-focused tests passed, the alias-parity coverage is useful, and `knowledge/gold_standards/duct_flow.yaml` validates cleanly against the schema. But the two extractor-path defects above are material enough that I would recalibrate this intake to roughly **0.40-0.45**.
+
+No F3 alias-parity defect surfaced in this round: adapter emit names and gold YAML observable names match, and the dedicated parity tests are doing real work there. No F4 defect surfaced either: the new public extractor functions do reject degenerate scalar/profile inputs loudly via `DuctFlowExtractorError`.
