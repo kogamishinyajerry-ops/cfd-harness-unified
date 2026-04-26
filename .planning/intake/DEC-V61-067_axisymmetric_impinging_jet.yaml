@@ -7,7 +7,44 @@
 # Revision history:
 #   v1 (2026-04-26): initial Stage 0 draft.
 #       authored by Claude Code Opus 4.7 1M.
-#       Pre-Stage-A Codex review pending.
+#   v2 (2026-04-26): Codex pre-Stage-A R1 returned REQUEST_CHANGES with
+#       1 HIGH + 1 MED + 1 LOW. All findings applied verbatim.
+#       Codex log: reports/codex_tool_reports/dec_v61_067_plan_review_v1.md
+#
+#       v1 → v2 edit summary:
+#         F1-HIGH (citation_audit closure too loose): rewrite §3 with
+#                  priority-ordered DOI list, distinguish THERMAL gold anchor
+#                  from HYDRODYNAMIC support. Whitelist DOI verified to
+#                  resolve to a turbine-LES paper (NOT impinging jet) per
+#                  Codex Crossref query. Cooper et al. 1993 demoted to
+#                  hydrodynamic-only. Baughn & Shimizu 1989
+#                  (10.1115/1.3250776) promoted to primary thermal anchor
+#                  candidate. Behnia et al. 1998/1999
+#                  (10.1016/S0017-9310(97)00254-8 +
+#                  10.1016/S0142-727X(98)10040-1) identified as the likely
+#                  "Behnad 2013" corruption.
+#         F2-MED (taxonomy internal inconsistency): keep Type II but fix
+#                  primary_gate_count: 2 → 1; add profile_qualitative_gate_count: 2;
+#                  add headline_gate + case_type_hard_gate_signed fields per
+#                  V61-058 template. Stations are ONE profile family, NOT
+#                  independent. Add a distinct second shape gate
+#                  (secondary_peak_presence_or_absence) so qualitative
+#                  count = 2 cleanly. Add early Stage A.0a batch in §6 to
+#                  resolve citation + free/confined + Re/H/D + wall-BC
+#                  family BEFORE extractor work. estimated_pass_rate_round1
+#                  lowered 0.40 → 0.28 (midpoint of Codex 0.25-0.30 band).
+#         F3-LOW (risk register completeness): add 3 risks visible in code:
+#                  R6 nusselt_number_unphysical_magnitude HAZARD flag exists
+#                  in extractor (foam_agent_adapter.py:9717); R7 plate BC is
+#                  fixedValue T_plate (constant-temperature, NOT uniform
+#                  heat flux — many literature correlations use the latter)
+#                  per foam_agent_adapter.py:6204; R8 mesh is pseudo-2D slab
+#                  with `empty` patches (NOT cyclic AMI / wedge / 3D)
+#                  per foam_agent_adapter.py:5632 — this is a wedge-like
+#                  approximation that may not match Cooper's true axisymmetric
+#                  3D measurement. §7 acceptance_criteria tightened with
+#                  exact DOI+locator + station set + tolerance mode +
+#                  hazard-flag-absent verifiable criterion.
 
 case_id: axisymmetric_impinging_jet
 dec_id: DEC-V61-067
@@ -15,8 +52,8 @@ case_number: 8  # canonical 8th case in the 10-case whitelist (impinging_jet)
 intake_authored_at: "2026-04-26"
 intake_author: "Claude Code (Opus 4.7, 1M context · Track B sixth-apply)"
 methodology_version: "v2.0"
-intake_version: 1
-codex_plan_review_verdict: PENDING
+intake_version: 2
+codex_plan_review_verdict: REQUEST_CHANGES_v1_then_REWRITTEN_v2  # final pending Codex R2
 
 # ============================================================================
 # §0 Why this case is being re-iterated (pre-existing state honesty)
@@ -64,37 +101,46 @@ preexisting_state_honesty: |
 # ============================================================================
 # §1 Classification (F5-M1 hard gate, §3b — NO mid-arc Type change allowed)
 # ============================================================================
-case_type: II  # 1 HARD_GATED stagnation scalar + 1 HARD_GATED profile family
-               # + 1 NON_TYPE_HARD_INVARIANT (monotonic decay) + 1 PROVISIONAL
+case_type: II  # v2 (per Codex F2): keep Type II — stations are ONE profile
+               # family, NOT independent physics families. 1 PRIMARY SCALAR
+               # + 2 PROFILE_QUALITATIVE_GATES + 1 PROVISIONAL_ADVISORY.
+               # The monotonicity check is RELABELED from
+               # NON_TYPE_HARD_INVARIANT to QUALITATIVE_GATE so the
+               # profile_qualitative_gate_count = 2 cleanly (mirrors
+               # V61-058's qualitative-gate accounting). A second distinct
+               # shape gate (secondary_peak_presence_or_absence) replaces
+               # the prior over-count of "the profile" as 2 separate gates.
 case_type_rationale: |
   PRIMARY SCALAR GATE (1):
     1. nusselt_stagnation_at_r_d_zero — HEADLINE — Nu at the radial bin
        closest to r=0 (axisymmetric stagnation point), extracted by the
-       existing `_extract_jet_nusselt` 3-point wall-normal stencil. Cooper
-       correlation: Nu_stag ~ 25-40 at Re=23000 h/d=2 (citation pending §3
-       audit). For Re=10000 h/d=2 the expected value is lower; gold YAML
-       must be re-anchored to a Re=10000 source OR the whitelist Re must
-       be bumped to match the correlation.
+       existing `_extract_jet_nusselt` 3-point wall-normal stencil.
+       Reference value pending §3 citation audit (will be either Baughn
+       & Shimizu 1989 thermal anchor OR Behnia et al. 1998 RANS-validation
+       value, NOT Cooper 1993 which is hydrodynamic-only).
 
-  PROFILE/QUALITATIVE GATES:
-    2. nusselt_profile_r_over_d — HARD_GATED — Nu(r/D) shape match at 5+
-       radial stations (r/D ∈ {0, 0.5, 1.0, 1.5, 2.0}). Reuses the existing
-       `nusselt_number_profile` + `nusselt_number_profile_r` adapter outputs.
-       Profile-mode comparator: per-station tolerance 25-30% (loose because
-       Cooper-style correlations are not point-precise; the SHAPE is the
-       gate, not point values). The DEC-V61-044 NACA Cp pattern is the
-       reference implementation.
+  PROFILE/QUALITATIVE GATES (2):
+    2. nusselt_profile_r_over_d — QUALITATIVE_GATE — Nu(r/D) shape match
+       at 5+ radial stations (r/D ∈ {0, 0.5, 1.0, 1.5, 2.0}). Reuses the
+       existing `nusselt_number_profile` + `nusselt_number_profile_r`
+       adapter outputs. Profile-mode comparator: per-station tolerance
+       25-30%. The SHAPE is the gate, not the per-point values. The
+       DEC-V61-044 NACA Cp pattern is the reference implementation.
 
-  CONSERVATION INVARIANT (NON_TYPE_HARD_INVARIANT, blocks on violation but
-  excluded from primary_gate_count denominator per Stage C.2 comparator):
-    3. nu_monotonic_decay_from_stagnation — Nu(r/D) must be monotonically
-       non-increasing from the stagnation peak outward through r/D ≤ 1.5.
-       This is a known physical invariant (jet impingement decays radially
-       in the wall-jet zone; the secondary peak at r/D ≈ 2 from vortex
-       breakdown only matters at high Re). Failure ⇒ solver chose an
-       unphysical secondary maximum near the axis or the extractor binned
-       cells incorrectly. tolerance: absolute, value=0 (any non-monotone
-       step violates).
+    3. secondary_peak_presence_or_absence — QUALITATIVE_GATE — the canonical
+       impinging-jet Nu(r/D) profile at h/D ≈ 2 has a SECONDARY PEAK around
+       r/D ≈ 2 caused by transition-to-turbulence in the wall jet (Cooper
+       1993 + Baughn & Shimizu 1989 both report this for Re ≥ ~20000).
+       At Re = 10000 the secondary peak may be absent or weak (transitional
+       flow regime). The gate's PASS condition depends on §3 citation audit:
+         - If gold anchor measures Re=10000 → gate = "secondary peak ABSENT"
+           (boolean, no tolerance)
+         - If gold anchor measures Re ≥ 20000 (mismatch case) → gate is
+           DOWNGRADED to PROVISIONAL_ADVISORY in v3 with explicit
+           §physics_contract.note acknowledgement
+       This gate is DISTINCT from the profile-shape gate above: it tests
+       a topological feature (number of local maxima ≥ 1.5 D outward),
+       not the per-station magnitudes.
 
   PROVISIONAL_ADVISORY (NOT a physics gate):
     4. y_plus_first_cell_at_plate — PROVISIONAL — wall-resolution diagnostic
@@ -102,14 +148,36 @@ case_type_rationale: |
        wall-resolved); y+ < 30 acceptable (wall-function regime). Pure
        diagnostic, not enforced.
 
-primary_gate_count: 2  # nusselt_stagnation_at_r_d_zero + nusselt_profile_r_over_d
-                       # The conservation invariant + advisory are excluded.
+  RETIRED FROM v1 (per Codex F2):
+    - nu_monotonic_decay_from_stagnation as NON_TYPE_HARD_INVARIANT was
+      MIS-CLASSIFIED. The "should monotonically decay" claim is itself the
+      content of gate #3 (secondary peak absent ⇔ no second local max),
+      so v1 was double-counting the same physics. Folded into gate #3.
+      The per-station shape-match in gate #2 already provides the only
+      independent physics signal.
+
+primary_gate_count: 1               # v2 (per Codex F2): only the headline
+                                    # scalar (Nu_stag) counts toward the
+                                    # primary denominator. Profile gates are
+                                    # qualitative.
+profile_qualitative_gate_count: 2   # v2: nusselt_profile_r_over_d +
+                                    # secondary_peak_presence_or_absence
+case_type_hard_gate_signed: 1       # v2 (per Codex F2 + V61-058 template):
+                                    # number of HARD_GATED observables that
+                                    # contribute to the primary verdict
+                                    # denominator. Equals primary_gate_count
+                                    # for this DEC; field exists for
+                                    # cross-referencing comparator's hard
+                                    # checks (Stage C.2 semantics).
 
 # ============================================================================
 # §2 Headline observable — citation provenance (F1-M2 hard gate)
 # ============================================================================
 headline_observable: nusselt_stagnation_at_r_d_zero
-headline_reference: PENDING_CITATION_AUDIT  # see §3
+headline_gate: nusselt_stagnation_at_r_d_zero  # v2 per V61-058 template:
+                                                # explicit field for the
+                                                # comparator's headline pick
+headline_reference: PENDING_CITATION_AUDIT      # resolved in §3 priority chain
 headline_reference_value: PENDING_CITATION_AUDIT
 headline_reference_tolerance: 0.30  # widened from typical 0.15 to absorb
                                     # Re/h-over-d mismatch + steady-vs-RANS
@@ -122,29 +190,112 @@ citation_audit:
   whitelist_claim:
     label: "Cooper et al. 1984 / Behnad et al. 2013"
     doi: "10.1016/j.ijheatfluidflow.2013.03.003"
-    audit_status: SUSPECT
+    audit_status: VERIFIED_WRONG_PAPER  # v2 per Codex F1: Crossref query
+                                        # confirms this DOI resolves to a
+                                        # turbine-LES paper, NOT impinging
+                                        # jet (V61-060 pattern repeated).
+    doi_resolves_to: "Turbine LES paper (NOT impinging jet) — VERIFIED 2026-04-26 via Codex Crossref query"
     audit_reason: |
-      "Cooper 1984" does not match any well-known impinging-jet author/date.
-      The canonical impinging-jet experimental dataset commonly cited in
-      OpenFOAM tutorials and benchmark suites is:
-        - Cooper, D., Jackson, D.C., Launder, B.E., Liao, G.X. (1993)
-          "Impinging jet studies for turbulence model assessment — I.
-          Flow-field experiments", Int. J. Heat Mass Transfer 36(10),
-          2675-2684. DOI: 10.1016/S0017-9310(05)80204-2
-        - Baughn, J.W., Shimizu, S. (1989) "Heat transfer measurements
-          from a surface with uniform heat flux and an impinging jet",
-          ASME J. Heat Transfer 111(4), 1096-1098. DOI: 10.1115/1.3250776
-      Whitelist may have transposed digits or compressed citations. Per
-      V61-060 lesson: a wrong citation that "happened to PASS" is the
-      worst kind of stale provenance.
-    closure_action_required: |
-      Stage A.0 MUST resolve the actual paper(s) hosting the Re=10000,
-      h/d=2 Nu_stag value used by the gold YAML. Acceptance criterion:
-      a publicly accessible document with a Table or Figure number
-      locator (V61-060 set this precedent). If the original Cooper 1984
-      DOI resolves to the wrong paper (V61-060 pattern), pivot to one
-      of the publicly-archived alternatives above.
-  doi_resolves_to: NOT_VERIFIED  # Stage A.0 must run a curl/fetch on the DOI
+      Whitelist label "Cooper 1984" does not match any well-known
+      impinging-jet author/date. Whitelist DOI 10.1016/j.ijheatfluidflow.2013.03.003
+      VERIFIED to resolve to an unrelated turbine-LES paper (Codex
+      Crossref query, 2026-04-26). "Behnad 2013" is most likely a
+      corruption of "Behnia 1998/1999".
+
+  # v2 (per Codex F1): Stage A.0 MUST try the following resolveable DOIs
+  # in priority order. The list distinguishes THERMAL gold anchor
+  # (primary; what the headline Nu_stag will be compared against) from
+  # HYDRODYNAMIC support (provides flow-field references but NOT Nu).
+  thermal_gold_anchor_priority_chain:
+    1_baughn_shimizu_1989:
+      authors: "Baughn, J.W., Shimizu, S."
+      year: 1989
+      title: "Heat transfer measurements from a surface with uniform heat flux and an impinging jet"
+      journal: "ASME J. Heat Transfer 111(4), 1096-1098"
+      doi: "10.1115/1.3250776"
+      reason_promoted: |
+        PRIMARY THERMAL ANCHOR CANDIDATE (Codex F1 recommendation).
+        Direct heat-transfer measurement from an axisymmetric jet
+        impinging on a uniform-heat-flux plate. Re ≈ 23700, h/D ∈ {2, 6, 10}.
+        Reports Nu(r/D) profile + stagnation Nu. Critical caveat: the
+        measurement uses uniform-heat-flux boundary condition (q=const),
+        NOT constant-temperature plate (T=const) which is what the
+        adapter currently emits at foam_agent_adapter.py:6204. This
+        BC mismatch must be reflected in the gold YAML §physics_contract.note
+        like V61-060 did for Pandey & Schumacher's free-slip vs no-slip mismatch.
+      stage_a_0_action: |
+        (a) Try DOI 10.1115/1.3250776; verify resolves to the right paper.
+        (b) If accessible, extract Nu_stag and Nu(r/D) at r/D ∈ {0, 0.5, 1, 1.5, 2}
+            from the published Table or Figure with explicit locator.
+        (c) If h/D=2 row exists, use it. Otherwise pivot to h/D=6 and
+            update whitelist.parameters.h_over_d to match.
+        (d) Re mismatch: paper reports Re ≈ 23700; whitelist sets Re=10000.
+            Stage A.0 MUST either (i) bump whitelist Re to 23700 OR
+            (ii) document this gap as a known physics-fidelity risk
+            in §physics_contract.note (V61-060 pattern).
+
+    2_behnia_1998_axisymmetric_jet:
+      authors: "Behnia, M., Parneix, S., Durbin, P.A."
+      year: 1998
+      title: "Prediction of heat transfer in an axisymmetric turbulent jet impinging on a flat plate"
+      journal: "Int. J. Heat Mass Transfer 41(12), 1845-1855"
+      doi: "10.1016/S0017-9310(97)00254-8"
+      reason_promoted: |
+        SECONDARY THERMAL ANCHOR (RANS-validation paper).
+        Re ∈ {15000, 23000} per the v2 paper; uses k-ε-v2-f turbulence
+        model and validates against Baughn 1989 + Yan 1991. Useful as
+        a CROSS-CHECK because it provides explicit RANS-CFD vs
+        experiment Nu(r/D) profiles, calibrating what "good agreement"
+        actually looks like for our k-omega SST stack.
+      stage_a_0_action: |
+        Try if Baughn 1989 is paywalled or unavailable. Use Behnia 1998
+        only if (a) it includes a Re=10000 row OR (b) the Behnia/Baughn
+        comparison table justifies a CFD-to-CFD anchor (less honest;
+        V61-060 explicitly avoided this kind of self-comparison).
+
+    3_behnia_1999_unconfined_confined:
+      authors: "Behnia, M., Parneix, S., Shabany, Y., Durbin, P.A."
+      year: 1999
+      title: "Numerical study of turbulent heat transfer in confined and unconfined impinging jets"
+      journal: "Int. J. Heat Fluid Flow 20(1), 1-9"
+      doi: "10.1016/S0142-727X(98)10040-1"
+      reason_promoted: |
+        TERTIARY ANCHOR — addresses §4 R-confinement (free-jet vs
+        confined-jet) by reporting BOTH configurations.
+      stage_a_0_action: Use only if R-confinement audit at §4 surfaces a confinement mismatch.
+
+  hydrodynamic_support_only:
+    cooper_1993:
+      authors: "Cooper, D., Jackson, D.C., Launder, B.E., Liao, G.X."
+      year: 1993
+      title: "Impinging jet studies for turbulence model assessment — I. Flow-field experiments"
+      journal: "Int. J. Heat Mass Transfer 36(10), 2675-2684"
+      doi: "10.1016/S0017-9310(05)80204-2"
+      reason_demoted: |
+        v2 per Codex F1: Cooper 1993 PART I is HYDRODYNAMIC ONLY (mean
+        velocity + Reynolds stresses). Heat transfer is in Part II (Cooper
+        et al. 1993 companion paper, different DOI). v1 listed Cooper 1993
+        as interchangeable with Baughn 1989 — that conflated flow-field
+        and heat-transfer datasets. Cooper 1993 Part I is reusable for
+        hydrodynamic SANITY_CHECK (e.g. axial velocity decay along the
+        centerline) but does NOT supply Nu_stag.
+      stage_a_0_action: |
+        Optional — use as cross-check for the hydrodynamic field if a
+        future v2 sub-batch adds a velocity-profile observable. Out of
+        scope for the headline Nu_stag gate.
+
+  closure_action_required: |
+    Stage A.0 MUST attempt the THREE thermal_gold_anchor_priority_chain
+    DOIs in order, RECORDING in §physics_contract.note:
+      (i) which DOI was tried,
+      (ii) whether it resolved to the expected paper,
+      (iii) which Re row was used (with table/figure locator),
+      (iv) any BC / Re / h-D mismatch that must be acknowledged in
+           §physics_contract.note as a known fidelity-gap.
+    PASS CRITERIA: at least ONE thermal anchor with explicit locator
+    landed; whitelist DOI replaced; gold YAML §source/literature_doi
+    updated; if BC mismatch present (constant-T vs uniform-q), it MUST
+    appear in physics_contract.note (V61-060 acknowledgement pattern).
 
 # ============================================================================
 # §4 Risk register (pre-Stage-A, surfaced for Codex review)
@@ -209,12 +360,82 @@ risk_register:
       commit MUST touch both alias maps. Codex pre-Stage-A review must
       enforce this.
 
+  # v2 (per Codex F3-LOW): three risks already visible in the code that
+  # were missed in v1.
+  R6_unphysical_magnitude_hazard_flag_exists:
+    severity: MED
+    description: |
+      `_extract_jet_nusselt` already emits a HAZARD flag
+      `nusselt_number_unphysical_magnitude=True` when extracted Nu_stag
+      falls outside [0, 500] (foam_agent_adapter.py:9717-9719). DEC-V61-042
+      round 1 explicitly noted "previous code silently clamped Nu to
+      [0, 500]" — a diverged solver could mask runaway gradients as
+      benign 500 values. Stage E live run + Stage D UI MUST surface this
+      flag (similar to V61-060's NON_TYPE_HARD_INVARIANT card pattern).
+      If the flag fires post-Stage-E, that is a HARD-FAIL signal even
+      if the headline Nu falls within tolerance.
+    mitigation: |
+      §7 acceptance criterion v explicitly requires "hazard flag absent
+      OR explicitly excused in DEC closeout" before headline-PASS verdict
+      can land.
+  R7_plate_bc_constant_temperature_vs_uniform_heat_flux:
+    severity: HIGH
+    description: |
+      Adapter at foam_agent_adapter.py:6204 emits the plate as
+      `type fixedValue; value uniform {T_plate};` — that is a
+      CONSTANT-TEMPERATURE Dirichlet BC (T = const).
+      Many literature impinging-jet correlations (Baughn & Shimizu 1989
+      explicitly; Yan 1991; ERCOFTAC IJ benchmarks) use UNIFORM HEAT FLUX
+      (q = const, Neumann ∂T/∂n = const) instead. The Nu-Re-Pr correlation
+      coefficients differ between the two BC families: at the same Re,
+      uniform-q yields a DIFFERENT Nu(r/D) profile than constant-T.
+      If §3 lands Baughn 1989 as primary anchor, this BC mismatch is a
+      direct fidelity-gap risk that may produce a 30-50% deviation
+      independently of Re/h/D.
+    mitigation: |
+      Stage A.0 closure must EXPLICITLY note BC family in the gold YAML
+      §physics_contract.note. Stage E acceptance widened to include
+      "either headline within ±30% OR DEC closeout as
+      METHODOLOGY_COMPLETE_PHYSICS_FIDELITY_GAP_DOCUMENTED with BC
+      mismatch as primary cause" (V61-063/V61-066 honest-FAIL pattern).
+      Optional Stage A sub-batch: add fixedGradient T plate BC variant
+      to the adapter (~30 LOC, separate DEC).
+  R8_pseudo_2d_slab_geometry_vs_true_axisymmetric:
+    severity: MED
+    description: |
+      Adapter at foam_agent_adapter.py:5632-5687 emits a pseudo-2D slab
+      with `front`/`back` faces as `empty` patches (Cartesian r-z slab,
+      depth 0.1 m). This is NEITHER:
+        (a) a true 3D axisymmetric mesh (cyclic AMI / wedge), NOR
+        (b) a 2.5D wedge with `wedge` boundary type
+      The OpenFOAM `empty` BC tells the solver to treat the third
+      direction as 1 cell with no gradient — equivalent to a Cartesian
+      2D slab, NOT an axisymmetric solve. Cooper-style correlations
+      assume true axisymmetric flow (3D rotation about the axis); a
+      Cartesian slab forces the radial direction to be a 1D line
+      instead of a 2D r-θ surface, which DOUBLES the actual cross-
+      sectional area sampled per unit r and changes the integrated
+      Nu measurement by O(1).
+    mitigation: |
+      Stage A.0 closure must verify whether the slab approximation is
+      tolerable: (a) if Nu is computed as a LOCAL gradient (the current
+      extractor at line 9698 uses local |∂T/∂n| at each radial bin),
+      slab vs axisymmetric does NOT affect the local value, so this is
+      LOW IMPACT for nusselt_stagnation_at_r_d_zero; BUT
+      (b) any INTEGRATED quantity (e.g. total heat transfer rate over
+      the plate) WILL differ. §1 gates 1+2+3 are all LOCAL, so R8
+      stays MED severity (not HIGH) — but Stage E DEC must mention
+      the slab approximation as a known limitation.
+
 # ============================================================================
 # §5 Estimated Codex round budget + pass-rate (for self-pass-rate calibration)
 # ============================================================================
 codex_budget_rounds: 5  # R5 normal checkpoint, R6 halt-risk, R7 force abandon
-estimated_pass_rate_round1: 0.40  # Lower than V61-060 (0.55) because the
-                                  # citation audit (§3) is genuinely unresolved
+estimated_pass_rate_round1: 0.28  # v2 per Codex F2: lowered 0.40 → 0.28 (midpoint
+                                  # of Codex 0.25-0.30 band). Pre-Stage-A R1 already
+                                  # CHANGES_REQUIRED (matches R1=0% pass at any
+                                  # ≤0.30 estimate), so this is now backward-
+                                  # calibrated. Citation audit (§3) is genuinely
                                   # — there's a non-trivial probability that
                                   # Stage A.0 surfaces "no clean publicly-archived
                                   # benchmark for Re=10000 h/d=2", forcing a
@@ -225,14 +446,44 @@ estimated_pass_rate_round1: 0.40  # Lower than V61-060 (0.55) because the
 # §6 Stage A → E preview (subject to Codex pre-Stage-A review)
 # ============================================================================
 stage_preview:
-  A_0_citation_pivot:
-    purpose: Resolve §3 citation audit. Replace stale Cf=0.0042 sentinel.
+  # v2 (per Codex F2): Stage A.0 split into A.0a (citation+context audit)
+  # and A.0b (gold YAML rewrite). A.0a MUST close all four entangled
+  # questions — citation, free/confined, Re/H/D, wall-BC family — BEFORE
+  # any gold/extractor/comparator work touches the codebase. This prevents
+  # the V61-060 Stage A.0 trap where a citation pivot wasn't atomic with
+  # the alias map update.
+  A_0a_pre_pivot_context_audit:
+    purpose: |
+      Resolve the four entangled context questions atomically:
+        (1) Citation — try the §3 thermal_gold_anchor_priority_chain DOIs
+            in order; record which paper, which Re row, which Table/Figure.
+        (2) Confinement — confirm whether the chosen anchor reports
+            FREE-jet (recommended, matches whitelist geometry) or
+            CONFINED-jet (would require a physics_contract.note caveat).
+        (3) Re/H/D match — confirm the gold's Re vs whitelist Re=10000
+            and h/D vs whitelist h_over_d=2.0 alignment.
+        (4) Wall-BC family — confirm constant-T (Dirichlet) vs uniform-q
+            (Neumann); §4 R7 risk crystallises here.
     deliverables:
-      - Verified DOI + page/table/figure locator OR pivot to alternate paper
+      - .planning/intake/DEC-V61-067_a0a_context_resolution.md (NEW)
+        with one bullet per question + DOI + Table/Figure locator OR
+        explicit "no clean match — gap documented" finding
+      - Decision: PROCEED (anchor + Re + h/D + BC all match) vs
+        MISMATCH_DOCUMENTED (proceed but expect honest-FAIL closeout) vs
+        BLOCK (cannot proceed; whitelist Re bump or follow-up DEC required)
+    no_code_changes_yet: true
+  A_0b_citation_pivot:
+    purpose: |
+      Apply the A.0a decisions to the gold YAML and whitelist atomically.
+    deliverables:
       - knowledge/gold_standards/axisymmetric_impinging_jet.yaml rewrite
-        (4 observables, schema_v2, Type II gate_status taxonomy)
-      - knowledge/whitelist.yaml `name` rename (if needed) → atomic with
-        BOTH alias map updates (R5 mitigation)
+        (4 observables matching v2 §1: 1 HARD_GATED + 2 QUALITATIVE_GATES
+        + 1 PROVISIONAL_ADVISORY; schema_v2; physics_contract.note
+        documents any A.0a-surfaced mismatches per V61-060 honesty pattern)
+      - knowledge/whitelist.yaml `name` rename + DOI replace + atomic
+        update of BOTH `_TASK_NAME_TO_CASE_ID_ALIASES` maps
+        (foam_agent_adapter.py:247 + auto_verifier/config.py:30) per
+        R5 mitigation — ALL IN ONE COMMIT
   A_1_to_A_n_canonical_contract_repair:
     purpose: Confirm adapter dispatch + extractor outputs match the new gold
     deliverables:
@@ -280,23 +531,54 @@ acceptance_criteria:
     CHANGES_REQUIRED with all findings closed verbatim per the 5-condition
     exception envelope (CLAUDE.md).
   ii_headline_validated_or_honestly_failed: |
-    EITHER: live-run Nu_stagnation falls within ±30% of the chosen literature
-    band — primary gate PASS; OR: Nu_stagnation falls outside the band and
-    the DEC documents the physics-fidelity gap explicitly (V61-063 / V61-066
-    / V61-060 closeout pattern: METHODOLOGY_COMPLETE_PHYSICS_FIDELITY_GAP_DOCUMENTED).
-  iii_profile_shape_validated: |
-    Nu(r/D) profile across r/D ∈ {0, 0.5, 1.0, 1.5, 2.0} matches Cooper-style
-    monotonic decay; the conservation invariant gate must pass UNLESS the
-    physics-fidelity gap explanation explicitly accounts for non-monotonic
-    behaviour (e.g. high-Re secondary peak from vortex breakdown).
-  iv_invariant_count_excluded_from_pass_fraction: |
-    Per V61-060 Stage C.2 comparator semantics: NON_TYPE_HARD_INVARIANT
-    blocks verdict on violation but is excluded from primary_gate_count
-    denominator. UI must surface the invariant card with the appropriate
-    "守恒不变量" badge (rose/emerald state-aware per V61-060 R6 fix).
+    EITHER: live-run nusselt_stagnation_at_r_d_zero falls within ±30%
+    (relative tolerance) of the gold ref_value resolved at A.0a — primary
+    gate PASS; OR: it falls outside the band and the DEC documents the
+    physics-fidelity gap explicitly with R7 BC-mismatch and/or R1 Re-mismatch
+    cited as primary cause (V61-063 / V61-066 / V61-060 honest-FAIL pattern:
+    METHODOLOGY_COMPLETE_PHYSICS_FIDELITY_GAP_DOCUMENTED).
+  iii_profile_shape_validated_with_explicit_locators: |
+    v2 per Codex F3: tighten "matches Cooper-style" to verifiable form:
+    Nu(r/D) profile MUST be measured at exactly r/D ∈ {0.0, 0.5, 1.0, 1.5, 2.0}
+    using the existing `_extract_jet_nusselt` `nusselt_number_profile_r`
+    output. PASS:
+      - per-station relative tolerance ≤30% vs gold values resolved at
+        A.0a from explicit Table/Figure locator (NOT a generic "Cooper-style"
+        reference)
+      - tolerance.mode = relative for all 5 stations
+      - if A.0a anchor lacks one or more stations, explicitly mark them
+        ADVISORY with a per-station gap reason in the gold YAML.
+  iv_secondary_peak_qualitative_gate: |
+    v2 per Codex F2: gate #3 (secondary_peak_presence_or_absence) PASS:
+      - if Re ≤ 15000: secondary peak ABSENT (Nu(r/D) is monotonically
+        non-increasing for r/D ∈ [0, 2]) — boolean gate, no tolerance
+      - if Re ≥ 20000: secondary peak PRESENT at r/D ∈ [1.5, 2.5] (one
+        local maximum after the stagnation peak) — boolean gate
+      - if 15000 < Re < 20000: gate is ADVISORY (transitional regime)
   v_alias_map_atomic_with_case_name_rename: |
-    Per RETRO-V61-060 addendum: any A.0 case_name rename MUST be in the
-    same commit as both `_TASK_NAME_TO_CASE_ID_ALIASES` map updates.
+    Per RETRO-V61-060 addendum: any A.0b case_name rename MUST be in the
+    same commit as both `_TASK_NAME_TO_CASE_ID_ALIASES` map updates
+    (foam_agent_adapter.py:247 + auto_verifier/config.py:30).
+  vi_unphysical_magnitude_hazard_flag_absent: |
+    v2 per Codex F3: Stage E live run must produce
+    `nusselt_number_unphysical_magnitude=False` (or unset). If the flag
+    fires, the DEC closeout MUST explicitly excuse it with a root-cause
+    explanation (e.g. "diverged solver despite headline within tolerance"
+    is NOT an acceptable PASS regardless of comparator verdict).
+  vii_bc_family_documented_in_gold_yaml: |
+    v2 per Codex F3 + R7: the chosen gold ref's wall BC family
+    (constant-T vs uniform-q) MUST appear in
+    knowledge/gold_standards/axisymmetric_impinging_jet.yaml
+    §physics_contract.note with explicit acknowledgement of mismatch
+    against the adapter's current `fixedValue T_plate` BC.
+  viii_pseudo_2d_slab_geometry_acknowledgement: |
+    v2 per Codex F3 + R8: the gold YAML §physics_contract.note MUST
+    acknowledge that the adapter emits a pseudo-2D Cartesian r-z slab
+    with `empty` patches (not a true 3D axisymmetric or wedge mesh).
+    The DEC closeout MUST state whether this matters for the chosen
+    observables (the current §1 gates are all LOCAL gradients, so the
+    impact is expected to be LOW; future integrated-quantity DECs would
+    need a different mesh topology).
 
 # ============================================================================
 # §8 Out of scope (will not be addressed in this DEC)
