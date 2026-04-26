@@ -3,7 +3,21 @@ gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
 status: M1_M4_COMPLETE
-last_updated: "2026-04-26T03:00 local"  # M1-M4 arc-close + Notion sync round
+last_updated: "2026-04-26T11:35 local"  # 治理收口 Day 0: anchor session + DEC-V61-071 (load_tolerance_policy wiring) + DEC-V61-072 (sampling audit first execution · §10.5 §11 drafted)
+methodology_active_sections:
+  - "§10 治理降级 (RETRO-V61-006 addendum)"
+  - "§10.4 Line-A/B isolation contract (OPS-2026-04-25-001)"
+  - "§10.5 sampling audit anchor (DEC-V61-072 · provisional · pending CFDJerry sign-off)"
+  - "§10.5.4a audit-required surfaces (5 surfaces · DEC-V61-072 first-execution amendment)"
+  - "§11 anti-drift standing rules (DRAFT · pending CFDJerry sign-off)"
+governance_closure_session:
+  start: "2026-04-26"
+  end: "2026-05-03"
+  anchor_url: "https://www.notion.so/34ec68942bed8105a5f2f961241cd32b"
+  three_anchors:
+    A_signature_chain: "PENDING_CFDJERRY (DEC-PIVOT + DEC-POLICY-VCP + W2 G-9 Opus Gate + DEC-V61-071 Codex review)"
+    B_ssot_alignment: "IN_PROGRESS (main page Active Phase line updated · Foundation-Freeze archive pending A1)"
+    C_sampling_audit: "FIRST_EXECUTION_LANDED (DEC-V61-072 · DEGRADATION_RULE_AT_RISK · §10.5 provisional active · interval 20→5)"
 progress:
   closed_arcs:
     workbench_arc: "6/6 stages + 8a + 8b prep COMPLETE (4-round Opus 4.7 review, stop criterion triggered 2026-04-25)"
