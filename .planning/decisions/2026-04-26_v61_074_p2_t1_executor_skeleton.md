@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-074
 title: P2-T1 · ExecutorMode ABC + 4-mode skeleton + manifest tagging + dispatch + routing (full P2-T1 scope · T1.a skeleton + T1.b integration)
-status: Accepted (2026-04-26 · full P2-T1 scope landed · T1.a skeleton at 16000ab Codex APPROVE round 3 · T1.b at f599129+69c0ed6+c7ede01 Codex APPROVE round 2 + LOW verbatim · 49/49 executor tests · 119/119 audit_package tests · 956/958 full-suite pass / 0 fail / 2 skipped)
+status: Accepted (2026-04-26 · full P2-T1 scope landed · T1.a skeleton at 16000ab Codex APPROVE round 3 · T1.b.1 pre-merge at f599129 Codex APPROVE round 2 + LOW verbatim · T1.b.2+T1.b.3 post-commit at 69c0ed6+c7ede01 Codex APPROVE round 2 after 8d7f990 fix closing 2 MED + 1 LOW · 49/49 executor tests · 119/119 audit_package tests · 966/968 full-suite pass / 0 fail / 2 skipped)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-26
 authored_under: 治理收口 anchor session · P2-T1 kickoff
@@ -11,7 +11,7 @@ parent_specs:
   - .planning/specs/EXECUTOR_ABSTRACTION_compatibility_spike.md (P2-T0 · COMPATIBLE_WITH_MANIFEST_TAG_EXTENSION)
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.80 (T1.a) / 0.65 (T1.b)
-external_gate_actual_outcome: APPROVE_AFTER_2_REVISIONS_T1A (R1: 3 findings — StrEnum vs (str, Enum), RunReport contract weakness, fallback test假覆盖; R2 closed all 3 + introduced 1 MED — bare-string notes char-explosion; R3 closed; final APPROVE @ 16000ab) · APPROVE_AFTER_1_REVISION_T1B (R1: 1 HIGH — class-identity contract_hash vs spec-derived; R2: APPROVE_WITH_COMMENTS, 1 LOW — stale inline comment closed verbatim within RETRO-V61-001 5-condition exception)
+external_gate_actual_outcome: APPROVE_AFTER_2_REVISIONS_T1A (R1: 3 findings — StrEnum vs (str, Enum), RunReport contract weakness, fallback test假覆盖; R2 closed all 3 + introduced 1 MED — bare-string notes char-explosion; R3 closed; final APPROVE @ 16000ab) · APPROVE_AFTER_1_REVISION_T1B1 (R1: 1 HIGH — class-identity contract_hash vs spec-derived; R2: APPROVE_WITH_COMMENTS, 1 LOW — stale inline comment closed verbatim within RETRO-V61-001 5-condition exception) · APPROVE_AFTER_1_REVISION_T1B2_T1B3 (post-commit R1: 2 MED + 1 LOW — short-circuit Notion write-back missing, WARN ceiling histogram incoherence, _extract_mode non-mapping crash; R2 at 8d7f990 closed all 3 + 10 regression tests, APPROVE_WITH_COMMENTS 0 blocking)
 pc_closure_commits:
   P2-T1.a-R1: 479597f (initial skeleton · 15 files · 1301 LOC · 39 tests)
   P2-T1.a-R2: 20afaaf (StrEnum + RunReport hardening + fallback test fix · folded into parallel session's gov commit by accident — see SUMMARY for attribution note · 45 tests)
@@ -307,11 +307,26 @@ diff-level match to Codex `Suggested fix`, references R2 finding ID).
 No additional Codex round triggered for the comment swap.
 
 T1.b.2 (`src/task_runner.py` dispatch) and T1.b.3
-(`src/metrics/trust_gate.py` per-mode routing) are post-commit Codex
+(`src/metrics/trust_gate.py` per-mode routing) post-commit Codex
 review per RETRO-V61-001 baseline (`src.metrics` spec implementation
-+ adapter-boundary modification ≥5 LOC). Both are batched here as a
-single follow-up review request after this addendum lands; they live
-outside trust-core 5 so pre-merge was not mandatory.
++ adapter-boundary modification ≥5 LOC). Both batched as a single
+review request; they live outside trust-core 5 so pre-merge was not
+mandatory.
+
+| Round | Diff target | Verdict | Findings |
+| --- | --- | --- | --- |
+| Post-commit R1 | 69c0ed6 + c7ede01 (batched) | CHANGES_REQUIRED on both | T1.b.2 1 MED (short-circuit bypassed Notion write-back, breaking `notion_client` `success=False → Status=Review` contract) · T1.b.3 1 MED (WARN ceiling left `count_by_status` unchanged → `overall=WARN AND has_warnings=False` public-API correctness bug) · T1.b.3 1 LOW (`_extract_mode` AttributeError on non-mapping `executor` payload) |
+| Post-commit R2 | 8d7f990 (single fix commit closing all 3 R1 findings + 10 regression tests) | **APPROVE_WITH_COMMENTS** | 0 blocking · 2 advisory: (a) histogram-bump approach acceptable in current API shape — caveat: `sum(count_by_status.values()) > len(reports)` after ceiling, no in-tree consumer assumes that invariant; future refactor option = dedicated `routing_ceiling_applied` field if `TrustGateReport` becomes broader external contract (deferred · non-blocking) · (b) confirms test verification posture under repo `.venv` (27 + 70 tests green) |
+
+**Post-commit Codex APPROVE achieved. T1.b.2 + T1.b.3 fully closed.**
+
+Self-pass-rate calibration update: T1.b post-commit estimated 0.80,
+actual = APPROVE_AFTER_1_REVISION (3 substantive findings on
+otherwise-mechanical wiring/routing — Codex catches integration gaps
+that local test scope misses, specifically: adjacent-system contracts
+like Notion write-back, public-API histogram coherence, and schema-
+robustness on non-mapping payloads). 0.80 was over-confident for
+T1.b's recurring "Codex catches what local tests don't" pattern.
 
 ### Self-pass-rate calibration data (RETRO candidate)
 
@@ -338,8 +353,9 @@ outside trust-core 5 so pre-merge was not mandatory.
   self-attribution)
 - **T1.b.3 (TrustGate per-mode routing)**: `c7ede01` (clean
   self-attribution)
-- **T1.b.4 (this closure addendum + STATE.md sync)**: pending
-  trailing commit
+- **T1.b.4 (this closure addendum + STATE.md sync)**: `2a5e9c4`
+- **T1.b post-commit fix (Codex R1 → R2 closure)**: `8d7f990`
+  (closes 2 MED + 1 LOW · +10 regression tests · 966/968 full-suite)
 
 #### Attribution note for T1.b.1 (`f599129`)
 
@@ -370,7 +386,7 @@ beating the parallel session's window.
 | `tests/test_metrics/*` | 87 | ✅ all pass (added +10 trust_gate_executor_mode_routing) |
 | `tests/test_task_runner_executor_mode.py` | 7 | ✅ all pass (new file) |
 | `tests/test_task_runner.py` | 25 | ✅ all pass (no regression on legacy CFDExecutor path) |
-| Full repo suite | 956 passed / 2 skipped / 0 failed | ✅ |
+| Full repo suite | 956 passed / 2 skipped / 0 failed (at c7ede01 closure) → **966 passed / 2 skipped / 0 failed** (after 8d7f990 post-commit fix · +10 regression tests) | ✅ |
 
 Net change vs. T1.a closure baseline (~930 passed / 1 pre-existing
 flake / 2 skipped): **+25 tests** (5 manifest + 7 dispatch + 10

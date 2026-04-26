@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: workbench-closed-loop
 milestone_name: "Workbench Operability Main-Line (post-pivot user-as-first-customer refinement)"
 status: M1_M4_COMPLETE
-last_updated: "2026-04-26T19:30 local"  # P2-T1.b full scope landed (manifest tagging f599129 + dispatch 69c0ed6 + routing c7ede01) · DEC-V61-074 status=Accepted (full P2-T1 scope) · Codex T1.b APPROVE round 2 + LOW verbatim · 956/958 full-suite pass / 0 failed / 2 skipped · forensic flake closed by parallel session d349e4d · counter v6.1 49→50 · T2 unblocked
+last_updated: "2026-04-26T20:30 local"  # P2-T1.b full scope CLOSED (manifest tagging f599129 + dispatch 69c0ed6 + routing c7ede01 + post-commit fix 8d7f990) · DEC-V61-074 status=Accepted · ALL Codex rounds GREEN: T1.a R3 APPROVE · T1.b.1 R2 APPROVE_WITH_COMMENTS+LOW verbatim · T1.b.2+T1.b.3 post-commit R2 APPROVE_WITH_COMMENTS 0-blocking after 8d7f990 closed 2 MED + 1 LOW · 966/968 full-suite pass / 0 failed / 2 skipped · counter v6.1 49→50 · T2 unblocked
 methodology_active_sections:
   - "§10 治理降级 (RETRO-V61-006 addendum)"
   - "§10.4 Line-A/B isolation contract (OPS-2026-04-25-001)"
@@ -21,7 +21,7 @@ governance_closure_session:
     B_ssot_alignment: "CLOSED (main page Active Phase line ✓ · Foundation-Freeze Status=Done with closeout section ✓ · P1 phase Closeout annotated ✓ · Phases DB sweep clean · Sessions DB anchor + Signature Closure ✓)"
     C_sampling_audit: "CLOSED (DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · interval 20→5 · §11 5 anti-drift rules drafted)"
   three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS_LANDED (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 closed Accepted 2026-04-26T17:00 · all 4 PCs GREEN with Codex APPROVE · P2-T1 UNBLOCKED · P2-T1.a skeleton landed 2026-04-26T18:00 · DEC-V61-074 Accepted)"
-  p2_kickoff_status: "T1.b_DONE_T2_QUEUED (full P2-T1 scope GREEN · 4 PCs + skeleton + manifest tagging + dispatch + routing all landed · PC1 06e5f29 · PC2 50bb2eb Codex APPROVE R3 · PC3 55f2642 Codex APPROVE R2 · PC4 25c4cd8 Codex APPROVE R3 · T1.a-R3 16000ab Codex APPROVE R3 · T1.b.1 f599129 [attribution-misaligned, see DEC addendum] Codex APPROVE R2 + LOW verbatim · T1.b.2 69c0ed6 dispatch · T1.b.3 c7ede01 routing · counter v6.1 49→50 · T2 [DEC-V61-075 FoamAgentExecutor → docker-openfoam wrapping] unblocked, deferred to next session)"
+  p2_kickoff_status: "T1.b_DONE_T2_QUEUED (full P2-T1 scope GREEN · all Codex rounds closed · 4 PCs + skeleton + manifest tagging + dispatch + routing all landed · PC1 06e5f29 · PC2 50bb2eb Codex APPROVE R3 · PC3 55f2642 Codex APPROVE R2 · PC4 25c4cd8 Codex APPROVE R3 · T1.a-R3 16000ab Codex APPROVE R3 · T1.b.1 f599129 [attribution-misaligned, see DEC addendum] Codex pre-merge APPROVE R2 + LOW verbatim · T1.b.2 69c0ed6 dispatch · T1.b.3 c7ede01 routing · T1.b post-commit fix 8d7f990 closed 2 MED + 1 LOW + 10 regression tests, post-commit R2 APPROVE_WITH_COMMENTS 0-blocking · 966/968 full-suite pass · counter v6.1 49→50 · T2 [DEC-V61-075 FoamAgentExecutor → docker-openfoam wrapping] unblocked, deferred to next session)"
   override_window_status: "0_days_consumed_window_fully_preserved (audit constitutional finding: 「全权执行,继续」 = operational not constitutional · Pivot Charter §7 independence-of-context invariant intact)"
   amendments_landed_2026_04_26_pc_closure:
     - "§10.5.4b token cap ≤100k/fire (DEC-V61-073 H3) · enforced by scripts/methodology/sampling_audit.py"
