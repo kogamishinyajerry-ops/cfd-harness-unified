@@ -69,21 +69,80 @@ Codex returns one of three verdicts per audit:
 path (RETRO-V61-001). The original commits stay on a quarantine branch for
 reference.
 
-### §10.5.4 Counter calibration loop
+### §10.5.4 Counter calibration loop (amended by DEC-V61-073)
 
 The §10 degradation rule is **not unconditional**. After each sampling
 audit:
 
 - **3 consecutive `CLEAN` verdicts** → sampling interval may relax 20 → 40
   commits (effective from the 4th audit forward).
-- **1 `BLIND_SPOTS_IDENTIFIED`** → interval stays 20.
-- **1 `DEGRADATION_RULE_AT_RISK`** → interval drops to **5 commits**
-  (per Codex first-execution recommendation — original draft said 10) and
-  stays there until 2 consecutive subsequent audits return zero category
-  2-5 findings, after which it relaxes back to 20.
+- **1 `BLIND_SPOTS_IDENTIFIED`** → interval stays at current value.
+- **1 `DEGRADATION_RULE_AT_RISK`** → interval drops to **5 commits**.
+  After each subsequent clean audit the interval ratchets up smoothly
+  via **5 → 7 → 10 → 15 → 20** (per DEC-V61-073 audit Q1(c) finding:
+  the original "stays at 5 until 2 clean" path risked starvation /
+  false-permissiveness binary; the smooth ratchet provides graduated
+  re-trust).
 
 Calibration state is recorded in the DEC-V61-XXX sampling audit DEC's
 `Counter calibration` section and mirrored in `.planning/STATE.md`.
+
+### §10.5.4b · Per-fire token budget cap (NEW · DEC-V61-073 H3)
+
+Each sampling-audit fire is capped at **≤100k Codex tokens**. Rationale
+(audit Q1(c)): with interval=5, P2 main-line will trigger ~3 audits over
+its arc; without a cap, a worst-case ~3×500k=1.5M token spend would
+greatly exceed the RETRO-V61-004 P1 arc 460k precedent and starve the
+Codex review budget. ≤100k/fire keeps total under ~300k for typical P2
+arc — well within precedent.
+
+If the prompt + per-commit diff load exceeds 100k, the auditor must:
+- Sample-scope (audit the most-changed N commits to fit budget), OR
+- Defer to next sampling fire with explicit `BUDGET_DEFERRED` marker
+  in the DEC frontmatter.
+
+The cap is advisory until the §10.5 promotion to Active formalizes it.
+
+### §10.5.4a · Pre-flagged audit-required surfaces (§10 amendment · expanded by DEC-V61-073)
+
+Following the DEC-V61-072 first-execution finding that §10 module-only
+gating was too weak, the following **non-trust-core surfaces** are now
+audit-required at commit time even though they live outside the
+trust-core 5 modules. The list grows from 5 (original) to 7
+(DEC-V61-073 H1 spillover):
+
+1. **FoamAgentExecutor call sites** — any new caller of
+   `FoamAgentExecutor.execute(...)` outside the 5 trust-core modules.
+2. **Docker / subprocess reachability changes** — any commit that adds
+   or modifies subprocess invocations reaching Docker, container
+   runtimes, or filesystem mount points.
+3. **`/api/**` route registration** — any new or renamed FastAPI route
+   under `ui/backend/routes/` (route-namespace collision check
+   mandatory; see Finding 2).
+4. **`reports/` durable persistence** — any commit that writes new
+   artifact paths under `reports/` or changes the schema/discovery of
+   existing paths.
+5. **`user_drafts/` → `TaskSpec` plumbing** — any commit that lets
+   user-drafted YAML influence `TaskSpec` or solver inputs without
+   per-case range / whitelist compatibility validation.
+6. **`correction_spec/` write paths (NEW · DEC-V61-073 A4)** — any
+   commit creating or modifying `CorrectionSpec` artifact paths under
+   `reports/{case_id}/correction_specs/` or
+   `knowledge/correction_patterns/`. CorrectionSpec influences the
+   Evaluation→Knowledge plane edge; silently changing its shape can
+   corrupt downstream FailurePattern / CorrectionPattern records.
+7. **`.planning/case_profiles/` write paths (NEW · DEC-V61-073 A4)** —
+   direct edits to `.planning/case_profiles/<case_id>.yaml`,
+   especially `tolerance_policy` blocks. These are physical-truth-source-
+   adjacent without being formal trust-core 5 modules; a bad
+   tolerance_policy can silently mask real numerical deviation.
+
+A commit touching any of the 7 surfaces requires Codex review per §10
+baseline regardless of `autonomous_governance` flag. The pre-commit
+hook `tools/methodology_guards/audit_required_surfaces.sh` (TBD ·
+shipped under §11.5 enforcement work) detects these surfaces and blocks
+direct-to-main commits without an `Audit-Required: <ID>` trailer
+referencing a Codex tool report.
 
 ### §10.5.4a Pre-flagged audit-required surfaces (§10 amendment)
 

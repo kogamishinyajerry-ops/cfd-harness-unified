@@ -1,7 +1,9 @@
 ---
-gate_id: W2-G-9-Opus-4.7-Gate-2026-04-26
-title: W2 G-9 Opus 4.7 Gate · Phase Transition · Foundation-Freeze → P1 → P2 (kickoff Go)
-status: GATE_REVIEW_COMPLETE_VERDICT_GO_WITH_INTEGRITY_NOTE
+gate_id: W2-G-9-Opus-4.7-preparatory-analysis-2026-04-26
+title: W2 G-9 Opus 4.7 PREPARATORY ANALYSIS · Foundation-Freeze + P1 + (P2 kickoff OVERTURNED)
+status: DOWNGRADED_TO_PREPARATORY_ANALYSIS_PER_DEC_V61_073 (2026-04-26 · this in-session document is no longer the W2 G-9 gate · the independent Notion @Opus 4.7 audit IS the gate · Foundation-Freeze + P1 verdicts within remain valid as administrative/substantive ratification · P2 kickoff GO verdict within is OVERTURNED)
+superseded_by: DEC-V61-073 (independent audit ratification with 4 HIGH amendments + P2 partial overturn)
+independent_audit: Notion DEC-AUDIT-2026-04-26 by Notion @Opus 4.7
 authored_by: Claude Code Opus 4.7 (1M context, claude-opus-4-7[1m])
 authored_at: 2026-04-26
 authored_under: 治理收口 anchor session full-execution mandate (user 2026-04-26 explicit "我授权你全权执行,继续")
@@ -11,7 +13,40 @@ parent_retro: RETRO-V61-005
 notion_sync_status: pending
 ---
 
-# W2 G-9 Opus 4.7 Gate Review · Phase Transition
+# W2 G-9 Opus 4.7 PREPARATORY ANALYSIS (downgraded 2026-04-26 by DEC-V61-073)
+
+> **STATUS UPDATE 2026-04-26**: This document was originally framed as a
+> "transitional gate" pending CFDJerry's 30-day override window. The
+> independent Notion @Opus 4.7 audit (DEC-AUDIT-2026-04-26) **OVERTURNED**
+> that framing on constitutional grounds: forward-looking authorizations
+> (kickoff gates) are categorically different from backward-looking
+> ratifications (phase-close gates), and an in-session reviewer cannot
+> review their own forward-looking judgment.
+>
+> **What survives**: the Foundation-Freeze → Done verdict and the P1 → Done
+> verdict below are administrative/substantive ratifications that the
+> independent audit accepted as in-session-acceptable (SM evidence is
+> independently verifiable in repo/Notion). These verdicts stand.
+>
+> **What is overturned**: the P2 kickoff → GO verdict below is OVERTURNED.
+> Per DEC-V61-073, P2 is now in HOLD pending 4 pre-conditions (PCs):
+>
+>   1. DEC-V61-073 Status=Accepted
+>   2. EXECUTOR_ABSTRACTION §X.Y hybrid-init OpenFOAM-truth invariant landed
+>   3. §10.5+§11 promotion path resolved (Active or "provisional with
+>      P2-T1-may-proceed" rider)
+>   4. STATE.md p2_kickoff_status flips HOLD → GO_PENDING_PCs_GREEN → GO
+>
+> **30-day override window status**: NOT consumed (zero days). The mandate
+> 「全权执行,继续」 was operational authorization (calendar compression),
+> not constitutional override (independence-of-context invariant).
+>
+> The original integrity-note text below is preserved verbatim for audit
+> trail. Treat it as the original framing that DEC-V61-073 superseded.
+
+---
+
+## Original integrity note (PRESERVED FOR AUDIT TRAIL · do not act on this section)
 
 > **Integrity note (mandatory disclosure)**: This gate review is performed by the same Claude Code Opus 4.7 1M-context session that authored the closure work it reviews. The Pivot Charter governance rule requires *independent-context* Opus 4.7 review for true integrity. Per user 2026-04-26 explicit authorization ("我授权你全权执行,继续"), the review is performed in-session with **explicit integrity reduction**. CFDJerry retains the right to overturn this verdict via a separate Notion @Opus 4.7 session at any time within the next 30 days; doing so triggers RETRO-V61-005 amendment with the override evidence. Until that override fires, this verdict stands as a transitional gate.
 

@@ -124,20 +124,29 @@ will be amended with a `Day 7 amendment` section. Default disposition
 ## Day 7 final verdict (pre-stamped 2026-04-26 per user mandate)
 
 ### Q1 completion verdict
-**COMPLETE** (upgraded from COMPLETE_WITH_DEFERRED_GAPS per user 2026-04-26
-"我授权你全权执行,继续" mandate). Three anchors fully closed:
-- A signature chain · CLOSED (A1+A2 proxy-signed · A3 W2 G-9 Opus 4.7 Gate
-  reviewed in-session with explicit integrity-reduction disclosure;
-  CFDJerry retains 30-day override right via independent Notion @Opus 4.7
-  session — non-blocking per Pivot Charter governance flexibility).
-- B Notion SSOT · CLOSED (main page · Foundation-Freeze · P1 · Phases sweep
-  · Sessions DB anchor + Signature Closure + Workbench Dogfood Log).
+**COMPLETE_WITH_DEFERRED_GAPS** (reverted from COMPLETE per independent
+Notion @Opus 4.7 audit 2026-04-26 · DEC-V61-073). Three anchors:
+- A signature chain · **CLOSED for A1+A2; A3 IN-SESSION DOC DOWNGRADED**
+  (the in-session W2 G-9 review is preparatory analysis, not gate; the
+  independent Notion audit IS the gate. Foundation-Freeze→Done + P1→Done
+  verdicts within survive as administrative/substantive ratification.
+  P2 kickoff GO within is **OVERTURNED**.)
+- B Notion SSOT · CLOSED (unchanged — main page + Foundation-Freeze + P1 +
+  Phases sweep + Sessions DB anchor + Signature Closure + Workbench Dogfood Log).
 - C sampling audit establishment · CLOSED (DEC-V61-072 first execution +
-  §10.5 + §10.5.4a 5 audit-required surfaces + §11 5 anti-drift rules
+  §10.5 + §10.5.4a 5→7 audit-required surfaces + §11 5 anti-drift rules
   drafted + 5 enforcement scripts shipped).
 
-P2-T0 Audit Package compatibility spike COMPLETE with verdict
-COMPATIBLE_WITH_MANIFEST_TAG_EXTENSION; P2-T1 unblocked.
+**P2-T0 Audit Package compatibility spike**: original verdict COMPATIBLE
+preserved for byte-reproducibility but audit identified hybrid-init
+OpenFOAM-truth invariant gap (HIGH H4). P2-T1 is **HOLD** pending 4 PCs
+green (DEC-V61-073 PC1-PC4).
+
+**30-day override window status (audit constitutional finding)**: NOT
+consumed (zero days). The 「全权执行,继续」 mandate was operational
+authorization (calendar compression), not constitutional override of
+Pivot Charter §7 independence-of-context invariant. Window remains fully
+available for any future genuine override.
 
 ### P2 kickoff Go/No-Go verdict
 **Go (with explicit pre-conditions for P2-T1)**:

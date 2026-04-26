@@ -15,11 +15,19 @@ governance_closure_session:
   end: "2026-05-03"
   anchor_url: "https://www.notion.so/34ec68942bed8105a5f2f961241cd32b"
   three_anchors:
-    A_signature_chain: "CLOSED (A1 + A2 Status=Accepted via Notion API proxy-sign · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 Opus Gate REVIEWED in-session with integrity-reduction disclosure per user 2026-04-26 explicit authorization · gate doc at .planning/gates/2026-04-26_w2_g9_opus_4_7_gate_review.md · CFDJerry retains 30-day override right via independent Notion @Opus 4.7 session)"
+    A_signature_chain: "CLOSED (A1+A2 Status=Accepted · DEC-V61-071 R2 APPROVE_WITH_COMMENTS · A3 W2 G-9 in-session DOCUMENT DOWNGRADED to preparatory analysis per DEC-V61-073 · independent Notion @Opus 4.7 audit IS the legitimate W2 G-9 gate · audit verdict RATIFY_WITH_AMENDMENTS · 30-day override window NOT consumed — fully preserved per audit constitutional finding)"
     B_ssot_alignment: "CLOSED (main page Active Phase line ✓ · Foundation-Freeze Status=Done with closeout section ✓ · P1 phase Closeout annotated ✓ · Phases DB sweep clean · Sessions DB anchor + Signature Closure ✓)"
     C_sampling_audit: "CLOSED (DEC-V61-072 first execution · DEGRADATION_RULE_AT_RISK · §10.5 provisional active with §10.5.4a 5 audit-required surfaces · interval 20→5 · §11 5 anti-drift rules drafted)"
-  three_anchor_verdict: "ALL_CLOSED (Day 0 single-day compressed execution per user 2026-04-26 explicit full-authority mandate)"
-  p2_kickoff_status: "GO (W2 G-9 Opus 4.7 Gate verdict GO · P2-T0 spike COMPATIBLE · P1 closeout APPROVE · §10.5+§11 active provisional · Pivot Charter governance constraints captured in gate doc)"
+  three_anchor_verdict: "ALL_CLOSED_WITH_AUDIT_AMENDMENTS (independent Notion @Opus 4.7 audit ratified A+B+C with 4 HIGH amendments · DEC-V61-073 lands them · P2 kickoff partial overturn → HOLD)"
+  p2_kickoff_status: "HOLD (audit Q5 OVERTURN · 4 PCs must turn GREEN before P2-T1 starts: PC1 DEC-V61-073 Accepted · PC2 EXECUTOR_ABSTRACTION §X.Y hybrid-init invariant landed · PC3 §10.5+§11 promotion path resolved · PC4 STATE.md p2_kickoff_status flips HOLD→GO_PENDING_PCs_GREEN→GO)"
+  override_window_status: "0_days_consumed_window_fully_preserved (audit constitutional finding: 「全权执行,继续」 = operational not constitutional · Pivot Charter §7 independence-of-context invariant intact)"
+  amendments_pending_active_promotion:
+    - "§10.5.4b token cap ≤100k/fire (DEC-V61-073 H3)"
+    - "§10.5.4c interval ratchet 5→7→10→15→20 (DEC-V61-073 Q1c)"
+    - "§10.5.4a surface list 5→7 (DEC-V61-073 A4: correction_spec/ + .planning/case_profiles/)"
+    - "EXECUTOR_ABSTRACTION §X.Y hybrid-init OpenFOAM-truth invariant (DEC-V61-073 H4)"
+    - "§11.1 wire-up advisory mode (DEC-V61-073 A6)"
+    - "§11.5 umbrella for 2 pre-existing SSOT discrepancies (DEC-V61-073 A7)"
   methodology_guards_shipped:
     - "tools/methodology_guards/workbench_freeze.sh (§11.1)"
     - "tools/methodology_guards/workbench_quota_check.sh (§11.4)"

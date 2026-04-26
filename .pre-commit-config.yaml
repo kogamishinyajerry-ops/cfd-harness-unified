@@ -85,3 +85,17 @@ repos:
         stages: [pre-push]
         pass_filenames: false
         always_run: true
+
+      # §11.1 Workbench feature freeze · advisory mode (DEC-V61-073 A6)
+      # Active during dogfood window 2026-04-25 → 2026-05-19. After expiry,
+      # entry flips from advisory wrapper → strict workbench_freeze.sh.
+      # Authority: Methodology v2.0 §11.1 + DEC-V61-073 (independent
+      # Notion @Opus 4.7 audit Q4 finding "unwired = absent").
+      # Currently advisory: emits warning to stderr, never blocks.
+      - id: workbench-freeze-advisory
+        name: §11.1 Workbench feature freeze · advisory (dogfood window)
+        entry: tools/methodology_guards/workbench_freeze_advisory.sh
+        language: script
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
