@@ -579,6 +579,11 @@ class TestFoamAgentExecutor:
             assert p_match is not None
             assert float(p_match.group(1)) == pytest.approx(0.05)
 
+            # DEC-V61-064: kOmegaSSTSAS transient is now AIRFOIL default →
+            # PIMPLE block uses URFs 0.7 (vs steady SIMPLE 0.5). Test asserts
+            # PIMPLE block + URFs 0.7 + solver mode markers.
+            assert "PIMPLE" in fv_solution
+            assert "pimpleFoam" not in fv_solution  # solver invocation in controlDict, not fvSolution
             for field_name in ("U", "k", "omega"):
                 field_match = re.search(
                     rf"equations\s*\{{[^}}]*\b{field_name}\s+([0-9.eE+-]+);",
@@ -586,7 +591,7 @@ class TestFoamAgentExecutor:
                     re.S,
                 )
                 assert field_match is not None
-                assert float(field_match.group(1)) == pytest.approx(0.5)
+                assert float(field_match.group(1)) == pytest.approx(0.7)
 
             k_text = (case_dir / "0" / "k").read_text()
             omega_text = (case_dir / "0" / "omega").read_text()
@@ -598,6 +603,20 @@ class TestFoamAgentExecutor:
             assert float(k_match.group(1)) == pytest.approx(3.75e-5, rel=1e-6)
             # omega = sqrt(k) / (Cmu^0.25 * L) = sqrt(3.75e-5) / (0.5623 * 0.1) ≈ 0.109
             assert float(omega_match.group(1)) == pytest.approx(0.109, rel=0.05)
+
+            # DEC-V61-064 Stage A: transient infrastructure for kOmegaSSTSAS.
+            turbulence_text = (case_dir / "constant" / "turbulenceProperties").read_text()
+            assert "kOmegaSSTSAS" in turbulence_text
+            controlDict_text = (case_dir / "system" / "controlDict").read_text()
+            assert "application     pimpleFoam" in controlDict_text
+            assert "deltaT          0.0025" in controlDict_text
+            assert "endTime         10" in controlDict_text
+            assert "adjustTimeStep  yes" in controlDict_text
+            assert "maxCo           5.0" in controlDict_text
+            # forceCoeffs sample cadence is runTime-based for transient
+            assert "writeControl    runTime" in controlDict_text
+            fvSchemes_text = (case_dir / "system" / "fvSchemes").read_text()
+            assert "ddtSchemes { default backward; }" in fvSchemes_text
         finally:
             shutil.rmtree(case_dir, ignore_errors=True)
 
@@ -1128,9 +1147,10 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         result = executor.execute(make_airfoil_task())
 
         assert result.success is True
+        # DEC-V61-064: AIRFOIL → kOmegaSSTSAS → pimpleFoam (transient).
         assert commands[:2] == [
             "blockMesh",
-            "simpleFoam",
+            "pimpleFoam",
         ]
         assert 'transformPoints "scale=(1 0 1)"' not in commands
         assert "extrudeMesh" not in commands
