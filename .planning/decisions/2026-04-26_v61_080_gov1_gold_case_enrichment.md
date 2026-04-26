@@ -8,7 +8,7 @@ authored_under: GOV-1 v0.5 enrichment arc · Session B
 parent_session: anchor session post-independent-audit
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.90
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed81e88714f78500757f54)
 codex_tool_report_path: null  # docs-only changes; no source-code review needed
 risk_flags:
   - executable_smoke_test                           # not applicable (docs-only, no executable change)
