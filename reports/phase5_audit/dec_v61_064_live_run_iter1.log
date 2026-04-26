@@ -1,0 +1,23 @@
+/Users/Zhuanz/Desktop/cfd-s2-naca-sas/scripts/dec_v61_064_live_runs.py:294: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+DEC-V61-064 Stage E live-run driver · timestamp=20260426T014022Z
+
+=== α=+0.0° run start ===
+=== α=+0.0° run complete in 6.3s (success=False, exit=None) ===
+
+=== α=+4.0° run start ===
+=== α=+4.0° run complete in 7.8s (success=False, exit=None) ===
+
+=== α=+8.0° run start ===
+=== α=+8.0° run complete in 7.7s (success=False, exit=None) ===
+
+→ summary written: /Users/Zhuanz/Desktop/cfd-s2-naca-sas/reports/phase5_audit/dec_v61_064_live_summary.yaml
+
+=== HEADLINE VERDICT: PENDING ===
+{}
+
+sign_convention_alpha_eight:
+  Cl: null
+  expected: '>0'
+  pass: false
+

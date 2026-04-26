@@ -1,0 +1,52 @@
+/Users/Zhuanz/Desktop/cfd-s2-naca-sas/scripts/dec_v61_064_live_runs.py:294: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+DEC-V61-064 Stage E live-run driver · timestamp=20260426T014430Z
+
+=== α=+0.0° run start ===
+=== α=+0.0° run complete in 3938.9s (success=True, exit=None) ===
+
+=== α=+4.0° run start ===
+=== α=+4.0° run complete in 4863.1s (success=True, exit=None) ===
+
+=== α=+8.0° run start ===
+=== α=+8.0° run complete in 5128.4s (success=True, exit=None) ===
+
+→ summary written: /Users/Zhuanz/Desktop/cfd-s2-naca-sas/reports/phase5_audit/dec_v61_064_live_summary.yaml
+
+=== HEADLINE VERDICT: FAIL: ['lift_coefficient_alpha_eight', 'drag_coefficient_alpha_zero', 'lift_slope_dCl_dalpha_linear_regime'] ===
+lift_coefficient_alpha_eight:
+  value: 0.7057213
+  gold: 0.815
+  rel_error: 0.13408429447852754
+  tolerance: 0.05
+  pass: false
+  role: HEADLINE_PRIMARY_SCALAR
+drag_coefficient_alpha_zero:
+  value: 0.01257944
+  gold: 0.008
+  rel_error: 0.5724300000000001
+  tolerance: 0.15
+  pass: false
+  role: SAME_RUN_CROSS_CHECK
+lift_slope_dCl_dalpha_linear_regime:
+  value: 0.08821206296250002
+  intercept: 0.004623846916666545
+  linearity_check_applicable: true
+  linearity_ok: true
+  linearity_residual: 0.019550425713352384
+  n_points: 3
+  gold: 0.105
+  rel_error: 0.15988511464285693
+  tolerance: 0.1
+  pass: false
+  role: QUALITATIVE_GATE
+
+sanity_cl_at_alpha_zero:
+  value: 2.47963e-05
+  abs_band: 0.005
+  pass: true
+sign_convention_alpha_eight:
+  Cl: 0.7057213
+  expected: '>0'
+  pass: true
+

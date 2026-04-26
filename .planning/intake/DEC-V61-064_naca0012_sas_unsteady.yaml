@@ -1,0 +1,254 @@
+# DEC-V61-064 · NACA0012 kOmegaSSTSAS (Scale-Adaptive URAS) transient simulation
+# Intake v1 · Stage 0 · 2026-04-26
+# Predecessor V61-063 closed at architectural_ceiling_reached on steady RANS
+# (4 ceilings established: mesh, topology, wall functions, turbulence model
+# class).
+#
+# Per RETRO-V61-063 followup: PRIMARY is full LES, SECONDARY is SAS hybrid.
+# V61-064 takes SECONDARY first because: (a) LES on V61-061 H-grid (96k, RANS-
+# resolved) likely needs much finer mesh — separate arc; (b) SAS is the cheapest
+# transient option that still tests the unsteady-physics axis; (c) if SAS fails
+# decisively, V61-065 commits to full LES with proper mesh design.
+
+dec_id: DEC-V61-064
+title: NACA0012 kOmegaSSTSAS transient · close steady-RANS ceiling via unsteady physics axis · methodology v2.2 first-apply
+case_id: naca0012_airfoil
+predecessor: DEC-V61-063
+predecessor_chain: [DEC-V61-058, DEC-V61-061, DEC-V61-062, DEC-V61-063]
+methodology_version: "v2.2 (first-apply, post-V61-053+057+058+061+062+063 + RETRO-V61-063 amendments)"
+case_type: II  # inherited from V61-058
+autonomous_governance: true
+
+# §1 Scope (in/out)
+scope:
+  in:
+    - "Switch turbulence model in `_generate_airfoil_flow` from kOmegaSST → kOmegaSSTSAS (OF10 RAS module, scale-adaptive URAS — verified at /opt/openfoam10/src/MomentumTransportModels/momentumTransportModels/RAS/kOmegaSSTSAS)"
+    - "Switch solver: simpleFoam (steady) → pimpleFoam (transient PISO+SIMPLE)"
+    - "Solver dispatcher (FoamAgentExecutor) AIRFOIL branch updated to route to pimpleFoam for kOmegaSSTSAS model selection"
+    - "controlDict transient block: deltaT computed from Co (CFL) target; endTime ~10 chord-flow-throughs (10·chord/U_inf = 10s); writeInterval at write-window cadence"
+    - "fvSchemes ddtSchemes default: steadyState → backward (2nd-order implicit) for transient"
+    - "fvSolution: SIMPLE block → PIMPLE block (nOuterCorrectors=1, nCorrectors=2)"
+    - "forceCoeffs FO time-averaging window: writeStart=5s (after 5-chord initial transient), accumulate to endTime=10s for 5-chord time-average"
+    - "Force-coefficient extractor (`compute_cl_cd`): reuse final-time-row reduction (last force coeffs are time-averaged at end of writeWindow)"
+    - "Mesh: V61-061 H-grid 96k cells UNCHANGED (per RETRO-V61-063 v2.2 amendment 3 — single-axis change at a time)"
+    - "Wall functions: V61-061 baseline (nutkWallFunction + kqRWallFunction) UNCHANGED"
+    - "Turbulence intensity: revert to V61-058+V61-061 default Tu=0.5% (intermediate between V61-063 iter1 0.18% and iter2 1.0%; SAS doesn't have transition formula sensitivity)"
+    - "Re-run Stage E sweep at α∈{0,4,8}° using cloned scripts/dec_v61_064_live_runs.py"
+    - "Verify V61-058 hard gates: Cl@α=8°≈0.815 (5%), Cd@α=0°≈0.008 (15%), dCl/dα≈0.105/deg (10%)"
+    - "Verify smoke + sanity: |Cl@α=0°|<0.005, sign convention Cl@α=+8°>0"
+  out:
+    - "Mesh changes (V61-061 H-grid LOCKED — per RETRO-V61-063 single-axis)"
+    - "Gold YAML hard-gate value changes (locked since V61-058 A1)"
+    - "Extractor logic core (forceCoeffs final-time-row already produces time-averaged value when applied to PIMPLE output)"
+    - "Audit fixture format (Stage D regenerates from new run)"
+    - "New gates / new observables (no transient-specific observables; reuse RANS gates on time-averaged values)"
+    - "γ-Re_θt fields (V61-063 wired but not used here; SAS subsumes transition modeling internally)"
+    - "Full LES (deferred to V61-065 if V61-064 SAS also fails)"
+    - "Stall regime / finite-AR / compressibility / 3D effects"
+    - "Other case meshes (V61-064 touches only `_generate_airfoil_flow` + dispatcher route)"
+
+# §2 Hard gates (inherited verbatim from V61-058 §3)
+hard_gates:
+  - id: lift_coefficient_alpha_eight
+    role: HEADLINE_PRIMARY_SCALAR
+    target: 0.815
+    tolerance: 0.05
+    source: "Ladson 1988 NASA TM-4074 §3.2 Tab.1 Re=3e6"
+    v61_058_actual: 0.491   # 40% under
+    v61_061_actual: 0.677   # 17% under
+    v61_062_actual: NaN     # diverged
+    v61_063_actual: 0.6763  # 17% under (no improvement vs V61-061)
+  - id: drag_coefficient_alpha_zero
+    role: SAME_RUN_CROSS_CHECK
+    target: 0.0080
+    tolerance: 0.15
+    source: "Ladson 1988 same"
+    v61_058_actual: 0.0201
+    v61_061_actual: 0.0126
+    v61_062_actual: NaN
+    v61_063_actual: 0.01270
+  - id: lift_slope_dCl_dalpha_linear_regime
+    role: QUALITATIVE_GATE
+    target: 0.105
+    tolerance: 0.10
+    source: "Ladson 1988 + Abbott 1959 cross-check"
+    v61_058_actual: 0.061
+    v61_061_actual: 0.0844
+    v61_062_actual: NaN
+    v61_063_actual: 0.08453
+
+smoke_assertions:
+  - "α=+8° → Cl > 0 strictly (time-averaged)"
+  - "α=0° → |Cl| < 0.005 (time-averaged; transient symmetry-breaking expected to wash out over 5-chord average)"
+
+advisory:
+  y_plus_max:
+    band: [11, 500]
+    target: ~30  # log-layer wall-function sweet spot (UNCHANGED from V61-061/V61-063)
+
+# §3 Technical hypothesis
+hypothesis: |
+  V61-058 → V61-061 → V61-062 → V61-063 progression decisively established
+  the steady RANS k-ω SST framework ceiling at Cl@α=8°=0.677 across:
+  (1) mesh density (V61-058 16k → V61-061 96k: closed 23 pp, plateaued)
+  (2) topology (V61-062 C-grid: NaN-diverged before completing)
+  (3) wall function regime (V61-062 LowRe + iter4 hybrid: ceiling)
+  (4) turbulence model class within steady RANS (V61-063 kOmegaSSTLM γ-Re_θt
+      with Tu sweep 5.5×: 0% Cl@α=8 movement)
+
+  Hypothesis: the missing physics axis is *unsteadiness*. NACA0012 at α=8° in
+  the Ladson 1988 wind tunnel may have small-scale vortex shedding / BL
+  unsteadiness on the suction side that steady RANS time-averages incorrectly
+  (over-predicts BL turbulence dissipation → under-predicts pressure recovery
+  → under-predicts Cl). kOmegaSSTSAS scale-adaptive URAS detects detached/
+  unsteady regions and switches to LES-like behavior, potentially capturing
+  this physics.
+
+  Risk acknowledgment: V61-061's H-grid is RANS-resolved (96k cells, y+~30,
+  designed for wall-modeled steady RANS). SAS in detached regions wants to
+  produce LES-like content but on a mesh that can't resolve it — the model
+  may degenerate to standard kOmegaSST in this regime, producing Cl@α=8 ≈ 0.677
+  again (V61-063 outcome). This is the SECONDARY recommendation precisely because
+  of this risk; if it fails, V61-065 commits to full LES with proper mesh.
+
+  Expected outcomes (pre-registered):
+  - Cl@α=8° within 5%: PASS (low likelihood ~10%)
+  - Cl@α=8° improvement vs V61-061 by ≥5 pp: medium likelihood ~30%
+  - Cl@α=8° identical to V61-061/V61-063 (~0.677): high likelihood ~60% — confirms ceiling
+  - Cl@α=8° worse than V61-061: low likelihood ~15% (numerical instability of transient + RANS-mesh mismatch)
+
+  Note: convergence here is qualitatively different from steady RANS. We
+  monitor time-averaged Cl/Cd over 5-chord-flow-throughs after 5-chord initial
+  transient. If Cl oscillates with bounded amplitude around mean, that's
+  physical vortex shedding (gold). If Cl drifts unboundedly, it's NaN
+  divergence (architectural_ceiling_reached early termination).
+
+# §4 Wall-clock budget
+runtime_budget:
+  per_alpha_target_s: 7200   # 2 hours
+  per_alpha_max_s: 18000     # 5 hours hard ceiling
+  total_sweep_target_s: 21600  # 6 hours for 3-α sweep
+  iteration_max_count: 4    # per RETRO-V61-062 L5
+  early_termination: "k bounding event with k_max > 1e6 → hard early-termination per RETRO-V61-062 v2.1 amendment 3; SAS-specific: any unbounded Cl drift past iteration N=2000 with rolling-window stddev > 5× signal magnitude"
+
+# §5 Codex budget + self-pass-rate calibration
+codex_budget_rounds: 0  # autonomous closeout per V61-061+V61-062+V61-063 precedent
+external_gate_self_estimated_pass_rate: 0.10
+# Per RETRO-V61-063 anchor at ≤0.20 for prior-ceiling geometry arcs.
+# V61-064 estimated 0.10 (at the floor) because:
+# - V61-061→V61-063 establishes Cl@α=8°=0.677 as the steady-RANS ceiling
+# - SAS on RANS-resolved mesh is well-known to underperform full LES
+# - Most likely outcome: SAS converges to same Cl ≈ 0.677 → null result confirming ceiling
+# - PASS requires actual unsteady physics being captured AND that physics
+#   actually moving the time-averaged Cl by ≥17%; this is a strong claim
+external_gate_self_estimated_pass_rate_4iter: 0.30
+# 4-iter estimate: iter1 SAS baseline; iter2 might tweak deltaT/Co or
+# averaging window; iter3+iter4 likely diminishing returns. If iter1 shows
+# Cl@α=8 unchanged from steady RANS, declare ceiling at 2/4 (per RETRO-V61-063
+# L5 — 2-iter ceiling judgment as parallel to 4-iter exhaustion).
+
+# §6 Risk flags (per RETRO-V61-063 v2.2 amendment 3 — single-axis principle)
+risk_flags:
+  - id: solver_class_change_steady_to_transient  # NEW for V61-064
+    note: "Multi-axis change: turbulence model + solver + controlDict + fvSchemes + fvSolution + extractor handling. RETRO-V61-063 v2.2 amendment 3 wanted single-axis but SAS REQUIRES transient — these are linked, not independent. All changes are co-located in `_generate_airfoil_flow` + `execute()` dispatch; intake §1 explicitly enumerates the linked changes."
+    mitigation: "Stage A test: assert pimpleFoam dispatched, ddtScheme=backward, PIMPLE block in fvSolution, kOmegaSSTSAS in turbulenceProperties. Live-run smoke at α=0° before launching full sweep — catches divergence early."
+  - id: ras_mesh_for_unsteady  # NEW for V61-064
+    note: "V61-061 H-grid is RANS-resolved (96k cells, y+~30). SAS in detached regions wants LES-like content; on this mesh SAS may degenerate to standard kOmegaSST. Expected outcome: similar Cl to V61-061/V61-063."
+    mitigation: "Pre-register null-result expectation in §5 (60% likelihood). If SAS degenerates to RANS, it's confirmation of ceiling — informative for V61-065 LES decision."
+  - id: time_averaging_window_sufficiency  # NEW for V61-064
+    note: "5-chord-flow-through averaging window after 5-chord transient. May be too short if vortex shedding period is long. NACA0012 at α=8° has small-scale TE shedding; 5-chord averaging should capture statistical convergence."
+    mitigation: "writeInterval set to small window; can analyze instantaneous samples to verify mean has converged within budget."
+  - id: cfl_choice_for_pimplefoam  # NEW for V61-064
+    note: "deltaT controls CFL (Co). Too large → divergence; too small → wasted compute. Default Co~1 for pimpleFoam stability."
+    mitigation: "Co target = 5 (PIMPLE allows higher Co than PISO via outer corrector iteration). deltaT auto-computed from Co * dx_min / |U|. dx_min from V61-061 mesh ~5e-4 m (BL first cell), Umax~1 m/s → deltaT ~ 2.5e-3s. endTime=10s → ~4000 timesteps. Reasonable budget."
+  - id: solver_stability_on_novel_geometry
+    note: "OPEN from V61-053/V61-058/V61-061/V61-062/V61-063. Solver stability for kOmegaSSTSAS+pimpleFoam on V61-061 mesh is the V61-064-specific gate."
+  - id: regression_on_v61_058_test_class
+    note: "TestNACA0012MultiDim's 40 unit tests must continue to pass — they test extractor + α-routing logic, not turbulence model or solver. Synthetic fixtures don't depend on real solver invocation."
+
+# §7 Stages
+stages:
+  - id: A
+    scope: |
+      Multi-axis but linked change to `_generate_airfoil_flow` + dispatcher:
+      - constant/turbulenceProperties: RASModel kOmegaSST → kOmegaSSTSAS
+      - solver routing in execute(): airfoil simpleFoam → pimpleFoam
+      - system/controlDict: transient block (deltaT, runTime/writeInterval)
+      - system/fvSchemes: ddtSchemes default backward
+      - system/fvSolution: SIMPLE block → PIMPLE block
+      - forceCoeffs FO: writeControl runTime; writeInterval at samplePeriod
+      - 0/k, 0/omega, 0/U, 0/p, 0/nut: same as V61-061 baseline (no new fields needed for SAS)
+      Tests: assert turbulenceProperties contains kOmegaSSTSAS, controlDict has
+      deltaT and runTime (not stopAt endTime alone), fvSchemes ddtSchemes=backward,
+      fvSolution PIMPLE block.
+    commit_count_estimate: 1-2
+    iteration_ceiling: 1
+  - id: E
+    scope: "Live OpenFOAM sweep at α∈{0,4,8}° using cloned scripts/dec_v61_064_live_runs.py. 5-chord initial transient + 5-chord time-averaging window. Iterate if any HARD gate FAILs OR solver diverges."
+    commit_count_estimate: 2-4
+    iteration_ceiling: 4  # per RETRO-V61-062 L5 + RETRO-V61-063 L5
+
+# §8 Stage-E close conditions
+stage_e_close_checklist:
+  - item: "Cl@α=8° within 5% of 0.815 (HEADLINE) — time-averaged"
+    required: true
+  - item: "Cd@α=0° within 15% of 0.0080 (CROSS_CHECK) — time-averaged"
+    required: true
+  - item: "dCl/dα within 10% of 0.105 (QUALITATIVE)"
+    required: true
+  - item: "|Cl@α=0°| < 0.005 (SANITY) — time-averaged"
+    required: true
+  - item: "Cl@α=+8° > 0 strictly (sign convention smoke) — time-averaged"
+    required: true
+  - item: "y+_max in [11, 500] (advisory PASS band)"
+    required: false
+  - item: "All 3 α cases solver-converge (no NaN, bounded Cl excursion < 5×|signal mean|)"
+    required: true
+  - item: "TestNACA0012MultiDim continues to pass (40+ tests)"
+    required: true
+  - item: "Per-α wall clock ≤ 5 hours (intake §4 budget ceiling)"
+    required: true
+  - item: "Time-averaging window covers ≥5 chord-flow-throughs"
+    required: true
+
+# §9 Self-review pre-Stage-A (no Codex available autonomously)
+self_review_pre_stage_a:
+  - check: "Scope is bounded (turbulence + solver + controlDict + fvSchemes + fvSolution; mesh + extractor core UNCHANGED)"
+    verdict: PASS
+    evidence: "§1 out-of-scope explicitly excludes: mesh changes, gold YAML hard gates, extractor logic core, full LES, other case meshes. The in-scope changes are linked (SAS REQUIRES transient) — single-axis principle preserved at the physics level even though it requires multi-file code change."
+  - check: "Hard gates inherited verbatim from V61-058 (no quiet relaxation)"
+    verdict: PASS
+    evidence: "§2 cites V61-058 §3 verbatim; tolerances unchanged; predecessor actuals tabulated for V61-058/061/062/063."
+  - check: "Hypothesis pre-registered (RETRO-V61-063 followup-aligned, not retrofit)"
+    verdict: PASS
+    evidence: "§3 references RETRO-V61-063 directly; SAS is the SECONDARY recommendation; mesh kept at V61-061 baseline per single-axis principle. Outcome distribution explicitly pre-registered with 4 categories and likelihoods."
+  - check: "Iteration ceiling bounded; SAS-specific divergence trigger pre-registered"
+    verdict: PASS
+    evidence: "§7 Stage E iteration_ceiling=4; §4 early_termination explicitly registers SAS-specific 'unbounded Cl drift past iter 2000 with rolling-window stddev > 5× signal magnitude' as hard stop."
+  - check: "Smoke + sanity assertions robust against the model+solver change"
+    verdict: PASS
+    evidence: "α=0° |Cl|<0.005 SANITY now applies to time-averaged Cl. Transient symmetry-breaking is expected to wash out over 5-chord average. Pre-registered in smoke_assertions list."
+  - check: "Pass rate self-estimate (0.10) calibrated; below RETRO-V61-063 ≤0.20 anchor"
+    verdict: PASS
+    evidence: |
+      §5 explains 0.10 floor: V61-058→V61-063 established Cl@α=8°=0.677 as the
+      robust steady-RANS ceiling. SAS on RANS-resolved mesh is well-known to
+      underperform; most likely outcome is null result confirming ceiling.
+      RETRO-V61-063 v2.2 amendment 4 says ≤0.20; V61-064 sets 0.10 because
+      this is the FIRST UNSTEADY arc and the mesh is suboptimal.
+  - check: "Out-of-scope guardrails prevent scope creep mid-arc"
+    verdict: PASS
+    evidence: "§1 explicit out list. If iter reveals need for new mesh, halt and open V61-065 instead of bleeding scope. No mid-arc gold YAML or extractor changes."
+
+# §10 Followup if V61-064 closes successfully
+followup:
+  - "RETRO addendum: V61-064 first-apply of methodology v2.2; document the 'linked multi-axis change' pattern (SAS requires transient) as legitimate exception to single-axis principle"
+  - "Knowledge: case_profile risk_flag ras_mesh_for_unsteady → reusable for any future hybrid RANS-LES arc"
+  - "NACA0012 case status: iteration_improvement → gold_validated (if all 3 hard gates clear at time-averaged)"
+
+# §11 Followup if V61-064 reaches architectural_ceiling_reached
+ceiling_protocol:
+  - "Write retro per RETRO-V61-001 trigger #4 (iter ceiling)"
+  - "V61-065 PRIMARY: full LES (WALE or k-equation SGS) on REFINED H-grid (~500k+ cells, y+<5 wall-resolved). Compute cost ~15-20× steady RANS per α."
+  - "If V61-065 LES also fails: park NACA0012 at V61-061 iteration_improvement baseline; document as 'physics-modeling ceiling on this harness's available methodology, would require DNS or detailed wind-tunnel analysis to close'"
+  - "Possible structural conclusion: Ladson 1988 ±5% measurement uncertainty may be optimistic; or 2D simulations cannot reproduce 3D wind-tunnel sidewall effects at Re=3e6"

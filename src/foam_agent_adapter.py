@@ -666,10 +666,17 @@ class FoamAgentExecutor:
                         )
                     self._generate_circular_cylinder_wake(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.AIRFOIL:
-                solver_name = "simpleFoam"
+                # DEC-V61-064: kOmegaSSTSAS is scale-adaptive URAS (Unsteady RAS)
+                # — REQUIRES transient solver (pimpleFoam, NOT simpleFoam).
+                # _turbulence_model_for_solver returns kOmegaSSTSAS for AIRFOIL;
+                # solver selection follows the model selection.
                 turbulence_model = self._turbulence_model_for_solver(
-                    solver_name, task_spec.geometry_type, task_spec.Re
+                    "pimpleFoam", task_spec.geometry_type, task_spec.Re
                 )
+                if turbulence_model == "kOmegaSSTSAS":
+                    solver_name = "pimpleFoam"
+                else:
+                    solver_name = "simpleFoam"
                 self._generate_airfoil_flow(case_host_dir, task_spec, turbulence_model)
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
@@ -811,12 +818,16 @@ class FoamAgentExecutor:
         """Auto-select turbulence model based on solver family.
 
         Core rule: buoyantFoam family -> kEpsilon (avoids OF10 kOmegaSST dimension bug);
-        SIMPLE_GRID laminar -> laminar; others -> kOmegaSST.
+        SIMPLE_GRID laminar -> laminar; AIRFOIL -> kOmegaSSTSAS (scale-adaptive
+        URAS per DEC-V61-064 — addresses V61-058→V61-063 steady-RANS ceiling
+        via unsteady physics axis on V61-061 H-grid); others -> kOmegaSST.
         """
         if "buoyant" in solver_name:
             return "kEpsilon"
         if geometry_type == GeometryType.SIMPLE_GRID and Re is not None and Re < 2300:
             return "laminar"
+        if geometry_type == GeometryType.AIRFOIL:
+            return "kOmegaSSTSAS"
         return "kOmegaSST"
 
     @staticmethod
@@ -6405,15 +6416,21 @@ boundaryField
             )
 
     def _generate_airfoil_flow(
-        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSST"
+        self, case_dir: Path, task_spec: TaskSpec, turbulence_model: str = "kOmegaSSTSAS"
     ) -> None:
-        """Generate airfoil external flow case files (simpleFoam steady k-omega SST).
+        """Generate airfoil external flow case files.
+
+        DEC-V61-064: when turbulence_model == kOmegaSSTSAS (scale-adaptive URAS),
+        switches to transient pimpleFoam infrastructure (controlDict deltaT/runTime,
+        fvSchemes ddtSchemes=backward, fvSolution PIMPLE block, forceCoeffs
+        time-averaging window). Otherwise emits steady simpleFoam infrastructure.
 
         Uses the tutorial six-block topology in the x-z plane, but keeps all
         shared block vertices explicit to avoid blockMesh projection drift at
         block interfaces. Only the airfoil boundary edges are projected onto
         the real NACA0012 surface for Cp extraction.
         """
+        is_transient = (turbulence_model == "kOmegaSSTSAS")
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
         (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
@@ -6736,6 +6753,13 @@ nu              [0 2 -1 0 0 0 0] {nu_val:.6e};
             encoding="utf-8",
         )
 
+        # DEC-V61-064: kOmegaSSTSAS requires `delta` keyword (LES-style filter
+        # length scale for the SAS source term). Use cubeRootVol — standard for
+        # unstructured/hex meshes (V61-061 H-grid). Other models don't read it.
+        if is_transient:
+            sas_delta_block = "    delta         cubeRootVol;\n"
+        else:
+            sas_delta_block = ""
         (case_dir / "constant" / "turbulenceProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\
@@ -6760,7 +6784,7 @@ RAS
     RASModel      {turbulence_model};
     turbulence    on;
     printCoeffs   on;
-}}
+{sas_delta_block}}}
 
 // ************************************************************************* //
 """,
@@ -6772,7 +6796,55 @@ RAS
         # forceCoeffs liftDir/dragDir + Aref are α-derived. Static prefix uses
         # plain string to avoid mass-escaping `{` `}` (python_version_parity
         # risk on 3.9 nested f-strings).
-        controlDict_static = """\
+        if is_transient:
+            # DEC-V61-064: pimpleFoam transient. deltaT chosen for Co~5
+            # (PIMPLE allows higher Co than PISO via outer corrector iter).
+            # V61-061 mesh first BL cell ~5e-4 m, U_inf=1 m/s → deltaT=2.5e-3s
+            # for Co=5. endTime=10s = 10 chord-flow-throughs (chord/U=1s).
+            # writeInterval=0.1s captures forceCoeffs at 100 samples; 5-chord
+            # initial transient + 5-chord time-averaging window.
+            controlDict_static = """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     pimpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+// DEC-V61-064: 10 chord-flow-throughs (U=1, chord=1 → 1s/flow-through).
+// 5s initial transient + 5s time-averaging window for forceCoeffs.
+endTime         10;
+deltaT          0.0025;
+writeControl    runTime;
+writeInterval   1.0;
+purgeWrite      2;
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+adjustTimeStep  yes;
+maxCo           5.0;
+maxDeltaT       0.005;
+
+"""
+        else:
+            controlDict_static = """\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -6822,6 +6894,13 @@ runTimeModifiable true;
         # band [11, 500] applied at extractor level).
         thin_span = y_hi - y_lo  # = 0.002 m
         Aref_m2 = chord * thin_span  # = 0.002 m² for chord=1.0
+        # DEC-V61-064: forceCoeffs sample cadence depends on solver mode.
+        if is_transient:
+            fc_writeControl = "runTime"
+            fc_writeInterval = "0.05"   # 0.05s sampling = 20Hz; ~200 samples in 10s endTime
+        else:
+            fc_writeControl = "timeStep"
+            fc_writeInterval = "1"
         controlDict_functions = f"""\
 // DEC-V61-044: in-solver surface sampler on the `aerofoil` patch
 // (note British spelling — matches blockMesh patch name). Emits
@@ -6868,8 +6947,12 @@ functions
     {{
         type            forceCoeffs;
         libs            ("libforces.so");
-        writeControl    timeStep;
-        writeInterval   1;
+        // DEC-V61-064: writeControl differs by solver mode.
+        // Steady (simpleFoam): timeStep, every iteration.
+        // Transient (pimpleFoam): runTime, every 0.05s (~20Hz sampling)
+        // — captures vortex shedding for time-averaging.
+        writeControl    {fc_writeControl};
+        writeInterval   {fc_writeInterval};
         patches         (aerofoil);
         rho             rhoInf;
         rhoInf          1.0;
@@ -6905,9 +6988,61 @@ functions
             encoding="utf-8",
         )
 
+        # DEC-V61-064: ddtSchemes default differs by solver mode.
+        # Steady (simpleFoam): steadyState (no time derivative).
+        # Transient (pimpleFoam): backward (2nd-order implicit, stable for SAS).
+        ddt_default = "backward" if is_transient else "steadyState"
         (case_dir / "system" / "fvSchemes").write_text(
-            """\
-/*--------------------------------*- C++ -*---------------------------------*\
+            f"""\
+/*--------------------------------*- C++ -*---------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes {{ default {ddt_default}; }}
+gradSchemes {{
+    default         Gauss linear;
+    limited         cellLimited Gauss linear 1;
+    grad(U)         $limited;
+    grad(k)         $limited;
+    grad(omega)     $limited;
+}}
+divSchemes {{
+    default         none;
+    div(phi,U)      bounded Gauss upwind;
+    div(phi,k)      bounded Gauss upwind;
+    div(phi,omega)  bounded Gauss upwind;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}}
+laplacianSchemes {{ default Gauss linear corrected; }}
+interpolationSchemes {{ default linear; }}
+snGradSchemes {{ default corrected; }}
+wallDist {{ method meshWave; }}
+
+// ************************************************************************* //
+""",
+            encoding="utf-8",
+        )
+
+        # DEC-V61-064: fvSolution outer block differs by solver mode.
+        # Steady (simpleFoam): SIMPLE block with residualControl.
+        # Transient (pimpleFoam): PIMPLE block with nOuterCorrectors+nCorrectors.
+        if is_transient:
+            fvsol = (
+                """\
+/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  10                                    |
@@ -6920,38 +7055,45 @@ FoamFile
     format      ascii;
     class       dictionary;
     location    "system";
-    object      fvSchemes;
+    object      fvSolution;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-ddtSchemes { default steadyState; }
-gradSchemes {
-    default         Gauss linear;
-    limited         cellLimited Gauss linear 1;
-    grad(U)         $limited;
-    grad(k)         $limited;
-    grad(omega)     $limited;
+solvers
+{
+    p { solver GAMG; smoother GaussSeidel; tolerance 1e-6; relTol 0.05; }
+    pFinal { $p; relTol 0; }
+    U { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    UFinal { $U; relTol 0; }
+    k { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    kFinal { $k; relTol 0; }
+    omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    omegaFinal { $omega; relTol 0; }
 }
-divSchemes {
-    default         none;
-    div(phi,U)      bounded Gauss upwind;
-    div(phi,k)      bounded Gauss upwind;
-    div(phi,omega)  bounded Gauss upwind;
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+
+PIMPLE
+{
+    nOuterCorrectors  2;
+    nCorrectors       2;
+    nNonOrthogonalCorrectors 1;
+    momentumPredictor true;
+    pRefCell          0;
+    pRefValue         0;
 }
-laplacianSchemes { default Gauss linear corrected; }
-interpolationSchemes { default linear; }
-snGradSchemes { default corrected; }
-wallDist { method meshWave; }
+
+relaxationFactors
+{
+    fields  { p 0.5; pFinal 1.0; }
+    equations { U 0.7; UFinal 1.0; k 0.7; kFinal 1.0; omega 0.7; omegaFinal 1.0; }
+}
 
 // ************************************************************************* //
-""",
-            encoding="utf-8",
-        )
-
-        fvsol = (
-            """\
-/*--------------------------------*- C++ -*---------------------------------*\
+"""
+            )
+        else:
+            fvsol = (
+                """\
+/*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  10                                    |
@@ -7000,7 +7142,7 @@ relaxationFactors
 
 // ************************************************************************* //
 """
-        )
+            )
         (case_dir / "system" / "fvSolution").write_text(fvsol, encoding="utf-8")
 
         # DEC-V61-058 B1: Ux/Uz come from α-rotated freestream (Ux_inf, Uz_inf
