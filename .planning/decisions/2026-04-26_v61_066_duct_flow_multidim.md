@@ -40,7 +40,7 @@ external_gate_actual_outcome_partial: |
   drift remained. R3 ACTUAL=100% (APPROVE, 0 residuals) vs Codex R2's
   recalibration target 0.75-0.80 — the spec cleanup landed verbatim and the
   intake is internally consistent.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed81899e35fc9d74e71f9d)
 codex_tool_report_path:
   - reports/codex_tool_reports/dec_v61_066_round1_review.md
   - reports/codex_tool_reports/dec_v61_066_round2_review.md
