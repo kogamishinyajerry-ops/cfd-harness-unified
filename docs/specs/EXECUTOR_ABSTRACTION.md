@@ -16,7 +16,7 @@ authoritative_consumers:
   - src/audit_package/sign.py (HMAC signing — covers `executor` field)
   - src/foam_agent_adapter.py (FoamAgentExecutor wrapped as DOCKER_OPENFOAM mode)
   - src/task_runner.py (TaskRunner dispatch on ExecutorMode)
-  - src/cfd_harness/trust_core/** (TrustGate routing per §6 — read-only consumer of this spec)
+  - src/metrics/** (TrustGate routing per §6 — read-only consumer of this spec; Plane.EVALUATION per ADR-001 line 73)
 ratification_pre_conditions_for_p2_t1:
   - PC-1: DEC-V61-073 (this DEC) Status=Accepted
   - PC-2: this spec §5 + §6 landed + Codex APPROVE
@@ -41,8 +41,9 @@ This spec is the **repo-local canonical mirror** of the Notion
 EXECUTOR_ABSTRACTION canonical doc (page id
 `ecee8d970e8148ec8c714eba8f250110`). On disagreement, **the file you
 are reading wins** — the Notion page mirrors this file post-merge, not
-the other way around (per `MODEL_ROUTING.md` "git is verifiable code
-state + frontmatter truth").
+the other way around (per `~/.claude/MODEL_ROUTING.md` "git is the
+verifiable code state + frontmatter truth; Notion is the human-readable
+decision portal").
 
 P2-T1 (DEC-V61-074, ExecutorMode ABC + 4-mode skeleton) is blocked
 until §5 + §6 land here AND Codex APPROVES this v0.2.
@@ -95,8 +96,8 @@ Properties (preserved from v0.1):
 
 | Mode | Produces canonical artifacts? | Subject to TrustGate full triad? | Notes |
 | --- | --- | --- | --- |
-| `mock` | No (synthetic artifacts) | No — ceiling `PASS_WITH_DISCLAIMER` | Used for plumbing tests + UI demos. Never "PASS". |
-| `docker_openfoam` | Yes — direct OpenFOAM solve | Yes — full triad | Reference truth source. |
+| `mock` | No (synthetic artifacts) | No — ceiling `WARN` (note `mock_executor_no_truth_source`) | Used for plumbing tests + UI demos. Never "PASS". |
+| `docker_openfoam` | Yes — direct OpenFOAM solve | Yes — full triad `PASS / WARN / FAIL` | Reference truth source. |
 | `hybrid_init` | Yes — final OpenFOAM solve outputs (initializer artifacts excluded) | Yes — defers to OpenFOAM artifact (§5) | Surrogate is non-canonical input. |
 | `future_remote` | (stub only this milestone) | (n/a — stub) | DEC-V61-078 sets the contract once a real backend lands. |
 
@@ -122,18 +123,35 @@ canonical_artifacts(execute(e=DOCKER_OPENFOAM, c, s))
 
 where:
 
-- `canonical_artifacts(...)` is the set of files committed to
-  `reports/{case_id}/artifacts/` after run completion that the
-  AuditPackage manifest pins as **physical-truth-source artifacts** —
-  specifically: `solver_log_tail`, `final_residuals`,
-  `postProcessing/` outputs, `system/controlDict`, `system/blockMeshDict`,
-  and `0/` initial field files **after the OpenFOAM solver writes them
-  back** (i.e., the post-solve `0/` snapshot, not the pre-solve
-  initializer-warm-start state).
-- `≡_bytes` is byte-for-byte equality.
+- `canonical_artifacts(...)` is the set of fields the AuditPackage
+  manifest pins as **physical-truth-source artifacts** for a run. As
+  of `src/audit_package/manifest.py` (SCHEMA_VERSION = 1), this set is:
+  - **Run inputs** (`inputs` dict): `system/controlDict`,
+    `system/blockMeshDict`, `system/fvSchemes`, `system/fvSolution`,
+    `0/` (initial-field files **after the OpenFOAM solver writes them
+    back** — i.e., the post-solve `0/` snapshot, not the pre-solve
+    initializer-warm-start state).
+  - **Run outputs** (`outputs` dict): `solver_log_name`,
+    `solver_log_tail` (the tail of the solver log, which embeds final
+    residuals + completion banner — see manifest.py docstring at line
+    207), and `postProcessing_sets_files` (sorted listing of
+    `postProcessing/sets/` output files).
+  These fields are extracted by `manifest.py:_collect_run_outputs` /
+  `_collect_run_inputs` and serialized byte-deterministically by
+  `serialize.py` (`json.dumps(..., sort_keys=True)`, repo-relative
+  POSIX paths, caller-injectable timestamps).
+- `≡_bytes` is byte-for-byte equality of the serialized manifest's
+  `inputs` + `outputs` subtrees (the rest of the manifest — git SHA,
+  decision-trail glob, comparator verdict — is not part of the
+  canonical-artifacts contract).
 - `seed s` is captured by the
   `controlDict.startTime + writeInterval + randomSeed` triple where
   applicable.
+
+If the AuditPackage manifest schema evolves (e.g. SCHEMA_VERSION 2
+adds `final_residuals` as a top-level field rather than embedded in
+`solver_log_tail`), the canonical_artifacts set above MUST be amended
+in lockstep via a §5.1 update DEC.
 
 ### §5.2 · Surrogate-as-initializer is non-canonical
 
@@ -144,8 +162,9 @@ excluded** from `canonical_artifacts(...)`.
 The invariant requires that the surrogate's contribution is **washed
 out** by the OpenFOAM solver's convergence. If it isn't, the case is
 malformed for hybrid-init use and the executor MUST return a
-`MODE_NOT_APPLICABLE_FOR_THIS_CASE` status instead of producing a
-divergent canonical artifact set.
+`MODE_NOT_APPLICABLE` status (the canonical name used throughout this
+spec and the §5.4 test suite) instead of producing a divergent
+canonical artifact set.
 
 ### §5.3 · Out-of-scope (clarifications)
 
@@ -182,11 +201,19 @@ P2-T1 ratification:
 
 ### §6.1 · Per-mode verdict ceilings
 
+The TrustGate verdict vocabulary is the existing
+`MetricStatus = {PASS, WARN, FAIL}` enum from
+`src/metrics/base.py:37` (per `METRICS_AND_TRUST_GATES.md` v0.1
+three-state decision). The brief's earlier shorthand
+"PASS_WITH_DISCLAIMER" is rendered in this codebase as a
+`WARN`-with-note pair. §6 uses the actual three-state vocabulary
+throughout to stay consistent with the implementation.
+
 | Mode | Verdict surface | Routing |
 | --- | --- | --- |
-| `docker_openfoam` | `PASS` / `PASS_WITH_DISCLAIMER` / `FAIL` | Full triad. The case-profile `tolerance_policy` resolves the verdict per `METRICS_AND_TRUST_GATES`. |
-| `foam_agent` *(alias of docker_openfoam at this layer)* | same as above | Full triad — adapter identity is a manifest field, not a routing dimension. |
-| `mock` | **ceiling = `PASS_WITH_DISCLAIMER`** | A `mock` run can NEVER reach `PASS`. Even if synthetic deviations are zero, the gate emits `PASS_WITH_DISCLAIMER` with note `mock_executor_no_truth_source`. |
+| `docker_openfoam` | full triad `PASS` / `WARN` / `FAIL` | Full triad. The case-profile `tolerance_policy` resolves the verdict per `METRICS_AND_TRUST_GATES`. |
+| `foam_agent` *(adapter identity for docker_openfoam at this layer)* | same as above | Full triad — adapter identity is a manifest field, not a routing dimension. |
+| `mock` | **ceiling = `WARN`** with note `mock_executor_no_truth_source` | A `mock` run can NEVER reach `PASS`. Even if synthetic deviations are zero, the gate emits `WARN` with that note. The note string is the operator-visible analogue of the brief's "PASS_WITH_DISCLAIMER" shorthand. |
 | `hybrid_init` | full triad on the **OpenFOAM** artifacts only | TrustGate consumes `canonical_artifacts(run)` per §5.1. Initializer artifacts are out-of-scope for verdict. The surrogate's contribution is **not** scored. |
 | `future_remote` | (stub-only this milestone) | TrustGate refuses to score a `future_remote` manifest. The CLI/UI surfaces `mode_not_yet_implemented`. DEC-V61-078 sets the real contract. |
 
@@ -223,16 +250,28 @@ When TrustGate evaluates a `RunReport` produced by `mode = hybrid_init`:
 
 §6 routing logic lives entirely OUTSIDE the trust-core 5 modules
 (`gold_standards/`, `auto_verifier/`, `convergence_attestor.py`,
-`audit_package/`, `foam_agent_adapter.py`). Routing is implemented in
-the consuming layer (`src/cfd_harness/trust_core/` per ADR-001
-four-plane contract — read-only consumer of this spec).
+`audit_package/`, `foam_agent_adapter.py`).
 
-This separation lets ExecutorMode evolve without crossing the trust-core
-boundary. Adding a new mode only requires:
+Per ADR-001 four-plane import-enforcement (line 73) and
+`src/_plane_assignment.py:68` (`"src.metrics": Plane.EVALUATION`),
+TrustGate routing logic lives in **`src/metrics/`** — the
+TrustGate overall-verdict reducer landed under P1-T2 (DEC-V61-055)
+and that is where §6.1 dispatch belongs. `src/metrics/` is a
+read-only consumer of this spec; adding a new ExecutorMode does not
+require modifying trust-core 5 modules.
+
+(There is no `src/cfd_harness/trust_core/` package in this repo; some
+historical brief language used that name forward-looking — the
+authoritative location per ADR-001 is `src.metrics.*` in the
+EVALUATION plane.)
+
+Adding a new mode requires:
 
 1. A new row in §4 contract-surface table.
 2. A new row in §6.1 routing table.
-3. A new `ExecutorMode` enum value + adapter implementation.
+3. A new `ExecutorMode` enum value + adapter implementation under the
+   appropriate plane (EXECUTION for executors, EVALUATION for routing
+   updates).
 4. Codex review per RETRO-V61-001 baseline (any new adapter ≥5 LOC).
 
 It does NOT require trust-core source changes.
