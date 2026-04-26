@@ -7066,7 +7066,9 @@ solvers
     U { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
     UFinal { $U; relTol 0; }
     k { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    kFinal { $k; relTol 0; }
     omega { solver PBiCGStab; preconditioner DILU; tolerance 1e-10; relTol 0.1; }
+    omegaFinal { $omega; relTol 0; }
 }
 
 PIMPLE
