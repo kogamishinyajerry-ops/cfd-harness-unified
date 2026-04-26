@@ -146,20 +146,39 @@ def _resolve_case_slug_for_policy(
     provided, walk THAT bundle's whitelist instead of instantiating
     a default ``KnowledgeDB()``. Honors the injected-DB contract for
     custom knowledge bundles (production HPC harnesses, test stubs).
-    Existing callers that pass no ``knowledge_db`` get the unchanged
-    default-DB behavior.
-    """
-    try:
-        if knowledge_db is None:
-            from .knowledge_db import KnowledgeDB  # noqa: PLC0415
 
-            knowledge_db = KnowledgeDB()
-        whitelist = knowledge_db._load_whitelist()
-    except Exception:  # noqa: BLE001 - resolution must not kill the run
-        return task_name
-    for case in whitelist.get("cases", []):
-        if case.get("name") == task_name or case.get("id") == task_name:
-            return case.get("id") or task_name
+    DEC-V61-075 P2-T2.3 Codex R5 P2 fix: try the injected DB first,
+    fall through to the default DB when the injected one is a
+    duck-typed stub that doesn't implement ``_load_whitelist`` (e.g.,
+    a bare ``MagicMock`` from a test that doesn't care about slug
+    resolution). The default-DB fallback recovers slug-resolution for
+    standard whitelist cases without requiring every test to wire up
+    ``_load_whitelist`` on its mock.
+    """
+    candidate_dbs: list = []
+    if knowledge_db is not None:
+        candidate_dbs.append(knowledge_db)
+    # Always include the default DB as a fallback so duck-typed stubs
+    # that miss ``_load_whitelist`` still resolve standard slugs.
+    try:
+        from .knowledge_db import KnowledgeDB  # noqa: PLC0415
+
+        candidate_dbs.append(KnowledgeDB())
+    except Exception:  # noqa: BLE001 - default DB construction must not kill the run
+        pass
+
+    for db in candidate_dbs:
+        try:
+            whitelist = db._load_whitelist()
+        except Exception:  # noqa: BLE001 - duck-type guard
+            continue
+        if not isinstance(whitelist, dict):
+            continue
+        for case in whitelist.get("cases", []):
+            if not isinstance(case, dict):
+                continue
+            if case.get("name") == task_name or case.get("id") == task_name:
+                return case.get("id") or task_name
     return task_name
 
 
