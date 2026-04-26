@@ -8,7 +8,7 @@ authored_under: Session B v3 · P-1 (DEC-V61-FORENSIC-FLAKE-1 follow-up)
 parent_dec: DEC-V61-FORENSIC-FLAKE-1
 autonomous_governance: true
 external_gate_self_estimated_pass_rate: 0.95    # pure test-isolation fix; no Codex trigger; full suite green confirmed
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed815a960dd947b63ec1ca)
 codex_tool_report_path: null  # CLASS-1: no Codex required (RETRO-V61-001 triggers not met)
 risk_flags: []
 gov1_v1_scope:
