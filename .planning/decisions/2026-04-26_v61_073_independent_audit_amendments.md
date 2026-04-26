@@ -12,7 +12,7 @@ supersedes_in_part:
   - RETRO_V61_005_Q1_COMPLETE (downgraded back to COMPLETE_WITH_DEFERRED_GAPS — P2 kickoff explicitly HOLD per audit Q5 OVERTURN)
 autonomous_governance: false
 external_gate_self_estimated_pass_rate: 0.85
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed812ab816c9f7ba082bcc)
 parent_audit_pages:
   - "DEC-AUDIT-2026-04-26 · Independent ratification of 治理收口 closure (Notion Decisions DB · authored by Notion @Opus 4.7)"
   - "P2 Kickoff Plan v0.1 (Notion Canonical Docs · authored by Notion @Opus 4.7)"
