@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from .audit_package.reference_lookup import has_docker_openfoam_reference_run
 from .executor import (
     DockerOpenFOAMExecutor,
     ExecutorAbc,
@@ -26,9 +27,11 @@ from .metrics import (
     MetricReport,
     MetricStatus,
     TrustGateReport,
+    apply_executor_mode_routing,
     load_tolerance_policy,
     reduce_reports,
 )
+from .metrics.trust_gate import ModeNotYetImplementedError
 from .models import (
     AttributionReport,
     BatchResult,
@@ -269,6 +272,7 @@ class TaskRunner:
         correction_policy: str = "legacy_auto_save",
         executor_mode: Optional[ExecutorMode] = None,
         executor_abc: Optional[ExecutorAbc] = None,
+        audit_package_root: Optional[Path] = None,
     ) -> None:
         if correction_policy not in CORRECTION_POLICIES:
             raise ValueError(
@@ -314,6 +318,12 @@ class TaskRunner:
         self._attributor = ErrorAttributor(knowledge_db=self._db)
         self._post_execute_hook = post_execute_hook
         self._correction_policy = correction_policy
+        # DEC-V61-075 P2-T2.3: optional audit-package corpus root for
+        # §6.3 hybrid-init reference-run resolution. None means "no
+        # lookup" — apply_executor_mode_routing falls through to the
+        # ``hybrid_init_invariant_unverified`` WARN ceiling, which is
+        # the spec-mandated first-ever-run behavior.
+        self._audit_package_root: Optional[Path] = audit_package_root
 
     @staticmethod
     def _resolve_executor_abc(mode: ExecutorMode) -> ExecutorAbc:
@@ -477,6 +487,50 @@ class TaskRunner:
             comparison=comparison,
             attestation=attestation,
         )
+
+        # DEC-V61-075 P2-T2.3 · §6.3 reference-run gate wiring.
+        # When ABC-dispatched, apply the per-mode TrustGate routing
+        # ceilings (mock → WARN, hybrid_init → reference-run gated)
+        # using the executor's identity tuple as the manifest section
+        # surrogate. The audit-package lookup runs only for HYBRID_INIT
+        # (other modes don't consume the flag) so DOCKER_OPENFOAM /
+        # MOCK runs pay zero filesystem cost.
+        if (
+            self._executor_abc is not None
+            and trust_gate_report is not None
+        ):
+            executor_section = {
+                "mode": self._executor_abc.MODE.value,
+                "version": self._executor_abc.VERSION,
+                "contract_hash": self._executor_abc.contract_hash,
+            }
+            ref_present = False
+            if (
+                self._executor_abc.MODE is ExecutorMode.HYBRID_INIT
+                and self._audit_package_root is not None
+            ):
+                ref_present = has_docker_openfoam_reference_run(
+                    case_id=task_spec.name,
+                    audit_package_root=self._audit_package_root,
+                )
+            try:
+                trust_gate_report = apply_executor_mode_routing(
+                    trust_gate_report,
+                    executor_section,
+                    hybrid_init_reference_run_present=ref_present,
+                )
+            except ModeNotYetImplementedError:
+                # FUTURE_REMOTE refusal — should never reach here in
+                # practice (FUTURE_REMOTE returns MODE_NOT_YET_IMPLEMENTED
+                # status which short-circuits at line ~342). Defensive
+                # log + leave trust_gate_report unchanged so callers
+                # see the underlying verdict + the OK-path note already
+                # appended to summary above.
+                logger.warning(
+                    "ModeNotYetImplementedError raised for OK-path "
+                    "future_remote run — should be unreachable; check "
+                    "executor short-circuit invariant"
+                )
 
         return RunReport(
             task_spec=task_spec,

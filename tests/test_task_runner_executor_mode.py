@@ -60,6 +60,16 @@ def _task_spec() -> TaskSpec:
     )
 
 
+def _make_tempdir() -> str:
+    """Helper used by hybrid_init reference-run tests below; pytest's
+    ``tmp_path`` fixture isn't available inside class methods that
+    don't accept it as a kwarg, so we build a one-off via
+    ``tempfile``. Cleanup is process-exit reliant — fine for a
+    single-process pytest run."""
+    import tempfile
+    return tempfile.mkdtemp(prefix="t2_3_audit_root_")
+
+
 def _stub_runner(executor_abc) -> TaskRunner:
     """TaskRunner with Notion + DB + comparator stubbed and an explicit
     ``executor_abc`` injected. Comparator is also mocked away — these
@@ -497,6 +507,168 @@ class TestOkPathExecutorNotePropagation:
 
         assert "docker_openfoam_preflight_failed" in result.summary
         assert "Executor notes" in result.summary
+
+    def test_hybrid_init_reference_run_lookup_when_root_configured(self):
+        """DEC-V61-075 P2-T2.3: when audit_package_root is configured
+        and a HYBRID_INIT executor returns OK, TaskRunner consults
+        has_docker_openfoam_reference_run and passes the result into
+        apply_executor_mode_routing. With a present reference run, the
+        gate verdict is the underlying base report (no WARN ceiling).
+        """
+        import io
+        import json
+        import zipfile
+        from pathlib import Path
+
+        from src.metrics.base import MetricStatus
+
+        # Build an audit-package corpus with a docker_openfoam reference
+        audit_root = Path(_make_tempdir())
+        case_dir = audit_root / "lid_driven_cavity_run_001"
+        case_dir.mkdir(parents=True)
+        manifest = {
+            "schema_version": 1,
+            "manifest_id": "lid_driven_cavity-run-001",
+            "case": {"id": "lid_driven_cavity", "legacy_ids": []},
+            "executor": {
+                "mode": "docker_openfoam",
+                "version": "0.2",
+                "contract_hash": "deadbeef" * 8,
+            },
+            "measurement": {"comparator_verdict": "PASS"},
+        }
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+        (case_dir / "ref.zip").write_bytes(buf.getvalue())
+
+        run_report = ExecutorRunReport(
+            mode=ExecutorMode.HYBRID_INIT,
+            status=ExecutorStatus.OK,
+            contract_hash="cafef00d" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=True,
+                is_mock=False,
+                residuals={"p": 1e-6, "U": 1e-6},
+                key_quantities={"u_centerline": 1.0},
+                execution_time_s=0.01,
+            ),
+        )
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.MODE = ExecutorMode.HYBRID_INIT
+        executor_abc.VERSION = SPEC_VERSION
+        executor_abc.contract_hash = "cafef00d" * 8
+        executor_abc.execute.return_value = run_report
+
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: None
+
+        from src.task_runner import TaskRunner
+
+        runner = TaskRunner(
+            notion_client=notion,
+            knowledge_db=db,
+            executor_abc=executor_abc,
+            audit_package_root=audit_root,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(passed=True, deviations=[])
+        # Force at least one MetricReport so trust_gate_report is non-None
+        # → apply_executor_mode_routing actually fires.
+        from src.metrics.base import MetricClass, MetricReport
+
+        def _fake_attest(*_args, **_kwargs):
+            return MagicMock(overall="ATTEST_PASS", checks=[])
+        runner._compute_attestation = _fake_attest  # type: ignore[method-assign]
+
+        # Inject a fake gold standard so a ComparisonResult is produced
+        # → _build_trust_gate_report produces a non-None TrustGateReport.
+        db.load_gold_standard.side_effect = lambda _: {"observables": []}
+        runner._comparator.compare.return_value = MagicMock(
+            passed=True,
+            deviations=[],
+            summary="ok",
+            gold_standard_id="lid_driven_cavity",
+        )
+
+        result = runner.run_task(_task_spec())
+
+        # The lookup ran (audit_root contained a matching reference) →
+        # routing did NOT impose hybrid_init_invariant_unverified ceiling.
+        assert result.trust_gate_report is not None
+        if result.trust_gate_report.notes:
+            assert "hybrid_init_invariant_unverified" not in " ".join(
+                result.trust_gate_report.notes
+            )
+
+    def test_hybrid_init_no_reference_run_emits_warn_ceiling(self):
+        """When audit_package_root is configured but contains NO
+        docker_openfoam reference for the case, the §6.3 ceiling fires:
+        ``hybrid_init_invariant_unverified`` WARN."""
+        from pathlib import Path
+
+        from src.metrics.base import MetricStatus
+
+        empty_root = Path(_make_tempdir())  # exists but empty
+
+        run_report = ExecutorRunReport(
+            mode=ExecutorMode.HYBRID_INIT,
+            status=ExecutorStatus.OK,
+            contract_hash="cafef00d" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=True,
+                is_mock=False,
+                residuals={"p": 1e-6, "U": 1e-6},
+                execution_time_s=0.01,
+            ),
+        )
+        executor_abc = MagicMock(spec=HybridInitExecutor)
+        executor_abc.MODE = ExecutorMode.HYBRID_INIT
+        executor_abc.VERSION = SPEC_VERSION
+        executor_abc.contract_hash = "cafef00d" * 8
+        executor_abc.execute.return_value = run_report
+
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: {"observables": []}
+
+        from src.task_runner import TaskRunner
+
+        runner = TaskRunner(
+            notion_client=notion,
+            knowledge_db=db,
+            executor_abc=executor_abc,
+            audit_package_root=empty_root,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(
+            passed=True, deviations=[], summary="ok",
+            gold_standard_id="lid_driven_cavity",
+        )
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_PASS", checks=[])
+        )
+
+        result = runner.run_task(_task_spec())
+
+        assert result.trust_gate_report is not None
+        # §6.3 ceiling note must appear when reference is absent.
+        assert any(
+            "hybrid_init_invariant_unverified" in note
+            for note in result.trust_gate_report.notes
+        )
+        assert result.trust_gate_report.overall is MetricStatus.WARN
 
     def test_legacy_foam_agent_runtime_failure_does_NOT_emit_preflight_note(self):
         """A solver-runtime failure (raw_output_path populated) must
