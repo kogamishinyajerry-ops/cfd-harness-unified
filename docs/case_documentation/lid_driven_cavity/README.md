@@ -40,7 +40,7 @@ Two-dimensional incompressible square cavity (L=0.1 m) with a lid translating ta
 | `primary_vortex_location.position` | 0.02 (relative) | `ghia1982` | Ghia grid spacing 1/128 ≈ 0.0078; ±2 grid cells = 0.016 < 0.02 → literature-anchored |
 | `primary_vortex_location.psi` | 0.05 (relative) | `asme_vv20_2009` | Engineering, mirrors u/v tolerance |
 | `secondary_vortices.position` | 0.02 (relative) | `ghia1982` | Same Ghia-grid argument as primary position |
-| `secondary_vortices.psi` | 0.10 (relative) | `TBD-GOV1` | Relaxed from 0.05 because corner-eddy ψ is 5–6 orders of magnitude smaller than primary; mesh sensitivity dominates. No direct literature anchor for the 10% relaxation. |
+| `secondary_vortices.psi` | 0.10 (relative) | `TBD-GOV1` | Relaxed from 0.05 because corner-eddy ψ is 5–6 orders of magnitude smaller than primary; mesh sensitivity dominates. No direct literature anchor for the 10% relaxation. **GOV-1 v0.7 trace attempted** (DEC-V61-086 follow-up): Ghia 1982 Table III gives corner-eddy ψ gold values but no §X mesh-sensitivity table or quantitative discussion of the relaxation factor. Fails methodology §1.1 (direct support); the scale-separation fact visible in Table III is a `gold-value-by-association` path explicitly forbidden by methodology §2. Retained as `TBD-GOV1` pending CFDJerry direction on README §"Open HOLDs" item 3 ("formally accept as engineering choice" path would mint an LDC-specific engineering-choice DEC analog to `dec_v61_057_intake`, enabling tier-(c) classification — Charter-level call, not autonomous). |
 
 Citation coverage: 5/6 = 83%.
 

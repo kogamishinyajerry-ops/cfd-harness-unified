@@ -66,7 +66,7 @@ These three cases are blocked from full citation closure until a primary-source 
 
 2. **RBC — Chaivat 2006** (DOI [10.1016/j.ijheatmasstransfer.2005.07.039](https://doi.org/10.1016/j.ijheatmasstransfer.2005.07.039)). Recompute 0.229·(10⁶)^0.269 = 9.4 vs stored 10.5 = 11.5% off (within 15% tol but suspicious). Need to identify which correlation variant Chaivat reports as the primary equation.
 
-3. **LDC — secondary-vortex ψ relaxation** (`tolerance: 0.10` vs primary `0.05`). No published reference quantifies the corner-eddy-vs-primary ψ relaxation factor. Either find a literature precedent (e.g., Ghia 1982 corner-eddy mesh-sensitivity discussion) or formally accept as engineering choice.
+3. **LDC — secondary-vortex ψ relaxation** (`tolerance: 0.10` vs primary `0.05`). No published reference quantifies the corner-eddy-vs-primary ψ relaxation factor. Either find a literature precedent (e.g., Ghia 1982 corner-eddy mesh-sensitivity discussion) or formally accept as engineering choice. **GOV-1 v0.7 trace attempted** (DEC-V61-086 follow-up, 2026-04-26): Ghia 1982 Table III provides gold values but no §X mesh-sensitivity discussion; trace fails methodology §1.1. Retained as `TBD-GOV1` pending CFDJerry direction on which path (literature re-read for hidden §X anchor, or formal engineering-choice DEC mint) to pursue. Promotion to tier-(c) via engineering-choice DEC is **not autonomous** — requires CFDJerry signal per Pivot Charter §4.7 framework (DEC-V61-085 CLASS-1/2/3 boundary).
 
 ## Citation key index (cross-case)
 
