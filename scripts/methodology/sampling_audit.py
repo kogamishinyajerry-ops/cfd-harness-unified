@@ -73,7 +73,8 @@ AUDIT_REQUIRED_SURFACES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "2.Docker_subprocess_reachability",
         re.compile(
-            r"\bsubprocess\.(run|Popen|call|check_output)\b"
+            # check_call added per Codex PC-3 R1 false-negative finding.
+            r"\bsubprocess\.(run|Popen|call|check_call|check_output)\b"
             r"|docker\s+(run|exec|build|compose)"
             r"|^[+-]\s*volumes:\s*$"
             r"|^[+-]\s*(image|container_name):",
@@ -81,10 +82,16 @@ AUDIT_REQUIRED_SURFACES: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     (
+        # Surface 3 detects route registration by *body* signal (decorator
+        # or APIRouter call) so that doc-only edits in ui/backend/routes/
+        # do not trigger a false-positive flag (Codex PC-3 R1 finding).
+        # The diff-header path was the cause of the false positive.
         "3.api_route_registration",
         re.compile(
-            r"^[+-]\s*(@router\.(get|post|put|patch|delete)|router\s*=\s*APIRouter)"
-            r"|^\+\+\+\s+b/ui/backend/routes/",
+            r"^[+-]\s*(@router\.(get|post|put|patch|delete)"
+            r"|router\s*=\s*APIRouter"
+            r"|router\s*\.\s*add_api_route"
+            r"|app\s*\.\s*include_router)",
             re.MULTILINE,
         ),
     ),
@@ -124,7 +131,17 @@ AUDIT_REQUIRED_SURFACES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 @dataclass
 class AuditWindow:
-    """Result of estimating the sampling-audit prompt cost for a git range."""
+    """Result of estimating the sampling-audit prompt cost for a git range.
+
+    `non_trust_core_commits` includes both pure-non-trust-core commits AND
+    "mixed" commits (touching both layers). For mixed commits, only the
+    non-trust-core file portion of the diff contributes to `diff_chars` and
+    surface detection — the trust-core portion is excluded per §10 baseline
+    (it is reviewed at every commit, not via §10.5 sampling).
+
+    `mixed_commits` lists the SHAs of mixed commits so the operator can
+    audit them with awareness of the partial-diff scope.
+    """
 
     git_range: str
     commits: list[str]
@@ -133,6 +150,7 @@ class AuditWindow:
     estimated_tokens: int
     cap: int
     surfaces_flagged: dict[str, list[str]] = field(default_factory=dict)
+    mixed_commits: list[str] = field(default_factory=list)
 
     @property
     def verdict(self) -> str:
@@ -158,50 +176,110 @@ def _git(*args: str, cwd: Path | None = None) -> str:
 
 
 def _last_sampling_audit_sha(cwd: Path | None = None) -> str | None:
-    """Find the most recent commit referencing a DEC-V61-*sampling.audit*."""
-    out = _git(
-        "log",
-        "--format=%H",
-        "--grep=DEC-V61-.*sampling.audit",
-        "main",
-        cwd=cwd,
-    ).strip()
-    if not out:
-        return None
-    return out.splitlines()[0]
+    """Find the most recent commit referencing a DEC-V61-*sampling.audit*.
+
+    Tries `main` first; falls back to walking from `HEAD` if `main` is not
+    available (worktrees, detached state, repos without a main branch —
+    Codex PC-3 R1 robustness finding).
+    """
+    for revision in ("main", "HEAD"):
+        try:
+            out = _git(
+                "log",
+                "--format=%H",
+                "--grep=DEC-V61-.*sampling.audit",
+                revision,
+                cwd=cwd,
+            ).strip()
+        except subprocess.CalledProcessError:
+            continue
+        if out:
+            return out.splitlines()[0]
+    return None
 
 
 def _resolve_default_range(cwd: Path | None = None) -> str:
     """Pick the default audit window when --range is not provided.
 
     Prefer the last sampling-audit DEC commit as the lower bound; otherwise
-    fall back to the last 50 commits (matches the GHA reminder fetch-depth).
+    fall back to the last 50 commits (matches the GHA reminder fetch-depth),
+    capped at the actual commit count to avoid `git log HEAD~50..HEAD`
+    crashing on shallow / short histories (Codex PC-3 R1 finding).
     """
     sha = _last_sampling_audit_sha(cwd=cwd)
     if sha:
         return f"{sha}..HEAD"
-    return "HEAD~50..HEAD"
+    try:
+        total = int(_git("rev-list", "--count", "HEAD", cwd=cwd).strip() or "0")
+    except subprocess.CalledProcessError:
+        total = 0
+    if total <= 1:
+        return "HEAD"
+    lookback = min(50, max(total - 1, 1))
+    return f"HEAD~{lookback}..HEAD"
 
 
 def _commits_in_range(git_range: str, cwd: Path | None = None) -> list[str]:
+    # `log <range>` for a single ref (e.g. "HEAD") returns the full history;
+    # we only want the tip in that case so the audit window stays sized.
+    if git_range == "HEAD":
+        try:
+            sha = _git("rev-parse", "HEAD", cwd=cwd).strip()
+        except subprocess.CalledProcessError:
+            return []
+        return [sha] if sha else []
     raw = _git("log", git_range, "--format=%H", cwd=cwd).strip()
     return [line for line in raw.splitlines() if line]
 
 
-def _commit_touches_trust_core(sha: str, cwd: Path | None = None) -> bool:
-    """True iff the commit modifies any trust-core 5 module path."""
-    files = _git("show", "--name-only", "--format=", sha, cwd=cwd).strip().splitlines()
-    for f in files:
-        for tc in TRUST_CORE_PATHS:
-            if f.startswith(tc):
-                return True
-    return False
+def _commit_touched_files(sha: str, cwd: Path | None = None) -> list[str]:
+    """List of repo-relative file paths the commit modified."""
+    raw = _git("show", "--name-only", "--format=", sha, cwd=cwd).strip()
+    return [line for line in raw.splitlines() if line]
 
 
-def _commit_diff_text(sha: str, cwd: Path | None = None) -> str:
-    """Return the unified diff body for `sha` (used for surface detection +
-    char-cost accounting). Excludes the commit message preamble."""
-    return _git("show", "--no-color", "--format=", sha, cwd=cwd)
+def _is_trust_core_path(file_path: str) -> bool:
+    """True iff file_path is under any TRUST_CORE_PATHS entry."""
+    return any(file_path.startswith(tc) for tc in TRUST_CORE_PATHS)
+
+
+def _commit_classification(sha: str, cwd: Path | None = None) -> tuple[bool, bool]:
+    """Return (touches_non_trust_core, touches_trust_core) for `sha`.
+
+    A "mixed" commit returns (True, True) — Codex PC-3 R1 HIGH finding fix:
+    we no longer drop mixed commits entirely; the non-trust-core portion is
+    audited and the trust-core portion is excluded from the diff load.
+    """
+    touches_ntc = touches_tc = False
+    for f in _commit_touched_files(sha, cwd=cwd):
+        if _is_trust_core_path(f):
+            touches_tc = True
+        else:
+            touches_ntc = True
+        if touches_ntc and touches_tc:
+            break
+    return touches_ntc, touches_tc
+
+
+def _commit_non_trust_core_diff(sha: str, cwd: Path | None = None) -> str:
+    """Return the unified diff body for `sha`, restricted to the
+    non-trust-core file set.
+
+    Trust-core file diffs are excluded from the audit window (they are
+    reviewed at every commit per §10 baseline). Files outside trust-core
+    are passed straight to `git show` via pathspec exclusion magic.
+    """
+    pathspec_excludes = [f":(exclude){tc}" for tc in TRUST_CORE_PATHS]
+    return _git(
+        "show",
+        "--no-color",
+        "--format=",
+        sha,
+        "--",
+        ".",
+        *pathspec_excludes,
+        cwd=cwd,
+    )
 
 
 def estimate_tokens(text: str) -> int:
@@ -277,14 +355,20 @@ def build_audit_window(
 
     commits = _commits_in_range(git_range, cwd=cwd)
     non_trust_core: list[str] = []
+    mixed: list[str] = []
     diff_text_total = ""
     surfaces_flagged: dict[str, list[str]] = {}
 
     for sha in commits:
-        if _commit_touches_trust_core(sha, cwd=cwd):
+        touches_ntc, touches_tc = _commit_classification(sha, cwd=cwd)
+        if not touches_ntc:
+            # Pure trust-core commit — excluded from §10.5 sampling per §10
+            # baseline (reviewed at every commit anyway).
             continue
         non_trust_core.append(sha)
-        diff = _commit_diff_text(sha, cwd=cwd)
+        if touches_tc:
+            mixed.append(sha)
+        diff = _commit_non_trust_core_diff(sha, cwd=cwd)
         diff_text_total += diff
         labels = detect_surfaces(diff)
         for label in labels:
@@ -305,6 +389,7 @@ def build_audit_window(
         estimated_tokens=estimated,
         cap=cap,
         surfaces_flagged=surfaces_flagged,
+        mixed_commits=mixed,
     )
 
 
@@ -314,6 +399,41 @@ def _serialize(window: AuditWindow) -> dict:
     payload["verdict"] = window.verdict
     payload["message"] = window.message
     return payload
+
+
+CAP_LOWER_REJECTED_EXIT = 3
+
+
+def _resolve_and_validate_cap(arg_cap: int | None) -> tuple[int, str | None]:
+    """Resolve the effective cap from --cap > env > default, and refuse
+    values lower than DEFAULT_CAP_TOKENS (Codex PC-3 R1 LOW finding).
+
+    Returns (cap, error_message). error_message is non-None iff the
+    caller-supplied value violated the raise-only policy; the caller
+    must surface it to stderr and exit with CAP_LOWER_REJECTED_EXIT.
+    """
+    env_raw = os.environ.get("SAMPLING_AUDIT_CAP")
+    env_cap: int | None = None
+    if env_raw is not None:
+        try:
+            env_cap = int(env_raw)
+        except ValueError:
+            return DEFAULT_CAP_TOKENS, (
+                f"SAMPLING_AUDIT_CAP={env_raw!r} is not an integer"
+            )
+
+    # Precedence: --cap (if explicitly given) > env > default.
+    effective = arg_cap if arg_cap is not None else (
+        env_cap if env_cap is not None else DEFAULT_CAP_TOKENS
+    )
+    if effective < DEFAULT_CAP_TOKENS:
+        source = "--cap" if arg_cap is not None else "SAMPLING_AUDIT_CAP env"
+        return DEFAULT_CAP_TOKENS, (
+            f"{source}={effective} is below DEFAULT_CAP_TOKENS={DEFAULT_CAP_TOKENS}; "
+            f"per DEC-V61-073 §10.5.4b, lowering the cap must land via a "
+            f"methodology DEC update — overrides are raise-only."
+        )
+    return effective, None
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -330,9 +450,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--cap",
         type=int,
-        default=int(os.environ.get("SAMPLING_AUDIT_CAP", DEFAULT_CAP_TOKENS)),
-        help=f"Token budget cap (default {DEFAULT_CAP_TOKENS}). "
-        "Per DEC-V61-073 §10.5.4b, lowering must land via DEC update.",
+        default=None,
+        help=f"Token budget cap (default {DEFAULT_CAP_TOKENS}; also via "
+        "SAMPLING_AUDIT_CAP env). Per DEC-V61-073 §10.5.4b, raise-only — "
+        f"values below {DEFAULT_CAP_TOKENS} are rejected.",
     )
     parser.add_argument(
         "--json",
@@ -347,19 +468,41 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
+    effective_cap, cap_error = _resolve_and_validate_cap(args.cap)
+    if cap_error is not None:
+        print(f"ERROR: {cap_error}", file=sys.stderr)
+        return CAP_LOWER_REJECTED_EXIT
+
     window = build_audit_window(
-        git_range=args.git_range, cap=args.cap, cwd=args.cwd
+        git_range=args.git_range, cap=effective_cap, cwd=args.cwd
     )
 
+    is_over_cap = window.verdict == "EXCEEDS_BUDGET_CAP"
+
     if args.json:
+        # In JSON mode the literal contract message
+        # `EXCEEDS_BUDGET_CAP=<used>/<cap>` MUST still appear on stderr so
+        # log scrapers and CI gates can grep it without parsing JSON
+        # (Codex PC-3 R1 MED finding).
         print(json.dumps(_serialize(window), indent=2))
+        if is_over_cap:
+            print(window.message, file=sys.stderr)
     else:
         print(f"sampling-audit budget gate · range={window.git_range}")
-        print(
-            f"  commits={len(window.commits)} "
-            f"non_trust_core={len(window.non_trust_core_commits)} "
-            f"diff_chars={window.diff_chars}"
-        )
+        ntc_count = len(window.non_trust_core_commits)
+        mixed_count = len(window.mixed_commits)
+        if mixed_count:
+            print(
+                f"  commits={len(window.commits)} "
+                f"non_trust_core={ntc_count} (mixed={mixed_count}) "
+                f"diff_chars={window.diff_chars}"
+            )
+        else:
+            print(
+                f"  commits={len(window.commits)} "
+                f"non_trust_core={ntc_count} "
+                f"diff_chars={window.diff_chars}"
+            )
         print(f"  estimated_tokens={window.estimated_tokens} cap={window.cap}")
         if window.surfaces_flagged:
             print("  §10.5.4a surfaces flagged:")
@@ -370,7 +513,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"  verdict={window.verdict}")
         print(f"  {window.message}")
 
-    return 2 if window.verdict == "EXCEEDS_BUDGET_CAP" else 0
+    return 2 if is_over_cap else 0
 
 
 if __name__ == "__main__":
