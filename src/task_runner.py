@@ -130,20 +130,31 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _resolve_case_slug_for_policy(task_name: str) -> str:
+def _resolve_case_slug_for_policy(
+    task_name: str, knowledge_db: Optional["KnowledgeDB"] = None
+) -> str:
     """Resolve a TaskSpec.name (display title or slug) to the canonical
     case-id slug expected by load_tolerance_policy.
 
     DEC-V61-071 round-1 finding #1 (verbatim fix): TaskSpec.name often
     comes from display titles (Notion page titles, whitelist `name`
-    field), not slugs. Walks knowledge/whitelist.yaml matching name OR
-    id; returns task_name unchanged on no match. Fail-soft — resolution
+    field), not slugs. Walks the whitelist matching name OR id;
+    returns task_name unchanged on no match. Fail-soft — resolution
     must not kill the run.
+
+    DEC-V61-075 P2-T2.3 Codex R4 P2 fix: when ``knowledge_db`` is
+    provided, walk THAT bundle's whitelist instead of instantiating
+    a default ``KnowledgeDB()``. Honors the injected-DB contract for
+    custom knowledge bundles (production HPC harnesses, test stubs).
+    Existing callers that pass no ``knowledge_db`` get the unchanged
+    default-DB behavior.
     """
     try:
-        from .knowledge_db import KnowledgeDB
+        if knowledge_db is None:
+            from .knowledge_db import KnowledgeDB  # noqa: PLC0415
 
-        whitelist = KnowledgeDB()._load_whitelist()
+            knowledge_db = KnowledgeDB()
+        whitelist = knowledge_db._load_whitelist()
     except Exception:  # noqa: BLE001 - resolution must not kill the run
         return task_name
     for case in whitelist.get("cases", []):
@@ -560,7 +571,12 @@ class TaskRunner:
                 # `case.id` as the canonical slug, so passing the
                 # raw display name would silently miss every real
                 # reference run.
-                canonical_case_id = _resolve_case_slug_for_policy(task_spec.name)
+                # Codex R4 P2 fix: pass the injected KnowledgeDB so
+                # custom knowledge bundles get the right canonical id
+                # for display-title task names.
+                canonical_case_id = _resolve_case_slug_for_policy(
+                    task_spec.name, knowledge_db=self._db
+                )
                 # Codex T2.3 post-commit R1 P2-B + R2 P1 fix: expand
                 # legacy aliases from the file-backed gold-standard
                 # YAML (``knowledge/gold_standards/<case>.yaml::

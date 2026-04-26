@@ -793,8 +793,10 @@ class TestOkPathExecutorNotePropagation:
             return_value=MagicMock(overall="ATTEST_PASS", checks=[])
         )
 
+        # Use the DISPLAY TITLE ("Custom Case") not the slug — Codex
+        # R4 P2 fix exercises the injected-DB slug resolution path.
         spec = TaskSpec(
-            name="custom_case",
+            name="Custom Case",
             geometry_type=GeometryType.SIMPLE_GRID,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
@@ -804,7 +806,12 @@ class TestOkPathExecutorNotePropagation:
         )
         result = runner.run_task(spec)
 
-        # Reference resolved via custom-root legacy alias → no ceiling
+        # Reference resolved via custom-root legacy alias → no ceiling.
+        # If the slug resolution didn't honor the injected DB, the
+        # canonical_case_id would stay "Custom Case", the gold-standard
+        # YAML lookup would target "Custom Case.yaml" (which does not
+        # exist), and legacy_aliases would be empty → the lookup would
+        # miss the legacy_x manifest and the §6.3 ceiling would fire.
         assert result.trust_gate_report is not None
         if result.trust_gate_report.notes:
             assert "hybrid_init_invariant_unverified" not in " ".join(
