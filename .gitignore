@@ -59,6 +59,12 @@ reports/phase5_audit/live_*.log
 # Phase 5 7c-service audit-report PDF output (regenerable; src/audit_package/manifest.py:342)
 reports/phase5_reports/
 
+# M3 (2026-04-26) workbench per-user run history. Layout written by
+# write_run_artifacts() in ui/backend/services/run_history.py:
+# reports/{case_id}/runs/{run_id}/{measurement.yaml,verdict.json,summary.json}.
+# Per-user runtime audit trail — intentionally not version-controlled.
+reports/*/runs/
+
 # ADR-002 plane-guard runtime telemetry (per OPS-2026-04-25-001 §2 ownership;
 # .jsonl files are per-process and should not pollute git).
 # reports/plane_guard/ — runtime telemetry (.jsonl + .log) ignored;
