@@ -163,6 +163,37 @@ def test_legacy_id_alias_matches(tmp_path):
     ) is True
 
 
+def test_caller_provided_legacy_alias_matches_pre_rename_manifest(tmp_path):
+    """Codex T2.3 post-commit P2-B fix: when querying for a post-rename
+    canonical id (``duct_flow``), an OLD manifest still using the
+    pre-rename id (``fully_developed_pipe``) must match — provided the
+    caller passes the legacy alias.
+
+    Without legacy_aliases expansion, the pre-rename manifest's
+    case.id (``fully_developed_pipe``) doesn't equal the queried
+    canonical id (``duct_flow``), and its legacy_ids list is empty
+    (the rename happened forward in time — old manifests can't have
+    new aliases retroactively backfilled).
+    """
+    # Old manifest: id is the pre-rename name, no legacy_ids backfilled
+    manifest = _docker_openfoam_manifest(
+        case_id="fully_developed_pipe",
+        legacy_ids=(),
+    )
+    _write_zip_with_manifest(tmp_path, "pre_rename", manifest)
+
+    # Without aliases: miss
+    assert has_docker_openfoam_reference_run(
+        "duct_flow", audit_package_root=tmp_path
+    ) is False
+    # With aliases: hit
+    assert has_docker_openfoam_reference_run(
+        "duct_flow",
+        audit_package_root=tmp_path,
+        legacy_aliases=("fully_developed_pipe",),
+    ) is True
+
+
 def test_different_case_id_does_not_match(tmp_path):
     """A docker_openfoam manifest for a different case must NOT resolve."""
     _write_zip_with_manifest(

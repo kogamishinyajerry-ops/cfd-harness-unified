@@ -509,9 +509,38 @@ class TaskRunner:
                 self._executor_abc.MODE is ExecutorMode.HYBRID_INIT
                 and self._audit_package_root is not None
             ):
+                # Codex T2.3 post-commit P2-A fix: resolve display
+                # title → canonical slug before scanning manifests.
+                # `task_spec.name` may be a Notion page title or
+                # whitelist `name` field; archived manifests store
+                # `case.id` as the canonical slug, so passing the
+                # raw display name would silently miss every real
+                # reference run.
+                canonical_case_id = _resolve_case_slug_for_policy(task_spec.name)
+                # Codex T2.3 post-commit P2-B (caller half): expand
+                # legacy aliases from the gold-standard YAML so the
+                # resolver can match pre-rename manifests too. Failure
+                # to resolve must NOT break the run — fall through to
+                # empty aliases and rely on direct id match only.
+                legacy_aliases: tuple[str, ...] = ()
+                try:
+                    gold = self._db.load_gold_standard(canonical_case_id)
+                    if gold is not None:
+                        gold_legacy = gold.get("legacy_case_ids")
+                        if isinstance(gold_legacy, list):
+                            legacy_aliases = tuple(
+                                alias for alias in gold_legacy
+                                if isinstance(alias, str)
+                            )
+                except Exception:  # noqa: BLE001 — alias lookup must not kill the run
+                    logger.exception(
+                        "Failed to resolve legacy_aliases for HYBRID_INIT "
+                        "reference-run lookup; continuing with no aliases"
+                    )
                 ref_present = has_docker_openfoam_reference_run(
-                    case_id=task_spec.name,
+                    case_id=canonical_case_id,
                     audit_package_root=self._audit_package_root,
+                    legacy_aliases=legacy_aliases,
                 )
             try:
                 trust_gate_report = apply_executor_mode_routing(

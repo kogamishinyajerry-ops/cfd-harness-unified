@@ -121,15 +121,25 @@ def _iter_candidate_manifests(audit_package_root: Path) -> Iterator[Dict[str, An
     """Yield manifest dicts from every signed zip + plain
     ``manifest.json`` under ``audit_package_root``.
 
-    Order: lexicographic glob over ``rglob('*.zip')`` then over
-    ``rglob('manifest.json')`` so two scans against the same corpus
-    yield the same manifest sequence (debug reproducibility).
+    Codex T2.3 post-commit P2-C fix: the cap is applied **during**
+    iteration of ``rglob`` rather than after a ``sorted(rglob(...))``
+    materialization. Building a sorted list would exhaust the full
+    generator before the loop body, so the cap could never actually
+    bound the traversal cost on a large corpus. We accept the
+    determinism trade-off (zip + json scans are no longer
+    lexicographically sorted) because the resolver is short-circuit
+    by design — the **first** successful match wins (see
+    ``has_docker_openfoam_reference_run`` body), so iteration order
+    is never observable to callers. If a future debugging session
+    needs deterministic order it can call ``sorted(...)`` outside the
+    cap-bounded loop.
+
     Malformed entries silent-skip per module docstring.
     """
     if not audit_package_root.is_dir():
         return
     scanned = 0
-    for zip_path in sorted(audit_package_root.rglob("*.zip")):
+    for zip_path in audit_package_root.rglob("*.zip"):
         if scanned >= _MAX_MANIFESTS_SCANNED_PER_CALL:
             return
         scanned += 1
@@ -143,7 +153,7 @@ def _iter_candidate_manifests(audit_package_root: Path) -> Iterator[Dict[str, An
         manifest = _safe_load_manifest(payload)
         if manifest is not None:
             yield manifest
-    for json_path in sorted(audit_package_root.rglob(_MANIFEST_FILENAME)):
+    for json_path in audit_package_root.rglob(_MANIFEST_FILENAME):
         if scanned >= _MAX_MANIFESTS_SCANNED_PER_CALL:
             return
         scanned += 1
@@ -156,18 +166,42 @@ def _iter_candidate_manifests(audit_package_root: Path) -> Iterator[Dict[str, An
             yield manifest
 
 
-def _manifest_matches_case(manifest: Mapping[str, Any], case_id: str) -> bool:
-    """True when the manifest's case section identifies ``case_id``
-    either as the canonical id or via legacy alias (rename history)."""
+def _manifest_matches_case(
+    manifest: Mapping[str, Any],
+    case_id: str,
+    legacy_aliases: tuple[str, ...] = (),
+) -> bool:
+    """True when the manifest's case section identifies ``case_id`` or
+    any of the caller-provided ``legacy_aliases``.
+
+    Codex T2.3 post-commit P2-B fix: the rename relationship is
+    bidirectional. Without ``legacy_aliases`` expansion, querying for a
+    post-rename canonical id (e.g., ``duct_flow``) would miss every
+    pre-rename manifest (whose ``case.id`` is still
+    ``fully_developed_pipe`` and whose ``legacy_ids`` array has not
+    been retroactively backfilled). Callers (``TaskRunner``) extract
+    legacy aliases from the gold-standard YAML's ``legacy_case_ids``
+    field and pass them here so the resolver matches both directions:
+
+      - canonical → legacy (manifest.case.legacy_ids contains case_id)
+      - legacy   → canonical (caller's legacy_aliases contains
+        manifest.case.id)
+    """
     case = manifest.get("case")
     if not isinstance(case, Mapping):
         return False
-    if case.get("id") == case_id:
-        return True
-    legacy = case.get("legacy_ids")
-    if isinstance(legacy, list) and case_id in legacy:
-        return True
-    return False
+    manifest_id = case.get("id")
+    manifest_legacy = case.get("legacy_ids")
+    if not isinstance(manifest_legacy, list):
+        manifest_legacy = []
+
+    # Build the set of identifiers that count as "this case" from the
+    # caller's perspective (case_id + caller-provided aliases) and the
+    # set the manifest claims (manifest.id + manifest.legacy_ids). A
+    # match is a non-empty intersection.
+    caller_ids = {case_id, *legacy_aliases}
+    manifest_ids = {manifest_id, *manifest_legacy} - {None}
+    return bool(caller_ids & manifest_ids)
 
 
 def _manifest_is_docker_openfoam(manifest: Mapping[str, Any]) -> bool:
@@ -205,6 +239,7 @@ def has_docker_openfoam_reference_run(
     case_id: str,
     *,
     audit_package_root: Path,
+    legacy_aliases: tuple[str, ...] = (),
 ) -> bool:
     """Return True when ``audit_package_root`` archives at least one
     ``docker_openfoam`` manifest for ``case_id`` that anchors the
@@ -214,11 +249,19 @@ def has_docker_openfoam_reference_run(
     ----------
     case_id
         Whitelist case id (post-rename canonical, e.g. ``"duct_flow"``).
-        Legacy aliases (``manifest.case.legacy_ids``) also resolve.
     audit_package_root
         Directory holding signed-zip bundles (``*.zip`` containing
         ``manifest.json``) and/or plain ``manifest.json`` exports.
         ``rglob`` is used so per-case subdirectory layouts work.
+    legacy_aliases
+        Caller-provided pre-rename ids (e.g.,
+        ``("fully_developed_pipe",)`` when ``case_id="duct_flow"``).
+        A manifest matches when its ``case.id`` OR any
+        ``case.legacy_ids`` entry intersects with
+        ``{case_id, *legacy_aliases}`` — covers both the canonical→
+        legacy and legacy→canonical directions of a rename per Codex
+        T2.3 post-commit P2-B fix. Callers typically source these from
+        ``knowledge/gold_standards/<case>.yaml::legacy_case_ids``.
 
     Returns
     -------
@@ -238,12 +281,12 @@ def has_docker_openfoam_reference_run(
     -----
     The function is read-only and cache-free. Callers that invoke it
     on every ``run_task`` should consider memoizing per
-    ``(case_id, audit_package_root)`` if profiling shows hot-path
-    contention (T2.3 skeleton does NOT memoize — keeping the
-    coupling surface small per RETRO-V61-001 baseline).
+    ``(case_id, audit_package_root, legacy_aliases)`` if profiling
+    shows hot-path contention (T2.3 skeleton does NOT memoize —
+    keeping the coupling surface small per RETRO-V61-001 baseline).
     """
     for manifest in _iter_candidate_manifests(audit_package_root):
-        if not _manifest_matches_case(manifest, case_id):
+        if not _manifest_matches_case(manifest, case_id, legacy_aliases):
             continue
         if not _manifest_is_docker_openfoam(manifest):
             continue
