@@ -1,21 +1,26 @@
 ---
 decision_id: DEC-V61-073
-title: Independent Opus 4.7 audit ratification + 4 HIGH amendments + P2 kickoff HOLD
-status: ACCEPTED_WITH_AMENDMENTS_PENDING_LANDING (2026-04-26 · independent-context Notion @Opus 4.7 audit returned RATIFY_WITH_AMENDMENTS · 4 HIGH findings being landed in this commit · P2 kickoff partial overturn → HOLD until 4 PCs GREEN)
-authored_by: Claude Code Opus 4.7 (1M context · landing amendments per independent audit verdict)
+title: Independent Opus 4.7 audit ratification + 4 HIGH amendments + P2 kickoff HOLD → GREEN
+status: Accepted (2026-04-26 · 4 PCs landed GREEN per Codex APPROVE on each · §10.5+§11 promote to Active · P2-T1 unblocked)
+authored_by: Claude Code Opus 4.7 (1M context · landing amendments + 4-PC closure)
 authored_at: 2026-04-26
-authored_under: 治理收口 anchor session · post-independent-audit amendment wave
+authored_under: 治理收口 anchor session · post-independent-audit amendment wave + 4-PC closure
 parent_session: https://www.notion.so/34ec68942bed8105a5f2f961241cd32b
 audit_source: Notion @Opus 4.7 independent-context review session 2026-04-26 (per audit prompt delivered to user · verdict pasted back)
 supersedes_in_part:
   - W2_G9_in_session_gate (downgraded from "transitional gate" to "preparatory analysis"; this independent audit IS the legitimate W2 G-9 gate)
-  - RETRO_V61_005_Q1_COMPLETE (downgraded back to COMPLETE_WITH_DEFERRED_GAPS — P2 kickoff explicitly HOLD per audit Q5 OVERTURN)
+  - RETRO_V61_005_Q1_COMPLETE (downgraded back to COMPLETE_WITH_DEFERRED_GAPS — P2 kickoff explicitly HOLD per audit Q5 OVERTURN, then UNBLOCKED on 4-PC GREEN closure below)
 autonomous_governance: false
 external_gate_self_estimated_pass_rate: 0.85
-notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed812ab816c9f7ba082bcc)
+external_gate_actual_outcome: APPROVE_AFTER_REVISION (PC-2 R3, PC-3 R2, PC-4 R3 — 0.85 estimate held: all PCs eventually approved, but each required at least one revision round; calibration honest within tolerance)
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/34ec68942bed812ab816c9f7ba082bcc) — re-sync pending after PC closure
 parent_audit_pages:
   - "DEC-AUDIT-2026-04-26 · Independent ratification of 治理收口 closure (Notion Decisions DB · authored by Notion @Opus 4.7)"
   - "P2 Kickoff Plan v0.1 (Notion Canonical Docs · authored by Notion @Opus 4.7)"
+pc_closure_commits:
+  PC-2: 50bb2eb (docs/specs/EXECUTOR_ABSTRACTION.md v0.2 · §5 hybrid-init invariant + §6 TrustGate routing · Codex APPROVE round 3)
+  PC-3: 55f2642 (scripts/methodology/sampling_audit.py + tests/methodology/test_sampling_audit.py · 24 tests · Codex APPROVE round 2)
+  PC-4: 25c4cd8 (.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md · §10.5.4a 7-surface canonical + chronology bridges · Codex APPROVE round 3)
 ---
 
 # DEC-V61-073 · Independent Audit Ratification + 4 HIGH Amendments + P2 Kickoff HOLD
@@ -179,3 +184,76 @@ authorizations (kickoff gates) are categorically different from
 backward-looking ratifications (phase-close gates). The closure
 methodology should distinguish these explicitly. Captured for next
 RETRO addendum.
+
+---
+
+## PC closure addendum (2026-04-26 · post-Codex-APPROVE on all 3 PCs)
+
+Status flips from `ACCEPTED_WITH_AMENDMENTS_PENDING_LANDING` to
+`Accepted`. P2-T1 (DEC-V61-074 · ExecutorMode ABC + 4-mode skeleton)
+is **UNBLOCKED**.
+
+### PC closure ledger
+
+| PC | Final commit | Codex rounds | Outcome |
+| --- | --- | --- | --- |
+| PC-1 | n/a (this DEC's own Status flip) | n/a | GREEN — DEC-V61-073 status now `Accepted` |
+| PC-2 | `50bb2eb` | R1 → R2 → R3 | GREEN — `docs/specs/EXECUTOR_ABSTRACTION.md` v0.2 with §5 hybrid-init OpenFOAM-truth invariant + §6 TrustGate executor-aware routing. R1 found 5 issues (3 HIGH + 1 MED + 1 LOW); R2 closed 3 (HIGH-3, MED-4, LOW-5); R3 closed the residual HIGH-1 (canonical_artifacts surface) + HIGH-2 (`PASS_WITH_DISCLAIMER` shorthand mapping). |
+| PC-3 | `55f2642` | R1 → R2 | GREEN — `scripts/methodology/sampling_audit.py` (§10.5 budget gate, ≤100k token cap, exit codes 0/2/3) + `tests/methodology/test_sampling_audit.py` (8 → 24 tests). R1 found 4 issues (1 HIGH mixed-commit blind spot + 2 MED + 1 LOW) + 2 regex bugs (false-negative `subprocess.check_call`, false-positive doc-only routes header); R2 closed all six. |
+| PC-4 | `25c4cd8` | R1 → R2 → R3 | GREEN — `.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md` cleanup. R1 (commit `cdedd6d`) removed the 5-surface duplicate; R2 (commit `b03604a`) closed the §10.5.5 stale "5 surfaces" reference; R3 (commit `25c4cd8`) closed the §10.5.5 stale "20→5 stays" rule reference. §10.5.4a now has a single canonical 7-surface enumeration; §10.5.5 narrative explicitly bridges historical chronology to the DEC-V61-073-amended current rules. |
+
+### Concrete §10.5 numerical values (now Active)
+
+- **§10.5.4b token budget cap**: **100 000 tokens per fire** (raise-only —
+  attempts to lower via `--cap` or `SAMPLING_AUDIT_CAP` env are rejected
+  by `scripts/methodology/sampling_audit.py` with exit code 3 and a
+  stderr error referencing this DEC).
+- **§10.5.4 ratchet**: `5 → 7 → 10 → 15 → 20` after each clean audit
+  post-`DEGRADATION_RULE_AT_RISK` (replaces the original "20 → 5 stays
+  at 5 until 2 clean" rule).
+- **§10.5.4a 7 audit-required surfaces** (every commit touching any of
+  these requires Codex review per §10 baseline regardless of
+  `autonomous_governance` flag):
+  1. `FoamAgentExecutor.execute(...)` call sites outside trust-core 5
+  2. Docker / subprocess reachability changes (incl. `subprocess.check_call`)
+  3. `/api/**` route registration (body signal: `@router.<verb>` /
+     `APIRouter()` / `router.add_api_route` / `app.include_router` —
+     diff-header-only doc edits in `ui/backend/routes/` no longer fire)
+  4. `reports/` durable persistence
+  5. `user_drafts/` → `TaskSpec` plumbing
+  6. `correction_spec/` write paths (NEW · A4)
+  7. `.planning/case_profiles/` write paths (NEW · A4)
+
+### Test posture at PC-closure
+
+- Full pytest suite at HEAD `4cb2aad`: **884 passed, 1 pre-existing
+  flaky test (`test_build_trust_gate_report_resolves_display_title_to_slug`),
+  2 skipped**. The flaky test passes in isolation but fails under
+  full-suite ordering — pre-existing test-isolation issue unrelated to
+  the PC arc; baseline at session start (commit `c65cbc7`) was 860
+  passed / 1 flake / 2 skipped. The PC arc added 24 new tests
+  (`tests/methodology/test_sampling_audit.py`); 16 of them are
+  R1-finding regression coverage.
+
+### §10.5 + §11 promotion to Active
+
+Per PC-3 acceptance gate (token cap + enforcement script live + tested)
+and PC-4 acceptance gate (7-surface canonical list + chronology bridges
+in §10.5.5), Methodology v2.0 §10.5 and §11 promote from `provisional`
+to **Active**. The next sampling audit fire will use the 100k cap and
+7-surface coverage automatically.
+
+### P2-T1 unlock
+
+DEC-V61-074 (ExecutorMode ABC + 4-mode skeleton + TrustGate routing
+implementation) is **UNBLOCKED** as of this DEC's status flip. The
+spec at `docs/specs/EXECUTOR_ABSTRACTION.md` is the canonical
+contract; Notion canonical doc `ecee8d970e8148ec8c714eba8f250110`
+mirrors from this file post-merge.
+
+### Counter v6.1
+
+`autonomous_governance_counter_v61` advances **47 → 48** for this PC
+closure (the original V61-073 amendment landing was 47; the closure
+itself is 48). Per RETRO-V61-001 risk-tier-driven cadence, no new STOP
+threshold; counter remains pure telemetry.
