@@ -371,3 +371,177 @@ class TestBuildManifestIntegration:
         )
         assert "fully_developed_pipe" in manifest["case"]["legacy_ids"]
         assert "fully_developed_turbulent_pipe_flow" in manifest["case"]["legacy_ids"]
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-074 P2-T1.b · additive `executor` manifest section
+# (EXECUTOR_ABSTRACTION.md §3 + spike F-3 forward-compat plan)
+# ---------------------------------------------------------------------------
+
+class TestExecutorManifestField:
+    """The ``executor`` top-level section is additive (no SCHEMA_VERSION
+    bump). Default = ``docker_openfoam`` (truth-source mode); explicit
+    ``ExecutorAbc`` instances tag their own MODE / VERSION / contract_hash;
+    legacy zips signed pre-P2 must continue to verify when the field is
+    absent (treated as ``docker_openfoam`` by downstream readers).
+    """
+
+    def _patch_repo(self, monkeypatch, repo: Path) -> None:
+        monkeypatch.setattr("src.audit_package.manifest._REPO_ROOT", repo)
+        monkeypatch.setattr(
+            "src.audit_package.manifest._WHITELIST_PATH",
+            repo / "knowledge" / "whitelist.yaml",
+        )
+        monkeypatch.setattr(
+            "src.audit_package.manifest._GOLD_STANDARDS_ROOT",
+            repo / "knowledge" / "gold_standards",
+        )
+        monkeypatch.setattr(
+            "src.audit_package.manifest._DECISIONS_ROOT",
+            repo / ".planning" / "decisions",
+        )
+
+    def test_default_executor_is_docker_openfoam(self, tmp_path, monkeypatch):
+        """``executor=None`` defaults to the truth-source mode + spec
+        version, with a deterministic contract_hash. SCHEMA_VERSION
+        unchanged (additive forward-compat per spike F-3)."""
+        from src.executor import (
+            DockerOpenFOAMExecutor,
+            ExecutorMode,
+            SPEC_VERSION,
+        )
+
+        repo = _synth_repo(tmp_path)
+        self._patch_repo(monkeypatch, repo)
+
+        manifest = build_manifest(
+            case_id="duct_flow",
+            run_id="r1",
+            build_fingerprint="2026-04-20T23:55:00Z",
+        )
+
+        assert manifest["schema_version"] == SCHEMA_VERSION  # un-bumped
+        assert manifest["executor"] == {
+            "mode": ExecutorMode.DOCKER_OPENFOAM.value,
+            "version": SPEC_VERSION,
+            "contract_hash": DockerOpenFOAMExecutor().contract_hash,
+        }
+
+    def test_explicit_mock_executor_tags_mock_mode(self, tmp_path, monkeypatch):
+        """``executor=MockExecutor()`` tags ``mode=mock`` so downstream
+        TrustGate routing per §6.1 can apply the WARN ceiling."""
+        from src.executor import ExecutorMode, MockExecutor
+
+        repo = _synth_repo(tmp_path)
+        self._patch_repo(monkeypatch, repo)
+        mock_exec = MockExecutor()
+
+        manifest = build_manifest(
+            case_id="duct_flow",
+            run_id="r1",
+            build_fingerprint="2026-04-20T23:55:00Z",
+            executor=mock_exec,
+        )
+
+        assert manifest["executor"]["mode"] == ExecutorMode.MOCK.value
+        assert manifest["executor"]["contract_hash"] == mock_exec.contract_hash
+
+    def test_executor_section_byte_stable_across_invocations(
+        self, tmp_path, monkeypatch
+    ):
+        """Two calls with the same default executor produce byte-identical
+        executor sections — required for spike F-3 byte-determinism."""
+        repo = _synth_repo(tmp_path)
+        self._patch_repo(monkeypatch, repo)
+
+        kwargs = dict(
+            case_id="duct_flow",
+            run_id="stable",
+            build_fingerprint="2026-04-20T23:55:00Z",
+        )
+        m1 = build_manifest(**kwargs)
+        m2 = build_manifest(**kwargs)
+
+        s1 = json.dumps(m1["executor"], sort_keys=True, ensure_ascii=False)
+        s2 = json.dumps(m2["executor"], sort_keys=True, ensure_ascii=False)
+        assert s1 == s2
+
+    def test_executor_field_round_trips_through_zip_serialization(
+        self, tmp_path, monkeypatch
+    ):
+        """build → serialize_zip_bytes → unzip → parse manifest.json:
+        the ``executor`` section survives the canonical-JSON serializer
+        unchanged (proof that zip embedding preserves new top-level
+        fields without manifest.py / serialize.py needing schema bump)."""
+        import io
+        import zipfile
+
+        from src.audit_package.serialize import serialize_zip_bytes
+        from src.executor import ExecutorMode, MockExecutor
+
+        repo = _synth_repo(tmp_path)
+        self._patch_repo(monkeypatch, repo)
+
+        manifest = build_manifest(
+            case_id="duct_flow",
+            run_id="rt",
+            build_fingerprint="2026-04-20T23:55:00Z",
+            executor=MockExecutor(),
+        )
+        zip_bytes = serialize_zip_bytes(manifest)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), mode="r") as zf:
+            # Phase7 may or may not be present; manifest.json always is.
+            inner = json.loads(zf.read("manifest.json").decode("utf-8"))
+
+        assert inner["executor"]["mode"] == ExecutorMode.MOCK.value
+        assert inner["executor"] == manifest["executor"]
+
+    def test_legacy_signed_zip_compatibility_no_executor_field(self):
+        """A legacy manifest dict with NO ``executor`` key (simulating
+        a pre-P2 zip) signs and verifies cleanly. The HMAC is computed
+        over the canonical JSON of whatever fields are present, so an
+        absent ``executor`` field is not a verification failure mode —
+        it's the forward-compat clause from EXECUTOR_ABSTRACTION §3.
+
+        Downstream readers (e.g., ``src.metrics.trust_gate`` per §6.1)
+        are responsible for treating absent ``executor`` as the truth-
+        source mode (``docker_openfoam``); this test pins the contract
+        at the audit-package boundary by ensuring the field's absence
+        does not break the sign/verify cycle.
+        """
+        from src.audit_package.serialize import serialize_zip_bytes
+        from src.audit_package.sign import sign, verify
+
+        legacy_manifest = {
+            "schema_version": 1,
+            "manifest_id": "duct_flow-legacy",
+            "build_fingerprint": "2026-04-20T23:55:00Z",
+            "git": {
+                "repo_commit_sha": "deadbeef",
+                "whitelist_commit_sha": None,
+                "gold_standard_commit_sha": None,
+            },
+            "case": {
+                "id": "duct_flow",
+                "legacy_ids": [],
+                "whitelist_entry": None,
+                "gold_standard": None,
+            },
+            "run": {"run_id": "legacy", "status": "no_run_output"},
+            "measurement": {
+                "key_quantities": {},
+                "comparator_verdict": None,
+                "audit_concerns": [],
+            },
+            "decision_trail": [],
+        }
+        # Sanity: this fixture intentionally omits the new field.
+        assert "executor" not in legacy_manifest
+
+        secret = b"x" * 32
+        zip_bytes = serialize_zip_bytes(legacy_manifest)
+        signature = sign(legacy_manifest, zip_bytes, secret)
+
+        assert verify(legacy_manifest, zip_bytes, signature, secret) is True
+        # Different key → still rejected (HMAC integrity preserved).
+        assert verify(legacy_manifest, zip_bytes, signature, b"y" * 32) is False

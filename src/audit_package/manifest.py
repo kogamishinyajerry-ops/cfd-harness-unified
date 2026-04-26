@@ -36,9 +36,12 @@ import datetime as _dt
 import hashlib
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 import yaml
+
+if TYPE_CHECKING:
+    from src.executor.base import ExecutorAbc
 
 SCHEMA_VERSION = 1
 
@@ -442,6 +445,43 @@ def _collect_phase7_artifacts(
     }
 
 
+def _build_executor_section(executor: Optional["ExecutorAbc"]) -> Dict[str, str]:
+    """Construct the additive ``executor`` manifest section per
+    EXECUTOR_ABSTRACTION.md §3 (compatibility-spike F-3 migration plan).
+
+    When ``executor`` is None, the section defaults to
+    ``DOCKER_OPENFOAM`` so legacy callers that have not yet plumbed an
+    explicit ``ExecutorAbc`` get the truth-source mode recorded —
+    matching §3's "absent field treated as ``docker_openfoam``" forward-
+    compat clause but pinning it explicitly for new manifests.
+
+    Plane note: ``src.audit_package`` (Plane.CONTROL) may import from
+    ``src.executor`` (Plane.EXECUTION) — Contract 1/2 in `.importlinter`
+    only forbid the EXECUTION↔EVALUATION crossing. The import is lazy
+    inside this helper so module-init time stays light and any future
+    circular-import concerns are deferred to call time.
+    """
+    from src.executor import DockerOpenFOAMExecutor, ExecutorMode  # noqa: PLC0415
+
+    if executor is None:
+        # Same shape as the wrapped path; the default executor's
+        # contract_hash is spec-derived
+        # (sha256(spec_file_sha256|MODE.value|VERSION) — see
+        # src/executor/base.py ExecutorAbc.contract_hash) so two
+        # calls produce byte-identical output even without caching.
+        default_executor = DockerOpenFOAMExecutor()
+        return {
+            "mode": ExecutorMode.DOCKER_OPENFOAM.value,
+            "version": default_executor.VERSION,
+            "contract_hash": default_executor.contract_hash,
+        }
+    return {
+        "mode": executor.MODE.value,
+        "version": executor.VERSION,
+        "contract_hash": executor.contract_hash,
+    }
+
+
 def build_manifest(
     *,
     case_id: str,
@@ -455,6 +495,7 @@ def build_manifest(
     build_fingerprint: Optional[str] = None,
     solver_name: Optional[str] = None,
     include_phase7: bool = True,
+    executor: Optional["ExecutorAbc"] = None,
 ) -> Dict[str, Any]:
     """Assemble the audit-package manifest for a single case + run.
 
@@ -492,6 +533,17 @@ def build_manifest(
     solver_name
         When known (typically from whitelist), recorded at ``run.solver``
         even if ``run_output_dir`` is None.
+    executor
+        ``ExecutorAbc`` instance whose ``MODE`` / ``VERSION`` /
+        ``contract_hash`` get tagged into the manifest's additive
+        ``executor`` top-level field per EXECUTOR_ABSTRACTION.md §3 +
+        spike F-3. ``None`` falls back to the canonical truth-source
+        mode (``DOCKER_OPENFOAM``); this keeps SCHEMA_VERSION pinned
+        at 1 (additive forward-compat — see spike F-3 verdict
+        ``COMPATIBLE_WITH_MANIFEST_TAG_EXTENSION``). Pre-P2 zips that
+        omit the field continue to verify; readers MUST treat absent
+        as ``docker_openfoam`` (mirrored downstream by
+        ``src.metrics.trust_gate``'s per-mode routing fallback).
 
     Returns
     -------
@@ -559,6 +611,7 @@ def build_manifest(
         "schema_version": SCHEMA_VERSION,
         "manifest_id": f"{case_id}-{run_id}",
         "build_fingerprint": build_fingerprint or _default_now_utc(),
+        "executor": _build_executor_section(executor),
         "git": git_section,
         "case": {
             "id": case_id,

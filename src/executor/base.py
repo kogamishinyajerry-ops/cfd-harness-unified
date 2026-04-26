@@ -29,6 +29,8 @@ import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import lru_cache
+from pathlib import Path
 from typing import ClassVar, Optional, Tuple
 
 from src.models import ExecutionResult, TaskSpec
@@ -39,12 +41,53 @@ __all__ = [
     "RunReport",
     "ExecutorAbc",
     "SPEC_VERSION",
+    "SPEC_FILE_UNAVAILABLE_SENTINEL",
 ]
 
 # Canonical version string pinned in the spec frontmatter at
 # docs/specs/EXECUTOR_ABSTRACTION.md `version: 0.2`. Bumping the spec
 # version requires bumping this constant in lockstep.
 SPEC_VERSION = "0.2"
+
+# DEC-V61-074 P2-T1.b · spec-file-derived contract_hash
+#
+# Per EXECUTOR_ABSTRACTION.md §2 + §3 + spike F-3, the manifest's
+# `executor.contract_hash` is derived from the FROZEN contract spec
+# file — not from the executor class identity. This means a class
+# rename / module move does NOT churn signed-manifest bytes, but a
+# spec change does (intended — contract evolves, hash advances in
+# lockstep).
+#
+# `_SPEC_FILE` resolves from this module's location. `_executor_spec_sha256`
+# is `lru_cache`d so two `contract_hash` calls within the same process
+# read the spec file once. The cache key is empty (no args) so we get
+# a stable per-process hash; the lifetime is the process lifetime,
+# matching the byte-determinism requirement from §3.
+_SPEC_FILE: Path = (
+    Path(__file__).resolve().parent.parent.parent
+    / "docs"
+    / "specs"
+    / "EXECUTOR_ABSTRACTION.md"
+)
+
+# Sentinel used when the spec file cannot be read (e.g., installed
+# wheel sans docs/). Stable across processes so audit pipelines can
+# detect the absence rather than seeing a moving target.
+SPEC_FILE_UNAVAILABLE_SENTINEL = "spec_file_unavailable"
+
+
+@lru_cache(maxsize=1)
+def _executor_spec_sha256() -> str:
+    """SHA-256 hex of the canonical EXECUTOR_ABSTRACTION.md content
+    bytes (process-cached). Returns ``SPEC_FILE_UNAVAILABLE_SENTINEL``
+    when the file cannot be read — that branch is reachable in
+    deployments that ship without ``docs/`` and is itself stable so
+    auditors can detect the absent source without seeing churn.
+    """
+    try:
+        return hashlib.sha256(_SPEC_FILE.read_bytes()).hexdigest()
+    except OSError:
+        return SPEC_FILE_UNAVAILABLE_SENTINEL
 
 
 class ExecutorMode(StrEnum):
@@ -170,12 +213,15 @@ class ExecutorAbc(ABC):
       - Implement `execute(task_spec) -> RunReport`.
 
     `contract_hash` is computed from a stable identity tuple
-    (mode value + spec version + class qualname). For P2-T1 skeleton
-    this is *not* the SHA-256 of a frozen spec file (per §3 ideal);
-    that integration lands in P2-T1.b together with manifest tagging.
-    The current implementation is identity-stable (same subclass →
-    same hash; different subclass → different hash) which is enough
-    for the skeleton's tests + downstream routing.
+    (mode value + spec version + spec-file SHA-256). Per
+    EXECUTOR_ABSTRACTION.md §2 + §3 + spike F-3, the hash is anchored
+    to the FROZEN contract spec source (`docs/specs/EXECUTOR_ABSTRACTION.md`),
+    not to the executor class identity — class renames / module moves
+    do NOT churn signed-manifest bytes; only spec changes do.
+
+    Different `ExecutorMode` values still produce different hashes
+    (mode is part of the identity tuple) so §6.3 reference-run
+    identity remains falsifiable per-mode.
 
     `VERSION` defaults to `SPEC_VERSION` so all 4 mode classes report
     the same version string in their `RunReport`s. Subclasses MAY
@@ -200,13 +246,29 @@ class ExecutorAbc(ABC):
 
     @property
     def contract_hash(self) -> str:
-        """SHA-256 hex digest of the executor's identity tuple.
+        """SHA-256 hex digest of ``(spec_file_sha256 | MODE | VERSION)``.
 
-        Same subclass + same spec version → same hash. Different
-        subclass → different hash. P2-T1.b will replace this with the
-        SHA of the frozen spec file once manifest tagging integrates.
+        The first component anchors the hash to the canonical
+        EXECUTOR_ABSTRACTION.md spec file content (see
+        :func:`_executor_spec_sha256`). The second + third differentiate
+        modes within the same spec revision so §6.3 reference identity
+        is per-mode, per-spec-version.
+
+        Implications (DEC-V61-074 P2-T1.b):
+
+        - Class rename / module move: hash UNCHANGED. Audit-package
+          manifests signed before such a refactor still verify; §6.3
+          reference-run lookups continue to resolve the same row.
+        - Spec amendment (any byte-level change to
+          ``docs/specs/EXECUTOR_ABSTRACTION.md``): hash CHANGES for ALL
+          modes simultaneously — the contract has moved, every
+          previously-signed manifest is now from a prior contract
+          revision, which is exactly the audit signal §3/F-3 requires.
+        - Different ``MODE`` values: hash DIFFERS (so a hybrid_init
+          run can never spuriously satisfy §6.3 against a
+          docker_openfoam reference).
         """
-        identity = f"{type(self).__qualname__}|{self.MODE.value}|{self.VERSION}"
+        identity = f"{_executor_spec_sha256()}|{self.MODE.value}|{self.VERSION}"
         return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
     @abstractmethod

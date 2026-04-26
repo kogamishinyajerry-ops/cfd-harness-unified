@@ -157,6 +157,87 @@ def test_contract_hash_is_sha256_hex():
 
 
 # -----------------------------------------------------------------------------
+# DEC-V61-074 P2-T1.b · executor_contract_hash_pinning (Codex round-1 fix)
+# -----------------------------------------------------------------------------
+
+
+class TestExecutorContractHashPinning:
+    """Per EXECUTOR_ABSTRACTION.md §2 + §3 + spike F-3 + DEC-V61-074
+    P2-T1.b R1 finding: ``contract_hash`` MUST be derived from the
+    frozen spec source (``docs/specs/EXECUTOR_ABSTRACTION.md``) — NOT
+    from the executor class identity. A class rename / module move
+    must NOT churn signed-manifest bytes.
+
+    These tests pin that contract so a future refactor cannot silently
+    re-introduce class-identity hashing.
+    """
+
+    def test_hash_invariant_under_subclass_qualname_change(self):
+        """A subclass that shares ``MODE`` + ``VERSION`` with one of
+        the canonical classes must hash identically to it — proves the
+        hash is *not* keyed on class qualname. P2-T1.a's earlier
+        implementation would have failed this check (it included
+        ``type(self).__qualname__`` in the identity tuple)."""
+
+        class _RenamedDockerOpenFoam(ExecutorAbc):
+            MODE = ExecutorMode.DOCKER_OPENFOAM
+
+            def execute(self, task_spec):  # pragma: no cover - not exercised
+                raise NotImplementedError
+
+        canonical = DockerOpenFOAMExecutor().contract_hash
+        renamed = _RenamedDockerOpenFoam().contract_hash
+        assert canonical == renamed, (
+            "contract_hash must depend on (spec_file_sha, MODE, VERSION) "
+            "only — not on the executor class qualname"
+        )
+
+    def test_hash_changes_when_spec_file_content_changes(self, monkeypatch):
+        """Mutating the spec-file SHA-256 must propagate to subsequent
+        ``contract_hash`` reads — the hash is a function of the spec,
+        not of frozen process state. (``monkeypatch.setattr`` swaps the
+        cached lookup; teardown restores the original function so the
+        ``lru_cache`` returns post-test, ready for downstream tests.)
+        """
+        from src.executor import base as executor_base
+
+        original = MockExecutor().contract_hash
+
+        # Swap the cached helper for a fixed-digest stub; this
+        # simulates a spec amendment without actually rewriting the
+        # file. Monkeypatch's auto-teardown restores the lru_cache.
+        monkeypatch.setattr(
+            executor_base,
+            "_executor_spec_sha256",
+            lambda: "f" * 64,
+        )
+        amended = MockExecutor().contract_hash
+
+        assert original != amended
+
+    def test_hash_is_lockstep_across_modes_within_one_spec_revision(self):
+        """All 4 modes share the same spec-file SHA component — only
+        the mode-value tail differs. This pins the §3 invariant that
+        a spec amendment churns ALL mode hashes simultaneously while
+        a class refactor churns NONE.
+        """
+        import hashlib
+        from src.executor.base import _executor_spec_sha256
+
+        spec_sha = _executor_spec_sha256()
+        for mode_cls, mode_value in (
+            (DockerOpenFOAMExecutor, ExecutorMode.DOCKER_OPENFOAM.value),
+            (MockExecutor, ExecutorMode.MOCK.value),
+            (HybridInitExecutor, ExecutorMode.HYBRID_INIT.value),
+            (FutureRemoteExecutor, ExecutorMode.FUTURE_REMOTE.value),
+        ):
+            expected = hashlib.sha256(
+                f"{spec_sha}|{mode_value}|{SPEC_VERSION}".encode("utf-8")
+            ).hexdigest()
+            assert mode_cls().contract_hash == expected
+
+
+# -----------------------------------------------------------------------------
 # RunReport invariants
 # -----------------------------------------------------------------------------
 

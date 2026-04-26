@@ -10,7 +10,7 @@ parent_authority_verdict: AUTH-V61-080-2026-04-26
 authority_class: CFDJerry_charter_gate  # Charter mods are CFDJerry's own gate per project governance
 autonomous_governance: false             # Charter modifications cannot land via autonomous_governance
 external_gate_self_estimated_pass_rate: n/a
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed810cbb1ef22d8c4c1027)
 codex_tool_report_path: null
 risk_flags: []
 gov1_v1_scope:
