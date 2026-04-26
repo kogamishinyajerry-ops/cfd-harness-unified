@@ -55,6 +55,17 @@ def _run_hook(
     # Round-2 Q6: env-driven override-reason. Tests that should pass under
     # the new gate pass extra_env={"CODEX_OVERRIDE_REASON": "..."}.
     env.pop("CODEX_OVERRIDE_REASON", None)
+    # Round-3 F10 CI-detection in `check_codex_cadence._is_ci_environment`
+    # refuses any override when CI=true is set. GitHub Actions / GitLab CI /
+    # CircleCI etc. all set CI=true on every test runner, so inheriting the
+    # parent env propagates that signal into the hook subprocess and breaks
+    # 6 override-path tests with "CI OVERRIDE REFUSED". The hook's policy
+    # is correct — overrides shouldn't work in real CI — but the *tests*
+    # exercising the override code path need a non-CI subprocess. Strip
+    # CI/CI-like vars so the hook sees a developer-machine environment.
+    for ci_var in ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI",
+                   "TRAVIS", "JENKINS_URL", "BUILDKITE"):
+        env.pop(ci_var, None)
     if extra_env:
         env.update(extra_env)
     res = subprocess.run(
