@@ -35,7 +35,7 @@ sub_scope_rationale: |
       TaskRunner dispatch + TrustGate routing per §6.1 + legacy
       compatibility tests. Trust-core write — Codex pre-merge review
       mandatory.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://www.notion.so/DEC-V61-074-P2-T1-ExecutorMode-ABC-manifest-tagging-dispatch-routing-full-P2-T1-scope-T-34ec68942bed8124a43ad6f75af3dfe8)
 ---
 
 # DEC-V61-074 · P2-T1 ExecutorMode ABC + 4-mode skeleton
