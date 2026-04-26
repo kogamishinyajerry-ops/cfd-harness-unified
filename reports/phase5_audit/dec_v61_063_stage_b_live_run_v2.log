@@ -1,0 +1,9 @@
+/Users/Zhuanz/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+[audit] commit: 0722c8c · cases: ['turbulent_flat_plate']
+[audit] turbulent_flat_plate → start
+[audit] [WARN] field artifact dir missing, skipping manifest: /Users/Zhuanz/Desktop/cfd-s3-pc/reports/phase5_fields/turbulent_flat_plate/20260425T154154Z
+[audit] turbulent_flat_plate → FAIL · 4.4s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+turbulent_flat_plate                   FAIL  4.4s

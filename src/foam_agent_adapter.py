@@ -684,9 +684,23 @@ class FoamAgentExecutor:
                     solver_name = "simpleFoam"
                 else:
                     solver_name = "simpleFoam"
-                    turbulence_model = self._turbulence_model_for_solver(
-                        solver_name, task_spec.geometry_type, task_spec.Re
-                    )
+                    # DEC-V61-063 Batch A.6 (post-R3 RETRO-V61-053 addendum):
+                    # Consult whitelist `turbulence_model` BEFORE the Re-based
+                    # heuristic, mirroring the DEC-V61-053 B1 cylinder fix.
+                    # Without this, turbulent_flat_plate (whitelist: laminar)
+                    # gets kOmegaSST from `_turbulence_model_for_solver` because
+                    # Re=50000 ≥ 2300, despite V61-006 closing the regime
+                    # decision as laminar Blasius. The pre-existing dispatch
+                    # was a Knowledge↔Execution misalignment that V61-063 Stage
+                    # B exposed (k_min=-403k, ω_min=-43k, Spalding fallback at
+                    # 4/4 x positions, mean_K=1.254 vs 0.664).
+                    whitelist_turb = _load_whitelist_turbulence_model(task_spec.name)
+                    if whitelist_turb in ("laminar", "kOmegaSST", "kEpsilon"):
+                        turbulence_model = whitelist_turb
+                    else:
+                        turbulence_model = self._turbulence_model_for_solver(
+                            solver_name, task_spec.geometry_type, task_spec.Re
+                        )
                     self._generate_steady_internal_flow(case_host_dir, task_spec, turbulence_model)
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
@@ -3927,17 +3941,29 @@ boundaryField
         """生成稳态内部流 case 文件（simpleFoam + configurable turbulence model）。
 
         适用于:
-        - Turbulent Flat Plate (SIMPLE_GRID, Re=5e4) -> kOmegaSST
+        - Laminar Flat Plate (SIMPLE_GRID, Re=5e4 deep-laminar Blasius)
+          per V61-006 -> laminar (DEC-V61-063 Batch A.7)
         - Fully Developed Pipe Flow (SIMPLE_GRID, Re=5e4) -> kOmegaSST
 
         几何: 矩形通道, 2D 近似 (z-depth = 0.1m)
         - inlet: uniform velocity U = (U_bulk, 0, 0)
         - walls: no-slip
         - outlet: zeroGradient pressure
+
+        DEC-V61-063 A.7: support `turbulence_model="laminar"` so the case
+        generator obeys the V61-006 closed regime decision. Stage B v1
+        proved that emitting `simulationType RAS; RASModel laminar;`
+        crashes simpleFoam at startup (no such RAS model). Branches:
+          - turbulenceProperties: simulationType laminar (no RAS block)
+          - 0/k, 0/omega, 0/epsilon, 0/nut: skipped — laminar solver
+            stack does not register these fields
+          - fvSolution: minimal U+p solver block, no k/omega/epsilon
+            residualControl
         """
         (case_dir / "system").mkdir(parents=True, exist_ok=True)
         (case_dir / "constant").mkdir(parents=True, exist_ok=True)
         (case_dir / "0").mkdir(parents=True, exist_ok=True)
+        is_laminar = turbulence_model == "laminar"
 
         Re = float(task_spec.Re or 50000)
         L = float(task_spec.boundary_conditions.get("plate_length", 1.0)) if task_spec.boundary_conditions else 1.0
@@ -4058,7 +4084,22 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
-        # constant/turbulenceProperties — k-epsilon
+        # constant/turbulenceProperties
+        # DEC-V61-063 A.7: branch on laminar — RAS{ RASModel laminar; }
+        # is invalid in OpenFOAM 10 (no laminar RAS model registered).
+        if is_laminar:
+            _turb_body = "simulationType  laminar;\n"
+        else:
+            _turb_body = (
+                f"simulationType  RAS;\n"
+                f"\n"
+                f"RAS\n"
+                f"{{\n"
+                f"    RASModel      {turbulence_model};\n"
+                f"    turbulence    on;\n"
+                f"    printCoeffs   on;\n"
+                f"}}\n"
+            )
         (case_dir / "constant" / "turbulenceProperties").write_text(
             f"""\
 /*--------------------------------*- C++ -*---------------------------------*\\
@@ -4078,15 +4119,7 @@ FoamFile
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-simulationType  RAS;
-
-RAS
-{{
-    RASModel      {turbulence_model};
-    turbulence    on;
-    printCoeffs   on;
-}}
-
+{_turb_body}
 // ************************************************************************* //
 """,
             encoding="utf-8",
@@ -4195,7 +4228,79 @@ wallDist
 
 
         # Build fvSolution content conditionally based on turbulence model
-        if turbulence_model == "kOmegaSST":
+        # DEC-V61-063 A.7: laminar branch — no k/omega/epsilon solvers,
+        # no residualControl entries for non-existent fields, no
+        # relaxation factors on absent equations.
+        if is_laminar:
+            solvers_block = """\
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    U
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    UFinal
+    {
+        $U;
+        relTol          0;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 1;
+    residualControl
+    {
+        U       1e-5;
+        p       1e-4;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.3;
+    }
+    equations
+    {
+        U               0.7;
+    }
+}
+"""
+        elif turbulence_model == "kOmegaSST":
             solvers_block = """\
 /*--------------------------------*- C++ -*---------------------------------*\
 | =========                 |                                                 |
@@ -4462,6 +4567,15 @@ boundaryField
 """,
             encoding="utf-8",
         )
+
+        # DEC-V61-063 A.7: laminar simpleFoam needs ONLY p/U fields.
+        # Writing k/omega/epsilon/nut while simulationType=laminar causes
+        # "Field nut not found" / RAS-not-registered errors at solver
+        # startup. The remaining sampleDict block (temperature profile
+        # for natural-convection cavity — leftover from copy-paste) is
+        # irrelevant for flat plate either way; skip with the same guard.
+        if is_laminar:
+            return
 
         # 0/k
         k_init = 0.01
@@ -8483,6 +8597,13 @@ mergePatchPairs
             key_quantities = self._extract_flat_plate_cf(
                 cxs, cys, u_vecs, task_spec, key_quantities
             )
+            # DEC-V61-063 A.3: derive Blasius invariant K_x and δ_99(x)
+            # secondaries on top of the A.2 cf_x_profile. Failures are
+            # folded into per-class error keys so a single δ_99 u-line
+            # gap doesn't strip the rest of the audit surface.
+            key_quantities = self._enrich_flat_plate_cf(
+                cxs, cys, u_vecs, task_spec, key_quantities
+            )
 
         # Impinging Jet: IMPINGING_JET -> nusselt_number
         elif geom == GeometryType.IMPINGING_JET:
@@ -9474,6 +9595,16 @@ mergePatchPairs
     # Turbulent Flat Plate — 提取局部摩擦系数 Cf
     # ------------------------------------------------------------------
 
+    # DEC-V61-063 A.2: streamwise sampling positions for the multi-x
+    # Cf profile. The 4-point sample exercises the laminar Blasius
+    # similarity scaling (Cf · √Re_x = 0.664) — see intake §1
+    # secondary_gates.cf_x_profile. x=0.5 stays first in the tuple
+    # because the back-compat `cf_skin_friction` scalar is still
+    # extracted from that position (existing fixtures depend on it).
+    _FLAT_PLATE_CF_X_TARGETS: Tuple[float, ...] = (0.5, 0.25, 0.75, 1.0)
+    # Back-compat anchor — `cf_skin_friction` scalar is the Cf at this x.
+    _FLAT_PLATE_CF_BACKCOMPAT_X: float = 0.5
+
     @staticmethod
     def _extract_flat_plate_cf(
         cxs: List[float],
@@ -9484,9 +9615,21 @@ mergePatchPairs
     ) -> Dict[str, Any]:
         """Turbulent Flat Plate: 从壁面速度梯度计算局部摩擦系数 Cf。
 
-        Gold Standard: Cf ≈ 0.0576/Re_x^0.2 (Spalding formula)
-        方法: 找 y=0（壁面）单元格的速度梯度 du/dy，
-        然后 Cf = tau_w / (0.5*rho*U_ref^2) = nu * (du/dy) / (0.5*U_ref^2)
+        DEC-V61-063 Stage A.2: generalized from single x_target=0.5 to
+        multi-x sampling at x ∈ {0.5, 0.25, 0.75, 1.0}. Emits both the
+        legacy single-scalar `cf_skin_friction` (from x=0.5) and the
+        new `cf_x_profile` list of (x, Cf) pairs that the V61-063
+        Type II comparator gates iterate over.
+
+        Method: per x in _FLAT_PLATE_CF_X_TARGETS, gather cell-centre
+        velocity samples within x_tol of the target, compute du/dy at
+        the wall via interior-cell gradient, then Cf = τ_w / (½·ρ·U_ref²)
+        = (ν + ν_t) · (du/dy) / (½·U_ref²).
+
+        Spalding fallback (Cf > 0.01 cap) remains in place but is now
+        per-x; emits cf_spalding_fallback_count for audit transparency.
+        Under the laminar Blasius contract (V61-006), this fallback
+        should NEVER fire — Stage A.3 will add an explicit assertion.
         """
         if not cxs or not u_vecs:
             return key_quantities
@@ -9535,8 +9678,7 @@ mergePatchPairs
                 return gradient, nut_eff
             return None
 
-        # 找 x=0.5 位置（无因次化后）和 y≈0（壁面）速度
-        x_target = 0.5
+        # 计算 x_tol 一次，所有 x_target 共享。
         unique_x = sorted({round(x, 6) for x in cxs})
         if len(unique_x) >= 2:
             dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
@@ -9544,65 +9686,266 @@ mergePatchPairs
         else:
             x_tol = 0.01
 
-        # 按 x 位置分组，找壁面（cy≈min(cy)）的速度
+        # 内部 helper: 在单个 x_target 上聚合并计算 Cf。返回 (Cf, fallback_used,
+        # sign_corrected) 或 None（采样失败/数据不足）。
         from collections import defaultdict
-        x_groups: Dict[float, List[Tuple]] = defaultdict(list)
 
-        for i in range(min(len(cxs), len(cys), len(u_vecs))):
-            if abs(cxs[i] - x_target) < x_tol:
-                cz_val = czs[i] if czs is not None else None
-                nut_val = nut_vals[i] if nut_vals is not None else 0.0
-                x_groups[round(cxs[i], 5)].append((cys[i], cz_val, u_vecs[i][0], nut_val))
-
-        cf_values = []
-        cf_spalding_fallback_count = 0
-        sign_corrected = False
-        for x_pos, cy_u_pairs in x_groups.items():
-            grad_data = _compute_wall_gradient(
-                [(cy, u_parallel, nut_val) for cy, _, u_parallel, nut_val in cy_u_pairs]
-            )
-
-            # 2D 薄层网格里 Cy 可能全部塌缩到 0；此时退化到 Cz 方向梯度。
-            if grad_data is None and czs is not None:
-                z_samples = [
-                    (cz, u_parallel, nut_val)
-                    for _, cz, u_parallel, nut_val in cy_u_pairs
-                    if cz is not None
-                ]
-                grad_data = _compute_wall_gradient(z_samples)
-
-            if grad_data is not None:
+        def _cf_at_x(x_target: float) -> Optional[Tuple[float, bool, bool]]:
+            x_groups: Dict[float, List[Tuple]] = defaultdict(list)
+            for i in range(min(len(cxs), len(cys), len(u_vecs))):
+                if abs(cxs[i] - x_target) < x_tol:
+                    cz_val = czs[i] if czs is not None else None
+                    nut_val = nut_vals[i] if nut_vals is not None else 0.0
+                    x_groups[round(cxs[i], 5)].append(
+                        (cys[i], cz_val, u_vecs[i][0], nut_val)
+                    )
+            cf_values: List[float] = []
+            local_fallback = False
+            local_sign_flip = False
+            for _, cy_u_pairs in x_groups.items():
+                grad_data = _compute_wall_gradient(
+                    [(cy, u_parallel, nv) for cy, _, u_parallel, nv in cy_u_pairs]
+                )
+                # 2D 薄层网格里 Cy 可能全部塌缩到 0；此时退化到 Cz 方向梯度。
+                if grad_data is None and czs is not None:
+                    z_samples = [
+                        (cz, u_parallel, nv)
+                        for _, cz, u_parallel, nv in cy_u_pairs
+                        if cz is not None
+                    ]
+                    grad_data = _compute_wall_gradient(z_samples)
+                if grad_data is None:
+                    continue
                 du_dn, nut_eff = grad_data
                 tau_w = (nu_val + nut_eff) * du_dn
-                Cf = tau_w / (0.5 * U_ref**2)
-                if math.isfinite(Cf):
-                    if Cf < 0.0:
-                        sign_corrected = True
-                        Cf = abs(Cf)
-                    # Cap Cf at physically reasonable max (~0.01 for flat plates).
-                    # Spalding: Cf ≈ 0.0576/Re_x^0.2; at Re_x=25000 (x=0.5,Re=50000)→Cf≈0.0076.
-                    # If extraction gives >0.01, the cell-centre gradient is unreliable — use formula.
-                    if Cf > 0.01:
-                        x_local = x_target / U_ref  # physical x position
-                        Re_x = U_ref * x_local / nu_val
-                        Cf = 0.0576 / (Re_x**0.2) if Re_x > 0 else Cf
-                        cf_spalding_fallback_count += 1
-                    cf_values.append(Cf)
+                Cf_local = tau_w / (0.5 * U_ref**2)
+                if not math.isfinite(Cf_local):
+                    continue
+                if Cf_local < 0.0:
+                    local_sign_flip = True
+                    Cf_local = abs(Cf_local)
+                # Spalding fallback per x: if cell-centre gradient gives an
+                # implausibly large Cf (>0.01), substitute the formula
+                # 0.0576/Re_x^0.2. Under V61-006 laminar contract this
+                # branch should never fire — Stage A.3 adds an assertion.
+                if Cf_local > 0.01:
+                    Re_x = U_ref * x_target / nu_val
+                    if Re_x > 0:
+                        Cf_local = 0.0576 / (Re_x**0.2)
+                    local_fallback = True
+                cf_values.append(Cf_local)
+            if not cf_values:
+                return None
+            return sum(cf_values) / len(cf_values), local_fallback, local_sign_flip
 
-        if cf_values:
-            if sign_corrected:
+        # 多 x 采样: 每个 x_target 独立计算 Cf，组成 cf_x_profile。
+        cf_x_profile: List[Tuple[float, float]] = []
+        cf_spalding_fallback_count = 0
+        cf_sign_flip_count = 0  # Codex R1 F2: machine-visible sign audit
+        sign_corrected_overall = False
+        cf_at_backcompat_x: Optional[float] = None
+        for x_target in FoamAgentExecutor._FLAT_PLATE_CF_X_TARGETS:
+            result = _cf_at_x(x_target)
+            if result is None:
+                continue
+            Cf_at_x, fallback_used, sign_flip = result
+            cf_x_profile.append((x_target, Cf_at_x))
+            if fallback_used:
+                cf_spalding_fallback_count += 1
+            if sign_flip:
+                sign_corrected_overall = True
+                cf_sign_flip_count += 1
+            if math.isclose(
+                x_target, FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X, abs_tol=1e-9
+            ):
+                cf_at_backcompat_x = Cf_at_x
+
+        if cf_x_profile:
+            # Sort by x ascending so audit consumers see a deterministic
+            # profile order (the input tuple has x=0.5 first for the
+            # back-compat lookup but the emitted profile should be
+            # ordered by streamwise position).
+            cf_x_profile.sort(key=lambda pair: pair[0])
+            if sign_corrected_overall:
                 warnings.warn(
                     "Negative flat-plate Cf corrected to absolute value; "
                     "check wall-normal orientation in extracted cell-centre data.",
                     RuntimeWarning,
                     stacklevel=2,
                 )
-            Cf_mean = sum(cf_values) / len(cf_values)
-            key_quantities["cf_skin_friction"] = Cf_mean
-            key_quantities["cf_location_x"] = x_target
+            # Back-compat scalar (x=0.5) — kept so existing fixtures and
+            # the legacy single-scalar comparator path keep working.
+            if cf_at_backcompat_x is not None:
+                key_quantities["cf_skin_friction"] = cf_at_backcompat_x
+                key_quantities["cf_location_x"] = (
+                    FoamAgentExecutor._FLAT_PLATE_CF_BACKCOMPAT_X
+                )
+            # New A.2 emit: full multi-x profile (tuple shape — keeps
+            # introspection cheap for tests + audit code).
+            key_quantities["cf_x_profile"] = list(cf_x_profile)
+            key_quantities["cf_x_profile_n_samples"] = len(cf_x_profile)
+            # A.4 comparator-facing dict shape: gold_standard_comparator
+            # consumes profile observables as list[{axis_key, value_key}],
+            # with `Cf` in PROFILE_VALUE_KEYS. Dual-emit so the tuple
+            # contract above stays untouched.
+            key_quantities["cf_x_profile_points"] = [
+                {"x": x, "Cf": cf} for x, cf in cf_x_profile
+            ]
+            # Audit-package stamp distinguishing wall-gradient extraction
+            # from any future correlation-based path. Stage A.3 will use
+            # this to assert no Spalding fallback fired under the laminar
+            # contract.
+            key_quantities["cf_extractor_path"] = "wall_gradient_v1"
             key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
-            key_quantities["cf_spalding_fallback_activated"] = cf_spalding_fallback_count > 0
+            key_quantities["cf_spalding_fallback_activated"] = (
+                cf_spalding_fallback_count > 0
+            )
+            # Codex R1 F2 fix: sign-flip audit must be machine-visible,
+            # not warning-only. Reversed wall-normal data (e.g. domain
+            # orientation flipped) was producing valid-looking positive
+            # Cf with only a runtime warning — invisible to the
+            # comparator + audit-package surfaces. Now key_quantities
+            # carries an explicit count + boolean so the gate engine
+            # and the audit dashboard see the orientation defect.
+            key_quantities["cf_sign_flip_count"] = cf_sign_flip_count
+            key_quantities["cf_sign_flip_activated"] = (
+                cf_sign_flip_count > 0
+            )
 
+        return key_quantities
+
+    @staticmethod
+    def _build_flat_plate_u_lines(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        x_targets: Tuple[float, ...],
+    ) -> Dict[float, List[Tuple[float, float]]]:
+        """DEC-V61-063 A.3: group cell-centre samples into wall-normal
+        ``(y, u_x)`` lines per x_target for δ_99 extraction.
+
+        Reuses the same x_tol heuristic as ``_extract_flat_plate_cf`` so
+        a target with no nearby cells correctly drops out (rather than
+        bleeding samples in from a neighbour). Lines with <2 points are
+        omitted from the result — δ_99 needs at least a wall sample plus
+        one interior sample to bracket the 0.99·U_inf level.
+        """
+        if not cxs or not u_vecs:
+            return {}
+        unique_x = sorted({round(x, 6) for x in cxs})
+        if len(unique_x) >= 2:
+            dx = min(unique_x[i + 1] - unique_x[i] for i in range(len(unique_x) - 1))
+            x_tol = max(0.6 * dx, 1e-3)
+        else:
+            x_tol = 0.01
+        out: Dict[float, List[Tuple[float, float]]] = {}
+        n = min(len(cxs), len(cys), len(u_vecs))
+        for x_t in x_targets:
+            line: List[Tuple[float, float]] = []
+            for i in range(n):
+                if abs(cxs[i] - x_t) < x_tol:
+                    line.append((cys[i], u_vecs[i][0]))
+            if len(line) >= 2:
+                out[x_t] = sorted(line, key=lambda p: p[0])
+        return out
+
+    @staticmethod
+    def _enrich_flat_plate_cf(
+        cxs: List[float],
+        cys: List[float],
+        u_vecs: List[Tuple],
+        task_spec: TaskSpec,
+        key_quantities: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """DEC-V61-063 A.3: lay V61-063 secondary observables on top of
+        A.2's ``cf_x_profile``.
+
+        Emits:
+          - ``cf_blasius_invariant_*`` (mean/std/rel_spread/per_x/n_samples/canonical_K)
+          - ``cf_profile_*`` (numerical_floor/amplitude/snr_ratio/sample_spacing_floor)
+          - ``delta_99_at_x_<x_key>`` + Blasius reference + relative error per x ∈ {0.5, 1.0}
+          - ``cf_enrichment_path = "enrich_cf_profile_v1_inline"``
+
+        Failure modes are folded into the dict (per-class error keys) so
+        the audit surface keeps Blasius invariant even when one δ_99
+        u-line fails, and never raises through to the caller.
+        """
+        if "cf_x_profile" not in key_quantities:
+            return key_quantities
+        profile = key_quantities["cf_x_profile"]
+        if not profile or len(profile) < 2:
+            key_quantities["cf_enrichment_error"] = "profile_too_short"
+            return key_quantities
+
+        try:
+            from src.flat_plate_extractors import (
+                FlatPlateExtractorError,
+                compute_blasius_invariant,
+                compute_delta_99_at_x,
+                profile_signal_metrics,
+            )
+        except ImportError as exc:
+            key_quantities["cf_enrichment_error"] = f"import:{exc}"
+            return key_quantities
+
+        U_inf = 1.0
+        Re = float(task_spec.Re or 50000)
+        nu = 1.0 / Re
+
+        try:
+            inv = compute_blasius_invariant(profile, U_inf=U_inf, nu=nu)
+            key_quantities["cf_blasius_invariant_mean_K"] = inv.mean_K
+            key_quantities["cf_blasius_invariant_std_K"] = inv.std_K
+            key_quantities["cf_blasius_invariant_rel_spread"] = inv.rel_spread
+            key_quantities["cf_blasius_invariant_per_x_K"] = list(inv.per_x_K)
+            key_quantities["cf_blasius_invariant_n_samples"] = inv.n_samples
+            key_quantities["cf_blasius_invariant_canonical_K"] = inv.canonical_K
+        except FlatPlateExtractorError as exc:
+            key_quantities["cf_blasius_invariant_error"] = str(exc)
+
+        try:
+            snr = profile_signal_metrics(profile)
+            key_quantities["cf_profile_numerical_floor"] = snr.numerical_floor
+            key_quantities["cf_profile_amplitude"] = snr.amplitude
+            key_quantities["cf_profile_snr_ratio"] = snr.snr_ratio
+            key_quantities["cf_profile_sample_spacing_floor"] = snr.sample_spacing_floor
+        except FlatPlateExtractorError as exc:
+            key_quantities["cf_profile_signal_metrics_error"] = str(exc)
+
+        delta_99_targets: Tuple[float, ...] = (0.5, 1.0)
+        u_lines = FoamAgentExecutor._build_flat_plate_u_lines(
+            cxs, cys, u_vecs, delta_99_targets,
+        )
+        for x_pos in delta_99_targets:
+            x_key = f"{x_pos:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+            if x_pos not in u_lines:
+                key_quantities[f"delta_99_at_x_{x_key}_missing_u_line"] = True
+                continue
+            try:
+                d = compute_delta_99_at_x(
+                    u_lines[x_pos], U_inf=U_inf, x=x_pos, nu=nu,
+                )
+                key_quantities[f"delta_99_at_x_{x_key}"] = d["delta_99"]
+                key_quantities[f"delta_99_blasius_at_x_{x_key}"] = d["delta_99_blasius"]
+                key_quantities[f"delta_99_rel_error_at_x_{x_key}"] = d["rel_error"]
+            except FlatPlateExtractorError as exc:
+                key_quantities[f"delta_99_at_x_{x_key}_error"] = str(exc)
+
+        # A.4 comparator-facing dict shape for δ_99(x). Built from the
+        # already-populated `delta_99_at_x_<x_key>` scalars (only the x's
+        # where extraction succeeded contribute a point — missing-u-line
+        # x's are silently absent from the profile, mirroring how the
+        # cylinder centreline extractor emits sparse deficit_x_over_D_*).
+        delta_99_points: List[Dict[str, float]] = []
+        for x_pos in delta_99_targets:
+            x_key = f"{x_pos:.4f}".rstrip("0").rstrip(".").replace(".", "p")
+            d_val = key_quantities.get(f"delta_99_at_x_{x_key}")
+            if isinstance(d_val, (int, float)) and math.isfinite(d_val):
+                delta_99_points.append({"x": x_pos, "value": float(d_val)})
+        if delta_99_points:
+            key_quantities["delta_99_x_profile"] = delta_99_points
+
+        key_quantities["cf_enrichment_path"] = "enrich_cf_profile_v1_inline"
         return key_quantities
 
     # ------------------------------------------------------------------

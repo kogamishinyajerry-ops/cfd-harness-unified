@@ -1,0 +1,178 @@
+# DEC-V61-064 · Flat-plate domain/BC structural fix · INTAKE STUB v0
+#
+# Status: PROPOSED — queued from DEC-V61-063 closeout (2026-04-26).
+# Scope: structural execution-plane fix for the case generator's top-wall
+# BC + (optionally) inlet/leading-edge handling, so the
+# `turbulent_flat_plate` whitelist case (laminar Blasius per V61-006)
+# satisfies its existing gold contract on the existing 80-ycell mesh.
+#
+# Triggered by: DEC-V61-063 Stage B v3 FAIL_PHYSICS_BORDERLINE outcome.
+# All 4 HARD_GATED observables fail by 10-30% rel_error, with the worst
+# (delta_99_x_profile, 30.1%) showing the lower-wall BL is ~30% too thin.
+# Codex R3 disposition (2026-04-26 picassoer651/ramaiamandhabdbs) directly
+# attributed the gap to top-wall mismatch evidenced at
+# src/foam_agent_adapter.py:4032 + 4510.
+#
+# Methodology v2.0 fifth-apply: V61-063 stack inherited verbatim — only
+# the case-gen template + (optionally) a leading-edge buffer change.
+
+decision_id: DEC-V61-064
+title: Flat-plate domain/BC structural fix · external ZPG BC + (optional) leading-edge buffer
+case_id: turbulent_flat_plate  # reuses V61-063 whitelist + gold YAML
+case_type: II  # inherited from V61-063
+status: PROPOSED
+proposed_at: "2026-04-26"
+parent_decision: DEC-V61-063
+intake_version: 0  # bump to 1 once research/scope review complete
+
+# ============================================================================
+# §1 Trigger
+# ============================================================================
+trigger:
+  type: post_v61_063_closeout
+  source: |
+    DEC-V61-063 Stage B v3 (commit 66f0e42) live OpenFOAM run produced
+    solver_success=True with all 28 audit keys populated, but 4/4
+    HARD_GATED observables failed gold tolerance:
+      - cf_skin_friction:                     rel_error 10.7%
+      - cf_x_profile_points (max):            rel_error 14.5%
+      - cf_blasius_invariant_mean_K:          rel_error 10.9%
+      - delta_99_x_profile (max):             rel_error 30.1%
+    Per-x K_x [0.698, 0.735, 0.751, 0.760] monotonic increasing,
+    cf_blasius_invariant_rel_spread=0.037 (tight). Spalding fallback +
+    sign-flip both inactive (laminar contract correctly honored).
+    Codex R3 disposition: ACCEPT (close V61-063, queue V61-064).
+  evidence_path: .planning/intake/DEC-V61-063_stage_b_v3_disposition.md
+
+# ============================================================================
+# §2 Goal
+# ============================================================================
+goal: |
+  Make `turbulent_flat_plate` Stage B PASS the 4 HARD_GATED observables
+  introduced in V61-063, by fixing the case generator to emit an
+  external-flow domain instead of the channel-flow domain that
+  `_generate_steady_internal_flow` currently produces.
+
+  Acceptance signal (PASS condition):
+    cf_blasius_invariant_mean_K rel_error < 10% AND
+    cf_x_profile_points (max-over-profile) rel_error < 10% AND
+    delta_99_x_profile (max-over-profile) rel_error < 10% AND
+    cf_skin_friction rel_error < 10%
+
+  Tightness signal (validates similarity, not just point-wise):
+    cf_blasius_invariant_rel_spread <= 0.05 (already met in V61-063 at 0.037)
+
+# ============================================================================
+# §3 In/out of scope
+# ============================================================================
+in_scope:
+  - "Differentiate flat-plate generator from channel generator (top wall = symmetry/freestream/slip, not no-slip)"
+  - "Verify: cf_blasius_invariant_mean_K rel_error < 10% on existing 80-ycell mesh"
+  - "Optionally: x_origin offset / inflow buffer to allow BL development before x=0.25 sample window — only if top-wall fix alone leaves residual >10%"
+  - "Regenerate audit fixture for turbulent_flat_plate"
+  - "Update knowledge/whitelist.yaml turbulent_flat_plate metadata (`name` field already says 'Laminar Flat Plate' per V61-006; no change needed unless A/B reveals new constraint)"
+
+out_of_scope:
+  - "AMR / GCI study / mesh refinement beyond the V61-063 80-ycell baseline (queued separately as DEC-V61-065 if needed)"
+  - "New observables (V61-063 set is reused verbatim)"
+  - "New case_id (the existing turbulent_flat_plate stays — it's a name, the physics is the V61-006 laminar Blasius)"
+  - "Changes to flat_plate_extractors.py or _enrich_flat_plate_cf (V61-063 closed these as RESOLVED at Codex R2 + R3)"
+
+# ============================================================================
+# §4 Approach (decision points to confirm at intake v1)
+# ============================================================================
+approach_options:
+  A: |
+    Refactor `_generate_steady_internal_flow` with a `flat_plate_mode=True`
+    branch that switches the top boundary patch from no-slip to
+    symmetryPlane (or slip / freestream). Pros: minimal LOC. Cons: the
+    function is already getting branchy after V61-063 A.7 (laminar branch);
+    adding flat_plate_mode increases combinatorial complexity.
+
+  B: |
+    Add a new `_generate_flat_plate(case_dir, task_spec)` generator,
+    dispatched from the SIMPLE_GRID branch when the whitelist
+    turbulence_model is "laminar" AND a flat-plate-specific marker is set
+    (e.g. case_id == "turbulent_flat_plate"). Pros: clean separation,
+    no scope creep on internal-flow generator. Cons: more LOC; some
+    duplication with _generate_steady_internal_flow.
+
+  C: |
+    Hybrid — extract a shared private `_emit_simple_grid_common(...)` for
+    blockMeshDict + transportProperties + controlDict + fvSchemes, then
+    have flat_plate and channel each call it with their own BC overlay.
+    Pros: avoids both branchiness AND duplication. Cons: largest refactor.
+
+# Pre-research recommendation (subject to Codex pre-Stage-A review):
+preferred_approach: B
+preferred_approach_rationale: |
+  Option B keeps V61-063's A.7 laminar branch in `_generate_steady_internal_flow`
+  intact (no churn on a Codex-approved code path) and isolates the new
+  external-flow BC handling in a dedicated generator. This is the same
+  pattern used by `_generate_circular_cylinder_wake` (separate generator
+  for a flow regime that doesn't share BC topology with the channel
+  generator). Option A risks adding a second axis of branching to a
+  function that already has 3 turbulence-model branches × 4 0/* field
+  conditionals.
+
+# ============================================================================
+# §5 Risk register
+# ============================================================================
+risk_flags:
+  - id: top_wall_BC_choice
+    severity: MED
+    description: |
+      Symmetry vs slip vs freestream are not equivalent. Symmetry forces
+      ∂U_y/∂y=0 + U_y=0 at top; slip allows tangential velocity. Freestream
+      tracks an inflow value. For a finite-domain flat plate, symmetry is
+      the textbook choice but only if the top boundary is far enough above
+      δ_99(x_max) that no upper-wall BL forms. Need to verify the existing
+      y_max=0.5m headroom vs δ_99(x=1.0)=0.022m (~22× headroom — likely
+      OK for symmetry).
+    mitigation: |
+      Stage A.0: derive y_max headroom from V61-063 v3 measured δ_99 and
+      pick top-wall BC accordingly. Document choice in the gold YAML
+      physics_contract.precondition.
+
+  - id: leading_edge_buffer_necessity
+    severity: LOW
+    description: |
+      V61-063 disposition flagged "no leading-edge development" as a likely
+      contributor (per-x K_x increases with x). It's not yet known whether
+      the top-wall fix alone closes the gap or whether an x_origin offset
+      is also needed. A/B test in Stage B will tell.
+    mitigation: |
+      Stage B.0: run with top-wall fix only (no inflow buffer). If
+      cf_blasius_invariant_mean_K rel_error <10%, ship V61-064 without
+      buffer. If still >10%, add buffer in Stage A.1 of V61-064.
+
+  - id: gold_yaml_physics_contract_drift
+    severity: LOW
+    description: |
+      The gold YAML physics_precondition[1] already states
+      "geometry_assumption: Flat plate with zero-pressure-gradient
+      external flow ... thin 2D slice (empty side patches) with a single
+      wall-normal direction carrying the boundary layer" — V61-064 will
+      finally satisfy this. precondition[2]/[3]/[4] are unaffected.
+    mitigation: |
+      Stage A.5: refresh `precondition_last_reviewed` to "2026-XX-XX
+      (DEC-V61-064 domain-fix · top-wall freestream)".
+
+# ============================================================================
+# §6 Codex budget
+# ============================================================================
+codex_budget:
+  estimated_rounds: 2
+  reason: |
+    Methodology stack inherited from V61-063 verbatim. Only delta is the
+    case generator + a few BC tests. Pre-Stage-A review optional (the
+    intake decision at §4 is the main ambiguity); R1 reviews the
+    generator + Stage B; R2 confirms acceptance.
+  halt_risk_flag: |
+    If Stage B v1 shows top-wall fix alone doesn't close the gap, halt
+    and decide whether to add inflow buffer (still V61-064) or escalate
+    to V61-065 mesh refinement. Document the empirical result in the
+    halt addendum.
+
+external_gate_self_estimated_pass_rate: 0.65
+external_gate_self_estimated_pass_rate_source: §4 + §5 (preferred approach is well-precedented; risk register tightly bounded; biggest unknown is whether top-wall fix alone suffices)

@@ -54,6 +54,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.cylinder_centerline_extractor": Plane.EXECUTION,
     "src.cylinder_strouhal_fft": Plane.EXECUTION,
     "src.airfoil_extractors": Plane.EXECUTION,  # DEC-V61-058 B2
+    "src.flat_plate_extractors": Plane.EXECUTION,  # DEC-V61-063 A.1
     "src.plane_channel_uplus_emitter": Plane.EXECUTION,
     "src.wall_gradient": Plane.EXECUTION,
     "src.dhc_extractors": Plane.EXECUTION,

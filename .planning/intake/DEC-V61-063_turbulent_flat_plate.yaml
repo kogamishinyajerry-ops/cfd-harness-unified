@@ -1,0 +1,463 @@
+# DEC-V61-063 turbulent_flat_plate Type II multi-dim intake
+# Mandated by methodology v2.0 F1-M1 hard gate before Stage A.
+# v1 draft 2026-04-25 (post-V61-059 closeout · counter 41)
+
+decision_id: DEC-V61-063
+case_id: turbulent_flat_plate
+case_position: "case 4 of 10 (whitelist.yaml:94)"
+arc_kind: first_apply  # never had a multi-dim DEC; only prior B-class metadata corrections (V61-006)
+methodology_version: "v2.0 (F1-M1 + F1-M2 strict)"
+intake_iteration: 1
+created_at: "2026-04-25"
+
+# ============================================================================
+# §1 Case classification
+# ============================================================================
+case_type: II
+case_type_rationale: |
+  1 primary scalar (Cf @ x=1.0, headline) + 3 derived gates:
+    - Cf(x) profile at x ∈ {0.25, 0.5, 0.75, 1.0} — Blasius scaling test
+    - Cf · √Re_x invariant scalar (= 0.664 for laminar Blasius;
+      a single number that pins down the entire similarity curve)
+    - δ_99(x) boundary-layer thickness — secondary observable
+      (Blasius: δ_99 ≈ 5·√(ν·x/U) → 0.0158 m at x=0.5, 0.0224 m at x=1.0
+      with ν=2e-5)
+
+  Rationale for Type II (not Type I): the existing whitelist already
+  has 2 gold points (x=0.5 and x=1.0) and the laminar Blasius
+  similarity solution is a 1D curve along Re_x. A single-scalar
+  Type I would lose the per-x scaling signal and accept an extractor
+  that gets x=0.5 right by coincidence while drifting at x=1.0
+  (or vice versa). Multi-x sampling + the Cf·√Re_x invariant make
+  the "extractor returns Blasius value at one x but uses the wrong
+  formula at others" failure mode catchable.
+
+primary_gate: cf_skin_friction_x1
+primary_gate_count: 4  # 1 primary + 3 secondary
+secondary_gates:
+  - id: cf_x_profile
+    name: Cf(x) profile at 4 sampling points
+    spec: |
+      Sample local Cf at x ∈ {0.25, 0.5, 0.75, 1.0} via the existing
+      _extract_flat_plate_cf wall-gradient method. Compare against
+      Blasius gold per point at the case-tolerance band (10%
+      relative). Profile gate FAILs if any single point is outside
+      tolerance.
+    blasius_gold_values:
+      - {x: 0.25, Cf: 0.00594}  # 0.664 / √12500
+      - {x: 0.50, Cf: 0.00420}  # 0.664 / √25000
+      - {x: 0.75, Cf: 0.00343}  # 0.664 / √37500
+      - {x: 1.00, Cf: 0.00297}  # 0.664 / √50000
+
+  - id: cf_blasius_invariant
+    name: Cf · √Re_x invariant
+    spec: |
+      Compute K_x = Cf(x) · √Re_x at each sampled x. Per Blasius
+      similarity, K is a constant = 0.664 independent of x. Report
+      mean(K) ± std(K). If std/mean > tolerance (5% relative), the
+      profile is NOT collapsing onto the Blasius similarity curve,
+      indicating a non-similarity flow pattern (transition,
+      pressure-gradient effect, mesh artifact).
+    blasius_gold_value: 0.664
+    invariant_tolerance: 0.05  # 5% on std/mean ratio (tighter than per-point Cf)
+
+  - id: delta_99_x_profile
+    name: δ_99(x) boundary-layer thickness profile
+    spec: |
+      Extract δ_99 (the y at which u/U_∞ = 0.99) at x ∈ {0.5, 1.0}.
+      Compare to Blasius δ_99(x) = 5 · √(ν·x/U_∞). Fail if relative
+      error exceeds tolerance. This is a derived observable that
+      catches mesh-resolution issues (under-resolved BL → stretched
+      δ_99 / over-coalesced δ_99 gradients).
+    blasius_gold_values:
+      - {x: 0.50, delta_99: 0.01581}  # 5·√(2e-5·0.5/1) = 5·√(1e-5) ≈ 0.01581 m
+      - {x: 1.00, delta_99: 0.02236}  # 5·√(2e-5·1.0/1) = 5·√(2e-5) ≈ 0.02236 m
+    tolerance: 0.20  # 20% relative — δ_99 inherently noisier than Cf
+
+# ============================================================================
+# §2 Adapter / extractor / fixture surface area
+# ============================================================================
+adapter_touch_points:
+  - file: src/foam_agent_adapter.py
+    method: _extract_flat_plate_cf  # currently single-x at x=0.5
+    change_kind: extend
+    spec: |
+      Generalize from "extract Cf at x_target=0.5 only" to "extract
+      Cf at x ∈ {0.25, 0.5, 0.75, 1.0}" returning a list of (x, Cf)
+      tuples in key_quantities["cf_x_profile"]. Preserve the existing
+      key_quantities["cf_skin_friction"] (single scalar at x=0.5)
+      for back-compat with prior fixtures + Cylinder/LDC/etc. tests
+      that don't use the new profile.
+
+      A.4-style flag: emit `cf_extractor_path = "wall_gradient_v1"`
+      so audit packages distinguish wall-gradient extraction from
+      any future Spalding-fallback or correlation-based path. The
+      Spalding fallback path (line ~9595) MUST remain disabled
+      under laminar contract (it can fire only when wall-gradient
+      extraction itself fails).
+
+  - file: src/flat_plate_extractors.py  # NEW MODULE (mirrors src/plane_channel_extractors.py)
+    change_kind: new
+    spec: |
+      Holds the secondary-observable computations:
+        - compute_blasius_invariant(cf_x_pairs) → (mean_K, std_K, K_per_x)
+        - compute_delta_99_at_x(u_line_pairs, U_inf, x) → δ_99
+        - canonicalize_turbulence_model(declared) → "laminar" / camelCase RANS
+      Following the V61-059 plane_channel_extractors.py pattern with
+      conservative SNR floor (max(spacings)) per V61-059 R2 F4.
+
+  - file: knowledge/gold_standards/turbulent_flat_plate.yaml
+    change_kind: extend
+    spec: |
+      Add 3 new HARD_GATED observables: cf_x_profile,
+      cf_blasius_invariant, delta_99_x_profile. The existing
+      cf_skin_friction observable @ x=0.5 stays as a soft-graded
+      back-compat anchor. schema_version stays at 2.
+
+  - file: ui/backend/tests/fixtures/runs/turbulent_flat_plate/audit_real_run_measurement.yaml
+    change_kind: extend
+    spec: |
+      Auto-regen via phase5_audit_run.py at Stage B. Existing
+      commit_sha: 547002a fixture is pre-DEC-V61-063; expect a
+      complete refresh.
+
+  - file: tests/test_flat_plate_extractors.py  # NEW
+    change_kind: new
+    spec: |
+      Unit tests for src/flat_plate_extractors.py: invariant
+      reproduces 0.664 from synthetic Blasius-like data, δ_99
+      reader handles raw OpenFOAM .xy line-sample output, fail-
+      closed on degenerate inputs (empty profile, all-zero u, etc.).
+      ~15-20 tests target.
+
+# ============================================================================
+# §3a IN scope (this DEC's surgical envelope)
+# ============================================================================
+in_scope:
+  - "Generalize _extract_flat_plate_cf to multi-x sampling"
+  - "New flat_plate_extractors module for secondary observables"
+  - "Gold YAML observables[] expansion (3 HARD_GATED + 1 back-compat)"
+  - "New unit-test module for the extractor (no integration tests)"
+  - "Adapter contract field cf_extractor_path emit"
+  - "Comparator-gates wiring to surface cf_x_profile + invariant verdicts"
+
+# §3b Out of scope (explicit exclusion to bound blast radius)
+out_of_scope:
+  - "Turbulent regime (k-ω SST, Spalding-fit gold) — V61-006 already corrected this to laminar Blasius. Do NOT re-open. Any kOmegaSST RANS path lives in a separate future DEC."
+  - "Adaptive mesh refinement / GCI study — fixed at the current ncy=80 mesh per STATE.md."
+  - "Pressure-gradient cases (favorable / adverse) — Blasius assumes ZPG."
+  - "Transition modeling — Re_x ≤ 50000 is well below transition."
+  - "Frontend Compare-tab anchor cards — Stage D scope, deferred until Stage A.5 gold regen lands."
+
+# ============================================================================
+# §4 Cross-plane wiring (Execution / Evaluation / Knowledge / Observation)
+# ============================================================================
+cross_plane_imports:
+  - plane: Execution
+    surface: src/foam_agent_adapter.py:_extract_flat_plate_cf, src/foam_agent_adapter.py task-name aliases
+    constraint: |
+      Adapter alias table (`_TASK_NAME_TO_CASE_ID_ALIASES`) MUST
+      keep "Laminar Flat Plate" → "turbulent_flat_plate" mapping
+      (legacy case_id retained per whitelist note line 95).
+
+  - plane: Evaluation
+    surface: src/comparator_gates.py, ui/backend/services/validation_report.py, ui/backend/services/auto_verifier.py
+    constraint: |
+      Verdict-engine must see the new observables in the gold YAML
+      and route them through the existing HARD_GATED tier. NO new
+      gate detector needed (Blasius is a single canonical curve,
+      not subject to canonical-band shortcut like plane_channel
+      DNS — V61-059 G2 territory does not apply here). Validation
+      report's _HARD_FAIL_CONCERNS set may need extension if a new
+      concern type is added (TBD during Stage A).
+
+  - plane: Knowledge
+    surface: knowledge/gold_standards/turbulent_flat_plate.yaml, knowledge/whitelist.yaml
+    constraint: |
+      schema_version stays at 2. legacy_case_ids (none currently)
+      not added unless a test fixture uses a stale name. Whitelist
+      gold_standard.reference_values stay as the existing 2-point
+      list for quick-glance; the canonical multi-point reference
+      lives in gold_standards/turbulent_flat_plate.yaml::observables.
+
+  - plane: Observation
+    surface: reports/phase5_audit/, reports/phase5_fields/, reports/codex_tool_reports/
+    constraint: |
+      Stage B live run produces logs at standard paths. No new
+      reporting infrastructure required.
+
+# ============================================================================
+# §5 Stage A batch breakdown (planned commits)
+# ============================================================================
+stage_a_status: COMPLETE  # 2026-04-25, all 5 batches landed on dec-v61-063-flat-plate
+stage_a_batches:
+  - batch: A.1
+    status: DONE
+    commit: 2b52248
+    landed_at: "2026-04-25"
+    scope: |
+      flat_plate_extractors.py module skeleton + unit tests:
+        - compute_blasius_invariant(cf_x_pairs) returning
+          (mean_K, std_K, per_x_K_dict)
+        - compute_delta_99_at_x(u_line, U_inf) returning δ_99 from
+          interpolated u/U=0.99
+        - canonicalize_turbulence_model(declared) — same
+          strip-based pattern as V61-059 plane_channel_extractors
+        - SNR metrics (numerical_floor, amplitude, snr_ratio) using
+          conservative max(spacings) floor per V61-059 R2 F4
+    commit_count_estimate: 1
+    actual_tests: 34
+
+  - batch: A.2
+    status: DONE
+    commit: 2577b28
+    landed_at: "2026-04-25"
+    scope: |
+      Generalize _extract_flat_plate_cf to multi-x sampling.
+      Returns list[(x, Cf)] in key_quantities["cf_x_profile"].
+      Preserve key_quantities["cf_skin_friction"] back-compat.
+      Stamp key_quantities["cf_extractor_path"] = "wall_gradient_v1".
+    commit_count_estimate: 1
+    actual_tests: 5
+
+  - batch: A.3
+    status: DONE
+    commit: a35777b
+    landed_at: "2026-04-25"
+    scope: |
+      Wire flat_plate_extractors into adapter post-extraction:
+      after _extract_flat_plate_cf returns, compute Blasius invariant
+      + δ_99 secondary observables and merge into key_quantities.
+      Pattern mirrors plane_channel A.4.a but on the wall-gradient
+      path instead of the wallShearStress FO path.
+    commit_count_estimate: 1
+    actual_tests: 4
+    deviation_note: |
+      Inlined the staged enrichment in _enrich_flat_plate_cf rather
+      than calling enrich_cf_profile directly so a single δ_99 u-line
+      failure cannot strip the Blasius invariant headline. Per-class
+      error keys (cf_blasius_invariant_error,
+      delta_99_at_x_<x_key>_{error,missing_u_line}, cf_enrichment_error)
+      preserve audit observability under partial failure.
+
+  - batch: A.4
+    status: DONE
+    commit: ac60303
+    landed_at: "2026-04-25"
+    scope: |
+      Gold YAML observables[] expansion: add 3 HARD_GATED entries
+      (cf_x_profile, cf_blasius_invariant, delta_99_x_profile)
+      with Blasius reference values + tolerance. Existing
+      cf_skin_friction stays as schema_v1 back-compat.
+    commit_count_estimate: 1
+    actual_tests: 3
+    deviation_note: |
+      Dual-emit pattern: kept tuple `cf_x_profile` (A.2 contract) +
+      added dict `cf_x_profile_points` for gold-comparator profile
+      path (PROFILE_VALUE_KEYS includes Cf). δ_99 similarly dual-
+      emits scalar `delta_99_at_x_<x_key>` (A.3) + profile shape
+      `delta_99_x_profile` (A.4). Gold YAML observable names match
+      the dict-shape keys exactly so no rename is needed.
+
+  - batch: A.5
+    status: DONE
+    commit: fb61bdb
+    landed_at: "2026-04-25"
+    scope: |
+      Adapter alias parity test: pin Execution + Evaluation plane
+      task-name → case_id agreement on
+      "Laminar Flat Plate (Zero Pressure Gradient, Re_x ≤ 5e4)" /
+      "turbulent_flat_plate" / legacy alias guard.
+    commit_count_estimate: 1
+    actual_tests: 8
+    deviation_note: |
+      Scope expanded beyond task-name aliasing to drive the live
+      GoldStandardComparator on a Blasius-consistent synthetic emit.
+      Proves: (1) every gold YAML observable name appears in adapter
+      emit, (2) dict shapes flow through `_compare_profile` without
+      reshaping, (3) ref_value math + 10% tolerance achievable on
+      Blasius similarity (sanity-checks the YAML). Result: PASS
+      overall, every observable within tolerance, K_x rel_error <1%.
+      Test file: tests/test_flat_plate_alias_parity.py (8 tests).
+
+# Stage A summary: 5 commits (2b52248..fb61bdb), 58 flat-plate tests
+# green across test_flat_plate_extractors.py (34) +
+# test_foam_agent_adapter.py (16, of which 12 new) +
+# test_flat_plate_alias_parity.py (8). Cross-track isolation guard +
+# import-linter four-plane contract pass on every commit. 3 pre-
+# existing Python 3.9 staticmethod-call failures in unrelated LDC
+# sampledict tests are noted but predate this branch.
+
+# ============================================================================
+# §5b Codex round 1 queue (Stage A landing review)
+# ============================================================================
+codex_round_1:
+  status: QUEUED  # awaiting user-triggered /codex-gpt54 invocation
+  trigger: |
+    Stage A landed ~290 LOC in src/foam_agent_adapter.py + new module
+    src/flat_plate_extractors.py + new gold YAML observables. Per
+    project rule (CLAUDE.md MODEL_ROUTING + V61-006 Codex baseline):
+    foam_agent_adapter.py changes >5 LOC → mandatory Codex review.
+  scope_to_review:
+    - "src/flat_plate_extractors.py (new, 479 LOC)"
+    - "src/foam_agent_adapter.py:9483-9794 (_extract_flat_plate_cf multi-x + _enrich_flat_plate_cf + _build_flat_plate_u_lines)"
+    - "knowledge/gold_standards/turbulent_flat_plate.yaml (3 new HARD_GATED observables)"
+    - "tests/test_flat_plate_extractors.py + test_foam_agent_adapter.py flat-plate tests + test_flat_plate_alias_parity.py"
+  focus_areas:
+    - "Wall-gradient extractor correctness in `_cf_at_x` (sign handling, Spalding fallback under laminar contract)"
+    - "Dual-emit pattern (tuple cf_x_profile + dict cf_x_profile_points) — latent contract drift?"
+    - "Gold YAML ref_value math vs Blasius similarity at x ∈ {0.5, 1.0} — independent verify"
+    - "Robustness of per-class error keys in `_enrich_flat_plate_cf` — does any failure path silently corrupt downstream comparator input?"
+    - "x_tol heuristic in `_build_flat_plate_u_lines` reuse of A.2 logic — alignment risk if cell density diverges"
+  out_of_scope_round_1:
+    - "Stage B live-run-only defects (executable_smoke_test risk flag captured for post-R3 RETRO addendum)"
+    - "Frontend Compare-tab anchor cards (Stage D, deferred)"
+  codex_budget_consumed: 0
+  codex_budget_total: 4
+  halt_risk_flag: "After R5, halt and request human review per RETRO-V61-053 protocol"
+
+# ============================================================================
+# §6 Risk register (intake-level, ranked)
+# ============================================================================
+risk_flags:
+  - id: cf_extractor_x_aliasing
+    severity: HIGH
+    description: |
+      Current _extract_flat_plate_cf at line 9538 uses a single
+      x_target=0.5 with x_tol from min(unique_x_spacing). Generalizing
+      to multi-x sampling needs the same tol per x but different
+      neighbour windows. Risk: x=0.25 might be below the inlet
+      developed region (or hit a refinement seam) and return
+      degenerate Cf.
+    mitigation: |
+      Add a Stage A explicit guard: if a sampled x has fewer than
+      N_min interior cells (default 5), raise FlatPlateExtractorError
+      and let the comparator emit MISSING_TARGET_QUANTITY rather
+      than a silent fallback.
+
+  - id: openfoam_version_emitter_api_drift
+    severity: HIGH  # promoted from RETRO-V61-053 addendum + V61-059 evidence (3 hits)
+    description: |
+      V61-059 surfaced 3 distinct OpenFOAM 10 emitter API drift hits
+      (turbulenceProperties → momentumTransport, icoFoam needing
+      pisoFoam to register a momentumTransportModel, sets-FO file
+      naming change). Flat plate uses simpleFoam laminar — does the
+      same API drift apply? simpleFoam DOES register
+      momentumTransport, so the V61-059 wallShearStress-FO crash
+      pattern likely doesn't recur, but the constant/momentumTransport
+      filename and the line-sample naming are still in scope.
+    mitigation: |
+      Stage B executable smoke test with the live OpenFOAM container
+      will surface any drift. Pre-emptive Stage A.0: instrument
+      the case dir generation to write `constant/momentumTransport`
+      (not turbulenceProperties) and verify with one quick smoke run
+      BEFORE batching A.1 forward.
+
+  - id: spalding_fallback_silent_fire
+    severity: MED
+    description: |
+      The Spalding-fallback branch in _extract_flat_plate_cf
+      (line ~9595) is a turbulent-regime safety-net that should
+      NEVER fire under laminar Blasius. If it does fire silently
+      and emits a "valid" Cf, the multi-x profile will look correct
+      while actually using a wrong physical model.
+    mitigation: |
+      Add an assertion: if cf_extractor_path == "wall_gradient_v1"
+      and any sampled x triggered Spalding fallback, the extractor
+      raises rather than emitting a mixed-source profile. Audit
+      package will see "extractor failure" instead of "silent
+      regime drift".
+
+  - id: blasius_invariant_extreme_sensitivity_to_inlet_drift
+    severity: MED
+    description: |
+      Cf · √Re_x = 0.664 is a tight invariant that sets a 5% std/mean
+      tolerance (vs 10% per-point). Any inlet-velocity drift, any
+      slight x_origin offset, or any mesh-induced acceleration near
+      the inlet will spoil the invariant before spoiling the per-x
+      Cf points (which are individually within their own 10% band).
+    mitigation: |
+      Stage A.3 should compute the invariant only for x ≥ 0.25
+      (skipping the inlet-sensitive region). Document this clearly
+      in the extractor comment.
+
+  - id: stage_b_runtime_budget
+    severity: LOW  # simpleFoam steady state should converge in <5min wall
+    description: |
+      Per V61-059 lessons, Stage B runtime budget should be
+      verified at intake time. simpleFoam laminar @ Re=50000 on
+      ncy=80 mesh is mass-equation-dominated, not transient. SIMPLE
+      iteration should converge in 200-500 iterations (~3-5 min wall
+      on the cfd-openfoam container).
+    mitigation: |
+      Existing controlDict at the case has standard endTime/
+      iteration caps. No tuning needed at intake; revisit only if
+      Stage B exposes a runtime issue.
+
+# ============================================================================
+# §7 Codex budget
+# ============================================================================
+codex_budget_rounds: 4
+round_5_action: "halt_risk_flag — review whether to enter Stage B sub-arc per V61-059 precedent"
+round_6_action: "FORCE_ABANDON per F6-M1; create abandonment retro"
+external_gate_self_estimated_pass_rate: 0.45
+estimated_pass_rate_rationale: |
+  Higher than V61-059's 0.40 because:
+    - The existing _extract_flat_plate_cf is well-trodden (no new
+      function-object machinery; uses cell-center wall-gradient
+      already validated for x=0.5 in prior fixtures)
+    - No new comparator-gate detector class (Blasius is not a
+      canonical-band-shortcut hazard; G2 territory doesn't apply)
+    - simpleFoam laminar is the most-used solver in the harness;
+      no novel solver framework registry concerns
+  Lower than 0.55 because:
+    - Multi-x extraction is net-new code; aliasing/tol risk
+    - Blasius invariant is a tight metric (5% std/mean)
+    - V61-059 R2 F3 P1 (verdict-engine wiring TOOTHLESS) class of
+      bug remains a real risk; new HARD_GATED concerns must be in
+      _HARD_FAIL_CONCERNS
+
+# ============================================================================
+# §8 Stage E close-checklist (intake mirror; activated at closeout)
+# ============================================================================
+stage_e_close_checklist:
+  - item: "All Codex round-N findings landed in commits"
+    required: true
+  - item: "Clean Codex round-(N+1) verdict ∈ {APPROVE, APPROVE_WITH_COMMENTS} per F1-M2"
+    required: true
+  - item: "Executable smoke test passes — phase5_audit_run.py turbulent_flat_plate emits 4 gates within tolerance"
+    required: true
+  - item: "DEC frontmatter notion_sync_status = synced"
+    required: true
+  - item: "autonomous_governance_counter_v61 incremented (+1 from main HEAD value at closeout; expected 41 → 42)"
+    required: true
+  - item: "RETRO-V61-063 written if any post-R3 defect surfaces (per RETRO-V61-053 addendum protocol)"
+    required: conditional
+
+# ============================================================================
+# §9 Cross-references
+# ============================================================================
+related_decs:
+  - DEC-V61-006 (turbulent_flat_plate B-class metadata correction · laminar Blasius regime · 2026-04-20)
+  - DEC-V61-036b (comparator gates G3/G4/G5 baseline)
+  - DEC-V61-050 (LDC Type I precedent)
+  - DEC-V61-052 (BFS Type II precedent)
+  - DEC-V61-053 (cylinder Type I + RETRO addendum class)
+  - DEC-V61-059 (plane_channel Type II + Stage B sub-arc precedent + openfoam_version_emitter_api_drift HIGH risk_flag)
+
+related_retros:
+  - RETRO-V61-053 (post-R3 live-run defect addendum protocol; openfoam_version_emitter_api_drift HIGH promotion)
+  - RETRO-V61-059 (V61-059 closeout retro; Stage B sub-arc precedent)
+
+# ============================================================================
+# §10 Branch + cross-session coordination
+# ============================================================================
+branch: dec-v61-063-flat-plate
+branched_from: origin/main (commit 61622e4 · DEC-V61-061 Notion sync close)
+cross_session_threads:
+  - dec-v61-057-stage-b: SESSION 1 (DHC) — DO NOT TOUCH
+  - dec-v61-058-naca / dec-v61-061-naca-mesh / dec-v61-062-naca-cgrid: SESSION 2 (NACA arc) — DO NOT TOUCH
+  - rbc territory (DEC-V61-060): another active session — DO NOT TOUCH
+  - dec-v61-059-pc: my just-closed session — done, PR #41 open
+
+# v1 draft created 2026-04-25 post-V61-059 closeout · counter_at_intake=41

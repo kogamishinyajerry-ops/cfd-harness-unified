@@ -30,10 +30,63 @@ physics_contract:
   contract_status: "SATISFIED_UNDER_LAMINAR_CONTRACT — Blasius is the exact analytical solution for the declared physics. Residual uncertainty is numerical (mesh resolution + schemes) and should fit within the 10% tolerance. Any deviation >10% now unambiguously indicates an adapter or mesh bug, not a regime-mismatch hazard."
   precondition_last_reviewed: "2026-04-20 (DEC-V61-006 B-class gold remediation · Gate Q-new Case 4 Path A)"
 observables:
+  # ---------------------------------------------------------------
+  # Back-compat scalar (DEC-V61-006 Path A · single anchor at x=0.5)
+  # Keeps existing fixtures and the legacy single-scalar comparator
+  # path working unchanged. Tier remains the original implicit gate;
+  # DEC-V61-063 keeps this as a soft-graded back-compat anchor while
+  # the 3 new HARD_GATED observables below carry the Type II verdict.
+  # ---------------------------------------------------------------
   - name: cf_skin_friction
     description: local skin-friction coefficient at x=0.5m (Blasius laminar similarity for Re=50000, plate_length=1.0m, Re_x=25000)
     ref_value: 0.00420
     unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+  # ---------------------------------------------------------------
+  # DEC-V61-063 Type II HARD_GATED observables (3 categories)
+  # Reference: Blasius laminar similarity Cf = 0.664/√Re_x with
+  # δ_99 = 5·√(ν·x/U_∞), evaluated at U_∞=1, ν=1/50000=2e-5.
+  # Tolerance 10% mirrors the back-compat scalar; tighter tiers will
+  # come post-Stage B once live-run noise is characterized.
+  # ---------------------------------------------------------------
+  - name: cf_x_profile_points
+    description: streamwise Cf(x) profile at x ∈ {0.5, 1.0} (Blasius laminar similarity)
+    gate_status: HARD_GATED
+    ref_value:
+      - x: 0.5
+        Cf: 0.00420
+      - x: 1.0
+        Cf: 0.00297
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+  # Codex R1 F1 fix (2026-04-25): gate on the *measured* mean K, not the
+  # constant canonical K. The canonical_K is hard-coded 0.664 in the
+  # extractor — a hard-gate against it is tautological and cannot detect
+  # a broken similarity solution. mean_K is the average of K_x = Cf·√Re_x
+  # across the actually-extracted profile points and DOES go off-target
+  # if Spalding fallback fires at any sampled x. Codex reproduced the
+  # false-pass under the old observable name on 2026-04-25.
+  - name: cf_blasius_invariant_mean_K
+    description: measured Blasius invariant K_x = Cf · √Re_x averaged across sampled x ≥ 0.25 — Blasius similarity gives 0.664
+    gate_status: HARD_GATED
+    ref_value: 0.664
+    unit: dimensionless
+    tolerance:
+      mode: relative
+      value: 0.10
+  - name: delta_99_x_profile
+    description: BL thickness δ_99(x) at x ∈ {0.5, 1.0} (Blasius reference 5·√(ν·x/U_∞))
+    gate_status: HARD_GATED
+    ref_value:
+      - x: 0.5
+        value: 0.01581
+      - x: 1.0
+        value: 0.02236
+    unit: m
     tolerance:
       mode: relative
       value: 0.10
