@@ -5,7 +5,7 @@ scope: Session B arc (v0.5 + v2 NARROW + v3) covering DEC-V61-080 through DEC-V6
 status: LANDING — follows Session B v3 P-1 + P-2 close.
 author: Claude Opus 4.7 (1M context · Session B v3 P-4)
 decided_by: Claude Code self-executed under autonomous_governance for autonomous DECs; CFDJerry-gated decisions explicitly marked.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-26 (https://notion.so/34ec68942bed817b994ae6c81cc5e737)
 trigger: RETRO-V61-001 cadence rule — Session B is first multi-class authority split execution + first dual-session-concurrent governance experiment; warrants explicit retro independent of counter threshold.
 ---
 
