@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "@/api/client";
 import type { PhaseId, RunPhaseEvent } from "@/types/wizard";
@@ -46,8 +46,15 @@ const INITIAL: PhaseState = {
   metrics: [],
 };
 
+// Auto-jump grace window after run_done before navigating to the run-detail
+// page. Long enough that the user notices the run has completed and reads
+// the final phase summary; short enough that they don't have to wait
+// awkwardly. Skipped if the user clicks the manual jump button.
+const AUTO_JUMP_DELAY_MS = 3500;
+
 export function WorkbenchRunPage() {
   const { caseId } = useParams<{ caseId: string }>();
+  const navigate = useNavigate();
   const [phases, setPhases] = useState<Record<PhaseId, PhaseState>>(() =>
     Object.fromEntries(PHASE_ORDER.map((p) => [p, { ...INITIAL }])) as Record<
       PhaseId,
@@ -56,7 +63,13 @@ export function WorkbenchRunPage() {
   );
   const [overall, setOverall] = useState<"running" | "done">("running");
   const [overallSummary, setOverallSummary] = useState<string>("");
+  // M3: capture run_id from any incoming RealSolverDriver event so we can
+  // auto-redirect on run_done. Stays null when MockSolverDriver is on
+  // (mock omits run_id) — the auto-jump logic below short-circuits in that
+  // case and the page just shows the completion banner.
+  const [runId, setRunId] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
+  const jumpTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!caseId) return;
@@ -79,10 +92,38 @@ export function WorkbenchRunPage() {
     return () => {
       es.close();
       sourceRef.current = null;
+      if (jumpTimerRef.current !== null) {
+        window.clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = null;
+      }
     };
   }, [caseId]);
 
+  // M3: schedule the auto-jump after run_done lands. Effect runs whenever
+  // overall flips to "done" — at that point runId is already populated by
+  // the SSE stream (RealSolverDriver attaches run_id to every event).
+  useEffect(() => {
+    if (overall !== "done" || !runId || !caseId) return;
+    jumpTimerRef.current = window.setTimeout(() => {
+      navigate(
+        `/workbench/case/${encodeURIComponent(caseId)}/run/${encodeURIComponent(runId)}`,
+      );
+    }, AUTO_JUMP_DELAY_MS);
+    return () => {
+      if (jumpTimerRef.current !== null) {
+        window.clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = null;
+      }
+    };
+  }, [overall, runId, caseId, navigate]);
+
   function applyEvent(ev: RunPhaseEvent) {
+    // M3: capture run_id off any event (RealSolverDriver attaches it
+    // unconditionally). MockSolverDriver leaves it undefined — runId
+    // stays null and auto-jump never fires.
+    if (ev.run_id && !runId) {
+      setRunId(ev.run_id);
+    }
     if (ev.type === "phase_start" && ev.phase) {
       setPhases((prev) => ({
         ...prev,
@@ -143,13 +184,35 @@ export function WorkbenchRunPage() {
         <h1 className="mt-1 text-2xl font-semibold text-surface-100">{caseId}</h1>
         <p className="mt-1 text-sm text-surface-400">
           {overall === "running"
-            ? "5 阶段流水线执行中（mock solver · Stage 8a）"
-            : "5 阶段流水线已完成"}
+            ? runId
+              ? "RealSolverDriver 执行中（Docker + OpenFOAM）"
+              : "5 阶段流水线执行中（mock solver · Stage 8a）"
+            : "运行已完成"}
         </p>
         <p className="mt-1 text-[11px] text-surface-500">
           {overallSummary || "等待事件流..."}
         </p>
+        {runId && (
+          <p className="mt-2 font-mono text-[10px] text-surface-500">
+            run_id = {runId}
+          </p>
+        )}
       </header>
+
+      {overall === "done" && runId && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-emerald-700/40 bg-emerald-700/10 px-4 py-2 text-[12px] text-emerald-300">
+          <span>
+            自动跳转至结果页 (run detail) · 3.5s 后,{" "}
+            <span className="font-mono text-[10px] text-surface-400">{runId}</span>
+          </span>
+          <Link
+            to={`/workbench/case/${encodeURIComponent(caseId)}/run/${encodeURIComponent(runId)}`}
+            className="rounded-sm bg-emerald-700/40 px-3 py-1 text-emerald-200 hover:bg-emerald-700/60"
+          >
+            立即跳转 →
+          </Link>
+        </div>
+      )}
 
       <Stepper phases={phases} />
 

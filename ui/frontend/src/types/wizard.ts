@@ -81,4 +81,8 @@ export interface RunPhaseEvent {
   level?: LogLevel | null;
   stream?: LogStream | null;
   exit_code?: number | null;
+  // M3 forward-compat — RealSolverDriver attaches run_id to every event
+  // so the frontend can auto-jump to /workbench/case/{id}/run/{run_id}
+  // when run_done fires. MockSolverDriver leaves it undefined.
+  run_id?: string | null;
 }

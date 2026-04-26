@@ -57,6 +57,7 @@ from ui.backend.routes import (
     health,
     mesh_metrics,
     preflight,
+    run_history,
     validation,
     wizard,
     workbench_basics,
@@ -102,3 +103,4 @@ app.include_router(preflight.router, prefix="/api", tags=["preflight"])
 app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
 app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
+app.include_router(run_history.router, prefix="/api", tags=["run-history"])

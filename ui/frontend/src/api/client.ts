@@ -29,6 +29,10 @@ import type {
   WizardPreviewResponse,
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
+import type {
+  RunDetail,
+  RunHistoryListResponse,
+} from "@/types/run_history";
 
 async function request<T>(
   path: string,
@@ -114,6 +118,16 @@ export const api = {
     request<AuditPackageBuildResponse>(
       `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}/audit-package/build`,
       { method: "POST", body: "{}" },
+    ),
+
+  // M3 (2026-04-26) — Workbench run history
+  listRuns: (caseId: string) =>
+    request<RunHistoryListResponse>(
+      `/api/cases/${encodeURIComponent(caseId)}/runs`,
+    ),
+  getRunDetail: (caseId: string, runId: string) =>
+    request<RunDetail>(
+      `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}`,
     ),
 
   // Stage 2 — industrial workbench first-screen

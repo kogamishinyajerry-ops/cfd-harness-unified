@@ -31,6 +31,37 @@ def _no_sleep():
         yield
 
 
+# Prevent RealSolverDriver from writing real artifacts to `reports/` during
+# tests (would pollute the working tree). Tests that explicitly need to
+# assert artifact contents can opt out via the `write_artifacts_capture`
+# fixture below.
+@pytest.fixture(autouse=True)
+def _stub_run_history_write():
+    with patch(
+        "ui.backend.services.run_history.write_run_artifacts",
+        lambda **_kw: None,
+    ):
+        yield
+
+
+@pytest.fixture
+def write_artifacts_capture():
+    """Yields a list that gets appended-to with every write_run_artifacts
+    kwargs dict. Use when you want to assert the driver fed the
+    run-history writer the right values."""
+    captured: list[dict] = []
+
+    def _record(**kw):
+        captured.append(kw)
+        return None
+
+    with patch(
+        "ui.backend.services.run_history.write_run_artifacts",
+        _record,
+    ):
+        yield captured
+
+
 async def _collect_events(driver: SolverDriver, case_id: str) -> list[dict]:
     """Drain a driver's async iterator into a list of decoded JSON
     events (stripping the SSE `data: ...\\n\\n` framing)."""
@@ -325,6 +356,103 @@ def test_real_driver_honors_user_draft_override_over_whitelist(tmp_path, monkeyp
 
     # Restore (monkeypatch fixture handles teardown automatically).
     _ = real_func
+
+
+def test_real_driver_emits_run_id_on_every_event_after_resolve() -> None:
+    """M3 contract: every SSE event after run_id is generated must carry it
+    as a top-level field. Frontend uses run_id on `run_done` to auto-redirect
+    to /workbench/case/{id}/run/{run_id} — also useful for log multiplexing
+    when multiple runs are in flight."""
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result()
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.return_value = fake_result
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    # Find the first event (opening log) — must have run_id.
+    assert "run_id" in events[0], "opening log must carry run_id"
+    expected_run_id = events[0]["run_id"]
+    # All subsequent events must carry the SAME run_id.
+    for i, e in enumerate(events):
+        assert e.get("run_id") == expected_run_id, (
+            f"event {i} ({e.get('type')}) missing/mismatched run_id: {e}"
+        )
+    # Final run_done summary must include run_id text for human-readable logs.
+    assert expected_run_id in events[-1]["summary"]
+
+
+def test_real_driver_writes_run_history_on_success(write_artifacts_capture) -> None:
+    """Happy path → write_run_artifacts called once with success=True,
+    correct exit_code, key_quantities + residuals copied through."""
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result(
+        success=True,
+        residuals={"Ux": 1e-5, "p": 5e-4},
+        key_quantities={"u_max": 0.61},
+        execution_time_s=12.5,
+    )
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.return_value = fake_result
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    assert len(write_artifacts_capture) == 1
+    kw = write_artifacts_capture[0]
+    assert kw["case_id"] == "lid_driven_cavity"
+    assert kw["success"] is True
+    assert kw["exit_code"] == 0
+    assert kw["key_quantities"] == {"u_max": 0.61}
+    assert kw["residuals"] == {"Ux": 1e-5, "p": 5e-4}
+    assert kw["duration_s"] == 12.5
+    # run_id must match what the SSE events advertised.
+    assert kw["run_id"] == events[0]["run_id"]
+    # source_origin must be one of the two known values.
+    assert kw["source_origin"] in {"draft", "whitelist"}
+
+
+def test_real_driver_writes_run_history_on_executor_exception(write_artifacts_capture) -> None:
+    """Failure-by-exception path → write_run_artifacts called with
+    success=False, exit_code=1, error_message populated."""
+    drv = RealSolverDriver()
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.side_effect = RuntimeError("Docker daemon offline")
+        events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    assert len(write_artifacts_capture) == 1
+    kw = write_artifacts_capture[0]
+    assert kw["success"] is False
+    assert kw["exit_code"] == 1
+    assert kw["error_message"] is not None
+    assert "Docker daemon offline" in kw["error_message"]
+    assert kw["run_id"] == events[0]["run_id"]
+
+
+def test_real_driver_writeback_failure_does_not_block_run_done(write_artifacts_capture) -> None:
+    """Defense: if write_run_artifacts raises (disk full, perm denied, ...)
+    the user must still see run_done. Failure surfaces as a warn-level
+    log event, not a swallowed exception."""
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result()
+
+    def _raise(**_kw):
+        raise OSError("read-only filesystem")
+
+    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        MockExec.return_value.execute.return_value = fake_result
+        with patch(
+            "ui.backend.services.run_history.write_run_artifacts",
+            _raise,
+        ):
+            events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
+
+    # Run completed despite writeback failure.
+    assert events[-1]["type"] == "run_done"
+    assert events[-1]["exit_code"] == 0
+    # Warning surfaced.
+    warn_logs = [
+        e for e in events
+        if e.get("type") == "log" and e.get("level") == "warning"
+    ]
+    assert any("writeback failed" in e["line"] for e in warn_logs)
 
 
 def test_real_driver_terminates_with_run_done_for_all_paths() -> None:

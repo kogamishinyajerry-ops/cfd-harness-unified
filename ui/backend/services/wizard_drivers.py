@@ -312,28 +312,50 @@ class RealSolverDriver:
 
     async def run(self, case_id: str) -> AsyncIterator[str]:
         # Defer src.* imports to call-time per the comment on
-        # _task_spec_from_whitelist above.
+        # _task_spec_from_case_id above.
+        from datetime import datetime, timezone
+
         from src.foam_agent_adapter import FoamAgentExecutor
+
+        from ui.backend.services.run_history import (
+            new_run_id,
+            write_run_artifacts,
+        )
+
+        # M3: pre-allocate a run_id at the very top so we can include it in
+        # every SSE event from this run. Frontend uses run_id on `run_done`
+        # to auto-redirect to /workbench/case/{id}/run/{run_id}.
+        run_id = new_run_id()
+        started_at = datetime.now(timezone.utc)
 
         yield _sse({
             "type": "log", "phase": None, "t": time.time(),
+            "run_id": run_id,
             "line": (
-                f"[wizard] case_id={case_id} starting REAL solver pipeline "
+                f"[wizard] case_id={case_id} run_id={run_id} starting REAL solver pipeline "
                 "(RealSolverDriver — user_drafts override → whitelist fallback)"
             ),
         })
 
         # --- 1. Resolve case_id → TaskSpec ----------------------------------
+        source_origin = "unknown"
         try:
             task_spec = _task_spec_from_case_id(case_id)
+            # Inspect description we set in _task_spec_from_case_id to derive
+            # the source origin for run_history's summary.json. This is the
+            # cheapest path; alternative would be returning a tuple.
+            desc = task_spec.description or ""
+            source_origin = "draft" if "source=draft" in desc else "whitelist"
         except KeyError as exc:
             yield _sse({
                 "type": "log", "phase": None, "t": time.time(),
+                "run_id": run_id,
                 "line": f"[wizard] ERROR: {exc}",
                 "level": "error", "stream": "stderr",
             })
             yield _sse({
                 "type": "run_done", "phase": None, "t": time.time(),
+                "run_id": run_id,
                 "summary": f"unknown case_id={case_id} — not in whitelist",
                 "exit_code": 2, "level": "error",
             })
@@ -341,6 +363,7 @@ class RealSolverDriver:
 
         yield _sse({
             "type": "log", "phase": None, "t": time.time(),
+            "run_id": run_id,
             "line": (
                 f"[wizard] resolved {case_id} → {task_spec.name} "
                 f"({task_spec.flow_type.value}/{task_spec.geometry_type.value})"
@@ -350,6 +373,7 @@ class RealSolverDriver:
         # --- 2. Dispatch executor to thread pool, heartbeat in foreground ---
         yield _sse({
             "type": "phase_start", "phase": "solver", "t": time.time(),
+            "run_id": run_id,
             "message": "Docker + OpenFOAM 求解器执行中（同步阻塞 ~10-300s）...",
         })
 
@@ -376,6 +400,7 @@ class RealSolverDriver:
                 elapsed = time.time() - t0
                 yield _sse({
                     "type": "log", "phase": "solver", "t": time.time(),
+                    "run_id": run_id,
                     "line": f"[solver] running... ({elapsed:.0f}s elapsed)",
                 })
                 continue
@@ -387,18 +412,51 @@ class RealSolverDriver:
         if exec_exc is not None:
             exc = exec_exc
             err_str = str(exc)
+            duration_s = time.time() - t0
+            verdict_summary = f"executor exception: {type(exc).__name__}"
+
             yield _sse({
                 "type": "log", "phase": "solver", "t": time.time(),
+                "run_id": run_id,
                 "line": f"[solver] FATAL: {type(exc).__name__}: {err_str[:200]}",
                 "level": "error", "stream": "stderr",
             })
             yield _sse({
                 "type": "phase_done", "phase": "solver", "t": time.time(),
+                "run_id": run_id,
                 "status": "fail",
-                "summary": f"executor exception: {type(exc).__name__}",
+                "summary": verdict_summary,
             })
+            # Persist run history artifacts even on failure — the user's
+            # /workbench/case/{id}/runs table needs to show the failed run.
+            try:
+                write_run_artifacts(
+                    case_id=case_id,
+                    run_id=run_id,
+                    started_at=started_at,
+                    task_spec=task_spec,
+                    source_origin=source_origin,
+                    success=False,
+                    exit_code=1,
+                    verdict_summary=verdict_summary,
+                    duration_s=duration_s,
+                    key_quantities=None,
+                    residuals=None,
+                    error_message=f"{type(exc).__name__}: {err_str[:500]}",
+                )
+            except Exception as write_exc:  # noqa: BLE001
+                # A failed write should never propagate up — the SSE
+                # client already saw run_done is en route. Surface as a log
+                # event so the operator sees it in the timeline.
+                yield _sse({
+                    "type": "log", "phase": None, "t": time.time(),
+                    "run_id": run_id,
+                    "line": f"[wizard] WARN: run-history writeback failed: {write_exc}",
+                    "level": "warning", "stream": "stderr",
+                })
             yield _sse({
                 "type": "run_done", "phase": None, "t": time.time(),
+                "run_id": run_id,
                 "summary": (
                     f"run failed · case_id={case_id} · "
                     f"{type(exc).__name__}: {err_str[:120]}"
@@ -412,6 +470,7 @@ class RealSolverDriver:
             try:
                 yield _sse({
                     "type": "metric", "phase": "solver", "t": time.time(),
+                    "run_id": run_id,
                     "metric_key": f"residual_{k}", "metric_value": float(v),
                 })
             except (TypeError, ValueError):
@@ -423,43 +482,74 @@ class RealSolverDriver:
                 fv = float(v)
                 yield _sse({
                     "type": "metric", "phase": "solver", "t": time.time(),
+                    "run_id": run_id,
                     "metric_key": str(k), "metric_value": fv,
                 })
             except (TypeError, ValueError):
                 yield _sse({
                     "type": "log", "phase": "solver", "t": time.time(),
+                    "run_id": run_id,
                     "line": f"[result] {k} = {v!r}"[:200],
                 })
 
-        # --- 4. phase_done + run_done ---------------------------------------
+        # --- 4. phase_done + run_done + run-history writeback ---------------
         elapsed_total = result.execution_time_s or (time.time() - t0)
         if result.success:
+            verdict_summary = (
+                f"OpenFOAM converged · {elapsed_total:.1f}s · "
+                f"{len(result.key_quantities or {})} key quantities extracted"
+            )
             yield _sse({
                 "type": "phase_done", "phase": "solver", "t": time.time(),
+                "run_id": run_id,
                 "status": "ok",
-                "summary": (
-                    f"OpenFOAM converged · {elapsed_total:.1f}s · "
-                    f"{len(result.key_quantities or {})} key quantities extracted"
-                ),
+                "summary": verdict_summary,
             })
             exit_code = result.exit_code if result.exit_code is not None else 0
             level = "info"
         else:
             err_msg = (result.error_message or "(no error message)")[:160]
+            verdict_summary = f"OpenFOAM failed · {err_msg}"
             yield _sse({
                 "type": "phase_done", "phase": "solver", "t": time.time(),
+                "run_id": run_id,
                 "status": "fail",
-                "summary": f"OpenFOAM failed · {err_msg}",
+                "summary": verdict_summary,
             })
             exit_code = result.exit_code if result.exit_code is not None else 1
             level = "error"
 
+        # Persist artifacts.
+        try:
+            write_run_artifacts(
+                case_id=case_id,
+                run_id=run_id,
+                started_at=started_at,
+                task_spec=task_spec,
+                source_origin=source_origin,
+                success=bool(result.success),
+                exit_code=exit_code,
+                verdict_summary=verdict_summary,
+                duration_s=elapsed_total,
+                key_quantities=dict(result.key_quantities or {}),
+                residuals=dict(result.residuals or {}),
+                error_message=result.error_message,
+            )
+        except Exception as write_exc:  # noqa: BLE001
+            yield _sse({
+                "type": "log", "phase": None, "t": time.time(),
+                "run_id": run_id,
+                "line": f"[wizard] WARN: run-history writeback failed: {write_exc}",
+                "level": "warning", "stream": "stderr",
+            })
+
         yield _sse({
             "type": "run_done", "phase": None, "t": time.time(),
+            "run_id": run_id,
             "summary": (
-                f"run complete · case_id={case_id} · "
+                f"run complete · case_id={case_id} · run_id={run_id} · "
                 f"success={result.success} · {elapsed_total:.1f}s · "
-                "real solver execution (M1 · RealSolverDriver)"
+                "real solver execution"
             ),
             "exit_code": exit_code,
             "level": level,

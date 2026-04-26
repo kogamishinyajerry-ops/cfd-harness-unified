@@ -300,6 +300,12 @@ export function EditCasePage() {
               </button>
             )}
             <Link
+              to={`/workbench/case/${encodeURIComponent(caseId)}/runs`}
+              className="text-xs text-surface-400 underline hover:text-surface-200"
+            >
+              View past runs →
+            </Link>
+            <Link
               to={`/cases/${caseId}/edit`}
               className="text-xs text-surface-400 underline hover:text-surface-200"
             >

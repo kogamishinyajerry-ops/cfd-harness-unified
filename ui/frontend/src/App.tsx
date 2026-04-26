@@ -12,6 +12,8 @@ import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { EditCasePage } from "@/pages/workbench/EditCasePage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
+import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
+import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 
 // Demo-first routing (convergence round, 2026-04-22): the default landing is
@@ -59,6 +61,11 @@ export default function App() {
             navigates to /workbench/run/:caseId where RealSolverDriver picks
             up the override (CFD_HARNESS_WIZARD_SOLVER=real). */}
         <Route path="/workbench/case/:caseId/edit" element={<EditCasePage />} />
+        {/* M3 (2026-04-26) · Run history — newest-first table of past
+            real-solver runs for a case, plus per-run detail page. SSE
+            run_done in WorkbenchRunPage auto-jumps to the detail. */}
+        <Route path="/workbench/case/:caseId/runs" element={<RunHistoryPage />} />
+        <Route path="/workbench/case/:caseId/run/:runId" element={<RunDetailPage />} />
         <Route path="*" element={<Navigate to="/learn" replace />} />
       </Route>
     </Routes>
