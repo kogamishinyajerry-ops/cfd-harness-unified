@@ -170,8 +170,11 @@ audit-required territory.
   time of this first execution (DEC-V61-072). The list was later
   expanded to 7 surfaces by DEC-V61-073 A4 — see §10.5.4a above for
   the current canonical 7-surface enumeration.
-- Sampling interval dropped 20 → 5 commits until 2 consecutive clean
-  audits.
+- Sampling interval dropped 20 → 5 commits **(rule at DEC-V61-072
+  execution time: stays at 5 until 2 consecutive clean audits)**.
+  DEC-V61-073 audit Q1(c) subsequently REPLACED the post-drop
+  ratchet with the smooth `5 → 7 → 10 → 15 → 20` curve — see §10.5.4
+  above for the current canonical calibration loop.
 - Merges **kept** (no trust-core bleed; commits are functional). Mini-
   retro filed under RETRO-V61-005 agenda for Day 7 closeout review.
 - The 9 commits remain on `origin/main` HEAD `faf8446`. The 4 specific
