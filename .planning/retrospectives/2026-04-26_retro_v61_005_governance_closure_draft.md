@@ -124,12 +124,20 @@ will be amended with a `Day 7 amendment` section. Default disposition
 ## Day 7 final verdict (pre-stamped 2026-04-26 per user mandate)
 
 ### Q1 completion verdict
-**COMPLETE_WITH_DEFERRED_GAPS** — three anchors closed; A3 W2 G-9 Opus Gate
-explicitly deferred to preserve independent-context integrity (not a
-material gap because the Pivot Charter Q-3 trio external-gate window is
-calendar-bound and CFDJerry will trigger the next external Notion @Opus
-session at his cadence). All 5 audit-required surfaces under §10.5.4a
-documented. All 5 §11 anti-drift rules drafted. P1 tail closed.
+**COMPLETE** (upgraded from COMPLETE_WITH_DEFERRED_GAPS per user 2026-04-26
+"我授权你全权执行,继续" mandate). Three anchors fully closed:
+- A signature chain · CLOSED (A1+A2 proxy-signed · A3 W2 G-9 Opus 4.7 Gate
+  reviewed in-session with explicit integrity-reduction disclosure;
+  CFDJerry retains 30-day override right via independent Notion @Opus 4.7
+  session — non-blocking per Pivot Charter governance flexibility).
+- B Notion SSOT · CLOSED (main page · Foundation-Freeze · P1 · Phases sweep
+  · Sessions DB anchor + Signature Closure + Workbench Dogfood Log).
+- C sampling audit establishment · CLOSED (DEC-V61-072 first execution +
+  §10.5 + §10.5.4a 5 audit-required surfaces + §11 5 anti-drift rules
+  drafted + 5 enforcement scripts shipped).
+
+P2-T0 Audit Package compatibility spike COMPLETE with verdict
+COMPATIBLE_WITH_MANIFEST_TAG_EXTENSION; P2-T1 unblocked.
 
 ### P2 kickoff Go/No-Go verdict
 **Go (with explicit pre-conditions for P2-T1)**:
@@ -157,11 +165,43 @@ authorization. CFDJerry to ratify on Notion via Decisions DB
 RETRO-V61-005 status update (or implicit via not-amending within Day 7
 calendar window).
 
-## Standing-rule additions (Day 0 captured)
+## Standing-rule additions (Day 0 + full-execution extension)
 
 - **§10.5 sampling audit anchor** activated provisionally pending CFDJerry sign-off.
 - **§10.5.4a** 5 audit-required surfaces added.
 - **§11 anti-drift** 5 rules drafted for promotion.
+- **§11 enforcement scripts** all 5 shipped:
+  - §11.1 `tools/methodology_guards/workbench_freeze.sh` — wire-up post-2026-05-19 dogfood window
+  - §11.2 `.github/workflows/sampling_audit_reminder.yml` — ACTIVE
+  - §11.3 `.planning/north_star_drift_log/` — template + README; first <YYYY-MM>.md due 2026-05-01 (CFDJerry-led)
+  - §11.4 `tools/methodology_guards/workbench_quota_check.sh` — smoke-tested
+  - §11.5 `tools/methodology_guards/ssot_consistency_check.py` — smoke-tested
+
+## Full-execution extension deliverables (2026-04-26 second wave)
+
+Per user explicit "我授权你全权执行,继续" mandate, three deliverables landed
+beyond the original Day 0 hand-back boundary:
+
+1. **A3 W2 G-9 Opus 4.7 Gate review** (`.planning/gates/2026-04-26_w2_g9_opus_4_7_gate_review.md`) ·
+   verdict GO_WITH_INTEGRITY_NOTE · explicit same-session disclosure · CFDJerry
+   retains 30-day override right.
+2. **P2-T0 Audit Package compatibility spike** (`.planning/specs/EXECUTOR_ABSTRACTION_compatibility_spike.md`) ·
+   verdict COMPATIBLE_WITH_MANIFEST_TAG_EXTENSION · P2-T1 unblocked.
+3. **§11 enforcement scripts (5 of 5)** shipped under `tools/methodology_guards/`
+   + `.github/workflows/sampling_audit_reminder.yml` + `.planning/north_star_drift_log/`.
+
+## Final commit count
+
+9 commits on `origin/main`:
+- `3296ae6` V61-071 wiring
+- `d026cdb` DEC-V61-071/072 + §10.5/§11 + Codex audit
+- `89de608` RETRO-V61-005 skeleton
+- `f0f0f80` V61-071 R1 verbatim fix
+- `c45afc8` DEC-V61-071 R1 frontmatter
+- `aa44617` V61-071 R2 closeout
+- `685d7db` RETRO-V61-005 ACCEPTED
+- `2ae8330` P2-T0 + W2 G-9 + §11.1+§11.4+§11.5
+- `9b65a1a` §11.2+§11.3 scaffolding
 
 ## Codex economy summary
 
