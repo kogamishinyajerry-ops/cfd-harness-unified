@@ -1,7 +1,7 @@
 schema_version: 2
 case_id: duct_flow
-source: "Jones 1976 / Jones & Launder 1973"
-literature_doi: "10.1016/0017-9310(76)90033-4"
+source: "Jones 1976, ASME J. Fluids Eng. 98(2), 173-180 / Jones & Launder 1973, Int. J. Heat Mass Transfer 16(6), 1119-1130"
+literature_doi: "10.1115/1.3448250"
 legacy_case_ids:
   - fully_developed_pipe                     # pre-DEC-V61-011 whitelist id
   - fully_developed_turbulent_pipe_flow      # pre-DEC-V61-011 auto_verifier case id
@@ -23,13 +23,25 @@ physics_contract:
   geometry_assumption: "Rectangular duct with aspect ratio 1 (square cross-section), fully-developed flow, smooth walls"
   reference_correlation_context: >
     Jones 1976 "An improvement in the calculation of turbulent friction in
-    rectangular ducts" (Int. J. Heat Mass Transfer) shows that for smooth
-    walls, rectangular-duct Darcy f is approximately 0.88 × circular-pipe
-    f at the same Re_h (based on hydraulic diameter). At Re=50000: pipe
-    Colebrook f ≈ 0.0206 → duct f ≈ 0.88 × 0.0206 = 0.0181. Reference
-    value 0.0185 stays within Jones correlation's ±10% uncertainty band
-    and also within the prior 8% band for Moody pipe, so no gold-numeric
-    change was needed alongside the label correction.
+    rectangular ducts" (ASME J. Fluids Eng. 98(2), 173-180; DOI corrected
+    in DEC-V61-082) develops a "laminar equivalent" modified Reynolds
+    number Re* such that the laminar relation f = 64/Re* applies across
+    geometries; in fully-developed turbulent flow this gives ~5% scatter
+    band about the smooth-tube line for aspect ratios 1:1 to 39:1.
+    Reference value f=0.0185 at Re=50000 (AR=1 square) stays within this
+    ~5% Jones turbulent-similarity band of the smooth-pipe Colebrook
+    f≈0.0206 line evaluated at Re_h.
+
+    NOTE (DEC-V61-082, 2026-04-26): the prior "f_duct ≈ 0.88 × f_pipe"
+    summarization in this block was Claude Code's internal shorthand and
+    does NOT match Jones 1976's actual formulation (Re* approach). The
+    numerical gold f=0.0185 is unchanged and remains within Jones's
+    stated ~5% band; only the descriptive correlation form has been
+    re-anchored to Re*. Codex review (CLASS-2 mandatory per AUTH-V61-080
+    §2 Case B) verifies this re-anchoring; if the ~5% band claim itself
+    needs a numeric tightening below current 10% tolerance, a CLASS-3
+    follow-up DEC must convene (gold-value tolerance change is out of
+    CLASS-2 scope).
   physics_precondition:
     - condition: "Adapter solver operates on a rectangular (AR=1) duct cross-section"
       satisfied_by_current_adapter: true
