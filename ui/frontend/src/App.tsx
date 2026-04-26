@@ -9,7 +9,6 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { DecisionsQueuePage } from "@/pages/DecisionsQueuePage";
 import { LearnCaseDetailPage } from "@/pages/learn/LearnCaseDetailPage";
 import { LearnHomePage } from "@/pages/learn/LearnHomePage";
-import { RunMonitorPage } from "@/pages/RunMonitorPage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
@@ -47,8 +46,9 @@ export default function App() {
         <Route path="/cases/:caseId/report" element={<ValidationReportPage />} />
         <Route path="/cases/:caseId/edit" element={<CaseEditorPage />} />
         <Route path="/decisions" element={<DecisionsQueuePage />} />
-        <Route path="/runs" element={<RunMonitorPage />} />
-        <Route path="/runs/:caseId" element={<RunMonitorPage />} />
+        {/* /runs and /runs/:caseId removed 2026-04-26 (M1) — Phase-3 synthetic
+            residual stream retired. Real solver SSE lives at
+            /workbench/run/:caseId driven by RealSolverDriver. */}
         <Route path="/audit-package" element={<AuditPackagePage />} />
         {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
         <Route path="/workbench/new" element={<NewCaseWizardPage />} />

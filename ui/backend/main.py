@@ -57,7 +57,6 @@ from ui.backend.routes import (
     health,
     mesh_metrics,
     preflight,
-    run_monitor,
     validation,
     wizard,
     workbench_basics,
@@ -92,7 +91,6 @@ app.include_router(cases.router,        prefix="/api", tags=["cases"])
 app.include_router(case_editor.router,  prefix="/api", tags=["case-editor"])
 app.include_router(validation.router,   prefix="/api", tags=["validation"])
 app.include_router(decisions.router,    prefix="/api", tags=["decisions"])
-app.include_router(run_monitor.router,  prefix="/api", tags=["runs"])
 app.include_router(dashboard.router,    prefix="/api", tags=["dashboard"])
 app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])
 app.include_router(case_export.router,  prefix="/api", tags=["case-export"])

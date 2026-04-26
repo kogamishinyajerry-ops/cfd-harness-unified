@@ -1,25 +1,23 @@
-"""Wizard solver-driver abstractions · Stage 8b prep.
+"""Wizard solver-driver abstractions.
 
-Stage 8a's `routes/wizard.py:_run_phase_script` mixed two concerns:
-  1. The fixed mock script DATA (`_PHASE_SCRIPT` list of phase dicts)
-  2. The walking LOGIC (yield phase_start / log / metric / phase_done /
-     run_done events, paced via asyncio.sleep)
+Two implementations of the `SolverDriver` protocol share a single SSE
+wire schema (`RunPhaseEvent`, audited mock-shape-free in Q13):
 
-For Stage 8b — when `dec-v61-058..063 / feat/c3a..c` line-B branches
-drain and `foam_agent_adapter` is no longer being actively iterated —
-we need to swap the script DATA for real solver subprocess output WITHOUT
-rewriting the walking LOGIC. Round-3 Q13 audit confirmed the wire
-schema (RunPhaseEvent) is mock-shape-free, so the walker can stay
-schema-stable while the source flips.
+  - `MockSolverDriver` (Stage 8a) — fixed 5-phase script paced via
+    asyncio.sleep, no Docker / no OpenFOAM. Source-of-truth demo path.
+  - `RealSolverDriver` (M1 · 2026-04-26) — wraps
+    `src.foam_agent_adapter.FoamAgentExecutor.execute()` (synchronous,
+    blocking, ~10-300s) with thread-pool dispatch + heartbeat log
+    events. Whitelist defaults only; M2 wires user_drafts overrides.
 
-This module formalises that plug-in surface as a `SolverDriver`
-protocol. `MockSolverDriver` is the Stage 8a implementation. Stage 8b
-adds `RealSolverDriver` (subprocess wrapper) as a sibling — only THIS
-file changes. `routes/wizard.py` picks a driver based on env var
-(`CFD_HARNESS_WIZARD_SOLVER=mock|real`, default `mock` for now).
+`get_driver()` picks by env var `CFD_HARNESS_WIZARD_SOLVER=mock|real`,
+default `mock`. `routes/wizard.py` is a thin pass-through.
 
-NOTE: this file does NOT import `foam_agent_adapter` or any line-B
-code path. Stage 8b's RealSolverDriver lands as a future addition.
+Line-A / Line-B isolation contract (per .planning/ROADMAP.md): this
+module imports ONLY `FoamAgentExecutor.execute()` public surface from
+`src.foam_agent_adapter` — never modifies internals. Imports of `src.*`
+are deferred to call-time so test imports of `wizard_drivers` don't
+pull in 8000+ LOC of adapter code.
 """
 from __future__ import annotations
 
@@ -192,15 +190,257 @@ class MockSolverDriver:
         })
 
 
-# Stage 8b plug-in point. When line-B drains and foam_agent_adapter
-# stabilises, add a `RealSolverDriver` class here implementing the
-# same `run(case_id)` async-iterator contract via subprocess wrappers
-# around blockMesh / simpleFoam / etc. The route below picks driver
-# by env var; default stays `mock` until the real driver is reviewed
-# end-to-end.
+# --- Real implementation (M1 · Workbench Closed-Loop main-line) ------------
+# Wraps `src.foam_agent_adapter.FoamAgentExecutor.execute()` (synchronous,
+# blocking, ~10-300s for real Docker+OpenFOAM runs) into the same async-iter
+# SSE contract MockSolverDriver satisfies.
+#
+# M1 scope (2026-04-26): whitelist defaults only — no user-draft parameter
+# overrides yet (that's M2 territory: read ui/backend/user_drafts/{id}.yaml
+# first, fall back to whitelist). Single combined "solver" phase rather than
+# the mock's 5-phase script — real solver doesn't expose explicit
+# geometry/mesh/solver/compare boundaries to the wizard layer.
+#
+# Bursty SSE warning: heartbeat log lines flow during the blocking execute()
+# (every HEARTBEAT_INTERVAL_S), then a sudden burst of metric+phase_done
+# +run_done events when execute() returns. This is acceptable for M1 —
+# proves the integration. Real-time log tailing during execute() is M3/M4
+# scope if it turns out to be necessary.
+
+
+_HEARTBEAT_INTERVAL_S = 2.5  # 2-3s feels responsive without flooding
+
+
+def _task_spec_from_whitelist(case_id: str):
+    """Build a TaskSpec from knowledge/whitelist.yaml for the given case_id.
+
+    M1 scope: whitelist defaults only. M2 will check
+    ``ui/backend/user_drafts/{case_id}.yaml`` first to honour parameter
+    overrides from /workbench/case/{id}/edit.
+
+    Raises KeyError if case_id not in whitelist. Returns the constructed
+    TaskSpec on success.
+
+    NOTE: imports from `src.*` are deferred to call-time so module import
+    of `wizard_drivers` doesn't pull in the 8000+ LOC foam_agent_adapter
+    just to expose MockSolverDriver to tests.
+    """
+    import yaml
+    from pathlib import Path
+
+    from src.models import (
+        Compressibility,
+        FlowType,
+        GeometryType,
+        SteadyState,
+        TaskSpec,
+    )
+
+    repo_root = Path(__file__).resolve().parents[3]
+    whitelist_path = repo_root / "knowledge" / "whitelist.yaml"
+    with whitelist_path.open("r", encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh) or {}
+
+    entry = next(
+        (c for c in doc.get("cases", []) if c.get("id") == case_id),
+        None,
+    )
+    if entry is None:
+        raise KeyError(f"case_id {case_id!r} not in knowledge/whitelist.yaml")
+
+    params = entry.get("parameters") or {}
+    bcs = entry.get("boundary_conditions") or {}
+    return TaskSpec(
+        name=entry.get("name", case_id),
+        geometry_type=GeometryType[entry["geometry_type"]],
+        flow_type=FlowType[entry["flow_type"]],
+        steady_state=SteadyState[entry.get("steady_state", "STEADY")],
+        compressibility=Compressibility[entry.get("compressibility", "INCOMPRESSIBLE")],
+        Re=params.get("Re"),
+        Ra=params.get("Ra"),
+        Re_tau=params.get("Re_tau"),
+        Ma=params.get("Ma"),
+        boundary_conditions=dict(bcs),
+        description=f"M1 RealSolverDriver run · ref={entry.get('reference', 'no ref')}",
+    )
+
+
+class RealSolverDriver:
+    """Real OpenFOAM execution driver. Wraps FoamAgentExecutor.execute().
+
+    Opt in via ``CFD_HARNESS_WIZARD_SOLVER=real``. Default remains ``mock``
+    so the Stage 8a onboarding demo path stays mock-driven.
+
+    Failure modes mapped to SSE:
+      - case_id not in whitelist → run_done with exit_code=2, level=error
+      - Executor raises (Docker missing, container crash, etc.) →
+        phase_done status=fail + run_done with exit_code=1, level=error
+      - ExecutionResult.success=False → phase_done status=fail, exit_code
+        mirrors result.exit_code if set else 1
+      - Success → phase_done status=ok + run_done with exit_code=0
+    """
+
+    name = "real"
+
+    async def run(self, case_id: str) -> AsyncIterator[str]:
+        # Defer src.* imports to call-time per the comment on
+        # _task_spec_from_whitelist above.
+        from src.foam_agent_adapter import FoamAgentExecutor
+
+        yield _sse({
+            "type": "log", "phase": None, "t": time.time(),
+            "line": (
+                f"[wizard] case_id={case_id} starting REAL solver pipeline "
+                "(M1 · RealSolverDriver — whitelist defaults, no draft overrides yet)"
+            ),
+        })
+
+        # --- 1. Resolve case_id → TaskSpec ----------------------------------
+        try:
+            task_spec = _task_spec_from_whitelist(case_id)
+        except KeyError as exc:
+            yield _sse({
+                "type": "log", "phase": None, "t": time.time(),
+                "line": f"[wizard] ERROR: {exc}",
+                "level": "error", "stream": "stderr",
+            })
+            yield _sse({
+                "type": "run_done", "phase": None, "t": time.time(),
+                "summary": f"unknown case_id={case_id} — not in whitelist",
+                "exit_code": 2, "level": "error",
+            })
+            return
+
+        yield _sse({
+            "type": "log", "phase": None, "t": time.time(),
+            "line": (
+                f"[wizard] resolved {case_id} → {task_spec.name} "
+                f"({task_spec.flow_type.value}/{task_spec.geometry_type.value})"
+            ),
+        })
+
+        # --- 2. Dispatch executor to thread pool, heartbeat in foreground ---
+        yield _sse({
+            "type": "phase_start", "phase": "solver", "t": time.time(),
+            "message": "Docker + OpenFOAM 求解器执行中（同步阻塞 ~10-300s）...",
+        })
+
+        executor = FoamAgentExecutor()
+        exec_task = asyncio.create_task(
+            asyncio.to_thread(executor.execute, task_spec)
+        )
+
+        # Heartbeat loop: wait up to HEARTBEAT_INTERVAL_S each iteration; if the
+        # executor finishes within that window, break with the result; otherwise
+        # emit a heartbeat log and try again. `asyncio.wait_for` uses
+        # `loop.call_later` for the timeout (real wall-clock), independent of any
+        # asyncio.sleep mocking that test fixtures may apply.
+        t0 = time.time()
+        result = None
+        exec_exc: Exception | None = None
+        while True:
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.shield(exec_task), timeout=_HEARTBEAT_INTERVAL_S
+                )
+                break
+            except asyncio.TimeoutError:
+                elapsed = time.time() - t0
+                yield _sse({
+                    "type": "log", "phase": "solver", "t": time.time(),
+                    "line": f"[solver] running... ({elapsed:.0f}s elapsed)",
+                })
+                continue
+            except Exception as exc:  # noqa: BLE001 — surface ANY executor failure
+                exec_exc = exc
+                break
+
+        # --- 3. Drain ExecutionResult or exception --------------------------
+        if exec_exc is not None:
+            exc = exec_exc
+            err_str = str(exc)
+            yield _sse({
+                "type": "log", "phase": "solver", "t": time.time(),
+                "line": f"[solver] FATAL: {type(exc).__name__}: {err_str[:200]}",
+                "level": "error", "stream": "stderr",
+            })
+            yield _sse({
+                "type": "phase_done", "phase": "solver", "t": time.time(),
+                "status": "fail",
+                "summary": f"executor exception: {type(exc).__name__}",
+            })
+            yield _sse({
+                "type": "run_done", "phase": None, "t": time.time(),
+                "summary": (
+                    f"run failed · case_id={case_id} · "
+                    f"{type(exc).__name__}: {err_str[:120]}"
+                ),
+                "exit_code": 1, "level": "error",
+            })
+            return
+
+        # Residuals → metric events (numeric only)
+        for k, v in (result.residuals or {}).items():
+            try:
+                yield _sse({
+                    "type": "metric", "phase": "solver", "t": time.time(),
+                    "metric_key": f"residual_{k}", "metric_value": float(v),
+                })
+            except (TypeError, ValueError):
+                continue
+
+        # Key quantities → metric events (numeric) or log lines (non-numeric)
+        for k, v in (result.key_quantities or {}).items():
+            try:
+                fv = float(v)
+                yield _sse({
+                    "type": "metric", "phase": "solver", "t": time.time(),
+                    "metric_key": str(k), "metric_value": fv,
+                })
+            except (TypeError, ValueError):
+                yield _sse({
+                    "type": "log", "phase": "solver", "t": time.time(),
+                    "line": f"[result] {k} = {v!r}"[:200],
+                })
+
+        # --- 4. phase_done + run_done ---------------------------------------
+        elapsed_total = result.execution_time_s or (time.time() - t0)
+        if result.success:
+            yield _sse({
+                "type": "phase_done", "phase": "solver", "t": time.time(),
+                "status": "ok",
+                "summary": (
+                    f"OpenFOAM converged · {elapsed_total:.1f}s · "
+                    f"{len(result.key_quantities or {})} key quantities extracted"
+                ),
+            })
+            exit_code = result.exit_code if result.exit_code is not None else 0
+            level = "info"
+        else:
+            err_msg = (result.error_message or "(no error message)")[:160]
+            yield _sse({
+                "type": "phase_done", "phase": "solver", "t": time.time(),
+                "status": "fail",
+                "summary": f"OpenFOAM failed · {err_msg}",
+            })
+            exit_code = result.exit_code if result.exit_code is not None else 1
+            level = "error"
+
+        yield _sse({
+            "type": "run_done", "phase": None, "t": time.time(),
+            "summary": (
+                f"run complete · case_id={case_id} · "
+                f"success={result.success} · {elapsed_total:.1f}s · "
+                "real solver execution (M1 · RealSolverDriver)"
+            ),
+            "exit_code": exit_code,
+            "level": level,
+        })
+
 
 _DRIVER_REGISTRY: dict[str, SolverDriver] = {
     "mock": MockSolverDriver(),
+    "real": RealSolverDriver(),
 }
 
 

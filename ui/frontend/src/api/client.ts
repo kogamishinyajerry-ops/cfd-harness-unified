@@ -16,7 +16,6 @@ import type {
 import type {
   DashboardResponse,
   DecisionsQueueResponse,
-  RunCheckpointsResponse,
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { BatchMatrix } from "@/types/batch_matrix";
@@ -103,13 +102,9 @@ export const api = {
   // Phase 2
   listDecisions: () => request<DecisionsQueueResponse>("/api/decisions"),
 
-  // Phase 3
-  getRunCheckpoints: (caseId: string) =>
-    request<RunCheckpointsResponse>(
-      `/api/runs/${encodeURIComponent(caseId)}/checkpoints`,
-    ),
-  runStreamUrl: (caseId: string) =>
-    `/api/runs/${encodeURIComponent(caseId)}/stream`,
+  // Phase 3 run-monitor endpoints removed 2026-04-26 (M1) — Phase-3 synthetic
+  // residual stream retired. Real solver SSE lives at /api/wizard/run/:id/stream
+  // driven by RealSolverDriver in wizard_drivers.py.
 
   // Phase 4
   getDashboard: () => request<DashboardResponse>("/api/dashboard"),

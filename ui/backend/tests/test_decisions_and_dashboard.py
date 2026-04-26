@@ -45,35 +45,9 @@ def test_decisions_gate_queue_included():
     assert q3["state"] == "CLOSED"
 
 
-# ---------- Phase 3: Run Monitor --------------------------------------------
-
-
-def test_run_checkpoints_snapshot():
-    resp = client.get("/api/runs/differential_heated_cavity/checkpoints")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["case_id"] == "differential_heated_cavity"
-    assert len(body["checkpoints"]) == 8
-
-
-def test_run_stream_first_events():
-    # Just consume the first ~3 SSE messages to verify wire format.
-    with client.stream(
-        "GET", "/api/runs/turbulent_flat_plate/stream"
-    ) as resp:
-        assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith("text/event-stream")
-        events: list[dict] = []
-        for raw in resp.iter_lines():
-            if not raw:
-                continue
-            line = raw if isinstance(raw, str) else raw.decode()
-            if line.startswith("data: "):
-                events.append(json.loads(line[6:]))
-                if len(events) >= 3:
-                    break
-    assert events[0]["phase"] == "init"
-    assert all("iter" in e for e in events)
+# Phase 3 Run Monitor tests removed 2026-04-26 (M1) — synthetic residual
+# stream retired. Real solver SSE lives at /api/wizard/run/{case_id}/stream
+# driven by RealSolverDriver; coverage in test_wizard_drivers.py.
 
 
 # ---------- Phase 4: Dashboard ----------------------------------------------
