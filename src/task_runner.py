@@ -58,6 +58,23 @@ PostExecuteHook = Callable[
 
 CORRECTION_POLICIES = ("legacy_auto_save", "suggest_only")
 
+# DEC-V61-075 P2-T2.1 (Codex R3 P2): notes the OK-path of run_task
+# propagates to the TaskRunner.RunReport summary (and thus to Notion +
+# log consumers). Vocabulary is deliberately narrow — only operational-
+# environment signals that change the operator's interpretation of a
+# "❌ Failed" line. Trust/manifest annotations (e.g.,
+# ``mock_executor_no_truth_source``) are NOT in this set; they live on
+# the AuditPackage manifest's ``executor`` section per T1.b.1 + §6.1.
+# Adding a new note requires:
+#   1. The producing executor (e.g., FoamAgentExecutor.execute_with_run_report)
+#      attaches it under a documented condition.
+#   2. The note is named so consumers can ``in`` against this set.
+#   3. A regression test in tests/test_task_runner_executor_mode.py
+#      confirms the note reaches summary.
+_OK_PATH_PROPAGATED_NOTES: frozenset[str] = frozenset({
+    "docker_openfoam_preflight_failed",
+})
+
 logger = logging.getLogger(__name__)
 
 
@@ -337,6 +354,7 @@ class TaskRunner:
         # non-OK statuses (MODE_NOT_APPLICABLE / MODE_NOT_YET_IMPLEMENTED)
         # short-circuit before comparator/correction so downstream
         # extractors never see synthetic-or-absent ExecutionResult.
+        executor_notes: tuple[str, ...] = ()
         if self._executor_abc is not None:
             executor_run_report = self._executor_abc.execute(task_spec)
             if executor_run_report.status is not ExecutorStatus.OK:
@@ -362,8 +380,46 @@ class TaskRunner:
                 return short_report
             assert executor_run_report.execution_result is not None  # OK invariant
             exec_result = executor_run_report.execution_result
+            # DEC-V61-075 P2-T2.1 (Codex R3 P2 fix): preserve
+            # operationally-significant OK-path executor notes for
+            # downstream summary/Notion consumers. Without this,
+            # Docker SDK / container / case-dir failures surface as
+            # a generic "❌ Failed" line — indistinguishable from
+            # solver divergence — and Notion + TrustGate consumers
+            # lose the executor-emitted environment signal.
+            #
+            # Note vocabulary is intentionally narrow: only
+            # operational-environment failures (preflight) propagate
+            # to summary. Trust/manifest annotations like
+            # ``mock_executor_no_truth_source`` belong on the manifest's
+            # ``executor`` section (set by callers via
+            # ``build_manifest(executor=...)`` per T1.b.1), not on
+            # ``TaskRunner.RunReport.summary``. Mixing the two would
+            # double-surface the mock ceiling and confuse log readers
+            # who already see the routing-imposed WARN downstream.
+            executor_notes = tuple(
+                note for note in executor_run_report.notes
+                if note in _OK_PATH_PROPAGATED_NOTES
+            )
         else:
+            # DEC-V61-075 P2-T2.1 (Codex R4 P2-A fix): legacy CFDExecutor
+            # branch — when ``self._executor`` happens to be a
+            # ``FoamAgentExecutor`` (the production path used by
+            # scripts/p2_acceptance_run.py, scripts/phase5_audit_run.py,
+            # ui/backend/services/wizard_drivers.py) detect pre-flight
+            # failure inline so the same operator signal reaches
+            # summary regardless of which dispatch kwarg the caller
+            # used. Other CFDExecutor implementations (MockExecutor,
+            # plug-ins) take the unchanged path; the FoamAgent-specific
+            # branch keeps coupling minimal and avoids requiring every
+            # CFDExecutor to grow a notes contract.
             exec_result = self._executor.execute(task_spec)
+            if (
+                isinstance(self._executor, FoamAgentExecutor)
+                and not exec_result.success
+                and exec_result.raw_output_path is None
+            ):
+                executor_notes = ("docker_openfoam_preflight_failed",)
         logger.info("Execution success=%s is_mock=%s", exec_result.success, exec_result.is_mock)
 
         # 2. 先做收敛 attestation；ATTEST_FAIL 不再进入 compare/correction。
@@ -405,7 +461,10 @@ class TaskRunner:
                 logger.exception("post_execute_hook raised; continuing without verify report")
 
         # 7. 生成摘要
-        summary = self._build_summary(exec_result, comparison, correction, attestation)
+        summary = self._build_summary(
+            exec_result, comparison, correction, attestation,
+            executor_notes=executor_notes,
+        )
 
         # 8. 回写 Notion（Notion 未配置时静默跳过）
         try:
@@ -639,6 +698,7 @@ class TaskRunner:
         comparison: Optional[ComparisonResult],
         correction: Optional[CorrectionSpec],
         attestation: Optional["AttestationResult"] = None,
+        executor_notes: tuple[str, ...] = (),
     ) -> str:
         parts = []
         status = "✅ Success" if exec_result.success else "❌ Failed"
@@ -651,6 +711,11 @@ class TaskRunner:
                 parts.append(f"Deviations: {len(comparison.deviations)}")
         if correction is not None:
             parts.append(f"CorrectionSpec generated: {correction.error_type.value}")
+        # DEC-V61-075 P2-T2.1 (Codex R3 P2 fix): surface OK-path
+        # executor notes (e.g., docker_openfoam_preflight_failed) so
+        # Notion + log consumers can branch on environment failures.
+        if executor_notes:
+            parts.append(f"Executor notes: {', '.join(executor_notes)}")
         return " | ".join(parts)
 
     def _compute_attestation(

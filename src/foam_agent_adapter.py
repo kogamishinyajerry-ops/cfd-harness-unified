@@ -802,6 +802,87 @@ class FoamAgentExecutor:
                 pass
 
     # ------------------------------------------------------------------
+    # DEC-V61-075 P2-T2.1 · ExecutorAbstraction RunReport bridge
+    # ------------------------------------------------------------------
+    # FoamAgentExecutor pre-dates the EXECUTOR_ABSTRACTION.md §2 ABC.
+    # `execute(task_spec) -> ExecutionResult` is preserved for backward
+    # compatibility with the `CFDExecutor` Protocol (~30 call sites in
+    # tests/, ui/backend/services/wizard_drivers.py, scripts/, and
+    # src/task_runner.py legacy path) — see DEC-V61-075 scope rationale.
+    # `execute_with_run_report` is the new canonical entry point that
+    # wraps the same call and packages the result into the `RunReport`
+    # shape the §6 TrustGate routing consumes.
+
+    def execute_with_run_report(self, task_spec: TaskSpec) -> "RunReport":  # noqa: F821 (forward ref)
+        """Run the simulation and return a §6.1 ``RunReport``.
+
+        Per EXECUTOR_ABSTRACTION.md §6.1 (docker_openfoam mode):
+
+        - ``mode`` is always ``ExecutorMode.DOCKER_OPENFOAM`` — this
+          adapter IS the canonical truth-source executor.
+        - ``status`` is ``ExecutorStatus.OK`` regardless of solver
+          outcome. The spec's ``ExecutorStatus`` distinguishes executor
+          *mode-level refusal* (``MODE_NOT_APPLICABLE`` for hybrid-init
+          §5.2 / ``MODE_NOT_YET_IMPLEMENTED`` for future_remote §6.1)
+          from run *outcome*; the latter is recorded inside
+          ``execution_result.success`` and downstream gates evaluate it
+          there.
+
+          Pre-flight environment failures (Docker SDK missing, container
+          stopped, case-dir creation failed) currently surface as
+          ``execution_result.success=False`` with ``raw_output_path=None``
+          and the synthetic note ``docker_openfoam_preflight_failed``
+          appended to ``RunReport.notes`` so adopters of this API can
+          observe + branch on the pre-flight vs. solver-runtime
+          distinction without parsing ``error_message`` strings. The
+          status stays ``OK`` because promoting environment unavailability
+          to a non-OK status would require a spec amendment to §6.1 +
+          ``ExecutorStatus`` (additive enum value) — out of scope for
+          DEC-V61-075's "thin bridge" P2-T2.1 sub-scope. A follow-up
+          DEC may introduce ``ExecutorStatus.EXECUTOR_UNAVAILABLE`` to
+          let ``TaskRunner`` short-circuit on pre-flight failure
+          symmetrically with the §5.2 + §6.1 mode-refusal short-circuit.
+        - ``contract_hash`` and ``version`` are sourced from a transient
+          :class:`DockerOpenFOAMExecutor` instance via lazy import so
+          the §3 / spike F-3 manifest-tagging contract is single-sourced
+          (a future spec amendment that bumps the hash flows here for
+          free; this method does not duplicate the SHA-256 derivation).
+
+        The lazy import keeps trust-core 5 module-init time light and
+        avoids any circular-import surprise: ``src.executor.docker_openfoam``
+        already lazy-imports ``FoamAgentExecutor`` inside ``_get_wrapped``,
+        so the two-way reference is symmetric and only resolves at call
+        time.
+        """
+        # Lazy import — see method docstring for the symmetric-lazy
+        # rationale + DEC-V61-075 scope rationale.
+        from src.executor import DockerOpenFOAMExecutor  # noqa: PLC0415
+        from src.executor.base import ExecutorStatus, RunReport  # noqa: PLC0415
+
+        result = self.execute(task_spec)
+        canonical = DockerOpenFOAMExecutor()
+        # Pre-flight environment failure detection (Codex P2-T2.1 R1 P2):
+        # FoamAgentExecutor.execute() returns success=False with
+        # raw_output_path=None when Docker SDK is missing, the
+        # container is stopped, or case-dir creation fails (lines
+        # 567-632). Solver-runtime failures (divergence, timeout) set
+        # raw_output_path to the actual case directory before failing.
+        # The note lets callers branch on pre-flight vs. solver-runtime
+        # without parsing error_message strings; see method docstring
+        # for why status stays OK in this DEC.
+        notes: Tuple[str, ...] = ()
+        if not result.success and result.raw_output_path is None:
+            notes = ("docker_openfoam_preflight_failed",)
+        return RunReport(
+            mode=canonical.MODE,
+            status=ExecutorStatus.OK,
+            contract_hash=canonical.contract_hash,
+            version=canonical.VERSION,
+            execution_result=result,
+            notes=notes,
+        )
+
+    # ------------------------------------------------------------------
     # Case file generation (Lid-Driven Cavity)
     # ------------------------------------------------------------------
 

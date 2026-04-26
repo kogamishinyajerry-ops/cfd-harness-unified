@@ -318,3 +318,225 @@ class TestShortCircuitWritesBackToNotion:
         # Must not raise.
         result = runner.run_task(_task_spec())
         assert "Short-circuit" in result.summary
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-075 P2-T2.1 (Codex R3 P2) · OK-path executor-note propagation
+# ---------------------------------------------------------------------------
+
+class TestOkPathExecutorNotePropagation:
+    """When ``ExecutorAbc`` returns OK with a note in the
+    ``_OK_PATH_PROPAGATED_NOTES`` set, ``TaskRunner.run_task`` MUST
+    surface it on ``RunReport.summary`` so Notion + log consumers can
+    branch on operational-environment failures (e.g., Docker SDK
+    missing, container down). Trust/manifest annotations like
+    ``mock_executor_no_truth_source`` MUST NOT be propagated — those
+    live on the AuditPackage manifest's ``executor`` section.
+    """
+
+    def _ok_with_notes(
+        self, mode: ExecutorMode, notes: tuple[str, ...]
+    ) -> ExecutorRunReport:
+        return ExecutorRunReport(
+            mode=mode,
+            status=ExecutorStatus.OK,
+            contract_hash="deadbeef" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=False,  # pre-flight failure scenario
+                is_mock=False,
+                error_message="Docker SDK not installed",
+                execution_time_s=0.0,
+                raw_output_path=None,
+            ),
+            notes=notes,
+        )
+
+    def test_docker_openfoam_preflight_note_surfaces_in_summary(self):
+        """A docker_openfoam_preflight_failed note MUST appear in
+        ``run_task`` summary so operators see the environment signal
+        instead of a generic '❌ Failed' line."""
+        run_report = self._ok_with_notes(
+            ExecutorMode.DOCKER_OPENFOAM,
+            ("docker_openfoam_preflight_failed",),
+        )
+        executor_abc = MagicMock(spec=DockerOpenFOAMExecutor)
+        executor_abc.execute.return_value = run_report
+
+        runner = _stub_runner(executor_abc)
+        result = runner.run_task(_task_spec())
+
+        assert "docker_openfoam_preflight_failed" in result.summary
+        assert "Executor notes" in result.summary
+
+    def test_mock_truth_source_note_does_NOT_surface_in_summary(self):
+        """``mock_executor_no_truth_source`` is a manifest-tier note
+        (per T1.b.1), NOT a TaskRunner-summary signal. Surfacing it
+        would double-display alongside the §6.1 routing-imposed WARN
+        and confuse log readers."""
+        run_report = ExecutorRunReport(
+            mode=ExecutorMode.MOCK,
+            status=ExecutorStatus.OK,
+            contract_hash="deadbeef" * 8,
+            version=SPEC_VERSION,
+            execution_result=ExecutionResult(
+                success=True,
+                is_mock=True,
+                residuals={"p": 1e-6, "U": 1e-6},
+                execution_time_s=0.01,
+            ),
+            notes=("mock_executor_no_truth_source",),
+        )
+        executor_abc = MagicMock(spec=MockExecutor)
+        executor_abc.execute.return_value = run_report
+
+        runner = _stub_runner(executor_abc)
+        result = runner.run_task(_task_spec())
+
+        assert "mock_executor_no_truth_source" not in result.summary
+        assert "Executor notes" not in result.summary
+
+    def test_mixed_notes_only_propagates_whitelisted_subset(self):
+        """When the ExecutorRunReport carries both whitelisted and
+        non-whitelisted notes, only the whitelisted ones reach summary.
+        Future-proofs the propagation contract: adding new producers
+        cannot accidentally leak unrelated annotations to operators."""
+        run_report = self._ok_with_notes(
+            ExecutorMode.DOCKER_OPENFOAM,
+            ("docker_openfoam_preflight_failed", "mock_executor_no_truth_source"),
+        )
+        executor_abc = MagicMock(spec=DockerOpenFOAMExecutor)
+        executor_abc.execute.return_value = run_report
+
+        runner = _stub_runner(executor_abc)
+        result = runner.run_task(_task_spec())
+
+        assert "docker_openfoam_preflight_failed" in result.summary
+        assert "mock_executor_no_truth_source" not in result.summary
+
+    def test_legacy_path_no_executor_notes_for_plain_cfdexecutor(self):
+        """When ``executor_abc`` is None and ``self._executor`` is a
+        plain ``CFDExecutor`` (not FoamAgentExecutor), no ``Executor
+        notes`` segment appears — propagation only fires for adapters
+        that produce the documented note vocabulary."""
+        legacy_executor = MagicMock(spec=["execute"])
+        legacy_executor.execute.return_value = ExecutionResult(
+            success=True,
+            is_mock=False,
+            residuals={"p": 1e-6, "U": 1e-6},
+            execution_time_s=0.01,
+        )
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        notion.list_pending_tasks.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: None
+        runner = TaskRunner(
+            executor=legacy_executor,
+            notion_client=notion,
+            knowledge_db=db,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(passed=True, deviations=[])
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_NOT_APPLICABLE", checks=[])
+        )
+        result = runner.run_task(_task_spec())
+
+        assert "Executor notes" not in result.summary
+
+    def test_legacy_foam_agent_executor_path_emits_preflight_note(self):
+        """Codex R4 P2-A fix: the legacy ``executor=FoamAgentExecutor()``
+        path (used by scripts/p2_acceptance_run.py,
+        scripts/phase5_audit_run.py, ui/backend/services/wizard_drivers.py)
+        must surface ``docker_openfoam_preflight_failed`` symmetrically
+        with the ABC dispatch path. Without this, Docker SDK / container /
+        case-dir failures in the production scripts collapse into the
+        same generic ``❌ Failed`` summary as a diverged solver."""
+        from unittest.mock import patch
+
+        from src.foam_agent_adapter import FoamAgentExecutor
+
+        legacy_executor = FoamAgentExecutor()
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        notion.list_pending_tasks.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: None
+        runner = TaskRunner(
+            executor=legacy_executor,
+            notion_client=notion,
+            knowledge_db=db,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(passed=True, deviations=[])
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_NOT_APPLICABLE", checks=[])
+        )
+
+        # Simulate Docker pre-flight failure: success=False with raw_output_path=None
+        preflight_fail = ExecutionResult(
+            success=False,
+            is_mock=False,
+            error_message="Docker SDK not installed",
+            execution_time_s=0.0,
+            raw_output_path=None,
+        )
+        with patch.object(FoamAgentExecutor, "execute", return_value=preflight_fail):
+            result = runner.run_task(_task_spec())
+
+        assert "docker_openfoam_preflight_failed" in result.summary
+        assert "Executor notes" in result.summary
+
+    def test_legacy_foam_agent_runtime_failure_does_NOT_emit_preflight_note(self):
+        """A solver-runtime failure (raw_output_path populated) must
+        NOT trigger the preflight note on the legacy path — same
+        discrimination as the bridge."""
+        from unittest.mock import patch
+
+        from src.foam_agent_adapter import FoamAgentExecutor
+
+        legacy_executor = FoamAgentExecutor()
+        notion = MagicMock()
+        notion.write_execution_result.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        notion.list_pending_tasks.side_effect = NotImplementedError(
+            "Notion not configured"
+        )
+        db = MagicMock()
+        db.get_execution_chain.side_effect = lambda _: None
+        db.load_gold_standard.side_effect = lambda _: None
+        runner = TaskRunner(
+            executor=legacy_executor,
+            notion_client=notion,
+            knowledge_db=db,
+        )
+        runner._comparator = MagicMock()
+        runner._comparator.compare.return_value = MagicMock(passed=True, deviations=[])
+        runner._compute_attestation = MagicMock(  # type: ignore[method-assign]
+            return_value=MagicMock(overall="ATTEST_NOT_APPLICABLE", checks=[])
+        )
+
+        runtime_fail = ExecutionResult(
+            success=False,
+            is_mock=False,
+            error_message="solver diverged",
+            execution_time_s=42.1,
+            raw_output_path="/tmp/cases/divergent_run",
+        )
+        with patch.object(FoamAgentExecutor, "execute", return_value=runtime_fail):
+            result = runner.run_task(_task_spec())
+
+        assert "docker_openfoam_preflight_failed" not in result.summary
+        assert "Executor notes" not in result.summary

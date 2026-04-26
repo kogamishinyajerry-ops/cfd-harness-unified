@@ -58,10 +58,40 @@ class DockerOpenFOAMExecutor(ExecutorAbc):
         return self._wrapped
 
     def execute(self, task_spec: TaskSpec) -> RunReport:
-        """Delegate to the wrapped CFDExecutor; package its
-        ExecutionResult into a RunReport(status=OK) per
-        EXECUTOR_ABSTRACTION §6.1."""
-        result = self._get_wrapped().execute(task_spec)
+        """Delegate to the wrapped CFDExecutor; package the result into a
+        RunReport per EXECUTOR_ABSTRACTION §6.1.
+
+        DEC-V61-075 P2-T2.1 (Codex R2 P2 fix): when the wrapped instance
+        is a substantialized ``FoamAgentExecutor`` (post-T2.1) it
+        exposes ``execute_with_run_report`` which produces the canonical
+        RunReport with the ``docker_openfoam_preflight_failed`` note on
+        environment failures. Calling that bridge here propagates the
+        pre-flight signal to ``TaskRunner(executor_mode=DOCKER_OPENFOAM)``
+        and any other ABC-path consumer — without it the note's
+        documented branch-point would be invisible to real callers.
+
+        DEC-V61-075 P2-T2.1 (Codex R3 P3 fix): the dispatch uses an
+        ``isinstance`` check against the trust-core ``FoamAgentExecutor``
+        class rather than ``hasattr``. ``hasattr`` is unsafe here because
+        a bare ``MagicMock()`` (no ``spec``) reports every attribute as
+        present via its ``__getattr__`` — the bridge branch would fire
+        on every test double and skip the legacy ``execute()`` path. The
+        ``isinstance`` check correctly recognizes plain ``CFDExecutor``
+        Protocol stubs (``MagicMock(spec=["execute"])``, custom
+        plug-ins) and falls back to the legacy ``execute()`` + manual
+        wrap path. Plug-in adapters that want the bridge inherit
+        ``FoamAgentExecutor`` (or a future common base) per
+        EXECUTOR_ABSTRACTION §6.4 trust-core boundary.
+        """
+        wrapped = self._get_wrapped()
+        # Lazy import — see _get_wrapped() docstring for the symmetric-lazy
+        # rationale; this avoids module-init time circularity with
+        # src.foam_agent_adapter (also Plane.EXECUTION).
+        from src.foam_agent_adapter import FoamAgentExecutor  # noqa: PLC0415
+
+        if isinstance(wrapped, FoamAgentExecutor):
+            return wrapped.execute_with_run_report(task_spec)
+        result = wrapped.execute(task_spec)
         return RunReport(
             mode=self.MODE,
             status=ExecutorStatus.OK,
