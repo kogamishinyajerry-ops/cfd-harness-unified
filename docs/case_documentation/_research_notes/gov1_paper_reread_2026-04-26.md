@@ -212,3 +212,100 @@ P4 schema design should treat link-rot / DOI-mismatch / author-unfindable as a f
 - Behnia 1999 cross-references: WebSearch on "Behnia Parneix Shabany Durbin impinging jet"
 - Ghia 1982 LDC tolerance: WebSearch on "Ghia 1982 lid-driven cavity Re=100 secondary vortex"
 - Pre-existing in-yaml audit notes: `knowledge/gold_standards/impinging_jet.yaml` Gate Q-new Case 9 HOLD comment; `knowledge/gold_standards/rayleigh_benard_convection.yaml` Gate Q-new Case 10 HOLD comment
+
+---
+
+## Addendum (2026-04-26 same-day) — Full DOI integrity audit across all 10 cases
+
+After the initial 3-HOLD focus surfaced the IJ + RBC DOI mismatches,
+the audit was extended to spot-check **all 10 case DOIs** against
+Semantic Scholar API + crossref.org + doi.org official resolver.
+Two additional issues found.
+
+### Audit method
+
+For each case's `literature_doi` field:
+1. Query Semantic Scholar API metadata
+2. If 404, query crossref.org
+3. If 404, fetch `https://doi.org/<DOI>` with `curl -sI` to confirm authoritative resolver behavior
+4. If still 404, search the actual paper title/authors to find the correct DOI
+
+### Full audit results
+
+| # | Case | Stored DOI | Stored attribution | Resolves? | Resolves to | Severity |
+|---|---|---|---|---|---|---|
+| 1 | `lid_driven_cavity` | `10.1016/0021-9991(82)90058-4` | Ghia 1982 J Comp Phys | ✅ | Match — Ghia/Ghia/Shin 1982 J Comp Phys | OK |
+| 2 | `backward_facing_step` | `10.1017/S0022112096003941` | Le/Moin/Kim 1997 J Fluid Mech | ✅ | Match — Le/Moin/Kim 1997 J Fluid Mech | OK |
+| 3 | `circular_cylinder_wake` | `10.1146/annurev.fl.28.010196.002421` | Williamson 1996 Annu Rev Fluid Mech | ❌ | 404 — DOI does not resolve | **LOW** (typo: correct is `.002401`, off by 20 in last segment; paper is real) |
+| 4 | `turbulent_flat_plate` | `10.1007/978-3-662-52919-5` | Schlichting 7th ed (Springer book) | ✅ | Match — Springer book series resolver | OK (textbook DOI is publisher-level, not paper-level — acceptable) |
+| 5 | `duct_flow` | `10.1016/0017-9310(76)90033-4` | Jones 1976 IJHMT | ❌ | 404 — DOI does not resolve | **MEDIUM** (paper is real but cited under WRONG journal: actual is ASME *J Fluids Engineering* 98(2), 173-180, DOI `10.1115/1.3448250`) |
+| 6 | `differential_heated_cavity` | `10.1002/fld.1650030305` | de Vahl Davis 1983 IJ Numer Methods Fluids | ✅ | Match — G. D. Davis 1983 IJ Numer Methods Fluids | OK (note: stored "de Vahl Davis" vs actual "G. D. Davis" is a name-style choice, not an error) |
+| 7 | `plane_channel_flow` | `10.1017/S0022112087000892` | Kim/Moin/Moser 1987 J Fluid Mech | ✅ | Match — Kim/Moin/Moser 1987 J Fluid Mech | OK |
+| 8 | `impinging_jet` | `10.1016/j.ijheatfluidflow.2013.03.003` | "Behnad et al. 2013" | ❌ | Resolves to **DIFFERENT PAPER** (Rao et al. 2013 LES turbines) | **HIGH** (canonical Behnia is **1999**) |
+| 9 | `naca0012_airfoil` | `10.1017/S0001924000001169` (retired by DEC-V61-058) | Thomas 1979 / Lada 2007 (retired) | n/a | Multi-source pivot to Ladson 1988 NTRS-19880019495 + Abbott 1959 + Gregory 1970 | RESOLVED via DEC-V61-058 |
+| 10 | `rayleigh_benard_convection` | `10.1016/j.ijheatmasstransfer.2005.07.039` | "Chaivat et al. 2006" | ❌ | Resolves to **DIFFERENT PAPER** (Meyer/Mudawar/Boyack/Hale 2006 jet array cooling) | **HIGH** (author "Chaivat" not findable in any database) |
+
+### Tally
+
+- ✅ Verified clean: 5 of 10 (LDC, BFS, TFP textbook, DHC, PCF)
+- 🚨 HIGH severity: 2 of 10 (IJ, RBC) — DOI resolves to completely unrelated paper
+- ⚠️ MEDIUM severity: 1 of 10 (DCT) — paper exists, cited under wrong journal/DOI
+- ⚠️ LOW severity: 1 of 10 (CCW) — paper exists, simple DOI typo
+- ✅ RESOLVED previously: 1 of 10 (NACA via DEC-V61-058)
+
+**4 of 10 active cases (40%) have some form of citation-data issue.** Including the previously-resolved NACA: 5 of 10 (50%) historic+current.
+
+### Concrete corrections needed (out of GOV-1 v0.5 scope; for v1.0)
+
+| Case | Fix needed | Effort |
+|---|---|---|
+| CCW | Update DOI `.002421` → `.002401`, citations.bib only | Trivial (one-character typo fix) |
+| DCT | Update journal "Int. J. Heat Mass Transfer" → "ASME J. Fluids Engineering"; volume/pages 19, 1067-1074 → 98(2), 173-180; DOI → `10.1115/1.3448250`; verify the f≈0.88·f_pipe correlation as actually stated by Jones 1976 in J Fluids Eng | Small (citation block + verify the correlation source) |
+| IJ | Multi-source pivot like NACA: anchor against Behnia 1999 IJHFF Vol 20(1) IF Re=10000 + h/d=2 fits, OR Cooper 1984/1993, OR Baughn 1989; may require gold-value re-anchoring | Medium-Large (gold-value question, not just citation cleanup) |
+| RBC | Multi-source pivot: drop "Chaivat 2006"; re-anchor against Globe & Dropkin 1959 (Nu ≈ 0.069·Ra^(1/3)·Pr^0.074), Niemela & Sreenivasan 2003, or Goldstein & Tokuda 1980; gold value Nu=10.5 may need reconciliation against new anchor | Medium-Large (gold-value question) |
+
+### Updated P-12 severity escalation recommendation
+
+The pattern P-12 `unreliable_paper_provenance` was originally severity LOW
+in `_p4_schema_input.md` (only NACA case observed, resolved).
+
+**Recommended severity escalation: LOW → HIGH**, because:
+- Empirical prevalence: 4 of 10 active cases (40%) have a citation-integrity issue
+- 2 of those 4 have DOIs that resolve to **different papers**, not just typos — this is the strong-form failure (hard to detect by reading the YAML alone)
+- The pattern was latent until this manual re-read; **automated DOI integrity check at ingest time would have caught all 4**
+
+P4 schema gate proposal (refining P-12 in `_p4_schema_input.md`):
+
+```yaml
+gold_value:
+  source:
+    primary_doi: 10.1016/j.ijheatfluidflow.1999.10.001
+    primary_archive_id: NTRS-NNNNN  # OR isbn / arc-rm-nnn / etc.
+  source_integrity:
+    last_doi_check_date: 2026-04-26
+    last_doi_check_status: VERIFIED  # one of: VERIFIED, UNRESOLVED, MISMATCHED, NOT_CHECKED
+    expected_first_author_lastname: "Behnia"
+    expected_year: 1999
+    expected_journal_keyword: "Heat and Fluid Flow"
+    integrity_validator: validators.assert_doi_metadata_matches_expected
+```
+
+CI cron runs `integrity_validator` against doi.org / Semantic Scholar; alerts on UNRESOLVED or MISMATCHED. This catches both link rot AND "synthesized-from-thin-air" placeholders.
+
+### Final hard-boundary self-attestation (this addendum)
+
+This addendum:
+- ✅ Documents 4 citation-integrity findings across all 10 cases
+- ✅ Recommends concrete corrections for v1.0 (does NOT execute them)
+- ✅ Recommends P-12 severity escalation (proposal only; not modifying `_p4_schema_input.md` in this addendum to avoid re-litigating the synthesis doc)
+- ❌ Does NOT modify any tolerance value
+- ❌ Does NOT modify any gold value
+- ❌ Does NOT modify any `knowledge/**` content
+- ❌ Does NOT modify the `citations.bib` files in any case folder (those would be substantive content edits — left for v1.0)
+
+### Sources (addendum)
+
+- doi.org HEAD requests via `curl -sI`: `10.1146/annurev.fl.28.010196.002421` → 404; `10.1016/0017-9310(76)90033-4` → 404
+- crossref.org API: same DOIs → 404
+- Williamson 1996 correct DOI verified via [Annual Reviews](https://www.annualreviews.org/content/journals/10.1146/annurev.fl.28.010196.002401) and [Semantic Scholar paper page](https://www.semanticscholar.org/paper/Vortex-Dynamics-in-the-Cylinder-Wake-Williamson/e1da75f7e47650f57ee4d7baefe648a9db1b86ee)
+- Jones 1976 correct citation verified via [ASME Digital Collection](https://asmedigitalcollection.asme.org/fluidsengineering/article-abstract/98/2/173/417608)
