@@ -120,14 +120,17 @@ export const api = {
       { method: "POST", body: "{}" },
     ),
 
-  // M3 (2026-04-26) — Workbench run history
+  // M3 (2026-04-26) — Workbench run history. Path is `/run-history` (not
+  // `/runs`) to dodge the Learn-track curated-taxonomy collision —
+  // GET /api/cases/{id}/runs is owned by validation.py and returns a
+  // different shape (list[RunDescriptor]).
   listRuns: (caseId: string) =>
     request<RunHistoryListResponse>(
-      `/api/cases/${encodeURIComponent(caseId)}/runs`,
+      `/api/cases/${encodeURIComponent(caseId)}/run-history`,
     ),
   getRunDetail: (caseId: string, runId: string) =>
     request<RunDetail>(
-      `/api/cases/${encodeURIComponent(caseId)}/runs/${encodeURIComponent(runId)}`,
+      `/api/cases/${encodeURIComponent(caseId)}/run-history/${encodeURIComponent(runId)}`,
     ),
 
   // Stage 2 — industrial workbench first-screen

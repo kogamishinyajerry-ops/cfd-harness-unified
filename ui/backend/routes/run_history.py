@@ -1,7 +1,14 @@
 """Run history routes · M3 · Workbench Closed-Loop main-line.
 
-    GET /api/cases/{case_id}/runs              → table rows (newest-first)
-    GET /api/cases/{case_id}/runs/{run_id}     → full detail
+    GET /api/cases/{case_id}/run-history              → table rows (newest-first)
+    GET /api/cases/{case_id}/run-history/{run_id}     → full detail
+
+Path is ``/run-history`` (not ``/runs``) so it can't collide with the Learn-
+track curated-taxonomy endpoint ``GET /api/cases/{case_id}/runs`` in
+``validation.py``, which returns a different shape (``list[RunDescriptor]``
+of reference_pass / audit_real_run / etc.). M3 is the dynamic per-run
+audit trail; Learn ``/runs`` is the static pedagogy taxonomy. Two
+different surfaces, two different URLs.
 
 The ``case_id`` and ``run_id`` path params reuse the same alphabet validation
 ``case_drafts._draft_path`` enforces upstream — alphanumeric / underscore /
@@ -19,7 +26,7 @@ from ui.backend.services.run_history import get_run_detail, list_runs
 router = APIRouter()
 
 
-@router.get("/cases/{case_id}/runs", response_model=RunHistoryListResponse)
+@router.get("/cases/{case_id}/run-history", response_model=RunHistoryListResponse)
 def list_runs_route(case_id: str) -> RunHistoryListResponse:
     try:
         runs = list_runs(case_id)
@@ -29,7 +36,7 @@ def list_runs_route(case_id: str) -> RunHistoryListResponse:
 
 
 @router.get(
-    "/cases/{case_id}/runs/{run_id}",
+    "/cases/{case_id}/run-history/{run_id}",
     response_model=RunDetail,
 )
 def get_run_detail_route(case_id: str, run_id: str) -> RunDetail:
