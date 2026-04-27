@@ -1,0 +1,27 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "b7ea793c1f0c9992e824b45408206a080436826dc63bb9ff1fab8d76ed19bd23",
+  "empty_cwd": "/tmp/strategic_brief_cwd_plDvJ4",
+  "trigger": "phase_kickoff_strategic_clearance",
+  "artifact": ".planning/strategic/m6_kickoff/brief_2026-04-27.md",
+  "invoked_at_utc": "2026-04-27T13:15:13Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 54975,
+    "total_cost_usd": 0.9653117500000001,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "e8acc8f0-34dd-4c76-8ae5-d8737c700988",
+    "uuid": "0ad5e8a3-53e4-4a51-a7be-8cad83d8eaca",
+    "model_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 129619,
+    "cache_read_tokens": 0,
+    "output_tokens": 2560
+  }
+}

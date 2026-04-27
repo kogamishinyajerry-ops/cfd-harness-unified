@@ -64,12 +64,18 @@
 
 ### M6 — gmsh-based unstructured meshing path
 
-- **Goal**: Add gmsh meshing path for imported geometries (alternative to snappyHexMesh).
-- **Out of M5 scope**: dependency pin (`gmsh>=4.11,<4.13`), CI smoke install matrix, macOS arm64 wheel known-issue posture — all deferred to M6's own kickoff brief per Kogami M5 clearance finding 4.
+- **Goal**: Take the imported case's `triSurface/{stl}` (M5.0 output), run gmsh + `gmshToFoam`, and write a runnable mesh under `user_drafts/imported/{case_id}/constant/polyMesh/`. After M6 lands, every imported case has a real OpenFOAM-runnable mesh.
+- **Tier split** (per Kogami M6 clearance 2026-04-27 finding 1, 4 — read (iii)):
+  - **M6.0 routine**: `meshing_gmsh/`, `mesh_imported.py` route, `MeshWizardPage.tsx`, gmsh+gmshToFoam pipeline, D4 dependency pin (`gmsh>=4.11,<4.13`) + CI smoke install matrix + macOS arm64 wheel posture. 50M power-mode hard cap; 5M beginner cap as soft warning until M6.0.1 calibration pass.
+  - **M6.1 trust-core micro-PR**: `src/foam_agent_adapter.py` only — add `mesh_already_provided: bool` flag to skip `blockMesh` when `constant/polyMesh/` is populated. Narrow scope per Kogami M6 finding 4 (no case_kind dispatch change, no manifest-as-trust-core-input).
+- **Strategic clearance**: `.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/` (APPROVE_WITH_COMMENTS · 5 findings).
+- **Revised kickoff spec**: `.planning/strategic/m6_kickoff/spec_v2_2026-04-27.md`.
 
-### M7 — Real OpenFOAM run on imported case + mesh budget tiering
+### M7 — Fill-in M5.0 sHM stub + real OpenFOAM run on imported case + mesh budget tiering
 
-- **Goal**: `snappyHexMesh` execution on imported geometry + two-tier mesh budget. `mesh_mode="beginner"` (default) hard-cap 5M cells; `mesh_mode="power"` cap 50M. Single toggle inside Mesh Wizard, not a separate page.
+- **Goal**: Fill the `system/snappyHexMeshDict.stub` that M5.0 wrote, run `snappyHexMesh` on imported geometry as a second mesh-engine option, then execute the real solver. Two-tier mesh budget: `mesh_mode="beginner"` (default) hard-cap 5M cells; `mesh_mode="power"` cap 50M. Single toggle inside Mesh Wizard, not a separate page.
+- **Mesh-engine relationship**: M6 = gmsh path · M7 = snappyHexMesh path. Whether to introduce a per-case `mesh_engine` selector field is deferred to the M7 kickoff (when the second engine actually exists). M6 ships the gmsh path as the only engine.
+- **D6 cap calibration**: M6.0 ships 5M as soft warning until empirical telemetry lands; M7 inherits whatever beginner cap M6.0.1 calibration produces.
 
 ### M8 — Beginner report v0 + Docker failure root-cause UI
 
