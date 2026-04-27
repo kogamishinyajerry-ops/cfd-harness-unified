@@ -23,9 +23,11 @@ from ui.backend.schemas.import_geometry import (
 from ui.backend.services.case_scaffold import scaffold_imported_case
 from ui.backend.services.geometry_ingest import (
     IngestReport,
+    combine,
     detect_patches,
     load_stl_from_bytes,
     run_health_checks,
+    solid_count,
 )
 
 
@@ -93,8 +95,24 @@ async def import_stl_route(file: UploadFile = File(...)) -> ImportSTLResponse:
         )
         raise HTTPException(status_code=400, detail=rejection.model_dump())
 
+    combined = combine(loaded)
+    if combined is None:
+        rejection = ImportRejection(
+            reason="STL contained no geometry",
+            failing_check="stl_parse",
+            ingest_report=_ingest_to_payload(
+                IngestReport.from_parse_failure(["STL contained no geometry"])
+            ),
+        )
+        raise HTTPException(status_code=400, detail=rejection.model_dump())
+
     patches, all_default = detect_patches(loaded)
-    report = run_health_checks(loaded=loaded, patches=patches, all_default_faces=all_default)
+    report = run_health_checks(
+        combined=combined,
+        solid_count=solid_count(loaded),
+        patches=patches,
+        all_default_faces=all_default,
+    )
 
     if report.errors:
         rejection = ImportRejection(
@@ -107,7 +125,7 @@ async def import_stl_route(file: UploadFile = File(...)) -> ImportSTLResponse:
     origin_filename = file.filename or "uploaded.stl"
     result = scaffold_imported_case(
         report=report,
-        loaded=loaded,
+        combined=combined,
         origin_filename=origin_filename,
     )
 

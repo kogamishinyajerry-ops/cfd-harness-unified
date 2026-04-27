@@ -39,18 +39,27 @@ def load_stl_from_bytes(data: bytes) -> tuple[LoadedSTL | None, list[str]]:
     return None, [f"unexpected trimesh load type: {type(loaded).__name__}"]
 
 
-def canonical_stl_bytes(loaded: LoadedSTL) -> bytes:
-    """Re-serialize the loaded mesh as binary STL.
+def combine(loaded: LoadedSTL) -> trimesh.Trimesh | None:
+    """Reduce a Scene (or Trimesh) to a single Trimesh for downstream use.
 
-    Stored under ``user_drafts/imported/{case_id}/triSurface/`` so
-    downstream M7 mesh generation has a stable, byte-deterministic asset
-    regardless of upload format (ASCII or binary).
+    Returns ``None`` for an empty Scene. Patch identity is NOT lost — the
+    caller still has ``loaded.geometry`` for per-solid name extraction.
     """
     if isinstance(loaded, trimesh.Scene):
-        # Concatenate scene geometries into one mesh for binary STL export.
-        # Patch identity is preserved separately in the manifest.
         meshes = list(loaded.geometry.values())
-        combined = trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
-    else:
-        combined = loaded
+        if not meshes:
+            return None
+        return trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
+    return loaded
+
+
+def solid_count(loaded: LoadedSTL) -> int:
+    if isinstance(loaded, trimesh.Scene):
+        return len(loaded.geometry)
+    return 1
+
+
+def canonical_stl_bytes(combined: trimesh.Trimesh) -> bytes:
+    """Re-serialize as binary STL. Caller passes the pre-combined mesh
+    from :func:`combine` so the concat work isn't repeated."""
     return combined.export(file_type="stl")

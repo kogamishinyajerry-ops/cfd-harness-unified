@@ -80,21 +80,19 @@ def _guess_units(max_extent: float) -> UnitGuess:
 
 
 def run_health_checks(
-    loaded: trimesh.Trimesh | trimesh.Scene,
+    *,
+    combined: trimesh.Trimesh,
+    solid_count: int,
     patches: list[PatchInfo],
     all_default_faces: bool,
 ) -> IngestReport:
-    """Aggregate per-criterion checks into an ``IngestReport``."""
-    if isinstance(loaded, trimesh.Scene):
-        meshes = list(loaded.geometry.values())
-        if len(meshes) == 0:
-            return IngestReport.from_parse_failure(["STL contained no geometry"])
-        combined = trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
-        solid_count = len(meshes)
-    else:
-        combined = loaded
-        solid_count = 1
+    """Aggregate per-criterion checks into an ``IngestReport``.
 
+    Caller (route or :func:`ingest_stl`) is responsible for combining a
+    Scene to a single Trimesh via :func:`stl_loader.combine` and counting
+    solids via :func:`stl_loader.solid_count` — done once per upload so
+    the concat work isn't repeated by ``canonical_stl_bytes``.
+    """
     bounds = combined.bounds
     bbox_min = (float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2]))
     bbox_max = (float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2]))

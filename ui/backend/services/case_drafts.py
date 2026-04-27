@@ -53,12 +53,15 @@ def _ensure_drafts_dir() -> None:
     DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def is_safe_case_id(case_id: str) -> bool:
+    """Path-traversal guard: case_id must be alphanum + ``_`` + ``-`` only."""
+    return all(c.isalnum() or c in ("_", "-") for c in case_id) and bool(case_id)
+
+
 def _draft_path(case_id: str) -> Path:
-    # Guard against path traversal: only allow alphanum + underscore.
-    safe = "".join(c for c in case_id if c.isalnum() or c in ("_", "-"))
-    if safe != case_id:
+    if not is_safe_case_id(case_id):
         raise ValueError(f"unsafe case_id: {case_id!r}")
-    return DRAFTS_DIR / f"{safe}.yaml"
+    return DRAFTS_DIR / f"{case_id}.yaml"
 
 
 def get_case_yaml(case_id: str) -> DraftSource:

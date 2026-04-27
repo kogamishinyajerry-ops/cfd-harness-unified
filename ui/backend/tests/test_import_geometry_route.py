@@ -2,35 +2,19 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import pytest
-import trimesh
 from fastapi.testclient import TestClient
 
 from ui.backend.main import app
 from ui.backend.routes import import_geometry as import_route
 from ui.backend.services import case_drafts
 from ui.backend.services.case_scaffold import template_clone
+from ui.backend.tests.conftest import box_stl, open_box_stl
 
 
 client = TestClient(app)
-
-
-def _box_stl(size: float = 0.1) -> bytes:
-    m = trimesh.creation.box([size, size, size])
-    buf = io.BytesIO()
-    m.export(buf, file_type="stl")
-    return buf.getvalue()
-
-
-def _open_box_stl() -> bytes:
-    m = trimesh.creation.box([0.1, 0.1, 0.1])
-    open_mesh = trimesh.Trimesh(vertices=m.vertices, faces=m.faces[2:].copy())
-    buf = io.BytesIO()
-    open_mesh.export(buf, file_type="stl")
-    return buf.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +30,7 @@ def isolated_drafts(tmp_path: Path, monkeypatch):
 def test_happy_path_returns_case_id_and_edit_url():
     resp = client.post(
         "/api/import/stl",
-        files={"file": ("cube.stl", _box_stl(), "application/octet-stream")},
+        files={"file": ("cube.stl", box_stl(), "application/octet-stream")},
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -63,7 +47,7 @@ def test_happy_path_returns_case_id_and_edit_url():
 def test_non_watertight_returns_400_with_watertight_failing_check():
     resp = client.post(
         "/api/import/stl",
-        files={"file": ("open_box.stl", _open_box_stl(), "application/octet-stream")},
+        files={"file": ("open_box.stl", open_box_stl(), "application/octet-stream")},
     )
     assert resp.status_code == 400, resp.text
     body = resp.json()

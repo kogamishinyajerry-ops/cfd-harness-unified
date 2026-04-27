@@ -2,38 +2,20 @@
 
 from __future__ import annotations
 
-import io
-
-import pytest
-import trimesh
-
 from ui.backend.services.geometry_ingest import (
     canonical_stl_bytes,
+    combine,
     detect_patches,
     ingest_stl,
     load_stl_from_bytes,
     run_health_checks,
+    solid_count,
 )
-
-
-def _box_stl(size: float = 0.1) -> bytes:
-    m = trimesh.creation.box([size, size, size])
-    buf = io.BytesIO()
-    m.export(buf, file_type="stl")
-    return buf.getvalue()
-
-
-def _open_box_stl() -> bytes:
-    """Non-watertight: cube with the first 2 triangles removed (open top)."""
-    m = trimesh.creation.box([0.1, 0.1, 0.1])
-    open_mesh = trimesh.Trimesh(vertices=m.vertices, faces=m.faces[2:].copy())
-    buf = io.BytesIO()
-    open_mesh.export(buf, file_type="stl")
-    return buf.getvalue()
+from ui.backend.tests.conftest import box_stl, open_box_stl
 
 
 def test_cube_ingest_passes_with_default_face_warning():
-    report = ingest_stl(_box_stl())
+    report = ingest_stl(box_stl())
     assert report.errors == []
     assert report.is_watertight is True
     assert report.face_count == 12  # 6 sides × 2 triangles
@@ -60,34 +42,36 @@ def test_garbage_bytes_rejected_with_parse_error():
 
 
 def test_non_watertight_stl_produces_error():
-    report = ingest_stl(_open_box_stl())
+    report = ingest_stl(open_box_stl())
     assert report.is_watertight is False
     assert any("watertight" in e.lower() for e in report.errors)
 
 
 def test_unit_guess_mm_band_kicks_in_for_large_extent():
-    # 500-unit cube → bbox extent 500 → mm band (250 < 500 ≤ 1e5)
-    report = ingest_stl(_box_stl(size=500.0))
+    report = ingest_stl(box_stl(size=500.0))
     assert report.unit_guess == "mm"
 
 
 def test_unit_guess_unknown_for_extreme_extent():
-    # 1e7-unit cube → bbox extent 1e7 → outside all bands → unknown
-    report = ingest_stl(_box_stl(size=1.0e7))
+    report = ingest_stl(box_stl(size=1.0e7))
     assert report.unit_guess == "unknown"
     assert any("unit could not be guessed" in w.lower() for w in report.warnings)
 
 
 def test_canonical_bytes_roundtrip_remains_loadable():
-    original = _box_stl()
+    original = box_stl()
     loaded, errs = load_stl_from_bytes(original)
     assert errs == []
-    canon = canonical_stl_bytes(loaded)
-    # Re-load the canonicalized bytes — must still parse + be watertight.
+    canon = canonical_stl_bytes(combine(loaded))
     loaded2, errs2 = load_stl_from_bytes(canon)
     assert errs2 == []
     patches2, all_default2 = detect_patches(loaded2)
-    report2 = run_health_checks(loaded=loaded2, patches=patches2, all_default_faces=all_default2)
+    report2 = run_health_checks(
+        combined=combine(loaded2),
+        solid_count=solid_count(loaded2),
+        patches=patches2,
+        all_default_faces=all_default2,
+    )
     assert report2.is_watertight is True
     assert report2.face_count == 12
 

@@ -16,6 +16,11 @@ import yaml
 
 from ui.backend.services.geometry_ingest import IngestReport
 
+# M5.0 schema-additive marker for imported cases. The M5.1 trust-core
+# hard-cap path (TrustGate verdict cap on imported cases) reads this
+# field from the manifest + editor YAML to gate the verdict.
+SOURCE_ORIGIN_IMPORTED_USER = "imported_user"
+
 
 def _ingest_summary(report: IngestReport) -> dict:
     """Subset of the ingest report safe to embed in YAML / show in UI."""
@@ -46,7 +51,7 @@ def write_case_manifest(
     when = (now or datetime.now(timezone.utc)).isoformat()
     manifest = {
         "source": "imported",
-        "source_origin": "imported_user",
+        "source_origin": SOURCE_ORIGIN_IMPORTED_USER,
         "case_id": case_id,
         "origin_filename": origin_filename,
         "ingest_report_summary": _ingest_summary(report),
@@ -90,7 +95,7 @@ def _editor_case_yaml(
         "geometry_type": "imported_stl",
         "turbulence_model": "laminar",
         "source": "imported",
-        "source_origin": "imported_user",  # M5.0 schema-additive field
+        "source_origin": SOURCE_ORIGIN_IMPORTED_USER,  # M5.0 schema-additive field
         "origin_filename": origin_filename,
         "imported_case_dir": rel_imported,
         "ingest_report_summary": _ingest_summary(report),

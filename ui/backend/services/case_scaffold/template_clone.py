@@ -25,15 +25,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ui.backend.services.validation_report import REPO_ROOT
+import trimesh
+
+from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.geometry_ingest import IngestReport, canonical_stl_bytes
-from ui.backend.services.geometry_ingest.stl_loader import LoadedSTL
+from ui.backend.services.validation_report import REPO_ROOT
+
+from .bc_injector import write_shm_stub, write_triSurface
+from .manifest_writer import write_case_manifest, write_editor_case_yaml
 
 
 DRAFTS_DIR = REPO_ROOT / "ui" / "backend" / "user_drafts"
 IMPORTED_DIR = DRAFTS_DIR / "imported"
-
-_CASE_ID_RE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +57,7 @@ def allocate_imported_case_id(
 
     Format: ``imported_YYYY-MM-DDTHH-MM-SSZ_XXXXXXXX`` (UTC; ``-`` rather
     than ``:`` so it satisfies the alphanum + ``_`` + ``-`` traversal
-    guard in ``case_drafts._draft_path``).
+    guard in ``case_drafts.is_safe_case_id``).
 
     The optional ``now`` and ``rand_hex`` arguments are present for test
     determinism only.
@@ -62,14 +65,14 @@ def allocate_imported_case_id(
     when = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H-%M-%SZ")
     rand = rand_hex if rand_hex is not None else secrets.token_hex(4)
     case_id = f"imported_{when}_{rand}"
-    if not all(c in _CASE_ID_RE_CHARS for c in case_id):
+    if not is_safe_case_id(case_id):
         raise ValueError(f"allocator produced unsafe case_id: {case_id!r}")
     return case_id
 
 
 def create_imported_case_dir(case_id: str) -> Path:
     """Create ``imported/{case_id}/{triSurface,system}/`` and return root."""
-    if not all(c in _CASE_ID_RE_CHARS for c in case_id):
+    if not is_safe_case_id(case_id):
         raise ValueError(f"unsafe case_id: {case_id!r}")
     root = IMPORTED_DIR / case_id
     (root / "triSurface").mkdir(parents=True, exist_ok=True)
@@ -91,7 +94,7 @@ def _safe_origin_filename(origin_filename: str) -> str:
 def scaffold_imported_case(
     *,
     report: IngestReport,
-    loaded: LoadedSTL,
+    combined: trimesh.Trimesh,
     origin_filename: str,
     now: datetime | None = None,
     case_id: str | None = None,
@@ -107,16 +110,11 @@ def scaffold_imported_case(
             f"{report.errors!r}"
         )
 
-    # late import to avoid module-load order issues (manifest_writer + bc_injector
-    # depend on this module's ScaffoldResult and DRAFTS_DIR)
-    from .bc_injector import write_shm_stub, write_triSurface
-    from .manifest_writer import write_case_manifest, write_editor_case_yaml
-
     cid = case_id or allocate_imported_case_id(now=now)
     safe_filename = _safe_origin_filename(origin_filename)
     root = create_imported_case_dir(cid)
 
-    canonical_bytes = canonical_stl_bytes(loaded)
+    canonical_bytes = canonical_stl_bytes(combined)
     triSurface_path = write_triSurface(
         case_dir=root, origin_filename=safe_filename, canonical_bytes=canonical_bytes
     )

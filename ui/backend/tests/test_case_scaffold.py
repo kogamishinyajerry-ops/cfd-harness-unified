@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import io
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-import trimesh
 import yaml
 
 from ui.backend.services import case_drafts
@@ -20,17 +18,13 @@ from ui.backend.services.case_scaffold import (
 from ui.backend.services.case_scaffold.template_clone import _safe_origin_filename
 from ui.backend.services.geometry_ingest import (
     IngestReport,
+    combine,
     detect_patches,
     load_stl_from_bytes,
     run_health_checks,
+    solid_count,
 )
-
-
-def _box_stl(size: float = 0.1) -> bytes:
-    m = trimesh.creation.box([size, size, size])
-    buf = io.BytesIO()
-    m.export(buf, file_type="stl")
-    return buf.getvalue()
+from ui.backend.tests.conftest import box_stl
 
 
 @pytest.fixture
@@ -46,13 +40,20 @@ def isolated_drafts(tmp_path: Path, monkeypatch):
 
 @pytest.fixture
 def clean_report():
-    """A passing-ingest IngestReport from a small cube STL."""
-    loaded, errs = load_stl_from_bytes(_box_stl())
+    """A passing-ingest IngestReport + the combined Trimesh, from a small cube STL."""
+    loaded, errs = load_stl_from_bytes(box_stl())
     assert errs == []
+    combined = combine(loaded)
+    assert combined is not None
     patches, all_default = detect_patches(loaded)
-    report = run_health_checks(loaded=loaded, patches=patches, all_default_faces=all_default)
+    report = run_health_checks(
+        combined=combined,
+        solid_count=solid_count(loaded),
+        patches=patches,
+        all_default_faces=all_default,
+    )
     assert report.errors == []
-    return report, loaded
+    return report, combined
 
 
 # ───────── allocator + filename safety ─────────
@@ -110,12 +111,12 @@ def test_create_imported_case_dir_rejects_unsafe_id(isolated_drafts):
 
 def test_scaffold_writes_all_expected_files(isolated_drafts, clean_report):
     drafts, imported = isolated_drafts
-    report, loaded = clean_report
+    report, combined = clean_report
     fixed = datetime(2026, 4, 27, 12, 0, 0, tzinfo=timezone.utc)
 
     result = scaffold_imported_case(
         report=report,
-        loaded=loaded,
+        combined=combined,
         origin_filename="my_geometry.stl",
         now=fixed,
         case_id="imported_2026-04-27T12-00-00Z_deadbeef",
@@ -135,10 +136,10 @@ def test_scaffold_writes_all_expected_files(isolated_drafts, clean_report):
 
 def test_scaffold_manifest_schema_complete(isolated_drafts, clean_report):
     drafts, imported = isolated_drafts
-    report, loaded = clean_report
+    report, combined = clean_report
     result = scaffold_imported_case(
         report=report,
-        loaded=loaded,
+        combined=combined,
         origin_filename="cube.stl",
     )
     manifest = yaml.safe_load(result.manifest_path.read_text())
@@ -165,10 +166,10 @@ def test_scaffold_manifest_schema_complete(isolated_drafts, clean_report):
 
 def test_scaffold_editor_yaml_lints_clean(isolated_drafts, clean_report):
     drafts, imported = isolated_drafts
-    report, loaded = clean_report
+    report, combined = clean_report
     result = scaffold_imported_case(
         report=report,
-        loaded=loaded,
+        combined=combined,
         origin_filename="ldc_box.stl",
     )
     yaml_text = result.case_yaml_path.read_text()
@@ -194,6 +195,6 @@ def test_scaffold_rejects_report_with_errors(isolated_drafts):
     with pytest.raises(ValueError, match="non-empty report.errors"):
         scaffold_imported_case(
             report=bad,
-            loaded=None,  # type: ignore[arg-type]
+            combined=None,  # type: ignore[arg-type]
             origin_filename="x.stl",
         )

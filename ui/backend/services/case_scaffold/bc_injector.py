@@ -11,6 +11,8 @@ from pathlib import Path
 
 from ui.backend.services.geometry_ingest import IngestReport
 
+from .manifest_writer import SOURCE_ORIGIN_IMPORTED_USER
+
 
 def write_triSurface(
     *,
@@ -57,7 +59,7 @@ def write_shm_stub(
     body = f"""\
 /*--------------------------------*- C++ -*----------------------------------*\\
 | M5.0 imported case · snappyHexMeshDict STUB                                  |
-| Source: imported_user · Origin: {origin_filename}                            |
+| Source: {SOURCE_ORIGIN_IMPORTED_USER} · Origin: {origin_filename}                            |
 | Patches detected: {len(report.patches)} · all_default_faces={report.all_default_faces} |
 | Bbox extent: {report.bbox_extent} · unit_guess={report.unit_guess}           |
 |                                                                              |
