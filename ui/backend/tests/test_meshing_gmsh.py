@@ -143,6 +143,71 @@ def test_mesh_imported_case_cap_exceeded_path_clean(tmp_path: Path, monkeypatch)
     assert exc_info.value.failing_check == "cell_cap_exceeded"
 
 
+def test_pipeline_normalizes_raw_gmsh_exception(tmp_path: Path, monkeypatch):
+    """Codex round-2 P1: gmsh's Python bindings raise plain Exception
+    on geometry failures; the pipeline must convert those into the
+    advertised gmsh_diverged tag rather than letting them surface as
+    HTTP 500."""
+    from ui.backend.services.meshing_gmsh import pipeline as pipeline_mod
+
+    case_dir = tmp_path / "imported_TEST_rawgmsh"
+    (case_dir / "triSurface").mkdir(parents=True)
+    (case_dir / "triSurface" / "input.stl").write_bytes(box_stl())
+
+    def fake_resolve(case_id: str):
+        return case_dir, case_dir / "triSurface" / "input.stl"
+
+    monkeypatch.setattr(pipeline_mod, "_resolve_imported_case", fake_resolve)
+    monkeypatch.setattr(
+        pipeline_mod,
+        "run_gmsh_on_imported_case",
+        lambda **kw: (_ for _ in ()).throw(Exception("gmsh raw error")),
+    )
+
+    with pytest.raises(MeshPipelineError) as exc_info:
+        mesh_imported_case("imported_TEST_rawgmsh")
+    assert exc_info.value.failing_check == "gmsh_diverged"
+    assert "gmsh raw error" in str(exc_info.value)
+
+
+def test_pipeline_normalizes_raw_docker_exception(tmp_path: Path, monkeypatch):
+    """Codex round-2 P2: docker SDK calls inside run_gmsh_to_foam can
+    raise DockerException directly. The pipeline must translate those
+    to gmshToFoam_failed."""
+    from ui.backend.services.meshing_gmsh import pipeline as pipeline_mod
+
+    case_dir = tmp_path / "imported_TEST_rawdocker"
+    (case_dir / "triSurface").mkdir(parents=True)
+    (case_dir / "triSurface" / "input.stl").write_bytes(box_stl())
+
+    fake_gmsh_result = pipeline_mod.GmshRunResult(
+        msh_path=case_dir / "imported.msh",
+        cell_count=1_000,
+        face_count=100,
+        point_count=200,
+        characteristic_length_used=0.05,
+        generation_time_s=0.1,
+    )
+
+    def fake_resolve(case_id: str):
+        return case_dir, case_dir / "triSurface" / "input.stl"
+
+    monkeypatch.setattr(pipeline_mod, "_resolve_imported_case", fake_resolve)
+    monkeypatch.setattr(
+        pipeline_mod, "run_gmsh_on_imported_case", lambda **kw: fake_gmsh_result
+    )
+    monkeypatch.setattr(
+        pipeline_mod,
+        "run_gmsh_to_foam",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("docker daemon dropped")),
+    )
+
+    with pytest.raises(MeshPipelineError) as exc_info:
+        mesh_imported_case("imported_TEST_rawdocker")
+    assert exc_info.value.failing_check == "gmshToFoam_failed"
+    assert "docker daemon" in str(exc_info.value)
+
+
 def test_to_foam_raises_when_msh_missing(tmp_path: Path):
     from ui.backend.services.meshing_gmsh.to_foam import (
         GmshToFoamError,

@@ -111,6 +111,14 @@ def mesh_imported_case(
         )
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
+    except Exception as exc:  # noqa: BLE001
+        # The gmsh Python bindings raise plain `Exception` on geometry
+        # failures inside merge() / classifySurfaces() / generate(3).
+        # Map those to the advertised gmsh_diverged rejection so the UI
+        # sees a structured 4xx instead of an opaque 500.
+        raise MeshPipelineError(
+            f"gmsh failed during mesh generation: {exc}", "gmsh_diverged"
+        ) from exc
 
     verdict: BudgetVerdict = classify_cell_count(gmsh_result.cell_count, mesh_mode)
     if not verdict.ok:
@@ -133,6 +141,14 @@ def mesh_imported_case(
             foam_result = run_gmsh_to_foam(case_host_dir=case_dir)
     except GmshToFoamError as exc:
         raise MeshPipelineError(str(exc), "gmshToFoam_failed") from exc
+    except Exception as exc:  # noqa: BLE001
+        # docker SDK calls inside run_gmsh_to_foam (put_archive,
+        # exec_run, get_archive) raise docker.errors.APIError /
+        # DockerException, which are not GmshToFoamError. Normalize
+        # those container-side failures to the same advertised tag.
+        raise MeshPipelineError(
+            f"gmshToFoam failed (container-side): {exc}", "gmshToFoam_failed"
+        ) from exc
 
     return MeshResult(
         case_id=case_id,

@@ -112,13 +112,23 @@ def run_gmsh_to_foam(
         ) from exc
 
     container_work_dir = f"{CONTAINER_WORK_BASE}/{case_host_dir.name}"
-    container.exec_run(
-        cmd=["bash", "-c", f"mkdir -p {container_work_dir} && chmod 777 {container_work_dir}"]
-    )
-    archive_ok = container.put_archive(
-        path=CONTAINER_WORK_BASE,
-        data=_make_tarball(case_host_dir),
-    )
+    # Wrap the rest of the container interaction in a single try/except
+    # so any raw docker SDK error (APIError / connection drop /
+    # archive failure) surfaces as GmshToFoamError. The pipeline +
+    # route layers expect that contract.
+    try:
+        container.exec_run(
+            cmd=["bash", "-c", f"mkdir -p {container_work_dir} && chmod 777 {container_work_dir}"]
+        )
+        archive_ok = container.put_archive(
+            path=CONTAINER_WORK_BASE,
+            data=_make_tarball(case_host_dir),
+        )
+    except docker.errors.DockerException as exc:
+        raise GmshToFoamError(
+            f"docker SDK error preparing container workspace: {exc}"
+        ) from exc
+
     if not archive_ok:
         raise GmshToFoamError(
             f"failed to copy case dir into container at {container_work_dir}"
@@ -130,7 +140,12 @@ def run_gmsh_to_foam(
         f"cd {container_work_dir} && "
         f"gmshToFoam {msh_relpath} > {log_filename} 2>&1"
     )
-    exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
+    try:
+        exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
+    except docker.errors.DockerException as exc:
+        raise GmshToFoamError(
+            f"docker SDK error invoking gmshToFoam: {exc}"
+        ) from exc
 
     # Pull the log + the polyMesh dir back to the host so the caller can
     # inspect them. Always pull the log first — if gmshToFoam failed, we
@@ -169,6 +184,10 @@ def run_gmsh_to_foam(
         raise GmshToFoamError(
             "gmshToFoam ran without error but produced no "
             "constant/polyMesh/ directory in the container. See log."
+        ) from exc
+    except docker.errors.DockerException as exc:
+        raise GmshToFoamError(
+            f"docker SDK error retrieving polyMesh from container: {exc}"
         ) from exc
 
     required = {"points", "faces", "owner", "neighbour", "boundary"}
