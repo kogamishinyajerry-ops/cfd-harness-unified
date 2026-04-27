@@ -1,0 +1,27 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "24a6093bc856e9d88cd37e5e821ccf5ad8b2e466ed268ef4dcfd461379697c99",
+  "empty_cwd": "/tmp/strategic_brief_cwd_jYDfXt",
+  "trigger": "high-risk-PR",
+  "artifact": ".planning/decisions/2026-04-28_v61_090_m6_1_blockmesh_skip.md",
+  "invoked_at_utc": "2026-04-27T17:40:45Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 58760,
+    "total_cost_usd": 0.9746045000000001,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "3698ddb6-a9fb-4640-af1d-f929ed311b04",
+    "uuid": "d3e948d6-9b68-4005-84d0-6819cd4f4375",
+    "model_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 129362,
+    "cache_read_tokens": 0,
+    "output_tokens": 3006
+  }
+}
