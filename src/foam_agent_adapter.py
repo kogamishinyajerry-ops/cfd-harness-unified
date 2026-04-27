@@ -621,12 +621,13 @@ class FoamAgentExecutor:
 
         # 3. 准备 case 目录 — DEC-V61-090 (M6.1): when
         # `mesh_already_provided=True`, the caller supplies a
-        # `case_dir_override` pointing at a directory the upstream
-        # stage has already populated (polyMesh + BC + physical
-        # properties + system/controlDict). The executor uses that
-        # directory verbatim and skips its own geometry generation
-        # below. The flag without an override is rejected — there
-        # would be no path to read polyMesh from.
+        # `case_dir_override` pointing at a pre-populated case dir
+        # (polyMesh + BC + physics + system/controlDict). The executor
+        # STAGES a copy under self._work_dir so the rest of the
+        # pipeline works unchanged: _docker_exec tars from
+        # self._work_dir / case_id, and the cleanup `shutil.rmtree`
+        # in the finally block removes only the staged copy — never
+        # the caller-owned source directory.
         if task_spec.mesh_already_provided:
             if not task_spec.case_dir_override:
                 return self._fail(
@@ -635,15 +636,37 @@ class FoamAgentExecutor:
                     "a path to the pre-populated case directory.",
                     time.monotonic() - t0,
                 )
-            case_host_dir = Path(task_spec.case_dir_override)
-            if not case_host_dir.is_dir():
+            src_case_dir = Path(task_spec.case_dir_override)
+            if not src_case_dir.is_dir():
                 return self._fail(
-                    f"case_dir_override path {case_host_dir} does not "
+                    f"case_dir_override path {src_case_dir} does not "
                     "exist or is not a directory.",
                     time.monotonic() - t0,
                 )
-            case_id = case_host_dir.name
+            # Pre-flight polyMesh validation against the SOURCE — fail
+            # fast before incurring a copytree on an incomplete case.
+            if not (src_case_dir / "constant" / "polyMesh").is_dir():
+                return self._fail(
+                    "task_spec.mesh_already_provided=True but "
+                    f"{src_case_dir / 'constant' / 'polyMesh'} does not "
+                    "exist — upstream stage must produce the polyMesh "
+                    "before invoking the executor with this flag set.",
+                    time.monotonic() - t0,
+                )
+            case_id = (
+                f"imported_{src_case_dir.name}_{int(time.time() * 1000)}"
+            )
+            case_host_dir = self._work_dir / case_id
             case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
+            try:
+                self._work_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(src_case_dir, case_host_dir)
+            except Exception as exc:
+                return self._fail(
+                    f"Failed to stage imported case "
+                    f"{src_case_dir} → {case_host_dir}: {exc}",
+                    time.monotonic() - t0,
+                )
         else:
             case_id = f"ldc_{os.getpid()}_{int(time.time() * 1000)}"
             case_host_dir = self._work_dir / case_id

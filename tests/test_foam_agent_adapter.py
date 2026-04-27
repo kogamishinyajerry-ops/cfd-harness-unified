@@ -3123,15 +3123,19 @@ class TestM6_1MeshAlreadyProvidedFlag:
         self, tmp_path, monkeypatch
     ):
         """Codex round-1 P2 fix #1+#2: flag=True + override → executor
-        uses the override dir verbatim (no fresh case_id), skips the
-        whole geometry dispatch (no _generate_*) AND skips blockMesh."""
+        STAGES a copy of the override dir into self._work_dir, skips
+        the whole geometry dispatch (no _generate_*) AND skips
+        blockMesh. The override remains untouched."""
         import src.foam_agent_adapter as adapter_mod
 
         _make_running_docker_mock(monkeypatch)
 
-        # Stand in for what M7 will populate in production.
-        imported_case_dir = tmp_path / "imported_M6_1_skip"
+        # Stand in for what M7 will populate in production. Place
+        # outside the executor's work_dir so we can verify the staged
+        # copy is independent.
+        imported_case_dir = tmp_path / "external" / "imported_M6_1_skip"
         (imported_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (imported_case_dir / "constant" / "polyMesh" / "points").write_text("dummy")
         (imported_case_dir / "0").mkdir()
         (imported_case_dir / "system").mkdir()
 
@@ -3183,7 +3187,9 @@ class TestM6_1MeshAlreadyProvidedFlag:
             lambda self_, *a, **kw: None,
         )
 
-        executor = FoamAgentExecutor(work_dir=tmp_path)
+        # Use a separate work_dir to isolate staging from source.
+        work_dir = tmp_path / "work"
+        executor = FoamAgentExecutor(work_dir=work_dir)
         executor.execute(task)
         assert "blockMesh" not in called, (
             f"blockMesh must NOT be invoked when mesh_already_provided=True; "
@@ -3193,6 +3199,10 @@ class TestM6_1MeshAlreadyProvidedFlag:
             f"No _generate_* method should run when mesh_already_provided=True; "
             f"got {gen_called}"
         )
+        # P1 #2 contract: source override must remain intact after
+        # the run (cleanup only removes the staged copy).
+        assert imported_case_dir.is_dir()
+        assert (imported_case_dir / "constant" / "polyMesh" / "points").read_text() == "dummy"
 
     def test_blockmesh_runs_when_flag_default_false(self, tmp_path, monkeypatch):
         """Regression guard: every existing whitelist case path must
@@ -3236,6 +3246,77 @@ class TestM6_1MeshAlreadyProvidedFlag:
         assert "blockMesh" in called, (
             f"blockMesh MUST be invoked when mesh_already_provided is False "
             f"(default); regression detected. Calls: {called}"
+        )
+
+    def test_override_dir_is_staged_into_work_dir_not_used_in_place(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-2 P1 #1+#2 fix: when the flag is set, executor
+        STAGES a copy of the override into self._work_dir (so
+        _docker_exec finds it where it expects, AND cleanup rmtrees
+        only the staged copy). Validates both halves of the round-2
+        finding in one shot."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        # Source case lives OUTSIDE the executor's work_dir to make
+        # the staging behavior observable.
+        src_case_dir = tmp_path / "external_caller_owned" / "imported_xyz"
+        (src_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (src_case_dir / "constant" / "polyMesh" / "points").write_text("src-marker")
+        (src_case_dir / "marker.txt").write_text("source-only-marker")
+
+        work_dir = tmp_path / "executor_work"
+
+        task = TaskSpec(
+            name="m6_1-staging",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            case_dir_override=str(src_case_dir),
+        )
+
+        # Capture which path _docker_exec is told to operate on.
+        exec_paths: list[str] = []
+
+        def fake_docker_exec(self_, command, working_dir, timeout):
+            exec_paths.append(working_dir)
+            return True, "ok"
+
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_copy_postprocess_fields",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=work_dir)
+        executor.execute(task)
+
+        # P1 #1: container working_dir must follow /tmp/cfd-harness-cases/{case_id}
+        # convention with a fresh case_id (matching what _docker_exec's
+        # host_case_dir = self._work_dir / case_id resolution expects).
+        assert exec_paths, "_docker_exec was not called at all"
+        for p in exec_paths:
+            assert p.startswith("/tmp/cfd-harness-cases/"), p
+            assert "imported_xyz" in p  # case_id derived from source basename
+
+        # P1 #2: source dir must remain intact after the run.
+        assert src_case_dir.is_dir()
+        assert (src_case_dir / "marker.txt").read_text() == "source-only-marker"
+        assert (
+            (src_case_dir / "constant" / "polyMesh" / "points").read_text()
+            == "src-marker"
         )
 
     def test_fails_fast_when_override_set_but_polymesh_missing(
