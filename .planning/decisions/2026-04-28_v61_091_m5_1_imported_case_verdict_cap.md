@@ -19,7 +19,7 @@ parent_artifacts:
 prerequisite_status:
   m6_1_acceptance: confirmed (DEC-V61-090 Accepted 2026-04-28 · commit 1831a77 + be0cec6 on main · Codex round-8 APPROVE + Kogami APPROVE_WITH_COMMENTS)
   v61_089_acceptance: confirmed (DEC-V61-089 Accepted 2026-04-28 · two-track invariant + Track B PASS_WITH_DISCLAIMER ceiling · Notion synced · this DEC's mechanism is dispatched ONLY by V61-089's invariant being load-bearing)
-notion_sync_status: pending (sync after Accepted state)
+notion_sync_status: synced 2026-04-28 (https://www.notion.so/34fc68942bed81f0ac8ee925c8b3b5a6)
 autonomous_governance: true  # advances counter; trust-core verdict-ceiling change requires Codex + Kogami gates
 codex_tool_report_path: reports/codex_tool_reports/m5_1_imported_verdict_cap_2026-04-28.log
 kogami_review:
