@@ -14,20 +14,30 @@ import type {
 // without any indication of why. A GET probe returns 405 (Method Not
 // Allowed) when the POST-only route is mounted, 404 when it is not.
 //
-// Only a confirmed 404 locks the page to "unavailable" — a network failure
-// is treated as "available" so a transient outage does not permanently
-// hide the upload form. If the actual upload then fails, the existing
-// rejection / network-error path surfaces the real reason.
+// A confirmed 404 locks "unavailable"; a 2xx/4xx (≠404) locks "available";
+// only network errors warrant retry — bounded backoff so a slow backend
+// startup or dev-proxy hiccup is absorbed but a permanent "no [workbench]"
+// install eventually returns the actionable 404 banner. After retries are
+// exhausted with only network errors, fall through to "available" so the
+// actual upload attempt surfaces the true error (not a misleading
+// "install [workbench]" banner that would not apply if the backend itself
+// is down).
 type ImportFeatureState = "probing" | "available" | "unavailable";
 
-async function probeImportEndpoint(): Promise<ImportFeatureState> {
-  try {
-    const res = await fetch("/api/import/stl", { method: "GET" });
-    if (res.status === 404) return "unavailable";
-    return "available";
-  } catch {
-    return "available";
+async function probeImportEndpoint(maxAttempts = 4): Promise<ImportFeatureState> {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const res = await fetch("/api/import/stl", { method: "GET" });
+      return res.status === 404 ? "unavailable" : "available";
+    } catch {
+      if (attempt < maxAttempts - 1) {
+        // 200ms → 400ms → 800ms (~1.4s total budget, comfortably above
+        // typical dev backend startup race).
+        await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
+      }
+    }
   }
+  return "available";
 }
 
 // M5.0 · STL Case Import (routine path).
