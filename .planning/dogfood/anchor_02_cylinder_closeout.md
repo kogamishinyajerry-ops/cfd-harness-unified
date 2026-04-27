@@ -1,6 +1,6 @@
 ---
 arc: anchor_02_cylinder
-status: CLOSED · GREEN-pipeline · YELLOW-physics
+status: CLOSED · GREEN (corrected 2026-04-27T10:35 — see correction at bottom)
 date_started: 2026-04-27T03:38:37Z
 date_closed: 2026-04-27T07:42:35Z
 case_id: circular_cylinder_wake
@@ -77,3 +77,41 @@ First live exercise of the v6.2 governance + M1-M4 closed-loop on a **transient 
 - `reports/circular_cylinder_wake/runs/2026-04-27T07-23-21Z/{verdict.json, summary.json, measurement.yaml}`
 - `reports/codex_tool_reports/bug1_sse_disconnect_persistence_r{1,2,3}.md`
 - Commits: `7bcd09b` (BUG-1 fix), `4875b7f` (vite env config)
+
+## Correction · 2026-04-27T10:35 — physics is GREEN, not YELLOW
+
+While preparing the CYLINDER-PHYSICS-1 follow-up stub, I re-read
+`.planning/case_profiles/circular_cylinder_wake.yaml` and found:
+
+```yaml
+tolerance_policy:
+  strouhal_number:
+    tolerance: 0.25  # 25% · 10s-endTime precision-limited; DEC-V61-053 R4
+  cd_mean:
+    tolerance: 0.05
+```
+
+Our run: St=-15.9%, Cd=+1.4%. Both are **within the case-profile's
+documented per-observable tolerance bands** (25% / 5% respectively).
+
+The 5% in `knowledge/whitelist.yaml` is the **aspirational** gold band;
+the `tolerance_policy` in case_profile is the **operational** band, which
+DEC-V61-053 R4 explicitly relaxed to 0.25 to account for the FFT
+frequency-resolution limit Δf ≈ 1/(8s · 0.164) ≈ 0.76 → ΔSt/St ≈ 20% at
+the 10s endTime.
+
+So:
+- The original closeout YELLOW classification was **incorrect** — read the
+  whitelist's 5% but missed the case_profile's 25% override.
+- No follow-up needed; CYLINDER-PHYSICS-1 stub NOT filed.
+- This anchor is GREEN end-to-end at the policy that actually governs it.
+- Independent path to tighter St precision **does** exist per DEC-V61-053
+  comment: bump CYLINDER_ENDTIME_S 10→60s for ΔSt/St ≈ 3% precision.
+  That's a separate scope item if/when the extra precision is needed,
+  not a defect of this run.
+
+This correction itself is a useful methodology signal: dogfood verdicts
+should consult `.planning/case_profiles/<case_id>.yaml::tolerance_policy`
+as the SSOT for "did the run pass?" — not the whitelist's nominal gold
+band. The harness's auto_verifier already uses the case_profile path;
+my manual closeout did not.
