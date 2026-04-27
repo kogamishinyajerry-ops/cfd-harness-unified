@@ -653,20 +653,31 @@ class FoamAgentExecutor:
                     "before invoking the executor with this flag set.",
                     time.monotonic() - t0,
                 )
+            # Append random hex to the ms timestamp so concurrent runs
+            # of the same source case (same basename, same ms) can't
+            # collide on case_host_dir. 32 bits + ms makes collision
+            # vanishingly rare; the cleanup-only-what-we-created guard
+            # below catches the residual case where it does happen.
+            import secrets
+
             case_id = (
-                f"imported_{src_case_dir.name}_{int(time.time() * 1000)}"
+                f"imported_{src_case_dir.name}_"
+                f"{int(time.time() * 1000)}_{secrets.token_hex(4)}"
             )
             case_host_dir = self._work_dir / case_id
             case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
+            # Capture pre-existence: copytree's "destination already
+            # exists" failure must NOT trigger our rmtree, otherwise a
+            # concurrent run's live case dir would be deleted.
+            preexisted = case_host_dir.exists()
             try:
                 self._work_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(src_case_dir, case_host_dir)
             except Exception as exc:
-                # copytree may have created the destination root
-                # before failing on a deeper path (e.g. ENOSPC, single
-                # unreadable file). Sweep the partial copy so failed
-                # retries don't accumulate on disk.
-                if case_host_dir.exists():
+                # Only clean up if we created the dir ourselves and it
+                # is still partial. If preexisted=True, another run
+                # owns that path — leave it alone.
+                if not preexisted and case_host_dir.exists():
                     shutil.rmtree(case_host_dir, ignore_errors=True)
                 return self._fail(
                     f"Failed to stage imported case "

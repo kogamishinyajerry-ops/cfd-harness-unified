@@ -3368,6 +3368,61 @@ class TestM6_1MeshAlreadyProvidedFlag:
             f"partial staged copy leaked into work_dir: {leftover}"
         )
 
+    def test_staging_collision_does_not_delete_concurrent_run(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-4 P2: when copytree fails because case_host_dir
+        already exists (a concurrent run owns it), the rollback must
+        NOT rmtree it — that would wipe the other run's live case."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        src_case_dir = tmp_path / "external" / "imported_collide"
+        (src_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (src_case_dir / "constant" / "polyMesh" / "points").write_text("x")
+
+        work_dir = tmp_path / "executor_work"
+        work_dir.mkdir()
+
+        task = TaskSpec(
+            name="m6_1-collision",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            case_dir_override=str(src_case_dir),
+        )
+
+        # Force secrets + time to produce a known case_id, then
+        # pre-create that exact dir to simulate "another run is using
+        # this slot".
+        forced_hex = "deadbeef"
+        forced_ms = 1234567890123
+        monkeypatch.setattr(
+            "src.foam_agent_adapter.time.time", lambda: forced_ms / 1000.0
+        )
+        # secrets is imported lazily inside the if-branch; patch the
+        # module attribute path.
+        import secrets as _secrets
+
+        monkeypatch.setattr(_secrets, "token_hex", lambda n: forced_hex)
+
+        expected_case_id = f"imported_imported_collide_{forced_ms}_{forced_hex}"
+        concurrent_dir = work_dir / expected_case_id
+        concurrent_dir.mkdir()
+        (concurrent_dir / "concurrent-marker").write_text("alive")
+
+        executor = FoamAgentExecutor(work_dir=work_dir)
+        result = executor.execute(task)
+
+        assert result.success is False
+        # Critical invariant: the pre-existing dir + its contents
+        # MUST survive the failed staging attempt.
+        assert concurrent_dir.is_dir()
+        assert (concurrent_dir / "concurrent-marker").read_text() == "alive"
+
     def test_fails_fast_when_override_set_but_polymesh_missing(
         self, tmp_path, monkeypatch
     ):
