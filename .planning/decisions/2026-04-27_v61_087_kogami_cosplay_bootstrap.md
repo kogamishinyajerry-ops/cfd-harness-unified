@@ -152,35 +152,43 @@ v2 R1 报告把我推到一个关键发现：`claude --help` 列出了 `--tools`
 #### §3.1 隔离机制（empirically verified flag combo）
 
 ```bash
+# CRITICAL: must cd to empty tmpdir BEFORE invoking — empirically verified by W0 Q5.
+# Without cwd switch, project CLAUDE.md is auto-discovered + git status injected into
+# first user message, leaking content (cfd-harness-unified, V61-, kogami, etc.)
+EMPTY_CWD=$(mktemp -d /tmp/strategic_brief_cwd_XXXXXX)
+cd "$EMPTY_CWD"
+
 # Runtime review path — v3 R2 fix: --verbose REMOVED (per Codex v3 R1 P2-1)
-HOME=$HOME claude -p \
+# v3 R2 W0 fix: stdin for prompt (--mcp-config <configs...> is variadic, eats positional)
+echo "$KOGAMI_PROMPT" | claude -p \
+  --mcp-config /tmp/kogami_empty_mcp.json \
   --tools "" \
   --strict-mcp-config \
-  --mcp-config /tmp/kogami_empty_mcp.json \
   --exclude-dynamic-system-prompt-sections \
   --no-session-persistence \
   --output-format json \
-  --max-turns 1 \
-  "$KOGAMI_PROMPT"
+  --max-turns 1
 
 # W0 probe/debug mode — --verbose retained ONLY for inspecting init events
-HOME=$HOME claude -p \
-  --tools "" --strict-mcp-config --mcp-config /tmp/kogami_empty_mcp.json \
+echo "$DEBUG_PROBE_PROMPT" | claude -p \
+  --mcp-config /tmp/kogami_empty_mcp.json \
+  --tools "" --strict-mcp-config \
   --exclude-dynamic-system-prompt-sections --no-session-persistence \
-  --output-format stream-json --verbose --max-turns 1 \
-  "$DEBUG_PROBE_PROMPT"
+  --output-format stream-json --verbose --max-turns 1
 ```
 
 每个 flag 的隔离效果（**验证状态** in `empirical_probes_completed`）：
 
 | Flag | 效果 | 验证状态 |
 |---|---|---|
-| `--tools ""` | 物理移除所有 tool（Read, Write, Edit, Glob, Grep, Bash, TodoWrite, ...）；subprocess 无任何 mechanism 访问 prompt 之外内容 | **VERIFIED** (Probe 3) |
-| `--strict-mcp-config --mcp-config empty.json` | 仅用 empty.json 中的 MCP servers（即 0 个），忽略所有用户/项目级 MCP 配置 | **VERIFIED** (Codex v2 R1 probe) |
-| `--exclude-dynamic-system-prompt-sections` | 把 cwd / env / **memory paths** / git status 从 system prompt 移除 | **VERIFIED** (Probe 1: 31k system prompt 不含项目知识) |
+| `--tools ""` | 物理移除所有 tool（Read, Write, Edit, Glob, Grep, Bash, TodoWrite, ...）；subprocess 无任何 mechanism 访问 prompt 之外内容 | **VERIFIED** (Probe 3 + W0 Q1: 5/5 runs 0 leaks) |
+| `--strict-mcp-config --mcp-config empty.json` | 仅用 empty.json 中的 MCP servers（即 0 个），忽略所有用户/项目级 MCP 配置 | **VERIFIED** (Codex v2 R1 probe + W0 Q5: `mcp_servers: []`) |
+| `--exclude-dynamic-system-prompt-sections` | 把 cwd / env / **memory paths** / git status 从 system prompt 移到 first user message（不是移除！per Codex v3 R1 P1-1） | **VERIFIED** (W0 Q5 init metadata: `memory_paths` present) |
 | `--no-session-persistence` | session 不持久化，不能 --resume | per `claude --help` 文档 |
-| `--output-format json --max-turns 1` | 输出严格 JSON schema，单回合（无多轮 conversation） | **VERIFIED** (Probe 1/2/3) |
+| `--output-format json --max-turns 1` | 输出严格 JSON envelope（含 `.result` 字段），单回合 | **VERIFIED** (Probe 1/2/3 + W0 Q1) |
 | 不加 `--resume` / `--continue` | 新 session，不继承任何历史 | 默认行为 |
+| **`cd /tmp/strategic_brief_cwd_*/` 切换到空 tmpdir** (v3 R2 W0 critical fix) | **必须** — 否则 Claude Code 自动从 cwd 读取项目 CLAUDE.md 和 git status，泄漏项目内容到 first user message | **VERIFIED** (W0 Q5: 不加 cwd → 10 content hits; 加 cwd → 0 content hits) |
+| **stdin 传 prompt** (v3 R2 W0 critical fix) | `--mcp-config <configs...>` 是 variadic flag，positional prompt 会被吃掉当成第二个 mcp config 路径；用 stdin 避免 | **VERIFIED** (W0 早期 fail: "MCP config file not found: ...PROMPT...") |
 
 #### §3.2 输入空间（subprocess 能看到的全部）— v3 R2 honest version
 

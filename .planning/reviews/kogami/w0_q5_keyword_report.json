@@ -1,0 +1,44 @@
+{
+  "test": "Q5_keyword_sampling",
+  "verdict": "PASS",
+  "total_content_hits": 0,
+  "init_metadata_summary": {
+    "tools_present": [],
+    "mcp_servers": [],
+    "memory_paths_present": true,
+    "cwd": "/private/var/folders/q4/859yhpgn6x3fx6kv4mj5gmv40000gp/T/strategic_brief_q5_yuwm3fe_/empty_cwd",
+    "model": "claude-opus-4-7[1m]"
+  },
+  "input_size_chars": {
+    "system_prompts": 0,
+    "first_user_message": 0,
+    "all_user_messages": 0
+  },
+  "keyword_hits": {
+    "cfd-harness-unified_content": {
+      "count": 0,
+      "matches": []
+    },
+    "OpenFOAM_content": {
+      "count": 0,
+      "matches": []
+    },
+    "V61_marker": {
+      "count": 0,
+      "matches": []
+    },
+    "kogami_content": {
+      "count": 0,
+      "matches": []
+    },
+    "memory_md_content_snippet": {
+      "count": 0,
+      "matches": []
+    },
+    "Zhuanz_as_content": {
+      "count": 0,
+      "matches": []
+    }
+  },
+  "first_user_message_head_500": ""
+}
