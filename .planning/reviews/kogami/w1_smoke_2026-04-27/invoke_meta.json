@@ -1,0 +1,27 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "cf4c41c865ac9b1cb675334e60a2963cd34bbed52a778dec1ab2943801993af8",
+  "empty_cwd": "/tmp/strategic_brief_cwd_3N5oYy",
+  "trigger": "w1-smoke-test",
+  "artifact": ".planning/reviews/kogami/README.md",
+  "invoked_at_utc": "2026-04-27T03:37:11Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 52557,
+    "total_cost_usd": 0.8164925,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "c26ad634-402a-4f3c-85c6-10c88599590d",
+    "uuid": "d7b9e056-9558-4d66-9805-c391de9edcd4",
+    "model_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 108288,
+    "cache_read_tokens": 6891,
+    "output_tokens": 2231
+  }
+}

@@ -95,3 +95,8 @@ uv.lock
 # Per-developer log; concurrent appends would conflict if tracked. The
 # directory itself ships a tracked README explaining the contract.
 .governance/codex_cadence_overrides.log
+
+# Override user-global .claude/ ignore — agents/ is project-level (DEC-V61-087)
+!.claude/
+!.claude/agents/
+!.claude/agents/*.md
