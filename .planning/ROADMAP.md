@@ -46,6 +46,39 @@
   - Frontend `FailureBanner` component showing category + 1-2 sentence remediation
 - **Constraints**: line-A only.
 
+## Next main-line: Beginner Full Stack M5–M8 (post-M4 · added 2026-04-27)
+
+**Origin**: graduated into the M-sequence from prior §90-day extension "import/register your own OpenFOAM case + full closed-loop on user-supplied geometry + Docker failure root-cause UI". User-as-first-customer pivot (Pivot Charter Addendum 1) makes this the natural sequel to M1–M4 dogfood-validation (3 anchors closed 2026-04-27).
+
+**Sequencing**: M5 → M6 → M7 → M8 in M-letter order. **No calendar deadline.** Gate between Ms is completion-of-prior-M; final gate at end of M8 is the stranger-dogfood test (replaces the 60-day-window framing previously implied by the kickoff spec — per Kogami M5 clearance 2026-04-27 finding 3).
+
+### M5 — STL-only Case Import v0
+
+- **Goal**: Workbench-side STL upload + trimesh sanity check + scaffold OpenFOAM case directory by forking the LDC template + route to `/workbench/case/{id}/edit`.
+- **Tier split** (per Kogami clearance 2026-04-27 findings 1, 2, 5 — reading (a) routine + trust-core carve-outs):
+  - **M5.0 routine**: `geometry_ingest/`, `case_scaffold/`, `import_geometry.py` route, `ImportPage.tsx`, `case_manifest.yaml` `source_origin` schema field, trimesh dep. Routine path per post-pivot 2026-04-26 standing rule: direct commit to main, single-pass Codex review on upload+pip-dep novelty. No DEC.
+  - **M5.1 trust-core micro-PR**: TrustGate hard-cap imported cases at `PASS_WITH_DISCLAIMER` (touches `src/metrics/trust_gate/` semantic boundary) + `audit_package` `--include-imported` filter (touches `src/audit_package/` explicitly trust-core). Full trust-core path: DEC-V61-08X authored, Codex 3-round, Kogami high-risk-PR clearance with intent_summary + merge_risk_summary.
+- **Out of scope (deferred to later M)**: STEP/IGES, geometry healing, UI patch picking, cfMesh, NL agent on case generation.
+- **Strategic clearance record**: `.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/` (APPROVE_WITH_COMMENTS · `recommended_next: revise` · 7 findings).
+- **Revised kickoff spec**: `.planning/strategic/m5_kickoff/spec_v2_2026-04-27.md`.
+
+### M6 — gmsh-based unstructured meshing path
+
+- **Goal**: Add gmsh meshing path for imported geometries (alternative to snappyHexMesh).
+- **Out of M5 scope**: dependency pin (`gmsh>=4.11,<4.13`), CI smoke install matrix, macOS arm64 wheel known-issue posture — all deferred to M6's own kickoff brief per Kogami M5 clearance finding 4.
+
+### M7 — Real OpenFOAM run on imported case + mesh budget tiering
+
+- **Goal**: `snappyHexMesh` execution on imported geometry + two-tier mesh budget. `mesh_mode="beginner"` (default) hard-cap 5M cells; `mesh_mode="power"` cap 50M. Single toggle inside Mesh Wizard, not a separate page.
+
+### M8 — Beginner report v0 + Docker failure root-cause UI
+
+- **Goal**: passive `beginner_report` listing (verdict warnings + case_quality deltas + identified sharp edges) + Docker failure root-cause surfacing in UI. Active anti-pattern detection (cellCount<1k / AR>100) deferred to M8.1 stretch.
+
+### M5–M8 completion gate (binding · supersedes prior calendar framing)
+
+Mandatory stranger dogfood: 1 CFD-literate non-project-member runs end-to-end (M5 import → M6 mesh → M7 run → M8 report) in target 30 min / cap 45 min. If blocked, the M5–M8 sequence is NOT done. **Replaces** the 60-day-window stranger dogfood framing implied by the kickoff spec (Kogami M5 clearance finding 3 resolution).
+
 ## Governance posture: downgraded (2026-04-26 standing rule)
 
 Per Pivot Charter Addendum 1 + methodology v2.0 §10:
@@ -87,7 +120,7 @@ Per Pivot Charter Addendum 1 + methodology v2.0 §10:
 ## 60/90-day extensions (post-M4, not in current scope)
 
 - 60-day: 3 anchor case 闭环 (LDC + cylinder + NACA-or-DHC) + run-comparison (diff two runs side-by-side) + project/workspace minimal concept
-- 90-day: import/register your own OpenFOAM case + full closed-loop on user-supplied geometry + Docker failure root-cause UI; **at this point** revisit PyPI / external-pilot / commercialization
+- 90-day: ~~import/register your own OpenFOAM case + full closed-loop on user-supplied geometry + Docker failure root-cause UI~~ — **graduated 2026-04-27 into M5–M8 sequence above** (M5 import / M6 gmsh / M7 real run + mesh tiering / M8 beginner report + Docker root-cause). PyPI / external-pilot / commercialization revisit remains 90-day item, deferred until after M8.
 
 ## Closed (do not reopen)
 
