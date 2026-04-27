@@ -41,7 +41,8 @@ codex_tool_report_path: |
   reports/codex_tool_reports/dec_v61_075_t2_*.md (T2.1 R1-R5 +
   T2.3 R1-R5 = 10 logs). Will land in the session-close commit
   per DEC-V61-074 attribution mitigation playbook §11.5.
-notion_sync_status: pending
+notion_sync_status: synced 2026-04-27 (https://www.notion.so/DEC-V61-075-P2-T2-DockerOpenFOAMExecutor-FoamAgentExecutor-substantialization-6-3-reference-34fc68942bed8142bed9f30000f963f4)
+session_summary_notion_url: https://www.notion.so/2026-04-26-27-P2-T2-DockerOpenFOAMExecutor-substantialization-DEC-V61-075-34fc68942bed81a0998bf46ee7a9acae
 ---
 
 # DEC-V61-075 · P2-T2 DockerOpenFOAMExecutor substantialization + reference-run resolver + executable smoke
