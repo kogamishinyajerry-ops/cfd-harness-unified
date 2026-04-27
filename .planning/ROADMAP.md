@@ -68,6 +68,9 @@
 - **Tier split** (per Kogami M6 clearance 2026-04-27 finding 1, 4 — read (iii)):
   - **M6.0 routine**: `meshing_gmsh/`, `mesh_imported.py` route, `MeshWizardPage.tsx`, gmsh+gmshToFoam pipeline, D4 dependency pin (`gmsh>=4.11,<4.13`) + CI smoke install matrix + macOS arm64 wheel posture. 50M power-mode hard cap; 5M beginner cap as soft warning until M6.0.1 calibration pass.
   - **M6.1 trust-core micro-PR**: `src/foam_agent_adapter.py` only — add `mesh_already_provided: bool` flag to skip `blockMesh` when `constant/polyMesh/` is populated. Narrow scope per Kogami M6 finding 4 (no case_kind dispatch change, no manifest-as-trust-core-input).
+- **Sequencing rule** (per Notion-Opus advisory 2026-04-27 finding 1): **M6.0 implementation MUST NOT begin** until M5.0 (`4a0755e..23bcba6`) has Codex APPROVE recorded. "Should wait" is upgraded to "must wait" — refuses stacked governance debt.
+- **Phase-Done gate** (per Notion-Opus advisory finding 3): **M6 cannot be marked Done while M6.1 is unmerged.** The trust-core micro-PR carve-out is a blocker on M6's Done flip, not on a future artifact's existence. Otherwise gmsh-meshed cases attempt `blockMesh` at M7-runtime and fail.
+- **D6 calibration unlock** (per Notion-Opus advisory finding 4c): M6.0.1 may convert the 5M beginner soft-warning to a hard cap **only when telemetry covers N≥3 distinct STLs (mix of bundled fixtures + real user uploads)**, not single-PR data. Single-sample calibration is anecdote.
 - **Strategic clearance**: `.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/` (APPROVE_WITH_COMMENTS · 5 findings).
 - **Revised kickoff spec**: `.planning/strategic/m6_kickoff/spec_v2_2026-04-27.md`.
 
@@ -76,6 +79,8 @@
 - **Goal**: Fill the `system/snappyHexMeshDict.stub` that M5.0 wrote, run `snappyHexMesh` on imported geometry as a second mesh-engine option, then execute the real solver. Two-tier mesh budget: `mesh_mode="beginner"` (default) hard-cap 5M cells; `mesh_mode="power"` cap 50M. Single toggle inside Mesh Wizard, not a separate page.
 - **Mesh-engine relationship**: M6 = gmsh path · M7 = snappyHexMesh path. Whether to introduce a per-case `mesh_engine` selector field is deferred to the M7 kickoff (when the second engine actually exists). M6 ships the gmsh path as the only engine.
 - **D6 cap calibration**: M6.0 ships 5M as soft warning until empirical telemetry lands; M7 inherits whatever beginner cap M6.0.1 calibration produces.
+- **MUST RESOLVE at M7 kickoff** (per Notion-Opus advisory 2026-04-27 finding 2 — the "homeless decision"): once M6 has shipped gmsh and M7 ships sHM, an imported case has **two** mesh backends. Who picks for a given case? UI selector? Heuristic on STL complexity (face count, watertight-ness)? Cell-budget-driven (gmsh for low-budget, sHM for high)? D8's "30 minutes end-to-end" implicitly assumes the user never has to choose — that assumption needs an explicit answer at M7 kickoff, not deferred to runtime.
+- **Phase-Done gate** (per Notion-Opus advisory finding 3): **M7 cannot be marked Done while M5.1 is unmerged.** TrustGate hard-cap + `audit_package` filter must land before imported cases can produce verdicts in production — otherwise imported cases silently reach `PASS` verdicts despite having no gold-standard reference.
 
 ### M8 — Beginner report v0 + Docker failure root-cause UI
 
