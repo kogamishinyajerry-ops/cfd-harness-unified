@@ -1,0 +1,27 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "46b266cb4ec60494c8d2afcd6f791c90408e52b8a3270ffe38d1f5bc53aabde8",
+  "empty_cwd": "/tmp/strategic_brief_cwd_Ta91WU",
+  "trigger": "high-risk-PR",
+  "artifact": ".planning/decisions/2026-04-28_v61_091_m5_1_imported_case_verdict_cap.md",
+  "invoked_at_utc": "2026-04-27T18:26:50Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 59862,
+    "total_cost_usd": 0.93963875,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "7af9082e-8150-4534-a3bc-2352d11b71a5",
+    "uuid": "e0aef90a-2c25-41a4-b391-17b855e262fc",
+    "model_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 123073,
+    "cache_read_tokens": 6891,
+    "output_tokens": 3025
+  }
+}

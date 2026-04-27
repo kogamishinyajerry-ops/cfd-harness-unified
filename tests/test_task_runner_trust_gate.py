@@ -652,3 +652,105 @@ def test_run_report_populates_trust_gate_with_comparison_present(
         "lid_driven_cavity_convergence_attestation",
         "lid_driven_cavity_gold_comparison",
     }
+
+
+# ---------------------------------------------------------------------------
+# DEC-V61-091 M5.1 · source-origin verdict ceiling integration
+#
+# When `task_spec.mesh_already_provided=True` (M6.1 contract: imported
+# user case), the TaskRunner must apply the source-origin ceiling so
+# the run-time verdict is capped at WARN with the disclaimer note,
+# even when the underlying gold-comparison + attestation would have
+# returned PASS.
+# ---------------------------------------------------------------------------
+
+
+_M5_1_DISCLAIMER_NOTE = (
+    "imported_user_no_literature_ground_truth_pass_with_disclaimer"
+)
+
+
+def _m5_1_imported_case_runner(tmp_path: Path):
+    """Build a TaskRunner whose executor returns a clean run, with a
+    solver log on disk so the attestor returns ATTEST_PASS. Returns
+    (runner, task_spec_factory) so each test can flip the
+    mesh_already_provided flag."""
+    from unittest.mock import MagicMock
+
+    from src.models import (
+        Compressibility,
+        FlowType,
+        GeometryType,
+        SteadyState,
+        TaskSpec,
+    )
+    from src.task_runner import TaskRunner
+
+    log_dir = tmp_path / "solver_output"
+    log_dir.mkdir()
+    (log_dir / "log.simpleFoam").write_text(
+        "Time = 1\nExecutionTime = 1 s\nEnd\n", encoding="utf-8"
+    )
+
+    class _CleanExecutor:
+        def execute(self, task_spec):
+            return ExecutionResult(
+                success=True,
+                is_mock=False,
+                key_quantities={"u_centerline": [0.025]},
+                raw_output_path=str(log_dir),
+                exit_code=0,
+            )
+
+    stub_notion = MagicMock()
+    stub_notion.write_execution_result = MagicMock()
+    stub_db = MagicMock()
+    stub_db.load_gold_standard = MagicMock(return_value=None)
+    stub_db.save_correction = MagicMock()
+
+    runner = TaskRunner(
+        executor=_CleanExecutor(),
+        notion_client=stub_notion,
+        knowledge_db=stub_db,
+    )
+
+    def make_task(*, mesh_already_provided: bool) -> TaskSpec:
+        return TaskSpec(
+            name="lid_driven_cavity",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=mesh_already_provided,
+        )
+
+    return runner, make_task
+
+
+def test_m5_1_imported_case_pass_capped_to_warn_with_disclaimer_note(
+    tmp_path: Path,
+) -> None:
+    """`mesh_already_provided=True` on a clean PASS run must cap the
+    overall verdict at WARN and append the disclaimer note."""
+    runner, make_task = _m5_1_imported_case_runner(tmp_path)
+    report = runner.run_task(make_task(mesh_already_provided=True))
+
+    assert report.trust_gate_report is not None
+    assert report.trust_gate_report.overall is MetricStatus.WARN
+    assert _M5_1_DISCLAIMER_NOTE in report.trust_gate_report.notes
+    # _ceiling_to_warn bumps WARN count when promoting from PASS so
+    # has_warnings + summary stay truthful.
+    assert report.trust_gate_report.has_warnings
+
+
+def test_m5_1_whitelist_pass_unchanged_regression_guard(
+    tmp_path: Path,
+) -> None:
+    """Default `mesh_already_provided=False` must NOT trigger the cap —
+    whitelist runs continue to reach PASS unaffected."""
+    runner, make_task = _m5_1_imported_case_runner(tmp_path)
+    report = runner.run_task(make_task(mesh_already_provided=False))
+
+    assert report.trust_gate_report is not None
+    assert report.trust_gate_report.overall is MetricStatus.PASS
+    assert _M5_1_DISCLAIMER_NOTE not in report.trust_gate_report.notes

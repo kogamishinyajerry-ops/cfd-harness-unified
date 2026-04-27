@@ -56,6 +56,22 @@ _NOTE_MOCK_NO_TRUTH_SOURCE = "mock_executor_no_truth_source"
 _NOTE_HYBRID_INIT_INVARIANT_UNVERIFIED = "hybrid_init_invariant_unverified"
 _NOTE_FUTURE_REMOTE_REFUSED = "future_remote_mode_not_yet_implemented"
 
+# DEC-V61-091 M5.1 · source-origin routing constants.
+#
+# Workbench imported user cases have no literature ground truth, so the
+# trust-gate verdict must be capped at WARN with a disclaimer note (the
+# UI / audit-package layer renders WARN+this note as
+# "PASS_WITH_DISCLAIMER" copy without requiring a new MetricStatus
+# enum value). The string is duplicated from
+# `ui.backend.services.case_scaffold.SOURCE_ORIGIN_IMPORTED_USER` rather
+# than imported because src.metrics is in Plane.EVALUATION and may NOT
+# import from ui.backend (Plane.UI) per .importlinter Contract 2 — the
+# trust-core line-A boundary stays clean.
+SOURCE_ORIGIN_IMPORTED_USER = "imported_user"
+_NOTE_IMPORTED_USER_NO_LITERATURE_GROUND_TRUTH = (
+    "imported_user_no_literature_ground_truth_pass_with_disclaimer"
+)
+
 
 @dataclass(frozen=True)
 class TrustGateReport:
@@ -261,6 +277,62 @@ def apply_executor_mode_routing(
     # older deployment reading a manifest from a newer producer)
     # both fall through to "no ceiling" — the worst-wins verdict from
     # the per-metric reports stands.
+    return base_report
+
+
+def apply_source_origin_routing(
+    base_report: TrustGateReport,
+    source_origin: Optional[str],
+) -> TrustGateReport:
+    """Apply DEC-V61-091 M5.1 source-origin verdict ceiling.
+
+    Workbench imported user cases (per DEC-V61-089 two-track invariant)
+    have no literature ground truth to validate against, so any
+    underlying PASS verdict must be capped at WARN with the
+    ``imported_user_no_literature_ground_truth_pass_with_disclaimer``
+    note. WARN and FAIL stay where they are (worst-wins monotone — the
+    cap can only lower severity, never raise it). The note still
+    accumulates so the audit trail records why the cap fired.
+
+    Parameters
+    ----------
+    base_report
+        Output of :func:`reduce_reports`, optionally already routed
+        through :func:`apply_executor_mode_routing`. Composition is
+        worst-wins-preserving: both ceilings funnel through
+        ``_ceiling_to_warn`` which is severity-idempotent and
+        count-stable (PASS→WARN, WARN→WARN, FAIL→FAIL with the same
+        ``count_by_status`` after the first application). The
+        ``notes`` tuple still accumulates the ceiling note on every
+        reapplication — that is by design so the audit trail records
+        each cap event.
+    source_origin
+        Caller-supplied opaque tag identifying the case origin. The
+        constant ``SOURCE_ORIGIN_IMPORTED_USER`` triggers the cap; any
+        other string (including ``None``, ``"whitelist"``, ``"draft"``,
+        or future origin tags this module hasn't been taught about
+        yet) falls through unchanged so the worst-wins verdict stands.
+
+    Returns
+    -------
+    TrustGateReport
+        - ``imported_user``: ceiling = ``WARN`` with note appended.
+        - any other origin (or ``None``): ``base_report`` unchanged.
+
+    Notes
+    -----
+    The signal is opaque on purpose: the caller (typically
+    ``task_runner``) derives the tag from upstream state (e.g.
+    ``task_spec.mesh_already_provided`` per DEC-V61-090, which is
+    exclusively set on imported user cases) and passes it as a string.
+    This keeps the trust-core (Plane.EVALUATION) boundary clean — no
+    direct read of ``case_manifest.yaml`` from inside the metrics
+    module, no import from ``ui.backend`` (Plane.UI).
+    """
+    if source_origin == SOURCE_ORIGIN_IMPORTED_USER:
+        return _ceiling_to_warn(
+            base_report, _NOTE_IMPORTED_USER_NO_LITERATURE_GROUND_TRUTH
+        )
     return base_report
 
 

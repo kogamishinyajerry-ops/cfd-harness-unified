@@ -1,0 +1,53 @@
+# Kogami Review · m5_1_imported_verdict_cap · 2026-04-27
+
+**Verdict**: `APPROVE_WITH_COMMENTS`
+**Recommended next**: `merge`
+**Trigger**: high-risk-PR
+**Artifact**: `.planning/decisions/2026-04-28_v61_091_m5_1_imported_case_verdict_cap.md`
+**Prompt SHA256**: `46b266cb4ec60494c8d2afcd6f791c90408e52b8a3270ffe38d1f5bc53aabde8`
+
+## Summary
+
+DEC-V61-091 is a coherent, narrowly-scoped trust-core micro-PR that correctly consumes the M6.1 mesh_already_provided signal from V61-090 to enforce the Track B verdict ceiling established by V61-089. The decision-arc fit is strong and the implementation strategy (reusing _ceiling_to_warn) is appropriately conservative. Three substantive concerns: (1) the constant duplication rationale (line-A/trust-core independence) deserves a more explicit cross-reference to ADR-001, (2) the M7-blocking relationship is asymmetric and the dormant-cap window between M5.1 merge and M7 wire-up needs a stated stop-the-line condition, and (3) the failure-mode table omits the case where executor-mode and source-origin caps interact across the worst-wins reducer with notes that downstream consumers may dedupe.
+
+## Strategic Assessment
+
+Decision-arc coherence is strong. V61-089 declared the Track B PASS_WITH_DISCLAIMER ceiling invariant but deferred mechanism. V61-090 introduced mesh_already_provided as the structural-boolean signal carrying imported-case identity to trust-core without crossing the ADR-001 import boundary. V61-091 correctly closes the loop by adding the smallest viable cap mechanism (one new function, one constant, one wire-up site) that consumes V61-090's signal to enforce V61-089's invariant. The implementation strategy of reusing _ceiling_to_warn rather than introducing a new MetricStatus enum value is the right blast-radius minimization — enum surgery would touch every MetricStatus consumer for no semantic gain since the WARN+note combination already encodes the user-facing 'PASS_WITH_DISCLAIMER' meaning. Roadmap fit: this DEC is the M5.1 trust-core micro-PR called out explicitly in ROADMAP §M5 tier-split and is a Phase-Done blocker on M7 per ROADMAP §M7. The pre-implementation surface scan (V61-088 discipline) is correctly performed and documented. Out-of-scope hygiene is good: enum surgery, UI rendering, manifest schema, per-case relaxation are all explicitly deferred with rationale. The audit_package --include-imported filter portion of the original M5.1 spec_v2 scope is conspicuously absent from this DEC; if it has been split to a separate DEC, that should be cross-referenced; if it has been deferred, the DEC should say so. Counter advancement (55 → 56 per Interpretation B) is correctly computed against STATE.md SSOT.
+
+## Findings
+
+### [P2] Constant duplication rationale needs ADR-001 anchor
+**Position**: §Scope · In scope · item 2 (SOURCE_ORIGIN_IMPORTED_USER constant)
+
+**Problem**: The DEC asserts duplicating SOURCE_ORIGIN_IMPORTED_USER between case_scaffold and trust_gate keeps line-A/trust-core independence, but does not cite the four-plane import direction rule from ADR-001 explicitly. A future reader could read the duplication as code smell and propose 'just import from case_scaffold' refactor without realizing it would violate the import direction. The §'Why this preserves trust-core boundary' paragraph mentions ADR-001 obliquely but does not pin the constant duplication to it.
+
+**Recommendation**: In §Scope · In scope · item 2, add a parenthetical: 'duplication is the canonical pattern under ADR-001 §<section> — trust-core (Knowledge/Evaluation plane) MUST NOT import from line-A (Control plane); a shared-constants module would itself be cross-plane'. This makes the constraint self-evident at the constant declaration site.
+
+### [P2] Dormant-cap window between M5.1 merge and M7 wire-up has no stop-the-line condition
+**Position**: §Why this preserves trust-core boundary · last paragraph ('Until M7 wires the flag, the cap is dormant')
+
+**Problem**: The DEC correctly observes the cap is dormant until M7 sets mesh_already_provided=True for production callers. But ROADMAP M7 explicitly states 'M7 cannot be marked Done while M5.1 is unmerged' AND 'M7 implementation MUST NOT begin until at least one stranger meeting Path A criteria is named'. There is no statement of what happens if a non-M7 caller (e.g., a future M6.1.1 patch, or a manual ad-hoc test fixture) sets the flag in the dormant window. The M6.1 contract is asserted as exclusive but not enforced — only documented.
+
+**Recommendation**: Add a sentence to §Failure modes considered or §Out of scope: 'During the dormant window (M5.1 merged, M7 not yet wired), any new caller proposing to set task_spec.mesh_already_provided=True outside M6.1's documented contract MUST file a successor DEC. The M6.1 exclusivity is a contract, not a runtime invariant — silent expansion of the flag's set of true-callers would silently expand the cap's blast radius.'
+
+### [P2] Composition test asserts severity-idempotence + count-stability but not note-deduplication semantics
+**Position**: §Scope · In scope · item 4 · last test bullet ('Composition with executor-mode ceiling')
+
+**Problem**: The DEC correctly identifies that _ceiling_to_warn is severity-idempotent and count-stable, and states notes accumulate honestly on reapplication. But two ceilings (executor-mode + source-origin) firing in the same run will produce TWO notes on a single PASS→WARN transition (one per cap event). The DEC §'Why' positions the note string as a user-facing render hint ('PASS_WITH_DISCLAIMER'). If the UI / audit-package render layer naively concatenates note strings, an imported_user case in mock executor mode would render two disclaimer-flavored notes — which is honest audit-trail behavior but may surprise downstream copy.
+
+**Recommendation**: Either (a) add a test asserting the specific note-list shape when both caps fire (executor-mode note + source-origin note both present, ordered by application), and add a one-line note in §Out of scope: 'UI dedup of multiple cap notes is M8 / dogfood concern'; OR (b) explicitly state that the audit trail SHOULD record both notes separately and downstream renderers are responsible for presentation. Either way, make the multi-cap audit shape an explicit, tested contract rather than an implicit consequence.
+
+### [P3] Self-pass-rate 80% lacks calibration anchor against recent trust-core arc precedent
+**Position**: §Verification plan · Codex review · self-pass-rate estimate
+
+**Problem**: RETRO-V61-004 established the stair-anchor convention (current ceiling 0.87) and RETRO-V61-006 noted a probationary drop to 0.85 for instrumentation-class PRs with subsequent recovery on clean APPROVE. RETRO-V61-053 documented that 'code-bearing first-pass is 0%' for novel trust-core wiring. The 80% estimate is plausible for a small surface but the DEC does not cite which calibration anchor it is sitting on. P2-T2 (DEC-V61-075) and V61-090 (M6.1) are the most recent trust-core arc precedents and would be the right comparators.
+
+**Recommendation**: Replace 'small surface, pattern-match against existing apply_executor_mode_routing, but trust-core path means small misses cost more' with an explicit comparator: e.g., 'V61-090 M6.1 (analogous trust-core micro-PR · single bool flag · single guard site) reached APPROVE in 6 rounds; this DEC has comparable surface but adds a new function rather than guarding an existing one — estimate 75-80% first-pass calibrated to V61-090 precedent.' This makes the estimate falsifiable post-hoc.
+
+### [P3] prerequisite_status only checks M6.1 acceptance, not Track B invariant DEC acceptance
+**Position**: frontmatter · prerequisite_status
+
+**Problem**: The frontmatter records m6_1_acceptance: confirmed but does not record DEC-V61-089 acceptance status. V61-089 is listed as a parent_decision but the load-bearing Track B verdict-ceiling invariant comes from V61-089, not V61-090. If V61-089 were ever Proposed/Pending (it appears Accepted from context but the DEC does not assert it), this DEC would have a logical gap.
+
+**Recommendation**: Add v61_089_acceptance: confirmed (or appropriate status) to prerequisite_status alongside m6_1_acceptance. This makes the dependency on the two-track invariant explicit at the frontmatter level.
+

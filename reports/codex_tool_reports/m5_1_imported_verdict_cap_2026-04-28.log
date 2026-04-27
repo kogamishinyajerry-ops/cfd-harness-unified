@@ -1,0 +1,57 @@
+M5.1 · TrustGate hard-cap on imported user case verdicts · DEC-V61-091
+Codex GPT-5.4 multi-round review arc · 2026-04-28
+================================================================================
+
+Round 1 · 2026-04-28T18:15Z (account: paauhtgaiah@gmail.com)
+Verdict: APPROVE_WITH_COMMENTS
+Findings:
+  P3 — "idempotent" wording in trust_gate.py docstring (apply_source_origin_routing
+       Parameters section) and DEC test bullet is too strong. _ceiling_to_warn is
+       severity-idempotent + count-stable, but not full-report-idempotent because
+       reapplication appends ceiling_note. Tighten wording unless duplicate-note
+       accumulation is the formal contract.
+Notes:
+  - No P0/P1/P2 correctness issues.
+  - Cap fires only when mesh_already_provided is truthy (task_runner.py:653).
+  - Composition with executor-mode routing is worst-wins-preserving.
+  - Boundary clean: no ui.backend import, no manifest reads inside src.metrics.
+  - Forward-compat: None, "", unknown tags fall through unchanged.
+Verification:
+  - tests/test_trust_gate_source_origin.py + tests/test_task_runner_trust_gate.py: 28 passed
+  - tests/test_metrics/test_trust_gate_executor_mode_routing.py + tests/test_task_runner_executor_mode.py: 37 passed
+  - lint-imports: 5/5 contracts kept
+
+Round 2 · 2026-04-28T18:21Z (account: ramaiamandhabdbs@gmail.com · Pro)
+Verdict: APPROVE_WITH_COMMENTS
+Fix applied (verbatim per R1 P3):
+  - src/metrics/trust_gate.py: docstring tightened to "severity-idempotent and
+    count-stable" + explicit "notes tuple still accumulates the ceiling note
+    on every reapplication — that is by design so the audit trail records
+    each cap event."
+  - tests/test_trust_gate_source_origin.py: test renamed
+    test_idempotent_under_repeated_application →
+    test_severity_idempotent_with_note_accumulation; added explicit
+    count_by_status[WARN] stability assertion; comment cites Codex R1 P3.
+  - DEC line 113 (verification plan bullet): rewritten with same wording.
+Findings:
+  doc-nit — DEC line 168 (failure-mode table) still said "_ceiling_to_warn
+            which is idempotent". Should match the same narrowed language.
+  Code/test contract now matches behavior — no further code concerns.
+
+Round 3 · 2026-04-28T18:25Z (account: ramaiamandhabdbs@gmail.com · Pro)
+Verdict: APPROVE
+Fix applied (verbatim per R2 doc-nit):
+  - DEC line 168 rewritten to "severity-idempotent + count-stable
+    (PASS → WARN, WARN → WARN, FAIL → FAIL; count_by_status does not
+    double-bump on reapplication). Composition is monotone. Notes
+    accumulate truthfully on each cap event so the audit trail is
+    preserved."
+No further comments.
+
+================================================================================
+Final verdict: APPROVE (3-round arc, all findings doc-only and resolved)
+Self-pass-rate calibration: predicted 80%, actual = clean code path with only
+  doc-wording iteration. Code APPROVE on R1; doc-wording took 2 follow-ups.
+Verbatim-exception: R2 + R3 both qualify (matched Suggested fix bullet, ≤20 LOC,
+  doc-only or tests, no public API change).
+================================================================================

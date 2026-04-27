@@ -35,9 +35,11 @@ from .integrated import IntegratedMetric
 from .spectral import SpectralMetric
 from .residual import ResidualMetric
 from .trust_gate import (
+    SOURCE_ORIGIN_IMPORTED_USER,
     ModeNotYetImplementedError,
     TrustGateReport,
     apply_executor_mode_routing,
+    apply_source_origin_routing,
     reduce_reports,
 )
 from .case_profile_loader import (
@@ -58,7 +60,9 @@ __all__ = [
     "ResidualMetric",
     "TrustGateReport",
     "ModeNotYetImplementedError",
+    "SOURCE_ORIGIN_IMPORTED_USER",
     "apply_executor_mode_routing",
+    "apply_source_origin_routing",
     "reduce_reports",
     "CaseProfileError",
     "load_case_profile",

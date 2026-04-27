@@ -26,8 +26,10 @@ from .metrics import (
     MetricClass,
     MetricReport,
     MetricStatus,
+    SOURCE_ORIGIN_IMPORTED_USER,
     TrustGateReport,
     apply_executor_mode_routing,
+    apply_source_origin_routing,
     load_tolerance_policy,
     reduce_reports,
 )
@@ -647,6 +649,22 @@ class TaskRunner:
                     "future_remote run — should be unreachable; check "
                     "executor short-circuit invariant"
                 )
+
+        # DEC-V61-091 M5.1 · source-origin verdict ceiling.
+        # Per DEC-V61-090 the M6.1 contract guarantees
+        # `task_spec.mesh_already_provided=True` ⟺ workbench imported
+        # user case (no production caller sets the flag for any other
+        # case kind). Translate that boolean into the canonical
+        # source-origin tag and apply the cap. Composition order:
+        # source-origin ceiling runs AFTER executor-mode ceiling so
+        # both ceilings stack monotonically (worst-wins preserved by
+        # `_ceiling_to_warn`).
+        if trust_gate_report is not None and getattr(
+            task_spec, "mesh_already_provided", False
+        ):
+            trust_gate_report = apply_source_origin_routing(
+                trust_gate_report, SOURCE_ORIGIN_IMPORTED_USER
+            )
 
         return RunReport(
             task_spec=task_spec,
