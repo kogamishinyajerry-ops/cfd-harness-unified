@@ -98,6 +98,7 @@ def scaffold_imported_case(
     origin_filename: str,
     now: datetime | None = None,
     case_id: str | None = None,
+    loaded: trimesh.Trimesh | trimesh.Scene | None = None,
 ) -> ScaffoldResult:
     """Top-level entry: allocate id, create dirs, write all M5 artifacts.
 
@@ -114,7 +115,14 @@ def scaffold_imported_case(
     safe_filename = _safe_origin_filename(origin_filename)
     root = create_imported_case_dir(cid)
 
-    canonical_bytes = canonical_stl_bytes(combined)
+    # Pass the original Scene (when available) + sanitized patch names so a
+    # multi-solid STL preserves the inlet/outlet/wall regions the sHM stub
+    # references. Falls back to single-mesh binary export when only the
+    # combined mesh is available.
+    canonical_bytes = canonical_stl_bytes(
+        loaded if loaded is not None else combined,
+        patch_names=[p.name for p in report.patches] if not report.all_default_faces else None,
+    )
     triSurface_path = write_triSurface(
         case_dir=root, origin_filename=safe_filename, canonical_bytes=canonical_bytes
     )

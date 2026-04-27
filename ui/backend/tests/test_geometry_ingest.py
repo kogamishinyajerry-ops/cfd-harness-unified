@@ -11,7 +11,7 @@ from ui.backend.services.geometry_ingest import (
     run_health_checks,
     solid_count,
 )
-from ui.backend.tests.conftest import box_stl, open_box_stl
+from ui.backend.tests.conftest import box_stl, multi_solid_ascii_stl, open_box_stl
 
 
 def test_cube_ingest_passes_with_default_face_warning():
@@ -80,3 +80,37 @@ def test_load_stl_from_bytes_returns_errors_on_garbage():
     loaded, errs = load_stl_from_bytes(b"\x00\x01\x02\x03not stl")
     assert loaded is None
     assert errs
+
+
+def test_canonical_bytes_preserves_named_regions():
+    """Multi-solid STL → canonical bytes must round-trip through trimesh
+    with the same patch names. Without this, the snappyHexMeshDict.stub
+    references regions that don't exist in the written triSurface STL."""
+    data = multi_solid_ascii_stl("inlet", "outlet", "wall")
+    loaded, errs = load_stl_from_bytes(data)
+    assert errs == []
+    patches, all_default = detect_patches(loaded)
+    assert all_default is False
+    assert {p.name for p in patches} == {"inlet", "outlet", "wall"}
+
+    canon = canonical_stl_bytes(loaded, patch_names=[p.name for p in patches])
+    loaded2, errs2 = load_stl_from_bytes(canon)
+    assert errs2 == []
+    patches2, all_default2 = detect_patches(loaded2)
+    assert all_default2 is False
+    assert {p.name for p in patches2} == {"inlet", "outlet", "wall"}
+
+
+def test_canonical_bytes_sanitizes_invalid_names_round_trip():
+    """STL solid names with whitespace + special chars must survive the
+    sanitize → canonical-bytes → reload pipeline as OpenFOAM-valid tokens."""
+    data = multi_solid_ascii_stl("inlet zone", "wall.left")
+    loaded, _ = load_stl_from_bytes(data)
+    patches, _ = detect_patches(loaded)
+    sanitized = {p.name for p in patches}
+    assert sanitized == {"inlet_zone", "wall_left"}
+
+    canon = canonical_stl_bytes(loaded, patch_names=[p.name for p in patches])
+    loaded2, _ = load_stl_from_bytes(canon)
+    patches2, _ = detect_patches(loaded2)
+    assert {p.name for p in patches2} == sanitized

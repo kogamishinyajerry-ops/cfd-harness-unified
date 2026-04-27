@@ -115,6 +115,13 @@ export function EditCasePage() {
     return jsYaml.dump(merged, { indent: 2, lineWidth: 100, sortKeys: false });
   }, [loaded, paramOverrides, bcOverrides]);
 
+  // M5.0 contract: imported_user cases are edit-only until M7. The
+  // run dispatcher (wizard_drivers._task_spec_from_case_id) refuses
+  // them, but the mock driver would silently fake success and the user
+  // would believe the geometry ran. Detect at render time and gate the
+  // CTA so the editor saves the draft without navigating.
+  const isImported = loaded?.raw.source_origin === "imported_user";
+
   const saveAndRunMutation = useMutation({
     mutationFn: async () => {
       const payload: CaseYamlPayload = {
@@ -133,7 +140,9 @@ export function EditCasePage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["caseYaml", caseId] });
-      navigate(`/workbench/run/${encodeURIComponent(caseId)}`);
+      if (!isImported) {
+        navigate(`/workbench/run/${encodeURIComponent(caseId)}`);
+      }
     },
     onError: (err) => {
       setErrorMsg(err instanceof ApiError ? `${err.status}: ${err.message}` : String(err));
@@ -280,6 +289,14 @@ export function EditCasePage() {
             </fieldset>
           )}
 
+          {isImported && (
+            <p className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Imported case · the run path is implemented in M7. You can save
+              draft edits now; running will become available once meshing +
+              dispatch are wired in.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               type="button"
@@ -287,7 +304,11 @@ export function EditCasePage() {
               disabled={saveAndRunMutation.isPending}
               className="rounded-sm bg-contract-pass/80 px-4 py-1.5 text-sm font-medium text-surface-950 transition hover:bg-contract-pass disabled:opacity-50"
             >
-              {saveAndRunMutation.isPending ? "Saving…" : "Save & run with these params"}
+              {saveAndRunMutation.isPending
+                ? "Saving…"
+                : isImported
+                ? "Save draft"
+                : "Save & run with these params"}
             </button>
             {loaded.origin === "draft" &&
               loaded.raw.source_origin !== "imported_user" && (

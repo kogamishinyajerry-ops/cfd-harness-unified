@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import re
 from typing import Union
 
 import trimesh
@@ -59,7 +60,57 @@ def solid_count(loaded: LoadedSTL) -> int:
     return 1
 
 
-def canonical_stl_bytes(combined: trimesh.Trimesh) -> bytes:
-    """Re-serialize as binary STL. Caller passes the pre-combined mesh
-    from :func:`combine` so the concat work isn't repeated."""
-    return combined.export(file_type="stl")
+_SOLID_HEADER_RE = re.compile(rb"^\s*solid\b[^\n]*", re.MULTILINE)
+_ENDSOLID_HEADER_RE = re.compile(rb"^\s*endsolid\b[^\n]*", re.MULTILINE)
+
+
+def _ascii_with_solid_name(mesh: trimesh.Trimesh, name: str) -> bytes:
+    """Export ``mesh`` as ASCII STL with the ``solid <name>`` / ``endsolid <name>``
+    headers rewritten to match the requested patch name. trimesh's own
+    ASCII export uses a generic placeholder ("solid"), which would defeat
+    the round-trip detect_patches → solid-name → sHM stub mapping.
+    """
+    raw = mesh.export(file_type="stl_ascii")
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
+    encoded_name = name.encode("ascii", errors="replace")
+    raw = _SOLID_HEADER_RE.sub(b"solid " + encoded_name, raw, count=1)
+    raw = _ENDSOLID_HEADER_RE.sub(b"endsolid " + encoded_name, raw, count=1)
+    if not raw.endswith(b"\n"):
+        raw += b"\n"
+    return raw
+
+
+def canonical_stl_bytes(
+    mesh_or_loaded: LoadedSTL,
+    patch_names: list[str] | None = None,
+) -> bytes:
+    """Re-serialize STL for storage in ``triSurface/``.
+
+    Behavior:
+
+    * ``Trimesh`` (or single-geometry ``Scene``) → binary STL. ``patch_names``
+      is ignored.
+    * Multi-geometry ``Scene`` + ``patch_names`` aligned to insertion order
+      → ASCII multi-solid STL whose ``solid <name>`` headers match the
+      sanitized names returned by :func:`detect_patches`. This is what the
+      ``snappyHexMeshDict.stub`` references — the names MUST agree or the
+      sHM regions stage at M7 has nothing to bind to.
+    * Multi-geometry ``Scene`` without ``patch_names`` → concatenate to a
+      single mesh + binary STL (legacy fallback).
+    """
+    if isinstance(mesh_or_loaded, trimesh.Scene):
+        geoms = list(mesh_or_loaded.geometry.values())
+        if not geoms:
+            return b""
+        if len(geoms) == 1:
+            return geoms[0].export(file_type="stl")
+        if patch_names and len(patch_names) == len(geoms):
+            chunks: list[bytes] = []
+            for name, mesh in zip(patch_names, geoms):
+                chunks.append(_ascii_with_solid_name(mesh, name))
+            return b"".join(chunks)
+        # Fallback: concat + binary. Loses solid-name identity — acceptable
+        # only when caller has no patch_names contract to honor.
+        return trimesh.util.concatenate(geoms).export(file_type="stl")
+    return mesh_or_loaded.export(file_type="stl")

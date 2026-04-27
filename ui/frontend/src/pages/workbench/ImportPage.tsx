@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
@@ -7,6 +7,25 @@ import type {
   ImportSTLResponse,
   IngestReport,
 } from "@/types/import_geometry";
+
+// Probe the import endpoint to confirm the backend was installed with the
+// `[workbench]` extra (trimesh + python-multipart + scipy). The base `[ui]`
+// install soft-skips the route, so navigating here would 404 every upload
+// without any indication of why. A GET probe returns 405 (Method Not
+// Allowed) when the POST-only route is mounted, 404 when it is not.
+type ImportFeatureState = "probing" | "available" | "unavailable";
+
+async function probeImportEndpoint(): Promise<ImportFeatureState> {
+  try {
+    const res = await fetch("/api/import/stl", { method: "GET" });
+    if (res.status === 404) return "unavailable";
+    return "available";
+  } catch {
+    // Network failure — treat as unavailable so the user gets a clear
+    // banner instead of a working-looking upload form.
+    return "unavailable";
+  }
+}
 
 // M5.0 · STL Case Import (routine path).
 // Single-page upload flow: file picker → POST /api/import/stl →
@@ -26,6 +45,17 @@ export function ImportPage() {
   const [response, setResponse] = useState<ImportSTLResponse | null>(null);
   const [rejection, setRejection] = useState<ImportRejectionDetail | null>(null);
   const [networkError, setNetworkError] = useState<string>("");
+  const [featureState, setFeatureState] = useState<ImportFeatureState>("probing");
+
+  useEffect(() => {
+    let cancelled = false;
+    probeImportEndpoint().then((state) => {
+      if (!cancelled) setFeatureState(state);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function reset() {
     setFile(null);
@@ -79,7 +109,22 @@ export function ImportPage() {
         </p>
       </header>
 
-      {!response && (
+      {featureState === "unavailable" && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-6 text-sm text-amber-100">
+          <strong className="block text-amber-200">
+            STL import is not enabled on this backend.
+          </strong>
+          <p className="mt-2 text-[13px] text-amber-100/90">
+            The import route requires the optional <code>[workbench]</code>{" "}
+            extras (<code>trimesh</code>, <code>scipy</code>,{" "}
+            <code>python-multipart</code>). Reinstall with{" "}
+            <code className="font-mono">uv pip install -e ".[workbench]"</code>{" "}
+            to enable uploads.
+          </p>
+        </div>
+      )}
+
+      {featureState !== "unavailable" && !response && (
         <div className="rounded-md border border-surface-800 bg-surface-900/40 p-6">
           <label className="block text-xs font-mono uppercase tracking-wider text-surface-500">
             STL file (max {MAX_DISPLAY_MB} MB)
@@ -118,10 +163,14 @@ export function ImportPage() {
             <button
               type="button"
               onClick={onUpload}
-              disabled={!file || uploading}
+              disabled={!file || uploading || featureState !== "available"}
               className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {uploading ? "Uploading…" : "Upload & create case"}
+              {featureState === "probing"
+                ? "Checking backend…"
+                : uploading
+                ? "Uploading…"
+                : "Upload & create case"}
             </button>
           </div>
 

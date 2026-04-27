@@ -126,6 +126,7 @@ async def import_stl_route(file: UploadFile = File(...)) -> ImportSTLResponse:
     result = scaffold_imported_case(
         report=report,
         combined=combined,
+        loaded=loaded,
         origin_filename=origin_filename,
     )
 
