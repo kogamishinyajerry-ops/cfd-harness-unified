@@ -653,31 +653,45 @@ class FoamAgentExecutor:
                     "before invoking the executor with this flag set.",
                     time.monotonic() - t0,
                 )
-            # Append random hex to the ms timestamp so concurrent runs
-            # of the same source case (same basename, same ms) can't
-            # collide on case_host_dir. 32 bits + ms makes collision
-            # vanishingly rare; the cleanup-only-what-we-created guard
-            # below catches the residual case where it does happen.
+            # case_id construction:
+            #   - random hex avoids ms-timestamp collisions on concurrent
+            #     runs of the same source case
+            #   - hash the source basename when it would push the
+            #     resulting filename past typical 255-byte FS limits
+            #     (e.g. ext4, APFS). Short basenames pass through
+            #     unchanged so logs / audit packages stay readable.
+            import hashlib
             import secrets
 
+            src_basename = src_case_dir.name
+            if len(src_basename) > 80:
+                src_basename = (
+                    hashlib.sha256(src_basename.encode("utf-8")).hexdigest()[:16]
+                )
             case_id = (
-                f"imported_{src_case_dir.name}_"
+                f"imported_{src_basename}_"
                 f"{int(time.time() * 1000)}_{secrets.token_hex(4)}"
             )
             case_host_dir = self._work_dir / case_id
             case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
-            # Capture pre-existence: copytree's "destination already
-            # exists" failure must NOT trigger our rmtree, otherwise a
-            # concurrent run's live case dir would be deleted.
-            preexisted = case_host_dir.exists()
             try:
                 self._work_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(src_case_dir, case_host_dir)
+            except FileExistsError as exc:
+                # A concurrent run owns case_host_dir (TOCTOU race
+                # past the random suffix). The destination dir is
+                # NOT ours to clean — fail without touching it.
+                return self._fail(
+                    f"Failed to stage imported case "
+                    f"{src_case_dir} → {case_host_dir}: another run is "
+                    f"using this path ({exc})",
+                    time.monotonic() - t0,
+                )
             except Exception as exc:
-                # Only clean up if we created the dir ourselves and it
-                # is still partial. If preexisted=True, another run
-                # owns that path — leave it alone.
-                if not preexisted and case_host_dir.exists():
+                # Anything else (ENOSPC, unreadable file, etc.) means
+                # copytree got past the initial dest_root.mkdir() and
+                # may have left a partial copy behind. Sweep it.
+                if case_host_dir.exists():
                     shutil.rmtree(case_host_dir, ignore_errors=True)
                 return self._fail(
                     f"Failed to stage imported case "

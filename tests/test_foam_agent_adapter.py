@@ -3368,12 +3368,85 @@ class TestM6_1MeshAlreadyProvidedFlag:
             f"partial staged copy leaked into work_dir: {leftover}"
         )
 
+    def test_long_source_basename_is_hashed_to_fit_filename_limit(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-5 P3: source basenames over 80 chars are
+        replaced by a 16-char sha256 prefix so the resulting case_id
+        stays well under the 255-byte filename limit on typical
+        filesystems (ext4, APFS)."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        # 200-character basename — round-5's reported failure mode.
+        long_name = "a" * 200
+        src_case_dir = tmp_path / "external" / long_name
+        (src_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (src_case_dir / "constant" / "polyMesh" / "points").write_text("x")
+
+        work_dir = tmp_path / "executor_work"
+
+        task = TaskSpec(
+            name="m6_1-long-basename",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            case_dir_override=str(src_case_dir),
+        )
+
+        called: list[str] = []
+        staged_paths: list[Path] = []
+
+        def fake_docker_exec(self_, command, working_dir, timeout):
+            called.append(command)
+            return True, "ok"
+
+        original_copytree = adapter_mod.shutil.copytree
+
+        def capturing_copytree(src, dst, *args, **kwargs):
+            staged_paths.append(Path(dst))
+            return original_copytree(src, dst, *args, **kwargs)
+
+        monkeypatch.setattr(adapter_mod.shutil, "copytree", capturing_copytree)
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_copy_postprocess_fields",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=work_dir)
+        executor.execute(task)
+
+        assert staged_paths, "copytree was not invoked"
+        # The basename portion must be capped (16-char hash, not the
+        # original 200 chars).
+        case_id = staged_paths[0].name
+        assert long_name not in case_id, (
+            f"long source basename leaked into staged case_id: {case_id}"
+        )
+        assert len(case_id) < 80, (
+            f"case_id too long even after hashing: {len(case_id)} chars"
+        )
+
     def test_staging_collision_does_not_delete_concurrent_run(
         self, tmp_path, monkeypatch
     ):
-        """Codex round-4 P2: when copytree fails because case_host_dir
-        already exists (a concurrent run owns it), the rollback must
-        NOT rmtree it — that would wipe the other run's live case."""
+        """Codex round-4 P2 / round-5 P2: when copytree raises
+        FileExistsError (the actual TOCTOU race window where another
+        run won between case_host_dir resolution and copytree), the
+        rollback must NOT rmtree the destination — that would wipe
+        the other run's live case."""
         import src.foam_agent_adapter as adapter_mod
 
         _make_running_docker_mock(monkeypatch)
