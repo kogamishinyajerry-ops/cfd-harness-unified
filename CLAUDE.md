@@ -57,7 +57,7 @@ Schema-invalid → wrapper exits non-zero → review not triggered → fix schem
 ## Tier 1 → Tier 2 escalation
 
 If any of the following occurs, trigger an independent DEC for Tier 2 OS sandbox upgrade:
-- Q1 canary regression test fails (`scripts/governance/verify_q1_canary.py`, monthly cron)
+- Q1 canary regression test fails (`scripts/governance/verify_q1_canary.py`, dependency-triggered: claude CLI version change — runs in wrapper before each Kogami invocation if `claude --version` differs from baseline)
 - Anthropic upgrades `claude` CLI and any §3.1 flag combo behavior changes
 - Live governance incident attributed to Kogami exceeding isolation
 - Q5 keyword sampling shows new content-leak vector (`scripts/governance/verify_q5_keyword_sampling.py`)
@@ -80,7 +80,10 @@ Tier 2 implementation options (out-of-scope for DEC-V61-087):
 - `.planning/methodology/kogami_counter_rules.md` (P-5: counter rules)
 - `.planning/decisions/2026-04-27_v61_087_kogami_cosplay_bootstrap.md` (P-7: this DEC)
 
-## Verification scripts (run on `claude` CLI version change OR monthly)
+## Verification scripts (run on `claude` CLI version change · NO calendar gating)
+
+> Per 项目"禁用日期/调度门控"原则: scripts run on dependency triggers, not timers.
+> Q1 canary auto-runs from `kogami_invoke.sh` when `claude --version` differs from `.planning/governance/claude_version_baseline.txt`.
 
 - `python3 scripts/governance/verify_q1_canary.py` — Q1 canary regression test (target: 5/5 zero leaks)
 - `python3 scripts/governance/verify_q5_keyword_sampling.py` — Q5 keyword sampling (target: 0 content hits)

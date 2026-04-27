@@ -1,0 +1,20 @@
+{
+  "review_path": ".planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/review.json",
+  "verdict_in_kogami_review": "APPROVE_WITH_COMMENTS",
+  "kogami_findings_count": 5,
+  "regex_table_hits": [
+    {
+      "id": "F1",
+      "name": "P0-1 prompt-contract isolation not enforceable",
+      "matched": "prompt-contract"
+    },
+    {
+      "id": "F5",
+      "name": "P1-3 acceptance criteria subjective / yes-and",
+      "matched": "canary"
+    }
+  ],
+  "hits_count": 2,
+  "pass_threshold": 2,
+  "verdict": "PASS"
+}

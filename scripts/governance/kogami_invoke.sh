@@ -31,6 +31,40 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 OUT_DIR="${REPO_ROOT}/.planning/reviews/kogami/${TOPIC}_${DATE}"
 mkdir -p "$OUT_DIR"
 
+# ─────────────────────────────────────────────────────────────────────
+# Dependency-triggered Q1 canary (per DEC-V61-087 §3.6 + 项目"禁用日期/调度门控"原则)
+# Trigger: claude CLI version change (NOT calendar). If `claude --version`
+# differs from .planning/governance/claude_version_baseline.txt, run Q1 canary
+# before allowing Kogami invocation. Canary fail → abort with Tier 2 escalation.
+# ─────────────────────────────────────────────────────────────────────
+BASELINE_FILE="${REPO_ROOT}/.planning/governance/claude_version_baseline.txt"
+CURRENT_VERSION=$(claude --version 2>&1 | tr -d '\r\n')
+
+if [[ ! -f "$BASELINE_FILE" ]]; then
+    echo "[kogami] no version baseline yet — first-run canary required"
+    NEED_CANARY=1
+elif [[ "$(cat "$BASELINE_FILE" | tr -d '\r\n')" != "$CURRENT_VERSION" ]]; then
+    echo "[kogami] claude CLI version change detected:"
+    echo "  baseline: $(cat "$BASELINE_FILE")"
+    echo "  current : $CURRENT_VERSION"
+    echo "[kogami] dependency-triggered canary required"
+    NEED_CANARY=1
+else
+    NEED_CANARY=0
+fi
+
+if [[ "$NEED_CANARY" == "1" ]]; then
+    echo "[kogami] running Q1 canary regression test (5 runs)..."
+    if python3 "${REPO_ROOT}/scripts/governance/verify_q1_canary.py" --runs 5; then
+        echo "$CURRENT_VERSION" > "$BASELINE_FILE"
+        echo "[kogami] Q1 canary PASS — baseline updated to: $CURRENT_VERSION"
+    else
+        echo "[kogami] ⛔ Q1 canary FAIL — Tier 2 escalation triggered (per DEC-V61-087 §3.6)"
+        echo "[kogami] Refusing to invoke Kogami. Open an independent DEC for Tier 2 OS sandbox."
+        exit 2
+    fi
+fi
+
 EMPTY_CWD=$(mktemp -d /tmp/strategic_brief_cwd_XXXXXX)
 EMPTY_MCP=$(mktemp /tmp/strategic_brief_mcp_XXXXXX.json)
 echo '{"mcpServers": {}}' > "$EMPTY_MCP"

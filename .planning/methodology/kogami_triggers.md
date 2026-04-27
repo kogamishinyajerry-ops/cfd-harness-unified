@@ -124,7 +124,7 @@ audit on accumulated review history.
 If any of these occur, this entire trigger system needs Tier 2 OS sandbox upgrade
 (independent DEC, not in scope of DEC-V61-087):
 
-- Q1 canary regression test (monthly cron) fails
+- Q1 canary regression test (dependency-triggered: `claude --version` change) fails
 - Anthropic upgrades `claude` CLI and any §3.1 flag combo behavior changes
 - Live governance incident attributed to Kogami exceeding isolation
 - Q5 keyword sampling shows new content-leak vector
