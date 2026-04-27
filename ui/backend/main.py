@@ -55,6 +55,7 @@ from ui.backend.routes import (
     exports,
     field_artifacts,
     health,
+    import_geometry,
     mesh_metrics,
     preflight,
     run_history,
@@ -104,3 +105,4 @@ app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
 app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
+app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])

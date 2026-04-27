@@ -41,12 +41,20 @@ export function WorkbenchIndexPage() {
       <header className="mb-6">
         <div className="flex items-baseline justify-between">
           <h1 className="text-2xl font-semibold text-surface-100">Workbench</h1>
-          <Link
-            to="/workbench/today"
-            className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
-          >
-            Today's runs →
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/workbench/import"
+              className="rounded-sm border border-surface-700 bg-surface-900/40 px-3 py-1 text-xs text-surface-200 transition hover:bg-surface-800"
+            >
+              Import STL →
+            </Link>
+            <Link
+              to="/workbench/today"
+              className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+            >
+              Today's runs →
+            </Link>
+          </div>
         </div>
         <p className="mt-1 text-[13px] text-surface-400">
           Pick a case to edit parameters and run a real Docker + OpenFOAM

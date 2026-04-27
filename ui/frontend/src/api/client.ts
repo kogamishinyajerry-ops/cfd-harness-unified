@@ -30,6 +30,10 @@ import type {
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 import type {
+  ImportRejectionDetail,
+  ImportSTLResponse,
+} from "@/types/import_geometry";
+import type {
   RecentRunsResponse,
   RunDetail,
   RunHistoryListResponse,
@@ -58,11 +62,13 @@ async function request<T>(
 
 export class ApiError extends Error {
   status: number;
+  detail?: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.status = status;
     this.name = "ApiError";
+    this.detail = detail;
   }
 }
 
@@ -178,4 +184,35 @@ export const api = {
     }),
   wizardRunStreamUrl: (caseId: string) =>
     `/api/wizard/run/${encodeURIComponent(caseId)}/stream`,
+
+  // M5.0 · STL case import. Multipart upload — bypasses the JSON-only
+  // request() helper because FormData sets its own Content-Type boundary
+  // and the route returns a structured rejection body on 4xx that the
+  // UI needs preserved as ApiError.detail.
+  importStl: async (file: File): Promise<ImportSTLResponse> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const resp = await fetch("/api/import/stl", {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+    });
+    if (!resp.ok) {
+      let detail: ImportRejectionDetail | string | undefined;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as ImportRejectionDetail).reason
+          : typeof detail === "string"
+            ? detail
+            : `import failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as ImportSTLResponse;
+  },
 };

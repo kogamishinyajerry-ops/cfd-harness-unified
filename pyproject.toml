@@ -67,6 +67,22 @@ cfd-real-solver = [
     # Install: `.venv/bin/pip install -e '.[cfd-real-solver]'`
     "docker>=7.0",
 ]
+workbench = [
+    # M5 STL case import (geometry_ingest + case_scaffold). trimesh is the
+    # canonical loader: watertight check, bbox, named-solid extraction,
+    # canonical re-serialization. Optional because non-workbench install
+    # paths (CI line-B, foam_agent_adapter) don't need it.
+    # scipy is a transitive requirement of trimesh.body_count (connected-
+    # components graph analysis) — explicit-pin it so the multi-shell
+    # health check does not silently degrade.
+    # python-multipart is required by FastAPI's File/UploadFile in the
+    # POST /api/import/stl route — no other route in the app uses
+    # multipart, so the dep stays scoped to this extras group.
+    # Install: `.venv/bin/pip install -e '.[workbench]'`
+    "trimesh>=4.0",
+    "scipy>=1.13",
+    "python-multipart>=0.0.9",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

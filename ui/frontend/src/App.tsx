@@ -11,6 +11,7 @@ import { LearnCaseDetailPage } from "@/pages/learn/LearnCaseDetailPage";
 import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { EditCasePage } from "@/pages/workbench/EditCasePage";
+import { ImportPage } from "@/pages/workbench/ImportPage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
@@ -65,6 +66,12 @@ export default function App() {
         <Route path="/workbench/today" element={<WorkbenchTodayPage />} />
         {/* Stage 8a · Onboarding Workbench — newcomer's first-case wizard */}
         <Route path="/workbench/new" element={<NewCaseWizardPage />} />
+        {/* M5.0 (2026-04-27) · STL case import — workbench-side upload that
+            ingests via trimesh + scaffolds an OpenFOAM case dir and routes
+            to /workbench/case/:caseId/edit. Imported cases get
+            source_origin=imported_user; M5.1 will hard-cap their verdicts
+            at PASS_WITH_DISCLAIMER on the trust-core path. */}
+        <Route path="/workbench/import" element={<ImportPage />} />
         <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />
         {/* M2 (2026-04-26) · Workbench Closed-Loop main-line — param-form
             editor for an existing whitelist case. Saves to user_drafts/ and
