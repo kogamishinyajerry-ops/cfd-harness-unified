@@ -692,16 +692,33 @@ class FoamAgentExecutor:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
 
-            # 5. 执行 blockMesh
-            blockmesh_ok, blockmesh_log = self._docker_exec(
-                "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
-            )
-            if not blockmesh_ok:
-                return self._fail(
-                    f"blockMesh failed:\n{blockmesh_log}",
-                    time.monotonic() - t0,
-                    raw_output_path=raw_output_path,
+            # 5. 执行 blockMesh — DEC-V61-090 (M6.1): skipped when an
+            # upstream stage has already produced constant/polyMesh/
+            # (e.g. M6.0's gmsh + gmshToFoam path for imported user
+            # geometry). Defensive check: when the flag is set but no
+            # polyMesh is on disk, fail fast — running the solver on
+            # an empty mesh would emit nonsense residuals.
+            if task_spec.mesh_already_provided:
+                polyMesh_dir = case_host_dir / "constant" / "polyMesh"
+                if not polyMesh_dir.is_dir():
+                    return self._fail(
+                        "task_spec.mesh_already_provided=True but "
+                        f"{polyMesh_dir} does not exist — upstream stage "
+                        "must produce the polyMesh before invoking the "
+                        "executor with this flag set.",
+                        time.monotonic() - t0,
+                        raw_output_path=raw_output_path,
+                    )
+            else:
+                blockmesh_ok, blockmesh_log = self._docker_exec(
+                    "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
                 )
+                if not blockmesh_ok:
+                    return self._fail(
+                        f"blockMesh failed:\n{blockmesh_log}",
+                        time.monotonic() - t0,
+                        raw_output_path=raw_output_path,
+                    )
 
             # topoSet/createBaffles only needed for circular cylinder wake (BODY_IN_CHANNEL EXTERNAL)
             # AIRFOIL uses a direct 2D blockMesh around the projected airfoil surface.

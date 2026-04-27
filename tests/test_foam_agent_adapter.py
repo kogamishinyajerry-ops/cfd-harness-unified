@@ -3037,3 +3037,213 @@ class TestNACA0012MultiDim:
         assert sc["excluded_from_gate_set"] is True
         assert sc["expected_value"] == 0.0
         assert sc["expected_band_absolute"] == 0.005
+
+
+# ----------------------------------------------------------------------
+# DEC-V61-090 (M6.1) · mesh_already_provided + blockMesh skip
+# ----------------------------------------------------------------------
+
+
+def _make_running_docker_mock(monkeypatch):
+    """Set up a fake docker module + running container that the
+    docker-init block at FoamAgentExecutor.execute lines 578-620
+    accepts. Returns the fake docker module so callers can introspect
+    container.exec_run calls if they want."""
+    class FakeDockerException(Exception):
+        pass
+
+    class FakeNotFound(FakeDockerException):
+        pass
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+
+    mock_docker = MagicMock()
+    mock_docker.errors.DockerException = FakeDockerException
+    mock_docker.errors.NotFound = FakeNotFound
+    mock_docker.from_env.return_value.containers.get.return_value = fake_container
+
+    import sys as _sys
+    monkeypatch.setitem(_sys.modules, "docker", mock_docker)
+    monkeypatch.setitem(_sys.modules, "docker.errors", mock_docker.errors)
+    monkeypatch.setattr("src.foam_agent_adapter._DOCKER_AVAILABLE", True)
+    monkeypatch.setattr("src.foam_agent_adapter.docker", mock_docker)
+    return mock_docker
+
+
+class TestM6_1MeshAlreadyProvidedFlag:
+    """DEC-V61-090 (M6.1) · trust-core micro-PR.
+
+    When TaskSpec.mesh_already_provided=True AND case_dir/constant/
+    polyMesh/ exists, FoamAgentExecutor.execute() must skip blockMesh
+    and proceed. When the flag is False (default), behavior must be
+    identical to pre-M6.1 (regression guard). When the flag is set
+    but polyMesh is missing, fail fast with a clear message — running
+    the solver on an empty mesh would yield nonsense residuals.
+    """
+
+    def test_taskspec_default_flag_is_false(self):
+        """Backward-compat invariant: every existing TaskSpec call site
+        constructs a TaskSpec without mesh_already_provided=True."""
+        task = TaskSpec(
+            name="default-flag-check",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+        )
+        assert task.mesh_already_provided is False
+
+    def test_blockmesh_skipped_when_flag_set_and_polymesh_present(
+        self, tmp_path, monkeypatch
+    ):
+        """Flag=True + polyMesh on disk → blockMesh must NOT be invoked.
+        Asserts the M6.1 skip path is reachable and active."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        task = TaskSpec(
+            name="m6_1-skip",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+            mesh_already_provided=True,
+        )
+
+        called: list[str] = []
+
+        def fake_docker_exec(self_, command, working_dir, timeout):
+            called.append(command)
+            return True, "ok"
+
+        original_generate = adapter_mod.FoamAgentExecutor._generate_lid_driven_cavity
+
+        def gen_with_polymesh(self_, case_dir, task_spec):
+            original_generate(self_, case_dir, task_spec)
+            (case_dir / "constant" / "polyMesh").mkdir(parents=True, exist_ok=True)
+
+        # Stub docker_exec so blockMesh / topoSet / solver / postProcess
+        # all return success without actually invoking the container.
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+        )
+        # Drop the polyMesh into the case dir as part of the geometry
+        # generation step so the M6.1 defensive check passes.
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_generate_lid_driven_cavity",
+            gen_with_polymesh,
+        )
+        # Bypass field-artifact capture (relies on real container files).
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_copy_postprocess_fields",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=tmp_path)
+        executor.execute(task)
+        assert "blockMesh" not in called, (
+            f"blockMesh must NOT be invoked when mesh_already_provided=True "
+            f"and polyMesh is present; got calls: {called}"
+        )
+
+    def test_blockmesh_runs_when_flag_default_false(self, tmp_path, monkeypatch):
+        """Regression guard: every existing whitelist case path must
+        still call blockMesh when the (default) flag is False."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        task = TaskSpec(
+            name="m6_1-regression",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+            # mesh_already_provided defaults to False
+        )
+
+        called: list[str] = []
+
+        def fake_docker_exec(self_, command, working_dir, timeout):
+            called.append(command)
+            return True, "ok"
+
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_copy_postprocess_fields",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=tmp_path)
+        executor.execute(task)
+        assert "blockMesh" in called, (
+            f"blockMesh MUST be invoked when mesh_already_provided is False "
+            f"(default); regression detected. Calls: {called}"
+        )
+
+    def test_fails_fast_when_flag_set_but_polymesh_missing(
+        self, tmp_path, monkeypatch
+    ):
+        """Defensive check: flag=True + no polyMesh on disk → executor
+        must early-return success=False BEFORE invoking the solver."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        task = TaskSpec(
+            name="m6_1-defensive",
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=100,
+            mesh_already_provided=True,
+        )
+
+        called: list[str] = []
+
+        def fake_docker_exec(self_, command, working_dir, timeout):
+            called.append(command)
+            return True, "ok"
+
+        # Default _generate_lid_driven_cavity does NOT create polyMesh —
+        # exactly the failure mode this test exercises.
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=tmp_path)
+        result = executor.execute(task)
+
+        assert result.success is False
+        assert "polyMesh" in (result.error_message or "")
+        assert "mesh_already_provided" in (result.error_message or "")
+        # Solver step must not have been reached.
+        for cmd in called:
+            assert "Foam" not in cmd, (
+                f"solver was invoked despite missing polyMesh: {called}"
+            )

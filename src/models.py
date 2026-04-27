@@ -85,6 +85,14 @@ class TaskSpec:
     # dataclass backward-compatible for all 79/79 existing tests.
     metadata: Optional[Dict[str, Any]] = None
 
+    # M6.1 (DEC-V61-090) — when True, FoamAgentExecutor.execute() skips
+    # the blockMesh step and verifies that a polyMesh is already present
+    # under the case dir. Used by the M7 dispatch path for imported
+    # user cases where the polyMesh has been pre-built by gmsh +
+    # gmshToFoam (M6.0). Default False is the existing whitelist
+    # behavior — every gold case still runs blockMesh exactly as before.
+    mesh_already_provided: bool = False
+
 
 @dataclass
 class ExecutionResult:
