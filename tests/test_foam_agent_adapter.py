@@ -3439,6 +3439,73 @@ class TestM6_1MeshAlreadyProvidedFlag:
             f"case_id too long even after hashing: {len(case_id)} chars"
         )
 
+    def test_multibyte_basename_hashed_by_encoded_byte_length(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-6 P2: filesystems cap filename components by
+        BYTE length (255 bytes on ext4/APFS), but len() returns
+        characters. A 76-char CJK basename (≈228 bytes UTF-8) must
+        still trip the hash guard; a 60-char CJK basename (≈180
+        bytes) passes through unchanged."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        # 76 CJK characters = 228 UTF-8 bytes. Adding the M6.1
+        # "imported_<basename>_<13-digit-ms>_<8-hex>" wrapper would
+        # exceed 255 bytes if the hash guard skipped this.
+        long_cjk = "案" * 76
+        src_case_dir = tmp_path / "external" / long_cjk
+        (src_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (src_case_dir / "constant" / "polyMesh" / "points").write_text("x")
+
+        work_dir = tmp_path / "executor_work"
+
+        task = TaskSpec(
+            name="m6_1-cjk-basename",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            case_dir_override=str(src_case_dir),
+        )
+
+        original_copytree = adapter_mod.shutil.copytree
+        staged_paths: list[Path] = []
+
+        def capturing_copytree(src, dst, *args, **kwargs):
+            staged_paths.append(Path(dst))
+            return original_copytree(src, dst, *args, **kwargs)
+
+        monkeypatch.setattr(adapter_mod.shutil, "copytree", capturing_copytree)
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_docker_exec",
+            lambda self_, *a, **kw: (True, "ok"),
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_capture_field_artifacts",
+            lambda self_, *a, **kw: None,
+        )
+        monkeypatch.setattr(
+            adapter_mod.FoamAgentExecutor,
+            "_copy_postprocess_fields",
+            lambda self_, *a, **kw: None,
+        )
+
+        executor = FoamAgentExecutor(work_dir=work_dir)
+        executor.execute(task)
+
+        assert staged_paths, "copytree was not invoked"
+        case_id = staged_paths[0].name
+        # CJK basename must NOT have leaked into the staged path —
+        # the hash guard should fire at 228 bytes UTF-8.
+        assert long_cjk not in case_id
+        # And the encoded length must be safely under 255 bytes.
+        assert len(case_id.encode("utf-8")) < 255
+
     def test_staging_collision_does_not_delete_concurrent_run(
         self, tmp_path, monkeypatch
     ):

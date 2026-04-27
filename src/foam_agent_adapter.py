@@ -664,7 +664,11 @@ class FoamAgentExecutor:
             import secrets
 
             src_basename = src_case_dir.name
-            if len(src_basename) > 80:
+            # Check ENCODED byte length, not character count: byte-limited
+            # filesystems (ext4, APFS) cap component names at 255 bytes,
+            # so a 76-character Chinese name (≈228 bytes) is just as
+            # dangerous as a 200-character ASCII name.
+            if len(src_basename.encode("utf-8")) > 80:
                 src_basename = (
                     hashlib.sha256(src_basename.encode("utf-8")).hexdigest()[:16]
                 )
