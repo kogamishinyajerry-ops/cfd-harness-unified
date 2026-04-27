@@ -140,6 +140,11 @@ export function EditCasePage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["caseYaml", caseId] });
+      // Clear any stale error from a prior failed save — for whitelist
+      // cases the navigate() unmount hides it, but imported cases stay
+      // on the editor and would otherwise show "saved" with the old
+      // error banner still visible.
+      setErrorMsg("");
       if (!isImported) {
         navigate(`/workbench/run/${encodeURIComponent(caseId)}`);
       }

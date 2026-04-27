@@ -13,6 +13,11 @@ import type {
 // install soft-skips the route, so navigating here would 404 every upload
 // without any indication of why. A GET probe returns 405 (Method Not
 // Allowed) when the POST-only route is mounted, 404 when it is not.
+//
+// Only a confirmed 404 locks the page to "unavailable" — a network failure
+// is treated as "available" so a transient outage does not permanently
+// hide the upload form. If the actual upload then fails, the existing
+// rejection / network-error path surfaces the real reason.
 type ImportFeatureState = "probing" | "available" | "unavailable";
 
 async function probeImportEndpoint(): Promise<ImportFeatureState> {
@@ -21,9 +26,7 @@ async function probeImportEndpoint(): Promise<ImportFeatureState> {
     if (res.status === 404) return "unavailable";
     return "available";
   } catch {
-    // Network failure — treat as unavailable so the user gets a clear
-    // banner instead of a working-looking upload form.
-    return "unavailable";
+    return "available";
   }
 }
 
