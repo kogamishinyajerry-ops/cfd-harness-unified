@@ -69,7 +69,9 @@ This prevents Codex framing from contaminating Kogami's independent strategic ju
 
 Per DEC §Out of Scope:
 
-Kogami **cannot approve** any DEC modifying:
+Kogami **cannot approve** any of the following (file-level OR meta-level):
+
+**Files**:
 - `.claude/agents/kogami-claude-cosplay.md` (P-1)
 - `scripts/governance/kogami_invoke.sh` (P-1.5)
 - `scripts/governance/kogami_brief.py` (P-2)
@@ -78,12 +80,19 @@ Kogami **cannot approve** any DEC modifying:
 - `.planning/methodology/kogami_triggers.md` (P-4 — this file)
 - `.planning/methodology/kogami_counter_rules.md` (P-5)
 
-For such DECs, the trigger STILL fires (transparency), but Kogami MUST return
-`CHANGES_REQUIRED` with verdict reason "out_of_scope_self_modification". The
+**Meta DECs** (recursion gap closure · per W3 blind-control Kogami P2-1 finding):
+- DEC-V61-087 itself (the governance contract)
+- Any DEC whose `parent_dec` field includes `DEC-V61-087` (successor governance evolution)
+- Any DEC whose subject matter modifies the Kogami isolation contract, counter rules,
+  trigger rules, or Tier 1/Tier 2 boundary — **regardless of which file paths are touched**
+
+For all the above, the trigger STILL fires (transparency), but Kogami MUST return
+`CHANGES_REQUIRED` with verdict reason `out_of_scope_self_modification`. The
 required path is: user explicit ratification + Codex review APPROVE.
 
 This rule prevents governance self-inflation (Kogami approving expansion of its
-own scope).
+own scope) AND closes the framing-bypass loophole (a DEC re-architecting Kogami
+without touching P-1..P-5 files is still self-modification).
 
 ## Strategic package authoring (high-risk PR only)
 
