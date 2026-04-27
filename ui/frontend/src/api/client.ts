@@ -215,4 +215,40 @@ export const api = {
     }
     return (await resp.json()) as ImportSTLResponse;
   },
+
+  // M6.0 · gmsh meshing for an imported case. Returns a mesh summary +
+  // optional warning (5M soft cap exceeded). Errors come back with a
+  // failing_check enum on .detail so the page can render a targeted
+  // remediation hint per failure mode.
+  meshImported: async (
+    caseId: string,
+    meshMode: import("@/types/mesh_imported").MeshMode,
+  ): Promise<import("@/types/mesh_imported").MeshSuccessResponse> => {
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/mesh`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ mesh_mode: meshMode }),
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: import("@/types/mesh_imported").MeshRejectionDetail | string | undefined;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as { reason: string }).reason
+          : typeof detail === "string"
+            ? detail
+            : `mesh failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/mesh_imported").MeshSuccessResponse;
+  },
 };

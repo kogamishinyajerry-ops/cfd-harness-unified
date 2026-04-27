@@ -295,11 +295,23 @@ export function EditCasePage() {
           )}
 
           {isImported && (
-            <p className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              Imported case · the run path is implemented in M7. You can save
-              draft edits now; running will become available once meshing +
-              dispatch are wired in.
-            </p>
+            <div className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <p>
+                Imported case · the run path is implemented in M7. You can
+                save draft edits now; running will become available once
+                meshing + dispatch are wired in.
+              </p>
+              <p className="mt-2">
+                <Link
+                  to={`/workbench/case/${encodeURIComponent(caseId)}/mesh`}
+                  className="font-semibold underline hover:text-amber-100"
+                >
+                  Generate mesh (M6.0) →
+                </Link>{" "}
+                builds <code className="font-mono">constant/polyMesh/</code>{" "}
+                with gmsh so M7 can pick it up.
+              </p>
+            </div>
           )}
 
           <div className="flex flex-wrap items-center gap-3 pt-2">

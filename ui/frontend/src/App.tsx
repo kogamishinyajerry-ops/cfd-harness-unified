@@ -12,6 +12,7 @@ import { LearnHomePage } from "@/pages/learn/LearnHomePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { EditCasePage } from "@/pages/workbench/EditCasePage";
 import { ImportPage } from "@/pages/workbench/ImportPage";
+import { MeshWizardPage } from "@/pages/workbench/MeshWizardPage";
 import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
@@ -78,6 +79,11 @@ export default function App() {
             navigates to /workbench/run/:caseId where RealSolverDriver picks
             up the override (CFD_HARNESS_WIZARD_SOLVER=real). */}
         <Route path="/workbench/case/:caseId/edit" element={<EditCasePage />} />
+        {/* M6.0 (2026-04-27) · Mesh Wizard — gmsh-based unstructured mesh
+            generation for imported cases. Writes constant/polyMesh/ via
+            gmsh + gmshToFoam (cfd-openfoam container). M7 will fill in
+            the M5.0 sHM stub on a separate path. */}
+        <Route path="/workbench/case/:caseId/mesh" element={<MeshWizardPage />} />
         {/* M3 (2026-04-26) · Run history — newest-first table of past
             real-solver runs for a case, plus per-run detail page. SSE
             run_done in WorkbenchRunPage auto-jumps to the detail. */}

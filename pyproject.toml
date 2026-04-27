@@ -82,6 +82,17 @@ workbench = [
     "trimesh>=4.0",
     "scipy>=1.13",
     "python-multipart>=0.0.9",
+    # M6.0 gmsh-based unstructured meshing path. Pinned to the 4.11/4.12
+    # series — 4.13 has not been validated against the macOS arm64
+    # universal wheel + the OpenFOAM-10 `gmshToFoam` reader format. Bump
+    # the upper bound only after a real-mesh smoke run on both Linux and
+    # macOS arm64. See spec_v2 D4 + Kogami M6 finding 4.
+    "gmsh>=4.11,<4.13",
+    # M6.0 also drives gmshToFoam inside the cfd-openfoam container.
+    # The docker SDK is *also* declared by [ui] but listing it here
+    # makes the `.[workbench]`-only install path runnable end-to-end
+    # without a hidden cross-extras dependency.
+    "docker>=7.0",
 ]
 
 [tool.pytest.ini_options]
