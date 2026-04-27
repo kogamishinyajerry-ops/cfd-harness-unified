@@ -85,27 +85,30 @@ def run_gmsh_on_imported_case(
     t0 = time.monotonic()
 
     gmsh.initialize()
+    # Wrap the entire post-init gmsh-API region in a single
+    # GmshMeshGenerationError boundary. The gmsh Python bindings raise
+    # plain `Exception` at many call sites (merge / classifySurfaces /
+    # addSurfaceLoop / addVolume / synchronize / generate /
+    # getEntities / getElements / write); per-call wrappers proved
+    # brittle (Codex round-3 caught merge/classify/generate, round-4
+    # caught synchronize). One outer boundary covers all of them
+    # without losing the GmshMeshGenerationError contract.
     try:
-        # Quiet logs — gmsh is chatty by default and the route only
-        # needs the structured result.
-        gmsh.option.setNumber("General.Terminal", 0)
-        gmsh.option.setNumber("General.Verbosity", 1)
-
-        # Merge the STL as a discrete surface. ``Mesh.Algorithm3D = 1``
-        # selects gmsh's Delaunay 3D — robust default for closed
-        # triangulated surfaces from real-world CAD exports.
-        gmsh.option.setNumber("Mesh.Algorithm3D", 1)
         try:
+            # Quiet logs — gmsh is chatty by default and the route only
+            # needs the structured result.
+            gmsh.option.setNumber("General.Terminal", 0)
+            gmsh.option.setNumber("General.Verbosity", 1)
+
+            # Merge the STL as a discrete surface. ``Mesh.Algorithm3D = 1``
+            # selects gmsh's Delaunay 3D — robust default for closed
+            # triangulated surfaces from real-world CAD exports.
+            gmsh.option.setNumber("Mesh.Algorithm3D", 1)
             gmsh.merge(str(stl_path))
-        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
-            raise GmshMeshGenerationError(
-                f"gmsh failed to load the STL: {exc}"
-            ) from exc
 
-        # Reclassify the imported triangles as a surface, then build a
-        # volume from the surface loop. This is the standard gmsh
-        # incantation for "STL → tetrahedral volume mesh".
-        try:
+            # Reclassify the imported triangles as a surface, then build
+            # a volume from the surface loop. Standard gmsh incantation
+            # for "STL → tetrahedral volume mesh".
             gmsh.model.mesh.classifySurfaces(
                 angle=40.0 * 3.141592653589793 / 180.0,
                 boundary=True,
@@ -113,69 +116,65 @@ def run_gmsh_on_imported_case(
                 curveAngle=180.0 * 3.141592653589793 / 180.0,
             )
             gmsh.model.mesh.createGeometry()
-        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
-            raise GmshMeshGenerationError(
-                f"gmsh failed to derive geometry from the STL surface: {exc}"
-            ) from exc
 
-        surfaces = gmsh.model.getEntities(dim=2)
-        if not surfaces:
-            raise GmshMeshGenerationError(
-                "gmsh found no 2D surfaces after classifying the STL "
-                "(likely a corrupt or non-watertight upload that slipped "
-                "past M5.0's health check)."
+            surfaces = gmsh.model.getEntities(dim=2)
+            if not surfaces:
+                raise GmshMeshGenerationError(
+                    "gmsh found no 2D surfaces after classifying the STL "
+                    "(likely a corrupt or non-watertight upload that slipped "
+                    "past M5.0's health check)."
+                )
+            surface_loop = gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces])
+            gmsh.model.geo.addVolume([surface_loop])
+            gmsh.model.geo.synchronize()
+
+            # Characteristic length sizing: explicit override >
+            # bbox-derived default. The cap layer (cell_budget.py) is
+            # the ultimate guard.
+            nodes = gmsh.model.mesh.getNodes()
+            if nodes and len(nodes) >= 2 and len(nodes[1]) > 0:
+                xyz = nodes[1].reshape(-1, 3).tolist()
+                diagonal = _bbox_diagonal([(p[0], p[1], p[2]) for p in xyz])
+            else:
+                diagonal = 0.0
+
+            lc = (
+                characteristic_length_override
+                if characteristic_length_override is not None
+                else _default_characteristic_length(diagonal, mesh_mode)
             )
-        surface_loop = gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces])
-        gmsh.model.geo.addVolume([surface_loop])
-        gmsh.model.geo.synchronize()
+            if lc > 0:
+                gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
+                gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
 
-        # Characteristic length sizing: explicit override > bbox-derived
-        # default. The cap layer (cell_budget.py) is the ultimate guard.
-        nodes = gmsh.model.mesh.getNodes()
-        if nodes and len(nodes) >= 2 and len(nodes[1]) > 0:
-            xyz = nodes[1].reshape(-1, 3).tolist()
-            diagonal = _bbox_diagonal([(p[0], p[1], p[2]) for p in xyz])
-        else:
-            diagonal = 0.0
-
-        lc = (
-            characteristic_length_override
-            if characteristic_length_override is not None
-            else _default_characteristic_length(diagonal, mesh_mode)
-        )
-        if lc > 0:
-            gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
-            gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
-
-        try:
             gmsh.model.mesh.generate(3)
-        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
+
+            # Element type 4 = 4-node tetrahedron in gmsh's element-type
+            # numbering. Counting only those keeps the cell_count honest
+            # if the model picks up stray surface elements.
+            elem_types, elem_tags, _ = gmsh.model.mesh.getElements(dim=3)
+            cell_count = sum(len(tags) for et, tags in zip(elem_types, elem_tags) if et == 4)
+            if cell_count == 0:
+                raise GmshMeshGenerationError(
+                    "gmsh produced zero 3D tetrahedral elements — meshing "
+                    "failed to converge on this geometry."
+                )
+
+            # Faces (2D elements on the boundary) and points for the
+            # summary. Re-fetch nodes after generate(3) so point_count
+            # reflects the volume mesh, not the input STL surface.
+            face_types, face_tags, _ = gmsh.model.mesh.getElements(dim=2)
+            face_count = sum(len(tags) for tags in face_tags)
+            post_nodes = gmsh.model.mesh.getNodes()
+            point_count = len(post_nodes[0]) if post_nodes and len(post_nodes) >= 1 else 0
+
+            gmsh.write(str(output_msh_path))
+        except GmshMeshGenerationError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
             raise GmshMeshGenerationError(
-                f"gmsh 3D mesh generation failed: {exc}"
+                f"gmsh API failure during mesh generation: {exc}"
             ) from exc
-
-        # Element type 4 = 4-node tetrahedron in gmsh's element-type
-        # numbering. Counting only those keeps the cell_count honest if
-        # the model picks up stray surface elements.
-        elem_types, elem_tags, _ = gmsh.model.mesh.getElements(dim=3)
-        cell_count = sum(len(tags) for et, tags in zip(elem_types, elem_tags) if et == 4)
-        if cell_count == 0:
-            raise GmshMeshGenerationError(
-                "gmsh produced zero 3D tetrahedral elements — meshing "
-                "failed to converge on this geometry."
-            )
-
-        # Faces (2D elements on the boundary) and points for the summary.
-        face_types, face_tags, _ = gmsh.model.mesh.getElements(dim=2)
-        face_count = sum(len(tags) for tags in face_tags)
-        # Re-fetch nodes — the earlier `nodes` variable was sampled
-        # before generate(3) and only reflects the input STL's surface
-        # vertices. Reporting the volume-mesh point count is what the
-        # UI summary actually wants.
-        post_nodes = gmsh.model.mesh.getNodes()
-        point_count = len(post_nodes[0]) if post_nodes and len(post_nodes) >= 1 else 0
-
-        gmsh.write(str(output_msh_path))
     finally:
         gmsh.finalize()
 

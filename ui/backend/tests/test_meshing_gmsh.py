@@ -186,6 +186,92 @@ def test_gmsh_runner_normalizes_raw_binding_exception(tmp_path: Path, monkeypatc
         )
 
 
+def test_gmsh_runner_wraps_late_api_exceptions(tmp_path: Path, monkeypatch):
+    """Codex round-4 P1: gmsh bindings raise plain Exception from many
+    call sites beyond merge/classify/generate (synchronize,
+    addSurfaceLoop, getEntities, etc.). The single outer boundary
+    must catch all of them as GmshMeshGenerationError."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    class _FakeGeo:
+        @staticmethod
+        def addSurfaceLoop(_tags):
+            return 1
+
+        @staticmethod
+        def addVolume(_loops):
+            return 1
+
+        @staticmethod
+        def synchronize():
+            raise Exception("synchronize() blew up")
+
+    class _FakeMesh:
+        @staticmethod
+        def classifySurfaces(**_kwargs):
+            return None
+
+        @staticmethod
+        def createGeometry():
+            return None
+
+        @staticmethod
+        def generate(_dim):
+            return None
+
+        @staticmethod
+        def getNodes():
+            return ([], [], [])
+
+        @staticmethod
+        def getElements(dim):
+            return ([], [], [])
+
+    class _FakeModel:
+        geo = _FakeGeo
+        mesh = _FakeMesh
+
+        @staticmethod
+        def getEntities(dim):
+            return [(2, 1)]
+
+    class _FakeGmsh:
+        class option:
+            @staticmethod
+            def setNumber(*args, **kwargs):
+                return None
+
+        model = _FakeModel
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            return None
+
+        @staticmethod
+        def write(_path):
+            return None
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+    with pytest.raises(runner_mod.GmshMeshGenerationError, match="synchronize"):
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+        )
+
+
 def test_to_foam_normalizes_docker_sdk_failures(tmp_path: Path):
     """Codex round-2 P2 / round-3 P2: docker SDK calls inside
     run_gmsh_to_foam (exec_run / put_archive / get_archive) raise
