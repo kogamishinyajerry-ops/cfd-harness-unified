@@ -3084,7 +3084,8 @@ class TestM6_1MeshAlreadyProvidedFlag:
 
     def test_taskspec_default_flag_is_false(self):
         """Backward-compat invariant: every existing TaskSpec call site
-        constructs a TaskSpec without mesh_already_provided=True."""
+        constructs a TaskSpec without mesh_already_provided=True or
+        case_dir_override set."""
         task = TaskSpec(
             name="default-flag-check",
             geometry_type=GeometryType.SIMPLE_GRID,
@@ -3093,51 +3094,84 @@ class TestM6_1MeshAlreadyProvidedFlag:
             compressibility=Compressibility.INCOMPRESSIBLE,
         )
         assert task.mesh_already_provided is False
+        assert task.case_dir_override is None
 
-    def test_blockmesh_skipped_when_flag_set_and_polymesh_present(
-        self, tmp_path, monkeypatch
-    ):
-        """Flag=True + polyMesh on disk → blockMesh must NOT be invoked.
-        Asserts the M6.1 skip path is reachable and active."""
+    def test_flag_without_override_rejected(self, tmp_path, monkeypatch):
+        """Codex round-1 contract guard: setting the flag without an
+        override path is a misuse — the executor has no way to find
+        polyMesh. Reject with a clear message before any work runs."""
         import src.foam_agent_adapter as adapter_mod
 
         _make_running_docker_mock(monkeypatch)
 
         task = TaskSpec(
+            name="m6_1-no-override",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            # case_dir_override deliberately not set
+        )
+
+        executor = FoamAgentExecutor(work_dir=tmp_path)
+        result = executor.execute(task)
+        assert result.success is False
+        assert "case_dir_override" in (result.error_message or "")
+
+    def test_skip_dispatch_and_blockmesh_when_flag_and_override_set(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-1 P2 fix #1+#2: flag=True + override → executor
+        uses the override dir verbatim (no fresh case_id), skips the
+        whole geometry dispatch (no _generate_*) AND skips blockMesh."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        # Stand in for what M7 will populate in production.
+        imported_case_dir = tmp_path / "imported_M6_1_skip"
+        (imported_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (imported_case_dir / "0").mkdir()
+        (imported_case_dir / "system").mkdir()
+
+        task = TaskSpec(
             name="m6_1-skip",
-            geometry_type=GeometryType.SIMPLE_GRID,
+            geometry_type=GeometryType.CUSTOM,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
             compressibility=Compressibility.INCOMPRESSIBLE,
             Re=100,
             mesh_already_provided=True,
+            case_dir_override=str(imported_case_dir),
         )
 
         called: list[str] = []
+        gen_called: list[str] = []
 
         def fake_docker_exec(self_, command, working_dir, timeout):
             called.append(command)
             return True, "ok"
 
-        original_generate = adapter_mod.FoamAgentExecutor._generate_lid_driven_cavity
+        for name in (
+            "_generate_lid_driven_cavity",
+            "_generate_backward_facing_step",
+            "_generate_natural_convection_cavity",
+            "_generate_steady_internal_channel",
+            "_generate_circular_cylinder_wake",
+            "_generate_airfoil_flow",
+            "_generate_impinging_jet",
+            "_generate_steady_internal_flow",
+        ):
+            monkeypatch.setattr(
+                adapter_mod.FoamAgentExecutor,
+                name,
+                (lambda nm: lambda self_, *a, **kw: gen_called.append(nm))(name),
+            )
 
-        def gen_with_polymesh(self_, case_dir, task_spec):
-            original_generate(self_, case_dir, task_spec)
-            (case_dir / "constant" / "polyMesh").mkdir(parents=True, exist_ok=True)
-
-        # Stub docker_exec so blockMesh / topoSet / solver / postProcess
-        # all return success without actually invoking the container.
         monkeypatch.setattr(
             adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
         )
-        # Drop the polyMesh into the case dir as part of the geometry
-        # generation step so the M6.1 defensive check passes.
-        monkeypatch.setattr(
-            adapter_mod.FoamAgentExecutor,
-            "_generate_lid_driven_cavity",
-            gen_with_polymesh,
-        )
-        # Bypass field-artifact capture (relies on real container files).
         monkeypatch.setattr(
             adapter_mod.FoamAgentExecutor,
             "_capture_field_artifacts",
@@ -3152,8 +3186,12 @@ class TestM6_1MeshAlreadyProvidedFlag:
         executor = FoamAgentExecutor(work_dir=tmp_path)
         executor.execute(task)
         assert "blockMesh" not in called, (
-            f"blockMesh must NOT be invoked when mesh_already_provided=True "
-            f"and polyMesh is present; got calls: {called}"
+            f"blockMesh must NOT be invoked when mesh_already_provided=True; "
+            f"got calls: {called}"
+        )
+        assert gen_called == [], (
+            f"No _generate_* method should run when mesh_already_provided=True; "
+            f"got {gen_called}"
         )
 
     def test_blockmesh_runs_when_flag_default_false(self, tmp_path, monkeypatch):
@@ -3200,23 +3238,29 @@ class TestM6_1MeshAlreadyProvidedFlag:
             f"(default); regression detected. Calls: {called}"
         )
 
-    def test_fails_fast_when_flag_set_but_polymesh_missing(
+    def test_fails_fast_when_override_set_but_polymesh_missing(
         self, tmp_path, monkeypatch
     ):
-        """Defensive check: flag=True + no polyMesh on disk → executor
-        must early-return success=False BEFORE invoking the solver."""
+        """Defensive check: flag=True + override pointing at a dir
+        WITHOUT a polyMesh subdirectory → executor must early-return
+        success=False BEFORE invoking the solver."""
         import src.foam_agent_adapter as adapter_mod
 
         _make_running_docker_mock(monkeypatch)
 
+        # Override dir exists but lacks constant/polyMesh.
+        empty_case_dir = tmp_path / "imported_M6_1_empty"
+        empty_case_dir.mkdir()
+
         task = TaskSpec(
             name="m6_1-defensive",
-            geometry_type=GeometryType.SIMPLE_GRID,
+            geometry_type=GeometryType.CUSTOM,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
             compressibility=Compressibility.INCOMPRESSIBLE,
             Re=100,
             mesh_already_provided=True,
+            case_dir_override=str(empty_case_dir),
         )
 
         called: list[str] = []
@@ -3225,8 +3269,6 @@ class TestM6_1MeshAlreadyProvidedFlag:
             called.append(command)
             return True, "ok"
 
-        # Default _generate_lid_driven_cavity does NOT create polyMesh —
-        # exactly the failure mode this test exercises.
         monkeypatch.setattr(
             adapter_mod.FoamAgentExecutor, "_docker_exec", fake_docker_exec
         )

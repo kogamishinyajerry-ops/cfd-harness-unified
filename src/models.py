@@ -86,12 +86,20 @@ class TaskSpec:
     metadata: Optional[Dict[str, Any]] = None
 
     # M6.1 (DEC-V61-090) — when True, FoamAgentExecutor.execute() skips
-    # the blockMesh step and verifies that a polyMesh is already present
-    # under the case dir. Used by the M7 dispatch path for imported
-    # user cases where the polyMesh has been pre-built by gmsh +
-    # gmshToFoam (M6.0). Default False is the existing whitelist
-    # behavior — every gold case still runs blockMesh exactly as before.
+    # blockMesh AND skips the geometry-type dispatch (no _generate_*
+    # method runs); it expects the caller to have pre-populated the
+    # case directory pointed to by `case_dir_override` with polyMesh +
+    # BC files + system/controlDict + constant/<*>Properties. Default
+    # False is the existing whitelist behavior — every gold case still
+    # runs the geometry dispatch + blockMesh exactly as before.
+    #
+    # The two fields are coupled: setting `mesh_already_provided=True`
+    # without `case_dir_override` is rejected, because there is no
+    # path the executor can read polyMesh from (the freshly-allocated
+    # temp `case_host_dir` is empty). M7 will set both when wiring
+    # imported user cases through this path.
     mesh_already_provided: bool = False
+    case_dir_override: Optional[str] = None
 
 
 @dataclass

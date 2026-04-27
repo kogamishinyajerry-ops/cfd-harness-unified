@@ -619,23 +619,57 @@ class FoamAgentExecutor:
                 time.monotonic() - t0,
             )
 
-        # 3. 准备临时 case 目录
-        case_id = f"ldc_{os.getpid()}_{int(time.time() * 1000)}"
-        case_host_dir = self._work_dir / case_id
-        case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
-        try:
-            case_host_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
-            return self._fail(
-                f"Cannot create case directory: {exc}",
-                time.monotonic() - t0,
-            )
+        # 3. 准备 case 目录 — DEC-V61-090 (M6.1): when
+        # `mesh_already_provided=True`, the caller supplies a
+        # `case_dir_override` pointing at a directory the upstream
+        # stage has already populated (polyMesh + BC + physical
+        # properties + system/controlDict). The executor uses that
+        # directory verbatim and skips its own geometry generation
+        # below. The flag without an override is rejected — there
+        # would be no path to read polyMesh from.
+        if task_spec.mesh_already_provided:
+            if not task_spec.case_dir_override:
+                return self._fail(
+                    "task_spec.mesh_already_provided=True requires "
+                    "case_dir_override to be set — the executor needs "
+                    "a path to the pre-populated case directory.",
+                    time.monotonic() - t0,
+                )
+            case_host_dir = Path(task_spec.case_dir_override)
+            if not case_host_dir.is_dir():
+                return self._fail(
+                    f"case_dir_override path {case_host_dir} does not "
+                    "exist or is not a directory.",
+                    time.monotonic() - t0,
+                )
+            case_id = case_host_dir.name
+            case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
+        else:
+            case_id = f"ldc_{os.getpid()}_{int(time.time() * 1000)}"
+            case_host_dir = self._work_dir / case_id
+            case_cont_dir = f"/tmp/cfd-harness-cases/{case_id}"
+            try:
+                case_host_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                return self._fail(
+                    f"Cannot create case directory: {exc}",
+                    time.monotonic() - t0,
+                )
 
         raw_output_path = str(case_host_dir)
 
         try:
-            # 4. 根据几何类型生成 case 文件
-            if task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP:
+            # 4. 根据几何类型生成 case 文件 — DEC-V61-090 (M6.1): when
+            # `mesh_already_provided=True`, skip the entire geometry
+            # dispatch. The case directory pointed to by
+            # `case_dir_override` is expected to be fully populated by
+            # the upstream stage (M7's job to wire). The solver name
+            # for this path comes from a future TaskSpec field; until
+            # M7 lands, we route to simpleFoam as a safe default that
+            # M7 can override via its own dispatch logic.
+            if task_spec.mesh_already_provided:
+                solver_name = "simpleFoam"
+            elif task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP:
                 self._generate_backward_facing_step(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
             elif task_spec.geometry_type == GeometryType.NATURAL_CONVECTION_CAVITY:
