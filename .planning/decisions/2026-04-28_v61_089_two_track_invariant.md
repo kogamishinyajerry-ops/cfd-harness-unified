@@ -16,7 +16,7 @@ parent_artifacts:
   - .planning/strategic/path_a_first_customer_recruitment_2026-04-27.md (M7 phase-Done gate)
   - knowledge/whitelist.yaml (Track A entry surface · 10 gold cases)
   - src/foam_agent_adapter.py (shared downstream · executor)
-notion_sync_status: pending (sync immediately after commit per project rule)
+notion_sync_status: synced 2026-04-28 (https://www.notion.so/34fc68942bed81828556fb1839137168)
 autonomous_governance: false  # docs-only architectural anchor; does NOT modify any rule, executor, or governance contract
 codex_tool_report_path: null  # CLASS-1 docs-only per CLAUDE.md — Codex skipped
 kogami_review: skipped (no §4 trigger fires — not phase-close, not retro, not high-risk PR, not counter ≥20, not autonomous_governance rule-change)
