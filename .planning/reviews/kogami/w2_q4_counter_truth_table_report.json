@@ -1,0 +1,45 @@
+{
+  "test": "Q4_counter_truth_table_dry_run",
+  "verdict": "PASS",
+  "expected_total_advance": 3,
+  "computed_total_advance": 3,
+  "drift": 0,
+  "samples": [
+    {
+      "id": "V61-006",
+      "expected_advance": 0,
+      "expected_row": 2,
+      "label": "external-gate B-class gold",
+      "computed_advance": 0
+    },
+    {
+      "id": "V61-011",
+      "expected_advance": 0,
+      "expected_row": 2,
+      "label": "external-gate Q-2 R-A relabel",
+      "computed_advance": 0
+    },
+    {
+      "id": "V61-074",
+      "expected_advance": 1,
+      "expected_row": 1,
+      "label": "P2-T1 ExecutorMode skeleton",
+      "computed_advance": 1
+    },
+    {
+      "id": "V61-075",
+      "expected_advance": 1,
+      "expected_row": 1,
+      "label": "P2-T2 docker_openfoam substantialization",
+      "computed_advance": 1
+    },
+    {
+      "id": "V61-086",
+      "expected_advance": 1,
+      "expected_row": 1,
+      "label": "GOV-1 v0.7 tier-(c)\u2192(a) trace",
+      "computed_advance": 1
+    }
+  ],
+  "drifts": []
+}
