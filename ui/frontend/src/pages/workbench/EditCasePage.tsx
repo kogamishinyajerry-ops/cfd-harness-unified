@@ -289,16 +289,17 @@ export function EditCasePage() {
             >
               {saveAndRunMutation.isPending ? "Saving…" : "Save & run with these params"}
             </button>
-            {loaded.origin === "draft" && (
-              <button
-                type="button"
-                onClick={() => revertMutation.mutate()}
-                disabled={revertMutation.isPending}
-                className="rounded-sm border border-surface-700 px-3 py-1.5 text-xs text-surface-300 transition hover:bg-surface-800"
-              >
-                Revert to whitelist
-              </button>
-            )}
+            {loaded.origin === "draft" &&
+              loaded.raw.source_origin !== "imported_user" && (
+                <button
+                  type="button"
+                  onClick={() => revertMutation.mutate()}
+                  disabled={revertMutation.isPending}
+                  className="rounded-sm border border-surface-700 px-3 py-1.5 text-xs text-surface-300 transition hover:bg-surface-800"
+                >
+                  Revert to whitelist
+                </button>
+              )}
             <Link
               to={`/workbench/case/${encodeURIComponent(caseId)}/runs`}
               className="text-xs text-surface-400 underline hover:text-surface-200"

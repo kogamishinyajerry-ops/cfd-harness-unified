@@ -55,7 +55,6 @@ from ui.backend.routes import (
     exports,
     field_artifacts,
     health,
-    import_geometry,
     mesh_metrics,
     preflight,
     run_history,
@@ -63,6 +62,14 @@ from ui.backend.routes import (
     wizard,
     workbench_basics,
 )
+
+# M5.0 STL import requires the [workbench] extra (trimesh, scipy,
+# python-multipart). The base [ui] install must still boot without it,
+# so the router is loaded conditionally.
+try:
+    from ui.backend.routes import import_geometry  # noqa: F401
+except ModuleNotFoundError:
+    import_geometry = None  # type: ignore[assignment]
 
 app = FastAPI(
     title="CFD Harness UI Backend",
@@ -105,4 +112,5 @@ app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
 app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
-app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])
+if import_geometry is not None:
+    app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])

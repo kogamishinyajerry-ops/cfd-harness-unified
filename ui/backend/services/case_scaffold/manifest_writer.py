@@ -91,8 +91,13 @@ def _editor_case_yaml(
     return {
         "id": case_id,
         "name": f"Imported · {origin_filename}",
-        "flow_type": "imported_unspecified",
-        "geometry_type": "imported_stl",
+        # Use valid enum members so editor/lint/whitelist round-trips don't
+        # blow up. Imported cases are blocked from solver dispatch by the
+        # source_origin == imported_user guard in wizard_drivers; M7 will
+        # replace these with case-appropriate values once the run path is
+        # wired in.
+        "flow_type": "INTERNAL",
+        "geometry_type": "CUSTOM",
         "turbulence_model": "laminar",
         "source": "imported",
         "source_origin": SOURCE_ORIGIN_IMPORTED_USER,  # M5.0 schema-additive field

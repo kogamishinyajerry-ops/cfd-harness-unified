@@ -8,9 +8,33 @@ should re-export with named solids per inlet/outlet/wall).
 """
 from __future__ import annotations
 
+import re
+
 import trimesh
 
 from .health_check import PatchInfo
+
+# OpenFOAM patch / sHM region names must be valid C-identifier-ish tokens
+# (letters, digits, underscore; cannot start with a digit). STL `solid <name>`
+# headers in the wild contain whitespace, dots, dashes, unicode, etc.
+_PATCH_NAME_INVALID = re.compile(r"[^A-Za-z0-9_]")
+
+
+def _sanitize_patch_name(raw: str) -> str:
+    """Coerce a raw STL solid name into an OpenFOAM-safe patch identifier.
+
+    Any non-`[A-Za-z0-9_]` char is replaced with `_`. A leading digit gets
+    a `p_` prefix. Empty / fully-stripped names fall back to ``defaultFaces``
+    so downstream sHM dict generation always has a usable token.
+    """
+    if not raw:
+        return "defaultFaces"
+    cleaned = _PATCH_NAME_INVALID.sub("_", raw).strip("_")
+    if not cleaned:
+        return "defaultFaces"
+    if cleaned[0].isdigit():
+        cleaned = f"p_{cleaned}"
+    return cleaned
 
 
 def detect_patches(loaded: trimesh.Trimesh | trimesh.Scene) -> tuple[list[PatchInfo], bool]:
@@ -26,7 +50,7 @@ def detect_patches(loaded: trimesh.Trimesh | trimesh.Scene) -> tuple[list[PatchI
         patches: list[PatchInfo] = []
         for name, geom in loaded.geometry.items():
             face_count = int(geom.faces.shape[0]) if hasattr(geom, "faces") else 0
-            patches.append(PatchInfo(name=name, face_count=face_count))
+            patches.append(PatchInfo(name=_sanitize_patch_name(name), face_count=face_count))
         # Edge case: trimesh may load a single-solid ASCII into a Scene
         # with a single auto-named geometry. Treat as defaulted if the
         # only key looks like trimesh's auto-name.

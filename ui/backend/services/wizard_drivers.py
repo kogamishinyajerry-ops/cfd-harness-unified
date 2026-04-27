@@ -402,6 +402,17 @@ def _task_spec_from_case_id(case_id: str):
                 f"case_id {case_id!r} not in user_drafts nor knowledge/whitelist.yaml"
             )
 
+    # M5.0 hard guard: imported cases carry valid enum placeholders
+    # (INTERNAL / CUSTOM) so the editor + lint flow round-trips, but the
+    # solver path is not yet wired (M7 work). Refuse to dispatch with a
+    # clear message instead of running an LDC default on user geometry.
+    if entry.get("source_origin") == "imported_user":
+        raise KeyError(
+            f"case {case_id!r} is an imported user case (source_origin="
+            "imported_user) — the run path is not implemented until M7. "
+            "Edit and save params is supported; running is not."
+        )
+
     params = entry.get("parameters") or {}
     bcs = entry.get("boundary_conditions") or {}
     return TaskSpec(
