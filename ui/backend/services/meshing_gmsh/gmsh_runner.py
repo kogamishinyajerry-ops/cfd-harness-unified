@@ -171,6 +171,12 @@ def run_gmsh_on_imported_case(
             gmsh.write(str(output_msh_path))
         except GmshMeshGenerationError:
             raise
+        except OSError:
+            # Disk-full / permission-denied / read-only filesystem from
+            # gmsh.write() or any other I/O. These are backend / host
+            # faults, not user-geometry rejections — let them bubble
+            # as 5xx so operators see the real cause.
+            raise
         except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
             raise GmshMeshGenerationError(
                 f"gmsh API failure during mesh generation: {exc}"

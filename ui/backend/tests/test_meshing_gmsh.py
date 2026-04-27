@@ -272,6 +272,95 @@ def test_gmsh_runner_wraps_late_api_exceptions(tmp_path: Path, monkeypatch):
         )
 
 
+def test_gmsh_runner_lets_oserror_bubble(tmp_path: Path, monkeypatch):
+    """Codex round-5 P2: host-side I/O failures (OSError /
+    PermissionError from gmsh.write()) must NOT be misreported as
+    gmsh_diverged. They are backend faults — let them surface as 5xx."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    class _FakeGeo:
+        @staticmethod
+        def addSurfaceLoop(_tags):
+            return 1
+
+        @staticmethod
+        def addVolume(_loops):
+            return 1
+
+        @staticmethod
+        def synchronize():
+            return None
+
+    class _FakeMesh:
+        @staticmethod
+        def classifySurfaces(**_kwargs):
+            return None
+
+        @staticmethod
+        def createGeometry():
+            return None
+
+        @staticmethod
+        def generate(_dim):
+            return None
+
+        @staticmethod
+        def getNodes():
+            return ([], [], [])
+
+        @staticmethod
+        def getElements(dim):
+            # Produce one tetrahedron so the cell-count check passes.
+            if dim == 3:
+                return ([4], [[1]], [])
+            return ([], [], [])
+
+    class _FakeModel:
+        geo = _FakeGeo
+        mesh = _FakeMesh
+
+        @staticmethod
+        def getEntities(dim):
+            return [(2, 1)]
+
+    class _FakeGmsh:
+        class option:
+            @staticmethod
+            def setNumber(*args, **kwargs):
+                return None
+
+        model = _FakeModel
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            return None
+
+        @staticmethod
+        def write(_path):
+            raise PermissionError("disk full / read-only filesystem")
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+    # PermissionError is a subclass of OSError — must bubble unchanged.
+    with pytest.raises(PermissionError, match="disk full"):
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+        )
+
+
 def test_to_foam_normalizes_docker_sdk_failures(tmp_path: Path):
     """Codex round-2 P2 / round-3 P2: docker SDK calls inside
     run_gmsh_to_foam (exec_run / put_archive / get_archive) raise
