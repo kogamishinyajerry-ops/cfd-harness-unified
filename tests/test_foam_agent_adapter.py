@@ -3319,6 +3319,55 @@ class TestM6_1MeshAlreadyProvidedFlag:
             == "src-marker"
         )
 
+    def test_partial_staging_failure_cleans_up_partial_copy(
+        self, tmp_path, monkeypatch
+    ):
+        """Codex round-3 P2: if shutil.copytree aborts partway through
+        (disk full, unreadable file, etc.), the partially-populated
+        staged dir must be swept so failed retries don't accumulate
+        on disk."""
+        import src.foam_agent_adapter as adapter_mod
+
+        _make_running_docker_mock(monkeypatch)
+
+        src_case_dir = tmp_path / "external" / "imported_partial"
+        (src_case_dir / "constant" / "polyMesh").mkdir(parents=True)
+        (src_case_dir / "constant" / "polyMesh" / "points").write_text("x")
+
+        work_dir = tmp_path / "executor_work"
+
+        task = TaskSpec(
+            name="m6_1-partial-copy",
+            geometry_type=GeometryType.CUSTOM,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            mesh_already_provided=True,
+            case_dir_override=str(src_case_dir),
+        )
+
+        # Simulate a partial copytree: create the destination root,
+        # then raise — this is the realistic ENOSPC mid-copy scenario.
+        original_copytree = adapter_mod.shutil.copytree
+
+        def failing_copytree(src, dst, *args, **kwargs):
+            Path(dst).mkdir(parents=True, exist_ok=True)
+            (Path(dst) / "partial-marker").write_text("partial")
+            raise OSError("simulated ENOSPC mid-copy")
+
+        monkeypatch.setattr(adapter_mod.shutil, "copytree", failing_copytree)
+
+        executor = FoamAgentExecutor(work_dir=work_dir)
+        result = executor.execute(task)
+
+        assert result.success is False
+        assert "stage imported case" in (result.error_message or "")
+        # No staged copy may remain in work_dir.
+        leftover = list(work_dir.glob("imported_*"))
+        assert leftover == [], (
+            f"partial staged copy leaked into work_dir: {leftover}"
+        )
+
     def test_fails_fast_when_override_set_but_polymesh_missing(
         self, tmp_path, monkeypatch
     ):

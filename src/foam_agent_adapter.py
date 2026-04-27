@@ -662,6 +662,12 @@ class FoamAgentExecutor:
                 self._work_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(src_case_dir, case_host_dir)
             except Exception as exc:
+                # copytree may have created the destination root
+                # before failing on a deeper path (e.g. ENOSPC, single
+                # unreadable file). Sweep the partial copy so failed
+                # retries don't accumulate on disk.
+                if case_host_dir.exists():
+                    shutil.rmtree(case_host_dir, ignore_errors=True)
                 return self._fail(
                     f"Failed to stage imported case "
                     f"{src_case_dir} → {case_host_dir}: {exc}",
