@@ -95,18 +95,28 @@ def run_gmsh_on_imported_case(
         # selects gmsh's Delaunay 3D — robust default for closed
         # triangulated surfaces from real-world CAD exports.
         gmsh.option.setNumber("Mesh.Algorithm3D", 1)
-        gmsh.merge(str(stl_path))
+        try:
+            gmsh.merge(str(stl_path))
+        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
+            raise GmshMeshGenerationError(
+                f"gmsh failed to load the STL: {exc}"
+            ) from exc
 
         # Reclassify the imported triangles as a surface, then build a
         # volume from the surface loop. This is the standard gmsh
         # incantation for "STL → tetrahedral volume mesh".
-        gmsh.model.mesh.classifySurfaces(
-            angle=40.0 * 3.141592653589793 / 180.0,
-            boundary=True,
-            forReparametrization=True,
-            curveAngle=180.0 * 3.141592653589793 / 180.0,
-        )
-        gmsh.model.mesh.createGeometry()
+        try:
+            gmsh.model.mesh.classifySurfaces(
+                angle=40.0 * 3.141592653589793 / 180.0,
+                boundary=True,
+                forReparametrization=True,
+                curveAngle=180.0 * 3.141592653589793 / 180.0,
+            )
+            gmsh.model.mesh.createGeometry()
+        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
+            raise GmshMeshGenerationError(
+                f"gmsh failed to derive geometry from the STL surface: {exc}"
+            ) from exc
 
         surfaces = gmsh.model.getEntities(dim=2)
         if not surfaces:
@@ -137,7 +147,12 @@ def run_gmsh_on_imported_case(
             gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
             gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
 
-        gmsh.model.mesh.generate(3)
+        try:
+            gmsh.model.mesh.generate(3)
+        except Exception as exc:  # noqa: BLE001 — gmsh raises plain Exception
+            raise GmshMeshGenerationError(
+                f"gmsh 3D mesh generation failed: {exc}"
+            ) from exc
 
         # Element type 4 = 4-node tetrahedron in gmsh's element-type
         # numbering. Counting only those keeps the cell_count honest if
