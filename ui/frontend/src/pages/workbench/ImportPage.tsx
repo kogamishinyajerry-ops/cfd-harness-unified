@@ -24,16 +24,36 @@ import type {
 // is down).
 type ImportFeatureState = "probing" | "available" | "unavailable";
 
-async function probeImportEndpoint(maxAttempts = 4): Promise<ImportFeatureState> {
+async function probeImportEndpoint(
+  signal: AbortSignal,
+  maxAttempts = 4,
+): Promise<ImportFeatureState | null> {
+  // Returns null when the caller aborted (component unmounted) so the
+  // effect can drop the result instead of writing to a dead component.
+  // Honors the signal both inside fetch() and during the backoff sleep —
+  // important under React.StrictMode where the effect double-mounts.
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (signal.aborted) return null;
     try {
-      const res = await fetch("/api/import/stl", { method: "GET" });
+      const res = await fetch("/api/import/stl", { method: "GET", signal });
       return res.status === 404 ? "unavailable" : "available";
-    } catch {
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return null;
       if (attempt < maxAttempts - 1) {
-        // 200ms → 400ms → 800ms (~1.4s total budget, comfortably above
-        // typical dev backend startup race).
-        await new Promise((resolve) => setTimeout(resolve, 200 * 2 ** attempt));
+        // 200ms → 400ms → 800ms (~1.4s total, above typical dev startup race).
+        const delay = 200 * 2 ** attempt;
+        const aborted = await new Promise<boolean>((resolve) => {
+          const timer = setTimeout(() => {
+            signal.removeEventListener("abort", onAbort);
+            resolve(false);
+          }, delay);
+          const onAbort = () => {
+            clearTimeout(timer);
+            resolve(true);
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
+        if (aborted) return null;
       }
     }
   }
@@ -61,12 +81,12 @@ export function ImportPage() {
   const [featureState, setFeatureState] = useState<ImportFeatureState>("probing");
 
   useEffect(() => {
-    let cancelled = false;
-    probeImportEndpoint().then((state) => {
-      if (!cancelled) setFeatureState(state);
+    const controller = new AbortController();
+    probeImportEndpoint(controller.signal).then((state) => {
+      if (state !== null) setFeatureState(state);
     });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, []);
 
