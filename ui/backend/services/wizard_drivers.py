@@ -456,6 +456,16 @@ class RealSolverDriver:
             write_run_artifacts,
         )
 
+        # BUG-1 fix (2026-04-27): persistence is bound to the executor task
+        # via add_done_callback so it survives SSE-consumer disconnect mid-run.
+        # If we kept write_run_artifacts inline in this coroutine (as it was
+        # pre-fix), a curl/browser disconnect after the executor await would
+        # cancel the rest of the coroutine and lose the verdict — burning
+        # 2-3h of cylinder compute. The callback runs on the event-loop
+        # thread once `executor.execute(task_spec)` returns inside its
+        # to_thread wrapper, regardless of SSE generator state.
+        _persisted: dict[str, bool] = {"done": False}
+
         # M3: pre-allocate a run_id at the very top so we can include it in
         # every SSE event from this run. Frontend uses run_id on `run_done`
         # to auto-redirect to /workbench/case/{id}/run/{run_id}.
@@ -516,6 +526,126 @@ class RealSolverDriver:
             asyncio.to_thread(executor.execute, task_spec)
         )
 
+        # BUG-1 fix: attach persistence to the task itself, not the SSE
+        # coroutine. Fires on event-loop thread when to_thread returns,
+        # independent of consumer disconnect.
+        t0_persist = time.time()
+
+        def _persist_callback(task: "asyncio.Task") -> None:
+            import sys
+            if _persisted["done"]:
+                return
+            _persisted["done"] = True
+            duration_s = time.time() - t0_persist
+            try:
+                exc = task.exception()
+            except asyncio.CancelledError:
+                # P2 fix (Codex r1): cancelled exec_task — record this so
+                # the user still sees a row in run-history, with an
+                # explanation. Otherwise a cancelled run is invisible.
+                try:
+                    write_run_artifacts(
+                        case_id=case_id,
+                        run_id=run_id,
+                        started_at=started_at,
+                        task_spec=task_spec,
+                        source_origin=source_origin,
+                        success=False,
+                        exit_code=130,  # conventional SIGINT-style code
+                        verdict_summary="executor task cancelled before completion",
+                        duration_s=duration_s,
+                        key_quantities=None,
+                        residuals=None,
+                        error_message="asyncio.CancelledError on exec_task",
+                        failure_category="unknown_error",
+                    )
+                except Exception as write_exc:  # noqa: BLE001
+                    print(
+                        f"[wizard] _persist_callback: cancelled-record "
+                        f"writeback failed for run_id={run_id}: "
+                        f"{type(write_exc).__name__}: {write_exc}",
+                        file=sys.stderr,
+                    )
+                return
+            except asyncio.InvalidStateError:
+                # Task isn't actually done yet — should not happen
+                # because the callback only fires on transition to
+                # done, but defend against it for forward-compat.
+                return
+            try:
+                if exc is not None:
+                    err_str = str(exc)
+                    fc = _classify_failure(
+                        f"{type(exc).__name__}: {err_str}", _exit_code=1
+                    )
+                    write_run_artifacts(
+                        case_id=case_id,
+                        run_id=run_id,
+                        started_at=started_at,
+                        task_spec=task_spec,
+                        source_origin=source_origin,
+                        success=False,
+                        exit_code=1,
+                        verdict_summary=(
+                            f"executor exception: {type(exc).__name__} ({fc})"
+                        ),
+                        duration_s=duration_s,
+                        key_quantities=None,
+                        residuals=None,
+                        error_message=f"{type(exc).__name__}: {err_str[:500]}",
+                        failure_category=fc,
+                    )
+                    return
+                res = task.result()
+                fc = None
+                if not res.success:
+                    fc = _classify_failure(
+                        res.error_message, _exit_code=res.exit_code
+                    )
+                duration_s = res.execution_time_s or duration_s
+                if res.success:
+                    summary = (
+                        f"OpenFOAM converged · {duration_s:.1f}s · "
+                        f"{len(res.key_quantities or {})} key quantities extracted"
+                    )
+                    exit_code = res.exit_code if res.exit_code is not None else 0
+                else:
+                    err_msg = (res.error_message or "(no error message)")[:160]
+                    summary = f"OpenFOAM failed · {err_msg} ({fc})"
+                    exit_code = res.exit_code if res.exit_code is not None else 1
+                write_run_artifacts(
+                    case_id=case_id,
+                    run_id=run_id,
+                    started_at=started_at,
+                    task_spec=task_spec,
+                    source_origin=source_origin,
+                    success=bool(res.success),
+                    exit_code=exit_code,
+                    verdict_summary=summary,
+                    duration_s=duration_s,
+                    key_quantities=dict(res.key_quantities or {}),
+                    residuals=dict(res.residuals or {}),
+                    error_message=res.error_message,
+                    failure_category=fc,
+                )
+            except Exception as cb_exc:  # noqa: BLE001 — callback must never raise
+                # P1 fix (Codex r1): persistence failures must be visible
+                # to the operator even when the SSE consumer is gone.
+                # Pre-fix path emitted a warn-level SSE event when the
+                # consumer was attached; we emit to stderr instead so the
+                # signal lands in backend logs regardless of consumer
+                # state. Without this an aborted run would have neither
+                # an SSE warning nor a persisted artifact dir, making
+                # the failure impossible to diagnose post-hoc.
+                print(
+                    f"[wizard] _persist_callback: writeback failed for "
+                    f"case_id={case_id} run_id={run_id}: "
+                    f"{type(cb_exc).__name__}: {cb_exc}",
+                    file=sys.stderr,
+                )
+
+        exec_task.add_done_callback(_persist_callback)
+
         # Heartbeat loop: wait up to HEARTBEAT_INTERVAL_S each iteration; if the
         # executor finishes within that window, break with the result; otherwise
         # emit a heartbeat log and try again. `asyncio.wait_for` uses
@@ -538,6 +668,42 @@ class RealSolverDriver:
                     "line": f"[solver] running... ({elapsed:.0f}s elapsed)",
                 })
                 continue
+            except asyncio.CancelledError:
+                # P2 fix (Codex r2): CancelledError is BaseException on
+                # 3.11+ so the bare `except Exception` below would not
+                # have caught it. Two scenarios produce this:
+                #   (a) outer coroutine cancelled (consumer disconnect):
+                #       shield protects exec_task; we want to propagate
+                #       so FastAPI's StreamingResponse exits cleanly.
+                #       The done_callback still persists when exec_task
+                #       eventually finishes.
+                #   (b) exec_task itself cancelled (rare — only via
+                #       explicit exec_task.cancel(); we don't do that):
+                #       outer coroutine is alive, consumer is connected.
+                #       Emit terminal SSE events so the client doesn't
+                #       hang waiting for run_done.
+                if exec_task.cancelled():
+                    fail_summary = "executor task cancelled before completion"
+                    yield _sse({
+                        "type": "phase_done", "phase": "solver", "t": time.time(),
+                        "run_id": run_id,
+                        "status": "fail",
+                        "summary": fail_summary,
+                        "failure_category": "unknown_error",
+                    })
+                    yield _sse({
+                        "type": "run_done", "phase": None, "t": time.time(),
+                        "run_id": run_id,
+                        "summary": fail_summary,
+                        "exit_code": 130,
+                        "level": "error",
+                        "failure_category": "unknown_error",
+                    })
+                    return
+                # Otherwise we (the SSE coroutine) are being cancelled;
+                # let it propagate. _persist_callback will fire when
+                # exec_task finishes its work in the thread pool.
+                raise
             except Exception as exc:  # noqa: BLE001 — surface ANY executor failure
                 exec_exc = exc
                 break
@@ -568,34 +734,9 @@ class RealSolverDriver:
                 "summary": verdict_summary,
                 "failure_category": failure_category,
             })
-            # Persist run history artifacts even on failure — the user's
-            # /workbench/case/{id}/runs table needs to show the failed run.
-            try:
-                write_run_artifacts(
-                    case_id=case_id,
-                    run_id=run_id,
-                    started_at=started_at,
-                    task_spec=task_spec,
-                    source_origin=source_origin,
-                    success=False,
-                    exit_code=1,
-                    verdict_summary=verdict_summary,
-                    duration_s=duration_s,
-                    key_quantities=None,
-                    residuals=None,
-                    error_message=f"{type(exc).__name__}: {err_str[:500]}",
-                    failure_category=failure_category,
-                )
-            except Exception as write_exc:  # noqa: BLE001
-                # A failed write should never propagate up — the SSE
-                # client already saw run_done is en route. Surface as a log
-                # event so the operator sees it in the timeline.
-                yield _sse({
-                    "type": "log", "phase": None, "t": time.time(),
-                    "run_id": run_id,
-                    "line": f"[wizard] WARN: run-history writeback failed: {write_exc}",
-                    "level": "warning", "stream": "stderr",
-                })
+            # BUG-1 fix: persistence happens in _persist_callback (attached
+            # above to exec_task). Do not write here — would double-write
+            # and the callback's writeback is the SSE-disconnect-safe one.
             yield _sse({
                 "type": "run_done", "phase": None, "t": time.time(),
                 "run_id": run_id,
@@ -670,30 +811,9 @@ class RealSolverDriver:
             exit_code = result.exit_code if result.exit_code is not None else 1
             level = "error"
 
-        # Persist artifacts.
-        try:
-            write_run_artifacts(
-                case_id=case_id,
-                run_id=run_id,
-                started_at=started_at,
-                task_spec=task_spec,
-                source_origin=source_origin,
-                success=bool(result.success),
-                exit_code=exit_code,
-                verdict_summary=verdict_summary,
-                duration_s=elapsed_total,
-                key_quantities=dict(result.key_quantities or {}),
-                residuals=dict(result.residuals or {}),
-                error_message=result.error_message,
-                failure_category=failure_category,
-            )
-        except Exception as write_exc:  # noqa: BLE001
-            yield _sse({
-                "type": "log", "phase": None, "t": time.time(),
-                "run_id": run_id,
-                "line": f"[wizard] WARN: run-history writeback failed: {write_exc}",
-                "level": "warning", "stream": "stderr",
-            })
+        # BUG-1 fix: persistence happens in _persist_callback (attached
+        # above to exec_task). Do not write here — would double-write and
+        # the callback's writeback is the SSE-disconnect-safe one.
 
         run_done_event: dict[str, object] = {
             "type": "run_done", "phase": None, "t": time.time(),

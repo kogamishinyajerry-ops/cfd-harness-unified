@@ -428,10 +428,17 @@ def test_real_driver_writes_run_history_on_executor_exception(write_artifacts_ca
     assert kw["run_id"] == events[0]["run_id"]
 
 
-def test_real_driver_writeback_failure_does_not_block_run_done(write_artifacts_capture) -> None:
+def test_real_driver_writeback_failure_does_not_block_run_done(
+    write_artifacts_capture,
+    capsys,
+) -> None:
     """Defense: if write_run_artifacts raises (disk full, perm denied, ...)
-    the user must still see run_done. Failure surfaces as a warn-level
-    log event, not a swallowed exception."""
+    the user must still see run_done. Per BUG-1 fix (2026-04-27),
+    persistence runs in an exec_task done_callback decoupled from the
+    SSE coroutine. Per Codex r1 P1, the callback emits a stderr log on
+    failure so the operator sees it in backend logs even when the SSE
+    consumer is gone (pre-fix behavior emitted via SSE; post-fix emits
+    via stderr — both routes guarantee operator visibility)."""
     drv = RealSolverDriver()
     fake_result = _stub_execution_result()
 
@@ -446,15 +453,72 @@ def test_real_driver_writeback_failure_does_not_block_run_done(write_artifacts_c
         ):
             events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
-    # Run completed despite writeback failure.
+    # Run completed despite writeback failure (the SSE stream did not crash).
     assert events[-1]["type"] == "run_done"
     assert events[-1]["exit_code"] == 0
-    # Warning surfaced.
-    warn_logs = [
-        e for e in events
-        if e.get("type") == "log" and e.get("level") == "warning"
-    ]
-    assert any("writeback failed" in e["line"] for e in warn_logs)
+    # stderr must show the writeback failure so backend logs preserve
+    # the signal even when SSE consumer is gone.
+    captured = capsys.readouterr()
+    assert "writeback failed" in captured.err
+    assert "OSError" in captured.err
+    assert "read-only filesystem" in captured.err
+
+
+def test_real_driver_consumer_disconnect_still_persists(write_artifacts_capture) -> None:
+    """BUG-1 (2026-04-27 cylinder dogfood incident): if the SSE consumer
+    aborts mid-run (curl killed, browser tab closed, Monitor timeout),
+    the executor task's done_callback must still write run history. Pre-fix
+    the persistence call lived inside the SSE generator coroutine, so a
+    consumer disconnect cancelled it after the executor had already
+    completed — burning ~2.5h of cylinder compute with no verdict trace.
+    """
+    drv = RealSolverDriver()
+    fake_result = _stub_execution_result(success=True)
+
+    async def _drain_then_abort():
+        with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+            MockExec.return_value.execute.return_value = fake_result
+            agen = drv.run("lid_driven_cavity")
+            # Drain a few events past phase_start so the coroutine has
+            # actually created exec_task and registered the
+            # done_callback. The to_thread executor returns instantly
+            # in tests (MagicMock value), so a couple of heartbeat /
+            # metric yields land before we abort.
+            drained = 0
+            while drained < 5:
+                try:
+                    await agen.__anext__()
+                except StopAsyncIteration:
+                    break
+                drained += 1
+            # Abandon mid-run — same shape as a curl client closing
+            # the connection or a Monitor timeout killing curl.
+            await agen.aclose()
+        # Yield repeatedly so the to_thread executor finishes in its
+        # thread pool, then the done_callback fires on this loop.
+        for _ in range(50):
+            await asyncio.sleep(0)
+
+    asyncio.run(_drain_then_abort())
+
+    # Persistence happened despite the consumer hanging up partway through.
+    assert len(write_artifacts_capture) == 1, (
+        "expected exactly one persistence call from the done_callback even "
+        "after consumer aborted; got "
+        f"{len(write_artifacts_capture)}"
+    )
+    kw = write_artifacts_capture[0]
+    assert kw["success"] is True
+    assert kw["case_id"] == "lid_driven_cavity"
+
+
+# Note: P2 (Codex r1) cancelled-exec_task handling is exercised in
+# production-side code only. A unit test for it is brittle (depends on
+# asyncio.cancel + asyncio.to_thread + thread-pool teardown ordering
+# inside asyncio.run, all of which are loop-internal mechanics). The
+# defensive callback branch is small + has a rationale comment;
+# regression of the broader done_callback wiring is caught by
+# `test_real_driver_consumer_disconnect_still_persists` above.
 
 
 # --- M4 · failure classifier ----------------------------------------------

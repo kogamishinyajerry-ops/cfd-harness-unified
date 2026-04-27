@@ -1,0 +1,6 @@
+verdict: CHANGES_REQUIRED
+
+findings:
+- P0: none
+- P1: `ui/backend/services/wizard_drivers.py:602-609`, `ui/backend/services/wizard_drivers.py:665-667`, `ui/backend/services/wizard_drivers.py:742-744` — persistence failures are now fully silent. The callback swallows every `write_run_artifacts(...)` exception, and the two old SSE warning paths were explicitly removed, so a disk/permission/partial-write failure now produces a normal `run_done` with no operator-visible signal at all. In this repo that is worse than a cosmetic observability loss: the run-history reader silently skips incomplete/missing artifact dirs, so the user is left with a “solver finished” stream but no persisted verdict row and no explanation. This path needs at least backend logging from the callback.
+- P2: `ui/backend/services/wizard_drivers.py:541-545`, `ui/backend/services/wizard_drivers.py:635-637` — the cancelled-task state is not handled end-to-end. `_persist_callback()` returns without persisting when `task.exception()` raises `asyncio.CancelledError`, and the main wait loop only catches `Exception`, not `asyncio.CancelledError` on Python 3.11 where it is a `BaseException`. If `exec_task` is ever cancelled, this code exits without a persisted failure record and without a terminal SSE event.
