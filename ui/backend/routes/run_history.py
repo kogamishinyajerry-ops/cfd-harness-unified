@@ -24,11 +24,13 @@ from ui.backend.schemas.run_history import (
     RunDetail,
     RunHistoryListResponse,
 )
+from ui.backend.services.run_compare import compare_runs
 from ui.backend.services.run_history import (
     get_run_detail,
     list_recent_runs_across_cases,
     list_runs,
 )
+from ui.backend.services.run_ids import _validate_segment
 
 
 router = APIRouter()
@@ -72,4 +74,37 @@ def get_run_detail_route(case_id: str, run_id: str) -> RunDetail:
         raise HTTPException(
             status_code=404,
             detail=f"run not found: case_id={case_id!r} run_id={run_id!r}",
+        ) from exc
+
+
+@router.get(
+    "/cases/{case_id}/run-history/{run_a_id}/compare/{run_b_id}",
+)
+def compare_runs_route(
+    case_id: str, run_a_id: str, run_b_id: str
+) -> dict:
+    """Run-vs-run diff (ROADMAP §60-day item).
+
+    Returns task_spec_diff + scalar_diffs + array_diffs + residual_diffs
+    + verdict_diff. Distinct from /comparison-report (run-vs-gold).
+    Response is a free-form dict (not RunDetail) because the diff shape
+    is heterogeneous: scalar/array/skipped buckets each carry different
+    fields. Frontend reads keys directly.
+
+    Per Codex r1 P1.1: explicitly validate all three path segments via
+    run_ids._validate_segment to reject `..` / percent-encoded traversal
+    with HTTP 400, instead of letting it 404 ambiguously through
+    get_run_detail's filesystem check.
+    """
+    _validate_segment(case_id, "case_id")
+    _validate_segment(run_a_id, "run_a_id")
+    _validate_segment(run_b_id, "run_b_id")
+    try:
+        return compare_runs(case_id, run_a_id, run_b_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"run not found: case_id={case_id!r} a={run_a_id!r} b={run_b_id!r} ({exc})",
         ) from exc
