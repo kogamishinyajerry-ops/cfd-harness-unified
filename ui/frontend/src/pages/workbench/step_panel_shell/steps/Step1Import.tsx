@@ -18,7 +18,19 @@ import { api, ApiError } from "@/api/client";
 
 import type { StepTaskPanelProps } from "../types";
 
-export function Step1Import({ caseId, onStepComplete, onStepError }: StepTaskPanelProps) {
+export function Step1Import({
+  caseId,
+  onStepComplete,
+  onStepError,
+  registerAiAction,
+}: StepTaskPanelProps) {
+  // Step 1 has no AI 处理 action — uploading is the engineer's gesture.
+  // Clear any prior registration so the shell renders the button disabled.
+  useEffect(() => {
+    registerAiAction(null);
+    return () => registerAiAction(null);
+  }, [registerAiAction]);
+
   const caseQuery = useQuery({
     queryKey: ["stepPanelShell", "case", caseId],
     queryFn: () => api.getCase(caseId),

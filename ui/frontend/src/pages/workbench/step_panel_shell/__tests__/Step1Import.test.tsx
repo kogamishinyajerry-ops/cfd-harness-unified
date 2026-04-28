@@ -26,6 +26,7 @@ function renderStep(props: {
   caseId?: string;
   onStepComplete?: () => void;
   onStepError?: (msg: string) => void;
+  registerAiAction?: (action: (() => Promise<void>) | null) => void;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -37,6 +38,7 @@ function renderStep(props: {
           caseId={props.caseId ?? "abc"}
           onStepComplete={props.onStepComplete ?? (() => {})}
           onStepError={props.onStepError ?? (() => {})}
+          registerAiAction={props.registerAiAction ?? (() => {})}
         />
       </MemoryRouter>
     </QueryClientProvider>,

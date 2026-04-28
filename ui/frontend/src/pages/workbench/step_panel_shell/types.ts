@@ -31,6 +31,11 @@ export interface StepTaskPanelProps {
   onStepComplete: () => void;
   /** Called when a step encounters an unrecoverable error. */
   onStepError: (message: string) => void;
+  /** Register the step's [AI 处理] action with the shell. The shell wraps
+   *  the registered action to track aiInFlight state + dispatch the
+   *  StepNavigation's [AI 处理] button click to it. Pass `null` to clear
+   *  the registration (e.g. on unmount or when the step has no AI action). */
+  registerAiAction: (action: (() => Promise<void>) | null) => void;
 }
 
 /** Static descriptor for one step in the 5-step tree. */

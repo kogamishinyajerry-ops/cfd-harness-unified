@@ -151,23 +151,29 @@ describe("StepPanelShell · skeleton (M-PANELS Step 2)", () => {
     expect(screen.getByTestId("next-button")).toBeDisabled();
   });
 
-  it("[AI 处理] is disabled in skeleton (no step is wired in Tier-A yet)", () => {
+  it("[AI 处理] is enabled on Step 2 (wired in Step 5) and disabled on Step 1 + Steps 3-5", () => {
+    const { unmount } = renderShell("/workbench/case/abc?step=1");
+    expect(screen.getByTestId("ai-process-button")).toBeDisabled();
+    unmount();
+
     renderShell("/workbench/case/abc?step=2");
-    const aiButton = screen.getByTestId("ai-process-button");
-    expect(aiButton).toBeDisabled();
-    expect(aiButton).toHaveAttribute("title");
+    // Step 2's [AI 处理] is wired to the mesh-trigger action; the button
+    // is enabled (Step2Mesh registers the action on mount). aiInFlight
+    // remains false because no click has fired yet.
+    expect(screen.getByTestId("ai-process-button")).not.toBeDisabled();
   });
 
-  it("renders a real Viewport on Step 1 (format='glb' from /geometry/render)", () => {
-    renderShell("/workbench/case/abc?step=1");
-    // Step 4 wireup flipped Step 1's viewportConfig from 'none' to
-    // 'glb'; the Viewport mounts (mocked kernel) so the placeholder
-    // is no longer present on this step.
+  it("renders a real Viewport on Steps 1+2 (format='glb' from M-RENDER-API)", () => {
+    const { unmount } = renderShell("/workbench/case/abc?step=1");
+    expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
+    unmount();
+
+    renderShell("/workbench/case/abc?step=2");
     expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
   });
 
-  it("still shows the viewport placeholder on Steps 2-5 (not yet wired)", () => {
-    renderShell("/workbench/case/abc?step=2");
+  it("still shows the viewport placeholder on Steps 3-5 (not yet wired)", () => {
+    renderShell("/workbench/case/abc?step=3");
     expect(screen.getByTestId("viewport-placeholder")).toBeInTheDocument();
   });
 

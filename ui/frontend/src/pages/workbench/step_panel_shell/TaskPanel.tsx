@@ -15,6 +15,7 @@ interface TaskPanelProps {
   caseId: string;
   onStepComplete: () => void;
   onStepError: (message: string) => void;
+  registerAiAction: (action: (() => Promise<void>) | null) => void;
   navigation: StepNavigationContract;
 }
 
@@ -23,6 +24,7 @@ export function TaskPanel({
   caseId,
   onStepComplete,
   onStepError,
+  registerAiAction,
   navigation,
 }: TaskPanelProps) {
   const Body = step.taskPanelComponent as ComponentType<StepTaskPanelProps>;
@@ -43,6 +45,7 @@ export function TaskPanel({
           caseId={caseId}
           onStepComplete={onStepComplete}
           onStepError={onStepError}
+          registerAiAction={registerAiAction}
         />
       </div>
       <StepNavigation

@@ -11,7 +11,7 @@
 // Skeleton commit (spec_v2 §E Step 2): all step bodies are
 // placeholder. Wire-up lands in spec_v2 §E Steps 3-6.
 
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 // Lazy-load Viewport so the vtk.js bundle (~190 KB gzipped) is fetched
@@ -64,17 +64,21 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Mesh",
     longLabel: "2 · Mesh",
     viewportConfig: {
-      format: "none",
+      // Wired in spec_v2 §E Step 5 (DEC-V61-096): the polyMesh wireframe
+      // is fetched as glb via M-RENDER-API's /mesh/render endpoint and
+      // rendered in the center pane. Falls back to the empty placeholder
+      // until the mesh is generated (404 from /mesh/render → Viewport
+      // surfaces the kind='fetch' status).
+      format: "glb",
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
     },
     taskPanelComponent: Step2Mesh,
-    // Tier-A wires Step 2 [AI 处理] to /api/import/<caseId>/mesh in
-    // implementation Step 5; the skeleton commit keeps it disabled.
-    aiActionWiredInTierA: false,
-    aiActionDeferredTooltip:
-      "AI 处理 wires up in M-PANELS Step 5 (mesh trigger via /api/import/<id>/mesh).",
+    // Step 2 [AI 处理] is the mesh-generation trigger — wired in spec_v2
+    // §E Step 5. The Step2Mesh body registers its mesh action with the
+    // shell on mount via the registerAiAction prop.
+    aiActionWiredInTierA: true,
   },
   {
     id: 3,
@@ -149,9 +153,21 @@ export function StepPanelShell() {
     }),
   );
   const [lastAction, setLastAction] = useState<string | null>(null);
-  const [aiInFlight] = useState(false);
+  const [aiInFlight, setAiInFlight] = useState(false);
   const [aiErrorMessage, setAiErrorMessage] = useState<string | undefined>(
     undefined,
+  );
+  // Each step registers its own [AI 处理] action with the shell via the
+  // registerAiAction prop. Stored in a ref (not state) so the shell can
+  // dispatch the latest registered action from inside the wrapped
+  // onAiProcess closure without re-creating that closure on every
+  // re-render (which would defeat StepNavigation's identity check).
+  const activeAiActionRef = useRef<(() => Promise<void>) | null>(null);
+  const registerAiAction = useCallback(
+    (action: (() => Promise<void>) | null) => {
+      activeAiActionRef.current = action;
+    },
+    [],
   );
 
   const setStep = useCallback(
@@ -268,10 +284,28 @@ export function StepPanelShell() {
             caseId={caseId}
             onStepComplete={onStepComplete}
             onStepError={onStepError}
+            registerAiAction={registerAiAction}
             navigation={{
+              // The shell wraps the active step's registered action with
+              // aiInFlight tracking + error capture. If no action is
+              // registered the button renders disabled (per
+              // StepNavigation contract).
               onAiProcess: activeStep.aiActionWiredInTierA
                 ? async () => {
-                    /* wired in spec_v2 §E Step 5 */
+                    const action = activeAiActionRef.current;
+                    if (!action) return;
+                    setAiInFlight(true);
+                    setAiErrorMessage(undefined);
+                    try {
+                      await action();
+                    } catch (err) {
+                      const msg =
+                        err instanceof Error ? err.message : String(err);
+                      setAiErrorMessage(msg);
+                      setLastAction(`Step ${currentStepId} AI error`);
+                    } finally {
+                      setAiInFlight(false);
+                    }
                   }
                 : null,
               onPrevious,
