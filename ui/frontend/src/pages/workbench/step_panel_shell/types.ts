@@ -20,6 +20,12 @@ export interface ViewportConfig {
   glbUrl: (caseId: string) => string | null;
   /** Returns the URL to fetch when format='stl', or null if not applicable. */
   stlUrl: (caseId: string) => string | null;
+  /** When set, the URL only resolves once `stepStates[gateOnStepCompletion]
+   *  === "completed"`. Used to suppress the pre-mesh 404 from /mesh/render
+   *  (the underlying glb only exists after Step 2 has run). null/undefined
+   *  means the URL is always resolved (Step 1's /geometry/render works
+   *  immediately after import). */
+  gateOnStepCompletion?: StepId;
 }
 
 /** Props injected into a step's task-panel body. */
@@ -59,6 +65,10 @@ export interface StepDef {
   /** Tooltip when the [AI 处理] button is disabled — points at the
    *  milestone that will wire it. Required when aiActionWiredInTierA=false. */
   aiActionDeferredTooltip?: string;
+  /** Copy shown in the empty-viewport placeholder when the step's
+   *  viewport URL is gated (gateOnStepCompletion). Defaults to a
+   *  generic milestone-pending hint when omitted. */
+  viewportEmptyHint?: string;
 }
 
 /** Per-step navigation contract surfaced by `<StepNavigation>`. */

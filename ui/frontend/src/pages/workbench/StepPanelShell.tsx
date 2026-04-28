@@ -11,7 +11,7 @@
 // Skeleton commit (spec_v2 §E Step 2): all step bodies are
 // placeholder. Wire-up lands in spec_v2 §E Steps 3-6.
 
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 // Lazy-load Viewport so the vtk.js bundle (~190 KB gzipped) is fetched
@@ -66,19 +66,25 @@ const STEPS: readonly StepDef[] = [
     viewportConfig: {
       // Wired in spec_v2 §E Step 5 (DEC-V61-096): the polyMesh wireframe
       // is fetched as glb via M-RENDER-API's /mesh/render endpoint and
-      // rendered in the center pane. Falls back to the empty placeholder
-      // until the mesh is generated (404 from /mesh/render → Viewport
-      // surfaces the kind='fetch' status).
+      // rendered in the center pane. The URL is gated on Step 2 being
+      // completed — pre-mesh, /mesh/render returns 404 (the underlying
+      // file doesn't exist yet); without gating, the Viewport rendered
+      // a hostile red error banner ("Viewport error (fetch): glb fetch
+      // returned HTTP 404") that the user reported as a UI 404 bug.
+      // Gated state shows the friendly viewportEmptyHint instead.
       format: "glb",
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
+      gateOnStepCompletion: 2,
     },
     taskPanelComponent: Step2Mesh,
     // Step 2 [AI 处理] is the mesh-generation trigger — wired in spec_v2
     // §E Step 5. The Step2Mesh body registers its mesh action with the
     // shell on mount via the registerAiAction prop.
     aiActionWiredInTierA: true,
+    viewportEmptyHint:
+      "Step 2 · Mesh — pick mesh mode in the right rail and click [AI 处理] to generate the polyMesh. The wireframe will appear here once gmsh + gmshToFoam complete.",
   },
   {
     id: 3,
@@ -104,6 +110,9 @@ const STEPS: readonly StepDef[] = [
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
+      // Same /mesh/render endpoint as Step 2 — also gated on mesh
+      // having been generated to avoid the same pre-mesh 404 banner.
+      gateOnStepCompletion: 2,
     },
     taskPanelComponent: Step4SolvePlaceholder,
     aiActionWiredInTierA: false,
@@ -119,6 +128,9 @@ const STEPS: readonly StepDef[] = [
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
+      // Same /mesh/render endpoint as Step 2 — also gated on mesh
+      // having been generated to avoid the same pre-mesh 404 banner.
+      gateOnStepCompletion: 2,
     },
     taskPanelComponent: Step5ResultsPlaceholder,
     aiActionWiredInTierA: false,
@@ -224,6 +236,34 @@ export function StepPanelShell() {
     [currentStepId],
   );
 
+  // Probe-on-mount: stepStates is in-memory, so a page refresh after
+  // meshing would lose the "Step 2 completed" signal and re-gate the
+  // mesh viewport. HEAD /mesh/render to detect a pre-existing polyMesh
+  // and restore the completed state. 200 = mesh artifacts on disk →
+  // mark Step 2 completed; any other status leaves it pending.
+  useEffect(() => {
+    if (!caseId) return;
+    let cancelled = false;
+    fetch(`/api/cases/${encodeURIComponent(caseId)}/mesh/render`, {
+      method: "HEAD",
+    })
+      .then((resp) => {
+        if (cancelled) return;
+        if (resp.ok) {
+          setStepStates((prev) =>
+            prev[2] === "completed" ? prev : { ...prev, 2: "completed" },
+          );
+        }
+      })
+      .catch(() => {
+        // network errors leave stepStates[2] pending — same outcome as a
+        // 404, which is the correct pre-mesh state.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId]);
+
   const activeStep = useMemo(
     () => STEPS.find((s) => s.id === currentStepId) ?? STEPS[0],
     [currentStepId],
@@ -231,6 +271,16 @@ export function StepPanelShell() {
 
   const viewportProps = useMemo(() => {
     const cfg = activeStep.viewportConfig;
+    // Gate the URL on the prerequisite step's completion when configured.
+    // Without this gate, Step 2's /mesh/render fires pre-mesh and the
+    // Viewport renders a red "HTTP 404" error — a routing-style bug from
+    // the user's perspective, even though the route works post-mesh.
+    if (
+      cfg.gateOnStepCompletion !== undefined &&
+      stepStates[cfg.gateOnStepCompletion] !== "completed"
+    ) {
+      return null;
+    }
     if (cfg.format === "glb") {
       const glbUrl = cfg.glbUrl(caseId);
       if (glbUrl) return { format: "glb" as const, glbUrl };
@@ -239,7 +289,7 @@ export function StepPanelShell() {
       if (stlUrl) return { format: "stl" as const, stlUrl };
     }
     return null;
-  }, [activeStep, caseId]);
+  }, [activeStep, caseId, stepStates]);
 
   return (
     <div
@@ -281,8 +331,8 @@ export function StepPanelShell() {
                 className="flex h-full w-full items-center justify-center rounded-md border border-dashed border-surface-800 bg-surface-950/40 p-6 text-center text-[12px] text-surface-500"
               >
                 <span>
-                  Viewport for step {currentStepId} wires up in a later
-                  M-PANELS implementation step.
+                  {activeStep.viewportEmptyHint ??
+                    `Viewport for step ${currentStepId} wires up in a later M-PANELS implementation step.`}
                 </span>
               </div>
             )}

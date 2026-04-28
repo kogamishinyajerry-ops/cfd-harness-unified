@@ -170,13 +170,23 @@ describe("StepPanelShell · skeleton (M-PANELS Step 2)", () => {
     expect(screen.getByTestId("ai-process-button")).not.toBeDisabled();
   });
 
-  it("renders a real Viewport on Steps 1+2 (format='glb' from M-RENDER-API)", () => {
-    const { unmount } = renderShell("/workbench/case/abc?step=1");
+  it("renders a real Viewport on Step 1 (geometry/render is unconditional)", () => {
+    renderShell("/workbench/case/abc?step=1");
     expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
-    unmount();
+  });
 
+  it("gates Step 2's mesh viewport on mesh completion to suppress pre-mesh 404 banner", () => {
+    // Pre-mesh, Step 2's /mesh/render endpoint returns 404 because the
+    // glb hasn't been generated yet. Without the gateOnStepCompletion
+    // gate, the Viewport rendered a hostile red error banner ("HTTP
+    // 404") which the user reported as a UI 404 bug. The shell now
+    // shows the friendly viewportEmptyHint placeholder until Step 2
+    // is completed (mesh action returns 200) or the mount-time HEAD
+    // probe detects an existing polyMesh.
     renderShell("/workbench/case/abc?step=2");
-    expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
+    const placeholder = screen.getByTestId("viewport-placeholder");
+    expect(placeholder).toBeInTheDocument();
+    expect(placeholder.textContent).toContain("AI 处理");
   });
 
   it("still shows the viewport placeholder on Steps 3-5 (not yet wired)", () => {
@@ -229,6 +239,26 @@ describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
       // And Step2Mesh's success panel rendered after the resolved mock.
       await waitFor(() => {
         expect(screen.getByTestId("step2-mesh-success")).toBeInTheDocument();
+      });
+    },
+  );
+
+  it(
+    "Step 2 mesh-viewport gate releases after a successful mesh — placeholder is replaced by Viewport",
+    async () => {
+      apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+      const user = userEvent.setup();
+      renderShell("/workbench/case/abc?step=2");
+
+      // Pre-mesh: the gate suppresses /mesh/render → placeholder visible.
+      expect(screen.getByTestId("viewport-placeholder")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("ai-process-button"));
+
+      // Post-mesh resolution: Step2Mesh fires onStepComplete → stepStates[2]
+      // = "completed" → the gate releases → Viewport renders.
+      await waitFor(() => {
+        expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
       });
     },
   );
