@@ -76,6 +76,11 @@ try:
 except ModuleNotFoundError:
     mesh_imported = None  # type: ignore[assignment]
 
+try:
+    from ui.backend.routes import geometry_render  # noqa: F401
+except ModuleNotFoundError:
+    geometry_render = None  # type: ignore[assignment]
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -121,3 +126,5 @@ if import_geometry is not None:
     app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])
 if mesh_imported is not None:
     app.include_router(mesh_imported.router, prefix="/api", tags=["mesh-imported"])
+if geometry_render is not None:
+    app.include_router(geometry_render.router, prefix="/api", tags=["geometry-render"])
