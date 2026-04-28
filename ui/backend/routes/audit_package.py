@@ -60,7 +60,7 @@ from ui.backend.schemas.audit_package import (
 )
 from ui.backend.services.validation_report import (  # noqa: SLF001
     _load_run_measurement,
-    load_case_detail,
+    is_whitelisted,
 )
 
 router = APIRouter()
@@ -150,12 +150,14 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
     Synchronous for v1 — build is typically < 5s. Async / progress
     streaming is a follow-up (PR-5e).
     """
-    # Whitelist gate (Codex PR-5d HIGH #1): refuse to sign a bundle for a
-    # case id that isn't in knowledge/whitelist.yaml. A signed "audit
-    # package" referencing an unknown case would be misleading to regulatory
-    # reviewers — no gold reference, no validation contract, no provenance.
-    # load_case_detail returns None for unknown ids.
-    if load_case_detail(case_id) is None:
+    # Whitelist gate (Codex PR-5d HIGH #1 + M-PANELS Codex Round 3 P1):
+    # refuse to sign a bundle for a case id that isn't in
+    # knowledge/whitelist.yaml. A signed "audit package" referencing an
+    # imported draft would be misleading to regulatory reviewers — no gold
+    # reference, no validation contract, no provenance. Use is_whitelisted()
+    # explicitly here: load_case_detail() now also matches imported drafts,
+    # so its None-check is no longer a whitelist-only gate.
+    if not is_whitelisted(case_id):
         raise HTTPException(
             status_code=404,
             detail=f"unknown case_id: {case_id!r} (not in knowledge/whitelist.yaml)",

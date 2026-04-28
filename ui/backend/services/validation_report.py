@@ -848,6 +848,19 @@ def list_cases() -> list[CaseIndexEntry]:
     return out
 
 
+def is_whitelisted(case_id: str) -> bool:
+    """Return True iff ``case_id`` exists in ``knowledge/whitelist.yaml``.
+
+    Use this when a route's contract is *whitelist-membership specifically*
+    (e.g. audit-package signing — see audit_package.py). Do NOT use
+    ``load_case_detail() is not None`` for that check: it now also matches
+    imported drafts since the M-PANELS Step 10 fix, and silently widening a
+    whitelist-only gate to imported cases is the Codex Round 3 P1 regression
+    this predicate exists to prevent.
+    """
+    return _load_whitelist().get(case_id) is not None
+
+
 def _load_imported_draft(case_id: str) -> dict[str, Any] | None:
     """Read an imported case's user-draft YAML (if it exists) and return the
     parsed mapping.

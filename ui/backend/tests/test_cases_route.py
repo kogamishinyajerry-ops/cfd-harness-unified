@@ -60,10 +60,8 @@ def test_get_case_returns_gold_case_unchanged() -> None:
     assert body["geometry_type"] == "SIMPLE_GRID"
 
 
-def test_get_case_falls_through_to_imported_draft(isolated_drafts) -> None:
-    """M-PANELS Step 1 fix: imported case_ids resolve via user_drafts/<id>.yaml."""
-    _, _, fake_drafts = isolated_drafts
-    case_id = "imported_2026-04-28T11-39-46Z_a4d3db45"
+def _seed_imported_draft(fake_drafts: Path, case_id: str) -> None:
+    """Drop a minimal imported-draft YAML at the redirected REPO_ROOT location."""
     yaml_text = (
         f"id: {case_id}\n"
         "name: Imported · cylinder.stl\n"
@@ -76,32 +74,80 @@ def test_get_case_falls_through_to_imported_draft(isolated_drafts) -> None:
     )
     (fake_drafts / f"{case_id}.yaml").write_text(yaml_text, encoding="utf-8")
 
-    detail = validation_report.load_case_detail(case_id)
-    assert detail is not None
-    assert detail.case_id == case_id
-    assert detail.name == "Imported · cylinder.stl"
-    assert detail.geometry_type == "CUSTOM"
-    assert detail.flow_type == "INTERNAL"
-    assert detail.turbulence_model == "laminar"
-    # solver dict in YAML → str via solver.name
-    assert detail.solver == "simpleFoam"
-    # imported cases never carry gold standard / preconditions
-    assert detail.gold_standard is None
-    assert detail.preconditions == []
-    assert detail.contract_status_narrative is None
+
+def test_get_case_falls_through_to_imported_draft_via_http(isolated_drafts) -> None:
+    """M-PANELS Step 1 fix · WIRE PATH: imported case_ids resolve through the route.
+
+    Codex Round 3 WARNING: the original test reached load_case_detail()
+    directly, which left the actual /api/cases/{id} HTTP path uncovered for
+    imported cases. This test goes through the FastAPI TestClient.
+    """
+    _, _, fake_drafts = isolated_drafts
+    case_id = "imported_2026-04-28T11-39-46Z_a4d3db45"
+    _seed_imported_draft(fake_drafts, case_id)
+
+    r = client.get(f"/api/cases/{case_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["case_id"] == case_id
+    assert body["name"] == "Imported · cylinder.stl"
+    assert body["geometry_type"] == "CUSTOM"
+    assert body["flow_type"] == "INTERNAL"
+    assert body["turbulence_model"] == "laminar"
+    assert body["solver"] == "simpleFoam"  # solver dict → solver.name
+    assert body["gold_standard"] is None
+    assert body["preconditions"] == []
 
 
-def test_get_case_returns_404_for_unknown_id(isolated_drafts) -> None:
-    """Cases that exist in neither whitelist nor user_drafts still 404."""
-    detail = validation_report.load_case_detail("unknown_case_xyz")
-    assert detail is None
+def test_get_case_returns_404_for_unknown_id_via_http(isolated_drafts) -> None:
+    """Cases in neither whitelist nor user_drafts still 404 through the route."""
+    r = client.get("/api/cases/unknown_case_xyz")
+    assert r.status_code == 404
 
 
 def test_get_case_rejects_path_traversal(isolated_drafts) -> None:
     """Path-traversal attempts are rejected by the alphanum/underscore/hyphen guard."""
-    # Whitelist won't match; draft-fall-through guard rejects unsafe chars.
+    # The starlette router strips dot-segments from URL paths so the route
+    # never sees the raw traversal chars; reach load_case_detail directly to
+    # verify the *guard* (the second line of defense) rejects unsafe ids.
     detail = validation_report.load_case_detail("../../../etc/passwd")
     assert detail is None
+    # Also probe the HTTP layer for a syntactically-invalid id that survives
+    # path normalization (a colon is route-safe but fails the allowlist).
+    r = client.get("/api/cases/has:colons:and:slashes")
+    assert r.status_code == 404
+
+
+def test_audit_package_refuses_imported_case_ids(isolated_drafts, monkeypatch) -> None:
+    """Codex Round 3 P1 regression guard: audit-package signing must NOT
+    silently widen to imported cases now that load_case_detail() also
+    resolves them. The route uses is_whitelisted() explicitly to keep its
+    whitelist-only contract intact.
+    """
+    _, _, fake_drafts = isolated_drafts
+    case_id = "imported_2026-04-28T11-39-46Z_a4d3db45"
+    _seed_imported_draft(fake_drafts, case_id)
+    monkeypatch.setenv("CFD_HARNESS_HMAC_SECRET", "text:test-secret")
+
+    # Imported case → 404 (whitelist gate, even though /api/cases/<id> serves it).
+    r = client.post(f"/api/cases/{case_id}/runs/no_run/audit-package/build")
+    assert r.status_code == 404
+    detail = r.json()["detail"]
+    assert "not in knowledge/whitelist.yaml" in detail
+
+
+def test_is_whitelisted_predicate(isolated_drafts) -> None:
+    """is_whitelisted() is True for whitelist cases, False for imported drafts."""
+    _, _, fake_drafts = isolated_drafts
+    case_id = "imported_2026-04-28T11-39-46Z_a4d3db45"
+    _seed_imported_draft(fake_drafts, case_id)
+
+    assert validation_report.is_whitelisted("lid_driven_cavity") is True
+    # Imported draft exists (load_case_detail resolves it) but it's NOT
+    # whitelisted — this is the predicate audit_package.py needs.
+    assert validation_report.load_case_detail(case_id) is not None
+    assert validation_report.is_whitelisted(case_id) is False
+    assert validation_report.is_whitelisted("totally_unknown") is False
 
 
 def test_get_case_e2e_imported_via_scaffold(isolated_drafts) -> None:
@@ -135,8 +181,9 @@ def test_get_case_e2e_imported_via_scaffold(isolated_drafts) -> None:
         src_yaml.read_text(encoding="utf-8"), encoding="utf-8"
     )
 
-    detail = validation_report.load_case_detail(result.case_id)
-    assert detail is not None
-    assert detail.case_id == result.case_id
-    assert detail.name.startswith("Imported")
-    assert detail.gold_standard is None
+    r = client.get(f"/api/cases/{result.case_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["case_id"] == result.case_id
+    assert body["name"].startswith("Imported")
+    assert body["gold_standard"] is None
