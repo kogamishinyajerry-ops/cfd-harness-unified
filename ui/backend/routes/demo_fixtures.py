@@ -89,17 +89,20 @@ def _refresh_sizes() -> None:
 
     Codex Round 6 P2: previously this only WROTE size_bytes when the
     file existed, leaving stale non-zero values for fixtures that
-    disappeared from disk. ``list_demo_fixtures`` filters by
-    ``size_bytes > 0`` and would advertise a stale fixture, then a
-    click on it would deterministically 500 from the missing-on-disk
-    branch. Always overwrite (size if present, 0 otherwise) so the
-    list reflects the live filesystem state.
+    disappeared from disk. Always overwrite (size if present, 0
+    otherwise) so the list reflects the live filesystem state.
+
+    Codex Round 7 P3: collapse the ``exists()`` → ``stat()`` TOCTTOU
+    window by stat-ing directly and treating ``FileNotFoundError`` as
+    "missing". A concurrent deletion between the two syscalls would
+    otherwise let a 500 escape from a route promising to just hide
+    the fixture.
     """
     for fx in _FIXTURES.values():
         path = _FIXTURE_ROOT / fx.filename
-        if path.exists():
+        try:
             fx.size_bytes = path.stat().st_size
-        else:
+        except FileNotFoundError:
             fx.size_bytes = 0
 
 
@@ -148,16 +151,12 @@ def import_demo_fixture(fixture_name: str) -> ImportSTLResponse:
             detail=f"unknown demo fixture: {fixture_name!r} (allowed: {sorted(_FIXTURES)})",
         )
 
-    path = _FIXTURE_ROOT / fx.filename
-    if not path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"demo fixture {fx.filename!r} listed in catalogue but missing on disk "
-                f"at {path}. The repo's examples/imports/ may be incomplete."
-            ),
-        )
-
+    # Codex Round 7 P3: collapse the ``exists()`` → ``read_bytes()``
+    # TOCTTOU window by attempting the read directly. FileNotFoundError
+    # surfaces as the same missing-on-disk 500 the explicit check
+    # produced before — same observable contract, no race window for
+    # an external deletion to slip a 5xx escape past us.
+    #
     # Codex Round 6 Q3 follow-up: parse / watertight failures on a
     # server-owned checked-in fixture are operator faults, not user-
     # upload faults. /api/import/stl returns 4xx because the user
@@ -165,7 +164,17 @@ def import_demo_fixture(fixture_name: str) -> ImportSTLResponse:
     # 500 so operators see the breakage instead of users getting a
     # confusing "bad geometry" message about a fixture they didn't
     # author.
-    contents = path.read_bytes()
+    path = _FIXTURE_ROOT / fx.filename
+    try:
+        contents = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"demo fixture {fx.filename!r} listed in catalogue but missing on disk "
+                f"at {path}. The repo's examples/imports/ may be incomplete."
+            ),
+        ) from exc
     loaded, parse_errors = load_stl_from_bytes(contents)
     if parse_errors or loaded is None:
         raise HTTPException(

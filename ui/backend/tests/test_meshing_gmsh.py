@@ -82,11 +82,16 @@ def test_gmsh_runs_on_real_box_stl(tmp_path: Path):
 
 
 def test_gmsh_raises_on_missing_stl(tmp_path: Path):
-    with pytest.raises(GmshMeshGenerationError, match="not found"):
+    """Codex Round 7 P2: a missing STL is a filesystem fault, not a
+    user-geometry fault. Surfaces as OSError (FileNotFoundError ⊂ OSError)
+    so the pipeline routes it as 5xx, NOT as gmsh_diverged / 422.
+    """
+    with pytest.raises(OSError, match="not found") as excinfo:
         run_gmsh_on_imported_case(
             stl_path=tmp_path / "missing.stl",
             output_msh_path=tmp_path / "out.msh",
         )
+    assert not isinstance(excinfo.value, GmshMeshGenerationError)
 
 
 # ----- pipeline ----------------------------------------------------------
@@ -483,21 +488,25 @@ def test_gmsh_runner_subprocess_wrapper_returns_inline_result(tmp_path: Path):
     assert result.point_count > 0
 
 
-def test_gmsh_runner_subprocess_wrapper_marshals_gmsh_errors(tmp_path: Path):
-    """When the child process raises GmshMeshGenerationError, the parent
-    re-raises the same type with the original message intact (queue
-    payload roundtrip)."""
+def test_gmsh_runner_subprocess_wrapper_marshals_missing_stl_as_filesystem_fault(tmp_path: Path):
+    """Codex Round 7 P2: a missing STL is a filesystem / operator
+    fault, not a user-geometry fault. _gmsh_inline raises
+    FileNotFoundError (⊂ OSError), the wrapper marshals it as
+    'os_error', and the parent re-raises as OSError so the pipeline
+    routes it as 5xx — NOT as GmshMeshGenerationError → 4xx.
+    """
     from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
 
     stl_path = tmp_path / "missing.stl"  # intentionally not created
-    with pytest.raises(
-        runner_mod.GmshMeshGenerationError, match="STL not found"
-    ):
+    with pytest.raises(OSError, match="STL not found") as excinfo:
         runner_mod.run_gmsh_on_imported_case(
             stl_path=stl_path,
             output_msh_path=tmp_path / "out.msh",
             mesh_mode="beginner",
         )
+    # Must NOT be GmshMeshGenerationError (which would 4xx-relabel
+    # the missing-file fault as "bad geometry").
+    assert not isinstance(excinfo.value, runner_mod.GmshMeshGenerationError)
 
 
 def test_subprocess_target_routes_oserror_as_os_error(tmp_path: Path):

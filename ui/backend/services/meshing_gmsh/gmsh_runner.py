@@ -97,8 +97,12 @@ def _gmsh_inline(
     # at module top would crash the base ``[ui]`` install.
     import gmsh
 
+    # Codex Round 7 P2: a missing STL is a filesystem / operator fault,
+    # not a user-geometry fault. Surface as FileNotFoundError (⊂ OSError)
+    # so the wrapper marshals it as 'os_error' → 5xx, NOT as
+    # GmshMeshGenerationError → gmsh_diverged → 422.
     if not stl_path.exists():
-        raise GmshMeshGenerationError(f"STL not found: {stl_path}")
+        raise FileNotFoundError(f"STL not found: {stl_path}")
 
     output_msh_path.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()

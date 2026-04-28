@@ -140,3 +140,43 @@ def test_import_demo_fixture_corrupt_asset_returns_500(
     detail = r.json()["detail"]
     assert "cylinder.stl" in detail
     assert "corrupt" in detail or "STL parse" in detail
+
+
+def test_refresh_sizes_swallows_filenotfound_directly(
+    isolated_fixture_root: Path,
+) -> None:
+    """Codex Round 7 P3 regression guard: _refresh_sizes() must NOT
+    use the exists()→stat() pattern (TOCTTOU race window where
+    concurrent deletion 500s the route). Instead, stat() directly
+    and treat FileNotFoundError as 'missing'.
+
+    Verified by deleting a fixture and confirming size_bytes goes to
+    0 (no exception escapes _refresh_sizes).
+    """
+    (isolated_fixture_root / "cylinder.stl").unlink()
+    demo_mod._refresh_sizes()  # must not raise
+    assert demo_mod._FIXTURES["cylinder"].size_bytes == 0
+
+
+def test_import_demo_fixture_collapses_toctou_to_500(
+    isolated_fixture_root: Path,
+) -> None:
+    """Codex Round 7 P3 regression guard: the import path must NOT
+    use the exists()→read_bytes() pattern. read_bytes() directly
+    and catch FileNotFoundError as the same 500 'missing on disk'
+    message the explicit-check path produced.
+
+    Verified by force-stating a non-zero size_bytes (simulating a
+    catalogue snapshot from before the deletion) then deleting the
+    file before the POST. With the TOCTTOU collapse, the route must
+    cleanly 500 — without it, FileNotFoundError would escape as
+    a raw 500 with no detail.
+    """
+    (isolated_fixture_root / "ldc_box.stl").unlink()
+    demo_mod._FIXTURES["ldc_box"].size_bytes = 684  # stale snapshot
+
+    r = client.post("/api/demo-fixtures/ldc_box/import")
+    assert r.status_code == 500
+    detail = r.json()["detail"]
+    assert "ldc_box.stl" in detail
+    assert "missing on disk" in detail
