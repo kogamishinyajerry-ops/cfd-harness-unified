@@ -21,7 +21,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ui.backend.schemas.import_geometry import (
-    ImportRejection,
     ImportSTLResponse,
     IngestReportPayload,
     PatchInfoPayload,
@@ -86,11 +85,22 @@ _FIXTURES: dict[str, DemoFixture] = {
 
 
 def _refresh_sizes() -> None:
-    """Populate size_bytes from the actual on-disk STLs."""
+    """Re-stat every catalogue entry's STL on disk and update ``size_bytes``.
+
+    Codex Round 6 P2: previously this only WROTE size_bytes when the
+    file existed, leaving stale non-zero values for fixtures that
+    disappeared from disk. ``list_demo_fixtures`` filters by
+    ``size_bytes > 0`` and would advertise a stale fixture, then a
+    click on it would deterministically 500 from the missing-on-disk
+    branch. Always overwrite (size if present, 0 otherwise) so the
+    list reflects the live filesystem state.
+    """
     for fx in _FIXTURES.values():
         path = _FIXTURE_ROOT / fx.filename
         if path.exists():
             fx.size_bytes = path.stat().st_size
+        else:
+            fx.size_bytes = 0
 
 
 _refresh_sizes()
@@ -148,26 +158,34 @@ def import_demo_fixture(fixture_name: str) -> ImportSTLResponse:
             ),
         )
 
+    # Codex Round 6 Q3 follow-up: parse / watertight failures on a
+    # server-owned checked-in fixture are operator faults, not user-
+    # upload faults. /api/import/stl returns 4xx because the user
+    # supplied bad bytes; here the server supplied them. Surface as
+    # 500 so operators see the breakage instead of users getting a
+    # confusing "bad geometry" message about a fixture they didn't
+    # author.
     contents = path.read_bytes()
     loaded, parse_errors = load_stl_from_bytes(contents)
     if parse_errors or loaded is None:
-        rejection = ImportRejection(
-            reason=parse_errors[0] if parse_errors else "STL load returned no geometry",
-            failing_check="stl_parse",
-            ingest_report=_ingest_to_payload(IngestReport.from_parse_failure(parse_errors)),
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"demo fixture {fx.filename!r} failed STL parse: "
+                f"{parse_errors[0] if parse_errors else 'no geometry'} — "
+                f"the checked-in asset is corrupt and needs operator attention."
+            ),
         )
-        raise HTTPException(status_code=400, detail=rejection.model_dump())
 
     combined = combine(loaded)
     if combined is None:
-        rejection = ImportRejection(
-            reason="STL contained no geometry",
-            failing_check="stl_parse",
-            ingest_report=_ingest_to_payload(
-                IngestReport.from_parse_failure(["STL contained no geometry"])
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"demo fixture {fx.filename!r} contained no usable geometry "
+                f"after combine() — the checked-in asset is corrupt."
             ),
         )
-        raise HTTPException(status_code=400, detail=rejection.model_dump())
 
     patches, all_default = detect_patches(loaded)
     report = run_health_checks(
@@ -178,12 +196,13 @@ def import_demo_fixture(fixture_name: str) -> ImportSTLResponse:
     )
 
     if report.errors:
-        rejection = ImportRejection(
-            reason=report.errors[0],
-            failing_check="watertight" if not report.is_watertight else "unknown",
-            ingest_report=_ingest_to_payload(report),
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"demo fixture {fx.filename!r} failed health checks: "
+                f"{report.errors[0]} — the checked-in asset is corrupt."
+            ),
         )
-        raise HTTPException(status_code=400, detail=rejection.model_dump())
 
     result = scaffold_imported_case(
         report=report,

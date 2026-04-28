@@ -33,6 +33,18 @@ class GmshMeshGenerationError(RuntimeError):
     """Raised when gmsh fails to produce a valid 3D mesh."""
 
 
+class GmshSubprocessError(RuntimeError):
+    """Raised when the gmsh child process fails for a non-geometry
+    reason (hard crash, ImportError, generic backend fault). The
+    pipeline lets this bubble as 5xx — it is NOT a user-geometry
+    rejection and must NOT be relabeled as ``gmsh_diverged`` / 422.
+
+    Codex Round 5 P1 + Round 6 P1: distinguishing this from
+    ``GmshMeshGenerationError`` is what keeps the route layer's
+    "bad geometry vs backend fault" contract intact.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class GmshRunResult:
     msh_path: Path
@@ -284,7 +296,14 @@ def run_gmsh_on_imported_case(
     proc.join()
 
     if proc.exitcode != 0 and queue.empty():
-        raise GmshMeshGenerationError(
+        # Codex Round 6 P1: a hard child crash (segfault, OOM kill,
+        # ``os._exit``, gmsh native abort) leaves no payload on the
+        # queue. The previous code raised GmshMeshGenerationError here
+        # which the pipeline mapped to gmsh_diverged / 422 — same
+        # 4xx-relabel bug the Round 5 fix was supposed to close, just
+        # on the no-payload crash path. Surface as GmshSubprocessError
+        # so it bubbles as 5xx alongside the other deployment faults.
+        raise GmshSubprocessError(
             f"gmsh subprocess exited with code {proc.exitcode} before "
             "posting a result (likely a hard crash inside gmsh's native code)."
         )
@@ -308,17 +327,17 @@ def run_gmsh_on_imported_case(
         raise OSError(str(payload))
     if kind == "import_error":
         # gmsh module missing in the deployed [workbench] extra. Surface
-        # as RuntimeError so FastAPI returns 5xx and operators see the
-        # original ImportError class + message. NOT a user-geometry
-        # fault — must not collapse to gmsh_diverged / 422.
-        raise RuntimeError(
+        # as GmshSubprocessError so FastAPI returns 5xx and operators
+        # see a structured cause class. NOT a user-geometry fault —
+        # must not collapse to gmsh_diverged / 422.
+        raise GmshSubprocessError(
             f"gmsh subprocess could not initialize (deployment fault): {payload}"
         )
     # 'backend_error' (or any unknown kind from a future version) —
-    # surface as RuntimeError so the route layer reports 5xx. Codex
-    # Round 5 P1: this branch must NOT raise GmshMeshGenerationError,
-    # otherwise child-bootstrap / unknown-cause faults would be
-    # silently relabeled as "bad geometry" (HTTP 422).
-    raise RuntimeError(
+    # surface as GmshSubprocessError so the route layer reports 5xx.
+    # Codex Round 5 P1 + Round 6 P1: this branch must NOT raise
+    # GmshMeshGenerationError, otherwise child-bootstrap / unknown-
+    # cause faults would be silently relabeled as "bad geometry" (422).
+    raise GmshSubprocessError(
         f"gmsh subprocess raised an unhandled exception (kind={kind!r}): {payload}"
     )

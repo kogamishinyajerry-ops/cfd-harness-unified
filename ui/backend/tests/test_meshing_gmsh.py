@@ -608,3 +608,65 @@ def test_subprocess_target_routes_unknown_as_backend_error(tmp_path: Path):
     kind, payload = captured.get_nowait()
     assert kind == "backend_error"
     assert "_SomeBackendBug" in payload
+
+
+def test_subprocess_wrapper_hard_crash_raises_gmsh_subprocess_error(tmp_path: Path, monkeypatch):
+    """Codex Round 6 P1 regression guard: a hard child-process crash
+    (segfault, OOM kill, os._exit, gmsh native abort) leaves no
+    payload on the queue. The wrapper's ``proc.exitcode != 0 and
+    queue.empty()`` branch must raise GmshSubprocessError (5xx
+    backend), NOT GmshMeshGenerationError (which would 4xx-relabel
+    the crash as 'bad geometry').
+
+    We simulate by stubbing the multiprocessing context to return a
+    fake Process that exits with code 1 immediately, leaving the
+    queue empty.
+    """
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    class _FakeProc:
+        def __init__(self, *_a, **_kw):
+            self.exitcode = 1
+
+        def start(self) -> None:
+            return None
+
+        def join(self) -> None:
+            return None
+
+    class _FakeCtx:
+        def Queue(self):
+            import queue as _q
+
+            return _q.Queue()  # always empty
+
+        def Process(self, *args, **kwargs):
+            return _FakeProc(*args, **kwargs)
+
+    monkeypatch.setattr(
+        runner_mod.multiprocessing, "get_context", lambda *_a, **_kw: _FakeCtx()
+    )
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    raised: BaseException | None = None
+    try:
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+        )
+    except BaseException as e:  # noqa: BLE001
+        raised = e
+
+    assert raised is not None
+    assert isinstance(raised, runner_mod.GmshSubprocessError), (
+        f"Hard child crash must raise GmshSubprocessError; "
+        f"got {type(raised).__name__}: {raised}"
+    )
+    assert not isinstance(raised, runner_mod.GmshMeshGenerationError), (
+        f"Hard child crash must NOT collapse to GmshMeshGenerationError "
+        f"(would 4xx-relabel as 'bad geometry'); got {type(raised).__name__}"
+    )
+    assert "exited with code 1" in str(raised)
