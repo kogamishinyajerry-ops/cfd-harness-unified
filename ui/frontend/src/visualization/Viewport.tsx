@@ -118,7 +118,7 @@ export function Viewport({
       )}
       {loadState.status === "ready" && (
         <p className="mt-2 text-[11px] text-surface-500">
-          drag to rotate · wheel to zoom · ⌥drag to pan
+          drag to rotate · wheel to zoom · shift+drag to pan · ⌥drag to spin
         </p>
       )}
     </div>
