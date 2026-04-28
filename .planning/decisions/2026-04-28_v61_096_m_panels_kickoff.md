@@ -41,7 +41,9 @@ prerequisite_status:
 notion_sync_status: synced 2026-04-28 (DEC https://www.notion.so/350c68942bed8141b428e851d8c0fd26 · brief sub-page https://www.notion.so/350c68942bed81d485e8f426d1adaf3f · spec_v2 sub-page https://www.notion.so/350c68942bed81b39cbedfdfc734884d · placement inherits V61-094/V61-095 P3 #5 precedent)
 autonomous_governance: true
 library_choice: React + React Router + Tailwind (all existing) · @kitware/vtk.js Viewport from M-VIZ · @tanstack/react-query for endpoint state (verify usage in surface scan; add if absent · single PR scope) · NO new UI component library / state-management library
-codex_tool_report_path: pending (per-implementation-arc Codex fires PRE-MERGE on Step 8 of spec_v2 §Sequence per RETRO-V61-001 ≤70% self-pass gate)
+codex_tool_report_path:
+  round_1: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round1.md (CHANGES_REQUIRED · 2 P2 [F1 step-tree mid-flight nav, F2 AI button race] · session 019dd36b-bfda-78a3-8f2c-a0abd7899e4e · arc 08b0d16..d25e365)
+  round_2: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round2.md (APPROVE · 0 P1/P2 · 72,532 tokens · session 019dd3cf-72d2-7450-8f9b-15602a868444 · arc 08b0d16..060d25b · pre-merge gate CLEARED)
 codex_review_required: true
 codex_review_phase: pre-merge (RETRO-V61-001 ≤70% self-pass gate · NOT post-merge)
 codex_triggers:
