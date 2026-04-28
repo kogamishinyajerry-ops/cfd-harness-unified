@@ -38,7 +38,7 @@ prerequisite_status:
   line_a_contract: confirmed (workbench/** declared line-A in ROADMAP §"Line-A / Line-B isolation contract" predates V61-094; visualization/** declared in commit 8fdb0a3 PRE-M-VIZ. NO further ROADMAP extension needed for M-PANELS Tier-A.)
   m_render_api_endpoints: confirmed (geometry/render + mesh/render + results/{run}/field/{name} all live · Codex APPROVE)
   break_freeze_quota: confirmed (current count 1/3 from M-VIZ Step 6 e453ba0 · M-PANELS Tier-A consumes 1 slot taking total to 2/3 · M-AI-COPILOT projected to consume the last slot taking total to 3/3 · accounted in spec_v2 §F)
-notion_sync_status: pending (DEC + brief + spec_v2 sub-pages will sync after this DEC's ratify trailer commit per V61-094/V61-095 §Sync precedent · Kogami P3 #5 placement)
+notion_sync_status: synced 2026-04-28 (DEC https://www.notion.so/350c68942bed8141b428e851d8c0fd26 · brief sub-page https://www.notion.so/350c68942bed81d485e8f426d1adaf3f · spec_v2 sub-page https://www.notion.so/350c68942bed81b39cbedfdfc734884d · placement inherits V61-094/V61-095 P3 #5 precedent)
 autonomous_governance: true
 library_choice: React + React Router + Tailwind (all existing) · @kitware/vtk.js Viewport from M-VIZ · @tanstack/react-query for endpoint state (verify usage in surface scan; add if absent · single PR scope) · NO new UI component library / state-management library
 codex_tool_report_path: pending (per-implementation-arc Codex fires PRE-MERGE on Step 8 of spec_v2 §Sequence per RETRO-V61-001 ≤70% self-pass gate)
