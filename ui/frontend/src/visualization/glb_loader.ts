@@ -69,19 +69,28 @@ export async function parseGlbBytes(buffer: ArrayBuffer): Promise<GlbData> {
   // and its transitive vtk.js dependencies are split into their own
   // chunk and only fetched when the user actually opens a glb-format
   // Viewport.
-  const { default: vtkGLTFImporter } = await import(
-    "@kitware/vtk.js/IO/Geometry/GLTFImporter"
-  );
-  const importer = vtkGLTFImporter.newInstance();
+  //
+  // Round-3 Finding 7: the dynamic import itself can fail (chunk 404,
+  // network drop after the splash, missing CSP allowance). Wrap the
+  // import + newInstance + parse in a single try/catch so chunk-load
+  // failures surface as GlbLoadError(kind="parse") instead of leaking
+  // a raw error and falling through to the Viewport's "unknown" kind.
+  let importer: ReturnType<typeof vtkGLTFImporterType.newInstance> | undefined;
   try {
+    const { default: vtkGLTFImporter } = await import(
+      "@kitware/vtk.js/IO/Geometry/GLTFImporter"
+    );
+    importer = vtkGLTFImporter.newInstance();
     importer.parseAsArrayBuffer(buffer);
     return { importer };
   } catch (err) {
-    try {
-      importer.delete();
-    } catch {
-      // delete() is not formally idempotent in vtk.js; suppress so the
-      // original parse error reaches the caller.
+    if (importer) {
+      try {
+        importer.delete();
+      } catch {
+        // delete() is not formally idempotent in vtk.js; suppress so the
+        // original parse error reaches the caller.
+      }
     }
     if (err instanceof GlbLoadError) throw err;
     const message =

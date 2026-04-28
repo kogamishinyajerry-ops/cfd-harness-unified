@@ -97,4 +97,29 @@ describe("glb_loader.parseGlbBytes", () => {
     );
     expect(importerInstance.delete).toHaveBeenCalledTimes(1);
   });
+
+  it("normalizes lazy-chunk-load failures to GlbLoadError(kind=parse) (Round-3 Finding 7)", async () => {
+    // Simulate a dynamic-import that resolves but whose default export
+    // throws when newInstance is called — same observable shape as a
+    // chunk-load TypeError reaching our try/catch. Without the Round-3
+    // wrap, this raw error would bubble up to Viewport as kind="unknown"
+    // instead of "parse".
+    vi.resetModules();
+    vi.doMock("@kitware/vtk.js/IO/Geometry/GLTFImporter", () => ({
+      default: {
+        newInstance: () => {
+          throw new TypeError("Failed to load chunk: net::ERR_FAILED");
+        },
+      },
+    }));
+    const mod = await import("../glb_loader");
+    await expect(
+      mod.parseGlbBytes(new Uint8Array(8).buffer),
+    ).rejects.toMatchObject({
+      name: "GlbLoadError",
+      kind: "parse",
+    });
+    vi.doUnmock("@kitware/vtk.js/IO/Geometry/GLTFImporter");
+    vi.resetModules();
+  });
 });

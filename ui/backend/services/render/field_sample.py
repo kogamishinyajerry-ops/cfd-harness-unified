@@ -245,15 +245,18 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
         n = cache.stat().st_size // 4
         return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
 
-    # Round-2 Finding 3: snapshot source mtime before parsing; if it
-    # changes during the rebuild window, abort and let the next request
-    # rebuild from the newer source. Without this guard a slow rebuild
-    # racing a source update can land an older payload over a newer
-    # cache and stamp it with a fresh mtime, freezing stale bytes.
+    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
+    # before parsing, after parsing, AND after os.replace. The post-
+    # parse check stops a stale-body / fresh-cache race; the post-
+    # replace check stops the residual window where the source mutates
+    # between our post-parse stat and the atomic rename — without this
+    # the cache mtime can outrace the source mtime forever, freezing
+    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
+    # we delete the just-written cache so the next request rebuilds.
     src_mtime_before = field_path.stat().st_mtime_ns
     values = _parse_internal_scalar_field(field_path)
-    src_mtime_after = field_path.stat().st_mtime_ns
-    if src_mtime_after != src_mtime_before:
+    src_mtime_after_parse = field_path.stat().st_mtime_ns
+    if src_mtime_after_parse != src_mtime_before:
         raise FieldSampleError(
             failing_check="field_parse_error",
             message=(
@@ -264,6 +267,19 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
     payload = values.astype(np.float32, copy=False).tobytes()
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
     _atomic_write(cache, payload)
+    src_mtime_after_replace = field_path.stat().st_mtime_ns
+    if src_mtime_after_replace != src_mtime_before:
+        try:
+            cache.unlink()
+        except OSError:
+            pass
+        raise FieldSampleError(
+            failing_check="field_parse_error",
+            message=(
+                f"source {field_path.name} mutated during atomic write "
+                "(retry the request)"
+            ),
+        )
     return FieldSampleResult(
         cache_path=cache,
         point_count=int(values.size),

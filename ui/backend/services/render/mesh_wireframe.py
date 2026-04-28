@@ -188,19 +188,22 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
     if _is_cache_fresh(cache, points_path, faces_path):
         return WireframeBuildResult(cache_path=cache, status="hit")
 
-    # Round-2 Finding 3: snapshot both source mtimes before building.
-    # If either changes during the build window, abort so the next
-    # request rebuilds against the newer source rather than racing.
+    # Round-2 Finding 3 (closed in Round-3): snapshot both source mtimes
+    # before, after build, AND after os.replace. The post-replace check
+    # closes the residual window where a source file mutates between
+    # our post-build stat and the atomic rename (Codex Round-2 PARTIAL
+    # note). On detected mutation we delete the just-written cache so
+    # the next request rebuilds.
     src_mtimes_before = (
         points_path.stat().st_mtime_ns,
         faces_path.stat().st_mtime_ns,
     )
     glb_bytes = _build_wireframe_bytes(points_path, faces_path)
-    src_mtimes_after = (
+    src_mtimes_after_build = (
         points_path.stat().st_mtime_ns,
         faces_path.stat().st_mtime_ns,
     )
-    if src_mtimes_after != src_mtimes_before:
+    if src_mtimes_after_build != src_mtimes_before:
         raise MeshRenderError(
             failing_check="polymesh_parse_error",
             message=(
@@ -210,4 +213,20 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
         )
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
     _atomic_write(cache, glb_bytes)
+    src_mtimes_after_replace = (
+        points_path.stat().st_mtime_ns,
+        faces_path.stat().st_mtime_ns,
+    )
+    if src_mtimes_after_replace != src_mtimes_before:
+        try:
+            cache.unlink()
+        except OSError:
+            pass
+        raise MeshRenderError(
+            failing_check="polymesh_parse_error",
+            message=(
+                "polyMesh source mutated during atomic write "
+                "(retry the request)"
+            ),
+        )
     return WireframeBuildResult(cache_path=cache, status=status)
