@@ -31,7 +31,7 @@ prerequisite_status:
   m6_0_acceptance: confirmed (gmsh + sHM pipeline outputs polyMesh under <case_dir>/constant/polyMesh/)
   m5_1_acceptance: confirmed (cap dormant; M7-redefined wires it. M-RENDER-API field endpoint reads from completed-run output directories regardless of cap state.)
   workbench_extra_dep: confirmed (trimesh already a [workbench] dep · M5.0 ingest depends on it · zero new dependencies needed for Tier-A)
-notion_sync_status: pending (sync after CFDJerry Acceptance · DEC + brief + spec_v2 paired per V61-094 §Sync precedent)
+notion_sync_status: synced 2026-04-28 (DEC https://www.notion.so/350c68942bed81da9f1fd5ace88dd5f9 · brief sub-page https://www.notion.so/350c68942bed81d8bae7e637cdaa3ee4 · spec_v2 sub-page https://www.notion.so/350c68942bed81deb9d3e7c8cd6ea7a5 · placement inherits V61-094 P3 #5 precedent)
 autonomous_governance: true
 library_choice: trimesh.export (working assumption · subject to ratification override before Status=Accepted)
 codex_tool_report_path: pending (per-implementation-arc Codex fires on Step 8 of spec_v2 §Sequence)
