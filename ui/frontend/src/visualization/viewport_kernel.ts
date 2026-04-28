@@ -80,9 +80,25 @@ export function createKernel(
     // bind the renderer and let the importer populate it. The importer
     // itself owns the actors so dispose only needs to delete the
     // importer (cascades to its actors per vtk.js GLTFImporter semantics).
+    //
+    // Round-2 Finding 5: defer ownership transfer until importActors()
+    // succeeds. If setRenderer or importActors throws (truncated payload
+    // surviving the parse gate, GL state mismatch, etc.) the kernel
+    // would otherwise hold a half-imported reference that leaks until
+    // the next dispose. Delete the importer immediately on throw and
+    // re-raise so the React layer can surface an error banner.
+    try {
+      imp.setRenderer(grw.getRenderer());
+      imp.importActors();
+    } catch (err) {
+      try {
+        imp.delete();
+      } catch {
+        // delete() is not formally idempotent in vtk.js
+      }
+      throw err;
+    }
     importer = imp;
-    imp.setRenderer(grw.getRenderer());
-    imp.importActors();
 
     const renderer = grw.getRenderer();
     renderer.resetCamera();

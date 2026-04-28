@@ -213,4 +213,40 @@ describe("Viewport", () => {
     ).toBeInTheDocument();
     expect(loadStlFromUrlMock).not.toHaveBeenCalled();
   });
+
+  it("renders an error banner when kernel.attachGltf throws (Round-2 Finding 5)", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+    attachGltfMock.mockImplementationOnce(() => {
+      throw new Error("importActors blew up");
+    });
+
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/geometry/render"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Viewport error \(unknown\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("disposes the kernel on unmount even on the glb path", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+
+    const { unmount } = render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/geometry/render"
+      />,
+    );
+    await waitFor(() => {
+      expect(attachGltfMock).toHaveBeenCalled();
+    });
+    unmount();
+    expect(disposeMock).toHaveBeenCalledTimes(1);
+  });
 });

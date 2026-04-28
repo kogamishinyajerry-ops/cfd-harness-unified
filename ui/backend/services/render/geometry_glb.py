@@ -72,6 +72,10 @@ def _resolve_source_stl(case_dir: Path) -> Path:
     (Codex round-1 P2 #1 fix on M-VIZ): ``glob("*.stl")`` would miss
     uploads named ``MODEL.STL`` since ``_safe_origin_filename``
     preserves the original casing.
+
+    Round-2 Finding 1: resolves the chosen path strictly and asserts it
+    stays under the case dir, so a symlink in ``triSurface/`` cannot
+    redirect us to an arbitrary file outside IMPORTED_DIR.
     """
     triSurface = case_dir / "triSurface"
     if not triSurface.is_dir():
@@ -85,7 +89,17 @@ def _resolve_source_stl(case_dir: Path) -> Path:
             failing_check="no_source_stl",
             message=f"no .stl under {triSurface}",
         )
-    return stls[0]
+    chosen = stls[0]
+    try:
+        resolved = chosen.resolve(strict=True)
+        case_root = case_dir.resolve(strict=True)
+        resolved.relative_to(case_root)
+    except (FileNotFoundError, OSError, ValueError):
+        raise GeometryRenderError(
+            failing_check="no_source_stl",
+            message=f"STL {chosen.name} resolved outside case dir",
+        )
+    return resolved
 
 
 def _cache_target(case_dir: Path) -> Path:
@@ -170,7 +184,21 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
     if _is_cache_fresh(cache, source_stl):
         return GlbBuildResult(cache_path=cache, status="hit")
 
+    # Round-2 Finding 3: snapshot source mtime before transcode; if it
+    # mutates during the rebuild, abort so the next request can rebuild
+    # against the newer source rather than overwrite the cache with a
+    # stale-but-fresh-mtimed payload.
+    src_mtime_before = source_stl.stat().st_mtime_ns
     glb_bytes = _transcode_to_glb(source_stl)
+    src_mtime_after = source_stl.stat().st_mtime_ns
+    if src_mtime_after != src_mtime_before:
+        raise GeometryRenderError(
+            failing_check="transcode_error",
+            message=(
+                f"source {source_stl.name} mutated during transcode "
+                "(retry the request)"
+            ),
+        )
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
     _atomic_write(cache, glb_bytes)
     return GlbBuildResult(cache_path=cache, status=status)

@@ -35,6 +35,7 @@ from .polymesh_parser import (
     extract_unique_edges,
     parse_faces,
     parse_points,
+    validate_face_indices,
 )
 
 
@@ -82,8 +83,16 @@ def _resolve_polymesh_dir(case_dir: Path) -> Path:
     )
 
 
-def _polymesh_source_files(polymesh_dir: Path) -> tuple[Path, Path]:
-    """Return ``(points_path, faces_path)`` or raise no_polymesh."""
+def _polymesh_source_files(
+    polymesh_dir: Path, case_dir: Path
+) -> tuple[Path, Path]:
+    """Return ``(points_path, faces_path)`` or raise no_polymesh.
+
+    Round-2 Finding 1: each chosen path is ``resolve(strict=True)``'d and
+    asserted to live under the case dir, so a symlink at
+    ``constant/polyMesh/points`` (or faces) cannot redirect us to an
+    arbitrary file outside IMPORTED_DIR.
+    """
     points = polymesh_dir / "points"
     faces = polymesh_dir / "faces"
     if not points.is_file():
@@ -96,7 +105,18 @@ def _polymesh_source_files(polymesh_dir: Path) -> tuple[Path, Path]:
             failing_check="no_polymesh",
             message=f"missing {faces}",
         )
-    return points, faces
+    try:
+        case_root = case_dir.resolve(strict=True)
+        points_resolved = points.resolve(strict=True)
+        faces_resolved = faces.resolve(strict=True)
+        points_resolved.relative_to(case_root)
+        faces_resolved.relative_to(case_root)
+    except (FileNotFoundError, OSError, ValueError):
+        raise MeshRenderError(
+            failing_check="no_polymesh",
+            message="polyMesh source resolved outside case dir",
+        )
+    return points_resolved, faces_resolved
 
 
 def _cache_target(case_dir: Path) -> Path:
@@ -126,6 +146,12 @@ def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
     try:
         points = parse_points(points_path)
         faces = parse_faces(faces_path)
+        # Round-2 Finding 4: face arity is checked against the count
+        # prefix in parse_faces, but vertex IDs were never checked
+        # against len(points). An out-of-range index would survive
+        # edge extraction and produce an indices accessor pointing past
+        # the POSITION buffer. Validate before building the GLB.
+        validate_face_indices(faces, n_points=len(points))
         edges = extract_unique_edges(faces)
     except PolyMeshParseError as exc:
         raise MeshRenderError(
@@ -156,13 +182,32 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
         )
 
     polymesh_dir = _resolve_polymesh_dir(case_dir)
-    points_path, faces_path = _polymesh_source_files(polymesh_dir)
+    points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
 
     cache = _cache_target(case_dir)
     if _is_cache_fresh(cache, points_path, faces_path):
         return WireframeBuildResult(cache_path=cache, status="hit")
 
+    # Round-2 Finding 3: snapshot both source mtimes before building.
+    # If either changes during the build window, abort so the next
+    # request rebuilds against the newer source rather than racing.
+    src_mtimes_before = (
+        points_path.stat().st_mtime_ns,
+        faces_path.stat().st_mtime_ns,
+    )
     glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+    src_mtimes_after = (
+        points_path.stat().st_mtime_ns,
+        faces_path.stat().st_mtime_ns,
+    )
+    if src_mtimes_after != src_mtimes_before:
+        raise MeshRenderError(
+            failing_check="polymesh_parse_error",
+            message=(
+                "polyMesh source mutated during transcode "
+                "(retry the request)"
+            ),
+        )
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
     _atomic_write(cache, glb_bytes)
     return WireframeBuildResult(cache_path=cache, status=status)

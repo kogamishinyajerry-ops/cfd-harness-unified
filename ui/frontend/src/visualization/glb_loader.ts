@@ -9,7 +9,13 @@
 // internally and exposes actors via getActors(). The kernel calls
 // importActors() against its renderer to populate the scene; the
 // loader's job is just to fetch the bytes and run parseAsArrayBuffer.
-import vtkGLTFImporter from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
+//
+// Round-2 Finding 6: ``vtkGLTFImporter`` is loaded via dynamic
+// ``import("@kitware/...")`` inside ``parseGlbBytes`` so STL-only
+// Viewport consumers don't pull the GLTFImporter (and its transitive
+// vtk.js dependencies) into the Viewport chunk. This preserves the
+// spec_v2 §AC#10 +50 KB gz delta budget regardless of caller mix.
+import type vtkGLTFImporterType from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
 
 export type GlbLoadFailureKind = "fetch" | "parse";
 
@@ -25,7 +31,7 @@ export class GlbLoadError extends Error {
 }
 
 export interface GlbData {
-  importer: ReturnType<typeof vtkGLTFImporter.newInstance>;
+  importer: ReturnType<typeof vtkGLTFImporterType.newInstance>;
 }
 
 export async function fetchGlbBytes(
@@ -52,12 +58,20 @@ export async function fetchGlbBytes(
   return response.arrayBuffer();
 }
 
-export function parseGlbBytes(buffer: ArrayBuffer): GlbData {
+export async function parseGlbBytes(buffer: ArrayBuffer): Promise<GlbData> {
   // vtkGLTFImporter validates the glb header internally and throws on
   // malformed input. Wrap so every failure surfaces as
   // GlbLoadError(kind="parse") and the importer is released on the
   // failure branch (otherwise the failed importer leaks until GC,
   // mirroring the stl_loader contract from M-VIZ Codex round-2).
+  //
+  // Round-2 Finding 6: dynamic-import the GLTFImporter so the module
+  // and its transitive vtk.js dependencies are split into their own
+  // chunk and only fetched when the user actually opens a glb-format
+  // Viewport.
+  const { default: vtkGLTFImporter } = await import(
+    "@kitware/vtk.js/IO/Geometry/GLTFImporter"
+  );
   const importer = vtkGLTFImporter.newInstance();
   try {
     importer.parseAsArrayBuffer(buffer);

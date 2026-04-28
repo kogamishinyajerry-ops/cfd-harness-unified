@@ -221,3 +221,22 @@ def test_get_case_geometry_render_matches_uppercase_stl(isolated_imported: Path)
     response = client.get(f"/api/cases/{case_id}/geometry/render")
     assert response.status_code == 200
     assert response.content[:4] == b"glTF"
+
+
+def test_build_geometry_glb_rejects_stl_symlink_escape(
+    isolated_imported: Path, tmp_path: Path,
+):
+    """Round-2 Finding 1: a symlink under triSurface/ pointing outside
+    the case dir must fail the resolve+relative_to containment guard,
+    not get transcoded into the cache."""
+    case_id = "imported_2026-04-28T00-00-00Z_stl_symlink"
+    case_dir = isolated_imported / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    outside_stl = tmp_path / "evil.stl"
+    outside_stl.write_bytes(box_stl())  # real STL but outside the case dir
+    (triSurface / "evil.stl").symlink_to(outside_stl)
+
+    with pytest.raises(GeometryRenderError) as excinfo:
+        build_geometry_glb(case_id)
+    assert excinfo.value.failing_check == "no_source_stl"

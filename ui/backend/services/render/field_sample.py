@@ -10,9 +10,13 @@ to assemble in our hand-built glTF builder and the frontend can do
 colormap mapping on a raw float32 array just as well. M-VIZ.results
 upgrades to baked glTF colors.
 
-Source resolution order:
-    1. <imported_case_dir>/{run_id}/{name}        (M5.1 OpenFOAM time-dir)
-    2. reports/phase5_fields/{case_id}/{run_id}/{name}   (Phase-7a fallback)
+Source resolution:
+    <imported_case_dir>/{run_id}/{name}        (M5.1 OpenFOAM time-dir)
+
+(The Round-1 review flagged a `reports/phase5_fields/` fallback as
+dead code — that artifact tree stores `{case_id}/{timestamp}/VTK/...`,
+not raw `{run_id}/{name}` text fields, so it could never resolve a
+real archived run. Removed in Round-2.)
 
 Tier-A scope:
     - Scalar fields only (volScalarField · internalField)
@@ -35,12 +39,9 @@ import numpy as np
 
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
-from ui.backend.services.validation_report import REPO_ROOT
 
 
 CacheStatus = Literal["hit", "miss", "rebuild"]
-
-_PHASE5_FIELDS_ROOT = REPO_ROOT / "reports" / "phase5_fields"
 
 # Match: ``internalField nonuniform List<scalar> <count>(<numbers>)``
 # with arbitrary whitespace + an optional newline before the count.
@@ -124,26 +125,38 @@ def _resolve_field_path(case_id: str, run_id: str, name: str) -> Path:
     _safe_field_segment(run_id, "run_id")
     _safe_field_segment(name, "field_name")
 
-    candidates = [
-        case_dir / run_id / name,
-        _PHASE5_FIELDS_ROOT / case_id / run_id / name,
-    ]
-    for c in candidates:
-        if c.is_file():
-            return c
-
-    # Differentiate run_not_found vs field_not_found for nicer 4xx mapping.
-    primary_run_dir = case_dir / run_id
-    fallback_run_dir = _PHASE5_FIELDS_ROOT / case_id / run_id
-    if not primary_run_dir.is_dir() and not fallback_run_dir.is_dir():
+    run_dir = case_dir / run_id
+    if not run_dir.is_dir():
         raise FieldSampleError(
             failing_check="run_not_found",
             message=f"no run dir for {run_id!r} under {case_id!r}",
         )
-    raise FieldSampleError(
-        failing_check="field_not_found",
-        message=f"field {name!r} not found in run {run_id!r} of case {case_id!r}",
-    )
+    candidate = run_dir / name
+    if not candidate.is_file():
+        raise FieldSampleError(
+            failing_check="field_not_found",
+            message=f"field {name!r} not found in run {run_id!r} of case {case_id!r}",
+        )
+
+    # Round-2 Finding 1: containment guard against symlink escape.
+    # is_safe_case_id + segment validators stop literal traversal in URL
+    # path segments, but a symlink under <case_dir>/<run_id>/<name>
+    # pointing outside IMPORTED_DIR would still let us read+transcode an
+    # arbitrary file. Resolve strictly and assert the resolved path stays
+    # under the case dir's resolved root.
+    try:
+        resolved = candidate.resolve(strict=True)
+        case_root = case_dir.resolve(strict=True)
+        resolved.relative_to(case_root)
+    except (FileNotFoundError, OSError, ValueError):
+        raise FieldSampleError(
+            failing_check="field_not_found",
+            message=(
+                f"field {name!r} resolution escaped case dir for "
+                f"run {run_id!r} of case {case_id!r}"
+            ),
+        )
+    return resolved
 
 
 def _parse_internal_scalar_field(field_path: Path) -> np.ndarray:
@@ -232,7 +245,22 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
         n = cache.stat().st_size // 4
         return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
 
+    # Round-2 Finding 3: snapshot source mtime before parsing; if it
+    # changes during the rebuild window, abort and let the next request
+    # rebuild from the newer source. Without this guard a slow rebuild
+    # racing a source update can land an older payload over a newer
+    # cache and stamp it with a fresh mtime, freezing stale bytes.
+    src_mtime_before = field_path.stat().st_mtime_ns
     values = _parse_internal_scalar_field(field_path)
+    src_mtime_after = field_path.stat().st_mtime_ns
+    if src_mtime_after != src_mtime_before:
+        raise FieldSampleError(
+            failing_check="field_parse_error",
+            message=(
+                f"source {field_path.name} mutated during rebuild "
+                "(retry the request)"
+            ),
+        )
     payload = values.astype(np.float32, copy=False).tobytes()
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
     _atomic_write(cache, payload)

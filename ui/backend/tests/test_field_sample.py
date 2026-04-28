@@ -218,6 +218,28 @@ def test_build_field_payload_rejects_traversal_in_field_name(
     assert excinfo.value.failing_check == "field_not_found"
 
 
+def test_build_field_payload_rejects_symlink_escaping_case_dir(
+    isolated_imported: Path, tmp_path: Path,
+):
+    """Round-2 Finding 1: symlink under a valid run_id pointing outside
+    the case dir must be rejected — segment validators only catch literal
+    traversal in URL path segments, not symlink redirection."""
+    case_id = "imported_2026-04-28T00-00-00Z_symlink"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    run_dir = case_dir / "run_evil"
+    run_dir.mkdir()
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("not a foam field", encoding="utf-8")
+    # a symlink under the run dir pointing at an arbitrary file.
+    (run_dir / "p").symlink_to(outside)
+
+    with pytest.raises(FieldSampleError) as excinfo:
+        build_field_payload(case_id, "run_evil", "p")
+    # resolve+relative_to fails → field_not_found (containment-collapsed).
+    assert excinfo.value.failing_check == "field_not_found"
+
+
 # ───────── route ─────────
 
 

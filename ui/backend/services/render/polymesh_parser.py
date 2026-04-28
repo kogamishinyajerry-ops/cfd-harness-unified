@@ -131,6 +131,32 @@ def parse_faces(faces_path: Path) -> list[list[int]]:
     return faces
 
 
+def validate_face_indices(faces: list[list[int]], n_points: int) -> None:
+    """Raise PolyMeshParseError if any face references a point ID outside [0, n_points).
+
+    Round-2 Finding 4: ``parse_faces`` only enforces face arity against
+    its count prefix. A malformed face like ``4(0 1 2 999)`` (with
+    n_points = 8) survived parsing; downstream the indices accessor
+    in the LINES glTF would point past the POSITION buffer. This
+    validator runs after ``parse_points`` + ``parse_faces`` so callers
+    have ``n_points`` available for the bound check.
+
+    Negative indices (which can't appear via the regex but could appear
+    if the parser is ever extended) are also rejected.
+    """
+    if n_points <= 0:
+        raise PolyMeshParseError(
+            f"refusing to validate faces against n_points={n_points}"
+        )
+    for face_idx, verts in enumerate(faces):
+        for v in verts:
+            if v < 0 or v >= n_points:
+                raise PolyMeshParseError(
+                    f"face {face_idx} references vertex {v} but only "
+                    f"{n_points} points were parsed"
+                )
+
+
 def extract_unique_edges(faces: list[list[int]]) -> np.ndarray:
     """Return an ``(M, 2)`` uint32 array of unique vertex-pair edges.
 

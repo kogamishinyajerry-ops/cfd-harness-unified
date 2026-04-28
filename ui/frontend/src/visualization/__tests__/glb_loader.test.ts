@@ -81,18 +81,18 @@ describe("glb_loader.parseGlbBytes", () => {
     importerInstance.delete.mockClear();
   });
 
-  it("returns the importer on a successful parse", () => {
+  it("returns the importer on a successful parse", async () => {
     const buf = new Uint8Array(64).buffer;
-    const data = parseGlbBytes(buf);
+    const data = await parseGlbBytes(buf);
     expect(importerInstance.parseAsArrayBuffer).toHaveBeenCalledWith(buf);
     expect(data.importer).toBe(importerInstance);
   });
 
-  it("converts vtk.js parser exceptions into GlbLoadError(kind=parse) and disposes the importer", () => {
+  it("converts vtk.js parser exceptions into GlbLoadError(kind=parse) and disposes the importer", async () => {
     importerInstance.parseAsArrayBuffer.mockImplementationOnce(() => {
       throw new RangeError("Invalid glb header");
     });
-    expect(() => parseGlbBytes(new Uint8Array(10).buffer)).toThrow(
+    await expect(parseGlbBytes(new Uint8Array(10).buffer)).rejects.toBeInstanceOf(
       GlbLoadError,
     );
     expect(importerInstance.delete).toHaveBeenCalledTimes(1);

@@ -28,6 +28,7 @@ from ui.backend.services.render.polymesh_parser import (
     extract_unique_edges,
     parse_faces,
     parse_points,
+    validate_face_indices,
 )
 
 
@@ -125,6 +126,78 @@ def test_parse_faces_rejects_count_mismatch(tmp_path: Path):
     faces_path.write_text("1\n(\n4(0 1 2)\n)\n", encoding="utf-8")
     with pytest.raises(PolyMeshParseError, match="did not match"):
         parse_faces(faces_path)
+
+
+def test_validate_face_indices_passes_for_in_range_faces():
+    """Round-2 Finding 4: faces with vertex IDs ∈ [0, n_points) accepted."""
+    faces = [[0, 1, 2, 3], [4, 5, 6, 7]]
+    validate_face_indices(faces, n_points=8)  # no raise
+
+
+def test_validate_face_indices_rejects_out_of_range_vertex():
+    """Round-2 Finding 4: a vertex ID >= n_points must raise rather than
+    flow through to the GLB indices accessor."""
+    faces = [[0, 1, 2, 3], [4, 5, 6, 999]]
+    with pytest.raises(PolyMeshParseError, match="vertex 999"):
+        validate_face_indices(faces, n_points=8)
+
+
+def test_validate_face_indices_rejects_negative_vertex():
+    """Negative IDs are rejected even though the regex never produces them
+    — defensive guard for parser extensions."""
+    faces = [[0, 1, -1, 3]]
+    with pytest.raises(PolyMeshParseError, match=r"vertex -1"):
+        validate_face_indices(faces, n_points=8)
+
+
+def test_build_mesh_wireframe_422_on_face_index_out_of_range(
+    isolated_imported: Path,
+):
+    """End-to-end: a polyMesh whose faces reference vertex IDs past
+    n_points - 1 must surface as a polymesh_parse_error, not a 200
+    with a malformed GLB."""
+    case_id = "imported_2026-04-28T00-00-00Z_oob_face"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    # 4 points but a face that references vertex 999.
+    (polymesh / "points").write_text(
+        "FoamFile{}\n4\n((0 0 0)(1 0 0)(0 1 0)(0 0 1))\n",
+        encoding="utf-8",
+    )
+    (polymesh / "faces").write_text(
+        "FoamFile{}\n1\n(\n4(0 1 2 999)\n)\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "polymesh_parse_error"
+    assert "vertex 999" in excinfo.value.message
+
+
+def test_build_mesh_wireframe_rejects_polymesh_symlink_escape(
+    isolated_imported: Path, tmp_path: Path,
+):
+    """Round-2 Finding 1: a symlink at constant/polyMesh/points pointing
+    outside the case dir must be rejected by the resolve+relative_to
+    containment guard."""
+    case_id = "imported_2026-04-28T00-00-00Z_polymesh_symlink"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    outside_points = tmp_path / "evil_points"
+    outside_points.write_text("not foam points", encoding="utf-8")
+    (polymesh / "points").symlink_to(outside_points)
+    (polymesh / "faces").write_text(
+        "FoamFile{}\n1\n(\n3(0 1 2)\n)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "no_polymesh"
 
 
 def test_parse_points_rejects_empty(tmp_path: Path):
