@@ -1,0 +1,27 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "3aadfbb05cd1eca8198be83d02a1204084c73e736b6eeaf5d906635db9ee2e05",
+  "empty_cwd": "/tmp/strategic_brief_cwd_xGqFyW",
+  "trigger": "autonomous-governance-rule-change",
+  "artifact": ".planning/decisions/2026-04-28_v61_093_addendum_3_cae_workbench_pivot.md",
+  "invoked_at_utc": "2026-04-28T02:27:05Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 597040,
+    "total_cost_usd": 0.28712499999999996,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "e3262a75-9ee8-48cd-ad78-a30569eb0d91",
+    "uuid": "e8d94d6e-0464-4879-89a3-d2a868626a4b",
+    "model_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0
+  }
+}
