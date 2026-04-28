@@ -206,11 +206,22 @@ def run_gmsh_to_foam(
         if not log_dest.exists():
             shutil.move(str(case_host_dir.parent / log_filename), str(log_dest))
     except Exception:  # noqa: BLE001 — best-effort log copy
+        # Codex R10 Finding 2: the placeholder write_text() can itself
+        # raise OSError (case_host_dir vanished, read-only filesystem,
+        # ENOSPC). Letting that escape as a raw 5xx breaks the
+        # GmshToFoamError contract the route layer relies on. Wrap it
+        # so any host-side write failure surfaces with the structured
+        # gmshToFoam_failed signal instead.
         log_dest = case_host_dir / log_filename
-        log_dest.write_text(
-            "(log file could not be retrieved from container)\n",
-            encoding="utf-8",
-        )
+        try:
+            log_dest.write_text(
+                "(log file could not be retrieved from container)\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise GmshToFoamError(
+                f"failed to persist fallback gmshToFoam log at {log_dest}: {exc}"
+            ) from exc
 
     if exec_result.exit_code != 0:
         raise GmshToFoamError(

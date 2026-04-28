@@ -915,3 +915,161 @@ def test_to_foam_normalizes_filenotfound_during_tarball_build(tmp_path: Path):
             with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
                 to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
     assert "tarball" in str(excinfo.value).lower() or "vanished" in str(excinfo.value).lower()
+
+
+def test_gmsh_inline_disk_full_during_write_surfaces_as_oserror(
+    tmp_path: Path, monkeypatch
+):
+    """Codex Round 10 Finding 1 regression guard: if gmsh.write()
+    raises a plain Exception for a write-time backend fault while the
+    output directory still passes both .exists() and os.access(W_OK)
+    (e.g. ENOSPC / disk-full / transient I/O error), the previous
+    R9 heuristic would relabel it as GmshMeshGenerationError → 4xx
+    'gmsh_diverged'. R10 wraps gmsh.write() in its own try/except so
+    the failure surfaces as OSError (5xx) regardless.
+    """
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()  # dir is writable AND exists — R9 heuristic won't fire
+    out_msh = out_dir / "out.msh"
+
+    class _FakeMesh:
+        @staticmethod
+        def classifySurfaces(**_kw):
+            return None
+
+        @staticmethod
+        def createGeometry():
+            return None
+
+        @staticmethod
+        def generate(_dim):
+            return None
+
+        @staticmethod
+        def getNodes():
+            # Return empty arrays so the bbox + point_count paths short-circuit
+            # cleanly and we actually reach gmsh.write().
+            return ([], [], [])
+
+        @staticmethod
+        def getElements(dim):
+            if dim == 3:
+                return ([4], [[1, 2, 3]], None)
+            return ([2], [[]], None)
+
+    class _FakeGmsh:
+        class option:
+            @staticmethod
+            def setNumber(*_a, **_kw):
+                return None
+
+        class model:
+            mesh = _FakeMesh
+
+            class geo:
+                @staticmethod
+                def addSurfaceLoop(_):
+                    return 1
+
+                @staticmethod
+                def addVolume(_):
+                    return 1
+
+                @staticmethod
+                def synchronize():
+                    return None
+
+            @staticmethod
+            def getEntities(dim):
+                return [(2, 1)]
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            return None
+
+        @staticmethod
+        def write(_path):
+            # gmsh's bindings can raise plain Exception for ENOSPC.
+            raise Exception("gmsh: write failed (no space left on device)")
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+
+    raised: BaseException | None = None
+    try:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=out_msh,
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    except BaseException as e:  # noqa: BLE001
+        raised = e
+
+    assert isinstance(raised, OSError), (
+        f"gmsh.write() raising plain Exception while output dir is "
+        f"healthy must surface as OSError (5xx host fault), not "
+        f"{type(raised).__name__ if raised else 'None'}"
+    )
+    assert not isinstance(raised, runner_mod.GmshMeshGenerationError)
+
+
+def test_to_foam_log_fallback_write_failure_surfaces_as_gmshtofoam_error(
+    tmp_path: Path,
+):
+    """Codex Round 10 Finding 2 regression guard: when log retrieval
+    from the container fails AND the host-side fallback write_text()
+    itself raises OSError (e.g. case dir vanished, read-only fs,
+    ENOSPC), the failure must surface as GmshToFoamError — not as a
+    raw 500 escape.
+    """
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_log_fallback_race"
+    case_dir.mkdir()
+    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+    # exec_run twice: mkdir prep + gmshToFoam invocation. Both succeed.
+    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+    fake_container.put_archive.return_value = True
+    # First get_archive (log) raises so we fall into the fallback branch.
+    fake_container.get_archive.side_effect = RuntimeError(
+        "container connection dropped while streaming log"
+    )
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_container
+
+    real_write_text = Path.write_text
+
+    def _disk_full_write_text(self, *_a, **_kw):
+        if self.name.startswith("log."):
+            raise OSError("[Errno 28] No space left on device")
+        return real_write_text(self, *_a, **_kw)
+
+    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+        with patch("docker.from_env", return_value=fake_client):
+            with patch.object(Path, "write_text", _disk_full_write_text):
+                with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+                    to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+
+    msg = str(excinfo.value).lower()
+    assert "log" in msg or "fallback" in msg, (
+        f"OSError from fallback write_text must surface as "
+        f"GmshToFoamError mentioning the log fallback, got: {excinfo.value}"
+    )

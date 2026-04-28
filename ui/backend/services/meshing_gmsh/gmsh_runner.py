@@ -200,7 +200,29 @@ def _gmsh_inline(
             post_nodes = gmsh.model.mesh.getNodes()
             point_count = len(post_nodes[0]) if post_nodes and len(post_nodes) >= 1 else 0
 
-            gmsh.write(str(output_msh_path))
+            # Codex R10 Finding 1: gmsh.write() can raise plain Exception
+            # for write-time backend faults (most importantly ENOSPC /
+            # disk-full) where os.access(W_OK) and dir-existence still
+            # report OK. Falling through to the generic catch-all below
+            # would relabel that as GmshMeshGenerationError → 4xx
+            # geometry rejection — the exact misclassification this
+            # chain is closing. Wrap gmsh.write() in its own try/except
+            # so any write-time failure surfaces as OSError (5xx) before
+            # the geometry-side catch-all sees it.
+            try:
+                gmsh.write(str(output_msh_path))
+            except OSError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — gmsh write raises plain Exception
+                output_dir = output_msh_path.parent
+                if not output_dir.exists():
+                    raise FileNotFoundError(
+                        f"output directory disappeared during gmsh.write: {output_dir}"
+                    ) from exc
+                raise OSError(
+                    f"gmsh.write failed for {output_msh_path} (likely disk-full / "
+                    f"permission / I/O error): {exc}"
+                ) from exc
         except GmshMeshGenerationError:
             raise
         except OSError:
