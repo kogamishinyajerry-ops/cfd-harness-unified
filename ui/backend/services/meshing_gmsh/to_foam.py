@@ -35,11 +35,38 @@ class GmshToFoamResult:
     used_container: bool
 
 
+# The cfd-openfoam container runs as uid=98765(openfoam). The host
+# typically runs as a different uid (often 502/dialout on macOS).
+# When ``put_archive`` extracts files preserving host uid/gid, the
+# openfoam user can't write into the directories it doesn't own —
+# gmshToFoam fails with "POSIX directory write permission denied"
+# trying to ``mkdir constant/polyMesh/``. Re-tag every entry to the
+# openfoam uid/gid + a permissive mode (M-PANELS Step 10 visual-smoke
+# fix) so the container side has full control of the staged case dir.
+_CONTAINER_UID = 98765
+_CONTAINER_GID = 98765
+
+
+def _retag_for_container(info: "tarfile.TarInfo") -> "tarfile.TarInfo":
+    info.uid = _CONTAINER_UID
+    info.gid = _CONTAINER_GID
+    info.uname = "openfoam"
+    info.gname = "openfoam"
+    if info.isdir():
+        info.mode = 0o755
+    else:
+        info.mode = 0o644
+    return info
+
+
 def _make_tarball(host_dir: Path) -> bytes:
-    """Pack ``host_dir`` recursively into an in-memory tarball."""
+    """Pack ``host_dir`` recursively into an in-memory tarball, retagged
+    for the cfd-openfoam container's UID/GID so gmshToFoam can write
+    polyMesh + log files into the staged case dir.
+    """
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
-        tar.add(str(host_dir), arcname=host_dir.name)
+        tar.add(str(host_dir), arcname=host_dir.name, filter=_retag_for_container)
     return buf.getvalue()
 
 

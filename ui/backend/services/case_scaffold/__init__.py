@@ -9,7 +9,7 @@ case YAML at ``ui/backend/user_drafts/{case_id}.yaml`` so the existing
 """
 from __future__ import annotations
 
-from .bc_injector import write_shm_stub, write_triSurface
+from .bc_injector import write_control_dict, write_shm_stub, write_triSurface
 from .manifest_writer import (
     SOURCE_ORIGIN_IMPORTED_USER,
     write_case_manifest,
@@ -33,6 +33,7 @@ __all__ = [
     "create_imported_case_dir",
     "scaffold_imported_case",
     "write_case_manifest",
+    "write_control_dict",
     "write_editor_case_yaml",
     "write_shm_stub",
     "write_triSurface",

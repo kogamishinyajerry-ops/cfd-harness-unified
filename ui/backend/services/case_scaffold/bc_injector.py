@@ -42,6 +42,63 @@ def _format_patches_block(report: IngestReport, indent: str = "    ") -> str:
     return "\n".join(lines)
 
 
+def write_control_dict(*, case_dir: Path) -> Path:
+    """Emit a minimal ``system/controlDict`` so OpenFOAM utilities run.
+
+    M-PANELS Step 10 visual-smoke fix: ``gmshToFoam`` (and every other
+    OpenFOAM utility) refuses to start without a ``controlDict`` in
+    ``system/`` — even for non-solver tasks like mesh conversion. The
+    M5.0 scaffold previously only wrote ``system/snappyHexMeshDict.stub``
+    so M6.0's gmshToFoam step crashed with "cannot find file
+    .../system/controlDict" on the very first run against an imported
+    case (caught by CFDJerry visual smoke 2026-04-28).
+
+    The values here are placeholders: ``application=simpleFoam`` is the
+    same default M-PANELS Step 1's editor YAML uses, and the time-loop
+    knobs are inert (gmshToFoam doesn't read them). M7-redefined will
+    overwrite this dict with the user's real solver/time-step settings
+    when the Solve step lands.
+    """
+    body = """\
+/*--------------------------------*- C++ -*----------------------------------*\\
+| M5.0 imported case · controlDict (minimal placeholder)                       |
+|                                                                              |
+| Required by every OpenFOAM utility (including gmshToFoam mesh conversion).   |
+| Values here are inert defaults. M7-redefined overwrites this with the user's |
+| chosen solver + time-step settings during the Solve step.                    |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     simpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         1;
+deltaT          1;
+writeControl    timeStep;
+writeInterval   1;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+// ************************************************************************* //
+"""
+    out = case_dir / "system" / "controlDict"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(body, encoding="utf-8")
+    return out
+
+
 def write_shm_stub(
     *,
     case_dir: Path,

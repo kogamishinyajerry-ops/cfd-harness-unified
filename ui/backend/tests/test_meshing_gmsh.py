@@ -179,10 +179,18 @@ def test_gmsh_runner_normalizes_raw_binding_exception(tmp_path: Path, monkeypatc
     import sys
 
     monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+    # M-PANELS Step 10 visual-smoke fix: gmsh logic now runs in a
+    # multiprocessing child so signal.signal works. The exception-
+    # normalization contract still lives in _gmsh_inline; target it
+    # directly because monkeypatch.setitem(sys.modules, "gmsh", ...)
+    # only affects this parent process — the spawned child re-imports
+    # the real gmsh module.
     with pytest.raises(runner_mod.GmshMeshGenerationError, match="raw error"):
-        runner_mod.run_gmsh_on_imported_case(
+        runner_mod._gmsh_inline(
             stl_path=stl_path,
             output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
         )
 
 
@@ -265,10 +273,14 @@ def test_gmsh_runner_wraps_late_api_exceptions(tmp_path: Path, monkeypatch):
     import sys
 
     monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+    # M-PANELS Step 10: target _gmsh_inline directly — see the
+    # parallel comment on test_gmsh_runner_normalizes_raw_binding_exception.
     with pytest.raises(runner_mod.GmshMeshGenerationError, match="synchronize"):
-        runner_mod.run_gmsh_on_imported_case(
+        runner_mod._gmsh_inline(
             stl_path=stl_path,
             output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
         )
 
 
@@ -353,11 +365,16 @@ def test_gmsh_runner_lets_oserror_bubble(tmp_path: Path, monkeypatch):
     import sys
 
     monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+    # M-PANELS Step 10: target _gmsh_inline directly. The subprocess
+    # wrapper translates OSError into a re-raised OSError as well, but
+    # via Queue marshaling — testing the inline contract is sufficient.
     # PermissionError is a subclass of OSError — must bubble unchanged.
     with pytest.raises(PermissionError, match="disk full"):
-        runner_mod.run_gmsh_on_imported_case(
+        runner_mod._gmsh_inline(
             stl_path=stl_path,
             output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
         )
 
 
@@ -435,3 +452,49 @@ def test_to_foam_calls_docker_when_msh_present(tmp_path: Path):
     assert result.polyMesh_dir == polyMesh
     assert result.used_container is True
     fake_container.exec_run.assert_called()
+
+
+# ----- subprocess wrapper (M-PANELS Step 10 visual-smoke fix) -----
+
+
+def test_gmsh_runner_subprocess_wrapper_returns_inline_result(tmp_path: Path):
+    """The public run_gmsh_on_imported_case wrapper spawns a child
+    process and marshals the GmshRunResult back across the queue.
+
+    Tests the wrapper's happy path against the real gmsh binding so we
+    catch the original "signal only works in main thread" regression
+    if the multiprocessing wrap is ever removed. Output mesh is tiny
+    (a 12-triangle box STL) so this stays fast.
+    """
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+    out_msh = tmp_path / "out.msh"
+
+    result = runner_mod.run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=out_msh,
+        mesh_mode="beginner",
+    )
+    assert result.msh_path == out_msh
+    assert out_msh.exists()
+    assert result.cell_count > 0
+    assert result.point_count > 0
+
+
+def test_gmsh_runner_subprocess_wrapper_marshals_gmsh_errors(tmp_path: Path):
+    """When the child process raises GmshMeshGenerationError, the parent
+    re-raises the same type with the original message intact (queue
+    payload roundtrip)."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "missing.stl"  # intentionally not created
+    with pytest.raises(
+        runner_mod.GmshMeshGenerationError, match="STL not found"
+    ):
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+        )

@@ -31,7 +31,7 @@ from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.geometry_ingest import IngestReport, canonical_stl_bytes
 from ui.backend.services.validation_report import REPO_ROOT
 
-from .bc_injector import write_shm_stub, write_triSurface
+from .bc_injector import write_control_dict, write_shm_stub, write_triSurface
 from .manifest_writer import write_case_manifest, write_editor_case_yaml
 
 
@@ -127,6 +127,7 @@ def scaffold_imported_case(
         case_dir=root, origin_filename=safe_filename, canonical_bytes=canonical_bytes
     )
     shm_path = write_shm_stub(case_dir=root, origin_filename=safe_filename, report=report)
+    write_control_dict(case_dir=root)
     manifest_path = write_case_manifest(
         case_dir=root,
         case_id=cid,
