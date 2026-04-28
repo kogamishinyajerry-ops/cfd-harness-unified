@@ -82,8 +82,21 @@ export function createKernel(
   }
 
   function dispose(): void {
-    // Order: actor → mapper → reader → interactor → render window. See
-    // webgl_lifecycle.ts (deprecated by this consolidation) for context.
+    // Order matters: actor/mapper/reader first (consumers of the
+    // renderer), then `grw.delete()` BEFORE `interactor.delete()`.
+    //
+    // Why grw before interactor (Codex round-4 R4 #1 P2 finding):
+    // vtkGenericRenderWindow.delete is a macro chain that calls
+    // setContainer(undefined), which in turn calls
+    // `interactor.unbindEvents(model.container)` against the old
+    // container. If we delete the interactor first, its internal
+    // container ref is cleared and the subsequent unbindEvents
+    // becomes a no-op — DOM keyup/pointer listeners then accumulate
+    // across mount/unmount cycles.
+    //
+    // After grw.delete() unbinds events, we still call
+    // interactor.delete() to release any remaining vtk handles
+    // (event listeners are gone by then, so the call is safe).
     try {
       actor?.delete();
     } catch {
@@ -101,12 +114,12 @@ export function createKernel(
       // see above
     }
     try {
-      interactor.delete();
+      grw.delete();
     } catch {
       // see above
     }
     try {
-      grw.delete();
+      interactor.delete();
     } catch {
       // see above
     }
