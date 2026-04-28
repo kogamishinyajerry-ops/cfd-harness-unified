@@ -1,0 +1,53 @@
+# Kogami Review · m_viz_kickoff_governance_clearance · 2026-04-28
+
+**Verdict**: `APPROVE_WITH_COMMENTS`
+**Recommended next**: `merge`
+**Trigger**: high-risk-PR-by-analogy
+**Artifact**: `.planning/decisions/2026-04-28_v61_094_m_viz_kickoff.md`
+**Prompt SHA256**: `288ea6f544aa69c6a05380c306feb77a856d55ba3b9142db1b9b0f5dc93da1e0`
+
+## Summary
+
+DEC-V61-094 is a coherent kickoff for M-VIZ that correctly inherits Pivot Charter Addendum 3 §3.a hard YES (3D viewport center) and §4.c hard ordering (M-VIZ first). Scope, tier-A/tier-B split, line-A contract extension prerequisite, library-choice override window, and Path A engagement timeline are all explicit and aligned with prior DEC arc (V61-087/088/089/091/092/093). Three substantive but non-blocking concerns: (1) `kogami_review.required: true` on a docs-only kickoff DEC is a precedent inflation that should be bounded, (2) the 3 MB bundle budget is asserted without derivation, and (3) the BREAK_FREEZE invocation for ImportPage integration is documented but the §11.1 escape-hatch counter (≥3 in 30 days triggers §11.1 review retro) is not acknowledged.
+
+## Strategic Assessment
+
+Decision-arc coherence is strong. The DEC correctly inherits the binding parent (DEC-V61-093 Addendum 3 §3.a hard YES viewport center, §3.b engineer-driven, §3.c Fluent 5-step, §4.c hard ordering M-VIZ first). It does not modify upstream invariants (V61-087 governance, V61-089 two-track invariant, V61-091 verdict cap dormant, V61-092 nav unchanged) and explicitly preserves them in §Out of scope. The line-A/line-B contract extension prerequisite (V61-093 Kogami P2 #3) is correctly identified as a PRE-implementation gate, with the contract-extension commit explicitly listed as Step 2 and AC#2. The Path A engagement timeline operationalization (V61-093 Kogami P2 #2) is explicit. Roadmap fit: M-VIZ is the first of four sequential milestones (M-VIZ → M-RENDER-API → M-PANELS → M-AI-COPILOT) under Addendum 3, and the tier-split (A=this milestone; B/C/D=later) matches the §4.c hard ordering. The dormant-cap discipline from V61-091 is preserved. The kickoff intentionally introduces no code, deferring all Codex-triggering surface to spec_v2 §Sequence Steps 2-7, which is consistent with V61-086/089/093 CLASS-1 docs-only precedent. Residual risks: the precedent this Kogami fire establishes (P2 finding 1), the BREAK_FREEZE quota interaction (P2 finding 3), and the calendar framing of Path A weeks (P3 finding 4) are the strategic-layer concerns most likely to compound across M-RENDER-API/M-PANELS/M-AI-COPILOT if not addressed at this gate.
+
+## Findings
+
+### [P2] Kogami precedent-setting trigger should be explicitly bounded to first-milestone-after-Addendum, not generalized to all kickoff DECs
+**Position**: frontmatter `kogami_review.rationale` block + §Why this DEC alone is docs-only
+
+**Problem**: The rationale for firing Kogami on this CLASS-1 docs-only kickoff DEC argues 'first concrete code commit interpreting Addendum 3 §3 hard YES'. This is reasonable, but the rationale as written ('this pattern...should eventually become an explicit kogami_triggers.md row') leaves open whether M-RENDER-API / M-PANELS / M-AI-COPILOT kickoff DECs will also fire Kogami by the same high-risk-PR-by-analogy fallback. If yes, that is precedent inflation: every milestone kickoff under Addendum 3 becomes Kogami-gated, which contradicts the Must-NOT-trigger rule for docs-only CLASS-1 changes (kogami_triggers.md §Must NOT trigger row 3).
+
+**Recommendation**: Add an explicit scoping sentence: 'This Kogami fire is bounded to M-VIZ as the first milestone after Addendum 3; subsequent milestone kickoffs (M-RENDER-API, M-PANELS, M-AI-COPILOT) inherit M-VIZ's framing precedent and do NOT re-fire Kogami unless they themselves trigger an independent must-trigger condition (e.g., new charter modification, line-A contract extension, or counter ≥20).' This bounds the precedent and aligns with kogami_triggers.md §Must NOT trigger.
+
+### [P2] 3 MB bundle budget asserted without derivation or fallback
+**Position**: §Scope item 2 (MVP tier-A scope) and §Failure modes row 1
+
+**Problem**: The 3 MB total post-vtk.js bundle budget is presented as a hard acceptance criterion, but no derivation is given (current bundle size, vtk.js minimum surface for STL render + trackball, headroom for M-RENDER-API growth). The failure-mode row says 'If breached during implementation, milestone reopens for library reconsideration' but this is a heavy reopen for what may be a tunable budget. Roadmap fit risk: if the budget is breached at Step 4 (dependency add) by even a small margin, the spec_v2 sequence stalls and library-reconsideration consumes M-VIZ's calendar.
+
+**Recommendation**: Either (a) cite where 3 MB came from (current main bundle size + delta budget = 3 MB total), or (b) split the AC into two tiers: 'soft target ≤2.5 MB · hard cap ≤4 MB · breach >4 MB triggers reopen'. Soft/hard split lets Step 4 proceed if vtk.js selective imports land at e.g. 2.8 MB without forcing milestone reopen.
+
+### [P2] BREAK_FREEZE invocation for ImportPage integration not counted against §11.1 escape-hatch quota
+**Position**: §Pre-implementation surface scan §11.1 EXCEPTION block + §Out of scope row about §11.1
+
+**Problem**: The DEC correctly identifies ImportPage.tsx as in workbench-freeze scope and plans a `BREAK_FREEZE:` commit footer. However, methodology §11.1 states 'three escape hatches in a 30-day window automatically trigger a §11.1 review retro'. The DEC does not enumerate prior BREAK_FREEZE invocations in the current 30-day window or acknowledge the running count. If V61-092 nav-discoverability fix or any prior workbench-touching commit consumed BREAK_FREEZE slots, M-VIZ's ImportPage integration could push the count to ≥3 and trigger an unexpected retro mid-implementation.
+
+**Recommendation**: Add a one-line accounting in the §11.1 EXCEPTION block: 'BREAK_FREEZE count in rolling 30-day window prior to this DEC: <N> (sources: <commit list>). M-VIZ ImportPage integration brings count to <N+1>. If <N+1> ≥3, §11.1 review retro fires post-merge.' This makes the methodology cost transparent rather than discovered at retro-trigger time.
+
+### [P3] Path A engagement timeline assumes weekly cadence without binding to signal-driven gates
+**Position**: §Scope item 5 (Path A engagement timeline)
+
+**Problem**: Week 0/2-3/4-5/7-8/9-10 framing inherits the calendar-driven posture that RETRO-V61-006 Addendum 5 (§Governance rhythm refactor · 9 calendar→signal gates, 2026-04-25T17:30) explicitly retired in favor of milestone-anchored gates. The text 'If no stranger recruited by week 3' is a calendar gate without explicit milestone-anchored fallback ('M-VIZ MVP merged' is the actual signal).
+
+**Recommendation**: Reframe weeks as milestone-anchored: 'M-VIZ MVP merged → early demo trigger', 'M-RENDER-API merged → mesh wireframe demo', etc. Keep calendar weeks as soft estimates only. This aligns with the post-2026-04-25 signal-count gate convention.
+
+### [P3] Notion sync of three paired artifacts assumed but not specified
+**Position**: §Sync section
+
+**Problem**: The DEC plans pair-sync of DEC + brief + spec_v2 to Notion as 'sub-page or referenced doc' without picking which. For a precedent-setting kickoff, the choice matters (sub-page = strong coupling visible in Decisions DB; referenced doc = lighter coupling). Future M-RENDER-API kickoff will inherit whatever pattern this one establishes.
+
+**Recommendation**: Pick one explicitly (e.g., 'sub-page under DEC's Decisions DB row') and state it in the Sync section so M-RENDER-API kickoff inherits a clear precedent rather than re-deciding.
+
