@@ -7,6 +7,7 @@ import type {
   ImportSTLResponse,
   IngestReport,
 } from "@/types/import_geometry";
+import { Viewport } from "@/visualization/Viewport";
 
 // Probe the import endpoint to confirm the backend was installed with the
 // `[workbench]` extra (trimesh + python-multipart + scipy). The base `[ui]`
@@ -217,33 +218,45 @@ export function ImportPage() {
       )}
 
       {response && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-6">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-emerald-300">
-              Case created
-            </h2>
-            <span className="font-mono text-[11px] text-surface-500">
-              {response.case_id}
-            </span>
+        <>
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-6">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-emerald-300">
+                Case created
+              </h2>
+              <span className="font-mono text-[11px] text-surface-500">
+                {response.case_id}
+              </span>
+            </div>
+            <IngestReportCard report={response.ingest_report} />
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-sm border border-surface-700 bg-surface-900/40 px-3 py-1.5 text-xs text-surface-300 transition hover:bg-surface-800"
+              >
+                Import another
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(response.edit_url)}
+                className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+              >
+                Continue to editor →
+              </button>
+            </div>
           </div>
-          <IngestReportCard report={response.ingest_report} />
-          <div className="mt-5 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={reset}
-              className="rounded-sm border border-surface-700 bg-surface-900/40 px-3 py-1.5 text-xs text-surface-300 transition hover:bg-surface-800"
-            >
-              Import another
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(response.edit_url)}
-              className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
-            >
-              Continue to editor →
-            </button>
+          {/* M-VIZ Step 6 (DEC-V61-094 spec_v2 §A.2): Geometry preview panel
+              ADDED below the existing report card. Not a Fluent-style layout
+              replacement — that's M-PANELS. M-VIZ uses ImportPage as the
+              smoke-test home so the Viewport gets a real consumer immediately.
+              The report card + "Continue to editor" link above are unchanged. */}
+          <div className="mt-6">
+            <Viewport
+              stlUrl={`/api/cases/${encodeURIComponent(response.case_id)}/geometry/stl`}
+            />
           </div>
-        </div>
+        </>
       )}
     </section>
   );
