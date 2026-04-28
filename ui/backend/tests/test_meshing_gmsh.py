@@ -1073,3 +1073,90 @@ def test_to_foam_log_fallback_write_failure_surfaces_as_gmshtofoam_error(
         f"OSError from fallback write_text must surface as "
         f"GmshToFoamError mentioning the log fallback, got: {excinfo.value}"
     )
+
+
+def test_to_foam_normalizes_oserror_during_tarball_build(tmp_path: Path):
+    """Codex Round 11 Finding 2 regression guard: _make_tarball() can
+    raise PermissionError / generic OSError (EACCES, ENOSPC, EIO) —
+    not just FileNotFoundError. These must surface as the structured
+    GmshToFoamError contract instead of a raw 500.
+    """
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_tarball_oserror"
+    case_dir.mkdir()
+    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_container
+
+    def _eacces_make_tarball(_path):
+        raise PermissionError("[Errno 13] Permission denied (host mount fault)")
+
+    with patch.object(to_foam_mod, "_make_tarball", _eacces_make_tarball):
+        with patch("docker.from_env", return_value=fake_client):
+            with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+                to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+    msg = str(excinfo.value).lower()
+    assert "tarball" in msg or "filesystem" in msg, (
+        f"PermissionError from _make_tarball must surface as "
+        f"GmshToFoamError mentioning tarball / filesystem, got: {excinfo.value}"
+    )
+
+
+def test_to_foam_normalizes_polymesh_copyback_oserror(tmp_path: Path):
+    """Codex Round 11 Finding 3 regression guard: the host-side
+    polyMesh materialization block (parent.mkdir + get_archive +
+    _extract_tarball) can raise OSError or tarfile.TarError. These
+    must surface as GmshToFoamError, not as raw 500s.
+    """
+    import tarfile as tarfile_mod
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_polymesh_copyback"
+    case_dir.mkdir()
+    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+    fake_container.put_archive.return_value = True
+    # Log retrieval succeeds; polyMesh retrieval raises a corrupt-archive error.
+    log_chunks = iter([(b"", None)])
+
+    def _get_archive(path):
+        if path.endswith(f"/{_safe_log_name('gmshToFoam')}"):
+            return iter([b""]), None
+        if path.endswith("/constant/polyMesh"):
+            return iter([b"<<corrupt tar bytes>>"]), None
+        raise AssertionError(f"unexpected get_archive path: {path}")
+
+    fake_container.get_archive.side_effect = _get_archive
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_client_value = fake_client
+    fake_client.containers.get.return_value = fake_container
+
+    def _raising_extract(_bytes, _dest):
+        raise tarfile_mod.TarError("malformed tar header in polyMesh archive")
+
+    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+        with patch.object(to_foam_mod, "_extract_tarball", _raising_extract):
+            with patch("docker.from_env", return_value=fake_client):
+                with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+                    to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+    msg = str(excinfo.value).lower()
+    assert "polymesh" in msg or "materialize" in msg or "archive" in msg, (
+        f"TarError from polyMesh extract must surface as "
+        f"GmshToFoamError mentioning polymesh/materialize/archive, "
+        f"got: {excinfo.value}"
+    )
+
+
+def _safe_log_name(command: str) -> str:
+    """Mirror to_foam._safe_log_name for test path construction."""
+    import re
+
+    return "log." + (re.sub(r"[^A-Za-z0-9]", "_", command).strip("_") or "cmd")

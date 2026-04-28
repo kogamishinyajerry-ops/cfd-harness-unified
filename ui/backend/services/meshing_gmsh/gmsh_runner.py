@@ -136,6 +136,19 @@ def _gmsh_inline(
             # selects gmsh's Delaunay 3D — robust default for closed
             # triangulated surfaces from real-world CAD exports.
             gmsh.option.setNumber("Mesh.Algorithm3D", 1)
+            # NOTE: Codex R11 Finding 1 suggested wrapping gmsh.merge()
+            # to relabel plain-Exception failures as OSError when the
+            # STL still exists (host read-side faults on a permission-
+            # denied mount). REJECTED on review: this conflicts with
+            # the R2/R3 architectural contract documented in
+            # test_gmsh_runner_normalizes_raw_binding_exception —
+            # gmsh.merge plain Exception is the canonical signal for
+            # "STL geometry is unparseable / malformed", which is the
+            # geometry-rejection 4xx the route layer expects. Real
+            # OSError from the underlying read is already caught by
+            # the explicit `except OSError` boundary below; only
+            # gmsh's binding-wrapped re-raises reach the catch-all,
+            # and those are dominantly geometry-side, not host-side.
             gmsh.merge(str(stl_path))
 
             # Reclassify the imported triangles as a surface, then build

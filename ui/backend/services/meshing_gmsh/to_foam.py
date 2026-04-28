@@ -175,6 +175,16 @@ def run_gmsh_to_foam(
         raise GmshToFoamError(
             f"case dir vanished while building tarball for {case_host_dir.name}: {exc}"
         ) from exc
+    except OSError as exc:
+        # Codex R11 Finding 2: ``_make_tarball`` can also raise
+        # PermissionError (EACCES on a host read-side mount fault),
+        # ENOSPC during the in-memory BytesIO grow path, or generic
+        # EIO. Without this branch those leak as raw 500s with no
+        # GmshToFoamError contract for the route layer to map.
+        raise GmshToFoamError(
+            f"failed to build gmshToFoam tarball for {case_host_dir.name} "
+            f"(host filesystem fault): {exc}"
+        ) from exc
 
     if not archive_ok:
         raise GmshToFoamError(
@@ -231,8 +241,14 @@ def run_gmsh_to_foam(
 
     # Pull constant/polyMesh back to the host case dir.
     polyMesh_host = case_host_dir / "constant" / "polyMesh"
-    polyMesh_host.parent.mkdir(parents=True, exist_ok=True)
+    # Codex R11 Finding 3: the host-side polyMesh materialization
+    # (parent.mkdir, get_archive bytes, _extract_tarball) can raise
+    # OSError (EACCES, ENOSPC, EIO on the host case dir) or
+    # tarfile.TarError (corrupt archive bytes from the docker stream).
+    # Without these catches, host filesystem faults leak as raw 500s
+    # with no GmshToFoamError contract for the route layer to map.
     try:
+        polyMesh_host.parent.mkdir(parents=True, exist_ok=True)
         bits, _ = container.get_archive(f"{container_work_dir}/constant/polyMesh")
         _extract_tarball(
             b"".join(chunk for chunk in bits),
@@ -246,6 +262,11 @@ def run_gmsh_to_foam(
     except docker.errors.DockerException as exc:
         raise GmshToFoamError(
             f"docker SDK error retrieving polyMesh from container: {exc}"
+        ) from exc
+    except (OSError, tarfile.TarError) as exc:
+        raise GmshToFoamError(
+            f"failed to materialize polyMesh on host at {polyMesh_host} "
+            f"(host filesystem / archive fault): {exc}"
         ) from exc
 
     # Codex Round 8 Finding 2: collapse the exists()→iterdir() TOCTTOU
