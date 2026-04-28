@@ -848,11 +848,69 @@ def list_cases() -> list[CaseIndexEntry]:
     return out
 
 
+def _load_imported_draft(case_id: str) -> dict[str, Any] | None:
+    """Read an imported case's user-draft YAML (if it exists) and return the
+    parsed mapping.
+
+    M-PANELS Step 10 fix (DEC-V61-096 follow-up): the engineer-driven import
+    flow scaffolds cases under ``ui/backend/user_drafts/{case_id}.yaml``,
+    not ``knowledge/whitelist.yaml``. Without this fall-through,
+    ``GET /api/cases/<imported-id>`` 404s, breaking the M-PANELS Step 1
+    happy path. Path-traversal-guarded by the alphanum/underscore/hyphen
+    allowlist mirrored from ``case_drafts.is_safe_case_id``.
+    """
+    if not (case_id and all(c.isalnum() or c in ("_", "-") for c in case_id)):
+        return None
+    draft = REPO_ROOT / "ui" / "backend" / "user_drafts" / f"{case_id}.yaml"
+    if not draft.exists():
+        return None
+    with draft.open("r", encoding="utf-8") as fh:
+        parsed = yaml.safe_load(fh)
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _synthesize_imported_detail(case_id: str, draft: dict[str, Any]) -> CaseDetail:
+    """Build a CaseDetail from an imported case's user-draft YAML.
+
+    Imported cases have no gold standard, no preconditions, and no
+    contract status — those fields are None / empty by design.
+    """
+    solver_field = draft.get("solver")
+    solver_str: str | None
+    if isinstance(solver_field, dict):
+        solver_str = solver_field.get("name")
+    elif isinstance(solver_field, str):
+        solver_str = solver_field
+    else:
+        solver_str = None
+    return CaseDetail(
+        case_id=case_id,
+        name=draft.get("name", case_id),
+        reference=draft.get("reference"),
+        doi=draft.get("doi"),
+        flow_type=draft.get("flow_type", "UNKNOWN"),
+        geometry_type=draft.get("geometry_type", "UNKNOWN"),
+        compressibility=draft.get("compressibility"),
+        steady_state=draft.get("steady_state"),
+        solver=solver_str,
+        turbulence_model=draft.get("turbulence_model", "UNKNOWN"),
+        parameters=draft.get("parameters") or {},
+        gold_standard=None,
+        preconditions=[],
+        contract_status_narrative=None,
+    )
+
+
 def load_case_detail(case_id: str) -> CaseDetail | None:
     whitelist = _load_whitelist()
     case = whitelist.get(case_id)
     if case is None:
-        return None
+        # Fall through to imported drafts so M-PANELS Step 1 works for the
+        # engineer-driven import path (Pivot Charter Addendum 3 §3).
+        draft = _load_imported_draft(case_id)
+        if draft is None:
+            return None
+        return _synthesize_imported_detail(case_id, draft)
     gs = _load_gold_standard(case_id)
     gs_ref = _make_gold_reference(case, gs)
     preconditions = _make_preconditions(gs)
