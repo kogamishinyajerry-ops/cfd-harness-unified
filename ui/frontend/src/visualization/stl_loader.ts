@@ -52,24 +52,44 @@ export async function fetchStlBytes(
 }
 
 export function parseStlBytes(buffer: ArrayBuffer): StlData {
+  // vtkSTLReader.parseAsArrayBuffer can itself throw on truncated /
+  // malformed inputs — for binary STL it constructs a fixed 84-byte
+  // DataView immediately, so any buffer < 84 bytes throws RangeError
+  // before getOutputData runs. Wrap the whole parse + validation path
+  // so every failure surfaces as StlLoadError(kind="parse") and the
+  // reader is always released (otherwise the failed-parse reader leaks
+  // until GC, which is also a vtk.js delete() obligation).
   const reader = vtkSTLReader.newInstance();
-  reader.parseAsArrayBuffer(buffer);
-  const polydata = reader.getOutputData();
-  if (!polydata || typeof polydata.getNumberOfPoints !== "function") {
-    throw new StlLoadError("parse", "STL parser returned no polydata");
+  try {
+    reader.parseAsArrayBuffer(buffer);
+    const polydata = reader.getOutputData();
+    if (!polydata || typeof polydata.getNumberOfPoints !== "function") {
+      throw new StlLoadError("parse", "STL parser returned no polydata");
+    }
+    const polys = polydata.getPolys?.();
+    // getNumberOfCells is on the cell array; fall back to point count
+    // heuristic when the cell array isn't present (defensive — vtk.js
+    // has occasionally evolved this shape between minor versions).
+    const triangleCount =
+      typeof polys?.getNumberOfCells === "function"
+        ? polys.getNumberOfCells()
+        : Math.floor((polydata.getNumberOfPoints?.() ?? 0) / 3);
+    if (triangleCount <= 0) {
+      throw new StlLoadError("parse", "STL contained zero triangles");
+    }
+    return { reader, triangleCount };
+  } catch (err) {
+    try {
+      reader.delete();
+    } catch {
+      // delete() is not formally idempotent in vtk.js; suppressing keeps
+      // cleanup atomic so the original parse error reaches the caller.
+    }
+    if (err instanceof StlLoadError) throw err;
+    const message =
+      err instanceof Error ? err.message : "unknown vtk.js parse failure";
+    throw new StlLoadError("parse", `STL parser threw: ${message}`);
   }
-  const polys = polydata.getPolys?.();
-  // getNumberOfCells is on the cell array; fall back to point count
-  // heuristic when the cell array isn't present (defensive — vtk.js
-  // has occasionally evolved this shape between minor versions).
-  const triangleCount =
-    typeof polys?.getNumberOfCells === "function"
-      ? polys.getNumberOfCells()
-      : Math.floor((polydata.getNumberOfPoints?.() ?? 0) / 3);
-  if (triangleCount <= 0) {
-    throw new StlLoadError("parse", "STL contained zero triangles");
-  }
-  return { reader, triangleCount };
 }
 
 export async function loadStlFromUrl(

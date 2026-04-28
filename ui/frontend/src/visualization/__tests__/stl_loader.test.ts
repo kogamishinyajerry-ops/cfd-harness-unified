@@ -83,8 +83,9 @@ describe("stl_loader.fetchStlBytes", () => {
 });
 
 describe("stl_loader.parseStlBytes", () => {
-  afterEach(() => {
+  beforeEach(() => {
     readerInstance.parseAsArrayBuffer.mockClear();
+    readerInstance.delete.mockClear();
     readerInstance.getOutputData.mockReset();
     readerInstance.getOutputData.mockReturnValue(polydataMock(12));
   });
@@ -111,5 +112,19 @@ describe("stl_loader.parseStlBytes", () => {
     expect(() => parseStlBytes(new Uint8Array(0).buffer)).toThrow(
       /zero triangles/,
     );
+  });
+
+  // Codex round-2 P2 finding: vtkSTLReader.parseAsArrayBuffer itself
+  // throws RangeError for short binary buffers (<84 bytes for the header
+  // DataView). Verify the wrap converts that to StlLoadError(kind=parse)
+  // and still calls reader.delete() to avoid leaking the failed reader.
+  it("converts vtk.js parser exceptions into StlLoadError(kind=parse) and disposes the reader", () => {
+    readerInstance.parseAsArrayBuffer.mockImplementationOnce(() => {
+      throw new RangeError("Invalid DataView length 84");
+    });
+    expect(() => parseStlBytes(new Uint8Array(10).buffer)).toThrow(
+      StlLoadError,
+    );
+    expect(readerInstance.delete).toHaveBeenCalledTimes(1);
   });
 });
