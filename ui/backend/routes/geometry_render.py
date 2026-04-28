@@ -16,7 +16,12 @@ from fastapi.responses import FileResponse
 
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
-from ui.backend.services.render import GeometryRenderError, build_geometry_glb
+from ui.backend.services.render import (
+    GeometryRenderError,
+    MeshRenderError,
+    build_geometry_glb,
+    build_mesh_wireframe_glb,
+)
 
 
 router = APIRouter()
@@ -97,4 +102,39 @@ def get_case_geometry_glb(case_id: str) -> FileResponse:
         resolved,
         media_type="model/gltf-binary",
         filename="geometry.glb",
+    )
+
+
+_MESH_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+    "case_not_found": 404,
+    "no_polymesh": 404,
+    "polymesh_parse_error": 422,
+}
+
+
+@router.get("/cases/{case_id}/mesh/render", tags=["geometry-render"])
+def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
+    """Return the imported case's polyMesh as a wireframe binary glTF.
+
+    Reads ``<case_dir>/constant/polyMesh/{points,faces}`` (M6.0 sHM
+    output), extracts unique edges across all faces, and emits a glTF
+    with a single ``mode: LINES`` primitive. Cached at
+    ``<case_dir>/.render_cache/mesh.glb`` keyed on points + faces mtimes.
+    """
+    try:
+        result = build_mesh_wireframe_glb(case_id)
+    except MeshRenderError as exc:
+        status = _MESH_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+        raise HTTPException(status_code=status, detail=str(exc))
+
+    try:
+        resolved = result.cache_path.resolve(strict=True)
+        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+    except (ValueError, OSError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="case not found")
+
+    return FileResponse(
+        resolved,
+        media_type="model/gltf-binary",
+        filename="mesh.glb",
     )
