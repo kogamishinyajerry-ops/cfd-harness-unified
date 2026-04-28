@@ -18,7 +18,6 @@ import "@kitware/vtk.js/Rendering/Profiles/Geometry";
 import vtkActor from "@kitware/vtk.js/Rendering/Core/Actor";
 import vtkMapper from "@kitware/vtk.js/Rendering/Core/Mapper";
 import vtkGenericRenderWindow from "@kitware/vtk.js/Rendering/Misc/GenericRenderWindow";
-import vtkInteractorStyleTrackballCamera from "@kitware/vtk.js/Interaction/Style/InteractorStyleTrackballCamera";
 
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 
@@ -43,9 +42,16 @@ export function createKernel(
   grw.setContainer(container);
   grw.resize();
 
+  // GenericRenderWindow.newInstance already installs a
+  // vtkInteractorStyleTrackballCamera on its interactor (see
+  // node_modules/@kitware/vtk.js/Rendering/Misc/GenericRenderWindow.js
+  // — `model.interactor.setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance())`).
+  // Earlier revisions of this kernel created and installed a second
+  // trackball style here, which (a) replaced the default style without
+  // freeing it and (b) was itself never delete()'d on dispose, leaking
+  // vtk objects on every preview mount (Codex round-3 P3 finding).
+  // We rely on the built-in default and skip the explicit install.
   const interactor = grw.getInteractor();
-  const style = vtkInteractorStyleTrackballCamera.newInstance();
-  interactor.setInteractorStyle(style);
 
   // Attached lazily when the STL load resolves.
   let mapper: ReturnType<typeof vtkMapper.newInstance> | undefined;

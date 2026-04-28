@@ -1,7 +1,7 @@
 // Unit smoke for stl_loader — the network path uses fetch mock, the
 // parser path uses a vtk.js mock so we don't need a real STL fixture or
 // WebGL in jsdom.
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {
   fetchStlBytes,
