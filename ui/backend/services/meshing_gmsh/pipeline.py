@@ -73,13 +73,24 @@ def _resolve_imported_case(case_id: str) -> tuple[Path, Path]:
             "case_not_found",
         )
     triSurface = case_dir / "triSurface"
-    if not triSurface.is_dir():
+    # Codex R9 Finding 3: collapse the is_dir()→iterdir() TOCTTOU
+    # window. If the directory disappears between the two syscalls
+    # (concurrent cleanup, fs error after moment-of-check), the
+    # raised FileNotFoundError used to escape as a raw 500 instead
+    # of the structured source_not_imported MeshPipelineError. Try
+    # iterdir() directly and treat NotADirectoryError /
+    # FileNotFoundError as the same "case lost its triSurface dir"
+    # signal the explicit check produced.
+    try:
+        stls = sorted(
+            p for p in triSurface.iterdir() if p.suffix.lower() == ".stl"
+        )
+    except (FileNotFoundError, NotADirectoryError) as exc:
         raise MeshPipelineError(
             f"case {case_id!r} has no triSurface/ directory — was it "
             "scaffolded by M5.0?",
             "source_not_imported",
-        )
-    stls = sorted(p for p in triSurface.iterdir() if p.suffix.lower() == ".stl")
+        ) from exc
     if not stls:
         raise MeshPipelineError(
             f"no STL found under {triSurface}",

@@ -24,6 +24,7 @@ is already serialized at the route layer (D6: synchronous, threadpool).
 from __future__ import annotations
 
 import multiprocessing
+import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -209,18 +210,28 @@ def _gmsh_inline(
             # as 5xx so operators see the real cause.
             raise
         except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
-            # Codex Round 8 Finding 1: an STL deletion between the
-            # entry-time existence check and the gmsh.merge() call
-            # makes gmsh raise a generic Exception that this catch
-            # would otherwise relabel as GmshMeshGenerationError →
-            # gmsh_diverged → 422. That's the same filesystem-as-
-            # geometry fault we've been closing through R5/R6/R7.
-            # Re-check the file: if it disappeared, surface as
-            # FileNotFoundError so the wrapper marshals it correctly
-            # to OSError → 5xx (operator fault).
+            # Codex R8 Finding 1 + R9 Finding 1: gmsh's bindings raise
+            # plain ``Exception`` for both geometry-level failures AND
+            # for I/O failures (input STL vanished, output dir not
+            # writable, disk full at gmsh.write time). The catch-all
+            # used to relabel everything as GmshMeshGenerationError →
+            # gmsh_diverged / 422, which silently 4xx-relabels host
+            # faults as user-geometry rejections.
+            #
+            # Discriminate via filesystem reality: if the input STL
+            # is gone or the output directory is non-writable, that
+            # is the actual cause. Surface as OSError so the wrapper
+            # marshals it as ``os_error`` → 5xx. Otherwise the gmsh
+            # failure was geometry-side and the GmshMeshGenerationError
+            # relabel is correct.
             if not stl_path.exists():
                 raise FileNotFoundError(
                     f"STL disappeared during gmsh meshing: {stl_path}"
+                ) from exc
+            output_dir = output_msh_path.parent
+            if not output_dir.exists() or not os.access(output_dir, os.W_OK):
+                raise OSError(
+                    f"output directory not writable for gmsh.write: {output_dir}"
                 ) from exc
             raise GmshMeshGenerationError(
                 f"gmsh API failure during mesh generation: {exc}"

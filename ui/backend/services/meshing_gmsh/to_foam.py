@@ -162,6 +162,19 @@ def run_gmsh_to_foam(
         raise GmshToFoamError(
             f"docker SDK error preparing container workspace: {exc}"
         ) from exc
+    except FileNotFoundError as exc:
+        # Codex R9 Finding 2: ``_make_tarball`` walks ``case_host_dir``
+        # and reads each file's bytes. If imported.msh (or any file
+        # inside the case dir) disappears mid-tarball — concurrent host
+        # cleanup, fs error after the moment-of-check stat() — the
+        # raised FileNotFoundError used to escape as a raw 500. Wrap
+        # so it surfaces as the structured GmshToFoamError contract
+        # the route already maps to 502 (gmshToFoam_failed) — same
+        # operator-facing signal as a missing-msh check, no race
+        # window for an unhandled exception to leak past us.
+        raise GmshToFoamError(
+            f"case dir vanished while building tarball for {case_host_dir.name}: {exc}"
+        ) from exc
 
     if not archive_ok:
         raise GmshToFoamError(

@@ -739,3 +739,179 @@ def test_gmsh_inline_re_checks_stl_after_merge_failure(tmp_path: Path, monkeypat
     assert not isinstance(raised, runner_mod.GmshMeshGenerationError), (
         "Filesystem fault must not be re-labeled as user-geometry rejection"
     )
+
+
+def test_gmsh_inline_re_checks_output_dir_writability_after_write_failure(
+    tmp_path: Path, monkeypatch
+):
+    """Codex Round 9 Finding 1 regression guard: when gmsh.write()
+    raises a generic Exception because the output dir is not
+    writable (host fault), _gmsh_inline must surface as OSError
+    (5xx) — NOT GmshMeshGenerationError (which would 4xx-relabel
+    a host fault as 'bad geometry').
+    """
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o555)
+    out_msh = locked / "out.msh"
+
+    class _FakeMesh:
+        @staticmethod
+        def classifySurfaces(**_kw):
+            return None
+
+        @staticmethod
+        def createGeometry():
+            return None
+
+        @staticmethod
+        def generate(_dim):
+            return None
+
+        @staticmethod
+        def getNodes():
+            return ([1, 2, 3], None, None)
+
+        @staticmethod
+        def getElements(dim):
+            if dim == 3:
+                return ([4], [[1, 2, 3]], None)
+            return ([2], [[]], None)
+
+    class _FakeGeo:
+        @staticmethod
+        def addSurfaceLoop(_):
+            return 1
+
+        @staticmethod
+        def addVolume(_):
+            return 1
+
+        @staticmethod
+        def synchronize():
+            return None
+
+    class _FakeModel:
+        mesh = _FakeMesh
+
+        class geo:
+            addSurfaceLoop = _FakeGeo.addSurfaceLoop
+            addVolume = _FakeGeo.addVolume
+            synchronize = _FakeGeo.synchronize
+
+        @staticmethod
+        def getEntities(dim):
+            return [(2, 1)]
+
+    class _FakeGmsh:
+        class option:
+            @staticmethod
+            def setNumber(*_a, **_kw):
+                return None
+
+        model = _FakeModel
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            return None
+
+        @staticmethod
+        def write(_path):
+            # Simulate gmsh's bindings raising a generic Exception on
+            # a non-writable output dir (instead of OSError).
+            raise Exception("gmsh: cannot write output file")
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+
+    raised: BaseException | None = None
+    try:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=out_msh,
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    except BaseException as e:  # noqa: BLE001
+        raised = e
+
+    assert isinstance(raised, OSError), (
+        f"non-writable output dir + plain-Exception write failure must "
+        f"surface as OSError (5xx host fault), not "
+        f"{type(raised).__name__ if raised else 'None'}"
+    )
+    assert not isinstance(raised, runner_mod.GmshMeshGenerationError)
+
+
+def test_resolve_imported_case_handles_concurrent_triSurface_deletion(
+    tmp_path: Path, monkeypatch
+):
+    """Codex Round 9 Finding 3 regression guard: TOCTTOU between
+    triSurface.is_dir() and triSurface.iterdir() must not let raw
+    FileNotFoundError escape — it must become MeshPipelineError
+    with failing_check='source_not_imported'.
+    """
+    from ui.backend.services.meshing_gmsh import pipeline as pipeline_mod
+
+    case_id = "imported_2026-04-28T00-00-00Z_racecase"
+    case_dir = tmp_path / "imported" / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    (triSurface / "input.stl").write_bytes(box_stl())
+
+    monkeypatch.setattr(pipeline_mod, "IMPORTED_DIR", tmp_path / "imported")
+
+    real_iterdir = Path.iterdir
+
+    def _racing_iterdir(self):
+        if self.name == "triSurface":
+            raise FileNotFoundError(self)
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _racing_iterdir)
+
+    with pytest.raises(MeshPipelineError) as excinfo:
+        pipeline_mod._resolve_imported_case(case_id)
+    assert excinfo.value.failing_check == "source_not_imported"
+
+
+def test_to_foam_normalizes_filenotfound_during_tarball_build(tmp_path: Path):
+    """Codex Round 9 Finding 2 regression guard: if the case dir
+    (or imported.msh inside it) disappears while _make_tarball walks
+    it, the raised FileNotFoundError must surface as the structured
+    GmshToFoamError contract — NOT escape as a raw 500.
+    """
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_tarball_race"
+    case_dir.mkdir()
+    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_container
+
+    def _racing_make_tarball(_path):
+        # Simulate the case dir disappearing mid-tarball build.
+        raise FileNotFoundError(case_dir)
+
+    with patch.object(to_foam_mod, "_make_tarball", _racing_make_tarball):
+        with patch("docker.from_env", return_value=fake_client):
+            with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+                to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+    assert "tarball" in str(excinfo.value).lower() or "vanished" in str(excinfo.value).lower()
