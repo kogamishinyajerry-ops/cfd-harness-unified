@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/frontend/src/components/Layout.tsx (Pro shell sidebar NAV has Dashboard / Cases / Decisions / Runs / Audit Package / ← Learn · NO Workbench entry)
 prerequisite_status:
   m5_1_acceptance: confirmed (DEC-V61-091 Accepted 2026-04-28 · commit 7f6e3f2 + ce25e9e on main)
-notion_sync_status: pending (sync after Accepted state)
+notion_sync_status: synced 2026-04-28 (https://www.notion.so/350c68942bed818ebe22f8f87416cdab)
 autonomous_governance: true
 codex_tool_report_path: reports/codex_tool_reports/m092_workbench_nav_discoverability_2026-04-28.log
 kogami_review:
