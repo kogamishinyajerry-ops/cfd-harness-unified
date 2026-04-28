@@ -60,6 +60,45 @@ AC #3 + #4 require human-eyes verification — that is Step 7's purpose.
 - `curl http://127.0.0.1:5183/api/health` (via Vite proxy) → same response
 - `/api/cases/{id}/geometry/stl` route is registered (visible in `/api/openapi.json`)
 
+**End-to-end roundtrip smoke against the live dev stack** (pre-Step-7 ·
+2026-04-28 05:41 UTC):
+
+| Fixture | Upload | Direct serve | Vite-proxy serve | Byte-equal |
+|---------|--------|--------------|------------------|-----------|
+| `ldc_box.stl` (684 B) | ✅ POST 200 | ✅ 684 B served | ✅ 684 B via proxy | ✅ `cmp -s` clean |
+| `cylinder.stl` (6 484 B) | ✅ POST 200 | ✅ 6 484 B served | ✅ 6 484 B via proxy | ✅ `cmp -s` clean |
+| `naca0012.stl` (31 484 B) | ✅ POST 200 | ✅ 31 484 B served | ✅ 31 484 B via proxy | ✅ `cmp -s` clean |
+
+Headers on `GET /api/cases/{case_id}/geometry/stl`:
+
+```
+HTTP/1.1 200 OK
+content-type: model/stl
+content-length: 684
+content-disposition: attachment; filename="ldc_box.stl"
+accept-ranges: bytes
+last-modified: Tue, 28 Apr 2026 05:41:48 GMT
+etag: "4746928ac2a70ac384325a59474d40aa"
+```
+
+Negative paths (also live-verified):
+
+| Probe | Expected | Got |
+|-------|---------|-----|
+| `GET /api/cases/unknown_case_xyz/geometry/stl` | 404 | 404 ✅ |
+| `GET /api/cases/bad@id/geometry/stl` (unsafe id) | 404 | 404 ✅ |
+| `HEAD ...stl` | 405 (no HEAD route) | 405 + `Allow: GET` ✅ |
+
+Codex round-1 #1 fix verified on live stack:
+- Uploaded a fixture renamed `UPPER_TEST.STL` (uppercase extension)
+- M5.0's `_safe_origin_filename` preserves casing → on-disk path is
+  `triSurface/UPPER_TEST.STL`
+- `GET /api/cases/{case_id}/geometry/stl` now returns 200 + 6 484 bytes
+  (the previous `glob("*.stl")` would have returned 404)
+
+**Backend ✅ verified end-to-end on real ports.** Only the in-browser
+visual rendering remains.
+
 ### Smoke procedure
 
 1. Open `http://127.0.0.1:5183/workbench/import` in Chrome
