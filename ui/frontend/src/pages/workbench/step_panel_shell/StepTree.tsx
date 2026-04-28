@@ -10,6 +10,10 @@ interface StepTreeProps {
   currentStepId: StepId;
   stepStates: Record<StepId, StepStatus>;
   onStepClick: (stepId: StepId) => void;
+  /** Round-1 Codex Finding 1: when an AI action is in flight, lock
+   *  step-tree navigation so the user can't navigate away from a
+   *  non-abortable in-flight mesh run and discard its result. */
+  disabled?: boolean;
 }
 
 const STATUS_DOT: Record<StepStatus, string> = {
@@ -38,11 +42,13 @@ export function StepTree({
   currentStepId,
   stepStates,
   onStepClick,
+  disabled = false,
 }: StepTreeProps) {
   return (
     <nav
       aria-label="Workbench step tree"
       data-testid="step-tree"
+      data-disabled={disabled ? "true" : undefined}
       className="flex flex-col gap-1 p-3"
     >
       <h3 className="mb-1 text-[10px] font-mono uppercase tracking-wider text-surface-500">
@@ -57,8 +63,9 @@ export function StepTree({
             data-testid={`step-tree-row-${step.id}`}
             data-step-id={step.id}
             data-step-status={status}
+            disabled={disabled}
             onClick={() => onStepClick(step.id)}
-            className={`${ROW_BASE} ${ROW_VARIANT[status]}`}
+            className={`${ROW_BASE} ${ROW_VARIANT[status]} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <span
               aria-hidden

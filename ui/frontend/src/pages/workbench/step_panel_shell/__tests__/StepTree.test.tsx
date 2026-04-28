@@ -125,4 +125,30 @@ describe("StepTree · component unit tests", () => {
     });
     expect(nav).toBeInTheDocument();
   });
+
+  // Round-1 Codex Finding 1: when an AI action is in flight, the shell
+  // passes disabled=true so the user can't navigate away from a
+  // non-abortable mesh run and discard its result.
+  it("disables every row and exposes data-disabled when disabled=true", async () => {
+    const user = userEvent.setup();
+    const onStepClick = vi.fn();
+    render(
+      <StepTree
+        steps={STUB_STEPS}
+        currentStepId={2}
+        stepStates={ALL_PENDING}
+        onStepClick={onStepClick}
+        disabled
+      />,
+    );
+    expect(screen.getByTestId("step-tree")).toHaveAttribute(
+      "data-disabled",
+      "true",
+    );
+    for (const id of [1, 2, 3, 4, 5] as const) {
+      expect(screen.getByTestId(`step-tree-row-${id}`)).toBeDisabled();
+    }
+    await user.click(screen.getByTestId("step-tree-row-3"));
+    expect(onStepClick).not.toHaveBeenCalled();
+  });
 });

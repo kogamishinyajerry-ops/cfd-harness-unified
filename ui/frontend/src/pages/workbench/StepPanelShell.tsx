@@ -162,10 +162,19 @@ export function StepPanelShell() {
   // dispatch the latest registered action from inside the wrapped
   // onAiProcess closure without re-creating that closure on every
   // re-render (which would defeat StepNavigation's identity check).
+  //
+  // Round-1 Codex Finding 2: a parallel state flag tracks whether an
+  // action is currently registered. The shell now gates the
+  // StepNavigation [AI 处理] enabled state on BOTH the step's
+  // aiActionWiredInTierA flag AND this state — without it, the button
+  // would be enabled on Step 2's first render before Step2Mesh's
+  // useEffect runs, and the first click would be a silent no-op.
   const activeAiActionRef = useRef<(() => Promise<void>) | null>(null);
+  const [hasRegisteredAiAction, setHasRegisteredAiAction] = useState(false);
   const registerAiAction = useCallback(
     (action: (() => Promise<void>) | null) => {
       activeAiActionRef.current = action;
+      setHasRegisteredAiAction(action !== null);
     },
     [],
   );
@@ -246,6 +255,7 @@ export function StepPanelShell() {
             currentStepId={currentStepId}
             stepStates={stepStates}
             onStepClick={onStepClick}
+            disabled={aiInFlight}
           />
         </div>
         <main
@@ -287,27 +297,30 @@ export function StepPanelShell() {
             registerAiAction={registerAiAction}
             navigation={{
               // The shell wraps the active step's registered action with
-              // aiInFlight tracking + error capture. If no action is
-              // registered the button renders disabled (per
-              // StepNavigation contract).
-              onAiProcess: activeStep.aiActionWiredInTierA
-                ? async () => {
-                    const action = activeAiActionRef.current;
-                    if (!action) return;
-                    setAiInFlight(true);
-                    setAiErrorMessage(undefined);
-                    try {
-                      await action();
-                    } catch (err) {
-                      const msg =
-                        err instanceof Error ? err.message : String(err);
-                      setAiErrorMessage(msg);
-                      setLastAction(`Step ${currentStepId} AI error`);
-                    } finally {
-                      setAiInFlight(false);
+              // aiInFlight tracking + error capture. The button is
+              // enabled only when (a) the step's metadata says its AI
+              // action is wired in Tier-A AND (b) the step body has
+              // actually registered its action with the shell — Codex
+              // Round-1 Finding 2 race fix.
+              onAiProcess:
+                activeStep.aiActionWiredInTierA && hasRegisteredAiAction
+                  ? async () => {
+                      const action = activeAiActionRef.current;
+                      if (!action) return;
+                      setAiInFlight(true);
+                      setAiErrorMessage(undefined);
+                      try {
+                        await action();
+                      } catch (err) {
+                        const msg =
+                          err instanceof Error ? err.message : String(err);
+                        setAiErrorMessage(msg);
+                        setLastAction(`Step ${currentStepId} AI error`);
+                      } finally {
+                        setAiInFlight(false);
+                      }
                     }
-                  }
-                : null,
+                  : null,
               onPrevious,
               onNext,
               canAdvance: currentStepId < 5,

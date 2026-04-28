@@ -5,10 +5,12 @@
 // alongside the components.
 
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import type { MeshSuccessResponse } from "@/types/mesh_imported";
 
 // vtk.js viewport_kernel mock so jsdom doesn't try to load WebGL.
 vi.mock("@/visualization/viewport_kernel", () => ({
@@ -41,6 +43,7 @@ const apiMock = vi.hoisted(() => ({
     preconditions: [],
     contract_status_narrative: null,
   }),
+  meshImported: vi.fn(),
 }));
 vi.mock("@/api/client", async () => {
   const actual = await vi.importActual<typeof import("@/api/client")>(
@@ -48,7 +51,11 @@ vi.mock("@/api/client", async () => {
   );
   return {
     ...actual,
-    api: { ...actual.api, getCase: apiMock.getCase },
+    api: {
+      ...actual.api,
+      getCase: apiMock.getCase,
+      meshImported: apiMock.meshImported,
+    },
   };
 });
 
@@ -184,4 +191,96 @@ describe("StepPanelShell · skeleton (M-PANELS Step 2)", () => {
       "1",
     );
   });
+});
+
+// Round-1 Codex Round 2 fixes (DEC-V61-096): integration coverage that
+// exercises the cross-component contracts the isolated unit tests can't.
+describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
+  const FAKE_MESH_RESPONSE: MeshSuccessResponse = {
+    case_id: "abc",
+    mesh_summary: {
+      cell_count: 1234567,
+      face_count: 7000000,
+      point_count: 234567,
+      generation_time_s: 42.5,
+      polyMesh_path: "/tmp/case/constant/polyMesh",
+      msh_path: "/tmp/case/mesh.msh",
+      mesh_mode_used: "beginner",
+      warning: null,
+    },
+  };
+
+  it(
+    "F2 · clicking [AI 处理] through the shell on Step 2 triggers Step2Mesh's registered mesh action",
+    async () => {
+      apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+      const user = userEvent.setup();
+      renderShell("/workbench/case/abc?step=2");
+
+      const aiButton = screen.getByTestId("ai-process-button");
+      expect(aiButton).not.toBeDisabled();
+      await user.click(aiButton);
+
+      // The shell's onAiProcess wrapper dispatched the registered action,
+      // which POSTed via api.meshImported.
+      await waitFor(() => {
+        expect(apiMock.meshImported).toHaveBeenCalledWith("abc", "beginner");
+      });
+      // And Step2Mesh's success panel rendered after the resolved mock.
+      await waitFor(() => {
+        expect(screen.getByTestId("step2-mesh-success")).toBeInTheDocument();
+      });
+    },
+  );
+
+  it(
+    "F1 · step-tree rows are locked while the AI action is in flight, then unlock after it resolves",
+    async () => {
+      // Use a deferred promise so the click is observable mid-flight.
+      let resolveMesh!: (value: MeshSuccessResponse) => void;
+      apiMock.meshImported.mockReturnValueOnce(
+        new Promise<MeshSuccessResponse>((resolve) => {
+          resolveMesh = resolve;
+        }),
+      );
+      const user = userEvent.setup();
+      renderShell("/workbench/case/abc?step=2");
+
+      // Pre-click: rows are clickable.
+      expect(screen.getByTestId("step-tree-row-1")).not.toBeDisabled();
+
+      await user.click(screen.getByTestId("ai-process-button"));
+
+      // Mid-flight: every step-tree row is disabled.
+      await waitFor(() => {
+        expect(screen.getByTestId("step-tree")).toHaveAttribute(
+          "data-disabled",
+          "true",
+        );
+      });
+      for (const id of [1, 2, 3, 4, 5] as const) {
+        expect(screen.getByTestId(`step-tree-row-${id}`)).toBeDisabled();
+      }
+
+      // Resolve the in-flight mesh call → shell unwinds aiInFlight.
+      resolveMesh(FAKE_MESH_RESPONSE);
+      await waitFor(() => {
+        expect(screen.getByTestId("step-tree")).not.toHaveAttribute(
+          "data-disabled",
+        );
+      });
+      expect(screen.getByTestId("step-tree-row-1")).not.toBeDisabled();
+    },
+  );
+
+  it(
+    "F2 · [AI 处理] is disabled on Step 3 (placeholder clears registration even though Tier-A scope says no AI action)",
+    () => {
+      renderShell("/workbench/case/abc?step=3");
+      // Step 3 is a placeholder: aiActionWiredInTierA=false on the step
+      // metadata AND Step3SetupPlaceholder's effect calls
+      // registerAiAction(null). The button must stay disabled.
+      expect(screen.getByTestId("ai-process-button")).toBeDisabled();
+    },
+  );
 });
