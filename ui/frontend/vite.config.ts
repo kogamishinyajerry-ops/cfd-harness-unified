@@ -45,11 +45,24 @@ export default defineConfig({
   // Round-2 Q15: minimum vitest + RTL bring-up so wizard pages don't
   // silently break on next backend response shape change. Full RTL
   // coverage stays in deferred Tier-B(2).
+  //
+  // M-VIZ note (DEC-V61-094): vtk.js is a heavy module tree whose
+  // Profiles/* side-effect imports crash vitest workers under jsdom
+  // even when individual modules are vi.mock'd. Aliasing the whole
+  // `@kitware/vtk.js/*` namespace to a tiny stub in test-only
+  // resolution keeps the worker heap small. Production builds skip
+  // this alias entirely.
   test: {
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+    alias: [
+      {
+        find: /^@kitware\/vtk\.js\/.*$/,
+        replacement: path.resolve(__dirname, "./src/test/vtk-stub.ts"),
+      },
+    ],
   },
 });
