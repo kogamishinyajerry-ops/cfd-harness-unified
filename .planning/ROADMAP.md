@@ -117,6 +117,9 @@ Per Pivot Charter Addendum 1 + methodology v2.0 §10:
 | `ui/backend/services/wizard_drivers.py` | ✅ | ✅ | ❌ |
 | `ui/backend/services/run_history.py` (NEW) | ✅ | ✅ | ❌ |
 | `ui/frontend/src/pages/workbench/**` | ✅ | ✅ | ❌ |
+| `ui/frontend/src/visualization/**` (NEW · M-VIZ per DEC-V61-094) | ✅ | ✅ | ❌ |
+| `ui/backend/routes/geometry_render.py` (NEW · M-VIZ per DEC-V61-094) | ✅ | ✅ | ❌ |
+| `ui/backend/services/render/**` (NEW · anticipatory · M-RENDER-API will land here per Pivot Charter Addendum 3 §4.c) | ✅ | ✅ | ❌ |
 | `ui/backend/tests/**` | ✅ | ✅ | ❌ |
 | `src/foam_agent_adapter.py::FoamAgentExecutor.execute()` | ❌ | ✅ (public surface only) | ✅ |
 | `src/foam_agent_adapter.py::_generate_*` / `_emit_*` (internals) | ❌ | ❌ | ✅ |
