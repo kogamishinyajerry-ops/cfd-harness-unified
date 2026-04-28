@@ -140,8 +140,9 @@ Updated step-state mapping for the StepTree:
 | D1 | §A.4 routing contract | `/workbench/<case_id>` + legacy `/workbench/<case_id>/{import,edit,mesh,run}` | `/workbench/case/:caseId` + legacy `/workbench/case/:caseId/{edit,mesh,run}` (no separate `/import` — import is at `/workbench/import` standalone today; map to `?step=1` only when arriving from a case context) | existing routes use `case/` segment; my spec_v2 used the wrong path |
 | D2 | §A.7 design tokens | `bg-accent-500/15 border-accent-500` | `bg-emerald-500/10 border-emerald-500/40 text-emerald-200` | no `accent-*` scale exists; emerald is the existing convention |
 | D3 | §A.4 layout decision | not specified | Option A: keep Layout wrapper; StepPanelShell renders inside `<Outlet />` | smaller diff + global nav persists; trivially reversible |
+| D4 | §A.4 + brief §Tier-A 7 — legacy redirects | `/workbench/case/:caseId/{edit,mesh,run}` redirect to `/workbench/case/:caseId?step=N` in M-PANELS Tier-A | **Deferred to M7-redefined** (added 2026-04-28 during Step 6 implementation): legacy routes stay alive as direct routes in M-PANELS Tier-A. Step 3-5 placeholder bodies link to legacy as an explicit fallback. M7-redefined lands the redirect when Step 3 has functional parity with the YAML editor. | Redirecting today would orphan engineers using `/edit` for live BC editing while Step 3 is just a placeholder. Placeholder copy + per-step link to legacy gives an explicit fallback path with zero deprecation surface. |
 
-**No blockers.** All three deviations are minor; the skeleton commit applies the corrected paths/tokens directly.
+**No blockers.** Four deviations documented, all minor.
 
 ---
 
