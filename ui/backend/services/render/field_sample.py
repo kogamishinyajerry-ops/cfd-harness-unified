@@ -253,22 +253,36 @@ def _atomic_write_guarded(
         f".tmp.{secrets.token_hex(4)}{target.suffix}"
     )
     tmp.write_bytes(payload)
-    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+
+    # Round-4 Codex regression: ``source.stat()`` raises FileNotFoundError
+    # if the source vanished between temp-write and pre-replace stat,
+    # which bypassed the service's failing_check translator AND leaked
+    # the temp artifact. Treat OSError (incl. FileNotFoundError) the
+    # same as a mtime mismatch — abort + clean up.
+    def _current_mtime() -> int | None:
+        try:
+            return source.stat().st_mtime_ns
+        except OSError:
+            return None
+
+    pre = _current_mtime()
+    if pre != expected_src_mtime_ns:
         try:
             tmp.unlink()
         except OSError:
             pass
         raise RuntimeError(
-            f"source {source.name} mutated before atomic replace"
+            f"source {source.name} mutated or vanished before atomic replace"
         )
     os.replace(tmp, target)
-    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+    post = _current_mtime()
+    if post != expected_src_mtime_ns:
         try:
             target.unlink()
         except OSError:
             pass
         raise RuntimeError(
-            f"source {source.name} mutated during atomic replace"
+            f"source {source.name} mutated or vanished during atomic replace"
         )
 
 

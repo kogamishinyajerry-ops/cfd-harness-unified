@@ -155,24 +155,36 @@ def _atomic_write_guarded_multi(
         f".tmp.{secrets.token_hex(4)}{target.suffix}"
     )
     tmp.write_bytes(payload)
-    current = tuple(s.stat().st_mtime_ns for s in sources)
-    if current != expected_mtimes_ns:
+
+    # Round-4 Codex regression: a source.stat() that raised on a
+    # vanished file leaked the temp and bypassed the failing_check
+    # translator. Treat OSError (incl. FileNotFoundError) for any
+    # source as a mtime mismatch — abort + clean up.
+    def _current_mtimes() -> tuple[int | None, ...]:
+        out: list[int | None] = []
+        for s in sources:
+            try:
+                out.append(s.stat().st_mtime_ns)
+            except OSError:
+                out.append(None)
+        return tuple(out)
+
+    if _current_mtimes() != expected_mtimes_ns:
         try:
             tmp.unlink()
         except OSError:
             pass
         raise RuntimeError(
-            "polyMesh source mutated before atomic replace"
+            "polyMesh source mutated or vanished before atomic replace"
         )
     os.replace(tmp, target)
-    current = tuple(s.stat().st_mtime_ns for s in sources)
-    if current != expected_mtimes_ns:
+    if _current_mtimes() != expected_mtimes_ns:
         try:
             target.unlink()
         except OSError:
             pass
         raise RuntimeError(
-            "polyMesh source mutated during atomic replace"
+            "polyMesh source mutated or vanished during atomic replace"
         )
 
 

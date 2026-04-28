@@ -218,6 +218,46 @@ def test_build_field_payload_rejects_traversal_in_field_name(
     assert excinfo.value.failing_check == "field_not_found"
 
 
+def test_build_field_payload_aborts_on_source_vanish(
+    isolated_imported: Path, monkeypatch,
+):
+    """Round-4 Codex regression: if the source disappears between
+    temp-write and pre-replace stat, the helper must NOT crash with
+    a raw FileNotFoundError, and the temp must be cleaned up.
+
+    Without the OSError-tolerant _current_mtime() guard the helper
+    would propagate FileNotFoundError, bypass the failing_check
+    translator, and leave a .tmp.<hex> artifact in .render_cache."""
+    case_id = "imported_2026-04-28T00-00-00Z_source_vanish"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    field_path = _stage_field(
+        case_dir, "run_001", "p",
+        np.array([1.0, 2.0, 3.0], dtype=np.float32),
+    )
+    real_write_bytes = Path.write_bytes
+    deleted_state = {"deleted": False}
+
+    def patched_write_bytes(self: Path, data: bytes, *args, **kwargs):
+        result = real_write_bytes(self, data, *args, **kwargs)
+        if ".tmp." in self.name and not deleted_state["deleted"]:
+            field_path.unlink()
+            deleted_state["deleted"] = True
+        return result
+    monkeypatch.setattr(Path, "write_bytes", patched_write_bytes)
+
+    with pytest.raises(FieldSampleError) as excinfo:
+        build_field_payload(case_id, "run_001", "p")
+    assert excinfo.value.failing_check == "field_parse_error"
+    assert "vanished" in excinfo.value.message
+    cache_dir = case_dir / ".render_cache"
+    if cache_dir.exists():
+        leftovers = sorted(p.name for p in cache_dir.iterdir())
+        assert leftovers == [], (
+            f"temp/cache file leaked after source-vanish: {leftovers}"
+        )
+
+
 def test_build_field_payload_aborts_on_pre_replace_source_mutation(
     isolated_imported: Path, monkeypatch,
 ):
