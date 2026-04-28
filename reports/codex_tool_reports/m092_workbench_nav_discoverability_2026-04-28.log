@@ -1,0 +1,76 @@
+DEC-V61-092 · Workbench nav-discoverability defect fix
+Codex GPT-5.4 multi-round review arc · 2026-04-28
+================================================================================
+
+Round 1 · 2026-04-28T19:02Z (account: pro · ramaiamandhabdbs@gmail.com)
+Verdict: CHANGES_REQUIRED
+Findings:
+  P1 — LearnLayout.tsx top-nav was a single-row flex with gap-6 between
+       items. Adding the new "导入新 case →" entry brought total to 5
+       items + dividers; would clip below ~480px viewports and HIDE the
+       very entry point this DEC was meant to expose. Discoverability
+       regression at narrow widths, not just cosmetic.
+  P3 — Layout.tsx still self-described as "Phase 0..5 shell" (header
+       comment) and "Phase 0..5 MVP" (footer) while introducing a live
+       Phase-6 Workbench entry. Copy drift in the same surface.
+  P3 — DEC kogami_review.rationale was loose: cited §4.2 single-file
+       skip clause when none of the §4.1 mandatory triggers fires in
+       the first place. Cleaner: just state §4.1 doesn't fire.
+Notes:
+  - No P0/P2 issues.
+  - Active-state behavior verified correct: Workbench NavLink without
+    `end` highlights /workbench/* paths; /pro entry uses end={true};
+    no false-active across siblings.
+  - a11y unchanged: NavLink emits aria-current="page" on active; no
+    global anchor focus reset; new import CTA is a plain Link inside
+    LearnLayout which is not mounted on /workbench/import.
+  - Freeze scope confirmed: workbench_freeze.sh patterns
+    (ui/backend/services/workbench_, ui/frontend/src/pages/workbench/)
+    do NOT cover this fix's files (components/Layout.tsx +
+    components/learn/LearnLayout.tsx).
+  - Self-test verified: typecheck clean, 16/16 frontend tests pass.
+
+Round 2 · 2026-04-28T19:32Z (account: pro · ramaiamandhabdbs@gmail.com)
+Verdict: APPROVE_WITH_COMMENTS
+Fixes applied (verbatim per R1):
+  - LearnLayout.tsx: header div gained 'flex-wrap gap-y-2'; nav
+    changed 'flex items-center gap-6' →
+    'flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-6'.
+    Comment cites Codex R1 P1 + 480px clip rationale. Fixes the
+    overflow at narrow viewports — items wrap to a second row instead
+    of clipping.
+  - Layout.tsx: 'Phase 0..5 shell' → 'Phase 0..6 shell' + appended
+    Phase 6 / DEC-V61-092 sentence. Footer 'Phase 0..5 MVP ·
+    DEC-V61-002 / 003' → 'Phase 0..6 MVP · DEC-V61-002 / 003 / 092'.
+  - DEC kogami_review.rationale: rewritten to state §4.1 doesn't fire,
+    BUT R2 still mentioned "DEC §4.2 single-file skip clause is NOT
+    being invoked here" — the mention itself was the residual nit.
+Findings (residual):
+  doc-nit — DEC line 24+ kogami_review.rationale still references §4.2
+            (even just to say "we're not invoking it"). Tighten by
+            deleting those two trailing sentences.
+  Code/test contract clean — no further code concerns.
+
+Round 3 · 2026-04-28T19:50Z (account: pro · ramaiamandhabdbs@gmail.com)
+Verdict: APPROVE
+Fix applied (verbatim per R2 doc-nit):
+  - DEC kogami_review.rationale: dropped the trailing two sentences
+    that mentioned §4.2 single-file-skip. Final rationale stops at
+    "...applicable code-layer review." Block shrinks ~30 LOC → ~22 LOC.
+No further comments.
+
+================================================================================
+Final verdict: APPROVE (3-round arc · 1 P1 functional + 3 doc-only iterations)
+Self-pass-rate calibration:
+  predicted: 88%
+  actual:    R1 caught 1 P1 (responsive overflow) — predicted miss-band
+             (12%) was for "a11y / copy / i18n nits"; the actual miss
+             was a11y-adjacent (responsive layout). Calibration
+             accurate; the miss landed exactly where the prediction
+             reserved bandwidth for.
+Verbatim-exception eligibility:
+  R2: matched R1 P1 (responsive fix) + 2 P3 verbatim · ≤30 LOC ·
+      2 source files + 1 doc · no public API change. Eligible.
+  R3: matched R2 doc-nit verbatim · ≤8 LOC · 1 doc file ·
+      no public API change. Eligible.
+================================================================================

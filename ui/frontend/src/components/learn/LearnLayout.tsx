@@ -10,7 +10,13 @@ export function LearnLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-surface-950 text-surface-100">
       <header className="border-b border-surface-800/70 bg-surface-900/40 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+        {/* DEC-V61-092 Codex R1 P1: header was a single-row flex with
+            gap-6 between nav items. Adding the import CTA brought
+            total to 5 items + dividers, which clips below ~480px and
+            hides the entry point this DEC is meant to expose.
+            Wrapping + smaller mobile gap restores reachability on
+            mobile widths (smoke tested at 375px). */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-y-2 px-6 py-3.5">
           <Link to="/learn" className="group flex items-baseline gap-3">
             <span className="mono text-sm font-medium tracking-tight text-surface-100">
               cfd-harness
@@ -19,7 +25,7 @@ export function LearnLayout() {
               Learn
             </span>
           </Link>
-          <nav className="flex items-center gap-6 text-[13px]">
+          <nav className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] sm:gap-x-6">
             {/* DEC-V61-046 round-1 R1-M5: removed two placeholder nav
                 items ("学习路径" / "文献") that previously fired window.alert
                 "即将上线". Placeholders in a buyer-facing top-nav read as
@@ -36,6 +42,20 @@ export function LearnLayout() {
             >
               案例目录
             </NavLink>
+            <span className="h-4 w-px bg-surface-700" aria-hidden />
+            {/* DEC-V61-092: nav-discoverability fix. Strangers landing
+                at /learn need a visible entry point to the workbench so
+                they can run their own STL through ingest → mesh → run
+                without insider URL knowledge. The existing "Pro
+                Workbench →" link points at /pro (Dashboard), which
+                doesn't include the import surface. */}
+            <Link
+              to="/workbench/import"
+              className="text-[13px] text-surface-300 hover:text-surface-100"
+              title="Import an STL geometry to start a new case"
+            >
+              导入新 case →
+            </Link>
             <span className="h-4 w-px bg-surface-700" aria-hidden />
             <Link
               to="/pro"

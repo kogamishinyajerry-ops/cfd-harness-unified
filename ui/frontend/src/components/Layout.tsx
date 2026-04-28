@@ -1,8 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-// Phase 0..5 shell. Left rail exposes live screens for every phase
+// Phase 0..6 shell. Left rail exposes live screens for every phase
 // landed. Phase 5 (Audit Package Builder · Screen 6) unblocked
 // 2026-04-20 by Q-1 closure (DEC-V61-006) + Q-2 closure (DEC-V61-011).
+// Phase 6 (Workbench landing · 60-day extension routes) exposed
+// 2026-04-28 by DEC-V61-092 (nav-discoverability defect fix).
 
 interface NavItem {
   label: string;
@@ -16,6 +18,12 @@ const NAV: NavItem[] = [
   // door (2026-04-22 convergence round). Sidebar order unchanged so the
   // power-user muscle memory still works.
   { label: "Dashboard", to: "/pro", enabled: true, phaseLabel: "Phase 4" },
+  // DEC-V61-092: nav-discoverability fix. The 60-day-extension workbench
+  // (/workbench, /workbench/import, /workbench/today, ...) was wired in
+  // App.tsx 2026-04-26 but never surfaced in the pro-shell sidebar — power
+  // users had to know the URLs by heart. This entry exposes the workbench
+  // landing one click from any pro-shell page.
+  { label: "Workbench", to: "/workbench", enabled: true, phaseLabel: "Phase 6" },
   { label: "Cases", to: "/cases", enabled: true, phaseLabel: "Phase 0" },
   { label: "Decisions", to: "/decisions", enabled: true, phaseLabel: "Phase 2" },
   { label: "Runs", to: "/runs", enabled: true, phaseLabel: "Phase 3" },
@@ -89,7 +97,7 @@ export function Layout() {
         </nav>
         <footer className="mt-8 border-t border-surface-800 px-2 pt-4 text-[10px] leading-snug text-surface-500">
           Path B · agentic V&amp;V workbench<br />
-          Phase 0..5 MVP · DEC-V61-002 / 003
+          Phase 0..6 MVP · DEC-V61-002 / 003 / 092
         </footer>
       </aside>
       <main className="flex-1 overflow-y-auto">
