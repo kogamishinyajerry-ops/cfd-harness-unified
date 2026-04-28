@@ -3,7 +3,10 @@
 **Status**: Active (2026-04-28 · Kogami APPROVE_WITH_COMMENTS · 4 findings addressed inline · CFDJerry explicit ratification 2026-04-28 · DEC-V61-093 Accepted)
 **Effective**: 2026-04-28 — operative for all subsequent milestones (M-VIZ → M-RENDER-API → M-PANELS → M-AI-COPILOT → M7-redefined → M8-redefined)
 **Authority**: 首席架构官 (CFDJerry) · drafted by Claude Code Opus 4.7 (1M context) under his direction
-**Notion SSOT**: pending — sync after Accepted state, link recorded in DEC-V61-093 frontmatter
+**Notion SSOT**:
+- Sub-page under Pivot Charter (canonical): https://www.notion.so/350c68942bed814aa314e9e2b39d7d67
+- Standalone copy (searchability):           https://www.notion.so/350c68942bed81a6a20cc935ed20a10b
+- Ratifying DEC in Decisions DB:             https://www.notion.so/350c68942bed818dae03c0a9bf64b49c
 
 ---
 

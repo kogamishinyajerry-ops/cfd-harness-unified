@@ -22,7 +22,11 @@ prerequisite_status:
   m5_1_acceptance: confirmed (DEC-V61-091 Accepted 2026-04-28 · commit 7f6e3f2 + ce25e9e)
   m6_1_acceptance: confirmed (DEC-V61-090 Accepted 2026-04-28)
   v61_092_acceptance: confirmed (DEC-V61-092 Accepted 2026-04-28 · commit f7ff827 + d7411ac · nav-discoverability defect fixed; Addendum 3 builds on the now-reachable workbench)
-notion_sync_status: synced 2026-04-28 (DEC: https://www.notion.so/350c68942bed818dae03c0a9bf64b49c · Addendum doc: pending — paired sync to follow as Charter sub-page when CFDJerry confirms placement under Pivot Charter parent)
+notion_sync_status: |
+  synced 2026-04-28
+    DEC (Decisions DB row):                 https://www.notion.so/350c68942bed818dae03c0a9bf64b49c
+    Addendum doc (sub-page · canonical):    https://www.notion.so/350c68942bed814aa314e9e2b39d7d67
+    Addendum doc (standalone · searchable): https://www.notion.so/350c68942bed81a6a20cc935ed20a10b
 autonomous_governance: true
 codex_tool_report_path: null  # CLASS-1 docs-only per V61-086 / V61-089 precedent (no code change in this DEC; per-milestone Codex fires later when M-VIZ / M-RENDER-API / M-PANELS / M-AI-COPILOT implement)
 codex_review_skipped: true
