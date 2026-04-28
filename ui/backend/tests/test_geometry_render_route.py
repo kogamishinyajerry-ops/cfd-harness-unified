@@ -132,3 +132,20 @@ def test_get_case_stl_404_for_unsafe_case_id():
     # that makes it through routing.
     response = client.get("/api/cases/bad@@id/geometry/stl")
     assert response.status_code == 404
+
+
+def test_get_case_stl_matches_uppercase_extension(isolated_imported: Path):
+    """Codex round-1 P2 finding: glob("*.stl") missed uploads named .STL on
+    case-sensitive filesystems even though _safe_origin_filename preserves
+    the uploader's original casing."""
+    case_id = "imported_2026-04-28T00-00-00Z_uppercase"
+    stl_bytes = box_stl()
+    case_dir = isolated_imported / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    (triSurface / f"{case_id}.STL").write_bytes(stl_bytes)
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/geometry/stl")
+    assert response.status_code == 200
+    assert response.content == stl_bytes

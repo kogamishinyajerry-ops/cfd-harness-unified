@@ -44,7 +44,13 @@ def get_case_stl(case_id: str) -> FileResponse:
     if not triSurface_dir.is_dir():
         raise HTTPException(status_code=404, detail="case not found")
 
-    stl_files = sorted(triSurface_dir.glob("*.stl"))
+    # Case-insensitive .stl match · _safe_origin_filename preserves the
+    # uploader's original extension casing (model.STL stays as model.STL),
+    # so glob("*.stl") would miss uploads on case-sensitive filesystems.
+    # Mirrors meshing_gmsh/pipeline.py:82.
+    stl_files = sorted(
+        p for p in triSurface_dir.iterdir() if p.suffix.lower() == ".stl"
+    )
     if not stl_files:
         raise HTTPException(status_code=404, detail="no STL on disk for this case")
 

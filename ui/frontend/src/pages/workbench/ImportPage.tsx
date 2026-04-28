@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
@@ -7,7 +7,14 @@ import type {
   ImportSTLResponse,
   IngestReport,
 } from "@/types/import_geometry";
-import { Viewport } from "@/visualization/Viewport";
+
+// Lazy-load Viewport so the vtk.js bundle (~190 KB gzipped) is fetched
+// only after a successful upload renders the preview panel — users on
+// /learn / /pro / other routes don't pay the download cost. Code-split
+// follows Codex round-1 P2 finding 3 (M-VIZ bundle review 2026-04-28).
+const Viewport = lazy(() =>
+  import("@/visualization/Viewport").then((m) => ({ default: m.Viewport })),
+);
 
 // Probe the import endpoint to confirm the backend was installed with the
 // `[workbench]` extra (trimesh + python-multipart + scipy). The base `[ui]`
@@ -250,11 +257,21 @@ export function ImportPage() {
               ADDED below the existing report card. Not a Fluent-style layout
               replacement — that's M-PANELS. M-VIZ uses ImportPage as the
               smoke-test home so the Viewport gets a real consumer immediately.
-              The report card + "Continue to editor" link above are unchanged. */}
+              The report card + "Continue to editor" link above are unchanged.
+              Viewport renders responsive (no fixed width) so it stays inside
+              this section's max-w-3xl bound. */}
           <div className="mt-6">
-            <Viewport
-              stlUrl={`/api/cases/${encodeURIComponent(response.case_id)}/geometry/stl`}
-            />
+            <Suspense
+              fallback={
+                <div className="rounded-md border border-surface-800 bg-surface-950/60 p-3 text-xs text-surface-500">
+                  Loading geometry preview…
+                </div>
+              }
+            >
+              <Viewport
+                stlUrl={`/api/cases/${encodeURIComponent(response.case_id)}/geometry/stl`}
+              />
+            </Suspense>
           </div>
         </>
       )}

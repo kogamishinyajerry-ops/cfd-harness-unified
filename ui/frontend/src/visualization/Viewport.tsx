@@ -11,6 +11,8 @@ import { createKernel, type ViewportKernel } from "./viewport_kernel";
 
 interface ViewportProps {
   stlUrl: string;
+  /** Fixed pixel width. If omitted, the canvas fills its parent container's
+   *  width (responsive layout). */
   width?: number;
   height?: number;
   background?: [number, number, number];
@@ -23,7 +25,7 @@ type LoadState =
 
 export function Viewport({
   stlUrl,
-  width = 800,
+  width,
   height = 480,
   background,
 }: ViewportProps) {
@@ -99,7 +101,11 @@ export function Viewport({
       <div
         ref={containerRef}
         data-testid="viewport-container"
-        style={{ width, height, position: "relative" }}
+        style={{
+          width: width ?? "100%",
+          height,
+          position: "relative",
+        }}
         className="bg-surface-950"
       />
       {loadState.status === "loading" && (
