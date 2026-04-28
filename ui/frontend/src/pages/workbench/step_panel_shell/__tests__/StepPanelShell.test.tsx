@@ -304,13 +304,17 @@ describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
   );
 
   it(
-    "F2 · [AI 处理] is disabled on Step 3 (placeholder clears registration even though Tier-A scope says no AI action)",
+    "Phase-1A · [AI 处理] is enabled on Steps 3, 4, 5 (DEC-V61-097: setup-bc + solve + results-summary now wired)",
     () => {
-      renderShell("/workbench/case/abc?step=3");
-      // Step 3 is a placeholder: aiActionWiredInTierA=false on the step
-      // metadata AND Step3SetupPlaceholder's effect calls
-      // registerAiAction(null). The button must stay disabled.
-      expect(screen.getByTestId("ai-process-button")).toBeDisabled();
+      // Steps 3 / 4 / 5 used to be M-AI-COPILOT / M7-redefined /
+      // M-VIZ.results placeholders. Phase-1A pulls forward the LDC
+      // demo-flow back-half, so all three steps now register their
+      // own AI actions with the shell on mount.
+      for (const step of [3, 4, 5] as const) {
+        const { unmount } = renderShell(`/workbench/case/abc?step=${step}`);
+        expect(screen.getByTestId("ai-process-button")).not.toBeDisabled();
+        unmount();
+      }
     },
   );
 });

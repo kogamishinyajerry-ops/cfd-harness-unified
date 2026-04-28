@@ -43,4 +43,9 @@ export interface DemoFixture {
   title: string;
   description: string;
   size_bytes: number;
+  // Phase-1A (DEC-V61-097): closed cavities (ldc_box) walk Steps 1→5
+  // end-to-end; external-flow geometries (cylinder, naca0012) stop
+  // at Step 2 because the gmsh interior mesh isn't a flow domain.
+  full_demo_capable: boolean;
+  capability_note: string;
 }

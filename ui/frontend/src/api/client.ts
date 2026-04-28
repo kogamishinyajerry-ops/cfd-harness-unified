@@ -281,4 +281,96 @@ export const api = {
     }
     return (await resp.json()) as import("@/types/mesh_imported").MeshSuccessResponse;
   },
+
+  // Phase-1A LDC demo (DEC-V61-097): the back-half routes wire Steps
+  // 3 (setup-bc), 4 (solve), 5 (results) of the M-PANELS step panel.
+  setupBC: async (
+    caseId: string,
+  ): Promise<import("@/types/case_solve").SetupBcSummary> => {
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/setup-bc`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "detail" in detail
+          ? (detail as { detail: string }).detail
+          : typeof detail === "string"
+            ? detail
+            : `setup-bc failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/case_solve").SetupBcSummary;
+  },
+
+  solve: async (
+    caseId: string,
+  ): Promise<import("@/types/case_solve").SolveSummary> => {
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/solve`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "detail" in detail
+          ? (detail as { detail: string }).detail
+          : typeof detail === "string"
+            ? detail
+            : `solve failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/case_solve").SolveSummary;
+  },
+
+  resultsSummary: async (
+    caseId: string,
+  ): Promise<import("@/types/case_solve").ResultsSummary> => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/results-summary`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "detail" in detail
+          ? (detail as { detail: string }).detail
+          : typeof detail === "string"
+            ? detail
+            : `results-summary failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/case_solve").ResultsSummary;
+  },
 };

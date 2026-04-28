@@ -55,6 +55,13 @@ class DemoFixture(BaseModel):
     title: str  # human-readable label for the button
     description: str  # one-sentence body text under the button
     size_bytes: int  # for the UI to show "(6.3 KB)" next to the title
+    # Phase-1A (DEC-V61-097): which step in the panel this fixture can
+    # actually advance through. The gmsh pipeline meshes the STL
+    # interior, which is correct as a flow domain ONLY for closed
+    # cavities (ldc_box). External-flow demos require a separate
+    # blockMesh+sHM pipeline that is NOT in scope for Phase-1A.
+    full_demo_capable: bool  # True if the fixture supports Steps 1→5 end-to-end
+    capability_note: str  # human-readable explanation of the capability bound
 
 
 # Static allowlist. Adding a fixture here is the only way to expose it
@@ -63,23 +70,29 @@ _FIXTURES: dict[str, DemoFixture] = {
     "ldc_box": DemoFixture(
         name="ldc_box",
         filename="ldc_box.stl",
-        title="Lid-driven cavity (cube)",
-        description="The canonical CFD smoke-test cube · 12 triangles · 684 B.",
-        size_bytes=0,  # filled in at module load
+        title="Lid-driven cavity (cube) — full demo",
+        description="The canonical CFD smoke-test cube · 12 triangles · 684 B. Walks Steps 1→5 end-to-end with icoFoam Re=100.",
+        size_bytes=0,
+        full_demo_capable=True,
+        capability_note="Closed cavity → gmsh's interior tet-mesh IS the flow domain. icoFoam runs ~60s and produces a recirculating LDC vortex.",
     ),
     "cylinder": DemoFixture(
         name="cylinder",
         filename="cylinder.stl",
-        title="Circular cylinder",
-        description="Curved-surface stress test for the meshing pipeline · 128 triangles · 6.3 KB.",
+        title="Circular cylinder (Steps 1+2 only)",
+        description="Curved-surface stress test for the meshing pipeline · 128 triangles · 6.3 KB. Stops at Step 2 — external-flow simulation needs Phase-2.",
         size_bytes=0,
+        full_demo_capable=False,
+        capability_note="External-flow geometry: gmsh would mesh the cylinder's interior, which is NOT a flow domain. Requires blockMesh+snappyHexMesh (Phase-2).",
     ),
     "naca0012": DemoFixture(
         name="naca0012",
         filename="naca0012.stl",
-        title="NACA 0012 airfoil",
-        description="Thin-shell aerospace profile · 656 triangles · 31 KB.",
+        title="NACA 0012 airfoil (Steps 1+2 only)",
+        description="Thin-shell aerospace profile · 656 triangles · 31 KB. Stops at Step 2 — external-flow simulation needs Phase-3.",
         size_bytes=0,
+        full_demo_capable=False,
+        capability_note="External-flow geometry: same caveat as the cylinder, plus thinner wake refinement requirements.",
     ),
 }
 

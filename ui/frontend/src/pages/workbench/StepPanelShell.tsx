@@ -25,9 +25,9 @@ const Viewport = lazy(() =>
 import { StatusStrip } from "./step_panel_shell/StatusStrip";
 import { Step1Import } from "./step_panel_shell/steps/Step1Import";
 import { Step2Mesh } from "./step_panel_shell/steps/Step2Mesh";
-import { Step3SetupPlaceholder } from "./step_panel_shell/steps/Step3SetupPlaceholder";
-import { Step4SolvePlaceholder } from "./step_panel_shell/steps/Step4SolvePlaceholder";
-import { Step5ResultsPlaceholder } from "./step_panel_shell/steps/Step5ResultsPlaceholder";
+import { Step3SetupBC } from "./step_panel_shell/steps/Step3SetupBC";
+import { Step4SolveRun } from "./step_panel_shell/steps/Step4SolveRun";
+import { Step5ResultsView } from "./step_panel_shell/steps/Step5ResultsView";
 import { StepTree } from "./step_panel_shell/StepTree";
 import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
@@ -89,53 +89,47 @@ const STEPS: readonly StepDef[] = [
   {
     id: 3,
     shortLabel: "Setup",
-    longLabel: "3 · Setup",
+    longLabel: "3 · Setup BC",
     viewportConfig: {
-      format: "none",
+      // Show the meshed wireframe — Step 3's BC patches are written
+      // ON this mesh, so visually re-using the Step 2 viewport is the
+      // right reference image for the user.
+      format: "glb",
       glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/geometry/render` : null,
+        caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
+      gateOnStepCompletion: 2,
     },
-    taskPanelComponent: Step3SetupPlaceholder,
-    aiActionWiredInTierA: false,
-    aiActionDeferredTooltip:
-      "AI 处理 wires up in M-AI-COPILOT (per-step setup buttons).",
+    taskPanelComponent: Step3SetupBC,
+    aiActionWiredInTierA: true,
   },
   {
     id: 4,
     shortLabel: "Solve",
     longLabel: "4 · Solve",
     viewportConfig: {
-      format: "none",
+      format: "glb",
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
-      // Same /mesh/render endpoint as Step 2 — also gated on mesh
-      // having been generated to avoid the same pre-mesh 404 banner.
       gateOnStepCompletion: 2,
     },
-    taskPanelComponent: Step4SolvePlaceholder,
-    aiActionWiredInTierA: false,
-    aiActionDeferredTooltip:
-      "AI 处理 wires up in M7-redefined (full solver progress).",
+    taskPanelComponent: Step4SolveRun,
+    aiActionWiredInTierA: true,
   },
   {
     id: 5,
     shortLabel: "Results",
     longLabel: "5 · Results",
     viewportConfig: {
-      format: "none",
+      format: "glb",
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
-      // Same /mesh/render endpoint as Step 2 — also gated on mesh
-      // having been generated to avoid the same pre-mesh 404 banner.
       gateOnStepCompletion: 2,
     },
-    taskPanelComponent: Step5ResultsPlaceholder,
-    aiActionWiredInTierA: false,
-    aiActionDeferredTooltip:
-      "AI 处理 wires up in M-VIZ.results (field overlay).",
+    taskPanelComponent: Step5ResultsView,
+    aiActionWiredInTierA: true,
   },
 ] as const;
 

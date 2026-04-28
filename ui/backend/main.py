@@ -89,6 +89,14 @@ try:
 except ModuleNotFoundError:
     geometry_render = None  # type: ignore[assignment]
 
+# case_solve routes (Phase-1A LDC demo: setup-bc + solve + results-summary).
+# Imported unconditionally because the service has no extra dependencies
+# beyond stdlib + docker SDK (already required by mesh_imported).
+try:
+    from ui.backend.routes import case_solve  # noqa: F401
+except ModuleNotFoundError:
+    case_solve = None  # type: ignore[assignment]
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -138,3 +146,5 @@ if mesh_imported is not None:
     app.include_router(mesh_imported.router, prefix="/api", tags=["mesh-imported"])
 if geometry_render is not None:
     app.include_router(geometry_render.router, prefix="/api", tags=["geometry-render"])
+if case_solve is not None:
+    app.include_router(case_solve.router, prefix="/api", tags=["case-solve"])

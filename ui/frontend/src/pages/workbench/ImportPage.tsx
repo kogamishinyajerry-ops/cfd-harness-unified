@@ -205,9 +205,7 @@ export function ImportPage() {
             Try a demo · one-click import
           </h2>
           <p className="mt-1 text-[12px] text-surface-400">
-            No file? Click any of the checked-in fixtures below to skip
-            straight into the M-PANELS workbench (Step 1 · geometry view).
-            Each has been verified end-to-end through Step 2 mesh.
+            Pick a fixture below. Look for the <strong className="text-emerald-200">[Steps 1→5]</strong> badge — those walk the full LDC pipeline (mesh → BC → icoFoam → results) end-to-end. <strong className="text-amber-300">[Steps 1+2]</strong> fixtures only validate import + meshing; their external-flow simulation needs Phase-2 (blockMesh+sHM).
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {demoFixtures.map((fx) => (
@@ -217,13 +215,38 @@ export function ImportPage() {
                 data-testid={`demo-fixture-${fx.name}`}
                 disabled={demoLoading !== null}
                 onClick={() => onDemoClick(fx.name)}
-                className="flex h-full flex-col items-start rounded-sm border border-surface-700 bg-surface-900/40 p-3 text-left transition hover:border-emerald-500/40 hover:bg-emerald-500/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                className={
+                  "flex h-full flex-col items-start rounded-sm border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 " +
+                  (fx.full_demo_capable
+                    ? "border-emerald-500/40 bg-emerald-500/[0.05] hover:border-emerald-500/60 hover:bg-emerald-500/[0.10]"
+                    : "border-amber-500/30 bg-surface-900/40 hover:border-amber-500/50 hover:bg-amber-500/[0.05]")
+                }
               >
-                <span className="text-[12px] font-semibold text-emerald-200">
-                  {demoLoading === fx.name ? "Importing…" : fx.title}
-                </span>
+                <div className="flex w-full items-center justify-between gap-2">
+                  <span
+                    className={
+                      "text-[12px] font-semibold " +
+                      (fx.full_demo_capable ? "text-emerald-200" : "text-amber-200")
+                    }
+                  >
+                    {demoLoading === fx.name ? "Importing…" : fx.title}
+                  </span>
+                  <span
+                    className={
+                      "rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider " +
+                      (fx.full_demo_capable
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : "bg-amber-500/20 text-amber-200")
+                    }
+                  >
+                    {fx.full_demo_capable ? "Steps 1→5" : "Steps 1+2"}
+                  </span>
+                </div>
                 <span className="mt-1 text-[11px] text-surface-400">
                   {fx.description}
+                </span>
+                <span className="mt-1 text-[10px] italic text-surface-500">
+                  {fx.capability_note}
                 </span>
                 <span className="mt-2 font-mono text-[10px] text-surface-500">
                   {fx.filename} · {(fx.size_bytes / 1024).toFixed(1)} KB

@@ -1,0 +1,41 @@
+// Mirrors ui/backend/schemas/case_solve.py — wire types only.
+
+export interface SetupBcSummary {
+  case_id: string;
+  n_lid_faces: number;
+  n_wall_faces: number;
+  lid_velocity: [number, number, number];
+  nu: number;
+  reynolds: number;
+  written_files: string[];
+}
+
+export interface SolveSummary {
+  case_id: string;
+  end_time_reached: number;
+  last_initial_residual_p: number | null;
+  last_initial_residual_U: [number | null, number | null, number | null];
+  last_continuity_error: number | null;
+  n_time_steps_written: number;
+  time_directories: string[];
+  wall_time_s: number;
+  converged: boolean;
+}
+
+export interface ResultsSummary {
+  case_id: string;
+  final_time: number;
+  cell_count: number;
+  u_magnitude_min: number;
+  u_magnitude_max: number;
+  u_magnitude_mean: number;
+  u_x_mean: number;
+  u_x_min: number;
+  u_x_max: number;
+  is_recirculating: boolean;
+}
+
+export interface CaseSolveRejection {
+  failing_check: string;
+  detail: string;
+}
