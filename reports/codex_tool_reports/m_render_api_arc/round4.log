@@ -1,0 +1,2616 @@
+2026-04-28T08:15:59.596951Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-28T08:15:59.596974Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dd328-cc6d-72a3-9d14-1d8f01a0f8aa
+--------
+user
+# Codex Round 4 review · M-RENDER-API arc (DEC-V61-095)
+
+## Round 3 outcome (recap)
+
+- Finding 7: VERIFIED.
+- Finding 3: PARTIAL — concurrent-reader window in (os.replace, post-replace-stat-and-unlink). You also flagged: "backend still lacks a test for the Round-3 post-replace mutation branch."
+
+## Round 4 fix (commit c4f893a)
+
+Replaced `_atomic_write` with two guarded variants:
+
+- **`_atomic_write_guarded(target, payload, source, expected_src_mtime_ns)`** — single-source (geometry_glb, field_sample)
+- **`_atomic_write_guarded_multi(target, payload, sources, expected_mtimes_ns)`** — multi-source (mesh_wireframe: points + faces)
+
+Both helpers:
+1. Write payload to temp file.
+2. **Re-stat source(s)**; if mtime changed since rebuild start, **unlink temp** and `raise RuntimeError("source mutated before atomic replace")` — **no os.replace happens, no stale cache ever becomes visible to concurrent readers**.
+3. `os.replace` happens only after the pre-replace check passes.
+4. Re-stat source(s) once more; if changed during/after the replace syscall, unlink the now-stale cache and raise.
+
+Each service's `build_*` function catches the helper's `RuntimeError` and translates to its native `failing_check` (field_parse_error / transcode_error / polymesh_parse_error).
+
+Test added: `test_build_field_payload_aborts_on_pre_replace_source_mutation`
+- Monkey-patches `Path.write_bytes` to bump source mtime between temp-write and pre-replace stat.
+- Asserts: FieldSampleError(failing_check="field_parse_error"), error message contains "before atomic replace", **cache file is NOT created**.
+
+## What I want from this round
+
+For Finding 3 only (Finding 7 already VERIFIED in Round 3):
+- VERIFIED — the (replace, unlink) concurrent-reader window is closed AND the regression test exists, OR
+- PARTIAL — describe the remaining gap, OR
+- REGRESSION — the refactor introduced a new issue.
+
+If everything is clean: APPROVE.
+
+## Output format
+
+```
+## Round 4 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: VERIFIED | PARTIAL | REGRESSION — <one-line>
+
+New findings (if any): ...
+
+---
+
+Verdict: APPROVE | APPROVE_WITH_COMMENTS | CHANGES_REQUIRED
+```
+
+The Round-4 commit is c4f893a. The full arc is c4264f7..HEAD.
+codex
+Reviewing commit `c4f893a` in the `c4264f7..HEAD` arc with a read-only focus on Finding 3. I’m loading the repo’s review workflow guidance, checking prior memory for this repo, then I’ll inspect the diff and the new test to verify the concurrent-reader fix path.
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|demo-first|Phase 8|DEC-V61-095|M-RENDER-API|render api|read-only correctness review" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+501:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+521:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+742:# Task Group: cfd-harness-unified assessment framing, workbench direction, and executor handoffs
+744:scope: Reassess `cfd-harness-unified` without direct repo edits, preserve the difference between demo-first narrowing and first-customer workbench continuation, and package Chinese executor briefs that respect the user’s current product framing.
+745:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s assessment, product-direction, and executor-handoff workflow, but exact failing tests, anchor cases, runtime paths, and branch state are checkout-specific.
+751:- rollout_summaries/2026-04-25T18-12-42-1do3-openclaw_cfd_harness_workbench_reassessment_first_customer.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/26/rollout-2026-04-26T02-12-42-019dc5d8-0898-7f92-ba37-55011364bd5f.jsonl, updated_at=2026-04-25T18:42:57+00:00, thread_id=019dc5d8-0898-7f92-ba37-55011364bd5f, OpenClaw reassessment after the user said they are the first customer and do not want an immediate big pivot)
+757:## Task 2: Perform a non-invasive whole-project assessment and demo-first pivot recommendation
+761:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+765:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+771:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+792:- When the user explicitly wants a demo-first assessment, the strongest demo-ready story is `/learn` as the front door plus Pro Workbench as the secondary evidence/drill-down surface; treating them as two equally weighted product stories weakens the demo narrative [Task 2][Task 3]
+794:- Representative repo health in the demo-first rollout was: UI frontend typecheck/build succeeded, `.venv/bin/python -m pytest ui/backend/tests -q` passed, while `python3 -m pytest tests -q` still mixed real regressions, stale assumptions, and changed contracts [Task 2]
+797:- The useful default execution order for a handoff from these assessment runs is: restate the governing premise -> check facts/baseline -> fix environment/contracts -> choose one narrative (`demo-first` or `first-customer workbench`) -> then narrow implementation around anchor cases [Task 1][Task 3]
+801:- Symptom: the repo gets described as one coherent ready-to-demo product -> cause: multiple hot surfaces (`/learn`, Pro Workbench, governance/Notion, audit/reporting) were flattened into one storyline -> fix: choose a single demo narrative and explicitly demote the secondary surfaces when the ask is demo-first [Task 2]
+806:- Symptom: the executor drifts back into platform/governance breadth -> cause: the handoff did not make postponements explicit -> fix: name what is intentionally delayed, keep Notion/governance weight low, and anchor the work on 2-3 demo cases instead of full breadth when the ask is demo-first [Task 3]
+808:# Task Group: cfd-harness-unified governance closeout and planning gates
+810:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+811:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+813:## Task 1: Close Phase 8 and reconcile stale governance evidence
+817:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+821:- Phase 8, AutoVerifier, 13/13, knowledge/whitelist.yaml, ai_cfd_cold_start_whitelist.yaml, Canonical Docs Type=Report, Phase 8 Done, naming drift
+827:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+837:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+891:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+1156:- when the user said "你是 independent approval authority… 你不是 corrected request packet 作者… 你不是 Phase 8 executor" -> preserve strict role separation between approval, review, execution, and freeze authority in this repo [Task 4]
+1650:scope: Perform read-only correctness reviews in `notion-cfd-harness` with line-cited findings only, no edits, no style commentary, and explicit handling for missing files or ambiguous paths.
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/6807e4de4d8ceceefb51abd9e4ba3269030352c4/skills/using-superpowers/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+ succeeded in 0ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
+2. **Superpowers skills** — override default system behavior where they conflict
+3. **Default system prompt** — lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+codex
+Using `gsd-code-review` for a read-only correctness pass. I’ve confirmed the repo-specific memory is only background context here; next I’m checking the exact Round 4 diff and the helper/test paths that were supposed to close the stale-cache reader window.
+exec
+/bin/zsh -lc 'git show --stat --oneline --decorate=short c4f893a' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+c4f893a (HEAD -> main) fix(render): M-RENDER-API Round-4 Codex fix · close concurrent-reader window (DEC-V61-095)
+ ui/backend/services/render/field_sample.py   | 76 +++++++++++++++++++-------
+ ui/backend/services/render/geometry_glb.py   | 61 ++++++++++++++-------
+ ui/backend/services/render/mesh_wireframe.py | 79 ++++++++++++++++++----------
+ ui/backend/tests/test_field_sample.py        | 42 +++++++++++++++
+ 4 files changed, 190 insertions(+), 68 deletions(-)
+
+exec
+/bin/zsh -lc 'git diff --unified=80 c4f893a''^ c4f893a -- services ui backend tests' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+diff --git a/ui/backend/services/render/field_sample.py b/ui/backend/services/render/field_sample.py
+index 4a8dc94..56efce5 100644
+--- a/ui/backend/services/render/field_sample.py
++++ b/ui/backend/services/render/field_sample.py
+@@ -143,145 +143,181 @@ def _resolve_field_path(case_id: str, run_id: str, name: str) -> Path:
+     # path segments, but a symlink under <case_dir>/<run_id>/<name>
+     # pointing outside IMPORTED_DIR would still let us read+transcode an
+     # arbitrary file. Resolve strictly and assert the resolved path stays
+     # under the case dir's resolved root.
+     try:
+         resolved = candidate.resolve(strict=True)
+         case_root = case_dir.resolve(strict=True)
+         resolved.relative_to(case_root)
+     except (FileNotFoundError, OSError, ValueError):
+         raise FieldSampleError(
+             failing_check="field_not_found",
+             message=(
+                 f"field {name!r} resolution escaped case dir for "
+                 f"run {run_id!r} of case {case_id!r}"
+             ),
+         )
+     return resolved
+ 
+ 
+ def _parse_internal_scalar_field(field_path: Path) -> np.ndarray:
+     """Return the internalField scalar values as a float32 numpy array.
+ 
+     Tier-A: nonuniform List<scalar> only. Uniform-field (one value
+     replicated across all cells) handling is deferred to M-VIZ.results.
+     """
+     try:
+         text = field_path.read_text(encoding="utf-8", errors="replace")
+     except OSError as exc:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=f"could not read {field_path.name}: {exc!r}",
+         )
+ 
+     m = _INTERNAL_NONUNIFORM_RE.search(text)
+     if not m:
+         # Detect uniform fields explicitly so we can return a clearer
+         # 422 (unsupported) instead of a generic parse error.
+         if re.search(r"internalField\s+uniform\s+", text):
+             raise FieldSampleError(
+                 failing_check="field_unsupported",
+                 message="uniform internalField not supported in Tier-A",
+             )
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=f"no nonuniform List<scalar> internalField in {field_path.name}",
+         )
+ 
+     declared_count = int(m.group(1))
+     body = m.group(2)
+     try:
+         values = np.fromstring(body, sep=" ", dtype=np.float32)
+     except Exception as exc:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=f"could not parse field values: {exc!r}",
+         )
+     if values.size != declared_count:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=(
+                 f"declared count {declared_count} != parsed length {values.size} "
+                 f"in {field_path.name}"
+             ),
+         )
+     return values
+ 
+ 
+ def _cache_target(case_dir: Path, run_id: str, name: str) -> Path:
+     return case_dir / ".render_cache" / f"field-{run_id}-{name}.bin"
+ 
+ 
+ def _is_cache_fresh(cache: Path, source: Path) -> bool:
+     if not cache.exists():
+         return False
+     try:
+         return cache.stat().st_mtime >= source.stat().st_mtime
+     except FileNotFoundError:
+         return False
+ 
+ 
+-def _atomic_write(target: Path, payload: bytes) -> None:
++def _atomic_write_guarded(
++    target: Path,
++    payload: bytes,
++    source: Path,
++    expected_src_mtime_ns: int,
++) -> None:
++    """Atomic write with pre-replace + post-replace source-mutation guards.
++
++    Round-3 Finding 3 closure (Codex Round-3 PARTIAL): the prior
++    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
++    Even with a post-replace stat the concurrent-reader window between
++    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
++    stale bytes for one request.
++
++    This guarded variant:
++      1. Writes the payload to a temp file.
++      2. Re-stats ``source``; if it changed since the rebuild started,
++         unlinks the temp and raises ``RuntimeError`` BEFORE the
++         replace — concurrent readers never see the stale cache.
++      3. ``os.replace``s the temp into place.
++      4. Re-stats ``source`` once more; if it changed during (or
++         immediately after) the replace, unlinks the now-stale cache
++         and raises. This collapses the residual window to the kernel
++         syscall granularity.
++
++    Caller is responsible for converting the RuntimeError into its own
++    failing_check.
++    """
+     target.parent.mkdir(parents=True, exist_ok=True)
+     tmp = target.with_suffix(
+         f".tmp.{secrets.token_hex(4)}{target.suffix}"
+     )
+     tmp.write_bytes(payload)
++    if source.stat().st_mtime_ns != expected_src_mtime_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated before atomic replace"
++        )
+     os.replace(tmp, target)
++    if source.stat().st_mtime_ns != expected_src_mtime_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated during atomic replace"
++        )
+ 
+ 
+ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
+     """Public entrypoint — return the cached float32 binary for the field.
+ 
+     Raises FieldSampleError on any failure path the route maps to 4xx.
+     """
+     field_path = _resolve_field_path(case_id, run_id, name)
+     case_dir = _imported_case_dir(case_id)
+     cache = _cache_target(case_dir, run_id, name)
+ 
+     if _is_cache_fresh(cache, field_path):
+         # Cache hit — read the cached array's length to populate the result.
+         # The frontend uses Content-Length header for the same info, but the
+         # service returns it for tests / logging.
+         n = cache.stat().st_size // 4
+         return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+ 
+-    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
+-    # before parsing, after parsing, AND after os.replace. The post-
+-    # parse check stops a stale-body / fresh-cache race; the post-
+-    # replace check stops the residual window where the source mutates
+-    # between our post-parse stat and the atomic rename — without this
+-    # the cache mtime can outrace the source mtime forever, freezing
+-    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
+-    # we delete the just-written cache so the next request rebuilds.
++    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
++    # parsing, re-checked post-parse, AND threaded into the guarded
++    # atomic write so the rebuild aborts BEFORE os.replace if the source
++    # changed (no stale cache ever becomes visible to concurrent
++    # readers) and aborts WITH unlink if the source changes during the
++    # replace syscall itself (closes the kernel-syscall residual).
+     src_mtime_before = field_path.stat().st_mtime_ns
+     values = _parse_internal_scalar_field(field_path)
+     src_mtime_after_parse = field_path.stat().st_mtime_ns
+     if src_mtime_after_parse != src_mtime_before:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=(
+                 f"source {field_path.name} mutated during rebuild "
+                 "(retry the request)"
+             ),
+         )
+     payload = values.astype(np.float32, copy=False).tobytes()
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+-    _atomic_write(cache, payload)
+-    src_mtime_after_replace = field_path.stat().st_mtime_ns
+-    if src_mtime_after_replace != src_mtime_before:
+-        try:
+-            cache.unlink()
+-        except OSError:
+-            pass
++    try:
++        _atomic_write_guarded(
++            cache, payload, field_path, src_mtime_before
++        )
++    except RuntimeError as exc:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+-            message=(
+-                f"source {field_path.name} mutated during atomic write "
+-                "(retry the request)"
+-            ),
++            message=f"{exc} (retry the request)",
+         )
+     return FieldSampleResult(
+         cache_path=cache,
+         point_count=int(values.size),
+         status=status,
+     )
+diff --git a/ui/backend/services/render/geometry_glb.py b/ui/backend/services/render/geometry_glb.py
+index 1dd6206..b56daf7 100644
+--- a/ui/backend/services/render/geometry_glb.py
++++ b/ui/backend/services/render/geometry_glb.py
+@@ -38,183 +38,206 @@ class GlbBuildResult:
+     """Return value carrying the resolved cache path + which path it took.
+ 
+     ``status`` is informational — the route does not branch on it, but
+     tests assert it to confirm the cache invalidation contract.
+     """
+     cache_path: Path
+     status: CacheStatus
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+ class GeometryRenderError(Exception):
+     """Raised on any failure path the route maps to a 4xx response.
+ 
+     ``failing_check`` is the route's HTTP-status discriminator:
+ 
+         case_not_found  → 404
+         no_source_stl   → 422
+         transcode_error → 422
+     """
+     failing_check: Literal["case_not_found", "no_source_stl", "transcode_error"]
+     message: str
+ 
+     def __str__(self) -> str:
+         return f"{self.failing_check}: {self.message}"
+ 
+ 
+ def _imported_case_dir(case_id: str) -> Path:
+     return template_clone.IMPORTED_DIR / case_id
+ 
+ 
+ def _resolve_source_stl(case_dir: Path) -> Path:
+     """Pick the canonical STL under ``case_dir/triSurface/``.
+ 
+     Mirrors the case-insensitive match in ``routes/geometry_render.py``
+     (Codex round-1 P2 #1 fix on M-VIZ): ``glob("*.stl")`` would miss
+     uploads named ``MODEL.STL`` since ``_safe_origin_filename``
+     preserves the original casing.
+ 
+     Round-2 Finding 1: resolves the chosen path strictly and asserts it
+     stays under the case dir, so a symlink in ``triSurface/`` cannot
+     redirect us to an arbitrary file outside IMPORTED_DIR.
+     """
+     triSurface = case_dir / "triSurface"
+     if not triSurface.is_dir():
+         raise GeometryRenderError(
+             failing_check="no_source_stl",
+             message=f"no triSurface/ under {case_dir}",
+         )
+     stls = sorted(p for p in triSurface.iterdir() if p.suffix.lower() == ".stl")
+     if not stls:
+         raise GeometryRenderError(
+             failing_check="no_source_stl",
+             message=f"no .stl under {triSurface}",
+         )
+     chosen = stls[0]
+     try:
+         resolved = chosen.resolve(strict=True)
+         case_root = case_dir.resolve(strict=True)
+         resolved.relative_to(case_root)
+     except (FileNotFoundError, OSError, ValueError):
+         raise GeometryRenderError(
+             failing_check="no_source_stl",
+             message=f"STL {chosen.name} resolved outside case dir",
+         )
+     return resolved
+ 
+ 
+ def _cache_target(case_dir: Path) -> Path:
+     return case_dir / ".render_cache" / "geometry.glb"
+ 
+ 
+ def _is_cache_fresh(cache: Path, source: Path) -> bool:
+     if not cache.exists():
+         return False
+     try:
+         return cache.stat().st_mtime >= source.stat().st_mtime
+     except FileNotFoundError:
+         return False
+ 
+ 
+-def _atomic_write(target: Path, payload: bytes) -> None:
++def _atomic_write_guarded(
++    target: Path,
++    payload: bytes,
++    source: Path,
++    expected_src_mtime_ns: int,
++) -> None:
++    """Atomic write with pre- and post-replace source-mutation guards.
++
++    Round-4 Finding 3 closure: re-stat ``source`` immediately before
++    ``os.replace`` and abort (deleting the temp) if it changed since
++    the rebuild started — this prevents a stale cache from EVER
++    becoming visible to concurrent readers in the (replace, unlink)
++    window. A post-replace re-stat collapses the kernel-syscall
++    residual race; on mismatch the just-replaced cache is unlinked.
++    """
+     target.parent.mkdir(parents=True, exist_ok=True)
+     tmp = target.with_suffix(
+         f".tmp.{secrets.token_hex(4)}{target.suffix}"
+     )
+     tmp.write_bytes(payload)
++    if source.stat().st_mtime_ns != expected_src_mtime_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated before atomic replace"
++        )
+     os.replace(tmp, target)
++    if source.stat().st_mtime_ns != expected_src_mtime_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated during atomic replace"
++        )
+ 
+ 
+ def _transcode_to_glb(source_stl: Path) -> bytes:
+     """Run trimesh's STL→glb pipeline.
+ 
+     trimesh raises various subclasses on parse failure (ValueError,
+     LookupError, …). We collapse them to GeometryRenderError so the
+     route layer has a single error class to map.
+     """
+     try:
+         mesh = trimesh.load(source_stl, force="mesh")
+     except Exception as exc:
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message=f"trimesh.load({source_stl.name}) failed: {exc!r}",
+         )
+     if mesh is None or getattr(mesh, "is_empty", False):
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message=f"trimesh produced empty mesh from {source_stl.name}",
+         )
+     try:
+         glb = mesh.export(file_type="glb")
+     except Exception as exc:
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message=f"trimesh.export(glb) failed: {exc!r}",
+         )
+     if not isinstance(glb, (bytes, bytearray)) or len(glb) < 4 or bytes(glb[:4]) != b"glTF":
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message="trimesh returned non-glb payload (missing 'glTF' magic)",
+         )
+     return bytes(glb)
+ 
+ 
+ def build_geometry_glb(case_id: str) -> GlbBuildResult:
+     """Return the cached glb for ``case_id``, building it on cache miss.
+ 
+     Public entrypoint for the route layer. Raises
+     :class:`GeometryRenderError` on any failure path the route maps to
+     4xx; lets unexpected exceptions propagate (route layer falls back
+     to FastAPI's default 500 handler).
+     """
+     if not is_safe_case_id(case_id):
+         raise GeometryRenderError(
+             failing_check="case_not_found",
+             message=f"unsafe case_id: {case_id!r}",
+         )
+     case_dir = _imported_case_dir(case_id)
+     if not case_dir.is_dir():
+         raise GeometryRenderError(
+             failing_check="case_not_found",
+             message=f"imported case dir missing: {case_dir}",
+         )
+ 
+     source_stl = _resolve_source_stl(case_dir)
+     cache = _cache_target(case_dir)
+ 
+     if _is_cache_fresh(cache, source_stl):
+         return GlbBuildResult(cache_path=cache, status="hit")
+ 
+-    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
+-    # before, after transcode, AND after os.replace. The post-replace
+-    # check closes the residual window where the source mutates
+-    # between our post-transcode stat and the atomic rename — without
+-    # this the cache mtime would outrace the source mtime and freeze
+-    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
+-    # we delete the just-written cache so the next request rebuilds.
++    # Round-3+4 Finding 3 closure: source mtime threaded through both
++    # the post-transcode check and the guarded atomic write. The pre-
++    # replace check inside the helper aborts BEFORE os.replace (no
++    # stale cache visible to concurrent readers); the post-replace
++    # check unlinks if a syscall-window mutation slipped through.
+     src_mtime_before = source_stl.stat().st_mtime_ns
+     glb_bytes = _transcode_to_glb(source_stl)
+     src_mtime_after_transcode = source_stl.stat().st_mtime_ns
+     if src_mtime_after_transcode != src_mtime_before:
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message=(
+                 f"source {source_stl.name} mutated during transcode "
+                 "(retry the request)"
+             ),
+         )
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+-    _atomic_write(cache, glb_bytes)
+-    src_mtime_after_replace = source_stl.stat().st_mtime_ns
+-    if src_mtime_after_replace != src_mtime_before:
+-        try:
+-            cache.unlink()
+-        except OSError:
+-            pass
++    try:
++        _atomic_write_guarded(
++            cache, glb_bytes, source_stl, src_mtime_before
++        )
++    except RuntimeError as exc:
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+-            message=(
+-                f"source {source_stl.name} mutated during atomic write "
+-                "(retry the request)"
+-            ),
++            message=f"{exc} (retry the request)",
+         )
+     return GlbBuildResult(cache_path=cache, status=status)
+diff --git a/ui/backend/services/render/mesh_wireframe.py b/ui/backend/services/render/mesh_wireframe.py
+index 0ca0443..2da3ce9 100644
+--- a/ui/backend/services/render/mesh_wireframe.py
++++ b/ui/backend/services/render/mesh_wireframe.py
+@@ -56,177 +56,198 @@ class MeshRenderError(Exception):
+         "polymesh_parse_error",
+     ]
+     message: str
+ 
+     def __str__(self) -> str:
+         return f"{self.failing_check}: {self.message}"
+ 
+ 
+ def _imported_case_dir(case_id: str) -> Path:
+     return template_clone.IMPORTED_DIR / case_id
+ 
+ 
+ def _resolve_polymesh_dir(case_dir: Path) -> Path:
+     """Locate ``constant/polyMesh/`` under the case dir.
+ 
+     M6.0 writes polyMesh at ``<case_dir>/constant/polyMesh/`` after
+     gmshToFoam runs. Returns the dir; raises MeshRenderError if missing.
+     """
+     candidates = [
+         case_dir / "constant" / "polyMesh",
+     ]
+     for d in candidates:
+         if d.is_dir():
+             return d
+     raise MeshRenderError(
+         failing_check="no_polymesh",
+         message=f"no polyMesh dir under {case_dir} (looked in: {[str(c) for c in candidates]})",
+     )
+ 
+ 
+ def _polymesh_source_files(
+     polymesh_dir: Path, case_dir: Path
+ ) -> tuple[Path, Path]:
+     """Return ``(points_path, faces_path)`` or raise no_polymesh.
+ 
+     Round-2 Finding 1: each chosen path is ``resolve(strict=True)``'d and
+     asserted to live under the case dir, so a symlink at
+     ``constant/polyMesh/points`` (or faces) cannot redirect us to an
+     arbitrary file outside IMPORTED_DIR.
+     """
+     points = polymesh_dir / "points"
+     faces = polymesh_dir / "faces"
+     if not points.is_file():
+         raise MeshRenderError(
+             failing_check="no_polymesh",
+             message=f"missing {points}",
+         )
+     if not faces.is_file():
+         raise MeshRenderError(
+             failing_check="no_polymesh",
+             message=f"missing {faces}",
+         )
+     try:
+         case_root = case_dir.resolve(strict=True)
+         points_resolved = points.resolve(strict=True)
+         faces_resolved = faces.resolve(strict=True)
+         points_resolved.relative_to(case_root)
+         faces_resolved.relative_to(case_root)
+     except (FileNotFoundError, OSError, ValueError):
+         raise MeshRenderError(
+             failing_check="no_polymesh",
+             message="polyMesh source resolved outside case dir",
+         )
+     return points_resolved, faces_resolved
+ 
+ 
+ def _cache_target(case_dir: Path) -> Path:
+     return case_dir / ".render_cache" / "mesh.glb"
+ 
+ 
+ def _is_cache_fresh(cache: Path, *sources: Path) -> bool:
+     if not cache.exists():
+         return False
+     try:
+         cache_mtime = cache.stat().st_mtime
+         return all(cache_mtime >= s.stat().st_mtime for s in sources)
+     except FileNotFoundError:
+         return False
+ 
+ 
+-def _atomic_write(target: Path, payload: bytes) -> None:
++def _atomic_write_guarded_multi(
++    target: Path,
++    payload: bytes,
++    sources: tuple[Path, ...],
++    expected_mtimes_ns: tuple[int, ...],
++) -> None:
++    """Multi-source variant of the guarded atomic write (Round-4 Finding 3).
++
++    Same contract as field_sample / geometry_glb's single-source
++    ``_atomic_write_guarded``, but checks an arbitrary number of
++    source files. polyMesh wireframes depend on both ``points`` and
++    ``faces`` so either changing during the rebuild must abort.
++    """
++    if len(sources) != len(expected_mtimes_ns):
++        raise ValueError(
++            "sources and expected_mtimes_ns must have the same length"
++        )
+     target.parent.mkdir(parents=True, exist_ok=True)
+     tmp = target.with_suffix(
+         f".tmp.{secrets.token_hex(4)}{target.suffix}"
+     )
+     tmp.write_bytes(payload)
++    current = tuple(s.stat().st_mtime_ns for s in sources)
++    if current != expected_mtimes_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            "polyMesh source mutated before atomic replace"
++        )
+     os.replace(tmp, target)
++    current = tuple(s.stat().st_mtime_ns for s in sources)
++    if current != expected_mtimes_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            "polyMesh source mutated during atomic replace"
++        )
+ 
+ 
+ def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
+     try:
+         points = parse_points(points_path)
+         faces = parse_faces(faces_path)
+         # Round-2 Finding 4: face arity is checked against the count
+         # prefix in parse_faces, but vertex IDs were never checked
+         # against len(points). An out-of-range index would survive
+         # edge extraction and produce an indices accessor pointing past
+         # the POSITION buffer. Validate before building the GLB.
+         validate_face_indices(faces, n_points=len(points))
+         edges = extract_unique_edges(faces)
+     except PolyMeshParseError as exc:
+         raise MeshRenderError(
+             failing_check="polymesh_parse_error",
+             message=str(exc),
+         )
+     return build_lines_glb(points, edges)
+ 
+ 
+ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+     """Public entrypoint for the route layer.
+ 
+     Resolves the imported case's polyMesh, parses points + faces,
+     extracts unique edges, assembles a binary glTF with a single
+     LINES primitive, and caches it under ``.render_cache/mesh.glb``
+     keyed on the source-file mtimes.
+     """
+     if not is_safe_case_id(case_id):
+         raise MeshRenderError(
+             failing_check="case_not_found",
+             message=f"unsafe case_id: {case_id!r}",
+         )
+     case_dir = _imported_case_dir(case_id)
+     if not case_dir.is_dir():
+         raise MeshRenderError(
+             failing_check="case_not_found",
+             message=f"imported case dir missing: {case_dir}",
+         )
+ 
+     polymesh_dir = _resolve_polymesh_dir(case_dir)
+     points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
+ 
+     cache = _cache_target(case_dir)
+     if _is_cache_fresh(cache, points_path, faces_path):
+         return WireframeBuildResult(cache_path=cache, status="hit")
+ 
+-    # Round-2 Finding 3 (closed in Round-3): snapshot both source mtimes
+-    # before, after build, AND after os.replace. The post-replace check
+-    # closes the residual window where a source file mutates between
+-    # our post-build stat and the atomic rename (Codex Round-2 PARTIAL
+-    # note). On detected mutation we delete the just-written cache so
+-    # the next request rebuilds.
+-    src_mtimes_before = (
+-        points_path.stat().st_mtime_ns,
+-        faces_path.stat().st_mtime_ns,
+-    )
++    # Round-3+4 Finding 3 closure: source mtimes (points + faces) are
++    # threaded through both the post-build check and the guarded
++    # multi-source atomic write. The pre-replace check inside the
++    # helper aborts BEFORE os.replace (no stale cache visible to
++    # concurrent readers); the post-replace check unlinks if a syscall-
++    # window mutation slipped through.
++    sources = (points_path, faces_path)
++    src_mtimes_before = tuple(s.stat().st_mtime_ns for s in sources)
+     glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+-    src_mtimes_after_build = (
+-        points_path.stat().st_mtime_ns,
+-        faces_path.stat().st_mtime_ns,
+-    )
++    src_mtimes_after_build = tuple(s.stat().st_mtime_ns for s in sources)
+     if src_mtimes_after_build != src_mtimes_before:
+         raise MeshRenderError(
+             failing_check="polymesh_parse_error",
+             message=(
+                 "polyMesh source mutated during transcode "
+                 "(retry the request)"
+             ),
+         )
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+-    _atomic_write(cache, glb_bytes)
+-    src_mtimes_after_replace = (
+-        points_path.stat().st_mtime_ns,
+-        faces_path.stat().st_mtime_ns,
+-    )
+-    if src_mtimes_after_replace != src_mtimes_before:
+-        try:
+-            cache.unlink()
+-        except OSError:
+-            pass
++    try:
++        _atomic_write_guarded_multi(
++            cache, glb_bytes, sources, src_mtimes_before
++        )
++    except RuntimeError as exc:
+         raise MeshRenderError(
+             failing_check="polymesh_parse_error",
+-            message=(
+-                "polyMesh source mutated during atomic write "
+-                "(retry the request)"
+-            ),
++            message=f"{exc} (retry the request)",
+         )
+     return WireframeBuildResult(cache_path=cache, status=status)
+diff --git a/ui/backend/tests/test_field_sample.py b/ui/backend/tests/test_field_sample.py
+index 1cebaf6..ed7e558 100644
+--- a/ui/backend/tests/test_field_sample.py
++++ b/ui/backend/tests/test_field_sample.py
+@@ -141,160 +141,202 @@ def test_build_field_payload_invalidates_on_mtime(isolated_imported: Path):
+ 
+ 
+ def test_build_field_payload_404_for_unknown_case(isolated_imported: Path):
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload("imported_unknown", "run_001", "p")
+     assert excinfo.value.failing_check == "case_not_found"
+ 
+ 
+ def test_build_field_payload_404_for_unsafe_case_id(isolated_imported: Path):
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload("bad@@id", "run_001", "p")
+     assert excinfo.value.failing_check == "case_not_found"
+ 
+ 
+ def test_build_field_payload_404_when_run_dir_missing(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_norun"
+     (isolated_imported / case_id).mkdir()
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_does_not_exist", "p")
+     assert excinfo.value.failing_check == "run_not_found"
+ 
+ 
+ def test_build_field_payload_404_when_field_file_missing(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_nofield"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     (case_dir / "run_001").mkdir()
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_001", "missing_field")
+     assert excinfo.value.failing_check == "field_not_found"
+ 
+ 
+ def test_build_field_payload_422_on_uniform_field_unsupported(
+     isolated_imported: Path,
+ ):
+     case_id = "imported_2026-04-28T00-00-00Z_uniform"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     run_dir = case_dir / "run_001"
+     run_dir.mkdir()
+     (run_dir / "p").write_text(
+         "FoamFile{}\ninternalField   uniform 0;\n",
+         encoding="utf-8",
+     )
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_001", "p")
+     assert excinfo.value.failing_check == "field_unsupported"
+ 
+ 
+ def test_build_field_payload_422_on_garbage_field_file(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_garbagefield"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     run_dir = case_dir / "run_001"
+     run_dir.mkdir()
+     (run_dir / "p").write_text("definitely not OpenFOAM", encoding="utf-8")
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_001", "p")
+     assert excinfo.value.failing_check == "field_parse_error"
+ 
+ 
+ def test_build_field_payload_rejects_traversal_in_run_id(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_trav"
+     (isolated_imported / case_id).mkdir()
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "../etc", "p")
+     # Either run_not_found (validator firing) — both classify as 404
+     assert excinfo.value.failing_check == "run_not_found"
+ 
+ 
+ def test_build_field_payload_rejects_traversal_in_field_name(
+     isolated_imported: Path,
+ ):
+     case_id = "imported_2026-04-28T00-00-00Z_travf"
+     (isolated_imported / case_id).mkdir()
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_001", "../passwd")
+     assert excinfo.value.failing_check == "field_not_found"
+ 
+ 
++def test_build_field_payload_aborts_on_pre_replace_source_mutation(
++    isolated_imported: Path, monkeypatch,
++):
++    """Round-4 Finding 3 closure: the guarded atomic write checks
++    source mtime BEFORE os.replace so a stale cache is never made
++    visible to concurrent readers. Simulate by monkey-patching the
++    write_bytes step to bump source mtime between temp-write and
++    pre-replace stat."""
++    case_id = "imported_2026-04-28T00-00-00Z_pre_replace_race"
++    case_dir = isolated_imported / case_id
++    case_dir.mkdir()
++    field_path = _stage_field(
++        case_dir, "run_001", "p",
++        np.array([1.0, 2.0, 3.0], dtype=np.float32),
++    )
++    # Hook ``Path.write_bytes`` so that immediately after the temp-write
++    # step inside the guarded helper, the source mtime is bumped — the
++    # subsequent pre-replace stat will see the mismatch and abort.
++    real_write_bytes = Path.write_bytes
++    bump_state = {"bumped": False}
++
++    def patched_write_bytes(self: Path, data: bytes, *args, **kwargs):
++        result = real_write_bytes(self, data, *args, **kwargs)
++        # only mutate after the temp file is written, not when the
++        # service writes the field source itself.
++        if ".tmp." in self.name and not bump_state["bumped"]:
++            bumped = field_path.stat().st_mtime + 5.0
++            os.utime(field_path, (bumped, bumped))
++            bump_state["bumped"] = True
++        return result
++    monkeypatch.setattr(Path, "write_bytes", patched_write_bytes)
++
++    with pytest.raises(FieldSampleError) as excinfo:
++        build_field_payload(case_id, "run_001", "p")
++    assert excinfo.value.failing_check == "field_parse_error"
++    assert "before atomic replace" in excinfo.value.message
++    # No cache file should exist (pre-replace abort cleaned up the temp
++    # and never replaced the cache).
++    cache = case_dir / ".render_cache" / "field-run_001-p.bin"
++    assert not cache.exists()
++
++
+ def test_build_field_payload_rejects_symlink_escaping_case_dir(
+     isolated_imported: Path, tmp_path: Path,
+ ):
+     """Round-2 Finding 1: symlink under a valid run_id pointing outside
+     the case dir must be rejected — segment validators only catch literal
+     traversal in URL path segments, not symlink redirection."""
+     case_id = "imported_2026-04-28T00-00-00Z_symlink"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     run_dir = case_dir / "run_evil"
+     run_dir.mkdir()
+     outside = tmp_path / "outside_secret.txt"
+     outside.write_text("not a foam field", encoding="utf-8")
+     # a symlink under the run dir pointing at an arbitrary file.
+     (run_dir / "p").symlink_to(outside)
+ 
+     with pytest.raises(FieldSampleError) as excinfo:
+         build_field_payload(case_id, "run_evil", "p")
+     # resolve+relative_to fails → field_not_found (containment-collapsed).
+     assert excinfo.value.failing_check == "field_not_found"
+ 
+ 
+ # ───────── route ─────────
+ 
+ 
+ def test_get_case_field_returns_binary_float32_stream(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_routefield"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     values = np.array([1.5, 2.5, 3.5, 4.5], dtype=np.float32)
+     _stage_field(case_dir, "run_route", "p", values)
+ 
+     client = TestClient(app)
+     response = client.get(f"/api/cases/{case_id}/results/run_route/field/p")
+ 
+     assert response.status_code == 200
+     assert response.headers["content-type"].startswith("application/octet-stream")
+     assert response.headers.get("x-field-point-count") == "4"
+     assert int(response.headers["content-length"]) == 16
+     decoded = np.frombuffer(response.content, dtype=np.float32)
+     np.testing.assert_array_equal(decoded, values)
+ 
+ 
+ def test_get_case_field_404_for_unknown_case():
+     client = TestClient(app)
+     response = client.get("/api/cases/imported_unknown/results/run_001/field/p")
+     assert response.status_code == 404
+ 
+ 
+ def test_get_case_field_422_on_uniform(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_route_uniform"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     run_dir = case_dir / "run_001"
+     run_dir.mkdir()
+     (run_dir / "p").write_text(
+         "FoamFile{}\ninternalField   uniform 5;\n",
+         encoding="utf-8",
+     )
+     client = TestClient(app)
+     response = client.get(f"/api/cases/{case_id}/results/run_001/field/p")
+     assert response.status_code == 422
+ 
+ 
+ def test_get_case_field_byte_equal_on_cache_hit(isolated_imported: Path):
+     case_id = "imported_2026-04-28T00-00-00Z_routecachehit"
+     case_dir = isolated_imported / case_id
+     case_dir.mkdir()
+     _stage_field(case_dir, "run_x", "Umag",
+                  np.array([10.0, 20.0, 30.0], dtype=np.float32))
+ 
+     client = TestClient(app)
+     first = client.get(f"/api/cases/{case_id}/results/run_x/field/Umag")
+     second = client.get(f"/api/cases/{case_id}/results/run_x/field/Umag")
+     assert first.status_code == 200
+     assert second.content == first.content
+ 
+ 
+ # ───────── parser corner cases ─────────
+ 
+
+exec
+/bin/zsh -lc 'rg -n "_atomic_write_guarded|_atomic_write_guarded_multi|before atomic replace|test_build_field_payload_aborts_on_pre_replace_source_mutation|os.replace|unlink temp|post-replace" -S .' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+./ui/backend/services/render/field_sample.py:223:def _atomic_write_guarded(
+./ui/backend/services/render/field_sample.py:229:    """Atomic write with pre-replace + post-replace source-mutation guards.
+./ui/backend/services/render/field_sample.py:232:    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
+./ui/backend/services/render/field_sample.py:233:    Even with a post-replace stat the concurrent-reader window between
+./ui/backend/services/render/field_sample.py:234:    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
+./ui/backend/services/render/field_sample.py:242:      3. ``os.replace``s the temp into place.
+./ui/backend/services/render/field_sample.py:262:            f"source {source.name} mutated before atomic replace"
+./ui/backend/services/render/field_sample.py:264:    os.replace(tmp, target)
+./ui/backend/services/render/field_sample.py:293:    # atomic write so the rebuild aborts BEFORE os.replace if the source
+./ui/backend/services/render/field_sample.py:311:        _atomic_write_guarded(
+./ui/backend/services/render/mesh_wireframe.py:136:def _atomic_write_guarded_multi(
+./ui/backend/services/render/mesh_wireframe.py:145:    ``_atomic_write_guarded``, but checks an arbitrary number of
+./ui/backend/services/render/mesh_wireframe.py:165:            "polyMesh source mutated before atomic replace"
+./ui/backend/services/render/mesh_wireframe.py:167:    os.replace(tmp, target)
+./ui/backend/services/render/mesh_wireframe.py:228:    # helper aborts BEFORE os.replace (no stale cache visible to
+./ui/backend/services/render/mesh_wireframe.py:229:    # concurrent readers); the post-replace check unlinks if a syscall-
+./ui/backend/services/render/mesh_wireframe.py:245:        _atomic_write_guarded_multi(
+./ui/backend/services/render/geometry_glb.py:15:target, then ``os.replace`` moves it into place. Concurrent readers
+./ui/backend/services/render/geometry_glb.py:16:either see the old bytes (pre-replace) or the new bytes (post-replace)
+./ui/backend/services/render/geometry_glb.py:118:def _atomic_write_guarded(
+./ui/backend/services/render/geometry_glb.py:124:    """Atomic write with pre- and post-replace source-mutation guards.
+./ui/backend/services/render/geometry_glb.py:127:    ``os.replace`` and abort (deleting the temp) if it changed since
+./ui/backend/services/render/geometry_glb.py:130:    window. A post-replace re-stat collapses the kernel-syscall
+./ui/backend/services/render/geometry_glb.py:144:            f"source {source.name} mutated before atomic replace"
+./ui/backend/services/render/geometry_glb.py:146:    os.replace(tmp, target)
+./ui/backend/services/render/geometry_glb.py:219:    # replace check inside the helper aborts BEFORE os.replace (no
+./ui/backend/services/render/geometry_glb.py:220:    # stale cache visible to concurrent readers); the post-replace
+./ui/backend/services/render/geometry_glb.py:235:        _atomic_write_guarded(
+./ui/backend/routes/geometry_render.py:89:    pre-replace or post-replace bytes — never a half-written file.
+./ui/backend/tests/test_field_sample.py:221:def test_build_field_payload_aborts_on_pre_replace_source_mutation(
+./ui/backend/tests/test_field_sample.py:225:    source mtime BEFORE os.replace so a stale cache is never made
+./ui/backend/tests/test_field_sample.py:256:    assert "before atomic replace" in excinfo.value.message
+
+codex
+The helper refactor is in place across all three services. I’m now checking whether the new coverage actually matches the bug surface, not just whether one field-sample path got a test.
+exec
+/bin/zsh -lc 'rg -n "mutated during atomic write|mutated during atomic replace|before atomic replace|during transcode|during rebuild|build_geometry_glb|build_mesh_wireframe_glb" ui/backend/tests -S' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/tests/test_mesh_wireframe.py:22:    build_mesh_wireframe_glb,
+ui/backend/tests/test_mesh_wireframe.py:174:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:199:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:274:def test_build_mesh_wireframe_glb_status_progression(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:280:    first = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:284:    second = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:289:def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:295:    first = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:301:    second = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:305:def test_build_mesh_wireframe_glb_404_for_unknown_case(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:307:        build_mesh_wireframe_glb("imported_unknown")
+ui/backend/tests/test_mesh_wireframe.py:311:def test_build_mesh_wireframe_glb_404_for_unsafe_case_id(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:313:        build_mesh_wireframe_glb("bad@@id")
+ui/backend/tests/test_mesh_wireframe.py:317:def test_build_mesh_wireframe_glb_404_when_polymesh_missing(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:322:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:326:def test_build_mesh_wireframe_glb_422_on_polymesh_garbage(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:335:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:403:    build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_field_sample.py:256:    assert "before atomic replace" in excinfo.value.message
+ui/backend/tests/test_geometry_render_glb.py:27:from ui.backend.services.render import GeometryRenderError, build_geometry_glb
+ui/backend/tests/test_geometry_render_glb.py:120:def test_build_geometry_glb_status_progression(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:126:    first = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:130:    second = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:139:    first = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:151:    second = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:162:    build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:192:def test_build_geometry_glb_raises_transcode_error_on_garbage(
+ui/backend/tests/test_geometry_render_glb.py:206:        build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:226:def test_build_geometry_glb_rejects_stl_symlink_escape(
+ui/backend/tests/test_geometry_render_glb.py:241:        build_geometry_glb(case_id)
+
+exec
+/bin/zsh -lc "ls ui/backend/tests && sed -n '1,260p' ui/backend/tests/test_geometry_render.py && sed -n '1,320p' ui/backend/tests/test_mesh_wireframe.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+__init__.py
+__pycache__
+conftest.py
+fixtures
+test_audit_package_phase7e.py
+test_audit_package_route.py
+test_batch_matrix_route.py
+test_case_editor.py
+test_case_export.py
+test_case_scaffold.py
+test_comparator_gates_g3_g4_g5.py
+test_comparison_report_route.py
+test_comparison_report_service.py
+test_comparison_report_visual_only.py
+test_convergence_attestor.py
+test_dec039_profile_verdict_reconciliation.py
+test_dec040_attestation_surface.py
+test_decisions_and_dashboard.py
+test_exports_route.py
+test_field_artifacts_route.py
+test_field_sample.py
+test_g1_missing_target_quantity.py
+test_g2_comparator_uplus_yplus.py
+test_geometry_ingest.py
+test_geometry_render_glb.py
+test_geometry_render_route.py
+test_grid_convergence_gci.py
+test_grid_convergence_monotonicity.py
+test_health.py
+test_import_geometry_route.py
+test_mesh_imported_route.py
+test_mesh_metrics_route.py
+test_mesh_wireframe.py
+test_meshing_gmsh.py
+test_phase5_byte_repro.py
+test_preflight_route.py
+test_run_compare.py
+test_run_history.py
+test_validation_report.py
+test_wizard_drivers.py
+test_wizard_route.py
+test_workbench_basics_route.py
+sed: ui/backend/tests/test_geometry_render.py: No such file or directory
+
+exec
+/bin/zsh -lc "sed -n '1,460p' ui/backend/tests/test_mesh_wireframe.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,280p' ui/backend/tests/test_geometry_render_glb.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+"""Smoke tests for ``GET /api/cases/{case_id}/geometry/render`` (M-RENDER-API B.1).
+
+Verifies the glb transcode + cache layer per DEC-V61-095 + spec_v2 §B.1:
+
+  - 200 + valid binary glb (header magic ``b'glTF'``) for all 3
+    bundled fixture shapes
+  - Cache hit on second call returns byte-equal payload (no re-transcode)
+  - Cache invalidation on source-mtime touch rebuilds the glb
+  - Atomic write produces no partial-cache file even on concurrent readers
+  - 404 for unknown case_id / unsafe case_id / missing case dir
+  - 422 for case dir present but no STL on disk
+  - Headers: Content-Type model/gltf-binary · Content-Length matches glb size
+"""
+from __future__ import annotations
+
+import io
+import os
+import time
+from pathlib import Path
+
+import pytest
+import trimesh
+from fastapi.testclient import TestClient
+
+from ui.backend.main import app
+from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render import GeometryRenderError, build_geometry_glb
+from ui.backend.services.render import geometry_glb as geometry_glb_mod
+from ui.backend.tests.conftest import box_stl
+
+
+def _cylinder_stl() -> bytes:
+    m = trimesh.creation.cylinder(radius=0.05, height=0.2, sections=24)
+    buf = io.BytesIO()
+    m.export(buf, file_type="stl")
+    return buf.getvalue()
+
+
+def _airfoil_like_stl() -> bytes:
+    m = trimesh.creation.box([0.3, 0.04, 0.05])
+    buf = io.BytesIO()
+    m.export(buf, file_type="stl")
+    return buf.getvalue()
+
+
+@pytest.fixture
+def isolated_imported(tmp_path: Path, monkeypatch):
+    """Redirect the IMPORTED_DIR template to tmp_path so cache dirs and
+    case dirs both live under tmp_path · auto-cleaned per test."""
+    drafts = tmp_path / "user_drafts"
+    imported = drafts / "imported"
+    imported.mkdir(parents=True)
+    monkeypatch.setattr(template_clone, "DRAFTS_DIR", drafts)
+    monkeypatch.setattr(template_clone, "IMPORTED_DIR", imported)
+    return imported
+
+
+def _stage_case(imported_root: Path, case_id: str, stl_bytes: bytes) -> Path:
+    case_dir = imported_root / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    stl_path = triSurface / f"{case_id}.stl"
+    stl_path.write_bytes(stl_bytes)
+    return stl_path
+
+
+# ───────── route happy paths ─────────
+
+
+def test_get_case_geometry_render_returns_glb_for_cube(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_cube0001"
+    _stage_case(isolated_imported, case_id, box_stl())
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/geometry/render")
+
+    assert response.status_code == 200
+    assert response.content[:4] == b"glTF"
+    assert response.headers["content-type"].startswith("model/gltf-binary")
+    assert int(response.headers["content-length"]) == len(response.content)
+
+
+@pytest.mark.parametrize(
+    "fixture_label, stl_factory",
+    [
+        ("ldc_box", box_stl),
+        ("cylinder", _cylinder_stl),
+        ("naca0012_like", _airfoil_like_stl),
+    ],
+)
+def test_get_case_geometry_render_serves_three_bundled_fixture_shapes(
+    isolated_imported: Path, fixture_label: str, stl_factory
+):
+    case_id = f"imported_2026-04-28T00-00-00Z_{fixture_label}"
+    _stage_case(isolated_imported, case_id, stl_factory())
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/geometry/render")
+    assert response.status_code == 200, fixture_label
+    assert response.content[:4] == b"glTF"
+    assert len(response.content) > 0
+
+
+# ───────── cache contract ─────────
+
+
+def test_cache_hit_returns_byte_equal_payload(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_cachehit"
+    _stage_case(isolated_imported, case_id, box_stl())
+
+    client = TestClient(app)
+    first = client.get(f"/api/cases/{case_id}/geometry/render")
+    second = client.get(f"/api/cases/{case_id}/geometry/render")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.content == second.content
+
+
+def test_build_geometry_glb_status_progression(isolated_imported: Path):
+    """Service-layer test for the cache-status discriminator. The route
+    doesn't expose status, but the contract is the unit-test target."""
+    case_id = "imported_2026-04-28T00-00-00Z_status"
+    _stage_case(isolated_imported, case_id, box_stl())
+
+    first = build_geometry_glb(case_id)
+    assert first.status == "miss"
+    assert first.cache_path.exists()
+
+    second = build_geometry_glb(case_id)
+    assert second.status == "hit"
+    assert second.cache_path == first.cache_path
+
+
+def test_cache_invalidates_on_source_mtime_change(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_invalidate"
+    stl_path = _stage_case(isolated_imported, case_id, box_stl())
+
+    first = build_geometry_glb(case_id)
+    assert first.status == "miss"
+    first_glb_bytes = first.cache_path.read_bytes()
+    original_cache_mtime = first.cache_path.stat().st_mtime
+
+    # Replace the source STL with a different shape and bump its mtime
+    # past the cache mtime so invalidation fires.
+    new_stl = _cylinder_stl()
+    stl_path.write_bytes(new_stl)
+    bumped_mtime = original_cache_mtime + 5.0
+    os.utime(stl_path, (bumped_mtime, bumped_mtime))
+
+    second = build_geometry_glb(case_id)
+    assert second.status == "rebuild"
+    assert second.cache_path.read_bytes() != first_glb_bytes
+
+
+def test_atomic_write_leaves_no_tempfile_on_success(isolated_imported: Path):
+    """After a successful build the cache dir holds only ``geometry.glb`` —
+    the ``.tmp.<hex>`` temp name from atomic-rename should be gone."""
+    case_id = "imported_2026-04-28T00-00-00Z_atomic"
+    _stage_case(isolated_imported, case_id, box_stl())
+
+    build_geometry_glb(case_id)
+    cache_dir = isolated_imported / case_id / ".render_cache"
+    children = sorted(p.name for p in cache_dir.iterdir())
+    assert children == ["geometry.glb"]
+
+
+# ───────── failure paths ─────────
+
+
+def test_get_case_geometry_render_404_for_unknown_case(isolated_imported: Path):
+    client = TestClient(app)
+    response = client.get("/api/cases/imported_unknown_case/geometry/render")
+    assert response.status_code == 404
+
+
+def test_get_case_geometry_render_404_for_unsafe_case_id():
+    client = TestClient(app)
+    response = client.get("/api/cases/bad@@id/geometry/render")
+    assert response.status_code == 404
+
+
+def test_get_case_geometry_render_422_when_no_stl(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_nostl"
+    (isolated_imported / case_id / "triSurface").mkdir(parents=True)
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/geometry/render")
+    assert response.status_code == 422
+
+
+def test_build_geometry_glb_raises_transcode_error_on_garbage(
+    isolated_imported: Path, monkeypatch
+):
+    """Force the transcode path to fail to verify the
+    ``transcode_error`` failing_check is reachable."""
+    case_id = "imported_2026-04-28T00-00-00Z_garbage"
+    _stage_case(isolated_imported, case_id, box_stl())
+
+    def _explode(*args, **kwargs):
+        raise RuntimeError("synthetic trimesh failure for test")
+
+    monkeypatch.setattr(geometry_glb_mod.trimesh, "load", _explode)
+
+    with pytest.raises(GeometryRenderError) as excinfo:
+        build_geometry_glb(case_id)
+    assert excinfo.value.failing_check == "transcode_error"
+
+
+# ───────── case-insensitive STL match preserved (Codex M-VIZ R1 #1 behavior) ─────────
+
+
+def test_get_case_geometry_render_matches_uppercase_stl(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_upper"
+    case_dir = isolated_imported / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    (triSurface / f"{case_id}.STL").write_bytes(box_stl())
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/geometry/render")
+    assert response.status_code == 200
+    assert response.content[:4] == b"glTF"
+
+
+def test_build_geometry_glb_rejects_stl_symlink_escape(
+    isolated_imported: Path, tmp_path: Path,
+):
+    """Round-2 Finding 1: a symlink under triSurface/ pointing outside
+    the case dir must fail the resolve+relative_to containment guard,
+    not get transcoded into the cache."""
+    case_id = "imported_2026-04-28T00-00-00Z_stl_symlink"
+    case_dir = isolated_imported / case_id
+    triSurface = case_dir / "triSurface"
+    triSurface.mkdir(parents=True)
+    outside_stl = tmp_path / "evil.stl"
+    outside_stl.write_bytes(box_stl())  # real STL but outside the case dir
+    (triSurface / "evil.stl").symlink_to(outside_stl)
+
+    with pytest.raises(GeometryRenderError) as excinfo:
+        build_geometry_glb(case_id)
+    assert excinfo.value.failing_check == "no_source_stl"
+
+ succeeded in 0ms:
+"""Tests for /api/cases/{id}/mesh/render + the polyMesh parser
+(M-RENDER-API B.2 · DEC-V61-095 spec_v2 §B.2).
+
+A unit-cube polyMesh has 8 points, 6 quad faces, and 12 unique edges;
+that's the canonical fixture used across the parser, edge extractor,
+glTF builder, and the route.
+"""
+from __future__ import annotations
+
+import os
+import struct
+from pathlib import Path
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from ui.backend.main import app
+from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render import (
+    MeshRenderError,
+    build_mesh_wireframe_glb,
+)
+from ui.backend.services.render import mesh_wireframe as mesh_wireframe_mod
+from ui.backend.services.render.gltf_lines_builder import build_lines_glb
+from ui.backend.services.render.polymesh_parser import (
+    PolyMeshParseError,
+    extract_unique_edges,
+    parse_faces,
+    parse_points,
+    validate_face_indices,
+)
+
+
+# ───────── unit-cube polyMesh fixture (8 points · 6 quad faces) ─────────
+
+_POINTS_TEXT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       vectorField;
+    location    "constant/polyMesh";
+    object      points;
+}
+
+8
+(
+(0 0 0)
+(1 0 0)
+(1 1 0)
+(0 1 0)
+(0 0 1)
+(1 0 1)
+(1 1 1)
+(0 1 1)
+)
+"""
+
+_FACES_TEXT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       faceList;
+    location    "constant/polyMesh";
+    object      faces;
+}
+
+6
+(
+4(0 1 2 3)
+4(4 5 6 7)
+4(0 1 5 4)
+4(2 3 7 6)
+4(1 2 6 5)
+4(0 3 7 4)
+)
+"""
+
+
+def _stage_polymesh(case_dir: Path) -> tuple[Path, Path]:
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    points = polymesh / "points"
+    faces = polymesh / "faces"
+    points.write_text(_POINTS_TEXT, encoding="utf-8")
+    faces.write_text(_FACES_TEXT, encoding="utf-8")
+    return points, faces
+
+
+@pytest.fixture
+def isolated_imported(tmp_path: Path, monkeypatch):
+    drafts = tmp_path / "user_drafts"
+    imported = drafts / "imported"
+    imported.mkdir(parents=True)
+    monkeypatch.setattr(template_clone, "DRAFTS_DIR", drafts)
+    monkeypatch.setattr(template_clone, "IMPORTED_DIR", imported)
+    return imported
+
+
+# ───────── parser ─────────
+
+
+def test_parse_points_returns_eight_cube_vertices(tmp_path: Path):
+    points_path = tmp_path / "points"
+    points_path.write_text(_POINTS_TEXT, encoding="utf-8")
+    pts = parse_points(points_path)
+    assert pts.shape == (8, 3)
+    assert pts.dtype == np.float64
+    np.testing.assert_array_equal(pts[0], [0, 0, 0])
+    np.testing.assert_array_equal(pts[6], [1, 1, 1])
+
+
+def test_parse_faces_returns_six_quad_faces(tmp_path: Path):
+    faces_path = tmp_path / "faces"
+    faces_path.write_text(_FACES_TEXT, encoding="utf-8")
+    faces = parse_faces(faces_path)
+    assert len(faces) == 6
+    assert all(len(f) == 4 for f in faces)
+    assert faces[0] == [0, 1, 2, 3]
+
+
+def test_parse_faces_rejects_count_mismatch(tmp_path: Path):
+    faces_path = tmp_path / "faces"
+    faces_path.write_text("1\n(\n4(0 1 2)\n)\n", encoding="utf-8")
+    with pytest.raises(PolyMeshParseError, match="did not match"):
+        parse_faces(faces_path)
+
+
+def test_validate_face_indices_passes_for_in_range_faces():
+    """Round-2 Finding 4: faces with vertex IDs ∈ [0, n_points) accepted."""
+    faces = [[0, 1, 2, 3], [4, 5, 6, 7]]
+    validate_face_indices(faces, n_points=8)  # no raise
+
+
+def test_validate_face_indices_rejects_out_of_range_vertex():
+    """Round-2 Finding 4: a vertex ID >= n_points must raise rather than
+    flow through to the GLB indices accessor."""
+    faces = [[0, 1, 2, 3], [4, 5, 6, 999]]
+    with pytest.raises(PolyMeshParseError, match="vertex 999"):
+        validate_face_indices(faces, n_points=8)
+
+
+def test_validate_face_indices_rejects_negative_vertex():
+    """Negative IDs are rejected even though the regex never produces them
+    — defensive guard for parser extensions."""
+    faces = [[0, 1, -1, 3]]
+    with pytest.raises(PolyMeshParseError, match=r"vertex -1"):
+        validate_face_indices(faces, n_points=8)
+
+
+def test_build_mesh_wireframe_422_on_face_index_out_of_range(
+    isolated_imported: Path,
+):
+    """End-to-end: a polyMesh whose faces reference vertex IDs past
+    n_points - 1 must surface as a polymesh_parse_error, not a 200
+    with a malformed GLB."""
+    case_id = "imported_2026-04-28T00-00-00Z_oob_face"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    # 4 points but a face that references vertex 999.
+    (polymesh / "points").write_text(
+        "FoamFile{}\n4\n((0 0 0)(1 0 0)(0 1 0)(0 0 1))\n",
+        encoding="utf-8",
+    )
+    (polymesh / "faces").write_text(
+        "FoamFile{}\n1\n(\n4(0 1 2 999)\n)\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "polymesh_parse_error"
+    assert "vertex 999" in excinfo.value.message
+
+
+def test_build_mesh_wireframe_rejects_polymesh_symlink_escape(
+    isolated_imported: Path, tmp_path: Path,
+):
+    """Round-2 Finding 1: a symlink at constant/polyMesh/points pointing
+    outside the case dir must be rejected by the resolve+relative_to
+    containment guard."""
+    case_id = "imported_2026-04-28T00-00-00Z_polymesh_symlink"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    outside_points = tmp_path / "evil_points"
+    outside_points.write_text("not foam points", encoding="utf-8")
+    (polymesh / "points").symlink_to(outside_points)
+    (polymesh / "faces").write_text(
+        "FoamFile{}\n1\n(\n3(0 1 2)\n)\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "no_polymesh"
+
+
+def test_parse_points_rejects_empty(tmp_path: Path):
+    points_path = tmp_path / "points"
+    points_path.write_text("FoamFile{}\n0\n(\n)\n", encoding="utf-8")
+    with pytest.raises(PolyMeshParseError, match="no point entries"):
+        parse_points(points_path)
+
+
+# ───────── edge extraction ─────────
+
+
+def test_extract_unique_edges_cube_has_12():
+    """A cube has exactly 12 edges; per-face quads contribute 24 directed
+    edges that dedupe to 12 unique sorted-pair entries."""
+    faces = [
+        [0, 1, 2, 3],   # bottom
+        [4, 5, 6, 7],   # top
+        [0, 1, 5, 4],
+        [2, 3, 7, 6],
+        [1, 2, 6, 5],
+        [0, 3, 7, 4],
+    ]
+    edges = extract_unique_edges(faces)
+    assert edges.shape == (12, 2)
+    assert edges.dtype == np.uint32
+    # All edges should be sorted with a < b
+    assert np.all(edges[:, 0] < edges[:, 1])
+    # Sample a known edge
+    assert any((row == [0, 1]).all() for row in edges)
+    assert any((row == [6, 7]).all() for row in edges)
+
+
+def test_extract_unique_edges_dedups_shared_edges():
+    """Two faces sharing an edge produce only one entry for that edge."""
+    faces = [[0, 1, 2], [0, 2, 3]]   # two triangles sharing edge 0-2
+    edges = extract_unique_edges(faces)
+    # Triangle 1 contributes (0,1), (1,2), (2,0); triangle 2 contributes
+    # (0,2), (2,3), (3,0). Dedup: (0,1), (0,2), (1,2), (2,3), (0,3) → 5.
+    assert edges.shape == (5, 2)
+
+
+# ───────── glTF lines builder ─────────
+
+
+def test_build_lines_glb_produces_valid_glb_header():
+    pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float64)
+    edges = np.array([[0, 1], [1, 2], [0, 2]], dtype=np.uint32)
+    glb = build_lines_glb(pts, edges)
+
+    assert glb[:4] == b"glTF"
+    magic, version, total_len = struct.unpack("<III", glb[:12])
+    assert magic == 0x46546C67
+    assert version == 2
+    assert total_len == len(glb)
+
+
+def test_build_lines_glb_rejects_empty_inputs():
+    with pytest.raises(ValueError):
+        build_lines_glb(
+            np.zeros((0, 3), dtype=np.float64),
+            np.zeros((0, 2), dtype=np.uint32),
+        )
+    with pytest.raises(ValueError, match=r"\(N, 3\)"):
+        build_lines_glb(
+            np.zeros((1, 4), dtype=np.float64),
+            np.array([[0, 0]], dtype=np.uint32),
+        )
+
+
+# ───────── service layer ─────────
+
+
+def test_build_mesh_wireframe_glb_status_progression(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_meshhit"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh(case_dir)
+
+    first = build_mesh_wireframe_glb(case_id)
+    assert first.status == "miss"
+    assert first.cache_path.exists()
+
+    second = build_mesh_wireframe_glb(case_id)
+    assert second.status == "hit"
+    assert second.cache_path == first.cache_path
+
+
+def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_meshinval"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    points_path, _faces_path = _stage_polymesh(case_dir)
+
+    first = build_mesh_wireframe_glb(case_id)
+    cache_mtime = first.cache_path.stat().st_mtime
+
+    bumped = cache_mtime + 5.0
+    os.utime(points_path, (bumped, bumped))
+
+    second = build_mesh_wireframe_glb(case_id)
+    assert second.status == "rebuild"
+
+
+def test_build_mesh_wireframe_glb_404_for_unknown_case(isolated_imported: Path):
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb("imported_unknown")
+    assert excinfo.value.failing_check == "case_not_found"
+
+
+def test_build_mesh_wireframe_glb_404_for_unsafe_case_id(isolated_imported: Path):
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb("bad@@id")
+    assert excinfo.value.failing_check == "case_not_found"
+
+
+def test_build_mesh_wireframe_glb_404_when_polymesh_missing(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_nomesh"
+    (isolated_imported / case_id).mkdir()
+
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "no_polymesh"
+
+
+def test_build_mesh_wireframe_glb_422_on_polymesh_garbage(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_garbage"
+    case_dir = isolated_imported / case_id
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text("definitely not a polyMesh", encoding="utf-8")
+    (polymesh / "faces").write_text("definitely not a faces file", encoding="utf-8")
+
+    with pytest.raises(MeshRenderError) as excinfo:
+        build_mesh_wireframe_glb(case_id)
+    assert excinfo.value.failing_check == "polymesh_parse_error"
+
+
+# ───────── route ─────────
+
+
+def test_get_case_mesh_render_returns_glb_for_cube(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_cubemesh"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh(case_dir)
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/mesh/render")
+
+    assert response.status_code == 200
+    assert response.content[:4] == b"glTF"
+    assert response.headers["content-type"].startswith("model/gltf-binary")
+
+
+def test_get_case_mesh_render_404_for_unknown_case(isolated_imported: Path):
+    client = TestClient(app)
+    response = client.get("/api/cases/imported_unknown/mesh/render")
+    assert response.status_code == 404
+
+
+def test_get_case_mesh_render_404_when_polymesh_missing(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_nopolymesh"
+    (isolated_imported / case_id).mkdir()
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/mesh/render")
+    assert response.status_code == 404
+
+
+def test_get_case_mesh_render_422_on_garbage(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_garbagemesh"
+    case_dir = isolated_imported / case_id
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text("not a polyMesh", encoding="utf-8")
+    (polymesh / "faces").write_text("also not a polyMesh", encoding="utf-8")
+
+    client = TestClient(app)
+    response = client.get(f"/api/cases/{case_id}/mesh/render")
+    assert response.status_code == 422
+
+
+def test_get_case_mesh_render_byte_equal_on_cache_hit(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_cachebyteequal"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh(case_dir)
+
+    client = TestClient(app)
+    first = client.get(f"/api/cases/{case_id}/mesh/render")
+    second = client.get(f"/api/cases/{case_id}/mesh/render")
+    assert first.status_code == 200
+    assert second.content == first.content
+
+
+def test_atomic_write_leaves_no_tempfile(isolated_imported: Path):
+    case_id = "imported_2026-04-28T00-00-00Z_atomicmesh"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh(case_dir)
+
+    build_mesh_wireframe_glb(case_id)
+    cache_dir = case_dir / ".render_cache"
+    children = sorted(p.name for p in cache_dir.iterdir())
+    assert children == ["mesh.glb"]
+
+codex
+I found one edge worth checking before I finalize: the guarded helpers only translate `RuntimeError`, but their fresh `source.stat()` calls can raise `FileNotFoundError` directly. I’m reproducing that deletion path now to see whether Round 4 accidentally introduced a 500/temp-file leak regression.
+exec
+/bin/zsh -lc "python - <<'PY'
+import os
+from pathlib import Path
+import tempfile
+import numpy as np
+from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render.field_sample import build_field_payload, FieldSampleError
+from ui.backend.tests.test_field_sample import _stage_field
+
+from unittest import mock
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    drafts = root / 'user_drafts'
+    imported = drafts / 'imported'
+    imported.mkdir(parents=True)
+    template_clone.DRAFTS_DIR = drafts
+    template_clone.IMPORTED_DIR = imported
+    case_id = 'imported_2026-04-28T00-00-00Z_delete_race'
+    case_dir = imported / case_id
+    case_dir.mkdir()
+    field_path = _stage_field(case_dir, 'run_001', 'p', np.array([1.0,2.0,3.0], dtype=np.float32))
+    real_write_bytes = Path.write_bytes
+    state = {'done': False}
+    def patched(self, data, *args, **kwargs):
+        result = real_write_bytes(self, data, *args, **kwargs)
+        if '.tmp.' in self.name and not state['done']:
+            field_path.unlink()
+            state['done'] = True
+        return result
+    with mock.patch.object(Path, 'write_bytes', patched):
+        try:
+            build_field_payload(case_id, 'run_001', 'p')
+            print('UNEXPECTED_SUCCESS')
+        except Exception as exc:
+            print(type(exc).__name__, str(exc))
+    cache_dir = case_dir / '.render_cache'
+    print('cache_dir_exists', cache_dir.exists())
+    if cache_dir.exists():
+        print('children', sorted(p.name for p in cache_dir.iterdir()))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 127 in 0ms:
+zsh:1: command not found: python
+
+exec
+/bin/zsh -lc "pytest -q ui/backend/tests/test_field_sample.py -k 'pre_replace_source_mutation or invalidates_on_mtime'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 4 in 157ms:
+ImportError while loading conftest '/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/conftest.py'.
+ui/backend/tests/conftest.py:7: in <module>
+    import trimesh
+E   ModuleNotFoundError: No module named 'trimesh'
+
+codex
+Targeted pytest is blocked by a missing local dependency (`trimesh` in the current interpreter), so I can’t claim live test execution. I’m switching to a direct `python3` repro for the deletion edge to verify whether this refactor changed runtime behavior.
+exec
+/bin/zsh -lc 'python3 -V' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+Python 3.9.6
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import os
+from pathlib import Path
+import tempfile
+import numpy as np
+from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render.field_sample import build_field_payload
+from ui.backend.tests.test_field_sample import _stage_field
+from unittest import mock
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    drafts = root / 'user_drafts'
+    imported = drafts / 'imported'
+    imported.mkdir(parents=True)
+    template_clone.DRAFTS_DIR = drafts
+    template_clone.IMPORTED_DIR = imported
+    case_id = 'imported_2026-04-28T00-00-00Z_delete_race'
+    case_dir = imported / case_id
+    case_dir.mkdir()
+    field_path = _stage_field(case_dir, 'run_001', 'p', np.array([1.0,2.0,3.0], dtype=np.float32))
+    real_write_bytes = Path.write_bytes
+    state = {'done': False}
+    def patched(self, data, *args, **kwargs):
+        result = real_write_bytes(self, data, *args, **kwargs)
+        if '.tmp.' in self.name and not state['done']:
+            field_path.unlink()
+            state['done'] = True
+        return result
+    with mock.patch.object(Path, 'write_bytes', patched):
+        try:
+            build_field_payload(case_id, 'run_001', 'p')
+            print('UNEXPECTED_SUCCESS')
+        except Exception as exc:
+            print(type(exc).__name__, str(exc))
+    cache_dir = case_dir / '.render_cache'
+    print('cache_dir_exists', cache_dir.exists())
+    if cache_dir.exists():
+        print('children', sorted(p.name for p in cache_dir.iterdir()))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 852ms:
+Traceback (most recent call last):
+  File "<stdin>", line 5, in <module>
+  File "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/case_scaffold/__init__.py", line 12, in <module>
+    from .bc_injector import write_shm_stub, write_triSurface
+  File "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/case_scaffold/bc_injector.py", line 12, in <module>
+    from ui.backend.services.geometry_ingest import IngestReport
+  File "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/geometry_ingest/__init__.py", line 11, in <module>
+    from .health_check import IngestReport, PatchInfo, run_health_checks
+  File "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/geometry_ingest/health_check.py", line 20, in <module>
+    @dataclass(frozen=True, slots=True)
+TypeError: dataclass() got an unexpected keyword argument 'slots'
+
+exec
+/bin/zsh -lc 'ls -1 .venv/bin/python*' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/field_sample.py | sed -n '220,330p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+.venv/bin/python
+.venv/bin/python3
+.venv/bin/python3.12
+
+ succeeded in 0ms:
+   220	        return False
+   221	
+   222	
+   223	def _atomic_write_guarded(
+   224	    target: Path,
+   225	    payload: bytes,
+   226	    source: Path,
+   227	    expected_src_mtime_ns: int,
+   228	) -> None:
+   229	    """Atomic write with pre-replace + post-replace source-mutation guards.
+   230	
+   231	    Round-3 Finding 3 closure (Codex Round-3 PARTIAL): the prior
+   232	    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
+   233	    Even with a post-replace stat the concurrent-reader window between
+   234	    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
+   235	    stale bytes for one request.
+   236	
+   237	    This guarded variant:
+   238	      1. Writes the payload to a temp file.
+   239	      2. Re-stats ``source``; if it changed since the rebuild started,
+   240	         unlinks the temp and raises ``RuntimeError`` BEFORE the
+   241	         replace — concurrent readers never see the stale cache.
+   242	      3. ``os.replace``s the temp into place.
+   243	      4. Re-stats ``source`` once more; if it changed during (or
+   244	         immediately after) the replace, unlinks the now-stale cache
+   245	         and raises. This collapses the residual window to the kernel
+   246	         syscall granularity.
+   247	
+   248	    Caller is responsible for converting the RuntimeError into its own
+   249	    failing_check.
+   250	    """
+   251	    target.parent.mkdir(parents=True, exist_ok=True)
+   252	    tmp = target.with_suffix(
+   253	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   254	    )
+   255	    tmp.write_bytes(payload)
+   256	    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+   257	        try:
+   258	            tmp.unlink()
+   259	        except OSError:
+   260	            pass
+   261	        raise RuntimeError(
+   262	            f"source {source.name} mutated before atomic replace"
+   263	        )
+   264	    os.replace(tmp, target)
+   265	    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+   266	        try:
+   267	            target.unlink()
+   268	        except OSError:
+   269	            pass
+   270	        raise RuntimeError(
+   271	            f"source {source.name} mutated during atomic replace"
+   272	        )
+   273	
+   274	
+   275	def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
+   276	    """Public entrypoint — return the cached float32 binary for the field.
+   277	
+   278	    Raises FieldSampleError on any failure path the route maps to 4xx.
+   279	    """
+   280	    field_path = _resolve_field_path(case_id, run_id, name)
+   281	    case_dir = _imported_case_dir(case_id)
+   282	    cache = _cache_target(case_dir, run_id, name)
+   283	
+   284	    if _is_cache_fresh(cache, field_path):
+   285	        # Cache hit — read the cached array's length to populate the result.
+   286	        # The frontend uses Content-Length header for the same info, but the
+   287	        # service returns it for tests / logging.
+   288	        n = cache.stat().st_size // 4
+   289	        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+   290	
+   291	    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
+   292	    # parsing, re-checked post-parse, AND threaded into the guarded
+   293	    # atomic write so the rebuild aborts BEFORE os.replace if the source
+   294	    # changed (no stale cache ever becomes visible to concurrent
+   295	    # readers) and aborts WITH unlink if the source changes during the
+   296	    # replace syscall itself (closes the kernel-syscall residual).
+   297	    src_mtime_before = field_path.stat().st_mtime_ns
+   298	    values = _parse_internal_scalar_field(field_path)
+   299	    src_mtime_after_parse = field_path.stat().st_mtime_ns
+   300	    if src_mtime_after_parse != src_mtime_before:
+   301	        raise FieldSampleError(
+   302	            failing_check="field_parse_error",
+   303	            message=(
+   304	                f"source {field_path.name} mutated during rebuild "
+   305	                "(retry the request)"
+   306	            ),
+   307	        )
+   308	    payload = values.astype(np.float32, copy=False).tobytes()
+   309	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   310	    try:
+   311	        _atomic_write_guarded(
+   312	            cache, payload, field_path, src_mtime_before
+   313	        )
+   314	    except RuntimeError as exc:
+   315	        raise FieldSampleError(
+   316	            failing_check="field_parse_error",
+   317	            message=f"{exc} (retry the request)",
+   318	        )
+   319	    return FieldSampleResult(
+   320	        cache_path=cache,
+   321	        point_count=int(values.size),
+   322	        status=status,
+   323	    )
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_field_sample.py | sed -n '221,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '136,250p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/geometry_glb.py | sed -n '118,245p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   221	def test_build_field_payload_aborts_on_pre_replace_source_mutation(
+   222	    isolated_imported: Path, monkeypatch,
+   223	):
+   224	    """Round-4 Finding 3 closure: the guarded atomic write checks
+   225	    source mtime BEFORE os.replace so a stale cache is never made
+   226	    visible to concurrent readers. Simulate by monkey-patching the
+   227	    write_bytes step to bump source mtime between temp-write and
+   228	    pre-replace stat."""
+   229	    case_id = "imported_2026-04-28T00-00-00Z_pre_replace_race"
+   230	    case_dir = isolated_imported / case_id
+   231	    case_dir.mkdir()
+   232	    field_path = _stage_field(
+   233	        case_dir, "run_001", "p",
+   234	        np.array([1.0, 2.0, 3.0], dtype=np.float32),
+   235	    )
+   236	    # Hook ``Path.write_bytes`` so that immediately after the temp-write
+   237	    # step inside the guarded helper, the source mtime is bumped — the
+   238	    # subsequent pre-replace stat will see the mismatch and abort.
+   239	    real_write_bytes = Path.write_bytes
+   240	    bump_state = {"bumped": False}
+   241	
+   242	    def patched_write_bytes(self: Path, data: bytes, *args, **kwargs):
+   243	        result = real_write_bytes(self, data, *args, **kwargs)
+   244	        # only mutate after the temp file is written, not when the
+   245	        # service writes the field source itself.
+   246	        if ".tmp." in self.name and not bump_state["bumped"]:
+   247	            bumped = field_path.stat().st_mtime + 5.0
+   248	            os.utime(field_path, (bumped, bumped))
+   249	            bump_state["bumped"] = True
+   250	        return result
+   251	    monkeypatch.setattr(Path, "write_bytes", patched_write_bytes)
+   252	
+   253	    with pytest.raises(FieldSampleError) as excinfo:
+   254	        build_field_payload(case_id, "run_001", "p")
+   255	    assert excinfo.value.failing_check == "field_parse_error"
+   256	    assert "before atomic replace" in excinfo.value.message
+   257	    # No cache file should exist (pre-replace abort cleaned up the temp
+   258	    # and never replaced the cache).
+   259	    cache = case_dir / ".render_cache" / "field-run_001-p.bin"
+   260	    assert not cache.exists()
+
+ succeeded in 0ms:
+   136	def _atomic_write_guarded_multi(
+   137	    target: Path,
+   138	    payload: bytes,
+   139	    sources: tuple[Path, ...],
+   140	    expected_mtimes_ns: tuple[int, ...],
+   141	) -> None:
+   142	    """Multi-source variant of the guarded atomic write (Round-4 Finding 3).
+   143	
+   144	    Same contract as field_sample / geometry_glb's single-source
+   145	    ``_atomic_write_guarded``, but checks an arbitrary number of
+   146	    source files. polyMesh wireframes depend on both ``points`` and
+   147	    ``faces`` so either changing during the rebuild must abort.
+   148	    """
+   149	    if len(sources) != len(expected_mtimes_ns):
+   150	        raise ValueError(
+   151	            "sources and expected_mtimes_ns must have the same length"
+   152	        )
+   153	    target.parent.mkdir(parents=True, exist_ok=True)
+   154	    tmp = target.with_suffix(
+   155	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   156	    )
+   157	    tmp.write_bytes(payload)
+   158	    current = tuple(s.stat().st_mtime_ns for s in sources)
+   159	    if current != expected_mtimes_ns:
+   160	        try:
+   161	            tmp.unlink()
+   162	        except OSError:
+   163	            pass
+   164	        raise RuntimeError(
+   165	            "polyMesh source mutated before atomic replace"
+   166	        )
+   167	    os.replace(tmp, target)
+   168	    current = tuple(s.stat().st_mtime_ns for s in sources)
+   169	    if current != expected_mtimes_ns:
+   170	        try:
+   171	            target.unlink()
+   172	        except OSError:
+   173	            pass
+   174	        raise RuntimeError(
+   175	            "polyMesh source mutated during atomic replace"
+   176	        )
+   177	
+   178	
+   179	def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
+   180	    try:
+   181	        points = parse_points(points_path)
+   182	        faces = parse_faces(faces_path)
+   183	        # Round-2 Finding 4: face arity is checked against the count
+   184	        # prefix in parse_faces, but vertex IDs were never checked
+   185	        # against len(points). An out-of-range index would survive
+   186	        # edge extraction and produce an indices accessor pointing past
+   187	        # the POSITION buffer. Validate before building the GLB.
+   188	        validate_face_indices(faces, n_points=len(points))
+   189	        edges = extract_unique_edges(faces)
+   190	    except PolyMeshParseError as exc:
+   191	        raise MeshRenderError(
+   192	            failing_check="polymesh_parse_error",
+   193	            message=str(exc),
+   194	        )
+   195	    return build_lines_glb(points, edges)
+   196	
+   197	
+   198	def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+   199	    """Public entrypoint for the route layer.
+   200	
+   201	    Resolves the imported case's polyMesh, parses points + faces,
+   202	    extracts unique edges, assembles a binary glTF with a single
+   203	    LINES primitive, and caches it under ``.render_cache/mesh.glb``
+   204	    keyed on the source-file mtimes.
+   205	    """
+   206	    if not is_safe_case_id(case_id):
+   207	        raise MeshRenderError(
+   208	            failing_check="case_not_found",
+   209	            message=f"unsafe case_id: {case_id!r}",
+   210	        )
+   211	    case_dir = _imported_case_dir(case_id)
+   212	    if not case_dir.is_dir():
+   213	        raise MeshRenderError(
+   214	            failing_check="case_not_found",
+   215	            message=f"imported case dir missing: {case_dir}",
+   216	        )
+   217	
+   218	    polymesh_dir = _resolve_polymesh_dir(case_dir)
+   219	    points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
+   220	
+   221	    cache = _cache_target(case_dir)
+   222	    if _is_cache_fresh(cache, points_path, faces_path):
+   223	        return WireframeBuildResult(cache_path=cache, status="hit")
+   224	
+   225	    # Round-3+4 Finding 3 closure: source mtimes (points + faces) are
+   226	    # threaded through both the post-build check and the guarded
+   227	    # multi-source atomic write. The pre-replace check inside the
+   228	    # helper aborts BEFORE os.replace (no stale cache visible to
+   229	    # concurrent readers); the post-replace check unlinks if a syscall-
+   230	    # window mutation slipped through.
+   231	    sources = (points_path, faces_path)
+   232	    src_mtimes_before = tuple(s.stat().st_mtime_ns for s in sources)
+   233	    glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+   234	    src_mtimes_after_build = tuple(s.stat().st_mtime_ns for s in sources)
+   235	    if src_mtimes_after_build != src_mtimes_before:
+   236	        raise MeshRenderError(
+   237	            failing_check="polymesh_parse_error",
+   238	            message=(
+   239	                "polyMesh source mutated during transcode "
+   240	                "(retry the request)"
+   241	            ),
+   242	        )
+   243	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   244	    try:
+   245	        _atomic_write_guarded_multi(
+   246	            cache, glb_bytes, sources, src_mtimes_before
+   247	        )
+   248	    except RuntimeError as exc:
+   249	        raise MeshRenderError(
+   250	            failing_check="polymesh_parse_error",
+
+ succeeded in 0ms:
+   118	def _atomic_write_guarded(
+   119	    target: Path,
+   120	    payload: bytes,
+   121	    source: Path,
+   122	    expected_src_mtime_ns: int,
+   123	) -> None:
+   124	    """Atomic write with pre- and post-replace source-mutation guards.
+   125	
+   126	    Round-4 Finding 3 closure: re-stat ``source`` immediately before
+   127	    ``os.replace`` and abort (deleting the temp) if it changed since
+   128	    the rebuild started — this prevents a stale cache from EVER
+   129	    becoming visible to concurrent readers in the (replace, unlink)
+   130	    window. A post-replace re-stat collapses the kernel-syscall
+   131	    residual race; on mismatch the just-replaced cache is unlinked.
+   132	    """
+   133	    target.parent.mkdir(parents=True, exist_ok=True)
+   134	    tmp = target.with_suffix(
+   135	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   136	    )
+   137	    tmp.write_bytes(payload)
+   138	    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+   139	        try:
+   140	            tmp.unlink()
+   141	        except OSError:
+   142	            pass
+   143	        raise RuntimeError(
+   144	            f"source {source.name} mutated before atomic replace"
+   145	        )
+   146	    os.replace(tmp, target)
+   147	    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+   148	        try:
+   149	            target.unlink()
+   150	        except OSError:
+   151	            pass
+   152	        raise RuntimeError(
+   153	            f"source {source.name} mutated during atomic replace"
+   154	        )
+   155	
+   156	
+   157	def _transcode_to_glb(source_stl: Path) -> bytes:
+   158	    """Run trimesh's STL→glb pipeline.
+   159	
+   160	    trimesh raises various subclasses on parse failure (ValueError,
+   161	    LookupError, …). We collapse them to GeometryRenderError so the
+   162	    route layer has a single error class to map.
+   163	    """
+   164	    try:
+   165	        mesh = trimesh.load(source_stl, force="mesh")
+   166	    except Exception as exc:
+   167	        raise GeometryRenderError(
+   168	            failing_check="transcode_error",
+   169	            message=f"trimesh.load({source_stl.name}) failed: {exc!r}",
+   170	        )
+   171	    if mesh is None or getattr(mesh, "is_empty", False):
+   172	        raise GeometryRenderError(
+   173	            failing_check="transcode_error",
+   174	            message=f"trimesh produced empty mesh from {source_stl.name}",
+   175	        )
+   176	    try:
+   177	        glb = mesh.export(file_type="glb")
+   178	    except Exception as exc:
+   179	        raise GeometryRenderError(
+   180	            failing_check="transcode_error",
+   181	            message=f"trimesh.export(glb) failed: {exc!r}",
+   182	        )
+   183	    if not isinstance(glb, (bytes, bytearray)) or len(glb) < 4 or bytes(glb[:4]) != b"glTF":
+   184	        raise GeometryRenderError(
+   185	            failing_check="transcode_error",
+   186	            message="trimesh returned non-glb payload (missing 'glTF' magic)",
+   187	        )
+   188	    return bytes(glb)
+   189	
+   190	
+   191	def build_geometry_glb(case_id: str) -> GlbBuildResult:
+   192	    """Return the cached glb for ``case_id``, building it on cache miss.
+   193	
+   194	    Public entrypoint for the route layer. Raises
+   195	    :class:`GeometryRenderError` on any failure path the route maps to
+   196	    4xx; lets unexpected exceptions propagate (route layer falls back
+   197	    to FastAPI's default 500 handler).
+   198	    """
+   199	    if not is_safe_case_id(case_id):
+   200	        raise GeometryRenderError(
+   201	            failing_check="case_not_found",
+   202	            message=f"unsafe case_id: {case_id!r}",
+   203	        )
+   204	    case_dir = _imported_case_dir(case_id)
+   205	    if not case_dir.is_dir():
+   206	        raise GeometryRenderError(
+   207	            failing_check="case_not_found",
+   208	            message=f"imported case dir missing: {case_dir}",
+   209	        )
+   210	
+   211	    source_stl = _resolve_source_stl(case_dir)
+   212	    cache = _cache_target(case_dir)
+   213	
+   214	    if _is_cache_fresh(cache, source_stl):
+   215	        return GlbBuildResult(cache_path=cache, status="hit")
+   216	
+   217	    # Round-3+4 Finding 3 closure: source mtime threaded through both
+   218	    # the post-transcode check and the guarded atomic write. The pre-
+   219	    # replace check inside the helper aborts BEFORE os.replace (no
+   220	    # stale cache visible to concurrent readers); the post-replace
+   221	    # check unlinks if a syscall-window mutation slipped through.
+   222	    src_mtime_before = source_stl.stat().st_mtime_ns
+   223	    glb_bytes = _transcode_to_glb(source_stl)
+   224	    src_mtime_after_transcode = source_stl.stat().st_mtime_ns
+   225	    if src_mtime_after_transcode != src_mtime_before:
+   226	        raise GeometryRenderError(
+   227	            failing_check="transcode_error",
+   228	            message=(
+   229	                f"source {source_stl.name} mutated during transcode "
+   230	                "(retry the request)"
+   231	            ),
+   232	        )
+   233	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   234	    try:
+   235	        _atomic_write_guarded(
+   236	            cache, glb_bytes, source_stl, src_mtime_before
+   237	        )
+   238	    except RuntimeError as exc:
+   239	        raise GeometryRenderError(
+   240	            failing_check="transcode_error",
+   241	            message=f"{exc} (retry the request)",
+   242	        )
+   243	    return GlbBuildResult(cache_path=cache, status=status)
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '248,258p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   248	    except RuntimeError as exc:
+   249	        raise MeshRenderError(
+   250	            failing_check="polymesh_parse_error",
+   251	            message=f"{exc} (retry the request)",
+   252	        )
+   253	    return WireframeBuildResult(cache_path=cache, status=status)
+
+codex
+I have enough for the core stale-cache question. One last check: I’m using the repo’s `.venv` to confirm the source-deletion edge I spotted, since the system Python here is too old for this backend and the global interpreter is missing deps.
+exec
+/bin/zsh -lc '.venv/bin/python -V' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+Python 3.12.13
+
+exec
+/bin/zsh -lc ".venv/bin/pytest -q ui/backend/tests/test_field_sample.py -k 'pre_replace_source_mutation or invalidates_on_mtime'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc ".venv/bin/python - <<'PY'
+import os
+from pathlib import Path
+import tempfile
+import numpy as np
+from unittest import mock
+
+from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render.field_sample import build_field_payload
+from ui.backend.tests.test_field_sample import _stage_field
+
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td)
+    drafts = root / 'user_drafts'
+    imported = drafts / 'imported'
+    imported.mkdir(parents=True)
+    template_clone.DRAFTS_DIR = drafts
+    template_clone.IMPORTED_DIR = imported
+    case_id = 'imported_2026-04-28T00-00-00Z_delete_race'
+    case_dir = imported / case_id
+    case_dir.mkdir()
+    field_path = _stage_field(case_dir, 'run_001', 'p', np.array([1.0,2.0,3.0], dtype=np.float32))
+    real_write_bytes = Path.write_bytes
+    state = {'done': False}
+    def patched(self, data: bytes, *args, **kwargs):
+        result = real_write_bytes(self, data, *args, **kwargs)
+        if '.tmp.' in self.name and not state['done']:
+            field_path.unlink()
+            state['done'] = True
+        return result
+    with mock.patch.object(Path, 'write_bytes', patched):
+        try:
+            build_field_payload(case_id, 'run_001', 'p')
+            print('UNEXPECTED_SUCCESS')
+        except Exception as exc:
+            print(type(exc).__name__)
+            print(str(exc))
+    cache_dir = case_dir / '.render_cache'
+    print('cache_dir_exists', cache_dir.exists())
+    if cache_dir.exists():
+        print('children', sorted(p.name for p in cache_dir.iterdir()))
+PY" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 825ms:
+FileNotFoundError
+[Errno 2] No such file or directory: '/private/var/folders/q4/859yhpgn6x3fx6kv4mj5gmv40000gp/T/tmpsx2plzyo/user_drafts/imported/imported_2026-04-28T00-00-00Z_delete_race/run_001/p'
+cache_dir_exists True
+children ['field-run_001-p.tmp.457b6005.bin']
+
+ exited 2 in 902ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+____________ ERROR collecting ui/backend/tests/test_field_sample.py ____________
+ImportError while importing test module '/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_field_sample.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui/backend/tests/test_field_sample.py:18: in <module>
+    from ui.backend.main import app
+E   ModuleNotFoundError: No module named 'ui'
+=========================== short test summary info ============================
+ERROR ui/backend/tests/test_field_sample.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.27s ===============================
+
+codex
+The `.venv` repro confirmed a real edge: if the source disappears between temp-write and the new pre-replace stat, the service now throws raw `FileNotFoundError` and leaves the temp artifact behind. I’m running the targeted pytest again with the repo on `PYTHONPATH` so I can separate “the intended new test passes” from this newly introduced failure mode.
+exec
+/bin/zsh -lc "PYTHONPATH=. .venv/bin/pytest -q ui/backend/tests/test_field_sample.py -k 'invalidates_on_mtime'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "PYTHONPATH=. .venv/bin/pytest -q ui/backend/tests/test_field_sample.py -k 'pre_replace_source_mutation'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1096ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 19 items / 18 deselected / 1 selected
+
+ui/backend/tests/test_field_sample.py .                                  [100%]
+
+======================= 1 passed, 18 deselected in 0.29s =======================
+
+ succeeded in 1096ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 19 items / 18 deselected / 1 selected
+
+ui/backend/tests/test_field_sample.py .                                  [100%]
+
+======================= 1 passed, 18 deselected in 0.29s =======================
+
+codex
+## Round 4 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: REGRESSION — the `(replace, unlink)` stale-cache reader window is closed and the new field-sample pre-replace regression test exists/passes, but the guarded helpers introduced a new source-disappearance path that escapes as raw `FileNotFoundError` and leaks the temp cache file.
+
+New findings (if any): `ui/backend/services/render/field_sample.py:255-263,310-318`, `ui/backend/services/render/geometry_glb.py:137-145,234-242`, and `ui/backend/services/render/mesh_wireframe.py:157-165,244-251` all assume the new pre-replace re-stat succeeds. If the source is deleted/renamed after temp-write but before that stat, `source.stat()` raises directly, so the service no longer translates to its native `failing_check`, and the temp artifact remains on disk. I reproduced this on the field path with `.venv/bin/python`: it raised `FileNotFoundError` and left `.render_cache/field-run_001-p.tmp.<hex>.bin`. Separately, `PYTHONPATH=. .venv/bin/pytest -q ui/backend/tests/test_field_sample.py -k 'pre_replace_source_mutation'` passed, so the intended mtime-mutation guard is covered.
+
+---
+
+Verdict: CHANGES_REQUIRED
+
+tokens used
+71,831
+## Round 4 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: REGRESSION — the `(replace, unlink)` stale-cache reader window is closed and the new field-sample pre-replace regression test exists/passes, but the guarded helpers introduced a new source-disappearance path that escapes as raw `FileNotFoundError` and leaks the temp cache file.
+
+New findings (if any): `ui/backend/services/render/field_sample.py:255-263,310-318`, `ui/backend/services/render/geometry_glb.py:137-145,234-242`, and `ui/backend/services/render/mesh_wireframe.py:157-165,244-251` all assume the new pre-replace re-stat succeeds. If the source is deleted/renamed after temp-write but before that stat, `source.stat()` raises directly, so the service no longer translates to its native `failing_check`, and the temp artifact remains on disk. I reproduced this on the field path with `.venv/bin/python`: it raised `FileNotFoundError` and left `.render_cache/field-run_001-p.tmp.<hex>.bin`. Separately, `PYTHONPATH=. .venv/bin/pytest -q ui/backend/tests/test_field_sample.py -k 'pre_replace_source_mutation'` passed, so the intended mtime-mutation guard is covered.
+
+---
+
+Verdict: CHANGES_REQUIRED
+

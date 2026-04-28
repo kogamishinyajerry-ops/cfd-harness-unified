@@ -1,0 +1,1546 @@
+2026-04-28T08:10:37.468047Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-28T08:10:37.468066Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dd323-e21d-7e83-a9a7-6939c5626918
+--------
+user
+# Codex Round 3 review · M-RENDER-API arc (DEC-V61-095)
+
+## Round 2 outcome (recap)
+
+Round 2 verdict: CHANGES_REQUIRED. 5 verified, 1 partial, 1 new finding.
+
+- Findings 1, 2, 4, 5, 6: VERIFIED in Round 2.
+- Finding 3 [P2]: PARTIAL — TOCTOU narrowed but residual window between post-parse stat and os.replace remained.
+- Finding 7 [P3 NEW]: lazy GLTFImporter chunk-load failures bypassed the GlbLoadError normalization.
+
+## Round 3 fixes (commit a2f263d)
+
+### Finding 3 closure
+- All three render services now stat() ONE more time AFTER os.replace.
+- If post-replace stat differs from before-stat, the just-written cache is unlinked and the call raises the same retry-the-request error.
+- Implementation: `geometry_glb.py:175-200`, `mesh_wireframe.py:170-198`, `field_sample.py:228-264`.
+- Behavior: the cache is never left in a state where mtime > source-mtime-at-mutation.
+
+### Finding 7 closure
+- `glb_loader.parseGlbBytes` now wraps `await import("@kitware/...")` + `vtkGLTFImporter.newInstance()` + `parseAsArrayBuffer` in a single try/catch. Importer-dispose is gated on whether the importer was successfully constructed.
+- Test added: "normalizes lazy-chunk-load failures to GlbLoadError(kind=parse)" — simulates a chunk-resolved-but-newInstance-throws TypeError (observable shape of a real chunk-load failure) and asserts the resulting error normalizes to `GlbLoadError(kind="parse")`.
+
+## What I want from this round
+
+For Findings 3 and 7 only:
+- VERIFIED — fix is correct and complete, OR
+- PARTIAL — describe the remaining gap, OR
+- REGRESSION — fix introduced a new issue.
+
+Then a short scan for any NEW issue introduced by Round-3 patches:
+- Does the post-replace stat introduce a different race (e.g., the unlink happens after a concurrent reader started reading)?
+- Does the chunk-load test correctly exercise the path?
+- Are the failing_check enum values reasonable for the post-replace failure path?
+
+If everything is clean, just say APPROVE. Be terse.
+
+## Output format
+
+```
+## Round 3 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: VERIFIED | PARTIAL | REGRESSION — <one-line>
+- Finding 7: VERIFIED | PARTIAL | REGRESSION — <one-line>
+
+New findings (if any): ...
+
+---
+
+Verdict: APPROVE | APPROVE_WITH_COMMENTS | CHANGES_REQUIRED
+```
+
+The Round-3 commit is a2f263d. The full arc is c4264f7..HEAD.
+codex
+Reviewing commit `a2f263d` against the `c4264f7..HEAD` arc, focusing only on Findings 3 and 7 plus any regressions introduced by the Round 3 patch. I’ll inspect the touched code and tests directly, then give a terse verdict in your requested format.
+exec
+/bin/zsh -lc 'rg -n "DEC-V61-095|M-RENDER-API|Finding 3|Finding 7|a2f263d" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc 'git status --short' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+?? .claude/MODEL_ROUTING.md
+?? .planning/strategic/2026-04-26_claude_code_kickoff_prompt_pivot_v1_1.md
+?? .planning/strategic/2026-04-26_strategic_advisory_memo.md
+?? .planning/strategic/2026-04-26_strategic_advisory_memo_002_post_three_answers.md
+?? .planning/strategic/PROJECT_HISTORY_NARRATIVE.md
+?? docs/methodology/project_introduction.md
+
+exec
+/bin/zsh -lc 'git rev-parse --short HEAD && git log --oneline --decorate -n 8' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+a2f263d
+a2f263d (HEAD -> main) fix(render): M-RENDER-API Round-3 Codex fixes (DEC-V61-095)
+a8dd37f fix(render): M-RENDER-API Round-2 Codex fixes (DEC-V61-095)
+2fd3baf feat(render): M-RENDER-API Steps 5+6 — field-sample binary stream + frontend glb dispatch (DEC-V61-095)
+676b8c2 feat(render): M-RENDER-API Step 4 — /mesh/render polyMesh wireframe glb (DEC-V61-095)
+d0360bf feat(render): M-RENDER-API Step 2+3 — services/render skeleton + /geometry/render glb endpoint + mtime-keyed cache (DEC-V61-095)
+09fdedd (origin/main, origin/HEAD) ops(notion): sync DEC-V61-095 M-RENDER-API kickoff (DEC + brief + spec_v2 sub-pages)
+e15c153 ops(m-render-api): docs-only ratify trailer for DEC-V61-095 kickoff
+c4264f7 gov(m-render-api): DEC-V61-095 kickoff ratified · second milestone under Addendum 3 (Status=Accepted · counter 59→60)
+
+codex
+I’ve confirmed the target commit and checked the worktree state; there are unrelated untracked files, so I’m keeping the review strictly read-only against `a2f263d`. Next I’m reading the exact Round 3 diffs and the targeted tests for the two findings.
+exec
+/bin/zsh -lc 'git diff --stat c4264f7..HEAD' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ .../2026-04-28_v61_095_m_render_api_kickoff.md     |   2 +-
+ ui/backend/routes/geometry_render.py               | 141 ++++++-
+ ui/backend/services/render/__init__.py             |  25 ++
+ ui/backend/services/render/field_sample.py         | 287 +++++++++++++++
+ ui/backend/services/render/geometry_glb.py         | 220 +++++++++++
+ ui/backend/services/render/gltf_lines_builder.py   | 166 +++++++++
+ ui/backend/services/render/mesh_wireframe.py       | 232 ++++++++++++
+ ui/backend/services/render/polymesh_parser.py      | 182 +++++++++
+ ui/backend/tests/test_field_sample.py              | 349 ++++++++++++++++++
+ ui/backend/tests/test_geometry_render_glb.py       | 242 ++++++++++++
+ ui/backend/tests/test_mesh_wireframe.py            | 406 +++++++++++++++++++++
+ ui/frontend/src/visualization/Viewport.tsx         | 117 ++++--
+ .../src/visualization/__tests__/Viewport.test.tsx  | 113 ++++++
+ .../src/visualization/__tests__/glb_loader.test.ts | 125 +++++++
+ ui/frontend/src/visualization/glb_loader.ts        | 108 ++++++
+ ui/frontend/src/visualization/viewport_kernel.ts   |  48 ++-
+ 16 files changed, 2721 insertions(+), 42 deletions(-)
+
+exec
+/bin/zsh -lc 'git diff a8dd37f..a2f263d -- src/backend/services/render/geometry_glb.py src/backend/services/render/mesh_wireframe.py src/backend/services/render/field_sample.py src/frontend/lib/rendering/glb_loader.ts src/frontend/lib/rendering/__tests__/glb_loader.test.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc 'git show --stat --oneline --decorate a2f263d --' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+a2f263d (HEAD -> main) fix(render): M-RENDER-API Round-3 Codex fixes (DEC-V61-095)
+ ui/backend/services/render/field_sample.py         | 30 +++++++++++++++++-----
+ ui/backend/services/render/geometry_glb.py         | 28 +++++++++++++++-----
+ ui/backend/services/render/mesh_wireframe.py       | 29 +++++++++++++++++----
+ .../src/visualization/__tests__/glb_loader.test.ts | 25 ++++++++++++++++++
+ ui/frontend/src/visualization/glb_loader.ts        | 27 ++++++++++++-------
+ 5 files changed, 112 insertions(+), 27 deletions(-)
+
+exec
+/bin/zsh -lc 'git diff a8dd37f..a2f263d -- ui/backend/services/render/geometry_glb.py ui/backend/services/render/mesh_wireframe.py ui/backend/services/render/field_sample.py ui/frontend/src/visualization/glb_loader.ts ui/frontend/src/visualization/__tests__/glb_loader.test.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+diff --git a/ui/backend/services/render/field_sample.py b/ui/backend/services/render/field_sample.py
+index fe43aef..4a8dc94 100644
+--- a/ui/backend/services/render/field_sample.py
++++ b/ui/backend/services/render/field_sample.py
+@@ -245,15 +245,18 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
+         n = cache.stat().st_size // 4
+         return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+ 
+-    # Round-2 Finding 3: snapshot source mtime before parsing; if it
+-    # changes during the rebuild window, abort and let the next request
+-    # rebuild from the newer source. Without this guard a slow rebuild
+-    # racing a source update can land an older payload over a newer
+-    # cache and stamp it with a fresh mtime, freezing stale bytes.
++    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
++    # before parsing, after parsing, AND after os.replace. The post-
++    # parse check stops a stale-body / fresh-cache race; the post-
++    # replace check stops the residual window where the source mutates
++    # between our post-parse stat and the atomic rename — without this
++    # the cache mtime can outrace the source mtime forever, freezing
++    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
++    # we delete the just-written cache so the next request rebuilds.
+     src_mtime_before = field_path.stat().st_mtime_ns
+     values = _parse_internal_scalar_field(field_path)
+-    src_mtime_after = field_path.stat().st_mtime_ns
+-    if src_mtime_after != src_mtime_before:
++    src_mtime_after_parse = field_path.stat().st_mtime_ns
++    if src_mtime_after_parse != src_mtime_before:
+         raise FieldSampleError(
+             failing_check="field_parse_error",
+             message=(
+@@ -264,6 +267,19 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
+     payload = values.astype(np.float32, copy=False).tobytes()
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+     _atomic_write(cache, payload)
++    src_mtime_after_replace = field_path.stat().st_mtime_ns
++    if src_mtime_after_replace != src_mtime_before:
++        try:
++            cache.unlink()
++        except OSError:
++            pass
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=(
++                f"source {field_path.name} mutated during atomic write "
++                "(retry the request)"
++            ),
++        )
+     return FieldSampleResult(
+         cache_path=cache,
+         point_count=int(values.size),
+diff --git a/ui/backend/services/render/geometry_glb.py b/ui/backend/services/render/geometry_glb.py
+index a6152da..1dd6206 100644
+--- a/ui/backend/services/render/geometry_glb.py
++++ b/ui/backend/services/render/geometry_glb.py
+@@ -184,14 +184,17 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
+     if _is_cache_fresh(cache, source_stl):
+         return GlbBuildResult(cache_path=cache, status="hit")
+ 
+-    # Round-2 Finding 3: snapshot source mtime before transcode; if it
+-    # mutates during the rebuild, abort so the next request can rebuild
+-    # against the newer source rather than overwrite the cache with a
+-    # stale-but-fresh-mtimed payload.
++    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
++    # before, after transcode, AND after os.replace. The post-replace
++    # check closes the residual window where the source mutates
++    # between our post-transcode stat and the atomic rename — without
++    # this the cache mtime would outrace the source mtime and freeze
++    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
++    # we delete the just-written cache so the next request rebuilds.
+     src_mtime_before = source_stl.stat().st_mtime_ns
+     glb_bytes = _transcode_to_glb(source_stl)
+-    src_mtime_after = source_stl.stat().st_mtime_ns
+-    if src_mtime_after != src_mtime_before:
++    src_mtime_after_transcode = source_stl.stat().st_mtime_ns
++    if src_mtime_after_transcode != src_mtime_before:
+         raise GeometryRenderError(
+             failing_check="transcode_error",
+             message=(
+@@ -201,4 +204,17 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
+         )
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+     _atomic_write(cache, glb_bytes)
++    src_mtime_after_replace = source_stl.stat().st_mtime_ns
++    if src_mtime_after_replace != src_mtime_before:
++        try:
++            cache.unlink()
++        except OSError:
++            pass
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=(
++                f"source {source_stl.name} mutated during atomic write "
++                "(retry the request)"
++            ),
++        )
+     return GlbBuildResult(cache_path=cache, status=status)
+diff --git a/ui/backend/services/render/mesh_wireframe.py b/ui/backend/services/render/mesh_wireframe.py
+index 6d0b176..0ca0443 100644
+--- a/ui/backend/services/render/mesh_wireframe.py
++++ b/ui/backend/services/render/mesh_wireframe.py
+@@ -188,19 +188,22 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+     if _is_cache_fresh(cache, points_path, faces_path):
+         return WireframeBuildResult(cache_path=cache, status="hit")
+ 
+-    # Round-2 Finding 3: snapshot both source mtimes before building.
+-    # If either changes during the build window, abort so the next
+-    # request rebuilds against the newer source rather than racing.
++    # Round-2 Finding 3 (closed in Round-3): snapshot both source mtimes
++    # before, after build, AND after os.replace. The post-replace check
++    # closes the residual window where a source file mutates between
++    # our post-build stat and the atomic rename (Codex Round-2 PARTIAL
++    # note). On detected mutation we delete the just-written cache so
++    # the next request rebuilds.
+     src_mtimes_before = (
+         points_path.stat().st_mtime_ns,
+         faces_path.stat().st_mtime_ns,
+     )
+     glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+-    src_mtimes_after = (
++    src_mtimes_after_build = (
+         points_path.stat().st_mtime_ns,
+         faces_path.stat().st_mtime_ns,
+     )
+-    if src_mtimes_after != src_mtimes_before:
++    if src_mtimes_after_build != src_mtimes_before:
+         raise MeshRenderError(
+             failing_check="polymesh_parse_error",
+             message=(
+@@ -210,4 +213,20 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+         )
+     status: CacheStatus = "rebuild" if cache.exists() else "miss"
+     _atomic_write(cache, glb_bytes)
++    src_mtimes_after_replace = (
++        points_path.stat().st_mtime_ns,
++        faces_path.stat().st_mtime_ns,
++    )
++    if src_mtimes_after_replace != src_mtimes_before:
++        try:
++            cache.unlink()
++        except OSError:
++            pass
++        raise MeshRenderError(
++            failing_check="polymesh_parse_error",
++            message=(
++                "polyMesh source mutated during atomic write "
++                "(retry the request)"
++            ),
++        )
+     return WireframeBuildResult(cache_path=cache, status=status)
+diff --git a/ui/frontend/src/visualization/__tests__/glb_loader.test.ts b/ui/frontend/src/visualization/__tests__/glb_loader.test.ts
+index d50bee2..4a8a3ca 100644
+--- a/ui/frontend/src/visualization/__tests__/glb_loader.test.ts
++++ b/ui/frontend/src/visualization/__tests__/glb_loader.test.ts
+@@ -97,4 +97,29 @@ describe("glb_loader.parseGlbBytes", () => {
+     );
+     expect(importerInstance.delete).toHaveBeenCalledTimes(1);
+   });
++
++  it("normalizes lazy-chunk-load failures to GlbLoadError(kind=parse) (Round-3 Finding 7)", async () => {
++    // Simulate a dynamic-import that resolves but whose default export
++    // throws when newInstance is called — same observable shape as a
++    // chunk-load TypeError reaching our try/catch. Without the Round-3
++    // wrap, this raw error would bubble up to Viewport as kind="unknown"
++    // instead of "parse".
++    vi.resetModules();
++    vi.doMock("@kitware/vtk.js/IO/Geometry/GLTFImporter", () => ({
++      default: {
++        newInstance: () => {
++          throw new TypeError("Failed to load chunk: net::ERR_FAILED");
++        },
++      },
++    }));
++    const mod = await import("../glb_loader");
++    await expect(
++      mod.parseGlbBytes(new Uint8Array(8).buffer),
++    ).rejects.toMatchObject({
++      name: "GlbLoadError",
++      kind: "parse",
++    });
++    vi.doUnmock("@kitware/vtk.js/IO/Geometry/GLTFImporter");
++    vi.resetModules();
++  });
+ });
+diff --git a/ui/frontend/src/visualization/glb_loader.ts b/ui/frontend/src/visualization/glb_loader.ts
+index b6c7c2f..704c9cb 100644
+--- a/ui/frontend/src/visualization/glb_loader.ts
++++ b/ui/frontend/src/visualization/glb_loader.ts
+@@ -69,19 +69,28 @@ export async function parseGlbBytes(buffer: ArrayBuffer): Promise<GlbData> {
+   // and its transitive vtk.js dependencies are split into their own
+   // chunk and only fetched when the user actually opens a glb-format
+   // Viewport.
+-  const { default: vtkGLTFImporter } = await import(
+-    "@kitware/vtk.js/IO/Geometry/GLTFImporter"
+-  );
+-  const importer = vtkGLTFImporter.newInstance();
++  //
++  // Round-3 Finding 7: the dynamic import itself can fail (chunk 404,
++  // network drop after the splash, missing CSP allowance). Wrap the
++  // import + newInstance + parse in a single try/catch so chunk-load
++  // failures surface as GlbLoadError(kind="parse") instead of leaking
++  // a raw error and falling through to the Viewport's "unknown" kind.
++  let importer: ReturnType<typeof vtkGLTFImporterType.newInstance> | undefined;
+   try {
++    const { default: vtkGLTFImporter } = await import(
++      "@kitware/vtk.js/IO/Geometry/GLTFImporter"
++    );
++    importer = vtkGLTFImporter.newInstance();
+     importer.parseAsArrayBuffer(buffer);
+     return { importer };
+   } catch (err) {
+-    try {
+-      importer.delete();
+-    } catch {
+-      // delete() is not formally idempotent in vtk.js; suppress so the
+-      // original parse error reaches the caller.
++    if (importer) {
++      try {
++        importer.delete();
++      } catch {
++        // delete() is not formally idempotent in vtk.js; suppress so the
++        // original parse error reaches the caller.
++      }
+     }
+     if (err instanceof GlbLoadError) throw err;
+     const message =
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/geometry_glb.py | sed -n '150,225p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   150	            failing_check="transcode_error",
+   151	            message=f"trimesh.export(glb) failed: {exc!r}",
+   152	        )
+   153	    if not isinstance(glb, (bytes, bytearray)) or len(glb) < 4 or bytes(glb[:4]) != b"glTF":
+   154	        raise GeometryRenderError(
+   155	            failing_check="transcode_error",
+   156	            message="trimesh returned non-glb payload (missing 'glTF' magic)",
+   157	        )
+   158	    return bytes(glb)
+   159	
+   160	
+   161	def build_geometry_glb(case_id: str) -> GlbBuildResult:
+   162	    """Return the cached glb for ``case_id``, building it on cache miss.
+   163	
+   164	    Public entrypoint for the route layer. Raises
+   165	    :class:`GeometryRenderError` on any failure path the route maps to
+   166	    4xx; lets unexpected exceptions propagate (route layer falls back
+   167	    to FastAPI's default 500 handler).
+   168	    """
+   169	    if not is_safe_case_id(case_id):
+   170	        raise GeometryRenderError(
+   171	            failing_check="case_not_found",
+   172	            message=f"unsafe case_id: {case_id!r}",
+   173	        )
+   174	    case_dir = _imported_case_dir(case_id)
+   175	    if not case_dir.is_dir():
+   176	        raise GeometryRenderError(
+   177	            failing_check="case_not_found",
+   178	            message=f"imported case dir missing: {case_dir}",
+   179	        )
+   180	
+   181	    source_stl = _resolve_source_stl(case_dir)
+   182	    cache = _cache_target(case_dir)
+   183	
+   184	    if _is_cache_fresh(cache, source_stl):
+   185	        return GlbBuildResult(cache_path=cache, status="hit")
+   186	
+   187	    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
+   188	    # before, after transcode, AND after os.replace. The post-replace
+   189	    # check closes the residual window where the source mutates
+   190	    # between our post-transcode stat and the atomic rename — without
+   191	    # this the cache mtime would outrace the source mtime and freeze
+   192	    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
+   193	    # we delete the just-written cache so the next request rebuilds.
+   194	    src_mtime_before = source_stl.stat().st_mtime_ns
+   195	    glb_bytes = _transcode_to_glb(source_stl)
+   196	    src_mtime_after_transcode = source_stl.stat().st_mtime_ns
+   197	    if src_mtime_after_transcode != src_mtime_before:
+   198	        raise GeometryRenderError(
+   199	            failing_check="transcode_error",
+   200	            message=(
+   201	                f"source {source_stl.name} mutated during transcode "
+   202	                "(retry the request)"
+   203	            ),
+   204	        )
+   205	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   206	    _atomic_write(cache, glb_bytes)
+   207	    src_mtime_after_replace = source_stl.stat().st_mtime_ns
+   208	    if src_mtime_after_replace != src_mtime_before:
+   209	        try:
+   210	            cache.unlink()
+   211	        except OSError:
+   212	            pass
+   213	        raise GeometryRenderError(
+   214	            failing_check="transcode_error",
+   215	            message=(
+   216	                f"source {source_stl.name} mutated during atomic write "
+   217	                "(retry the request)"
+   218	            ),
+   219	        )
+   220	    return GlbBuildResult(cache_path=cache, status=status)
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '145,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/field_sample.py | sed -n '210,290p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   145	def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
+   146	    try:
+   147	        points = parse_points(points_path)
+   148	        faces = parse_faces(faces_path)
+   149	        # Round-2 Finding 4: face arity is checked against the count
+   150	        # prefix in parse_faces, but vertex IDs were never checked
+   151	        # against len(points). An out-of-range index would survive
+   152	        # edge extraction and produce an indices accessor pointing past
+   153	        # the POSITION buffer. Validate before building the GLB.
+   154	        validate_face_indices(faces, n_points=len(points))
+   155	        edges = extract_unique_edges(faces)
+   156	    except PolyMeshParseError as exc:
+   157	        raise MeshRenderError(
+   158	            failing_check="polymesh_parse_error",
+   159	            message=str(exc),
+   160	        )
+   161	    return build_lines_glb(points, edges)
+   162	
+   163	
+   164	def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+   165	    """Public entrypoint for the route layer.
+   166	
+   167	    Resolves the imported case's polyMesh, parses points + faces,
+   168	    extracts unique edges, assembles a binary glTF with a single
+   169	    LINES primitive, and caches it under ``.render_cache/mesh.glb``
+   170	    keyed on the source-file mtimes.
+   171	    """
+   172	    if not is_safe_case_id(case_id):
+   173	        raise MeshRenderError(
+   174	            failing_check="case_not_found",
+   175	            message=f"unsafe case_id: {case_id!r}",
+   176	        )
+   177	    case_dir = _imported_case_dir(case_id)
+   178	    if not case_dir.is_dir():
+   179	        raise MeshRenderError(
+   180	            failing_check="case_not_found",
+   181	            message=f"imported case dir missing: {case_dir}",
+   182	        )
+   183	
+   184	    polymesh_dir = _resolve_polymesh_dir(case_dir)
+   185	    points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
+   186	
+   187	    cache = _cache_target(case_dir)
+   188	    if _is_cache_fresh(cache, points_path, faces_path):
+   189	        return WireframeBuildResult(cache_path=cache, status="hit")
+   190	
+   191	    # Round-2 Finding 3 (closed in Round-3): snapshot both source mtimes
+   192	    # before, after build, AND after os.replace. The post-replace check
+   193	    # closes the residual window where a source file mutates between
+   194	    # our post-build stat and the atomic rename (Codex Round-2 PARTIAL
+   195	    # note). On detected mutation we delete the just-written cache so
+   196	    # the next request rebuilds.
+   197	    src_mtimes_before = (
+   198	        points_path.stat().st_mtime_ns,
+   199	        faces_path.stat().st_mtime_ns,
+   200	    )
+   201	    glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+   202	    src_mtimes_after_build = (
+   203	        points_path.stat().st_mtime_ns,
+   204	        faces_path.stat().st_mtime_ns,
+   205	    )
+   206	    if src_mtimes_after_build != src_mtimes_before:
+   207	        raise MeshRenderError(
+   208	            failing_check="polymesh_parse_error",
+   209	            message=(
+   210	                "polyMesh source mutated during transcode "
+   211	                "(retry the request)"
+   212	            ),
+   213	        )
+   214	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   215	    _atomic_write(cache, glb_bytes)
+   216	    src_mtimes_after_replace = (
+   217	        points_path.stat().st_mtime_ns,
+   218	        faces_path.stat().st_mtime_ns,
+   219	    )
+   220	    if src_mtimes_after_replace != src_mtimes_before:
+
+ succeeded in 0ms:
+   210	def _cache_target(case_dir: Path, run_id: str, name: str) -> Path:
+   211	    return case_dir / ".render_cache" / f"field-{run_id}-{name}.bin"
+   212	
+   213	
+   214	def _is_cache_fresh(cache: Path, source: Path) -> bool:
+   215	    if not cache.exists():
+   216	        return False
+   217	    try:
+   218	        return cache.stat().st_mtime >= source.stat().st_mtime
+   219	    except FileNotFoundError:
+   220	        return False
+   221	
+   222	
+   223	def _atomic_write(target: Path, payload: bytes) -> None:
+   224	    target.parent.mkdir(parents=True, exist_ok=True)
+   225	    tmp = target.with_suffix(
+   226	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   227	    )
+   228	    tmp.write_bytes(payload)
+   229	    os.replace(tmp, target)
+   230	
+   231	
+   232	def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
+   233	    """Public entrypoint — return the cached float32 binary for the field.
+   234	
+   235	    Raises FieldSampleError on any failure path the route maps to 4xx.
+   236	    """
+   237	    field_path = _resolve_field_path(case_id, run_id, name)
+   238	    case_dir = _imported_case_dir(case_id)
+   239	    cache = _cache_target(case_dir, run_id, name)
+   240	
+   241	    if _is_cache_fresh(cache, field_path):
+   242	        # Cache hit — read the cached array's length to populate the result.
+   243	        # The frontend uses Content-Length header for the same info, but the
+   244	        # service returns it for tests / logging.
+   245	        n = cache.stat().st_size // 4
+   246	        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+   247	
+   248	    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
+   249	    # before parsing, after parsing, AND after os.replace. The post-
+   250	    # parse check stops a stale-body / fresh-cache race; the post-
+   251	    # replace check stops the residual window where the source mutates
+   252	    # between our post-parse stat and the atomic rename — without this
+   253	    # the cache mtime can outrace the source mtime forever, freezing
+   254	    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
+   255	    # we delete the just-written cache so the next request rebuilds.
+   256	    src_mtime_before = field_path.stat().st_mtime_ns
+   257	    values = _parse_internal_scalar_field(field_path)
+   258	    src_mtime_after_parse = field_path.stat().st_mtime_ns
+   259	    if src_mtime_after_parse != src_mtime_before:
+   260	        raise FieldSampleError(
+   261	            failing_check="field_parse_error",
+   262	            message=(
+   263	                f"source {field_path.name} mutated during rebuild "
+   264	                "(retry the request)"
+   265	            ),
+   266	        )
+   267	    payload = values.astype(np.float32, copy=False).tobytes()
+   268	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   269	    _atomic_write(cache, payload)
+   270	    src_mtime_after_replace = field_path.stat().st_mtime_ns
+   271	    if src_mtime_after_replace != src_mtime_before:
+   272	        try:
+   273	            cache.unlink()
+   274	        except OSError:
+   275	            pass
+   276	        raise FieldSampleError(
+   277	            failing_check="field_parse_error",
+   278	            message=(
+   279	                f"source {field_path.name} mutated during atomic write "
+   280	                "(retry the request)"
+   281	            ),
+   282	        )
+   283	    return FieldSampleResult(
+   284	        cache_path=cache,
+   285	        point_count=int(values.size),
+   286	        status=status,
+   287	    )
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '220,245p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   220	    if src_mtimes_after_replace != src_mtimes_before:
+   221	        try:
+   222	            cache.unlink()
+   223	        except OSError:
+   224	            pass
+   225	        raise MeshRenderError(
+   226	            failing_check="polymesh_parse_error",
+   227	            message=(
+   228	                "polyMesh source mutated during atomic write "
+   229	                "(retry the request)"
+   230	            ),
+   231	        )
+   232	    return WireframeBuildResult(cache_path=cache, status=status)
+
+codex
+I’ve isolated the backend change. There is one remaining question on Finding 3: the new post-`os.replace()` verification closes the original self-freeze, but it still exposes a short stale-cache window to concurrent readers before the writer unlinks the cache. I’m verifying whether that’s already masked elsewhere or is a real remaining gap.
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/geometry_glb.py | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""polyMesh → wireframe glTF transcoding with mtime-keyed cache.
+     2	
+     3	M-RENDER-API Tier-A B.2 (DEC-V61-095 spec_v2 §B.2). Mirrors the
+     4	geometry_glb cache contract — invalidate on points/faces mtime change,
+     5	atomic-rename on write.
+     6	
+     7	Cache layout:
+     8	
+     9	    <imported_case_dir>/.render_cache/mesh.glb
+    10	
+    11	Source paths (in resolution order):
+    12	
+    13	    1. <case_dir>/constant/polyMesh/{points,faces}    (M6.0 sHM output)
+    14	    2. <case_dir>/<imported_case_id>/constant/polyMesh/{points,faces}
+    15	       — fallback for cases scaffolded under user_drafts/imported/
+    16	
+    17	Tier-A scope is internal-edge wireframe: every face's ring is
+    18	serialised as line segments, deduplicated. Patch-aware coloring is
+    19	M-VIZ.advanced. Boundary-only wireframe is M-VIZ.results.
+    20	"""
+    21	from __future__ import annotations
+    22	
+    23	import os
+    24	import secrets
+    25	from dataclasses import dataclass
+    26	from pathlib import Path
+    27	from typing import Literal
+    28	
+    29	from ui.backend.services.case_drafts import is_safe_case_id
+    30	from ui.backend.services.case_scaffold import template_clone
+    31	
+    32	from .gltf_lines_builder import build_lines_glb
+    33	from .polymesh_parser import (
+    34	    PolyMeshParseError,
+    35	    extract_unique_edges,
+    36	    parse_faces,
+    37	    parse_points,
+    38	    validate_face_indices,
+    39	)
+    40	
+    41	
+    42	CacheStatus = Literal["hit", "miss", "rebuild"]
+    43	
+    44	
+    45	@dataclass(frozen=True, slots=True)
+    46	class WireframeBuildResult:
+    47	    cache_path: Path
+    48	    status: CacheStatus
+    49	
+    50	
+    51	@dataclass(frozen=True, slots=True)
+    52	class MeshRenderError(Exception):
+    53	    failing_check: Literal[
+    54	        "case_not_found",
+    55	        "no_polymesh",
+    56	        "polymesh_parse_error",
+    57	    ]
+    58	    message: str
+    59	
+    60	    def __str__(self) -> str:
+    61	        return f"{self.failing_check}: {self.message}"
+    62	
+    63	
+    64	def _imported_case_dir(case_id: str) -> Path:
+    65	    return template_clone.IMPORTED_DIR / case_id
+    66	
+    67	
+    68	def _resolve_polymesh_dir(case_dir: Path) -> Path:
+    69	    """Locate ``constant/polyMesh/`` under the case dir.
+    70	
+    71	    M6.0 writes polyMesh at ``<case_dir>/constant/polyMesh/`` after
+    72	    gmshToFoam runs. Returns the dir; raises MeshRenderError if missing.
+    73	    """
+    74	    candidates = [
+    75	        case_dir / "constant" / "polyMesh",
+    76	    ]
+    77	    for d in candidates:
+    78	        if d.is_dir():
+    79	            return d
+    80	    raise MeshRenderError(
+    81	        failing_check="no_polymesh",
+    82	        message=f"no polyMesh dir under {case_dir} (looked in: {[str(c) for c in candidates]})",
+    83	    )
+    84	
+    85	
+    86	def _polymesh_source_files(
+    87	    polymesh_dir: Path, case_dir: Path
+    88	) -> tuple[Path, Path]:
+    89	    """Return ``(points_path, faces_path)`` or raise no_polymesh.
+    90	
+    91	    Round-2 Finding 1: each chosen path is ``resolve(strict=True)``'d and
+    92	    asserted to live under the case dir, so a symlink at
+    93	    ``constant/polyMesh/points`` (or faces) cannot redirect us to an
+    94	    arbitrary file outside IMPORTED_DIR.
+    95	    """
+    96	    points = polymesh_dir / "points"
+    97	    faces = polymesh_dir / "faces"
+    98	    if not points.is_file():
+    99	        raise MeshRenderError(
+   100	            failing_check="no_polymesh",
+   101	            message=f"missing {points}",
+   102	        )
+   103	    if not faces.is_file():
+   104	        raise MeshRenderError(
+   105	            failing_check="no_polymesh",
+   106	            message=f"missing {faces}",
+   107	        )
+   108	    try:
+   109	        case_root = case_dir.resolve(strict=True)
+   110	        points_resolved = points.resolve(strict=True)
+   111	        faces_resolved = faces.resolve(strict=True)
+   112	        points_resolved.relative_to(case_root)
+   113	        faces_resolved.relative_to(case_root)
+   114	    except (FileNotFoundError, OSError, ValueError):
+   115	        raise MeshRenderError(
+   116	            failing_check="no_polymesh",
+   117	            message="polyMesh source resolved outside case dir",
+   118	        )
+   119	    return points_resolved, faces_resolved
+   120	
+
+ succeeded in 0ms:
+     1	"""STL → glTF binary (.glb) transcoding with mtime-keyed cache.
+     2	
+     3	M-RENDER-API Tier-A B.1 (DEC-V61-095 spec_v2 §B.1). The Viewport's
+     4	glb consumer (M-PANELS / M-VIZ.mesh follow-ups) calls
+     5	GET /api/cases/<id>/geometry/render which delegates here.
+     6	
+     7	Cache layout:
+     8	
+     9	    <imported_case_dir>/.render_cache/geometry.glb
+    10	
+    11	Cache invalidation: source-mtime comparison. If any *.stl under
+    12	``triSurface/`` is newer than the cached glb, the cache is rebuilt.
+    13	
+    14	Atomic write: the new glb lands in a tempfile next to the cache
+    15	target, then ``os.replace`` moves it into place. Concurrent readers
+    16	either see the old bytes (pre-replace) or the new bytes (post-replace)
+    17	— never a half-written file.
+    18	"""
+    19	from __future__ import annotations
+    20	
+    21	import os
+    22	import secrets
+    23	from dataclasses import dataclass
+    24	from pathlib import Path
+    25	from typing import Literal
+    26	
+    27	import trimesh
+    28	
+    29	from ui.backend.services.case_drafts import is_safe_case_id
+    30	from ui.backend.services.case_scaffold import template_clone
+    31	
+    32	
+    33	CacheStatus = Literal["hit", "miss", "rebuild"]
+    34	
+    35	
+    36	@dataclass(frozen=True, slots=True)
+    37	class GlbBuildResult:
+    38	    """Return value carrying the resolved cache path + which path it took.
+    39	
+    40	    ``status`` is informational — the route does not branch on it, but
+    41	    tests assert it to confirm the cache invalidation contract.
+    42	    """
+    43	    cache_path: Path
+    44	    status: CacheStatus
+    45	
+    46	
+    47	@dataclass(frozen=True, slots=True)
+    48	class GeometryRenderError(Exception):
+    49	    """Raised on any failure path the route maps to a 4xx response.
+    50	
+    51	    ``failing_check`` is the route's HTTP-status discriminator:
+    52	
+    53	        case_not_found  → 404
+    54	        no_source_stl   → 422
+    55	        transcode_error → 422
+    56	    """
+    57	    failing_check: Literal["case_not_found", "no_source_stl", "transcode_error"]
+    58	    message: str
+    59	
+    60	    def __str__(self) -> str:
+    61	        return f"{self.failing_check}: {self.message}"
+    62	
+    63	
+    64	def _imported_case_dir(case_id: str) -> Path:
+    65	    return template_clone.IMPORTED_DIR / case_id
+    66	
+    67	
+    68	def _resolve_source_stl(case_dir: Path) -> Path:
+    69	    """Pick the canonical STL under ``case_dir/triSurface/``.
+    70	
+    71	    Mirrors the case-insensitive match in ``routes/geometry_render.py``
+    72	    (Codex round-1 P2 #1 fix on M-VIZ): ``glob("*.stl")`` would miss
+    73	    uploads named ``MODEL.STL`` since ``_safe_origin_filename``
+    74	    preserves the original casing.
+    75	
+    76	    Round-2 Finding 1: resolves the chosen path strictly and asserts it
+    77	    stays under the case dir, so a symlink in ``triSurface/`` cannot
+    78	    redirect us to an arbitrary file outside IMPORTED_DIR.
+    79	    """
+    80	    triSurface = case_dir / "triSurface"
+    81	    if not triSurface.is_dir():
+    82	        raise GeometryRenderError(
+    83	            failing_check="no_source_stl",
+    84	            message=f"no triSurface/ under {case_dir}",
+    85	        )
+    86	    stls = sorted(p for p in triSurface.iterdir() if p.suffix.lower() == ".stl")
+    87	    if not stls:
+    88	        raise GeometryRenderError(
+    89	            failing_check="no_source_stl",
+    90	            message=f"no .stl under {triSurface}",
+    91	        )
+    92	    chosen = stls[0]
+    93	    try:
+    94	        resolved = chosen.resolve(strict=True)
+    95	        case_root = case_dir.resolve(strict=True)
+    96	        resolved.relative_to(case_root)
+    97	    except (FileNotFoundError, OSError, ValueError):
+    98	        raise GeometryRenderError(
+    99	            failing_check="no_source_stl",
+   100	            message=f"STL {chosen.name} resolved outside case dir",
+   101	        )
+   102	    return resolved
+   103	
+   104	
+   105	def _cache_target(case_dir: Path) -> Path:
+   106	    return case_dir / ".render_cache" / "geometry.glb"
+   107	
+   108	
+   109	def _is_cache_fresh(cache: Path, source: Path) -> bool:
+   110	    if not cache.exists():
+   111	        return False
+   112	    try:
+   113	        return cache.stat().st_mtime >= source.stat().st_mtime
+   114	    except FileNotFoundError:
+   115	        return False
+   116	
+   117	
+   118	def _atomic_write(target: Path, payload: bytes) -> None:
+   119	    target.parent.mkdir(parents=True, exist_ok=True)
+   120	    tmp = target.with_suffix(
+
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/visualization/glb_loader.ts | sed -n '1,170p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/frontend/src/visualization/__tests__/glb_loader.test.ts | sed -n '1,180p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	// Binary glTF (.glb) fetch + parse helper for the Viewport.
+     2	//
+     3	// Mirrors the shape of stl_loader.ts (fetchXxxBytes / parseXxxBytes /
+     4	// loadXxxFromUrl + RenderLoadError-style error class) so the React
+     5	// component can dispatch on format='stl'|'glb' without leaking
+     6	// vtk.js specifics into Viewport.tsx.
+     7	//
+     8	// The vtk.js side uses vtkGLTFImporter which holds the parsed scene
+     9	// internally and exposes actors via getActors(). The kernel calls
+    10	// importActors() against its renderer to populate the scene; the
+    11	// loader's job is just to fetch the bytes and run parseAsArrayBuffer.
+    12	//
+    13	// Round-2 Finding 6: ``vtkGLTFImporter`` is loaded via dynamic
+    14	// ``import("@kitware/...")`` inside ``parseGlbBytes`` so STL-only
+    15	// Viewport consumers don't pull the GLTFImporter (and its transitive
+    16	// vtk.js dependencies) into the Viewport chunk. This preserves the
+    17	// spec_v2 §AC#10 +50 KB gz delta budget regardless of caller mix.
+    18	import type vtkGLTFImporterType from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
+    19	
+    20	export type GlbLoadFailureKind = "fetch" | "parse";
+    21	
+    22	export class GlbLoadError extends Error {
+    23	  readonly kind: GlbLoadFailureKind;
+    24	  readonly status?: number;
+    25	  constructor(kind: GlbLoadFailureKind, message: string, status?: number) {
+    26	    super(message);
+    27	    this.name = "GlbLoadError";
+    28	    this.kind = kind;
+    29	    this.status = status;
+    30	  }
+    31	}
+    32	
+    33	export interface GlbData {
+    34	  importer: ReturnType<typeof vtkGLTFImporterType.newInstance>;
+    35	}
+    36	
+    37	export async function fetchGlbBytes(
+    38	  url: string,
+    39	  signal?: AbortSignal,
+    40	): Promise<ArrayBuffer> {
+    41	  let response: Response;
+    42	  try {
+    43	    response = await fetch(url, { signal });
+    44	  } catch (err) {
+    45	    if ((err as { name?: string })?.name === "AbortError") throw err;
+    46	    throw new GlbLoadError(
+    47	      "fetch",
+    48	      `network error fetching glb: ${(err as Error).message}`,
+    49	    );
+    50	  }
+    51	  if (!response.ok) {
+    52	    throw new GlbLoadError(
+    53	      "fetch",
+    54	      `glb fetch returned HTTP ${response.status}`,
+    55	      response.status,
+    56	    );
+    57	  }
+    58	  return response.arrayBuffer();
+    59	}
+    60	
+    61	export async function parseGlbBytes(buffer: ArrayBuffer): Promise<GlbData> {
+    62	  // vtkGLTFImporter validates the glb header internally and throws on
+    63	  // malformed input. Wrap so every failure surfaces as
+    64	  // GlbLoadError(kind="parse") and the importer is released on the
+    65	  // failure branch (otherwise the failed importer leaks until GC,
+    66	  // mirroring the stl_loader contract from M-VIZ Codex round-2).
+    67	  //
+    68	  // Round-2 Finding 6: dynamic-import the GLTFImporter so the module
+    69	  // and its transitive vtk.js dependencies are split into their own
+    70	  // chunk and only fetched when the user actually opens a glb-format
+    71	  // Viewport.
+    72	  //
+    73	  // Round-3 Finding 7: the dynamic import itself can fail (chunk 404,
+    74	  // network drop after the splash, missing CSP allowance). Wrap the
+    75	  // import + newInstance + parse in a single try/catch so chunk-load
+    76	  // failures surface as GlbLoadError(kind="parse") instead of leaking
+    77	  // a raw error and falling through to the Viewport's "unknown" kind.
+    78	  let importer: ReturnType<typeof vtkGLTFImporterType.newInstance> | undefined;
+    79	  try {
+    80	    const { default: vtkGLTFImporter } = await import(
+    81	      "@kitware/vtk.js/IO/Geometry/GLTFImporter"
+    82	    );
+    83	    importer = vtkGLTFImporter.newInstance();
+    84	    importer.parseAsArrayBuffer(buffer);
+    85	    return { importer };
+    86	  } catch (err) {
+    87	    if (importer) {
+    88	      try {
+    89	        importer.delete();
+    90	      } catch {
+    91	        // delete() is not formally idempotent in vtk.js; suppress so the
+    92	        // original parse error reaches the caller.
+    93	      }
+    94	    }
+    95	    if (err instanceof GlbLoadError) throw err;
+    96	    const message =
+    97	      err instanceof Error ? err.message : "unknown vtk.js glb parse failure";
+    98	    throw new GlbLoadError("parse", `glb parser threw: ${message}`);
+    99	  }
+   100	}
+   101	
+   102	export async function loadGlbFromUrl(
+   103	  url: string,
+   104	  signal?: AbortSignal,
+   105	): Promise<GlbData> {
+   106	  const buffer = await fetchGlbBytes(url, signal);
+   107	  return parseGlbBytes(buffer);
+   108	}
+
+ succeeded in 0ms:
+     1	// Unit smoke for glb_loader. Mirrors stl_loader.test.ts shape — fetch
+     2	// path uses fetch-mock, parser path uses a vtk.js mock so jsdom doesn't
+     3	// need WebGL or the GLTFImporter real implementation.
+     4	
+     5	import { describe, expect, it, vi, beforeEach } from "vitest";
+     6	
+     7	import {
+     8	  fetchGlbBytes,
+     9	  parseGlbBytes,
+    10	  GlbLoadError,
+    11	} from "../glb_loader";
+    12	
+    13	const importerInstance = {
+    14	  parseAsArrayBuffer: vi.fn(),
+    15	  setRenderer: vi.fn(),
+    16	  importActors: vi.fn(),
+    17	  delete: vi.fn(),
+    18	};
+    19	vi.mock("@kitware/vtk.js/IO/Geometry/GLTFImporter", () => ({
+    20	  default: {
+    21	    newInstance: () => importerInstance,
+    22	  },
+    23	}));
+    24	
+    25	describe("glb_loader.fetchGlbBytes", () => {
+    26	  beforeEach(() => {
+    27	    vi.restoreAllMocks();
+    28	  });
+    29	
+    30	  it("returns the response body as ArrayBuffer on 200", async () => {
+    31	    const buf = new Uint8Array([0x67, 0x6c, 0x54, 0x46]).buffer;
+    32	    vi.stubGlobal(
+    33	      "fetch",
+    34	      vi.fn().mockResolvedValue({
+    35	        ok: true,
+    36	        status: 200,
+    37	        arrayBuffer: () => Promise.resolve(buf),
+    38	      }),
+    39	    );
+    40	    const result = await fetchGlbBytes("/api/cases/test/geometry/render");
+    41	    expect(result).toBe(buf);
+    42	  });
+    43	
+    44	  it("throws GlbLoadError with kind=fetch on non-2xx", async () => {
+    45	    vi.stubGlobal(
+    46	      "fetch",
+    47	      vi.fn().mockResolvedValue({ ok: false, status: 404 }),
+    48	    );
+    49	    await expect(
+    50	      fetchGlbBytes("/api/cases/missing/geometry/render"),
+    51	    ).rejects.toMatchObject({
+    52	      name: "GlbLoadError",
+    53	      kind: "fetch",
+    54	      status: 404,
+    55	    });
+    56	  });
+    57	
+    58	  it("throws GlbLoadError with kind=fetch on network error", async () => {
+    59	    vi.stubGlobal(
+    60	      "fetch",
+    61	      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    62	    );
+    63	    await expect(
+    64	      fetchGlbBytes("/api/cases/x/geometry/render"),
+    65	    ).rejects.toBeInstanceOf(GlbLoadError);
+    66	  });
+    67	
+    68	  it("propagates AbortError unchanged so callers can detect abort", async () => {
+    69	    const abort = new Error("aborted");
+    70	    abort.name = "AbortError";
+    71	    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
+    72	    await expect(
+    73	      fetchGlbBytes("/api/cases/x/geometry/render"),
+    74	    ).rejects.toMatchObject({ name: "AbortError" });
+    75	  });
+    76	});
+    77	
+    78	describe("glb_loader.parseGlbBytes", () => {
+    79	  beforeEach(() => {
+    80	    importerInstance.parseAsArrayBuffer.mockClear();
+    81	    importerInstance.delete.mockClear();
+    82	  });
+    83	
+    84	  it("returns the importer on a successful parse", async () => {
+    85	    const buf = new Uint8Array(64).buffer;
+    86	    const data = await parseGlbBytes(buf);
+    87	    expect(importerInstance.parseAsArrayBuffer).toHaveBeenCalledWith(buf);
+    88	    expect(data.importer).toBe(importerInstance);
+    89	  });
+    90	
+    91	  it("converts vtk.js parser exceptions into GlbLoadError(kind=parse) and disposes the importer", async () => {
+    92	    importerInstance.parseAsArrayBuffer.mockImplementationOnce(() => {
+    93	      throw new RangeError("Invalid glb header");
+    94	    });
+    95	    await expect(parseGlbBytes(new Uint8Array(10).buffer)).rejects.toBeInstanceOf(
+    96	      GlbLoadError,
+    97	    );
+    98	    expect(importerInstance.delete).toHaveBeenCalledTimes(1);
+    99	  });
+   100	
+   101	  it("normalizes lazy-chunk-load failures to GlbLoadError(kind=parse) (Round-3 Finding 7)", async () => {
+   102	    // Simulate a dynamic-import that resolves but whose default export
+   103	    // throws when newInstance is called — same observable shape as a
+   104	    // chunk-load TypeError reaching our try/catch. Without the Round-3
+   105	    // wrap, this raw error would bubble up to Viewport as kind="unknown"
+   106	    // instead of "parse".
+   107	    vi.resetModules();
+   108	    vi.doMock("@kitware/vtk.js/IO/Geometry/GLTFImporter", () => ({
+   109	      default: {
+   110	        newInstance: () => {
+   111	          throw new TypeError("Failed to load chunk: net::ERR_FAILED");
+   112	        },
+   113	      },
+   114	    }));
+   115	    const mod = await import("../glb_loader");
+   116	    await expect(
+   117	      mod.parseGlbBytes(new Uint8Array(8).buffer),
+   118	    ).rejects.toMatchObject({
+   119	      name: "GlbLoadError",
+   120	      kind: "parse",
+   121	    });
+   122	    vi.doUnmock("@kitware/vtk.js/IO/Geometry/GLTFImporter");
+   123	    vi.resetModules();
+   124	  });
+   125	});
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/routes/geometry_render.py | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'rg -n "failing_check|transcode_error|polymesh_parse_error|field_parse_error" ui/backend/routes ui/backend/services/render' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""Geometry-render routes — STL pass-through (M-VIZ) + glb transcode (M-RENDER-API).
+     2	
+     3	  GET /api/cases/{case_id}/geometry/stl     — M-VIZ Tier-A · raw STL bytes
+     4	  GET /api/cases/{case_id}/geometry/render  — M-RENDER-API B.1 · transcoded glb
+     5	
+     6	Both routes share path-traversal defense (``is_safe_case_id`` + post-
+     7	resolve subpath check) and source-of-truth path
+     8	(``user_drafts/imported/{case_id}/triSurface/*.stl``). The /render
+     9	endpoint additionally caches the transcoded glb under
+    10	``<case_dir>/.render_cache/`` keyed on source mtime.
+    11	"""
+    12	from __future__ import annotations
+    13	
+    14	from fastapi import APIRouter, HTTPException
+    15	from fastapi.responses import FileResponse
+    16	
+    17	from ui.backend.services.case_drafts import is_safe_case_id
+    18	from ui.backend.services.case_scaffold import template_clone
+    19	from ui.backend.services.render import (
+    20	    FieldSampleError,
+    21	    GeometryRenderError,
+    22	    MeshRenderError,
+    23	    build_field_payload,
+    24	    build_geometry_glb,
+    25	    build_mesh_wireframe_glb,
+    26	)
+    27	
+    28	
+    29	router = APIRouter()
+    30	
+    31	
+    32	@router.get("/cases/{case_id}/geometry/stl", tags=["geometry-render"])
+    33	def get_case_stl(case_id: str) -> FileResponse:
+    34	    """Return the imported case's STL as raw binary.
+    35	
+    36	    Returns 404 if the case_id is unsafe, the imported case directory is
+    37	    missing, the triSurface subdir is missing, or no .stl is on disk.
+    38	
+    39	    Content-Type ``model/stl`` per spec_v2 §B.1. ``application/octet-stream``
+    40	    would also work for browser-side fetch consumers, but ``model/stl`` is
+    41	    more accurate and vtk.js doesn't care about the MIME type when reading
+    42	    via ``parseAsArrayBuffer``.
+    43	    """
+    44	    if not is_safe_case_id(case_id):
+    45	        raise HTTPException(status_code=404, detail="case not found")
+    46	
+    47	    imported_root = template_clone.IMPORTED_DIR / case_id
+    48	    triSurface_dir = imported_root / "triSurface"
+    49	    if not triSurface_dir.is_dir():
+    50	        raise HTTPException(status_code=404, detail="case not found")
+    51	
+    52	    # Case-insensitive .stl match · _safe_origin_filename preserves the
+    53	    # uploader's original extension casing (model.STL stays as model.STL),
+    54	    # so glob("*.stl") would miss uploads on case-sensitive filesystems.
+    55	    # Mirrors meshing_gmsh/pipeline.py:82.
+    56	    stl_files = sorted(
+    57	        p for p in triSurface_dir.iterdir() if p.suffix.lower() == ".stl"
+    58	    )
+    59	    if not stl_files:
+    60	        raise HTTPException(status_code=404, detail="no STL on disk for this case")
+    61	
+    62	    target = stl_files[0]
+    63	    try:
+    64	        resolved = target.resolve(strict=True)
+    65	        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+    66	    except (ValueError, OSError, FileNotFoundError):
+    67	        raise HTTPException(status_code=404, detail="case not found")
+    68	
+    69	    return FileResponse(
+    70	        resolved,
+    71	        media_type="model/stl",
+    72	        filename=resolved.name,
+    73	    )
+    74	
+    75	
+    76	_RENDER_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+    77	    "case_not_found": 404,
+    78	    "no_source_stl": 422,
+    79	    "transcode_error": 422,
+    80	}
+    81	
+    82	
+    83	@router.get("/cases/{case_id}/geometry/render", tags=["geometry-render"])
+    84	def get_case_geometry_glb(case_id: str) -> FileResponse:
+    85	    """Return the imported case's geometry as binary glTF (.glb).
+    86	
+    87	    Caches the transcoded glb under ``<case_dir>/.render_cache/geometry.glb``
+    88	    keyed on the source STL mtime. Concurrent readers either see the
+    89	    pre-replace or post-replace bytes — never a half-written file.
+    90	    """
+    91	    try:
+    92	        result = build_geometry_glb(case_id)
+    93	    except GeometryRenderError as exc:
+    94	        status = _RENDER_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+    95	        raise HTTPException(status_code=status, detail=str(exc))
+    96	
+    97	    try:
+    98	        resolved = result.cache_path.resolve(strict=True)
+    99	        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+   100	    except (ValueError, OSError, FileNotFoundError):
+   101	        raise HTTPException(status_code=404, detail="case not found")
+   102	
+   103	    return FileResponse(
+   104	        resolved,
+   105	        media_type="model/gltf-binary",
+   106	        filename="geometry.glb",
+   107	    )
+   108	
+   109	
+   110	_MESH_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+   111	    "case_not_found": 404,
+   112	    "no_polymesh": 404,
+   113	    "polymesh_parse_error": 422,
+   114	}
+   115	
+   116	
+   117	@router.get("/cases/{case_id}/mesh/render", tags=["geometry-render"])
+   118	def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
+   119	    """Return the imported case's polyMesh as a wireframe binary glTF.
+   120	
+   121	    Reads ``<case_dir>/constant/polyMesh/{points,faces}`` (M6.0 sHM
+   122	    output), extracts unique edges across all faces, and emits a glTF
+   123	    with a single ``mode: LINES`` primitive. Cached at
+   124	    ``<case_dir>/.render_cache/mesh.glb`` keyed on points + faces mtimes.
+   125	    """
+   126	    try:
+   127	        result = build_mesh_wireframe_glb(case_id)
+   128	    except MeshRenderError as exc:
+   129	        status = _MESH_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+   130	        raise HTTPException(status_code=status, detail=str(exc))
+   131	
+   132	    try:
+   133	        resolved = result.cache_path.resolve(strict=True)
+   134	        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+   135	    except (ValueError, OSError, FileNotFoundError):
+   136	        raise HTTPException(status_code=404, detail="case not found")
+   137	
+   138	    return FileResponse(
+   139	        resolved,
+   140	        media_type="model/gltf-binary",
+   141	        filename="mesh.glb",
+   142	    )
+   143	
+   144	
+   145	_FIELD_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+   146	    "case_not_found": 404,
+   147	    "run_not_found": 404,
+   148	    "field_not_found": 404,
+   149	    "field_unsupported": 422,
+   150	    "field_parse_error": 422,
+   151	}
+   152	
+   153	
+   154	@router.get(
+   155	    "/cases/{case_id}/results/{run_id}/field/{name}",
+   156	    tags=["geometry-render"],
+   157	)
+   158	def get_case_field_sample(
+   159	    case_id: str, run_id: str, name: str
+   160	) -> FileResponse:
+   161	    """Return the case+run+field as a binary float32 stream.
+   162	
+   163	    Tier-A fallback per spec_v2 §B.3: ``application/octet-stream``
+   164	    carrying the internalField scalar values packed as little-endian
+   165	    float32. Frontend handles colormap mapping. M-VIZ.results upgrades
+   166	    to baked-color glTF.
+   167	
+   168	    The result has Content-Length = 4 × point_count.
+   169	    """
+   170	    try:
+   171	        result = build_field_payload(case_id, run_id, name)
+   172	    except FieldSampleError as exc:
+   173	        status = _FIELD_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+   174	        raise HTTPException(status_code=status, detail=str(exc))
+   175	
+   176	    try:
+   177	        resolved = result.cache_path.resolve(strict=True)
+   178	        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+   179	    except (ValueError, OSError, FileNotFoundError):
+   180	        raise HTTPException(status_code=404, detail="case not found")
+   181	
+   182	    return FileResponse(
+   183	        resolved,
+   184	        media_type="application/octet-stream",
+   185	        filename=f"field-{run_id}-{name}.bin",
+   186	        headers={"X-Field-Point-Count": str(result.point_count)},
+   187	    )
+
+ succeeded in 0ms:
+ui/backend/services/render/field_sample.py:65:    failing_check: Literal[
+ui/backend/services/render/field_sample.py:70:        "field_parse_error",
+ui/backend/services/render/field_sample.py:75:        return f"{self.failing_check}: {self.message}"
+ui/backend/services/render/field_sample.py:92:            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
+ui/backend/services/render/field_sample.py:97:            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
+ui/backend/services/render/field_sample.py:102:            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
+ui/backend/services/render/field_sample.py:115:            failing_check="case_not_found",
+ui/backend/services/render/field_sample.py:121:            failing_check="case_not_found",
+ui/backend/services/render/field_sample.py:131:            failing_check="run_not_found",
+ui/backend/services/render/field_sample.py:137:            failing_check="field_not_found",
+ui/backend/services/render/field_sample.py:153:            failing_check="field_not_found",
+ui/backend/services/render/field_sample.py:172:            failing_check="field_parse_error",
+ui/backend/services/render/field_sample.py:182:                failing_check="field_unsupported",
+ui/backend/services/render/field_sample.py:186:            failing_check="field_parse_error",
+ui/backend/services/render/field_sample.py:196:            failing_check="field_parse_error",
+ui/backend/services/render/field_sample.py:201:            failing_check="field_parse_error",
+ui/backend/services/render/field_sample.py:261:            failing_check="field_parse_error",
+ui/backend/services/render/field_sample.py:277:            failing_check="field_parse_error",
+ui/backend/services/render/mesh_wireframe.py:53:    failing_check: Literal[
+ui/backend/services/render/mesh_wireframe.py:56:        "polymesh_parse_error",
+ui/backend/services/render/mesh_wireframe.py:61:        return f"{self.failing_check}: {self.message}"
+ui/backend/services/render/mesh_wireframe.py:81:        failing_check="no_polymesh",
+ui/backend/services/render/mesh_wireframe.py:100:            failing_check="no_polymesh",
+ui/backend/services/render/mesh_wireframe.py:105:            failing_check="no_polymesh",
+ui/backend/services/render/mesh_wireframe.py:116:            failing_check="no_polymesh",
+ui/backend/services/render/mesh_wireframe.py:158:            failing_check="polymesh_parse_error",
+ui/backend/services/render/mesh_wireframe.py:174:            failing_check="case_not_found",
+ui/backend/services/render/mesh_wireframe.py:180:            failing_check="case_not_found",
+ui/backend/services/render/mesh_wireframe.py:208:            failing_check="polymesh_parse_error",
+ui/backend/services/render/mesh_wireframe.py:226:            failing_check="polymesh_parse_error",
+ui/backend/services/render/geometry_glb.py:51:    ``failing_check`` is the route's HTTP-status discriminator:
+ui/backend/services/render/geometry_glb.py:55:        transcode_error → 422
+ui/backend/services/render/geometry_glb.py:57:    failing_check: Literal["case_not_found", "no_source_stl", "transcode_error"]
+ui/backend/services/render/geometry_glb.py:61:        return f"{self.failing_check}: {self.message}"
+ui/backend/services/render/geometry_glb.py:83:            failing_check="no_source_stl",
+ui/backend/services/render/geometry_glb.py:89:            failing_check="no_source_stl",
+ui/backend/services/render/geometry_glb.py:99:            failing_check="no_source_stl",
+ui/backend/services/render/geometry_glb.py:138:            failing_check="transcode_error",
+ui/backend/services/render/geometry_glb.py:143:            failing_check="transcode_error",
+ui/backend/services/render/geometry_glb.py:150:            failing_check="transcode_error",
+ui/backend/services/render/geometry_glb.py:155:            failing_check="transcode_error",
+ui/backend/services/render/geometry_glb.py:171:            failing_check="case_not_found",
+ui/backend/services/render/geometry_glb.py:177:            failing_check="case_not_found",
+ui/backend/services/render/geometry_glb.py:199:            failing_check="transcode_error",
+ui/backend/services/render/geometry_glb.py:214:            failing_check="transcode_error",
+ui/backend/routes/mesh_imported.py:27:# Map pipeline failing_check enum → HTTP status. case_not_found is the
+ui/backend/routes/mesh_imported.py:73:            failing_check=exc.failing_check,
+ui/backend/routes/mesh_imported.py:76:            status_code=_STATUS_FOR_FAILING_CHECK.get(exc.failing_check, 400),
+ui/backend/routes/import_geometry.py:58:def _classify_failing_check(report: IngestReport, parse_errors: list[str]) -> str:
+ui/backend/routes/import_geometry.py:79:                    "failing_check": "size_limit",
+ui/backend/routes/import_geometry.py:93:            failing_check="stl_parse",
+ui/backend/routes/import_geometry.py:102:            failing_check="stl_parse",
+ui/backend/routes/import_geometry.py:120:            failing_check=_classify_failing_check(report, []),
+ui/backend/routes/geometry_render.py:79:    "transcode_error": 422,
+ui/backend/routes/geometry_render.py:94:        status = _RENDER_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+ui/backend/routes/geometry_render.py:113:    "polymesh_parse_error": 422,
+ui/backend/routes/geometry_render.py:129:        status = _MESH_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+ui/backend/routes/geometry_render.py:150:    "field_parse_error": 422,
+ui/backend/routes/geometry_render.py:173:        status = _FIELD_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+
+exec
+/bin/zsh -lc 'rg -n "mutated during atomic write|retry the request|post-replace|after_replace" ui/backend/tests ui/frontend/src/visualization/__tests__' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc 'rg -n "mutated during|retry the request|st_mtime_ns|atomic write|rebuild window|transcode" ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py ui/backend/tests/test_field_sample.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/tests/test_geometry_render_glb.py:3:Verifies the glb transcode + cache layer per DEC-V61-095 + spec_v2 §B.1:
+ui/backend/tests/test_geometry_render_glb.py:7:  - Cache hit on second call returns byte-equal payload (no re-transcode)
+ui/backend/tests/test_geometry_render_glb.py:192:def test_build_geometry_glb_raises_transcode_error_on_garbage(
+ui/backend/tests/test_geometry_render_glb.py:195:    """Force the transcode path to fail to verify the
+ui/backend/tests/test_geometry_render_glb.py:196:    ``transcode_error`` failing_check is reachable."""
+ui/backend/tests/test_geometry_render_glb.py:207:    assert excinfo.value.failing_check == "transcode_error"
+ui/backend/tests/test_geometry_render_glb.py:231:    not get transcoded into the cache."""
+
+exec
+/bin/zsh -lc 'git diff a8dd37f..a2f263d -- ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py ui/backend/tests/test_field_sample.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_field_sample.py | sed -n '315,370p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_mesh_wireframe.py | sed -n '360,430p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   315	-2.0e+5
+   316	3.14
+   317	)
+   318	;
+   319	"""
+   320	    (run_dir / "p").write_text(text, encoding="utf-8")
+   321	    result = build_field_payload(case_id, "run_001", "p")
+   322	    decoded = np.frombuffer(result.cache_path.read_bytes(), dtype=np.float32)
+   323	    assert decoded.shape == (3,)
+   324	    assert decoded[0] == pytest.approx(1.5e-3)
+   325	    assert decoded[1] == pytest.approx(-2.0e5)
+   326	    assert decoded[2] == pytest.approx(3.14)
+   327	
+   328	
+   329	def test_parser_rejects_count_mismatch(isolated_imported: Path):
+   330	    case_id = "imported_2026-04-28T00-00-00Z_mismatch"
+   331	    case_dir = isolated_imported / case_id
+   332	    case_dir.mkdir()
+   333	    run_dir = case_dir / "run_001"
+   334	    run_dir.mkdir()
+   335	    text = """\
+   336	FoamFile{}
+   337	
+   338	internalField   nonuniform List<scalar>
+   339	5
+   340	(
+   341	1.0
+   342	2.0
+   343	)
+   344	;
+   345	"""
+   346	    (run_dir / "p").write_text(text, encoding="utf-8")
+   347	    with pytest.raises(FieldSampleError) as excinfo:
+   348	        build_field_payload(case_id, "run_001", "p")
+   349	    assert excinfo.value.failing_check == "field_parse_error"
+
+ succeeded in 0ms:
+   360	
+   361	
+   362	def test_get_case_mesh_render_404_when_polymesh_missing(isolated_imported: Path):
+   363	    case_id = "imported_2026-04-28T00-00-00Z_nopolymesh"
+   364	    (isolated_imported / case_id).mkdir()
+   365	
+   366	    client = TestClient(app)
+   367	    response = client.get(f"/api/cases/{case_id}/mesh/render")
+   368	    assert response.status_code == 404
+   369	
+   370	
+   371	def test_get_case_mesh_render_422_on_garbage(isolated_imported: Path):
+   372	    case_id = "imported_2026-04-28T00-00-00Z_garbagemesh"
+   373	    case_dir = isolated_imported / case_id
+   374	    polymesh = case_dir / "constant" / "polyMesh"
+   375	    polymesh.mkdir(parents=True)
+   376	    (polymesh / "points").write_text("not a polyMesh", encoding="utf-8")
+   377	    (polymesh / "faces").write_text("also not a polyMesh", encoding="utf-8")
+   378	
+   379	    client = TestClient(app)
+   380	    response = client.get(f"/api/cases/{case_id}/mesh/render")
+   381	    assert response.status_code == 422
+   382	
+   383	
+   384	def test_get_case_mesh_render_byte_equal_on_cache_hit(isolated_imported: Path):
+   385	    case_id = "imported_2026-04-28T00-00-00Z_cachebyteequal"
+   386	    case_dir = isolated_imported / case_id
+   387	    case_dir.mkdir()
+   388	    _stage_polymesh(case_dir)
+   389	
+   390	    client = TestClient(app)
+   391	    first = client.get(f"/api/cases/{case_id}/mesh/render")
+   392	    second = client.get(f"/api/cases/{case_id}/mesh/render")
+   393	    assert first.status_code == 200
+   394	    assert second.content == first.content
+   395	
+   396	
+   397	def test_atomic_write_leaves_no_tempfile(isolated_imported: Path):
+   398	    case_id = "imported_2026-04-28T00-00-00Z_atomicmesh"
+   399	    case_dir = isolated_imported / case_id
+   400	    case_dir.mkdir()
+   401	    _stage_polymesh(case_dir)
+   402	
+   403	    build_mesh_wireframe_glb(case_id)
+   404	    cache_dir = case_dir / ".render_cache"
+   405	    children = sorted(p.name for p in cache_dir.iterdir())
+   406	    assert children == ["mesh.glb"]
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_geometry_render_glb.py | sed -n '220,255p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   220	    client = TestClient(app)
+   221	    response = client.get(f"/api/cases/{case_id}/geometry/render")
+   222	    assert response.status_code == 200
+   223	    assert response.content[:4] == b"glTF"
+   224	
+   225	
+   226	def test_build_geometry_glb_rejects_stl_symlink_escape(
+   227	    isolated_imported: Path, tmp_path: Path,
+   228	):
+   229	    """Round-2 Finding 1: a symlink under triSurface/ pointing outside
+   230	    the case dir must fail the resolve+relative_to containment guard,
+   231	    not get transcoded into the cache."""
+   232	    case_id = "imported_2026-04-28T00-00-00Z_stl_symlink"
+   233	    case_dir = isolated_imported / case_id
+   234	    triSurface = case_dir / "triSurface"
+   235	    triSurface.mkdir(parents=True)
+   236	    outside_stl = tmp_path / "evil.stl"
+   237	    outside_stl.write_bytes(box_stl())  # real STL but outside the case dir
+   238	    (triSurface / "evil.stl").symlink_to(outside_stl)
+   239	
+   240	    with pytest.raises(GeometryRenderError) as excinfo:
+   241	        build_geometry_glb(case_id)
+   242	    assert excinfo.value.failing_check == "no_source_stl"
+
+codex
+I’ve checked the code paths and test coverage. The frontend fix looks structurally correct; I’m running the targeted backend/frontend tests now to separate “looks right” from “verified by execution.”
+exec
+/bin/zsh -lc 'pytest -q ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py ui/backend/tests/test_field_sample.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 4 in 141ms:
+ImportError while loading conftest '/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/conftest.py'.
+ui/backend/tests/conftest.py:7: in <module>
+    import trimesh
+E   ModuleNotFoundError: No module named 'trimesh'
+
+exec
+/bin/zsh -lc 'cd ui/frontend && npx vitest run src/visualization/__tests__/glb_loader.test.ts' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1634ms:
+4:11:54 PM [vite] warning: `esbuild` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `oxc` instead.
+4:11:54 PM [vite] warning: `optimizeDeps.esbuildOptions` option was specified by "vite:react-babel" plugin. This option is deprecated, please use `optimizeDeps.rolldownOptions` instead.
+Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored. The following esbuild options were set: `{ jsx: 'automatic', jsxImportSource: undefined }`
+
+ RUN  v4.1.5 /Users/Zhuanz/Desktop/cfd-harness-unified/ui/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  16:11:54
+   Duration  938ms (transform 27ms, setup 95ms, import 19ms, tests 5ms, environment 506ms)
+
+
+codex
+## Round 3 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: PARTIAL — the post-`os.replace()` stat closes the stale-cache freeze, but there is still a concurrent-reader window where another request can observe the freshly replaced stale cache before this request unlinks it (`ui/backend/services/render/geometry_glb.py:205`, `ui/backend/services/render/mesh_wireframe.py:214`, `ui/backend/services/render/field_sample.py:268`).
+- Finding 7: VERIFIED — `parseGlbBytes` now normalizes dynamic-import / `newInstance()` / parse failures through one catch, and the added Vitest covers that normalization path correctly (`ui/frontend/src/visualization/glb_loader.ts:78`, `ui/frontend/src/visualization/__tests__/glb_loader.test.ts:101`).
+
+New findings (if any): No new frontend issue. The `failing_check` reuse on the post-replace retry path is reasonable and keeps the route mapping stable. The backend still lacks a test for the Round-3 post-replace mutation branch, and the concurrent-reader stale-cache window above remains.
+
+---
+
+Verdict: CHANGES_REQUIRED
+tokens used
+58,328
+## Round 3 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: PARTIAL — the post-`os.replace()` stat closes the stale-cache freeze, but there is still a concurrent-reader window where another request can observe the freshly replaced stale cache before this request unlinks it (`ui/backend/services/render/geometry_glb.py:205`, `ui/backend/services/render/mesh_wireframe.py:214`, `ui/backend/services/render/field_sample.py:268`).
+- Finding 7: VERIFIED — `parseGlbBytes` now normalizes dynamic-import / `newInstance()` / parse failures through one catch, and the added Vitest covers that normalization path correctly (`ui/frontend/src/visualization/glb_loader.ts:78`, `ui/frontend/src/visualization/__tests__/glb_loader.test.ts:101`).
+
+New findings (if any): No new frontend issue. The `failing_check` reuse on the post-replace retry path is reasonable and keeps the route mapping stable. The backend still lacks a test for the Round-3 post-replace mutation branch, and the concurrent-reader stale-cache window above remains.
+
+---
+
+Verdict: CHANGES_REQUIRED

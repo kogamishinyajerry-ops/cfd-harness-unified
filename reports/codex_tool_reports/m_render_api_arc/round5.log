@@ -1,0 +1,2372 @@
+2026-04-28T08:20:16.167992Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-28T08:20:16.168010Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dd32c-b6a8-7b13-81f7-30e2d08742fb
+--------
+user
+# Codex Round 5 review · M-RENDER-API arc (DEC-V61-095)
+
+## Round 4 outcome (recap)
+
+Round 4 returned REGRESSION: Round-4's guarded atomic helpers introduced raw `FileNotFoundError` propagation if the source vanished between temp-write and pre-replace stat (you reproduced this with `.venv/bin/python` and demonstrated a leftover `.render_cache/field-run_001-p.tmp.<hex>.bin`).
+
+## Round 5 fix (commit 84fa4cf)
+
+- All three render services' guarded helpers now wrap each `source.stat()` call in a local `_current_mtime()` (single-source) / `_current_mtimes()` (multi-source) closure that returns `None` (or a tuple containing `None`) on `OSError`.
+- A `None`-or-mismatch result triggers the **same** temp/cache cleanup + `RuntimeError` path as the mutation case.
+- Error messages updated to "mutated or vanished" so callers don't have to differentiate.
+
+Test added: `test_build_field_payload_aborts_on_source_vanish`
+- Monkey-patches `Path.write_bytes` to delete the source field file the moment the temp lands.
+- Asserts:
+  - `FieldSampleError(failing_check="field_parse_error")` (NOT raw OSError)
+  - error message contains `"vanished"`
+  - `.render_cache` contains **zero** leftover files (temp cleaned, no cache written)
+
+## What I want from this round
+
+For Finding 3 (now including the vanish-regression closure):
+- VERIFIED — the helper is OSError-tolerant for pre AND post-replace stats, the temp+cache leak is fixed, and the test exists, OR
+- PARTIAL — describe the remaining gap, OR
+- REGRESSION — the OSError tolerance introduced a new issue.
+
+Brief scan for new Round-5 issues (I made the same change in 3 files; check parity):
+- `ui/backend/services/render/field_sample.py:_atomic_write_guarded`
+- `ui/backend/services/render/geometry_glb.py:_atomic_write_guarded`
+- `ui/backend/services/render/mesh_wireframe.py:_atomic_write_guarded_multi`
+
+If clean: APPROVE or APPROVE_WITH_COMMENTS.
+
+## Output format
+
+```
+## Round 5 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: VERIFIED | PARTIAL | REGRESSION — <one-line>
+
+New findings (if any): ...
+
+---
+
+Verdict: APPROVE | APPROVE_WITH_COMMENTS | CHANGES_REQUIRED
+```
+
+The Round-5 commit is 84fa4cf. The full arc is c4264f7..HEAD.
+codex
+Reviewing commit `84fa4cf` against the `M-RENDER-API` arc. I’m pulling the repo’s prior context and then checking the three guarded helpers plus the new vanish test for parity and regressions.
+exec
+/bin/zsh -lc 'rg -n "cfd-harness-unified|M-RENDER-API|render/field_sample|render/geometry_glb|render/mesh_wireframe|review" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+52:applies_to: cwd=/Users/Zhuanz/archreview-kg; reuse_rule=safe for this repo’s local studio-demo workflow, but the chosen port, redirect target, and live process state are machine-specific.
+58:- rollout_summaries/2026-04-27T10-59-43-2NZc-archreview_kg_start_ui_demo.md (cwd=/Users/Zhuanz/archreview-kg, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/27/rollout-2026-04-27T18-59-43-019dce98-56b3-7533-9697-cd158b324e66.jsonl, updated_at=2026-04-27T15:56:24+00:00, thread_id=019dce98-56b3-7533-9697-cd158b324e66, fallback-port studio boot plus curl smoke)
+62:- archreview-kg, 启动项目目前UI，让我体验demo, studio, ./.venv/bin/python -m archkg.cli.main studio --no-browser, 8780, 8765, 8766, 9000, curl -I, /demo, /runs/demo-
+68:- rollout_summaries/2026-04-27T10-59-43-2NZc-archreview_kg_start_ui_demo.md (cwd=/Users/Zhuanz/archreview-kg, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/27/rollout-2026-04-27T18-59-43-019dce98-56b3-7533-9697-cd158b324e66.jsonl, updated_at=2026-04-27T15:56:24+00:00, thread_id=019dce98-56b3-7533-9697-cd158b324e66, working root URL and demo entry returned)
+91:# Task Group: AI-Notebooklm V4.4 parity sprint, Notion resync, and review/planning handoff
+93:scope: Continue AI-Notebooklm from live Notion context using a clean reviewable worktree, ship an evidence-first parity slice, and end by syncing GitHub/Notion state plus a copy-paste review/planning package.
+94:applies_to: cwd=/Users/Zhuanz/AI-Notebooklm and isolated worktree `/Users/Zhuanz/AI-Notebooklm-v4-4-notebooklm-product-parity`; reuse_rule=safe for this repo’s parity-sprint, control-tower sync, and review-handoff workflow, but branch names, PR state, Notion record IDs, and local model-cache availability are time-specific.
+100:- rollout_summaries/2026-04-24T14-44-38-7L6S-ai_notebooklm_v4_4_notion_sync_review_and_sprint_planning.md (cwd=/Users/Zhuanz/AI-Notebooklm-v4-4-notebooklm-product-parity, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/24/rollout-2026-04-24T22-44-38-019dbff3-2d65-7f40-9410-6589387a3c2e.jsonl, updated_at=2026-04-25T02:10:30+00:00, thread_id=019dbff3-2d65-7f40-9410-6589387a3c2e, clean worktree parity seed validated with targeted pytest and browser smoke)
+106:## Task 2: Resync GitHub/Notion control tower, create the Opus 4.7 review prompt, and seed Sprint 2 planning, outcome success
+110:- rollout_summaries/2026-04-24T14-44-38-7L6S-ai_notebooklm_v4_4_notion_sync_review_and_sprint_planning.md (cwd=/Users/Zhuanz/AI-Notebooklm-v4-4-notebooklm-product-parity, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/24/rollout-2026-04-24T22-44-38-019dbff3-2d65-7f40-9410-6589387a3c2e.jsonl, updated_at=2026-04-25T02:10:30+00:00, thread_id=019dbff3-2d65-7f40-9410-6589387a3c2e, Notion review/planning artifacts and Sprint 2 rows created after PR resync)
+114:- 和Notion中枢同步, Opus 4.7 review prompt, Sprint 2 planning, raw Notion API, draft/open, mergeStateStatus=CLEAN, review task 34dc6894-2bed-814c-a52b-ca08b45e9625, review artifact 34dc6894-2bed-814d-9621-f0246443af48, Sprint 2 phase 34dc6894-2bed-81a0-94fe-e50be82d6ffb, product baseline, Audio Overview, Mind Maps
+118:- when the original AI-Notebooklm worktree was dirty and the user still wanted continuation from Notion context, the accepted path was a clean isolated worktree from `origin/main` -> for reviewable NotebookLM slices, prefer a fresh worktree instead of piling onto unstable local state [Task 1]
+120:- when the user asked for “Notion的Opus 4.7提示词，让它做审查，以及下一个阶段的开发规划” -> produce both a copy-paste review prompt and a concrete next-phase plan, not just a summary of what changed [Task 2]
+121:- the review-gate framing here implies the user wants review-ready handoff artifacts with explicit blockers and output schema, not a loose narrative handoff [Task 1][Task 2]
+125:- For this repo, a clean worktree from `origin/main` is the right default when the current branch is dirty and the target slice needs to be reviewable; the validated path here was `/Users/Zhuanz/AI-Notebooklm-v4-4-notebooklm-product-parity` [Task 1]
+126:- The V4.4 parity seed that passed focused on evidence-first UX: `ChatResponse.evidence` gained `source_id`, evidence cards could open the matching source preview, and a Notebook guide strip surfaced READY source count / evidence status / next action while keeping `AntiHallucinationGateway` as the verification boundary [Task 1]
+129:- This repo’s Notion control tower can be kept current via raw API writes when plugin resources are unavailable; the proven review/planning payload here included a review task, review artifact, Sprint 2 phase, Sprint 2 plan artifact, and four Sprint 2 task rows created directly against the live databases [Task 2]
+131:- Future review prompts in this repo should be copy-paste ready and include scope, known blocker, concrete verification commands/results, required output schema, and an explicit environment-vs-code distinction for reviewers [Task 2]
+135:- Symptom: a parity sprint starts from a dirty branch and becomes hard to review -> cause: existing local state is mixed with new work -> fix: branch from `origin/main` into a clean isolated worktree before implementing the slice [Task 1]
+139:- Symptom: Notion review/planning sync wastes time reopening old memory/search context -> cause: reorientation started from stale notes instead of live state -> fix: check live GitHub PR state and live Notion rows first, then write only the minimal new records needed for the next gate [Task 2]
+140:- Symptom: a reviewer treats missing offline model cache as a code defect -> cause: the handoff prompt did not explicitly preserve the environment-vs-code boundary -> fix: spell out that the offline cache gap is an environment gate, not a product-regression claim [Task 2]
+246:- Symptom: coordination docs stay internally inconsistent after a governance refresh -> cause: only `plan.md` and `dev_handoff.md` were checked while `qa_report.md` kept the older baseline text -> fix: review the full coordination-doc set together when baseline wording or control-plane truth changes [Task 1][Task 3]
+252:scope: Add candidate-only C919 workstation analysis features, keep them off the main worktree until reviewed, and hand them off through GitHub + Notion so Claude Code can decide whether to adopt them.
+273:- isolated-branch, candidate commit, codex/failure_simulation_function_module, ac87a6b, 45381e7, Notion handoff, Claude Code review, cherry-pick, branch URL, commit URL, Asset Type Handoff
+347:- Missing local paths yield critical blockers; dirty git worktrees yield warning blockers and a "review local changes" next action; if no issue is detected, the scanner still returns a deterministic "prepare next task pack" next action [Task 2]
+383:- codex-cli, gpt-5.4, xhigh, fast mode, priority processing, service_tier, codex debug models, additional_speed_tiers, ~/.codex/config.toml, codex exec, codex review, cx-auto
+469:- when taking over an active repo, the user said "接手项目的开发" and "指挥Claude APP或者Claude CLI对项目进行深度开发优化" -> default to fixing the execution path and implementing, not staying in review/planning mode [Task 1][Task 2]
+470:- when control-plane review would slow execution, the user said "决策权完全绕过Kogami和Notion里的Opus 4.7" -> if this workflow comes up again, own the local execution decisions instead of waiting on Notion-side approval unless a real gate appears [Task 1][Task 2]
+501:- OpenClaw, AI-CFD, Notion作为指挥中枢，Github作为唯一代码真相库, ~/.openclaw/openclaw.json, plugins.allow, openclaw config validate --json, MAIN_OK, CODEX_BUILDER_OK, CLAUDE_REVIEW_OK, NOTION_SYNC_OK, cfd-harness-unified
+517:- when naming available tools as "Codex、Claude code、Minimax", the user implicitly wanted explicit role assignment between these tool families -> future configs should assign conductor/builder/review/sync responsibilities instead of assuming a single generic agent [Task 1]
+521:- The real live config surface was `~/.openclaw/openclaw.json`; the actual repo truth for this rollout was `/Users/Zhuanz/Desktop/cfd-harness-unified`, not the chat thread cwd [Task 1]
+522:- The validated four-agent split was `main` as conductor, `codex-builder` for implementation/test/bugfix, `claude-review` for architecture/risk review, and `notion-sync` for spec translation/sync summaries, with separate workspaces and handoff/status artifacts under `project_state/openclaw-live-setup/` [Task 1]
+525:- The usable routing at the end of the rollout was pragmatic: `main`, `codex-builder`, and `claude-review` ran on `claude-cli/opus-4.6`, while `notion-sync` used `deepseek/deepseek-chat`; Codex remained configured as fallback only [Task 2]
+564:- rollout_summaries/2026-04-17T09-59-05-XzK5-ai_fea_adr006_autonomous_merges_smoke_e2e_demo_gate.md (cwd=/Users/Zhuanz/20260408 AI StructureAnalysis, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T17-59-05-019d9ae1-3a62-7232-9e44-28537fac30dd.jsonl, updated_at=2026-04-18T07:10:00+00:00, thread_id=019d9ae1-3a62-7232-9e44-28537fac30dd, review note appended without changing verdict)
+568:- Review Summary, verdict unchanged, gate review note, AI-FEA-P0-10, results.vtp not visually validated, manifest contract incomplete
+573:- when defining stop conditions, the user wrote "仅在以下三类情况写 REVIEW_REQUEST 到 Notion 并停机" -> stop only for ADR changes, repeated/unknown reviewer failures, or visual/demo milestones; do not create extra pauses [Task 1]
+576:- when reviewing solver realism, the user said "CalculiX 是主求解器" -> future smoke/demo work must distinguish CI-safe stubs from a real solver path and must not over-claim a pass [Task 2]
+584:- For milestone/demo PRs, `Review Summary` and final `Verdict` must stay separate; appending a gate review note to Notion is allowed while the PR stays open [Task 3]
+589:- Symptom: CI is green but the demo gate is still not actually satisfied -> cause: the smoke test used stubs and the gate required human visual validation plus manifest-contract proof -> fix: stop at the demo gate, append a review note, and keep the PR unmerged until the human check is done [Task 2][Task 3]
+646:- git status --short --branch, 287 passed, dirty worktree, .notion-cache, .planning, __pycache__, reviewable implementation path
+654:- the user wanted a reviewable implementation path, so future similar runs should distinguish "suite green" from "ready to hand off" and clean or separate unrelated local artifacts before stopping [Task 5]
+672:- Symptom: `287 passed` but the deliverable is still messy -> cause: local artifacts and unrelated files remained in the worktree -> fix: review the diff and clean/commit only intended changes before calling the branch handoff-ready [Task 5]
+729:- `scripts/notion_sync.py` became the reusable AI-Notebooklm sync surface with `doctor`, `search`, `sync`, `writeback-phase`, `create-artifact`, `upsert-review`, and `upsert-task` commands [Task 3]
+731:- Local completion was substantial in the V4.0 rollout: retrieval eval tooling, RRF tuning, staging/UAT runbooks, README updates, Notion artifact/task/review rows, and `210 passed` regression validation [Task 4]
+742:# Task Group: cfd-harness-unified assessment framing, workbench direction, and executor handoffs
+744:scope: Reassess `cfd-harness-unified` without direct repo edits, preserve the difference between demo-first narrowing and first-customer workbench continuation, and package Chinese executor briefs that respect the user’s current product framing.
+745:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s assessment, product-direction, and executor-handoff workflow, but exact failing tests, anchor cases, runtime paths, and branch state are checkout-specific.
+751:- rollout_summaries/2026-04-25T18-12-42-1do3-openclaw_cfd_harness_workbench_reassessment_first_customer.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/26/rollout-2026-04-26T02-12-42-019dc5d8-0898-7f92-ba37-55011364bd5f.jsonl, updated_at=2026-04-25T18:42:57+00:00, thread_id=019dc5d8-0898-7f92-ba37-55011364bd5f, OpenClaw reassessment after the user said they are the first customer and do not want an immediate big pivot)
+761:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+765:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+771:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, Chinese Claude Code brief delivered in requested structure)
+808:# Task Group: cfd-harness-unified governance closeout and planning gates
+810:scope: Close out accepted phases in `cfd-harness-unified`, normalize Notion-vs-repo naming drift, and keep future phases planning-only until the explicit solver/routing gate is reviewed.
+811:applies_to: cwd=/Users/Zhuanz/Desktop/cfd-harness-unified; reuse_rule=safe for this repo’s Notion-governed phase/gate work, but phase/task IDs and review packets are rollout-specific.
+817:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 8 closeout and evidence normalization)
+827:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, Phase 9 kept as planning-only with decision-tree packet))
+837:- rollout_summaries/2026-04-16T17-04-02-U9ea-phase8_closeout_and_phase9_planning_gate_prep.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/17/rollout-2026-04-17T01-04-02-019d973f-efab-7132-bd99-5e0ebb839e12.jsonl, updated_at=2026-04-17T05:16:53+00:00, thread_id=019d973f-efab-7132-bd99-5e0ebb839e12, handoff prompt prepared instead of silent activation))
+841:- Opus 4.7 activation review, self-dispatch, planning-only, single-engine OpenFOAM, SU2 reference-only, CFX hold, review packet
+845:- when working this repo, the user phrased the boundary as "继续推进开发，直至需要Opus 4.7介入" -> keep executing autonomously until a real gate is reached, then stop with a ready review packet [Task 1][Task 2][Task 3]
+852:- Phase 9 must start from a bounded decision tree: keep single-engine OpenFOAM, allow reference-only external solver surfaces, or open one bounded proof slice; anything broader still needs review [Task 2]
+858:- Symptom: planning work accidentally looks like activation -> cause: Phase 9 docs/task text are not explicit enough about `Planned` vs `Active` -> fix: state planning-only mode in phase page, tasks, dashboard summary, and review packet [Task 2]
+891:- rollout_summaries/2026-04-12T15-33-54-ByPi-jerry_ai_cfd_notion_sync_and_cfd_harness_unified_context_mis.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/12/rollout-2026-04-12T23-33-54-019d8253-fa8b-7f40-9775-46e6e03db8ac.jsonl, updated_at=2026-04-16T17:03:18+00:00, thread_id=019d8253-fa8b-7f40-9775-46e6e03db8ac, later cfd-harness-unified instruction block correctly treated as mismatch)
+906:- bounded_action_plan, Phase1BoundedActionPlan, supported, clarification_needed, unsupported, result_output_surface, phase1_bounded_action_plan_only, local_review_surface, workbench upstream integration, narrow Phase 1 bounded planning boundary
+912:- rollout_summaries/2026-04-02T04-41-46-kVGb-phase1_ui_distance_and_interactive_postprocess_workbench.md (cwd=/Users/Zhuanz/Documents/20260330 Jerry AI CFD Project, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/02/rollout-2026-04-02T12-41-46-019d4c7f-5489-7a63-be71-48d72549d01b.jsonl, updated_at=2026-04-07T19:00:24+00:00, thread_id=019d4c7f-5489-7a63-be71-48d72549d01b, static review seed distinguished from the desired interactive workbench)
+916:- UI demo, 整个真实工作流程的UI界面, 不能只是静态UI, 自然语言交互, interactive_postprocess_workbench_v1, local_review_surface, phase1_report_review_seed_page.py, 37 passed, workflow visualization
+927:- when accepted, the user wanted one concrete next step rather than options -> end this repo’s review/acceptance slices with a single next named direction [Task 1][Task 4]
+937:- `local_review_surface/phase1_copilot_workbench.py` now consumes the real upstream `build_bounded_action_plan(...)` output, carries `action_plan_support_status` / `action_plan_note` / `action_plan_output_kind`, and should remain a local HTML-only, advisory-only surface [Task 4]
+939:- The currently implemented UI surface is still a deterministic local HTML review seed; an NL-driven postprocess cockpit belongs to a separate governed proposal such as `interactive_postprocess_workbench_v1`, not to the already-accepted static Phase 1 path [Task 5]
+948:- Symptom: a future agent overstates how close the repo is to a "real UI" -> cause: the deterministic review seed was mistaken for an interactive workbench -> fix: say clearly that the static Phase 1 chain is real and tested, but NL-triggered postprocessing and workflow control need a new governed phase [Task 5]
+952:scope: Continue AI FANTUI LogicMVP automatically from `.planning` and Notion-synced state, keep the control tower current, and use approved/no-review gate state to decide whether to keep moving.
+963:- AI FANTUI LogicMVP 控制塔, NOTION_API_KEY, gsd_notion_sync.py, prepare-opus-review, writeback timeout, stronger QA baseline, 175 tests OK, 10 demo smoke scenarios pass, 8/8 shared validation checks pass
+989:- the user’s repeated instruction was: "根据Notion上下文、开发规则，继续全自动推进，不要停止，除非需要我手动让Opus 4.6介入审查" -> default to uninterrupted autonomous execution when the gate is approved, and only interrupt for manual Opus review [Task 2][Task 3]
+1072:- when reviewing the early demo, the user said "大量的文字全都放到页面次要的位置" and asked for a "简化版的拉杆" with "实时显示目前的拉杆相关的参数" -> default demo iterations to a visual-first cockpit with collapsed backstory, not prompt-first Q&A [Task 5]
+1095:scope: Build and sync an independent Notion control tower for AI ControlLogicMaster, integrate it with GSD automation, and treat freeze-signoff planning review as a strict read-only acceptance gate where navigation/routing text can block acceptance.
+1109:## Task 2: Upgrade the repo into a GSD-driven automated cockpit with manual Opus review pauses
+1123:- rollout_summaries/2026-04-07T14-48-14-t3g6-post_phase7_final_freeze_signoff_governance_planning_review.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/07/rollout-2026-04-07T22-48-14-019d686a-5f10-79f2-9918-ff5cdc98e6aa.jsonl, updated_at=2026-04-08T15:13:06+00:00, thread_id=019d686a-5f10-79f2-9918-ff5cdc98e6aa, initial rejection then accepted rerun after README/docs routing fix)
+1127:- independent planning review, do not write acceptance_audit_log.yaml, do not modify freeze_gate_status.yaml, accepted_for_review, freeze-complete, docs incomplete, README routing, docs/README.md, MILESTONE_BOARD.md
+1134:- rollout_summaries/2026-04-02T16-11-48-lkTw-aplh_post_phase7_manual_review_intake_action_review.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/03/rollout-2026-04-03T00-11-48-019d4ef7-13d3-7311-a159-a08420027a5a.jsonl, updated_at=2026-04-08T12:29:35+00:00, thread_id=019d4ef7-13d3-7311-a159-a08420027a5a, manual intake accepted but explicitly not freeze approval)
+1138:- FORMAL-POP-APPROVAL-20260407-002, 49 != 50, FormalPopulationExecutor, preflight_targets, manual_review_intake, accepted_for_review, pending_manual_decision, freeze-complete, checklist incomplete, freeze_gate_status hash
+1140:## Task 5: Create a non-executable manual review intake request package and keep routing pointed at independent review
+1144:- rollout_summaries/2026-04-02T18-05-38-tXWd-post_phase7_manual_review_intake_request_package.md (cwd=/Users/Zhuanz/20260402 AI ControlLogicMaster, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/03/rollout-2026-04-03T02-05-38-019d4f5f-4b79-7e92-8037-4ad30697428d.jsonl, updated_at=2026-04-08T01:38:10+00:00, thread_id=019d4f5f-4b79-7e92-8037-4ad30697428d, markdown-only request packet plus review input)
+1154:- the user asked to integrate GSD and make it "完全自动化的开发，除了需要暂停下来让我定期手动触发Opus 4.6审查" -> automate by default but preserve hard manual review pauses [Task 2]
+1155:- for freeze-signoff governance review, the user required a strict independent review with no writes to freeze artifacts -> treat this as review-only until the user explicitly changes scope [Task 3]
+1156:- when the user said "你是 independent approval authority… 你不是 corrected request packet 作者… 你不是 Phase 8 executor" -> preserve strict role separation between approval, review, execution, and freeze authority in this repo [Task 4]
+1158:- when the request-package input said the executor "must not write manual intake state" and "must not be valid input to any CLI command" -> default manual-review-intake packaging work to markdown-only, non-mutating deliverables [Task 5]
+1159:- when the user said acceptance "must not equal freeze approval" and "cannot directly enter final freeze signoff" -> always restate that `accepted_for_review` is not `freeze-complete`, even when readiness evidence looks strong [Task 3][Task 4]
+1168:- In freeze-governance review, README/docs/milestone-board routing is a real acceptance criterion; stale navigation can block acceptance even when substantive planning logic is correct [Task 3]
+1170:- `freeze_readiness_report.yaml` can show `formal_state: accepted_for_review`, `population_state: populated`, `validation_state: post-validated`, and `G6-E passed: true` while `freeze-readiness --dir artifacts` still fails on `Checklist Completed: Fail (Docs incomplete)`; that is planning evidence, not permission to sign off [Task 3][Task 4]
+1172:- The manual review intake request package in this repo is a non-executable artifact pair: `docs/POST_PHASE7_MANUAL_REVIEW_INTAKE_REQUEST.md` and `docs/POST_PHASE7_MANUAL_REVIEW_INTAKE_REQUEST_REVIEW_INPUT.md`, with README/docs routing updated so the next step is independent review rather than manual intake or freeze [Task 5]
+1179:- Symptom: a governance review package seems technically sound but still should not be accepted -> cause: operator-facing docs still route users to the wrong gate -> fix: verify README/docs index/milestone-board navigation before acceptance [Task 3]
+1181:- Symptom: a repo state labeled `accepted_for_review` is treated as manual signoff complete -> cause: manual intake acceptance, pending manual decision, and freeze completion were collapsed -> fix: keep those states distinct in reports, docs, and next-step selection [Task 3][Task 4]
+1182:- Symptom: a manual-review-intake packet accidentally starts behaving like an executable step -> cause: the request package, action review, and freeze flows were collapsed together -> fix: keep the packet markdown-only, keep `.aplh` state untouched, and re-read rendered README/docs routing after patching [Task 5]
+1338:- Phase 3, KnowledgeCompiler, orchestrator, TaskWizard, baseline freeze, publish_contract, diff_engine, benchmark validators, Opus review, task decomposition
+1350:- `BASELINE_MANIFEST.json` is the authoritative inventory for diff-engine work, and `publish_contract.md` plus `diff_engine.md` are the rule sources for automatic review triggers such as `EVIDENCE_EDIT` and `CHART_RULE_EDIT` [Task 4][Task 6]
+1358:- Symptom: Phase 3 planning overstates the readiness of the baseline -> cause: manifest counts or follow-up review items do not match the repo snapshot -> fix: start by reconciling the baseline inventory and missing follow-up items before decomposing new orchestrator work [Task 6]
+1415:- g3_gate, GateConfig, trigger_gate, g4_gate, g5_gate, g6_gate, tests/test_p4_07_g3_gate.py, tests/test_p4_08_g4_g6_gates.py, trigger_code_review.sh, requests, yaml, numpy, matplotlib
+1421:- rollout_summaries/2026-04-07T15-56-06-sCzN-p4_09_notion_reviews_sync.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/07/rollout-2026-04-07T23-56-06-019d68a8-8151-76c3-8c63-ea47fc4c3843.jsonl, updated_at=2026-04-07T16:09:37+00:00, thread_id=019d68a8-8151-76c3-8c63-ea47fc4c3843, Reviews DB sync with schema-aware mapping)
+1648:# Task Group: notion-cfd-harness correctness-review contract
+1650:scope: Perform read-only correctness reviews in `notion-cfd-harness` with line-cited findings only, no edits, no style commentary, and explicit handling for missing files or ambiguous paths.
+1651:applies_to: cwd=/Users/Zhuanz/Desktop/notion-cfd-harness; reuse_rule=safe for review-style tasks in this repo family, but keep file targets and findings tied to the inspected checkout.
+1653:## Task 1: Preserve the strict review-only deliverable format
+1657:- rollout_summaries/2026-04-08T17-18-40-2J04-phase3_code_review_correctness_and_edge_cases.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/09/rollout-2026-04-09T01-18-40-019d6e1a-733a-7141-80bd-cb62aa056db8.jsonl, updated_at=2026-04-08T17:18:49+00:00, thread_id=019d6e1a-733a-7141-80bd-cb62aa056db8, review contract and formatting expectations)
+1661:- read-only review, BUG WARNING OK, exact file path and line number, summary table, Do NOT refactor or change style, only report findings
+1667:- rollout_summaries/2026-04-08T16-32-28-Z8XS-phase3_correctness_review_analogy_planner_cad.md (cwd=/Users/Zhuanz/Desktop/notion-cfd-harness, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/09/rollout-2026-04-09T00-32-28-019d6df0-25d0-7081-b84e-20b46a8ea338.jsonl, updated_at=2026-04-08T16:41:56+00:00, thread_id=019d6df0-25d0-7081-b84e-20b46a8ea338, concrete defects in analogy scoring, E6 relaxation, planner coverage, and STL parsing)
+1675:- when the user asks for a review here, they mean it literally: "Do NOT refactor or change style — only flag genuine defects or missing guards" -> stay in correctness/edge-case/type-safety mode and avoid style commentary [Task 1][Task 2]
+1678:- the user said "This is a read-only review. Only report findings" -> do not edit files in this workflow [Task 1]
+1682:- The expected deliverable shape is one section per area with reviewed line ranges, `BUG / WARNING / OK` findings, exact snippets for non-OK items, and a final table `| Area | BUGs | WARNINGs | Status |` [Task 1]
+1687:- Symptom: a review answer drifts into general commentary or architecture advice -> cause: treating “review” as broad feedback instead of a defect audit -> fix: report only grounded correctness findings with file/line references [Task 1]
+1688:- Symptom: a path looks missing and the review stops there -> cause: failing to search for similarly named files first -> fix: search nearby names/locations before concluding absence, then say explicitly what was and was not found [Task 1]
+1713:- /Applications/Codex.app/Contents/Resources/codex, codex exec, codex review, codex app, codex resume, cx-auto 20, CLAUDE.md, quota exhaustion, subprocess
+1726:- Codex CLI itself is a normal local executable at `/Applications/Codex.app/Contents/Resources/codex`, and the available subprocess/session surfaces include `exec`, `review`, `resume`, and `app` [Task 2]
+1767:- 直接复制给claude code的提示词, Opus 4.6, MiniMax, 不要从零开始, 不要推翻已有优化, GitHub integration, Claude Code on the web, scan.md, implement.md, fix.md, review-local.md, Claude March 2026 usage promotion
+
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,220p' /Users/Zhuanz/.codex/plugins/cache/openai-curated/superpowers/6807e4de4d8ceceefb51abd9e4ba3269030352c4/skills/using-superpowers/SKILL.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+ succeeded in 0ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority
+2. **Superpowers skills** — override default system behavior where they conflict
+3. **Default system prompt** — lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" → brainstorming first, then implementation skills.
+"Fix this bug" → debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+codex
+Using the repo’s review-only contract and the code-review workflow as the frame here. Next I’m checking the exact diff for `84fa4cf`, then reading the three helpers and the new test side by side to verify the vanish path and parity.
+exec
+/bin/zsh -lc 'git rev-parse --show-toplevel' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+/Users/Zhuanz/Desktop/cfd-harness-unified
+
+exec
+/bin/zsh -lc 'git show --stat --oneline 84fa4cf' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+84fa4cf fix(render): M-RENDER-API Round-5 Codex fix · OSError tolerance in pre/post-replace stat (DEC-V61-095)
+ ui/backend/services/render/field_sample.py   | 22 ++++++++++++---
+ ui/backend/services/render/geometry_glb.py   | 20 +++++++++++---
+ ui/backend/services/render/mesh_wireframe.py | 24 ++++++++++++-----
+ ui/backend/tests/test_field_sample.py        | 40 ++++++++++++++++++++++++++++
+ 4 files changed, 92 insertions(+), 14 deletions(-)
+
+exec
+/bin/zsh -lc 'git diff --unified=80 c4264f7..HEAD -- ui/backend/services/render/field_sample.py ui/backend/services/render/geometry_glb.py ui/backend/services/render/mesh_wireframe.py tests/ui_backend/test_render_field_sample.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+diff --git a/ui/backend/services/render/field_sample.py b/ui/backend/services/render/field_sample.py
+new file mode 100644
+index 0000000..8a360d0
+--- /dev/null
++++ b/ui/backend/services/render/field_sample.py
+@@ -0,0 +1,337 @@
++"""OpenFOAM scalar field → binary float32 stream (Tier-A fallback).
++
++M-RENDER-API Tier-A B.3 (DEC-V61-095 spec_v2 §B.3). Reads a scalar
++volScalarField from an OpenFOAM time-directory and returns the
++``internalField`` values as a packed float32 binary blob.
++
++Per spec_v2 §B.3, Tier-A ships the **binary stream fallback** rather
++than the full glTF-accessor-with-COLOR_0 path — the latter is harder
++to assemble in our hand-built glTF builder and the frontend can do
++colormap mapping on a raw float32 array just as well. M-VIZ.results
++upgrades to baked glTF colors.
++
++Source resolution:
++    <imported_case_dir>/{run_id}/{name}        (M5.1 OpenFOAM time-dir)
++
++(The Round-1 review flagged a `reports/phase5_fields/` fallback as
++dead code — that artifact tree stores `{case_id}/{timestamp}/VTK/...`,
++not raw `{run_id}/{name}` text fields, so it could never resolve a
++real archived run. Removed in Round-2.)
++
++Tier-A scope:
++    - Scalar fields only (volScalarField · internalField)
++    - nonuniform List<scalar> only (uniform-field handling deferred)
++    - No boundary fields (Tier-A internalField only)
++
++Cache layout:
++    <imported_case_dir>/.render_cache/field-{run_id}-{name}.bin
++"""
++from __future__ import annotations
++
++import os
++import re
++import secrets
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++import numpy as np
++
++from ui.backend.services.case_drafts import is_safe_case_id
++from ui.backend.services.case_scaffold import template_clone
++
++
++CacheStatus = Literal["hit", "miss", "rebuild"]
++
++# Match: ``internalField nonuniform List<scalar> <count>(<numbers>)``
++# with arbitrary whitespace + an optional newline before the count.
++# We tolerate ``List<scalar>`` and ``List<float>`` (some emitters use float).
++_INTERNAL_NONUNIFORM_RE = re.compile(
++    r"internalField\s+nonuniform\s+List<\s*(?:scalar|float|double)\s*>\s*"
++    r"(\d+)\s*\(\s*([^)]*?)\s*\)\s*;",
++    re.DOTALL,
++)
++
++
++@dataclass(frozen=True, slots=True)
++class FieldSampleResult:
++    cache_path: Path
++    point_count: int
++    status: CacheStatus
++
++
++@dataclass(frozen=True, slots=True)
++class FieldSampleError(Exception):
++    failing_check: Literal[
++        "case_not_found",
++        "run_not_found",
++        "field_not_found",
++        "field_unsupported",
++        "field_parse_error",
++    ]
++    message: str
++
++    def __str__(self) -> str:
++        return f"{self.failing_check}: {self.message}"
++
++
++def _imported_case_dir(case_id: str) -> Path:
++    return template_clone.IMPORTED_DIR / case_id
++
++
++def _safe_field_segment(name: str, kind: str) -> None:
++    """Path-traversal guard for run_id and field name segments.
++
++    is_safe_case_id is too narrow (no dot allowed) for OpenFOAM run_ids
++    that often carry timestamps with dots (e.g. ``run_2026-04-28T10.30``).
++    Mirror run_ids._SEGMENT_RE which allows `[A-Za-z0-9_-]` after a
++    leading alphanumeric.
++    """
++    if not name or name in (".", ".."):
++        raise FieldSampleError(
++            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
++            message=f"invalid {kind}: empty or '.'/'..'",
++        )
++    if "/" in name or "\\" in name or ".." in name:
++        raise FieldSampleError(
++            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
++            message=f"invalid {kind}: contains separator or '..'",
++        )
++    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$", name):
++        raise FieldSampleError(
++            failing_check="run_not_found" if kind == "run_id" else "field_not_found",
++            message=f"invalid {kind}: must match [A-Za-z0-9][A-Za-z0-9_-]*",
++        )
++
++
++def _resolve_field_path(case_id: str, run_id: str, name: str) -> Path:
++    """Return the on-disk OpenFOAM scalar-field file for the case+run+name.
++
++    Raises FieldSampleError with case_not_found / run_not_found /
++    field_not_found per which level the resolution failed at.
++    """
++    if not is_safe_case_id(case_id):
++        raise FieldSampleError(
++            failing_check="case_not_found",
++            message=f"unsafe case_id: {case_id!r}",
++        )
++    case_dir = _imported_case_dir(case_id)
++    if not case_dir.is_dir():
++        raise FieldSampleError(
++            failing_check="case_not_found",
++            message=f"imported case dir missing: {case_dir}",
++        )
++
++    _safe_field_segment(run_id, "run_id")
++    _safe_field_segment(name, "field_name")
++
++    run_dir = case_dir / run_id
++    if not run_dir.is_dir():
++        raise FieldSampleError(
++            failing_check="run_not_found",
++            message=f"no run dir for {run_id!r} under {case_id!r}",
++        )
++    candidate = run_dir / name
++    if not candidate.is_file():
++        raise FieldSampleError(
++            failing_check="field_not_found",
++            message=f"field {name!r} not found in run {run_id!r} of case {case_id!r}",
++        )
++
++    # Round-2 Finding 1: containment guard against symlink escape.
++    # is_safe_case_id + segment validators stop literal traversal in URL
++    # path segments, but a symlink under <case_dir>/<run_id>/<name>
++    # pointing outside IMPORTED_DIR would still let us read+transcode an
++    # arbitrary file. Resolve strictly and assert the resolved path stays
++    # under the case dir's resolved root.
++    try:
++        resolved = candidate.resolve(strict=True)
++        case_root = case_dir.resolve(strict=True)
++        resolved.relative_to(case_root)
++    except (FileNotFoundError, OSError, ValueError):
++        raise FieldSampleError(
++            failing_check="field_not_found",
++            message=(
++                f"field {name!r} resolution escaped case dir for "
++                f"run {run_id!r} of case {case_id!r}"
++            ),
++        )
++    return resolved
++
++
++def _parse_internal_scalar_field(field_path: Path) -> np.ndarray:
++    """Return the internalField scalar values as a float32 numpy array.
++
++    Tier-A: nonuniform List<scalar> only. Uniform-field (one value
++    replicated across all cells) handling is deferred to M-VIZ.results.
++    """
++    try:
++        text = field_path.read_text(encoding="utf-8", errors="replace")
++    except OSError as exc:
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=f"could not read {field_path.name}: {exc!r}",
++        )
++
++    m = _INTERNAL_NONUNIFORM_RE.search(text)
++    if not m:
++        # Detect uniform fields explicitly so we can return a clearer
++        # 422 (unsupported) instead of a generic parse error.
++        if re.search(r"internalField\s+uniform\s+", text):
++            raise FieldSampleError(
++                failing_check="field_unsupported",
++                message="uniform internalField not supported in Tier-A",
++            )
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=f"no nonuniform List<scalar> internalField in {field_path.name}",
++        )
++
++    declared_count = int(m.group(1))
++    body = m.group(2)
++    try:
++        values = np.fromstring(body, sep=" ", dtype=np.float32)
++    except Exception as exc:
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=f"could not parse field values: {exc!r}",
++        )
++    if values.size != declared_count:
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=(
++                f"declared count {declared_count} != parsed length {values.size} "
++                f"in {field_path.name}"
++            ),
++        )
++    return values
++
++
++def _cache_target(case_dir: Path, run_id: str, name: str) -> Path:
++    return case_dir / ".render_cache" / f"field-{run_id}-{name}.bin"
++
++
++def _is_cache_fresh(cache: Path, source: Path) -> bool:
++    if not cache.exists():
++        return False
++    try:
++        return cache.stat().st_mtime >= source.stat().st_mtime
++    except FileNotFoundError:
++        return False
++
++
++def _atomic_write_guarded(
++    target: Path,
++    payload: bytes,
++    source: Path,
++    expected_src_mtime_ns: int,
++) -> None:
++    """Atomic write with pre-replace + post-replace source-mutation guards.
++
++    Round-3 Finding 3 closure (Codex Round-3 PARTIAL): the prior
++    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
++    Even with a post-replace stat the concurrent-reader window between
++    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
++    stale bytes for one request.
++
++    This guarded variant:
++      1. Writes the payload to a temp file.
++      2. Re-stats ``source``; if it changed since the rebuild started,
++         unlinks the temp and raises ``RuntimeError`` BEFORE the
++         replace — concurrent readers never see the stale cache.
++      3. ``os.replace``s the temp into place.
++      4. Re-stats ``source`` once more; if it changed during (or
++         immediately after) the replace, unlinks the now-stale cache
++         and raises. This collapses the residual window to the kernel
++         syscall granularity.
++
++    Caller is responsible for converting the RuntimeError into its own
++    failing_check.
++    """
++    target.parent.mkdir(parents=True, exist_ok=True)
++    tmp = target.with_suffix(
++        f".tmp.{secrets.token_hex(4)}{target.suffix}"
++    )
++    tmp.write_bytes(payload)
++
++    # Round-4 Codex regression: ``source.stat()`` raises FileNotFoundError
++    # if the source vanished between temp-write and pre-replace stat,
++    # which bypassed the service's failing_check translator AND leaked
++    # the temp artifact. Treat OSError (incl. FileNotFoundError) the
++    # same as a mtime mismatch — abort + clean up.
++    def _current_mtime() -> int | None:
++        try:
++            return source.stat().st_mtime_ns
++        except OSError:
++            return None
++
++    pre = _current_mtime()
++    if pre != expected_src_mtime_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated or vanished before atomic replace"
++        )
++    os.replace(tmp, target)
++    post = _current_mtime()
++    if post != expected_src_mtime_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated or vanished during atomic replace"
++        )
++
++
++def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
++    """Public entrypoint — return the cached float32 binary for the field.
++
++    Raises FieldSampleError on any failure path the route maps to 4xx.
++    """
++    field_path = _resolve_field_path(case_id, run_id, name)
++    case_dir = _imported_case_dir(case_id)
++    cache = _cache_target(case_dir, run_id, name)
++
++    if _is_cache_fresh(cache, field_path):
++        # Cache hit — read the cached array's length to populate the result.
++        # The frontend uses Content-Length header for the same info, but the
++        # service returns it for tests / logging.
++        n = cache.stat().st_size // 4
++        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
++
++    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
++    # parsing, re-checked post-parse, AND threaded into the guarded
++    # atomic write so the rebuild aborts BEFORE os.replace if the source
++    # changed (no stale cache ever becomes visible to concurrent
++    # readers) and aborts WITH unlink if the source changes during the
++    # replace syscall itself (closes the kernel-syscall residual).
++    src_mtime_before = field_path.stat().st_mtime_ns
++    values = _parse_internal_scalar_field(field_path)
++    src_mtime_after_parse = field_path.stat().st_mtime_ns
++    if src_mtime_after_parse != src_mtime_before:
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=(
++                f"source {field_path.name} mutated during rebuild "
++                "(retry the request)"
++            ),
++        )
++    payload = values.astype(np.float32, copy=False).tobytes()
++    status: CacheStatus = "rebuild" if cache.exists() else "miss"
++    try:
++        _atomic_write_guarded(
++            cache, payload, field_path, src_mtime_before
++        )
++    except RuntimeError as exc:
++        raise FieldSampleError(
++            failing_check="field_parse_error",
++            message=f"{exc} (retry the request)",
++        )
++    return FieldSampleResult(
++        cache_path=cache,
++        point_count=int(values.size),
++        status=status,
++    )
+diff --git a/ui/backend/services/render/geometry_glb.py b/ui/backend/services/render/geometry_glb.py
+new file mode 100644
+index 0000000..7077a83
+--- /dev/null
++++ b/ui/backend/services/render/geometry_glb.py
+@@ -0,0 +1,255 @@
++"""STL → glTF binary (.glb) transcoding with mtime-keyed cache.
++
++M-RENDER-API Tier-A B.1 (DEC-V61-095 spec_v2 §B.1). The Viewport's
++glb consumer (M-PANELS / M-VIZ.mesh follow-ups) calls
++GET /api/cases/<id>/geometry/render which delegates here.
++
++Cache layout:
++
++    <imported_case_dir>/.render_cache/geometry.glb
++
++Cache invalidation: source-mtime comparison. If any *.stl under
++``triSurface/`` is newer than the cached glb, the cache is rebuilt.
++
++Atomic write: the new glb lands in a tempfile next to the cache
++target, then ``os.replace`` moves it into place. Concurrent readers
++either see the old bytes (pre-replace) or the new bytes (post-replace)
++— never a half-written file.
++"""
++from __future__ import annotations
++
++import os
++import secrets
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++import trimesh
++
++from ui.backend.services.case_drafts import is_safe_case_id
++from ui.backend.services.case_scaffold import template_clone
++
++
++CacheStatus = Literal["hit", "miss", "rebuild"]
++
++
++@dataclass(frozen=True, slots=True)
++class GlbBuildResult:
++    """Return value carrying the resolved cache path + which path it took.
++
++    ``status`` is informational — the route does not branch on it, but
++    tests assert it to confirm the cache invalidation contract.
++    """
++    cache_path: Path
++    status: CacheStatus
++
++
++@dataclass(frozen=True, slots=True)
++class GeometryRenderError(Exception):
++    """Raised on any failure path the route maps to a 4xx response.
++
++    ``failing_check`` is the route's HTTP-status discriminator:
++
++        case_not_found  → 404
++        no_source_stl   → 422
++        transcode_error → 422
++    """
++    failing_check: Literal["case_not_found", "no_source_stl", "transcode_error"]
++    message: str
++
++    def __str__(self) -> str:
++        return f"{self.failing_check}: {self.message}"
++
++
++def _imported_case_dir(case_id: str) -> Path:
++    return template_clone.IMPORTED_DIR / case_id
++
++
++def _resolve_source_stl(case_dir: Path) -> Path:
++    """Pick the canonical STL under ``case_dir/triSurface/``.
++
++    Mirrors the case-insensitive match in ``routes/geometry_render.py``
++    (Codex round-1 P2 #1 fix on M-VIZ): ``glob("*.stl")`` would miss
++    uploads named ``MODEL.STL`` since ``_safe_origin_filename``
++    preserves the original casing.
++
++    Round-2 Finding 1: resolves the chosen path strictly and asserts it
++    stays under the case dir, so a symlink in ``triSurface/`` cannot
++    redirect us to an arbitrary file outside IMPORTED_DIR.
++    """
++    triSurface = case_dir / "triSurface"
++    if not triSurface.is_dir():
++        raise GeometryRenderError(
++            failing_check="no_source_stl",
++            message=f"no triSurface/ under {case_dir}",
++        )
++    stls = sorted(p for p in triSurface.iterdir() if p.suffix.lower() == ".stl")
++    if not stls:
++        raise GeometryRenderError(
++            failing_check="no_source_stl",
++            message=f"no .stl under {triSurface}",
++        )
++    chosen = stls[0]
++    try:
++        resolved = chosen.resolve(strict=True)
++        case_root = case_dir.resolve(strict=True)
++        resolved.relative_to(case_root)
++    except (FileNotFoundError, OSError, ValueError):
++        raise GeometryRenderError(
++            failing_check="no_source_stl",
++            message=f"STL {chosen.name} resolved outside case dir",
++        )
++    return resolved
++
++
++def _cache_target(case_dir: Path) -> Path:
++    return case_dir / ".render_cache" / "geometry.glb"
++
++
++def _is_cache_fresh(cache: Path, source: Path) -> bool:
++    if not cache.exists():
++        return False
++    try:
++        return cache.stat().st_mtime >= source.stat().st_mtime
++    except FileNotFoundError:
++        return False
++
++
++def _atomic_write_guarded(
++    target: Path,
++    payload: bytes,
++    source: Path,
++    expected_src_mtime_ns: int,
++) -> None:
++    """Atomic write with pre- and post-replace source-mutation guards.
++
++    Round-4 Finding 3 closure: re-stat ``source`` immediately before
++    ``os.replace`` and abort (deleting the temp) if it changed since
++    the rebuild started — this prevents a stale cache from EVER
++    becoming visible to concurrent readers in the (replace, unlink)
++    window. A post-replace re-stat collapses the kernel-syscall
++    residual race; on mismatch the just-replaced cache is unlinked.
++    """
++    target.parent.mkdir(parents=True, exist_ok=True)
++    tmp = target.with_suffix(
++        f".tmp.{secrets.token_hex(4)}{target.suffix}"
++    )
++    tmp.write_bytes(payload)
++
++    # Round-4 Codex regression: source.stat() raises FileNotFoundError
++    # if the source vanished mid-build (deleted/renamed between temp-
++    # write and pre-replace stat), which leaked the temp file and
++    # bypassed the failing_check translator. Treat OSError (incl.
++    # FileNotFoundError) the same as a mtime mismatch.
++    def _current_mtime() -> int | None:
++        try:
++            return source.stat().st_mtime_ns
++        except OSError:
++            return None
++
++    if _current_mtime() != expected_src_mtime_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated or vanished before atomic replace"
++        )
++    os.replace(tmp, target)
++    if _current_mtime() != expected_src_mtime_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            f"source {source.name} mutated or vanished during atomic replace"
++        )
++
++
++def _transcode_to_glb(source_stl: Path) -> bytes:
++    """Run trimesh's STL→glb pipeline.
++
++    trimesh raises various subclasses on parse failure (ValueError,
++    LookupError, …). We collapse them to GeometryRenderError so the
++    route layer has a single error class to map.
++    """
++    try:
++        mesh = trimesh.load(source_stl, force="mesh")
++    except Exception as exc:
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=f"trimesh.load({source_stl.name}) failed: {exc!r}",
++        )
++    if mesh is None or getattr(mesh, "is_empty", False):
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=f"trimesh produced empty mesh from {source_stl.name}",
++        )
++    try:
++        glb = mesh.export(file_type="glb")
++    except Exception as exc:
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=f"trimesh.export(glb) failed: {exc!r}",
++        )
++    if not isinstance(glb, (bytes, bytearray)) or len(glb) < 4 or bytes(glb[:4]) != b"glTF":
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message="trimesh returned non-glb payload (missing 'glTF' magic)",
++        )
++    return bytes(glb)
++
++
++def build_geometry_glb(case_id: str) -> GlbBuildResult:
++    """Return the cached glb for ``case_id``, building it on cache miss.
++
++    Public entrypoint for the route layer. Raises
++    :class:`GeometryRenderError` on any failure path the route maps to
++    4xx; lets unexpected exceptions propagate (route layer falls back
++    to FastAPI's default 500 handler).
++    """
++    if not is_safe_case_id(case_id):
++        raise GeometryRenderError(
++            failing_check="case_not_found",
++            message=f"unsafe case_id: {case_id!r}",
++        )
++    case_dir = _imported_case_dir(case_id)
++    if not case_dir.is_dir():
++        raise GeometryRenderError(
++            failing_check="case_not_found",
++            message=f"imported case dir missing: {case_dir}",
++        )
++
++    source_stl = _resolve_source_stl(case_dir)
++    cache = _cache_target(case_dir)
++
++    if _is_cache_fresh(cache, source_stl):
++        return GlbBuildResult(cache_path=cache, status="hit")
++
++    # Round-3+4 Finding 3 closure: source mtime threaded through both
++    # the post-transcode check and the guarded atomic write. The pre-
++    # replace check inside the helper aborts BEFORE os.replace (no
++    # stale cache visible to concurrent readers); the post-replace
++    # check unlinks if a syscall-window mutation slipped through.
++    src_mtime_before = source_stl.stat().st_mtime_ns
++    glb_bytes = _transcode_to_glb(source_stl)
++    src_mtime_after_transcode = source_stl.stat().st_mtime_ns
++    if src_mtime_after_transcode != src_mtime_before:
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=(
++                f"source {source_stl.name} mutated during transcode "
++                "(retry the request)"
++            ),
++        )
++    status: CacheStatus = "rebuild" if cache.exists() else "miss"
++    try:
++        _atomic_write_guarded(
++            cache, glb_bytes, source_stl, src_mtime_before
++        )
++    except RuntimeError as exc:
++        raise GeometryRenderError(
++            failing_check="transcode_error",
++            message=f"{exc} (retry the request)",
++        )
++    return GlbBuildResult(cache_path=cache, status=status)
+diff --git a/ui/backend/services/render/mesh_wireframe.py b/ui/backend/services/render/mesh_wireframe.py
+new file mode 100644
+index 0000000..d02d6e2
+--- /dev/null
++++ b/ui/backend/services/render/mesh_wireframe.py
+@@ -0,0 +1,265 @@
++"""polyMesh → wireframe glTF transcoding with mtime-keyed cache.
++
++M-RENDER-API Tier-A B.2 (DEC-V61-095 spec_v2 §B.2). Mirrors the
++geometry_glb cache contract — invalidate on points/faces mtime change,
++atomic-rename on write.
++
++Cache layout:
++
++    <imported_case_dir>/.render_cache/mesh.glb
++
++Source paths (in resolution order):
++
++    1. <case_dir>/constant/polyMesh/{points,faces}    (M6.0 sHM output)
++    2. <case_dir>/<imported_case_id>/constant/polyMesh/{points,faces}
++       — fallback for cases scaffolded under user_drafts/imported/
++
++Tier-A scope is internal-edge wireframe: every face's ring is
++serialised as line segments, deduplicated. Patch-aware coloring is
++M-VIZ.advanced. Boundary-only wireframe is M-VIZ.results.
++"""
++from __future__ import annotations
++
++import os
++import secrets
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Literal
++
++from ui.backend.services.case_drafts import is_safe_case_id
++from ui.backend.services.case_scaffold import template_clone
++
++from .gltf_lines_builder import build_lines_glb
++from .polymesh_parser import (
++    PolyMeshParseError,
++    extract_unique_edges,
++    parse_faces,
++    parse_points,
++    validate_face_indices,
++)
++
++
++CacheStatus = Literal["hit", "miss", "rebuild"]
++
++
++@dataclass(frozen=True, slots=True)
++class WireframeBuildResult:
++    cache_path: Path
++    status: CacheStatus
++
++
++@dataclass(frozen=True, slots=True)
++class MeshRenderError(Exception):
++    failing_check: Literal[
++        "case_not_found",
++        "no_polymesh",
++        "polymesh_parse_error",
++    ]
++    message: str
++
++    def __str__(self) -> str:
++        return f"{self.failing_check}: {self.message}"
++
++
++def _imported_case_dir(case_id: str) -> Path:
++    return template_clone.IMPORTED_DIR / case_id
++
++
++def _resolve_polymesh_dir(case_dir: Path) -> Path:
++    """Locate ``constant/polyMesh/`` under the case dir.
++
++    M6.0 writes polyMesh at ``<case_dir>/constant/polyMesh/`` after
++    gmshToFoam runs. Returns the dir; raises MeshRenderError if missing.
++    """
++    candidates = [
++        case_dir / "constant" / "polyMesh",
++    ]
++    for d in candidates:
++        if d.is_dir():
++            return d
++    raise MeshRenderError(
++        failing_check="no_polymesh",
++        message=f"no polyMesh dir under {case_dir} (looked in: {[str(c) for c in candidates]})",
++    )
++
++
++def _polymesh_source_files(
++    polymesh_dir: Path, case_dir: Path
++) -> tuple[Path, Path]:
++    """Return ``(points_path, faces_path)`` or raise no_polymesh.
++
++    Round-2 Finding 1: each chosen path is ``resolve(strict=True)``'d and
++    asserted to live under the case dir, so a symlink at
++    ``constant/polyMesh/points`` (or faces) cannot redirect us to an
++    arbitrary file outside IMPORTED_DIR.
++    """
++    points = polymesh_dir / "points"
++    faces = polymesh_dir / "faces"
++    if not points.is_file():
++        raise MeshRenderError(
++            failing_check="no_polymesh",
++            message=f"missing {points}",
++        )
++    if not faces.is_file():
++        raise MeshRenderError(
++            failing_check="no_polymesh",
++            message=f"missing {faces}",
++        )
++    try:
++        case_root = case_dir.resolve(strict=True)
++        points_resolved = points.resolve(strict=True)
++        faces_resolved = faces.resolve(strict=True)
++        points_resolved.relative_to(case_root)
++        faces_resolved.relative_to(case_root)
++    except (FileNotFoundError, OSError, ValueError):
++        raise MeshRenderError(
++            failing_check="no_polymesh",
++            message="polyMesh source resolved outside case dir",
++        )
++    return points_resolved, faces_resolved
++
++
++def _cache_target(case_dir: Path) -> Path:
++    return case_dir / ".render_cache" / "mesh.glb"
++
++
++def _is_cache_fresh(cache: Path, *sources: Path) -> bool:
++    if not cache.exists():
++        return False
++    try:
++        cache_mtime = cache.stat().st_mtime
++        return all(cache_mtime >= s.stat().st_mtime for s in sources)
++    except FileNotFoundError:
++        return False
++
++
++def _atomic_write_guarded_multi(
++    target: Path,
++    payload: bytes,
++    sources: tuple[Path, ...],
++    expected_mtimes_ns: tuple[int, ...],
++) -> None:
++    """Multi-source variant of the guarded atomic write (Round-4 Finding 3).
++
++    Same contract as field_sample / geometry_glb's single-source
++    ``_atomic_write_guarded``, but checks an arbitrary number of
++    source files. polyMesh wireframes depend on both ``points`` and
++    ``faces`` so either changing during the rebuild must abort.
++    """
++    if len(sources) != len(expected_mtimes_ns):
++        raise ValueError(
++            "sources and expected_mtimes_ns must have the same length"
++        )
++    target.parent.mkdir(parents=True, exist_ok=True)
++    tmp = target.with_suffix(
++        f".tmp.{secrets.token_hex(4)}{target.suffix}"
++    )
++    tmp.write_bytes(payload)
++
++    # Round-4 Codex regression: a source.stat() that raised on a
++    # vanished file leaked the temp and bypassed the failing_check
++    # translator. Treat OSError (incl. FileNotFoundError) for any
++    # source as a mtime mismatch — abort + clean up.
++    def _current_mtimes() -> tuple[int | None, ...]:
++        out: list[int | None] = []
++        for s in sources:
++            try:
++                out.append(s.stat().st_mtime_ns)
++            except OSError:
++                out.append(None)
++        return tuple(out)
++
++    if _current_mtimes() != expected_mtimes_ns:
++        try:
++            tmp.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            "polyMesh source mutated or vanished before atomic replace"
++        )
++    os.replace(tmp, target)
++    if _current_mtimes() != expected_mtimes_ns:
++        try:
++            target.unlink()
++        except OSError:
++            pass
++        raise RuntimeError(
++            "polyMesh source mutated or vanished during atomic replace"
++        )
++
++
++def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
++    try:
++        points = parse_points(points_path)
++        faces = parse_faces(faces_path)
++        # Round-2 Finding 4: face arity is checked against the count
++        # prefix in parse_faces, but vertex IDs were never checked
++        # against len(points). An out-of-range index would survive
++        # edge extraction and produce an indices accessor pointing past
++        # the POSITION buffer. Validate before building the GLB.
++        validate_face_indices(faces, n_points=len(points))
++        edges = extract_unique_edges(faces)
++    except PolyMeshParseError as exc:
++        raise MeshRenderError(
++            failing_check="polymesh_parse_error",
++            message=str(exc),
++        )
++    return build_lines_glb(points, edges)
++
++
++def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
++    """Public entrypoint for the route layer.
++
++    Resolves the imported case's polyMesh, parses points + faces,
++    extracts unique edges, assembles a binary glTF with a single
++    LINES primitive, and caches it under ``.render_cache/mesh.glb``
++    keyed on the source-file mtimes.
++    """
++    if not is_safe_case_id(case_id):
++        raise MeshRenderError(
++            failing_check="case_not_found",
++            message=f"unsafe case_id: {case_id!r}",
++        )
++    case_dir = _imported_case_dir(case_id)
++    if not case_dir.is_dir():
++        raise MeshRenderError(
++            failing_check="case_not_found",
++            message=f"imported case dir missing: {case_dir}",
++        )
++
++    polymesh_dir = _resolve_polymesh_dir(case_dir)
++    points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
++
++    cache = _cache_target(case_dir)
++    if _is_cache_fresh(cache, points_path, faces_path):
++        return WireframeBuildResult(cache_path=cache, status="hit")
++
++    # Round-3+4 Finding 3 closure: source mtimes (points + faces) are
++    # threaded through both the post-build check and the guarded
++    # multi-source atomic write. The pre-replace check inside the
++    # helper aborts BEFORE os.replace (no stale cache visible to
++    # concurrent readers); the post-replace check unlinks if a syscall-
++    # window mutation slipped through.
++    sources = (points_path, faces_path)
++    src_mtimes_before = tuple(s.stat().st_mtime_ns for s in sources)
++    glb_bytes = _build_wireframe_bytes(points_path, faces_path)
++    src_mtimes_after_build = tuple(s.stat().st_mtime_ns for s in sources)
++    if src_mtimes_after_build != src_mtimes_before:
++        raise MeshRenderError(
++            failing_check="polymesh_parse_error",
++            message=(
++                "polyMesh source mutated during transcode "
++                "(retry the request)"
++            ),
++        )
++    status: CacheStatus = "rebuild" if cache.exists() else "miss"
++    try:
++        _atomic_write_guarded_multi(
++            cache, glb_bytes, sources, src_mtimes_before
++        )
++    except RuntimeError as exc:
++        raise MeshRenderError(
++            failing_check="polymesh_parse_error",
++            message=f"{exc} (retry the request)",
++        )
++    return WireframeBuildResult(cache_path=cache, status=status)
+
+codex
+The Round-5 patch is confined to the three helpers plus one new field-sample test. I’m reading the exact line ranges now and then I’ll run the targeted test to confirm the leak and exception translation behavior in practice.
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/geometry_glb.py | sed -n '100,190p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/field_sample.py | sed -n '210,320p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   100	            message=f"STL {chosen.name} resolved outside case dir",
+   101	        )
+   102	    return resolved
+   103	
+   104	
+   105	def _cache_target(case_dir: Path) -> Path:
+   106	    return case_dir / ".render_cache" / "geometry.glb"
+   107	
+   108	
+   109	def _is_cache_fresh(cache: Path, source: Path) -> bool:
+   110	    if not cache.exists():
+   111	        return False
+   112	    try:
+   113	        return cache.stat().st_mtime >= source.stat().st_mtime
+   114	    except FileNotFoundError:
+   115	        return False
+   116	
+   117	
+   118	def _atomic_write_guarded(
+   119	    target: Path,
+   120	    payload: bytes,
+   121	    source: Path,
+   122	    expected_src_mtime_ns: int,
+   123	) -> None:
+   124	    """Atomic write with pre- and post-replace source-mutation guards.
+   125	
+   126	    Round-4 Finding 3 closure: re-stat ``source`` immediately before
+   127	    ``os.replace`` and abort (deleting the temp) if it changed since
+   128	    the rebuild started — this prevents a stale cache from EVER
+   129	    becoming visible to concurrent readers in the (replace, unlink)
+   130	    window. A post-replace re-stat collapses the kernel-syscall
+   131	    residual race; on mismatch the just-replaced cache is unlinked.
+   132	    """
+   133	    target.parent.mkdir(parents=True, exist_ok=True)
+   134	    tmp = target.with_suffix(
+   135	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   136	    )
+   137	    tmp.write_bytes(payload)
+   138	
+   139	    # Round-4 Codex regression: source.stat() raises FileNotFoundError
+   140	    # if the source vanished mid-build (deleted/renamed between temp-
+   141	    # write and pre-replace stat), which leaked the temp file and
+   142	    # bypassed the failing_check translator. Treat OSError (incl.
+   143	    # FileNotFoundError) the same as a mtime mismatch.
+   144	    def _current_mtime() -> int | None:
+   145	        try:
+   146	            return source.stat().st_mtime_ns
+   147	        except OSError:
+   148	            return None
+   149	
+   150	    if _current_mtime() != expected_src_mtime_ns:
+   151	        try:
+   152	            tmp.unlink()
+   153	        except OSError:
+   154	            pass
+   155	        raise RuntimeError(
+   156	            f"source {source.name} mutated or vanished before atomic replace"
+   157	        )
+   158	    os.replace(tmp, target)
+   159	    if _current_mtime() != expected_src_mtime_ns:
+   160	        try:
+   161	            target.unlink()
+   162	        except OSError:
+   163	            pass
+   164	        raise RuntimeError(
+   165	            f"source {source.name} mutated or vanished during atomic replace"
+   166	        )
+   167	
+   168	
+   169	def _transcode_to_glb(source_stl: Path) -> bytes:
+   170	    """Run trimesh's STL→glb pipeline.
+   171	
+   172	    trimesh raises various subclasses on parse failure (ValueError,
+   173	    LookupError, …). We collapse them to GeometryRenderError so the
+   174	    route layer has a single error class to map.
+   175	    """
+   176	    try:
+   177	        mesh = trimesh.load(source_stl, force="mesh")
+   178	    except Exception as exc:
+   179	        raise GeometryRenderError(
+   180	            failing_check="transcode_error",
+   181	            message=f"trimesh.load({source_stl.name}) failed: {exc!r}",
+   182	        )
+   183	    if mesh is None or getattr(mesh, "is_empty", False):
+   184	        raise GeometryRenderError(
+   185	            failing_check="transcode_error",
+   186	            message=f"trimesh produced empty mesh from {source_stl.name}",
+   187	        )
+   188	    try:
+   189	        glb = mesh.export(file_type="glb")
+   190	    except Exception as exc:
+
+ succeeded in 0ms:
+   210	def _cache_target(case_dir: Path, run_id: str, name: str) -> Path:
+   211	    return case_dir / ".render_cache" / f"field-{run_id}-{name}.bin"
+   212	
+   213	
+   214	def _is_cache_fresh(cache: Path, source: Path) -> bool:
+   215	    if not cache.exists():
+   216	        return False
+   217	    try:
+   218	        return cache.stat().st_mtime >= source.stat().st_mtime
+   219	    except FileNotFoundError:
+   220	        return False
+   221	
+   222	
+   223	def _atomic_write_guarded(
+   224	    target: Path,
+   225	    payload: bytes,
+   226	    source: Path,
+   227	    expected_src_mtime_ns: int,
+   228	) -> None:
+   229	    """Atomic write with pre-replace + post-replace source-mutation guards.
+   230	
+   231	    Round-3 Finding 3 closure (Codex Round-3 PARTIAL): the prior
+   232	    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
+   233	    Even with a post-replace stat the concurrent-reader window between
+   234	    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
+   235	    stale bytes for one request.
+   236	
+   237	    This guarded variant:
+   238	      1. Writes the payload to a temp file.
+   239	      2. Re-stats ``source``; if it changed since the rebuild started,
+   240	         unlinks the temp and raises ``RuntimeError`` BEFORE the
+   241	         replace — concurrent readers never see the stale cache.
+   242	      3. ``os.replace``s the temp into place.
+   243	      4. Re-stats ``source`` once more; if it changed during (or
+   244	         immediately after) the replace, unlinks the now-stale cache
+   245	         and raises. This collapses the residual window to the kernel
+   246	         syscall granularity.
+   247	
+   248	    Caller is responsible for converting the RuntimeError into its own
+   249	    failing_check.
+   250	    """
+   251	    target.parent.mkdir(parents=True, exist_ok=True)
+   252	    tmp = target.with_suffix(
+   253	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   254	    )
+   255	    tmp.write_bytes(payload)
+   256	
+   257	    # Round-4 Codex regression: ``source.stat()`` raises FileNotFoundError
+   258	    # if the source vanished between temp-write and pre-replace stat,
+   259	    # which bypassed the service's failing_check translator AND leaked
+   260	    # the temp artifact. Treat OSError (incl. FileNotFoundError) the
+   261	    # same as a mtime mismatch — abort + clean up.
+   262	    def _current_mtime() -> int | None:
+   263	        try:
+   264	            return source.stat().st_mtime_ns
+   265	        except OSError:
+   266	            return None
+   267	
+   268	    pre = _current_mtime()
+   269	    if pre != expected_src_mtime_ns:
+   270	        try:
+   271	            tmp.unlink()
+   272	        except OSError:
+   273	            pass
+   274	        raise RuntimeError(
+   275	            f"source {source.name} mutated or vanished before atomic replace"
+   276	        )
+   277	    os.replace(tmp, target)
+   278	    post = _current_mtime()
+   279	    if post != expected_src_mtime_ns:
+   280	        try:
+   281	            target.unlink()
+   282	        except OSError:
+   283	            pass
+   284	        raise RuntimeError(
+   285	            f"source {source.name} mutated or vanished during atomic replace"
+   286	        )
+   287	
+   288	
+   289	def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
+   290	    """Public entrypoint — return the cached float32 binary for the field.
+   291	
+   292	    Raises FieldSampleError on any failure path the route maps to 4xx.
+   293	    """
+   294	    field_path = _resolve_field_path(case_id, run_id, name)
+   295	    case_dir = _imported_case_dir(case_id)
+   296	    cache = _cache_target(case_dir, run_id, name)
+   297	
+   298	    if _is_cache_fresh(cache, field_path):
+   299	        # Cache hit — read the cached array's length to populate the result.
+   300	        # The frontend uses Content-Length header for the same info, but the
+   301	        # service returns it for tests / logging.
+   302	        n = cache.stat().st_size // 4
+   303	        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+   304	
+   305	    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
+   306	    # parsing, re-checked post-parse, AND threaded into the guarded
+   307	    # atomic write so the rebuild aborts BEFORE os.replace if the source
+   308	    # changed (no stale cache ever becomes visible to concurrent
+   309	    # readers) and aborts WITH unlink if the source changes during the
+   310	    # replace syscall itself (closes the kernel-syscall residual).
+   311	    src_mtime_before = field_path.stat().st_mtime_ns
+   312	    values = _parse_internal_scalar_field(field_path)
+   313	    src_mtime_after_parse = field_path.stat().st_mtime_ns
+   314	    if src_mtime_after_parse != src_mtime_before:
+   315	        raise FieldSampleError(
+   316	            failing_check="field_parse_error",
+   317	            message=(
+   318	                f"source {field_path.name} mutated during rebuild "
+   319	                "(retry the request)"
+   320	            ),
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/render/mesh_wireframe.py | sed -n '120,215p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   120	
+   121	
+   122	def _cache_target(case_dir: Path) -> Path:
+   123	    return case_dir / ".render_cache" / "mesh.glb"
+   124	
+   125	
+   126	def _is_cache_fresh(cache: Path, *sources: Path) -> bool:
+   127	    if not cache.exists():
+   128	        return False
+   129	    try:
+   130	        cache_mtime = cache.stat().st_mtime
+   131	        return all(cache_mtime >= s.stat().st_mtime for s in sources)
+   132	    except FileNotFoundError:
+   133	        return False
+   134	
+   135	
+   136	def _atomic_write_guarded_multi(
+   137	    target: Path,
+   138	    payload: bytes,
+   139	    sources: tuple[Path, ...],
+   140	    expected_mtimes_ns: tuple[int, ...],
+   141	) -> None:
+   142	    """Multi-source variant of the guarded atomic write (Round-4 Finding 3).
+   143	
+   144	    Same contract as field_sample / geometry_glb's single-source
+   145	    ``_atomic_write_guarded``, but checks an arbitrary number of
+   146	    source files. polyMesh wireframes depend on both ``points`` and
+   147	    ``faces`` so either changing during the rebuild must abort.
+   148	    """
+   149	    if len(sources) != len(expected_mtimes_ns):
+   150	        raise ValueError(
+   151	            "sources and expected_mtimes_ns must have the same length"
+   152	        )
+   153	    target.parent.mkdir(parents=True, exist_ok=True)
+   154	    tmp = target.with_suffix(
+   155	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   156	    )
+   157	    tmp.write_bytes(payload)
+   158	
+   159	    # Round-4 Codex regression: a source.stat() that raised on a
+   160	    # vanished file leaked the temp and bypassed the failing_check
+   161	    # translator. Treat OSError (incl. FileNotFoundError) for any
+   162	    # source as a mtime mismatch — abort + clean up.
+   163	    def _current_mtimes() -> tuple[int | None, ...]:
+   164	        out: list[int | None] = []
+   165	        for s in sources:
+   166	            try:
+   167	                out.append(s.stat().st_mtime_ns)
+   168	            except OSError:
+   169	                out.append(None)
+   170	        return tuple(out)
+   171	
+   172	    if _current_mtimes() != expected_mtimes_ns:
+   173	        try:
+   174	            tmp.unlink()
+   175	        except OSError:
+   176	            pass
+   177	        raise RuntimeError(
+   178	            "polyMesh source mutated or vanished before atomic replace"
+   179	        )
+   180	    os.replace(tmp, target)
+   181	    if _current_mtimes() != expected_mtimes_ns:
+   182	        try:
+   183	            target.unlink()
+   184	        except OSError:
+   185	            pass
+   186	        raise RuntimeError(
+   187	            "polyMesh source mutated or vanished during atomic replace"
+   188	        )
+   189	
+   190	
+   191	def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
+   192	    try:
+   193	        points = parse_points(points_path)
+   194	        faces = parse_faces(faces_path)
+   195	        # Round-2 Finding 4: face arity is checked against the count
+   196	        # prefix in parse_faces, but vertex IDs were never checked
+   197	        # against len(points). An out-of-range index would survive
+   198	        # edge extraction and produce an indices accessor pointing past
+   199	        # the POSITION buffer. Validate before building the GLB.
+   200	        validate_face_indices(faces, n_points=len(points))
+   201	        edges = extract_unique_edges(faces)
+   202	    except PolyMeshParseError as exc:
+   203	        raise MeshRenderError(
+   204	            failing_check="polymesh_parse_error",
+   205	            message=str(exc),
+   206	        )
+   207	    return build_lines_glb(points, edges)
+   208	
+   209	
+   210	def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
+   211	    """Public entrypoint for the route layer.
+   212	
+   213	    Resolves the imported case's polyMesh, parses points + faces,
+   214	    extracts unique edges, assembles a binary glTF with a single
+   215	    LINES primitive, and caches it under ``.render_cache/mesh.glb``
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_field_sample.py | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""Tests for /api/cases/{id}/results/{run_id}/field/{name}
+     2	(M-RENDER-API B.3 · DEC-V61-095 spec_v2 §B.3).
+     3	
+     4	Tier-A scope is binary float32 stream output (the glTF-with-COLOR_0
+     5	upgrade is M-VIZ.results). Tests synthesise OpenFOAM-style scalar field
+     6	files inline so M5.1/M6.0/M7 don't need to actually run.
+     7	"""
+     8	from __future__ import annotations
+     9	
+    10	import os
+    11	import struct
+    12	from pathlib import Path
+    13	
+    14	import numpy as np
+    15	import pytest
+    16	from fastapi.testclient import TestClient
+    17	
+    18	from ui.backend.main import app
+    19	from ui.backend.services.case_scaffold import template_clone
+    20	from ui.backend.services.render import (
+    21	    FieldSampleError,
+    22	    build_field_payload,
+    23	)
+    24	from ui.backend.services.render import field_sample as field_sample_mod
+    25	
+    26	
+    27	_NONUNIFORM_SCALAR_FIELD = """\
+    28	FoamFile
+    29	{{
+    30	    version     2.0;
+    31	    format      ascii;
+    32	    class       volScalarField;
+    33	    location    "{run_id}";
+    34	    object      {name};
+    35	}}
+    36	
+    37	dimensions      [0 2 -2 0 0 0 0];
+    38	
+    39	internalField   nonuniform List<scalar>
+    40	{count}
+    41	(
+    42	{values}
+    43	)
+    44	;
+    45	
+    46	boundaryField
+    47	{{
+    48	    inlet
+    49	    {{
+    50	        type   fixedValue;
+    51	        value  uniform 1;
+    52	    }}
+    53	    outlet
+    54	    {{
+    55	        type   zeroGradient;
+    56	    }}
+    57	}}
+    58	"""
+    59	
+    60	
+    61	def _stage_field(
+    62	    case_dir: Path,
+    63	    run_id: str,
+    64	    name: str,
+    65	    values: np.ndarray,
+    66	) -> Path:
+    67	    """Write a synthetic OpenFOAM scalar field at <case_dir>/<run_id>/<name>."""
+    68	    body = "\n".join(f"{v}" for v in values)
+    69	    text = _NONUNIFORM_SCALAR_FIELD.format(
+    70	        run_id=run_id, name=name, count=len(values), values=body,
+    71	    )
+    72	    run_dir = case_dir / run_id
+    73	    run_dir.mkdir(parents=True)
+    74	    field_path = run_dir / name
+    75	    field_path.write_text(text, encoding="utf-8")
+    76	    return field_path
+    77	
+    78	
+    79	@pytest.fixture
+    80	def isolated_imported(tmp_path: Path, monkeypatch):
+    81	    drafts = tmp_path / "user_drafts"
+    82	    imported = drafts / "imported"
+    83	    imported.mkdir(parents=True)
+    84	    monkeypatch.setattr(template_clone, "DRAFTS_DIR", drafts)
+    85	    monkeypatch.setattr(template_clone, "IMPORTED_DIR", imported)
+    86	    return imported
+    87	
+    88	
+    89	# ───────── service: parse + cache ─────────
+    90	
+    91	
+    92	def test_build_field_payload_parses_nonuniform_scalar_list(isolated_imported: Path):
+    93	    case_id = "imported_2026-04-28T00-00-00Z_field"
+    94	    case_dir = isolated_imported / case_id
+    95	    case_dir.mkdir()
+    96	    values = np.array([1.0, 2.5, 3.14, -0.5, 100.0], dtype=np.float32)
+    97	    _stage_field(case_dir, "run_001", "p", values)
+    98	
+    99	    result = build_field_payload(case_id, "run_001", "p")
+   100	    assert result.point_count == 5
+   101	    assert result.status == "miss"
+   102	    raw = result.cache_path.read_bytes()
+   103	    assert len(raw) == 5 * 4
+   104	    # Round-trip the binary back into a float32 array and compare exactly.
+   105	    decoded = np.frombuffer(raw, dtype=np.float32)
+   106	    np.testing.assert_array_equal(decoded, values)
+   107	
+   108	
+   109	def test_build_field_payload_cache_hit(isolated_imported: Path):
+   110	    case_id = "imported_2026-04-28T00-00-00Z_fieldhit"
+   111	    case_dir = isolated_imported / case_id
+   112	    case_dir.mkdir()
+   113	    _stage_field(case_dir, "run_002", "T",
+   114	                 np.array([300.0, 301.5, 299.7], dtype=np.float32))
+   115	
+   116	    first = build_field_payload(case_id, "run_002", "T")
+   117	    second = build_field_payload(case_id, "run_002", "T")
+   118	    assert first.status == "miss"
+   119	    assert second.status == "hit"
+   120	    assert second.point_count == first.point_count
+   121	
+   122	
+   123	def test_build_field_payload_invalidates_on_mtime(isolated_imported: Path):
+   124	    case_id = "imported_2026-04-28T00-00-00Z_fieldinval"
+   125	    case_dir = isolated_imported / case_id
+   126	    case_dir.mkdir()
+   127	    field_path = _stage_field(
+   128	        case_dir, "run_003", "k",
+   129	        np.array([0.1, 0.2], dtype=np.float32),
+   130	    )
+   131	    first = build_field_payload(case_id, "run_003", "k")
+   132	
+   133	    bumped = first.cache_path.stat().st_mtime + 5.0
+   134	    os.utime(field_path, (bumped, bumped))
+   135	
+   136	    second = build_field_payload(case_id, "run_003", "k")
+   137	    assert second.status == "rebuild"
+   138	
+   139	
+   140	# ───────── service: failure paths ─────────
+   141	
+   142	
+   143	def test_build_field_payload_404_for_unknown_case(isolated_imported: Path):
+   144	    with pytest.raises(FieldSampleError) as excinfo:
+   145	        build_field_payload("imported_unknown", "run_001", "p")
+   146	    assert excinfo.value.failing_check == "case_not_found"
+   147	
+   148	
+   149	def test_build_field_payload_404_for_unsafe_case_id(isolated_imported: Path):
+   150	    with pytest.raises(FieldSampleError) as excinfo:
+   151	        build_field_payload("bad@@id", "run_001", "p")
+   152	    assert excinfo.value.failing_check == "case_not_found"
+   153	
+   154	
+   155	def test_build_field_payload_404_when_run_dir_missing(isolated_imported: Path):
+   156	    case_id = "imported_2026-04-28T00-00-00Z_norun"
+   157	    (isolated_imported / case_id).mkdir()
+   158	    with pytest.raises(FieldSampleError) as excinfo:
+   159	        build_field_payload(case_id, "run_does_not_exist", "p")
+   160	    assert excinfo.value.failing_check == "run_not_found"
+   161	
+   162	
+   163	def test_build_field_payload_404_when_field_file_missing(isolated_imported: Path):
+   164	    case_id = "imported_2026-04-28T00-00-00Z_nofield"
+   165	    case_dir = isolated_imported / case_id
+   166	    case_dir.mkdir()
+   167	    (case_dir / "run_001").mkdir()
+   168	    with pytest.raises(FieldSampleError) as excinfo:
+   169	        build_field_payload(case_id, "run_001", "missing_field")
+   170	    assert excinfo.value.failing_check == "field_not_found"
+   171	
+   172	
+   173	def test_build_field_payload_422_on_uniform_field_unsupported(
+   174	    isolated_imported: Path,
+   175	):
+   176	    case_id = "imported_2026-04-28T00-00-00Z_uniform"
+   177	    case_dir = isolated_imported / case_id
+   178	    case_dir.mkdir()
+   179	    run_dir = case_dir / "run_001"
+   180	    run_dir.mkdir()
+   181	    (run_dir / "p").write_text(
+   182	        "FoamFile{}\ninternalField   uniform 0;\n",
+   183	        encoding="utf-8",
+   184	    )
+   185	    with pytest.raises(FieldSampleError) as excinfo:
+   186	        build_field_payload(case_id, "run_001", "p")
+   187	    assert excinfo.value.failing_check == "field_unsupported"
+   188	
+   189	
+   190	def test_build_field_payload_422_on_garbage_field_file(isolated_imported: Path):
+   191	    case_id = "imported_2026-04-28T00-00-00Z_garbagefield"
+   192	    case_dir = isolated_imported / case_id
+   193	    case_dir.mkdir()
+   194	    run_dir = case_dir / "run_001"
+   195	    run_dir.mkdir()
+   196	    (run_dir / "p").write_text("definitely not OpenFOAM", encoding="utf-8")
+   197	    with pytest.raises(FieldSampleError) as excinfo:
+   198	        build_field_payload(case_id, "run_001", "p")
+   199	    assert excinfo.value.failing_check == "field_parse_error"
+   200	
+   201	
+   202	def test_build_field_payload_rejects_traversal_in_run_id(isolated_imported: Path):
+   203	    case_id = "imported_2026-04-28T00-00-00Z_trav"
+   204	    (isolated_imported / case_id).mkdir()
+   205	    with pytest.raises(FieldSampleError) as excinfo:
+   206	        build_field_payload(case_id, "../etc", "p")
+   207	    # Either run_not_found (validator firing) — both classify as 404
+   208	    assert excinfo.value.failing_check == "run_not_found"
+   209	
+   210	
+   211	def test_build_field_payload_rejects_traversal_in_field_name(
+   212	    isolated_imported: Path,
+   213	):
+   214	    case_id = "imported_2026-04-28T00-00-00Z_travf"
+   215	    (isolated_imported / case_id).mkdir()
+   216	    with pytest.raises(FieldSampleError) as excinfo:
+   217	        build_field_payload(case_id, "run_001", "../passwd")
+   218	    assert excinfo.value.failing_check == "field_not_found"
+   219	
+   220	
+   221	def test_build_field_payload_aborts_on_source_vanish(
+   222	    isolated_imported: Path, monkeypatch,
+   223	):
+   224	    """Round-4 Codex regression: if the source disappears between
+   225	    temp-write and pre-replace stat, the helper must NOT crash with
+   226	    a raw FileNotFoundError, and the temp must be cleaned up.
+   227	
+   228	    Without the OSError-tolerant _current_mtime() guard the helper
+   229	    would propagate FileNotFoundError, bypass the failing_check
+   230	    translator, and leave a .tmp.<hex> artifact in .render_cache."""
+   231	    case_id = "imported_2026-04-28T00-00-00Z_source_vanish"
+   232	    case_dir = isolated_imported / case_id
+   233	    case_dir.mkdir()
+   234	    field_path = _stage_field(
+   235	        case_dir, "run_001", "p",
+   236	        np.array([1.0, 2.0, 3.0], dtype=np.float32),
+   237	    )
+   238	    real_write_bytes = Path.write_bytes
+   239	    deleted_state = {"deleted": False}
+   240	
+   241	    def patched_write_bytes(self: Path, data: bytes, *args, **kwargs):
+   242	        result = real_write_bytes(self, data, *args, **kwargs)
+   243	        if ".tmp." in self.name and not deleted_state["deleted"]:
+   244	            field_path.unlink()
+   245	            deleted_state["deleted"] = True
+   246	        return result
+   247	    monkeypatch.setattr(Path, "write_bytes", patched_write_bytes)
+   248	
+   249	    with pytest.raises(FieldSampleError) as excinfo:
+   250	        build_field_payload(case_id, "run_001", "p")
+   251	    assert excinfo.value.failing_check == "field_parse_error"
+   252	    assert "vanished" in excinfo.value.message
+   253	    cache_dir = case_dir / ".render_cache"
+   254	    if cache_dir.exists():
+   255	        leftovers = sorted(p.name for p in cache_dir.iterdir())
+   256	        assert leftovers == [], (
+   257	            f"temp/cache file leaked after source-vanish: {leftovers}"
+   258	        )
+   259	
+   260	
+
+exec
+/bin/zsh -lc 'rg -n "vanish|mutated or vanished|_current_mtime|_current_mtimes" ui/backend/tests ui/backend/services/render' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/render/field_sample.py:258:    # if the source vanished between temp-write and pre-replace stat,
+ui/backend/services/render/field_sample.py:262:    def _current_mtime() -> int | None:
+ui/backend/services/render/field_sample.py:268:    pre = _current_mtime()
+ui/backend/services/render/field_sample.py:275:            f"source {source.name} mutated or vanished before atomic replace"
+ui/backend/services/render/field_sample.py:278:    post = _current_mtime()
+ui/backend/services/render/field_sample.py:285:            f"source {source.name} mutated or vanished during atomic replace"
+ui/backend/services/render/mesh_wireframe.py:160:    # vanished file leaked the temp and bypassed the failing_check
+ui/backend/services/render/mesh_wireframe.py:163:    def _current_mtimes() -> tuple[int | None, ...]:
+ui/backend/services/render/mesh_wireframe.py:172:    if _current_mtimes() != expected_mtimes_ns:
+ui/backend/services/render/mesh_wireframe.py:178:            "polyMesh source mutated or vanished before atomic replace"
+ui/backend/services/render/mesh_wireframe.py:181:    if _current_mtimes() != expected_mtimes_ns:
+ui/backend/services/render/mesh_wireframe.py:187:            "polyMesh source mutated or vanished during atomic replace"
+ui/backend/services/render/geometry_glb.py:140:    # if the source vanished mid-build (deleted/renamed between temp-
+ui/backend/services/render/geometry_glb.py:144:    def _current_mtime() -> int | None:
+ui/backend/services/render/geometry_glb.py:150:    if _current_mtime() != expected_src_mtime_ns:
+ui/backend/services/render/geometry_glb.py:156:            f"source {source.name} mutated or vanished before atomic replace"
+ui/backend/services/render/geometry_glb.py:159:    if _current_mtime() != expected_src_mtime_ns:
+ui/backend/services/render/geometry_glb.py:165:            f"source {source.name} mutated or vanished during atomic replace"
+ui/backend/tests/test_field_sample.py:221:def test_build_field_payload_aborts_on_source_vanish(
+ui/backend/tests/test_field_sample.py:228:    Without the OSError-tolerant _current_mtime() guard the helper
+ui/backend/tests/test_field_sample.py:231:    case_id = "imported_2026-04-28T00-00-00Z_source_vanish"
+ui/backend/tests/test_field_sample.py:252:    assert "vanished" in excinfo.value.message
+ui/backend/tests/test_field_sample.py:257:            f"temp/cache file leaked after source-vanish: {leftovers}"
+
+exec
+/bin/zsh -lc 'pytest -q ui/backend/tests/test_field_sample.py -k vanish' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 4 in 130ms:
+ui/backend/tests/conftest.py:7: in <module>
+    import trimesh
+E   ModuleNotFoundError: No module named 'trimesh'
+
+codex
+The new field-sample test is present and the helper changes are structurally consistent across all three services. The local `pytest` entrypoint is missing repo deps (`trimesh` import from `conftest.py`), so I’m checking whether this repo expects `.venv/bin/python -m pytest` instead before I finalize the verification status.
+exec
+/bin/zsh -lc 'ls -la .venv/bin/python' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+lrwxr-xr-x@ 1 Zhuanz  staff  83 Apr 24 23:15 .venv/bin/python -> /Users/Zhuanz/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12
+
+exec
+/bin/zsh -lc "git show 84fa4cf:ui/backend/services/render/field_sample.py | nl -ba | sed -n '250,325p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   250	    """
+   251	    target.parent.mkdir(parents=True, exist_ok=True)
+   252	    tmp = target.with_suffix(
+   253	        f".tmp.{secrets.token_hex(4)}{target.suffix}"
+   254	    )
+   255	    tmp.write_bytes(payload)
+   256	
+   257	    # Round-4 Codex regression: ``source.stat()`` raises FileNotFoundError
+   258	    # if the source vanished between temp-write and pre-replace stat,
+   259	    # which bypassed the service's failing_check translator AND leaked
+   260	    # the temp artifact. Treat OSError (incl. FileNotFoundError) the
+   261	    # same as a mtime mismatch — abort + clean up.
+   262	    def _current_mtime() -> int | None:
+   263	        try:
+   264	            return source.stat().st_mtime_ns
+   265	        except OSError:
+   266	            return None
+   267	
+   268	    pre = _current_mtime()
+   269	    if pre != expected_src_mtime_ns:
+   270	        try:
+   271	            tmp.unlink()
+   272	        except OSError:
+   273	            pass
+   274	        raise RuntimeError(
+   275	            f"source {source.name} mutated or vanished before atomic replace"
+   276	        )
+   277	    os.replace(tmp, target)
+   278	    post = _current_mtime()
+   279	    if post != expected_src_mtime_ns:
+   280	        try:
+   281	            target.unlink()
+   282	        except OSError:
+   283	            pass
+   284	        raise RuntimeError(
+   285	            f"source {source.name} mutated or vanished during atomic replace"
+   286	        )
+   287	
+   288	
+   289	def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
+   290	    """Public entrypoint — return the cached float32 binary for the field.
+   291	
+   292	    Raises FieldSampleError on any failure path the route maps to 4xx.
+   293	    """
+   294	    field_path = _resolve_field_path(case_id, run_id, name)
+   295	    case_dir = _imported_case_dir(case_id)
+   296	    cache = _cache_target(case_dir, run_id, name)
+   297	
+   298	    if _is_cache_fresh(cache, field_path):
+   299	        # Cache hit — read the cached array's length to populate the result.
+   300	        # The frontend uses Content-Length header for the same info, but the
+   301	        # service returns it for tests / logging.
+   302	        n = cache.stat().st_size // 4
+   303	        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+   304	
+   305	    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
+   306	    # parsing, re-checked post-parse, AND threaded into the guarded
+   307	    # atomic write so the rebuild aborts BEFORE os.replace if the source
+   308	    # changed (no stale cache ever becomes visible to concurrent
+   309	    # readers) and aborts WITH unlink if the source changes during the
+   310	    # replace syscall itself (closes the kernel-syscall residual).
+   311	    src_mtime_before = field_path.stat().st_mtime_ns
+   312	    values = _parse_internal_scalar_field(field_path)
+   313	    src_mtime_after_parse = field_path.stat().st_mtime_ns
+   314	    if src_mtime_after_parse != src_mtime_before:
+   315	        raise FieldSampleError(
+   316	            failing_check="field_parse_error",
+   317	            message=(
+   318	                f"source {field_path.name} mutated during rebuild "
+   319	                "(retry the request)"
+   320	            ),
+   321	        )
+   322	    payload = values.astype(np.float32, copy=False).tobytes()
+   323	    status: CacheStatus = "rebuild" if cache.exists() else "miss"
+   324	    try:
+   325	        _atomic_write_guarded(
+
+exec
+/bin/zsh -lc '.venv/bin/python -m pytest -q ui/backend/tests/test_field_sample.py -k vanish' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 972ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 20 items / 19 deselected / 1 selected
+
+ui/backend/tests/test_field_sample.py .                                  [100%]
+
+======================= 1 passed, 19 deselected in 0.30s =======================
+
+exec
+/bin/zsh -lc 'rg -n "def test_.*geometry|def test_.*mesh|build_geometry_glb|build_mesh_wireframe_glb" ui/backend/tests' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/tests/test_wizard_route.py:98:def test_pipe_flow_template_uses_axisymmetric_geometry() -> None:
+ui/backend/tests/test_meshing_gmsh.py:95:def test_mesh_imported_case_unsafe_id_rejects():
+ui/backend/tests/test_meshing_gmsh.py:101:def test_mesh_imported_case_missing_dir_rejects():
+ui/backend/tests/test_meshing_gmsh.py:107:def test_mesh_imported_case_cap_exceeded_path_clean(tmp_path: Path, monkeypatch):
+ui/backend/tests/test_mesh_wireframe.py:22:    build_mesh_wireframe_glb,
+ui/backend/tests/test_mesh_wireframe.py:153:def test_build_mesh_wireframe_422_on_face_index_out_of_range(
+ui/backend/tests/test_mesh_wireframe.py:174:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:179:def test_build_mesh_wireframe_rejects_polymesh_symlink_escape(
+ui/backend/tests/test_mesh_wireframe.py:199:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:274:def test_build_mesh_wireframe_glb_status_progression(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:280:    first = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:284:    second = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:289:def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:295:    first = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:301:    second = build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:305:def test_build_mesh_wireframe_glb_404_for_unknown_case(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:307:        build_mesh_wireframe_glb("imported_unknown")
+ui/backend/tests/test_mesh_wireframe.py:311:def test_build_mesh_wireframe_glb_404_for_unsafe_case_id(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:313:        build_mesh_wireframe_glb("bad@@id")
+ui/backend/tests/test_mesh_wireframe.py:317:def test_build_mesh_wireframe_glb_404_when_polymesh_missing(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:322:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:326:def test_build_mesh_wireframe_glb_422_on_polymesh_garbage(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:335:        build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_wireframe.py:342:def test_get_case_mesh_render_returns_glb_for_cube(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:356:def test_get_case_mesh_render_404_for_unknown_case(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:362:def test_get_case_mesh_render_404_when_polymesh_missing(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:371:def test_get_case_mesh_render_422_on_garbage(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:384:def test_get_case_mesh_render_byte_equal_on_cache_hit(isolated_imported: Path):
+ui/backend/tests/test_mesh_wireframe.py:403:    build_mesh_wireframe_glb(case_id)
+ui/backend/tests/test_mesh_imported_route.py:17:def test_mesh_route_case_not_found_returns_404():
+ui/backend/tests/test_mesh_imported_route.py:27:def test_mesh_route_unsafe_case_id_returns_404():
+ui/backend/tests/test_mesh_imported_route.py:39:def test_mesh_route_validation_rejects_bogus_mesh_mode():
+ui/backend/tests/test_mesh_imported_route.py:47:def test_mesh_route_happy_path_returns_summary(tmp_path: Path):
+ui/backend/tests/test_mesh_imported_route.py:82:def test_mesh_route_cell_cap_exceeded_returns_422():
+ui/backend/tests/test_mesh_imported_route.py:99:def test_mesh_route_gmsh_diverged_surfaces_failing_check():
+ui/backend/tests/test_geometry_render_glb.py:27:from ui.backend.services.render import GeometryRenderError, build_geometry_glb
+ui/backend/tests/test_geometry_render_glb.py:70:def test_get_case_geometry_render_returns_glb_for_cube(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:91:def test_get_case_geometry_render_serves_three_bundled_fixture_shapes(
+ui/backend/tests/test_geometry_render_glb.py:120:def test_build_geometry_glb_status_progression(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:126:    first = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:130:    second = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:139:    first = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:151:    second = build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:162:    build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:171:def test_get_case_geometry_render_404_for_unknown_case(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:177:def test_get_case_geometry_render_404_for_unsafe_case_id():
+ui/backend/tests/test_geometry_render_glb.py:183:def test_get_case_geometry_render_422_when_no_stl(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:192:def test_build_geometry_glb_raises_transcode_error_on_garbage(
+ui/backend/tests/test_geometry_render_glb.py:206:        build_geometry_glb(case_id)
+ui/backend/tests/test_geometry_render_glb.py:213:def test_get_case_geometry_render_matches_uppercase_stl(isolated_imported: Path):
+ui/backend/tests/test_geometry_render_glb.py:226:def test_build_geometry_glb_rejects_stl_symlink_escape(
+ui/backend/tests/test_geometry_render_glb.py:241:        build_geometry_glb(case_id)
+ui/backend/tests/test_batch_matrix_route.py:70:def test_at_least_one_case_passes_at_finest_mesh() -> None:
+ui/backend/tests/test_batch_matrix_route.py:121:def test_lid_driven_cavity_finest_mesh_reason_cites_precondition() -> None:
+
+exec
+/bin/zsh -lc '.venv/bin/python -m pytest -q ui/backend/tests/test_field_sample.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1014ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 20 items
+
+ui/backend/tests/test_field_sample.py ....................               [100%]
+
+============================== 20 passed in 0.34s ==============================
+
+codex
+I found existing dedicated suites for the other two services, so I’m running those as a parity check. That gives a cleaner answer on whether the identical helper change introduced any service-specific regression outside `field_sample`.
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_mesh_wireframe.py | sed -n '260,420p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_geometry_render_glb.py | sed -n '110,250p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   260	        build_lines_glb(
+   261	            np.zeros((0, 3), dtype=np.float64),
+   262	            np.zeros((0, 2), dtype=np.uint32),
+   263	        )
+   264	    with pytest.raises(ValueError, match=r"\(N, 3\)"):
+   265	        build_lines_glb(
+   266	            np.zeros((1, 4), dtype=np.float64),
+   267	            np.array([[0, 0]], dtype=np.uint32),
+   268	        )
+   269	
+   270	
+   271	# ───────── service layer ─────────
+   272	
+   273	
+   274	def test_build_mesh_wireframe_glb_status_progression(isolated_imported: Path):
+   275	    case_id = "imported_2026-04-28T00-00-00Z_meshhit"
+   276	    case_dir = isolated_imported / case_id
+   277	    case_dir.mkdir()
+   278	    _stage_polymesh(case_dir)
+   279	
+   280	    first = build_mesh_wireframe_glb(case_id)
+   281	    assert first.status == "miss"
+   282	    assert first.cache_path.exists()
+   283	
+   284	    second = build_mesh_wireframe_glb(case_id)
+   285	    assert second.status == "hit"
+   286	    assert second.cache_path == first.cache_path
+   287	
+   288	
+   289	def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported: Path):
+   290	    case_id = "imported_2026-04-28T00-00-00Z_meshinval"
+   291	    case_dir = isolated_imported / case_id
+   292	    case_dir.mkdir()
+   293	    points_path, _faces_path = _stage_polymesh(case_dir)
+   294	
+   295	    first = build_mesh_wireframe_glb(case_id)
+   296	    cache_mtime = first.cache_path.stat().st_mtime
+   297	
+   298	    bumped = cache_mtime + 5.0
+   299	    os.utime(points_path, (bumped, bumped))
+   300	
+   301	    second = build_mesh_wireframe_glb(case_id)
+   302	    assert second.status == "rebuild"
+   303	
+   304	
+   305	def test_build_mesh_wireframe_glb_404_for_unknown_case(isolated_imported: Path):
+   306	    with pytest.raises(MeshRenderError) as excinfo:
+   307	        build_mesh_wireframe_glb("imported_unknown")
+   308	    assert excinfo.value.failing_check == "case_not_found"
+   309	
+   310	
+   311	def test_build_mesh_wireframe_glb_404_for_unsafe_case_id(isolated_imported: Path):
+   312	    with pytest.raises(MeshRenderError) as excinfo:
+   313	        build_mesh_wireframe_glb("bad@@id")
+   314	    assert excinfo.value.failing_check == "case_not_found"
+   315	
+   316	
+   317	def test_build_mesh_wireframe_glb_404_when_polymesh_missing(isolated_imported: Path):
+   318	    case_id = "imported_2026-04-28T00-00-00Z_nomesh"
+   319	    (isolated_imported / case_id).mkdir()
+   320	
+   321	    with pytest.raises(MeshRenderError) as excinfo:
+   322	        build_mesh_wireframe_glb(case_id)
+   323	    assert excinfo.value.failing_check == "no_polymesh"
+   324	
+   325	
+   326	def test_build_mesh_wireframe_glb_422_on_polymesh_garbage(isolated_imported: Path):
+   327	    case_id = "imported_2026-04-28T00-00-00Z_garbage"
+   328	    case_dir = isolated_imported / case_id
+   329	    polymesh = case_dir / "constant" / "polyMesh"
+   330	    polymesh.mkdir(parents=True)
+   331	    (polymesh / "points").write_text("definitely not a polyMesh", encoding="utf-8")
+   332	    (polymesh / "faces").write_text("definitely not a faces file", encoding="utf-8")
+   333	
+   334	    with pytest.raises(MeshRenderError) as excinfo:
+   335	        build_mesh_wireframe_glb(case_id)
+   336	    assert excinfo.value.failing_check == "polymesh_parse_error"
+   337	
+   338	
+   339	# ───────── route ─────────
+   340	
+   341	
+   342	def test_get_case_mesh_render_returns_glb_for_cube(isolated_imported: Path):
+   343	    case_id = "imported_2026-04-28T00-00-00Z_cubemesh"
+   344	    case_dir = isolated_imported / case_id
+   345	    case_dir.mkdir()
+   346	    _stage_polymesh(case_dir)
+   347	
+   348	    client = TestClient(app)
+   349	    response = client.get(f"/api/cases/{case_id}/mesh/render")
+   350	
+   351	    assert response.status_code == 200
+   352	    assert response.content[:4] == b"glTF"
+   353	    assert response.headers["content-type"].startswith("model/gltf-binary")
+   354	
+   355	
+   356	def test_get_case_mesh_render_404_for_unknown_case(isolated_imported: Path):
+   357	    client = TestClient(app)
+   358	    response = client.get("/api/cases/imported_unknown/mesh/render")
+   359	    assert response.status_code == 404
+   360	
+   361	
+   362	def test_get_case_mesh_render_404_when_polymesh_missing(isolated_imported: Path):
+   363	    case_id = "imported_2026-04-28T00-00-00Z_nopolymesh"
+   364	    (isolated_imported / case_id).mkdir()
+   365	
+   366	    client = TestClient(app)
+   367	    response = client.get(f"/api/cases/{case_id}/mesh/render")
+   368	    assert response.status_code == 404
+   369	
+   370	
+   371	def test_get_case_mesh_render_422_on_garbage(isolated_imported: Path):
+   372	    case_id = "imported_2026-04-28T00-00-00Z_garbagemesh"
+   373	    case_dir = isolated_imported / case_id
+   374	    polymesh = case_dir / "constant" / "polyMesh"
+   375	    polymesh.mkdir(parents=True)
+   376	    (polymesh / "points").write_text("not a polyMesh", encoding="utf-8")
+   377	    (polymesh / "faces").write_text("also not a polyMesh", encoding="utf-8")
+   378	
+   379	    client = TestClient(app)
+   380	    response = client.get(f"/api/cases/{case_id}/mesh/render")
+   381	    assert response.status_code == 422
+   382	
+   383	
+   384	def test_get_case_mesh_render_byte_equal_on_cache_hit(isolated_imported: Path):
+   385	    case_id = "imported_2026-04-28T00-00-00Z_cachebyteequal"
+   386	    case_dir = isolated_imported / case_id
+   387	    case_dir.mkdir()
+   388	    _stage_polymesh(case_dir)
+   389	
+   390	    client = TestClient(app)
+   391	    first = client.get(f"/api/cases/{case_id}/mesh/render")
+   392	    second = client.get(f"/api/cases/{case_id}/mesh/render")
+   393	    assert first.status_code == 200
+   394	    assert second.content == first.content
+   395	
+   396	
+   397	def test_atomic_write_leaves_no_tempfile(isolated_imported: Path):
+   398	    case_id = "imported_2026-04-28T00-00-00Z_atomicmesh"
+   399	    case_dir = isolated_imported / case_id
+   400	    case_dir.mkdir()
+   401	    _stage_polymesh(case_dir)
+   402	
+   403	    build_mesh_wireframe_glb(case_id)
+   404	    cache_dir = case_dir / ".render_cache"
+   405	    children = sorted(p.name for p in cache_dir.iterdir())
+   406	    assert children == ["mesh.glb"]
+
+ succeeded in 0ms:
+   110	
+   111	    client = TestClient(app)
+   112	    first = client.get(f"/api/cases/{case_id}/geometry/render")
+   113	    second = client.get(f"/api/cases/{case_id}/geometry/render")
+   114	
+   115	    assert first.status_code == 200
+   116	    assert second.status_code == 200
+   117	    assert first.content == second.content
+   118	
+   119	
+   120	def test_build_geometry_glb_status_progression(isolated_imported: Path):
+   121	    """Service-layer test for the cache-status discriminator. The route
+   122	    doesn't expose status, but the contract is the unit-test target."""
+   123	    case_id = "imported_2026-04-28T00-00-00Z_status"
+   124	    _stage_case(isolated_imported, case_id, box_stl())
+   125	
+   126	    first = build_geometry_glb(case_id)
+   127	    assert first.status == "miss"
+   128	    assert first.cache_path.exists()
+   129	
+   130	    second = build_geometry_glb(case_id)
+   131	    assert second.status == "hit"
+   132	    assert second.cache_path == first.cache_path
+   133	
+   134	
+   135	def test_cache_invalidates_on_source_mtime_change(isolated_imported: Path):
+   136	    case_id = "imported_2026-04-28T00-00-00Z_invalidate"
+   137	    stl_path = _stage_case(isolated_imported, case_id, box_stl())
+   138	
+   139	    first = build_geometry_glb(case_id)
+   140	    assert first.status == "miss"
+   141	    first_glb_bytes = first.cache_path.read_bytes()
+   142	    original_cache_mtime = first.cache_path.stat().st_mtime
+   143	
+   144	    # Replace the source STL with a different shape and bump its mtime
+   145	    # past the cache mtime so invalidation fires.
+   146	    new_stl = _cylinder_stl()
+   147	    stl_path.write_bytes(new_stl)
+   148	    bumped_mtime = original_cache_mtime + 5.0
+   149	    os.utime(stl_path, (bumped_mtime, bumped_mtime))
+   150	
+   151	    second = build_geometry_glb(case_id)
+   152	    assert second.status == "rebuild"
+   153	    assert second.cache_path.read_bytes() != first_glb_bytes
+   154	
+   155	
+   156	def test_atomic_write_leaves_no_tempfile_on_success(isolated_imported: Path):
+   157	    """After a successful build the cache dir holds only ``geometry.glb`` —
+   158	    the ``.tmp.<hex>`` temp name from atomic-rename should be gone."""
+   159	    case_id = "imported_2026-04-28T00-00-00Z_atomic"
+   160	    _stage_case(isolated_imported, case_id, box_stl())
+   161	
+   162	    build_geometry_glb(case_id)
+   163	    cache_dir = isolated_imported / case_id / ".render_cache"
+   164	    children = sorted(p.name for p in cache_dir.iterdir())
+   165	    assert children == ["geometry.glb"]
+   166	
+   167	
+   168	# ───────── failure paths ─────────
+   169	
+   170	
+   171	def test_get_case_geometry_render_404_for_unknown_case(isolated_imported: Path):
+   172	    client = TestClient(app)
+   173	    response = client.get("/api/cases/imported_unknown_case/geometry/render")
+   174	    assert response.status_code == 404
+   175	
+   176	
+   177	def test_get_case_geometry_render_404_for_unsafe_case_id():
+   178	    client = TestClient(app)
+   179	    response = client.get("/api/cases/bad@@id/geometry/render")
+   180	    assert response.status_code == 404
+   181	
+   182	
+   183	def test_get_case_geometry_render_422_when_no_stl(isolated_imported: Path):
+   184	    case_id = "imported_2026-04-28T00-00-00Z_nostl"
+   185	    (isolated_imported / case_id / "triSurface").mkdir(parents=True)
+   186	
+   187	    client = TestClient(app)
+   188	    response = client.get(f"/api/cases/{case_id}/geometry/render")
+   189	    assert response.status_code == 422
+   190	
+   191	
+   192	def test_build_geometry_glb_raises_transcode_error_on_garbage(
+   193	    isolated_imported: Path, monkeypatch
+   194	):
+   195	    """Force the transcode path to fail to verify the
+   196	    ``transcode_error`` failing_check is reachable."""
+   197	    case_id = "imported_2026-04-28T00-00-00Z_garbage"
+   198	    _stage_case(isolated_imported, case_id, box_stl())
+   199	
+   200	    def _explode(*args, **kwargs):
+   201	        raise RuntimeError("synthetic trimesh failure for test")
+   202	
+   203	    monkeypatch.setattr(geometry_glb_mod.trimesh, "load", _explode)
+   204	
+   205	    with pytest.raises(GeometryRenderError) as excinfo:
+   206	        build_geometry_glb(case_id)
+   207	    assert excinfo.value.failing_check == "transcode_error"
+   208	
+   209	
+   210	# ───────── case-insensitive STL match preserved (Codex M-VIZ R1 #1 behavior) ─────────
+   211	
+   212	
+   213	def test_get_case_geometry_render_matches_uppercase_stl(isolated_imported: Path):
+   214	    case_id = "imported_2026-04-28T00-00-00Z_upper"
+   215	    case_dir = isolated_imported / case_id
+   216	    triSurface = case_dir / "triSurface"
+   217	    triSurface.mkdir(parents=True)
+   218	    (triSurface / f"{case_id}.STL").write_bytes(box_stl())
+   219	
+   220	    client = TestClient(app)
+   221	    response = client.get(f"/api/cases/{case_id}/geometry/render")
+   222	    assert response.status_code == 200
+   223	    assert response.content[:4] == b"glTF"
+   224	
+   225	
+   226	def test_build_geometry_glb_rejects_stl_symlink_escape(
+   227	    isolated_imported: Path, tmp_path: Path,
+   228	):
+   229	    """Round-2 Finding 1: a symlink under triSurface/ pointing outside
+   230	    the case dir must fail the resolve+relative_to containment guard,
+   231	    not get transcoded into the cache."""
+   232	    case_id = "imported_2026-04-28T00-00-00Z_stl_symlink"
+   233	    case_dir = isolated_imported / case_id
+   234	    triSurface = case_dir / "triSurface"
+   235	    triSurface.mkdir(parents=True)
+   236	    outside_stl = tmp_path / "evil.stl"
+   237	    outside_stl.write_bytes(box_stl())  # real STL but outside the case dir
+   238	    (triSurface / "evil.stl").symlink_to(outside_stl)
+   239	
+   240	    with pytest.raises(GeometryRenderError) as excinfo:
+   241	        build_geometry_glb(case_id)
+   242	    assert excinfo.value.failing_check == "no_source_stl"
+
+exec
+/bin/zsh -lc '.venv/bin/python -m pytest -q ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1090ms:
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, anyio-4.13.0
+collected 39 items
+
+ui/backend/tests/test_geometry_render_glb.py ..............              [ 35%]
+ui/backend/tests/test_mesh_wireframe.py .........................        [100%]
+
+============================== 39 passed in 0.39s ==============================
+
+codex
+## Round 5 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: VERIFIED — all three helpers now treat `OSError` on pre/post-replace stat as the same abort path as mtime drift, `field_sample` has the new vanish regression test, and the temp/cache cleanup behavior is confirmed.
+
+New findings (if any): none. I checked parity in [field_sample.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/field_sample.py:223), [geometry_glb.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/geometry_glb.py:118), and [mesh_wireframe.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/mesh_wireframe.py:136). The new vanish test is present in [test_field_sample.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_field_sample.py:221). Verification run: `.venv/bin/python -m pytest -q ui/backend/tests/test_field_sample.py` passed (`20 passed`), and the parity suites `.venv/bin/python -m pytest -q ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py` also passed (`39 passed`). The plain `pytest` shim failed only because it was outside the repo venv (`ModuleNotFoundError: trimesh`), not because of this patch.
+
+---
+
+Verdict: APPROVE
+
+tokens used
+66,477
+## Round 5 review · M-RENDER-API arc
+
+Verification:
+- Finding 3: VERIFIED — all three helpers now treat `OSError` on pre/post-replace stat as the same abort path as mtime drift, `field_sample` has the new vanish regression test, and the temp/cache cleanup behavior is confirmed.
+
+New findings (if any): none. I checked parity in [field_sample.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/field_sample.py:223), [geometry_glb.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/geometry_glb.py:118), and [mesh_wireframe.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/services/render/mesh_wireframe.py:136). The new vanish test is present in [test_field_sample.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_field_sample.py:221). Verification run: `.venv/bin/python -m pytest -q ui/backend/tests/test_field_sample.py` passed (`20 passed`), and the parity suites `.venv/bin/python -m pytest -q ui/backend/tests/test_geometry_render_glb.py ui/backend/tests/test_mesh_wireframe.py` also passed (`39 passed`). The plain `pytest` shim failed only because it was outside the repo venv (`ModuleNotFoundError: trimesh`), not because of this patch.
+
+---
+
+Verdict: APPROVE
+

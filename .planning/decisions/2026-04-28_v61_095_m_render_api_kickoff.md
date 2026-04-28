@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-095
 title: M-RENDER-API kickoff — backend geometry / mesh / field render endpoints (trimesh.export · glTF binary · second milestone under Pivot Charter Addendum 3)
-status: Accepted (2026-04-28 · CLASS-1 docs-only governance kickoff per V61-086/089/093/094 precedent · Codex SKIPPED · Kogami NOT triggered per V61-094 P2 #1 bounding clause [4-condition self-check passed: no charter mod · no line-A extension beyond M-VIZ · counter <20 since RETRO-V61-005 · no risk-tier change] · CFDJerry explicit ratification 2026-04-28)
+status: Accepted (2026-04-28 · CLASS-1 docs-only governance kickoff per V61-086/089/093/094 precedent · Codex SKIPPED at kickoff · Kogami NOT triggered per V61-094 P2 #1 bounding clause [4-condition self-check passed: no charter mod · no line-A extension beyond M-VIZ · counter <20 since RETRO-V61-005 · no risk-tier change] · CFDJerry explicit ratification 2026-04-28 · IMPLEMENTATION ARC CLOSED 2026-04-28 · Codex APPROVE at round 5 · 7 findings closed across 5 rounds [R1: 6 findings · R2: F7 new · R3-R5: F3 successive closure] · arc commit range c4264f7..84fa4cf)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-28
 authored_under: Pivot Charter Addendum 3 §4.a + §4.c HARD ORDERING (DEC-V61-093 Accepted 2026-04-28)
@@ -33,8 +33,8 @@ prerequisite_status:
   workbench_extra_dep: confirmed (trimesh already a [workbench] dep · M5.0 ingest depends on it · zero new dependencies needed for Tier-A)
 notion_sync_status: synced 2026-04-28 (DEC https://www.notion.so/350c68942bed81da9f1fd5ace88dd5f9 · brief sub-page https://www.notion.so/350c68942bed81d8bae7e637cdaa3ee4 · spec_v2 sub-page https://www.notion.so/350c68942bed81deb9d3e7c8cd6ea7a5 · placement inherits V61-094 P3 #5 precedent)
 autonomous_governance: true
-library_choice: trimesh.export (working assumption · subject to ratification override before Status=Accepted)
-codex_tool_report_path: pending (per-implementation-arc Codex fires on Step 8 of spec_v2 §Sequence)
+library_choice: trimesh.export + hand-built minimal glTF for LINES (confirmed at implementation · trimesh handled STL→glb · hand-built gltf_lines_builder.py for polyMesh wireframe since trimesh has no LINES primitive support · vtkGLTFImporter on the frontend lazy-loaded as a separate chunk)
+codex_tool_report_path: reports/codex_tool_reports/m_render_api_arc/ (5-round arc · README.md indexes verdicts and findings · round{1..5}.log raw transcripts)
 codex_review_required: true
 codex_triggers:
   - 多文件后端改动 (3 new routes + new services/render/ module + extension to existing geometry_render.py)
