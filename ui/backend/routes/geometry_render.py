@@ -1,16 +1,13 @@
-"""GET /api/cases/{case_id}/geometry/stl — serve STL bytes for the Viewport.
+"""Geometry-render routes — STL pass-through (M-VIZ) + glb transcode (M-RENDER-API).
 
-M-VIZ Tier-A backend deliverable (per DEC-V61-094 + spec_v2 §B.1).
-Tiny anticipatory endpoint — full M-RENDER-API surface (multi-format,
-glTF, mesh, fields) lands in a later milestone. For M-VIZ this exists
-solely so the frontend Viewport.tsx component has something concrete
-to fetch when smoke-testing the imported case fixtures.
+  GET /api/cases/{case_id}/geometry/stl     — M-VIZ Tier-A · raw STL bytes
+  GET /api/cases/{case_id}/geometry/render  — M-RENDER-API B.1 · transcoded glb
 
-Source of truth: ``ui/backend/user_drafts/imported/{case_id}/triSurface/*.stl``
-(written by ``case_scaffold.scaffold_imported_case`` during M5.0 import).
-
-Path-traversal defense: ``is_safe_case_id`` + post-resolve subpath check
-mirroring the comparison_report.get_render_file pattern.
+Both routes share path-traversal defense (``is_safe_case_id`` + post-
+resolve subpath check) and source-of-truth path
+(``user_drafts/imported/{case_id}/triSurface/*.stl``). The /render
+endpoint additionally caches the transcoded glb under
+``<case_dir>/.render_cache/`` keyed on source mtime.
 """
 from __future__ import annotations
 
@@ -19,6 +16,7 @@ from fastapi.responses import FileResponse
 
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
+from ui.backend.services.render import GeometryRenderError, build_geometry_glb
 
 
 router = APIRouter()
@@ -65,4 +63,38 @@ def get_case_stl(case_id: str) -> FileResponse:
         resolved,
         media_type="model/stl",
         filename=resolved.name,
+    )
+
+
+_RENDER_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+    "case_not_found": 404,
+    "no_source_stl": 422,
+    "transcode_error": 422,
+}
+
+
+@router.get("/cases/{case_id}/geometry/render", tags=["geometry-render"])
+def get_case_geometry_glb(case_id: str) -> FileResponse:
+    """Return the imported case's geometry as binary glTF (.glb).
+
+    Caches the transcoded glb under ``<case_dir>/.render_cache/geometry.glb``
+    keyed on the source STL mtime. Concurrent readers either see the
+    pre-replace or post-replace bytes — never a half-written file.
+    """
+    try:
+        result = build_geometry_glb(case_id)
+    except GeometryRenderError as exc:
+        status = _RENDER_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+        raise HTTPException(status_code=status, detail=str(exc))
+
+    try:
+        resolved = result.cache_path.resolve(strict=True)
+        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+    except (ValueError, OSError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="case not found")
+
+    return FileResponse(
+        resolved,
+        media_type="model/gltf-binary",
+        filename="geometry.glb",
     )
