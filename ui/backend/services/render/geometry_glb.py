@@ -115,13 +115,43 @@ def _is_cache_fresh(cache: Path, source: Path) -> bool:
         return False
 
 
-def _atomic_write(target: Path, payload: bytes) -> None:
+def _atomic_write_guarded(
+    target: Path,
+    payload: bytes,
+    source: Path,
+    expected_src_mtime_ns: int,
+) -> None:
+    """Atomic write with pre- and post-replace source-mutation guards.
+
+    Round-4 Finding 3 closure: re-stat ``source`` immediately before
+    ``os.replace`` and abort (deleting the temp) if it changed since
+    the rebuild started — this prevents a stale cache from EVER
+    becoming visible to concurrent readers in the (replace, unlink)
+    window. A post-replace re-stat collapses the kernel-syscall
+    residual race; on mismatch the just-replaced cache is unlinked.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(
         f".tmp.{secrets.token_hex(4)}{target.suffix}"
     )
     tmp.write_bytes(payload)
+    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"source {source.name} mutated before atomic replace"
+        )
     os.replace(tmp, target)
+    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"source {source.name} mutated during atomic replace"
+        )
 
 
 def _transcode_to_glb(source_stl: Path) -> bytes:
@@ -184,13 +214,11 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
     if _is_cache_fresh(cache, source_stl):
         return GlbBuildResult(cache_path=cache, status="hit")
 
-    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
-    # before, after transcode, AND after os.replace. The post-replace
-    # check closes the residual window where the source mutates
-    # between our post-transcode stat and the atomic rename — without
-    # this the cache mtime would outrace the source mtime and freeze
-    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
-    # we delete the just-written cache so the next request rebuilds.
+    # Round-3+4 Finding 3 closure: source mtime threaded through both
+    # the post-transcode check and the guarded atomic write. The pre-
+    # replace check inside the helper aborts BEFORE os.replace (no
+    # stale cache visible to concurrent readers); the post-replace
+    # check unlinks if a syscall-window mutation slipped through.
     src_mtime_before = source_stl.stat().st_mtime_ns
     glb_bytes = _transcode_to_glb(source_stl)
     src_mtime_after_transcode = source_stl.stat().st_mtime_ns
@@ -203,18 +231,13 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
             ),
         )
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
-    _atomic_write(cache, glb_bytes)
-    src_mtime_after_replace = source_stl.stat().st_mtime_ns
-    if src_mtime_after_replace != src_mtime_before:
-        try:
-            cache.unlink()
-        except OSError:
-            pass
+    try:
+        _atomic_write_guarded(
+            cache, glb_bytes, source_stl, src_mtime_before
+        )
+    except RuntimeError as exc:
         raise GeometryRenderError(
             failing_check="transcode_error",
-            message=(
-                f"source {source_stl.name} mutated during atomic write "
-                "(retry the request)"
-            ),
+            message=f"{exc} (retry the request)",
         )
     return GlbBuildResult(cache_path=cache, status=status)

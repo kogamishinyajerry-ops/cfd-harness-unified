@@ -220,13 +220,56 @@ def _is_cache_fresh(cache: Path, source: Path) -> bool:
         return False
 
 
-def _atomic_write(target: Path, payload: bytes) -> None:
+def _atomic_write_guarded(
+    target: Path,
+    payload: bytes,
+    source: Path,
+    expected_src_mtime_ns: int,
+) -> None:
+    """Atomic write with pre-replace + post-replace source-mutation guards.
+
+    Round-3 Finding 3 closure (Codex Round-3 PARTIAL): the prior
+    ``_atomic_write`` did temp-write + ``os.replace`` unconditionally.
+    Even with a post-replace stat the concurrent-reader window between
+    ``os.replace`` and our subsequent ``cache.unlink()`` could expose
+    stale bytes for one request.
+
+    This guarded variant:
+      1. Writes the payload to a temp file.
+      2. Re-stats ``source``; if it changed since the rebuild started,
+         unlinks the temp and raises ``RuntimeError`` BEFORE the
+         replace — concurrent readers never see the stale cache.
+      3. ``os.replace``s the temp into place.
+      4. Re-stats ``source`` once more; if it changed during (or
+         immediately after) the replace, unlinks the now-stale cache
+         and raises. This collapses the residual window to the kernel
+         syscall granularity.
+
+    Caller is responsible for converting the RuntimeError into its own
+    failing_check.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(
         f".tmp.{secrets.token_hex(4)}{target.suffix}"
     )
     tmp.write_bytes(payload)
+    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"source {source.name} mutated before atomic replace"
+        )
     os.replace(tmp, target)
+    if source.stat().st_mtime_ns != expected_src_mtime_ns:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"source {source.name} mutated during atomic replace"
+        )
 
 
 def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResult:
@@ -245,14 +288,12 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
         n = cache.stat().st_size // 4
         return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
 
-    # Round-2 Finding 3 (closed in Round-3): snapshot source mtime
-    # before parsing, after parsing, AND after os.replace. The post-
-    # parse check stops a stale-body / fresh-cache race; the post-
-    # replace check stops the residual window where the source mutates
-    # between our post-parse stat and the atomic rename — without this
-    # the cache mtime can outrace the source mtime forever, freezing
-    # stale bytes (Codex Round-2 PARTIAL note). On detected mutation
-    # we delete the just-written cache so the next request rebuilds.
+    # Round-3+4 Finding 3 closure: source mtime is snapshotted before
+    # parsing, re-checked post-parse, AND threaded into the guarded
+    # atomic write so the rebuild aborts BEFORE os.replace if the source
+    # changed (no stale cache ever becomes visible to concurrent
+    # readers) and aborts WITH unlink if the source changes during the
+    # replace syscall itself (closes the kernel-syscall residual).
     src_mtime_before = field_path.stat().st_mtime_ns
     values = _parse_internal_scalar_field(field_path)
     src_mtime_after_parse = field_path.stat().st_mtime_ns
@@ -266,19 +307,14 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
         )
     payload = values.astype(np.float32, copy=False).tobytes()
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
-    _atomic_write(cache, payload)
-    src_mtime_after_replace = field_path.stat().st_mtime_ns
-    if src_mtime_after_replace != src_mtime_before:
-        try:
-            cache.unlink()
-        except OSError:
-            pass
+    try:
+        _atomic_write_guarded(
+            cache, payload, field_path, src_mtime_before
+        )
+    except RuntimeError as exc:
         raise FieldSampleError(
             failing_check="field_parse_error",
-            message=(
-                f"source {field_path.name} mutated during atomic write "
-                "(retry the request)"
-            ),
+            message=f"{exc} (retry the request)",
         )
     return FieldSampleResult(
         cache_path=cache,

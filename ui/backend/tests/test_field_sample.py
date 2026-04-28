@@ -218,6 +218,48 @@ def test_build_field_payload_rejects_traversal_in_field_name(
     assert excinfo.value.failing_check == "field_not_found"
 
 
+def test_build_field_payload_aborts_on_pre_replace_source_mutation(
+    isolated_imported: Path, monkeypatch,
+):
+    """Round-4 Finding 3 closure: the guarded atomic write checks
+    source mtime BEFORE os.replace so a stale cache is never made
+    visible to concurrent readers. Simulate by monkey-patching the
+    write_bytes step to bump source mtime between temp-write and
+    pre-replace stat."""
+    case_id = "imported_2026-04-28T00-00-00Z_pre_replace_race"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    field_path = _stage_field(
+        case_dir, "run_001", "p",
+        np.array([1.0, 2.0, 3.0], dtype=np.float32),
+    )
+    # Hook ``Path.write_bytes`` so that immediately after the temp-write
+    # step inside the guarded helper, the source mtime is bumped — the
+    # subsequent pre-replace stat will see the mismatch and abort.
+    real_write_bytes = Path.write_bytes
+    bump_state = {"bumped": False}
+
+    def patched_write_bytes(self: Path, data: bytes, *args, **kwargs):
+        result = real_write_bytes(self, data, *args, **kwargs)
+        # only mutate after the temp file is written, not when the
+        # service writes the field source itself.
+        if ".tmp." in self.name and not bump_state["bumped"]:
+            bumped = field_path.stat().st_mtime + 5.0
+            os.utime(field_path, (bumped, bumped))
+            bump_state["bumped"] = True
+        return result
+    monkeypatch.setattr(Path, "write_bytes", patched_write_bytes)
+
+    with pytest.raises(FieldSampleError) as excinfo:
+        build_field_payload(case_id, "run_001", "p")
+    assert excinfo.value.failing_check == "field_parse_error"
+    assert "before atomic replace" in excinfo.value.message
+    # No cache file should exist (pre-replace abort cleaned up the temp
+    # and never replaced the cache).
+    cache = case_dir / ".render_cache" / "field-run_001-p.bin"
+    assert not cache.exists()
+
+
 def test_build_field_payload_rejects_symlink_escaping_case_dir(
     isolated_imported: Path, tmp_path: Path,
 ):

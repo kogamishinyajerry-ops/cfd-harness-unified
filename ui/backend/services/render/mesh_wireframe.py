@@ -133,13 +133,47 @@ def _is_cache_fresh(cache: Path, *sources: Path) -> bool:
         return False
 
 
-def _atomic_write(target: Path, payload: bytes) -> None:
+def _atomic_write_guarded_multi(
+    target: Path,
+    payload: bytes,
+    sources: tuple[Path, ...],
+    expected_mtimes_ns: tuple[int, ...],
+) -> None:
+    """Multi-source variant of the guarded atomic write (Round-4 Finding 3).
+
+    Same contract as field_sample / geometry_glb's single-source
+    ``_atomic_write_guarded``, but checks an arbitrary number of
+    source files. polyMesh wireframes depend on both ``points`` and
+    ``faces`` so either changing during the rebuild must abort.
+    """
+    if len(sources) != len(expected_mtimes_ns):
+        raise ValueError(
+            "sources and expected_mtimes_ns must have the same length"
+        )
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(
         f".tmp.{secrets.token_hex(4)}{target.suffix}"
     )
     tmp.write_bytes(payload)
+    current = tuple(s.stat().st_mtime_ns for s in sources)
+    if current != expected_mtimes_ns:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            "polyMesh source mutated before atomic replace"
+        )
     os.replace(tmp, target)
+    current = tuple(s.stat().st_mtime_ns for s in sources)
+    if current != expected_mtimes_ns:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            "polyMesh source mutated during atomic replace"
+        )
 
 
 def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
@@ -188,21 +222,16 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
     if _is_cache_fresh(cache, points_path, faces_path):
         return WireframeBuildResult(cache_path=cache, status="hit")
 
-    # Round-2 Finding 3 (closed in Round-3): snapshot both source mtimes
-    # before, after build, AND after os.replace. The post-replace check
-    # closes the residual window where a source file mutates between
-    # our post-build stat and the atomic rename (Codex Round-2 PARTIAL
-    # note). On detected mutation we delete the just-written cache so
-    # the next request rebuilds.
-    src_mtimes_before = (
-        points_path.stat().st_mtime_ns,
-        faces_path.stat().st_mtime_ns,
-    )
+    # Round-3+4 Finding 3 closure: source mtimes (points + faces) are
+    # threaded through both the post-build check and the guarded
+    # multi-source atomic write. The pre-replace check inside the
+    # helper aborts BEFORE os.replace (no stale cache visible to
+    # concurrent readers); the post-replace check unlinks if a syscall-
+    # window mutation slipped through.
+    sources = (points_path, faces_path)
+    src_mtimes_before = tuple(s.stat().st_mtime_ns for s in sources)
     glb_bytes = _build_wireframe_bytes(points_path, faces_path)
-    src_mtimes_after_build = (
-        points_path.stat().st_mtime_ns,
-        faces_path.stat().st_mtime_ns,
-    )
+    src_mtimes_after_build = tuple(s.stat().st_mtime_ns for s in sources)
     if src_mtimes_after_build != src_mtimes_before:
         raise MeshRenderError(
             failing_check="polymesh_parse_error",
@@ -212,21 +241,13 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
             ),
         )
     status: CacheStatus = "rebuild" if cache.exists() else "miss"
-    _atomic_write(cache, glb_bytes)
-    src_mtimes_after_replace = (
-        points_path.stat().st_mtime_ns,
-        faces_path.stat().st_mtime_ns,
-    )
-    if src_mtimes_after_replace != src_mtimes_before:
-        try:
-            cache.unlink()
-        except OSError:
-            pass
+    try:
+        _atomic_write_guarded_multi(
+            cache, glb_bytes, sources, src_mtimes_before
+        )
+    except RuntimeError as exc:
         raise MeshRenderError(
             failing_check="polymesh_parse_error",
-            message=(
-                "polyMesh source mutated during atomic write "
-                "(retry the request)"
-            ),
+            message=f"{exc} (retry the request)",
         )
     return WireframeBuildResult(cache_path=cache, status=status)
