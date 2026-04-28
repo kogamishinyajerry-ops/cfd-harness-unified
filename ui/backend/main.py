@@ -71,6 +71,14 @@ try:
 except ModuleNotFoundError:
     import_geometry = None  # type: ignore[assignment]
 
+# demo_fixtures uses the same [workbench]-extra deps as import_geometry
+# (it shares the geometry_ingest + case_scaffold pipeline). Loaded
+# conditionally for parity with import_geometry.
+try:
+    from ui.backend.routes import demo_fixtures  # noqa: F401
+except ModuleNotFoundError:
+    demo_fixtures = None  # type: ignore[assignment]
+
 try:
     from ui.backend.routes import mesh_imported  # noqa: F401
 except ModuleNotFoundError:
@@ -124,6 +132,8 @@ app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
 if import_geometry is not None:
     app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])
+if demo_fixtures is not None:
+    app.include_router(demo_fixtures.router, prefix="/api", tags=["demo-fixtures"])
 if mesh_imported is not None:
     app.include_router(mesh_imported.router, prefix="/api", tags=["mesh-imported"])
 if geometry_render is not None:

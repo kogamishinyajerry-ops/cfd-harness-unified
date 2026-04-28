@@ -219,6 +219,13 @@ def _subprocess_target(
     """Run the gmsh meshing job inside a child process and post back the
     serialized result (or error) on ``queue``. Top-level so it can be
     pickled by the 'spawn' start method on macOS.
+
+    Error-kind dispatch matters: the parent translates 'gmsh_error' to
+    GmshMeshGenerationError (user-geometry fault → 422), but every
+    backend/setup fault must surface as something OTHER than
+    GmshMeshGenerationError so the pipeline routes it as 5xx. Codex
+    Round 5 P1: a missing ``gmsh`` install, child-bootstrap failure,
+    or similar backend fault must NOT be reported as "bad geometry".
     """
     try:
         result = _gmsh_inline(
@@ -234,10 +241,14 @@ def _subprocess_target(
         queue.put(("ok", payload))
     except GmshMeshGenerationError as exc:
         queue.put(("gmsh_error", str(exc)))
+    except ImportError as exc:
+        # ModuleNotFoundError ⊂ ImportError. gmsh missing from the
+        # [workbench] extra is a deployment fault, not user geometry.
+        queue.put(("import_error", f"{type(exc).__name__}: {exc}"))
     except OSError as exc:
         queue.put(("os_error", str(exc)))
     except BaseException as exc:  # noqa: BLE001 — bubble unknown failures with type info
-        queue.put(("unknown", f"{type(exc).__name__}: {exc}"))
+        queue.put(("backend_error", f"{type(exc).__name__}: {exc}"))
 
 
 def run_gmsh_on_imported_case(
@@ -295,9 +306,19 @@ def run_gmsh_on_imported_case(
         # Disk-full / permission-denied — surface as OSError so the
         # pipeline layer reports a 5xx (matches the in-process contract).
         raise OSError(str(payload))
-    # 'unknown' — pickle the message into a GmshMeshGenerationError so
-    # the route layer's existing handler path covers it. The message
-    # carries the original exception class name for debugging.
-    raise GmshMeshGenerationError(
-        f"gmsh subprocess raised an unhandled exception: {payload}"
+    if kind == "import_error":
+        # gmsh module missing in the deployed [workbench] extra. Surface
+        # as RuntimeError so FastAPI returns 5xx and operators see the
+        # original ImportError class + message. NOT a user-geometry
+        # fault — must not collapse to gmsh_diverged / 422.
+        raise RuntimeError(
+            f"gmsh subprocess could not initialize (deployment fault): {payload}"
+        )
+    # 'backend_error' (or any unknown kind from a future version) —
+    # surface as RuntimeError so the route layer reports 5xx. Codex
+    # Round 5 P1: this branch must NOT raise GmshMeshGenerationError,
+    # otherwise child-bootstrap / unknown-cause faults would be
+    # silently relabeled as "bad geometry" (HTTP 422).
+    raise RuntimeError(
+        f"gmsh subprocess raised an unhandled exception (kind={kind!r}): {payload}"
     )

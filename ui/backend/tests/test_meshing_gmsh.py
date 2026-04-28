@@ -498,3 +498,113 @@ def test_gmsh_runner_subprocess_wrapper_marshals_gmsh_errors(tmp_path: Path):
             output_msh_path=tmp_path / "out.msh",
             mesh_mode="beginner",
         )
+
+
+def test_subprocess_target_routes_oserror_as_os_error(tmp_path: Path):
+    """Codex Round 5 P1 unit-level guard for the 'os_error' kind.
+
+    Calls _subprocess_target directly (bypassing multiprocessing) with a
+    Queue and verifies that an OSError from _gmsh_inline (e.g. disk full
+    / read-only filesystem at gmsh.write()) marshals back as
+    ('os_error', msg). The parent then re-raises OSError → 5xx backend,
+    NOT GmshMeshGenerationError → 4xx 'bad geometry'.
+    """
+    from queue import Queue
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    captured = Queue()
+
+    def _fake_inline(**_kwargs):
+        raise PermissionError("disk full / read-only filesystem")
+
+    original = runner_mod._gmsh_inline
+    runner_mod._gmsh_inline = _fake_inline
+    try:
+        runner_mod._subprocess_target(
+            stl_path_str=str(tmp_path / "x.stl"),
+            output_msh_path_str=str(tmp_path / "x.msh"),
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+            queue=captured,
+        )
+    finally:
+        runner_mod._gmsh_inline = original
+
+    kind, payload = captured.get_nowait()
+    assert kind == "os_error"
+    assert "disk full" in payload
+
+
+def test_subprocess_target_routes_import_error_as_import_error(tmp_path: Path):
+    """Codex Round 5 P1 unit-level guard for the 'import_error' kind.
+
+    Calls _subprocess_target directly (bypassing multiprocessing) with
+    a Queue and verifies that an ImportError from _gmsh_inline (e.g.
+    gmsh missing from the [workbench] extra) lands as ('import_error',
+    msg) — distinct from ('gmsh_error', ...) which would 4xx-relabel.
+    """
+    from queue import Queue
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    captured = Queue()
+
+    def _fake_inline(**_kwargs):
+        raise ModuleNotFoundError("No module named 'gmsh'")
+
+    # Patch _gmsh_inline so the synchronous _subprocess_target invokes
+    # our raiser in the same process. (Avoids needing to spawn a real
+    # child to exercise the dispatch logic.)
+    original = runner_mod._gmsh_inline
+    runner_mod._gmsh_inline = _fake_inline
+    try:
+        runner_mod._subprocess_target(
+            stl_path_str=str(tmp_path / "x.stl"),
+            output_msh_path_str=str(tmp_path / "x.msh"),
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+            queue=captured,
+        )
+    finally:
+        runner_mod._gmsh_inline = original
+
+    kind, payload = captured.get_nowait()
+    assert kind == "import_error", (
+        f"ModuleNotFoundError must marshal as 'import_error' "
+        f"(non-gmsh, non-OSError backend fault); got {kind!r}"
+    )
+    assert "ModuleNotFoundError" in payload
+
+
+def test_subprocess_target_routes_unknown_as_backend_error(tmp_path: Path):
+    """Codex Round 5 P1: unknown exception classes from the child must
+    land as 'backend_error', so the parent can re-raise as RuntimeError
+    (5xx) instead of GmshMeshGenerationError (which would 4xx-collapse
+    every backend bug into 'bad geometry').
+    """
+    from queue import Queue
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    captured = Queue()
+
+    class _SomeBackendBug(RuntimeError):
+        pass
+
+    def _fake_inline(**_kwargs):
+        raise _SomeBackendBug("unexpected child-process failure")
+
+    original = runner_mod._gmsh_inline
+    runner_mod._gmsh_inline = _fake_inline
+    try:
+        runner_mod._subprocess_target(
+            stl_path_str=str(tmp_path / "x.stl"),
+            output_msh_path_str=str(tmp_path / "x.msh"),
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+            queue=captured,
+        )
+    finally:
+        runner_mod._gmsh_inline = original
+
+    kind, payload = captured.get_nowait()
+    assert kind == "backend_error"
+    assert "_SomeBackendBug" in payload

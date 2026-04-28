@@ -34,3 +34,13 @@ export interface ImportRejectionDetail {
   failing_check: "stl_parse" | "watertight" | "size_limit" | "unknown" | string;
   ingest_report?: IngestReport | null;
 }
+
+// M-PANELS Step 10 · demo-fixtures catalogue. Mirrors the
+// DemoFixture pydantic model in ui/backend/routes/demo_fixtures.py.
+export interface DemoFixture {
+  name: string;
+  filename: string;
+  title: string;
+  description: string;
+  size_bytes: number;
+}

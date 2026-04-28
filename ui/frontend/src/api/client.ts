@@ -30,6 +30,7 @@ import type {
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 import type {
+  DemoFixture,
   ImportRejectionDetail,
   ImportSTLResponse,
 } from "@/types/import_geometry";
@@ -211,6 +212,35 @@ export const api = {
           : typeof detail === "string"
             ? detail
             : `import failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as ImportSTLResponse;
+  },
+
+  // M-PANELS Step 10 demo entry: list + one-click import of the
+  // checked-in demo STLs in examples/imports/. The import endpoint
+  // returns the same ImportSTLResponse shape as /api/import/stl, so
+  // the post-upload navigation logic in ImportPage is shared.
+  listDemoFixtures: () => request<DemoFixture[]>("/api/demo-fixtures"),
+  importDemoFixture: async (name: string): Promise<ImportSTLResponse> => {
+    const resp = await fetch(
+      `/api/demo-fixtures/${encodeURIComponent(name)}/import`,
+      { method: "POST", credentials: "same-origin" },
+    );
+    if (!resp.ok) {
+      let detail: ImportRejectionDetail | string | undefined;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as ImportRejectionDetail).reason
+          : typeof detail === "string"
+            ? detail
+            : `demo import failed (${resp.status})`;
       throw new ApiError(resp.status, message, detail);
     }
     return (await resp.json()) as ImportSTLResponse;

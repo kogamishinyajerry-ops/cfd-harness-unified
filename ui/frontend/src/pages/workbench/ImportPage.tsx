@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
 import type {
+  DemoFixture,
   ImportRejectionDetail,
   ImportSTLResponse,
   IngestReport,
@@ -87,6 +88,8 @@ export function ImportPage() {
   const [rejection, setRejection] = useState<ImportRejectionDetail | null>(null);
   const [networkError, setNetworkError] = useState<string>("");
   const [featureState, setFeatureState] = useState<ImportFeatureState>("probing");
+  const [demoFixtures, setDemoFixtures] = useState<DemoFixture[]>([]);
+  const [demoLoading, setDemoLoading] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,6 +100,44 @@ export function ImportPage() {
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listDemoFixtures()
+      .then((fixtures) => {
+        if (!cancelled) setDemoFixtures(fixtures);
+      })
+      .catch(() => {
+        // Soft-fail: if /api/demo-fixtures isn't available the section
+        // just stays hidden (the legacy upload-flow remains usable).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onDemoClick(name: string) {
+    setDemoLoading(name);
+    setRejection(null);
+    setNetworkError("");
+    try {
+      const r = await api.importDemoFixture(name);
+      // Same post-upload navigation as the file-upload flow — straight
+      // into Step 1 of the M-PANELS workbench.
+      navigate(`/workbench/case/${encodeURIComponent(r.case_id)}?step=1`);
+    } catch (e) {
+      if (e instanceof ApiError && e.detail && typeof e.detail === "object") {
+        setRejection(e.detail as ImportRejectionDetail);
+      } else if (e instanceof Error) {
+        setNetworkError(e.message);
+      } else {
+        setNetworkError(String(e));
+      }
+    } finally {
+      setDemoLoading(null);
+    }
+  }
 
   function reset() {
     setFile(null);
@@ -149,6 +190,49 @@ export function ImportPage() {
           verdict (M5.1 caps them at PASS_WITH_DISCLAIMER).
         </p>
       </header>
+
+      {/* M-PANELS Step 10 demo: one-click STL imports for the
+          checked-in fixtures. Hidden if the backend can't list demos
+          (graceful degradation — the regular upload flow below still
+          works). Hidden after a successful upload too so the success
+          panel isn't visually competed-with. */}
+      {featureState === "available" && !response && demoFixtures.length > 0 && (
+        <div
+          data-testid="demo-fixtures"
+          className="mb-5 rounded-md border border-emerald-500/30 bg-emerald-500/[0.04] p-5"
+        >
+          <h2 className="text-sm font-semibold text-emerald-300">
+            Try a demo · one-click import
+          </h2>
+          <p className="mt-1 text-[12px] text-surface-400">
+            No file? Click any of the checked-in fixtures below to skip
+            straight into the M-PANELS workbench (Step 1 · geometry view).
+            Each has been verified end-to-end through Step 2 mesh.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {demoFixtures.map((fx) => (
+              <button
+                key={fx.name}
+                type="button"
+                data-testid={`demo-fixture-${fx.name}`}
+                disabled={demoLoading !== null}
+                onClick={() => onDemoClick(fx.name)}
+                className="flex h-full flex-col items-start rounded-sm border border-surface-700 bg-surface-900/40 p-3 text-left transition hover:border-emerald-500/40 hover:bg-emerald-500/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="text-[12px] font-semibold text-emerald-200">
+                  {demoLoading === fx.name ? "Importing…" : fx.title}
+                </span>
+                <span className="mt-1 text-[11px] text-surface-400">
+                  {fx.description}
+                </span>
+                <span className="mt-2 font-mono text-[10px] text-surface-500">
+                  {fx.filename} · {(fx.size_bytes / 1024).toFixed(1)} KB
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {featureState === "unavailable" && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-6 text-sm text-amber-100">

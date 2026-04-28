@@ -133,6 +133,17 @@ def test_scaffold_writes_all_expected_files(isolated_drafts, clean_report):
     assert result.case_yaml_path.exists()
     assert result.case_yaml_path.parent == drafts
 
+    # M-PANELS Step 10 visual-smoke fix (Codex Round 5 Comment 3):
+    # the scaffold must always emit system/controlDict so gmshToFoam
+    # (and every downstream OpenFOAM utility) can run without "cannot
+    # find file system/controlDict" failures.
+    control_dict = result.imported_case_dir / "system" / "controlDict"
+    assert control_dict.exists()
+    body = control_dict.read_text(encoding="utf-8")
+    assert "FoamFile" in body
+    assert "object      controlDict;" in body
+    assert "application" in body
+
 
 def test_scaffold_manifest_schema_complete(isolated_drafts, clean_report):
     drafts, imported = isolated_drafts
