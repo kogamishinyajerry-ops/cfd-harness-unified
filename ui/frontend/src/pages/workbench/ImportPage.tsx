@@ -246,20 +246,30 @@ export function ImportPage() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate(response.edit_url)}
+                // M-PANELS (DEC-V61-096 spec_v2 §E Step 4): post-upload
+                // navigation lands on the three-pane workbench shell at
+                // /workbench/case/<id>?step=1 (Step 1 · imported-geometry
+                // verification) so the engineer enters the engineer-driven
+                // step-panel flow Charter Addendum 3 §3 promises rather
+                // than the legacy YAML editor.
+                onClick={() =>
+                  navigate(
+                    `/workbench/case/${encodeURIComponent(response.case_id)}?step=1`,
+                  )
+                }
                 className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
               >
-                Continue to editor →
+                Open in workbench →
               </button>
             </div>
           </div>
-          {/* M-VIZ Step 6 (DEC-V61-094 spec_v2 §A.2): Geometry preview panel
-              ADDED below the existing report card. Not a Fluent-style layout
-              replacement — that's M-PANELS. M-VIZ uses ImportPage as the
-              smoke-test home so the Viewport gets a real consumer immediately.
-              The report card + "Continue to editor" link above are unchanged.
-              Viewport renders responsive (no fixed width) so it stays inside
-              this section's max-w-3xl bound. */}
+          {/* M-VIZ Step 6 added the preview here as the smoke-test home
+              for the Viewport. M-RENDER-API + M-PANELS (DEC-V61-096
+              Step 4) flip this from the M-VIZ STL passthrough to the
+              transcoded glb served by /api/cases/<id>/geometry/render —
+              same content, smaller wire payload, and matches what the
+              StepPanelShell's center pane renders, so the import preview
+              and the post-merge workbench view are byte-equivalent. */}
           <div className="mt-6">
             <Suspense
               fallback={
@@ -269,7 +279,8 @@ export function ImportPage() {
               }
             >
               <Viewport
-                stlUrl={`/api/cases/${encodeURIComponent(response.case_id)}/geometry/stl`}
+                format="glb"
+                glbUrl={`/api/cases/${encodeURIComponent(response.case_id)}/geometry/render`}
               />
             </Suspense>
           </div>

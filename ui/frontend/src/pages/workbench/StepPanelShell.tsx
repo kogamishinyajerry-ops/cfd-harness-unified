@@ -45,11 +45,10 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Import",
     longLabel: "1 · Geometry import",
     viewportConfig: {
-      // Skeleton ships format='none' so the empty Viewport doesn't
-      // try to fetch a glb that may not exist yet for the case_id.
-      // Step 4 of the implementation flips this to format='glb' once
-      // the upload primitives + format-toggle are in place.
-      format: "none",
+      // Wired in spec_v2 §E Step 4 (DEC-V61-096): the imported case's
+      // geometry is fetched as glb via M-RENDER-API's /geometry/render
+      // endpoint and rendered in the center pane.
+      format: "glb",
       glbUrl: (caseId) =>
         caseId ? `/api/cases/${caseId}/geometry/render` : null,
       stlUrl: (caseId) =>
@@ -58,7 +57,7 @@ const STEPS: readonly StepDef[] = [
     taskPanelComponent: Step1Import,
     aiActionWiredInTierA: false,
     aiActionDeferredTooltip:
-      "Step 1 has no AI 处理 action — uploading is the engineer's gesture.",
+      "Step 1 has no AI 处理 action — uploading is the engineer's gesture (re-upload at /workbench/import).",
   },
   {
     id: 2,
@@ -135,18 +134,25 @@ export function StepPanelShell() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentStepId = clampStepId(searchParams.get("step"));
 
-  // Skeleton state: all steps default to pending. The wire-up commits
-  // derive these from the case + run state via react-query.
-  const [stepStates] = useState<Record<StepId, StepStatus>>(() => ({
-    1: "pending",
-    2: "pending",
-    3: "pending",
-    4: "pending",
-    5: "pending",
-  }));
-  const [lastAction] = useState<string | null>(null);
+  // Each step's task-panel calls onStepComplete / onStepError to
+  // signal its own status; the shell threads those into stepStates.
+  // Step 1 fires complete on mount (the case existing implies the
+  // import scaffold ran); Steps 2-5 will fire complete from their own
+  // wire-up commits.
+  const [stepStates, setStepStates] = useState<Record<StepId, StepStatus>>(
+    () => ({
+      1: "pending",
+      2: "pending",
+      3: "pending",
+      4: "pending",
+      5: "pending",
+    }),
+  );
+  const [lastAction, setLastAction] = useState<string | null>(null);
   const [aiInFlight] = useState(false);
-  const [aiErrorMessage] = useState<string | undefined>(undefined);
+  const [aiErrorMessage, setAiErrorMessage] = useState<string | undefined>(
+    undefined,
+  );
 
   const setStep = useCallback(
     (stepId: StepId) => {
@@ -171,13 +177,27 @@ export function StepPanelShell() {
   }, [currentStepId, setStep]);
 
   const onStepComplete = useCallback(() => {
-    // Wired in spec_v2 §E Step 4 (Step 1) and Step 5 (Step 2). Skeleton
-    // accepts the signal but does not yet flip stepStates.
-  }, []);
+    setStepStates((prev) =>
+      prev[currentStepId] === "completed"
+        ? prev
+        : { ...prev, [currentStepId]: "completed" },
+    );
+    setLastAction(`Step ${currentStepId} ready`);
+    setAiErrorMessage(undefined);
+  }, [currentStepId]);
 
-  const onStepError = useCallback((_message: string) => {
-    // Wired in spec_v2 §E Step 4/5. Skeleton accepts the signal.
-  }, []);
+  const onStepError = useCallback(
+    (message: string) => {
+      setStepStates((prev) =>
+        prev[currentStepId] === "error"
+          ? prev
+          : { ...prev, [currentStepId]: "error" },
+      );
+      setLastAction(`Step ${currentStepId} error`);
+      setAiErrorMessage(message);
+    },
+    [currentStepId],
+  );
 
   const activeStep = useMemo(
     () => STEPS.find((s) => s.id === currentStepId) ?? STEPS[0],

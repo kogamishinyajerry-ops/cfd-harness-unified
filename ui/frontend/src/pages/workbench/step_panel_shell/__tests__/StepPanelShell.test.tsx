@@ -1,18 +1,16 @@
-// Smoke test for the M-PANELS skeleton (DEC-V61-096 spec_v2 §E Step 2).
+// Smoke test for the M-PANELS shell (DEC-V61-096 spec_v2 §E Steps 2 + 4).
 // Asserts the shell mounts cleanly + 5 steps render + URL-driven step
-// state works. Wire-up tests for Step 1 / Step 2 / etc. land in their
-// own test files in spec_v2 §E Steps 3-5.
+// state works. Component-level tests live in this directory's other
+// __tests__ files; per-step wireup tests live in step_panel_shell/steps
+// alongside the components.
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// Viewport delegates to viewport_kernel, which the existing
-// Viewport.test.tsx mocks to avoid loading vtk.js under jsdom. The
-// skeleton ships format='none' on every step so the Viewport never
-// actually mounts in this test — we still mock the kernel so the
-// production code-path stays import-clean.
+// vtk.js viewport_kernel mock so jsdom doesn't try to load WebGL.
 vi.mock("@/visualization/viewport_kernel", () => ({
   createKernel: () => ({
     attachStl: vi.fn(),
@@ -23,18 +21,54 @@ vi.mock("@/visualization/viewport_kernel", () => ({
   }),
 }));
 
+// Step 1 now queries api.getCase via react-query (Step 4 wireup).
+// Mock the api module so the shell tests don't block on a network
+// fetch and we don't need to add an msw handler for every test.
+const apiMock = vi.hoisted(() => ({
+  getCase: vi.fn().mockResolvedValue({
+    case_id: "abc",
+    name: "Test Case",
+    reference: null,
+    doi: null,
+    flow_type: "incompressible",
+    geometry_type: "imported",
+    compressibility: null,
+    steady_state: null,
+    solver: null,
+    turbulence_model: "laminar",
+    parameters: {},
+    gold_standard: null,
+    preconditions: [],
+    contract_status_narrative: null,
+  }),
+}));
+vi.mock("@/api/client", async () => {
+  const actual = await vi.importActual<typeof import("@/api/client")>(
+    "@/api/client",
+  );
+  return {
+    ...actual,
+    api: { ...actual.api, getCase: apiMock.getCase },
+  };
+});
+
 import { StepPanelShell } from "../../StepPanelShell";
 
 function renderShell(initialPath: string) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route
-          path="/workbench/case/:caseId"
-          element={<StepPanelShell />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route
+            path="/workbench/case/:caseId"
+            element={<StepPanelShell />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -124,11 +158,17 @@ describe("StepPanelShell · skeleton (M-PANELS Step 2)", () => {
     expect(aiButton).toHaveAttribute("title");
   });
 
-  it("renders the viewport placeholder while every step ships format='none'", () => {
+  it("renders a real Viewport on Step 1 (format='glb' from /geometry/render)", () => {
     renderShell("/workbench/case/abc?step=1");
-    expect(
-      screen.getByTestId("viewport-placeholder"),
-    ).toBeInTheDocument();
+    // Step 4 wireup flipped Step 1's viewportConfig from 'none' to
+    // 'glb'; the Viewport mounts (mocked kernel) so the placeholder
+    // is no longer present on this step.
+    expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
+  });
+
+  it("still shows the viewport placeholder on Steps 2-5 (not yet wired)", () => {
+    renderShell("/workbench/case/abc?step=2");
+    expect(screen.getByTestId("viewport-placeholder")).toBeInTheDocument();
   });
 
   it("falls back to step 1 on out-of-range ?step values", () => {
