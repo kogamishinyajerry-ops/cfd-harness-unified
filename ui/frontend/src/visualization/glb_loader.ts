@@ -75,13 +75,24 @@ export async function parseGlbBytes(buffer: ArrayBuffer): Promise<GlbData> {
   // import + newInstance + parse in a single try/catch so chunk-load
   // failures surface as GlbLoadError(kind="parse") instead of leaking
   // a raw error and falling through to the Viewport's "unknown" kind.
+  //
+  // M-PANELS Step 10 visual-smoke fix: @kitware/vtk.js@35.11's
+  // GLTFImporter.d.ts advertises `parseAsArrayBuffer` but the actual
+  // JS runtime exposes `parseAsBinary` (async) — the type defs are
+  // stale upstream. Calling parseAsArrayBuffer at runtime throws
+  // "importer.parseAsArrayBuffer is not a function". Cast through
+  // unknown to reach the real method until upstream types are fixed.
   let importer: ReturnType<typeof vtkGLTFImporterType.newInstance> | undefined;
   try {
     const { default: vtkGLTFImporter } = await import(
       "@kitware/vtk.js/IO/Geometry/GLTFImporter"
     );
     importer = vtkGLTFImporter.newInstance();
-    importer.parseAsArrayBuffer(buffer);
+    await (
+      importer as unknown as {
+        parseAsBinary: (content: ArrayBuffer) => Promise<void>;
+      }
+    ).parseAsBinary(buffer);
     return { importer };
   } catch (err) {
     if (importer) {
