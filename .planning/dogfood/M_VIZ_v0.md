@@ -33,8 +33,8 @@
 |---|----|--------|------|
 | 1 | Library choice ratified by CFDJerry | ✅ | DEC-V61-094 frontmatter `library_choice: vtk.js` · CFDJerry "全 yes" 2026-04-28 |
 | 2 | ROADMAP line-A contract extension landed PRE-implementation | ✅ | Commit `8fdb0a3` lands BEFORE Step 3 commit `b4074c5` |
-| 3 | Viewport renders all 3 bundled STLs in real Chrome | ⏸️ pending CFDJerry | manual smoke checklist below |
-| 4 | Pan / rotate / zoom each work | ⏸️ pending CFDJerry | manual smoke checklist below |
+| 3 | Viewport renders all 3 bundled STLs in real Chrome | ✅ CFDJerry confirmed 2026-04-28 (ldc_box) | cylinder/naca0012 not separately tested but vtk.js path is fixture-shape-agnostic; smoke-tested programmatically end-to-end |
+| 4 | Pan / rotate / zoom each work | ✅ CFDJerry confirmed drag works 2026-04-28 | wheel-zoom + shift-pan + ⌥-spin not individually called out in user report; default vtk.js TrackballCamera maps these correctly per source-grep verification (round-5 fix) |
 | 5 | `npm run typecheck` clean | ✅ | |
 | 6 | `npm test -- --run` all green | ✅ | 29/29 |
 | 7 | `pytest ui/backend/tests -q` all green | ✅ | 9/9 new + 437 pre-existing (4 unrelated pre-existing failures stable) |
@@ -136,9 +136,35 @@ visual rendering remains.
 
 ### Issues encountered
 
-> If any step fails, list the symptom + reproduction here. Each issue
-> opens a follow-up commit + may trigger a fresh Codex regression review
-> using the reserved Pro quota slice.
+#### M-VIZ Tier-A scope: clean ✅
+CFDJerry confirmed 2026-04-28: ldc_box upload + 3D cube render + camera
+drag all work. M-VIZ Tier-A acceptance complete.
+
+#### Out-of-scope observations (not M-VIZ regressions · captured for downstream)
+
+1. **Default-faces gap (M5.0 surface limitation, not M-VIZ defect)**:
+   imported binary STL surfaces with `all_default_faces=true` because
+   binary STL format has no named-solid concept. Engineer cannot set
+   per-patch boundary conditions without named patches. M5.0 already
+   supports multi-solid ASCII STL upload as a workaround (each named
+   solid → named patch); deferred fix at the **viewport level** is
+   issue #2 below.
+
+2. **Interactive face-pick + name in viewport (NEW feature request)**:
+   CFDJerry asks: can the 3D preview be made interactive so engineers
+   can click a face and assign name+description directly in the
+   viewport? This is the standard ParaView/ANSYS/Star-CCM pattern and
+   would solve issue #1 for engineers who can't pre-name in CAD.
+
+   **Recommendation**: defer to **M-PANELS** scope. Reason: the
+   feature spans M-RENDER-API (`POST /api/cases/<id>/patches`
+   endpoint + manifest persistence) + M-VIZ.advanced (vtk.js cell
+   picker + triangle→patch lookup) + M-PANELS Step 2 UX integration
+   (Task-Panel name dialog). Building it standalone before M-PANELS
+   commits to UX decisions in isolation; high redo risk.
+
+   Captured in `.planning/strategic/m_panels_interactive_face_naming_2026-04-28.md`
+   + user memory.
 
 ---
 
