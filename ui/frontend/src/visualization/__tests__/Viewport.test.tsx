@@ -10,14 +10,18 @@ import userEvent from "@testing-library/user-event";
 
 const {
   loadStlFromUrlMock,
+  loadGlbFromUrlMock,
   createKernelMock,
   attachStlMock,
+  attachGltfMock,
   resetCameraMock,
   disposeMock,
 } = vi.hoisted(() => ({
   loadStlFromUrlMock: vi.fn(),
+  loadGlbFromUrlMock: vi.fn(),
   createKernelMock: vi.fn(),
   attachStlMock: vi.fn(),
+  attachGltfMock: vi.fn(),
   resetCameraMock: vi.fn(),
   disposeMock: vi.fn(),
 }));
@@ -32,11 +36,22 @@ vi.mock("../stl_loader", async () => {
   };
 });
 
+vi.mock("../glb_loader", async () => {
+  const actual =
+    await vi.importActual<typeof import("../glb_loader")>("../glb_loader");
+  return {
+    ...actual,
+    loadGlbFromUrl: (url: string, signal?: AbortSignal) =>
+      loadGlbFromUrlMock(url, signal),
+  };
+});
+
 vi.mock("../viewport_kernel", () => ({
   createKernel: (...args: unknown[]) => {
     createKernelMock(...args);
     return {
       attachStl: attachStlMock,
+      attachGltf: attachGltfMock,
       resetCamera: resetCameraMock,
       dispose: disposeMock,
       setBackground: vi.fn(),
@@ -49,8 +64,10 @@ import { Viewport } from "../Viewport";
 describe("Viewport", () => {
   beforeEach(() => {
     loadStlFromUrlMock.mockReset();
+    loadGlbFromUrlMock.mockReset();
     createKernelMock.mockReset();
     attachStlMock.mockReset();
+    attachGltfMock.mockReset();
     resetCameraMock.mockReset();
     disposeMock.mockReset();
   });
@@ -135,5 +152,65 @@ describe("Viewport", () => {
         triangleCount: 1,
       });
     });
+  });
+
+  it("dispatches to loadGlbFromUrl + attachGltf when format='glb'", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/geometry/render"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(loadGlbFromUrlMock).toHaveBeenCalledTimes(1);
+    });
+    expect(loadStlFromUrlMock).not.toHaveBeenCalled();
+    const [url, signal] = loadGlbFromUrlMock.mock.calls[0];
+    expect(url).toBe("/api/cases/abc/geometry/render");
+    expect(signal).toBeInstanceOf(AbortSignal);
+
+    await waitFor(() => {
+      expect(attachGltfMock).toHaveBeenCalledWith(fakeImporter);
+    });
+    expect(attachStlMock).not.toHaveBeenCalled();
+  });
+
+  it("renders an error banner when loadGlbFromUrl rejects", async () => {
+    const { GlbLoadError } = await import("../glb_loader");
+    loadGlbFromUrlMock.mockRejectedValue(
+      new GlbLoadError("parse", "glb parser threw: bad header"),
+    );
+
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/x/geometry/render"
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Viewport error \(parse\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("emits a config error if format='glb' but glbUrl is missing", async () => {
+    render(<Viewport format="glb" />);
+    expect(
+      await screen.findByText(/Viewport error \(config\)/),
+    ).toBeInTheDocument();
+    expect(loadGlbFromUrlMock).not.toHaveBeenCalled();
+    expect(loadStlFromUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("emits a config error if format='stl' (default) but stlUrl is missing", async () => {
+    render(<Viewport />);
+    expect(
+      await screen.findByText(/Viewport error \(config\)/),
+    ).toBeInTheDocument();
+    expect(loadStlFromUrlMock).not.toHaveBeenCalled();
   });
 });

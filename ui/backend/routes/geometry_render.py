@@ -17,8 +17,10 @@ from fastapi.responses import FileResponse
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
 from ui.backend.services.render import (
+    FieldSampleError,
     GeometryRenderError,
     MeshRenderError,
+    build_field_payload,
     build_geometry_glb,
     build_mesh_wireframe_glb,
 )
@@ -137,4 +139,49 @@ def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
         resolved,
         media_type="model/gltf-binary",
         filename="mesh.glb",
+    )
+
+
+_FIELD_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+    "case_not_found": 404,
+    "run_not_found": 404,
+    "field_not_found": 404,
+    "field_unsupported": 422,
+    "field_parse_error": 422,
+}
+
+
+@router.get(
+    "/cases/{case_id}/results/{run_id}/field/{name}",
+    tags=["geometry-render"],
+)
+def get_case_field_sample(
+    case_id: str, run_id: str, name: str
+) -> FileResponse:
+    """Return the case+run+field as a binary float32 stream.
+
+    Tier-A fallback per spec_v2 §B.3: ``application/octet-stream``
+    carrying the internalField scalar values packed as little-endian
+    float32. Frontend handles colormap mapping. M-VIZ.results upgrades
+    to baked-color glTF.
+
+    The result has Content-Length = 4 × point_count.
+    """
+    try:
+        result = build_field_payload(case_id, run_id, name)
+    except FieldSampleError as exc:
+        status = _FIELD_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+        raise HTTPException(status_code=status, detail=str(exc))
+
+    try:
+        resolved = result.cache_path.resolve(strict=True)
+        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+    except (ValueError, OSError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="case not found")
+
+    return FileResponse(
+        resolved,
+        media_type="application/octet-stream",
+        filename=f"field-{run_id}-{name}.bin",
+        headers={"X-Field-Point-Count": str(result.point_count)},
     )

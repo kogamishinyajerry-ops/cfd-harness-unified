@@ -20,10 +20,13 @@ import vtkMapper from "@kitware/vtk.js/Rendering/Core/Mapper";
 import vtkGenericRenderWindow from "@kitware/vtk.js/Rendering/Misc/GenericRenderWindow";
 
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
+import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
 
 export interface ViewportKernel {
   setBackground(rgb: [number, number, number]): void;
   attachStl(reader: vtkSTLReader): void;
+  /** glb path · adds the importer's actors to the renderer (M-RENDER-API). */
+  attachGltf(importer: vtkGLTFImporter): void;
   resetCamera(): void;
   dispose(): void;
 }
@@ -53,10 +56,11 @@ export function createKernel(
   // We rely on the built-in default and skip the explicit install.
   const interactor = grw.getInteractor();
 
-  // Attached lazily when the STL load resolves.
+  // Attached lazily when the STL or glb load resolves.
   let mapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
   let actor: ReturnType<typeof vtkActor.newInstance> | undefined;
   let reader: vtkSTLReader | undefined;
+  let importer: vtkGLTFImporter | undefined;
 
   function attachStl(r: vtkSTLReader): void {
     mapper = vtkMapper.newInstance();
@@ -67,6 +71,20 @@ export function createKernel(
 
     const renderer = grw.getRenderer();
     renderer.addActor(actor);
+    renderer.resetCamera();
+    grw.getRenderWindow().render();
+  }
+
+  function attachGltf(imp: vtkGLTFImporter): void {
+    // GLTFImporter brings its own actors via importActors(); we just
+    // bind the renderer and let the importer populate it. The importer
+    // itself owns the actors so dispose only needs to delete the
+    // importer (cascades to its actors per vtk.js GLTFImporter semantics).
+    importer = imp;
+    imp.setRenderer(grw.getRenderer());
+    imp.importActors();
+
+    const renderer = grw.getRenderer();
     renderer.resetCamera();
     grw.getRenderWindow().render();
   }
@@ -114,6 +132,16 @@ export function createKernel(
       // see above
     }
     try {
+      // GLTFImporter cascades dispose to its imported actors per
+      // vtk.js semantics, so deleting the importer here is sufficient
+      // for the glb path. If both stl and glb were ever attached on
+      // the same kernel (not currently exercised), each cleanup is
+      // independent.
+      importer?.delete();
+    } catch {
+      // see above
+    }
+    try {
       grw.delete();
     } catch {
       // see above
@@ -125,5 +153,5 @@ export function createKernel(
     }
   }
 
-  return { setBackground, attachStl, resetCamera, dispose };
+  return { setBackground, attachStl, attachGltf, resetCamera, dispose };
 }
