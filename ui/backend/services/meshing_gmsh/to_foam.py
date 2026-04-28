@@ -102,12 +102,19 @@ def run_gmsh_to_foam(
     Raises :class:`GmshToFoamError` if Docker is unavailable, the
     container is missing, or ``gmshToFoam`` reports failure.
     """
+    # Codex Round 8 Finding 2: collapse the exists()→stat()/use() TOCTTOU
+    # window. We can't fully eliminate the gap before the tarball is built,
+    # but stat() with FileNotFoundError catch turns the structured
+    # GmshToFoamError contract into the actual observable signal regardless
+    # of whether the file was missing at moment-of-check or moment-of-use.
     msh_path = case_host_dir / msh_relpath
-    if not msh_path.exists():
+    try:
+        msh_path.stat()
+    except FileNotFoundError as exc:
         raise GmshToFoamError(
             f"expected gmsh output at {msh_path}, but it does not exist — "
             "did the gmsh runner succeed?"
-        )
+        ) from exc
 
     try:
         import docker  # type: ignore[import-not-found]
@@ -217,8 +224,18 @@ def run_gmsh_to_foam(
             f"docker SDK error retrieving polyMesh from container: {exc}"
         ) from exc
 
+    # Codex Round 8 Finding 2: collapse the exists()→iterdir() TOCTTOU
+    # window. If the polyMesh dir disappears between the two syscalls
+    # (concurrent cleanup, host-side rm -rf), iterdir() raises
+    # FileNotFoundError; treat that as the same "directory missing"
+    # signal the explicit-check produced — required-files set is the
+    # full canonical list.
     required = {"points", "faces", "owner", "neighbour", "boundary"}
-    missing = required - {p.name for p in polyMesh_host.iterdir()} if polyMesh_host.exists() else required
+    try:
+        present = {p.name for p in polyMesh_host.iterdir()}
+    except FileNotFoundError:
+        present = set()
+    missing = required - present
     if missing:
         raise GmshToFoamError(
             f"polyMesh is missing canonical files: {sorted(missing)}. "

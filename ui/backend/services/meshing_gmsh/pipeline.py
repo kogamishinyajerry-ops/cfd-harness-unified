@@ -120,9 +120,11 @@ def mesh_imported_case(
     verdict: BudgetVerdict = classify_cell_count(gmsh_result.cell_count, mesh_mode)
     if not verdict.ok:
         # Drop the stale .msh so the next attempt is not confused by a
-        # leftover oversized mesh file.
-        if msh_path.exists():
-            msh_path.unlink()
+        # leftover oversized mesh file. Codex Round 8 Finding 2: collapse
+        # the exists()→unlink() TOCTTOU window via missing_ok=True so a
+        # concurrent deletion can't leak a raw FileNotFoundError 500
+        # ahead of the structured cap_exceeded rejection.
+        msh_path.unlink(missing_ok=True)
         raise MeshPipelineError(
             verdict.rejection_reason or "cell budget exceeded",
             "cell_cap_exceeded",

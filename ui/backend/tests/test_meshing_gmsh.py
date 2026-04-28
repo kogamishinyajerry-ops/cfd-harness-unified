@@ -679,3 +679,63 @@ def test_subprocess_wrapper_hard_crash_raises_gmsh_subprocess_error(tmp_path: Pa
         f"(would 4xx-relabel as 'bad geometry'); got {type(raised).__name__}"
     )
     assert "exited with code 1" in str(raised)
+
+
+def test_gmsh_inline_re_checks_stl_after_merge_failure(tmp_path: Path, monkeypatch):
+    """Codex Round 8 Finding 1 regression guard: if gmsh.merge() raises
+    AFTER the entry-time exists() check (concurrent deletion races
+    through that gap), and the STL is now missing, _gmsh_inline must
+    raise FileNotFoundError — NOT wrap as GmshMeshGenerationError
+    (which would 4xx-relabel the operator deletion as 'bad geometry').
+    """
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "input.stl"
+    stl_path.write_bytes(box_stl())
+
+    class _FakeGmsh:
+        class option:
+            @staticmethod
+            def setNumber(*_a, **_kw):
+                return None
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            # Simulate the file disappearing between the entry-time
+            # check and the merge call. gmsh raises a generic
+            # Exception in this case (its bindings don't preserve
+            # FileNotFoundError shape).
+            stl_path.unlink()
+            raise Exception("gmsh: cannot merge file (vanished)")
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+
+    raised: BaseException | None = None
+    try:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    except BaseException as e:  # noqa: BLE001
+        raised = e
+
+    assert isinstance(raised, FileNotFoundError), (
+        f"Disappearing STL during meshing must raise FileNotFoundError "
+        f"so the wrapper marshals it as os_error → 5xx; got "
+        f"{type(raised).__name__}: {raised}"
+    )
+    assert not isinstance(raised, runner_mod.GmshMeshGenerationError), (
+        "Filesystem fault must not be re-labeled as user-geometry rejection"
+    )

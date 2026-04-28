@@ -209,6 +209,19 @@ def _gmsh_inline(
             # as 5xx so operators see the real cause.
             raise
         except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
+            # Codex Round 8 Finding 1: an STL deletion between the
+            # entry-time existence check and the gmsh.merge() call
+            # makes gmsh raise a generic Exception that this catch
+            # would otherwise relabel as GmshMeshGenerationError →
+            # gmsh_diverged → 422. That's the same filesystem-as-
+            # geometry fault we've been closing through R5/R6/R7.
+            # Re-check the file: if it disappeared, surface as
+            # FileNotFoundError so the wrapper marshals it correctly
+            # to OSError → 5xx (operator fault).
+            if not stl_path.exists():
+                raise FileNotFoundError(
+                    f"STL disappeared during gmsh meshing: {stl_path}"
+                ) from exc
             raise GmshMeshGenerationError(
                 f"gmsh API failure during mesh generation: {exc}"
             ) from exc
