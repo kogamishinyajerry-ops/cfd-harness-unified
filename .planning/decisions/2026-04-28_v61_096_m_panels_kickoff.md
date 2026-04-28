@@ -43,7 +43,9 @@ autonomous_governance: true
 library_choice: React + React Router + Tailwind (all existing) · @kitware/vtk.js Viewport from M-VIZ · @tanstack/react-query for endpoint state (verify usage in surface scan; add if absent · single PR scope) · NO new UI component library / state-management library
 codex_tool_report_path:
   round_1: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round1.md (CHANGES_REQUIRED · 2 P2 [F1 step-tree mid-flight nav, F2 AI button race] · session 019dd36b-bfda-78a3-8f2c-a0abd7899e4e · arc 08b0d16..d25e365)
-  round_2: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round2.md (APPROVE · 0 P1/P2 · 72,532 tokens · session 019dd3cf-72d2-7450-8f9b-15602a868444 · arc 08b0d16..060d25b · pre-merge gate CLEARED)
+  round_2: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round2.md (APPROVE · 0 P1/P2 · 72,532 tokens · session 019dd3cf-72d2-7450-8f9b-15602a868444 · arc 08b0d16..060d25b)
+  round_3: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round3.md (CHANGES_REQUIRED · 1 P1 [audit-package whitelist gate regression after ca1f48f imported-case fall-through] · 1 WARNING [route-layer test gap] · 160,704 tokens · arc d25e365..ca1f48f)
+  round_4: reports/codex_tool_reports/2026-04-28_m_panels_arc_codex_review_round4.md (APPROVE · 0 P1/P2 · 178,393 tokens · arc d25e365..5b21df5 · pre-merge gate CLEARED · cumulative arc 08b0d16..5b21df5 across 4 rounds)
 codex_review_required: true
 codex_review_phase: pre-merge (RETRO-V61-001 ≤70% self-pass gate · NOT post-merge)
 codex_triggers:
