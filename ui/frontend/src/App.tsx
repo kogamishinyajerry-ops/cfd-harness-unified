@@ -17,6 +17,7 @@ import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
+import { StepPanelShell } from "@/pages/workbench/StepPanelShell";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
@@ -74,6 +75,12 @@ export default function App() {
             at PASS_WITH_DISCLAIMER on the trust-core path. */}
         <Route path="/workbench/import" element={<ImportPage />} />
         <Route path="/workbench/run/:caseId" element={<WorkbenchRunPage />} />
+        {/* M-PANELS (2026-04-28 · DEC-V61-096) · three-pane workbench
+            shell · 5-step tree (Import / Mesh / Setup / Solve / Results)
+            + [AI 处理] / [上一步] / [下一步] button contract per Pivot
+            Charter Addendum 3 §3. Skeleton ships placeholder bodies for
+            every step; step-by-step wireup lands in spec_v2 §E Steps 3-6. */}
+        <Route path="/workbench/case/:caseId" element={<StepPanelShell />} />
         {/* M2 (2026-04-26) · Workbench Closed-Loop main-line — param-form
             editor for an existing whitelist case. Saves to user_drafts/ and
             navigates to /workbench/run/:caseId where RealSolverDriver picks
