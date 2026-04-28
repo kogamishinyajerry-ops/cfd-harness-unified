@@ -115,6 +115,15 @@ def run_gmsh_to_foam(
             f"expected gmsh output at {msh_path}, but it does not exist — "
             "did the gmsh runner succeed?"
         ) from exc
+    except OSError as exc:
+        # Codex R12 Finding 1: stat() can also raise PermissionError /
+        # EIO / other OSError on a read-side host fault (permission-
+        # denied mount, flaky disk, FUSE error). Without this branch
+        # those leak as raw 500s with no GmshToFoamError contract for
+        # the route layer to map.
+        raise GmshToFoamError(
+            f"failed to stat gmsh output at {msh_path} (host filesystem fault): {exc}"
+        ) from exc
 
     try:
         import docker  # type: ignore[import-not-found]

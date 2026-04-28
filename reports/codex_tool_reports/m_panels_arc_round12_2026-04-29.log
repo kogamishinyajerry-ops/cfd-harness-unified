@@ -1,0 +1,2182 @@
+2026-04-28T17:29:10.555320Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-research-deerflow/SKILL.md: missing YAML frontmatter delimited by ---
+2026-04-28T17:29:10.555340Z ERROR codex_core::codex: failed to load skill /Users/Zhuanz/.agents/skills/cfd-report-pretext/SKILL.md: missing YAML frontmatter delimited by ---
+Reading additional input from stdin...
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 019dd523-409c-75c0-90a4-32c80d91902b
+--------
+user
+Round 12 review of M-PANELS Codex chain · DEC-V61-096
+
+Last commit: 1e4cd5f "fix(panels): Codex R11 P2 #2+#3, reject #1 (DEC-V61-096)"
+
+Repo: /Users/Zhuanz/Desktop/cfd-harness-unified
+
+## Context
+
+This is round 12 of a Codex chain on the M-PANELS gmsh meshing pipeline. The chain is closing a class of bugs where filesystem/backend faults were misclassified as 4xx geometry-rejection rather than 5xx backend faults.
+
+R11 returned CHANGES_REQUIRED with three P2 findings. Two were applied verbatim. One was rejected with rationale — please confirm or push back.
+
+## R11 #2 APPLIED (to_foam.py:165)
+
+Broadened `except FileNotFoundError` after `_make_tarball()` to also catch `OSError` (PermissionError, ENOSPC, EIO). Verbatim per R11 suggested fix.
+
+## R11 #3 APPLIED (to_foam.py:243-260)
+
+Wrapped the host-side polyMesh materialization block (parent.mkdir + container.get_archive + _extract_tarball) in `except (OSError, tarfile.TarError)`. Verbatim per R11 suggested fix.
+
+## R11 #1 REJECTED (gmsh_runner.py:139)
+
+R11 #1 suggested wrapping `gmsh.merge(str(stl_path))` in its own try/except so plain-Exception failures relabel as `OSError` when `stl_path.exists()` is True (catching EACCES on a permission-denied mount).
+
+REJECTED on review because:
+
+1. This conflicts with the R2/R3 architectural contract encoded in `test_gmsh_runner_normalizes_raw_binding_exception` (line 151 of `ui/backend/tests/test_meshing_gmsh.py`). That test was the explicit outcome of R2 P1 / R3 P1 review and documents:
+   > "gmsh's Python bindings raise plain Exception on geometry-level failures (merge / classify / generate). Those must be wrapped INSIDE gmsh_runner as GmshMeshGenerationError so the pipeline maps them to gmsh_diverged."
+
+2. Real `OSError` from the underlying STL read is already caught by the explicit `except OSError: raise` boundary in `_gmsh_inline` (gmsh_runner.py line 218 area). Only gmsh-binding-wrapped re-raises reach the catch-all. Those are dominantly geometry-side ("STL has malformed header", "non-watertight surface") — the canonical 4xx case the route layer expects.
+
+3. The "EACCES on a permission-denied mount surfaced as plain Exception from gmsh.merge" scenario R11 #1 hypothesizes requires gmsh's C bindings to swallow the OS-level error and re-raise as plain Python Exception. This is not the documented gmsh API behavior and isn't observed in any of the project's failure logs.
+
+4. Applying R11 #1 verbatim broke the R2/R3 test (commit reverted; see HEAD).
+
+Inline NOTE block at `ui/backend/services/meshing_gmsh/gmsh_runner.py:138-152` (around `gmsh.merge`) documents the rejection rationale.
+
+## Question for R12
+
+Two questions:
+
+(a) **R11 #1 rationale check**: Do you accept the R2/R3 contract argument? If yes: confirm the rejection. If no: explain why the R2/R3 contract should be flipped, and what evidence drives "host EACCES manifests as plain Exception from gmsh.merge" as the more likely interpretation than "malformed STL".
+
+(b) **Remaining surfaces**: With R11 #2 and #3 applied, are there any further surfaces in `gmsh_runner.py`, `to_foam.py`, or `pipeline.py` where a backend/filesystem fault could escape as either:
+   - a raw uncaught exception (5xx with no structured contract), or
+   - a misclassified geometry rejection (4xx)?
+
+## Verdict
+
+Verdict ENUM: APPROVE / CHANGES_REQUIRED / INCONCLUSIVE.
+
+If APPROVE: state so explicitly so the chain can close (chain has been running 12 rounds; R7 onward has been increasingly narrow disk-full / permission edge cases).
+
+If CHANGES_REQUIRED: list each new finding with file:line, severity (P1/P2/P3), and verbatim suggested fix. Be terse.
+
+If INCONCLUSIVE: explain what evidence is missing.
+
+Under 600 words.
+codex
+Reviewing the R12 scope as a read-only correctness pass. I’m pulling the current implementation, the cited tests, and any repo memory relevant to `cfd-harness-unified` before I evaluate the rejected finding and remaining fault-classification surfaces.
+exec
+/bin/zsh -lc 'rg -n "demo-first|Phase 8 Done|DEC-V61|gmsh|meshing_gmsh|to_foam|pipeline.py|gmsh_runner.py" /Users/Zhuanz/.codex/memories/MEMORY.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+819:scope: Reassess `cfd-harness-unified` without direct repo edits, preserve the difference between demo-first narrowing and first-customer workbench continuation, and package Chinese executor briefs that respect the user’s current product framing.
+832:## Task 2: Perform a non-invasive whole-project assessment and demo-first pivot recommendation
+836:- rollout_summaries/2026-04-22T13-19-47-467x-demo_first_cfd_workbench_assessment_and_claude_handoff.md (cwd=/Users/Zhuanz/Desktop/cfd-harness-unified, rollout_path=/Users/Zhuanz/.codex/sessions/2026/04/22/rollout-2026-04-22T21-19-47-019db558-c6dd-7930-b776-2493c7fc5dfb.jsonl, updated_at=2026-04-22T13:41:27+00:00, thread_id=019db558-c6dd-7930-b776-2493c7fc5dfb, demo-first narrowing report without code changes)
+840:- demo-first, cfd-harness-unified, /learn, Pro Workbench, Python 3.9, Python 3.12, ui/backend, contract_dashboard.py, UNKNOWN contract class, validate_gold_standards.py, jsonschema, anchor cases
+867:- When the user explicitly wants a demo-first assessment, the strongest demo-ready story is `/learn` as the front door plus Pro Workbench as the secondary evidence/drill-down surface; treating them as two equally weighted product stories weakens the demo narrative [Task 2][Task 3]
+869:- Representative repo health in the demo-first rollout was: UI frontend typecheck/build succeeded, `.venv/bin/python -m pytest ui/backend/tests -q` passed, while `python3 -m pytest tests -q` still mixed real regressions, stale assumptions, and changed contracts [Task 2]
+872:- The useful default execution order for a handoff from these assessment runs is: restate the governing premise -> check facts/baseline -> fix environment/contracts -> choose one narrative (`demo-first` or `first-customer workbench`) -> then narrow implementation around anchor cases [Task 1][Task 3]
+876:- Symptom: the repo gets described as one coherent ready-to-demo product -> cause: multiple hot surfaces (`/learn`, Pro Workbench, governance/Notion, audit/reporting) were flattened into one storyline -> fix: choose a single demo narrative and explicitly demote the secondary surfaces when the ask is demo-first [Task 2]
+881:- Symptom: the executor drifts back into platform/governance breadth -> cause: the handoff did not make postponements explicit -> fix: name what is intentionally delayed, keep Notion/governance weight low, and anchor the work on 2-3 demo cases instead of full breadth when the ask is demo-first [Task 3]
+896:- Phase 8, AutoVerifier, 13/13, knowledge/whitelist.yaml, ai_cfd_cold_start_whitelist.yaml, Canonical Docs Type=Report, Phase 8 Done, naming drift
+
+exec
+/bin/zsh -lc "rg -n \"test_gmsh_runner_normalizes_raw_binding_exception|gmsh.merge|_make_tarball|_extract_tarball|parent.mkdir|get_archive|except \\(OSError, tarfile.TarError\\)|except OSError|NOTE\" ui/backend -S" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/render/field_sample.py:170:    except OSError as exc:
+ui/backend/services/render/field_sample.py:251:    target.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/render/field_sample.py:265:        except OSError:
+ui/backend/services/render/field_sample.py:272:        except OSError:
+ui/backend/services/render/field_sample.py:282:        except OSError:
+ui/backend/services/case_drafts.py:138:        except OSError:
+ui/backend/services/case_scaffold/bc_injector.py:25:    out.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/case_scaffold/bc_injector.py:97:    out.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/case_scaffold/bc_injector.py:145:    out.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/render/mesh_wireframe.py:153:    target.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/render/mesh_wireframe.py:168:            except OSError:
+ui/backend/services/render/mesh_wireframe.py:175:        except OSError:
+ui/backend/services/render/mesh_wireframe.py:184:        except OSError:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:108:    output_msh_path.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/meshing_gmsh/gmsh_runner.py:139:            # NOTE: Codex R11 Finding 1 suggested wrapping gmsh.merge()
+ui/backend/services/meshing_gmsh/gmsh_runner.py:144:            # test_gmsh_runner_normalizes_raw_binding_exception —
+ui/backend/services/meshing_gmsh/gmsh_runner.py:145:            # gmsh.merge plain Exception is the canonical signal for
+ui/backend/services/meshing_gmsh/gmsh_runner.py:149:            # the explicit `except OSError` boundary below; only
+ui/backend/services/meshing_gmsh/gmsh_runner.py:152:            gmsh.merge(str(stl_path))
+ui/backend/services/meshing_gmsh/gmsh_runner.py:227:            except OSError:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:241:        except OSError:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:323:    except OSError as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:62:def _make_tarball(host_dir: Path) -> bytes:
+ui/backend/services/meshing_gmsh/to_foam.py:73:def _extract_tarball(stream_bytes: bytes, dest_dir: Path) -> None:
+ui/backend/services/meshing_gmsh/to_foam.py:74:    """Unpack a tarball produced by ``container.get_archive`` into
+ui/backend/services/meshing_gmsh/to_foam.py:159:            data=_make_tarball(case_host_dir),
+ui/backend/services/meshing_gmsh/to_foam.py:166:        # Codex R9 Finding 2: ``_make_tarball`` walks ``case_host_dir``
+ui/backend/services/meshing_gmsh/to_foam.py:178:    except OSError as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:179:        # Codex R11 Finding 2: ``_make_tarball`` can also raise
+ui/backend/services/meshing_gmsh/to_foam.py:211:        bits, _ = container.get_archive(f"{container_work_dir}/{log_filename}")
+ui/backend/services/meshing_gmsh/to_foam.py:213:        _extract_tarball(b"".join(chunk for chunk in bits), case_host_dir.parent)
+ui/backend/services/meshing_gmsh/to_foam.py:231:        except OSError as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:245:    # (parent.mkdir, get_archive bytes, _extract_tarball) can raise
+ui/backend/services/meshing_gmsh/to_foam.py:251:        polyMesh_host.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/meshing_gmsh/to_foam.py:252:        bits, _ = container.get_archive(f"{container_work_dir}/constant/polyMesh")
+ui/backend/services/meshing_gmsh/to_foam.py:253:        _extract_tarball(
+ui/backend/services/meshing_gmsh/to_foam.py:266:    except (OSError, tarfile.TarError) as exc:
+ui/backend/services/render/geometry_glb.py:133:    target.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/render/geometry_glb.py:147:        except OSError:
+ui/backend/services/render/geometry_glb.py:153:        except OSError:
+ui/backend/services/render/geometry_glb.py:162:        except OSError:
+ui/backend/services/decisions.py:109:    except OSError:
+ui/backend/services/wizard_drivers.py:358:    NOTE: imports from `src.*` are deferred to call-time so module import
+ui/backend/tests/test_audit_package_phase7e.py:104:    leak.parent.mkdir(parents=True)
+ui/backend/tests/test_run_history.py:212:    legacy.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/tests/test_meshing_gmsh.py:151:def test_gmsh_runner_normalizes_raw_binding_exception(tmp_path: Path, monkeypatch):
+ui/backend/tests/test_meshing_gmsh.py:282:    # parallel comment on test_gmsh_runner_normalizes_raw_binding_exception.
+ui/backend/tests/test_meshing_gmsh.py:388:    run_gmsh_to_foam (exec_run / put_archive / get_archive) raise
+ui/backend/tests/test_meshing_gmsh.py:448:    fake_container.get_archive.return_value = (iter([b""]), {})
+ui/backend/tests/test_meshing_gmsh.py:453:    with patch.object(to_foam_mod, "_extract_tarball", return_value=None):
+ui/backend/tests/test_meshing_gmsh.py:685:    """Codex Round 8 Finding 1 regression guard: if gmsh.merge() raises
+ui/backend/tests/test_meshing_gmsh.py:893:    (or imported.msh inside it) disappears while _make_tarball walks
+ui/backend/tests/test_meshing_gmsh.py:909:    def _racing_make_tarball(_path):
+ui/backend/tests/test_meshing_gmsh.py:913:    with patch.object(to_foam_mod, "_make_tarball", _racing_make_tarball):
+ui/backend/tests/test_meshing_gmsh.py:1051:    # First get_archive (log) raises so we fall into the fallback branch.
+ui/backend/tests/test_meshing_gmsh.py:1052:    fake_container.get_archive.side_effect = RuntimeError(
+ui/backend/tests/test_meshing_gmsh.py:1065:    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+ui/backend/tests/test_meshing_gmsh.py:1079:    """Codex Round 11 Finding 2 regression guard: _make_tarball() can
+ui/backend/tests/test_meshing_gmsh.py:1096:    def _eacces_make_tarball(_path):
+ui/backend/tests/test_meshing_gmsh.py:1099:    with patch.object(to_foam_mod, "_make_tarball", _eacces_make_tarball):
+ui/backend/tests/test_meshing_gmsh.py:1105:        f"PermissionError from _make_tarball must surface as "
+ui/backend/tests/test_meshing_gmsh.py:1112:    polyMesh materialization block (parent.mkdir + get_archive +
+ui/backend/tests/test_meshing_gmsh.py:1113:    _extract_tarball) can raise OSError or tarfile.TarError. These
+ui/backend/tests/test_meshing_gmsh.py:1130:    def _get_archive(path):
+ui/backend/tests/test_meshing_gmsh.py:1135:        raise AssertionError(f"unexpected get_archive path: {path}")
+ui/backend/tests/test_meshing_gmsh.py:1137:    fake_container.get_archive.side_effect = _get_archive
+ui/backend/tests/test_meshing_gmsh.py:1145:    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+ui/backend/tests/test_meshing_gmsh.py:1146:        with patch.object(to_foam_mod, "_extract_tarball", _raising_extract):
+ui/backend/tests/test_convergence_attestor.py:493:    NOTE (demo-first convergence round 1, 2026-04-22): this test historically
+ui/backend/tests/test_comparator_gates_g3_g4_g5.py:68:    path.parent.mkdir(parents=True, exist_ok=True)
+
+exec
+/bin/zsh -lc 'git rev-parse HEAD && git log -1 --oneline' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git status --short' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+?? .claude/MODEL_ROUTING.md
+?? .planning/strategic/2026-04-26_claude_code_kickoff_prompt_pivot_v1_1.md
+?? .planning/strategic/2026-04-26_strategic_advisory_memo.md
+?? .planning/strategic/2026-04-26_strategic_advisory_memo_002_post_three_answers.md
+?? .planning/strategic/PROJECT_HISTORY_NARRATIVE.md
+?? docs/methodology/project_introduction.md
+
+ succeeded in 0ms:
+1e4cd5ff81da727e1291c621fbff93946b1f52c8
+1e4cd5f fix(panels): Codex R11 P2 #2+#3, reject #1 (DEC-V61-096)
+
+codex
+I’ve confirmed the repo is at the cited `1e4cd5f` commit and the worktree only has unrelated untracked docs. Next I’m reading the meshing path and its regression tests line-for-line to judge whether the rejected `gmsh.merge` change would violate the established contract or still expose a real backend misclassification gap.
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/meshing_gmsh/gmsh_runner.py | sed -n '96,340p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+    96	    """
+    97	    # Deferred import: gmsh is optional (``[workbench]`` extra). Importing
+    98	    # at module top would crash the base ``[ui]`` install.
+    99	    import gmsh
+   100	
+   101	    # Codex Round 7 P2: a missing STL is a filesystem / operator fault,
+   102	    # not a user-geometry fault. Surface as FileNotFoundError (⊂ OSError)
+   103	    # so the wrapper marshals it as 'os_error' → 5xx, NOT as
+   104	    # GmshMeshGenerationError → gmsh_diverged → 422.
+   105	    if not stl_path.exists():
+   106	        raise FileNotFoundError(f"STL not found: {stl_path}")
+   107	
+   108	    output_msh_path.parent.mkdir(parents=True, exist_ok=True)
+   109	    t0 = time.monotonic()
+   110	
+   111	    gmsh.initialize()
+   112	    # Wrap the entire post-init gmsh-API region in a single
+   113	    # GmshMeshGenerationError boundary. The gmsh Python bindings raise
+   114	    # plain `Exception` at many call sites (merge / classifySurfaces /
+   115	    # addSurfaceLoop / addVolume / synchronize / generate /
+   116	    # getEntities / getElements / write); per-call wrappers proved
+   117	    # brittle (Codex round-3 caught merge/classify/generate, round-4
+   118	    # caught synchronize). One outer boundary covers all of them
+   119	    # without losing the GmshMeshGenerationError contract.
+   120	    try:
+   121	        try:
+   122	            # Quiet logs — gmsh is chatty by default and the route only
+   123	            # needs the structured result.
+   124	            gmsh.option.setNumber("General.Terminal", 0)
+   125	            gmsh.option.setNumber("General.Verbosity", 1)
+   126	
+   127	            # M-PANELS Step 10 visual-smoke fix: force gmsh's legacy MSH
+   128	            # format 2.2 output. gmsh defaults to format 4.1, but
+   129	            # OpenFOAM 10's gmshToFoam parses only up to 2.x reliably
+   130	            # ("Attempt to get back from bad stream" on 4.x ASCII files).
+   131	            # Format 2.2 is the lingua franca every gmshToFoam version
+   132	            # accepts.
+   133	            gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
+   134	
+   135	            # Merge the STL as a discrete surface. ``Mesh.Algorithm3D = 1``
+   136	            # selects gmsh's Delaunay 3D — robust default for closed
+   137	            # triangulated surfaces from real-world CAD exports.
+   138	            gmsh.option.setNumber("Mesh.Algorithm3D", 1)
+   139	            # NOTE: Codex R11 Finding 1 suggested wrapping gmsh.merge()
+   140	            # to relabel plain-Exception failures as OSError when the
+   141	            # STL still exists (host read-side faults on a permission-
+   142	            # denied mount). REJECTED on review: this conflicts with
+   143	            # the R2/R3 architectural contract documented in
+   144	            # test_gmsh_runner_normalizes_raw_binding_exception —
+   145	            # gmsh.merge plain Exception is the canonical signal for
+   146	            # "STL geometry is unparseable / malformed", which is the
+   147	            # geometry-rejection 4xx the route layer expects. Real
+   148	            # OSError from the underlying read is already caught by
+   149	            # the explicit `except OSError` boundary below; only
+   150	            # gmsh's binding-wrapped re-raises reach the catch-all,
+   151	            # and those are dominantly geometry-side, not host-side.
+   152	            gmsh.merge(str(stl_path))
+   153	
+   154	            # Reclassify the imported triangles as a surface, then build
+   155	            # a volume from the surface loop. Standard gmsh incantation
+   156	            # for "STL → tetrahedral volume mesh".
+   157	            gmsh.model.mesh.classifySurfaces(
+   158	                angle=40.0 * 3.141592653589793 / 180.0,
+   159	                boundary=True,
+   160	                forReparametrization=True,
+   161	                curveAngle=180.0 * 3.141592653589793 / 180.0,
+   162	            )
+   163	            gmsh.model.mesh.createGeometry()
+   164	
+   165	            surfaces = gmsh.model.getEntities(dim=2)
+   166	            if not surfaces:
+   167	                raise GmshMeshGenerationError(
+   168	                    "gmsh found no 2D surfaces after classifying the STL "
+   169	                    "(likely a corrupt or non-watertight upload that slipped "
+   170	                    "past M5.0's health check)."
+   171	                )
+   172	            surface_loop = gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces])
+   173	            gmsh.model.geo.addVolume([surface_loop])
+   174	            gmsh.model.geo.synchronize()
+   175	
+   176	            # Characteristic length sizing: explicit override >
+   177	            # bbox-derived default. The cap layer (cell_budget.py) is
+   178	            # the ultimate guard.
+   179	            nodes = gmsh.model.mesh.getNodes()
+   180	            if nodes and len(nodes) >= 2 and len(nodes[1]) > 0:
+   181	                xyz = nodes[1].reshape(-1, 3).tolist()
+   182	                diagonal = _bbox_diagonal([(p[0], p[1], p[2]) for p in xyz])
+   183	            else:
+   184	                diagonal = 0.0
+   185	
+   186	            lc = (
+   187	                characteristic_length_override
+   188	                if characteristic_length_override is not None
+   189	                else _default_characteristic_length(diagonal, mesh_mode)
+   190	            )
+   191	            if lc > 0:
+   192	                gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
+   193	                gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
+   194	
+   195	            gmsh.model.mesh.generate(3)
+   196	
+   197	            # Element type 4 = 4-node tetrahedron in gmsh's element-type
+   198	            # numbering. Counting only those keeps the cell_count honest
+   199	            # if the model picks up stray surface elements.
+   200	            elem_types, elem_tags, _ = gmsh.model.mesh.getElements(dim=3)
+   201	            cell_count = sum(len(tags) for et, tags in zip(elem_types, elem_tags) if et == 4)
+   202	            if cell_count == 0:
+   203	                raise GmshMeshGenerationError(
+   204	                    "gmsh produced zero 3D tetrahedral elements — meshing "
+   205	                    "failed to converge on this geometry."
+   206	                )
+   207	
+   208	            # Faces (2D elements on the boundary) and points for the
+   209	            # summary. Re-fetch nodes after generate(3) so point_count
+   210	            # reflects the volume mesh, not the input STL surface.
+   211	            face_types, face_tags, _ = gmsh.model.mesh.getElements(dim=2)
+   212	            face_count = sum(len(tags) for tags in face_tags)
+   213	            post_nodes = gmsh.model.mesh.getNodes()
+   214	            point_count = len(post_nodes[0]) if post_nodes and len(post_nodes) >= 1 else 0
+   215	
+   216	            # Codex R10 Finding 1: gmsh.write() can raise plain Exception
+   217	            # for write-time backend faults (most importantly ENOSPC /
+   218	            # disk-full) where os.access(W_OK) and dir-existence still
+   219	            # report OK. Falling through to the generic catch-all below
+   220	            # would relabel that as GmshMeshGenerationError → 4xx
+   221	            # geometry rejection — the exact misclassification this
+   222	            # chain is closing. Wrap gmsh.write() in its own try/except
+   223	            # so any write-time failure surfaces as OSError (5xx) before
+   224	            # the geometry-side catch-all sees it.
+   225	            try:
+   226	                gmsh.write(str(output_msh_path))
+   227	            except OSError:
+   228	                raise
+   229	            except Exception as exc:  # noqa: BLE001 — gmsh write raises plain Exception
+   230	                output_dir = output_msh_path.parent
+   231	                if not output_dir.exists():
+   232	                    raise FileNotFoundError(
+   233	                        f"output directory disappeared during gmsh.write: {output_dir}"
+   234	                    ) from exc
+   235	                raise OSError(
+   236	                    f"gmsh.write failed for {output_msh_path} (likely disk-full / "
+   237	                    f"permission / I/O error): {exc}"
+   238	                ) from exc
+   239	        except GmshMeshGenerationError:
+   240	            raise
+   241	        except OSError:
+   242	            # Disk-full / permission-denied / read-only filesystem from
+   243	            # gmsh.write() or any other I/O. These are backend / host
+   244	            # faults, not user-geometry rejections — let them bubble
+   245	            # as 5xx so operators see the real cause.
+   246	            raise
+   247	        except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
+   248	            # Codex R8 Finding 1 + R9 Finding 1: gmsh's bindings raise
+   249	            # plain ``Exception`` for both geometry-level failures AND
+   250	            # for I/O failures (input STL vanished, output dir not
+   251	            # writable, disk full at gmsh.write time). The catch-all
+   252	            # used to relabel everything as GmshMeshGenerationError →
+   253	            # gmsh_diverged / 422, which silently 4xx-relabels host
+   254	            # faults as user-geometry rejections.
+   255	            #
+   256	            # Discriminate via filesystem reality: if the input STL
+   257	            # is gone or the output directory is non-writable, that
+   258	            # is the actual cause. Surface as OSError so the wrapper
+   259	            # marshals it as ``os_error`` → 5xx. Otherwise the gmsh
+   260	            # failure was geometry-side and the GmshMeshGenerationError
+   261	            # relabel is correct.
+   262	            if not stl_path.exists():
+   263	                raise FileNotFoundError(
+   264	                    f"STL disappeared during gmsh meshing: {stl_path}"
+   265	                ) from exc
+   266	            output_dir = output_msh_path.parent
+   267	            if not output_dir.exists() or not os.access(output_dir, os.W_OK):
+   268	                raise OSError(
+   269	                    f"output directory not writable for gmsh.write: {output_dir}"
+   270	                ) from exc
+   271	            raise GmshMeshGenerationError(
+   272	                f"gmsh API failure during mesh generation: {exc}"
+   273	            ) from exc
+   274	    finally:
+   275	        gmsh.finalize()
+   276	
+   277	    return GmshRunResult(
+   278	        msh_path=output_msh_path,
+   279	        cell_count=cell_count,
+   280	        face_count=face_count,
+   281	        point_count=point_count,
+   282	        characteristic_length_used=lc if lc > 0 else 0.0,
+   283	        generation_time_s=time.monotonic() - t0,
+   284	    )
+   285	
+   286	
+   287	def _subprocess_target(
+   288	    stl_path_str: str,
+   289	    output_msh_path_str: str,
+   290	    mesh_mode: str,
+   291	    characteristic_length_override: float | None,
+   292	    queue: "multiprocessing.Queue[tuple[str, object]]",
+   293	) -> None:
+   294	    """Run the gmsh meshing job inside a child process and post back the
+   295	    serialized result (or error) on ``queue``. Top-level so it can be
+   296	    pickled by the 'spawn' start method on macOS.
+   297	
+   298	    Error-kind dispatch matters: the parent translates 'gmsh_error' to
+   299	    GmshMeshGenerationError (user-geometry fault → 422), but every
+   300	    backend/setup fault must surface as something OTHER than
+   301	    GmshMeshGenerationError so the pipeline routes it as 5xx. Codex
+   302	    Round 5 P1: a missing ``gmsh`` install, child-bootstrap failure,
+   303	    or similar backend fault must NOT be reported as "bad geometry".
+   304	    """
+   305	    try:
+   306	        result = _gmsh_inline(
+   307	            stl_path=Path(stl_path_str),
+   308	            output_msh_path=Path(output_msh_path_str),
+   309	            mesh_mode=mesh_mode,
+   310	            characteristic_length_override=characteristic_length_override,
+   311	        )
+   312	        # asdict() handles the Path → str translation for the dataclass
+   313	        # via a custom default factory; do it explicitly for safety.
+   314	        payload = asdict(result)
+   315	        payload["msh_path"] = str(payload["msh_path"])
+   316	        queue.put(("ok", payload))
+   317	    except GmshMeshGenerationError as exc:
+   318	        queue.put(("gmsh_error", str(exc)))
+   319	    except ImportError as exc:
+   320	        # ModuleNotFoundError ⊂ ImportError. gmsh missing from the
+   321	        # [workbench] extra is a deployment fault, not user geometry.
+   322	        queue.put(("import_error", f"{type(exc).__name__}: {exc}"))
+   323	    except OSError as exc:
+   324	        queue.put(("os_error", str(exc)))
+   325	    except BaseException as exc:  # noqa: BLE001 — bubble unknown failures with type info
+   326	        queue.put(("backend_error", f"{type(exc).__name__}: {exc}"))
+   327	
+   328	
+   329	def run_gmsh_on_imported_case(
+   330	    *,
+   331	    stl_path: Path,
+   332	    output_msh_path: Path,
+   333	    mesh_mode: str = "beginner",
+   334	    characteristic_length_override: float | None = None,
+   335	) -> GmshRunResult:
+   336	    """Mesh ``stl_path`` with gmsh and write ``output_msh_path``.
+   337	
+   338	    Spawns a child process so gmsh's mandatory signal-handler install
+   339	    lands on a fresh main thread (FastAPI threadpool workers are not
+   340	    the main thread; see module docstring).
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/meshing_gmsh/to_foam.py | sed -n '1,340p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_meshing_gmsh.py | sed -n '140,320p;680,760p;880,1165p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/meshing_gmsh/pipeline.py | sed -n '1,320p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""Invoke ``gmshToFoam`` inside the cfd-openfoam container.
+     2	
+     3	This is the bridge from gmsh's ``.msh`` output (M6.0 produces it on the
+     4	host) to the OpenFOAM ``constant/polyMesh/`` format that the executor
+     5	(M6.1 + M7) consumes.
+     6	
+     7	We intentionally do NOT import any helper from
+     8	``src.foam_agent_adapter`` — that lives in the trust-core / line-B
+     9	plane and importing from it would re-introduce the line-A → trust-core
+    10	coupling that ADR-001 forbids. The Docker SDK calls duplicated here are
+    11	small (~40 LOC) and self-contained.
+    12	"""
+    13	from __future__ import annotations
+    14	
+    15	import io
+    16	import re
+    17	import shutil
+    18	import tarfile
+    19	from dataclasses import dataclass
+    20	from pathlib import Path
+    21	
+    22	
+    23	CONTAINER_NAME = "cfd-openfoam"
+    24	CONTAINER_WORK_BASE = "/tmp/cfd-harness-cases-mesh"
+    25	
+    26	
+    27	class GmshToFoamError(RuntimeError):
+    28	    """Raised when gmshToFoam fails to convert ``.msh`` → polyMesh."""
+    29	
+    30	
+    31	@dataclass(frozen=True, slots=True)
+    32	class GmshToFoamResult:
+    33	    polyMesh_dir: Path  # absolute host path: case_dir / constant / polyMesh
+    34	    log_path: Path
+    35	    used_container: bool
+    36	
+    37	
+    38	# The cfd-openfoam container runs as uid=98765(openfoam). The host
+    39	# typically runs as a different uid (often 502/dialout on macOS).
+    40	# When ``put_archive`` extracts files preserving host uid/gid, the
+    41	# openfoam user can't write into the directories it doesn't own —
+    42	# gmshToFoam fails with "POSIX directory write permission denied"
+    43	# trying to ``mkdir constant/polyMesh/``. Re-tag every entry to the
+    44	# openfoam uid/gid + a permissive mode (M-PANELS Step 10 visual-smoke
+    45	# fix) so the container side has full control of the staged case dir.
+    46	_CONTAINER_UID = 98765
+    47	_CONTAINER_GID = 98765
+    48	
+    49	
+    50	def _retag_for_container(info: "tarfile.TarInfo") -> "tarfile.TarInfo":
+    51	    info.uid = _CONTAINER_UID
+    52	    info.gid = _CONTAINER_GID
+    53	    info.uname = "openfoam"
+    54	    info.gname = "openfoam"
+    55	    if info.isdir():
+    56	        info.mode = 0o755
+    57	    else:
+    58	        info.mode = 0o644
+    59	    return info
+    60	
+    61	
+    62	def _make_tarball(host_dir: Path) -> bytes:
+    63	    """Pack ``host_dir`` recursively into an in-memory tarball, retagged
+    64	    for the cfd-openfoam container's UID/GID so gmshToFoam can write
+    65	    polyMesh + log files into the staged case dir.
+    66	    """
+    67	    buf = io.BytesIO()
+    68	    with tarfile.open(fileobj=buf, mode="w") as tar:
+    69	        tar.add(str(host_dir), arcname=host_dir.name, filter=_retag_for_container)
+    70	    return buf.getvalue()
+    71	
+    72	
+    73	def _extract_tarball(stream_bytes: bytes, dest_dir: Path) -> None:
+    74	    """Unpack a tarball produced by ``container.get_archive`` into
+    75	    ``dest_dir``. Used to copy ``constant/polyMesh/`` back from the
+    76	    container.
+    77	    """
+    78	    dest_dir.mkdir(parents=True, exist_ok=True)
+    79	    buf = io.BytesIO(stream_bytes)
+    80	    with tarfile.open(fileobj=buf, mode="r") as tar:
+    81	        tar.extractall(path=dest_dir, filter="data")
+    82	
+    83	
+    84	def _safe_log_name(command: str) -> str:
+    85	    return "log." + (re.sub(r"[^A-Za-z0-9]", "_", command).strip("_") or "cmd")
+    86	
+    87	
+    88	def run_gmsh_to_foam(
+    89	    *,
+    90	    case_host_dir: Path,
+    91	    msh_relpath: str = "imported.msh",
+    92	    container_name: str = CONTAINER_NAME,
+    93	) -> GmshToFoamResult:
+    94	    """Convert ``case_host_dir / msh_relpath`` into
+    95	    ``case_host_dir / constant / polyMesh/`` using ``gmshToFoam`` inside
+    96	    the configured Docker container.
+    97	
+    98	    On success, returns a :class:`GmshToFoamResult` whose ``polyMesh_dir``
+    99	    exists and contains at least the canonical files
+   100	    (``points``, ``faces``, ``owner``, ``neighbour``, ``boundary``).
+   101	
+   102	    Raises :class:`GmshToFoamError` if Docker is unavailable, the
+   103	    container is missing, or ``gmshToFoam`` reports failure.
+   104	    """
+   105	    # Codex Round 8 Finding 2: collapse the exists()→stat()/use() TOCTTOU
+   106	    # window. We can't fully eliminate the gap before the tarball is built,
+   107	    # but stat() with FileNotFoundError catch turns the structured
+   108	    # GmshToFoamError contract into the actual observable signal regardless
+   109	    # of whether the file was missing at moment-of-check or moment-of-use.
+   110	    msh_path = case_host_dir / msh_relpath
+   111	    try:
+   112	        msh_path.stat()
+   113	    except FileNotFoundError as exc:
+   114	        raise GmshToFoamError(
+   115	            f"expected gmsh output at {msh_path}, but it does not exist — "
+   116	            "did the gmsh runner succeed?"
+   117	        ) from exc
+   118	
+   119	    try:
+   120	        import docker  # type: ignore[import-not-found]
+   121	        import docker.errors  # type: ignore[import-not-found]
+   122	    except ImportError as exc:
+   123	        raise GmshToFoamError(
+   124	            "docker SDK is not installed — install with `pip install "
+   125	            "'docker>=7.0'` (already in the [ui] extra). gmshToFoam "
+   126	            "must run inside the cfd-openfoam container."
+   127	        ) from exc
+   128	
+   129	    try:
+   130	        client = docker.from_env()
+   131	        container = client.containers.get(container_name)
+   132	        if container.status != "running":
+   133	            raise GmshToFoamError(
+   134	                f"container '{container_name}' is not running "
+   135	                f"(status={container.status!r}); start it with "
+   136	                f"`docker start {container_name}`."
+   137	            )
+   138	    except docker.errors.NotFound as exc:
+   139	        raise GmshToFoamError(
+   140	            f"container '{container_name}' not found. Bring up the "
+   141	            f"cfd-openfoam container before importing geometry."
+   142	        ) from exc
+   143	    except docker.errors.DockerException as exc:
+   144	        raise GmshToFoamError(
+   145	            f"docker client init failed: {exc}"
+   146	        ) from exc
+   147	
+   148	    container_work_dir = f"{CONTAINER_WORK_BASE}/{case_host_dir.name}"
+   149	    # Wrap the rest of the container interaction in a single try/except
+   150	    # so any raw docker SDK error (APIError / connection drop /
+   151	    # archive failure) surfaces as GmshToFoamError. The pipeline +
+   152	    # route layers expect that contract.
+   153	    try:
+   154	        container.exec_run(
+   155	            cmd=["bash", "-c", f"mkdir -p {container_work_dir} && chmod 777 {container_work_dir}"]
+   156	        )
+   157	        archive_ok = container.put_archive(
+   158	            path=CONTAINER_WORK_BASE,
+   159	            data=_make_tarball(case_host_dir),
+   160	        )
+   161	    except docker.errors.DockerException as exc:
+   162	        raise GmshToFoamError(
+   163	            f"docker SDK error preparing container workspace: {exc}"
+   164	        ) from exc
+   165	    except FileNotFoundError as exc:
+   166	        # Codex R9 Finding 2: ``_make_tarball`` walks ``case_host_dir``
+   167	        # and reads each file's bytes. If imported.msh (or any file
+   168	        # inside the case dir) disappears mid-tarball — concurrent host
+   169	        # cleanup, fs error after the moment-of-check stat() — the
+   170	        # raised FileNotFoundError used to escape as a raw 500. Wrap
+   171	        # so it surfaces as the structured GmshToFoamError contract
+   172	        # the route already maps to 502 (gmshToFoam_failed) — same
+   173	        # operator-facing signal as a missing-msh check, no race
+   174	        # window for an unhandled exception to leak past us.
+   175	        raise GmshToFoamError(
+   176	            f"case dir vanished while building tarball for {case_host_dir.name}: {exc}"
+   177	        ) from exc
+   178	    except OSError as exc:
+   179	        # Codex R11 Finding 2: ``_make_tarball`` can also raise
+   180	        # PermissionError (EACCES on a host read-side mount fault),
+   181	        # ENOSPC during the in-memory BytesIO grow path, or generic
+   182	        # EIO. Without this branch those leak as raw 500s with no
+   183	        # GmshToFoamError contract for the route layer to map.
+   184	        raise GmshToFoamError(
+   185	            f"failed to build gmshToFoam tarball for {case_host_dir.name} "
+   186	            f"(host filesystem fault): {exc}"
+   187	        ) from exc
+   188	
+   189	    if not archive_ok:
+   190	        raise GmshToFoamError(
+   191	            f"failed to copy case dir into container at {container_work_dir}"
+   192	        )
+   193	
+   194	    log_filename = _safe_log_name("gmshToFoam")
+   195	    bash_cmd = (
+   196	        f"source /opt/openfoam10/etc/bashrc && "
+   197	        f"cd {container_work_dir} && "
+   198	        f"gmshToFoam {msh_relpath} > {log_filename} 2>&1"
+   199	    )
+   200	    try:
+   201	        exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
+   202	    except docker.errors.DockerException as exc:
+   203	        raise GmshToFoamError(
+   204	            f"docker SDK error invoking gmshToFoam: {exc}"
+   205	        ) from exc
+   206	
+   207	    # Pull the log + the polyMesh dir back to the host so the caller can
+   208	    # inspect them. Always pull the log first — if gmshToFoam failed, we
+   209	    # need it for the rejection message.
+   210	    try:
+   211	        bits, _ = container.get_archive(f"{container_work_dir}/{log_filename}")
+   212	        log_dest = case_host_dir / log_filename
+   213	        _extract_tarball(b"".join(chunk for chunk in bits), case_host_dir.parent)
+   214	        # Tar extraction places it under a top-level dir named after
+   215	        # the archived file's parent; flatten if needed.
+   216	        if not log_dest.exists():
+   217	            shutil.move(str(case_host_dir.parent / log_filename), str(log_dest))
+   218	    except Exception:  # noqa: BLE001 — best-effort log copy
+   219	        # Codex R10 Finding 2: the placeholder write_text() can itself
+   220	        # raise OSError (case_host_dir vanished, read-only filesystem,
+   221	        # ENOSPC). Letting that escape as a raw 5xx breaks the
+   222	        # GmshToFoamError contract the route layer relies on. Wrap it
+   223	        # so any host-side write failure surfaces with the structured
+   224	        # gmshToFoam_failed signal instead.
+   225	        log_dest = case_host_dir / log_filename
+   226	        try:
+   227	            log_dest.write_text(
+   228	                "(log file could not be retrieved from container)\n",
+   229	                encoding="utf-8",
+   230	            )
+   231	        except OSError as exc:
+   232	            raise GmshToFoamError(
+   233	                f"failed to persist fallback gmshToFoam log at {log_dest}: {exc}"
+   234	            ) from exc
+   235	
+   236	    if exec_result.exit_code != 0:
+   237	        raise GmshToFoamError(
+   238	            f"gmshToFoam exit_code={exec_result.exit_code}; see "
+   239	            f"{log_dest} for full output."
+   240	        )
+   241	
+   242	    # Pull constant/polyMesh back to the host case dir.
+   243	    polyMesh_host = case_host_dir / "constant" / "polyMesh"
+   244	    # Codex R11 Finding 3: the host-side polyMesh materialization
+   245	    # (parent.mkdir, get_archive bytes, _extract_tarball) can raise
+   246	    # OSError (EACCES, ENOSPC, EIO on the host case dir) or
+   247	    # tarfile.TarError (corrupt archive bytes from the docker stream).
+   248	    # Without these catches, host filesystem faults leak as raw 500s
+   249	    # with no GmshToFoamError contract for the route layer to map.
+   250	    try:
+   251	        polyMesh_host.parent.mkdir(parents=True, exist_ok=True)
+   252	        bits, _ = container.get_archive(f"{container_work_dir}/constant/polyMesh")
+   253	        _extract_tarball(
+   254	            b"".join(chunk for chunk in bits),
+   255	            case_host_dir / "constant",
+   256	        )
+   257	    except docker.errors.NotFound as exc:
+   258	        raise GmshToFoamError(
+   259	            "gmshToFoam ran without error but produced no "
+   260	            "constant/polyMesh/ directory in the container. See log."
+   261	        ) from exc
+   262	    except docker.errors.DockerException as exc:
+   263	        raise GmshToFoamError(
+   264	            f"docker SDK error retrieving polyMesh from container: {exc}"
+   265	        ) from exc
+   266	    except (OSError, tarfile.TarError) as exc:
+   267	        raise GmshToFoamError(
+   268	            f"failed to materialize polyMesh on host at {polyMesh_host} "
+   269	            f"(host filesystem / archive fault): {exc}"
+   270	        ) from exc
+   271	
+   272	    # Codex Round 8 Finding 2: collapse the exists()→iterdir() TOCTTOU
+   273	    # window. If the polyMesh dir disappears between the two syscalls
+   274	    # (concurrent cleanup, host-side rm -rf), iterdir() raises
+   275	    # FileNotFoundError; treat that as the same "directory missing"
+   276	    # signal the explicit-check produced — required-files set is the
+   277	    # full canonical list.
+   278	    required = {"points", "faces", "owner", "neighbour", "boundary"}
+   279	    try:
+   280	        present = {p.name for p in polyMesh_host.iterdir()}
+   281	    except FileNotFoundError:
+   282	        present = set()
+   283	    missing = required - present
+   284	    if missing:
+   285	        raise GmshToFoamError(
+   286	            f"polyMesh is missing canonical files: {sorted(missing)}. "
+   287	            f"See {log_dest}."
+   288	        )
+   289	
+   290	    return GmshToFoamResult(
+   291	        polyMesh_dir=polyMesh_host,
+   292	        log_path=log_dest,
+   293	        used_container=True,
+   294	    )
+
+ succeeded in 0ms:
+     1	"""Top-level orchestration for the gmsh-based meshing pipeline.
+     2	
+     3	Sequence (all on the host except the gmshToFoam call):
+     4	
+     5	    1. Resolve the imported case_id → on-disk paths
+     6	    2. Run gmsh on the canonical STL → ``imported.msh``
+     7	    3. Apply D6 cell-budget rules — reject early if hard cap exceeded
+     8	    4. Run gmshToFoam in the cfd-openfoam container → polyMesh
+     9	    5. Return :class:`MeshResult`
+    10	
+    11	Failures at each stage are mapped to a ``failing_check`` enum value so
+    12	the route can attach a stable, machine-readable rejection code.
+    13	"""
+    14	from __future__ import annotations
+    15	
+    16	from dataclasses import dataclass
+    17	from pathlib import Path
+    18	from typing import Literal
+    19	
+    20	from ui.backend.services.case_drafts import is_safe_case_id
+    21	from ui.backend.services.case_scaffold import IMPORTED_DIR
+    22	
+    23	from .cell_budget import BudgetVerdict, classify_cell_count
+    24	from .gmsh_runner import (
+    25	    GmshMeshGenerationError,
+    26	    GmshRunResult,
+    27	    run_gmsh_on_imported_case,
+    28	)
+    29	from .to_foam import GmshToFoamError, run_gmsh_to_foam
+    30	
+    31	
+    32	MeshMode = Literal["beginner", "power"]
+    33	FailingCheck = Literal[
+    34	    "case_not_found",
+    35	    "source_not_imported",
+    36	    "gmsh_diverged",
+    37	    "cell_cap_exceeded",
+    38	    "gmshToFoam_failed",
+    39	]
+    40	
+    41	
+    42	class MeshPipelineError(RuntimeError):
+    43	    """Pipeline-level failure with a stable ``failing_check`` tag."""
+    44	
+    45	    def __init__(self, message: str, failing_check: FailingCheck) -> None:
+    46	        super().__init__(message)
+    47	        self.failing_check: FailingCheck = failing_check
+    48	
+    49	
+    50	@dataclass(frozen=True, slots=True)
+    51	class MeshResult:
+    52	    case_id: str
+    53	    mesh_mode: MeshMode
+    54	    cell_count: int
+    55	    face_count: int
+    56	    point_count: int
+    57	    polyMesh_path: Path
+    58	    msh_path: Path
+    59	    generation_time_s: float
+    60	    warning: str | None  # populated when beginner soft cap is exceeded
+    61	
+    62	
+    63	def _resolve_imported_case(case_id: str) -> tuple[Path, Path]:
+    64	    """Return ``(case_dir, stl_path)`` or raise pipeline error."""
+    65	    if not is_safe_case_id(case_id):
+    66	        raise MeshPipelineError(
+    67	            f"unsafe case_id: {case_id!r}", "case_not_found"
+    68	        )
+    69	    case_dir = IMPORTED_DIR / case_id
+    70	    if not case_dir.is_dir():
+    71	        raise MeshPipelineError(
+    72	            f"imported case {case_id!r} not found at {case_dir}",
+    73	            "case_not_found",
+    74	        )
+    75	    triSurface = case_dir / "triSurface"
+    76	    # Codex R9 Finding 3: collapse the is_dir()→iterdir() TOCTTOU
+    77	    # window. If the directory disappears between the two syscalls
+    78	    # (concurrent cleanup, fs error after moment-of-check), the
+    79	    # raised FileNotFoundError used to escape as a raw 500 instead
+    80	    # of the structured source_not_imported MeshPipelineError. Try
+    81	    # iterdir() directly and treat NotADirectoryError /
+    82	    # FileNotFoundError as the same "case lost its triSurface dir"
+    83	    # signal the explicit check produced.
+    84	    try:
+    85	        stls = sorted(
+    86	            p for p in triSurface.iterdir() if p.suffix.lower() == ".stl"
+    87	        )
+    88	    except (FileNotFoundError, NotADirectoryError) as exc:
+    89	        raise MeshPipelineError(
+    90	            f"case {case_id!r} has no triSurface/ directory — was it "
+    91	            "scaffolded by M5.0?",
+    92	            "source_not_imported",
+    93	        ) from exc
+    94	    if not stls:
+    95	        raise MeshPipelineError(
+    96	            f"no STL found under {triSurface}",
+    97	            "source_not_imported",
+    98	        )
+    99	    return case_dir, stls[0]
+   100	
+   101	
+   102	def mesh_imported_case(
+   103	    case_id: str,
+   104	    *,
+   105	    mesh_mode: MeshMode = "beginner",
+   106	    container_name: str | None = None,
+   107	) -> MeshResult:
+   108	    """Run the full M6.0 pipeline for the given imported case_id.
+   109	
+   110	    Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
+   111	    is one of :data:`FailingCheck`. The route maps each value to an
+   112	    HTTP 4xx response.
+   113	    """
+   114	    case_dir, stl_path = _resolve_imported_case(case_id)
+   115	    msh_path = case_dir / "imported.msh"
+   116	
+   117	    try:
+   118	        gmsh_result: GmshRunResult = run_gmsh_on_imported_case(
+   119	            stl_path=stl_path,
+   120	            output_msh_path=msh_path,
+   121	            mesh_mode=mesh_mode,
+   122	        )
+   123	    except GmshMeshGenerationError as exc:
+   124	        raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
+   125	    # Other exception types (ModuleNotFoundError when [workbench] isn't
+   126	    # installed, OSError on disk failure) are backend / configuration
+   127	    # faults — let those bubble as 5xx instead of misattributing them
+   128	    # as user-geometry rejections. gmsh_runner is responsible for
+   129	    # converting raw gmsh-binding errors into GmshMeshGenerationError.
+   130	
+   131	    verdict: BudgetVerdict = classify_cell_count(gmsh_result.cell_count, mesh_mode)
+   132	    if not verdict.ok:
+   133	        # Drop the stale .msh so the next attempt is not confused by a
+   134	        # leftover oversized mesh file. Codex Round 8 Finding 2: collapse
+   135	        # the exists()→unlink() TOCTTOU window via missing_ok=True so a
+   136	        # concurrent deletion can't leak a raw FileNotFoundError 500
+   137	        # ahead of the structured cap_exceeded rejection.
+   138	        msh_path.unlink(missing_ok=True)
+   139	        raise MeshPipelineError(
+   140	            verdict.rejection_reason or "cell budget exceeded",
+   141	            "cell_cap_exceeded",
+   142	        )
+   143	
+   144	    try:
+   145	        if container_name:
+   146	            foam_result = run_gmsh_to_foam(
+   147	                case_host_dir=case_dir,
+   148	                container_name=container_name,
+   149	            )
+   150	        else:
+   151	            foam_result = run_gmsh_to_foam(case_host_dir=case_dir)
+   152	    except GmshToFoamError as exc:
+   153	        raise MeshPipelineError(str(exc), "gmshToFoam_failed") from exc
+   154	    # Host-side failures escaping run_gmsh_to_foam (tarfile errors,
+   155	    # PermissionError, disk full) are not docker / container faults —
+   156	    # surface them as 5xx so diagnosis is not misdirected. to_foam.py
+   157	    # is responsible for wrapping all docker SDK calls itself.
+   158	
+   159	    return MeshResult(
+   160	        case_id=case_id,
+   161	        mesh_mode=mesh_mode,
+   162	        cell_count=gmsh_result.cell_count,
+   163	        face_count=gmsh_result.face_count,
+   164	        point_count=gmsh_result.point_count,
+   165	        polyMesh_path=foam_result.polyMesh_dir,
+   166	        msh_path=msh_path,
+   167	        generation_time_s=gmsh_result.generation_time_s,
+   168	        warning=verdict.warning,
+   169	    )
+
+ succeeded in 0ms:
+   140	    monkeypatch.setattr(
+   141	        pipeline_mod,
+   142	        "run_gmsh_to_foam",
+   143	        lambda **kw: pytest.fail("gmshToFoam called after cap-exceeded"),
+   144	    )
+   145	
+   146	    with pytest.raises(MeshPipelineError) as exc_info:
+   147	        mesh_imported_case("imported_TEST_capcheck", mesh_mode="power")
+   148	    assert exc_info.value.failing_check == "cell_cap_exceeded"
+   149	
+   150	
+   151	def test_gmsh_runner_normalizes_raw_binding_exception(tmp_path: Path, monkeypatch):
+   152	    """Codex round-2 P1 / round-3 P1: gmsh's Python bindings raise
+   153	    plain Exception on geometry-level failures (merge / classify /
+   154	    generate). Those must be wrapped INSIDE gmsh_runner as
+   155	    GmshMeshGenerationError so the pipeline maps them to
+   156	    gmsh_diverged. ModuleNotFoundError / OSError must NOT be caught
+   157	    here — those are backend / config faults that belong as 5xx."""
+   158	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   159	
+   160	    stl_path = tmp_path / "input.stl"
+   161	    stl_path.write_bytes(box_stl())
+   162	
+   163	    class _FakeGmsh:
+   164	        # Minimal stub that mimics the gmsh module surface used by
+   165	        # run_gmsh_on_imported_case but raises plain Exception from
+   166	        # merge() — that's the round-3 worry.
+   167	        class option:
+   168	            @staticmethod
+   169	            def setNumber(*args, **kwargs):
+   170	                return None
+   171	
+   172	        @staticmethod
+   173	        def initialize():
+   174	            return None
+   175	
+   176	        @staticmethod
+   177	        def finalize():
+   178	            return None
+   179	
+   180	        @staticmethod
+   181	        def merge(_path):
+   182	            raise Exception("gmsh raw error in merge()")
+   183	
+   184	    import sys
+   185	
+   186	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+   187	    # M-PANELS Step 10 visual-smoke fix: gmsh logic now runs in a
+   188	    # multiprocessing child so signal.signal works. The exception-
+   189	    # normalization contract still lives in _gmsh_inline; target it
+   190	    # directly because monkeypatch.setitem(sys.modules, "gmsh", ...)
+   191	    # only affects this parent process — the spawned child re-imports
+   192	    # the real gmsh module.
+   193	    with pytest.raises(runner_mod.GmshMeshGenerationError, match="raw error"):
+   194	        runner_mod._gmsh_inline(
+   195	            stl_path=stl_path,
+   196	            output_msh_path=tmp_path / "out.msh",
+   197	            mesh_mode="beginner",
+   198	            characteristic_length_override=None,
+   199	        )
+   200	
+   201	
+   202	def test_gmsh_runner_wraps_late_api_exceptions(tmp_path: Path, monkeypatch):
+   203	    """Codex round-4 P1: gmsh bindings raise plain Exception from many
+   204	    call sites beyond merge/classify/generate (synchronize,
+   205	    addSurfaceLoop, getEntities, etc.). The single outer boundary
+   206	    must catch all of them as GmshMeshGenerationError."""
+   207	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   208	
+   209	    stl_path = tmp_path / "input.stl"
+   210	    stl_path.write_bytes(box_stl())
+   211	
+   212	    class _FakeGeo:
+   213	        @staticmethod
+   214	        def addSurfaceLoop(_tags):
+   215	            return 1
+   216	
+   217	        @staticmethod
+   218	        def addVolume(_loops):
+   219	            return 1
+   220	
+   221	        @staticmethod
+   222	        def synchronize():
+   223	            raise Exception("synchronize() blew up")
+   224	
+   225	    class _FakeMesh:
+   226	        @staticmethod
+   227	        def classifySurfaces(**_kwargs):
+   228	            return None
+   229	
+   230	        @staticmethod
+   231	        def createGeometry():
+   232	            return None
+   233	
+   234	        @staticmethod
+   235	        def generate(_dim):
+   236	            return None
+   237	
+   238	        @staticmethod
+   239	        def getNodes():
+   240	            return ([], [], [])
+   241	
+   242	        @staticmethod
+   243	        def getElements(dim):
+   244	            return ([], [], [])
+   245	
+   246	    class _FakeModel:
+   247	        geo = _FakeGeo
+   248	        mesh = _FakeMesh
+   249	
+   250	        @staticmethod
+   251	        def getEntities(dim):
+   252	            return [(2, 1)]
+   253	
+   254	    class _FakeGmsh:
+   255	        class option:
+   256	            @staticmethod
+   257	            def setNumber(*args, **kwargs):
+   258	                return None
+   259	
+   260	        model = _FakeModel
+   261	
+   262	        @staticmethod
+   263	        def initialize():
+   264	            return None
+   265	
+   266	        @staticmethod
+   267	        def finalize():
+   268	            return None
+   269	
+   270	        @staticmethod
+   271	        def merge(_path):
+   272	            return None
+   273	
+   274	        @staticmethod
+   275	        def write(_path):
+   276	            return None
+   277	
+   278	    import sys
+   279	
+   280	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+   281	    # M-PANELS Step 10: target _gmsh_inline directly — see the
+   282	    # parallel comment on test_gmsh_runner_normalizes_raw_binding_exception.
+   283	    with pytest.raises(runner_mod.GmshMeshGenerationError, match="synchronize"):
+   284	        runner_mod._gmsh_inline(
+   285	            stl_path=stl_path,
+   286	            output_msh_path=tmp_path / "out.msh",
+   287	            mesh_mode="beginner",
+   288	            characteristic_length_override=None,
+   289	        )
+   290	
+   291	
+   292	def test_gmsh_runner_lets_oserror_bubble(tmp_path: Path, monkeypatch):
+   293	    """Codex round-5 P2: host-side I/O failures (OSError /
+   294	    PermissionError from gmsh.write()) must NOT be misreported as
+   295	    gmsh_diverged. They are backend faults — let them surface as 5xx."""
+   296	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   297	
+   298	    stl_path = tmp_path / "input.stl"
+   299	    stl_path.write_bytes(box_stl())
+   300	
+   301	    class _FakeGeo:
+   302	        @staticmethod
+   303	        def addSurfaceLoop(_tags):
+   304	            return 1
+   305	
+   306	        @staticmethod
+   307	        def addVolume(_loops):
+   308	            return 1
+   309	
+   310	        @staticmethod
+   311	        def synchronize():
+   312	            return None
+   313	
+   314	    class _FakeMesh:
+   315	        @staticmethod
+   316	        def classifySurfaces(**_kwargs):
+   317	            return None
+   318	
+   319	        @staticmethod
+   320	        def createGeometry():
+   680	    )
+   681	    assert "exited with code 1" in str(raised)
+   682	
+   683	
+   684	def test_gmsh_inline_re_checks_stl_after_merge_failure(tmp_path: Path, monkeypatch):
+   685	    """Codex Round 8 Finding 1 regression guard: if gmsh.merge() raises
+   686	    AFTER the entry-time exists() check (concurrent deletion races
+   687	    through that gap), and the STL is now missing, _gmsh_inline must
+   688	    raise FileNotFoundError — NOT wrap as GmshMeshGenerationError
+   689	    (which would 4xx-relabel the operator deletion as 'bad geometry').
+   690	    """
+   691	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   692	
+   693	    stl_path = tmp_path / "input.stl"
+   694	    stl_path.write_bytes(box_stl())
+   695	
+   696	    class _FakeGmsh:
+   697	        class option:
+   698	            @staticmethod
+   699	            def setNumber(*_a, **_kw):
+   700	                return None
+   701	
+   702	        @staticmethod
+   703	        def initialize():
+   704	            return None
+   705	
+   706	        @staticmethod
+   707	        def finalize():
+   708	            return None
+   709	
+   710	        @staticmethod
+   711	        def merge(_path):
+   712	            # Simulate the file disappearing between the entry-time
+   713	            # check and the merge call. gmsh raises a generic
+   714	            # Exception in this case (its bindings don't preserve
+   715	            # FileNotFoundError shape).
+   716	            stl_path.unlink()
+   717	            raise Exception("gmsh: cannot merge file (vanished)")
+   718	
+   719	    import sys
+   720	
+   721	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+   722	
+   723	    raised: BaseException | None = None
+   724	    try:
+   725	        runner_mod._gmsh_inline(
+   726	            stl_path=stl_path,
+   727	            output_msh_path=tmp_path / "out.msh",
+   728	            mesh_mode="beginner",
+   729	            characteristic_length_override=None,
+   730	        )
+   731	    except BaseException as e:  # noqa: BLE001
+   732	        raised = e
+   733	
+   734	    assert isinstance(raised, FileNotFoundError), (
+   735	        f"Disappearing STL during meshing must raise FileNotFoundError "
+   736	        f"so the wrapper marshals it as os_error → 5xx; got "
+   737	        f"{type(raised).__name__}: {raised}"
+   738	    )
+   739	    assert not isinstance(raised, runner_mod.GmshMeshGenerationError), (
+   740	        "Filesystem fault must not be re-labeled as user-geometry rejection"
+   741	    )
+   742	
+   743	
+   744	def test_gmsh_inline_re_checks_output_dir_writability_after_write_failure(
+   745	    tmp_path: Path, monkeypatch
+   746	):
+   747	    """Codex Round 9 Finding 1 regression guard: when gmsh.write()
+   748	    raises a generic Exception because the output dir is not
+   749	    writable (host fault), _gmsh_inline must surface as OSError
+   750	    (5xx) — NOT GmshMeshGenerationError (which would 4xx-relabel
+   751	    a host fault as 'bad geometry').
+   752	    """
+   753	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   754	
+   755	    stl_path = tmp_path / "input.stl"
+   756	    stl_path.write_bytes(box_stl())
+   757	
+   758	    locked = tmp_path / "locked"
+   759	    locked.mkdir(mode=0o555)
+   760	    out_msh = locked / "out.msh"
+   880	        if self.name == "triSurface":
+   881	            raise FileNotFoundError(self)
+   882	        return real_iterdir(self)
+   883	
+   884	    monkeypatch.setattr(Path, "iterdir", _racing_iterdir)
+   885	
+   886	    with pytest.raises(MeshPipelineError) as excinfo:
+   887	        pipeline_mod._resolve_imported_case(case_id)
+   888	    assert excinfo.value.failing_check == "source_not_imported"
+   889	
+   890	
+   891	def test_to_foam_normalizes_filenotfound_during_tarball_build(tmp_path: Path):
+   892	    """Codex Round 9 Finding 2 regression guard: if the case dir
+   893	    (or imported.msh inside it) disappears while _make_tarball walks
+   894	    it, the raised FileNotFoundError must surface as the structured
+   895	    GmshToFoamError contract — NOT escape as a raw 500.
+   896	    """
+   897	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+   898	
+   899	    case_dir = tmp_path / "imported_TEST_tarball_race"
+   900	    case_dir.mkdir()
+   901	    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+   902	
+   903	    fake_container = MagicMock()
+   904	    fake_container.status = "running"
+   905	    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+   906	    fake_client = MagicMock()
+   907	    fake_client.containers.get.return_value = fake_container
+   908	
+   909	    def _racing_make_tarball(_path):
+   910	        # Simulate the case dir disappearing mid-tarball build.
+   911	        raise FileNotFoundError(case_dir)
+   912	
+   913	    with patch.object(to_foam_mod, "_make_tarball", _racing_make_tarball):
+   914	        with patch("docker.from_env", return_value=fake_client):
+   915	            with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+   916	                to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+   917	    assert "tarball" in str(excinfo.value).lower() or "vanished" in str(excinfo.value).lower()
+   918	
+   919	
+   920	def test_gmsh_inline_disk_full_during_write_surfaces_as_oserror(
+   921	    tmp_path: Path, monkeypatch
+   922	):
+   923	    """Codex Round 10 Finding 1 regression guard: if gmsh.write()
+   924	    raises a plain Exception for a write-time backend fault while the
+   925	    output directory still passes both .exists() and os.access(W_OK)
+   926	    (e.g. ENOSPC / disk-full / transient I/O error), the previous
+   927	    R9 heuristic would relabel it as GmshMeshGenerationError → 4xx
+   928	    'gmsh_diverged'. R10 wraps gmsh.write() in its own try/except so
+   929	    the failure surfaces as OSError (5xx) regardless.
+   930	    """
+   931	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   932	
+   933	    stl_path = tmp_path / "input.stl"
+   934	    stl_path.write_bytes(box_stl())
+   935	
+   936	    out_dir = tmp_path / "out"
+   937	    out_dir.mkdir()  # dir is writable AND exists — R9 heuristic won't fire
+   938	    out_msh = out_dir / "out.msh"
+   939	
+   940	    class _FakeMesh:
+   941	        @staticmethod
+   942	        def classifySurfaces(**_kw):
+   943	            return None
+   944	
+   945	        @staticmethod
+   946	        def createGeometry():
+   947	            return None
+   948	
+   949	        @staticmethod
+   950	        def generate(_dim):
+   951	            return None
+   952	
+   953	        @staticmethod
+   954	        def getNodes():
+   955	            # Return empty arrays so the bbox + point_count paths short-circuit
+   956	            # cleanly and we actually reach gmsh.write().
+   957	            return ([], [], [])
+   958	
+   959	        @staticmethod
+   960	        def getElements(dim):
+   961	            if dim == 3:
+   962	                return ([4], [[1, 2, 3]], None)
+   963	            return ([2], [[]], None)
+   964	
+   965	    class _FakeGmsh:
+   966	        class option:
+   967	            @staticmethod
+   968	            def setNumber(*_a, **_kw):
+   969	                return None
+   970	
+   971	        class model:
+   972	            mesh = _FakeMesh
+   973	
+   974	            class geo:
+   975	                @staticmethod
+   976	                def addSurfaceLoop(_):
+   977	                    return 1
+   978	
+   979	                @staticmethod
+   980	                def addVolume(_):
+   981	                    return 1
+   982	
+   983	                @staticmethod
+   984	                def synchronize():
+   985	                    return None
+   986	
+   987	            @staticmethod
+   988	            def getEntities(dim):
+   989	                return [(2, 1)]
+   990	
+   991	        @staticmethod
+   992	        def initialize():
+   993	            return None
+   994	
+   995	        @staticmethod
+   996	        def finalize():
+   997	            return None
+   998	
+   999	        @staticmethod
+  1000	        def merge(_path):
+  1001	            return None
+  1002	
+  1003	        @staticmethod
+  1004	        def write(_path):
+  1005	            # gmsh's bindings can raise plain Exception for ENOSPC.
+  1006	            raise Exception("gmsh: write failed (no space left on device)")
+  1007	
+  1008	    import sys
+  1009	
+  1010	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+  1011	
+  1012	    raised: BaseException | None = None
+  1013	    try:
+  1014	        runner_mod._gmsh_inline(
+  1015	            stl_path=stl_path,
+  1016	            output_msh_path=out_msh,
+  1017	            mesh_mode="beginner",
+  1018	            characteristic_length_override=None,
+  1019	        )
+  1020	    except BaseException as e:  # noqa: BLE001
+  1021	        raised = e
+  1022	
+  1023	    assert isinstance(raised, OSError), (
+  1024	        f"gmsh.write() raising plain Exception while output dir is "
+  1025	        f"healthy must surface as OSError (5xx host fault), not "
+  1026	        f"{type(raised).__name__ if raised else 'None'}"
+  1027	    )
+  1028	    assert not isinstance(raised, runner_mod.GmshMeshGenerationError)
+  1029	
+  1030	
+  1031	def test_to_foam_log_fallback_write_failure_surfaces_as_gmshtofoam_error(
+  1032	    tmp_path: Path,
+  1033	):
+  1034	    """Codex Round 10 Finding 2 regression guard: when log retrieval
+  1035	    from the container fails AND the host-side fallback write_text()
+  1036	    itself raises OSError (e.g. case dir vanished, read-only fs,
+  1037	    ENOSPC), the failure must surface as GmshToFoamError — not as a
+  1038	    raw 500 escape.
+  1039	    """
+  1040	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+  1041	
+  1042	    case_dir = tmp_path / "imported_TEST_log_fallback_race"
+  1043	    case_dir.mkdir()
+  1044	    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+  1045	
+  1046	    fake_container = MagicMock()
+  1047	    fake_container.status = "running"
+  1048	    # exec_run twice: mkdir prep + gmshToFoam invocation. Both succeed.
+  1049	    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+  1050	    fake_container.put_archive.return_value = True
+  1051	    # First get_archive (log) raises so we fall into the fallback branch.
+  1052	    fake_container.get_archive.side_effect = RuntimeError(
+  1053	        "container connection dropped while streaming log"
+  1054	    )
+  1055	    fake_client = MagicMock()
+  1056	    fake_client.containers.get.return_value = fake_container
+  1057	
+  1058	    real_write_text = Path.write_text
+  1059	
+  1060	    def _disk_full_write_text(self, *_a, **_kw):
+  1061	        if self.name.startswith("log."):
+  1062	            raise OSError("[Errno 28] No space left on device")
+  1063	        return real_write_text(self, *_a, **_kw)
+  1064	
+  1065	    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+  1066	        with patch("docker.from_env", return_value=fake_client):
+  1067	            with patch.object(Path, "write_text", _disk_full_write_text):
+  1068	                with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+  1069	                    to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+  1070	
+  1071	    msg = str(excinfo.value).lower()
+  1072	    assert "log" in msg or "fallback" in msg, (
+  1073	        f"OSError from fallback write_text must surface as "
+  1074	        f"GmshToFoamError mentioning the log fallback, got: {excinfo.value}"
+  1075	    )
+  1076	
+  1077	
+  1078	def test_to_foam_normalizes_oserror_during_tarball_build(tmp_path: Path):
+  1079	    """Codex Round 11 Finding 2 regression guard: _make_tarball() can
+  1080	    raise PermissionError / generic OSError (EACCES, ENOSPC, EIO) —
+  1081	    not just FileNotFoundError. These must surface as the structured
+  1082	    GmshToFoamError contract instead of a raw 500.
+  1083	    """
+  1084	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+  1085	
+  1086	    case_dir = tmp_path / "imported_TEST_tarball_oserror"
+  1087	    case_dir.mkdir()
+  1088	    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+  1089	
+  1090	    fake_container = MagicMock()
+  1091	    fake_container.status = "running"
+  1092	    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+  1093	    fake_client = MagicMock()
+  1094	    fake_client.containers.get.return_value = fake_container
+  1095	
+  1096	    def _eacces_make_tarball(_path):
+  1097	        raise PermissionError("[Errno 13] Permission denied (host mount fault)")
+  1098	
+  1099	    with patch.object(to_foam_mod, "_make_tarball", _eacces_make_tarball):
+  1100	        with patch("docker.from_env", return_value=fake_client):
+  1101	            with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+  1102	                to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+  1103	    msg = str(excinfo.value).lower()
+  1104	    assert "tarball" in msg or "filesystem" in msg, (
+  1105	        f"PermissionError from _make_tarball must surface as "
+  1106	        f"GmshToFoamError mentioning tarball / filesystem, got: {excinfo.value}"
+  1107	    )
+  1108	
+  1109	
+  1110	def test_to_foam_normalizes_polymesh_copyback_oserror(tmp_path: Path):
+  1111	    """Codex Round 11 Finding 3 regression guard: the host-side
+  1112	    polyMesh materialization block (parent.mkdir + get_archive +
+  1113	    _extract_tarball) can raise OSError or tarfile.TarError. These
+  1114	    must surface as GmshToFoamError, not as raw 500s.
+  1115	    """
+  1116	    import tarfile as tarfile_mod
+  1117	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+  1118	
+  1119	    case_dir = tmp_path / "imported_TEST_polymesh_copyback"
+  1120	    case_dir.mkdir()
+  1121	    (case_dir / "imported.msh").write_text("dummy", encoding="utf-8")
+  1122	
+  1123	    fake_container = MagicMock()
+  1124	    fake_container.status = "running"
+  1125	    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+  1126	    fake_container.put_archive.return_value = True
+  1127	    # Log retrieval succeeds; polyMesh retrieval raises a corrupt-archive error.
+  1128	    log_chunks = iter([(b"", None)])
+  1129	
+  1130	    def _get_archive(path):
+  1131	        if path.endswith(f"/{_safe_log_name('gmshToFoam')}"):
+  1132	            return iter([b""]), None
+  1133	        if path.endswith("/constant/polyMesh"):
+  1134	            return iter([b"<<corrupt tar bytes>>"]), None
+  1135	        raise AssertionError(f"unexpected get_archive path: {path}")
+  1136	
+  1137	    fake_container.get_archive.side_effect = _get_archive
+  1138	    fake_client = MagicMock()
+  1139	    fake_client.containers.get.return_value = fake_client_value = fake_client
+  1140	    fake_client.containers.get.return_value = fake_container
+  1141	
+  1142	    def _raising_extract(_bytes, _dest):
+  1143	        raise tarfile_mod.TarError("malformed tar header in polyMesh archive")
+  1144	
+  1145	    with patch.object(to_foam_mod, "_make_tarball", lambda _p: b""):
+  1146	        with patch.object(to_foam_mod, "_extract_tarball", _raising_extract):
+  1147	            with patch("docker.from_env", return_value=fake_client):
+  1148	                with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+  1149	                    to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+  1150	    msg = str(excinfo.value).lower()
+  1151	    assert "polymesh" in msg or "materialize" in msg or "archive" in msg, (
+  1152	        f"TarError from polyMesh extract must surface as "
+  1153	        f"GmshToFoamError mentioning polymesh/materialize/archive, "
+  1154	        f"got: {excinfo.value}"
+  1155	    )
+  1156	
+  1157	
+  1158	def _safe_log_name(command: str) -> str:
+  1159	    """Mirror to_foam._safe_log_name for test path construction."""
+  1160	    import re
+  1161	
+  1162	    return "log." + (re.sub(r"[^A-Za-z0-9]", "_", command).strip("_") or "cmd")
+
+codex
+The core contracts are visible now: `gmsh_runner` deliberately uses one geometry-exception boundary with targeted filesystem escape hatches, and `to_foam` has been progressively hardened around host-side tar/extract paths. I’m checking the parent-process wrapper and any unguarded host I/O branches that still sit outside those contracts before I issue the verdict.
+exec
+/bin/zsh -lc "nl -ba ui/backend/services/meshing_gmsh/gmsh_runner.py | sed -n '340,520p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   340	    the main thread; see module docstring).
+   341	    """
+   342	    # Use 'spawn' explicitly: macOS defaults to 'spawn' since 3.8 and
+   343	    # Linux defaults to 'fork', which copies the parent process state
+   344	    # (including FastAPI / gmsh module-level imports). 'spawn' gives a
+   345	    # clean interpreter and avoids fork-after-import hazards from gmsh.
+   346	    ctx = multiprocessing.get_context("spawn")
+   347	    queue: "multiprocessing.Queue[tuple[str, object]]" = ctx.Queue()
+   348	    proc = ctx.Process(
+   349	        target=_subprocess_target,
+   350	        args=(
+   351	            str(stl_path),
+   352	            str(output_msh_path),
+   353	            mesh_mode,
+   354	            characteristic_length_override,
+   355	            queue,
+   356	        ),
+   357	    )
+   358	    proc.start()
+   359	    proc.join()
+   360	
+   361	    if proc.exitcode != 0 and queue.empty():
+   362	        # Codex Round 6 P1: a hard child crash (segfault, OOM kill,
+   363	        # ``os._exit``, gmsh native abort) leaves no payload on the
+   364	        # queue. The previous code raised GmshMeshGenerationError here
+   365	        # which the pipeline mapped to gmsh_diverged / 422 — same
+   366	        # 4xx-relabel bug the Round 5 fix was supposed to close, just
+   367	        # on the no-payload crash path. Surface as GmshSubprocessError
+   368	        # so it bubbles as 5xx alongside the other deployment faults.
+   369	        raise GmshSubprocessError(
+   370	            f"gmsh subprocess exited with code {proc.exitcode} before "
+   371	            "posting a result (likely a hard crash inside gmsh's native code)."
+   372	        )
+   373	
+   374	    kind, payload = queue.get()
+   375	    if kind == "ok":
+   376	        assert isinstance(payload, dict)
+   377	        return GmshRunResult(
+   378	            msh_path=Path(payload["msh_path"]),
+   379	            cell_count=int(payload["cell_count"]),
+   380	            face_count=int(payload["face_count"]),
+   381	            point_count=int(payload["point_count"]),
+   382	            characteristic_length_used=float(payload["characteristic_length_used"]),
+   383	            generation_time_s=float(payload["generation_time_s"]),
+   384	        )
+   385	    if kind == "gmsh_error":
+   386	        raise GmshMeshGenerationError(str(payload))
+   387	    if kind == "os_error":
+   388	        # Disk-full / permission-denied — surface as OSError so the
+   389	        # pipeline layer reports a 5xx (matches the in-process contract).
+   390	        raise OSError(str(payload))
+   391	    if kind == "import_error":
+   392	        # gmsh module missing in the deployed [workbench] extra. Surface
+   393	        # as GmshSubprocessError so FastAPI returns 5xx and operators
+   394	        # see a structured cause class. NOT a user-geometry fault —
+   395	        # must not collapse to gmsh_diverged / 422.
+   396	        raise GmshSubprocessError(
+   397	            f"gmsh subprocess could not initialize (deployment fault): {payload}"
+   398	        )
+   399	    # 'backend_error' (or any unknown kind from a future version) —
+   400	    # surface as GmshSubprocessError so the route layer reports 5xx.
+   401	    # Codex Round 5 P1 + Round 6 P1: this branch must NOT raise
+   402	    # GmshMeshGenerationError, otherwise child-bootstrap / unknown-
+   403	    # cause faults would be silently relabeled as "bad geometry" (422).
+   404	    raise GmshSubprocessError(
+   405	        f"gmsh subprocess raised an unhandled exception (kind={kind!r}): {payload}"
+   406	    )
+
+exec
+/bin/zsh -lc "rg -n \"except .*Exception|except BaseException|unlink\\(|mkdir\\(|write_text\\(|iterdir\\(|get_archive\\(|put_archive\\(|extractall|tarfile\\.TarError|os\\.access|exists\\(\" ui/backend/services/meshing_gmsh -S" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:105:    if not stl_path.exists():
+ui/backend/services/meshing_gmsh/gmsh_runner.py:108:    output_msh_path.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/meshing_gmsh/gmsh_runner.py:218:            # disk-full) where os.access(W_OK) and dir-existence still
+ui/backend/services/meshing_gmsh/gmsh_runner.py:229:            except Exception as exc:  # noqa: BLE001 — gmsh write raises plain Exception
+ui/backend/services/meshing_gmsh/gmsh_runner.py:231:                if not output_dir.exists():
+ui/backend/services/meshing_gmsh/gmsh_runner.py:247:        except Exception as exc:  # noqa: BLE001 — gmsh bindings raise plain Exception
+ui/backend/services/meshing_gmsh/gmsh_runner.py:262:            if not stl_path.exists():
+ui/backend/services/meshing_gmsh/gmsh_runner.py:267:            if not output_dir.exists() or not os.access(output_dir, os.W_OK):
+ui/backend/services/meshing_gmsh/gmsh_runner.py:325:    except BaseException as exc:  # noqa: BLE001 — bubble unknown failures with type info
+ui/backend/services/meshing_gmsh/pipeline.py:76:    # Codex R9 Finding 3: collapse the is_dir()→iterdir() TOCTTOU
+ui/backend/services/meshing_gmsh/pipeline.py:81:    # iterdir() directly and treat NotADirectoryError /
+ui/backend/services/meshing_gmsh/pipeline.py:86:            p for p in triSurface.iterdir() if p.suffix.lower() == ".stl"
+ui/backend/services/meshing_gmsh/pipeline.py:135:        # the exists()→unlink() TOCTTOU window via missing_ok=True so a
+ui/backend/services/meshing_gmsh/pipeline.py:138:        msh_path.unlink(missing_ok=True)
+ui/backend/services/meshing_gmsh/to_foam.py:78:    dest_dir.mkdir(parents=True, exist_ok=True)
+ui/backend/services/meshing_gmsh/to_foam.py:81:        tar.extractall(path=dest_dir, filter="data")
+ui/backend/services/meshing_gmsh/to_foam.py:105:    # Codex Round 8 Finding 2: collapse the exists()→stat()/use() TOCTTOU
+ui/backend/services/meshing_gmsh/to_foam.py:143:    except docker.errors.DockerException as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:157:        archive_ok = container.put_archive(
+ui/backend/services/meshing_gmsh/to_foam.py:161:    except docker.errors.DockerException as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:202:    except docker.errors.DockerException as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:211:        bits, _ = container.get_archive(f"{container_work_dir}/{log_filename}")
+ui/backend/services/meshing_gmsh/to_foam.py:216:        if not log_dest.exists():
+ui/backend/services/meshing_gmsh/to_foam.py:218:    except Exception:  # noqa: BLE001 — best-effort log copy
+ui/backend/services/meshing_gmsh/to_foam.py:219:        # Codex R10 Finding 2: the placeholder write_text() can itself
+ui/backend/services/meshing_gmsh/to_foam.py:227:            log_dest.write_text(
+ui/backend/services/meshing_gmsh/to_foam.py:247:    # tarfile.TarError (corrupt archive bytes from the docker stream).
+ui/backend/services/meshing_gmsh/to_foam.py:251:        polyMesh_host.parent.mkdir(parents=True, exist_ok=True)
+ui/backend/services/meshing_gmsh/to_foam.py:252:        bits, _ = container.get_archive(f"{container_work_dir}/constant/polyMesh")
+ui/backend/services/meshing_gmsh/to_foam.py:262:    except docker.errors.DockerException as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:266:    except (OSError, tarfile.TarError) as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:272:    # Codex Round 8 Finding 2: collapse the exists()→iterdir() TOCTTOU
+ui/backend/services/meshing_gmsh/to_foam.py:274:    # (concurrent cleanup, host-side rm -rf), iterdir() raises
+ui/backend/services/meshing_gmsh/to_foam.py:280:        present = {p.name for p in polyMesh_host.iterdir()}
+
+exec
+/bin/zsh -lc "pytest -q ui/backend/tests/test_meshing_gmsh.py -k 'gmsh_runner_normalizes_raw_binding_exception or gmsh_inline_re_checks_stl_after_merge_failure or gmsh_inline_disk_full_during_write_surfaces_as_oserror or to_foam_normalizes_oserror_during_tarball_build or to_foam_normalizes_polymesh_copyback_oserror'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 4 in 202ms:
+ImportError while loading conftest '/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/conftest.py'.
+ui/backend/tests/conftest.py:7: in <module>
+    import trimesh
+E   ModuleNotFoundError: No module named 'trimesh'
+
+codex
+I don’t see evidence that `gmsh.merge()` should override the existing raw-binding contract, but I do see two pre-wrapper host-I/O checks that can still escape as naked `OSError` before the structured meshing contracts engage. I’m validating whether those are in-bounds for this chain or just residual 5xx behavior before I lock the verdict.
+exec
+/bin/zsh -lc "nl -ba ui/backend/tests/test_meshing_gmsh.py | sed -n '320,520p;760,880p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+   320	        def createGeometry():
+   321	            return None
+   322	
+   323	        @staticmethod
+   324	        def generate(_dim):
+   325	            return None
+   326	
+   327	        @staticmethod
+   328	        def getNodes():
+   329	            return ([], [], [])
+   330	
+   331	        @staticmethod
+   332	        def getElements(dim):
+   333	            # Produce one tetrahedron so the cell-count check passes.
+   334	            if dim == 3:
+   335	                return ([4], [[1]], [])
+   336	            return ([], [], [])
+   337	
+   338	    class _FakeModel:
+   339	        geo = _FakeGeo
+   340	        mesh = _FakeMesh
+   341	
+   342	        @staticmethod
+   343	        def getEntities(dim):
+   344	            return [(2, 1)]
+   345	
+   346	    class _FakeGmsh:
+   347	        class option:
+   348	            @staticmethod
+   349	            def setNumber(*args, **kwargs):
+   350	                return None
+   351	
+   352	        model = _FakeModel
+   353	
+   354	        @staticmethod
+   355	        def initialize():
+   356	            return None
+   357	
+   358	        @staticmethod
+   359	        def finalize():
+   360	            return None
+   361	
+   362	        @staticmethod
+   363	        def merge(_path):
+   364	            return None
+   365	
+   366	        @staticmethod
+   367	        def write(_path):
+   368	            raise PermissionError("disk full / read-only filesystem")
+   369	
+   370	    import sys
+   371	
+   372	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+   373	    # M-PANELS Step 10: target _gmsh_inline directly. The subprocess
+   374	    # wrapper translates OSError into a re-raised OSError as well, but
+   375	    # via Queue marshaling — testing the inline contract is sufficient.
+   376	    # PermissionError is a subclass of OSError — must bubble unchanged.
+   377	    with pytest.raises(PermissionError, match="disk full"):
+   378	        runner_mod._gmsh_inline(
+   379	            stl_path=stl_path,
+   380	            output_msh_path=tmp_path / "out.msh",
+   381	            mesh_mode="beginner",
+   382	            characteristic_length_override=None,
+   383	        )
+   384	
+   385	
+   386	def test_to_foam_normalizes_docker_sdk_failures(tmp_path: Path):
+   387	    """Codex round-2 P2 / round-3 P2: docker SDK calls inside
+   388	    run_gmsh_to_foam (exec_run / put_archive / get_archive) raise
+   389	    DockerException; those must surface as GmshToFoamError so the
+   390	    pipeline maps them to gmshToFoam_failed. Host-side failures
+   391	    (PermissionError, tarfile errors) are NOT normalized here —
+   392	    those belong as 5xx for accurate diagnosis."""
+   393	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+   394	
+   395	    case_dir = tmp_path / "imported_TEST_dockerfail"
+   396	    case_dir.mkdir()
+   397	    (case_dir / "imported.msh").write_bytes(b"FAKE MSH")
+   398	
+   399	    import docker.errors
+   400	
+   401	    fake_container = MagicMock()
+   402	    fake_container.status = "running"
+   403	    fake_container.exec_run.side_effect = docker.errors.APIError("connection lost")
+   404	
+   405	    fake_client = MagicMock()
+   406	    fake_client.containers.get.return_value = fake_container
+   407	
+   408	    with patch("docker.from_env", return_value=fake_client):
+   409	        with pytest.raises(to_foam_mod.GmshToFoamError, match="docker SDK"):
+   410	            to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+   411	
+   412	
+   413	def test_to_foam_raises_when_msh_missing(tmp_path: Path):
+   414	    from ui.backend.services.meshing_gmsh.to_foam import (
+   415	        GmshToFoamError,
+   416	        run_gmsh_to_foam,
+   417	    )
+   418	
+   419	    case_dir = tmp_path / "no_msh_here"
+   420	    case_dir.mkdir()
+   421	
+   422	    with pytest.raises(GmshToFoamError, match="does not exist"):
+   423	        run_gmsh_to_foam(case_host_dir=case_dir)
+   424	
+   425	
+   426	def test_to_foam_calls_docker_when_msh_present(tmp_path: Path):
+   427	    """Mock the docker SDK and confirm we copy the case in, exec
+   428	    gmshToFoam, copy logs + polyMesh out. Validates the surface
+   429	    contract — not gmshToFoam itself, which is a downstream tool."""
+   430	    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+   431	
+   432	    case_dir = tmp_path / "imported_TEST_dock"
+   433	    case_dir.mkdir()
+   434	    (case_dir / "imported.msh").write_bytes(b"FAKE MSH")
+   435	
+   436	    # Pre-create a host-side polyMesh dir so the post-run validation
+   437	    # passes (the mocked extract function will simulate the container
+   438	    # producing it).
+   439	    polyMesh = case_dir / "constant" / "polyMesh"
+   440	    polyMesh.mkdir(parents=True)
+   441	    for fname in ("points", "faces", "owner", "neighbour", "boundary"):
+   442	        (polyMesh / fname).write_text("dummy", encoding="utf-8")
+   443	
+   444	    fake_container = MagicMock()
+   445	    fake_container.status = "running"
+   446	    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+   447	    fake_container.put_archive.return_value = True
+   448	    fake_container.get_archive.return_value = (iter([b""]), {})
+   449	
+   450	    fake_client = MagicMock()
+   451	    fake_client.containers.get.return_value = fake_container
+   452	
+   453	    with patch.object(to_foam_mod, "_extract_tarball", return_value=None):
+   454	        with patch("docker.from_env", return_value=fake_client):
+   455	            result = to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+   456	
+   457	    assert result.polyMesh_dir == polyMesh
+   458	    assert result.used_container is True
+   459	    fake_container.exec_run.assert_called()
+   460	
+   461	
+   462	# ----- subprocess wrapper (M-PANELS Step 10 visual-smoke fix) -----
+   463	
+   464	
+   465	def test_gmsh_runner_subprocess_wrapper_returns_inline_result(tmp_path: Path):
+   466	    """The public run_gmsh_on_imported_case wrapper spawns a child
+   467	    process and marshals the GmshRunResult back across the queue.
+   468	
+   469	    Tests the wrapper's happy path against the real gmsh binding so we
+   470	    catch the original "signal only works in main thread" regression
+   471	    if the multiprocessing wrap is ever removed. Output mesh is tiny
+   472	    (a 12-triangle box STL) so this stays fast.
+   473	    """
+   474	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   475	
+   476	    stl_path = tmp_path / "input.stl"
+   477	    stl_path.write_bytes(box_stl())
+   478	    out_msh = tmp_path / "out.msh"
+   479	
+   480	    result = runner_mod.run_gmsh_on_imported_case(
+   481	        stl_path=stl_path,
+   482	        output_msh_path=out_msh,
+   483	        mesh_mode="beginner",
+   484	    )
+   485	    assert result.msh_path == out_msh
+   486	    assert out_msh.exists()
+   487	    assert result.cell_count > 0
+   488	    assert result.point_count > 0
+   489	
+   490	
+   491	def test_gmsh_runner_subprocess_wrapper_marshals_missing_stl_as_filesystem_fault(tmp_path: Path):
+   492	    """Codex Round 7 P2: a missing STL is a filesystem / operator
+   493	    fault, not a user-geometry fault. _gmsh_inline raises
+   494	    FileNotFoundError (⊂ OSError), the wrapper marshals it as
+   495	    'os_error', and the parent re-raises as OSError so the pipeline
+   496	    routes it as 5xx — NOT as GmshMeshGenerationError → 4xx.
+   497	    """
+   498	    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+   499	
+   500	    stl_path = tmp_path / "missing.stl"  # intentionally not created
+   501	    with pytest.raises(OSError, match="STL not found") as excinfo:
+   502	        runner_mod.run_gmsh_on_imported_case(
+   503	            stl_path=stl_path,
+   504	            output_msh_path=tmp_path / "out.msh",
+   505	            mesh_mode="beginner",
+   506	        )
+   507	    # Must NOT be GmshMeshGenerationError (which would 4xx-relabel
+   508	    # the missing-file fault as "bad geometry").
+   509	    assert not isinstance(excinfo.value, runner_mod.GmshMeshGenerationError)
+   510	
+   511	
+   512	def test_subprocess_target_routes_oserror_as_os_error(tmp_path: Path):
+   513	    """Codex Round 5 P1 unit-level guard for the 'os_error' kind.
+   514	
+   515	    Calls _subprocess_target directly (bypassing multiprocessing) with a
+   516	    Queue and verifies that an OSError from _gmsh_inline (e.g. disk full
+   517	    / read-only filesystem at gmsh.write()) marshals back as
+   518	    ('os_error', msg). The parent then re-raises OSError → 5xx backend,
+   519	    NOT GmshMeshGenerationError → 4xx 'bad geometry'.
+   520	    """
+   760	    out_msh = locked / "out.msh"
+   761	
+   762	    class _FakeMesh:
+   763	        @staticmethod
+   764	        def classifySurfaces(**_kw):
+   765	            return None
+   766	
+   767	        @staticmethod
+   768	        def createGeometry():
+   769	            return None
+   770	
+   771	        @staticmethod
+   772	        def generate(_dim):
+   773	            return None
+   774	
+   775	        @staticmethod
+   776	        def getNodes():
+   777	            return ([1, 2, 3], None, None)
+   778	
+   779	        @staticmethod
+   780	        def getElements(dim):
+   781	            if dim == 3:
+   782	                return ([4], [[1, 2, 3]], None)
+   783	            return ([2], [[]], None)
+   784	
+   785	    class _FakeGeo:
+   786	        @staticmethod
+   787	        def addSurfaceLoop(_):
+   788	            return 1
+   789	
+   790	        @staticmethod
+   791	        def addVolume(_):
+   792	            return 1
+   793	
+   794	        @staticmethod
+   795	        def synchronize():
+   796	            return None
+   797	
+   798	    class _FakeModel:
+   799	        mesh = _FakeMesh
+   800	
+   801	        class geo:
+   802	            addSurfaceLoop = _FakeGeo.addSurfaceLoop
+   803	            addVolume = _FakeGeo.addVolume
+   804	            synchronize = _FakeGeo.synchronize
+   805	
+   806	        @staticmethod
+   807	        def getEntities(dim):
+   808	            return [(2, 1)]
+   809	
+   810	    class _FakeGmsh:
+   811	        class option:
+   812	            @staticmethod
+   813	            def setNumber(*_a, **_kw):
+   814	                return None
+   815	
+   816	        model = _FakeModel
+   817	
+   818	        @staticmethod
+   819	        def initialize():
+   820	            return None
+   821	
+   822	        @staticmethod
+   823	        def finalize():
+   824	            return None
+   825	
+   826	        @staticmethod
+   827	        def merge(_path):
+   828	            return None
+   829	
+   830	        @staticmethod
+   831	        def write(_path):
+   832	            # Simulate gmsh's bindings raising a generic Exception on
+   833	            # a non-writable output dir (instead of OSError).
+   834	            raise Exception("gmsh: cannot write output file")
+   835	
+   836	    import sys
+   837	
+   838	    monkeypatch.setitem(sys.modules, "gmsh", _FakeGmsh)
+   839	
+   840	    raised: BaseException | None = None
+   841	    try:
+   842	        runner_mod._gmsh_inline(
+   843	            stl_path=stl_path,
+   844	            output_msh_path=out_msh,
+   845	            mesh_mode="beginner",
+   846	            characteristic_length_override=None,
+   847	        )
+   848	    except BaseException as e:  # noqa: BLE001
+   849	        raised = e
+   850	
+   851	    assert isinstance(raised, OSError), (
+   852	        f"non-writable output dir + plain-Exception write failure must "
+   853	        f"surface as OSError (5xx host fault), not "
+   854	        f"{type(raised).__name__ if raised else 'None'}"
+   855	    )
+   856	    assert not isinstance(raised, runner_mod.GmshMeshGenerationError)
+   857	
+   858	
+   859	def test_resolve_imported_case_handles_concurrent_triSurface_deletion(
+   860	    tmp_path: Path, monkeypatch
+   861	):
+   862	    """Codex Round 9 Finding 3 regression guard: TOCTTOU between
+   863	    triSurface.is_dir() and triSurface.iterdir() must not let raw
+   864	    FileNotFoundError escape — it must become MeshPipelineError
+   865	    with failing_check='source_not_imported'.
+   866	    """
+   867	    from ui.backend.services.meshing_gmsh import pipeline as pipeline_mod
+   868	
+   869	    case_id = "imported_2026-04-28T00-00-00Z_racecase"
+   870	    case_dir = tmp_path / "imported" / case_id
+   871	    triSurface = case_dir / "triSurface"
+   872	    triSurface.mkdir(parents=True)
+   873	    (triSurface / "input.stl").write_bytes(box_stl())
+   874	
+   875	    monkeypatch.setattr(pipeline_mod, "IMPORTED_DIR", tmp_path / "imported")
+   876	
+   877	    real_iterdir = Path.iterdir
+   878	
+   879	    def _racing_iterdir(self):
+   880	        if self.name == "triSurface":
+
+exec
+/bin/zsh -lc "rg -n \"mesh_imported_case\\(|gmsh_diverged|gmshToFoam_failed|MeshPipelineError|OSError\" ui/backend -S" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/backend/services/field_artifacts.py:106:    except (json.JSONDecodeError, OSError):
+ui/backend/services/field_artifacts.py:140:    except (OSError, RuntimeError):
+ui/backend/services/field_artifacts.py:149:    except (ValueError, OSError):
+ui/backend/services/field_artifacts.py:182:        except (ValueError, OSError):
+ui/backend/services/field_artifacts.py:241:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/services/run_history.py:184:    except (OSError, json.JSONDecodeError):
+ui/backend/services/decisions.py:109:    except OSError:
+ui/backend/services/render/field_sample.py:151:    except (FileNotFoundError, OSError, ValueError):
+ui/backend/services/render/field_sample.py:170:    except OSError as exc:
+ui/backend/services/render/field_sample.py:260:    # the temp artifact. Treat OSError (incl. FileNotFoundError) the
+ui/backend/services/render/field_sample.py:265:        except OSError:
+ui/backend/services/render/field_sample.py:272:        except OSError:
+ui/backend/services/render/field_sample.py:282:        except OSError:
+ui/backend/services/render/geometry_glb.py:97:    except (FileNotFoundError, OSError, ValueError):
+ui/backend/services/render/geometry_glb.py:142:    # bypassed the failing_check translator. Treat OSError (incl.
+ui/backend/services/render/geometry_glb.py:147:        except OSError:
+ui/backend/services/render/geometry_glb.py:153:        except OSError:
+ui/backend/services/render/geometry_glb.py:162:        except OSError:
+ui/backend/services/render/mesh_wireframe.py:114:    except (FileNotFoundError, OSError, ValueError):
+ui/backend/services/render/mesh_wireframe.py:161:    # translator. Treat OSError (incl. FileNotFoundError) for any
+ui/backend/services/render/mesh_wireframe.py:168:            except OSError:
+ui/backend/services/render/mesh_wireframe.py:175:        except OSError:
+ui/backend/services/render/mesh_wireframe.py:184:        except OSError:
+ui/backend/routes/mesh_imported.py:20:    MeshPipelineError,
+ui/backend/routes/mesh_imported.py:32:    "gmsh_diverged": 422,
+ui/backend/routes/mesh_imported.py:34:    "gmshToFoam_failed": 502,  # downstream container-side failure
+ui/backend/routes/mesh_imported.py:69:        result = mesh_imported_case(case_id, mesh_mode=request.mesh_mode)
+ui/backend/routes/mesh_imported.py:70:    except MeshPipelineError as exc:
+ui/backend/services/comparison_report.py:136:    except (ValueError, OSError):
+ui/backend/services/comparison_report.py:612:    except (subprocess.SubprocessError, OSError):
+ui/backend/services/comparison_report.py:726:        except (OSError, yaml.YAMLError, ValueError, TypeError):
+ui/backend/services/comparison_report.py:856:        except (OSError, yaml.YAMLError, ValueError, TypeError):
+ui/backend/services/comparison_report.py:965:        except (OSError, yaml.YAMLError, ValueError, TypeError):
+ui/backend/services/comparison_report.py:1038:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/services/comparison_report.py:1079:    # raise RuntimeError/TypeError/KeyError/etc. beyond ImportError+OSError
+ui/backend/services/comparison_report.py:1454:    as OSError and are mapped by the route layer to 503, same as ImportError.
+ui/backend/services/comparison_report.py:1481:    except (ValueError, OSError):
+ui/backend/routes/comparison_report.py:76:    except (ImportError, OSError) as e:
+ui/backend/routes/comparison_report.py:78:        # OSError: native dep (libgobject / libcairo / libpango) failed to load
+ui/backend/routes/comparison_report.py:129:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/routes/comparison_report.py:152:    except (ImportError, OSError) as e:
+ui/backend/routes/comparison_report.py:154:        # native libgobject/libcairo/libpango load failures surface as OSError
+ui/backend/routes/audit_package.py:295:    except (ValueError, OSError):
+ui/backend/services/case_drafts.py:138:        except OSError:
+ui/backend/tests/test_wizard_drivers.py:446:        raise OSError("read-only filesystem")
+ui/backend/tests/test_wizard_drivers.py:463:    assert "OSError" in captured.err
+ui/backend/tests/test_wizard_drivers.py:645:        MockExec.return_value.execute.side_effect = OSError("Cannot connect to Docker")
+ui/backend/tests/test_field_sample.py:228:    Without the OSError-tolerant _current_mtime() guard the helper
+ui/backend/routes/geometry_render.py:66:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/routes/geometry_render.py:100:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/routes/geometry_render.py:135:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/routes/geometry_render.py:179:    except (ValueError, OSError, FileNotFoundError):
+ui/backend/tests/test_meshing_gmsh.py:27:    MeshPipelineError,
+ui/backend/tests/test_meshing_gmsh.py:86:    user-geometry fault. Surfaces as OSError (FileNotFoundError ⊂ OSError)
+ui/backend/tests/test_meshing_gmsh.py:87:    so the pipeline routes it as 5xx, NOT as gmsh_diverged / 422.
+ui/backend/tests/test_meshing_gmsh.py:89:    with pytest.raises(OSError, match="not found") as excinfo:
+ui/backend/tests/test_meshing_gmsh.py:101:    with pytest.raises(MeshPipelineError) as exc_info:
+ui/backend/tests/test_meshing_gmsh.py:102:        mesh_imported_case("../etc/passwd")
+ui/backend/tests/test_meshing_gmsh.py:107:    with pytest.raises(MeshPipelineError) as exc_info:
+ui/backend/tests/test_meshing_gmsh.py:108:        mesh_imported_case("imported_2099-01-01T00-00-00Z_deadbeef")
+ui/backend/tests/test_meshing_gmsh.py:146:    with pytest.raises(MeshPipelineError) as exc_info:
+ui/backend/tests/test_meshing_gmsh.py:147:        mesh_imported_case("imported_TEST_capcheck", mesh_mode="power")
+ui/backend/tests/test_meshing_gmsh.py:156:    gmsh_diverged. ModuleNotFoundError / OSError must NOT be caught
+ui/backend/tests/test_meshing_gmsh.py:293:    """Codex round-5 P2: host-side I/O failures (OSError /
+ui/backend/tests/test_meshing_gmsh.py:295:    gmsh_diverged. They are backend faults — let them surface as 5xx."""
+ui/backend/tests/test_meshing_gmsh.py:374:    # wrapper translates OSError into a re-raised OSError as well, but
+ui/backend/tests/test_meshing_gmsh.py:376:    # PermissionError is a subclass of OSError — must bubble unchanged.
+ui/backend/tests/test_meshing_gmsh.py:390:    pipeline maps them to gmshToFoam_failed. Host-side failures
+ui/backend/tests/test_meshing_gmsh.py:494:    FileNotFoundError (⊂ OSError), the wrapper marshals it as
+ui/backend/tests/test_meshing_gmsh.py:495:    'os_error', and the parent re-raises as OSError so the pipeline
+ui/backend/tests/test_meshing_gmsh.py:501:    with pytest.raises(OSError, match="STL not found") as excinfo:
+ui/backend/tests/test_meshing_gmsh.py:516:    Queue and verifies that an OSError from _gmsh_inline (e.g. disk full
+ui/backend/tests/test_meshing_gmsh.py:518:    ('os_error', msg). The parent then re-raises OSError → 5xx backend,
+ui/backend/tests/test_meshing_gmsh.py:582:        f"(non-gmsh, non-OSError backend fault); got {kind!r}"
+ui/backend/tests/test_meshing_gmsh.py:749:    writable (host fault), _gmsh_inline must surface as OSError
+ui/backend/tests/test_meshing_gmsh.py:833:            # a non-writable output dir (instead of OSError).
+ui/backend/tests/test_meshing_gmsh.py:851:    assert isinstance(raised, OSError), (
+ui/backend/tests/test_meshing_gmsh.py:853:        f"surface as OSError (5xx host fault), not "
+ui/backend/tests/test_meshing_gmsh.py:864:    FileNotFoundError escape — it must become MeshPipelineError
+ui/backend/tests/test_meshing_gmsh.py:886:    with pytest.raises(MeshPipelineError) as excinfo:
+ui/backend/tests/test_meshing_gmsh.py:928:    'gmsh_diverged'. R10 wraps gmsh.write() in its own try/except so
+ui/backend/tests/test_meshing_gmsh.py:929:    the failure surfaces as OSError (5xx) regardless.
+ui/backend/tests/test_meshing_gmsh.py:1023:    assert isinstance(raised, OSError), (
+ui/backend/tests/test_meshing_gmsh.py:1025:        f"healthy must surface as OSError (5xx host fault), not "
+ui/backend/tests/test_meshing_gmsh.py:1036:    itself raises OSError (e.g. case dir vanished, read-only fs,
+ui/backend/tests/test_meshing_gmsh.py:1062:            raise OSError("[Errno 28] No space left on device")
+ui/backend/tests/test_meshing_gmsh.py:1073:        f"OSError from fallback write_text must surface as "
+ui/backend/tests/test_meshing_gmsh.py:1080:    raise PermissionError / generic OSError (EACCES, ENOSPC, EIO) —
+ui/backend/tests/test_meshing_gmsh.py:1113:    _extract_tarball) can raise OSError or tarfile.TarError. These
+ui/backend/schemas/mesh_imported.py:13:    "gmsh_diverged",
+ui/backend/schemas/mesh_imported.py:15:    "gmshToFoam_failed",
+ui/backend/services/meshing_gmsh/gmsh_runner.py:6:to HTTP 4xx with ``failing_check=gmsh_diverged``.
+ui/backend/services/meshing_gmsh/gmsh_runner.py:41:    rejection and must NOT be relabeled as ``gmsh_diverged`` / 422.
+ui/backend/services/meshing_gmsh/gmsh_runner.py:102:    # not a user-geometry fault. Surface as FileNotFoundError (⊂ OSError)
+ui/backend/services/meshing_gmsh/gmsh_runner.py:104:    # GmshMeshGenerationError → gmsh_diverged → 422.
+ui/backend/services/meshing_gmsh/gmsh_runner.py:140:            # to relabel plain-Exception failures as OSError when the
+ui/backend/services/meshing_gmsh/gmsh_runner.py:148:            # OSError from the underlying read is already caught by
+ui/backend/services/meshing_gmsh/gmsh_runner.py:149:            # the explicit `except OSError` boundary below; only
+ui/backend/services/meshing_gmsh/gmsh_runner.py:223:            # so any write-time failure surfaces as OSError (5xx) before
+ui/backend/services/meshing_gmsh/gmsh_runner.py:227:            except OSError:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:235:                raise OSError(
+ui/backend/services/meshing_gmsh/gmsh_runner.py:241:        except OSError:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:253:            # gmsh_diverged / 422, which silently 4xx-relabels host
+ui/backend/services/meshing_gmsh/gmsh_runner.py:258:            # is the actual cause. Surface as OSError so the wrapper
+ui/backend/services/meshing_gmsh/gmsh_runner.py:268:                raise OSError(
+ui/backend/services/meshing_gmsh/gmsh_runner.py:323:    except OSError as exc:
+ui/backend/services/meshing_gmsh/gmsh_runner.py:365:        # which the pipeline mapped to gmsh_diverged / 422 — same
+ui/backend/services/meshing_gmsh/gmsh_runner.py:388:        # Disk-full / permission-denied — surface as OSError so the
+ui/backend/services/meshing_gmsh/gmsh_runner.py:390:        raise OSError(str(payload))
+ui/backend/services/meshing_gmsh/gmsh_runner.py:395:        # must not collapse to gmsh_diverged / 422.
+ui/backend/tests/test_comparison_report_route.py:185:    """Codex round 3: GET .../comparison-report.pdf must map OSError → 503."""
+ui/backend/tests/test_comparison_report_route.py:189:        raise OSError("libpango missing (synthetic)")
+ui/backend/tests/test_comparison_report_route.py:201:    map OSError → 503. Previously it returned 500 on native lib load failure."""
+ui/backend/tests/test_comparison_report_route.py:205:        raise OSError("libpango missing (synthetic)")
+ui/backend/tests/test_mesh_imported_route.py:11:from ui.backend.services.meshing_gmsh.pipeline import MeshPipelineError
+ui/backend/tests/test_mesh_imported_route.py:85:    err = MeshPipelineError(
+ui/backend/tests/test_mesh_imported_route.py:99:def test_mesh_route_gmsh_diverged_surfaces_failing_check():
+ui/backend/tests/test_mesh_imported_route.py:102:    err = MeshPipelineError("zero tetrahedra produced", "gmsh_diverged")
+ui/backend/tests/test_mesh_imported_route.py:110:    assert response.json()["detail"]["failing_check"] == "gmsh_diverged"
+ui/backend/services/meshing_gmsh/pipeline.py:36:    "gmsh_diverged",
+ui/backend/services/meshing_gmsh/pipeline.py:38:    "gmshToFoam_failed",
+ui/backend/services/meshing_gmsh/pipeline.py:42:class MeshPipelineError(RuntimeError):
+ui/backend/services/meshing_gmsh/pipeline.py:66:        raise MeshPipelineError(
+ui/backend/services/meshing_gmsh/pipeline.py:71:        raise MeshPipelineError(
+ui/backend/services/meshing_gmsh/pipeline.py:80:    # of the structured source_not_imported MeshPipelineError. Try
+ui/backend/services/meshing_gmsh/pipeline.py:89:        raise MeshPipelineError(
+ui/backend/services/meshing_gmsh/pipeline.py:95:        raise MeshPipelineError(
+ui/backend/services/meshing_gmsh/pipeline.py:102:def mesh_imported_case(
+ui/backend/services/meshing_gmsh/pipeline.py:110:    Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
+ui/backend/services/meshing_gmsh/pipeline.py:124:        raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
+ui/backend/services/meshing_gmsh/pipeline.py:126:    # installed, OSError on disk failure) are backend / configuration
+ui/backend/services/meshing_gmsh/pipeline.py:139:        raise MeshPipelineError(
+ui/backend/services/meshing_gmsh/pipeline.py:153:        raise MeshPipelineError(str(exc), "gmshToFoam_failed") from exc
+ui/backend/services/meshing_gmsh/to_foam.py:172:        # the route already maps to 502 (gmshToFoam_failed) — same
+ui/backend/services/meshing_gmsh/to_foam.py:178:    except OSError as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:220:        # raise OSError (case_host_dir vanished, read-only filesystem,
+ui/backend/services/meshing_gmsh/to_foam.py:224:        # gmshToFoam_failed signal instead.
+ui/backend/services/meshing_gmsh/to_foam.py:231:        except OSError as exc:
+ui/backend/services/meshing_gmsh/to_foam.py:246:    # OSError (EACCES, ENOSPC, EIO on the host case dir) or
+ui/backend/services/meshing_gmsh/to_foam.py:266:    except (OSError, tarfile.TarError) as exc:
+
+exec
+/bin/zsh -lc "nl -ba ui/backend/routes/mesh_imported.py | sed -n '1,140p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	"""POST /api/import/{case_id}/mesh — M6.0 gmsh meshing route.
+     2	
+     3	Consumes the M5.0 imported case scaffold (triSurface + STL on disk),
+     4	runs gmsh + gmshToFoam, and writes ``constant/polyMesh/`` so the M6.1
+     5	trust-core executor patch can skip ``blockMesh``.
+     6	"""
+     7	from __future__ import annotations
+     8	
+     9	from fastapi import APIRouter, HTTPException
+    10	
+    11	from ui.backend.schemas.mesh_imported import (
+    12	    MeshRejection,
+    13	    MeshRequest,
+    14	    MeshSuccessResponse,
+    15	    MeshSummary,
+    16	)
+    17	from ui.backend.services.meshing_gmsh import MeshResult, mesh_imported_case
+    18	from ui.backend.services.meshing_gmsh.pipeline import (
+    19	    FailingCheck,
+    20	    MeshPipelineError,
+    21	)
+    22	
+    23	
+    24	router = APIRouter()
+    25	
+    26	
+    27	# Map pipeline failing_check enum → HTTP status. case_not_found is the
+    28	# only 404; the rest are 4xx user errors (geometry quality / sizing).
+    29	_STATUS_FOR_FAILING_CHECK: dict[FailingCheck, int] = {
+    30	    "case_not_found": 404,
+    31	    "source_not_imported": 400,
+    32	    "gmsh_diverged": 422,
+    33	    "cell_cap_exceeded": 422,
+    34	    "gmshToFoam_failed": 502,  # downstream container-side failure
+    35	}
+    36	
+    37	
+    38	def _result_to_response(result: MeshResult) -> MeshSuccessResponse:
+    39	    return MeshSuccessResponse(
+    40	        case_id=result.case_id,
+    41	        mesh_summary=MeshSummary(
+    42	            cell_count=result.cell_count,
+    43	            face_count=result.face_count,
+    44	            point_count=result.point_count,
+    45	            mesh_mode_used=result.mesh_mode,
+    46	            polyMesh_path=str(result.polyMesh_path),
+    47	            msh_path=str(result.msh_path),
+    48	            generation_time_s=result.generation_time_s,
+    49	            warning=result.warning,
+    50	        ),
+    51	    )
+    52	
+    53	
+    54	@router.post(
+    55	    "/import/{case_id}/mesh",
+    56	    response_model=MeshSuccessResponse,
+    57	)
+    58	def mesh_imported_route(
+    59	    case_id: str,
+    60	    request: MeshRequest,
+    61	) -> MeshSuccessResponse:
+    62	    # Intentionally synchronous: gmsh + gmshToFoam can take 30-300s on
+    63	    # real geometry. An async handler would block the FastAPI event
+    64	    # loop for that whole window and starve unrelated routes
+    65	    # (/api/health, SSE streams). Synchronous routes run in FastAPI's
+    66	    # default threadpool, so a long mesh blocks one worker thread but
+    67	    # leaves the event loop free.
+    68	    try:
+    69	        result = mesh_imported_case(case_id, mesh_mode=request.mesh_mode)
+    70	    except MeshPipelineError as exc:
+    71	        rejection = MeshRejection(
+    72	            reason=str(exc),
+    73	            failing_check=exc.failing_check,
+    74	        )
+    75	        raise HTTPException(
+    76	            status_code=_STATUS_FOR_FAILING_CHECK.get(exc.failing_check, 400),
+    77	            detail=rejection.model_dump(),
+    78	        ) from exc
+    79	
+    80	    return _result_to_response(result)
+
+codex
+CHANGES_REQUIRED
+
+Findings:
+1. `ui/backend/services/meshing_gmsh/to_foam.py:111-117` `P2`
+   `msh_path.stat()` only normalizes `FileNotFoundError`. If the host-side preflight read hits `PermissionError`, `EIO`, or another `OSError`, it escapes as a raw 500 even though this path already has a structured `GmshToFoamError -> gmshToFoam_failed -> 502` contract.
+   Suggested fix: after the existing `except FileNotFoundError`, add:
+   ```python
+   except OSError as exc:
+       raise GmshToFoamError(
+           f"failed to stat gmsh output at {msh_path} (host filesystem fault): {exc}"
+       ) from exc
+   ```
+
+R11 #1 rationale:
+I accept the rejection. The current `R2/R3` contract is the stronger default: `gmsh.merge()` plain `Exception` is already codified as the geometry-side signal in [test_meshing_gmsh.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_meshing_gmsh.py:151), and the existing `_gmsh_inline()` catch ladder already preserves real `OSError` when the filesystem surfaces one directly. I do not see evidence in this repo that `gmsh.merge()` on host `EACCES` is commonly swallowed and re-emitted as a plain binding `Exception`; flipping the contract on that hypothesis would weaken a tested geometry-rejection boundary and, per your note, already regressed the established test.
+
+Remaining surfaces:
+- `ui/backend/services/meshing_gmsh/to_foam.py:111-117`: actionable P2 above.
+- `ui/backend/services/meshing_gmsh/gmsh_runner.py:108`: `output_msh_path.parent.mkdir(...)` is still a raw host-I/O escape hatch before the main gmsh exception boundary. This is a 5xx-without-structured-contract surface, but not a 4xx misclassification.
+- `ui/backend/services/meshing_gmsh/pipeline.py:84-88`: `triSurface.iterdir()` normalizes disappearance/not-a-directory, but read-side `PermissionError`/`EIO` would still bubble as raw 500. Again, raw 5xx surface, not a geometry misclassification.
+
+So: the rejected `gmsh.merge()` change should stay rejected, but one real `to_foam.py` host-filesystem normalization gap remains before I’d close the chain.
+
+Verification:
+I inspected the cited code and tests at `1e4cd5f`. I could not run the targeted pytest slice because the local test env is missing `trimesh` from `ui/backend/tests/conftest.py`.
+
+
+tokens used
+128,937
+CHANGES_REQUIRED
+
+Findings:
+1. `ui/backend/services/meshing_gmsh/to_foam.py:111-117` `P2`
+   `msh_path.stat()` only normalizes `FileNotFoundError`. If the host-side preflight read hits `PermissionError`, `EIO`, or another `OSError`, it escapes as a raw 500 even though this path already has a structured `GmshToFoamError -> gmshToFoam_failed -> 502` contract.
+   Suggested fix: after the existing `except FileNotFoundError`, add:
+   ```python
+   except OSError as exc:
+       raise GmshToFoamError(
+           f"failed to stat gmsh output at {msh_path} (host filesystem fault): {exc}"
+       ) from exc
+   ```
+
+R11 #1 rationale:
+I accept the rejection. The current `R2/R3` contract is the stronger default: `gmsh.merge()` plain `Exception` is already codified as the geometry-side signal in [test_meshing_gmsh.py](/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/tests/test_meshing_gmsh.py:151), and the existing `_gmsh_inline()` catch ladder already preserves real `OSError` when the filesystem surfaces one directly. I do not see evidence in this repo that `gmsh.merge()` on host `EACCES` is commonly swallowed and re-emitted as a plain binding `Exception`; flipping the contract on that hypothesis would weaken a tested geometry-rejection boundary and, per your note, already regressed the established test.
+
+Remaining surfaces:
+- `ui/backend/services/meshing_gmsh/to_foam.py:111-117`: actionable P2 above.
+- `ui/backend/services/meshing_gmsh/gmsh_runner.py:108`: `output_msh_path.parent.mkdir(...)` is still a raw host-I/O escape hatch before the main gmsh exception boundary. This is a 5xx-without-structured-contract surface, but not a 4xx misclassification.
+- `ui/backend/services/meshing_gmsh/pipeline.py:84-88`: `triSurface.iterdir()` normalizes disappearance/not-a-directory, but read-side `PermissionError`/`EIO` would still bubble as raw 500. Again, raw 5xx surface, not a geometry misclassification.
+
+So: the rejected `gmsh.merge()` change should stay rejected, but one real `to_foam.py` host-filesystem normalization gap remains before I’d close the chain.
+
+Verification:
+I inspected the cited code and tests at `1e4cd5f`. I could not run the targeted pytest slice because the local test env is missing `trimesh` from `ui/backend/tests/conftest.py`.
+
+

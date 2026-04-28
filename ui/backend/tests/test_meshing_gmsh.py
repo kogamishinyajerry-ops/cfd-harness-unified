@@ -1160,3 +1160,34 @@ def _safe_log_name(command: str) -> str:
     import re
 
     return "log." + (re.sub(r"[^A-Za-z0-9]", "_", command).strip("_") or "cmd")
+
+
+def test_to_foam_normalizes_msh_stat_oserror(tmp_path: Path):
+    """Codex Round 12 Finding 1 regression guard: msh_path.stat() can
+    raise PermissionError / EIO / other OSError beyond
+    FileNotFoundError. Those host read-side faults must surface as
+    GmshToFoamError, not as raw 500s.
+    """
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_msh_stat_eacces"
+    case_dir.mkdir()
+    msh_path = case_dir / "imported.msh"
+    msh_path.write_text("dummy", encoding="utf-8")
+
+    real_stat = Path.stat
+
+    def _eacces_stat(self, *_a, **_kw):
+        if self == msh_path:
+            raise PermissionError("[Errno 13] Permission denied (mount fault)")
+        return real_stat(self, *_a, **_kw)
+
+    with patch.object(Path, "stat", _eacces_stat):
+        with pytest.raises(to_foam_mod.GmshToFoamError) as excinfo:
+            to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+
+    msg = str(excinfo.value).lower()
+    assert "stat" in msg or "filesystem" in msg, (
+        f"PermissionError on msh stat must surface as GmshToFoamError "
+        f"mentioning stat/filesystem, got: {excinfo.value}"
+    )
