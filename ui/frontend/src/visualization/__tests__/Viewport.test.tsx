@@ -364,15 +364,19 @@ describe("Viewport", () => {
       (c) => typeof c[0] === "function",
     );
     const handler = fnCalls[fnCalls.length - 1][0] as (r: {
-      primitiveIndex: number;
+      patchName: string;
       cellId: number;
       worldPosition: [number, number, number];
     }) => void;
-    handler({ primitiveIndex: 1, cellId: 2, worldPosition: [0.5, 0.5, 0.5] });
+    handler({
+      patchName: "fixedWalls",
+      cellId: 2,
+      worldPosition: [0.5, 0.5, 0.5],
+    });
 
     expect(onFacePick).toHaveBeenCalledWith({
       faceId: "fid_w1",
-      primitiveIndex: 1,
+      patchName: "fixedWalls",
       cellId: 2,
       worldPosition: [0.5, 0.5, 0.5],
     });

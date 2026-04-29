@@ -24,15 +24,27 @@ import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
 
 /** Result of a successful vtkCellPicker hit. The frontend pickMode
- *  uses ``primitiveIndex`` + ``cellId`` to look up the face_id in the
+ *  uses ``patchName`` + ``cellId`` to look up the face_id in the
  *  cached face-index document (DEC-V61-098 spec_v2 §A6).
+ *
+ *  Codex round 1 finding 1 (2026-04-29): an earlier revision returned
+ *  ``primitiveIndex`` based on ``renderer.getActors()`` order. That
+ *  mechanism was unsound — vtk.js GLTFImporter inserts a node-level
+ *  actor into the renderer ahead of every primitive actor (see
+ *  ``IO/Geometry/GLTFImporter/Reader.js:392``), and primitive actor
+ *  insertion is concurrent under ``Promise.all`` so order is also not
+ *  stable. The kernel now keys by patch_name extracted from the glTF
+ *  actor map, which the backend bc_glb sets on each primitive
+ *  (``primitive.name = patch_name``).
  */
 export interface PickResult {
-  /** Index of the picked actor within the kernel's primitive list.
-   *  For glb, this matches the glTF primitive index (kernel preserves
-   *  importer.getActors() order). For stl this is always 0.
+  /** Patch name resolved from the picked actor's glTF primitive.name
+   *  attribute. The Viewport layer maps this to ``primitives[i]``
+   *  in the face-index by ``patch_name`` equality. For STL (single
+   *  actor, no primitive metadata) this is the empty string and the
+   *  Viewport falls back to primitive index 0.
    */
-  primitiveIndex: number;
+  patchName: string;
   /** Cell index within the picked actor's polyData (0-based triangle
    *  index for triangulated surfaces).
    */
@@ -91,13 +103,21 @@ export function createKernel(
   let importer: vtkGLTFImporter | undefined;
 
   // Picking infrastructure. The picker is constructed on first
-  // setPickHandler() call and torn down on dispose. We track the
-  // attached actors in primitive order so the React layer can resolve
-  // cellId → face_id via the face-index doc keyed by primitiveIndex.
+  // setPickHandler() call and torn down on dispose. We track each
+  // primitive actor by its glTF primitive.name (= bc_glb's patch_name)
+  // so the React layer can resolve actor → patch_name → face_index
+  // primitive without depending on renderer.getActors() ordering
+  // (see PickResult docstring for why that's unsound).
   let picker: ReturnType<typeof vtkCellPicker.newInstance> | undefined;
   let pickHandler: PickHandler | null = null;
   let pickSubscription: { unsubscribe: () => void } | undefined;
-  const orderedActors: ReturnType<typeof vtkActor.newInstance>[] = [];
+  // Map: actor object identity → its glTF primitive.name. Empty for
+  // STL (single anonymous actor; we record "" and the React layer
+  // falls back to primitive index 0).
+  const actorPatchNames = new Map<
+    ReturnType<typeof vtkActor.newInstance>,
+    string
+  >();
 
   function attachStl(r: vtkSTLReader): void {
     mapper = vtkMapper.newInstance();
@@ -108,8 +128,11 @@ export function createKernel(
 
     const renderer = grw.getRenderer();
     renderer.addActor(actor);
-    orderedActors.length = 0;
-    orderedActors.push(actor);
+    actorPatchNames.clear();
+    // STL has no patch metadata. Record the empty string; the Viewport
+    // resolution path uses primitive[0] as the fallback when
+    // patchName === "".
+    actorPatchNames.set(actor, "");
     renderer.resetCamera();
     grw.getRenderWindow().render();
   }
@@ -140,17 +163,28 @@ export function createKernel(
     importer = imp;
 
     const renderer = grw.getRenderer();
-    // Snapshot actors in glTF primitive order so vtkCellPicker hits
-    // can be resolved back to a primitive index. GLTFImporter populates
-    // the renderer in primitive order; getActors() returns them in the
-    // same order. The face-index document on the backend uses this
-    // exact order (lid → fixedWalls → alphabetical per bc_glb).
-    orderedActors.length = 0;
-    const actors = renderer.getActors();
-    if (Array.isArray(actors)) {
-      for (const a of actors) {
-        orderedActors.push(a as ReturnType<typeof vtkActor.newInstance>);
-      }
+    // Build the actor → patch_name map by walking the importer's
+    // internal actor map. vtk.js GLTFImporter sets keys as
+    // ``${node.id}`` for node actors and ``${node.id}_${primitive.name}``
+    // for primitive actors (see Reader.js:392 + 396). Keys without an
+    // underscore are node actors (skip — they have no primitive); keys
+    // with underscore embed the patch_name as the suffix (we set
+    // primitive.name=patch_name in bc_glb.py to make these distinct).
+    actorPatchNames.clear();
+    const importerWithGetters = imp as unknown as {
+      getActors?: () => Map<string, ReturnType<typeof vtkActor.newInstance>>;
+    };
+    const actorsMap = importerWithGetters.getActors?.();
+    if (actorsMap && typeof actorsMap.forEach === "function") {
+      actorsMap.forEach((a, key) => {
+        const underscoreIdx = typeof key === "string" ? key.indexOf("_") : -1;
+        if (underscoreIdx <= 0) {
+          // Node actor (just the node id, no primitive suffix). Skip.
+          return;
+        }
+        const patchName = key.slice(underscoreIdx + 1);
+        actorPatchNames.set(a, patchName);
+      });
     }
     renderer.resetCamera();
     grw.getRenderWindow().render();
@@ -201,10 +235,10 @@ export function createKernel(
       const pickedActors = picker.getActors();
       if (!Array.isArray(pickedActors) || pickedActors.length === 0) return;
       const pickedActor = pickedActors[0];
-      const primitiveIndex = orderedActors.findIndex(
-        (a) => a === pickedActor,
+      const patchName = actorPatchNames.get(
+        pickedActor as ReturnType<typeof vtkActor.newInstance>,
       );
-      if (primitiveIndex < 0) return;
+      if (patchName === undefined) return;
       const cellId = picker.getCellId();
       if (typeof cellId !== "number" || cellId < 0) return;
       const world = picker.getPickPosition();
@@ -215,7 +249,7 @@ export function createKernel(
             Number(world[2]) || 0,
           ]
         : [0, 0, 0];
-      localHandler({ primitiveIndex, cellId, worldPosition });
+      localHandler({ patchName, cellId, worldPosition });
     });
   }
 

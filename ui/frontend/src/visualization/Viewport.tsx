@@ -29,13 +29,13 @@ import type { FaceIndexDocument } from "@/pages/workbench/step_panel_shell/types
 
 /** Payload delivered to ``onFacePick`` after a successful pick.
  *  ``face_id`` is null when pickMode is on but the kernel emitted a
- *  cell hit that the face-index couldn't resolve (out-of-bounds cellId
- *  or unknown primitive — rare). The Viewport surfaces this as a soft
- *  status, not an error.
+ *  cell hit that the face-index couldn't resolve (unknown patch_name
+ *  or out-of-bounds cellId — rare). The Viewport surfaces this as a
+ *  soft status, not an error.
  */
 export interface FacePickEvent {
   faceId: string | null;
-  primitiveIndex: number;
+  patchName: string;
   cellId: number;
   worldPosition: [number, number, number];
 }
@@ -228,14 +228,19 @@ function ViewportVtk({
     const handleKernelPick = (result: PickResult) => {
       const idx = faceIndexRef.current;
       if (!idx) return;
-      const primitive = idx.primitives[result.primitiveIndex];
+      // Resolve actor → primitive by patch_name equality. STL emits
+      // patchName === "" → fallback to primitives[0]. The face-index
+      // backend service guarantees primitives[i].patch_name uniqueness.
+      const primitive = result.patchName
+        ? idx.primitives.find((p) => p.patch_name === result.patchName)
+        : idx.primitives[0];
       const faceId =
         primitive && result.cellId < primitive.face_ids.length
           ? primitive.face_ids[result.cellId]
           : null;
       onFacePickRef.current?.({
         faceId,
-        primitiveIndex: result.primitiveIndex,
+        patchName: result.patchName,
         cellId: result.cellId,
         worldPosition: result.worldPosition,
       });

@@ -329,11 +329,23 @@ def _build_bc_glb_bytes(case_dir: Path) -> bytes:
 
     primitives: list[dict] = []
     for i, name in enumerate(primitive_names):
+        # ``primitive.name`` is glTF 2.0-extension territory — vtk.js
+        # GLTFImporter uses it to key the actor map (see
+        # node_modules/@kitware/vtk.js/IO/Geometry/GLTFImporter/Reader.js
+        # line 396: ``model.actors.set(`${node.id}_${primitive.name}`, ...)``).
+        # Without a name every primitive ends up at the same map key
+        # ``"0_undefined"`` and only the last one survives. Codex round 1
+        # (DEC-V61-098 Step 6 review 2026-04-29) demonstrated this on a
+        # live import. Setting name=patch_name both deduplicates the
+        # actor map AND lets the frontend pickMode resolve actor → patch
+        # via the actor's preserved name attribute (mirrors the backend
+        # face_index primitive ordering).
         primitives.append({
             "attributes": {"POSITION": 0},
             "indices": 1 + i,
             "material": i,
             "mode": _MODE_TRIANGLES,
+            "name": name,
         })
 
     gltf_json: dict = {

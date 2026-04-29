@@ -75,7 +75,7 @@ export function useFacePickPublisher() {
   return useCallback(
     (event: {
       faceId: string | null;
-      primitiveIndex: number;
+      patchName: string;
       cellId: number;
       worldPosition: [number, number, number];
     }) => {
