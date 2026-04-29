@@ -233,3 +233,88 @@ def test_route_409_when_pre_setup_bc(isolated_imported):
     client = TestClient(app)
     resp = client.get("/api/cases/case_001/bc/render")
     assert resp.status_code == 409
+
+
+# ───────── Codex round-1 follow-up tests ─────────
+
+
+def test_symlink_escape_rejected(isolated_imported, tmp_path):
+    """Codex round-1 MED-3: a symlink at constant/polyMesh/points pointing
+    outside the case dir must NOT be followed. The hardened
+    _bc_source_files() resolves the symlink and asserts relative_to
+    case_root, so this raises BcRenderError(no_polymesh) instead of
+    serving an attacker-chosen file.
+    """
+    case_dir = isolated_imported / "case_001"
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    # Create a victim file outside the case dir + symlink to it.
+    victim = tmp_path / "outside_case.txt"
+    victim.write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "points").symlink_to(victim)
+    (polymesh / "faces").write_text(_FACES_TEXT, encoding="utf-8")
+    (polymesh / "boundary").write_text(_BOUNDARY_TEXT, encoding="utf-8")
+
+    with pytest.raises(BcRenderError) as exc:
+        build_bc_render_glb("case_001")
+    assert exc.value.failing_check == "no_polymesh"
+    assert "outside" in str(exc.value).lower()
+
+
+def test_malformed_boundary_range_raises_parse_error(isolated_imported):
+    """Codex round-1 MED-4: a boundary with startFace + nFaces beyond the
+    faces array length used to silently truncate to a partial GLB.
+    Now it raises BcRenderError(parse_error) so the route returns 422.
+    """
+    case_dir = isolated_imported / "case_001"
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "faces").write_text(_FACES_TEXT, encoding="utf-8")
+    # Boundary references face 99 — way past the 6-face fixture.
+    bad_boundary = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+1
+(
+    bogus
+    {
+        type            wall;
+        nFaces          5;
+        startFace       95;
+    }
+)
+"""
+    (polymesh / "boundary").write_text(bad_boundary, encoding="utf-8")
+
+    with pytest.raises(BcRenderError) as exc:
+        build_bc_render_glb("case_001")
+    assert exc.value.failing_check == "parse_error"
+    assert "face 95" in str(exc.value) or "faces has length 6" in str(exc.value)
+
+
+def test_route_422_on_malformed_boundary(isolated_imported):
+    """Same defect surfaced through the HTTP route -> 422 parse_error."""
+    case_dir = isolated_imported / "case_001"
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "faces").write_text(_FACES_TEXT, encoding="utf-8")
+    (polymesh / "boundary").write_text(
+        _BOUNDARY_TEXT.replace("startFace       1;", "startFace       100;"),
+        encoding="utf-8",
+    )
+
+    client = TestClient(app)
+    resp = client.get("/api/cases/case_001/bc/render")
+    assert resp.status_code == 422

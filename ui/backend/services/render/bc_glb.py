@@ -90,19 +90,59 @@ def _imported_case_dir(case_id: str) -> Path:
     return template_clone.IMPORTED_DIR / case_id
 
 
-def _read_boundary_patches(polymesh: Path) -> dict[str, tuple[int, int]]:
-    """Parse ``constant/polyMesh/boundary`` → ``{patch: (startFace, nFaces)}``.
+def _bc_source_files(
+    polymesh_dir: Path, case_dir: Path
+) -> tuple[Path, Path, Path]:
+    """Return ``(points, faces, boundary)`` paths after symlink-containment.
 
-    Mirrors bc_overlay._read_boundary_patches but kept local so this
-    module is self-contained.
+    Codex round-1 MED-3: previously the three polyMesh inputs were
+    opened directly via ``is_file()/read_text()/parse_*``, which let a
+    symlink under ``constant/polyMesh/`` redirect to an arbitrary file
+    outside IMPORTED_DIR. This helper mirrors
+    ``mesh_wireframe._polymesh_source_files``: each input is
+    ``resolve(strict=True)``'d and asserted to live under the case dir.
+
+    A ``no_polymesh`` failing_check covers points/faces; ``no_boundary``
+    covers the boundary file specifically (signal to the route layer to
+    distinguish pre-mesh from pre-setup-bc).
     """
-    boundary = polymesh / "boundary"
+    points = polymesh_dir / "points"
+    faces = polymesh_dir / "faces"
+    boundary = polymesh_dir / "boundary"
+    if not points.is_file() or not faces.is_file():
+        raise BcRenderError(
+            failing_check="no_polymesh",
+            message=f"polyMesh at {polymesh_dir} missing points or faces",
+        )
     if not boundary.is_file():
         raise BcRenderError(
             failing_check="no_boundary",
             message=f"no boundary file at {boundary}",
         )
-    text = boundary.read_text()
+    try:
+        case_root = case_dir.resolve(strict=True)
+        points_resolved = points.resolve(strict=True)
+        faces_resolved = faces.resolve(strict=True)
+        boundary_resolved = boundary.resolve(strict=True)
+        points_resolved.relative_to(case_root)
+        faces_resolved.relative_to(case_root)
+        boundary_resolved.relative_to(case_root)
+    except (FileNotFoundError, OSError, ValueError):
+        raise BcRenderError(
+            failing_check="no_polymesh",
+            message="polyMesh source resolved outside case dir",
+        )
+    return points_resolved, faces_resolved, boundary_resolved
+
+
+def _read_boundary_patches(boundary_path: Path) -> dict[str, tuple[int, int]]:
+    """Parse ``constant/polyMesh/boundary`` → ``{patch: (startFace, nFaces)}``.
+
+    Mirrors bc_overlay._read_boundary_patches but kept local so this
+    module is self-contained. The caller is responsible for symlink
+    containment via ``_bc_source_files``.
+    """
+    text = boundary_path.read_text()
     pattern = re.compile(
         r"(\w+)\s*\{[^}]*nFaces\s+(\d+)[^}]*startFace\s+(\d+)[^}]*\}",
         re.DOTALL,
@@ -145,13 +185,11 @@ def _build_bc_glb_bytes(case_dir: Path) -> bytes:
             failing_check="no_polymesh",
             message=f"no polyMesh at {polymesh}",
         )
-    points_path = polymesh / "points"
-    faces_path = polymesh / "faces"
-    if not points_path.is_file() or not faces_path.is_file():
-        raise BcRenderError(
-            failing_check="no_polymesh",
-            message=f"polyMesh at {polymesh} missing points or faces",
-        )
+
+    # Codex round-1 MED-3: resolve all three input files under the
+    # case dir before reading. Previously a symlink under polyMesh/
+    # could escape to anywhere on disk.
+    points_path, faces_path, boundary_path = _bc_source_files(polymesh, case_dir)
 
     try:
         points = parse_points(points_path)
@@ -160,7 +198,7 @@ def _build_bc_glb_bytes(case_dir: Path) -> bytes:
     except PolyMeshParseError as exc:
         raise BcRenderError(failing_check="parse_error", message=str(exc))
 
-    patches = _read_boundary_patches(polymesh)
+    patches = _read_boundary_patches(boundary_path)
     # Deterministic ordering: lid first (most visually important), then
     # fixedWalls, then everything else alphabetically.
     def patch_sort_key(name: str) -> tuple[int, str]:
@@ -179,7 +217,17 @@ def _build_bc_glb_bytes(case_dir: Path) -> bytes:
         triangles: list[tuple[int, int, int]] = []
         for face_idx in range(start_face, start_face + n_faces):
             if face_idx >= len(faces):
-                continue
+                # Codex round-1 MED-4: a corrupt startFace/nFaces was
+                # silently truncated to a partial 200 GLB. Surface the
+                # corruption explicitly so the route returns 422 instead
+                # of an incomplete BC scene.
+                raise BcRenderError(
+                    failing_check="parse_error",
+                    message=(
+                        f"boundary patch {name!r} references face {face_idx} "
+                        f"but faces has length {len(faces)}"
+                    ),
+                )
             triangles.extend(_triangulate_face(faces[face_idx]))
         if not triangles:
             continue

@@ -41,6 +41,10 @@ from ui.backend.services.case_solve import (
     setup_ldc_bc,
     stream_icofoam,
 )
+from ui.backend.services.case_solve.solver_streamer import (
+    SolveAlreadyRunning,
+    _prepare_stream_icofoam,
+)
 
 
 router = APIRouter()
@@ -146,13 +150,23 @@ def solve_stream(case_id: str) -> StreamingResponse:
             ).model_dump(),
         )
 
+    # Codex round-1 HIGH-1: preflight must run BEFORE we hand a
+    # generator to StreamingResponse. ``_prepare_stream_icofoam`` is a
+    # plain function (not a generator), so any SolverRunError raised
+    # here surfaces as an HTTPException synchronously — instead of as
+    # a 200 response with a torn iterator.
     try:
-        # ``stream_icofoam`` is a generator; instantiating it does the
-        # eager Docker setup-checks but doesn't run the solver yet.
-        # The first ``next()`` is what triggers staging + spawning.
-        # Wrap it in another generator that translates SolverRunError
-        # raised before the first yield into an HTTPException.
-        gen = stream_icofoam(case_host_dir=case_dir)
+        prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    except SolveAlreadyRunning as exc:
+        # HIGH-2: a prior run for this case is still active. Reject
+        # with 409 so the client can wait + retry.
+        raise HTTPException(
+            status_code=409,
+            detail=SolveRejection(
+                failing_check="solve_already_running",
+                detail=str(exc),
+            ).model_dump(),
+        ) from exc
     except SolverRunError as exc:
         msg = str(exc)
         if "container" in msg.lower() and (
@@ -172,7 +186,7 @@ def solve_stream(case_id: str) -> StreamingResponse:
         ) from exc
 
     return StreamingResponse(
-        gen,
+        stream_icofoam(prepared=prepared),
         media_type="text/event-stream",
         headers={
             # SSE wants no buffering by intermediaries; declare
