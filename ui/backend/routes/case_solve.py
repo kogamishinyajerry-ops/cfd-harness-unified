@@ -19,9 +19,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 
+from ui.backend.schemas.ai_action import AIActionEnvelope
 from ui.backend.schemas.case_solve import (
     ResultsRejection,
     ResultsSummaryWire,
@@ -29,6 +30,10 @@ from ui.backend.schemas.case_solve import (
     SetupBcSummary,
     SolveRejection,
     SolveSummary,
+)
+from ui.backend.services.ai_actions import (
+    AIActionError,
+    setup_bc_with_annotations,
 )
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
@@ -71,44 +76,116 @@ def _resolve_case_dir(case_id: str) -> Path:
     return case_dir
 
 
+def _setup_bc_failure_to_http(exc: BCSetupError) -> HTTPException:
+    """Map a ``BCSetupError`` to the appropriate HTTPException, shared
+    by the legacy ``setup_bc`` route and the envelope-mode wrapper.
+    """
+    msg = str(exc)
+    if "axis-aligned cube" in msg or "no boundary faces match" in msg:
+        return HTTPException(
+            status_code=400,
+            detail=SetupBcRejection(
+                failing_check="not_an_ldc_cube", detail=msg
+            ).model_dump(),
+        )
+    if "no constant/polyMesh" in msg or "boundary file" in msg:
+        return HTTPException(
+            status_code=409,
+            detail=SetupBcRejection(
+                failing_check="mesh_missing", detail=msg
+            ).model_dump(),
+        )
+    return HTTPException(
+        status_code=500,
+        detail=SetupBcRejection(
+            failing_check="write_failed", detail=msg
+        ).model_dump(),
+    )
+
+
 @router.post(
     "/import/{case_id}/setup-bc",
-    response_model=SetupBcSummary,
     tags=["case-solve"],
 )
-def setup_bc(case_id: str) -> SetupBcSummary:
+def setup_bc(
+    case_id: str,
+    envelope: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "When 1, return AIActionEnvelope (M-AI-COPILOT collab "
+            "shape) instead of legacy SetupBcSummary. Backward-compat: "
+            "default 0 preserves V61-097 callers."
+        ),
+    ),
+    force_uncertain: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "(envelope=1 only) When 1, force confidence='uncertain' "
+            "with one mock dialog question. Tier-A LDC dogfood path "
+            "for the dialog flow without needing real arbitrary-STL "
+            "AI ambiguity."
+        ),
+    ),
+    force_blocked: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "(envelope=1 only) When 1, force confidence='blocked' "
+            "with one mock dialog question. Mutually exclusive with "
+            "force_uncertain; if both are passed, force_blocked wins."
+        ),
+    ),
+):
     """Split gmshToFoam's single patch into ``lid`` + ``fixedWalls`` and
     author OpenFOAM dicts for icoFoam Re=100. Idempotent.
+
+    Default response shape is ``SetupBcSummary`` (V61-097 contract).
+    Set ``?envelope=1`` to receive ``AIActionEnvelope`` instead — the
+    M-AI-COPILOT (DEC-V61-098) collab dialog wraps the outcome with
+    structured uncertainty. The ``force_uncertain`` / ``force_blocked``
+    query parameters drive the LDC dogfood dialog flow.
     """
     case_dir = _resolve_case_dir(case_id)
+
+    if envelope:
+        try:
+            env = setup_bc_with_annotations(
+                case_dir=case_dir,
+                case_id=case_id,
+                force_uncertain=bool(force_uncertain),
+                force_blocked=bool(force_blocked),
+            )
+        except AIActionError as exc:
+            # AIActionError wraps either a BCSetupError or an
+            # AnnotationsIOError. Map to the same HTTP shape as the
+            # legacy route for BC failures; for annotation failures
+            # surface a 422 with the failing_check tag.
+            failing = getattr(exc, "failing_check", "ai_action_failed")
+            if failing == "setup_bc_failed":
+                # Re-construct the underlying BCSetupError for HTTP mapping.
+                raise _setup_bc_failure_to_http(BCSetupError(str(exc))) from exc
+            raise HTTPException(
+                status_code=422,
+                detail=SetupBcRejection(
+                    failing_check=failing,
+                    detail=str(exc),
+                ).model_dump(),
+            ) from exc
+        return JSONResponse(
+            content=env.model_dump(),
+            status_code=200,
+        )
+
+    # Legacy V61-097 path.
     try:
         result = setup_ldc_bc(case_dir, case_id=case_id)
     except BCSetupError as exc:
-        msg = str(exc)
-        # Distinguish user-geometry rejection from backend faults.
-        if "axis-aligned cube" in msg or "no boundary faces match" in msg:
-            raise HTTPException(
-                status_code=400,
-                detail=SetupBcRejection(
-                    failing_check="not_an_ldc_cube",
-                    detail=msg,
-                ).model_dump(),
-            ) from exc
-        if "no constant/polyMesh" in msg or "boundary file" in msg:
-            raise HTTPException(
-                status_code=409,
-                detail=SetupBcRejection(
-                    failing_check="mesh_missing",
-                    detail=msg,
-                ).model_dump(),
-            ) from exc
-        raise HTTPException(
-            status_code=500,
-            detail=SetupBcRejection(
-                failing_check="write_failed",
-                detail=msg,
-            ).model_dump(),
-        ) from exc
+        raise _setup_bc_failure_to_http(exc) from exc
 
     return SetupBcSummary(
         case_id=result.case_id,
