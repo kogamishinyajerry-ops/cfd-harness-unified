@@ -249,6 +249,98 @@ def test_run_id_suffixes_container_work_dir(tmp_path, monkeypatch):
     assert "case_suffix" not in _active_runs
 
 
+# ────────── Post-R3 live-run defect (DEC-V61-099): staging order ──────────
+
+
+def test_staging_renames_extracted_dir_into_run_id_suffix(tmp_path, monkeypatch):
+    """Post-R3 live-run defect (DEC-V61-099 · caught on first LDC dogfood
+    after V61-097 R4 RESOLVED). The V61-097 round-1 HIGH-2 fix introduced
+    a run_id-suffixed container_work_dir but the staging sequence
+    silently bypassed the rename:
+
+      1. ``mkdir -p {container_work_dir}``  ← suffix dir pre-created
+      2. ``put_archive(path={CONTAINER_WORK_BASE})``  ← extracts as
+         ``{BASE}/{case_id}`` (un-suffixed)
+      3. ``if [ -d {BASE}/{case_id} ] && [ ! -d {container_work_dir} ];
+            then mv ... fi``  ← guard FALSE because step 1 just created
+            the suffix dir → ``mv`` SKIPPED → suffix dir stays empty
+
+    icoFoam then ``cd``'d into the empty suffix dir and FOAM-Fatal'd
+    on missing ``system/controlDict``.
+
+    Codex's static review missed this in V61-097 because the staging
+    test (``test_run_id_suffixes_container_work_dir``) only asserted the
+    PATH STRING and the mock ``put_archive`` returned True without
+    simulating actual extract. This test pins the failure mode by
+    tracking the bash command sequence.
+
+    Per RETRO-V61-053 addendum: this is the ``executable_smoke_test``
+    risk-flag class — runtime-emergent, not visible to static review.
+    """
+    from ui.backend.services.case_solve.solver_streamer import (
+        _prepare_stream_icofoam,
+        _release_run,
+    )
+
+    case_dir = tmp_path / "case_staging_regression"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    # Track every bash command sent to exec_run so we can assert the
+    # staging sequence is correct.
+    bash_commands: list[str] = []
+
+    class TrackingContainer(_FakeContainer):
+        def exec_run(self, cmd, stream=False, demux=False):  # noqa: ARG002
+            if isinstance(cmd, list) and len(cmd) >= 3 and cmd[0] == "bash":
+                bash_commands.append(cmd[2])
+            return super().exec_run(cmd, stream=stream, demux=demux)
+
+    container = TrackingContainer(status="running", exec_lines=[])
+    _install_fake_docker(monkeypatch, container)
+
+    forced_run_id = "regtest9999"
+    suffix_path_fragment = f"case_staging_regression-{forced_run_id}"
+    try:
+        prepared = _prepare_stream_icofoam(
+            case_host_dir=case_dir, run_id=forced_run_id
+        )
+        assert prepared.container_work_dir.endswith(suffix_path_fragment)
+    finally:
+        _release_run("case_staging_regression", forced_run_id)
+
+    # Assertion 1: there is exactly ONE mkdir command before put_archive,
+    # and it must NOT pre-create the run_id-suffixed dir (the buggy
+    # version did, which is what neutered the subsequent mv).
+    mkdir_cmds = [c for c in bash_commands if "mkdir -p" in c]
+    assert mkdir_cmds, "expected at least one mkdir during staging"
+    pre_archive_mkdirs = [
+        c for c in mkdir_cmds if suffix_path_fragment in c
+    ]
+    assert not pre_archive_mkdirs, (
+        f"REGRESSION: staging pre-created the run_id-suffixed dir via "
+        f"mkdir -p — this is the V61-099 bug because the subsequent mv "
+        f"is silently skipped under the [ ! -d suffix ] guard. "
+        f"Offending command(s): {pre_archive_mkdirs}"
+    )
+
+    # Assertion 2: the rename of the extracted {case_id} dir into the
+    # run_id-suffixed name must be UNCONDITIONAL (no [ ! -d ] guard
+    # against the suffix dir, since under V61-099 the suffix dir does
+    # not pre-exist for the same-run claim).
+    mv_cmds = [c for c in bash_commands if " mv " in c and suffix_path_fragment in c]
+    assert mv_cmds, (
+        f"expected an `mv` command renaming the extracted dir into "
+        f"the run_id-suffixed name; got commands: {bash_commands}"
+    )
+    for mv in mv_cmds:
+        assert "[ ! -d" not in mv, (
+            f"REGRESSION: rename guarded by [ ! -d {{suffix_dir}} ] — "
+            f"this is what allowed V61-099 to silently skip the rename "
+            f"after the (now-removed) pre-create mkdir. mv command: {mv!r}"
+        )
+
+
 # ────────── Codex round-2 R2.1: GeneratorExit must release the lock ──────────
 
 

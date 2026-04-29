@@ -282,18 +282,23 @@ def _prepare_stream_icofoam(
         container_work_dir = f"{CONTAINER_WORK_BASE}/{case_id}-{run_id}"
 
         try:
+            # Pre-create the BASE only — NOT the run_id-suffixed work
+            # dir. The earlier version pre-created `{container_work_dir}`
+            # via `mkdir -p` then guarded the rename with `[ ! -d
+            # {container_work_dir} ]`, which silently skipped the `mv`
+            # because `mkdir -p` had just made the dir exist. Result:
+            # extracted case files stayed under `{CONTAINER_WORK_BASE}/
+            # {case_id}` (unsuffixed), the suffixed dir stayed empty,
+            # icoFoam `cd`d into the empty dir → FOAM Fatal: cannot
+            # find file system/controlDict. Caught post-R3 (V61-097
+            # round 4 RESOLVED) on the first live LDC dogfood run.
             container.exec_run(
                 cmd=[
                     "bash",
                     "-c",
-                    f"mkdir -p {container_work_dir} && chmod 777 {container_work_dir}",
+                    f"mkdir -p {CONTAINER_WORK_BASE} && chmod 777 {CONTAINER_WORK_BASE}",
                 ]
             )
-            # Stage the case files under the run_id-suffixed dir. We
-            # tar from case_host_dir, but extract under container_work_dir
-            # whose basename matches case_host_dir.name only if run_id
-            # is empty — so we send the tarball to a parent path and
-            # rename. Simpler: send to CONTAINER_WORK_BASE then move.
             ok = container.put_archive(
                 path=CONTAINER_WORK_BASE,
                 data=_make_tarball(case_host_dir),
@@ -302,17 +307,18 @@ def _prepare_stream_icofoam(
                 raise SolverRunError(
                     "failed to stage case for streaming icoFoam"
                 )
-            # Rename the extracted dir from <case_id> to <case_id>-<run_id>.
-            # Use mv so the rename is atomic even if multiple runs land
-            # close together; if the source already vanished (parallel
-            # rename), `mv` returns non-zero and we fall through.
+            # Atomically rename the extracted dir into the run_id-suffixed
+            # name. run_id is unique per run so the destination cannot
+            # collide with an in-flight peer; defensively `rm -rf` first
+            # to clear any orphan from a prior abandoned run whose
+            # finally cleanup didn't run (process kill, container restart).
             container.exec_run(
                 cmd=[
                     "bash",
                     "-c",
-                    f"if [ -d {CONTAINER_WORK_BASE}/{case_id} ] && "
-                    f"[ ! -d {container_work_dir} ]; then "
-                    f"mv {CONTAINER_WORK_BASE}/{case_id} {container_work_dir}; fi",
+                    f"rm -rf {container_work_dir} && "
+                    f"mv {CONTAINER_WORK_BASE}/{case_id} {container_work_dir} && "
+                    f"chmod 777 {container_work_dir}",
                 ]
             )
         except docker.errors.DockerException as exc:
