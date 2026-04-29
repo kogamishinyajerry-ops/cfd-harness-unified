@@ -45,7 +45,7 @@ prerequisite_status:
   line_a_contract: confirmed (workbench/** + visualization/** + ui/backend/services/case_setup/** all line-A · NO new ROADMAP extension needed for M-AI-COPILOT Tier-A)
   m_render_api_endpoints: confirmed (geometry/render + mesh/render + results/{run}/field/{name} all live · face_id surfaces from polyMesh data already exposed via mesh/render)
   break_freeze_quota: confirmed (current count 2/3 from M-VIZ Step 6 e453ba0 + M-PANELS arc · M-AI-COPILOT Tier-A consumes the FINAL slot taking total to 3/3 · accounted in spec_v2 §F · post-arc the dogfood window's quota is exhausted; subsequent workbench/** changes route through normal feature freeze)
-notion_sync_status: pending (DEC + brief sub-page + spec_v2 sub-page · placement inherits V61-094/V61-095/V61-096 P3 #5 precedent)
+notion_sync_status: synced 2026-04-29 (DEC https://app.notion.com/p/351c68942bed81719f85d72415d1252d · brief sub-page https://app.notion.com/p/351c68942bed8171a159debd91518db3 · spec_v2 sub-page https://app.notion.com/p/351c68942bed81378b26e509120f2583 · placement inherits V61-094/V61-095/V61-096 P3 #5 precedent)
 autonomous_governance: true
 library_choice: React + React Router + Tailwind (existing) · @kitware/vtk.js Viewport from M-VIZ (extends with vtkCellPicker · already a sibling import in vtk.js core) · @tanstack/react-query for envelope state · pyyaml for face_annotations.yaml read/write (existing dep · used elsewhere in case_setup) · NO new UI component library / state-management library / 3D library
 codex_tool_report_path:
