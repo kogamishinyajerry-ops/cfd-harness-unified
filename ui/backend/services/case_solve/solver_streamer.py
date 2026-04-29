@@ -396,10 +396,6 @@ def stream_icofoam(
     # ImportError path is unreachable here because preflight succeeded.
     import docker.errors  # type: ignore[import-not-found]
 
-    # FIRST event: announce the run_id so the frontend can guard state
-    # writes against stale runs.
-    yield _sse("start", {"run_id": run_id, "case_id": case_host_dir.name})
-
     # Buffer + line-by-line parse + accumulate full log on host.
     log_dest = case_host_dir / "log.icoFoam"
     log_buf = io.BytesIO()
@@ -408,14 +404,20 @@ def stream_icofoam(
     last_p: list[float | None] = [None]
     fatal_seen: list[bool] = [False]
 
-    # Codex round-2 R2.1: wrap the entire generator body (everything
-    # after the start yield) in an outer try/finally so a GeneratorExit
-    # raised at ANY yield point — client disconnect, FastAPI shutdown,
-    # mid-stream abort — releases the per-case run lock and cleans up
-    # the container work dir. Previously the release lived only in
-    # the late summary's finally; a disconnect during the streaming
-    # loop would skip it and the next solve would stick on 409.
+    # Codex rounds 2 & 3: wrap the ENTIRE generator body (including the
+    # very first `start` yield) in an outer try/finally so a
+    # GeneratorExit raised at ANY yield point — client disconnect on
+    # the first event, FastAPI shutdown, mid-stream abort — releases
+    # the per-case run lock and cleans up the container work dir.
+    # Round 2 fixed the mid-loop case; round 3 caught that the start
+    # yield was still OUTSIDE the try, so an immediate disconnect after
+    # the very first SSE byte was still leaking _active_runs.
     try:
+        # FIRST event: announce the run_id so the frontend can guard
+        # state writes against stale runs. MUST stay inside the outer
+        # try so a GeneratorExit on this yield still hits the finally.
+        yield _sse("start", {"run_id": run_id, "case_id": case_host_dir.name})
+
         # Stream icoFoam output line-by-line.
         try:
             for chunk in exec_result.output:

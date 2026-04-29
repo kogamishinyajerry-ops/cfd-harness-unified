@@ -252,12 +252,48 @@ def test_run_id_suffixes_container_work_dir(tmp_path, monkeypatch):
 # ────────── Codex round-2 R2.1: GeneratorExit must release the lock ──────────
 
 
-def test_generator_close_releases_run_id(tmp_path, monkeypatch):
-    """Round-2 R2.1: a `GeneratorExit` (client disconnect mid-stream)
-    must release the per-case lock + run cleanup. Previously
-    _release_run lived only in the late summary's finally; closing the
-    generator BEFORE the loop completed left _active_runs stuck and
-    the next solve would 409 forever.
+def test_generator_close_releases_run_id_after_first_yield(
+    tmp_path, monkeypatch
+):
+    """Codex round-3 finding: closing the generator IMMEDIATELY after
+    the first `start` SSE — without ever entering the streaming loop —
+    used to bypass the outer try/finally because the start yield was
+    OUTSIDE it. Round 3 moved the yield inside; this test pins down
+    the exact failure mode Codex flagged.
+    """
+    from ui.backend.services.case_solve.solver_streamer import (
+        _active_runs,
+        _prepare_stream_icofoam,
+        stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_immediate_close"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    # Empty exec_lines so even one extra next() would still happen,
+    # but we close right after the first start yield.
+    container = _FakeContainer(status="running", exec_lines=[])
+    _install_fake_docker(monkeypatch, container)
+
+    prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    assert "case_immediate_close" in _active_runs
+    gen = stream_icofoam(prepared=prepared)
+
+    # Consume ONLY the start event, then close. Generator is suspended
+    # exactly on the start yield — the failure mode round 2 missed.
+    first = next(gen)
+    assert first.startswith(b"event: start"), "first event should be the start event"
+    gen.close()  # raises GeneratorExit at the start yield
+
+    assert "case_immediate_close" not in _active_runs, (
+        "GeneratorExit on the start yield must release the run lock"
+    )
+
+
+def test_generator_close_releases_run_id_mid_loop(tmp_path, monkeypatch):
+    """Round-2 R2.1: closing the generator mid-streaming-loop must also
+    release. Complementary to the immediate-disconnect test above.
     """
     from ui.backend.services.case_solve.solver_streamer import (
         _active_runs,
@@ -269,8 +305,6 @@ def test_generator_close_releases_run_id(tmp_path, monkeypatch):
     case_dir.mkdir()
     _stage_minimal_case(case_dir)
 
-    # Provide enough lines to keep the generator producing events; the
-    # test will close it after consuming a few yields.
     lines = [b"Time = 0.005s\n"] * 200
     container = _FakeContainer(status="running", exec_lines=lines)
     _install_fake_docker(monkeypatch, container)
@@ -279,13 +313,10 @@ def test_generator_close_releases_run_id(tmp_path, monkeypatch):
     assert "case_disconnect" in _active_runs
     gen = stream_icofoam(prepared=prepared)
 
-    # Pull a couple of events, then close the generator early to
-    # simulate client disconnect / fastapi cancellation.
-    next(gen)  # start event
-    next(gen)  # at least one residual/time event
-    gen.close()  # raises GeneratorExit inside the generator
+    next(gen)  # start
+    next(gen)  # mid-loop event
+    gen.close()
 
-    # The outer try/finally must have fired _release_run.
     assert "case_disconnect" not in _active_runs, (
-        "GeneratorExit must release the per-case run lock"
+        "GeneratorExit mid-loop must release the per-case run lock"
     )
