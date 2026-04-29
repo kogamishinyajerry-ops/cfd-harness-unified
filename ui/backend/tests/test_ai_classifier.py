@@ -944,6 +944,82 @@ def test_setup_channel_bc_is_idempotent_on_same_case_dir(tmp_path):
     assert (res2.n_inlet_faces, res2.n_outlet_faces, res2.n_wall_faces) == (1, 1, 4)
 
 
+def test_channel_executor_handles_multi_inlet_with_distinct_names(tmp_path):
+    """DEC-V61-101 implicit feature validation: when the engineer pins
+    TWO different boundary faces both with names containing 'inlet'
+    (e.g., 'inlet_north' + 'inlet_south' for a Y-junction manifold),
+    the classifier collects both face_ids and the executor merges
+    them into a single 'inlet' patch with nFaces=2.
+
+    This is the simplest multi-inlet behavior — same velocity on all
+    inlet faces. True per-inlet velocity differentiation belongs to a
+    later UX milestone where the engineer specifies one BC per pinned
+    face. For now we just prove N>1 doesn't break the path.
+    """
+    from ui.backend.services.case_solve import setup_channel_bc
+    from ui.backend.services.case_annotations import face_id
+
+    case_dir = tmp_path / "channel_multi_inlet"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = empty_annotations("channel_multi_inlet")
+    # Pin TWO faces as inlets: y=0 side (inlet_north) and z=0 cap
+    # (inlet_south). The executor should merge both into the inlet
+    # patch.
+    inlet_north_fid = face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 10.0), (0.0, 0.0, 10.0)]
+    )
+    inlet_south_fid = _bottom_face_id_of_channel()  # z=0 cap
+    outlet_fid = _top_face_id_of_channel()
+    annotations["faces"].extend([
+        {
+            "face_id": inlet_north_fid,
+            "name": "inlet_north",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-30T00:00:00Z",
+        },
+        {
+            "face_id": inlet_south_fid,
+            "name": "inlet_south",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-30T00:00:00Z",
+        },
+        {
+            "face_id": outlet_fid,
+            "name": "outlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-30T00:00:00Z",
+        },
+    ])
+    save_annotations(case_dir, annotations, if_match_revision=0)
+
+    # Classifier sees both inlet substrings, verifies both face_ids on
+    # boundary, returns confident with inlet_face_ids=(north, south).
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    assert res.confidence == "confident", res
+    assert len(res.inlet_face_ids) == 2
+    assert set(res.inlet_face_ids) == {inlet_north_fid, inlet_south_fid}
+    assert len(res.outlet_face_ids) == 1
+
+    # Executor merges both into inlet patch with nFaces=2.
+    exec_res = setup_channel_bc(
+        case_dir,
+        case_id="channel_multi_inlet",
+        inlet_face_ids=res.inlet_face_ids,
+        outlet_face_ids=res.outlet_face_ids,
+    )
+    assert exec_res.n_inlet_faces == 2
+    assert exec_res.n_outlet_faces == 1
+    assert exec_res.n_wall_faces == 3  # 6 boundary - 2 inlet - 1 outlet
+
+    # Boundary file shows the inlet patch with 2 contiguous faces.
+    bnd = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
+    assert "nFaces          2" in bnd or "nFaces 2" in bnd
+
+
 def test_setup_bc_rejects_stale_pre_split_backup_after_remesh(tmp_path):
     """Codex DEC-V61-101 idempotency R1 HIGH closure:
     polyMesh.pre_split is invalidated by Step 2 re-mesh (the gmshToFoam
