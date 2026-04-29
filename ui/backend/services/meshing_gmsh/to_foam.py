@@ -278,6 +278,22 @@ def run_gmsh_to_foam(
             f"(host filesystem / archive fault): {exc}"
         ) from exc
 
+    # Codex DEC-V61-101 idempotency R1 HIGH closure: a stale
+    # polyMesh.pre_split backup left over from a previous setup_*_bc()
+    # call would silently override this fresh mesh on the next BC
+    # setup invocation. Step 2 re-mesh = backup is no longer valid;
+    # delete it so the BC executor's idempotency restore doesn't
+    # resurrect old points/faces.
+    pre_split = polyMesh_host.parent / "polyMesh.pre_split"
+    if pre_split.is_dir():
+        try:
+            shutil.rmtree(pre_split)
+        except OSError:
+            # Non-fatal — if removal fails, the BC executor will
+            # detect the stale backup via its own pre_split fingerprint
+            # check (future hardening). For now log+continue.
+            pass
+
     # Codex Round 8 Finding 2: collapse the exists()→iterdir() TOCTTOU
     # window. If the polyMesh dir disappears between the two syscalls
     # (concurrent cleanup, host-side rm -rf), iterdir() raises

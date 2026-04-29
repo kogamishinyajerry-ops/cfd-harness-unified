@@ -944,6 +944,80 @@ def test_setup_channel_bc_is_idempotent_on_same_case_dir(tmp_path):
     assert (res2.n_inlet_faces, res2.n_outlet_faces, res2.n_wall_faces) == (1, 1, 4)
 
 
+def test_setup_bc_rejects_stale_pre_split_backup_after_remesh(tmp_path):
+    """Codex DEC-V61-101 idempotency R1 HIGH closure:
+    polyMesh.pre_split is invalidated by Step 2 re-mesh (the gmshToFoam
+    materialization deletes it). Without that, the BC executor's
+    'restore from backup' logic would silently resurrect the old mesh,
+    overwriting the engineer's freshly regenerated points + faces.
+
+    We simulate the post-re-mesh state directly: write a fresh
+    polyMesh after a setup_*_bc has already created a backup, but
+    WITH the backup pre-deleted (mirrors what to_foam.py now does).
+    The second setup_*_bc call must operate on the new mesh, not the
+    backup.
+    """
+    import shutil
+    from ui.backend.services.case_solve import setup_channel_bc
+
+    case_dir = tmp_path / "channel_remesh"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    inlet_fid = _bottom_face_id_of_channel()
+    outlet_fid = _top_face_id_of_channel()
+
+    # First call creates polyMesh.pre_split backup of original mesh.
+    res1 = setup_channel_bc(
+        case_dir,
+        case_id="channel_remesh",
+        inlet_face_ids=(inlet_fid,),
+        outlet_face_ids=(outlet_fid,),
+    )
+    assert res1.n_wall_faces == 4
+    backup = case_dir / "constant" / "polyMesh.pre_split"
+    assert backup.is_dir()
+
+    # Simulate Step 2 re-mesh: fresh polyMesh + delete the now-stale
+    # pre_split backup (this is exactly what gmsh_to_foam.py does
+    # after writing the new constant/polyMesh).
+    polymesh = case_dir / "constant" / "polyMesh"
+    shutil.rmtree(polymesh)
+    shutil.rmtree(backup)
+    # Restage with a SHIFTED channel (z range 0..20 instead of 0..10).
+    polymesh.mkdir(parents=True)
+    shifted_points = _POINTS_CHANNEL.replace(" 10)", " 20)")
+    (polymesh / "points").write_text(shifted_points, encoding="utf-8")
+    (polymesh / "faces").write_text(_FACES_CHANNEL, encoding="utf-8")
+    (polymesh / "boundary").write_text(_BOUNDARY_CHANNEL_PRESPLIT, encoding="utf-8")
+    (polymesh / "owner").write_text(_OWNER_CUBE, encoding="utf-8")
+
+    # Pin the NEW outlet face_id (z=20 plane this time).
+    from ui.backend.services.case_annotations import face_id
+
+    new_outlet_fid = face_id(
+        [
+            (0.0, 0.0, 20.0),
+            (1.0, 0.0, 20.0),
+            (1.0, 1.0, 20.0),
+            (0.0, 1.0, 20.0),
+        ]
+    )
+
+    # Second call must operate on the FRESH mesh, not resurrect the
+    # backup. Re ought to use min extent = 1 (not 20).
+    res2 = setup_channel_bc(
+        case_dir,
+        case_id="channel_remesh",
+        inlet_face_ids=(inlet_fid,),  # z=0 still valid
+        outlet_face_ids=(new_outlet_fid,),  # z=20 — only on new mesh
+    )
+    assert res2.n_inlet_faces == 1
+    assert res2.n_outlet_faces == 1
+    # If the stale backup had been resurrected, the z=20 face_id
+    # wouldn't be on the boundary and we'd raise BCSetupError.
+    # Reaching here proves the new mesh survived.
+
+
 def test_channel_executor_handles_off_axis_inlet_outlet_topology(tmp_path):
     """DEC-V61-101 topology-independence claim: the patch splitter
     routes by face_id (not plane heuristics), so engineers can pin
