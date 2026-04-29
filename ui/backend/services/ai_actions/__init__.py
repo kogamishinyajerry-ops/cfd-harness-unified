@@ -35,6 +35,8 @@ from ui.backend.services.case_annotations import (
 from ui.backend.services.case_solve.bc_setup import (
     BCSetupError,
     BCSetupResult,
+    ChannelBCSetupResult,
+    setup_channel_bc,
     setup_ldc_bc,
 )
 
@@ -190,7 +192,47 @@ def setup_bc_with_annotations(
                 ),
             )
 
-    # Run the underlying setup-bc.
+    # DEC-V61-101: dispatch the executor by classifier verdict.
+    # When force_uncertain (no classifier was run), default to LDC for
+    # backwards compatibility with the dogfood mock substrate. The
+    # classifier path always sets `cls` above.
+    geometry_class = (
+        cls.geometry_class
+        if (use_classifier and not force_uncertain)
+        else "ldc_cube"
+    )
+
+    if geometry_class == "non_cube":
+        # Channel executor — classifier already verified each pin's
+        # face_id is on the boundary, so bc_setup just consumes the
+        # tuples and writes dicts. Fall through if anything raises.
+        try:
+            ch_result: ChannelBCSetupResult = setup_channel_bc(
+                case_dir,
+                case_id=case_id,
+                inlet_face_ids=cls.inlet_face_ids,
+                outlet_face_ids=cls.outlet_face_ids,
+            )
+        except BCSetupError as exc:
+            raise AIActionError(
+                str(exc), failing_check="setup_channel_bc_failed"
+            ) from exc
+
+        return AIActionEnvelope(
+            confidence="confident",
+            summary=(
+                f"Set up channel laminar BCs: inlet="
+                f"{ch_result.n_inlet_faces} face · outlet="
+                f"{ch_result.n_outlet_faces} face · walls="
+                f"{ch_result.n_wall_faces} faces. Re≈"
+                f"{ch_result.reynolds:.0f} (icoFoam laminar)."
+            ),
+            annotations_revision_consumed=revision_before,
+            annotations_revision_after=revision_before,
+            next_step_suggestion="Proceed to Step 4 (Solve).",
+        )
+
+    # LDC path: run the underlying setup-bc.
     try:
         result: BCSetupResult = setup_ldc_bc(case_dir, case_id=case_id)
     except BCSetupError as exc:

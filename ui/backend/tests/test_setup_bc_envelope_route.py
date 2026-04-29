@@ -453,3 +453,135 @@ def test_envelope_full_loop_lid_pin_off_top_plane_stays_uncertain(
     assert env["annotations_revision_consumed"] == 1
     # And critically: setup_ldc_bc did NOT run — no 0/ dir.
     assert not (case_dir / "0").is_dir()
+
+
+# ────────── DEC-V61-101 channel executor E2E ──────────
+
+
+def test_envelope_full_loop_channel_inlet_outlet_pin_then_confident_via_http(
+    monkeypatch, tmp_path
+):
+    """DEC-V61-101: the channel-geometry analog of the LDC full-loop
+    HTTP E2E.
+
+    POST setup-bc → uncertain (inlet+outlet face_label questions) ·
+    PUT face-annotations (both pins as user_authoritative) ·
+    POST setup-bc → confident · channel BC dicts on disk · boundary
+    patch split into inlet/outlet/walls.
+
+    Defends the route layer against the same kind of post-R3 defect
+    RETRO-V61-053 mandates an executable smoke test for, but on the
+    new non-cube path that DEC-V61-101 introduces.
+    """
+    # 1×1×10 channel polyMesh fixture (mirrors test_ai_classifier
+    # _POINTS_CHANNEL + _stage_full_channel).
+    points = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class vectorField;\n    location \"constant/polyMesh\";\n"
+        "    object points;\n}\n\n8\n(\n"
+        "(0 0 0)\n(1 0 0)\n(1 1 0)\n(0 1 0)\n"
+        "(0 0 10)\n(1 0 10)\n(1 1 10)\n(0 1 10)\n)\n"
+    )
+    faces = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class faceList;\n    location \"constant/polyMesh\";\n"
+        "    object faces;\n}\n\n6\n(\n"
+        "4(0 1 2 3)\n4(4 5 6 7)\n4(0 1 5 4)\n"
+        "4(2 3 7 6)\n4(1 2 6 5)\n4(0 3 7 4)\n)\n"
+    )
+    boundary = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class polyBoundaryMesh;\n"
+        "    location \"constant/polyMesh\";\n    object boundary;\n}\n\n"
+        "1\n(\n    walls\n    {\n        type wall;\n"
+        "        nFaces 6;\n        startFace 0;\n    }\n)\n"
+    )
+    owner = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class labelList;\n    location \"constant/polyMesh\";\n"
+        "    object owner;\n}\n\n6\n(\n0\n0\n0\n0\n0\n0\n)\n"
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(points, encoding="utf-8")
+    (polymesh / "faces").write_text(faces, encoding="utf-8")
+    (polymesh / "boundary").write_text(boundary, encoding="utf-8")
+    (polymesh / "owner").write_text(owner, encoding="utf-8")
+
+    client = _new_client()
+
+    # Step 1: first envelope call returns uncertain · 2 face questions.
+    r1 = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},
+    )
+    assert r1.status_code == 200, r1.text
+    env1 = r1.json()
+    assert env1["confidence"] == "uncertain", env1
+    qids = {q["id"] for q in env1["unresolved_questions"]}
+    assert "inlet_face" in qids
+    assert "outlet_face" in qids
+    assert not (case_dir / "0").is_dir()
+
+    # Step 2: compute the inlet/outlet face_ids and PUT both pins.
+    from ui.backend.services.case_annotations import face_id
+
+    inlet_fid = face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+    )
+    outlet_fid = face_id(
+        [
+            (0.0, 0.0, 10.0),
+            (1.0, 0.0, 10.0),
+            (1.0, 1.0, 10.0),
+            (0.0, 1.0, 10.0),
+        ]
+    )
+    r_put = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 0,
+            "annotated_by": "human",
+            "faces": [
+                {
+                    "face_id": inlet_fid,
+                    "name": "inlet_main",
+                    "confidence": "user_authoritative",
+                },
+                {
+                    "face_id": outlet_fid,
+                    "name": "outlet_main",
+                    "confidence": "user_authoritative",
+                },
+            ],
+        },
+    )
+    assert r_put.status_code == 200, r_put.text
+    assert r_put.json()["revision"] == 1
+
+    # Step 3: re-run envelope → classifier verifies pins → confident →
+    # setup_channel_bc writes dicts + splits boundary into 3 patches.
+    r2 = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},
+    )
+    assert r2.status_code == 200, r2.text
+    env2 = r2.json()
+    assert env2["confidence"] == "confident", env2
+    assert env2["unresolved_questions"] == []
+    assert env2["annotations_revision_consumed"] == 1
+    assert "inlet=" in env2["summary"] and "outlet=" in env2["summary"]
+    # Executor wrote the channel dict tree (NOT the LDC tree — no
+    # `lid` patch).
+    assert (case_dir / "0" / "U").is_file()
+    assert (case_dir / "0" / "p").is_file()
+    assert (case_dir / "system" / "controlDict").is_file()
+    bnd_text = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
+    assert "inlet" in bnd_text
+    assert "outlet" in bnd_text
+    assert "walls" in bnd_text
+    assert "lid" not in bnd_text  # not the LDC executor

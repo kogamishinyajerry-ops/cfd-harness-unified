@@ -19,6 +19,8 @@ NACA0012 demos require a separate blockMesh+snappyHexMesh pipeline
 from .bc_setup import (
     BCSetupError,
     BCSetupResult,
+    ChannelBCSetupResult,
+    setup_channel_bc,
     setup_ldc_bc,
 )
 from .results_extractor import (
@@ -38,12 +40,14 @@ from .solver_streamer import (
 __all__ = [
     "BCSetupError",
     "BCSetupResult",
+    "ChannelBCSetupResult",
     "ResultsExtractError",
     "ResultsSummary",
     "SolverRunError",
     "SolverRunResult",
     "extract_results_summary",
     "run_icofoam",
+    "setup_channel_bc",
     "setup_ldc_bc",
     "stream_icofoam",
 ]

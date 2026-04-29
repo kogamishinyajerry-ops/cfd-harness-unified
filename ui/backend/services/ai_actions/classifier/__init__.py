@@ -60,6 +60,10 @@ class ClassificationResult:
         summary: human-readable one-liner for the dialog summary slot
         rationale: short engineering note for the audit log (NOT
             shown to the user; goes into the action's diagnostics)
+        inlet_face_ids / outlet_face_ids: only set on the non_cube
+            confident path (DEC-V61-101) — the resolved user-pinned
+            face_ids that the wrapper forwards to setup_channel_bc.
+            Empty tuple on every other path.
     """
 
     geometry_class: GeometryClass
@@ -67,6 +71,8 @@ class ClassificationResult:
     questions: list[UnresolvedQuestion]
     summary: str
     rationale: str
+    inlet_face_ids: tuple[str, ...] = ()
+    outlet_face_ids: tuple[str, ...] = ()
 
 
 # Numerical tolerances. Chosen by the Tier-A face_id contract:
@@ -178,6 +184,85 @@ def _top_plane_face_ids(case_dir: Path) -> set[str]:
             ]
             if all(abs(v[2] - z_max) < _LID_EPS for v in verts_xyz):
                 out.add(compute_face_id(verts_xyz))
+    return out
+
+
+def _boundary_face_ids(case_dir: Path) -> set[str]:
+    """Return the set of face_ids for ALL boundary faces (every patch).
+
+    DEC-V61-101 channel verification helper. Mirrors the structure of
+    ``_top_plane_face_ids`` but without the z-plane filter — channel
+    geometries don't have a privileged plane, so verification is
+    "the user-pinned face_id is somewhere on the boundary." Empty set
+    if the polyMesh is missing or unparseable; the classifier falls
+    back to the conservative uncertain path in that case.
+    """
+    polymesh = case_dir / "constant" / "polyMesh"
+    if not polymesh.is_dir():
+        return set()
+    try:
+        from ui.backend.services.render.bc_glb import (
+            _bc_source_files,
+            _read_boundary_patches,
+        )
+        from ui.backend.services.render.polymesh_parser import (
+            parse_faces,
+            parse_points,
+            validate_face_indices,
+        )
+
+        points_path, faces_path, boundary_path = _bc_source_files(
+            polymesh, case_dir
+        )
+        points = parse_points(points_path)
+        faces = parse_faces(faces_path)
+        validate_face_indices(faces, len(points))
+        patches = _read_boundary_patches(boundary_path)
+    except Exception:
+        return set()
+
+    if not patches or len(points) == 0:
+        return set()
+
+    out: set[str] = set()
+    for _name, (start_face, n_faces) in patches.items():
+        for face_idx in range(start_face, start_face + n_faces):
+            if face_idx >= len(faces):
+                continue
+            polymesh_face = faces[face_idx]
+            verts_xyz = [
+                (
+                    float(points[v][0]),
+                    float(points[v][1]),
+                    float(points[v][2]),
+                )
+                for v in polymesh_face
+            ]
+            out.add(compute_face_id(verts_xyz))
+    return out
+
+
+def _pinned_face_ids_with_name_substring(
+    annotations: dict[str, Any], substring: str
+) -> set[str]:
+    """Return user_authoritative face_ids whose ``name`` contains
+    ``substring`` (case-insensitive). Used by the channel branch to
+    extract inlet vs outlet pins distinctly. Names that aren't strings
+    or pins without a name are skipped.
+    """
+    sub = substring.lower()
+    out: set[str] = set()
+    for f in annotations.get("faces", []) or []:
+        if f.get("confidence") != "user_authoritative":
+            continue
+        n = f.get("name")
+        if not isinstance(n, str):
+            continue
+        if sub not in n.lower():
+            continue
+        fid = f.get("face_id")
+        if isinstance(fid, str):
+            out.add(fid)
     return out
 
 
@@ -406,29 +491,24 @@ def classify_setup_bc(
             ),
         )
 
-    # Codex round 1 HIGH-2 (DEC-V61-100 Step 2 review 2026-04-29):
-    # The non-cube branch CANNOT return confident yet — the only
-    # downstream executor (setup_ldc_bc) is LDC-only and would write
-    # incorrect lid/fixedWalls boundaries on a channel/airfoil mesh.
-    # Until a non-LDC executor exists (deferred to a future milestone:
-    # M10 STEP/IGES + M11 Mesh Wizard or a dedicated channel/external
-    # action), the non-cube path stays uncertain even when the user
-    # has pinned inlet+outlet. The dialog message tells them why so
-    # they don't think they did something wrong.
+    # DEC-V61-101: non-cube confident path (replaces the previous
+    # "blocked: non-LDC executor pending" branch closed in Codex
+    # M9 Step 2 R1 HIGH-2).
     #
-    # We still emit the inlet+outlet questions so the engineer can
-    # CAPTURE their intent in face_annotations.yaml — the data
-    # accumulates in the doc and gets re-used when a non-LDC executor
-    # ships.
+    # We still emit inlet/outlet face questions when neither is pinned
+    # so the engineer can CAPTURE their intent. Once both are pinned,
+    # we apply the SAME parity rule that closed Codex M9 Step 2 R2:
+    # the pin's face_id must actually appear on the polyMesh boundary
+    # (not just have the right name). Without that check, an engineer
+    # who pinned a stale/regenerated face_id would see the executor
+    # silently honor a different face — exactly the failure mode that
+    # caused the R2 HIGH on the cube branch.
+    inlet_pin_ids = _pinned_face_ids_with_name_substring(annotations, "inlet")
+    outlet_pin_ids = _pinned_face_ids_with_name_substring(annotations, "outlet")
+    inlet_pinned = bool(inlet_pin_ids)
+    outlet_pinned = bool(outlet_pin_ids)
+
     questions: list[UnresolvedQuestion] = []
-    pinned_names: set[str] = set()
-    for f in annotations.get("faces", []) or []:
-        if f.get("confidence") == "user_authoritative":
-            n = f.get("name")
-            if isinstance(n, str):
-                pinned_names.add(n.lower())
-    inlet_pinned = any("inlet" in n for n in pinned_names)
-    outlet_pinned = any("outlet" in n for n in pinned_names)
     if not inlet_pinned:
         questions.append(
             UnresolvedQuestion(
@@ -457,40 +537,81 @@ def classify_setup_bc(
             ),
         )
 
-    # Special case: both already pinned BUT no non-LDC executor
-    # exists. Surface a "blocked" envelope so the engineer knows the
-    # case can't be solved with the current pipeline; their
-    # annotations are saved for when M10/M11 ship.
     if inlet_pinned and outlet_pinned:
+        # Both pinned by name. Verify each pin's face_id is on the
+        # boundary (defends against stale annotations after mesh regen).
+        boundary_ids = _boundary_face_ids(case_dir)
+        bad_inlets = inlet_pin_ids - boundary_ids
+        bad_outlets = outlet_pin_ids - boundary_ids
+        # Disjointness: same face_id can't be both inlet and outlet.
+        ambiguous = inlet_pin_ids & outlet_pin_ids
+        if bad_inlets or bad_outlets or ambiguous:
+            problems = []
+            if bad_inlets:
+                problems.append(
+                    f"inlet pin(s) {sorted(bad_inlets)} not on current "
+                    f"boundary (mesh may have been regenerated)"
+                )
+            if bad_outlets:
+                problems.append(
+                    f"outlet pin(s) {sorted(bad_outlets)} not on current "
+                    f"boundary (mesh may have been regenerated)"
+                )
+            if ambiguous:
+                problems.append(
+                    f"face_id {sorted(ambiguous)} pinned as BOTH inlet "
+                    f"and outlet — pick distinct faces"
+                )
+            return ClassificationResult(
+                geometry_class="non_cube",
+                confidence="uncertain",
+                questions=[
+                    UnresolvedQuestion(
+                        id="channel_pin_mismatch",
+                        kind="free_text",
+                        prompt=(
+                            "Pinned inlet/outlet face_ids don't pass "
+                            "boundary verification: "
+                            + " · ".join(problems)
+                            + ". Re-pick distinct faces in the viewport "
+                            "and retry."
+                        ),
+                        needs_face_selection=False,
+                        candidate_face_ids=[],
+                        candidate_options=[],
+                        default_answer=None,
+                    ),
+                ],
+                summary=(
+                    f"Non-cube geometry (aspect ratio {ar:.3f}) — pin "
+                    f"verification failed. Re-pick inlet/outlet."
+                ),
+                rationale=(
+                    f"non_cube_pin_mismatch ar={ar:.4f} extents={extents} "
+                    f"bad_inlets={sorted(bad_inlets)} "
+                    f"bad_outlets={sorted(bad_outlets)} "
+                    f"ambiguous={sorted(ambiguous)}"
+                ),
+            )
+
+        # Verification passed — confident · executor will write dicts.
         return ClassificationResult(
             geometry_class="non_cube",
-            confidence="blocked",
-            questions=[
-                UnresolvedQuestion(
-                    id="non_cube_executor_pending",
-                    kind="free_text",
-                    prompt=(
-                        f"Non-cube geometry (aspect ratio {ar:.3f}) with "
-                        f"inlet+outlet pinned. The current solver path is "
-                        f"LDC-only — channel/external-flow executors "
-                        f"land in M10 (STEP/IGES) and M11 (Mesh Wizard). "
-                        f"Your annotations are saved and will be honored "
-                        f"once the non-LDC pipeline ships."
-                    ),
-                    needs_face_selection=False,
-                    candidate_face_ids=[],
-                    candidate_options=[],
-                    default_answer=None,
-                ),
-            ],
+            confidence="confident",
+            questions=[],
             summary=(
-                f"Non-cube geometry (aspect ratio {ar:.3f}) with annotations "
-                f"saved. Cannot solve until a non-LDC executor lands."
+                f"Non-cube geometry (aspect ratio {ar:.3f}) with verified "
+                f"inlet ({len(inlet_pin_ids)} face) + outlet "
+                f"({len(outlet_pin_ids)} face) pins. Writing laminar "
+                f"channel BCs (icoFoam · Re~100 default)."
             ),
             rationale=(
-                f"non_cube_blocked ar={ar:.4f} extents={extents} "
-                f"pinned={sorted(pinned_names)}"
+                f"non_cube_confident ar={ar:.4f} extents={extents} "
+                f"inlet={sorted(inlet_pin_ids)} "
+                f"outlet={sorted(outlet_pin_ids)}"
             ),
+            inlet_face_ids=tuple(sorted(inlet_pin_ids)),
+            outlet_face_ids=tuple(sorted(outlet_pin_ids)),
         )
 
     return ClassificationResult(

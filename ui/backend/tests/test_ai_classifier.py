@@ -218,6 +218,90 @@ def _stage_full_cube(case_dir: Path) -> Path:
     return polymesh
 
 
+# Faces of the 1×1×10 channel · same indexing scheme as the cube
+# but the +z plane is at z=10 (outlet) and -z plane at z=0 (inlet).
+_FACES_CHANNEL = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       faceList;
+    location    "constant/polyMesh";
+    object      faces;
+}
+
+6
+(
+4(0 1 2 3)
+4(4 5 6 7)
+4(0 1 5 4)
+4(2 3 7 6)
+4(1 2 6 5)
+4(0 3 7 4)
+)
+"""
+
+_BOUNDARY_CHANNEL_PRESPLIT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+1
+(
+    walls
+    {
+        type            wall;
+        nFaces          6;
+        startFace       0;
+    }
+)
+"""
+
+
+def _stage_full_channel(case_dir: Path) -> Path:
+    """DEC-V61-101: stage a complete 1×1×10 channel polyMesh fixture
+    (points + faces + 1-patch boundary + owner). Used by tests that
+    need the channel classifier to verify pinned inlet/outlet face_ids
+    against the actual boundary faces.
+    """
+    polymesh = _stage_polymesh(
+        case_dir,
+        _POINTS_CHANNEL,
+        faces_text=_FACES_CHANNEL,
+        boundary_text=_BOUNDARY_CHANNEL_PRESPLIT,
+    )
+    (polymesh / "owner").write_text(_OWNER_CUBE, encoding="utf-8")
+    return polymesh
+
+
+def _bottom_face_id_of_channel() -> str:
+    """face_id for the z=0 face of the channel (designated inlet)."""
+    from ui.backend.services.case_annotations import face_id
+
+    return face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+    )
+
+
+def _top_face_id_of_channel() -> str:
+    """face_id for the z=10 face of the channel (designated outlet)."""
+    from ui.backend.services.case_annotations import face_id
+
+    return face_id(
+        [
+            (0.0, 0.0, 10.0),
+            (1.0, 0.0, 10.0),
+            (1.0, 1.0, 10.0),
+            (0.0, 1.0, 10.0),
+        ]
+    )
+
+
 def _top_face_id_of_unit_cube() -> str:
     """The face_id of the top (z=1) face of the unit cube fixture.
     Faces[1] = (4 5 6 7) → vertices (0 0 1) (1 0 1) (1 1 1) (0 1 1).
@@ -383,20 +467,22 @@ def test_classifier_channel_no_pins_asks_inlet_and_outlet(tmp_path):
     assert "outlet_face" in q_ids
 
 
-def test_classifier_channel_with_inlet_and_outlet_pinned_is_blocked_until_executor_ships(
+def test_classifier_channel_with_unverifiable_pins_returns_uncertain(
     tmp_path,
 ):
-    """Codex round 1 HIGH-2 (cb8b8e3 review): non-cube cannot return
-    confident — the only downstream executor (setup_ldc_bc) is
-    LDC-only and would write incorrect lid/fixedWalls boundaries on a
-    channel. Until M10/M11 ship a non-LDC executor, the path stays
-    blocked even with full inlet+outlet pinning. The engineer's
-    annotations are saved for future use.
+    """DEC-V61-101: pinning inlet+outlet by name but with face_ids that
+    aren't on the current polyMesh boundary (e.g., after mesh regen)
+    must return uncertain with a channel_pin_mismatch question — NOT
+    confident. The classifier-executor parity rule from Codex M9 Step 2
+    R2 applies to the channel branch too.
     """
-    case_dir = tmp_path / "channel_done"
+    case_dir = tmp_path / "channel_stale_pins"
     case_dir.mkdir()
     _stage_polymesh(case_dir, _POINTS_CHANNEL)
-    annotations = _empty_doc("channel_done")
+    annotations = _empty_doc("channel_stale_pins")
+    # Stub face_ids that don't actually exist on the polyMesh boundary —
+    # the empty boundary file means _boundary_face_ids returns empty,
+    # so any pin fails verification.
     for fid, name in [("fid_in", "inlet_main"), ("fid_out", "outlet_main")]:
         annotations["faces"].append({
             "face_id": fid,
@@ -407,11 +493,84 @@ def test_classifier_channel_with_inlet_and_outlet_pinned_is_blocked_until_execut
             "annotated_at": "2026-04-29T00:00:00Z",
         })
     res = classify_setup_bc(case_dir, annotations=annotations)
-    assert res.confidence == "blocked"
+    assert res.confidence == "uncertain"
     assert res.geometry_class == "non_cube"
-    assert any(
-        q.id == "non_cube_executor_pending" for q in res.questions
-    )
+    assert any(q.id == "channel_pin_mismatch" for q in res.questions)
+    # Confident-only fields stay empty when verification fails.
+    assert res.inlet_face_ids == ()
+    assert res.outlet_face_ids == ()
+
+
+def test_classifier_channel_with_verified_inlet_outlet_returns_confident(
+    tmp_path,
+):
+    """DEC-V61-101 happy path: with a proper channel polyMesh and
+    user_authoritative pins whose face_ids ARE on the boundary, the
+    classifier returns confident and exposes inlet_face_ids /
+    outlet_face_ids for the wrapper to forward to setup_channel_bc.
+    """
+    case_dir = tmp_path / "channel_confident"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = _empty_doc("channel_confident")
+    inlet_fid = _bottom_face_id_of_channel()  # z=0 face
+    outlet_fid = _top_face_id_of_channel()  # z=10 face
+    annotations["faces"].extend([
+        {
+            "face_id": inlet_fid,
+            "name": "inlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": outlet_fid,
+            "name": "outlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    assert res.confidence == "confident", res
+    assert res.geometry_class == "non_cube"
+    assert res.questions == []
+    assert res.inlet_face_ids == (inlet_fid,)
+    assert res.outlet_face_ids == (outlet_fid,)
+
+
+def test_classifier_channel_rejects_same_face_for_inlet_and_outlet(
+    tmp_path,
+):
+    """DEC-V61-101 disjointness check: an engineer who pins the same
+    face under two different names ('inlet' and 'outlet') would let
+    the executor write contradictory BCs. Classifier rejects via
+    channel_pin_mismatch question.
+    """
+    case_dir = tmp_path / "channel_same_face"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = _empty_doc("channel_same_face")
+    same_fid = _bottom_face_id_of_channel()
+    annotations["faces"].extend([
+        {
+            "face_id": same_fid,
+            "name": "inlet_a",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": same_fid,
+            "name": "outlet_b",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    assert res.confidence == "uncertain"
+    assert any(q.id == "channel_pin_mismatch" for q in res.questions)
 
 
 def test_classifier_channel_with_only_inlet_pinned_still_asks_outlet(
@@ -617,3 +776,111 @@ def test_full_loop_uncertain_then_pin_top_lid_then_confident(tmp_path):
     assert env2.unresolved_questions == []
     assert (case_dir / "0").is_dir()
     assert (case_dir / "system").is_dir()
+
+
+def test_full_loop_channel_uncertain_pin_inlet_outlet_then_confident(tmp_path):
+    """DEC-V61-101: full pick→annotate→re-run loop on the channel
+    geometry (mirrors test_full_loop_uncertain_then_pin_top_lid* but
+    for the non-cube branch).
+
+      1. First call (no annotations) → uncertain · inlet+outlet questions.
+      2. PUT inlet (z=0 face, name='inlet_main') and outlet (z=10,
+         name='outlet_main') as user_authoritative.
+      3. Re-run → classifier returns confident with verified pin set →
+         wrapper invokes setup_channel_bc → 0/U, 0/p, system/, etc on
+         disk + boundary patch split into inlet/outlet/walls.
+    """
+    case_dir = tmp_path / "channel_loop_test"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+
+    env1 = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="channel_loop_test",
+    )
+    assert env1.confidence == "uncertain"
+    qids = {q.id for q in env1.unresolved_questions}
+    assert "inlet_face" in qids
+    assert "outlet_face" in qids
+
+    annotations = empty_annotations("channel_loop_test")
+    inlet_fid = _bottom_face_id_of_channel()
+    outlet_fid = _top_face_id_of_channel()
+    annotations["faces"].extend([
+        {
+            "face_id": inlet_fid,
+            "name": "inlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": outlet_fid,
+            "name": "outlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    save_annotations(case_dir, annotations, if_match_revision=0)
+
+    env2 = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="channel_loop_test",
+    )
+    assert env2.confidence == "confident", env2
+    assert env2.unresolved_questions == []
+    # Channel-specific summary mentions inlet/outlet face counts + Re.
+    assert "inlet=" in env2.summary and "outlet=" in env2.summary
+    # Executor wrote the dict tree.
+    assert (case_dir / "0" / "U").is_file()
+    assert (case_dir / "0" / "p").is_file()
+    assert (case_dir / "system" / "controlDict").is_file()
+    assert (case_dir / "constant" / "physicalProperties").is_file()
+    # Boundary file got split into 3 named patches.
+    bnd_text = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
+    assert "inlet" in bnd_text
+    assert "outlet" in bnd_text
+    assert "walls" in bnd_text
+
+
+def test_full_loop_channel_executor_writes_correct_inlet_velocity(tmp_path):
+    """DEC-V61-101 BC sanity: 0/U boundary field for inlet must be
+    fixedValue (1 0 0) and outlet must be zeroGradient. Defends
+    against silent BC default changes.
+    """
+    case_dir = tmp_path / "channel_bc_check"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = empty_annotations("channel_bc_check")
+    annotations["faces"].extend([
+        {
+            "face_id": _bottom_face_id_of_channel(),
+            "name": "inlet_a",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": _top_face_id_of_channel(),
+            "name": "outlet_b",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    save_annotations(case_dir, annotations, if_match_revision=0)
+
+    env = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="channel_bc_check",
+    )
+    assert env.confidence == "confident"
+    u_text = (case_dir / "0" / "U").read_text()
+    assert "inlet" in u_text
+    assert "fixedValue" in u_text
+    assert "(1.0 0.0 0.0)" in u_text or "(1 0 0)" in u_text
+    assert "outlet" in u_text
+    assert "zeroGradient" in u_text
+    assert "walls" in u_text
+    assert "noSlip" in u_text
