@@ -292,13 +292,26 @@ def _prepare_stream_icofoam(
             # icoFoam `cd`d into the empty dir → FOAM Fatal: cannot
             # find file system/controlDict. Caught post-R3 (V61-097
             # round 4 RESOLVED) on the first live LDC dogfood run.
-            container.exec_run(
+            # V61-099 round 1 MED closure: every staging exec_run is
+            # checked for non-zero exit_code. Without this, a failed
+            # mkdir/mv/chmod returns silently and the route emits a 200
+            # SSE stream that hits FOAM Fatal at the first icoFoam read
+            # — defeating the whole point of preflight. Codex flagged
+            # this as a residual hole in the same surface V61-099 was
+            # closing; fix in the same arc.
+            mkdir_res = container.exec_run(
                 cmd=[
                     "bash",
                     "-c",
                     f"mkdir -p {CONTAINER_WORK_BASE} && chmod 777 {CONTAINER_WORK_BASE}",
                 ]
             )
+            if getattr(mkdir_res, "exit_code", 0) != 0:
+                raise SolverRunError(
+                    f"failed to prepare container staging base "
+                    f"{CONTAINER_WORK_BASE}: exec_run returned "
+                    f"exit_code={mkdir_res.exit_code}"
+                )
             ok = container.put_archive(
                 path=CONTAINER_WORK_BASE,
                 data=_make_tarball(case_host_dir),
@@ -312,7 +325,7 @@ def _prepare_stream_icofoam(
             # collide with an in-flight peer; defensively `rm -rf` first
             # to clear any orphan from a prior abandoned run whose
             # finally cleanup didn't run (process kill, container restart).
-            container.exec_run(
+            rename_res = container.exec_run(
                 cmd=[
                     "bash",
                     "-c",
@@ -321,6 +334,15 @@ def _prepare_stream_icofoam(
                     f"chmod 777 {container_work_dir}",
                 ]
             )
+            if getattr(rename_res, "exit_code", 0) != 0:
+                raise SolverRunError(
+                    f"failed to rename staged case dir into run-suffixed "
+                    f"path {container_work_dir}: exec_run returned "
+                    f"exit_code={rename_res.exit_code}. The extracted "
+                    f"{CONTAINER_WORK_BASE}/{case_id} may be missing "
+                    f"(put_archive silently failed) or the run-suffixed "
+                    f"path is uncleanable."
+                )
         except docker.errors.DockerException as exc:
             raise SolverRunError(
                 f"docker SDK error preparing container workspace: {exc}"

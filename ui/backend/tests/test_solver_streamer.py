@@ -341,6 +341,98 @@ def test_staging_renames_extracted_dir_into_run_id_suffix(tmp_path, monkeypatch)
         )
 
 
+def test_staging_raises_on_nonzero_exec_run_exit_code(tmp_path, monkeypatch):
+    """V61-099 Codex round 1 MED closure: every staging exec_run must
+    check exit_code, not just trap Docker transport exceptions. Without
+    this, a failed mkdir/mv/chmod (e.g., extracted dir missing because
+    put_archive silently lost it; permissions wrong; suffixed path
+    uncleanable) returns silently and the route emits a 200 SSE stream
+    that hits FOAM Fatal at the first icoFoam read.
+
+    This test forces the rename step's exec_run to return non-zero
+    exit_code; preflight must raise SolverRunError before
+    StreamingResponse is constructed.
+    """
+    from ui.backend.services.case_solve.solver_streamer import (
+        SolverRunError,
+        _active_runs,
+        _prepare_stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_exit_code_check"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    class FailingRenameContainer(_FakeContainer):
+        """exec_run returns exit_code=0 for the BASE-mkdir but
+        exit_code=1 for the rename step (the rm/mv/chmod triplet).
+        """
+
+        def exec_run(self, cmd, stream=False, demux=False):  # noqa: ARG002
+            if (
+                isinstance(cmd, list)
+                and len(cmd) >= 3
+                and cmd[0] == "bash"
+                and " mv " in cmd[2]
+                and "case_exit_code_check-" in cmd[2]
+            ):
+                return types.SimpleNamespace(output=b"", exit_code=1)
+            if stream:
+                return types.SimpleNamespace(
+                    output=iter(self._exec_lines)
+                )
+            return types.SimpleNamespace(output=b"", exit_code=0)
+
+    container = FailingRenameContainer(status="running", exec_lines=[])
+    _install_fake_docker(monkeypatch, container)
+
+    with pytest.raises(SolverRunError, match="failed to rename"):
+        _prepare_stream_icofoam(case_host_dir=case_dir)
+
+    # The run lock must be released so the user can retry after fixing
+    # whatever caused the rename to fail.
+    assert "case_exit_code_check" not in _active_runs, (
+        "preflight failure on staging exec_run must release the run lock "
+        "(otherwise a failed staging permanently locks the case)"
+    )
+
+
+def test_staging_raises_on_nonzero_mkdir_exit_code(tmp_path, monkeypatch):
+    """Companion to the rename-fail test: BASE mkdir failure must also
+    surface as preflight SolverRunError. This is rarer in practice
+    (CONTAINER_WORK_BASE is usually writable) but the contract should
+    hold uniformly across staging exec_run calls.
+    """
+    from ui.backend.services.case_solve.solver_streamer import (
+        SolverRunError,
+        _active_runs,
+        _prepare_stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_mkdir_fail"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    class FailingMkdirContainer(_FakeContainer):
+        def exec_run(self, cmd, stream=False, demux=False):  # noqa: ARG002
+            if (
+                isinstance(cmd, list)
+                and len(cmd) >= 3
+                and cmd[0] == "bash"
+                and "mkdir -p" in cmd[2]
+            ):
+                return types.SimpleNamespace(output=b"", exit_code=1)
+            return types.SimpleNamespace(output=b"", exit_code=0)
+
+    container = FailingMkdirContainer(status="running", exec_lines=[])
+    _install_fake_docker(monkeypatch, container)
+
+    with pytest.raises(SolverRunError, match="failed to prepare container staging base"):
+        _prepare_stream_icofoam(case_host_dir=case_dir)
+
+    assert "case_mkdir_fail" not in _active_runs
+
+
 # ────────── Codex round-2 R2.1: GeneratorExit must release the lock ──────────
 
 
