@@ -428,6 +428,15 @@ def test_envelope_full_loop_lid_pin_off_top_plane_stays_uncertain(
         },
     )
     assert r_put.status_code == 200, r_put.text
+    put_payload = r_put.json()
+    # Prove the bad pin was actually written (not silently no-op'd).
+    # Without this, the test could pass on a stale/empty doc and the
+    # uncertain assertion below would still hold for the wrong reason.
+    assert put_payload["revision"] == 1
+    assert any(
+        f["face_id"] == bottom_face_id and f["name"] == "lid"
+        for f in put_payload["faces"]
+    )
 
     # Envelope MUST stay uncertain — classifier honors geometry.
     r = client.post(
@@ -437,5 +446,10 @@ def test_envelope_full_loop_lid_pin_off_top_plane_stays_uncertain(
     assert r.status_code == 200, r.text
     env = r.json()
     assert env["confidence"] == "uncertain", env
+    # Prove the classifier actually consumed the bad pin (revision=1)
+    # before deciding to stay uncertain — closes the Codex E2E R1 LOW
+    # gap where the test could pass on the wrong reason (no annotation
+    # consumed at all).
+    assert env["annotations_revision_consumed"] == 1
     # And critically: setup_ldc_bc did NOT run — no 0/ dir.
     assert not (case_dir / "0").is_dir()
