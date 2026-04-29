@@ -423,6 +423,55 @@ def test_to_foam_raises_when_msh_missing(tmp_path: Path):
         run_gmsh_to_foam(case_host_dir=case_dir)
 
 
+def test_to_foam_raises_when_pre_split_cleanup_fails(tmp_path: Path):
+    """Codex DEC-V61-101 idempotency R2 closure: rmtree failure on
+    polyMesh.pre_split must promote to GmshToFoamError, not silently
+    pass. If we returned success while the stale backup survived, the
+    next setup_*_bc call would silently restore it over this fresh
+    mesh — exactly the production bug the cleanup was meant to close.
+    """
+    from ui.backend.services.meshing_gmsh import to_foam as to_foam_mod
+
+    case_dir = tmp_path / "imported_TEST_cleanup_fail"
+    case_dir.mkdir()
+    (case_dir / "imported.msh").write_bytes(b"FAKE MSH")
+
+    # Stage host polyMesh + a stale pre_split backup to be cleaned up.
+    polyMesh = case_dir / "constant" / "polyMesh"
+    polyMesh.mkdir(parents=True)
+    for fname in ("points", "faces", "owner", "neighbour", "boundary"):
+        (polyMesh / fname).write_text("dummy", encoding="utf-8")
+    backup = case_dir / "constant" / "polyMesh.pre_split"
+    backup.mkdir()
+    (backup / "points").write_text("stale dummy", encoding="utf-8")
+
+    fake_container = MagicMock()
+    fake_container.status = "running"
+    fake_container.exec_run.return_value = MagicMock(exit_code=0, output=b"ok")
+    fake_container.put_archive.return_value = True
+    fake_container.get_archive.return_value = (iter([b""]), {})
+
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_container
+
+    # Force shutil.rmtree to fail on the pre_split path.
+    real_rmtree = to_foam_mod.shutil.rmtree
+
+    def failing_rmtree(path, *args, **kwargs):
+        if str(path).endswith("polyMesh.pre_split"):
+            raise OSError("simulated permission denied")
+        return real_rmtree(path, *args, **kwargs)
+
+    with patch.object(to_foam_mod, "_extract_tarball", return_value=None):
+        with patch.object(to_foam_mod.shutil, "rmtree", side_effect=failing_rmtree):
+            with patch("docker.from_env", return_value=fake_client):
+                with pytest.raises(
+                    to_foam_mod.GmshToFoamError,
+                    match="failed to invalidate stale polyMesh.pre_split",
+                ):
+                    to_foam_mod.run_gmsh_to_foam(case_host_dir=case_dir)
+
+
 def test_to_foam_calls_docker_when_msh_present(tmp_path: Path):
     """Mock the docker SDK and confirm we copy the case in, exec
     gmshToFoam, copy logs + polyMesh out. Validates the surface
