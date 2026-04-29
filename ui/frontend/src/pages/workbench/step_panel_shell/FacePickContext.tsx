@@ -69,9 +69,16 @@ export function useFacePickOptional(): FacePickContextValue | null {
  *  forwards the resolved face_id + world position into the context.
  *  Use it together with ``useFacePickOptional`` so the handler is null
  *  outside a provider (no-op).
+ *
+ *  Codex round 1 (Step 7b) note: depend on ``ctx?.setPicked`` rather
+ *  than the whole context object — setPicked from useState is stable
+ *  across renders, while the context value object is recreated on
+ *  every ``picked`` change. This keeps the published callback
+ *  identity-stable across pick → clear → pick cycles.
  */
 export function useFacePickPublisher() {
   const ctx = useFacePickOptional();
+  const setPicked = ctx?.setPicked;
   return useCallback(
     (event: {
       faceId: string | null;
@@ -79,12 +86,12 @@ export function useFacePickPublisher() {
       cellId: number;
       worldPosition: [number, number, number];
     }) => {
-      if (!ctx || !event.faceId) return;
-      ctx.setPicked({
+      if (!setPicked || !event.faceId) return;
+      setPicked({
         faceId: event.faceId,
         worldPosition: event.worldPosition,
       });
     },
-    [ctx],
+    [setPicked],
   );
 }

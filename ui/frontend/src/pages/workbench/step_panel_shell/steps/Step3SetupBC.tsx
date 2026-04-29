@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
+import type { AnnotationsRevisionConflictDetail } from "../types";
 import type {
   CaseSolveRejection,
   SetupBcSummary,
@@ -95,13 +96,52 @@ export function Step3SetupBC({
       if (!annotations) {
         throw new Error("annotations not loaded yet");
       }
-      const updated = await api.putFaceAnnotations(caseId, {
-        if_match_revision: annotations.revision,
-        faces: [patch],
-        annotated_by: "human",
-      });
-      setAnnotations(updated);
-      facePick?.setPicked(null);
+      try {
+        const updated = await api.putFaceAnnotations(caseId, {
+          if_match_revision: annotations.revision,
+          faces: [patch],
+          annotated_by: "human",
+        });
+        setAnnotations(updated);
+        facePick?.setPicked(null);
+      } catch (e) {
+        // Codex Step 7b round 1 HIGH: a 409 revision_conflict
+        // (concurrent AI write or second client) used to leave the
+        // panel stuck on the stale revision forever — every retry
+        // re-sent the same `if_match_revision` and re-failed. We now
+        // re-fetch the latest annotations doc on 409 so the user can
+        // retry with the bumped revision; the AnnotationPanel keeps
+        // its draft inputs intact (it only resets on faceId change).
+        // sticky invariant is preserved (annotated_by stays 'human').
+        if (
+          e instanceof ApiError &&
+          e.status === 409 &&
+          e.detail &&
+          typeof e.detail === "object" &&
+          "failing_check" in e.detail
+        ) {
+          const conflict = e.detail as AnnotationsRevisionConflictDetail;
+          try {
+            const fresh = await api.getFaceAnnotations(caseId);
+            setAnnotations(fresh);
+            throw new Error(
+              `Revision conflict (was ${conflict.attempted_revision}, ` +
+                `latest ${fresh.revision}). Refreshed — please retry.`,
+            );
+          } catch (refetchErr) {
+            // If even the refetch fails, surface a useful error so
+            // the AnnotationPanel still tells the user something
+            // actionable.
+            if (refetchErr instanceof Error) throw refetchErr;
+            throw new Error(
+              `Revision conflict (was ${conflict.attempted_revision}, ` +
+                `latest ${conflict.current_revision}). ` +
+                `Refresh failed: ${String(refetchErr)}.`,
+            );
+          }
+        }
+        throw e;
+      }
     },
     [annotations, caseId, facePick],
   );
