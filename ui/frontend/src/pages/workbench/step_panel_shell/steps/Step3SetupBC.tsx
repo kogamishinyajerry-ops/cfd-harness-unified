@@ -339,6 +339,7 @@ export function Step3SetupBC({
           }
         }
         if (
+          !isStale() &&
           result.confidence === "confident" &&
           result.unresolved_questions.length === 0
         ) {
@@ -346,6 +347,9 @@ export function Step3SetupBC({
           // we don't currently fetch the post-envelope SetupBcSummary
           // (n_lid_faces / Re) — the success surface below renders a
           // simpler "✓ AI processing complete" note in envelope mode.
+          // The isStale() re-check covers the case where ai_mode flipped
+          // during the nested getFaceAnnotations() await above (Codex
+          // M9 Step 3 R2 finding).
           setPickedFaceIdForQuestion({});
           onStepComplete();
         }
