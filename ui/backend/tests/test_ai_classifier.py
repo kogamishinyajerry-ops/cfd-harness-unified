@@ -890,6 +890,141 @@ def test_channel_executor_reports_re_100_on_unit_cross_section(tmp_path):
     assert abs(res.reynolds - 100.0) < 0.5, res.reynolds
 
 
+def test_setup_ldc_bc_is_idempotent_on_same_case_dir(tmp_path):
+    """Engineers can re-click [AI 处理] without crashing. The
+    polyMesh.pre_split backup is restored on second invocation so the
+    boundary-parser sees the original single-patch shape both times.
+    Surfaced as a real production gap by DEC-V61-101's off-axis topology
+    test on 2026-04-30 (the LDC path had the same gap, just untested).
+    """
+    from ui.backend.services.case_solve import setup_ldc_bc
+
+    case_dir = tmp_path / "ldc_idempotent"
+    case_dir.mkdir()
+    _stage_full_cube(case_dir)
+
+    res1 = setup_ldc_bc(case_dir, case_id="ldc_idempotent")
+    assert res1.n_lid_faces == 1
+    assert res1.n_wall_faces == 5
+
+    # Re-invoke: must not raise; counts should match.
+    res2 = setup_ldc_bc(case_dir, case_id="ldc_idempotent")
+    assert res2.n_lid_faces == 1
+    assert res2.n_wall_faces == 5
+
+
+def test_setup_channel_bc_is_idempotent_on_same_case_dir(tmp_path):
+    """Same idempotency contract as the LDC path. Without the
+    polyMesh.pre_split restore, the regex-based boundary parser would
+    see {nFaces=1, startFace=0} from the inlet patch on second call
+    and miss the outlet/wall faces.
+    """
+    from ui.backend.services.case_solve import setup_channel_bc
+
+    case_dir = tmp_path / "channel_idempotent"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    inlet_fid = _bottom_face_id_of_channel()
+    outlet_fid = _top_face_id_of_channel()
+
+    res1 = setup_channel_bc(
+        case_dir,
+        case_id="channel_idempotent",
+        inlet_face_ids=(inlet_fid,),
+        outlet_face_ids=(outlet_fid,),
+    )
+    assert (res1.n_inlet_faces, res1.n_outlet_faces, res1.n_wall_faces) == (1, 1, 4)
+
+    res2 = setup_channel_bc(
+        case_dir,
+        case_id="channel_idempotent",
+        inlet_face_ids=(inlet_fid,),
+        outlet_face_ids=(outlet_fid,),
+    )
+    assert (res2.n_inlet_faces, res2.n_outlet_faces, res2.n_wall_faces) == (1, 1, 4)
+
+
+def test_channel_executor_handles_off_axis_inlet_outlet_topology(tmp_path):
+    """DEC-V61-101 topology-independence claim: the patch splitter
+    routes by face_id (not plane heuristics), so engineers can pin
+    inlet/outlet on ANY pair of distinct boundary faces — not just the
+    z-axis caps. Critical for engineering geometries (elbow ducts,
+    branching manifolds, off-axis intakes) where the inlet isn't
+    necessarily the +z face.
+
+    This test pins a SIDE face (y=0 plane, face index 2) as inlet and
+    another SIDE face (y=1 plane, face index 3) as outlet on the
+    1×1×10 fixture. The classifier-executor handshake must succeed
+    without complaint. If it doesn't, the patch splitter's claim of
+    being plane-agnostic is false.
+    """
+    from ui.backend.services.case_solve import setup_channel_bc
+    from ui.backend.services.case_annotations import face_id
+
+    case_dir = tmp_path / "channel_off_axis"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = empty_annotations("channel_off_axis")
+    # y=0 face: vertices (0,0,0)(1,0,0)(1,0,10)(0,0,10) — side wall.
+    side_inlet_fid = face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 10.0), (0.0, 0.0, 10.0)]
+    )
+    # y=1 face: vertices (0,1,0)(1,1,0)(1,1,10)(0,1,10) — opposite side.
+    side_outlet_fid = face_id(
+        [(0.0, 1.0, 0.0), (1.0, 1.0, 0.0), (1.0, 1.0, 10.0), (0.0, 1.0, 10.0)]
+    )
+    annotations["faces"].extend([
+        {
+            "face_id": side_inlet_fid,
+            "name": "side_inlet",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-30T00:00:00Z",
+        },
+        {
+            "face_id": side_outlet_fid,
+            "name": "side_outlet",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-30T00:00:00Z",
+        },
+    ])
+    save_annotations(case_dir, annotations, if_match_revision=0)
+
+    # Classifier sees side_inlet/side_outlet (substring match on
+    # "inlet"/"outlet") and verifies face_ids on boundary → confident.
+    env = setup_bc_with_annotations(
+        case_dir=case_dir, case_id="channel_off_axis"
+    )
+    assert env.confidence == "confident", env
+    # Executor wrote dicts with inlet/outlet/walls split — boundary
+    # file should contain all three patches.
+    bnd = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
+    assert "inlet" in bnd
+    assert "outlet" in bnd
+    assert "walls" in bnd
+
+    # Cross-check face counts on a FRESH case_dir (avoiding the
+    # known same-dir non-idempotency: _split_channel_patches reads
+    # only the first patch's nFaces/startFace, so re-invoking on a
+    # post-split polyMesh wouldn't see the original 6 boundary faces.
+    # That's a separate hardening for a future DEC; the wrapper calls
+    # the executor exactly once per envelope round-trip, which is
+    # the only contract this DEC commits to.)
+    fresh_case = tmp_path / "channel_off_axis_direct"
+    fresh_case.mkdir()
+    _stage_full_channel(fresh_case)
+    res = setup_channel_bc(
+        fresh_case,
+        case_id="channel_off_axis_direct",
+        inlet_face_ids=(side_inlet_fid,),
+        outlet_face_ids=(side_outlet_fid,),
+    )
+    assert res.n_inlet_faces == 1
+    assert res.n_outlet_faces == 1
+    assert res.n_wall_faces == 4
+
+
 def test_full_loop_channel_executor_writes_correct_inlet_velocity(tmp_path):
     """DEC-V61-101 BC sanity: 0/U boundary field for inlet must be
     fixedValue (1 0 0) and outlet must be zeroGradient. Defends

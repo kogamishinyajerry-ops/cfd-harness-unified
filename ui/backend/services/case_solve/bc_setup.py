@@ -134,6 +134,28 @@ def _parse_face(line: str) -> list[int]:
     return vidx
 
 
+def _restore_pre_split_if_present(polymesh: Path) -> None:
+    """Idempotency support for setup_*_bc. If a previous invocation
+    saved polyMesh.pre_split (the original gmshToFoam single-patch
+    state), restore it BEFORE re-splitting so the regex-based
+    boundary parser sees the original {nFaces, startFace} pair
+    instead of post-split per-patch values.
+
+    Without this, calling setup_ldc_bc/setup_channel_bc twice on the
+    same case_dir parses only the first patch's nFaces/startFace,
+    truncating the boundary face range and raising spurious
+    BCSetupErrors. The docstring used to claim idempotency but the
+    implementation didn't deliver — surfaced by DEC-V61-101's off-axis
+    topology test on 2026-04-30.
+    """
+    backup = polymesh.parent / "polyMesh.pre_split"
+    if not backup.is_dir():
+        return
+    # Restore: blow away current polyMesh, copy backup over it.
+    shutil.rmtree(polymesh)
+    shutil.copytree(backup, polymesh)
+
+
 def _split_lid_walls(
     polymesh: Path,
 ) -> tuple[int, int, int]:
@@ -142,7 +164,12 @@ def _split_lid_walls(
 
     Returns (n_lid, n_walls, b_start). Raises BCSetupError if the
     polyMesh isn't shaped like a single-patch gmshToFoam output.
+
+    Idempotent: if a polyMesh.pre_split backup exists from a previous
+    invocation, the original single-patch state is restored before
+    the regex-based parse runs.
     """
+    _restore_pre_split_if_present(polymesh)
     boundary_text = (polymesh / "boundary").read_text()
     m_n = re.search(r"nFaces\s+(\d+)", boundary_text)
     m_start = re.search(r"startFace\s+(\d+)", boundary_text)
@@ -410,9 +437,15 @@ def _split_channel_patches(
     or any pin's face_id can't be located among the boundary faces
     (the classifier should have rejected this case before we got here,
     but defend in depth).
+
+    Idempotent: if a polyMesh.pre_split backup exists from a previous
+    invocation, the original single-patch state is restored before
+    the regex parse — engineer can safely re-click [AI 处理] without
+    triggering spurious channel_pin_mismatch errors.
     """
     from ui.backend.services.case_annotations import face_id as compute_face_id
 
+    _restore_pre_split_if_present(polymesh)
     boundary_text = (polymesh / "boundary").read_text()
     m_n = re.search(r"nFaces\s+(\d+)", boundary_text)
     m_start = re.search(r"startFace\s+(\d+)", boundary_text)
