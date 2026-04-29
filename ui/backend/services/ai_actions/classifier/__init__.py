@@ -200,27 +200,47 @@ def classify_setup_bc(
 
     # Cube-like: aspect ratio close to 1 across all three axes.
     if ar < 1.0 + _ASPECT_RATIO_CUBE_TOL:
-        # If the user has already pinned a face as user_authoritative,
-        # we can confidently default to that orientation.
-        if user_pinned:
+        # Codex round 1 HIGH-1 (DEC-V61-100 Step 2 review 2026-04-29):
+        # Returning confident on ANY user_authoritative pin was unsound
+        # because setup_ldc_bc() always derives the lid from max-z
+        # geometry — it does NOT consume annotations. So if the user
+        # pinned a SIDE face as the lid, the classifier would say
+        # confident, the wrapper would run setup_ldc_bc, and the writer
+        # would still pick the top face. Loop not closed.
+        #
+        # Honest fix: only return confident if the pinned face is on
+        # the top plane (matching what setup_ldc_bc will actually do).
+        # We can't verify face-by-face from face_id alone without the
+        # face_index lookup table, but we CAN check whether the user
+        # named a face "lid" — that signals they intend the top plane.
+        # This keeps the dialog open until the user's pin matches the
+        # writer's behavior.
+        pinned_names: set[str] = set()
+        for f in annotations.get("faces", []) or []:
+            if f.get("confidence") == "user_authoritative":
+                n = f.get("name")
+                if isinstance(n, str):
+                    pinned_names.add(n.lower())
+        lid_pinned = any("lid" in n for n in pinned_names)
+
+        if lid_pinned:
             return ClassificationResult(
                 geometry_class="ldc_cube",
                 confidence="confident",
                 questions=[],
                 summary=(
                     f"Cube geometry (aspect ratio {ar:.3f}) with "
-                    f"{len(user_pinned)} user-pinned face(s). LDC defaults "
-                    f"applied honoring user annotations."
+                    f"user-pinned lid. LDC defaults applied — writer "
+                    f"will use the top (+z) plane as the moving lid."
                 ),
                 rationale=(
                     f"cube_ar={ar:.4f} extents={extents} "
-                    f"user_pinned={len(user_pinned)}"
+                    f"lid_pinned=True names={sorted(pinned_names)}"
                 ),
             )
-        # No user pins yet: confident if the axis-aligned bounding box
-        # corresponds to the obvious LDC fixture orientation (+z lid).
-        # We surface a single uncertain question so the engineer can
-        # confirm; the AI defaults to top in the question.
+        # No lid pin yet (whether user pinned other faces or not):
+        # surface the lid question so engineer confirms top-plane is
+        # the intended lid before we hand off to setup_ldc_bc.
         return ClassificationResult(
             geometry_class="ldc_cube",
             confidence="uncertain",
@@ -231,47 +251,52 @@ def classify_setup_bc(
                     prompt=(
                         f"Cube geometry detected (aspect ratio {ar:.3f}). "
                         f"Default lid: top face (+z, max_z={bbox_max[2]:.4f}). "
-                        f"Click the lid face in the viewport to confirm or "
-                        f"select a different face."
+                        f"Click the lid face in the viewport to confirm "
+                        f"(name it 'lid' in the dialog)."
                     ),
                     needs_face_selection=True,
                     candidate_face_ids=[],
                     candidate_options=[],
-                    default_answer=None,
+                    default_answer="lid",
                 ),
             ],
             summary=(
                 f"Cube geometry (aspect ratio {ar:.3f}). Please confirm "
                 f"the lid orientation."
             ),
-            rationale=f"ldc_cube_default ar={ar:.4f} extents={extents}",
+            rationale=(
+                f"ldc_cube_default ar={ar:.4f} extents={extents} "
+                f"pinned_names={sorted(pinned_names)} (lid not pinned)"
+            ),
         )
 
-    # Non-cube: surface inlet + outlet questions in addition to lid.
-    # The classifier doesn't know which face is inlet vs outlet; the
-    # engineer answers via two face-selection questions. Walls are
-    # implicitly everything else (the action wrapper handles the
-    # default).
-    n_questions_remaining = 2  # inlet + outlet
+    # Codex round 1 HIGH-2 (DEC-V61-100 Step 2 review 2026-04-29):
+    # The non-cube branch CANNOT return confident yet — the only
+    # downstream executor (setup_ldc_bc) is LDC-only and would write
+    # incorrect lid/fixedWalls boundaries on a channel/airfoil mesh.
+    # Until a non-LDC executor exists (deferred to a future milestone:
+    # M10 STEP/IGES + M11 Mesh Wizard or a dedicated channel/external
+    # action), the non-cube path stays uncertain even when the user
+    # has pinned inlet+outlet. The dialog message tells them why so
+    # they don't think they did something wrong.
+    #
+    # We still emit the inlet+outlet questions so the engineer can
+    # CAPTURE their intent in face_annotations.yaml — the data
+    # accumulates in the doc and gets re-used when a non-LDC executor
+    # ships.
     questions: list[UnresolvedQuestion] = []
-    inlet_id = "inlet_face"
-    outlet_id = "outlet_face"
-    # If the user already pinned at least one inlet/outlet, drop the
-    # corresponding question. We can't tell which by face_id alone
-    # without also reading patch_type from each annotation, but
-    # checking name-prefix is good enough for Tier-B.
     pinned_names: set[str] = set()
     for f in annotations.get("faces", []) or []:
         if f.get("confidence") == "user_authoritative":
             n = f.get("name")
             if isinstance(n, str):
                 pinned_names.add(n.lower())
-    if any("inlet" in n for n in pinned_names):
-        n_questions_remaining -= 1
-    else:
+    inlet_pinned = any("inlet" in n for n in pinned_names)
+    outlet_pinned = any("outlet" in n for n in pinned_names)
+    if not inlet_pinned:
         questions.append(
             UnresolvedQuestion(
-                id=inlet_id,
+                id="inlet_face",
                 kind="face_label",
                 prompt=(
                     f"Non-cube geometry (aspect ratio {ar:.3f}). Click "
@@ -280,36 +305,55 @@ def classify_setup_bc(
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
-                default_answer=None,
+                default_answer="inlet",
             ),
         )
-    if any("outlet" in n for n in pinned_names):
-        n_questions_remaining -= 1
-    else:
+    if not outlet_pinned:
         questions.append(
             UnresolvedQuestion(
-                id=outlet_id,
+                id="outlet_face",
                 kind="face_label",
                 prompt="Click the outlet face in the viewport.",
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
-                default_answer=None,
+                default_answer="outlet",
             ),
         )
 
-    if n_questions_remaining == 0:
+    # Special case: both already pinned BUT no non-LDC executor
+    # exists. Surface a "blocked" envelope so the engineer knows the
+    # case can't be solved with the current pipeline; their
+    # annotations are saved for when M10/M11 ship.
+    if inlet_pinned and outlet_pinned:
         return ClassificationResult(
             geometry_class="non_cube",
-            confidence="confident",
-            questions=[],
+            confidence="blocked",
+            questions=[
+                UnresolvedQuestion(
+                    id="non_cube_executor_pending",
+                    kind="free_text",
+                    prompt=(
+                        f"Non-cube geometry (aspect ratio {ar:.3f}) with "
+                        f"inlet+outlet pinned. The current solver path is "
+                        f"LDC-only — channel/external-flow executors "
+                        f"land in M10 (STEP/IGES) and M11 (Mesh Wizard). "
+                        f"Your annotations are saved and will be honored "
+                        f"once the non-LDC pipeline ships."
+                    ),
+                    needs_face_selection=False,
+                    candidate_face_ids=[],
+                    candidate_options=[],
+                    default_answer=None,
+                ),
+            ],
             summary=(
-                f"Non-cube geometry (aspect ratio {ar:.3f}). Inlet + "
-                f"outlet pinned by user; using engineer's labels."
+                f"Non-cube geometry (aspect ratio {ar:.3f}) with annotations "
+                f"saved. Cannot solve until a non-LDC executor lands."
             ),
             rationale=(
-                f"non_cube_resolved ar={ar:.4f} extents={extents} "
-                f"pinned_names={sorted(pinned_names)}"
+                f"non_cube_blocked ar={ar:.4f} extents={extents} "
+                f"pinned={sorted(pinned_names)}"
             ),
         )
 
@@ -319,10 +363,10 @@ def classify_setup_bc(
         questions=questions,
         summary=(
             f"Non-cube geometry (aspect ratio {ar:.3f}). Please "
-            f"identify the inlet and outlet."
+            f"identify the inlet and outlet faces."
         ),
         rationale=(
             f"non_cube_classify ar={ar:.4f} extents={extents} "
-            f"questions_remaining={n_questions_remaining}"
+            f"inlet_pinned={inlet_pinned} outlet_pinned={outlet_pinned}"
         ),
     )
