@@ -158,7 +158,7 @@ def _read_boundary_patches(boundary_path: Path) -> dict[str, tuple[int, int]]:
     if not patches:
         raise BcRenderError(
             failing_check="no_boundary",
-            message=f"boundary file at {boundary} contains no patches",
+            message=f"boundary file at {boundary_path} contains no patches",
         )
     return patches
 
@@ -409,9 +409,20 @@ def build_bc_render_glb(case_id: str) -> BcGlbBuildResult:
         )
 
     polymesh = case_dir / "constant" / "polyMesh"
-    points_path = polymesh / "points"
-    faces_path = polymesh / "faces"
-    boundary_path = polymesh / "boundary"
+    if not polymesh.is_dir():
+        raise BcRenderError(
+            failing_check="no_polymesh",
+            message=f"no polyMesh at {polymesh}",
+        )
+
+    # Codex round-2 R3.1: resolve all three input paths under the case
+    # root BEFORE checking cache freshness. The previous order called
+    # _is_cache_fresh on unresolved Path objects, so a symlink at
+    # constant/polyMesh/points pointing outside the case dir was
+    # followed by stat() on the cache-hit path — defeating the
+    # symlink-containment hardening that _bc_source_files now enforces
+    # on the cache-miss path.
+    points_path, faces_path, boundary_path = _bc_source_files(polymesh, case_dir)
 
     cache = _cache_target(case_dir)
     if _is_cache_fresh(cache, points_path, faces_path, boundary_path):

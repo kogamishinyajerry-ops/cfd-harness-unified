@@ -318,3 +318,75 @@ def test_route_422_on_malformed_boundary(isolated_imported):
     client = TestClient(app)
     resp = client.get("/api/cases/case_001/bc/render")
     assert resp.status_code == 422
+
+
+# ───────── Codex round-2 follow-up tests ─────────
+
+
+def test_cache_hit_path_also_resolves_symlinks(isolated_imported, tmp_path):
+    """Codex round-2 R3.1: even on cache hit, the input paths must be
+    resolved + checked relative_to(case_root) BEFORE _is_cache_fresh
+    runs. A symlink at constant/polyMesh/points pointing outside the
+    case dir must be rejected on the cache-hit path too.
+    """
+    case_dir = isolated_imported / "case_001"
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "faces").write_text(_FACES_TEXT, encoding="utf-8")
+    (polymesh / "boundary").write_text(_BOUNDARY_TEXT, encoding="utf-8")
+
+    # Build once to populate the cache.
+    first = build_bc_render_glb("case_001")
+    assert first.status == "miss"
+
+    # Now swap one input for a symlink that escapes the case dir.
+    (polymesh / "points").unlink()
+    victim = tmp_path / "outside_case_points.txt"
+    victim.write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "points").symlink_to(victim)
+
+    # Cache hit would have served stale bytes silently — now must
+    # raise no_polymesh because resolve+containment runs FIRST.
+    with pytest.raises(BcRenderError) as exc:
+        build_bc_render_glb("case_001")
+    assert exc.value.failing_check == "no_polymesh"
+
+
+def test_empty_boundary_raises_bc_render_error_not_nameerror(isolated_imported):
+    """Codex round-2 LOW: the parameter rename `boundary` -> `boundary_path`
+    in _read_boundary_patches left a stale reference to `boundary` in
+    the no-patches error message. An empty/unparseable boundary file
+    used to raise NameError; now must raise BcRenderError(no_boundary).
+    """
+    case_dir = isolated_imported / "case_001"
+    case_dir.mkdir()
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(_POINTS_TEXT, encoding="utf-8")
+    (polymesh / "faces").write_text(_FACES_TEXT, encoding="utf-8")
+    # Boundary file present but contains no patches (only a FoamFile
+    # header + an empty list).
+    (polymesh / "boundary").write_text(
+        """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+0
+(
+)
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BcRenderError) as exc:
+        build_bc_render_glb("case_001")
+    # Must NOT be NameError; must surface as a clean BcRenderError.
+    assert exc.value.failing_check == "no_boundary"

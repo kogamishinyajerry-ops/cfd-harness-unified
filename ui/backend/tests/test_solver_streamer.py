@@ -247,3 +247,45 @@ def test_run_id_suffixes_container_work_dir(tmp_path, monkeypatch):
     finally:
         _release_run("case_suffix", forced_run_id)
     assert "case_suffix" not in _active_runs
+
+
+# ────────── Codex round-2 R2.1: GeneratorExit must release the lock ──────────
+
+
+def test_generator_close_releases_run_id(tmp_path, monkeypatch):
+    """Round-2 R2.1: a `GeneratorExit` (client disconnect mid-stream)
+    must release the per-case lock + run cleanup. Previously
+    _release_run lived only in the late summary's finally; closing the
+    generator BEFORE the loop completed left _active_runs stuck and
+    the next solve would 409 forever.
+    """
+    from ui.backend.services.case_solve.solver_streamer import (
+        _active_runs,
+        _prepare_stream_icofoam,
+        stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_disconnect"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    # Provide enough lines to keep the generator producing events; the
+    # test will close it after consuming a few yields.
+    lines = [b"Time = 0.005s\n"] * 200
+    container = _FakeContainer(status="running", exec_lines=lines)
+    _install_fake_docker(monkeypatch, container)
+
+    prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    assert "case_disconnect" in _active_runs
+    gen = stream_icofoam(prepared=prepared)
+
+    # Pull a couple of events, then close the generator early to
+    # simulate client disconnect / fastapi cancellation.
+    next(gen)  # start event
+    next(gen)  # at least one residual/time event
+    gen.close()  # raises GeneratorExit inside the generator
+
+    # The outer try/finally must have fired _release_run.
+    assert "case_disconnect" not in _active_runs, (
+        "GeneratorExit must release the per-case run lock"
+    )

@@ -408,87 +408,96 @@ def stream_icofoam(
     last_p: list[float | None] = [None]
     fatal_seen: list[bool] = [False]
 
+    # Codex round-2 R2.1: wrap the entire generator body (everything
+    # after the start yield) in an outer try/finally so a GeneratorExit
+    # raised at ANY yield point — client disconnect, FastAPI shutdown,
+    # mid-stream abort — releases the per-case run lock and cleans up
+    # the container work dir. Previously the release lived only in
+    # the late summary's finally; a disconnect during the streaming
+    # loop would skip it and the next solve would stick on 409.
     try:
-        for chunk in exec_result.output:
-            if not chunk:
-                continue
-            log_buf.write(chunk)
-            # Append chunk to the line buffer, split on \n, parse each
-            # complete line. The trailing partial line stays in the
-            # buffer for the next chunk.
-            line_buf += chunk
-            while b"\n" in line_buf:
-                raw_line, _, line_buf = line_buf.partition(b"\n")
-                try:
-                    line_str = raw_line.decode("utf-8", errors="replace")
-                except Exception:  # noqa: BLE001
+        # Stream icoFoam output line-by-line.
+        try:
+            for chunk in exec_result.output:
+                if not chunk:
                     continue
+                log_buf.write(chunk)
+                # Append chunk to the line buffer, split on \n, parse
+                # each complete line. The trailing partial line stays
+                # in the buffer for the next chunk.
+                line_buf += chunk
+                while b"\n" in line_buf:
+                    raw_line, _, line_buf = line_buf.partition(b"\n")
+                    try:
+                        line_str = raw_line.decode("utf-8", errors="replace")
+                    except Exception:  # noqa: BLE001
+                        continue
+                    yield from _parse_line_to_events(
+                        line_str,
+                        current_time=current_time,
+                        last_p=last_p,
+                        fatal_seen=fatal_seen,
+                    )
+        except Exception as exc:  # noqa: BLE001 — stream interruption
+            yield _sse("error", {"detail": f"stream interrupted: {exc}"})
+            # Don't re-raise — let the done event below close the
+            # stream cleanly; the client will see error then
+            # done(converged=false).
+
+        # Flush the trailing partial line.
+        if line_buf:
+            try:
+                line_str = line_buf.decode("utf-8", errors="replace")
                 yield from _parse_line_to_events(
                     line_str,
                     current_time=current_time,
                     last_p=last_p,
                     fatal_seen=fatal_seen,
                 )
-    except Exception as exc:  # noqa: BLE001 — stream interruption
-        yield _sse("error", {"detail": f"stream interrupted: {exc}"})
-        # Don't re-raise — let the done event below close the stream
-        # cleanly; the client will see error then done(converged=false).
+            except Exception:  # noqa: BLE001
+                pass
 
-    # Flush the trailing partial line.
-    if line_buf:
+        # Persist the full log on the host so downstream tools (the
+        # /residual-history.png renderer, the audit package, etc) can
+        # read it.
         try:
-            line_str = line_buf.decode("utf-8", errors="replace")
-            yield from _parse_line_to_events(
-                line_str,
-                current_time=current_time,
-                last_p=last_p,
-                fatal_seen=fatal_seen,
+            log_dest.write_bytes(log_buf.getvalue())
+        except OSError as exc:
+            yield _sse(
+                "error",
+                {"detail": f"failed to persist log on host: {exc}"},
             )
-        except Exception:  # noqa: BLE001
-            pass
 
-    # Persist the full log on the host so downstream tools (the
-    # /residual-history.png renderer, the audit package, etc) can
-    # read it.
-    try:
-        log_dest.write_bytes(log_buf.getvalue())
-    except OSError as exc:
-        yield _sse(
-            "error",
-            {"detail": f"failed to persist log on host: {exc}"},
-        )
+        # Pull time directories back for the results extractor.
+        pulled: list[str] = []
+        try:
+            ls_out = container.exec_run(
+                cmd=[
+                    "bash",
+                    "-c",
+                    f"cd {container_work_dir} && ls -d [0-9]* 2>/dev/null",
+                ]
+            )
+            time_dirs_raw = ls_out.output.decode(errors="replace").strip().split()
+            for td in time_dirs_raw:
+                try:
+                    bits, _ = container.get_archive(f"{container_work_dir}/{td}")
+                    _extract_tarball(b"".join(bits), case_host_dir)
+                    pulled.append(td)
+                except docker.errors.DockerException:
+                    continue
+        except docker.errors.DockerException as exc:
+            yield _sse(
+                "error",
+                {"detail": f"docker SDK error pulling time dirs: {exc}"},
+            )
+        except (OSError, tarfile.TarError) as exc:
+            yield _sse(
+                "error",
+                {"detail": f"host fault pulling time dirs: {exc}"},
+            )
 
-    # Pull time directories back for the results extractor.
-    pulled: list[str] = []
-    try:
-        ls_out = container.exec_run(
-            cmd=[
-                "bash",
-                "-c",
-                f"cd {container_work_dir} && ls -d [0-9]* 2>/dev/null",
-            ]
-        )
-        time_dirs_raw = ls_out.output.decode(errors="replace").strip().split()
-        for td in time_dirs_raw:
-            try:
-                bits, _ = container.get_archive(f"{container_work_dir}/{td}")
-                _extract_tarball(b"".join(bits), case_host_dir)
-                pulled.append(td)
-            except docker.errors.DockerException:
-                continue
-    except docker.errors.DockerException as exc:
-        yield _sse(
-            "error",
-            {"detail": f"docker SDK error pulling time dirs: {exc}"},
-        )
-    except (OSError, tarfile.TarError) as exc:
-        yield _sse(
-            "error",
-            {"detail": f"host fault pulling time dirs: {exc}"},
-        )
-
-    # Final summary event — mirrors SolverRunResult shape.
-    try:
+        # Final summary event — mirrors SolverRunResult shape.
         parsed = _parse_log(log_buf.getvalue().decode("utf-8", errors="replace"))
         converged = _is_converged(parsed) and not fatal_seen[0]
         summary = {
@@ -508,12 +517,9 @@ def stream_icofoam(
         }
         yield _sse("done", summary)
     finally:
-        # HIGH-2 release: whether the generator runs to completion, the
-        # client drops the connection, or an exception is raised, we
-        # must release the per-case run lock so the next solve can
-        # claim it. The container_work_dir cleanup is best-effort —
-        # leftover dirs are tagged with run_id so they don't collide
-        # with future runs.
+        # Always release the per-case run lock and (best-effort) clean
+        # up the container work dir, even on GeneratorExit (client
+        # disconnect mid-stream) or any other exception above.
         _release_run(case_host_dir.name, run_id)
         try:
             container.exec_run(
