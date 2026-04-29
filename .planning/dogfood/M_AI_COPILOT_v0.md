@@ -77,9 +77,39 @@ The acceptance criteria:
 - **Click the same face you just saved.** The form should be **pre-filled** with the saved name + patch_type + notes (re-seeded from existing annotation).
 - **Modify the name and Save.** Should succeed.
 
-### 4. Smoke the M9 Tier-B AI envelope-mode dialog (NEW · DEC-V61-100 Step 1)
+### 4a. Smoke the real M9 Tier-B AI classifier (DEC-V61-100 Step 2)
 
-This validates the productized pick→annotate→re-run loop on the dogfood substrate (real classifier deferred to Step 2).
+The default envelope mode now invokes the real geometric classifier
+(no `?ai_mode=` query param needed). Heuristics:
+
+- LDC cube + no annotations → `uncertain` · 1 lid_orientation question
+- LDC cube + lid pin verified on top plane → `confident` · runs setup_ldc_bc
+- LDC cube + lid-named pin OFF top plane → `uncertain` (specific message
+  pointing at the actual top-plane face_ids · prevents silent override)
+- Channel/non-cube → `uncertain` until inlet+outlet pinned, then `blocked`
+  with "non-LDC executor pending M10/M11" message
+- No polyMesh / <8 vertices → `blocked`
+
+Smoke runbook (LDC cube · default behavior · NO query param):
+
+1. Navigate to `/workbench/<ldc-case-id>?step=3` (no `ai_mode`).
+2. Click `[AI 处理]`. Expected:
+   - DialogPanel surfaces with `lid_orientation` question
+   - confidence badge: `uncertain`
+   - prompt: "Cube geometry detected (aspect ratio ~1.000). Default lid: top face (+z, max_z=...). Click the lid face in the viewport to confirm (name it 'lid' in the dialog)."
+3. Click the **top** face of the cube. Verify face hint shows "Picked: fid_xxx".
+4. Click `[继续 AI 处理]`. Expected:
+   - PUT face_annotations writes user_authoritative entry (name='lid', face_id matches top plane)
+   - Wrapper re-runs envelope · classifier verifies face_id ∈ top_plane set → confident
+   - setup_ldc_bc actually writes dicts (`0/`, `system/`)
+   - Step completes
+5. **Negative path**: try clicking a SIDE face and confirming with name='lid'. Expected: classifier stays uncertain with message "You pinned a face named 'lid', but it isn't on the top (+z) plane the LDC solver uses." — engineer must click the actual top face.
+
+### 4b. Legacy dogfood substrate (DEC-V61-098 Step 1)
+
+This validates the productized pick→annotate→re-run loop on the
+**mock** substrate (force_uncertain mock — bypasses the real classifier
+for testing the dialog UX without geometric verification).
 
 1. Navigate to `/workbench/<case-id>?step=3&ai_mode=force_uncertain`.
 2. An amber **"AI-COPILOT envelope mode"** banner appears at the top of the right rail. The banner confirms the dialog substrate is active.

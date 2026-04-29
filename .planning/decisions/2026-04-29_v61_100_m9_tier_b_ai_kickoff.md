@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-100
 title: M9 Tier-B AI kickoff — productized pick→annotate→re-run loop + arbitrary-STL classifier roadmap [Era 1 LOOP SPINE first milestone under workbench long-horizon roadmap]
-status: Active · Step 1 (frontend envelope-mode dialog flow) IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS · 127/127 frontend pass) · Steps 2-3 (backend classifier + AI inference iteration) PENDING
+status: Active · Step 1 IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS · frontend envelope-mode dialog flow) · Step 2 IMPLEMENTED at commit 11b81ba (Codex 3-round arc R3 APPROVE · backend geometric classifier with lid-pin verification) · Step 3 (multi-question scenario hardening · awaits CFDJerry smoke + real-world classifier exposure) PENDING
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE M9 row · "Tier-B AI · face-pick selection + AI BC inference iteration") + DEC-V61-098 (M-AI-COPILOT Tier-A · Tier-B explicit deferral row in §F)
@@ -43,6 +43,9 @@ autonomous_governance: true
 
 codex_tool_report_path:
   step_1_round_1: reports/codex_tool_reports/dec_v61_100_m9_step1_round1.md (APPROVE_WITH_COMMENTS · 2026-04-29 commit aa4d3f1 · no blocking findings · 127/127 frontend pass · 2 non-blocker observations flagged for Step 2 hardening)
+  step_2_round_1: reports/codex_tool_reports/dec_v61_100_m9_step2_round1.md (CHANGES_REQUIRED · 2026-04-29 · 2 HIGH findings — cube returned confident on any user_authoritative pin · non-cube returned confident with no executor able to honor it)
+  step_2_round_2: reports/codex_tool_reports/dec_v61_100_m9_step2_round2.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH — lid-named pin off top plane was silently overridden by setup_ldc_bc · narrow R1 fix wasn't honest at the executor level)
+  step_2_round_3: reports/codex_tool_reports/dec_v61_100_m9_step2_round3.md (APPROVE · 2026-04-29 commit 11b81ba · _top_plane_face_ids() helper mirrors setup_ldc_bc's lid detection exactly · classifier-executor parity verified · borderline tolerance probe matches · full loop closure proven · 34/34 in slice)
 codex_review_required: true
 codex_review_phase: pre-merge (per RETRO-V61-001 · multi-file frontend + UX flow change triggers)
 codex_triggers:
