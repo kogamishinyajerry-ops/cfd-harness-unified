@@ -86,12 +86,31 @@ export function Step3SetupBC({
   const [pickedFaceIdForQuestion, setPickedFaceIdForQuestion] = useState<
     Record<string, string>
   >({});
+  // M9 Step 3: explicit "active face question" — engineer picks a
+  // question via the DialogPanel button, then the next viewport pick
+  // routes to that specific slot. Closes the rapid-double-pick race
+  // Codex flagged on Step 1 R1 (under multi-question scenarios the
+  // first-unresolved auto-routing was lossy).
+  const [activeFaceQuestionId, setActiveFaceQuestionId] = useState<
+    string | null
+  >(null);
   const [annotations, setAnnotations] = useState<AnnotationsDocument | null>(
     null,
   );
   const [annotationsLoadError, setAnnotationsLoadError] = useState<
     string | null
   >(null);
+
+  // M9 Step 3 (Codex Step 1 R1 non-blocker #2 closure): clear stale
+  // envelope + pick state when the engineer toggles the ai_mode
+  // query param mid-session. Without this, an old uncertain envelope
+  // could linger after switching to legacy mode (or vice versa),
+  // confusing the engineer about which flow is active.
+  useEffect(() => {
+    setEnvelope(null);
+    setPickedFaceIdForQuestion({});
+    setActiveFaceQuestionId(null);
+  }, [aiMode]);
 
   // Lazy-load annotations doc once the case_id is known. We don't gate
   // the panel on this because the existing-annotation seed is purely
@@ -116,16 +135,33 @@ export function Step3SetupBC({
     };
   }, [caseId]);
 
-  // First unresolved face-selection question awaiting an answer (used
-  // to route the engineer's pick to the right question slot).
+  // Resolve which face question gets the next pick:
+  //   1. If the engineer explicitly clicked "Select this face" on a
+  //      question row, route to that one (activeFaceQuestionId).
+  //   2. Otherwise auto-route ONLY when the envelope has exactly one
+  //      face question total (single-question dogfood path · Step 1
+  //      backwards-compat). Multi-question envelopes always require
+  //      explicit slot selection, even after some have been answered —
+  //      otherwise the engineer can be surprised by a "silent
+  //      second-pick wins" once only one slot remains unresolved.
   const activeFaceQuestion = useMemo<UnresolvedQuestion | null>(() => {
     if (!envelope) return null;
-    return (
-      envelope.unresolved_questions.find(
-        (q) => q.needs_face_selection && !pickedFaceIdForQuestion[q.id],
-      ) ?? null
+    if (activeFaceQuestionId) {
+      const explicit = envelope.unresolved_questions.find(
+        (q) => q.id === activeFaceQuestionId && q.needs_face_selection,
+      );
+      if (explicit) return explicit;
+      // Stale id (engineer clicked the button on a question that the
+      // re-run dropped) — fall through to single-q auto-route.
+    }
+    const totalFaceQs = envelope.unresolved_questions.filter(
+      (q) => q.needs_face_selection,
     );
-  }, [envelope, pickedFaceIdForQuestion]);
+    if (totalFaceQs.length === 1 && !pickedFaceIdForQuestion[totalFaceQs[0].id]) {
+      return totalFaceQs[0];
+    }
+    return null;
+  }, [envelope, activeFaceQuestionId, pickedFaceIdForQuestion]);
 
   // Consume picks: if there's an active dialog face question, the pick
   // routes to it (not the AnnotationPanel). Otherwise the
@@ -136,6 +172,12 @@ export function Step3SetupBC({
       ...prev,
       [activeFaceQuestion.id]: facePick.picked!.faceId,
     }));
+    // After consuming the pick, clear the explicit active-id so the
+    // next pick doesn't auto-route back to this same question (the
+    // engineer should explicitly pick the next question they want
+    // to answer, or use the auto-routing fallback if only one
+    // remains unresolved).
+    setActiveFaceQuestionId(null);
     facePick.setPicked(null);
   }, [facePick, activeFaceQuestion]);
 
@@ -414,6 +456,8 @@ export function Step3SetupBC({
         <DialogPanel
           envelope={envelope}
           pickedFaceIdForQuestion={pickedFaceIdForQuestion}
+          activeFaceQuestionId={activeFaceQuestionId}
+          onSelectActiveFaceQuestion={setActiveFaceQuestionId}
           onResume={handleDialogResume}
         />
       )}

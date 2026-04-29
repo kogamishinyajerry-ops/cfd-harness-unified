@@ -524,3 +524,99 @@ function FacePushHelper() {
     </button>
   );
 }
+
+describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
+  beforeEach(() => {
+    setupBCMock.mockReset();
+    setupBCWithEnvelopeMock.mockReset();
+    getFaceAnnotationsMock.mockReset();
+    putFaceAnnotationsMock.mockReset();
+  });
+
+  it("two unresolved face questions → no auto-route until 'Select this face' is clicked", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock.mockResolvedValueOnce({
+      confidence: "uncertain",
+      summary: "Channel needs inlet + outlet.",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [
+        {
+          id: "inlet_face",
+          kind: "face_label",
+          prompt: "Pick the inlet.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: "inlet",
+        },
+        {
+          id: "outlet_face",
+          kind: "face_label",
+          prompt: "Pick the outlet.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: "outlet",
+        },
+      ],
+      next_step_suggestion: null,
+      error_detail: null,
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode="]}>
+        <FacePickProvider>
+          <Step3SetupBC
+            caseId="abc"
+            onStepComplete={vi.fn()}
+            onStepError={vi.fn()}
+            registerAiAction={(action) => {
+              registeredAction = action;
+            }}
+          />
+          <FacePushHelper />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    // ai_mode is empty (URL has ?ai_mode=) → envelope mode active.
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    // Without clicking 'Select this face', a viewport pick should NOT
+    // route to either question (multi-q safety).
+    await user.click(screen.getByTestId("test-pick-button"));
+    // Brief wait for any effect.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(
+      screen.getByTestId("dialog-panel-face-hint-inlet_face"),
+    ).not.toHaveTextContent(/picked:/i);
+    expect(
+      screen.getByTestId("dialog-panel-face-hint-outlet_face"),
+    ).not.toHaveTextContent(/picked:/i);
+
+    // Now click 'Select this face' on the outlet question, then pick.
+    await user.click(
+      screen.getByTestId("dialog-panel-select-face-outlet_face"),
+    );
+    await user.click(screen.getByTestId("test-pick-button"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("dialog-panel-face-hint-outlet_face"),
+      ).toHaveTextContent(/picked: fid_lid_a/i),
+    );
+    // Inlet still empty.
+    expect(
+      screen.getByTestId("dialog-panel-face-hint-inlet_face"),
+    ).not.toHaveTextContent(/picked:/i);
+  });
+});

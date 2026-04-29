@@ -100,9 +100,13 @@ describe("DialogPanel", () => {
         onResume={vi.fn()}
       />,
     );
-    expect(screen.getByTestId("dialog-panel-face-hint-qFace")).toHaveTextContent(
-      /click a face/i,
-    );
+    // Without activeFaceQuestionId, the panel directs the engineer
+    // to click "Select this face" first (M9 Step 3 explicit slot
+    // routing). The previous "Click a face" wording was for the
+    // single-question dogfood path; new wording covers multi-q safely.
+    expect(
+      screen.getByTestId("dialog-panel-face-hint-qFace"),
+    ).toHaveTextContent(/select this face/i);
     expect(screen.getByTestId("dialog-panel-resume")).toBeDisabled();
 
     rerender(
@@ -243,5 +247,113 @@ describe("DialogPanel", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByTestId("dialog-panel-options-q1")).toBeNull();
+  });
+
+  // ──────────── M9 Step 3 · multi-question slot routing ────────────
+
+  it("highlights the active face question + 'Active' button label", () => {
+    const envelope = buildEnvelope({
+      unresolved_questions: [
+        {
+          id: "qInlet",
+          kind: "face_label",
+          prompt: "Pick the inlet.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+        {
+          id: "qOutlet",
+          kind: "face_label",
+          prompt: "Pick the outlet.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+    });
+    render(
+      <DialogPanel
+        envelope={envelope}
+        activeFaceQuestionId="qOutlet"
+        onSelectActiveFaceQuestion={vi.fn()}
+        onResume={vi.fn()}
+      />,
+    );
+    // Inlet (not active) → Select this face
+    expect(
+      screen.getByTestId("dialog-panel-select-face-qInlet"),
+    ).toHaveTextContent(/select this face/i);
+    // Outlet (active) → Active (and disabled)
+    const outletBtn = screen.getByTestId("dialog-panel-select-face-qOutlet");
+    expect(outletBtn).toHaveTextContent("Active");
+    expect(outletBtn).toBeDisabled();
+    // Outlet question row marked active
+    expect(
+      screen.getByTestId("dialog-panel-question-qOutlet"),
+    ).toHaveAttribute("data-question-active", "true");
+    expect(
+      screen.getByTestId("dialog-panel-question-qInlet"),
+    ).toHaveAttribute("data-question-active", "false");
+    // Outlet hint reads "Click a face in the viewport now."
+    expect(
+      screen.getByTestId("dialog-panel-face-hint-qOutlet"),
+    ).toHaveTextContent(/click a face in the viewport now/i);
+  });
+
+  it("clicking 'Select this face' fires onSelectActiveFaceQuestion", async () => {
+    const onSelect = vi.fn();
+    const envelope = buildEnvelope({
+      unresolved_questions: [
+        {
+          id: "qFoo",
+          kind: "face_label",
+          prompt: "Pick foo.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(
+      <DialogPanel
+        envelope={envelope}
+        onSelectActiveFaceQuestion={onSelect}
+        onResume={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByTestId("dialog-panel-select-face-qFoo"));
+    expect(onSelect).toHaveBeenCalledWith("qFoo");
+  });
+
+  it("Re-pick label appears when a face is already picked for the question", () => {
+    const envelope = buildEnvelope({
+      unresolved_questions: [
+        {
+          id: "qPicked",
+          kind: "face_label",
+          prompt: "Pick something.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+    });
+    render(
+      <DialogPanel
+        envelope={envelope}
+        pickedFaceIdForQuestion={{ qPicked: "fid_already_picked" }}
+        onSelectActiveFaceQuestion={vi.fn()}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByTestId("dialog-panel-select-face-qPicked"),
+    ).toHaveTextContent(/re-pick/i);
   });
 });

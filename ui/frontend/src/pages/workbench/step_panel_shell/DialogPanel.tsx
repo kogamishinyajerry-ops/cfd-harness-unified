@@ -25,6 +25,20 @@ interface DialogPanelProps {
    *  Optional — face questions surface a "select a face" hint until set.
    */
   pickedFaceIdForQuestion?: Record<string, string | undefined>;
+  /** The id of the face-selection question that should currently
+   *  receive viewport picks. Codex M9 Step 1 R1 flagged that picking
+   *  always routed to "first unresolved" — under rapid double-clicks
+   *  the second pick silently overwrote the first. Step 3 fix: the
+   *  engineer explicitly picks WHICH question to answer next via the
+   *  "Select this face" button on each row. The shell tracks the
+   *  active id and routes pick events to that specific slot.
+   *  Falls back to the first unresolved face question when unset.
+   */
+  activeFaceQuestionId?: string | null;
+  /** Fired when the engineer clicks "Select this face" on a question
+   *  row to direct the next viewport pick. Caller stores in shell state.
+   */
+  onSelectActiveFaceQuestion?: (questionId: string) => void;
   /** Disabled while the AI is mid-run or the page is offline. */
   disabled?: boolean;
   /** Fires when the engineer clicks [继续 AI 处理]. The map keys are
@@ -53,6 +67,8 @@ function isAnswerComplete(
 export function DialogPanel({
   envelope,
   pickedFaceIdForQuestion = {},
+  activeFaceQuestionId = null,
+  onSelectActiveFaceQuestion,
   disabled = false,
   onResume,
 }: DialogPanelProps) {
@@ -158,12 +174,20 @@ export function DialogPanel({
         {envelope.unresolved_questions.map((q) => {
           const pickedFid = pickedFaceIdForQuestion[q.id];
           const complete = isAnswerComplete(q, answers[q.id], pickedFid);
+          const isActiveFaceSlot =
+            q.needs_face_selection && activeFaceQuestionId === q.id;
+          // Border highlight for the active question — engineer sees
+          // at a glance which slot the next viewport pick fills.
+          const borderClass = isActiveFaceSlot
+            ? "border-emerald-400/60"
+            : "border-surface-800";
           return (
             <li
               key={q.id}
               data-testid={`dialog-panel-question-${q.id}`}
               data-question-complete={complete ? "true" : "false"}
-              className="space-y-1 rounded-sm border border-surface-800 bg-surface-950/40 p-2"
+              data-question-active={isActiveFaceSlot ? "true" : "false"}
+              className={`space-y-1 rounded-sm border ${borderClass} bg-surface-950/40 p-2`}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[11px] text-surface-100">{q.prompt}</span>
@@ -173,13 +197,32 @@ export function DialogPanel({
               </div>
 
               {q.needs_face_selection && (
-                <div
-                  data-testid={`dialog-panel-face-hint-${q.id}`}
-                  className={`text-[10px] ${pickedFid ? "text-emerald-300" : "text-amber-200"}`}
-                >
-                  {pickedFid
-                    ? `Picked: ${pickedFid.slice(0, 12)}…`
-                    : "Click a face in the viewport to select."}
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    data-testid={`dialog-panel-face-hint-${q.id}`}
+                    className={`text-[10px] ${pickedFid ? "text-emerald-300" : "text-amber-200"}`}
+                  >
+                    {pickedFid
+                      ? `Picked: ${pickedFid.slice(0, 12)}…`
+                      : isActiveFaceSlot
+                        ? "Click a face in the viewport now."
+                        : "Click 'Select this face' to direct your next pick here."}
+                  </div>
+                  {onSelectActiveFaceQuestion && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectActiveFaceQuestion(q.id)}
+                      disabled={isLocked || isActiveFaceSlot}
+                      data-testid={`dialog-panel-select-face-${q.id}`}
+                      className="rounded-sm border border-surface-600 bg-surface-900/80 px-2 py-0.5 text-[10px] font-mono text-surface-200 transition hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isActiveFaceSlot
+                        ? "Active"
+                        : pickedFid
+                          ? "Re-pick"
+                          : "Select this face"}
+                    </button>
+                  )}
                 </div>
               )}
 
