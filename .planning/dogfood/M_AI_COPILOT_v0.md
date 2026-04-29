@@ -134,6 +134,54 @@ for testing the dialog UX without geometric verification).
 - Click `[AI 处理]` with `ai_mode=force_uncertain` but DON'T pick a face. Verify `[继续 AI 处理]` stays disabled.
 - Open two tabs · in tab A start envelope-mode flow · in tab B do a manual face annotation save · come back to tab A and resume → expect mid-dialog 409 message "Annotations changed mid-dialog. Refreshed — please retry."
 
+### 4c. Smoke the M9 Step 3 multi-question slot routing (DEC-V61-100 Step 3)
+
+The geometric classifier (Step 2) emits **two** unresolved face questions
+on non-cube channel geometries (`inlet_face` + `outlet_face`). Step 3
+(commits faa2e08 + a54f4b7 + 6ae9a3b · Codex 3-round arc R3 APPROVE)
+hardens the multi-q UX so the engineer never silently picks the wrong
+slot.
+
+Smoke runbook (channel · default behavior · NO query param):
+
+1. Import a non-cube geometry (anything where the bounding box is NOT
+   ~1:1:1 — a straight rectangular duct works). Run Step 2 mesh.
+2. Step 3 → `[AI 处理]`. Expected:
+   - DialogPanel surfaces with **two** rows: `inlet_face` + `outlet_face`
+   - confidence badge: `uncertain`
+   - both rows show the hint **"Click 'Select this face' to direct your
+     next pick here."** (NOT the legacy "click a face to select")
+   - `[继续 AI 处理]` is **disabled** until both have a picked face_id
+3. Click in the viewport directly (without first clicking "Select this
+   face"). Expected: nothing happens — no row gets a `Picked: …` hint,
+   AnnotationPanel does NOT surface (Codex R1 Finding 2 closure).
+4. Click **"Select this face"** on the `inlet_face` row. Expected:
+   - that row's button label flips to `Active` (and goes disabled)
+   - the row gets an emerald border
+   - hint changes to **"Click a face in the viewport now."**
+   - `data-question-active="true"` on the row (devtools)
+5. Click an actual face in the viewport. Expected:
+   - the picked face_id binds to `inlet_face` (hint shows `Picked: fid_…`)
+   - active highlight clears (button is back to `Re-pick`)
+   - the OTHER row (`outlet_face`) is **still empty** — auto-fallback is
+     deliberately disabled in multi-q mode (Codex R1 Finding 1 closure)
+6. Click **"Select this face"** on `outlet_face`, then pick the outlet.
+   Expected: same routing pattern; both rows now have picks.
+7. Click `[继续 AI 处理]`. Expected: PUT face_annotations writes BOTH
+   user_authoritative entries; envelope re-runs; classifier returns
+   `blocked` (channel solver still pending M11/M12) — this is correct
+   behavior, not a bug. The dialog disappears and the `error_detail`
+   surface explains the executor gap.
+
+**Negative tests:**
+- Click "Select this face" on inlet, pick face A; click "Select this
+  face" on outlet, pick face B — expect inlet=A, outlet=B (no race).
+  This is the rapid-double-pick scenario Codex Step 1 R1 flagged.
+- Toggle `?ai_mode=force_uncertain` mid-session (after a real-classifier
+  envelope is open). Expected: dialog clears immediately + any in-flight
+  envelope request from the previous mode is dropped (no late-arriving
+  state writes — Codex R1+R2 Finding 1 closure via aiModeGenRef).
+
 ### 6. Smoke the 409 conflict path (advanced)
 
 This validates the Codex Step 7b R1 fix — useful but not required for visual smoke:
@@ -158,11 +206,12 @@ These are NOT broken — they're explicitly out of Tier-A scope:
 
 | Gap | Where it goes |
 |---|---|
-| `[AI 处理]` doesn't yet route through envelope mode (no DialogPanel rendering) | Step 7c (next session) |
-| Face-pick highlighting (selected face glow) | Tier-B / M9 |
-| Annotations don't auto-influence the next `[AI 处理]` envelope | Tier-B / M9 |
+| ~~`[AI 处理]` doesn't yet route through envelope mode (no DialogPanel rendering)~~ | ✅ CLOSED at M9 Step 1 commit aa4d3f1 |
+| Face-pick highlighting (selected face glow on the picked face) | M11 Mesh Wizard (face-pick UI extension) |
+| ~~Annotations don't auto-influence the next `[AI 处理]` envelope~~ | ✅ CLOSED at M9 Step 2 commit 11b81ba (real classifier consumes face_annotations.yaml) |
 | `face_annotations.yaml` doesn't appear in audit-package zip yet | separate Tier-A line item per spec §F |
 | Multi-face batch save | not in scope — engineer saves one face at a time |
+| Channel/non-cube executor (after multi-q `inlet_face`+`outlet_face` are pinned, classifier returns `blocked` with "non-LDC executor pending") | M11 Mesh Wizard / M12 multi-solver routing |
 
 ---
 
