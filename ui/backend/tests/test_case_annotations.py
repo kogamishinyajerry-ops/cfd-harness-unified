@@ -79,6 +79,24 @@ def test_face_id_absorbs_floating_point_drift_at_9_decimals():
     assert face_id(base) == face_id(drift)
 
 
+def test_face_id_normalizes_signed_zero():
+    """Codex DEC-V61-098 round-1 finding: ``gmshToFoam`` may emit
+    either ``0.0`` or ``-0.0`` depending on numerical context, and
+    ``repr()`` distinguishes them — without normalization the same
+    geometric face produced different hashes across mesh regens.
+
+    Fix: signed-zero normalization via ``+ 0.0`` (IEEE 754 flips
+    ``-0.0 → 0.0``). This test pins the contract.
+    """
+    f_neg = [(-0.0, 0.0, 0.0), (1.0, -0.0, 0.0), (0.0, 1.0, -0.0)]
+    f_pos = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    f_mixed = [(-0.0, 0.0, 0.0), (1.0, 0.0, -0.0), (-0.0, 1.0, 0.0)]
+    assert face_id(f_neg) == face_id(f_pos) == face_id(f_mixed), (
+        "signed-zero normalization must collapse -0.0 → 0.0 so the "
+        "same geometric face hashes consistently across gmshToFoam runs"
+    )
+
+
 def test_face_id_distinguishes_at_8th_decimal():
     """Drift at the 8th decimal IS large enough to flip the hash.
 
@@ -318,6 +336,109 @@ def test_load_rejects_symlink_escape(tmp_path):
     with pytest.raises(AnnotationsIOError) as exc:
         load_annotations(case_dir, case_id="case_symlink_load")
     assert exc.value.failing_check == "symlink_escape"
+
+
+def test_save_immune_to_planted_tmp_symlink(tmp_path):
+    """Codex DEC-V61-098 round-1 SECURITY finding: a fixed-name
+    ``face_annotations.yaml.tmp`` was vulnerable to symlink planting.
+    The fix uses ``tempfile.mkstemp`` to generate a random per-call
+    suffix, so no pre-existing symlink at the legacy fixed filename
+    can be followed.
+
+    This test plants a symlink at the OLD fixed ``.tmp`` path AND
+    pollutes the dir with a few other ``.tmp`` symlinks; save must
+    succeed without touching any of the victim files.
+    """
+    case_dir = tmp_path / "case_tmp_symlink"
+    case_dir.mkdir()
+    victim = tmp_path / "victim.yaml"
+    victim.write_text("BEFORE_ATTACK\n")
+    # Plant the legacy fixed-name trap.
+    (case_dir / "face_annotations.yaml.tmp").symlink_to(victim)
+    # Plant a couple more nuisance traps with similar names.
+    (case_dir / "face_annotations.bak.tmp").symlink_to(victim)
+    (case_dir / "annotations.tmp").symlink_to(victim)
+
+    saved = save_annotations(
+        case_dir, empty_annotations("case_tmp_symlink"),
+        if_match_revision=None,
+    )
+    assert saved["revision"] == 1, "save must succeed despite planted traps"
+    # Critical: victim file untouched.
+    assert victim.read_text() == "BEFORE_ATTACK\n", (
+        "victim file was modified — random-suffix .tmp defense failed"
+    )
+    # And the final annotations file landed correctly.
+    final = case_dir / "face_annotations.yaml"
+    assert final.exists() and not final.is_symlink()
+
+
+def test_save_concurrent_writers_no_tmp_collision(tmp_path):
+    """Codex DEC-V61-098 round-1 finding: two threads calling
+    save_annotations on the same case used to collide on the shared
+    ``face_annotations.yaml.tmp`` filename — one thread's rename
+    moved the other thread's mid-write file, causing
+    FileNotFoundError on the loser's rename.
+
+    Fix: mkstemp generates a unique suffix per call. This test
+    verifies two concurrent writers BOTH succeed without
+    FileNotFoundError or other transient collision symptoms.
+    Note: the second writer hits AnnotationsRevisionConflict on the
+    if_match_revision check (correct behavior — it observes the
+    first writer's bumped revision), NOT a transient OS race.
+    """
+    import threading
+
+    case_dir = tmp_path / "case_concurrent"
+    case_dir.mkdir()
+    # Initialize at revision 1.
+    save_annotations(case_dir, empty_annotations("case_concurrent"),
+                     if_match_revision=0)
+
+    barrier = threading.Barrier(2)
+    results: list[tuple[str, str]] = []
+    lock = threading.Lock()
+
+    def worker(name: str) -> None:
+        barrier.wait(timeout=5)
+        try:
+            out = save_annotations(
+                case_dir,
+                empty_annotations("case_concurrent"),
+                if_match_revision=1,
+            )
+            with lock:
+                results.append((name, f"OK rev={out['revision']}"))
+        except AnnotationsRevisionConflict:
+            with lock:
+                results.append((name, "REVISION_CONFLICT"))
+        except Exception as e:  # noqa: BLE001
+            with lock:
+                results.append((name, f"UNEXPECTED:{type(e).__name__}"))
+
+    t1 = threading.Thread(target=worker, args=("a",))
+    t2 = threading.Thread(target=worker, args=("b",))
+    t1.start(); t2.start(); t1.join(); t2.join()
+
+    # Exactly one writer wins; the other gets RevisionConflict.
+    # Critically: NEITHER gets UNEXPECTED:FileNotFoundError or
+    # similar transient OS errors from .tmp filename collision.
+    outcomes = sorted(r[1] for r in results)
+    unexpected = [r for r in results if r[1].startswith("UNEXPECTED")]
+    assert not unexpected, (
+        f"transient OS race observed: {unexpected}; "
+        f"mkstemp per-call defense failed"
+    )
+    # One should succeed, one should hit revision conflict.
+    ok_count = sum(1 for r in results if r[1].startswith("OK"))
+    conflict_count = sum(1 for r in results if r[1] == "REVISION_CONFLICT")
+    assert ok_count == 1 and conflict_count == 1, (
+        f"expected exactly 1 OK + 1 REVISION_CONFLICT; got {outcomes}"
+    )
+
+    # Final on-disk state: revision 2.
+    final = load_annotations(case_dir, case_id="case_concurrent")
+    assert final["revision"] == 2
 
 
 # ────────── atomic write ──────────

@@ -13,9 +13,13 @@ to keep the output deterministic.
 """
 from __future__ import annotations
 
+import fcntl
+import os
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 
@@ -197,6 +201,39 @@ def load_annotations(case_dir: Path, *, case_id: str) -> dict[str, Any]:
     return data
 
 
+@contextmanager
+def _exclusive_case_lock(case_root: Path) -> Iterator[None]:
+    """Acquire an exclusive flock on the case dir's lock file.
+
+    Serializes concurrent ``save_annotations`` writers within the
+    same process AND across processes, closing the TOCTOU race
+    between read-revision and write-revision. Codex DEC-V61-098
+    round-1 demonstrated the race: two threads reading on-disk
+    revision=1 both passed the if_match_revision=1 check, both
+    incremented to rev=2 in memory, both renamed their .tmp into
+    the final path — the second writer silently overwrote the
+    first, so both appeared to commit rev=2 from independent
+    parents (data loss).
+
+    The lock file ``.face_annotations.lock`` is a sibling of the
+    annotations file; it is created if missing. Lock is held
+    only for the short critical section (read revision + write
+    new file + rename). Engineers will not see the lock file
+    in the normal annotations workflow.
+    """
+    lock_path = case_root / ".face_annotations.lock"
+    # O_CREAT so the lock file exists; mode 0o600 owner-only.
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
 def save_annotations(
     case_dir: Path,
     annotations: dict[str, Any],
@@ -229,6 +266,28 @@ def save_annotations(
     """
     path = _resolve_annotations_path(case_dir)
 
+    # Acquire exclusive lock to serialize the read-revision +
+    # write + rename critical section. Without this, two concurrent
+    # writers can both pass the if_match_revision check, both bump
+    # revision to current+1 in memory, and both rename their .tmp
+    # into the final path — last writer silently wins, first
+    # writer's data is lost (Codex DEC-V61-098 round-1 finding).
+    with _exclusive_case_lock(path.parent):
+        return _save_annotations_locked(
+            path, annotations, if_match_revision=if_match_revision
+        )
+
+
+def _save_annotations_locked(
+    path: Path,
+    annotations: dict[str, Any],
+    *,
+    if_match_revision: int | None,
+) -> dict[str, Any]:
+    """Internal: the locked critical section of save_annotations.
+
+    The caller MUST hold ``_exclusive_case_lock(path.parent)``.
+    """
     # Determine current on-disk revision. If file missing, treat as 0.
     if path.exists():
         from ui.backend.services.case_annotations import SCHEMA_VERSION
@@ -277,14 +336,67 @@ def save_annotations(
             failing_check="parse_error",
         ) from exc
 
+    # Write atomically: write to a UNIQUE-per-call .tmp via mkstemp,
+    # then rename to the final path.
+    #
+    # Codex DEC-V61-098 round-1 SECURITY findings closed:
+    # 1. SYMLINK ESCAPE: An attacker who plants a symlink at the
+    #    fixed-name ``face_annotations.yaml.tmp`` redirected the
+    #    write to ANY file the backend can touch. Fixed by using
+    #    ``tempfile.mkstemp`` with a random suffix per call →
+    #    pre-existing symlink at the random name is statistically
+    #    impossible. Also adds the same containment check on the
+    #    final path (already done in _resolve_annotations_path).
+    # 2. CONCURRENT-WRITE RACE: Two threads calling save_annotations
+    #    on the same case both wrote to the shared ``.tmp`` filename;
+    #    one thread's rename moved the other thread's mid-write file,
+    #    causing FileNotFoundError on the loser's rename. Fixed by
+    #    mkstemp's per-call random suffix → no shared filename.
+    # 3. STALE .tmp from a prior crash: mkstemp doesn't depend on
+    #    the absence of any specific filename, so leftover .tmp
+    #    files from prior crashes don't block writes. (They're
+    #    ignored; engineer can clean up manually if it bothers them.)
+    case_root = path.parent
     try:
-        # Write atomically: write to .tmp then rename.
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(text, encoding="utf-8")
-        tmp.replace(path)
+        fd, tmp_str = tempfile.mkstemp(
+            prefix="face_annotations.",
+            suffix=".tmp",
+            dir=str(case_root),
+        )
     except OSError as exc:
         raise AnnotationsIOError(
-            f"could not write annotations to {path}: {exc}",
+            f"could not create .tmp file in {case_root}: {exc}",
+            failing_check="parse_error",
+        ) from exc
+
+    tmp = Path(tmp_str)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            fp.write(text)
+    except OSError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise AnnotationsIOError(
+            f"could not write annotations .tmp: {tmp}: {exc}",
+            failing_check="parse_error",
+        ) from exc
+
+    # Rename .tmp → target. ``os.replace`` is atomic on POSIX and
+    # safe against the symlink-escape vector at the DESTINATION because
+    # _resolve_annotations_path() already validated that ``path``
+    # resolves within case_root and rejected pre-existing symlinks
+    # at the final-path component.
+    try:
+        os.replace(str(tmp), str(path))
+    except OSError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise AnnotationsIOError(
+            f"could not rename .tmp into {path}: {exc}",
             failing_check="parse_error",
         ) from exc
 

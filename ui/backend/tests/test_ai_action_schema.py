@@ -210,6 +210,51 @@ def test_envelope_question_ids_must_be_unique():
     assert "duplicate" in str(exc.value).lower()
 
 
+def test_envelope_error_detail_only_allowed_when_blocked():
+    """Codex DEC-V61-098 round-1 finding: spec_v2 §B.2 says
+    ``error_detail: 'only when confidence == blocked'``, but the
+    initial impl accepted error_detail on confident/uncertain too.
+    Tightened: error_detail must be None unless confidence='blocked'.
+    """
+    # confident + error_detail → reject
+    with pytest.raises(ValidationError) as exc:
+        AIActionEnvelope(
+            confidence="confident",
+            summary="x",
+            annotations_revision_consumed=0,
+            annotations_revision_after=0,
+            error_detail="solver crashed",
+        )
+    assert "error_detail" in str(exc.value)
+
+    # uncertain + error_detail → reject
+    with pytest.raises(ValidationError) as exc:
+        AIActionEnvelope(
+            confidence="uncertain",
+            summary="x",
+            annotations_revision_consumed=0,
+            annotations_revision_after=0,
+            unresolved_questions=[
+                UnresolvedQuestion(
+                    id="q", kind="face_label", prompt="x",
+                    needs_face_selection=False,
+                ),
+            ],
+            error_detail="should not be here",
+        )
+    assert "error_detail" in str(exc.value)
+
+    # blocked + error_detail → accept
+    e = AIActionEnvelope(
+        confidence="blocked",
+        summary="x",
+        annotations_revision_consumed=0,
+        annotations_revision_after=0,
+        error_detail="solver crashed at iter 47",
+    )
+    assert e.error_detail == "solver crashed at iter 47"
+
+
 def test_envelope_revisions_must_be_non_negative():
     with pytest.raises(ValidationError):
         AIActionEnvelope(

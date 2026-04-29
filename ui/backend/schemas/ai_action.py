@@ -194,3 +194,16 @@ class AIActionEnvelope(BaseModel):
                 "unresolved_questions to be non-empty OR "
                 "error_detail to be set"
             )
+        # 4. error_detail is exclusive to confidence='blocked' per
+        #    spec_v2 §B.2 ("only when confidence == 'blocked'"). Codex
+        #    DEC-V61-098 round-1 demonstrated the contract was loose:
+        #    confident/uncertain envelopes accepted error_detail without
+        #    rejection. Tighten here so frontend can rely on
+        #    error_detail being meaningful only when confidence ==
+        #    'blocked'.
+        if self.confidence != "blocked" and self.error_detail is not None:
+            raise ValueError(
+                f"error_detail must be None when "
+                f"confidence='{self.confidence}'; it is only "
+                f"meaningful when confidence='blocked'"
+            )

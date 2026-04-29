@@ -63,13 +63,25 @@ FACE_ID_HASH_LEN = 16
 FACE_ID_ROUND_DECIMALS = 9
 
 
+def _normalize_coord(c: float) -> float:
+    """Round + normalize signed zero. ``gmshToFoam`` may emit either
+    ``0.0`` or ``-0.0`` depending on numerical context (the IEEE 754
+    sign bit survives rounding); ``repr()`` distinguishes them, so
+    without normalization the same geometric face produces different
+    hashes across mesh regens. Adding ``0.0`` flips ``-0.0 → 0.0``
+    per IEEE 754 (the only normalization step we need).
+    """
+    return round(c, FACE_ID_ROUND_DECIMALS) + 0.0
+
+
 def face_id(face_vertices: list[tuple[float, float, float]]) -> str:
     """Return a stable hash for an OpenFOAM polyMesh face.
 
     Independent of vertex ordering within the face — coordinates are
-    rounded then sorted before hashing. As long as ``gmshToFoam`` is
-    deterministic (which it is for the same input geometry) and the
-    mesh topology hasn't changed, this id survives mesh regen.
+    rounded, signed-zero-normalized, then sorted before hashing. As
+    long as ``gmshToFoam`` is deterministic (which it is for the same
+    input geometry) and the mesh topology hasn't changed, this id
+    survives mesh regen.
 
     Args:
         face_vertices: list of ``(x, y, z)`` tuples for each vertex on
@@ -83,14 +95,18 @@ def face_id(face_vertices: list[tuple[float, float, float]]) -> str:
         >>> v2 = [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
         >>> face_id(v1) == face_id(v2)  # same face, different vertex order
         True
+        >>> # Signed-zero normalization (Codex DEC-V61-098 round-1 finding):
+        >>> v_neg = [(-0.0, 0.0, 0.0), (1.0, -0.0, 0.0), (0.0, 1.0, -0.0)]
+        >>> v_pos = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+        >>> face_id(v_neg) == face_id(v_pos)
+        True
         >>> face_id(v1).startswith("fid_")
         True
         >>> len(face_id(v1)) == 4 + 16
         True
     """
     rounded = [
-        tuple(round(c, FACE_ID_ROUND_DECIMALS) for c in v)
-        for v in face_vertices
+        tuple(_normalize_coord(c) for c in v) for v in face_vertices
     ]
     sorted_verts = sorted(rounded)
     h = hashlib.sha1(repr(sorted_verts).encode("utf-8")).hexdigest()
