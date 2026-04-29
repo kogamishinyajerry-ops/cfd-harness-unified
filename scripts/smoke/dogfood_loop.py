@@ -262,6 +262,113 @@ def _smoke_negative_paths(client, imported: Path, face_id_fn) -> None:
     _say("neg-chan", "bogus pins → channel_pin_mismatch question · executor NOT invoked ✓")
 
 
+def _smoke_real_solver(repo_root: Path) -> None:
+    """OPT-IN (--with-solver): run icoFoam in the cfd-openfoam Docker
+    container against a real meshed LDC fixture. Validates Step 4 of
+    the dogfood loop end-to-end (the only piece the default smoke
+    can't cover via TestClient).
+
+    Wall-time: ~3 minutes on the small fixture. Skipped by default;
+    invoke with `--with-solver` when validating big changes
+    (channel-executor extensions, solver_runner refactors, OpenFOAM
+    container upgrades).
+
+    Skip behavior: if Docker isn't running, the cfd-openfoam container
+    isn't present, or no meshed LDC fixture is available on disk,
+    print a clear skip message and continue. The default-fast smoke
+    must remain green even on environments without Docker.
+    """
+    import shutil
+    import tempfile
+    import time
+
+    print("\n┌─ Step 4 · real icoFoam solve in Docker (slow · opt-in) ─")
+
+    # Docker availability check.
+    try:
+        import docker  # type: ignore[import-not-found]
+        import docker.errors  # type: ignore[import-not-found]
+    except ImportError:
+        _say("skip", "docker SDK not installed — skipping real solver smoke")
+        return
+    try:
+        client = docker.from_env()
+        container = client.containers.get("cfd-openfoam")
+        if container.status != "running":
+            _say(
+                "skip",
+                f"cfd-openfoam container status={container.status!r} — start with `docker start cfd-openfoam`",
+            )
+            return
+    except docker.errors.NotFound:
+        _say("skip", "cfd-openfoam container not found — skipping real solver smoke")
+        return
+    except docker.errors.DockerException as exc:
+        _say("skip", f"docker not available ({exc}) — skipping real solver smoke")
+        return
+
+    # Find a meshed LDC fixture in user_drafts. Pick the smallest one
+    # to minimize solve time. If nothing is meshed, skip — the engineer
+    # needs to run Step 2 mesh manually before this smoke.
+    drafts_dir = repo_root / "ui" / "backend" / "user_drafts" / "imported"
+    candidates: list[tuple[int, Path]] = []
+    if drafts_dir.is_dir():
+        for d in drafts_dir.iterdir():
+            polymesh = d / "constant" / "polyMesh"
+            owner_path = polymesh / "owner"
+            u_path = d / "0" / "U"
+            bnd_path = polymesh / "boundary"
+            if not (owner_path.is_file() and u_path.is_file() and bnd_path.is_file()):
+                continue
+            # Only LDC-shaped cases (lid + fixedWalls), to keep this
+            # smoke decoupled from channel BCs (channel solve will
+            # land as a separate validation when an engineer-provided
+            # channel STL is available).
+            if "lid" not in bnd_path.read_text():
+                continue
+            candidates.append((owner_path.stat().st_size, d))
+
+    if not candidates:
+        _say(
+            "skip",
+            f"no meshed LDC fixture found under {drafts_dir} — run Step 2 mesh on an LDC import first",
+        )
+        return
+
+    candidates.sort()
+    src = candidates[0][1]
+    _say("setup", f"using meshed fixture {src.name} (smallest of {len(candidates)})")
+
+    from ui.backend.services.case_solve import run_icofoam
+
+    with tempfile.TemporaryDirectory(prefix="solver_smoke_") as td:
+        # Container-side workdir name comes from the case_dir name.
+        # Prefix with "imported_solver_smoke_" so it can't collide
+        # with a real user case still running.
+        dst = Path(td) / f"imported_solver_smoke_{src.name[-12:]}"
+        shutil.copytree(src, dst)
+
+        t0 = time.time()
+        try:
+            res = run_icofoam(case_host_dir=dst)
+        except Exception as exc:
+            raise AssertionError(
+                f"run_icofoam raised: {type(exc).__name__}: {exc}"
+            ) from exc
+        dt = time.time() - t0
+
+        assert res.converged, f"icoFoam did NOT converge (wall_time={dt:.1f}s · time_dirs={res.time_directories})"
+        assert len(res.time_directories) >= 2, (
+            f"expected ≥2 time dirs (initial + at least one solve step), "
+            f"got {res.time_directories}"
+        )
+        _say(
+            "pass",
+            f"icoFoam converged in {dt:.1f}s · {len(res.time_directories)} time dirs · "
+            f"residual_p={res.last_initial_residual_p}",
+        )
+
+
 def _smoke_backend_pytest_slice(repo_root: Path) -> None:
     """Run the backend test slice this DEC's contracts are most
     likely to break. Faster than the full suite (which has 4
@@ -442,6 +549,11 @@ def main() -> int:
         _smoke_frontend_dev_server_boots(repo_root)
     else:
         print("\n┌─ Frontend · skipped (--no-frontend) ─")
+
+    if "--with-solver" in sys.argv:
+        _smoke_real_solver(repo_root)
+    else:
+        print("\n┌─ Step 4 · real solver · skipped (pass --with-solver to enable) ─")
 
     print("\n╚══ ✓ All dogfood loops green · DEC gates may flip to Accepted ══╝\n")
     return 0

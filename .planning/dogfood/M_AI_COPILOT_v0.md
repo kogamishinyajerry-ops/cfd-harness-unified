@@ -254,8 +254,13 @@ The script covers:
 - §4a LDC cube full loop (uncertain → pin lid → confident · dicts on disk)
 - §4c channel full loop (uncertain → pin inlet+outlet → confident · 3-patch split)
 - §7 negative paths (lid-on-side stays uncertain · bogus pins → channel_pin_mismatch)
-- Frontend Vite dev server boot probe (200 OK · HTML hydrated)
-- (transitively, via TestClient) the existing E2E test slice
+- Backend pytest slice (97 tests) + frontend vitest (131 tests)
+- Vite dev server boot probe (HTTP 200 · HTML hydrated)
+- **Step 4 real icoFoam solve in Docker** (opt-in via `--with-solver` ·
+  ~3 min · validates that the BC dicts the executor writes actually
+  converge end-to-end on a real meshed LDC). Skipped by default to
+  keep the fast-loop smoke fast; run before merging big changes:
+  `PYTHONPATH=. .venv/bin/python scripts/smoke/dogfood_loop.py --with-solver`
 
 The §11.1 BREAK_FREEZE quota counter went to 3/3 at this acceptance;
 further workbench/** changes route through the normal feature-freeze
@@ -270,6 +275,9 @@ browser, but the dev workflow does NOT block on them:
 - Emerald glow on the active face-question slot
 - Cross-tab 409 conflict UX flow (advanced §6)
 - Real face-pick from the 3D viewport (the smoke uses HTTP shortcuts)
+- Channel real-solver smoke (the `--with-solver` opt-in currently
+  validates LDC only — channel solve will be added once a small
+  channel STL fixture lands in `examples/imports/`)
 
 ---
 
