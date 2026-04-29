@@ -33,11 +33,44 @@ import { Step5ResultsView } from "./step_panel_shell/steps/Step5ResultsView";
 import { StepTree } from "./step_panel_shell/StepTree";
 import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
+import {
+  FacePickProvider,
+  useFacePickPublisher,
+} from "./step_panel_shell/FacePickContext";
 import type {
   StepDef,
   StepId,
   StepStatus,
 } from "./step_panel_shell/types";
+
+// Internal wrapper: renders <Viewport> with pickMode + onFacePick wired
+// into the FacePickContext when active. Lives below the provider so
+// useFacePickPublisher works. The non-pickMode case is a no-op
+// publisher (handler unused), so the wrapper is safe to use for every
+// step regardless of pickMode.
+function ViewportWithFacePick({
+  viewportProps,
+  caseId,
+  pickMode,
+}: {
+  viewportProps:
+    | { format: "stl"; stlUrl: string }
+    | { format: "glb"; glbUrl: string }
+    | { format: "image"; imageUrl: string };
+  caseId: string;
+  pickMode: boolean;
+}) {
+  const publish = useFacePickPublisher();
+  return (
+    <Viewport
+      {...viewportProps}
+      caseId={caseId}
+      pickMode={pickMode}
+      onFacePick={publish}
+      height={420}
+    />
+  );
+}
 
 // Static 5-step config. Engineer-customizable steps are explicitly
 // out of Tier-A scope (deferred per DEC-V61-096 §Tier-C).
@@ -332,6 +365,7 @@ export function StepPanelShell() {
 
   return (
     <SolveStreamProvider>
+    <FacePickProvider>
     <div
       data-testid="step-panel-shell"
       data-current-step-id={currentStepId}
@@ -365,7 +399,14 @@ export function StepPanelShell() {
                   {viewportProps.format === "custom" ? (
                     <viewportProps.Component caseId={caseId} height={420} />
                   ) : (
-                    <Viewport {...viewportProps} height={420} />
+                    <ViewportWithFacePick
+                      viewportProps={viewportProps}
+                      caseId={caseId}
+                      pickMode={
+                        activeStep.id === 3 &&
+                        stepStates[3] === "completed"
+                      }
+                    />
                   )}
                 </Suspense>
               </div>
@@ -427,6 +468,7 @@ export function StepPanelShell() {
       </div>
       <StatusStrip lastAction={lastAction} />
     </div>
+    </FacePickProvider>
     </SolveStreamProvider>
   );
 }

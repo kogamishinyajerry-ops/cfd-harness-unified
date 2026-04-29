@@ -13,7 +13,7 @@
 //    geometric classification worked.
 // 3. Registers the action so the shell's [AI 处理] button is enabled.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
 import type {
@@ -21,7 +21,13 @@ import type {
   SetupBcSummary,
 } from "@/types/case_solve";
 
-import type { StepTaskPanelProps } from "../types";
+import { AnnotationPanel } from "../AnnotationPanel";
+import { useFacePickOptional } from "../FacePickContext";
+import type {
+  AnnotationsDocument,
+  FaceAnnotation,
+  StepTaskPanelProps,
+} from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
   not_an_ldc_cube:
@@ -41,6 +47,68 @@ export function Step3SetupBC({
   const [summary, setSummary] = useState<SetupBcSummary | null>(null);
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+
+  // M-AI-COPILOT face-annotation state (DEC-V61-098 spec_v2 §A8). The
+  // FacePickContext (populated by the Viewport pickMode wiring) is
+  // optional — when null we just render the legacy form. When present,
+  // a picked face_id surfaces the AnnotationPanel below the BC summary.
+  const facePick = useFacePickOptional();
+  const [annotations, setAnnotations] = useState<AnnotationsDocument | null>(
+    null,
+  );
+  const [annotationsLoadError, setAnnotationsLoadError] = useState<
+    string | null
+  >(null);
+
+  // Lazy-load annotations doc once the case_id is known. We don't gate
+  // the panel on this because the existing-annotation seed is purely
+  // optional UX (the AnnotationPanel handles the no-existing case).
+  useEffect(() => {
+    if (!caseId) return;
+    let cancelled = false;
+    api
+      .getFaceAnnotations(caseId)
+      .then((doc) => {
+        if (cancelled) return;
+        setAnnotations(doc);
+        setAnnotationsLoadError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setAnnotationsLoadError(msg);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId]);
+
+  const existingForPicked = useMemo<FaceAnnotation | undefined>(() => {
+    if (!facePick?.picked || !annotations) return undefined;
+    return annotations.faces.find(
+      (f) => f.face_id === facePick.picked!.faceId,
+    );
+  }, [facePick?.picked, annotations]);
+
+  const handleSaveAnnotation = useCallback(
+    async (patch: FaceAnnotation) => {
+      if (!annotations) {
+        throw new Error("annotations not loaded yet");
+      }
+      const updated = await api.putFaceAnnotations(caseId, {
+        if_match_revision: annotations.revision,
+        faces: [patch],
+        annotated_by: "human",
+      });
+      setAnnotations(updated);
+      facePick?.setPicked(null);
+    },
+    [annotations, caseId, facePick],
+  );
+
+  const handleCancelPick = useCallback(() => {
+    facePick?.setPicked(null);
+  }, [facePick]);
 
   const triggerSetup = useCallback(async () => {
     setRejection(null);
@@ -149,6 +217,31 @@ export function Step3SetupBC({
         >
           Network error: {networkError}
         </div>
+      )}
+
+      {/* M-AI-COPILOT face annotations (DEC-V61-098 §A8). The panel
+       *  surfaces only when the engineer has picked a face in the
+       *  Viewport — see ../FacePickContext. The existing form above
+       *  remains the LDC dogfood path; this is the collab-first
+       *  extension that lets the engineer pin user_authoritative
+       *  metadata onto individual boundary faces. */}
+      {facePick?.picked && (
+        <AnnotationPanel
+          faceId={facePick.picked.faceId}
+          existing={existingForPicked}
+          disabled={!annotations}
+          onSave={handleSaveAnnotation}
+          onCancel={handleCancelPick}
+        />
+      )}
+
+      {annotationsLoadError && (
+        <p
+          data-testid="step3-annotations-load-error"
+          className="rounded-sm border border-rose-700/30 bg-rose-900/5 px-2 py-1 text-[10px] text-rose-300/70"
+        >
+          Could not load existing annotations: {annotationsLoadError}
+        </p>
       )}
     </div>
   );
