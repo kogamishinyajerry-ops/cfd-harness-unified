@@ -15,6 +15,7 @@ const {
   attachStlMock,
   attachGltfMock,
   resetCameraMock,
+  setPickHandlerMock,
   disposeMock,
 } = vi.hoisted(() => ({
   loadStlFromUrlMock: vi.fn(),
@@ -23,6 +24,7 @@ const {
   attachStlMock: vi.fn(),
   attachGltfMock: vi.fn(),
   resetCameraMock: vi.fn(),
+  setPickHandlerMock: vi.fn(),
   disposeMock: vi.fn(),
 }));
 
@@ -53,6 +55,7 @@ vi.mock("../viewport_kernel", () => ({
       attachStl: attachStlMock,
       attachGltf: attachGltfMock,
       resetCamera: resetCameraMock,
+      setPickHandler: setPickHandlerMock,
       dispose: disposeMock,
       setBackground: vi.fn(),
     };
@@ -69,6 +72,7 @@ describe("Viewport", () => {
     attachStlMock.mockReset();
     attachGltfMock.mockReset();
     resetCameraMock.mockReset();
+    setPickHandlerMock.mockReset();
     disposeMock.mockReset();
   });
 
@@ -248,5 +252,160 @@ describe("Viewport", () => {
     });
     unmount();
     expect(disposeMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ───────── pickMode (DEC-V61-098 spec_v2 §A6) ─────────
+
+  it("pickMode=false: kernel.setPickHandler is invoked with null on mount", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/geometry/render"
+        pickMode={false}
+      />,
+    );
+    await waitFor(() => expect(attachGltfMock).toHaveBeenCalled());
+    // pickMode is false → handler explicitly cleared. The kernel is
+    // shared across glb and stl paths so we always issue the clear.
+    expect(setPickHandlerMock).toHaveBeenCalledWith(null);
+  });
+
+  it("pickMode=true + caseId: fetches /face-index and registers pick handler", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+    const fakeFaceIndex = {
+      case_id: "abc",
+      primitives: [
+        { patch_name: "lid", face_ids: ["fid_aaa", "fid_aaa"] },
+        {
+          patch_name: "fixedWalls",
+          face_ids: ["fid_bbb", "fid_bbb", "fid_ccc", "fid_ccc"],
+        },
+      ],
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(fakeFaceIndex), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const onFacePick = vi.fn();
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/mesh/render"
+        pickMode={true}
+        caseId="abc"
+        onFacePick={onFacePick}
+      />,
+    );
+    await waitFor(() => expect(attachGltfMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/cases/abc/face-index",
+        expect.objectContaining({ method: "GET" }),
+      ),
+    );
+    // The kernel handler should be registered with a non-null function
+    // after the fetch resolves.
+    await waitFor(() => {
+      const handlerCalls = setPickHandlerMock.mock.calls.filter(
+        (c) => typeof c[0] === "function",
+      );
+      expect(handlerCalls.length).toBeGreaterThanOrEqual(1);
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it("pickMode pick callback resolves face_id via the cached face-index", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+    const fakeFaceIndex = {
+      case_id: "abc",
+      primitives: [
+        { patch_name: "lid", face_ids: ["fid_lid_a", "fid_lid_a"] },
+        {
+          patch_name: "fixedWalls",
+          face_ids: ["fid_w0", "fid_w0", "fid_w1", "fid_w1"],
+        },
+      ],
+    };
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(fakeFaceIndex), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const onFacePick = vi.fn();
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/mesh/render"
+        pickMode={true}
+        caseId="abc"
+        onFacePick={onFacePick}
+      />,
+    );
+    await waitFor(() => expect(attachGltfMock).toHaveBeenCalled());
+    await waitFor(() => {
+      const fnCalls = setPickHandlerMock.mock.calls.filter(
+        (c) => typeof c[0] === "function",
+      );
+      expect(fnCalls.length).toBeGreaterThanOrEqual(1);
+    });
+    // Grab the latest registered handler and dispatch a synthetic
+    // kernel pick. fixedWalls is primitive 1; cellId 2 → face_ids[2] = fid_w1.
+    const fnCalls = setPickHandlerMock.mock.calls.filter(
+      (c) => typeof c[0] === "function",
+    );
+    const handler = fnCalls[fnCalls.length - 1][0] as (r: {
+      primitiveIndex: number;
+      cellId: number;
+      worldPosition: [number, number, number];
+    }) => void;
+    handler({ primitiveIndex: 1, cellId: 2, worldPosition: [0.5, 0.5, 0.5] });
+
+    expect(onFacePick).toHaveBeenCalledWith({
+      faceId: "fid_w1",
+      primitiveIndex: 1,
+      cellId: 2,
+      worldPosition: [0.5, 0.5, 0.5],
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it("pickMode degrades silently when /face-index returns 404", async () => {
+    const fakeImporter = { delete: vi.fn() };
+    loadGlbFromUrlMock.mockResolvedValue({ importer: fakeImporter });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "no_polymesh" }), { status: 404 }),
+    );
+
+    const onFacePick = vi.fn();
+    render(
+      <Viewport
+        format="glb"
+        glbUrl="/api/cases/abc/mesh/render"
+        pickMode={true}
+        caseId="abc"
+        onFacePick={onFacePick}
+      />,
+    );
+    await waitFor(() => expect(attachGltfMock).toHaveBeenCalled());
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    // The kernel handler must NOT be installed with a function — only
+    // the initial null-clear from the pickMode effect.
+    await new Promise((r) => setTimeout(r, 20));
+    const fnCalls = setPickHandlerMock.mock.calls.filter(
+      (c) => typeof c[0] === "function",
+    );
+    expect(fnCalls.length).toBe(0);
+    expect(onFacePick).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

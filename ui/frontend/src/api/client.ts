@@ -434,6 +434,42 @@ export const api = {
     ).AnnotationsDocument;
   },
 
+  /** GET /face-index — cell-id → face_id mapping for the boundary glb.
+   *  Used by the Viewport pickMode (DEC-V61-098 spec_v2 §A6) to resolve
+   *  a vtkCellPicker hit to a stable face_id. The mapping is stable
+   *  per polyMesh, so callers can cache it for the case lifetime.
+   */
+  getFaceIndex: async (
+    caseId: string,
+  ): Promise<
+    import("@/pages/workbench/step_panel_shell/types").FaceIndexDocument
+  > => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/face-index`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `getFaceIndex failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).FaceIndexDocument;
+  },
+
   solve: async (
     caseId: string,
   ): Promise<import("@/types/case_solve").SolveSummary> => {

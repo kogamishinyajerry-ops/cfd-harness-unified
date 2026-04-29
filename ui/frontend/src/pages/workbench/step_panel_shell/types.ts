@@ -108,6 +108,22 @@ export interface AnnotationsRevisionConflictDetail {
   current_revision: number;
 }
 
+/** Cell-id → face_id mapping for one glTF primitive. Returned by
+ *  GET /face-index (DEC-V61-098 spec_v2 §A6). The frontend Viewport
+ *  pickMode caches this once per case and indexes
+ *  ``primitives[primitiveIdx].face_ids[cellId]`` to resolve a
+ *  vtkCellPicker hit to a stable face_id.
+ */
+export interface FaceIndexPrimitive {
+  patch_name: string;
+  face_ids: string[];
+}
+
+export interface FaceIndexDocument {
+  case_id: string;
+  primitives: FaceIndexPrimitive[];
+}
+
 /** Viewport configuration the step prescribes for the center pane.
  *  Tier-A: Step 1 → /geometry/render glb · Step 2 → /mesh/render glb ·
  *  Steps 3-5 fall back to Step 1's geometry as a placeholder background. */

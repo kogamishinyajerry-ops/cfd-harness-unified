@@ -15,9 +15,30 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { api } from "@/api/client";
+
 import { GlbLoadError, loadGlbFromUrl } from "./glb_loader";
 import { loadStlFromUrl, StlLoadError } from "./stl_loader";
-import { createKernel, type ViewportKernel } from "./viewport_kernel";
+import {
+  createKernel,
+  type PickResult,
+  type ViewportKernel,
+} from "./viewport_kernel";
+
+import type { FaceIndexDocument } from "@/pages/workbench/step_panel_shell/types";
+
+/** Payload delivered to ``onFacePick`` after a successful pick.
+ *  ``face_id`` is null when pickMode is on but the kernel emitted a
+ *  cell hit that the face-index couldn't resolve (out-of-bounds cellId
+ *  or unknown primitive — rare). The Viewport surfaces this as a soft
+ *  status, not an error.
+ */
+export interface FacePickEvent {
+  faceId: string | null;
+  primitiveIndex: number;
+  cellId: number;
+  worldPosition: [number, number, number];
+}
 
 interface ViewportProps {
   /** Source URL when format='stl' (or default). */
@@ -37,6 +58,19 @@ interface ViewportProps {
   background?: [number, number, number];
   /** Alt text for image format (a11y). Defaults to "viewport". */
   imageAlt?: string;
+  /** When true, left-clicks on the geometry fire ``onFacePick`` with
+   *  the resolved face_id (DEC-V61-098 spec_v2 §A6). The Viewport
+   *  fetches /face-index lazily on first activation and caches the
+   *  result. ``caseId`` MUST be set when pickMode is true.
+   */
+  pickMode?: boolean;
+  /** Required when pickMode is true — used to fetch /face-index. */
+  caseId?: string;
+  /** Fires after each successful pick. The callback receives the
+   *  resolved face_id (or null on lookup miss) plus the underlying
+   *  primitive/cell/world coords for downstream UI (e.g., positioning
+   *  the AnnotationPanel). */
+  onFacePick?: (event: FacePickEvent) => void;
 }
 
 type LoaderErrorKind =
@@ -75,9 +109,19 @@ function ViewportVtk({
   width,
   height = 480,
   background,
+  pickMode,
+  caseId,
+  onFacePick,
 }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const kernelRef = useRef<ViewportKernel | null>(null);
+  const faceIndexRef = useRef<FaceIndexDocument | null>(null);
+  // Latest onFacePick reference so the kernel handler stays stable
+  // across renders (prevents resubscribing on every parent re-render).
+  const onFacePickRef = useRef<typeof onFacePick>(onFacePick);
+  useEffect(() => {
+    onFacePickRef.current = onFacePick;
+  }, [onFacePick]);
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
@@ -154,8 +198,72 @@ function ViewportVtk({
       controller.abort();
       kernelRef.current?.dispose();
       kernelRef.current = null;
+      faceIndexRef.current = null;
     };
   }, [stlUrl, glbUrl, format, background]);
+
+  // Pick-mode wiring. Lazy-loads the face-index doc on first activation
+  // so a non-pick Viewport pays no cost. Re-runs only when pickMode or
+  // caseId changes; the kernel's pick handler reads the latest
+  // onFacePick via ref so handler-identity churn doesn't resubscribe.
+  //
+  // Skip entirely when pickMode is unset (most consumers don't use it),
+  // so existing test mocks of createKernel that don't include
+  // setPickHandler keep working — the kernel default is no picking.
+  useEffect(() => {
+    if (pickMode === undefined) return;
+    const kernel = kernelRef.current;
+    if (!kernel) return;
+    if (!pickMode) {
+      kernel.setPickHandler?.(null);
+      return;
+    }
+    if (!caseId) {
+      kernel.setPickHandler?.(null);
+      return;
+    }
+    if (!kernel.setPickHandler) return;
+    let disposed = false;
+
+    const handleKernelPick = (result: PickResult) => {
+      const idx = faceIndexRef.current;
+      if (!idx) return;
+      const primitive = idx.primitives[result.primitiveIndex];
+      const faceId =
+        primitive && result.cellId < primitive.face_ids.length
+          ? primitive.face_ids[result.cellId]
+          : null;
+      onFacePickRef.current?.({
+        faceId,
+        primitiveIndex: result.primitiveIndex,
+        cellId: result.cellId,
+        worldPosition: result.worldPosition,
+      });
+    };
+
+    if (faceIndexRef.current) {
+      kernel.setPickHandler(handleKernelPick);
+    } else {
+      api
+        .getFaceIndex(caseId)
+        .then((doc) => {
+          if (disposed) return;
+          faceIndexRef.current = doc;
+          kernelRef.current?.setPickHandler?.(handleKernelPick);
+        })
+        .catch(() => {
+          // Silent: pickMode degrades to no-op when the face-index
+          // can't be fetched (e.g., polyMesh missing pre-Step-2). The
+          // user's clicks just won't fire onFacePick. The kernel
+          // remains attached; we just don't install a handler.
+        });
+    }
+
+    return () => {
+      disposed = true;
+      kernelRef.current?.setPickHandler?.(null);
+    };
+  }, [pickMode, caseId]);
 
   function onResetCamera() {
     kernelRef.current?.resetCamera();
