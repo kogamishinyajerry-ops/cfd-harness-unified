@@ -24,7 +24,7 @@
 // arbitrary-STL classifier (deferred); the force_uncertain flag is
 // the dogfood substrate for testing the dialog UX in the meantime.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
@@ -106,10 +106,20 @@ export function Step3SetupBC({
   // query param mid-session. Without this, an old uncertain envelope
   // could linger after switching to legacy mode (or vice versa),
   // confusing the engineer about which flow is active.
+  //
+  // M9 Step 3 R1 Finding 1 (MED): a request started under the previous
+  // ai_mode could still resolve and stomp the cleared state. We bump
+  // a generation token on every aiMode flip; in-flight runEnvelope
+  // resolutions ignore themselves when their captured token no longer
+  // matches the current one.
+  const aiModeGenRef = useRef(0);
   useEffect(() => {
+    aiModeGenRef.current += 1;
     setEnvelope(null);
     setPickedFaceIdForQuestion({});
     setActiveFaceQuestionId(null);
+    setRejection(null);
+    setNetworkError(null);
   }, [aiMode]);
 
   // Lazy-load annotations doc once the case_id is known. We don't gate
@@ -166,20 +176,38 @@ export function Step3SetupBC({
   // Consume picks: if there's an active dialog face question, the pick
   // routes to it (not the AnnotationPanel). Otherwise the
   // AnnotationPanel handles it via the existing flow below.
+  //
+  // M9 Step 3 R1 Finding 2 (LOW): when an envelope is open with
+  // unresolved face questions but no slot is active (multi-q awaiting
+  // explicit selection), a bare pick used to leak through into
+  // AnnotationPanel — opening a separate mutation surface that
+  // bypasses the dialog flow entirely. We now swallow such picks so
+  // "explicit slot selection required" stays true at the UX level.
+  const envelopeAwaitsFaceSelection = Boolean(
+    envelope?.unresolved_questions.some((q) => q.needs_face_selection),
+  );
   useEffect(() => {
-    if (!facePick?.picked || !activeFaceQuestion) return;
-    setPickedFaceIdForQuestion((prev) => ({
-      ...prev,
-      [activeFaceQuestion.id]: facePick.picked!.faceId,
-    }));
-    // After consuming the pick, clear the explicit active-id so the
-    // next pick doesn't auto-route back to this same question (the
-    // engineer should explicitly pick the next question they want
-    // to answer, or use the auto-routing fallback if only one
-    // remains unresolved).
-    setActiveFaceQuestionId(null);
-    facePick.setPicked(null);
-  }, [facePick, activeFaceQuestion]);
+    if (!facePick?.picked) return;
+    if (activeFaceQuestion) {
+      setPickedFaceIdForQuestion((prev) => ({
+        ...prev,
+        [activeFaceQuestion.id]: facePick.picked!.faceId,
+      }));
+      // After consuming the pick, clear the explicit active-id so the
+      // next pick doesn't auto-route back to this same question (the
+      // engineer should explicitly pick the next question they want
+      // to answer, or use the auto-routing fallback if only one
+      // face question exists in the envelope).
+      setActiveFaceQuestionId(null);
+      facePick.setPicked(null);
+      return;
+    }
+    if (envelopeAwaitsFaceSelection) {
+      // Envelope expects face answers via dialog — drop the stray
+      // pick rather than surfacing AnnotationPanel.
+      facePick.setPicked(null);
+    }
+  }, [facePick, activeFaceQuestion, envelopeAwaitsFaceSelection]);
 
   const existingForPicked = useMemo<FaceAnnotation | undefined>(() => {
     if (!facePick?.picked || !annotations) return undefined;
@@ -283,11 +311,17 @@ export function Step3SetupBC({
     async (fold: { useForceFlags: boolean }) => {
       setRejection(null);
       setNetworkError(null);
+      // Capture the generation token at request start; if the engineer
+      // flips ai_mode while this promise is in flight, the post-resolve
+      // state writes are dropped (Codex M9 Step 3 R1 Finding 1).
+      const generation = aiModeGenRef.current;
+      const isStale = () => aiModeGenRef.current !== generation;
       try {
         const result = await api.setupBCWithEnvelope(
           caseId,
           fold.useForceFlags ? envelopeForce : {},
         );
+        if (isStale()) return;
         setEnvelope(result);
         // Refresh annotations whenever the envelope reports the doc
         // bumped server-side (e.g., the action wrapper merged AI
@@ -298,7 +332,7 @@ export function Step3SetupBC({
         ) {
           try {
             const fresh = await api.getFaceAnnotations(caseId);
-            setAnnotations(fresh);
+            if (!isStale()) setAnnotations(fresh);
           } catch {
             // Non-fatal — local state stays where it is, the
             // annotation panel re-fetches on its next 409.
@@ -316,6 +350,12 @@ export function Step3SetupBC({
           onStepComplete();
         }
       } catch (e) {
+        if (isStale()) {
+          // Drop late errors from the previous ai_mode — surfacing
+          // them now would be misleading to the engineer who already
+          // moved on to a different flow.
+          return;
+        }
         if (
           e instanceof ApiError &&
           e.detail &&

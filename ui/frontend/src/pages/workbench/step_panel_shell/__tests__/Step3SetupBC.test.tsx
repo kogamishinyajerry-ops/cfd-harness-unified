@@ -603,6 +603,11 @@ describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
     expect(
       screen.getByTestId("dialog-panel-face-hint-outlet_face"),
     ).not.toHaveTextContent(/picked:/i);
+    // M9 Step 3 R1 Finding 2 (LOW) closure: a stray pick while an
+    // envelope-with-face-questions is open MUST NOT surface
+    // AnnotationPanel — the dialog flow is the only sanctioned
+    // mutation surface in that state.
+    expect(screen.queryByTestId("annotation-panel")).toBeNull();
 
     // Now click 'Select this face' on the outlet question, then pick.
     await user.click(
