@@ -26,12 +26,19 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ui.backend.schemas.ai_action import UnresolvedQuestion
+from ui.backend.services.case_annotations import face_id as compute_face_id
 
 __all__ = [
     "GeometryClass",
     "ClassificationResult",
     "classify_setup_bc",
 ]
+
+
+# Tolerance for "this vertex is on the top plane". Mirrors the
+# ``_LID_EPS`` used by ``setup_ldc_bc._split_lid_walls`` exactly so
+# the classifier's verdict matches the executor's behavior.
+_LID_EPS = 1e-4
 
 
 GeometryClass = Literal[
@@ -108,6 +115,70 @@ def _aspect_ratio(
     if any(e < _DEGENERATE_BBOX_MIN for e in extents):
         return float("inf")
     return max(extents) / min(extents)
+
+
+def _top_plane_face_ids(case_dir: Path) -> set[str]:
+    """Return the set of face_ids on the polyMesh's top (max-z) plane.
+
+    Mirrors ``setup_ldc_bc._split_lid_walls()``'s lid detection — uses
+    the same _LID_EPS tolerance and z_max definition. Empty set if
+    the polyMesh is missing or unparseable.
+
+    Used by the cube classifier branch to verify the engineer's
+    user_authoritative pin actually corresponds to a face the executor
+    will treat as part of the lid; without that check, an engineer
+    could click a side face, name it 'lid', and the classifier would
+    promise something the executor can't deliver (Codex round-2 R1
+    HIGH for DEC-V61-100 Step 2).
+    """
+    polymesh = case_dir / "constant" / "polyMesh"
+    if not polymesh.is_dir():
+        return set()
+    try:
+        from ui.backend.services.render.bc_glb import (
+            _bc_source_files,
+            _read_boundary_patches,
+        )
+        from ui.backend.services.render.polymesh_parser import (
+            parse_faces,
+            parse_points,
+            validate_face_indices,
+        )
+
+        points_path, faces_path, boundary_path = _bc_source_files(
+            polymesh, case_dir
+        )
+        points = parse_points(points_path)
+        faces = parse_faces(faces_path)
+        validate_face_indices(faces, len(points))
+        patches = _read_boundary_patches(boundary_path)
+    except Exception:
+        # Boundary file missing (pre-setup-bc) or parser disagreement —
+        # we can't verify, so return empty (classifier falls back to
+        # the more conservative uncertain path).
+        return set()
+
+    if not patches or len(points) == 0:
+        return set()
+
+    z_max = max(float(p[2]) for p in points)
+    out: set[str] = set()
+    for _name, (start_face, n_faces) in patches.items():
+        for face_idx in range(start_face, start_face + n_faces):
+            if face_idx >= len(faces):
+                continue
+            polymesh_face = faces[face_idx]
+            verts_xyz = [
+                (
+                    float(points[v][0]),
+                    float(points[v][1]),
+                    float(points[v][2]),
+                )
+                for v in polymesh_face
+            ]
+            if all(abs(v[2] - z_max) < _LID_EPS for v in verts_xyz):
+                out.add(compute_face_id(verts_xyz))
+    return out
 
 
 def _user_authoritative_face_ids(annotations: dict[str, Any]) -> set[str]:
@@ -215,27 +286,92 @@ def classify_setup_bc(
         # named a face "lid" — that signals they intend the top plane.
         # This keeps the dialog open until the user's pin matches the
         # writer's behavior.
+        # Codex round 2 HIGH (DEC-V61-100 Step 2 review 2026-04-29):
+        # Naming a face 'lid' is a NECESSARY but not SUFFICIENT
+        # condition. setup_ldc_bc derives the lid from z_max geometry,
+        # so the classifier MUST verify the user's pinned face_id
+        # actually lies on the top plane — otherwise an engineer who
+        # clicks a side face and names it 'lid' would still get the
+        # top plane as the lid, silently overriding their intent.
+        #
+        # We compute the top-plane face_ids from the polyMesh and
+        # check that at least one user-authoritative pin named 'lid'
+        # has a face_id IN that set. Requires the polyMesh boundary
+        # file to be present (post-setup-bc), so on a fresh cube
+        # before any setup_bc has run, the top-plane set may be empty
+        # — in that case we fall back to uncertain so the engineer
+        # explicitly confirms.
+        pinned_lid_face_ids: set[str] = set()
         pinned_names: set[str] = set()
         for f in annotations.get("faces", []) or []:
-            if f.get("confidence") == "user_authoritative":
-                n = f.get("name")
-                if isinstance(n, str):
-                    pinned_names.add(n.lower())
-        lid_pinned = any("lid" in n for n in pinned_names)
+            if f.get("confidence") != "user_authoritative":
+                continue
+            n = f.get("name")
+            if not isinstance(n, str):
+                continue
+            pinned_names.add(n.lower())
+            if "lid" in n.lower():
+                fid = f.get("face_id")
+                if isinstance(fid, str):
+                    pinned_lid_face_ids.add(fid)
 
-        if lid_pinned:
+        top_plane_fids = _top_plane_face_ids(case_dir)
+        lid_pin_verified = bool(
+            pinned_lid_face_ids & top_plane_fids
+        )
+
+        if lid_pin_verified:
             return ClassificationResult(
                 geometry_class="ldc_cube",
                 confidence="confident",
                 questions=[],
                 summary=(
                     f"Cube geometry (aspect ratio {ar:.3f}) with "
-                    f"user-pinned lid. LDC defaults applied — writer "
-                    f"will use the top (+z) plane as the moving lid."
+                    f"verified user-pinned lid (face on top plane). "
+                    f"LDC defaults applied — writer will use the "
+                    f"top (+z) plane as the moving lid."
                 ),
                 rationale=(
                     f"cube_ar={ar:.4f} extents={extents} "
-                    f"lid_pinned=True names={sorted(pinned_names)}"
+                    f"lid_pin_verified=True top_plane_n={len(top_plane_fids)} "
+                    f"names={sorted(pinned_names)}"
+                ),
+            )
+
+        # Detect the dishonest condition: user pinned a 'lid'-named
+        # face but its face_id is NOT on the top plane. Surface a
+        # specific error message so the engineer understands why
+        # the dialog isn't progressing — they likely clicked the
+        # wrong face.
+        if pinned_lid_face_ids and top_plane_fids:
+            return ClassificationResult(
+                geometry_class="ldc_cube",
+                confidence="uncertain",
+                questions=[
+                    UnresolvedQuestion(
+                        id="lid_orientation",
+                        kind="face_label",
+                        prompt=(
+                            f"Cube geometry detected (aspect ratio {ar:.3f}). "
+                            f"You pinned a face named 'lid', but it isn't on "
+                            f"the top (+z) plane the LDC solver uses. Click "
+                            f"the actual top face in the viewport (max_z="
+                            f"{bbox_max[2]:.4f}) and name it 'lid'."
+                        ),
+                        needs_face_selection=True,
+                        candidate_face_ids=sorted(top_plane_fids),
+                        candidate_options=[],
+                        default_answer="lid",
+                    ),
+                ],
+                summary=(
+                    f"Cube geometry, but the pinned 'lid' face isn't on "
+                    f"the top plane. Please select a top-plane face."
+                ),
+                rationale=(
+                    f"ldc_cube_lid_mismatch ar={ar:.4f} "
+                    f"pinned={sorted(pinned_lid_face_ids)} "
+                    f"top_plane_n={len(top_plane_fids)}"
                 ),
             )
         # No lid pin yet (whether user pinned other faces or not):

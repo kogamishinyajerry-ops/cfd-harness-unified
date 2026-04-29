@@ -62,6 +62,54 @@ FoamFile
 )
 """
 
+# Faces of the unit cube · 6 quad faces. Index 1 = top (z=1) — the
+# lid plane setup_ldc_bc picks. Indices 0,2,3,4,5 are the other walls.
+_FACES_CUBE = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       faceList;
+    location    "constant/polyMesh";
+    object      faces;
+}
+
+6
+(
+4(0 1 2 3)
+4(4 5 6 7)
+4(0 1 5 4)
+4(2 3 7 6)
+4(1 2 6 5)
+4(0 3 7 4)
+)
+"""
+
+# Boundary that exposes all 6 faces on a single boundary patch. After
+# Step 3 (setup-bc) splits this into lid + fixedWalls, the boundary
+# changes; for the classifier verification we just need the
+# top-plane face to be reachable via the boundary file.
+_BOUNDARY_CUBE_PRESPLIT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+1
+(
+    walls
+    {
+        type            wall;
+        nFaces          6;
+        startFace       0;
+    }
+)
+"""
+
 # 1×1×10 channel (aspect ratio 10) — distinctly non-cube.
 _POINTS_CHANNEL = """\
 FoamFile
@@ -107,16 +155,78 @@ FoamFile
 """
 
 
-def _stage_polymesh(case_dir: Path, points_text: str) -> Path:
+def _stage_polymesh(
+    case_dir: Path,
+    points_text: str,
+    *,
+    faces_text: str | None = None,
+    boundary_text: str | None = None,
+) -> Path:
+    """Stage a polyMesh fixture. Defaults to minimal (empty faces +
+    boundary) for tests that only need points; pass ``faces_text`` and
+    ``boundary_text`` for tests that need top-plane face verification.
+    """
     polymesh = case_dir / "constant" / "polyMesh"
     polymesh.mkdir(parents=True)
     (polymesh / "points").write_text(points_text, encoding="utf-8")
-    # Minimal placeholders — classifier only reads points.
-    (polymesh / "faces").write_text("0\n(\n)\n", encoding="utf-8")
+    (polymesh / "faces").write_text(
+        faces_text if faces_text is not None else "0\n(\n)\n",
+        encoding="utf-8",
+    )
     (polymesh / "boundary").write_text(
-        "0\n(\n)\n", encoding="utf-8"
+        boundary_text if boundary_text is not None else "0\n(\n)\n",
+        encoding="utf-8",
     )
     return polymesh
+
+
+_OWNER_CUBE = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       labelList;
+    location    "constant/polyMesh";
+    object      owner;
+}
+
+6
+(
+0
+0
+0
+0
+0
+0
+)
+"""
+
+
+def _stage_full_cube(case_dir: Path) -> Path:
+    """Stage a complete unit-cube polyMesh fixture (points + faces +
+    boundary mapping all 6 faces on a single 'walls' patch + owner).
+    Returns the polyMesh dir. Used by tests that need the classifier
+    to verify lid pin against actual top-plane face_ids.
+    """
+    polymesh = _stage_polymesh(
+        case_dir,
+        _POINTS_CUBE,
+        faces_text=_FACES_CUBE,
+        boundary_text=_BOUNDARY_CUBE_PRESPLIT,
+    )
+    (polymesh / "owner").write_text(_OWNER_CUBE, encoding="utf-8")
+    return polymesh
+
+
+def _top_face_id_of_unit_cube() -> str:
+    """The face_id of the top (z=1) face of the unit cube fixture.
+    Faces[1] = (4 5 6 7) → vertices (0 0 1) (1 0 1) (1 1 1) (0 1 1).
+    """
+    from ui.backend.services.case_annotations import face_id
+
+    return face_id(
+        [(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0)]
+    )
 
 
 def _empty_doc(case_id: str) -> dict[str, Any]:
@@ -163,17 +273,20 @@ def test_classifier_cube_no_user_pins_is_uncertain(tmp_path):
     assert "cube" in res.summary.lower()
 
 
-def test_classifier_cube_with_lid_named_pin_is_confident(tmp_path):
-    """Codex round 1 HIGH-1 (cb8b8e3 review): only a lid-named pin
-    triggers confident, since setup_ldc_bc derives the lid from the
-    top plane. A non-lid pin keeps the dialog open.
+def test_classifier_cube_with_lid_named_pin_on_top_plane_is_confident(
+    tmp_path,
+):
+    """Codex round 2 HIGH (3e8e7e1 review): a lid-named pin is
+    confident ONLY if the face_id is on the top plane. This pins
+    the verified-OK case: name='lid' AND face_id matches the top
+    quad of the unit cube.
     """
     case_dir = tmp_path / "cube_pinned"
     case_dir.mkdir()
-    _stage_polymesh(case_dir, _POINTS_CUBE)
+    _stage_full_cube(case_dir)
     annotations = _empty_doc("cube_pinned")
     annotations["faces"].append({
-        "face_id": "fid_lid_face",
+        "face_id": _top_face_id_of_unit_cube(),
         "name": "lid",
         "patch_type": "wall",
         "confidence": "user_authoritative",
@@ -184,6 +297,34 @@ def test_classifier_cube_with_lid_named_pin_is_confident(tmp_path):
     assert res.confidence == "confident"
     assert res.geometry_class == "ldc_cube"
     assert res.questions == []
+    assert "verified" in res.summary.lower()
+
+
+def test_classifier_cube_with_lid_named_pin_off_top_plane_is_uncertain(
+    tmp_path,
+):
+    """Codex round 2 HIGH closure: even when the user pins a face
+    NAMED 'lid', if its face_id is NOT on the top plane, classifier
+    must keep the dialog open — otherwise setup_ldc_bc would silently
+    use the top plane and ignore the user's intent.
+    """
+    case_dir = tmp_path / "cube_lid_wrong_face"
+    case_dir.mkdir()
+    _stage_full_cube(case_dir)
+    annotations = _empty_doc("cube_lid_wrong_face")
+    annotations["faces"].append({
+        "face_id": "fid_definitely_not_top_plane_xxx",
+        "name": "lid",  # named lid, but face_id doesn't match top plane
+        "confidence": "user_authoritative",
+        "annotated_by": "human",
+        "annotated_at": "2026-04-29T00:00:00Z",
+    })
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    assert res.confidence == "uncertain"
+    # Specific message + candidate_face_ids hint pointing at top plane.
+    q = next(q for q in res.questions if q.id == "lid_orientation")
+    assert "isn't on the top" in q.prompt
+    assert _top_face_id_of_unit_cube() in q.candidate_face_ids
 
 
 def test_classifier_cube_with_non_lid_pin_stays_uncertain(tmp_path):
@@ -210,13 +351,14 @@ def test_classifier_cube_with_non_lid_pin_stays_uncertain(tmp_path):
 
 
 def test_classifier_cube_lid_name_case_insensitive(tmp_path):
-    """The `lid` substring match should be case-insensitive."""
+    """The `lid` substring match should be case-insensitive — but the
+    face_id still has to match the top plane."""
     case_dir = tmp_path / "cube_lid_case"
     case_dir.mkdir()
-    _stage_polymesh(case_dir, _POINTS_CUBE)
+    _stage_full_cube(case_dir)
     annotations = _empty_doc("cube_lid_case")
     annotations["faces"].append({
-        "face_id": "fid_lid",
+        "face_id": _top_face_id_of_unit_cube(),
         "name": "Top_LID_face",  # mixed-case + extra prefix
         "confidence": "user_authoritative",
         "annotated_by": "human",
@@ -314,19 +456,20 @@ def test_wrapper_classifier_default_on_cube_returns_uncertain(tmp_path):
     assert not (case_dir / "0").exists() and not (case_dir / "system").exists()
 
 
-def test_wrapper_classifier_with_lid_pin_runs_setup_and_returns_confident(
+def test_wrapper_classifier_with_top_plane_lid_pin_returns_confident(
     tmp_path,
 ):
-    """When the engineer has pinned a face named 'lid', classifier
-    returns confident, and the wrapper runs setup_ldc_bc to write
-    the dicts.
+    """When the engineer pins the actual top-plane face named 'lid',
+    classifier returns confident, and the wrapper runs setup_ldc_bc
+    to write the dicts. The full fixture has enough polyMesh files
+    for setup_ldc_bc to actually succeed end-to-end.
     """
     case_dir = tmp_path / "wrapper_cube_pinned"
     case_dir.mkdir()
-    _stage_polymesh(case_dir, _POINTS_CUBE)
+    _stage_full_cube(case_dir)
     annotations = _empty_doc("wrapper_cube_pinned")
     annotations["faces"].append({
-        "face_id": "fid_lid",
+        "face_id": _top_face_id_of_unit_cube(),
         "name": "lid",
         "confidence": "user_authoritative",
         "annotated_by": "human",
@@ -334,17 +477,15 @@ def test_wrapper_classifier_with_lid_pin_runs_setup_and_returns_confident(
     })
     save_annotations(case_dir, annotations, if_match_revision=0)
 
-    # The classifier returns confident → wrapper invokes setup_ldc_bc.
-    # That call WILL fail in this minimal fixture (we only staged
-    # points, not a complete polyMesh). The classifier integration
-    # should still propagate the failure as AIActionError so the
-    # route can map to 422 — that's the contract.
-    with pytest.raises(AIActionError) as exc:
-        setup_bc_with_annotations(
-            case_dir=case_dir,
-            case_id="wrapper_cube_pinned",
-        )
-    assert exc.value.failing_check == "setup_bc_failed"
+    env = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="wrapper_cube_pinned",
+    )
+    assert env.confidence == "confident"
+    assert env.unresolved_questions == []
+    # setup_ldc_bc actually wrote the dicts.
+    assert (case_dir / "0").is_dir()
+    assert (case_dir / "system").is_dir()
 
 
 def test_wrapper_classifier_with_non_lid_pin_stays_uncertain_no_setup_run(
@@ -428,21 +569,21 @@ def test_wrapper_classifier_on_degenerate_mesh_blocks(tmp_path):
     )
 
 
-def test_full_loop_uncertain_then_pin_lid_then_confident(tmp_path):
-    """Codex round 1 Note (test gap): no test was proving the full
-    pick→annotate→re-run loop. This integration test pins down the
-    contract:
+def test_full_loop_uncertain_then_pin_top_lid_then_confident(tmp_path):
+    """Codex round 2 closure: full pick→annotate→re-run loop with
+    geometric verification. The loop only closes when the engineer
+    pins the ACTUAL top-plane face — pinning any other face stays
+    uncertain (preventing silent override by setup_ldc_bc).
 
-      1. First call (no annotations) → uncertain · lid_orientation question.
-      2. After PUT face_annotations with name='lid' confidence='user_authoritative',
-         classifier returns confident on next call.
-      3. Wrapper then attempts setup_ldc_bc (which fails on this
-         minimal fixture, but only AFTER the classifier said confident
-         — proving the loop closed).
+      1. First call (no annotations) → uncertain · lid_orientation.
+      2. PUT face_annotations name='lid' face_id=<actual top plane>
+         confidence='user_authoritative'.
+      3. Re-run → classifier returns confident → wrapper invokes
+         setup_ldc_bc.
     """
     case_dir = tmp_path / "loop_test"
     case_dir.mkdir()
-    _stage_polymesh(case_dir, _POINTS_CUBE)
+    _stage_full_cube(case_dir)
 
     # Step 1: first envelope call returns uncertain.
     env1 = setup_bc_with_annotations(
@@ -454,11 +595,10 @@ def test_full_loop_uncertain_then_pin_lid_then_confident(tmp_path):
         q.id == "lid_orientation" for q in env1.unresolved_questions
     )
 
-    # Step 2: simulate the resume PUT — write a lid-named user_authoritative
-    # entry to face_annotations.yaml.
+    # Step 2: simulate the resume PUT with the actual top-plane face_id.
     annotations = empty_annotations("loop_test")
     annotations["faces"].append({
-        "face_id": "fid_lid_picked",
+        "face_id": _top_face_id_of_unit_cube(),
         "name": "lid",
         "confidence": "user_authoritative",
         "annotated_by": "human",
@@ -466,13 +606,14 @@ def test_full_loop_uncertain_then_pin_lid_then_confident(tmp_path):
     })
     save_annotations(case_dir, annotations, if_match_revision=0)
 
-    # Step 3: re-run wrapper. Classifier should NOW be confident,
-    # which means setup_ldc_bc gets invoked. On the minimal fixture
-    # it fails — confirming the loop closed AND the classifier
-    # didn't shortcut to confident on the wrong condition.
-    with pytest.raises(AIActionError) as exc:
-        setup_bc_with_annotations(
-            case_dir=case_dir,
-            case_id="loop_test",
-        )
-    assert exc.value.failing_check == "setup_bc_failed"
+    # Step 3: re-run wrapper — classifier verifies the lid pin
+    # geometrically + returns confident → setup_ldc_bc runs to
+    # completion → confident envelope back, dicts on disk.
+    env2 = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="loop_test",
+    )
+    assert env2.confidence == "confident"
+    assert env2.unresolved_questions == []
+    assert (case_dir / "0").is_dir()
+    assert (case_dir / "system").is_dir()
