@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from ui.backend.schemas.case_solve import (
     ResultsRejection,
@@ -38,6 +39,7 @@ from ui.backend.services.case_solve import (
     extract_results_summary,
     run_icofoam,
     setup_ldc_bc,
+    stream_icofoam,
 )
 
 
@@ -112,6 +114,74 @@ def setup_bc(case_id: str) -> SetupBcSummary:
         nu=result.nu,
         reynolds=result.reynolds,
         written_files=list(result.written_files),
+    )
+
+
+@router.post(
+    "/import/{case_id}/solve-stream",
+    tags=["case-solve"],
+)
+def solve_stream(case_id: str) -> StreamingResponse:
+    """Run icoFoam with **live** SSE streaming so the UI can update a
+    residual chart in real time.
+
+    Setup failures (case missing, bc not setup, container down) raise
+    HTTPException BEFORE the first byte is yielded — those become
+    HTTP 4xx/5xx with the same shape as the blocking ``/solve`` route.
+    Failures DURING the run land as in-stream ``error`` events; the
+    HTTP status stays 200 because the stream has already started.
+    """
+    case_dir = _resolve_case_dir(case_id)
+
+    # Validate eagerly so we can return a real HTTP error code instead
+    # of a 200-with-error-event. The streamer also checks these but
+    # raising here gives the route a chance to attach the structured
+    # SolveRejection contract.
+    if not (case_dir / "system" / "controlDict").is_file():
+        raise HTTPException(
+            status_code=409,
+            detail=SolveRejection(
+                failing_check="bc_not_setup",
+                detail=f"no system/controlDict at {case_dir}",
+            ).model_dump(),
+        )
+
+    try:
+        # ``stream_icofoam`` is a generator; instantiating it does the
+        # eager Docker setup-checks but doesn't run the solver yet.
+        # The first ``next()`` is what triggers staging + spawning.
+        # Wrap it in another generator that translates SolverRunError
+        # raised before the first yield into an HTTPException.
+        gen = stream_icofoam(case_host_dir=case_dir)
+    except SolverRunError as exc:
+        msg = str(exc)
+        if "container" in msg.lower() and (
+            "not running" in msg.lower() or "not found" in msg.lower()
+        ):
+            status = 503
+            failing = "container_unavailable"
+        else:
+            status = 502
+            failing = "post_stage_failed"
+        raise HTTPException(
+            status_code=status,
+            detail=SolveRejection(
+                failing_check=failing,
+                detail=msg,
+            ).model_dump(),
+        ) from exc
+
+    return StreamingResponse(
+        gen,
+        media_type="text/event-stream",
+        headers={
+            # SSE wants no buffering by intermediaries; declare
+            # explicitly so reverse proxies (nginx etc) flush each
+            # event instead of accumulating.
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 

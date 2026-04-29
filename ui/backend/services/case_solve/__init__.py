@@ -31,6 +31,9 @@ from .solver_runner import (
     SolverRunResult,
     run_icofoam,
 )
+from .solver_streamer import (
+    stream_icofoam,
+)
 
 __all__ = [
     "BCSetupError",
@@ -42,4 +45,5 @@ __all__ = [
     "extract_results_summary",
     "run_icofoam",
     "setup_ldc_bc",
+    "stream_icofoam",
 ]

@@ -25,6 +25,8 @@ const Viewport = lazy(() =>
 import { StatusStrip } from "./step_panel_shell/StatusStrip";
 import { Step1Import } from "./step_panel_shell/steps/Step1Import";
 import { Step2Mesh } from "./step_panel_shell/steps/Step2Mesh";
+import { LiveResidualChart } from "./step_panel_shell/LiveResidualChart";
+import { SolveStreamProvider } from "./step_panel_shell/SolveStreamContext";
 import { Step3SetupBC } from "./step_panel_shell/steps/Step3SetupBC";
 import { Step4SolveRun } from "./step_panel_shell/steps/Step4SolveRun";
 import { Step5ResultsView } from "./step_panel_shell/steps/Step5ResultsView";
@@ -113,22 +115,20 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Solve",
     longLabel: "4 · Solve",
     viewportConfig: {
-      // Phase-1A: residual-history line chart parsed from log.icoFoam.
-      // Shows U_x/U_y/U_z + p initial residuals on a log scale across
-      // the 400 PISO timesteps — visual proof the solver actually
-      // converged. Gated on Step 4 completion (the log only exists
-      // after icoFoam runs).
-      format: "image",
+      // Phase-1A live-streaming variant (DEC-V61-097): the residual
+      // chart is no longer a post-mortem PNG. The SolveStream context
+      // opens an SSE connection on [AI 处理]; LiveResidualChart
+      // subscribes and renders polylines that update per emitted
+      // event. The viewport is visible from the moment Step 4 is
+      // activated (no gate) so the user sees the empty axes BEFORE
+      // clicking [AI 处理] and watches them populate live.
+      format: "custom",
       glbUrl: () => null,
       stlUrl: () => null,
-      imageUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/residual-history.png` : null,
-      gateOnStepCompletion: 4,
+      customViewport: LiveResidualChart,
     },
     taskPanelComponent: Step4SolveRun,
     aiActionWiredInTierA: true,
-    viewportEmptyHint:
-      "Step 4 · Solve — click [AI 处理] to run icoFoam (~60s wall). The residual-history chart will appear here showing how p / Ux / Uy / Uz converged.",
   },
   {
     id: 5,
@@ -319,11 +319,17 @@ export function StepPanelShell() {
           imageUrl: `${baseUrl}${sep}v=${encodeURIComponent(version)}`,
         };
       }
+    } else if (cfg.format === "custom" && cfg.customViewport) {
+      return {
+        format: "custom" as const,
+        Component: cfg.customViewport,
+      };
     }
     return null;
   }, [activeStep, caseId, stepStates]);
 
   return (
+    <SolveStreamProvider>
     <div
       data-testid="step-panel-shell"
       data-current-step-id={currentStepId}
@@ -354,7 +360,11 @@ export function StepPanelShell() {
                     </p>
                   }
                 >
-                  <Viewport {...viewportProps} height={420} />
+                  {viewportProps.format === "custom" ? (
+                    <viewportProps.Component caseId={caseId} height={420} />
+                  ) : (
+                    <Viewport {...viewportProps} height={420} />
+                  )}
                 </Suspense>
               </div>
             ) : (
@@ -415,5 +425,6 @@ export function StepPanelShell() {
       </div>
       <StatusStrip lastAction={lastAction} />
     </div>
+    </SolveStreamProvider>
   );
 }
