@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Optional
 
 from ui.backend.schemas.ai_action import AIActionEnvelope, UnresolvedQuestion
+from ui.backend.services.ai_actions.classifier import (
+    ClassificationResult,
+    classify_setup_bc,
+)
 from ui.backend.services.case_annotations import (
     AnnotationsIOError,
     load_annotations,
@@ -85,28 +89,45 @@ def setup_bc_with_annotations(
     case_id: str,
     force_uncertain: bool = False,
     force_blocked: bool = False,
+    use_classifier: bool = True,
 ) -> AIActionEnvelope:
     """Run setup-bc with annotation-aware envelope return.
 
-    For Tier-A on the LDC fixture, this delegates to ``setup_ldc_bc``
-    and wraps the success in a ``confident`` envelope. The
-    ``force_uncertain`` / ``force_blocked`` flags drive the dialog
-    dogfood path.
+    Two operating modes:
+
+    1. **Force flags** (``force_uncertain`` or ``force_blocked``):
+       legacy DEC-V61-098 dogfood path. Returns the canned LDC dialog
+       question for engineer practice without running the classifier.
+       These flags take precedence over the classifier.
+
+    2. **Real classifier** (``use_classifier=True``, default since
+       DEC-V61-100 M9 Step 2 · no force flags set): consults
+       :func:`classify_setup_bc` to inspect the polyMesh geometry
+       + existing user_authoritative annotations and decides whether
+       the answer is confident, uncertain, or blocked. If confident,
+       runs the underlying ``setup_ldc_bc``; if not, returns the
+       classifier's questions immediately.
 
     Reads ``face_annotations.yaml`` BEFORE the action so the AI can
-    honor any user-authoritative entries from prior dialog turns
-    (Tier-A: the file is read but not yet used to influence the
-    underlying ``setup_ldc_bc`` call — that's an M9 Tier-B feature).
+    honor any user-authoritative entries from prior dialog turns —
+    M9 Step 2 makes that loop close: the classifier reads the
+    annotations and skips re-asking questions about pinned faces.
 
     Args:
         case_dir: the host case directory.
         case_id: the case identifier.
         force_uncertain: if true, return ``confidence='uncertain'``
-            with one mock dialog question (LDC dogfood path).
-        force_blocked: if true, return ``confidence='blocked'``
-            with one mock dialog question (LDC dogfood path).
-            Mutually exclusive with ``force_uncertain``; if both
-            are passed, ``force_blocked`` wins.
+            with one mock dialog question (DEC-V61-098 dogfood path).
+        force_blocked: if true, return ``confidence='blocked'`` with
+            one mock dialog question (DEC-V61-098 dogfood path).
+            Mutually exclusive with ``force_uncertain``;
+            ``force_blocked`` wins if both are passed.
+        use_classifier: when true (default since DEC-V61-100), the
+            geometric classifier is invoked when no force flag is set.
+            Passing ``False`` reverts to the Tier-A confident-only
+            behavior — used by tests that need the legacy contract,
+            and by the LDC dogfood path that doesn't want classifier
+            second-guessing.
 
     Returns:
         ``AIActionEnvelope`` describing the outcome.
@@ -131,9 +152,7 @@ def setup_bc_with_annotations(
     revision_before = annotations["revision"]
 
     # If forced into a non-confident state for dogfood, short-circuit
-    # BEFORE running the underlying setup. The LDC scenario forces
-    # the dialog flow so the engineer can practice without needing a
-    # genuinely-uncertain classifier (deferred to M9).
+    # BEFORE running the underlying setup OR the classifier.
     if force_blocked:
         return AIActionEnvelope(
             confidence="blocked",
@@ -147,6 +166,29 @@ def setup_bc_with_annotations(
                 force_blocked=True, force_uncertain=False
             ),
         )
+
+    # M9 Step 2: consult the geometric classifier BEFORE running the
+    # underlying setup. If it returns blocked/uncertain, surface that
+    # immediately and don't write any dicts — the engineer answers
+    # the question(s) via the dialog, the resume PUTs annotations, and
+    # the next envelope call will (ideally) be confident.
+    if use_classifier and not force_uncertain:
+        cls: ClassificationResult = classify_setup_bc(
+            case_dir, annotations=annotations
+        )
+        if cls.confidence != "confident":
+            return AIActionEnvelope(
+                confidence=cls.confidence,
+                summary=cls.summary,
+                annotations_revision_consumed=revision_before,
+                annotations_revision_after=revision_before,
+                unresolved_questions=cls.questions,
+                next_step_suggestion=(
+                    "Click [继续 AI 处理] after answering the question(s)."
+                    if cls.confidence == "uncertain"
+                    else None
+                ),
+            )
 
     # Run the underlying setup-bc.
     try:
