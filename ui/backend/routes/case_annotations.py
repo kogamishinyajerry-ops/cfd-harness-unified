@@ -38,6 +38,8 @@ from ui.backend.services.case_annotations import (
 )
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
+from ui.backend.services.render.bc_glb import BcRenderError
+from ui.backend.services.render.face_index import build_face_index
 
 __all__ = ["router"]
 
@@ -205,6 +207,40 @@ def put_face_annotations(
     except AnnotationsIOError as exc:
         raise HTTPException(
             status_code=422,
+            detail={
+                "failing_check": exc.failing_check,
+                "detail": str(exc),
+            },
+        ) from exc
+
+
+@router.get(
+    "/cases/{case_id}/face-index",
+    tags=["case-annotations"],
+)
+def get_face_index(case_id: str) -> dict[str, Any]:
+    """Cell-id → face_id mapping for the boundary glb's primitives.
+
+    Used by the frontend Viewport pickMode to resolve a vtkCellPicker
+    hit (per-primitive triangle index) to the stable face_id. Same
+    primitive ordering as :func:`bc_glb._build_bc_glb_bytes`, so the
+    frontend can index ``primitives[primitiveIdx].face_ids[cellId]``.
+
+    422 surfaces if the polyMesh is missing or malformed (the glb path
+    would also fail in that case — same failing_check tags).
+    """
+    case_dir = _resolve_case_dir(case_id)
+    try:
+        return build_face_index(case_dir)
+    except BcRenderError as exc:
+        status_map = {
+            "no_polymesh": 404,
+            "parse_error": 422,
+            "no_boundary": 422,
+        }
+        status = status_map.get(exc.failing_check, 500)
+        raise HTTPException(
+            status_code=status,
             detail={
                 "failing_check": exc.failing_check,
                 "detail": str(exc),
