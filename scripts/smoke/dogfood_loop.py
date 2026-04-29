@@ -262,6 +262,86 @@ def _smoke_negative_paths(client, imported: Path, face_id_fn) -> None:
     _say("neg-chan", "bogus pins → channel_pin_mismatch question · executor NOT invoked ✓")
 
 
+def _smoke_backend_pytest_slice(repo_root: Path) -> None:
+    """Run the backend test slice this DEC's contracts are most
+    likely to break. Faster than the full suite (which has 4
+    pre-existing-failure modules unrelated to the dogfood path).
+    """
+    import subprocess
+
+    print("\n┌─ Backend · pytest slice (classifier + envelope route + meshing + smoke-adjacent) ─")
+    cmd = [
+        str(repo_root / ".venv" / "bin" / "python"),
+        "-m", "pytest", "-q",
+        "ui/backend/tests/test_ai_classifier.py",
+        "ui/backend/tests/test_setup_bc_envelope_route.py",
+        "ui/backend/tests/test_meshing_gmsh.py",
+        "ui/backend/tests/test_face_annotations_route.py",
+        "ui/backend/tests/test_ai_action_schema.py",
+    ]
+    if not Path(cmd[0]).is_file():
+        _say("skip", f"no .venv at {cmd[0]} — backend slice skipped")
+        return
+    proc = subprocess.run(
+        cmd,
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**__import__("os").environ, "PYTHONPATH": str(repo_root)},
+    )
+    if proc.returncode != 0:
+        tail = "\n".join((proc.stdout or "").splitlines()[-15:])
+        raise AssertionError(
+            f"backend pytest slice exited {proc.returncode}; tail:\n{tail}"
+        )
+    summary = next(
+        (
+            line for line in (proc.stdout or "").splitlines()
+            if " passed" in line
+        ),
+        "(summary not found)",
+    )
+    _say("pass", summary.strip())
+
+
+def _smoke_frontend_vitest(repo_root: Path) -> None:
+    """Run the frontend vitest slice. Catches frontend regressions
+    that the backend TestClient loops can't see — DialogPanel state
+    machines, FacePickContext propagation, ai_mode race guards.
+    """
+    import shutil
+    import subprocess
+
+    print("\n┌─ Frontend · vitest run ─")
+    if shutil.which("npx") is None:
+        _say("skip", "npx not on PATH — vitest skipped")
+        return
+
+    proc = subprocess.run(
+        ["npx", "vitest", "run"],
+        cwd=str(repo_root / "ui" / "frontend"),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if proc.returncode != 0:
+        # Surface stderr summary so engineer can dig in.
+        tail = "\n".join((proc.stdout or "").splitlines()[-20:])
+        raise AssertionError(
+            f"vitest run exited {proc.returncode}; tail:\n{tail}"
+        )
+    # Parse the summary line: "Tests  N passed (N)" — best-effort.
+    summary = next(
+        (
+            line for line in (proc.stdout or "").splitlines()
+            if "Tests" in line and "passed" in line
+        ),
+        "(summary not found)",
+    )
+    _say("pass", summary.strip())
+
+
 def _smoke_frontend_dev_server_boots(repo_root: Path) -> None:
     """Optional layer: prove the Vite dev server boots and serves the
     workbench shell HTML. Skipped when --no-frontend is passed (e.g.,
@@ -355,7 +435,10 @@ def main() -> int:
         _smoke_channel(client, imported, face_id)
         _smoke_negative_paths(client, imported, face_id)
 
+    _smoke_backend_pytest_slice(repo_root)
+
     if "--no-frontend" not in sys.argv:
+        _smoke_frontend_vitest(repo_root)
         _smoke_frontend_dev_server_boots(repo_root)
     else:
         print("\n┌─ Frontend · skipped (--no-frontend) ─")
