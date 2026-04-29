@@ -15,11 +15,19 @@ export type StepStatus = "pending" | "active" | "completed" | "error";
  *  Tier-A: Step 1 → /geometry/render glb · Step 2 → /mesh/render glb ·
  *  Steps 3-5 fall back to Step 1's geometry as a placeholder background. */
 export interface ViewportConfig {
-  format: "stl" | "glb" | "none";
+  format: "stl" | "glb" | "image" | "none";
   /** Returns the URL to fetch when format='glb', or null if not applicable. */
   glbUrl: (caseId: string) => string | null;
   /** Returns the URL to fetch when format='stl', or null if not applicable. */
   stlUrl: (caseId: string) => string | null;
+  /** Returns the URL to fetch when format='image', or null if not
+   *  applicable. Used by Phase-1A Steps 3/4/5 — server-rendered PNGs
+   *  for the BC overlay, residual history, and velocity slice. */
+  imageUrl?: (caseId: string) => string | null;
+  /** Optional version key — when this changes the Viewport bumps the
+   *  image URL with a query parameter to bust browser cache. Used so
+   *  Step 4's residual chart re-fetches after each [AI 处理] click. */
+  imageVersionKey?: (stepStates: Record<StepId, StepStatus>) => string;
   /** When set, the URL only resolves once `stepStates[gateOnStepCompletion]
    *  === "completed"`. Used to suppress the pre-mesh 404 from /mesh/render
    *  (the underlying glb only exists after Step 2 has run). null/undefined

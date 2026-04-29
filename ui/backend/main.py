@@ -97,6 +97,13 @@ try:
 except ModuleNotFoundError:
     case_solve = None  # type: ignore[assignment]
 
+# case_visualize routes (Phase-1A: PNG renders for Steps 3-5 viewports).
+# Pillow + numpy + scipy required; available via the [workbench] extra.
+try:
+    from ui.backend.routes import case_visualize  # noqa: F401
+except ModuleNotFoundError:
+    case_visualize = None  # type: ignore[assignment]
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -148,3 +155,5 @@ if geometry_render is not None:
     app.include_router(geometry_render.router, prefix="/api", tags=["geometry-render"])
 if case_solve is not None:
     app.include_router(case_solve.router, prefix="/api", tags=["case-solve"])
+if case_visualize is not None:
+    app.include_router(case_visualize.router, prefix="/api", tags=["case-visualize"])

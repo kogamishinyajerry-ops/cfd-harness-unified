@@ -24,13 +24,19 @@ interface ViewportProps {
   stlUrl?: string;
   /** Source URL when format='glb'. */
   glbUrl?: string;
+  /** Source URL when format='image' — server-rendered PNG. Phase-1A
+   *  uses this for Steps 3/4/5 (BC overlay, residual chart, velocity
+   *  slice) since none of those benefit from a 3D scene graph. */
+  imageUrl?: string;
   /** Render path. Defaults to 'stl' for backward compatibility with M-VIZ. */
-  format?: "stl" | "glb";
+  format?: "stl" | "glb" | "image";
   /** Fixed pixel width. If omitted, the canvas fills its parent container's
    *  width (responsive layout). */
   width?: number;
   height?: number;
   background?: [number, number, number];
+  /** Alt text for image format (a11y). Defaults to "viewport". */
+  imageAlt?: string;
 }
 
 type LoaderErrorKind =
@@ -44,7 +50,25 @@ type LoadState =
   | { status: "ready"; triangleCount?: number }
   | { status: "error"; message: string; kind: LoaderErrorKind };
 
-export function Viewport({
+export function Viewport(props: ViewportProps) {
+  // The image render path is fundamentally different from the
+  // vtk.js/STL/glb pipeline — it's just an <img> tag with a src URL,
+  // and the browser handles caching + decoding. Top-level dispatch
+  // keeps Rules of Hooks intact (each branch has its own hook order).
+  if (props.format === "image") {
+    return (
+      <ViewportImage
+        imageUrl={props.imageUrl}
+        height={props.height ?? 480}
+        width={props.width}
+        imageAlt={props.imageAlt ?? "viewport"}
+      />
+    );
+  }
+  return <ViewportVtk {...props} />;
+}
+
+function ViewportVtk({
   stlUrl,
   glbUrl,
   format = "stl",
@@ -180,6 +204,83 @@ export function Viewport({
       {loadState.status === "ready" && (
         <p className="mt-2 text-[11px] text-surface-500">
           drag to rotate · wheel to zoom · shift+drag to pan · ⌥drag to spin
+        </p>
+      )}
+    </div>
+  );
+}
+
+
+// Phase-1A image-format renderer (DEC-V61-097). Used by Steps 3/4/5
+// to display server-rendered PNGs (BC overlay, residual chart,
+// velocity slice) without spinning up a vtk.js scene graph.
+interface ViewportImageProps {
+  imageUrl?: string;
+  height: number;
+  width?: number;
+  imageAlt: string;
+}
+
+function ViewportImage({ imageUrl, height, width, imageAlt }: ViewportImageProps) {
+  const [imageStatus, setImageStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+
+  // Reset state whenever the URL changes so the user sees the
+  // loading spinner during a re-fetch (e.g., post-solve residual
+  // chart re-render).
+  useEffect(() => {
+    setImageStatus("loading");
+  }, [imageUrl]);
+
+  if (!imageUrl) {
+    return (
+      <div className="rounded-md border border-surface-800 bg-surface-950/60 p-3">
+        <p className="text-[11px] text-surface-500">
+          Viewport image not configured for this step.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="viewport-image"
+      className="rounded-md border border-surface-800 bg-surface-950/60 p-3"
+    >
+      <div
+        style={{
+          width: width ?? "100%",
+          height,
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        className="bg-surface-950"
+      >
+        <img
+          data-testid="viewport-image-img"
+          src={imageUrl}
+          alt={imageAlt}
+          onLoad={() => setImageStatus("ready")}
+          onError={() => setImageStatus("error")}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            objectFit: "contain",
+          }}
+        />
+        {imageStatus === "loading" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="text-[11px] text-surface-500">Rendering…</p>
+          </div>
+        )}
+      </div>
+      {imageStatus === "error" && (
+        <p className="mt-2 rounded-sm border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
+          Viewport error: server didn't return a PNG. Check that the
+          required step has run (BC setup → solve → results).
         </p>
       )}
     </div>

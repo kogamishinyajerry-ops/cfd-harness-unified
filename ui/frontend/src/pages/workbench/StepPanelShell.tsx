@@ -91,45 +91,67 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Setup",
     longLabel: "3 · Setup BC",
     viewportConfig: {
-      // Show the meshed wireframe — Step 3's BC patches are written
-      // ON this mesh, so visually re-using the Step 2 viewport is the
-      // right reference image for the user.
-      format: "glb",
-      glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/mesh/render` : null,
+      // Phase-1A (DEC-V61-097): server-rendered PNG showing the
+      // post-setup-bc cube with lid faces in red and walls in gray
+      // + lid-velocity arrow. Gated on Step 3 completion so it only
+      // fetches AFTER setup-bc has run; pre-setup the user sees the
+      // viewportEmptyHint placeholder instead of a 409 banner.
+      format: "image",
+      glbUrl: () => null,
       stlUrl: () => null,
-      gateOnStepCompletion: 2,
+      imageUrl: (caseId) =>
+        caseId ? `/api/cases/${caseId}/bc-overlay.png` : null,
+      gateOnStepCompletion: 3,
     },
     taskPanelComponent: Step3SetupBC,
     aiActionWiredInTierA: true,
+    viewportEmptyHint:
+      "Step 3 · Setup BC — click [AI 处理] in the right rail to label the lid + walls. The viewport will then highlight the lid (red) on top of the cube with the velocity arrow.",
   },
   {
     id: 4,
     shortLabel: "Solve",
     longLabel: "4 · Solve",
     viewportConfig: {
-      format: "glb",
-      glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/mesh/render` : null,
+      // Phase-1A: residual-history line chart parsed from log.icoFoam.
+      // Shows U_x/U_y/U_z + p initial residuals on a log scale across
+      // the 400 PISO timesteps — visual proof the solver actually
+      // converged. Gated on Step 4 completion (the log only exists
+      // after icoFoam runs).
+      format: "image",
+      glbUrl: () => null,
       stlUrl: () => null,
-      gateOnStepCompletion: 2,
+      imageUrl: (caseId) =>
+        caseId ? `/api/cases/${caseId}/residual-history.png` : null,
+      gateOnStepCompletion: 4,
     },
     taskPanelComponent: Step4SolveRun,
     aiActionWiredInTierA: true,
+    viewportEmptyHint:
+      "Step 4 · Solve — click [AI 处理] to run icoFoam (~60s wall). The residual-history chart will appear here showing how p / Ux / Uy / Uz converged.",
   },
   {
     id: 5,
     shortLabel: "Results",
     longLabel: "5 · Results",
     viewportConfig: {
-      format: "glb",
-      glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/mesh/render` : null,
+      // Phase-1A: |U| heatmap on the z=0 midplane slice. Viridis
+      // colormap, clipped at 95th percentile so the lid corner
+      // singularity overshoot doesn't wash out the bulk vortex.
+      // Gated on Step 5 completion: rendering the slice triggers an
+      // in-container postProcess for cell centres on first call (~2s),
+      // then becomes cached.
+      format: "image",
+      glbUrl: () => null,
       stlUrl: () => null,
-      gateOnStepCompletion: 2,
+      imageUrl: (caseId) =>
+        caseId ? `/api/cases/${caseId}/velocity-slice.png` : null,
+      gateOnStepCompletion: 5,
     },
     taskPanelComponent: Step5ResultsView,
     aiActionWiredInTierA: true,
+    viewportEmptyHint:
+      "Step 5 · Results — click [AI 处理] to extract the velocity field. A |U| heatmap on the z=0 midplane will render here, showing the LDC vortex.",
   },
 ] as const;
 
@@ -281,6 +303,22 @@ export function StepPanelShell() {
     } else if (cfg.format === "stl") {
       const stlUrl = cfg.stlUrl(caseId);
       if (stlUrl) return { format: "stl" as const, stlUrl };
+    } else if (cfg.format === "image" && cfg.imageUrl) {
+      const baseUrl = cfg.imageUrl(caseId);
+      if (baseUrl) {
+        // Cache-bust on each step transition so Step 4's residual
+        // chart re-renders after a re-solve, etc. The browser still
+        // honors HTTP cache for unchanged URLs because the version
+        // key is stable until the underlying step re-completes.
+        const version = cfg.imageVersionKey
+          ? cfg.imageVersionKey(stepStates)
+          : String(stepStates[activeStep.id] === "completed" ? 1 : 0);
+        const sep = baseUrl.includes("?") ? "&" : "?";
+        return {
+          format: "image" as const,
+          imageUrl: `${baseUrl}${sep}v=${encodeURIComponent(version)}`,
+        };
+      }
     }
     return null;
   }, [activeStep, caseId, stepStates]);

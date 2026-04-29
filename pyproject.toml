@@ -93,6 +93,12 @@ workbench = [
     # makes the `.[workbench]`-only install path runnable end-to-end
     # without a hidden cross-extras dependency.
     "docker>=7.0",
+    # Phase-1A (DEC-V61-097): server-rendered visualization PNGs for
+    # Steps 3-5 (bc-overlay, residual-history, velocity-slice). Pillow
+    # is small (~3 MB) and avoids the matplotlib footprint (~50 MB).
+    # Colormap + line-chart renderers are hand-rolled in
+    # ui/backend/services/case_visualize/.
+    "Pillow>=10.0",
 ]
 
 [tool.pytest.ini_options]
