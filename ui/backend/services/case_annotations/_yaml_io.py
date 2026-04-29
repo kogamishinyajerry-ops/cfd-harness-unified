@@ -222,16 +222,59 @@ def _exclusive_case_lock(case_root: Path) -> Iterator[None]:
     in the normal annotations workflow.
     """
     lock_path = case_root / ".face_annotations.lock"
-    # O_CREAT so the lock file exists; mode 0o600 owner-only.
-    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    # Codex DEC-V61-098 round-2 SECURITY finding: opening the lock
+    # file without O_NOFOLLOW lets an attacker plant a symlink at
+    # `.face_annotations.lock` pointing outside the case root —
+    # `os.open(... O_RDWR | O_CREAT)` then creates the file at the
+    # attacker's chosen path. Even though we never WRITE to the lock
+    # file (only flock it), the unauthorized file creation can stage
+    # later attacks (touch any path the backend can write to).
+    # Fix: O_NOFOLLOW refuses to follow an existing symlink at the
+    # final path component → ELOOP if planted. Plus we wrap every
+    # raw OSError below into AnnotationsIOError so the route layer
+    # never sees uncategorized 500s from the lock acquisition path
+    # (Codex round-2 also flagged IsADirectoryError leaking when the
+    # lock path is a symlink-to-directory).
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        fd = os.open(str(lock_path), flags, 0o600)
+    except OSError as exc:
+        # ELOOP under symlink + O_NOFOLLOW; IsADirectoryError under
+        # planted directory; EACCES if perms wrong. All map to
+        # symlink_escape (containment failure) so the caller reports
+        # a uniform 422 instead of bubbling raw OSError as 500.
+        raise AnnotationsIOError(
+            f"refusing to use {lock_path} as a lock file (errno "
+            f"{exc.errno}: {exc.strerror}) — possible symlink escape",
+            failing_check="symlink_escape",
+        ) from exc
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except OSError as exc:
+            raise AnnotationsIOError(
+                f"could not acquire exclusive lock on {lock_path}: {exc}",
+                failing_check="parse_error",
+            ) from exc
         try:
             yield
         finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                # LOCK_UN failure is benign on close — fd close
+                # below releases the advisory lock anyway. Do not
+                # mask an in-flight exception from the critical
+                # section.
+                pass
     finally:
-        os.close(fd)
+        try:
+            os.close(fd)
+        except OSError:
+            # Same rationale: close failure here is unrecoverable
+            # and not actionable; advisory lock is released by
+            # process-end at worst.
+            pass
 
 
 def save_annotations(

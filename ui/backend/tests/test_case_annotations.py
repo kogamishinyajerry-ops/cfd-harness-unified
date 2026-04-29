@@ -373,6 +373,66 @@ def test_save_immune_to_planted_tmp_symlink(tmp_path):
     assert final.exists() and not final.is_symlink()
 
 
+def test_save_rejects_lock_symlink_escape(tmp_path):
+    """Codex DEC-V61-098 round-2 SECURITY finding: the lock file
+    `.face_annotations.lock` introduced by round-1's concurrent-write
+    fix is itself opened with `os.open(O_RDWR | O_CREAT)` — without
+    O_NOFOLLOW, an attacker who plants a symlink at the lock path
+    can redirect file creation to ANY path the backend can write to.
+
+    Demonstrated by Codex's repro: save_ok + `outside_created_by_lock`
+    (0-byte file) materialized outside the case root.
+
+    Fix: O_NOFOLLOW on the lock open. This test pins the defense.
+    """
+    case_dir = tmp_path / "case_lock_symlink"
+    case_dir.mkdir()
+    outside = tmp_path / "lock_target_should_not_be_created"
+    # Plant the symlink at the lock path. outside doesn't exist yet —
+    # if the open follows the symlink it would CREATE the target.
+    (case_dir / ".face_annotations.lock").symlink_to(outside)
+
+    with pytest.raises(AnnotationsIOError) as exc:
+        save_annotations(
+            case_dir, empty_annotations("case_lock_symlink"),
+            if_match_revision=None,
+        )
+    assert exc.value.failing_check == "symlink_escape"
+    # Critical: the symlink target must NOT have been created.
+    assert not outside.exists(), (
+        "lock-file symlink target was created — O_NOFOLLOW defense failed"
+    )
+
+
+def test_save_rejects_lock_symlink_to_directory(tmp_path):
+    """Codex DEC-V61-098 round-2 also surfaced a contract-leak case:
+    when ``.face_annotations.lock`` points to a directory (or a
+    symlink to a directory), the open raises ``IsADirectoryError``,
+    and without wrapping it leaks as an uncategorized 500.
+
+    Fix: wrap the os.open OSError → AnnotationsIOError so the route
+    sees the uniform symlink_escape contract.
+    """
+    case_dir = tmp_path / "case_lock_dir"
+    case_dir.mkdir()
+    target_dir = tmp_path / "lock_target_dir"
+    target_dir.mkdir()
+    # Plant a symlink at the lock path pointing to a directory.
+    (case_dir / ".face_annotations.lock").symlink_to(target_dir)
+
+    with pytest.raises(AnnotationsIOError) as exc:
+        save_annotations(
+            case_dir, empty_annotations("case_lock_dir"),
+            if_match_revision=None,
+        )
+    assert exc.value.failing_check == "symlink_escape"
+    # Critical: target dir contents must not have been touched —
+    # specifically no file should have been created inside it.
+    assert list(target_dir.iterdir()) == [], (
+        "lock-file directory-symlink defense failed: target dir was modified"
+    )
+
+
 def test_save_concurrent_writers_no_tmp_collision(tmp_path):
     """Codex DEC-V61-098 round-1 finding: two threads calling
     save_annotations on the same case used to collide on the shared
