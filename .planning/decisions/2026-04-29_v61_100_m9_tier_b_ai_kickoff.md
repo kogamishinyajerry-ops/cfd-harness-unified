@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-100
 title: M9 Tier-B AI kickoff — productized pick→annotate→re-run loop + arbitrary-STL classifier roadmap [Era 1 LOOP SPINE first milestone under workbench long-horizon roadmap]
-status: Active · Step 1 IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS · frontend envelope-mode dialog flow) · Step 2 IMPLEMENTED at commit 11b81ba (Codex 3-round arc R3 APPROVE · backend geometric classifier with lid-pin verification) · Step 3 (multi-question scenario hardening · awaits CFDJerry smoke + real-world classifier exposure) PENDING
+status: Active · Step 1 IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS · frontend envelope-mode dialog flow) · Step 2 IMPLEMENTED at commit 11b81ba (Codex 3-round arc R3 APPROVE · backend geometric classifier with lid-pin verification) · Step 3 IMPLEMENTED at commits faa2e08 + a54f4b7 + 6ae9a3b (Codex 3-round arc R3 APPROVE · multi-question slot routing + ai_mode generation token + bare-pick suppression) · Awaiting CFDJerry visual smoke on multi-q non-cube channel path
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE M9 row · "Tier-B AI · face-pick selection + AI BC inference iteration") + DEC-V61-098 (M-AI-COPILOT Tier-A · Tier-B explicit deferral row in §F)
@@ -46,6 +46,9 @@ codex_tool_report_path:
   step_2_round_1: reports/codex_tool_reports/dec_v61_100_m9_step2_round1.md (CHANGES_REQUIRED · 2026-04-29 · 2 HIGH findings — cube returned confident on any user_authoritative pin · non-cube returned confident with no executor able to honor it)
   step_2_round_2: reports/codex_tool_reports/dec_v61_100_m9_step2_round2.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH — lid-named pin off top plane was silently overridden by setup_ldc_bc · narrow R1 fix wasn't honest at the executor level)
   step_2_round_3: reports/codex_tool_reports/dec_v61_100_m9_step2_round3.md (APPROVE · 2026-04-29 commit 11b81ba · _top_plane_face_ids() helper mirrors setup_ldc_bc's lid detection exactly · classifier-executor parity verified · borderline tolerance probe matches · full loop closure proven · 34/34 in slice)
+  step_3_round_1: reports/codex_tool_reports/dec_v61_100_step3_r1.md (CHANGES_REQUIRED · 2026-04-29 commit faa2e08 · 1 MED ai_mode-flip race + 1 LOW bare-pick leak into AnnotationPanel)
+  step_3_round_2: reports/codex_tool_reports/dec_v61_100_step3_r2.md (CHANGES_REQUIRED · 2026-04-29 commit a54f4b7 · LOW resolved · MED partially-closed — confident-path branch reachable after nested getFaceAnnotations() await)
+  step_3_round_3: reports/codex_tool_reports/dec_v61_100_step3_r3.md (APPROVE · 2026-04-29 commit 6ae9a3b · ≤6 LOC verbatim fix · isStale() re-check at confident-path · M9 Step 3 ready to merge)
 codex_review_required: true
 codex_review_phase: pre-merge (per RETRO-V61-001 · multi-file frontend + UX flow change triggers)
 codex_triggers:
