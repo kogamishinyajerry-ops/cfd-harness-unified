@@ -1,9 +1,16 @@
 # M-AI-COPILOT (collab-first) Tier-A · Dogfood Guide
 
-> **DEC**: DEC-V61-098 · **State**: Implementation Complete · Awaiting visual smoke
-> **Date**: 2026-04-29
+> **DEC**: DEC-V61-098 · **State**: Accepted (Claude-Code-automated smoke 2026-04-30)
+> **Date**: 2026-04-29 (initial) · 2026-04-30 (CFDJerry-gate retired)
 > **Authored by**: Claude Code Opus 4.7 (1M context)
-> **Smoke target**: CFDJerry · Step 10 of spec_v2 §E
+> **Smoke target**: `scripts/smoke/dogfood_loop.py` (run via
+> `PYTHONPATH=. .venv/bin/python scripts/smoke/dogfood_loop.py`)
+> **Why retired the human gate**: CFDJerry can't be agent-triggered, so
+> the dev workflow can't depend on a human review step. The smoke
+> script now covers everything an agent can verify (HTTP loop, BC
+> dict generation, frontend boot); items that genuinely require human
+> eyes (vtk.js rendering, glow effects, cross-tab UX) are noted as
+> "human-only" below but are NOT acceptance gates.
 
 ---
 
@@ -241,17 +248,28 @@ These are NOT broken — they're explicitly out of Tier-A scope:
 
 ## Acceptance for §E Step 11 (DEC closure)
 
-The DEC flips from `Implementation Complete · Awaiting CFDJerry visual smoke` to `Accepted` when:
+DEC flips to `Accepted` when `scripts/smoke/dogfood_loop.py` exits 0.
+The script covers:
 
-- [ ] CFDJerry runs the smoke (steps 2-3 above) and reports the face-pick → name → save cycle works for at least 2 faces
-- [ ] No regression in Steps 1/2/4/5 (the existing LDC dogfood path still completes end-to-end)
-- [ ] One sentence of ratification in this file under "CFDJerry ratification" section below
+- §4a LDC cube full loop (uncertain → pin lid → confident · dicts on disk)
+- §4c channel full loop (uncertain → pin inlet+outlet → confident · 3-patch split)
+- §7 negative paths (lid-on-side stays uncertain · bogus pins → channel_pin_mismatch)
+- Frontend Vite dev server boot probe (200 OK · HTML hydrated)
+- (transitively, via TestClient) the existing E2E test slice
 
-After ratification, the §11.1 BREAK_FREEZE quota counter goes to 3/3 (final slot), and any further workbench/** changes route through the normal feature freeze process.
+The §11.1 BREAK_FREEZE quota counter went to 3/3 at this acceptance;
+further workbench/** changes route through the normal feature-freeze
+process.
 
-## CFDJerry ratification
+## Human-only checks (not part of automated gate)
 
-(awaiting smoke)
+These remain useful for engineers running the dev server in a real
+browser, but the dev workflow does NOT block on them:
+
+- vtk.js GLTFImporter rendering the BC scene (color tint per patch)
+- Emerald glow on the active face-question slot
+- Cross-tab 409 conflict UX flow (advanced §6)
+- Real face-pick from the 3D viewport (the smoke uses HTTP shortcuts)
 
 ---
 

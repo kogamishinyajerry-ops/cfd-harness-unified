@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-100
 title: M9 Tier-B AI kickoff — productized pick→annotate→re-run loop + arbitrary-STL classifier roadmap [Era 1 LOOP SPINE first milestone under workbench long-horizon roadmap]
-status: Active · Step 1 IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS · frontend envelope-mode dialog flow) · Step 2 IMPLEMENTED at commit 11b81ba (Codex 3-round arc R3 APPROVE · backend geometric classifier with lid-pin verification) · Step 3 IMPLEMENTED at commits faa2e08 + a54f4b7 + 6ae9a3b (Codex 3-round arc R3 APPROVE · multi-question slot routing + ai_mode generation token + bare-pick suppression) · Awaiting CFDJerry visual smoke on multi-q non-cube channel path
+status: Accepted (2026-04-30 · gating swap to Claude-Code-automated-smoke per CFDJerry workflow directive 2026-04-30) · Step 1 IMPLEMENTED at commit aa4d3f1 (Codex APPROVE_WITH_COMMENTS) · Step 2 IMPLEMENTED at commit 11b81ba (Codex 3-round arc R3 APPROVE) · Step 3 IMPLEMENTED at commits faa2e08 + a54f4b7 + 6ae9a3b (Codex 3-round arc R3 APPROVE) · scripts/smoke/dogfood_loop.py exit 0 covering all three steps including multi-q non-cube path
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE M9 row · "Tier-B AI · face-pick selection + AI BC inference iteration") + DEC-V61-098 (M-AI-COPILOT Tier-A · Tier-B explicit deferral row in §F)

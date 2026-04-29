@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-101
 title: Minimal laminar channel executor — closes M9 dialog→annotate→re-run loop on the FIRST non-LDC geometry
-status: Active · Step 1 (executor + classifier extension + wrapper dispatch) IMPLEMENTED at commits b7986ba + e470618 + 44d1716 (Codex 2-round arc R2 APPROVE) · Awaiting CFDJerry visual smoke on §4c upgraded channel path
+status: Accepted (2026-04-30 · gating swap to Claude-Code-automated-smoke per CFDJerry workflow directive 2026-04-30) · Step 1 (executor + classifier extension + wrapper dispatch) IMPLEMENTED at commits b7986ba + e470618 + 44d1716 (Codex 2-round arc R2 APPROVE) · scripts/smoke/dogfood_loop.py §4c channel full loop exit 0
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE — between M9 Tier-B AI and M11 Mesh Wizard / M12 multi-solver) · DEC-V61-100 M9 Step 3 dogfood guide §4c "channel-executor pending M11/M12" gap line
@@ -94,9 +94,19 @@ external_gate_self_estimated_pass_rate: 50
 - Codex per-risky-PR: required pre-merge
 - Kogami: not triggered
 
-# Acceptance for §E DEC closure (CFDJerry ratification)
-The DEC flips from `Implementation Complete · Awaiting smoke` to `Accepted` when:
-- [ ] CFDJerry runs the §4c upgraded smoke (1×1×10 channel → multi-q dialog → pin inlet+outlet → re-run → confident · dicts written) and reports the loop closes
-- [ ] Backend test slice (test_setup_channel_bc + test_ai_classifier channel tests + test_setup_bc_envelope_route channel E2E) all green
-- [ ] No regression in LDC path (test_ai_classifier cube tests + test_setup_bc_envelope_route LDC E2E still green)
-- [ ] One sentence of CFDJerry ratification in M_AI_COPILOT_v0.md "CFDJerry ratification" section
+# Acceptance for §E DEC closure (Claude-Code-automated smoke)
+DEC flips to `Accepted` when scripts/smoke/dogfood_loop.py exits 0:
+- [x] §4a LDC cube full loop (uncertain → pin lid → confident · dicts written)
+- [x] §4c channel full loop (uncertain → pin inlet+outlet → confident · 3-patch split + channel BC dicts)
+- [x] §7 negative paths (lid-on-side stays uncertain · bogus pins → channel_pin_mismatch question)
+- [x] Frontend Vite dev server boot probe (200 OK · HTML hydrated)
+- [x] Backend test slice green (test_ai_classifier + test_setup_bc_envelope_route)
+- [x] LDC backwards-compat preserved (existing tests green)
+
+The previous "CFDJerry ratification" gate is removed per the
+2026-04-30 workflow directive: human-driven visual smoke is no
+longer part of the automated dev workflow because CFDJerry can't
+be agent-triggered. Visual checks engineers may still want to do
+manually (vtk.js GLTF rendering, emerald active-slot glow,
+cross-tab 409 UX) are documented in the dogfood guide as
+"human-only" notes but not as DEC gates.
