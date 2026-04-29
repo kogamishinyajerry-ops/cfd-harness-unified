@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-098
 title: M-AI-COPILOT (collab-first) kickoff — human-AI collaboration layer for arbitrary-STL workflows (4 interaction primitives + face-pick + face_annotations.yaml + AI uncertainty envelope; merges deferred M-PANELS.advanced face-pick) [fourth milestone under Pivot Charter Addendum 3]
-status: Active (2026-04-29 · CLASS-1 docs-only governance kickoff per V61-094/095/096 precedent · Codex SKIPPED at kickoff [will fire pre-merge per RETRO-V61-001 ≤70% self-pass-rate gate during implementation arc Step 8 of spec_v2 §E] · Kogami NOT triggered per V61-094 P2 #1 bounding clause [4-condition self-check passes: no charter mod · workbench/** + visualization/** already line-A · counter <20 since RETRO-V61-005 · no risk-tier change] · CFDJerry explicit ratification 2026-04-29 "很好，按照你的理解和建议，执行")
+status: Implementation Complete · Awaiting CFDJerry visual smoke (2026-04-29 · CLASS-1 docs-only governance kickoff per V61-094/095/096 precedent · Codex 7-round arc COMPLETE [Steps 2+3 round 3 APPROVE at commit 67b0465; Steps 6+7a round 2 RESOLVED at commit b3e1720; Step 7b round 2 RESOLVED at commit 0abdd74] · Kogami NOT triggered per V61-094 P2 #1 bounding clause [4-condition self-check passes: no charter mod · workbench/** + visualization/** already line-A · counter <20 since RETRO-V61-005 · no risk-tier change] · CFDJerry explicit ratification 2026-04-29 "很好，按照你的理解和建议，执行" · Status flip to Accepted gated on §E Step 10 visual smoke + §E Step 11 dogfood log)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: Pivot Charter Addendum 3 §3 (product-interaction hard constraint) + §4.a (M-AI-COPILOT surface) + §4.c HARD ORDERING (DEC-V61-093 Accepted 2026-04-28 · M-VIZ → M-RENDER-API → M-PANELS → **M-AI-COPILOT** → M7-redefined → M8-redefined)
@@ -50,9 +50,13 @@ notion_sync_status: synced 2026-04-29 (DEC https://app.notion.com/p/351c68942bed
 autonomous_governance: true
 library_choice: React + React Router + Tailwind (existing) · @kitware/vtk.js Viewport from M-VIZ (extends with vtkCellPicker · already a sibling import in vtk.js core) · @tanstack/react-query for envelope state · pyyaml for face_annotations.yaml read/write (existing dep · used elsewhere in case_setup) · NO new UI component library / state-management library / 3D library
 codex_tool_report_path:
-  round_1: reports/codex_tool_reports/dec_v61_098_steps2_3_round1.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH symlink-escape via fixed `.tmp` + 1 MED face_id signed-zero + 1 LOW error_detail unbound + concurrent-write race surfaced locally)
-  round_2: reports/codex_tool_reports/dec_v61_098_steps2_3_round2.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH lock-file containment via missing O_NOFOLLOW + raw OSError leak)
-  round_3: reports/codex_tool_reports/dec_v61_098_steps2_3_round3.md (APPROVE · 2026-04-29 commit 8ae2749 · all R1+R2 findings closed · regression tests pinned)
+  steps_2_3_round_1: reports/codex_tool_reports/dec_v61_098_steps2_3_round1.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH symlink-escape via fixed `.tmp` + 1 MED face_id signed-zero + 1 LOW error_detail unbound + concurrent-write race surfaced locally)
+  steps_2_3_round_2: reports/codex_tool_reports/dec_v61_098_steps2_3_round2.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH lock-file containment via missing O_NOFOLLOW + raw OSError leak)
+  steps_2_3_round_3: reports/codex_tool_reports/dec_v61_098_steps2_3_round3.md (APPROVE · 2026-04-29 commit 8ae2749 · all R1+R2 findings closed · regression tests pinned)
+  step_6_7a_round_1: reports/codex_tool_reports/dec_v61_098_step6_7a_round1.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH primitive ordering — vtk.js GLTFImporter actor-map collision via missing primitive.name + node-actor offset in renderer.getActors())
+  step_6_7a_round_2: reports/codex_tool_reports/dec_v61_098_step6_7a_round2.md (RESOLVED · 2026-04-29 commit b3e1720 · backend bc_glb sets primitive.name=patch_name · frontend kernel maps actor→patch_name via importer.getActors() Map keys · primitive ordering bug fully closed)
+  step_7b_round_1: reports/codex_tool_reports/dec_v61_098_step7b_round1.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH 409 revision_conflict left panel stuck on stale revision; minor: useFacePickPublisher dep-stability)
+  step_7b_round_2: reports/codex_tool_reports/dec_v61_098_step7b_round2.md (RESOLVED · 2026-04-29 commit 0abdd74 · 409 path re-fetches /face-annotations + retry uses bumped revision · sticky invariant preserved · publisher useCallback stabilized)
 codex_review_required: true
 codex_review_phase: pre-merge (RETRO-V61-001 ≤70% self-pass gate · NOT post-merge)
 codex_triggers:
