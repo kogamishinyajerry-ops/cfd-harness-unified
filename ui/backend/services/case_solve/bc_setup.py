@@ -486,6 +486,46 @@ def _split_channel_patches(
             "all boundary faces classified as inlet/outlet — channel needs "
             "at least one wall face."
         )
+    # Codex DEC-V61-101 R1 HIGH closure: the previous "≥1 matched"
+    # check let a partially-stale pin set slip through silently. Prove
+    # EVERY face_id in the inlet/outlet sets was actually consumed by
+    # the routing, otherwise raise — defends classifier-executor parity
+    # exactly the way the LDC R2 fix did.
+    consumed_inlet_ids = {
+        compute_face_id(
+            [
+                (float(pts[v][0]), float(pts[v][1]), float(pts[v][2]))
+                for v in _parse_face(bnd_face_lines[i])
+            ]
+        )
+        for i in inlet_idx
+    }
+    consumed_outlet_ids = {
+        compute_face_id(
+            [
+                (float(pts[v][0]), float(pts[v][1]), float(pts[v][2]))
+                for v in _parse_face(bnd_face_lines[i])
+            ]
+        )
+        for i in outlet_idx
+    }
+    missing_inlet = inlet_set - consumed_inlet_ids
+    missing_outlet = outlet_set - consumed_outlet_ids
+    if missing_inlet or missing_outlet:
+        problems = []
+        if missing_inlet:
+            problems.append(
+                f"inlet pin(s) {sorted(missing_inlet)} not on current boundary"
+            )
+        if missing_outlet:
+            problems.append(
+                f"outlet pin(s) {sorted(missing_outlet)} not on current boundary"
+            )
+        raise BCSetupError(
+            "stale pins after classifier verification — "
+            + "; ".join(problems)
+            + " (mesh may have been regenerated mid-flight)."
+        )
 
     new_bnd_faces = (
         [bnd_face_lines[i] for i in inlet_idx]
@@ -689,14 +729,23 @@ def setup_channel_bc(
     )
     written = _author_channel_dicts(case_dir)
 
-    # Rough Re estimate using max bbox extent as L_char.
+    # Codex DEC-V61-101 R1 LOW closure: use the MIN bbox extent as
+    # L_char (hydraulic-diameter approximation for narrow channels).
+    # Using max-extent inflated Re by 10× on a 1×1×10 fixture (Re=1000)
+    # which contradicts the DEC's "Re~100 default" claim. Min-extent
+    # gives Re=100 on the same fixture, matching the locked DEC text.
     pts_pre, _, pts_body, _ = _split_foam_block(polymesh / "points")
     pts = _parse_points(pts_body)
     if pts:
         xs = [p[0] for p in pts]
         ys = [p[1] for p in pts]
         zs = [p[2] for p in pts]
-        l_char = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+        extents = [max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)]
+        # Filter out near-zero extents (degenerate axis); fall back to
+        # max if all are degenerate (shouldn't happen — classifier
+        # would have rejected).
+        nonzero = [e for e in extents if e > 1e-9]
+        l_char = min(nonzero) if nonzero else max(extents) if extents else 1.0
     else:
         l_char = 1.0
     u_mag = sum(c * c for c in _CHANNEL_INLET_VELOCITY) ** 0.5

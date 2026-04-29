@@ -88,6 +88,23 @@ def _setup_bc_failure_to_http(exc: BCSetupError) -> HTTPException:
                 failing_check="not_an_ldc_cube", detail=msg
             ).model_dump(),
         )
+    # DEC-V61-101: channel executor user-actionable failures. Stale
+    # pins after classifier verification (mesh regen mid-flight) and
+    # missing pin matches both come back as the engineer's problem to
+    # solve by re-picking, so they're 422 (semantic — request shape
+    # OK, content rejected) rather than 500 (server-side fault).
+    if (
+        "stale pins after classifier verification" in msg
+        or "no boundary face matched any" in msg
+        or "all boundary faces classified as inlet/outlet" in msg
+        or "classifier contract violated" in msg
+    ):
+        return HTTPException(
+            status_code=422,
+            detail=SetupBcRejection(
+                failing_check="channel_pin_mismatch", detail=msg
+            ).model_dump(),
+        )
     if "no constant/polyMesh" in msg or "boundary file" in msg:
         return HTTPException(
             status_code=409,
@@ -161,13 +178,16 @@ def setup_bc(
                 force_blocked=bool(force_blocked),
             )
         except AIActionError as exc:
-            # AIActionError wraps either a BCSetupError or an
-            # AnnotationsIOError. Map to the same HTTP shape as the
-            # legacy route for BC failures; for annotation failures
-            # surface a 422 with the failing_check tag.
+            # AIActionError wraps either a BCSetupError (LDC or channel
+            # executor) or an AnnotationsIOError. Map BC failures to
+            # the same HTTP shape as the legacy route; surface other
+            # tags as 422 with the failing_check.
+            #
+            # Codex DEC-V61-101 R1 MED closure: setup_channel_bc_failed
+            # was previously falling through to the 422 branch, losing
+            # the BCSetupError → 4xx/5xx contract that the LDC path has.
             failing = getattr(exc, "failing_check", "ai_action_failed")
-            if failing == "setup_bc_failed":
-                # Re-construct the underlying BCSetupError for HTTP mapping.
+            if failing in ("setup_bc_failed", "setup_channel_bc_failed"):
                 raise _setup_bc_failure_to_http(BCSetupError(str(exc))) from exc
             raise HTTPException(
                 status_code=422,

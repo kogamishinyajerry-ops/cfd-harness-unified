@@ -585,3 +585,104 @@ def test_envelope_full_loop_channel_inlet_outlet_pin_then_confident_via_http(
     assert "outlet" in bnd_text
     assert "walls" in bnd_text
     assert "lid" not in bnd_text  # not the LDC executor
+
+
+def test_envelope_channel_executor_failure_routes_to_422_pin_mismatch(
+    monkeypatch, tmp_path
+):
+    """Codex DEC-V61-101 R1 MED closure: when setup_channel_bc raises
+    BCSetupError (e.g., a pin doesn't resolve mid-flight because the
+    classifier's _boundary_face_ids snapshot somehow disagrees with
+    the executor's), the route layer must surface a 422
+    channel_pin_mismatch — NOT generic 422 setup_channel_bc_failed
+    or 500 write_failed.
+
+    We exercise this by directly calling setup_channel_bc with a
+    bogus inlet_face_id; the wrapper raises AIActionError(failing_check
+    = setup_channel_bc_failed), and the route maps it via
+    _setup_bc_failure_to_http to 422 channel_pin_mismatch.
+    """
+    from ui.backend.services.case_annotations import face_id
+
+    # Stage a 1×1×10 channel mesh; pin a REAL outlet but a BOGUS inlet.
+    points = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class vectorField;\n    location \"constant/polyMesh\";\n"
+        "    object points;\n}\n\n8\n(\n"
+        "(0 0 0)\n(1 0 0)\n(1 1 0)\n(0 1 0)\n"
+        "(0 0 10)\n(1 0 10)\n(1 1 10)\n(0 1 10)\n)\n"
+    )
+    faces = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class faceList;\n    location \"constant/polyMesh\";\n"
+        "    object faces;\n}\n\n6\n(\n"
+        "4(0 1 2 3)\n4(4 5 6 7)\n4(0 1 5 4)\n"
+        "4(2 3 7 6)\n4(1 2 6 5)\n4(0 3 7 4)\n)\n"
+    )
+    boundary = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class polyBoundaryMesh;\n"
+        "    location \"constant/polyMesh\";\n    object boundary;\n}\n\n"
+        "1\n(\n    walls\n    {\n        type wall;\n"
+        "        nFaces 6;\n        startFace 0;\n    }\n)\n"
+    )
+    owner = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class labelList;\n    location \"constant/polyMesh\";\n"
+        "    object owner;\n}\n\n6\n(\n0\n0\n0\n0\n0\n0\n)\n"
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(points, encoding="utf-8")
+    (polymesh / "faces").write_text(faces, encoding="utf-8")
+    (polymesh / "boundary").write_text(boundary, encoding="utf-8")
+    (polymesh / "owner").write_text(owner, encoding="utf-8")
+
+    # Force the wrapper to invoke setup_channel_bc with a deliberately
+    # mismatched pin set by patching the classifier to return confident
+    # with a bogus inlet face_id (real outlet). This simulates the
+    # mid-flight stale-pin race that the R1 HIGH guards against.
+    real_outlet = face_id(
+        [
+            (0.0, 0.0, 10.0),
+            (1.0, 0.0, 10.0),
+            (1.0, 1.0, 10.0),
+            (0.0, 1.0, 10.0),
+        ]
+    )
+
+    from ui.backend.services.ai_actions import classifier as cls_mod
+
+    fake_result = cls_mod.ClassificationResult(
+        geometry_class="non_cube",
+        confidence="confident",
+        questions=[],
+        summary="(test fixture)",
+        rationale="test",
+        inlet_face_ids=("fid_bogus0000000",),
+        outlet_face_ids=(real_outlet,),
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.ai_actions.classify_setup_bc",
+        lambda case_dir, annotations: fake_result,
+    )
+
+    client = _new_client()
+    r = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},
+    )
+    assert r.status_code == 422, r.text
+    payload = r.json()
+    assert payload["detail"]["failing_check"] == "channel_pin_mismatch"
+    # Either "stale pins" (partial match) or "no boundary face matched"
+    # (zero match) is valid — both are 422 channel_pin_mismatch with
+    # an actionable engineer message.
+    detail = payload["detail"]["detail"]
+    assert (
+        "stale pins" in detail or "no boundary face matched" in detail
+    ), detail

@@ -844,6 +844,52 @@ def test_full_loop_channel_uncertain_pin_inlet_outlet_then_confident(tmp_path):
     assert "walls" in bnd_text
 
 
+def test_channel_executor_rejects_partially_stale_pin_set(tmp_path):
+    """Codex DEC-V61-101 R1 HIGH closure: setup_channel_bc must verify
+    EVERY pinned face_id was consumed (not just ≥1 inlet, ≥1 outlet).
+    A partially stale pin set [real_fid, bogus_fid] previously
+    succeeded silently — exactly the silent-override class of bug
+    that the LDC R2 fix closed at the classifier level.
+    """
+    from ui.backend.services.case_solve import setup_channel_bc, BCSetupError
+
+    case_dir = tmp_path / "channel_partial_stale"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    real_inlet = _bottom_face_id_of_channel()
+    real_outlet = _top_face_id_of_channel()
+    bogus = "fid_bogus0000000"
+
+    with pytest.raises(BCSetupError) as exc:
+        setup_channel_bc(
+            case_dir,
+            case_id="channel_partial_stale",
+            inlet_face_ids=(real_inlet, bogus),
+            outlet_face_ids=(real_outlet,),
+        )
+    assert "stale pins" in str(exc.value)
+
+
+def test_channel_executor_reports_re_100_on_unit_cross_section(tmp_path):
+    """Codex DEC-V61-101 R1 LOW closure: Re must use min bbox extent
+    (hydraulic diameter approximation), not max. For the 1×1×10
+    fixture, U=1, D=1, ν=0.01 → Re=100 (matching the DEC's locked
+    default text). The earlier max-extent code reported Re=1000.
+    """
+    from ui.backend.services.case_solve import setup_channel_bc
+
+    case_dir = tmp_path / "channel_re_check"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    res = setup_channel_bc(
+        case_dir,
+        case_id="channel_re_check",
+        inlet_face_ids=(_bottom_face_id_of_channel(),),
+        outlet_face_ids=(_top_face_id_of_channel(),),
+    )
+    assert abs(res.reynolds - 100.0) < 0.5, res.reynolds
+
+
 def test_full_loop_channel_executor_writes_correct_inlet_velocity(tmp_path):
     """DEC-V61-101 BC sanity: 0/U boundary field for inlet must be
     fixedValue (1 0 0) and outlet must be zeroGradient. Defends
