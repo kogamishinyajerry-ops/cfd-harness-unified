@@ -75,22 +75,6 @@ interface SolveStreamState {
 
 const Ctx = createContext<SolveStreamState | null>(null);
 
-/** Build the per-timestep table from raw events. The chart renders
- *  this as polylines indexed by timestep. */
-function upsertRow(
-  rows: PerTimestepRow[],
-  t: number,
-): { rows: PerTimestepRow[]; row: PerTimestepRow } {
-  // Rows are appended in time order; if t is the latest, that's the
-  // last row. Otherwise scan from the end (typical SSE order keeps
-  // this O(1) amortized).
-  if (rows.length > 0 && rows[rows.length - 1].t === t) {
-    return { rows, row: rows[rows.length - 1] };
-  }
-  const row: PerTimestepRow = { t };
-  return { rows: [...rows, row], row };
-}
-
 export function SolveStreamProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<SolveStreamPhase>("idle");
   const [caseId, setCaseId] = useState<string | null>(null);
@@ -100,9 +84,60 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // Batch SSE events through a single requestAnimationFrame flush. The
+  // raw stream emits ~6 events per timestep × 400 timesteps = ~2400
+  // events; calling setSeries on each forced React + the SVG chart to
+  // re-render thousands of times. Pending events accumulate in a ref
+  // (no React render) and a single rAF callback merges them into one
+  // setSeries — at most ~60 renders/sec regardless of event rate.
+  type PendingEvent =
+    | { kind: "residual"; ev: ResidualEvent }
+    | { kind: "continuity"; ev: ContinuityEvent };
+  const pendingRef = useRef<PendingEvent[]>([]);
+  const flushScheduledRef = useRef(false);
+
+  const flushPending = useCallback(() => {
+    flushScheduledRef.current = false;
+    const pending = pendingRef.current;
+    if (pending.length === 0) return;
+    pendingRef.current = [];
+    setSeries((prev) => {
+      const out = prev.slice();
+      const lastIdxByT = new Map<number, number>();
+      for (let i = 0; i < out.length; i++) {
+        lastIdxByT.set(out[i].t, i);
+      }
+      for (const item of pending) {
+        const t = item.ev.t;
+        let idx = lastIdxByT.get(t);
+        if (idx === undefined) {
+          idx = out.length;
+          out.push({ t });
+          lastIdxByT.set(t, idx);
+        }
+        const row = { ...out[idx] };
+        if (item.kind === "residual") {
+          row[item.ev.field] = item.ev.init;
+        } else {
+          row.continuity = item.ev.sum_local;
+        }
+        out[idx] = row;
+      }
+      return out;
+    });
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (flushScheduledRef.current) return;
+    flushScheduledRef.current = true;
+    requestAnimationFrame(flushPending);
+  }, [flushPending]);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    pendingRef.current = [];
+    flushScheduledRef.current = false;
     setPhase("idle");
     setCaseId(null);
     setSeries([]);
@@ -179,31 +214,16 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (eventName === "residual") {
-        const ev = payload as ResidualEvent;
-        setSeries((prev) => {
-          const { rows, row } = upsertRow(prev, ev.t);
-          // For p we keep the LAST init residual within a timestep
-          // (post-PISO). For U components there's only one solve per
-          // timestep, but we still overwrite to match.
-          row[ev.field] = ev.init;
-          // Replace the final row in-place (rows array is fresh).
-          const out = rows.slice(0, rows.length - 1);
-          out.push({ ...row });
-          return out;
-        });
+        pendingRef.current.push({ kind: "residual", ev: payload as ResidualEvent });
+        scheduleFlush();
       } else if (eventName === "continuity") {
-        const ev = payload as ContinuityEvent;
-        setSeries((prev) => {
-          const { rows, row } = upsertRow(prev, ev.t);
-          row.continuity = ev.sum_local;
-          const out = rows.slice(0, rows.length - 1);
-          out.push({ ...row });
-          return out;
-        });
+        pendingRef.current.push({ kind: "continuity", ev: payload as ContinuityEvent });
+        scheduleFlush();
       } else if (eventName === "done") {
+        flushPending();
         const s = payload as SolveStreamSummary;
         setSummary(s);
-        setPhase(s.converged ? "completed" : "completed");
+        setPhase("completed");
       } else if (eventName === "error") {
         const e = payload as { detail: string };
         // In-stream errors don't kill the stream — icoFoam may still
@@ -240,6 +260,7 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (e) {
+      flushPending();
       if ((e as { name?: string })?.name === "AbortError") return;
       const msg = e instanceof Error ? e.message : String(e);
       setErrorMessage(msg);
@@ -249,8 +270,9 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
     // If we exit the loop without a done event, the stream ended
     // unexpectedly. Mark as error so the user sees something went
     // wrong rather than a stuck "streaming…" state.
+    flushPending();
     setPhase((prev) => (prev === "streaming" ? "error" : prev));
-  }, []);
+  }, [flushPending, scheduleFlush]);
 
   const value = useMemo<SolveStreamState>(
     () => ({
