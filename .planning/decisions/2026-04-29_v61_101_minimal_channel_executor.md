@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-101
 title: Minimal laminar channel executor — closes M9 dialog→annotate→re-run loop on the FIRST non-LDC geometry
-status: Active · Step 1 (executor + classifier extension + wrapper dispatch) IMPLEMENTATION pending
+status: Active · Step 1 (executor + classifier extension + wrapper dispatch) IMPLEMENTED at commits b7986ba + e470618 + 44d1716 (Codex 2-round arc R2 APPROVE) · Awaiting CFDJerry visual smoke on §4c upgraded channel path
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE — between M9 Tier-B AI and M11 Mesh Wizard / M12 multi-solver) · DEC-V61-100 M9 Step 3 dogfood guide §4c "channel-executor pending M11/M12" gap line
@@ -70,7 +70,10 @@ prerequisite_status:
   v61_100_acceptance: Implementation Complete · Awaiting CFDJerry visual smoke on multi-q channel path (this DEC upgrades the §4c smoke from "blocked" to "confident · dicts written")
   break_freeze_quota: NOT consumed — V61-098 used the final §11.1 BREAK_FREEZE slot. This DEC routes through the normal feature-freeze process per §11.1 §H.
 
-notion_sync_status: pending (sync after Step 1 lands + Codex APPROVE)
+notion_sync_status: pending (Codex APPROVE'd at R2 commit 44d1716; awaiting next Notion-MCP-online window for sync)
+codex_tool_report_path:
+  step_1_round_1: reports/codex_tool_reports/dec_v61_101_step1_r1.md (CHANGES_REQUIRED · 2026-04-30 commit b7986ba · 1 HIGH partial-stale-pin acceptance + 1 MED channel-error HTTP mapping + 1 LOW Re calculation)
+  step_1_round_2: reports/codex_tool_reports/dec_v61_101_step1_r2.md (APPROVE · 2026-04-30 commit e470618 · 0 findings · 34/34 in classifier+route slice · Re≈100 verified · HTTP precedence preserved)
 autonomous_governance: true
 
 codex_review_required: true

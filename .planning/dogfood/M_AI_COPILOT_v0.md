@@ -167,11 +167,22 @@ Smoke runbook (channel · default behavior · NO query param):
      deliberately disabled in multi-q mode (Codex R1 Finding 1 closure)
 6. Click **"Select this face"** on `outlet_face`, then pick the outlet.
    Expected: same routing pattern; both rows now have picks.
-7. Click `[继续 AI 处理]`. Expected: PUT face_annotations writes BOTH
+7. Click `[继续 AI 处理]`. Expected (UPGRADED at DEC-V61-101 · commits
+   b7986ba + e470618 + 44d1716): PUT face_annotations writes BOTH
    user_authoritative entries; envelope re-runs; classifier returns
-   `blocked` (channel solver still pending M11/M12) — this is correct
-   behavior, not a bug. The dialog disappears and the `error_detail`
-   surface explains the executor gap.
+   **`confident`** (no longer "blocked: pending M11/M12"). Wrapper
+   invokes `setup_channel_bc` which:
+   - Splits `polyMesh/boundary` into 3 named patches: `inlet` /
+     `outlet` (both `type patch`) + `walls` (`type wall`)
+   - Writes the icoFoam laminar dict tree: `0/U` (inlet=fixedValue
+     (1 0 0) · outlet=zeroGradient · walls=noSlip), `0/p`
+     (inlet=zeroGradient · outlet=fixedValue 0 · walls=zeroGradient),
+     `constant/physicalProperties` (ν=0.01), `constant/momentumTransport`
+     (laminar), and `system/{controlDict, fvSchemes, fvSolution}`
+   - Reports the channel summary: `inlet=N face · outlet=M face ·
+     walls=K faces · Re≈100 (icoFoam laminar)` for unit-cross-section
+     channels (Re uses min nonzero bbox extent as L_char)
+   - Step 4 unlocks · engineer can run icoFoam against the channel
 
 **Negative tests:**
 - Click "Select this face" on inlet, pick face A; click "Select this
@@ -181,6 +192,15 @@ Smoke runbook (channel · default behavior · NO query param):
   envelope is open). Expected: dialog clears immediately + any in-flight
   envelope request from the previous mode is dropped (no late-arriving
   state writes — Codex R1+R2 Finding 1 closure via aiModeGenRef).
+- **Stale-pin path** (DEC-V61-101 R1 HIGH closure): pin inlet+outlet,
+  then re-mesh Step 2 (so face_ids change). Click `[继续 AI 处理]` →
+  expect 422 `channel_pin_mismatch` with message "stale pins after
+  classifier verification" or "no boundary face matched any inlet
+  pin". Re-pick faces → cycle resumes normally.
+- **Same-face-as-both** (DEC-V61-101 disjointness): pin one face as
+  `inlet_a`, then pin the SAME face as `outlet_b`. Click resume →
+  expect classifier `uncertain` with `channel_pin_mismatch` question
+  explaining which face_id was double-pinned.
 
 ### 6. Smoke the 409 conflict path (advanced)
 
@@ -211,7 +231,11 @@ These are NOT broken — they're explicitly out of Tier-A scope:
 | ~~Annotations don't auto-influence the next `[AI 处理]` envelope~~ | ✅ CLOSED at M9 Step 2 commit 11b81ba (real classifier consumes face_annotations.yaml) |
 | `face_annotations.yaml` doesn't appear in audit-package zip yet | separate Tier-A line item per spec §F |
 | Multi-face batch save | not in scope — engineer saves one face at a time |
-| Channel/non-cube executor (after multi-q `inlet_face`+`outlet_face` are pinned, classifier returns `blocked` with "non-LDC executor pending") | M11 Mesh Wizard / M12 multi-solver routing |
+| ~~Channel/non-cube executor (after multi-q `inlet_face`+`outlet_face` are pinned, classifier returns `blocked`)~~ | ✅ CLOSED at DEC-V61-101 commits b7986ba + e470618 + 44d1716 (laminar icoFoam channel executor · Codex R2 APPROVE) |
+| Turbulence models (channel currently always laminar) | M12 multi-solver routing |
+| Boundary layer prism control (no y+ targeting) | M11 Mesh Wizard |
+| BC value override UI (engineer can't yet edit U_inlet=(1,0,0), p_outlet=0, ν=0.01) | M12 |
+| Multi-inlet / multi-outlet (only ONE of each per dialog) | M12 / out of M9 scope |
 
 ---
 
