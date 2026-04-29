@@ -93,22 +93,24 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Setup",
     longLabel: "3 · Setup BC",
     viewportConfig: {
-      // Phase-1A (DEC-V61-097): server-rendered PNG showing the
-      // post-setup-bc cube with lid faces in red and walls in gray
-      // + lid-velocity arrow. Gated on Step 3 completion so it only
-      // fetches AFTER setup-bc has run; pre-setup the user sees the
-      // viewportEmptyHint placeholder instead of a 409 banner.
-      format: "image",
-      glbUrl: () => null,
+      // Phase-1A (DEC-V61-097, user feedback 2026-04-29): replaced the
+      // static bc-overlay.png with an interactive 3D viewport — same
+      // vtk.js orbit controls as Step 1, but each polyMesh boundary
+      // patch is rendered as its own TRIANGLES primitive with a
+      // distinct PBR baseColorFactor: lid in red, fixedWalls in gray,
+      // frontAndBack in muted blue (semi-transparent). Gated on Step 3
+      // completion so the glb only builds AFTER setup-bc has split the
+      // patches; pre-setup the user sees the viewportEmptyHint instead.
+      format: "glb",
+      glbUrl: (caseId) =>
+        caseId ? `/api/cases/${caseId}/bc/render` : null,
       stlUrl: () => null,
-      imageUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/bc-overlay.png` : null,
       gateOnStepCompletion: 3,
     },
     taskPanelComponent: Step3SetupBC,
     aiActionWiredInTierA: true,
     viewportEmptyHint:
-      "Step 3 · Setup BC — click [AI 处理] in the right rail to label the lid + walls. The viewport will then highlight the lid (red) on top of the cube with the velocity arrow.",
+      "Step 3 · Setup BC — click [AI 处理] in the right rail to label the lid + walls. The viewport will then show the cube in 3D with the lid (red), walls (gray), and front/back patches (semi-transparent blue) — drag to rotate.",
   },
   {
     id: 4,

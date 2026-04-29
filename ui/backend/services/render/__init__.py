@@ -10,15 +10,18 @@ All modules under this package are line-A · declared in ROADMAP commit
 """
 from __future__ import annotations
 
+from .bc_glb import BcRenderError, build_bc_render_glb
 from .field_sample import FieldSampleError, build_field_payload
 from .geometry_glb import GeometryRenderError, build_geometry_glb
 from .mesh_wireframe import MeshRenderError, build_mesh_wireframe_glb
 
 
 __all__ = [
+    "BcRenderError",
     "FieldSampleError",
     "GeometryRenderError",
     "MeshRenderError",
+    "build_bc_render_glb",
     "build_field_payload",
     "build_geometry_glb",
     "build_mesh_wireframe_glb",

@@ -17,9 +17,11 @@ from fastapi.responses import FileResponse
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
 from ui.backend.services.render import (
+    BcRenderError,
     FieldSampleError,
     GeometryRenderError,
     MeshRenderError,
+    build_bc_render_glb,
     build_field_payload,
     build_geometry_glb,
     build_mesh_wireframe_glb,
@@ -139,6 +141,48 @@ def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
         resolved,
         media_type="model/gltf-binary",
         filename="mesh.glb",
+    )
+
+
+_BC_FAILING_CHECK_TO_STATUS: dict[str, int] = {
+    "case_not_found": 404,
+    "no_polymesh": 404,
+    "no_boundary": 409,  # polyMesh exists but boundary not yet split (pre-setup-bc)
+    "parse_error": 422,
+    "transcode_error": 422,
+}
+
+
+@router.get("/cases/{case_id}/bc/render", tags=["geometry-render"])
+def get_case_bc_render_glb(case_id: str) -> FileResponse:
+    """Return the post-setup-bc polyMesh boundary patches as a colored glb.
+
+    Phase-1A (DEC-V61-097). Replaces the static
+    ``/cases/{id}/bc-overlay.png`` endpoint for Step 3 of M-PANELS.
+    Each polyMesh boundary patch becomes its own TRIANGLES primitive
+    with a distinct PBR baseColorFactor — vtk.js renders them in the
+    standard orbit viewport so the user can rotate/zoom/pan.
+
+    Cached at ``<case_dir>/.render_cache/bc_overlay.glb`` keyed on
+    points + faces + boundary mtimes; rebuilds whenever any of the
+    three is touched (e.g., re-running setup-bc to relabel patches).
+    """
+    try:
+        result = build_bc_render_glb(case_id)
+    except BcRenderError as exc:
+        status = _BC_FAILING_CHECK_TO_STATUS.get(exc.failing_check, 422)
+        raise HTTPException(status_code=status, detail=str(exc))
+
+    try:
+        resolved = result.cache_path.resolve(strict=True)
+        resolved.relative_to(template_clone.IMPORTED_DIR.resolve())
+    except (ValueError, OSError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="case not found")
+
+    return FileResponse(
+        resolved,
+        media_type="model/gltf-binary",
+        filename="bc_overlay.glb",
     )
 
 
