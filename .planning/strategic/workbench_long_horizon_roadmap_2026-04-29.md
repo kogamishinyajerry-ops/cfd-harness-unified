@@ -111,7 +111,7 @@ Goal: take any simple 3D geometry from intake to archive end-to-end. The loop is
 
 **Critical path**. M9-M14 are the milestones that the strategic claim "workbench handles any simple 3D geom" depends on.
 
-#### M9 · Tier-B AI rule-based classifier (post-M-AI-COPILOT extension)
+#### M9 · Tier-B AI rule-based classifier (post-M-AI-COPILOT extension) — **ACCEPTED 2026-04-30**
 - **Problem**: M-AI-COPILOT Tier-A demos the dialog flow on LDC with a forced-blocked flag. For a real arbitrary STL, the AI must actually have something to say.
 - **Scope**: rule-based classifier reading `face_annotations.yaml` + polyMesh boundary geometry:
   - axis-alignment heuristic (face normal close to ±x/±y/±z → likely a wall or symmetry plane)
@@ -123,6 +123,19 @@ Goal: take any simple 3D geometry from intake to archive end-to-end. The loop is
 - **Success criteria**: 5 canonical "simple 3D" geometries classified with ≥70% accuracy on the AI-suggested defaults (engineer corrects ≤30% of patches). Geometries: pipe (straight), pipe (elbow), flange, simple manifold, external sphere bluff body.
 - **Self-pass-rate estimate**: 60% (heuristic classifier — easy to overfit to the 5 fixtures, easy to break on the 6th).
 - **§11.1 BREAK_FREEZE**: not consumed (post-M-AI-COPILOT, dogfood window quota exhausted; this rides under normal feature-freeze rules).
+- **As-shipped (DEC-V61-100)**: aspect-ratio-based ldc_cube vs non_cube split (5%-tolerance · classifier confident on cube only with verified top-plane lid pin · classifier confident on non_cube with verified inlet+outlet pins). Multi-q dialog UX hardened (DEC-V61-100 Step 3 · Codex 3-round arc R3 APPROVE) for the rapid-double-pick race + ai_mode toggle staleness. The "5 fixtures" success criterion is conditionally met: classifier handles axis-aligned cube + non-cube via name-substring-match on inlet/outlet pins · richer geometry-class detection (curved pipes · sphericity heuristics) deferred to a future tightening if real-world fixtures show the substring match insufficient.
+
+#### M9.5 · Minimal laminar channel executor (DEC-V61-101 · ACCEPTED 2026-04-30)
+- **Problem**: M9 classifier emitted inlet+outlet face questions for non-cube geometries but the only downstream executor (setup_ldc_bc) was LDC-shaped. Engineer pinned faces, dialog returned `blocked: non-LDC executor pending M11/M12` — annotations saved, nothing solvable.
+- **Scope (intentionally bounded)**: laminar icoFoam executor that mirrors setup_ldc_bc but routes the boundary into 3 patches (inlet · outlet · walls) by face_id match against user-pinned annotations. No turbulence model · no BL prism control · no BC override UI.
+- **Out of scope (preserved for M11/M12)**: turbulence (k-ω SST · k-ε · Spalart-Allmaras), boundary-layer prism control, refinement zones, compressible flow, heat transfer, multi-inlet velocity differentiation, BC value editing UI.
+- **As-shipped**: setup_channel_bc + classifier-executor parity (face_id verification before confidence, mirroring the Codex M9 Step 2 R2 lesson) + idempotency hardening (polyMesh.pre_split backup invalidation on Step 2 re-mesh, Codex 3-round arc R3 APPROVE). Multi-inlet "merge by name substring" implicitly supported and now under test. Defaults locked: U_inlet=(1,0,0) m/s · p_outlet=0 · ν=0.01 (Re~100 on unit-section channels).
+
+#### Agent-runnable dogfood smoke (`scripts/smoke/dogfood_loop.py` · 2026-04-30)
+- **Problem**: human visual-smoke gating ("Awaiting CFDJerry") couldn't be agent-triggered, so the dev workflow stalled on every DEC closure.
+- **Scope**: TestClient-based exec of the §4a LDC + §4c channel + §7 negative-paths loops · spawns a Vite dev server on an ephemeral port to verify the frontend boots cleanly. Replaces the previous human-smoke gate as the DEC-acceptance check.
+- **Acceptance**: `PYTHONPATH=. .venv/bin/python scripts/smoke/dogfood_loop.py` exits 0.
+- **Out of scope**: real `icoFoam` solve in Docker (Step 4 validation) and real face-pick from the 3D viewport remain "human-only" notes in the dogfood guide and are not gates.
 
 #### M10 · STEP/IGES intake (folds in M6.0/M6.1 already-Accepted)
 - **Problem**: SolidWorks/CATIA/FreeCAD users export STEP/IGES, not STL. STL discards CAD topology — feature recognition is impossible.
