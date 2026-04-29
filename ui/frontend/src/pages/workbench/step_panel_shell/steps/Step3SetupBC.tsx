@@ -1,4 +1,7 @@
-// Step 3 · Setup BC — wired in Phase-1A (DEC-V61-097).
+// Step 3 · Setup BC — wired in Phase-1A (DEC-V61-097), extended in
+// M-AI-COPILOT Tier-A (DEC-V61-098) with face-annotation pinning,
+// and again in M9 Tier-B AI (this revision) with envelope-mode
+// dialog flow.
 //
 // LDC-only scope: the gmsh pipeline produces a mesh of the STL interior,
 // which is correct as a flow domain ONLY for closed-cavity geometries
@@ -6,14 +9,23 @@
 // the mesh is the obstacle interior — useless for CFD; that requires
 // a separate blockMesh+sHM pipeline (Phase-2 / Phase-3 milestones).
 //
-// This component:
-// 1. Calls POST /api/import/<id>/setup-bc — splits gmshToFoam's single
-//    patch into `lid` + `fixedWalls` and authors icoFoam dicts.
-// 2. Surfaces the lid-face count + Re number so the user sees the
-//    geometric classification worked.
-// 3. Registers the action so the shell's [AI 处理] button is enabled.
+// Two operating modes:
+//   1. Legacy (default): POST /setup-bc returns SetupBcSummary; we show
+//      lid/wall counts + Re. This is the LDC dogfood path Phase-1A built.
+//   2. Envelope mode (?ai_mode=force_uncertain | force_blocked):
+//      POST /setup-bc?envelope=1&force_uncertain=1 returns
+//      AIActionEnvelope. When confidence is uncertain/blocked, we
+//      render the DialogPanel and the engineer answers questions
+//      (often by picking faces in the viewport). [继续 AI 处理] then
+//      saves answers as user_authoritative annotations and re-runs
+//      envelope mode. Once confident, the step completes.
+//
+// Tier-B AI fully wires only when the backend ships a real
+// arbitrary-STL classifier (deferred); the force_uncertain flag is
+// the dogfood substrate for testing the dialog UX in the meantime.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
 import type { AnnotationsRevisionConflictDetail } from "../types";
@@ -23,11 +35,14 @@ import type {
 } from "@/types/case_solve";
 
 import { AnnotationPanel } from "../AnnotationPanel";
+import { DialogPanel } from "../DialogPanel";
 import { useFacePickOptional } from "../FacePickContext";
 import type {
+  AIActionEnvelope,
   AnnotationsDocument,
   FaceAnnotation,
   StepTaskPanelProps,
+  UnresolvedQuestion,
 } from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
@@ -54,6 +69,23 @@ export function Step3SetupBC({
   // optional — when null we just render the legacy form. When present,
   // a picked face_id surfaces the AnnotationPanel below the BC summary.
   const facePick = useFacePickOptional();
+  const [searchParams] = useSearchParams();
+  const aiMode = searchParams.get("ai_mode") ?? null;
+  const envelopeForce: { forceUncertain?: boolean; forceBlocked?: boolean } =
+    useMemo(() => {
+      if (aiMode === "force_uncertain") return { forceUncertain: true };
+      if (aiMode === "force_blocked") return { forceBlocked: true };
+      return {};
+    }, [aiMode]);
+  const envelopeMode = aiMode !== null;
+  const [envelope, setEnvelope] = useState<AIActionEnvelope | null>(null);
+  // Map: question.id → face_id picked specifically for that question.
+  // The DialogPanel reads this to gate completeness on face_label
+  // questions; the resume handler reads it to assemble the
+  // PUT /face-annotations payload.
+  const [pickedFaceIdForQuestion, setPickedFaceIdForQuestion] = useState<
+    Record<string, string>
+  >({});
   const [annotations, setAnnotations] = useState<AnnotationsDocument | null>(
     null,
   );
@@ -83,6 +115,29 @@ export function Step3SetupBC({
       cancelled = true;
     };
   }, [caseId]);
+
+  // First unresolved face-selection question awaiting an answer (used
+  // to route the engineer's pick to the right question slot).
+  const activeFaceQuestion = useMemo<UnresolvedQuestion | null>(() => {
+    if (!envelope) return null;
+    return (
+      envelope.unresolved_questions.find(
+        (q) => q.needs_face_selection && !pickedFaceIdForQuestion[q.id],
+      ) ?? null
+    );
+  }, [envelope, pickedFaceIdForQuestion]);
+
+  // Consume picks: if there's an active dialog face question, the pick
+  // routes to it (not the AnnotationPanel). Otherwise the
+  // AnnotationPanel handles it via the existing flow below.
+  useEffect(() => {
+    if (!facePick?.picked || !activeFaceQuestion) return;
+    setPickedFaceIdForQuestion((prev) => ({
+      ...prev,
+      [activeFaceQuestion.id]: facePick.picked!.faceId,
+    }));
+    facePick.setPicked(null);
+  }, [facePick, activeFaceQuestion]);
 
   const existingForPicked = useMemo<FaceAnnotation | undefined>(() => {
     if (!facePick?.picked || !annotations) return undefined;
@@ -150,12 +205,14 @@ export function Step3SetupBC({
     facePick?.setPicked(null);
   }, [facePick]);
 
-  const triggerSetup = useCallback(async () => {
+  // Legacy non-envelope path. Used when ?ai_mode is unset.
+  const triggerSetupLegacy = useCallback(async () => {
     setRejection(null);
     setNetworkError(null);
     try {
       const r = await api.setupBC(caseId);
       setSummary(r);
+      setEnvelope(null);
       onStepComplete();
     } catch (e) {
       if (
@@ -175,6 +232,126 @@ export function Step3SetupBC({
       throw e;
     }
   }, [caseId, onStepComplete, onStepError]);
+
+  // Envelope-mode path (M9 Tier-B AI). Used when ?ai_mode=force_uncertain
+  // or ?ai_mode=force_blocked is set, and on every [继续 AI 处理]
+  // resume click. The fold parameter controls force flags so the
+  // resume call doesn't re-force uncertainty after the user answered.
+  const runEnvelope = useCallback(
+    async (fold: { useForceFlags: boolean }) => {
+      setRejection(null);
+      setNetworkError(null);
+      try {
+        const result = await api.setupBCWithEnvelope(
+          caseId,
+          fold.useForceFlags ? envelopeForce : {},
+        );
+        setEnvelope(result);
+        // Refresh annotations whenever the envelope reports the doc
+        // bumped server-side (e.g., the action wrapper merged AI
+        // confident classifications).
+        if (
+          annotations &&
+          result.annotations_revision_after !== annotations.revision
+        ) {
+          try {
+            const fresh = await api.getFaceAnnotations(caseId);
+            setAnnotations(fresh);
+          } catch {
+            // Non-fatal — local state stays where it is, the
+            // annotation panel re-fetches on its next 409.
+          }
+        }
+        if (
+          result.confidence === "confident" &&
+          result.unresolved_questions.length === 0
+        ) {
+          // Reset dialog state and complete the step. Tier-B note:
+          // we don't currently fetch the post-envelope SetupBcSummary
+          // (n_lid_faces / Re) — the success surface below renders a
+          // simpler "✓ AI processing complete" note in envelope mode.
+          setPickedFaceIdForQuestion({});
+          onStepComplete();
+        }
+      } catch (e) {
+        if (
+          e instanceof ApiError &&
+          e.detail &&
+          typeof e.detail === "object" &&
+          "failing_check" in e.detail
+        ) {
+          const detail = e.detail as CaseSolveRejection;
+          setRejection(detail);
+          onStepError(`setup-bc envelope rejected: ${detail.failing_check}`);
+        } else {
+          const msg = e instanceof Error ? e.message : String(e);
+          setNetworkError(msg);
+          onStepError(msg);
+        }
+        throw e;
+      }
+    },
+    [caseId, envelopeForce, annotations, onStepComplete, onStepError],
+  );
+
+  const handleDialogResume = useCallback(
+    async (answers: Record<string, string>) => {
+      if (!envelope) return;
+      // For face-selection questions: persist the picked face_id with
+      // the engineer's label as a user_authoritative annotation. The
+      // DialogPanel composes "<face_id>:<label>" when both are
+      // present, or just "<face_id>" otherwise. Parse that back here.
+      const facesToWrite: FaceAnnotation[] = [];
+      for (const q of envelope.unresolved_questions) {
+        if (!q.needs_face_selection) continue;
+        const composed = answers[q.id];
+        if (!composed) continue;
+        const [faceId, label] = composed.split(":");
+        if (!faceId) continue;
+        facesToWrite.push({
+          face_id: faceId,
+          name: label || q.id,
+          confidence: "user_authoritative",
+        });
+      }
+      if (facesToWrite.length > 0 && annotations) {
+        try {
+          const updated = await api.putFaceAnnotations(caseId, {
+            if_match_revision: annotations.revision,
+            faces: facesToWrite,
+            annotated_by: "human",
+          });
+          setAnnotations(updated);
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409) {
+            // Resync and abort the resume; the engineer can click
+            // [继续 AI 处理] again. We surface the conflict via the
+            // envelope's error_detail to keep the UI on the dialog
+            // path.
+            try {
+              const fresh = await api.getFaceAnnotations(caseId);
+              setAnnotations(fresh);
+            } catch {
+              // best-effort
+            }
+            throw new Error(
+              "Annotations changed mid-dialog. Refreshed — please retry.",
+            );
+          }
+          throw e;
+        }
+      }
+      // Re-run envelope mode WITHOUT force flags. The action wrapper
+      // re-reads the (now-updated) face_annotations.yaml and ideally
+      // returns confident.
+      await runEnvelope({ useForceFlags: false });
+    },
+    [annotations, caseId, envelope, runEnvelope],
+  );
+
+  const triggerSetup = envelopeMode
+    ? () => runEnvelope({ useForceFlags: true })
+    : triggerSetupLegacy;
 
   useEffect(() => {
     registerAiAction(triggerSetup);
@@ -197,11 +374,48 @@ export function Step3SetupBC({
         Phase-2 (blockMesh + sHM).
       </div>
 
-      {!summary && !rejection && !networkError && (
+      {envelopeMode && (
+        <div
+          data-testid="step3-envelope-mode-banner"
+          className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-mono text-amber-200"
+        >
+          AI-COPILOT envelope mode (ai_mode={aiMode}). The dialog panel
+          will surface below when the AI returns uncertain or blocked.
+        </div>
+      )}
+
+      {!summary && !envelope && !rejection && !networkError && (
         <p className="rounded-sm border border-surface-800 bg-surface-900/40 px-2 py-1 text-[11px] text-surface-400">
           Click <strong className="text-surface-200">[AI 处理]</strong> below
           to split the mesh into lid + walls and write BC dicts.
         </p>
+      )}
+
+      {envelope &&
+        envelope.confidence === "confident" &&
+        envelope.unresolved_questions.length === 0 && (
+          <div
+            data-testid="step3-envelope-success"
+            className="rounded-sm border border-emerald-700/40 bg-emerald-900/10 p-2"
+          >
+            <div className="font-mono text-[11px] text-emerald-200">
+              ✓ AI processing complete (envelope mode)
+            </div>
+            <p className="mt-1 text-[10px] text-surface-400">{envelope.summary}</p>
+            {envelope.next_step_suggestion && (
+              <p className="mt-1 text-[10px] text-surface-500">
+                {envelope.next_step_suggestion}
+              </p>
+            )}
+          </div>
+        )}
+
+      {envelope && envelope.unresolved_questions.length > 0 && (
+        <DialogPanel
+          envelope={envelope}
+          pickedFaceIdForQuestion={pickedFaceIdForQuestion}
+          onResume={handleDialogResume}
+        />
       )}
 
       {summary && (

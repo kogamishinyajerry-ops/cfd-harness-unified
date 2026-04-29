@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 
 import { Step3SetupBC } from "../steps/Step3SetupBC";
 import {
@@ -14,10 +15,12 @@ import type { ReactNode } from "react";
 
 const {
   setupBCMock,
+  setupBCWithEnvelopeMock,
   getFaceAnnotationsMock,
   putFaceAnnotationsMock,
 } = vi.hoisted(() => ({
   setupBCMock: vi.fn(),
+  setupBCWithEnvelopeMock: vi.fn(),
   getFaceAnnotationsMock: vi.fn(),
   putFaceAnnotationsMock: vi.fn(),
 }));
@@ -31,6 +34,8 @@ vi.mock("@/api/client", async () => {
     api: {
       ...actual.api,
       setupBC: (...args: unknown[]) => setupBCMock(...args),
+      setupBCWithEnvelope: (...args: unknown[]) =>
+        setupBCWithEnvelopeMock(...args),
       getFaceAnnotations: (...args: unknown[]) =>
         getFaceAnnotationsMock(...args),
       putFaceAnnotations: (...args: unknown[]) =>
@@ -40,22 +45,27 @@ vi.mock("@/api/client", async () => {
 });
 
 // A small harness that primes a picked face so the AnnotationPanel
-// renders inside Step3SetupBC's body.
+// renders inside Step3SetupBC's body. Wrapped in MemoryRouter so
+// useSearchParams (M9 envelope-mode wiring) works.
 function PickedHarness({
   caseId,
   faceId,
   children,
+  initialEntries = ["/?ai_mode="],
 }: {
   caseId: string;
   faceId: string;
   children: ReactNode;
+  initialEntries?: string[];
 }) {
   return (
-    <FacePickProvider>
-      <Primer faceId={faceId} />
-      {children}
-      <span data-testid="harness-case-id">{caseId}</span>
-    </FacePickProvider>
+    <MemoryRouter initialEntries={initialEntries}>
+      <FacePickProvider>
+        <Primer faceId={faceId} />
+        {children}
+        <span data-testid="harness-case-id">{caseId}</span>
+      </FacePickProvider>
+    </MemoryRouter>
   );
 }
 
@@ -75,6 +85,7 @@ function Primer({ faceId }: { faceId: string }) {
 describe("Step3SetupBC face-annotation save path", () => {
   beforeEach(() => {
     setupBCMock.mockReset();
+    setupBCWithEnvelopeMock.mockReset();
     getFaceAnnotationsMock.mockReset();
     putFaceAnnotationsMock.mockReset();
   });
@@ -207,3 +218,309 @@ describe("Step3SetupBC face-annotation save path", () => {
     });
   });
 });
+
+describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
+  beforeEach(() => {
+    setupBCMock.mockReset();
+    setupBCWithEnvelopeMock.mockReset();
+    getFaceAnnotationsMock.mockReset();
+    putFaceAnnotationsMock.mockReset();
+  });
+
+  it("ai_mode=force_uncertain: clicking [AI 处理] dispatches envelope mode + renders DialogPanel", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock.mockResolvedValueOnce({
+      confidence: "uncertain",
+      summary: "Please confirm the lid orientation.",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [
+        {
+          id: "lid_orientation",
+          kind: "face_label",
+          prompt: "Click the lid face.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+      next_step_suggestion: "Click [继续 AI 处理].",
+      error_detail: null,
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const registerAiAction = vi.fn(
+      (action: (() => Promise<void>) | null) => {
+        registeredAction = action;
+      },
+    );
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3SetupBC
+            caseId="abc"
+            onStepComplete={vi.fn()}
+            onStepError={vi.fn()}
+            registerAiAction={registerAiAction}
+          />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByTestId("step3-envelope-mode-banner"),
+    ).toBeInTheDocument();
+
+    // The shell calls the registered action (simulated [AI 处理] click).
+    await waitFor(() => expect(registerAiAction).toHaveBeenCalled());
+    expect(registeredAction).not.toBeNull();
+    await registeredAction!();
+
+    await waitFor(() =>
+      expect(setupBCWithEnvelopeMock).toHaveBeenCalledWith(
+        "abc",
+        expect.objectContaining({ forceUncertain: true }),
+      ),
+    );
+    expect(await screen.findByTestId("dialog-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("dialog-panel-confidence")).toHaveTextContent(
+      "uncertain",
+    );
+  });
+
+  it("face pick during dialog routes to the active face question", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock.mockResolvedValueOnce({
+      confidence: "uncertain",
+      summary: "Please confirm the lid.",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [
+        {
+          id: "lid_orientation",
+          kind: "face_label",
+          prompt: "Click the lid face.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+      next_step_suggestion: null,
+      error_detail: null,
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Primer faceId="" />
+          <Step3SetupBC
+            caseId="abc"
+            onStepComplete={vi.fn()}
+            onStepError={vi.fn()}
+            registerAiAction={(action) => {
+              registeredAction = action;
+            }}
+          />
+          <FacePushHelper />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    // Simulate a viewport pick: clicking the FacePushHelper button
+    // calls setPicked({ faceId: 'fid_lid_a', ... }). The Step3SetupBC
+    // useEffect routes that to the active face question.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("test-pick-button"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("dialog-panel-face-hint-lid_orientation"),
+      ).toHaveTextContent(/picked: fid_lid_a/i),
+    );
+  });
+
+  it("envelope confident on first call → step completes (no dialog)", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock.mockResolvedValueOnce({
+      confidence: "confident",
+      summary: "All set.",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [],
+      next_step_suggestion: null,
+      error_detail: null,
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const onStepComplete = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3SetupBC
+            caseId="abc"
+            onStepComplete={onStepComplete}
+            onStepError={vi.fn()}
+            registerAiAction={(action) => {
+              registeredAction = action;
+            }}
+          />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
+    expect(screen.queryByTestId("dialog-panel")).toBeNull();
+    expect(
+      await screen.findByTestId("step3-envelope-success"),
+    ).toBeInTheDocument();
+  });
+
+  it("[继续 AI 处理] saves picked face as user_authoritative + re-runs envelope", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock
+      .mockResolvedValueOnce({
+        confidence: "uncertain",
+        summary: "Confirm lid.",
+        annotations_revision_consumed: 1,
+        annotations_revision_after: 1,
+        unresolved_questions: [
+          {
+            id: "lid_orientation",
+            kind: "face_label",
+            prompt: "Pick the lid.",
+            needs_face_selection: true,
+            candidate_face_ids: [],
+            candidate_options: [],
+            default_answer: null,
+          },
+        ],
+        next_step_suggestion: null,
+        error_detail: null,
+      })
+      // Re-run after resume returns confident.
+      .mockResolvedValueOnce({
+        confidence: "confident",
+        summary: "Done.",
+        annotations_revision_consumed: 2,
+        annotations_revision_after: 2,
+        unresolved_questions: [],
+        next_step_suggestion: null,
+        error_detail: null,
+      });
+    putFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 2,
+      last_modified: "2026-04-29T00:00:01Z",
+      faces: [{ face_id: "fid_lid_a", name: "lid_orientation" }],
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const onStepComplete = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3SetupBC
+            caseId="abc"
+            onStepComplete={onStepComplete}
+            onStepError={vi.fn()}
+            registerAiAction={(action) => {
+              registeredAction = action;
+            }}
+          />
+          <FacePushHelper />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    // Pick the lid face → routes to lid_orientation question.
+    await user.click(screen.getByTestId("test-pick-button"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("dialog-panel-face-hint-lid_orientation"),
+      ).toHaveTextContent(/picked: fid_lid_a/i),
+    );
+
+    // Click [继续 AI 处理]. Resume composes "<face_id>:<label>" if a
+    // text answer was typed; in this test the engineer didn't type
+    // anything, so DialogPanel sends just "<face_id>".
+    await user.click(screen.getByTestId("dialog-panel-resume"));
+
+    await waitFor(() => expect(putFaceAnnotationsMock).toHaveBeenCalled());
+    const [, putBody] = putFaceAnnotationsMock.mock.calls[0];
+    expect(putBody).toMatchObject({
+      if_match_revision: 1,
+      annotated_by: "human",
+      faces: [
+        expect.objectContaining({
+          face_id: "fid_lid_a",
+          confidence: "user_authoritative",
+        }),
+      ],
+    });
+
+    // Re-run envelope mode without force flags.
+    await waitFor(() =>
+      expect(setupBCWithEnvelopeMock).toHaveBeenCalledTimes(2),
+    );
+    const [, secondCallOpts] = setupBCWithEnvelopeMock.mock.calls[1];
+    expect(secondCallOpts).toEqual({});
+    await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
+  });
+});
+
+// Helper: a small button that pushes a face pick into the context.
+// The envelope-mode tests use this to simulate a viewport pick
+// without spinning up the kernel.
+function FacePushHelper() {
+  const { setPicked } = useFacePick();
+  return (
+    <button
+      type="button"
+      data-testid="test-pick-button"
+      onClick={() =>
+        setPicked({
+          faceId: "fid_lid_a",
+          worldPosition: [0.5, 0.5, 1.0],
+        })
+      }
+    >
+      pick lid
+    </button>
+  );
+}
