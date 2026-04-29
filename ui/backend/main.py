@@ -104,6 +104,13 @@ try:
 except ModuleNotFoundError:
     case_visualize = None  # type: ignore[assignment]
 
+# case_annotations routes (M-AI-COPILOT Tier-A · DEC-V61-098 spec_v2 §A4).
+# face_annotations.yaml GET/PUT for the bidirectional dialog flow.
+try:
+    from ui.backend.routes import case_annotations  # noqa: F401
+except ModuleNotFoundError:
+    case_annotations = None  # type: ignore[assignment]
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -157,3 +164,5 @@ if case_solve is not None:
     app.include_router(case_solve.router, prefix="/api", tags=["case-solve"])
 if case_visualize is not None:
     app.include_router(case_visualize.router, prefix="/api", tags=["case-visualize"])
+if case_annotations is not None:
+    app.include_router(case_annotations.router, prefix="/api", tags=["case-annotations"])

@@ -21,6 +21,10 @@ const STATUS_DOT: Record<StepStatus, string> = {
   active: "bg-emerald-400",
   completed: "bg-emerald-500",
   error: "bg-rose-500",
+  // M-AI-COPILOT: amber dot signals "AI is waiting for user input"
+  // — distinct hue from active (emerald) and error (rose) so the
+  // engineer can see at a glance that the step is parked, not running.
+  awaiting_user: "bg-amber-400",
 };
 
 const ROW_BASE =
@@ -35,6 +39,8 @@ const ROW_VARIANT: Record<StepStatus, string> = {
     "border-surface-800 bg-surface-900/40 text-emerald-300 hover:bg-surface-900/60",
   error:
     "border-rose-500/40 bg-rose-500/10 text-rose-200",
+  awaiting_user:
+    "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20",
 };
 
 export function StepTree({

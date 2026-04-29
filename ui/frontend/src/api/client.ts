@@ -314,6 +314,126 @@ export const api = {
     return (await resp.json()) as import("@/types/case_solve").SetupBcSummary;
   },
 
+  // M-AI-COPILOT (DEC-V61-098 spec_v2 §B.4): envelope-mode setup-bc.
+  // Same backend route, different response shape under ?envelope=1.
+  // ``forceUncertain`` / ``forceBlocked`` drive the LDC dialog dogfood
+  // path so the engineer can practice the bidirectional dialog flow
+  // without needing real arbitrary-STL ambiguity.
+  setupBCWithEnvelope: async (
+    caseId: string,
+    options: {
+      forceUncertain?: boolean;
+      forceBlocked?: boolean;
+    } = {},
+  ): Promise<
+    import("@/pages/workbench/step_panel_shell/types").AIActionEnvelope
+  > => {
+    const params = new URLSearchParams({ envelope: "1" });
+    if (options.forceUncertain) params.set("force_uncertain", "1");
+    if (options.forceBlocked) params.set("force_blocked", "1");
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/setup-bc?${params.toString()}`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "detail" in detail
+          ? (detail as { detail: string }).detail
+          : typeof detail === "string"
+            ? detail
+            : `setup-bc envelope failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).AIActionEnvelope;
+  },
+
+  // M-AI-COPILOT face-annotations endpoints (DEC-V61-098 spec_v2 §A4).
+  getFaceAnnotations: async (
+    caseId: string,
+  ): Promise<
+    import("@/pages/workbench/step_panel_shell/types").AnnotationsDocument
+  > => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/face-annotations`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `getFaceAnnotations failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).AnnotationsDocument;
+  },
+
+  /** PUT /face-annotations. Returns the new state with bumped revision.
+   *  Throws ApiError with status=409 + RevisionConflictDetail body when
+   *  ``if_match_revision`` is stale (caller should re-fetch + retry).
+   */
+  putFaceAnnotations: async (
+    caseId: string,
+    body: import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).AnnotationsPutBody,
+  ): Promise<
+    import("@/pages/workbench/step_panel_shell/types").AnnotationsDocument
+  > => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/face-annotations`,
+      {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `putFaceAnnotations failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).AnnotationsDocument;
+  },
+
   solve: async (
     caseId: string,
   ): Promise<import("@/types/case_solve").SolveSummary> => {
