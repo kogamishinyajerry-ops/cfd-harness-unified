@@ -50,7 +50,9 @@ notion_sync_status: synced 2026-04-29 (DEC https://app.notion.com/p/351c68942bed
 autonomous_governance: true
 library_choice: React + React Router + Tailwind (existing) · @kitware/vtk.js Viewport from M-VIZ (extends with vtkCellPicker · already a sibling import in vtk.js core) · @tanstack/react-query for envelope state · pyyaml for face_annotations.yaml read/write (existing dep · used elsewhere in case_setup) · NO new UI component library / state-management library / 3D library
 codex_tool_report_path:
-  round_1: pending (will land at reports/codex_tool_reports/2026-04-XX_m_ai_copilot_arc_codex_review_round1.md after spec_v2 §E Step 8)
+  round_1: reports/codex_tool_reports/dec_v61_098_steps2_3_round1.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH symlink-escape via fixed `.tmp` + 1 MED face_id signed-zero + 1 LOW error_detail unbound + concurrent-write race surfaced locally)
+  round_2: reports/codex_tool_reports/dec_v61_098_steps2_3_round2.md (CHANGES_REQUIRED · 2026-04-29 · 1 HIGH lock-file containment via missing O_NOFOLLOW + raw OSError leak)
+  round_3: reports/codex_tool_reports/dec_v61_098_steps2_3_round3.md (APPROVE · 2026-04-29 commit 8ae2749 · all R1+R2 findings closed · regression tests pinned)
 codex_review_required: true
 codex_review_phase: pre-merge (RETRO-V61-001 ≤70% self-pass gate · NOT post-merge)
 codex_triggers:
