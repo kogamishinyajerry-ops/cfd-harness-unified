@@ -77,7 +77,34 @@ The acceptance criteria:
 - **Click the same face you just saved.** The form should be **pre-filled** with the saved name + patch_type + notes (re-seeded from existing annotation).
 - **Modify the name and Save.** Should succeed.
 
-### 4. Smoke the 409 conflict path (advanced)
+### 4. Smoke the M9 Tier-B AI envelope-mode dialog (NEW · DEC-V61-100 Step 1)
+
+This validates the productized pick→annotate→re-run loop on the dogfood substrate (real classifier deferred to Step 2).
+
+1. Navigate to `/workbench/<case-id>?step=3&ai_mode=force_uncertain`.
+2. An amber **"AI-COPILOT envelope mode"** banner appears at the top of the right rail. The banner confirms the dialog substrate is active.
+3. Click `[AI 处理]`. Instead of completing immediately, the right rail surfaces a **DialogPanel** (amber outline) with:
+   - confidence badge: `uncertain`
+   - summary: "Set up LDC defaults: lid=N faces, walls=M faces. Please confirm the lid orientation."
+   - one question (`lid_orientation`): "Confirm which face is the moving lid (default: top, +z). Click the lid face in the 3D viewport to confirm or select a different face."
+   - face hint: "Click a face in the viewport to select." (amber)
+4. **Click the lid face** (top of cube · z=1) in the viewport. Expected:
+   - face hint changes to "Picked: fid_xxx…" (emerald)
+   - the AnnotationPanel does NOT surface (the pick routes to the dialog question, not the panel)
+   - `[继续 AI 处理]` button arms (no longer disabled)
+5. Click `[继续 AI 处理]`. Expected:
+   - the picked face is saved as `face_annotations.yaml` entry with `confidence: user_authoritative` and `annotated_by: human`
+   - envelope re-runs with force flags cleared
+   - returns `confident` (mock backend always confidents on re-run)
+   - DialogPanel disappears, `✓ AI processing complete (envelope mode)` success surface appears
+   - step completes (Step 4 unlocks)
+6. Try `?ai_mode=force_blocked` for the blocked variant. Expected: rose-outline DialogPanel, [继续 AI 处理] still arms after picking the face, re-run completes.
+
+**Negative tests** (optional but useful):
+- Click `[AI 处理]` with `ai_mode=force_uncertain` but DON'T pick a face. Verify `[继续 AI 处理]` stays disabled.
+- Open two tabs · in tab A start envelope-mode flow · in tab B do a manual face annotation save · come back to tab A and resume → expect mid-dialog 409 message "Annotations changed mid-dialog. Refreshed — please retry."
+
+### 6. Smoke the 409 conflict path (advanced)
 
 This validates the Codex Step 7b R1 fix — useful but not required for visual smoke:
 
@@ -87,7 +114,7 @@ This validates the Codex Step 7b R1 fix — useful but not required for visual s
 4. Back in tab A: click Save → expect inline error `Revision conflict (was 1, latest 2). Refreshed — please retry.`
 5. Click Save again in tab A → succeeds with `if_match_revision: 2` (the panel auto-refreshed to the latest doc).
 
-### 5. Smoke checks for regressions
+### 7. Smoke checks for regressions
 
 - Steps 1/2/4/5 viewport: pickMode must be **disabled** outside Step 3. Click on viewport in Step 1 → no AnnotationPanel surfaces.
 - Step 4 [AI 处理] (solver) and Step 5 (results) — should work exactly as before.
