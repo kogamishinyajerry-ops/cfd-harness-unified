@@ -27,6 +27,10 @@ from ui.backend.services.case_scaffold import IMPORTED_DIR
 def _isolated_imported(monkeypatch, tmp_path: Path) -> Path:
     """Repoint IMPORTED_DIR at a tmp dir so tests don't pollute the
     real user_drafts/imported tree.
+
+    Two route modules import IMPORTED_DIR at module load: case_solve
+    (for setup-bc) and case_annotations (for face-annotations PUT/GET).
+    Both must be patched to keep the full E2E loop self-contained.
     """
     target = tmp_path / "imported"
     target.mkdir()
@@ -35,6 +39,9 @@ def _isolated_imported(monkeypatch, tmp_path: Path) -> Path:
     )
     monkeypatch.setattr(
         "ui.backend.routes.case_solve.IMPORTED_DIR", target
+    )
+    monkeypatch.setattr(
+        "ui.backend.routes.case_annotations.IMPORTED_DIR", target
     )
     return target
 
@@ -230,3 +237,205 @@ def test_envelope_reads_existing_annotations_revision(
     payload = r.json()
     assert payload["annotations_revision_consumed"] == 2
     assert payload["annotations_revision_after"] == 2  # blocked → no write
+
+
+# ────────── envelope=1 full-loop HTTP E2E (RETRO-V61-053 mandate) ──────────
+#
+# RETRO-V61-053 addendum (2026-04-24) introduced the
+# `executable_smoke_test` flag: a category of post-R3 defects that
+# Codex static review structurally cannot catch — they only surface
+# when the handshake between classifier, action wrapper, and HTTP
+# route is exercised through the actual API. Wrapper-level full-loop
+# coverage already exists in test_ai_classifier.test_full_loop_*; this
+# closes the route-layer gap.
+
+
+def test_envelope_full_loop_uncertain_pin_lid_then_confident_via_http(
+    monkeypatch, tmp_path
+):
+    """E2E: POST setup-bc → uncertain · PUT face-annotations · POST
+    setup-bc → confident · BC dicts on disk.
+
+    Exercises the contract Codex M9 Step 2 R2 closed (classifier-
+    executor parity via _top_plane_face_ids) over the actual HTTP
+    surface, so a route-layer breakage between the FastAPI body
+    schema, _resolve_case_dir, and ai_actions wrapper would be
+    caught here even when wrapper-level tests stay green.
+    """
+    # Inline cube fixture (mirrors test_ai_classifier._stage_full_cube).
+    # We don't import from a sibling test module — that's brittle and
+    # makes pytest collection order matter.
+    points_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class vectorField;\n    location \"constant/polyMesh\";\n"
+        "    object points;\n}\n\n8\n(\n"
+        "(0 0 0)\n(1 0 0)\n(1 1 0)\n(0 1 0)\n"
+        "(0 0 1)\n(1 0 1)\n(1 1 1)\n(0 1 1)\n)\n"
+    )
+    faces_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class faceList;\n    location \"constant/polyMesh\";\n"
+        "    object faces;\n}\n\n6\n(\n"
+        "4(0 1 2 3)\n4(4 5 6 7)\n4(0 1 5 4)\n"
+        "4(2 3 7 6)\n4(1 2 6 5)\n4(0 3 7 4)\n)\n"
+    )
+    boundary_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class polyBoundaryMesh;\n"
+        "    location \"constant/polyMesh\";\n    object boundary;\n}\n\n"
+        "1\n(\n    walls\n    {\n        type wall;\n"
+        "        nFaces 6;\n        startFace 0;\n    }\n)\n"
+    )
+    owner_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class labelList;\n    location \"constant/polyMesh\";\n"
+        "    object owner;\n}\n\n6\n(\n0\n0\n0\n0\n0\n0\n)\n"
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(points_cube, encoding="utf-8")
+    (polymesh / "faces").write_text(faces_cube, encoding="utf-8")
+    (polymesh / "boundary").write_text(boundary_cube, encoding="utf-8")
+    (polymesh / "owner").write_text(owner_cube, encoding="utf-8")
+
+    client = _new_client()
+
+    # Step 1: first envelope call returns uncertain · lid_orientation.
+    r1 = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},  # NOTE: no force flags — exercises the real classifier
+    )
+    assert r1.status_code == 200, r1.text
+    env1 = r1.json()
+    assert env1["confidence"] == "uncertain", env1
+    assert any(
+        q["id"] == "lid_orientation" for q in env1["unresolved_questions"]
+    )
+    assert env1["annotations_revision_consumed"] == 0
+    assert not (case_dir / "0").is_dir()  # executor did NOT run yet
+
+    # Step 2: compute the actual top-plane face_id and PUT the lid pin.
+    from ui.backend.services.case_annotations import face_id
+
+    top_face_id = face_id(
+        [(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0)]
+    )
+    r_put = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 0,
+            "annotated_by": "human",
+            "faces": [
+                {
+                    "face_id": top_face_id,
+                    "name": "lid",
+                    "confidence": "user_authoritative",
+                }
+            ],
+        },
+    )
+    assert r_put.status_code == 200, r_put.text
+    put_payload = r_put.json()
+    assert put_payload["revision"] == 1
+    pinned = next(f for f in put_payload["faces"] if f["face_id"] == top_face_id)
+    assert pinned["name"] == "lid"
+    assert pinned["confidence"] == "user_authoritative"
+
+    # Step 3: re-run envelope → classifier verifies pin geometrically →
+    # confident · setup_ldc_bc runs → BC dicts on disk.
+    r2 = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},
+    )
+    assert r2.status_code == 200, r2.text
+    env2 = r2.json()
+    assert env2["confidence"] == "confident", env2
+    assert env2["unresolved_questions"] == []
+    assert env2["annotations_revision_consumed"] == 1
+    assert (case_dir / "0").is_dir()
+    assert (case_dir / "system").is_dir()
+    assert (case_dir / "constant").is_dir()
+
+
+def test_envelope_full_loop_lid_pin_off_top_plane_stays_uncertain(
+    monkeypatch, tmp_path
+):
+    """E2E negative path: pinning a non-top face with name='lid' must
+    NOT silently flip the classifier to confident — that would let
+    setup_ldc_bc override the engineer's intent. Codex M9 Step 2 R2
+    HIGH finding.
+    """
+    points_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class vectorField;\n    location \"constant/polyMesh\";\n"
+        "    object points;\n}\n\n8\n(\n"
+        "(0 0 0)\n(1 0 0)\n(1 1 0)\n(0 1 0)\n"
+        "(0 0 1)\n(1 0 1)\n(1 1 1)\n(0 1 1)\n)\n"
+    )
+    faces_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class faceList;\n    location \"constant/polyMesh\";\n"
+        "    object faces;\n}\n\n6\n(\n"
+        "4(0 1 2 3)\n4(4 5 6 7)\n4(0 1 5 4)\n"
+        "4(2 3 7 6)\n4(1 2 6 5)\n4(0 3 7 4)\n)\n"
+    )
+    boundary_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class polyBoundaryMesh;\n"
+        "    location \"constant/polyMesh\";\n    object boundary;\n}\n\n"
+        "1\n(\n    walls\n    {\n        type wall;\n"
+        "        nFaces 6;\n        startFace 0;\n    }\n)\n"
+    )
+    owner_cube = (
+        "FoamFile\n{\n    version 2.0;\n    format ascii;\n"
+        "    class labelList;\n    location \"constant/polyMesh\";\n"
+        "    object owner;\n}\n\n6\n(\n0\n0\n0\n0\n0\n0\n)\n"
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(points_cube, encoding="utf-8")
+    (polymesh / "faces").write_text(faces_cube, encoding="utf-8")
+    (polymesh / "boundary").write_text(boundary_cube, encoding="utf-8")
+    (polymesh / "owner").write_text(owner_cube, encoding="utf-8")
+
+    # Pin a SIDE face (z=0 plane) with name='lid' — wrong geometry.
+    from ui.backend.services.case_annotations import face_id
+
+    bottom_face_id = face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+    )
+    client = _new_client()
+    r_put = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 0,
+            "annotated_by": "human",
+            "faces": [
+                {
+                    "face_id": bottom_face_id,
+                    "name": "lid",
+                    "confidence": "user_authoritative",
+                }
+            ],
+        },
+    )
+    assert r_put.status_code == 200, r_put.text
+
+    # Envelope MUST stay uncertain — classifier honors geometry.
+    r = client.post(
+        f"/api/import/{case_id}/setup-bc",
+        params={"envelope": 1},
+    )
+    assert r.status_code == 200, r.text
+    env = r.json()
+    assert env["confidence"] == "uncertain", env
+    # And critically: setup_ldc_bc did NOT run — no 0/ dir.
+    assert not (case_dir / "0").is_dir()
