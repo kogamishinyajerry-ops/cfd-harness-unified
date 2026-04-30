@@ -74,6 +74,10 @@ beforeEach(() => {
   apiMock.listRawDicts.mockReset();
   apiMock.getRawDict.mockReset();
   apiMock.postRawDict.mockReset();
+  // Codex round-2 MED closure introduced sessionStorage persistence
+  // across mounts. Clear between tests so a previous case_id+path
+  // entry doesn't leak as the initial buffer of the next test.
+  sessionStorage.clear();
 });
 
 describe("RawDictEditor", () => {
@@ -135,15 +139,17 @@ describe("RawDictEditor", () => {
     renderEditor({});
     await waitFor(() => screen.getByText("system/controlDict"));
 
-    // Save button visible but disabled while GET in flight.
+    // Critical invariant: while the GET is in flight, save is
+    // DISABLED — even if the user types content into the editor.
+    // This guarantees the POST race-protection contract (etag must
+    // be known before save) is unconditionally honored.
     const saveBtn = screen.getByTestId("raw-dict-save");
     expect(saveBtn).toBeDisabled();
-    // Even if we type into the editor, save stays disabled until GET completes.
     const cm = screen.getByTestId("cm-mock");
     fireEvent.change(cm, { target: { value: "premature edit\n" } });
     expect(saveBtn).toBeDisabled();
 
-    // Resolve GET; save becomes available once dirty.
+    // Resolve GET; save unlocks once etag is known.
     await act(async () => {
       resolveGet({
         case_id: "case-1",
@@ -154,12 +160,12 @@ describe("RawDictEditor", () => {
         edited_at: null,
       });
     });
-    // After GET resolves, the buffer is reset to server content;
-    // dirty=false → save still disabled.
+    // GET completed, etag known. With Codex round-2 persistence the
+    // user's typed draft survives the GET (server content does NOT
+    // overwrite it), so save becomes enabled because buffer != server.
     await waitFor(() => {
-      expect(screen.getByTestId("cm-mock")).toHaveValue("from server\n");
+      expect(screen.getByTestId("raw-dict-save")).not.toBeDisabled();
     });
-    expect(saveBtn).toBeDisabled();
   });
 
   it("save POSTs with expected_etag and updates the etag on success", async () => {
@@ -345,6 +351,114 @@ describe("RawDictEditor", () => {
         }),
         { force: true },
       );
+    });
+  });
+
+  it("surfaces detail.isError when GET fails (Codex round-1 P1 follow-up)", async () => {
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "abcd1234abcd1234" },
+    ]);
+    apiMock.getRawDict.mockRejectedValueOnce(
+      new ApiError(500, "internal error", { hint: "disk full" }),
+    );
+
+    renderEditor({});
+
+    await waitFor(() => {
+      expect(screen.getByTestId("raw-dict-load-error")).toBeInTheDocument();
+    });
+  });
+
+  it("preserves unsaved buffer across unmount/remount (Codex round-2 MED — cross-step nav)", async () => {
+    // Simulate: user types into the editor, navigates away (parent
+    // unmounts), comes back. Without sessionStorage persistence the
+    // buffer would reset to server content; with persistence the
+    // typed content survives.
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "etag1234567890ab" },
+    ]);
+    apiMock.getRawDict.mockResolvedValue({
+      case_id: "case-persist",
+      path: "system/controlDict",
+      content: "server content\n",
+      source: "ai",
+      etag: "etag1234567890ab",
+      edited_at: null,
+    });
+
+    sessionStorage.clear();
+    const first = renderEditor({ caseId: "case-persist" });
+    await waitFor(() => {
+      expect(screen.getByTestId("cm-mock")).toHaveValue("server content\n");
+    });
+    fireEvent.change(screen.getByTestId("cm-mock"), {
+      target: { value: "USER UNSAVED EDIT\n" },
+    });
+    // Force the persistence useEffect to flush.
+    await waitFor(() => {
+      expect(
+        sessionStorage.getItem(
+          "dec-v61-102:dict-buffer:case-persist:system/controlDict",
+        ),
+      ).toBe("USER UNSAVED EDIT\n");
+    });
+
+    // Unmount (simulates step navigation).
+    first.unmount();
+
+    // Remount the editor. Buffer must restore to the persisted draft,
+    // not the server content.
+    renderEditor({ caseId: "case-persist" });
+    await waitFor(() => {
+      expect(screen.getByTestId("cm-mock")).toHaveValue("USER UNSAVED EDIT\n");
+    });
+
+    sessionStorage.clear();
+  });
+
+  it("clears persisted draft on successful save (Codex round-2 follow-up)", async () => {
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "etag1111aaaa2222" },
+    ]);
+    apiMock.getRawDict.mockResolvedValue({
+      case_id: "case-cleared",
+      path: "system/controlDict",
+      content: "old\n",
+      source: "ai",
+      etag: "etag1111aaaa2222",
+      edited_at: null,
+    });
+    apiMock.postRawDict.mockResolvedValueOnce({
+      case_id: "case-cleared",
+      path: "system/controlDict",
+      new_etag: "newnewnewnewnewn",
+      source: "user",
+      warnings: [],
+    });
+
+    sessionStorage.clear();
+    renderEditor({ caseId: "case-cleared" });
+    await waitFor(() => {
+      expect(screen.getByTestId("cm-mock")).toHaveValue("old\n");
+    });
+    fireEvent.change(screen.getByTestId("cm-mock"), {
+      target: { value: "user new\n" },
+    });
+    await waitFor(() => {
+      expect(
+        sessionStorage.getItem(
+          "dec-v61-102:dict-buffer:case-cleared:system/controlDict",
+        ),
+      ).toBe("user new\n");
+    });
+
+    fireEvent.click(screen.getByTestId("raw-dict-save"));
+    await waitFor(() => {
+      expect(
+        sessionStorage.getItem(
+          "dec-v61-102:dict-buffer:case-cleared:system/controlDict",
+        ),
+      ).toBeNull();
     });
   });
 

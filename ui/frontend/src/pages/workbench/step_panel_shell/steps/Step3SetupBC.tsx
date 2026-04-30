@@ -81,9 +81,13 @@ export function Step3SetupBC({
   // Codex Phase-2 P2 closure: track whether the disclosure has been
   // opened AT LEAST ONCE rather than whether it is open RIGHT NOW.
   // After the first open, the editor stays mounted so closing the
-  // <details> hides it via CSS but does NOT unmount the component
-  // and silently discard any unsaved edits. The user must explicitly
-  // save (or click "Discard local changes") to lose pending content.
+  // <details> hides it via CSS rather than unmounting the component.
+  //
+  // Note: cross-step navigation (Step 3 → Step 2 → Step 3) DOES
+  // unmount this whole panel and reset rawDictHasOpened. Buffer
+  // continuity across that boundary is handled inside RawDictEditor
+  // via sessionStorage persistence (Codex round-2 MED closure), so
+  // the user's unsaved content survives even when the parent unmounts.
   const [rawDictHasOpened, setRawDictHasOpened] = useState(false);
 
   // M-AI-COPILOT face-annotation state (DEC-V61-098 spec_v2 §A8). The

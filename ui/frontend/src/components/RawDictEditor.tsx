@@ -38,6 +38,48 @@ interface Props {
   allowedPaths?: ReadonlyArray<string>;
 }
 
+// Codex Phase-2 round-2 MED closure: sessionStorage persistence for
+// the editor buffer. Step navigation (Step 3 → Step 2 → Step 3)
+// unmounts the whole task panel including this component, so a
+// component-local useState would silently discard unsaved content.
+// We persist on every keystroke and restore on mount; sessionStorage
+// (not localStorage) so closing the tab is still an intentional
+// discard. Key includes caseId + path to scope the cache correctly.
+const PERSISTENCE_PREFIX = "dec-v61-102:dict-buffer";
+
+function persistenceKey(caseId: string, relativePath: string): string {
+  return `${PERSISTENCE_PREFIX}:${caseId}:${relativePath}`;
+}
+
+function readPersisted(caseId: string, relativePath: string): string | null {
+  try {
+    return sessionStorage.getItem(persistenceKey(caseId, relativePath));
+  } catch {
+    // sessionStorage can throw under privacy modes / disabled storage.
+    return null;
+  }
+}
+
+function writePersisted(
+  caseId: string,
+  relativePath: string,
+  buffer: string,
+): void {
+  try {
+    sessionStorage.setItem(persistenceKey(caseId, relativePath), buffer);
+  } catch {
+    // Quota exceeded / disabled — fall back to in-memory only.
+  }
+}
+
+function clearPersisted(caseId: string, relativePath: string): void {
+  try {
+    sessionStorage.removeItem(persistenceKey(caseId, relativePath));
+  } catch {
+    // Same as above.
+  }
+}
+
 interface SaveStatus {
   kind: "idle" | "saving" | "saved" | "error";
   message?: string;
@@ -97,24 +139,60 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
 
   // Clear buffer the moment the user picks a different tab, so the
-  // editor never displays stale-under-new-path content. detail.data
-  // arriving later populates it.
+  // editor never displays stale-under-new-path content. If a persisted
+  // draft exists for the new path (Codex round-2 MED closure: cross-
+  // step navigation no longer silently discards unsaved edits), seed
+  // the buffer from sessionStorage. detail.data arriving later
+  // populates it ONLY if there's no persisted draft.
   useEffect(() => {
-    setBuffer("");
+    if (!activePath) {
+      setBuffer("");
+      setBufferEtag(null);
+      setStatus({ kind: "idle" });
+      return;
+    }
+    const persisted = readPersisted(caseId, activePath);
+    setBuffer(persisted ?? "");
     setBufferEtag(null);
     setStatus({ kind: "idle" });
-  }, [activePath]);
+  }, [activePath, caseId]);
 
-  // Once a fresh GET arrives, populate from server. For paths that
-  // don't exist yet (no manifest, no on-disk file), we leave the
-  // buffer empty so the user can author from scratch — saving will
-  // create the file with no expected_etag (server treats as new).
+  // Once a fresh GET arrives, populate from server UNLESS the user
+  // has a persisted draft for this path (their unsaved work wins
+  // until they explicitly save or discard).
+  //
+  // Path guard: useQuery may surface ``detail.data`` from the PREVIOUS
+  // tab's query while the new tab's GET is in flight. We must ignore
+  // any data whose .path doesn't match the currently-selected tab —
+  // otherwise switching tabs would briefly re-populate the editor
+  // with the previous tab's content under the new tab's path.
   useEffect(() => {
-    if (detail.data) {
+    if (!detail.data || !activePath) return;
+    if (detail.data.path !== activePath) return;
+    const persisted = readPersisted(caseId, activePath);
+    if (persisted === null) {
       setBuffer(detail.data.content);
-      setBufferEtag(detail.data.etag);
     }
-  }, [detail.data]);
+    setBufferEtag(detail.data.etag);
+  }, [detail.data, activePath, caseId]);
+
+  // Persist every keystroke. Two strict gates:
+  //   (a) Only persist once detail.data has loaded for the active
+  //       path — otherwise the empty buffer in the post-clear/
+  //       pre-populate gap would be written to sessionStorage and
+  //       later read back as a "persisted empty draft", suppressing
+  //       the legitimate populate-from-server step.
+  //   (b) Skip persistence when buffer matches server content (no
+  //       unsaved changes) — keeps sessionStorage compact.
+  useEffect(() => {
+    if (!activePath || !detail.data) return;
+    if (detail.data.path !== activePath) return;
+    if (buffer === detail.data.content) {
+      clearPersisted(caseId, activePath);
+      return;
+    }
+    writePersisted(caseId, activePath, buffer);
+  }, [buffer, detail.data, activePath, caseId]);
 
   // For existing files, the save button must wait until the GET
   // returns the current etag — otherwise a POST without expected_etag
@@ -153,6 +231,10 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
           message: `Saved · source=user · etag=${resp.new_etag.slice(0, 8)}`,
           warnings: resp.warnings.map((w) => `${w.severity}: ${w.message}`),
         });
+        // Save succeeded — clear the persisted draft so a future
+        // remount picks up the server content rather than the (now
+        // stale-but-saved) draft.
+        clearPersisted(caseId, activePath);
         // Invalidate so the tab list re-fetches the source/etag flag.
         qc.invalidateQueries({ queryKey: ["case-dicts-list", caseId] });
         qc.invalidateQueries({ queryKey: ["case-dict", caseId, activePath] });
@@ -207,6 +289,9 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
 
   const refreshFromServer = useCallback(() => {
     if (!activePath) return;
+    // Discarding local changes also clears the persisted draft so a
+    // remount doesn't resurrect the discarded edits.
+    clearPersisted(caseId, activePath);
     qc.invalidateQueries({ queryKey: ["case-dict", caseId, activePath] });
     qc.invalidateQueries({ queryKey: ["case-dicts-list", caseId] });
     setStatus({ kind: "idle" });
