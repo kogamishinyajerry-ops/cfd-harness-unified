@@ -34,6 +34,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from ui.backend.services.case_manifest import (
+    is_user_override,
+    mark_ai_authored,
+)
+
 # Lid plane is at z = +0.05 (top of the [-0.05, +0.05] cube). EPS is the
 # numerical tolerance for "all 3 vertices on the lid plane" — gmsh
 # rounds vertex coords to ~1e-7, so 1e-4 is generous-enough that
@@ -59,6 +64,10 @@ class BCSetupResult:
     nu: float
     reynolds: float
     written_files: tuple[str, ...]
+    # DEC-V61-102 Phase 1.4: paths skipped because the engineer carries
+    # a `source: user` manifest entry — preserved across re-runs of
+    # setup_ldc_bc so manual rescues survive AI re-author cycles.
+    skipped_user_overrides: tuple[str, ...] = ()
 
 
 # DEC-V61-101: minimal laminar channel executor. Defaults locked in
@@ -84,6 +93,9 @@ class ChannelBCSetupResult:
     nu: float
     reynolds: float  # rough estimate U·L_char/ν using bbox max-extent
     written_files: tuple[str, ...]
+    # DEC-V61-102 Phase 1.4: same semantics as BCSetupResult — paths the
+    # engineer manually edited are preserved, never silently re-authored.
+    skipped_user_overrides: tuple[str, ...] = ()
 
 
 def _split_foam_block(path: Path) -> tuple[str, int, str, str]:
@@ -265,19 +277,32 @@ def _split_lid_walls(
     return n_lid, n_walls, b_start
 
 
-def _author_dicts(case_dir: Path) -> tuple[str, ...]:
+def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Write the 7 OpenFOAM-10 dicts needed by icoFoam.
 
-    Returns the relative paths of the files written (for the
-    BCSetupResult audit trail).
+    Returns ``(written, skipped)``: ``written`` are paths the AI just
+    re-authored; ``skipped`` are paths the engineer manually edited
+    (manifest ``source: user``) and we left untouched. The 0/* and
+    constant/polyMesh paths are NEVER subject to user override (face_id-
+    coupled — see `case_dicts.allowlist`); only the dicts in the
+    allowlist can carry a `source: user` entry.
+
+    DEC-V61-102 Phase 1.4: this is the executor side of the
+    user-override invariant. Without this guard, every re-click of
+    [AI 处理] silently clobbers manual edits the engineer staged via
+    POST /cases/{id}/dicts/{path}.
     """
     (case_dir / "0").mkdir(exist_ok=True)
     (case_dir / "system").mkdir(exist_ok=True)
     (case_dir / "constant").mkdir(exist_ok=True)
 
     written: list[str] = []
+    skipped: list[str] = []
 
     def w(rel: str, content: str) -> None:
+        if is_user_override(case_dir, relative_path=rel):
+            skipped.append(rel)
+            return
         (case_dir / rel).write_text(content)
         written.append(rel)
 
@@ -377,7 +402,7 @@ def _author_dicts(case_dir: Path) -> tuple[str, ...]:
         "}\n",
     )
 
-    return tuple(written)
+    return tuple(written), tuple(skipped)
 
 
 def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
@@ -406,7 +431,19 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
         )
 
     n_lid, n_walls, _ = _split_lid_walls(polymesh)
-    written = _author_dicts(case_dir)
+    written, skipped = _author_dicts(case_dir)
+
+    # Record AI authorship for the paths we actually wrote. mark_ai_authored
+    # itself is a second guard that refuses to flip source=user → source=ai
+    # (the manifest invariant), so even if a race opened the override
+    # window between is_user_override and write, the manifest stays honest.
+    if written:
+        mark_ai_authored(
+            case_dir,
+            relative_paths=list(written),
+            action="setup_ldc_bc",
+            detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+        )
 
     return BCSetupResult(
         case_id=case_id,
@@ -417,6 +454,7 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
         nu=_NU_KINEMATIC,
         reynolds=_LID_VELOCITY[0] * 0.1 / _NU_KINEMATIC,
         written_files=written,
+        skipped_user_overrides=skipped,
     )
 
 
@@ -603,21 +641,27 @@ def _split_channel_patches(
     return n_inlet, n_outlet, n_walls, b_start
 
 
-def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
-    """Write the icoFoam dict tree for a laminar channel.
+def _author_channel_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Write the pimpleFoam dict tree for a laminar channel.
 
-    Same solver (icoFoam) and physics (laminar incompressible) as the
-    LDC path — only the BCs change to inlet/outlet/walls. The transport
-    properties use ν=0.01 to keep the channel in laminar regime
-    (Re=U·D/ν=1·1/0.01=100 for a 1×1 cross-section).
+    Same physics (laminar incompressible) as the LDC path — only the
+    BCs change to inlet/outlet/walls. ν=0.01 keeps the channel laminar
+    (Re=U·D/ν=1·1/0.01=100 for the 1×1 cross-section default).
+
+    Returns ``(written, skipped)`` — see `_author_dicts` for the
+    user-override semantics; identical here.
     """
     (case_dir / "0").mkdir(exist_ok=True)
     (case_dir / "system").mkdir(exist_ok=True)
     (case_dir / "constant").mkdir(exist_ok=True)
 
     written: list[str] = []
+    skipped: list[str] = []
 
     def w(rel: str, content: str) -> None:
+        if is_user_override(case_dir, relative_path=rel):
+            skipped.append(rel)
+            return
         (case_dir / rel).write_text(content)
         written.append(rel)
 
@@ -755,7 +799,7 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "}\n",
     )
 
-    return tuple(written)
+    return tuple(written), tuple(skipped)
 
 
 def setup_channel_bc(
@@ -796,7 +840,14 @@ def setup_channel_bc(
     n_inlet, n_outlet, n_walls, _ = _split_channel_patches(
         polymesh, inlet_face_ids, outlet_face_ids
     )
-    written = _author_channel_dicts(case_dir)
+    written, skipped = _author_channel_dicts(case_dir)
+    if written:
+        mark_ai_authored(
+            case_dir,
+            relative_paths=list(written),
+            action="setup_channel_bc",
+            detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+        )
 
     # Codex DEC-V61-101 R1 LOW closure: use the MIN bbox extent as
     # L_char (hydraulic-diameter approximation for narrow channels).
@@ -830,4 +881,5 @@ def setup_channel_bc(
         nu=_CHANNEL_NU,
         reynolds=reynolds,
         written_files=written,
+        skipped_user_overrides=skipped,
     )

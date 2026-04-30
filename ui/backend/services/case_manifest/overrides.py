@@ -95,10 +95,21 @@ def mark_user_override(
         edited_at=datetime.now(timezone.utc),
         etag=compute_etag(new_content),
     )
+    # Codex 8b4e602 review P3: callers (post_raw_dict in particular)
+    # pass custom detail with extra fields like force_bypass. We MERGE
+    # rather than replace so the path identifier is always present —
+    # otherwise a multi-edit history can't tell you which file each
+    # edit was about.
+    history_detail: dict[str, Any] = {
+        "path": relative_path,
+        "size": len(new_content),
+    }
+    if detail:
+        history_detail.update(detail)
     manifest.append_history(
         action="edit_dict",
         source="user",
-        detail=detail or {"path": relative_path, "size": len(new_content)},
+        detail=history_detail,
     )
     write_case_manifest(case_dir, manifest)
     return manifest

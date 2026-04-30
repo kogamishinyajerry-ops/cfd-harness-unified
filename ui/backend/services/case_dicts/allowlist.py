@@ -22,8 +22,13 @@ ALLOWED_RAW_DICT_PATHS: frozenset[str] = frozenset(
         "system/decomposeParDict",
         # Turbulence model selection (laminar / k-ω SST / Spalart-Allmaras / ...).
         "constant/momentumTransport",
-        # Material properties (kinematic viscosity, density for compressible).
-        "constant/transportProperties",
+        # Material properties (kinematic viscosity, density for
+        # compressible). The actual file is ``physicalProperties`` —
+        # both setup_ldc_bc and setup_channel_bc author that path
+        # (verified against bc_setup.py:313 + :655). The legacy name
+        # ``transportProperties`` is what older OpenFOAM tutorials use;
+        # we follow what's actually written.
+        "constant/physicalProperties",
         # Gravity vector (buoyant solvers).
         "constant/g",
         # NB: 0/{U, p, T, k, ...} are intentionally EXCLUDED.
