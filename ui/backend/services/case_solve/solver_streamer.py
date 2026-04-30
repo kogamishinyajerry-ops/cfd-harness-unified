@@ -209,22 +209,29 @@ def _parse_line_to_events(
     # axis or going blank. ``diagonal: true`` flag lets the
     # frontend decorate or filter the marker if it ever wants to,
     # but the default render still works.
-    # diagonal: trivial-matrix solve — no iteration, no residual.
-    # We DO NOT emit a synthetic SSE event for these. Codex rounds
-    # 3–7 explored emitting placeholder values (1e-12, carry-forward,
-    # 1e-7 seed) and each variant created a new failure mode: axis
-    # distortion, summary/chart disagreement, blank-on-diagonal-only.
-    # The honest answer is "the chart can't show what didn't happen."
-    # On real CAD-mesh runs (the user's reported failure mode),
-    # pimpleFoam picks GAMG/PBiCGStab and ``diagonal:`` never appears
-    # so the live chart works normally. On a degenerate fully-
-    # orthogonal mesh where every step is diagonal, the live chart
-    # shows no series for affected fields and the final ``done``
-    # summary reports 0.0 — accurate to the underlying physics.
-    # If a future user actually hits this on a real workflow, the
-    # right fix is a frontend ``diagonal: true`` event renderer that
-    # decorates the time axis without participating in y-scale.
-    if _RES_DIAGONAL_LINE.search(line):
+    # diagonal: trivial-matrix solve — emit residual=0.0 so the
+    # chart and the final summary agree (solver_runner._parse_log
+    # also reports 0.0 for diagonal lines). The frontend
+    # LiveResidualChart filters v<=0 out of axis-scaling but
+    # renders 0 values at the y-axis floor, so these points
+    # extend the line to the final step instead of distorting the
+    # log-scale span. Codex 2008105 round-8 closure 2026-04-30.
+    m_d = _RES_DIAGONAL_LINE.search(line)
+    if m_d:
+        field_raw = m_d.group(1)
+        if field_raw in ("Ux", "Uy", "Uz", "p"):
+            iters = int(m_d.group(2))
+            yield _sse(
+                "residual",
+                {
+                    "field": field_raw,
+                    "init": 0.0,
+                    "final": 0.0,
+                    "iters": iters,
+                    "t": current_time[0],
+                    "diagonal": True,
+                },
+            )
         return
 
     m_c = _CONT_LINE.search(line)

@@ -65,9 +65,20 @@ export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChart
       const points: string[] = [];
       for (const row of series) {
         const v = row[key];
-        if (v === undefined || v <= 0) continue;
+        if (v === undefined) continue;
+        // Codex 2008105 round-8 closure: a residual of 0.0 means
+        // the solver took the diagonal: trivial-matrix path on
+        // that step (no iteration, no real residual). Render those
+        // at the y-axis floor (yMinLog) so the line continues to
+        // the final step instead of freezing at the previous non-
+        // zero — keeps the chart visually consistent with the
+        // final summary, which reports 0.0 for the same step. Real
+        // iterative residuals (v > 0) plot at their actual log
+        // height; the value 0.0 is the only signal that triggers
+        // the floor render.
         const xFrac = row.t / xMax;
-        const yFrac = (safeLog10(v) - yMinLog) / yLogSpan;
+        const yFrac =
+          v <= 0 ? 0 : (safeLog10(v) - yMinLog) / yLogSpan;
         const px = _PAD_L + xFrac * plotW;
         const py = _PAD_T + (1 - yFrac) * plotH;
         points.push(`${px.toFixed(1)},${py.toFixed(1)}`);
