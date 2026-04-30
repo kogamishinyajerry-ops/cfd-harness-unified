@@ -69,13 +69,20 @@ export interface ViewportKernel {
    *  vtkCellPicker subscription idempotently. (DEC-V61-098 spec_v2 §A6)
    */
   setPickHandler(handler: PickHandler | null): void;
-  /** Place a small bright sphere at the given world position so the
-   *  user gets immediate visual confirmation that a pick succeeded.
-   *  Pass ``null`` to hide the marker. Sized relative to the current
-   *  scene bounds so it stays visible without occluding the geometry.
-   *  Idempotent: calling repeatedly with new positions just moves the
-   *  same sphere actor. (Dogfood feedback 2026-04-30 — without
-   *  visual feedback the user can't tell pick from no-op.)
+  /** Hover-preselect handler. Throttled to one pick-per-RAF; fires
+   *  on every mouse move with the same PickResult shape as the
+   *  click handler. Pass ``null`` to disable. Independently from
+   *  setPickHandler so the kernel can do hover-only or click-only
+   *  modes if a future viewport needs that. (Dogfood feedback
+   *  2026-04-30 — without hover feedback users can't tell which
+   *  face they're about to commit to.)
+   */
+  setHoverHandler(handler: PickHandler | null): void;
+  /** Place a small bright cyan sphere at the given world position
+   *  so the user gets immediate visual confirmation that a pick
+   *  succeeded. Pass ``null`` to hide the marker. Sized relative to
+   *  the current scene bounds. (Dogfood feedback 2026-04-30 —
+   *  without visual feedback the user can't tell pick from no-op.)
    */
   setPickMarker(world: [number, number, number] | null): void;
   dispose(): void;
@@ -121,6 +128,13 @@ export function createKernel(
   let picker: ReturnType<typeof vtkCellPicker.newInstance> | undefined;
   let pickHandler: PickHandler | null = null;
   let pickSubscription: { unsubscribe: () => void } | undefined;
+  // Hover preselect (dogfood feedback 2026-04-30): mouse-move runs the
+  // picker on the cursor position so the user gets which-face-you'll-
+  // -hit feedback BEFORE they click. Throttled to one pick per RAF
+  // tick because vtkCellPicker.pick is non-trivial work and mouse-move
+  // events fire at high frequency.
+  let hoverSubscription: { unsubscribe: () => void } | undefined;
+  let hoverPending = false;
 
   // Pick-marker actor (sphere placed at the last successful pick's
   // worldPosition). Built lazily on first setPickMarker call.
@@ -129,6 +143,15 @@ export function createKernel(
     | undefined;
   let markerMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
   let markerActor: ReturnType<typeof vtkActor.newInstance> | undefined;
+  // Hover-marker (translucent yellow ghost that tracks the cursor).
+  // Separate from the click marker so the click marker can stay parked
+  // at the engineer's confirmed selection while the hover one flits
+  // around. Lazy-allocated.
+  let hoverMarkerSource:
+    | ReturnType<typeof vtkSphereSource.newInstance>
+    | undefined;
+  let hoverMarkerMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
+  let hoverMarkerActor: ReturnType<typeof vtkActor.newInstance> | undefined;
   // Map: actor object identity → its glTF primitive.name. Empty for
   // STL (single anonymous actor; we record "" and the React layer
   // falls back to primitive index 0).
@@ -222,10 +245,15 @@ export function createKernel(
       picker = vtkCellPicker.newInstance();
       // setPickFromList(false) means "search all visible actors" rather
       // than a curated subset — appropriate since the kernel owns the
-      // full primitive list. We don't need a tolerance > 0 for clean
-      // triangulated surfaces.
+      // full primitive list.
       picker.setPickFromList(false);
-      picker.setTolerance(0);
+      // Dogfood feedback 2026-04-30: tolerance=0 was silently missing
+      // most clicks on real-world meshes (the user reported clicks
+      // produced no feedback at all). vtk.js cell-picker tolerance is
+      // a fraction of the renderer diagonal; 0.005 = 0.5% gives the
+      // ray a small "fat" radius that handles rasterization-rounding
+      // edge cases on tiny triangles without smearing across faces.
+      picker.setTolerance(0.005);
     }
     if (pickSubscription) {
       // Already armed — handler change is enough; no need to resubscribe.
@@ -253,10 +281,16 @@ export function createKernel(
       const pickedActors = picker.getActors();
       if (!Array.isArray(pickedActors) || pickedActors.length === 0) return;
       const pickedActor = pickedActors[0];
-      const patchName = actorPatchNames.get(
-        pickedActor as ReturnType<typeof vtkActor.newInstance>,
-      );
-      if (patchName === undefined) return;
+      // Dogfood feedback 2026-04-30: actor-map lookup returning
+      // undefined was silently dropping every click. Fall back to ""
+      // so the Viewport's resolution path picks primitives[0] of the
+      // face-index — the right answer for single-primitive GLBs and
+      // STL fallback cases. Multi-primitive GLBs still get their
+      // proper patch name from the actorsMap walk above.
+      const patchName =
+        actorPatchNames.get(
+          pickedActor as ReturnType<typeof vtkActor.newInstance>,
+        ) ?? "";
       const cellId = picker.getCellId();
       if (typeof cellId !== "number" || cellId < 0) return;
       const world = picker.getPickPosition();
@@ -269,6 +303,116 @@ export function createKernel(
         : [0, 0, 0];
       localHandler({ patchName, cellId, worldPosition });
     });
+  }
+
+  function setHoverHandler(handler: PickHandler | null): void {
+    if (handler === null) {
+      hoverSubscription?.unsubscribe();
+      hoverSubscription = undefined;
+      // Hide the hover marker if any.
+      if (hoverMarkerActor) {
+        hoverMarkerActor.setVisibility(false);
+        grw.getRenderWindow().render();
+      }
+      return;
+    }
+    if (!picker) {
+      // Hover wants the same picker as click; reuse it. If picker
+      // isn't built yet, build now.
+      picker = vtkCellPicker.newInstance();
+      picker.setPickFromList(false);
+      picker.setTolerance(0.005);
+    }
+    if (hoverSubscription) return;
+    hoverSubscription = interactor.onMouseMove((callData: unknown) => {
+      if (hoverPending) return;
+      hoverPending = true;
+      requestAnimationFrame(() => {
+        hoverPending = false;
+        if (!picker) return;
+        const cd = callData as
+          | { position?: { x?: number; y?: number } }
+          | undefined;
+        const pos = cd?.position;
+        if (
+          !pos ||
+          typeof pos.x !== "number" ||
+          typeof pos.y !== "number"
+        ) {
+          return;
+        }
+        const renderer = grw.getRenderer();
+        picker.pick([pos.x, pos.y, 0], renderer);
+        const pickedActors = picker.getActors();
+        if (!Array.isArray(pickedActors) || pickedActors.length === 0) {
+          // Cursor moved off the geometry — hide the hover marker.
+          if (hoverMarkerActor && hoverMarkerActor.getVisibility?.()) {
+            hoverMarkerActor.setVisibility(false);
+            grw.getRenderWindow().render();
+          }
+          return;
+        }
+        const pickedActor = pickedActors[0];
+        const patchName =
+          actorPatchNames.get(
+            pickedActor as ReturnType<typeof vtkActor.newInstance>,
+          ) ?? "";
+        const cellId = picker.getCellId();
+        if (typeof cellId !== "number" || cellId < 0) return;
+        const world = picker.getPickPosition();
+        const worldPosition: [number, number, number] = Array.isArray(world)
+          ? [
+              Number(world[0]) || 0,
+              Number(world[1]) || 0,
+              Number(world[2]) || 0,
+            ]
+          : [0, 0, 0];
+        // Move the hover marker to the new spot. Independently from
+        // the click marker so a confirmed selection stays parked
+        // even as the user moves on to consider a different face.
+        showHoverMarker(worldPosition);
+        handler({ patchName, cellId, worldPosition });
+      });
+    });
+  }
+
+  function showHoverMarker(world: [number, number, number]): void {
+    const renderer = grw.getRenderer();
+    if (!hoverMarkerSource) {
+      hoverMarkerSource = vtkSphereSource.newInstance({
+        thetaResolution: 12,
+        phiResolution: 12,
+      });
+    }
+    if (!hoverMarkerMapper) {
+      hoverMarkerMapper = vtkMapper.newInstance();
+      hoverMarkerMapper.setInputConnection(hoverMarkerSource.getOutputPort());
+    }
+    if (!hoverMarkerActor) {
+      hoverMarkerActor = vtkActor.newInstance();
+      hoverMarkerActor.setMapper(hoverMarkerMapper);
+      // Soft yellow with high opacity so it reads as "you're aiming
+      // here" — distinct from the cyan click marker which means
+      // "you've committed to this face".
+      hoverMarkerActor.getProperty().setColor(1.0, 0.9, 0.2);
+      hoverMarkerActor.getProperty().setAmbient(0.7);
+      hoverMarkerActor.getProperty().setDiffuse(0.3);
+      hoverMarkerActor.getProperty().setOpacity(0.7);
+      renderer.addActor(hoverMarkerActor);
+    }
+    const bounds = renderer.computeVisiblePropBounds();
+    let radius = 0.008;
+    if (Array.isArray(bounds) && bounds.length === 6) {
+      const dx = (bounds[1] - bounds[0]) || 0;
+      const dy = (bounds[3] - bounds[2]) || 0;
+      const dz = (bounds[5] - bounds[4]) || 0;
+      const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (diag > 0) radius = Math.max(diag * 0.009, 1e-6);
+    }
+    hoverMarkerSource.setCenter(world[0], world[1], world[2]);
+    hoverMarkerSource.setRadius(radius);
+    hoverMarkerActor.setVisibility(true);
+    grw.getRenderWindow().render();
   }
 
   function setPickMarker(world: [number, number, number] | null): void {
@@ -381,6 +525,11 @@ export function createKernel(
       // see above
     }
     try {
+      hoverSubscription?.unsubscribe();
+    } catch {
+      // see above
+    }
+    try {
       picker?.delete();
     } catch {
       // see above
@@ -397,6 +546,21 @@ export function createKernel(
     }
     try {
       markerSource?.delete();
+    } catch {
+      // see above
+    }
+    try {
+      hoverMarkerActor?.delete();
+    } catch {
+      // see above
+    }
+    try {
+      hoverMarkerMapper?.delete();
+    } catch {
+      // see above
+    }
+    try {
+      hoverMarkerSource?.delete();
     } catch {
       // see above
     }
@@ -418,6 +582,7 @@ export function createKernel(
     attachGltf,
     resetCamera,
     setPickHandler,
+    setHoverHandler,
     setPickMarker,
     dispose,
   };

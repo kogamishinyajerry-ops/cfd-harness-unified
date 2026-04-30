@@ -216,11 +216,13 @@ function ViewportVtk({
     if (!kernel) return;
     if (!pickMode) {
       kernel.setPickHandler?.(null);
+      kernel.setHoverHandler?.(null);
       kernel.setPickMarker?.(null);
       return;
     }
     if (!caseId) {
       kernel.setPickHandler?.(null);
+      kernel.setHoverHandler?.(null);
       kernel.setPickMarker?.(null);
       return;
     }
@@ -259,8 +261,21 @@ function ViewportVtk({
       });
     };
 
+    // Hover handler: same resolution path as click, but only places
+    // the kernel hover marker (yellow ghost). Doesn't fire onFacePick
+    // — that's reserved for committed clicks. Independently from the
+    // click handler so they can be enabled/disabled separately.
+    const handleKernelHover = (_result: PickResult) => {
+      // The kernel itself manages the hover marker actor + position;
+      // this React-side handler doesn't need to do anything beyond
+      // confirming the cell hit (the marker has already been moved
+      // by the time this fires). We pass a no-op so the kernel's
+      // setHoverHandler treats it as enabled.
+    };
+
     if (faceIndexRef.current) {
       kernel.setPickHandler(handleKernelPick);
+      kernel.setHoverHandler?.(handleKernelHover);
     } else {
       api
         .getFaceIndex(caseId)
@@ -268,6 +283,7 @@ function ViewportVtk({
           if (disposed) return;
           faceIndexRef.current = doc;
           kernelRef.current?.setPickHandler?.(handleKernelPick);
+          kernelRef.current?.setHoverHandler?.(handleKernelHover);
         })
         .catch(() => {
           // Silent: pickMode degrades to no-op when the face-index
@@ -280,6 +296,7 @@ function ViewportVtk({
     return () => {
       disposed = true;
       kernelRef.current?.setPickHandler?.(null);
+      kernelRef.current?.setHoverHandler?.(null);
     };
   }, [pickMode, caseId]);
 
