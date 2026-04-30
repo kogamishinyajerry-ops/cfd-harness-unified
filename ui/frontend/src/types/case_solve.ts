@@ -55,6 +55,11 @@ export interface ReportBundle {
    *  already embed it as ?v=...; surfaced here so the frontend can
    *  use it as a queryKey suffix or trigger explicit re-mounts. */
   cache_version: string;
+  /** Auto-classified case geometry — used to gate semantics that
+   *  only make sense for one kind of flow (e.g. the LDC
+   *  recirculation banner shouldn't fire on a channel). Values:
+   *  "lid_driven_cavity" | "channel" | "unknown". */
+  case_kind: "lid_driven_cavity" | "channel" | "unknown";
   artifacts: {
     contour_streamlines: string;
     pressure: string;

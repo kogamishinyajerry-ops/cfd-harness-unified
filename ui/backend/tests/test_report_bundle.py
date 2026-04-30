@@ -193,6 +193,50 @@ def test_build_report_bundle_cache_version_changes_on_in_place_resolve(tmp_path)
     )
 
 
+# -- case_kind classification (Codex round-4 P2) -----------------------
+
+
+def _stage_boundary(case: Path, patch_names: list[str]) -> None:
+    """Write a minimal polyMesh/boundary file with the given patch
+    names so _classify_case_kind has something to read.
+    """
+    polymesh = case / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True, exist_ok=True)
+    body_lines = []
+    for name in patch_names:
+        body_lines.append(
+            f"{name}\n{{\n    type wall;\n    nFaces 1;\n    startFace 0;\n}}"
+        )
+    text = (
+        "FoamFile { version 2.0; format ascii; class polyBoundaryMesh; }\n"
+        f"{len(patch_names)}\n(\n"
+        + "\n".join(body_lines)
+        + "\n)\n"
+    )
+    (polymesh / "boundary").write_text(text)
+
+
+def test_build_report_bundle_case_kind_lid_driven_cavity(tmp_path):
+    case = _make_synthetic_case(tmp_path)
+    _stage_boundary(case, ["lid", "fixedWalls", "frontAndBack"])
+    bundle = build_report_bundle(case)
+    assert bundle.case_kind == "lid_driven_cavity"
+
+
+def test_build_report_bundle_case_kind_channel(tmp_path):
+    case = _make_synthetic_case(tmp_path)
+    _stage_boundary(case, ["inlet", "outlet", "walls"])
+    bundle = build_report_bundle(case)
+    assert bundle.case_kind == "channel"
+
+
+def test_build_report_bundle_case_kind_unknown_when_pre_setup(tmp_path):
+    case = _make_synthetic_case(tmp_path)
+    # No boundary file (pre-mesh / pre-setup state) → unknown.
+    bundle = build_report_bundle(case)
+    assert bundle.case_kind == "unknown"
+
+
 # -- uniform pressure field (Codex round-2 P2) -------------------------
 
 

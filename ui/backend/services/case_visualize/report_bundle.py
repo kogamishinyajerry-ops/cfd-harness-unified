@@ -429,19 +429,26 @@ def _render_centerline(slab: _SliceFields, out: Path) -> None:
     mid_y_idx = len(ys) // 2
     Ux_centreline = Ux_g[:, mid_x_idx]
     Uy_centreline = Uy_g[mid_y_idx, :]
+    # Codex round-4 P3 (2026-04-30): the velocity components on the
+    # picked plane are slab.Ux/slab.Uy, but those are PLANE-LOCAL
+    # variables — the actual physical components depend on which two
+    # axes _pick_plane chose. For an xz slab Uy slot is U_z; for yz
+    # it's U_z too. Render labels with the actual axis letter so the
+    # plot title doesn't lie about the observable.
+    a0, a1 = slab.axes  # e.g. ("x", "y") for LDC, ("x", "z") for NACA
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     ax_l, ax_r = axes
     ax_l.plot(Ux_centreline, ys, color="#60a5fa", linewidth=1.6)
     ax_l.axvline(0, color="#475569", linewidth=0.6, linestyle=":")
-    ax_l.set_xlabel("U_x [m/s]")
-    ax_l.set_ylabel(f"{slab.axes[1]} [m]")
-    ax_l.set_title(f"U_x along {slab.axes[0]} = mid", pad=8)
+    ax_l.set_xlabel(f"U_{a0} [m/s]")
+    ax_l.set_ylabel(f"{a1} [m]")
+    ax_l.set_title(f"U_{a0} along {a0} = mid", pad=8)
     ax_l.grid(True, alpha=0.25)
     ax_r.plot(xs, Uy_centreline, color="#fbbf24", linewidth=1.6)
     ax_r.axhline(0, color="#475569", linewidth=0.6, linestyle=":")
-    ax_r.set_xlabel(f"{slab.axes[0]} [m]")
-    ax_r.set_ylabel("U_y [m/s]")
-    ax_r.set_title(f"U_y along {slab.axes[1]} = mid", pad=8)
+    ax_r.set_xlabel(f"{a0} [m]")
+    ax_r.set_ylabel(f"U_{a1} [m/s]")
+    ax_r.set_title(f"U_{a1} along {a1} = mid", pad=8)
     ax_r.grid(True, alpha=0.25)
     fig.suptitle(
         f"centreline velocity profiles · t = {slab.final_time:g}s",
@@ -461,6 +468,12 @@ class ReportBundle:
     time directory still bumps the version. The route uses this as
     ``?v=<cache_version>`` on artifact URLs so the browser refetches
     after a re-solve (Codex round-2 P1, 2026-04-30).
+
+    ``case_kind`` classifies the case based on the polyMesh boundary
+    patch names so the frontend can gate semantics that only make
+    sense for one geometry (e.g. the LDC recirculation banner is
+    nonsensical on a through-flow channel — Codex round-4 P2).
+    Values: "lid_driven_cavity", "channel", or "unknown".
     """
 
     final_time: float
@@ -470,6 +483,7 @@ class ReportBundle:
     artifacts: dict[str, str]  # logical name → relative URL fragment
     summary_text: str
     cache_version: str
+    case_kind: str
 
 
 def _slab_cache_dir(case_dir: Path, final_time: float) -> Path:
@@ -480,6 +494,32 @@ def _slab_cache_dir(case_dir: Path, final_time: float) -> Path:
     """
     key = f"{final_time:.6f}".replace(".", "_")
     return case_dir / "reports" / key
+
+
+def _classify_case_kind(case_dir: Path) -> str:
+    """Inspect the polyMesh boundary file to classify the case kind.
+    Returns "lid_driven_cavity" if a `lid` patch is present (the BC
+    setup that the LDC executor writes), "channel" when both `inlet`
+    and `outlet` are present, "unknown" otherwise. Pre-setup-bc the
+    boundary only has gmsh-default patches → "unknown".
+    Codex round-4 P2 (2026-04-30) added so the frontend can gate
+    LDC-only semantics like the recirculation warning.
+    """
+    boundary = case_dir / "constant" / "polyMesh" / "boundary"
+    if not boundary.is_file():
+        return "unknown"
+    try:
+        text = boundary.read_text()
+    except OSError:
+        return "unknown"
+    # Patch names appear as identifier-line followed by `{`. A simple
+    # regex catches them; we don't need the full polyMesh parser here.
+    names = set(re.findall(r"^\s*([A-Za-z][A-Za-z0-9_]*)\s*\n\s*\{", text, re.M))
+    if "lid" in names:
+        return "lid_driven_cavity"
+    if "inlet" in names and "outlet" in names:
+        return "channel"
+    return "unknown"
 
 
 def _stale(cached: Path, source: Path) -> bool:
@@ -613,6 +653,7 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
         artifacts=artifacts,
         summary_text=summary,
         cache_version=cache_version,
+        case_kind=_classify_case_kind(case_dir),
     )
 
 

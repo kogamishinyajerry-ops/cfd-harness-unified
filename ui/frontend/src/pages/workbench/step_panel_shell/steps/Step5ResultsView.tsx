@@ -129,54 +129,60 @@ export function Step5ResultsView({
         </p>
       )}
 
-      {bundle && (
-        <div
-          data-testid="step5-results-success"
-          className={
-            "space-y-2 rounded-sm border p-2 " +
-            // Codex round-3 P1: the green tint goes ONLY when both
-            // (a) the bundle rendered and (b) the recirculation
-            // sanity check passed. A "render succeeded but field
-            // looks wrong" solve gets the amber warn tint instead.
-            (resultsSummary && !resultsSummary.is_recirculating
-              ? "border-amber-700/50 bg-amber-900/10"
-              : "border-emerald-700/40 bg-emerald-900/10")
-          }
-        >
+      {bundle && (() => {
+        // Codex round-4 P2 (2026-04-30): the recirculation sanity
+        // check is meaningful ONLY for closed-cavity LDC cases. On a
+        // through-flow channel `is_recirculating` is correctly false,
+        // and surfacing it as an amber warning would be a false
+        // positive. Gate on bundle.case_kind so non-LDC flows just
+        // show the green ✓ banner without the LDC-specific check.
+        const isLdc = bundle.case_kind === "lid_driven_cavity";
+        const recircFails =
+          isLdc && resultsSummary !== null && !resultsSummary.is_recirculating;
+        return (
           <div
+            data-testid="step5-results-success"
             className={
-              "font-mono text-[11px] " +
-              (resultsSummary && !resultsSummary.is_recirculating
-                ? "text-amber-200"
-                : "text-emerald-200")
+              "space-y-2 rounded-sm border p-2 " +
+              (recircFails
+                ? "border-amber-700/50 bg-amber-900/10"
+                : "border-emerald-700/40 bg-emerald-900/10")
             }
           >
-            {resultsSummary && !resultsSummary.is_recirculating
-              ? "⚠ Bundle ready — but field doesn't look like a closed-cavity recirculation. Check BCs / convergence."
-              : "✓ Bundle ready — see grid in the centre pane."}
-          </div>
-          <ul className="space-y-1 font-mono text-[10px] text-surface-300">
-            <li>final time: t = {bundle.final_time}s</li>
-            <li>{bundle.summary_text}</li>
-            <li>
-              plane: {bundle.plane_axes.join("-")} ·{" "}
-              {bundle.slab_cell_count.toLocaleString()} slab cells
-            </li>
-            {resultsSummary && (
-              <li className="pt-1 text-surface-500">
-                {resultsSummary.is_recirculating
-                  ? "Mean Ux ≈ 0 with min/max spanning ±values: vortex confirmed."
-                  : "Mean Ux ≠ 0: would indicate plug flow or solver issue."}
+            <div
+              className={
+                "font-mono text-[11px] " +
+                (recircFails ? "text-amber-200" : "text-emerald-200")
+              }
+            >
+              {recircFails
+                ? "⚠ Bundle ready — but field doesn't look like a closed-cavity recirculation. Check BCs / convergence."
+                : "✓ Bundle ready — see grid in the centre pane."}
+            </div>
+            <ul className="space-y-1 font-mono text-[10px] text-surface-300">
+              <li>final time: t = {bundle.final_time}s</li>
+              <li>{bundle.summary_text}</li>
+              <li>
+                plane: {bundle.plane_axes.join("-")} ·{" "}
+                {bundle.slab_cell_count.toLocaleString()} slab cells · case
+                kind: {bundle.case_kind}
               </li>
-            )}
-          </ul>
-          <p className="pt-1 text-[10px] text-surface-500">
-            Re-click [AI 处理] after a re-solve to refresh; matplotlib
-            output is cached per cache_version (final_time + U mtime)
-            so unchanged solves return in &lt;1 s.
-          </p>
-        </div>
-      )}
+              {isLdc && resultsSummary && (
+                <li className="pt-1 text-surface-500">
+                  {resultsSummary.is_recirculating
+                    ? "Mean Ux ≈ 0 with min/max spanning ±values: vortex confirmed."
+                    : "Mean Ux ≠ 0: would indicate plug flow or solver issue."}
+                </li>
+              )}
+            </ul>
+            <p className="pt-1 text-[10px] text-surface-500">
+              Re-click [AI 处理] after a re-solve to refresh; matplotlib
+              output is cached per cache_version (final_time + U mtime)
+              so unchanged solves return in &lt;1 s.
+            </p>
+          </div>
+        );
+      })()}
 
       {rejection && (
         <div

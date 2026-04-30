@@ -388,6 +388,19 @@ export function Step3SetupBC({
           confidence: "user_authoritative",
         });
       }
+      // Codex round-4 P2 (2026-04-30): if facesToWrite is non-empty
+      // but annotations hasn't loaded yet, the PUT was previously
+      // skipped silently. Now that envelope is the default Step 3
+      // path, that race silently dropped the user's lid pin →
+      // re-running envelope returned the same uncertain question
+      // and the user thought they'd answered. Block the resume here
+      // with an actionable error so the user retries (annotations
+      // are usually loaded within ~50 ms of step entry).
+      if (facesToWrite.length > 0 && !annotations) {
+        throw new Error(
+          "Face annotations not ready yet — please wait a moment and click [继续 AI 处理] again.",
+        );
+      }
       if (facesToWrite.length > 0 && annotations) {
         try {
           const updated = await api.putFaceAnnotations(caseId, {

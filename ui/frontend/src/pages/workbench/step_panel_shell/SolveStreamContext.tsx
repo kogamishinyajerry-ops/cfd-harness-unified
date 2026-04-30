@@ -268,15 +268,20 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
         const s = payload as SolveStreamSummary;
         setSummary(s);
         setPhase("completed");
-        // Codex round-3 P2 (2026-04-30): a re-solve invalidates the
-        // Step 5 report bundle. The grid observer reads from React
-        // Query cache with enabled:false, so without this, navigating
-        // back to Step 5 after a re-solve would show the previous
-        // bundle's plots until the user clicked [AI 处理] again. Drop
-        // the cache entry as soon as the new solve finishes so the
-        // grid renders empty + the next click fetches fresh.
+        // Codex round-3 P2 + round-4 P2 (2026-04-30): a re-solve
+        // invalidates the Step 5 report bundle. The grid observer
+        // reads from React Query cache with enabled:false, so without
+        // this, navigating back to Step 5 after a re-solve would show
+        // the previous bundle's plots until the user clicked [AI 处理]
+        // again.
+        //
+        // Round-3 used invalidateQueries which marks data stale but
+        // KEEPS it in cache; an enabled:false observer will re-render
+        // with the same stale value. Round-4 uses removeQueries which
+        // actually drops the entry — the grid sees `data === undefined`
+        // and renders the empty hint until the user clicks [AI 处理].
         if (s.case_id) {
-          queryClient.invalidateQueries({
+          queryClient.removeQueries({
             queryKey: ["report-bundle", s.case_id],
           });
         }

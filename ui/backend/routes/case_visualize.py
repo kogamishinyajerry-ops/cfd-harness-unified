@@ -147,6 +147,7 @@ def get_report_bundle(case_id: str) -> dict:
         "plane_axes": list(bundle.plane_axes),
         "summary_text": bundle.summary_text,
         "cache_version": bundle.cache_version,
+        "case_kind": bundle.case_kind,
         "artifacts": {
             name: f"{base}/report/{name}.png?v={bundle.cache_version}"
             for name in ARTIFACT_NAMES
