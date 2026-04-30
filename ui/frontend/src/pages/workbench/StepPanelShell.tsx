@@ -305,29 +305,48 @@ export function StepPanelShell() {
   // from a meshed case to an unmeshed one therefore left
   // stepStates[2] sticky at "completed" — Step 3's viewport gate
   // trusted that flag and immediately fetched /bc/render → 404/409
-  // → red error banner. Now we synchronously reset Steps 2-5 back
-  // to "pending" when caseId changes, then let the probe lift
-  // Step 2 back to "completed" only if mesh artifacts actually exist
-  // for the new case.
+  // → red error banner. Now we synchronously reset all step states
+  // back to "pending" when caseId changes, then let two probes
+  // independently lift Step 1 + Step 2 if the backend confirms.
   //
-  // Codex round-15 P3 (2026-04-30): keep Step 1 = "completed" on a
-  // case switch. Step 1 is "Geometry import" and only Step1Import
-  // calls onStepComplete(); but if the engineer is on the URL
-  // /workbench/case/:caseId at all, the case already exists in the
-  // imported drafts directory (the route enforces this), so the
-  // import already happened. Resetting Step 1 to pending on case
-  // switch was incorrect — the StepTree would falsely show Step 1
-  // as "not done" until the engineer clicked back to it.
+  // Codex round-17 P2 (2026-04-30): an earlier draft of this fix
+  // unconditionally lifted Step 1 → "completed" on the assumption
+  // that any /workbench/case/:caseId route implies the case exists.
+  // That's wrong — the React Router path accepts arbitrary strings,
+  // so a mistyped or deleted ID would falsely show "import done"
+  // even though every backend call would 404. Probe GET /api/cases/X
+  // (200 = exists, 404 = bogus/deleted) and only mark Step 1
+  // completed on success. Same shape as the /mesh/render HEAD probe
+  // for Step 2.
   useEffect(() => {
     if (!caseId) return;
     setStepStates({
-      1: "completed",
+      1: "pending",
       2: "pending",
       3: "pending",
       4: "pending",
       5: "pending",
     });
     let cancelled = false;
+    // Probe 1: case existence (lifts Step 1).
+    fetch(`/api/cases/${encodeURIComponent(caseId)}`, { method: "GET" })
+      .then((resp) => {
+        if (cancelled) return;
+        if (resp.ok) {
+          setStepStates((prev) =>
+            prev[1] === "completed" ? prev : { ...prev, 1: "completed" },
+          );
+        }
+        // Non-200 (typically 404 = bogus/deleted caseId) leaves
+        // Step 1 pending. Step1Import will surface its own red
+        // "Failed to load case" banner when the engineer navigates
+        // to it, and onStepError() will flip the state to error.
+      })
+      .catch(() => {
+        // Network errors leave Step 1 pending — same outcome as 404.
+      });
+    // Probe 2: mesh artifacts (lifts Step 2). HEAD avoids streaming
+    // the glb body just to check existence.
     fetch(`/api/cases/${encodeURIComponent(caseId)}/mesh/render`, {
       method: "HEAD",
     })
@@ -338,13 +357,12 @@ export function StepPanelShell() {
             prev[2] === "completed" ? prev : { ...prev, 2: "completed" },
           );
         }
-        // Non-200 leaves Step 2 pending (already reset above) — that's
-        // the correct pre-mesh state and Step 3's viewport gate will
-        // show the placeholder hint instead of a 404 banner.
+        // Non-200 leaves Step 2 pending — that's the correct
+        // pre-mesh state and Step 3's viewport gate will show the
+        // placeholder hint instead of a 404 banner.
       })
       .catch(() => {
-        // network errors leave stepStates[2] pending — same outcome as a
-        // 404, which is the correct pre-mesh state.
+        // network errors leave stepStates[2] pending.
       });
     return () => {
       cancelled = true;

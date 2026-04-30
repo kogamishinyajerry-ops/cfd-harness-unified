@@ -330,22 +330,31 @@ describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
 // /bc/render. The shell now resets all step states on caseId change
 // before the HEAD probe runs.
 describe("StepPanelShell · case-switch step-state reset (Codex round-13 P1)", () => {
-  // Per-case mesh availability the mocked fetch reports.
+  // Per-case mesh + case-exists availability for the mocked fetch.
   const meshAvailable = new Map<string, boolean>();
+  const caseExists = new Map<string, boolean>();
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
     meshAvailable.clear();
+    caseExists.clear();
     originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      const match = url.match(
-        /\/api\/cases\/([^/]+)\/mesh\/render/,
-      );
-      if (match) {
-        const id = decodeURIComponent(match[1]);
-        const ok = meshAvailable.get(id) ?? false;
-        return new Response(null, { status: ok ? 200 : 404 });
+      const meshMatch = url.match(/\/api\/cases\/([^/]+)\/mesh\/render/);
+      if (meshMatch) {
+        const id = decodeURIComponent(meshMatch[1]);
+        return new Response(null, {
+          status: meshAvailable.get(id) ? 200 : 404,
+        });
+      }
+      // Case-existence probe — Codex round-17 P2.
+      const caseMatch = url.match(/\/api\/cases\/([^/?]+)$/);
+      if (caseMatch) {
+        const id = decodeURIComponent(caseMatch[1]);
+        return new Response(null, {
+          status: caseExists.get(id) ? 200 : 404,
+        });
       }
       return new Response(null, { status: 404 });
     }) as unknown as typeof globalThis.fetch;
@@ -358,6 +367,8 @@ describe("StepPanelShell · case-switch step-state reset (Codex round-13 P1)", (
   it("Step 3 viewport gate falls back to placeholder after switching to an unmeshed case", async () => {
     meshAvailable.set("meshed_case", true);
     meshAvailable.set("fresh_case", false);
+    caseExists.set("meshed_case", true);
+    caseExists.set("fresh_case", true);
 
     function NavHelper() {
       const navigate = useNavigate();
@@ -412,5 +423,78 @@ describe("StepPanelShell · case-switch step-state reset (Codex round-13 P1)", (
     expect(screen.getByTestId("top-bar-case-id")).toHaveTextContent(
       "fresh_case",
     );
+  });
+
+  it("Codex round-17 P2: bogus caseId leaves Step 1 pending instead of falsely showing 'completed'", async () => {
+    // 404 on GET /api/cases/<bogus> — the case existence probe must
+    // NOT lift Step 1 to "completed" for an arbitrary URL string.
+    caseExists.set("bogus_id", false);
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/workbench/case/bogus_id?step=2"]}>
+          <Routes>
+            <Route
+              path="/workbench/case/:caseId"
+              element={<StepPanelShell />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Wait for the probes to settle — give the GET /api/cases probe
+    // enough time to land its 404. We assert NOT-completed (a
+    // negative); poll briefly to ensure the 404 had time to flow
+    // through.
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalled();
+    });
+    // Step 1 row must NOT be marked "completed". With the round-16
+    // bug the row would show data-step-status="completed" because
+    // the shell unconditionally lifted it on caseId change.
+    const step1Row = screen.getByTestId("step-tree-row-1");
+    expect(step1Row).not.toHaveAttribute("data-step-status", "completed");
+
+    // Step 2 row must also not be completed (no mesh).
+    expect(screen.getByTestId("step-tree-row-2")).not.toHaveAttribute(
+      "data-step-status",
+      "completed",
+    );
+  });
+
+  it("Codex round-15 P3: valid caseId lifts Step 1 to 'completed' on mount", async () => {
+    caseExists.set("real_case", true);
+    meshAvailable.set("real_case", false);
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/workbench/case/real_case?step=2"]}>
+          <Routes>
+            <Route
+              path="/workbench/case/:caseId"
+              element={<StepPanelShell />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // After the case-existence probe settles, Step 1 row reaches
+    // data-step-status="completed" — so the StepTree truthfully
+    // shows "import done" for valid cases when the engineer is on
+    // a later step.
+    await waitFor(() => {
+      expect(screen.getByTestId("step-tree-row-1")).toHaveAttribute(
+        "data-step-status",
+        "completed",
+      );
+    });
   });
 });
