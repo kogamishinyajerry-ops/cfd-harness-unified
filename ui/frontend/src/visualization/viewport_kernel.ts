@@ -107,6 +107,16 @@ export interface ViewportKernel {
     actor: ReturnType<typeof vtkActor.newInstance>,
     cellIds: number[],
   ): void;
+  /** Return all cellIds whose triangles share the same plane (within
+   *  a fixed quantization tolerance) as the triangle at ``cellId``.
+   *  Used by the React layer to expand a single-cell pick into the
+   *  full flat face. Falls back to ``[cellId]`` for curved geometry
+   *  or degenerate input. (2026-04-30 dogfood feedback closure.)
+   */
+  getCoplanarSiblings(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellId: number,
+  ): number[];
   dispose(): void;
 }
 
@@ -182,6 +192,18 @@ export function createKernel(
   const actorPatchNames = new Map<
     ReturnType<typeof vtkActor.newInstance>,
     string
+  >();
+  // Map: actor → cellId → list of cellIds whose triangles share the
+  // same plane (quantized normal + plane offset). Built on first
+  // attach + cached. (Dogfood feedback 2026-04-30: gmsh tet meshes
+  // give 1 triangle per polyMesh face, so face_id-grouping is 1:1
+  // and the user can't tell their "lid face click" from a single-
+  // triangle pick. Coplanar grouping recovers "highlight the whole
+  // flat face of the cube" semantics for axis-aligned dogfood
+  // geometries.)
+  const coplanarGroups = new Map<
+    ReturnType<typeof vtkActor.newInstance>,
+    Map<number, number[]>
   >();
 
   function attachStl(r: vtkSTLReader): void {
@@ -477,6 +499,130 @@ export function createKernel(
     }
   }
 
+  // Precompute coplanar groups for an actor. Walks every triangle,
+  // computes its plane (normalized normal + signed distance from
+  // origin), quantizes to a string key, and bins cellIds by that
+  // key. (Dogfood feedback 2026-04-30: gmsh tet meshes give 1
+  // triangle per polyMesh face, so face_id-grouping is 1:1 — no
+  // visible expansion. Coplanar grouping recovers the "highlight
+  // the whole flat side of the cube" semantics for axis-aligned
+  // dogfood geometries.)
+  //
+  // For ~3260 triangles on the LDC this is ~1 ms. For curved
+  // surfaces every triangle ends up in its own group, which
+  // gracefully degrades to single-triangle highlight — that's
+  // the right behavior for a curved face anyway.
+  function precomputeCoplanarGroups(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+  ): void {
+    if (coplanarGroups.has(actor)) return;
+    const inputData = actor.getMapper()?.getInputData?.();
+    if (!inputData) return;
+    const polys = inputData.getPolys?.();
+    const points = inputData.getPoints?.();
+    if (!polys || !points) return;
+    const cellData = polys.getData?.();
+    const pointArray = points.getData?.();
+    if (!cellData || !pointArray) return;
+
+    // Quantize to ~4 decimal places (TOL=1e4 multiply-then-round).
+    // Tet meshes from gmsh emit boundary triangles whose vertex
+    // coords are exactly equal on a flat face, so 1e-4 is more
+    // than enough; tighter risks fragmenting a single cube face
+    // into multiple groups due to FP drift.
+    const TOL = 1e4;
+    const groups = new Map<number, number[]>();
+    const keyToList = new Map<string, number[]>();
+
+    let cellId = 0;
+    for (let i = 0; i + 3 < cellData.length; ) {
+      const n = cellData[i];
+      if (n !== 3) {
+        // Skip non-triangle cells (defensive for mixed-cell
+        // polyData; bc_glb always emits triangles).
+        i += n + 1;
+        cellId++;
+        continue;
+      }
+      const a = cellData[i + 1];
+      const b = cellData[i + 2];
+      const c = cellData[i + 3];
+      i += 4;
+
+      const ax = pointArray[a * 3 + 0];
+      const ay = pointArray[a * 3 + 1];
+      const az = pointArray[a * 3 + 2];
+      const bx = pointArray[b * 3 + 0];
+      const by = pointArray[b * 3 + 1];
+      const bz = pointArray[b * 3 + 2];
+      const cx = pointArray[c * 3 + 0];
+      const cy = pointArray[c * 3 + 1];
+      const cz = pointArray[c * 3 + 2];
+
+      // Plane normal via cross product, normalized.
+      const ux = bx - ax,
+        uy = by - ay,
+        uz = bz - az;
+      const vx = cx - ax,
+        vy = cy - ay,
+        vz = cz - az;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      if (len === 0) {
+        // Degenerate triangle — record a singleton group.
+        groups.set(cellId, [cellId]);
+        cellId++;
+        continue;
+      }
+      nx /= len;
+      ny /= len;
+      nz /= len;
+      // Canonicalize sign so antiparallel-but-coplanar normals
+      // hash to the same key (a quad fan-triangulated in opposite
+      // winding still belongs to the same flat face).
+      if (
+        nx < 0 ||
+        (nx === 0 && ny < 0) ||
+        (nx === 0 && ny === 0 && nz < 0)
+      ) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+      }
+      const offset = nx * ax + ny * ay + nz * az;
+
+      const key =
+        Math.round(nx * TOL) +
+        "/" +
+        Math.round(ny * TOL) +
+        "/" +
+        Math.round(nz * TOL) +
+        "/" +
+        Math.round(offset * TOL);
+      let list = keyToList.get(key);
+      if (!list) {
+        list = [];
+        keyToList.set(key, list);
+      }
+      list.push(cellId);
+      // Every cellId in the group shares a reference to the same
+      // list, so any pick resolves to the full set.
+      groups.set(cellId, list);
+      cellId++;
+    }
+    coplanarGroups.set(actor, groups);
+  }
+
+  function getCoplanarSiblings(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellId: number,
+  ): number[] {
+    precomputeCoplanarGroups(actor);
+    return coplanarGroups.get(actor)?.get(cellId) ?? [cellId];
+  }
+
   // Replace the given highlight overlay (pick OR hover) with the
   // supplied triangles. ``trianglesXyz`` is a flat array of N*9 floats
   // (3 vertices per triangle, no shared indices). Lazy-allocates the
@@ -742,6 +888,7 @@ export function createKernel(
     setHoverHandler,
     setPickHighlightCells,
     setHoverHighlightCells,
+    getCoplanarSiblings,
     clearPickHighlight,
     clearHoverHighlight,
     dispose,

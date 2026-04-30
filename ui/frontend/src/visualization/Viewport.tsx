@@ -280,6 +280,39 @@ function ViewportVtk({
       );
     };
 
+    // Resolve which cellIds to highlight together with the picked
+    // one. Combines two grouping signals:
+    //   1. Face-id siblings — triangles that bc_glb's triangulation
+    //      produced from the same polyMesh face. For tet meshes
+    //      this is 1:1 (no expansion); for hex/quad meshes it
+    //      groups the 2-3 triangles of a quad.
+    //   2. Coplanar siblings — triangles that lie on the same flat
+    //      plane (within FP tolerance). For axis-aligned dogfood
+    //      geometries (cubes, channels) this groups all triangles
+    //      on the same flat face of the original CAD shape, so
+    //      clicking ONE triangle on the cube's lid lights up the
+    //      WHOLE lid. For curved surfaces every triangle gets its
+    //      own group, gracefully degrading to single-triangle.
+    // The coplanar set always contains the face-id set as a subset
+    // when both are computed off the same actor's polyData, so we
+    // just use the coplanar set when available.
+    const expandSiblings = (
+      result: PickResult,
+      faceId: string | null,
+    ): number[] => {
+      const k = kernelRef.current;
+      if (k?.getCoplanarSiblings) {
+        const coplanar = k.getCoplanarSiblings(result.actor, result.cellId);
+        if (coplanar.length > 1) return coplanar;
+      }
+      if (faceId !== null) {
+        const primitive = resolvePrimitive(result.patchName);
+        const sibs = primitive?._faceIdToCellIds?.get(faceId);
+        if (sibs && sibs.length > 0) return sibs;
+      }
+      return [result.cellId];
+    };
+
     const handleKernelPick = (result: PickResult) => {
       const primitive = resolvePrimitive(result.patchName);
       if (!primitive) return;
@@ -287,14 +320,8 @@ function ViewportVtk({
         result.cellId < primitive.face_ids.length
           ? primitive.face_ids[result.cellId]
           : null;
-      // Highlight every triangle that shares the picked face_id —
-      // a polyMesh face that triangulates to several GLB triangles
-      // ends up fully colored, not half. (2026-04-30 dogfood
-      // feedback closure.)
-      if (faceId !== null) {
-        const sibs = primitive._faceIdToCellIds?.get(faceId) ?? [
-          result.cellId,
-        ];
+      const sibs = expandSiblings(result, faceId);
+      if (sibs.length > 0) {
         kernelRef.current?.setPickHighlightCells?.(result.actor, sibs);
       } else {
         kernelRef.current?.clearPickHighlight?.();
@@ -307,9 +334,6 @@ function ViewportVtk({
       });
     };
 
-    // Hover handler: same resolve path, but updates the yellow ghost
-    // overlay instead of the cyan committed pick. Doesn't fire
-    // onFacePick — that's reserved for committed clicks.
     const handleKernelHover = (result: PickResult) => {
       const primitive = resolvePrimitive(result.patchName);
       if (!primitive) {
@@ -320,14 +344,12 @@ function ViewportVtk({
         result.cellId < primitive.face_ids.length
           ? primitive.face_ids[result.cellId]
           : null;
-      if (faceId === null) {
+      const sibs = expandSiblings(result, faceId);
+      if (sibs.length > 0) {
+        kernelRef.current?.setHoverHighlightCells?.(result.actor, sibs);
+      } else {
         kernelRef.current?.clearHoverHighlight?.();
-        return;
       }
-      const sibs = primitive._faceIdToCellIds?.get(faceId) ?? [
-        result.cellId,
-      ];
-      kernelRef.current?.setHoverHighlightCells?.(result.actor, sibs);
     };
 
     if (faceIndexRef.current) {
