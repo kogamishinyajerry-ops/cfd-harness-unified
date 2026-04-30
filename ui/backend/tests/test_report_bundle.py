@@ -165,6 +165,80 @@ def test_build_report_bundle_invalidates_when_u_field_newer(tmp_path):
     assert p.stat().st_mtime > mtime_before, "cache should have invalidated"
 
 
+# -- cache_version semantics (Codex round-2 P1) ------------------------
+
+
+def test_build_report_bundle_cache_version_includes_final_time(tmp_path):
+    case = _make_synthetic_case(tmp_path)
+    bundle = build_report_bundle(case)
+    # Final time is 1.0 → "1_000000" prefix; suffix is U's mtime_ns.
+    assert bundle.cache_version.startswith("1_000000_")
+    # Suffix is a positive int (mtime_ns).
+    suffix = bundle.cache_version.split("_")[-1]
+    assert suffix.isdigit() and int(suffix) > 0
+
+
+def test_build_report_bundle_cache_version_changes_on_in_place_resolve(tmp_path):
+    case = _make_synthetic_case(tmp_path)
+    bundle1 = build_report_bundle(case)
+    # Simulate icoFoam overwriting the same time dir's U field
+    # (final_time unchanged, mtime advances).
+    _time.sleep(1.05)
+    (case / "1" / "U").touch()
+    bundle2 = build_report_bundle(case)
+    assert bundle1.final_time == bundle2.final_time
+    assert bundle1.cache_version != bundle2.cache_version, (
+        "in-place re-solve must bump cache_version "
+        f"(both were {bundle1.cache_version!r})"
+    )
+
+
+# -- uniform pressure field (Codex round-2 P2) -------------------------
+
+
+def test_build_report_bundle_handles_uniform_pressure(tmp_path):
+    """When p is `internalField uniform <val>`, the parser returns a
+    length-1 array. Previously this fell into the "len(p) != len(U)"
+    branch and rendered the placeholder. Now it broadcasts to all
+    cells and the pressure panel renders a flat-coloured contour.
+    """
+    case = tmp_path / "imported_uniform_p"
+    (case / "constant").mkdir(parents=True)
+    (case / "system").mkdir()
+    n = 12
+    xs = np.linspace(-0.5, 0.5, n)
+    ys = np.linspace(-0.5, 0.5, n)
+    zs = np.linspace(-0.5, 0.5, n)
+    X, Y, Z = np.meshgrid(xs, ys, zs, indexing="ij")
+    C = np.stack([X.ravel(), Y.ravel(), Z.ravel()], axis=1)
+    Ux = -Y.ravel()
+    Uy = X.ravel()
+    Uz = 0.05 * Z.ravel()
+    U = np.stack([Ux, Uy, Uz], axis=1)
+    final = case / "1"
+    final.mkdir()
+    _stage_volVectorField(final / "U", U)
+    _stage_volVectorField(final / "C", C)
+    # Hand-write a uniform-pressure FoamFile. _stage_volScalarField
+    # always emits nonuniform; for this test we need the OpenFOAM
+    # uniform layout the round-2 fix targets.
+    (final / "p").write_text(
+        "FoamFile { version 2.0; format ascii; class volScalarField; }\n"
+        "internalField   uniform 3.5 ;\n"
+        "boundaryField {}\n"
+    )
+    init = case / "0"
+    init.mkdir()
+    _stage_volVectorField(init / "U", np.zeros_like(U))
+
+    bundle = build_report_bundle(case)
+    p = case / bundle.artifacts["pressure"]
+    assert p.is_file()
+    # PNG > 1 KB => real plot, not the "not available" placeholder
+    # which renders an empty figure ~600 B.
+    assert p.stat().st_size > 1024
+
+
 # -- failure modes ------------------------------------------------------
 
 

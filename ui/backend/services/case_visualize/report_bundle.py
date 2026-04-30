@@ -453,7 +453,15 @@ def _render_centerline(slab: _SliceFields, out: Path) -> None:
 @dataclass(frozen=True, slots=True)
 class ReportBundle:
     """Bundle metadata returned by /report-bundle. Field URLs are
-    relative paths the frontend prefixes with the case-id base."""
+    relative paths the frontend prefixes with the case-id base.
+
+    ``cache_version`` is a stable token that changes whenever the
+    rendered figures should be considered stale — combines final_time
+    with the U field's mtime so an in-place re-solve into the same
+    time directory still bumps the version. The route uses this as
+    ``?v=<cache_version>`` on artifact URLs so the browser refetches
+    after a re-solve (Codex round-2 P1, 2026-04-30).
+    """
 
     final_time: float
     cell_count: int
@@ -461,6 +469,7 @@ class ReportBundle:
     plane_axes: tuple[str, str]
     artifacts: dict[str, str]  # logical name → relative URL fragment
     summary_text: str
+    cache_version: str
 
 
 def _slab_cache_dir(case_dir: Path, final_time: float) -> Path:
@@ -521,8 +530,17 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
     p_path = final_dir / "p"
     if p_path.is_file():
         p = _parse_volScalarField(p_path)
-        if len(p) != len(U):
-            # Fall back to no pressure rather than fail — better to
+        # Codex round-2 P2 (2026-04-30): _parse_volScalarField returns a
+        # length-1 array for `internalField uniform <val>` (a legal
+        # OpenFOAM dict layout). The previous "len(p) != len(U) → drop"
+        # branch hid these valid uniform-pressure fields behind the
+        # placeholder card. Broadcast the uniform value to all cells
+        # so the panel renders a flat-coloured contour (which is the
+        # physically correct depiction).
+        if len(p) == 1 and len(U) > 1:
+            p = np.full(len(U), float(p[0]), dtype=np.float64)
+        elif len(p) != len(U):
+            # True size mismatch — likely a corrupt field. Better to
             # render 3/4 panels than 0/4.
             p = None
     else:
@@ -573,6 +591,20 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
         f"|U| mean = {u_mean:.3g}, max = {u_max:.3g} m/s"
     )
 
+    # cache_version: combines final_time (changes on a re-solve into
+    # a new time dir) with the U field's mtime (changes on an
+    # in-place re-solve into the same time dir). Codex round-2 P1
+    # (2026-04-30) showed final_time alone wasn't enough: icoFoam can
+    # overwrite an existing time directory and the URL version
+    # wouldn't move. Using the U mtime as part of the token closes
+    # that gap. Falls back to "0" if mtime read fails (e.g. case dir
+    # got removed mid-call) so the response is still well-formed.
+    try:
+        u_mtime_ns = u_path.stat().st_mtime_ns
+    except OSError:
+        u_mtime_ns = 0
+    cache_version = f"{final_time:.6f}".replace(".", "_") + f"_{u_mtime_ns}"
+
     return ReportBundle(
         final_time=final_time,
         cell_count=len(U),
@@ -580,6 +612,7 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
         plane_axes=slab.axes,
         artifacts=artifacts,
         summary_text=summary,
+        cache_version=cache_version,
     )
 
 

@@ -29,10 +29,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
 import type { AnnotationsRevisionConflictDetail } from "../types";
-import type {
-  CaseSolveRejection,
-  SetupBcSummary,
-} from "@/types/case_solve";
+import type { CaseSolveRejection } from "@/types/case_solve";
 
 import { AnnotationPanel } from "../AnnotationPanel";
 import { DialogPanel } from "../DialogPanel";
@@ -60,7 +57,10 @@ export function Step3SetupBC({
   onStepError,
   registerAiAction,
 }: StepTaskPanelProps) {
-  const [summary, setSummary] = useState<SetupBcSummary | null>(null);
+  // Legacy `summary` state was set only by the removed
+  // triggerSetupLegacy path (api.setupBC). Envelope-mode dispatches
+  // populate `envelope.summary` instead, which the confident-success
+  // banner below already shows.
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
 
@@ -77,7 +77,18 @@ export function Step3SetupBC({
       if (aiMode === "force_blocked") return { forceBlocked: true };
       return {};
     }, [aiMode]);
-  const envelopeMode = aiMode !== null;
+  // Codex round-2 P1 (2026-04-30): the previous condition
+  // `envelopeMode = aiMode !== null` made `?ai_mode=...` opt-in
+  // semantics for the M-AI-COPILOT flow. The default URL is plain
+  // `/workbench/case/:id?step=3` (no ai_mode), which dispatched the
+  // LEGACY api.setupBC path that ignores face_annotations.yaml — so
+  // any face the user pinned through the (now-unblocked) Step 3
+  // viewport was silently discarded. Envelope mode is the production
+  // M-AI-COPILOT contract; ai_mode is now strictly a debug knob to
+  // FORCE the envelope into uncertain/blocked states for testing the
+  // dialog UI under controlled scenarios. Natural production flow
+  // always uses envelope, with no force flags.
+  const envelopeMode = true;
   const [envelope, setEnvelope] = useState<AIActionEnvelope | null>(null);
   // Map: question.id → face_id picked specifically for that question.
   // The DialogPanel reads this to gate completeness on face_label
@@ -275,38 +286,15 @@ export function Step3SetupBC({
     facePick?.setPicked(null);
   }, [facePick]);
 
-  // Legacy non-envelope path. Used when ?ai_mode is unset.
-  const triggerSetupLegacy = useCallback(async () => {
-    setRejection(null);
-    setNetworkError(null);
-    try {
-      const r = await api.setupBC(caseId);
-      setSummary(r);
-      setEnvelope(null);
-      onStepComplete();
-    } catch (e) {
-      if (
-        e instanceof ApiError &&
-        e.detail &&
-        typeof e.detail === "object" &&
-        "failing_check" in e.detail
-      ) {
-        const detail = e.detail as CaseSolveRejection;
-        setRejection(detail);
-        onStepError(`setup-bc rejected: ${detail.failing_check}`);
-      } else {
-        const msg = e instanceof Error ? e.message : String(e);
-        setNetworkError(msg);
-        onStepError(msg);
-      }
-      throw e;
-    }
-  }, [caseId, onStepComplete, onStepError]);
-
-  // Envelope-mode path (M9 Tier-B AI). Used when ?ai_mode=force_uncertain
-  // or ?ai_mode=force_blocked is set, and on every [继续 AI 处理]
-  // resume click. The fold parameter controls force flags so the
-  // resume call doesn't re-force uncertainty after the user answered.
+  // Envelope-mode path (M9 Tier-B AI · M-AI-COPILOT production flow).
+  // Codex round-2 (2026-04-30) made envelope the unconditional default;
+  // the prior triggerSetupLegacy that called api.setupBC directly has
+  // been removed because it ignored face_annotations.yaml and silently
+  // discarded user pins on the natural Step 3 click. fold.useForceFlags
+  // is true ONLY when the URL has an explicit ?ai_mode=force_*
+  // (debug-time UI forcing); production clicks pass useForceFlags=false
+  // so the executor returns the natural envelope based on whatever
+  // annotations the user has already pinned.
   const runEnvelope = useCallback(
     async (fold: { useForceFlags: boolean }) => {
       setRejection(null);
@@ -435,9 +423,12 @@ export function Step3SetupBC({
     [annotations, caseId, envelope, runEnvelope],
   );
 
-  const triggerSetup = envelopeMode
-    ? () => runEnvelope({ useForceFlags: true })
-    : triggerSetupLegacy;
+  // useForceFlags=true ONLY when an explicit ?ai_mode is set
+  // (debug-time forcing of uncertain/blocked envelopes); the natural
+  // production click is useForceFlags=false so the executor returns
+  // the actual envelope based on existing face_annotations.yaml.
+  const triggerSetup = () =>
+    runEnvelope({ useForceFlags: aiMode !== null });
 
   useEffect(() => {
     registerAiAction(triggerSetup);
@@ -470,7 +461,7 @@ export function Step3SetupBC({
         </div>
       )}
 
-      {!summary && !envelope && !rejection && !networkError && (
+      {!envelope && !rejection && !networkError && (
         <p className="rounded-sm border border-surface-800 bg-surface-900/40 px-2 py-1 text-[11px] text-surface-400">
           Click <strong className="text-surface-200">[AI 处理]</strong> below
           to split the mesh into lid + walls and write BC dicts.
@@ -504,35 +495,6 @@ export function Step3SetupBC({
           onSelectActiveFaceQuestion={setActiveFaceQuestionId}
           onResume={handleDialogResume}
         />
-      )}
-
-      {summary && (
-        <div
-          data-testid="step3-setup-bc-success"
-          className="space-y-2 rounded-sm border border-emerald-700/40 bg-emerald-900/10 p-2"
-        >
-          <div className="font-mono text-[11px] text-emerald-200">
-            ✓ Boundary patches split, dicts written
-          </div>
-          <ul className="space-y-1 font-mono text-[10px] text-surface-300">
-            <li>
-              lid faces: <span className="text-emerald-300">{summary.n_lid_faces}</span>{" "}
-              ({summary.lid_velocity[0]} {summary.lid_velocity[1]} {summary.lid_velocity[2]}) m/s
-            </li>
-            <li>
-              wall faces: <span className="text-emerald-300">{summary.n_wall_faces}</span>{" "}
-              (no-slip)
-            </li>
-            <li>
-              ν: <span className="text-emerald-300">{summary.nu.toExponential(3)}</span>{" "}
-              m²/s &nbsp;→&nbsp; Re ={" "}
-              <span className="text-emerald-300">{summary.reynolds.toFixed(0)}</span>
-            </li>
-            <li className="pt-1 text-surface-500">
-              {summary.written_files.length} dict files written
-            </li>
-          </ul>
-        </div>
       )}
 
       {rejection && (

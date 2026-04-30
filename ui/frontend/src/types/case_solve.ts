@@ -51,6 +51,10 @@ export interface ReportBundle {
   slab_cell_count: number;
   plane_axes: string[];
   summary_text: string;
+  /** Stable token combining final_time + U mtime. The artifact URLs
+   *  already embed it as ?v=...; surfaced here so the frontend can
+   *  use it as a queryKey suffix or trigger explicit re-mounts. */
+  cache_version: string;
   artifacts: {
     contour_streamlines: string;
     pressure: string;
