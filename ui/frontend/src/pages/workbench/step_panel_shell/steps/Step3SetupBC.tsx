@@ -33,6 +33,19 @@ import type { CaseSolveRejection } from "@/types/case_solve";
 
 import { AnnotationPanel } from "../AnnotationPanel";
 import { DialogPanel } from "../DialogPanel";
+import { RawDictEditor } from "@/components/RawDictEditor";
+
+// DEC-V61-102 M-RESCUE Phase 2 · Step 3 raw-dict footprint. These are
+// the OpenFOAM dicts setup_ldc_bc / setup_channel_bc author. 0/* paths
+// are intentionally excluded from the allowlist (face_id-coupled —
+// editing them silently breaks the patch invariant).
+const STEP3_RAW_DICT_PATHS = [
+  "system/controlDict",
+  "system/fvSchemes",
+  "system/fvSolution",
+  "constant/momentumTransport",
+  "constant/physicalProperties",
+] as const;
 import { useFacePickOptional } from "../FacePickContext";
 import { useStep3State } from "../Step3StateContext";
 import type {
@@ -63,6 +76,8 @@ export function Step3SetupBC({
   // banner below already shows.
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  // DEC-V61-102 Phase 2 raw-dict editor mount gate (see <details onToggle>).
+  const [rawDictOpen, setRawDictOpen] = useState(false);
 
   // M-AI-COPILOT face-annotation state (DEC-V61-098 spec_v2 §A8). The
   // FacePickContext (populated by the Viewport pickMode wiring) is
@@ -746,6 +761,31 @@ export function Step3SetupBC({
           Could not load existing annotations: {annotationsLoadError}
         </p>
       )}
+
+      {/* DEC-V61-102 M-RESCUE Phase 2 · raw dict editor. Collapsed by
+       *  default and lazily mounted when the engineer expands the
+       *  details — the editor uses @tanstack/react-query so we keep
+       *  it out of the render tree until needed (existing Step 3
+       *  tests don't wrap in QueryClientProvider). */}
+      <details
+        data-testid="step3-raw-dict-editor"
+        className="mt-3 rounded-sm border border-slate-700/50 bg-slate-900/30"
+        onToggle={(e) => setRawDictOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="cursor-pointer px-2 py-1 text-[11px] uppercase tracking-wider text-slate-300 hover:text-slate-100">
+          Advanced · edit raw dicts (manual override)
+        </summary>
+        <div className="px-2 py-2">
+          {!caseId ? (
+            <p className="text-[11px] text-slate-400">Open a case first.</p>
+          ) : rawDictOpen ? (
+            <RawDictEditor
+              caseId={caseId}
+              allowedPaths={STEP3_RAW_DICT_PATHS}
+            />
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }

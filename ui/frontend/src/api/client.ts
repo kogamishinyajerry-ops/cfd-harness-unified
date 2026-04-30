@@ -563,4 +563,86 @@ export const api = {
     }
     return (await resp.json()) as import("@/types/case_solve").ReportBundle;
   },
+
+  // ──────────── M-RESCUE Phase 2 · raw dict GET/POST/list ────────────
+  // DEC-V61-102 — engineer manual override of AI-authored OpenFOAM
+  // dicts (system/controlDict, fvSchemes, fvSolution, etc.). Inline
+  // fetch wrappers preserve the structured `detail` body on 4xx so
+  // the UI can branch on failing_check (etag_mismatch / validation_failed
+  // / symlink_escape) rather than just status code.
+
+  listRawDicts: async (
+    caseId: string,
+  ): Promise<import("@/types/case_dicts").RawDictAllowlistEntry[]> => {
+    return request<import("@/types/case_dicts").RawDictAllowlistEntry[]>(
+      `/api/cases/${encodeURIComponent(caseId)}/dicts`,
+    );
+  },
+
+  getRawDict: async (
+    caseId: string,
+    relativePath: string,
+  ): Promise<import("@/types/case_dicts").RawDictGet> => {
+    const url = `/api/cases/${encodeURIComponent(caseId)}/dicts/${relativePath
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}`;
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        typeof detail === "object" && detail !== null && "hint" in detail
+          ? (detail as { hint: string }).hint
+          : `getRawDict failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import("@/types/case_dicts").RawDictGet;
+  },
+
+  postRawDict: async (
+    caseId: string,
+    relativePath: string,
+    body: import("@/types/case_dicts").RawDictPostBody,
+    options?: { force?: boolean },
+  ): Promise<import("@/types/case_dicts").RawDictPostResponse> => {
+    const url = `/api/cases/${encodeURIComponent(caseId)}/dicts/${relativePath
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}${options?.force ? "?force=1" : ""}`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      credentials: "same-origin",
+    });
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const parsed = await resp.json();
+        detail = parsed?.detail ?? parsed;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        typeof detail === "object" && detail !== null && "hint" in detail
+          ? (detail as { hint: string }).hint
+          : `postRawDict failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import("@/types/case_dicts").RawDictPostResponse;
+  },
 };
