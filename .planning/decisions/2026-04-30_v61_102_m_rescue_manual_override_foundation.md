@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-102
 title: M-RESCUE · Manual override foundation — every AI-authored dict becomes engineer-editable
-status: Accepted (2026-04-30 · authored under user direction "完全交给你决策" + "工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例" deep-planning consensus)
+status: Phase-1+Phase-2 Implemented (2026-04-30 · Phase 1 backend at commits 8b4e602..7677496 cleared by 7-round Codex chain APPROVE_WITH_COMMENTS · Phase 2 frontend at commits 323a326..658bf86 cleared by 4-round Codex chain APPROVE · all pushed to origin/main · authored under user direction "完全交给你决策" + "工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例" deep-planning consensus)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-30
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE — slots in as M9.7, AFTER DEC-V61-101 minimal channel executor and BEFORE M10 STEP/IGES intake) · user direction 2026-04-30 — "我觉得在CAD几何操作、算例设置方面，功能必须完全覆盖，否则项目就是不完整的，工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例"
@@ -339,6 +339,6 @@ To be confirmed during Phase 1 review.
 
 ---
 
-notion_sync_status: pending
-codex_tool_report_path: pending
+notion_sync_status: pending (Phase 1+2 Codex chain cleared on origin/main; awaiting next Notion-MCP-online window for sync; same status convention as parent DEC-V61-101)
+codex_tool_report_path: reports/codex_tool_reports/2026-04-30_v61_102_m_rescue_phase_1_2_codex_chain.md
 autonomous_governance: true
