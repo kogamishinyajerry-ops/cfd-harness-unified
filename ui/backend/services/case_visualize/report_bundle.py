@@ -34,13 +34,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import matplotlib
-
-# Headless backend BEFORE pyplot import — we run inside the FastAPI
-# worker process which has no display. mirrors render_case_report.py.
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 import numpy as np
 
 from ui.backend.services.case_visualize.velocity_slice import (
@@ -53,6 +46,58 @@ from ui.backend.services.case_visualize.velocity_slice import (
 
 class ReportBundleError(RuntimeError):
     """Raised when field parsing or matplotlib rendering fails."""
+
+
+# Codex round-5 P2 (2026-04-30): matplotlib is in the [workbench] extra
+# but the documented backend install is `.[ui,dev]`. Importing
+# matplotlib at module load made the case_visualize PACKAGE
+# unimportable in stock UI installs — including the three legacy
+# Pillow-only routes (bc-overlay, residual-history, velocity-slice)
+# that have nothing to do with matplotlib.
+#
+# Defer the import to first-call instead. The package now imports
+# cleanly without matplotlib; only build_report_bundle / the four
+# renderers fail (with a clear actionable error) when matplotlib is
+# missing. Legacy routes keep working unchanged.
+_MPL_LOADED = False
+
+
+def _ensure_matplotlib() -> None:
+    """Import matplotlib + matplotlib.tri on first call. Raises
+    ReportBundleError with install hint when matplotlib isn't
+    available so the route can map it to a clean 503 response.
+    """
+    global _MPL_LOADED, plt, mtri  # noqa: PLW0603 — deliberate module-level cache
+    if _MPL_LOADED:
+        return
+    try:
+        import matplotlib  # type: ignore[import-not-found]
+
+        # Headless Agg backend BEFORE pyplot import — we run inside
+        # the FastAPI worker which has no display. Mirrors
+        # render_case_report.py.
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as _plt  # type: ignore[import-not-found]
+        import matplotlib.tri as _mtri  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise ReportBundleError(
+            "matplotlib is required for the Step 5 report bundle but is "
+            "not installed. Install the workbench extras: "
+            "`.venv/bin/pip install -e '.[workbench]'` and restart the "
+            "backend."
+        ) from exc
+    plt = _plt
+    mtri = _mtri
+    _MPL_LOADED = True
+    # Dark-theme rcParams set once on first import.
+    _apply_rcparams()
+
+
+# Module-scope handles populated by _ensure_matplotlib(). Typed as Any
+# so the renderers can use plt./mtri. without static-import errors;
+# at runtime they're only touched after _ensure_matplotlib() succeeds.
+plt = None  # type: ignore[assignment]
+mtri = None  # type: ignore[assignment]
 
 
 _DPI = 120
@@ -82,24 +127,26 @@ ARTIFACT_NAMES = (
     "centerline",
 )
 
-# Dark-theme matplotlib styling so the panels match the workbench UI
-# (slate background, light text). One global rcParams update at module
-# load — figure-level overrides are rare.
-plt.rcParams.update(
-    {
-        "figure.facecolor": "#0b0d12",
-        "axes.facecolor": "#0e1117",
-        "axes.edgecolor": "#3a3f4a",
-        "axes.labelcolor": "#cbd5e1",
-        "axes.titlecolor": "#e2e8f0",
-        "xtick.color": "#94a3b8",
-        "ytick.color": "#94a3b8",
-        "grid.color": "#1f242f",
-        "savefig.facecolor": "#0b0d12",
-        "savefig.edgecolor": "#0b0d12",
-        "font.size": 10,
-    }
-)
+def _apply_rcparams() -> None:
+    """Dark-theme matplotlib styling so the panels match the workbench
+    UI (slate background, light text). Called once from
+    _ensure_matplotlib() on first matplotlib load.
+    """
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "#0b0d12",
+            "axes.facecolor": "#0e1117",
+            "axes.edgecolor": "#3a3f4a",
+            "axes.labelcolor": "#cbd5e1",
+            "axes.titlecolor": "#e2e8f0",
+            "xtick.color": "#94a3b8",
+            "ytick.color": "#94a3b8",
+            "grid.color": "#1f242f",
+            "savefig.facecolor": "#0b0d12",
+            "savefig.edgecolor": "#0b0d12",
+            "font.size": 10,
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,7 +301,7 @@ def _aspect_figsize(Cx: np.ndarray, Cy: np.ndarray) -> tuple[float, float]:
     return w, h
 
 
-def _save(fig: plt.Figure, path: Path) -> None:
+def _save(fig, path: Path) -> None:  # type: ignore[no-untyped-def]
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight", dpi=_DPI)
     plt.close(fig)
@@ -542,6 +589,10 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
     at the four PNG URLs. Caching is keyed on ``final_time`` and on
     each source field's mtime so a re-solve auto-invalidates.
     """
+    # Codex round-5 P2: matplotlib import is deferred to first call
+    # so the case_visualize package keeps importing on stock `.[ui]`
+    # installs that haven't pulled in the [workbench] extras.
+    _ensure_matplotlib()
     times = _list_time_dirs(case_dir)
     if not times:
         raise ReportBundleError("no time directories under case dir")
@@ -556,6 +607,14 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
         raise ReportBundleError(
             f"U field missing in {final_dir} — solver may have crashed."
         )
+    # Codex round-5 P1 (2026-04-30): _ensure_cell_centres returns the
+    # first cached C file it finds in any time directory. After a
+    # remesh + re-solve the cached C from a previous mesh has the OLD
+    # cell count and the length check below would fail PERMANENTLY
+    # ("U has 26332 cells but C has 8000 — mesh changed?"). Detect the
+    # mismatch and recover by deleting the stale C files + retrying
+    # _ensure_cell_centres which will re-run postProcess for the
+    # current mesh.
     try:
         c_path = _ensure_cell_centres(case_dir)
     except VelocitySliceError as exc:
@@ -564,9 +623,34 @@ def build_report_bundle(case_dir: Path) -> ReportBundle:
     U = _parse_volVectorField(u_path)
     C = _parse_volVectorField(c_path)
     if len(U) != len(C):
-        raise ReportBundleError(
-            f"U has {len(U)} cells but C has {len(C)} — mesh changed?"
-        )
+        # Stale C from a prior mesh. Surgical recovery: delete only
+        # the specific C file we just loaded and retry. If another
+        # time directory has a C with the right cell count,
+        # _ensure_cell_centres returns it on the next call. If no
+        # valid C exists anywhere, it falls through to postProcess.
+        # Loop because there may be multiple stale Cs (one per old
+        # time dir from a prior mesh) — bounded by `len(times)`.
+        max_attempts = len(times)
+        for _ in range(max_attempts):
+            try:
+                c_path.unlink()
+            except OSError:
+                break
+            try:
+                c_path = _ensure_cell_centres(case_dir)
+            except VelocitySliceError as exc:
+                raise ReportBundleError(
+                    f"stale C field detected (U has {len(U)} cells, C had "
+                    f"{len(C)}); failed to regenerate: {exc}"
+                ) from exc
+            C = _parse_volVectorField(c_path)
+            if len(U) == len(C):
+                break
+        if len(U) != len(C):
+            raise ReportBundleError(
+                f"U has {len(U)} cells but regenerated C has {len(C)}; "
+                "mesh / solver state is inconsistent."
+            )
     p_path = final_dir / "p"
     if p_path.is_file():
         p = _parse_volScalarField(p_path)

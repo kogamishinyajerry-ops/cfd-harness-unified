@@ -178,10 +178,13 @@ def get_report_artifact(
             detail=f"unknown artifact: {artifact!r}",
         )
     case_dir = _resolve(case_id)
+    # Codex round-5 P2: previously this route built the report
+    # bundle to validate ``v`` AND read_report_artifact rebuilt it
+    # again to read the file — 2 builds per PNG, 8 builds per Step 5
+    # render. build_report_bundle parses U/C/p unconditionally before
+    # checking the disk cache, so this was wasteful. Now we build
+    # once, then read the file path directly off the bundle.
     try:
-        # build_report_bundle is idempotent + cached, so calling it
-        # here is cheap when nothing changed and still gives us the
-        # current cache_version to validate ``v`` against.
         from ui.backend.services.case_visualize import build_report_bundle
         bundle = build_report_bundle(case_dir)
         if v is not None and v != bundle.cache_version:
@@ -192,7 +195,16 @@ def get_report_artifact(
                     f"{bundle.cache_version!r}. Re-fetch /report-bundle."
                 ),
             )
-        png = read_report_artifact(case_dir, artifact)
+        # bundle.artifacts maps logical name → URL fragment of the
+        # form "reports/<dir>/<name>.png?v=...". Strip the query
+        # string to get the on-disk relative path.
+        rel = bundle.artifacts[artifact].split("?", 1)[0]
+        on_disk = case_dir / rel
+        if not on_disk.is_file():
+            raise ReportBundleError(
+                f"artifact {artifact!r} not on disk at {on_disk}"
+            )
+        png = on_disk.read_bytes()
     except ReportBundleError as exc:
         raise _report_bundle_error_to_http(exc) from exc
     return _png_response(png)

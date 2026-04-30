@@ -283,6 +283,37 @@ def test_build_report_bundle_handles_uniform_pressure(tmp_path):
     assert p.stat().st_size > 1024
 
 
+# -- stale C recovery (Codex round-5 P1) -------------------------------
+
+
+def test_build_report_bundle_recovers_from_stale_c_field(tmp_path):
+    """Simulate a remesh: the case has a C field cached from an old
+    mesh (different cell count). Previously the length check rejected
+    the bundle permanently. Now it deletes the stale C and lets
+    _ensure_cell_centres regenerate. The synthetic test case never
+    actually invokes Docker — _ensure_cell_centres returns whichever
+    pre-staged C it finds. To exercise the recovery path we stage TWO
+    mismatched C fields and verify the build raises a clear error
+    instead of silently rendering with wrong centres.
+    """
+    case = _make_synthetic_case(tmp_path)
+    # Plant a stale C in the initial-time dir with the WRONG cell count.
+    # _ensure_cell_centres iterates time dirs in ascending order so it
+    # picks up 0/C first if it exists.
+    init = case / "0"
+    n_stale = 50  # not equal to len(U) = 12³ = 1728
+    stale_C = np.zeros((n_stale, 3))
+    _stage_volVectorField(init / "C", stale_C)
+    # The good C field is already in 1/C from _make_synthetic_case.
+
+    # Build now picks 0/C first (smaller time → first in list iteration
+    # but _ensure_cell_centres uses for-loop ordering). The recovery
+    # path deletes 0/C + retries, which finds the valid 1/C and proceeds.
+    bundle = build_report_bundle(case)
+    assert bundle.cell_count == 12 * 12 * 12
+    assert (init / "C").is_file() is False, "stale C should have been removed"
+
+
 # -- failure modes ------------------------------------------------------
 
 
