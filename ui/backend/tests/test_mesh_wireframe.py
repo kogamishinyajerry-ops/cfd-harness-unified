@@ -353,6 +353,44 @@ def test_get_case_mesh_render_returns_glb_for_cube(isolated_imported: Path):
     assert response.headers["content-type"].startswith("model/gltf-binary")
 
 
+def test_head_case_mesh_render_returns_200_for_existing_mesh(
+    isolated_imported: Path,
+):
+    """Codex round-19 dogfood smoke regression (2026-04-30). The
+    StepPanelShell case-switch probe sends HEAD /mesh/render to detect
+    Step 2 completion without downloading the full ~200KB glb body.
+    @router.get does NOT auto-register HEAD in FastAPI; without an
+    explicit api_route(methods=['GET','HEAD']) the probe gets 405 and
+    the client falls through to "no mesh", regating Step 3's viewport
+    even though the artifacts exist. User-visible symptom: face
+    picking unavailable on a meshed case after a fresh page load."""
+    case_id = "imported_2026-04-28T00-00-00Z_cubemesh_head"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh(case_dir)
+
+    client = TestClient(app)
+    response = client.head(f"/api/cases/{case_id}/mesh/render")
+    assert response.status_code == 200
+    # HEAD response body MUST be empty (Starlette strips it).
+    assert response.content == b""
+    # Content-Type still set so the caller can confirm it's a glb.
+    assert response.headers["content-type"].startswith("model/gltf-binary")
+
+
+def test_head_case_mesh_render_returns_404_when_polymesh_missing(
+    isolated_imported: Path,
+):
+    """HEAD must mirror GET status semantics: 404 when no mesh exists
+    so the StepPanelShell probe correctly leaves Step 2 pending."""
+    case_id = "imported_2026-04-28T00-00-00Z_nopolymesh_head"
+    (isolated_imported / case_id).mkdir()
+
+    client = TestClient(app)
+    response = client.head(f"/api/cases/{case_id}/mesh/render")
+    assert response.status_code == 404
+
+
 def test_get_case_mesh_render_404_for_unknown_case(isolated_imported: Path):
     client = TestClient(app)
     response = client.get("/api/cases/imported_unknown/mesh/render")

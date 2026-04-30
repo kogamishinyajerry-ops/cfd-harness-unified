@@ -116,7 +116,11 @@ _MESH_FAILING_CHECK_TO_STATUS: dict[str, int] = {
 }
 
 
-@router.get("/cases/{case_id}/mesh/render", tags=["geometry-render"])
+@router.api_route(
+    "/cases/{case_id}/mesh/render",
+    methods=["GET", "HEAD"],
+    tags=["geometry-render"],
+)
 def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
     """Return the imported case's polyMesh as a wireframe binary glTF.
 
@@ -124,6 +128,14 @@ def get_case_mesh_wireframe_glb(case_id: str) -> FileResponse:
     output), extracts unique edges across all faces, and emits a glTF
     with a single ``mode: LINES`` primitive. Cached at
     ``<case_dir>/.render_cache/mesh.glb`` keyed on points + faces mtimes.
+
+    HEAD is supported (Codex round-19 dogfood smoke 2026-04-30) so the
+    StepPanelShell mesh-existence probe can confirm Step 2 completion
+    on case-switch without downloading the full glb body. FastAPI's
+    @router.get does not auto-register HEAD; users hitting HEAD on a
+    GET-only route get a 405 and the probe falls through to "no
+    mesh", regating Step 3's viewport even when artifacts exist.
+    Starlette's FileResponse handles HEAD (strips body) automatically.
     """
     try:
         result = build_mesh_wireframe_glb(case_id)

@@ -155,7 +155,11 @@ def get_report_bundle(case_id: str) -> dict:
     }
 
 
-@router.get("/cases/{case_id}/report/{artifact}.png", tags=["case-visualize"])
+@router.api_route(
+    "/cases/{case_id}/report/{artifact}.png",
+    methods=["GET", "HEAD"],
+    tags=["case-visualize"],
+)
 def get_report_artifact(
     case_id: str,
     artifact: str,
@@ -171,6 +175,12 @@ def get_report_artifact(
     410 Gone so the client knows to re-fetch /report-bundle. When
     omitted, serve the current bundle (backward compatibility for
     callers that don't pass the version, e.g. direct curl).
+
+    HEAD support (Codex round-19 dogfood smoke 2026-04-30): the
+    Step5ResultsGrid FigureCard's onError → fetch(HEAD) probe needs
+    the 410 status to detect a stale artifact and drop the bundle
+    cache. A 405 here would silently strand the broken-image state
+    until the user manually re-clicks [AI 处理].
     """
     if artifact not in ARTIFACT_NAMES:
         raise HTTPException(
