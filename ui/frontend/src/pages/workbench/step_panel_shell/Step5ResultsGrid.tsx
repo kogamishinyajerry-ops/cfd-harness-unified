@@ -12,7 +12,9 @@
 // so the user knows whether it's "solve hasn't run" vs. "container
 // down" vs. "field malformed".
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
 
@@ -25,9 +27,33 @@ interface FigureCardProps {
   title: string;
   caption: string;
   url: string;
+  onStale: () => void;
 }
 
-function FigureCard({ title, caption, url }: FigureCardProps) {
+function FigureCard({ title, caption, url, onStale }: FigureCardProps) {
+  // Codex round-6 P2 (2026-04-30): the /report/{name}.png route can
+  // return 410 Gone if the case was re-solved between the bundle
+  // metadata fetch and this image fetch. <img onError> doesn't expose
+  // the HTTP status, so probe the URL via fetch() and only set src
+  // when we get 200. On 410 (or any non-OK), fire onStale so the
+  // grid can drop the bundle from React Query cache and render the
+  // empty hint, prompting the user to click [AI 处理] again.
+  const [staleHit, setStaleHit] = useState(false);
+
+  if (staleHit) {
+    return (
+      <figure className="flex min-h-0 flex-col rounded-md border border-amber-700/40 bg-amber-900/10 p-3">
+        <figcaption className="text-[10px] font-mono uppercase tracking-wider text-amber-200">
+          {title}
+        </figcaption>
+        <p className="mt-2 text-[11px] text-amber-100">
+          Image stale (case was re-solved). Click [AI 处理] in the right
+          rail to refresh.
+        </p>
+      </figure>
+    );
+  }
+
   return (
     <figure className="flex min-h-0 flex-col rounded-md border border-surface-800 bg-surface-950/60">
       <figcaption className="flex items-baseline justify-between border-b border-surface-800 px-3 py-1.5 text-[10px]">
@@ -41,6 +67,22 @@ function FigureCard({ title, caption, url }: FigureCardProps) {
           src={url}
           alt={title}
           className="max-h-full max-w-full object-contain"
+          onError={() => {
+            // Image element's onError fires on any load failure
+            // (broken bytes, 4xx, network). Probe the URL to
+            // distinguish 410 (stale) from a real failure.
+            fetch(url, { method: "HEAD" })
+              .then((resp) => {
+                if (resp.status === 410) {
+                  setStaleHit(true);
+                  onStale();
+                }
+              })
+              .catch(() => {
+                // Network error — leave the broken-image state as-is;
+                // user can still re-click [AI 处理] manually.
+              });
+          }}
         />
       </div>
     </figure>
@@ -48,6 +90,7 @@ function FigureCard({ title, caption, url }: FigureCardProps) {
 }
 
 export function Step5ResultsGrid({ caseId, height }: Step5ResultsGridProps) {
+  const queryClient = useQueryClient();
   // The Step 5 right-rail's [AI 处理] populates the cache via
   // queryClient.fetchQuery(['report-bundle', caseId], ...). This grid
   // observes the same key with enabled=false so it never fires its
@@ -61,6 +104,15 @@ export function Step5ResultsGrid({ caseId, height }: Step5ResultsGridProps) {
     retry: false,
     staleTime: Infinity,
   });
+
+  // Codex round-6 P2: when an artifact 410s the bundle is stale.
+  // FigureCard probes via fetch(HEAD) and calls onStale to drop the
+  // cache entry, which collapses the grid back to its empty hint
+  // (the 410 won't recur because the user must click [AI 处理] to
+  // re-fetch with the new cache_version).
+  const handleStale = () => {
+    queryClient.removeQueries({ queryKey: ["report-bundle", caseId] });
+  };
 
   if (isLoading) {
     return (
@@ -146,21 +198,25 @@ export function Step5ResultsGrid({ caseId, height }: Step5ResultsGridProps) {
           title="|U| + streamlines"
           caption="velocity magnitude · streamplot"
           url={data.artifacts.contour_streamlines}
+          onStale={handleStale}
         />
         <FigureCard
           title="gauge pressure"
           caption="p / ρ · diverging colormap"
           url={data.artifacts.pressure}
+          onStale={handleStale}
         />
         <FigureCard
           title="vorticity"
           caption="∂Uy/∂x − ∂Ux/∂y"
           url={data.artifacts.vorticity}
+          onStale={handleStale}
         />
         <FigureCard
           title="centreline profiles"
           caption="U_x(y) · U_y(x) at midlines"
           url={data.artifacts.centerline}
+          onStale={handleStale}
         />
       </div>
     </div>

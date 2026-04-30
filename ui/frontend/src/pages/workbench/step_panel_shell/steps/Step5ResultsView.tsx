@@ -84,6 +84,22 @@ export function Step5ResultsView({
       setResultsSummary(s);
       onStepComplete();
     } catch (e) {
+      // Codex round-6 P3 (2026-04-30): a 409 from /report-bundle just
+      // means "Step 4 hasn't run yet" — that's an expected precondition
+      // miss when the user clicks [AI 处理] on Step 5 first. The center
+      // grid already shows a friendly "finish Step 4 first" hint; the
+      // right rail should mirror that, not flag the step as errored.
+      if (e instanceof ApiError && e.status === 409) {
+        setRejection({
+          failing_check: "solve_not_run",
+          detail:
+            typeof e.message === "string" && e.message.length > 0
+              ? e.message
+              : "Solve hasn't run yet. Finish Step 4 (solve) first.",
+        });
+        // Don't onStepError() — 409 is an expected pre-solve state.
+        return;
+      }
       if (
         e instanceof ApiError &&
         e.detail &&
@@ -94,7 +110,6 @@ export function Step5ResultsView({
         setRejection(detail);
         onStepError(`report-bundle rejected: ${detail.failing_check}`);
       } else if (e instanceof ApiError && typeof e.message === "string") {
-        // Generic backend rejection — surface message + status hint.
         setNetworkError(`${e.message} (HTTP ${e.status})`);
         onStepError(e.message);
       } else {

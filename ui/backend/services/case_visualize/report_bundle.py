@@ -248,15 +248,99 @@ def _select_slab(
         raise ReportBundleError(
             "midplane slab found < 4 cells — mesh is degenerate."
         )
+    Cx_raw = C[mask, i]
+    Cy_raw = C[mask, j]
+    Ux_raw = U[mask, i]
+    Uy_raw = U[mask, j]
+    p_raw = p[mask] if p is not None else None
+
+    # Codex round-6 P2 (2026-04-30): for genuinely 3D meshes the slab
+    # may catch multiple cells per (Cx, Cy) projected location with
+    # different field values (different depth samples). matplotlib.tri
+    # fails on exactly-coincident (x, y) points and would otherwise
+    # pick one sample arbitrarily based on cell ordering — making the
+    # contour, streamline, and vorticity panels non-physical. Bin
+    # cells onto a regular (Cx, Cy) grid keyed by the slab-axis bbox
+    # (~_GRID_RES bins per axis) and AVERAGE the field values that
+    # land in each bin. Pseudo-2D one-cell-thick meshes already have
+    # one sample per (Cx, Cy) so binning is a no-op for those.
+    Cx_grid, Cy_grid, Ux_grid, Uy_grid, p_grid = _project_slab(
+        Cx_raw,
+        Cy_raw,
+        Ux_raw,
+        Uy_raw,
+        p_raw,
+        n_bins=_GRID_RES // 2,
+    )
     return _SliceFields(
-        Cx=C[mask, i],
-        Cy=C[mask, j],
-        Ux=U[mask, i],
-        Uy=U[mask, j],
-        p=p[mask] if p is not None else None,
+        Cx=Cx_grid,
+        Cy=Cy_grid,
+        Ux=Ux_grid,
+        Uy=Uy_grid,
+        p=p_grid,
         final_time=0.0,  # caller fills in
         axes=(lab_i, lab_j),
     )
+
+
+def _project_slab(
+    Cx: np.ndarray,
+    Cy: np.ndarray,
+    Ux: np.ndarray,
+    Uy: np.ndarray,
+    p: np.ndarray | None,
+    n_bins: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
+    """Bin slab cells onto a regular (Cx, Cy) grid, averaging values
+    that fall in the same bin. Returns the bin-centre coordinates +
+    averaged field values for non-empty bins.
+
+    For pseudo-2D meshes (one cell thick on the slab axis) almost
+    every input (Cx, Cy) is unique → binning preserves the original
+    sample count. For genuinely 3D meshes (LDC unit cube etc.) the
+    slab catches multiple depth samples per (Cx, Cy) → binning
+    deduplicates by averaging. Pure numpy; no scipy KD-tree needed.
+    """
+    n = len(Cx)
+    if n == 0:
+        return Cx, Cy, Ux, Uy, p
+    xmin, xmax = float(Cx.min()), float(Cx.max())
+    ymin, ymax = float(Cy.min()), float(Cy.max())
+    dx = xmax - xmin
+    dy = ymax - ymin
+    if dx <= 0 or dy <= 0:
+        # Degenerate domain — pass through; downstream handles the
+        # error path.
+        return Cx, Cy, Ux, Uy, p
+    # +1 padding on the upper edge so xmax/ymax fall inside the last bin.
+    eps_x = dx * 1e-9
+    eps_y = dy * 1e-9
+    ix = np.clip(((Cx - xmin) / (dx + eps_x) * n_bins).astype(np.int64), 0, n_bins - 1)
+    iy = np.clip(((Cy - ymin) / (dy + eps_y) * n_bins).astype(np.int64), 0, n_bins - 1)
+    flat_idx = ix * n_bins + iy
+    # Aggregate via np.bincount for sums + counts.
+    counts = np.bincount(flat_idx, minlength=n_bins * n_bins)
+    nonempty = np.flatnonzero(counts > 0)
+    if len(nonempty) >= n:
+        # No collisions — every cell got its own bin. Return originals
+        # so we don't pay the binning cost. This is the pseudo-2D
+        # path on every dogfood mesh we ship today (gmsh tet mesh on
+        # LDC unit cube generates ~1500 unique slab cells, n_bins²
+        # = 12100 bins).
+        return Cx, Cy, Ux, Uy, p
+
+    def _avg(values: np.ndarray) -> np.ndarray:
+        sums = np.bincount(flat_idx, weights=values, minlength=n_bins * n_bins)
+        return sums[nonempty] / counts[nonempty]
+
+    bx = nonempty // n_bins
+    by = nonempty % n_bins
+    Cx_out = xmin + (bx + 0.5) * (dx / n_bins)
+    Cy_out = ymin + (by + 0.5) * (dy / n_bins)
+    Ux_out = _avg(Ux)
+    Uy_out = _avg(Uy)
+    p_out = _avg(p) if p is not None else None
+    return Cx_out, Cy_out, Ux_out, Uy_out, p_out
 
 
 def _bbox(Cx: np.ndarray, Cy: np.ndarray) -> tuple[float, float, float, float]:

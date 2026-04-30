@@ -283,6 +283,50 @@ def test_build_report_bundle_handles_uniform_pressure(tmp_path):
     assert p.stat().st_size > 1024
 
 
+# -- 3D slab projection dedup (Codex round-6 P2) -----------------------
+
+
+def test_project_slab_collapses_duplicate_xy_samples():
+    """For genuinely 3D meshes the slab catches multiple cells per
+    (Cx, Cy) projection with different field values. _project_slab
+    must average them onto bins so matplotlib.tri's no-duplicate
+    constraint holds. Construct a synthetic case where 4 slab cells
+    map to the same projected (x, y) with values [0, 10, 0, 10]; the
+    bin should report mean 5.
+    """
+    from ui.backend.services.case_visualize.report_bundle import _project_slab
+
+    # 4 cells at (0,0), 4 at (1,0), 4 at (0,1), 4 at (1,1) — each
+    # quad has alternating Ux 0/10. Total 16 cells.
+    Cx = np.array([0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1], dtype=float)
+    Cy = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], dtype=float)
+    Ux = np.array([0, 10, 0, 10] * 4, dtype=float)
+    Uy = np.zeros(16)
+    Cx_out, Cy_out, Ux_out, Uy_out, p_out = _project_slab(
+        Cx, Cy, Ux, Uy, None, n_bins=2
+    )
+    # 4 unique (x, y) bins → 4 output cells
+    assert len(Cx_out) == 4
+    # Every bin should average to 5 (mean of 0, 10, 0, 10)
+    assert np.allclose(Ux_out, 5.0)
+    assert p_out is None
+
+
+def test_project_slab_passthrough_when_no_collisions():
+    """Pseudo-2D mesh: every (Cx, Cy) is unique → binning is a
+    no-op and the function returns the original arrays so we don't
+    pay the binning cost.
+    """
+    from ui.backend.services.case_visualize.report_bundle import _project_slab
+
+    Cx = np.array([0, 1, 2, 3], dtype=float)
+    Cy = np.array([0, 1, 2, 3], dtype=float)
+    Ux = np.array([0, 1, 2, 3], dtype=float)
+    Uy = np.zeros(4)
+    Cx_out, *_ = _project_slab(Cx, Cy, Ux, Uy, None, n_bins=64)
+    assert Cx_out is Cx  # identity check — pass-through
+
+
 # -- stale C recovery (Codex round-5 P1) -------------------------------
 
 
