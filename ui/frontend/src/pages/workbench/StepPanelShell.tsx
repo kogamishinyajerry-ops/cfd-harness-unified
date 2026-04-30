@@ -305,14 +305,23 @@ export function StepPanelShell() {
   // from a meshed case to an unmeshed one therefore left
   // stepStates[2] sticky at "completed" — Step 3's viewport gate
   // trusted that flag and immediately fetched /bc/render → 404/409
-  // → red error banner. Now we synchronously reset all step states
-  // back to "pending" when caseId changes, then let the probe lift
+  // → red error banner. Now we synchronously reset Steps 2-5 back
+  // to "pending" when caseId changes, then let the probe lift
   // Step 2 back to "completed" only if mesh artifacts actually exist
   // for the new case.
+  //
+  // Codex round-15 P3 (2026-04-30): keep Step 1 = "completed" on a
+  // case switch. Step 1 is "Geometry import" and only Step1Import
+  // calls onStepComplete(); but if the engineer is on the URL
+  // /workbench/case/:caseId at all, the case already exists in the
+  // imported drafts directory (the route enforces this), so the
+  // import already happened. Resetting Step 1 to pending on case
+  // switch was incorrect — the StepTree would falsely show Step 1
+  // as "not done" until the engineer clicked back to it.
   useEffect(() => {
     if (!caseId) return;
     setStepStates({
-      1: "pending",
+      1: "completed",
       2: "pending",
       3: "pending",
       4: "pending",

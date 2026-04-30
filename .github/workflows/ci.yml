@@ -33,7 +33,13 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # 2026-04-30 (Codex round-15 P2): include the [workbench]
+          # extra so the report_bundle regression suite (matplotlib +
+          # scipy) collects on CI. Without this the 17 tests under
+          # ui/backend/tests/test_report_bundle.py only run via the
+          # local dogfood smoke loop, leaving CI blind to renderer
+          # regressions in the Step 5 multi-figure pipeline.
+          pip install -e ".[dev,workbench]"
 
       - name: Gold YAML schema validator gate
         run: |
@@ -51,7 +57,12 @@ jobs:
         env:
           EXECUTOR_MODE: mock
         run: |
-          python -m pytest tests/ -q
+          # tests/ is the engine + knowledge + report-engine lane.
+          # ui/backend/tests/test_report_bundle.py adds the matplotlib
+          # report-bundle regressions (Codex round-15 P2): the file
+          # lives outside testpaths but is explicit-included so the
+          # 17 renderer tests run on every PR.
+          python -m pytest tests/ ui/backend/tests/test_report_bundle.py -q
 
       # ADR-002 §5 W4 dogfood window 2026-04-25 → 2026-05-09:
       # Re-run pytest with the runtime guard installed in WARN mode so any
@@ -69,7 +80,7 @@ jobs:
           CFD_HARNESS_PLANE_GUARD: warn
         run: |
           mkdir -p reports/plane_guard
-          python -m pytest tests/ -q --no-header -p no:cacheprovider \
+          python -m pytest tests/ ui/backend/tests/test_report_bundle.py -q --no-header -p no:cacheprovider \
             -o "log_cli=true" -o "log_cli_level=WARNING" \
             2>&1 | tee reports/plane_guard/ci_warn_pytest.log
           python scripts/plane_guard_rollback_eval.py \

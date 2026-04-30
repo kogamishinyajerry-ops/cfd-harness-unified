@@ -62,6 +62,15 @@ export function Step5ResultsView({
   );
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  // Codex round-15 P3 (2026-04-30): a 409 from /report-bundle is the
+  // documented "Step 4 (solve) hasn't run yet" precondition — not a
+  // failure. Round-6 routed it through `rejection`, but that state
+  // drives the red `step5-results-rejection` card, contradicting
+  // the center grid's neutral "finish Step 4 first" hint. Use a
+  // separate state with a neutral surface_900/40 banner so the
+  // right rail mirrors the grid's UX instead of flagging the step
+  // as errored.
+  const [preSolveHint, setPreSolveHint] = useState<string | null>(null);
 
   // Reset resultsSummary whenever the bundle cache is dropped (the
   // grid's onStale handler removeQueries it on a 410 / SolveStream
@@ -77,6 +86,7 @@ export function Step5ResultsView({
   const fetchBundle = useCallback(async () => {
     setRejection(null);
     setNetworkError(null);
+    setPreSolveHint(null);
     // Codex round-9 P2 (2026-04-30): the prior implementation Promise.all'd
     // fetchQuery(report-bundle) and api.resultsSummary, then dropped the
     // bundle cache from a single shared catch block. A summary failure
@@ -116,14 +126,14 @@ export function Step5ResultsView({
       // miss when the user clicks [AI 处理] on Step 5 first. The center
       // grid already shows a friendly "finish Step 4 first" hint; the
       // right rail should mirror that, not flag the step as errored.
+      // Codex round-15 P3: route through the neutral preSolveHint
+      // surface, not the red rejection card.
       if (e instanceof ApiError && e.status === 409) {
-        setRejection({
-          failing_check: "solve_not_run",
-          detail:
-            typeof e.message === "string" && e.message.length > 0
-              ? e.message
-              : "Solve hasn't run yet. Finish Step 4 (solve) first.",
-        });
+        setPreSolveHint(
+          typeof e.message === "string" && e.message.length > 0
+            ? e.message
+            : "Solve hasn't run yet. Finish Step 4 (solve) first.",
+        );
         // Don't onStepError() — 409 is an expected pre-solve state.
         return;
       }
@@ -176,10 +186,19 @@ export function Step5ResultsView({
         velocity profiles.
       </p>
 
-      {!bundle && !rejection && !networkError && (
+      {!bundle && !rejection && !networkError && !preSolveHint && (
         <p className="rounded-sm border border-surface-800 bg-surface-900/40 px-2 py-1 text-[11px] text-surface-400">
           Click <strong className="text-surface-200">[AI 处理]</strong> to
           render the report bundle from the final time directory.
+        </p>
+      )}
+
+      {preSolveHint && (
+        <p
+          data-testid="step5-results-pre-solve-hint"
+          className="rounded-sm border border-surface-800 bg-surface-900/40 px-2 py-1 text-[11px] text-surface-400"
+        >
+          {preSolveHint}
         </p>
       )}
 
