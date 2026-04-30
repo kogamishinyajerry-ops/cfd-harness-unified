@@ -111,56 +111,37 @@ def _parse_log(log_text: str) -> dict[str, object]:
     times = [float(m.group(1)) for m in _TIME_LINE.finditer(log_text)]
     end_time_reached = times[-1] if times else 0.0
 
-    # Final residuals are the LAST occurrence of each pattern.
-    res_u = list(_RES_U_LINE.finditer(log_text))
-    res_p = list(_RES_P_LINE.finditer(log_text))
-    res_diag = list(_RES_DIAGONAL_LINE.finditer(log_text))
+    # Codex ebd6ff3 round-4 P1: pick the MOST-RECENT residual per
+    # field by log position, considering both iterative (_RES_U/P)
+    # and diagonal patterns. The earlier rev only fell back to
+    # diagonal when iterative was empty, so a mixed run (early
+    # steps iterative, final step diagonal) reported the stale
+    # earlier residual instead of the final zero-iteration state.
+    # Strategy: collect (position, field, value) for both patterns,
+    # then walk in reverse to find the most-recent value per field.
+    last_per_field: dict[str, float] = {}
+    candidates: list[tuple[int, str, float]] = []
+    for m in _RES_U_LINE.finditer(log_text):
+        candidates.append((m.start(), f"U{m.group(1)}", float(m.group(2))))
+    for m in _RES_P_LINE.finditer(log_text):
+        candidates.append((m.start(), "p", float(m.group(1))))
+    for m in _RES_DIAGONAL_LINE.finditer(log_text):
+        field = m.group(1)
+        if field in ("Ux", "Uy", "Uz", "p"):
+            # Diagonal solve produced no residual; physically the
+            # field is at zero residual on this step.
+            candidates.append((m.start(), field, 0.0))
+    # Sort by position descending so the first hit per field wins.
+    candidates.sort(key=lambda x: -x[0])
+    for _pos, field, val in candidates:
+        if field not in last_per_field:
+            last_per_field[field] = val
+    ux = last_per_field.get("Ux")
+    uy = last_per_field.get("Uy")
+    uz = last_per_field.get("Uz")
+    p_init: float | None = last_per_field.get("p")
     cont = list(_CONT_LINE.finditer(log_text))
     exec_t = list(_EXEC_TIME.finditer(log_text))
-
-    # Build (Ux, Uy, Uz) tuple from the last 3 U-residuals (one per
-    # component, all printed for the same final timestep).
-    ux: float | None = None
-    uy: float | None = None
-    uz: float | None = None
-    for m in reversed(res_u):
-        comp = m.group(1)
-        val = float(m.group(2))  # Initial residual
-        if comp == "x" and ux is None:
-            ux = val
-        elif comp == "y" and uy is None:
-            uy = val
-        elif comp == "z" and uz is None:
-            uz = val
-        if ux is not None and uy is not None and uz is not None:
-            break
-
-    # Fallback: if a U component never showed up in _RES_U_LINE
-    # (the trivial-orthogonal-mesh case where pimpleFoam took the
-    # diagonal: path on the final step), look for the tail-most
-    # diagonal line for that field and treat as residual=0.
-    # Codex af9579e round-3 P2-b closure.
-    if ux is None or uy is None or uz is None:
-        for m in reversed(res_diag):
-            field = m.group(1)
-            if field == "Ux" and ux is None:
-                ux = 0.0
-            elif field == "Uy" and uy is None:
-                uy = 0.0
-            elif field == "Uz" and uz is None:
-                uz = 0.0
-            if ux is not None and uy is not None and uz is not None:
-                break
-
-    p_init: float | None = None
-    if res_p:
-        p_init = float(res_p[-1].group(1))
-    else:
-        # Diagonal-only p path: the solve closed in zero iterations.
-        for m in reversed(res_diag):
-            if m.group(1) == "p":
-                p_init = 0.0
-                break
     cont_local = float(cont[-1].group(1)) if cont else None
     wall_clock = float(exec_t[-1].group(1)) if exec_t else 0.0
 

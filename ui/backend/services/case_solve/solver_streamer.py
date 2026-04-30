@@ -196,29 +196,17 @@ def _parse_line_to_events(
         )
         return
 
-    # diagonal: trivial-matrix solve — emit a small positive floor
-    # so the UI tick still advances on otherwise-silent timesteps.
-    # Codex af9579e round-3 P2-a: LiveResidualChart filters
-    # residual <= 0 before plotting on the log-scale axis, so a
-    # literal 0.0 would be invisible. 1e-12 is far below any real
-    # iterative residual (typical icoFoam lower bound is ~1e-7
-    # tolerance) so it's unambiguous as "diagonal trivial closure"
-    # while still drawing on the chart.
-    m_d = _RES_DIAGONAL_LINE.search(line)
-    if m_d:
-        field_raw = m_d.group(1)
-        if field_raw in ("Ux", "Uy", "Uz", "p"):
-            iters = int(m_d.group(2))
-            yield _sse(
-                "residual",
-                {
-                    "field": field_raw,
-                    "init": 1e-12,
-                    "final": 1e-12,
-                    "iters": iters,
-                    "t": current_time[0],
-                },
-            )
+    # diagonal: trivial-matrix solve. Codex ebd6ff3 round-4 P2:
+    # earlier rev emitted a 1e-12 sentinel so the chart drew a
+    # tick, but on mixed runs (real residuals + occasional
+    # diagonal) that sentinel forced the chart's log y-axis to
+    # span 11+ decades and squashed the real curves near the top.
+    # Solution: don't emit a residual SSE event at all for the
+    # diagonal: line. The chart simply doesn't get a point for
+    # that field on that step — physically accurate (no iteration
+    # happened, no residual to report) and y-axis stays calibrated
+    # to the actual iterative residuals around it.
+    if _RES_DIAGONAL_LINE.search(line):
         return
 
     m_c = _CONT_LINE.search(line)
