@@ -133,17 +133,24 @@ def get_report_bundle(case_id: str) -> dict:
         raise _report_bundle_error_to_http(exc) from exc
 
     base = f"/api/cases/{case_id}"
+    # Codex round-1 P2 (2026-04-30): the previous URL form
+    # `/report/<name>.png` was identical across solves. After a
+    # re-solve the React `<img>` tags re-rendered with the same src
+    # → browser short-circuited to its memory cache and the grid
+    # kept showing the previous PNGs even though the disk artifacts
+    # had been re-rendered. The Cache-Control: no-store header isn't
+    # enough because React doesn't re-mount an `<img>` whose src
+    # didn't change. Embedding the final_time as `?v=` forces a
+    # different src on every re-solve and the browser refetches.
+    version = f"{bundle.final_time:.6f}".replace(".", "_")
     return {
         "final_time": bundle.final_time,
         "cell_count": bundle.cell_count,
         "slab_cell_count": bundle.slab_cell_count,
         "plane_axes": list(bundle.plane_axes),
         "summary_text": bundle.summary_text,
-        # Each artifact gets a stable URL the frontend can <img src> at.
-        # Names match ARTIFACT_NAMES in report_bundle.py; the route
-        # below resolves them through read_report_artifact().
         "artifacts": {
-            name: f"{base}/report/{name}.png"
+            name: f"{base}/report/{name}.png?v={version}"
             for name in ARTIFACT_NAMES
         },
     }

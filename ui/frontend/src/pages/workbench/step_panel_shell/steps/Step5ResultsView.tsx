@@ -53,12 +53,25 @@ export function Step5ResultsView({
       // fetchQuery populates the React Query cache under
       // ['report-bundle', caseId]; the matching Step5ResultsGrid
       // useQuery hook observes the same cache entry and re-renders
-      // automatically when this resolves. staleTime=Infinity tells
-      // Step5ResultsGrid not to re-fetch on its own.
+      // automatically when this resolves.
+      //
+      // Codex round-1 P1 (2026-04-30): an earlier draft set
+      // staleTime: Infinity, which made fetchQuery short-circuit on
+      // every subsequent click — the right-rail and grid kept
+      // showing the OLD bundle even after a re-solve produced a new
+      // final_time. The contract here is "user clicks [AI 处理] =>
+      // hit the backend"; the backend already caches the matplotlib
+      // render keyed on final_time on disk, so an unchanged
+      // final_time short-circuits at the disk level (~50 ms) and a
+      // changed final_time produces fresh PNGs (~1.5 s). The right
+      // place to short-circuit is the SERVER, not the client cache.
+      // invalidateQueries first so any stale observers re-render.
+      await queryClient.invalidateQueries({
+        queryKey: ["report-bundle", caseId],
+      });
       const r = await queryClient.fetchQuery({
         queryKey: ["report-bundle", caseId],
         queryFn: () => api.reportBundle(caseId),
-        staleTime: Infinity,
       });
       setBundle(r);
       onStepComplete();

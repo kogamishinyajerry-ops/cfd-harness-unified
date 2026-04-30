@@ -128,18 +128,23 @@ const STEPS: readonly StepDef[] = [
     longLabel: "3 · Setup BC",
     viewportConfig: {
       // 2026-04-30 user-feedback fix: previously gated on Step 3
-      // completion, which inverted the workflow — picking is the input
-      // to setup-bc, so the viewport must be live BEFORE the executor
-      // runs. Now gates on Step 2 (mesh) instead, and renders
-      // /mesh/render so face-picking maps to polyMesh cells directly.
-      // Post-completion the same URL keeps working (boundary patches
-      // are re-written but vertex hashes / face_ids are stable). The
-      // BC color overlay (red lid / gray walls) is layered back in a
-      // follow-up — picking interactivity blocks the user, color is
-      // polish.
+      // completion (the original Phase-1A design), which inverted the
+      // workflow — picking is the INPUT to setup-bc, so the viewport
+      // must be live BEFORE the executor runs. Now gates on Step 2
+      // (mesh) instead.
+      //
+      // Codex round-1 P1 (2026-04-30): an earlier draft of this fix
+      // pointed glbUrl at /mesh/render which serves a `mode: LINES`
+      // wireframe — clicks don't intersect triangles, so picking
+      // silently no-ops. /bc/render serves the boundary as triangle
+      // primitives and bc_glb works pre-setup (renders the gmsh-
+      // default patches like frontAndBack with a muted color, then
+      // re-colors lid/walls after setup-bc splits the patches). Same
+      // GLB primitive layout as the face_index endpoint, so the
+      // picker's cellId → face_id resolution stays consistent.
       format: "glb",
       glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/mesh/render` : null,
+        caseId ? `/api/cases/${caseId}/bc/render` : null,
       stlUrl: () => null,
       gateOnStepCompletion: 2,
     },
