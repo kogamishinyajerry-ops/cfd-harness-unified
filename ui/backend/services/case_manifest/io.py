@@ -148,12 +148,16 @@ def write_case_manifest(case_dir: Path, manifest: CaseManifest) -> Path:
     # in the case directory (visible to subsequent operations / exports).
     serialized = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
     tmp_path = path.with_name(path.name + ".tmp")
-    tmp_path.write_text(serialized, encoding="utf-8")
+    # Codex round-6 LOW closure: wrap BOTH the tmp write and the
+    # rename in the cleanup guard. A partial write_text (e.g. ENOSPC
+    # mid-flight) creates+truncates the .tmp on disk before raising,
+    # so it must also be unlinked — not just the os.replace failure.
     try:
+        tmp_path.write_text(serialized, encoding="utf-8")
         os.replace(tmp_path, path)
     except OSError:
         try:
-            tmp_path.unlink()
+            tmp_path.unlink(missing_ok=True)
         except OSError:
             pass
         raise

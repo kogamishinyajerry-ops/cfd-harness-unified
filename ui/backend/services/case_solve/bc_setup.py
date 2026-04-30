@@ -318,8 +318,15 @@ def _atomic_commit_dicts(
         return (), tuple(skipped)
 
     # Phase B + C: snapshot prior bytes and write tempfiles.
+    #
+    # Codex round-6 MED closure: if ``tmp.write_text(content)`` fails
+    # MID-write, the file may have been created/truncated on disk
+    # before the OSError surfaced. The previous implementation tracked
+    # ``tempfiles_written`` only on successful writes, so the partially-
+    # written tmp leaked. Fix: clean up by iterating the FULL pending
+    # plan in the except branch — every tmp path we may have touched
+    # gets unlinked, success or partial.
     prior: dict[str, bytes | None] = {}
-    tempfiles_written: list[str] = []  # rel paths whose .tmp is on disk
     try:
         for rel, content in pending:
             target = case_dir / rel
@@ -327,14 +334,14 @@ def _atomic_commit_dicts(
             prior[rel] = target.read_bytes() if target.is_file() else None
             tmp = target.with_name(target.name + ".tmp")
             tmp.write_text(content)
-            tempfiles_written.append(rel)
     except OSError:
-        # Tempfile write failed mid-loop. Clean up any tempfiles we
-        # did create, then re-raise. No final name was touched.
-        for rel in tempfiles_written:
+        # Tempfile write failed (possibly mid-write, leaving a torn
+        # tmp file on disk). Clean up every tmp path in the plan —
+        # missing_ok handles the "not yet started" entries cleanly.
+        for rel, _ in pending:
             tmp = (case_dir / rel).with_name((case_dir / rel).name + ".tmp")
             try:
-                tmp.unlink()
+                tmp.unlink(missing_ok=True)
             except OSError:
                 pass
         raise

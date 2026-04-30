@@ -254,3 +254,40 @@ def test_compute_etag_deterministic_and_truncated():
     assert a == b
     assert a != c
     assert len(a) == 16
+
+
+def test_write_case_manifest_cleans_up_partial_tmp_write(tmp_path, monkeypatch):
+    """Codex round-6 LOW closure: write_case_manifest's tmp_path.write_text
+    can fail partway (creates+truncates the .tmp before raising). The
+    cleanup must unlink the orphan so case_manifest.yaml.tmp doesn't
+    leak in the case dir."""
+    from pathlib import Path
+
+    from ui.backend.services.case_manifest import io as io_mod
+
+    case_dir = tmp_path / "case-partial-manifest"
+    case_dir.mkdir()
+    manifest = CaseManifest(case_id="case-partial-manifest")
+
+    real_write_text = Path.write_text
+
+    def partial_manifest_write(self, data, *args, **kwargs):
+        if self.name == "case_manifest.yaml.tmp":
+            real_write_text(self, data[: len(data) // 2], *args, **kwargs)
+            raise OSError("simulated partial-manifest-write (round-6)")
+        return real_write_text(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", partial_manifest_write)
+
+    raised = False
+    try:
+        io_mod.write_case_manifest(case_dir, manifest)
+    except OSError:
+        raised = True
+    assert raised
+
+    leftover = list(case_dir.glob("*.tmp"))
+    assert leftover == [], (
+        f"partial manifest tmp write leaked: {leftover} — "
+        f"cleanup must cover the write_text failure path, not just os.replace"
+    )
