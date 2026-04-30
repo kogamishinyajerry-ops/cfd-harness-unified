@@ -300,14 +300,48 @@ export function Step3SetupBC({
       // the saved state matches the visual highlight. For axis-
       // aligned cube faces this collapses to length 1 and the
       // request is identical to the pre-fix shape.
-      const targetFaceIds =
+      //
+      // Codex fca13c3 review P2: the form is seeded from one
+      // face_id only (existingForPicked), so a naive fan-out
+      // would clobber sibling faces whose existing annotation
+      // differs from what the user typed. Skip any sibling whose
+      // existing annotation (a) exists AND (b) doesn't match the
+      // patch being saved on name/patch_type/physics_notes — the
+      // primary picked face_id is always written. The user can
+      // click those siblings individually to edit them.
+      const segmentFaceIds =
         facePick?.picked?.faceIds && facePick.picked.faceIds.length > 0
           ? facePick.picked.faceIds
           : [patch.face_id];
-      const facesToWrite: FaceAnnotation[] = targetFaceIds.map((fid) => ({
-        ...patch,
-        face_id: fid,
-      }));
+      const annotationByFaceId = new Map<string, FaceAnnotation>();
+      for (const f of annotations.faces) {
+        annotationByFaceId.set(f.face_id, f);
+      }
+      const annotationMatchesPatch = (existing: FaceAnnotation): boolean =>
+        existing.name === patch.name &&
+        existing.patch_type === patch.patch_type &&
+        (existing.physics_notes ?? undefined) ===
+          (patch.physics_notes ?? undefined);
+      const facesToWrite: FaceAnnotation[] = [];
+      let conflictingSiblings = 0;
+      for (const fid of segmentFaceIds) {
+        const existing = annotationByFaceId.get(fid);
+        const isPrimary = fid === patch.face_id;
+        if (!isPrimary && existing && !annotationMatchesPatch(existing)) {
+          conflictingSiblings++;
+          continue;
+        }
+        facesToWrite.push({ ...patch, face_id: fid });
+      }
+      if (conflictingSiblings > 0) {
+        // Best-effort UX warning. The save still proceeds (with
+        // conflicting siblings preserved) so the user isn't blocked.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[Step3SetupBC] segment fan-out skipped ${conflictingSiblings} ` +
+            `sibling face(s) with conflicting existing annotations.`,
+        );
+      }
       try {
         const updated = await api.putFaceAnnotations(caseId, {
           if_match_revision: annotations.revision,
