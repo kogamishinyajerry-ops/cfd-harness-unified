@@ -45,17 +45,45 @@ interface Props {
 // We persist on every keystroke and restore on mount; sessionStorage
 // (not localStorage) so closing the tab is still an intentional
 // discard. Key includes caseId + path to scope the cache correctly.
+//
+// Codex Phase-2 round-3 MED closure: persist BOTH content AND etag
+// as a JSON envelope. On restore the etag stays at the value it had
+// when the draft was authored; the server-side fresh-GET etag is NOT
+// adopted automatically. That preserves the conflict-protection
+// contract: if AI re-authored the file while the engineer was away,
+// a save POST sends the (now-stale) etag → server returns 409 →
+// engineer sees the conflict prompt instead of silently overwriting
+// the newer server content.
 const PERSISTENCE_PREFIX = "dec-v61-102:dict-buffer";
+
+interface PersistedDraft {
+  content: string;
+  /** etag at the moment the draft was authored. Null if the file did
+   *  not exist server-side at that time. */
+  etag: string | null;
+}
 
 function persistenceKey(caseId: string, relativePath: string): string {
   return `${PERSISTENCE_PREFIX}:${caseId}:${relativePath}`;
 }
 
-function readPersisted(caseId: string, relativePath: string): string | null {
+function readPersisted(
+  caseId: string,
+  relativePath: string,
+): PersistedDraft | null {
   try {
-    return sessionStorage.getItem(persistenceKey(caseId, relativePath));
+    const raw = sessionStorage.getItem(persistenceKey(caseId, relativePath));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.content !== "string") return null;
+    return {
+      content: parsed.content,
+      etag: typeof parsed.etag === "string" ? parsed.etag : null,
+    };
   } catch {
-    // sessionStorage can throw under privacy modes / disabled storage.
+    // sessionStorage can throw under privacy modes / disabled storage,
+    // or JSON.parse can throw on legacy plain-string entries from the
+    // round-2 schema. Treat both as "no persisted draft".
     return null;
   }
 }
@@ -63,10 +91,14 @@ function readPersisted(caseId: string, relativePath: string): string | null {
 function writePersisted(
   caseId: string,
   relativePath: string,
-  buffer: string,
+  content: string,
+  etag: string | null,
 ): void {
   try {
-    sessionStorage.setItem(persistenceKey(caseId, relativePath), buffer);
+    sessionStorage.setItem(
+      persistenceKey(caseId, relativePath),
+      JSON.stringify({ content, etag } satisfies PersistedDraft),
+    );
   } catch {
     // Quota exceeded / disabled — fall back to in-memory only.
   }
@@ -140,10 +172,10 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
 
   // Clear buffer the moment the user picks a different tab, so the
   // editor never displays stale-under-new-path content. If a persisted
-  // draft exists for the new path (Codex round-2 MED closure: cross-
-  // step navigation no longer silently discards unsaved edits), seed
-  // the buffer from sessionStorage. detail.data arriving later
-  // populates it ONLY if there's no persisted draft.
+  // draft exists for the new path, seed BOTH buffer AND bufferEtag
+  // from the persisted envelope (Codex round-3 MED closure: keep the
+  // etag at the value it had when the draft was authored, so a later
+  // save surfaces 409 if the server has moved on).
   useEffect(() => {
     if (!activePath) {
       setBuffer("");
@@ -152,8 +184,8 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
       return;
     }
     const persisted = readPersisted(caseId, activePath);
-    setBuffer(persisted ?? "");
-    setBufferEtag(null);
+    setBuffer(persisted?.content ?? "");
+    setBufferEtag(persisted?.etag ?? null);
     setStatus({ kind: "idle" });
   }, [activePath, caseId]);
 
@@ -161,38 +193,51 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
   // has a persisted draft for this path (their unsaved work wins
   // until they explicitly save or discard).
   //
-  // Path guard: useQuery may surface ``detail.data`` from the PREVIOUS
-  // tab's query while the new tab's GET is in flight. We must ignore
-  // any data whose .path doesn't match the currently-selected tab —
-  // otherwise switching tabs would briefly re-populate the editor
-  // with the previous tab's content under the new tab's path.
+  // Two guards on detail.data (Codex round-3):
+  //   (1) case_id guard: useQuery may surface data from the PREVIOUS
+  //       case's query while the new case's GET is in flight. The
+  //       Step 3 shell stays mounted across caseId changes, so the
+  //       path can be identical but the content belongs to a different
+  //       case.
+  //   (2) path guard: same shape, applied within a single case during
+  //       tab switches.
+  //
+  // When a persisted draft EXISTS, we deliberately do NOT overwrite
+  // bufferEtag with the fresh server etag — keeping the persisted
+  // (older) etag is what makes save surface 409 if AI re-authored
+  // the file while the engineer was away.
   useEffect(() => {
     if (!detail.data || !activePath) return;
+    if (detail.data.case_id !== caseId) return;
     if (detail.data.path !== activePath) return;
     const persisted = readPersisted(caseId, activePath);
     if (persisted === null) {
       setBuffer(detail.data.content);
+      setBufferEtag(detail.data.etag);
     }
-    setBufferEtag(detail.data.etag);
+    // If persisted exists: keep buffer + bufferEtag as restored.
   }, [detail.data, activePath, caseId]);
 
-  // Persist every keystroke. Two strict gates:
+  // Persist every keystroke. Strict gates (Codex rounds 2-3):
   //   (a) Only persist once detail.data has loaded for the active
-  //       path — otherwise the empty buffer in the post-clear/
-  //       pre-populate gap would be written to sessionStorage and
-  //       later read back as a "persisted empty draft", suppressing
-  //       the legitimate populate-from-server step.
-  //   (b) Skip persistence when buffer matches server content (no
-  //       unsaved changes) — keeps sessionStorage compact.
+  //       case+path — otherwise an empty buffer in the post-clear/
+  //       pre-populate gap would be written to sessionStorage.
+  //   (b) Skip persistence when buffer matches server content
+  //       (no unsaved changes worth restoring).
+  //   (c) Persist the bufferEtag (the etag at the time the draft
+  //       was AUTHORED), not the latest server etag. This preserves
+  //       conflict protection across remounts: if the server moves
+  //       on, save will hit 409.
   useEffect(() => {
     if (!activePath || !detail.data) return;
+    if (detail.data.case_id !== caseId) return;
     if (detail.data.path !== activePath) return;
     if (buffer === detail.data.content) {
       clearPersisted(caseId, activePath);
       return;
     }
-    writePersisted(caseId, activePath, buffer);
-  }, [buffer, detail.data, activePath, caseId]);
+    writePersisted(caseId, activePath, buffer, bufferEtag);
+  }, [buffer, bufferEtag, detail.data, activePath, caseId]);
 
   // For existing files, the save button must wait until the GET
   // returns the current etag — otherwise a POST without expected_etag
@@ -231,13 +276,30 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
           message: `Saved · source=user · etag=${resp.new_etag.slice(0, 8)}`,
           warnings: resp.warnings.map((w) => `${w.severity}: ${w.message}`),
         });
+        // Optimistically update the query cache so detail.data
+        // immediately reflects the new server state. Without this,
+        // the persist useEffect would race the cache invalidation:
+        // it sees buffer != stale-detail.data.content and rewrites
+        // sessionStorage right after we cleared it (Codex round-3
+        // edge case from the "clears persisted draft on save" test).
+        qc.setQueryData(["case-dict", caseId, activePath], {
+          case_id: caseId,
+          path: activePath,
+          content: buffer,
+          source: "user" as const,
+          etag: resp.new_etag,
+          edited_at: new Date().toISOString(),
+        });
         // Save succeeded — clear the persisted draft so a future
         // remount picks up the server content rather than the (now
         // stale-but-saved) draft.
         clearPersisted(caseId, activePath);
-        // Invalidate so the tab list re-fetches the source/etag flag.
+        // Invalidate the LIST query so source/etag badges refresh.
+        // (We don't invalidate the per-path detail query because we
+        // just optimistically populated it; an invalidate here would
+        // trigger an immediate refetch and could briefly show a
+        // loading flicker.)
         qc.invalidateQueries({ queryKey: ["case-dicts-list", caseId] });
-        qc.invalidateQueries({ queryKey: ["case-dict", caseId, activePath] });
       } catch (exc) {
         if (exc instanceof ApiError && exc.status === 409) {
           const d = (exc.detail ?? {}) as {

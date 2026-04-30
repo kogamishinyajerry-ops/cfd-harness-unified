@@ -394,13 +394,15 @@ describe("RawDictEditor", () => {
     fireEvent.change(screen.getByTestId("cm-mock"), {
       target: { value: "USER UNSAVED EDIT\n" },
     });
-    // Force the persistence useEffect to flush.
+    // Persisted as JSON {content, etag} (Codex round-3 schema).
     await waitFor(() => {
-      expect(
-        sessionStorage.getItem(
-          "dec-v61-102:dict-buffer:case-persist:system/controlDict",
-        ),
-      ).toBe("USER UNSAVED EDIT\n");
+      const raw = sessionStorage.getItem(
+        "dec-v61-102:dict-buffer:case-persist:system/controlDict",
+      );
+      expect(raw).not.toBeNull();
+      const parsed = JSON.parse(raw as string);
+      expect(parsed.content).toBe("USER UNSAVED EDIT\n");
+      expect(parsed.etag).toBe("etag1234567890ab");
     });
 
     // Unmount (simulates step navigation).
@@ -445,11 +447,11 @@ describe("RawDictEditor", () => {
       target: { value: "user new\n" },
     });
     await waitFor(() => {
-      expect(
-        sessionStorage.getItem(
-          "dec-v61-102:dict-buffer:case-cleared:system/controlDict",
-        ),
-      ).toBe("user new\n");
+      const raw = sessionStorage.getItem(
+        "dec-v61-102:dict-buffer:case-cleared:system/controlDict",
+      );
+      expect(raw).not.toBeNull();
+      expect(JSON.parse(raw as string).content).toBe("user new\n");
     });
 
     fireEvent.click(screen.getByTestId("raw-dict-save"));
@@ -460,6 +462,127 @@ describe("RawDictEditor", () => {
         ),
       ).toBeNull();
     });
+  });
+
+  it("ignores detail.data from a different case_id (Codex round-3 MED #1)", async () => {
+    // Stale data from case A must NOT populate the editor when the
+    // user has switched to case B on the same path. Step 3 shell
+    // stays mounted across caseId changes, so the GET cache may
+    // still hold case A's response while case B's GET is in flight.
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "caseB_etag123456" },
+    ]);
+    // GET hangs — we only want to verify that data with the WRONG
+    // case_id never populates buffer.
+    let resolveGet: (v: any) => void = () => {};
+    apiMock.getRawDict.mockReturnValueOnce(
+      new Promise((res) => {
+        resolveGet = res;
+      }),
+    );
+
+    sessionStorage.clear();
+    renderEditor({ caseId: "case-B" });
+
+    // Resolve GET with a payload whose case_id is FROM A DIFFERENT CASE.
+    await waitFor(() => screen.getByText("system/controlDict"));
+    await act(async () => {
+      resolveGet({
+        case_id: "case-A", // wrong! payload from different case
+        path: "system/controlDict",
+        content: "case A content (must NOT show)\n",
+        source: "ai",
+        etag: "caseA_etag99999999",
+        edited_at: null,
+      });
+    });
+
+    // Buffer must NOT adopt case A's content.
+    expect(screen.getByTestId("cm-mock")).toHaveValue("");
+    // No persisted entry should have been written under case B.
+    expect(
+      sessionStorage.getItem(
+        "dec-v61-102:dict-buffer:case-B:system/controlDict",
+      ),
+    ).toBeNull();
+  });
+
+  it("preserves draft etag across remount → save surfaces 409 on server move-on (Codex round-3 MED #2)", async () => {
+    // Round-3 finding: the prior version of this code restored the
+    // draft content but adopted whatever fresh server etag arrived,
+    // so a save POST went out with stale-content + fresh-etag. The
+    // server accepted it (etag matched) and the user silently
+    // overwrote whatever AI had re-authored while they were away.
+    // Fix: persist {content, etag} together; restore both; do NOT
+    // overwrite the persisted etag from the fresh GET. Save then
+    // surfaces 409.
+    sessionStorage.clear();
+    sessionStorage.setItem(
+      "dec-v61-102:dict-buffer:case-rebase:system/controlDict",
+      JSON.stringify({
+        content: "USER DRAFT (authored 5min ago)\n",
+        etag: "originalEtag1234", // etag at time of draft
+      }),
+    );
+
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "freshServer5678" },
+    ]);
+    apiMock.getRawDict.mockResolvedValue({
+      case_id: "case-rebase",
+      path: "system/controlDict",
+      content: "AI re-authored while user was away\n",
+      source: "ai",
+      etag: "freshServer5678", // ← server has moved on
+      edited_at: null,
+    });
+    // Server returns 409 because expected_etag (the OLD persisted
+    // one) doesn't match current_etag (server's new one).
+    apiMock.postRawDict.mockRejectedValueOnce(
+      new ApiError(409, "etag_mismatch", {
+        failing_check: "etag_mismatch",
+        expected_etag: "originalEtag1234",
+        current_etag: "freshServer5678",
+        hint: "file changed since last GET; re-fetch and merge before retry",
+      }),
+    );
+
+    renderEditor({ caseId: "case-rebase" });
+
+    // Restored draft visible (not the AI-re-authored server content).
+    await waitFor(() => {
+      expect(screen.getByTestId("cm-mock")).toHaveValue(
+        "USER DRAFT (authored 5min ago)\n",
+      );
+    });
+    // Save unlocks once GET completes (existingFileLoading guard
+    // releases). Wait for that before clicking.
+    await waitFor(() => {
+      expect(screen.getByTestId("raw-dict-save")).not.toBeDisabled();
+    });
+
+    fireEvent.click(screen.getByTestId("raw-dict-save"));
+
+    // Save must use the ORIGINAL etag (from persistence), not the
+    // fresh server etag. Server returns 409 → user sees conflict UI.
+    await waitFor(() => {
+      expect(apiMock.postRawDict).toHaveBeenCalledWith(
+        "case-rebase",
+        "system/controlDict",
+        expect.objectContaining({
+          content: "USER DRAFT (authored 5min ago)\n",
+          expected_etag: "originalEtag1234",
+        }),
+        undefined,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(/File changed on disk since you opened it/),
+      ).toBeInTheDocument();
+    });
+
+    sessionStorage.clear();
   });
 
   it("clears buffer immediately on tab switch (no stale content under new path)", async () => {
