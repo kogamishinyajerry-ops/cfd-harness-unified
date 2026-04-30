@@ -318,22 +318,21 @@ export function Step3SetupBC({
       // aligned cube faces this collapses to length 1 and the
       // request is identical to the pre-fix shape.
       //
-      // Codex round-2/round-3 closure: a sibling is "safe to
-      // overwrite" iff its EXISTING annotation matches the
-      // EXISTING annotation of the directly-picked face — not
-      // (as the round-2 attempt did) the new form values. The
-      // round-2 comparison broke uniform-segment renames: every
-      // face in an all-wall segment matched each other but NOT
-      // the new "inlet" patch, so all siblings were preserved
-      // and only the picked face flipped. Comparing siblings to
-      // the picked face's pre-edit state correctly classifies:
-      //   - All same as picked-existing → uniform segment, fan
-      //     out the new patch to all of them (bulk rename works).
-      //   - Some differ from picked-existing → outlier siblings,
-      //     skip those so their distinct annotations stay intact.
-      //   - Picked face was unannotated → fan out only to other
-      //     unannotated siblings, leaving any pre-existing
-      //     sibling annotations untouched.
+      // Codex rounds 2-4 closure: classify each sibling as "safe
+      // to overwrite" or "outlier to preserve":
+      //   - Sibling unannotated → always safe (empty slots get
+      //     filled by the fan-out, including the partially-
+      //     annotated-segment recovery path Codex round-4 raised).
+      //   - Sibling annotated identically to the picked face's
+      //     pre-edit state → safe (uniform segments fan out
+      //     correctly, e.g. all-wall → inlet bulk rename).
+      //   - Sibling annotated differently from the picked face's
+      //     pre-edit state → outlier, leave intact. The user can
+      //     click that sibling individually to edit it.
+      // Earlier rounds compared against the new form values
+      // (round 2, broke bulk renames) or required strict equality
+      // including unannotated mismatches (round 3, broke partial-
+      // segment recovery).
       const segmentFaceIds =
         facePick?.picked?.faceIds && facePick.picked.faceIds.length > 0
           ? facePick.picked.faceIds
@@ -343,11 +342,16 @@ export function Step3SetupBC({
         annotationByFaceId.set(f.face_id, f);
       }
       const pickedExisting = annotationByFaceId.get(patch.face_id);
-      const sameAsPickedExisting = (
+      const isSafeSibling = (
         existing: FaceAnnotation | undefined,
       ): boolean => {
-        if (pickedExisting === undefined) return existing === undefined;
-        if (existing === undefined) return false;
+        // Unannotated sibling → safe to fill.
+        if (existing === undefined) return true;
+        // Annotated sibling, but picked face has no prior
+        // annotation → user is starting from a blank slate;
+        // preserve any pre-existing sibling annotation.
+        if (pickedExisting === undefined) return false;
+        // Both annotated → safe iff sibling matches picked.
         return (
           existing.name === pickedExisting.name &&
           existing.patch_type === pickedExisting.patch_type &&
@@ -364,7 +368,7 @@ export function Step3SetupBC({
           continue;
         }
         const existing = annotationByFaceId.get(fid);
-        if (!sameAsPickedExisting(existing)) {
+        if (!isSafeSibling(existing)) {
           skippedFaceIds.push(fid);
           continue;
         }
