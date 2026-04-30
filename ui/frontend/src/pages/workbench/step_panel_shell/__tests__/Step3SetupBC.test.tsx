@@ -11,6 +11,7 @@ import {
   FacePickProvider,
   useFacePick,
 } from "../FacePickContext";
+import { Step3StateProvider } from "../Step3StateContext";
 import type { ReactNode } from "react";
 
 const {
@@ -61,9 +62,11 @@ function PickedHarness({
   return (
     <MemoryRouter initialEntries={initialEntries}>
       <FacePickProvider>
-        <Primer faceId={faceId} />
-        {children}
-        <span data-testid="harness-case-id">{caseId}</span>
+        <Step3StateProvider caseId={caseId}>
+          <Primer faceId={faceId} />
+          {children}
+          <span data-testid="harness-case-id">{caseId}</span>
+        </Step3StateProvider>
       </FacePickProvider>
     </MemoryRouter>
   );
@@ -264,12 +267,14 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     render(
       <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
         <FacePickProvider>
-          <Step3SetupBC
-            caseId="abc"
-            onStepComplete={vi.fn()}
-            onStepError={vi.fn()}
-            registerAiAction={registerAiAction}
-          />
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={registerAiAction}
+            />
+          </Step3StateProvider>
         </FacePickProvider>
       </MemoryRouter>,
     );
@@ -327,16 +332,18 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     render(
       <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
         <FacePickProvider>
-          <Primer faceId="" />
-          <Step3SetupBC
-            caseId="abc"
-            onStepComplete={vi.fn()}
-            onStepError={vi.fn()}
-            registerAiAction={(action) => {
-              registeredAction = action;
-            }}
-          />
-          <FacePushHelper />
+          <Step3StateProvider caseId="abc">
+            <Primer faceId="" />
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <FacePushHelper />
+          </Step3StateProvider>
         </FacePickProvider>
       </MemoryRouter>,
     );
@@ -380,14 +387,16 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     render(
       <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
         <FacePickProvider>
-          <Step3SetupBC
-            caseId="abc"
-            onStepComplete={onStepComplete}
-            onStepError={vi.fn()}
-            registerAiAction={(action) => {
-              registeredAction = action;
-            }}
-          />
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={onStepComplete}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+          </Step3StateProvider>
         </FacePickProvider>
       </MemoryRouter>,
     );
@@ -452,15 +461,17 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     render(
       <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
         <FacePickProvider>
-          <Step3SetupBC
-            caseId="abc"
-            onStepComplete={onStepComplete}
-            onStepError={vi.fn()}
-            registerAiAction={(action) => {
-              registeredAction = action;
-            }}
-          />
-          <FacePushHelper />
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={onStepComplete}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <FacePushHelper />
+          </Step3StateProvider>
         </FacePickProvider>
       </MemoryRouter>,
     );
@@ -575,15 +586,17 @@ describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
     render(
       <MemoryRouter initialEntries={["/?ai_mode="]}>
         <FacePickProvider>
-          <Step3SetupBC
-            caseId="abc"
-            onStepComplete={vi.fn()}
-            onStepError={vi.fn()}
-            registerAiAction={(action) => {
-              registeredAction = action;
-            }}
-          />
-          <FacePushHelper />
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <FacePushHelper />
+          </Step3StateProvider>
         </FacePickProvider>
       </MemoryRouter>,
     );

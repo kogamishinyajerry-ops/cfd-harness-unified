@@ -101,6 +101,16 @@ export function Step5ResultsView({
       setResultsSummary(s);
       onStepComplete();
     } catch (e) {
+      // Codex round-8 P2 (2026-04-30): React Query preserves the
+      // previous successful `data` payload when a later fetchQuery
+      // throws. Without this, the right rail keeps showing the
+      // stale "✓ Bundle ready" card alongside the new rejection /
+      // network-error banner — internally inconsistent. removeQueries
+      // drops the cache entry, which both the grid (observer) and
+      // this view (also observer) see immediately as data===undefined.
+      queryClient.removeQueries({
+        queryKey: ["report-bundle", caseId],
+      });
       // Codex round-6 P3 (2026-04-30): a 409 from /report-bundle just
       // means "Step 4 hasn't run yet" — that's an expected precondition
       // miss when the user clicks [AI 处理] on Step 5 first. The center

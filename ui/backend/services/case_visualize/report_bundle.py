@@ -500,19 +500,33 @@ def _render_vorticity(slab: _SliceFields, out: Path) -> None:
     omega = dUy_dx - dUx_dy
     finite = np.isfinite(omega)
     if not finite.any():
-        omega_clipped = np.zeros_like(omega)
+        # No finite vorticity anywhere — render an empty plot rather
+        # than a contour of zeros that the user could mistake for
+        # "uniform zero vorticity".
         wmax = 1.0
+        omega_for_plot = omega  # all-NaN; matplotlib leaves it blank
     else:
         wmax = float(np.nanpercentile(np.abs(omega[finite]), _PCTL_CLIP_VORTICITY))
         if not math.isfinite(wmax) or wmax <= 0:
             wmax = 1.0
-        omega_clipped = np.where(finite, np.clip(omega, -wmax, wmax), 0.0)
+        # Codex round-8 P2 (2026-04-30): the previous version
+        # `np.where(finite, ..., 0.0)` painted a large fake
+        # zero-vorticity region OUTSIDE the triangulation on
+        # geometries whose midplane projection doesn't fill its
+        # axis-aligned bbox (circular, airfoil, BFS, etc.). Pass
+        # NaN through to contourf — matplotlib leaves NaN cells
+        # blank, which is the physically honest depiction. Clip
+        # only the finite values so percentile-bounded coloring
+        # stays correct.
+        omega_for_plot = np.where(
+            finite, np.clip(omega, -wmax, wmax), np.nan
+        )
     fig, ax = plt.subplots(figsize=_aspect_figsize(Cx, Cy))
     levels = np.linspace(-wmax, wmax, _CONTOUR_LEVELS)
     cf = ax.contourf(
         xs,
         ys,
-        omega_clipped,
+        omega_for_plot,
         levels=levels,
         cmap=_CMAP_VORTICITY,
     )

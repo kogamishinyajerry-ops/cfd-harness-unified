@@ -34,8 +34,8 @@ import type { CaseSolveRejection } from "@/types/case_solve";
 import { AnnotationPanel } from "../AnnotationPanel";
 import { DialogPanel } from "../DialogPanel";
 import { useFacePickOptional } from "../FacePickContext";
+import { useStep3State } from "../Step3StateContext";
 import type {
-  AIActionEnvelope,
   AnnotationsDocument,
   FaceAnnotation,
   StepTaskPanelProps,
@@ -89,22 +89,32 @@ export function Step3SetupBC({
   // dialog UI under controlled scenarios. Natural production flow
   // always uses envelope, with no force flags.
   const envelopeMode = true;
-  const [envelope, setEnvelope] = useState<AIActionEnvelope | null>(null);
+  // Codex round-8 P1 (2026-04-30): envelope, pickedFaceIdForQuestion,
+  // and activeFaceQuestionId now live in a shell-scoped Step3StateContext
+  // so they survive the TaskPanel's remount when the engineer navigates
+  // to another step and back. With envelope mode unconditional (round-2
+  // P1), losing these on navigation forced the engineer to re-pick faces
+  // and re-type labels for any in-progress uncertain dialog. Other
+  // transient state (rejection, networkError, annotations) stays local
+  // — annotations is re-fetched on remount, and rejection/networkError
+  // are only meaningful immediately after a click.
+  //
   // Map: question.id → face_id picked specifically for that question.
   // The DialogPanel reads this to gate completeness on face_label
   // questions; the resume handler reads it to assemble the
   // PUT /face-annotations payload.
-  const [pickedFaceIdForQuestion, setPickedFaceIdForQuestion] = useState<
-    Record<string, string>
-  >({});
-  // M9 Step 3: explicit "active face question" — engineer picks a
-  // question via the DialogPanel button, then the next viewport pick
-  // routes to that specific slot. Closes the rapid-double-pick race
-  // Codex flagged on Step 1 R1 (under multi-question scenarios the
-  // first-unresolved auto-routing was lossy).
-  const [activeFaceQuestionId, setActiveFaceQuestionId] = useState<
-    string | null
-  >(null);
+  //
+  // activeFaceQuestionId: explicit "active face question" — engineer
+  // picks a question via the DialogPanel button, then the next viewport
+  // pick routes to that specific slot.
+  const {
+    envelope,
+    setEnvelope,
+    pickedFaceIdForQuestion,
+    setPickedFaceIdForQuestion,
+    activeFaceQuestionId,
+    setActiveFaceQuestionId,
+  } = useStep3State();
   const [annotations, setAnnotations] = useState<AnnotationsDocument | null>(
     null,
   );

@@ -38,6 +38,7 @@ import {
   FacePickProvider,
   useFacePickPublisher,
 } from "./step_panel_shell/FacePickContext";
+import { Step3StateProvider } from "./step_panel_shell/Step3StateContext";
 import type {
   StepDef,
   StepId,
@@ -372,6 +373,7 @@ export function StepPanelShell() {
   return (
     <SolveStreamProvider>
     <FacePickProvider>
+    <Step3StateProvider caseId={caseId}>
     <div
       data-testid="step-panel-shell"
       data-current-step-id={currentStepId}
@@ -471,6 +473,7 @@ export function StepPanelShell() {
       </div>
       <StatusStrip lastAction={lastAction} />
     </div>
+    </Step3StateProvider>
     </FacePickProvider>
     </SolveStreamProvider>
   );
