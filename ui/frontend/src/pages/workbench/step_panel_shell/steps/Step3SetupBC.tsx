@@ -121,6 +121,13 @@ export function Step3SetupBC({
   const [annotationsLoadError, setAnnotationsLoadError] = useState<
     string | null
   >(null);
+  // Codex f7f6476 round-3 P2: surface a visible banner when a
+  // segment fan-out had to skip outlier siblings, instead of a
+  // hidden console.warn the user will never see in normal browser
+  // use. Cleared on next pick (so the warning is transient — it
+  // describes the previous save).
+  const [segmentPartialSaveWarning, setSegmentPartialSaveWarning] =
+    useState<string | null>(null);
 
   // M9 Step 3 (Codex Step 1 R1 non-blocker #2 closure): clear stale
   // envelope + pick state when the engineer toggles the ai_mode
@@ -247,6 +254,16 @@ export function Step3SetupBC({
   // AnnotationPanel — opening a separate mutation surface that
   // bypasses the dialog flow entirely. We now swallow such picks so
   // "explicit slot selection required" stays true at the UX level.
+  // Codex round-3 P2 closure: a new pick supersedes the previous
+  // partial-save warning. The banner stays until the next pick OR
+  // explicit dismiss, so the engineer has time to see + read it
+  // even if the panel itself dismissed.
+  useEffect(() => {
+    if (facePick?.picked) {
+      setSegmentPartialSaveWarning(null);
+    }
+  }, [facePick?.picked?.faceId]);
+
   useEffect(() => {
     if (!facePick?.picked) return;
     if (activeFaceQuestion) {
@@ -301,14 +318,22 @@ export function Step3SetupBC({
       // aligned cube faces this collapses to length 1 and the
       // request is identical to the pre-fix shape.
       //
-      // Codex fca13c3 review P2: the form is seeded from one
-      // face_id only (existingForPicked), so a naive fan-out
-      // would clobber sibling faces whose existing annotation
-      // differs from what the user typed. Skip any sibling whose
-      // existing annotation (a) exists AND (b) doesn't match the
-      // patch being saved on name/patch_type/physics_notes — the
-      // primary picked face_id is always written. The user can
-      // click those siblings individually to edit them.
+      // Codex round-2/round-3 closure: a sibling is "safe to
+      // overwrite" iff its EXISTING annotation matches the
+      // EXISTING annotation of the directly-picked face — not
+      // (as the round-2 attempt did) the new form values. The
+      // round-2 comparison broke uniform-segment renames: every
+      // face in an all-wall segment matched each other but NOT
+      // the new "inlet" patch, so all siblings were preserved
+      // and only the picked face flipped. Comparing siblings to
+      // the picked face's pre-edit state correctly classifies:
+      //   - All same as picked-existing → uniform segment, fan
+      //     out the new patch to all of them (bulk rename works).
+      //   - Some differ from picked-existing → outlier siblings,
+      //     skip those so their distinct annotations stay intact.
+      //   - Picked face was unannotated → fan out only to other
+      //     unannotated siblings, leaving any pre-existing
+      //     sibling annotations untouched.
       const segmentFaceIds =
         facePick?.picked?.faceIds && facePick.picked.faceIds.length > 0
           ? facePick.picked.faceIds
@@ -317,30 +342,33 @@ export function Step3SetupBC({
       for (const f of annotations.faces) {
         annotationByFaceId.set(f.face_id, f);
       }
-      const annotationMatchesPatch = (existing: FaceAnnotation): boolean =>
-        existing.name === patch.name &&
-        existing.patch_type === patch.patch_type &&
-        (existing.physics_notes ?? undefined) ===
-          (patch.physics_notes ?? undefined);
+      const pickedExisting = annotationByFaceId.get(patch.face_id);
+      const sameAsPickedExisting = (
+        existing: FaceAnnotation | undefined,
+      ): boolean => {
+        if (pickedExisting === undefined) return existing === undefined;
+        if (existing === undefined) return false;
+        return (
+          existing.name === pickedExisting.name &&
+          existing.patch_type === pickedExisting.patch_type &&
+          (existing.physics_notes ?? undefined) ===
+            (pickedExisting.physics_notes ?? undefined)
+        );
+      };
       const facesToWrite: FaceAnnotation[] = [];
-      let conflictingSiblings = 0;
+      const skippedFaceIds: string[] = [];
       for (const fid of segmentFaceIds) {
-        const existing = annotationByFaceId.get(fid);
         const isPrimary = fid === patch.face_id;
-        if (!isPrimary && existing && !annotationMatchesPatch(existing)) {
-          conflictingSiblings++;
+        if (isPrimary) {
+          facesToWrite.push({ ...patch, face_id: fid });
+          continue;
+        }
+        const existing = annotationByFaceId.get(fid);
+        if (!sameAsPickedExisting(existing)) {
+          skippedFaceIds.push(fid);
           continue;
         }
         facesToWrite.push({ ...patch, face_id: fid });
-      }
-      if (conflictingSiblings > 0) {
-        // Best-effort UX warning. The save still proceeds (with
-        // conflicting siblings preserved) so the user isn't blocked.
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[Step3SetupBC] segment fan-out skipped ${conflictingSiblings} ` +
-            `sibling face(s) with conflicting existing annotations.`,
-        );
       }
       try {
         const updated = await api.putFaceAnnotations(caseId, {
@@ -349,6 +377,23 @@ export function Step3SetupBC({
           annotated_by: "human",
         });
         setAnnotations(updated);
+        // Codex round-3 P2 closure: surface a visible banner when
+        // a fan-out had to skip outlier siblings, so the engineer
+        // sees that the saved BC state diverges from the visual
+        // highlight (rather than silently committing a partial
+        // write and dismissing the panel). The banner clears on
+        // the next pick.
+        if (skippedFaceIds.length > 0) {
+          setSegmentPartialSaveWarning(
+            `Saved annotation to ${facesToWrite.length} of ${
+              segmentFaceIds.length
+            } face(s) in the highlighted segment. ` +
+              `${skippedFaceIds.length} sibling face(s) had different existing annotations and were left unchanged — ` +
+              `click each one individually to review or edit.`,
+          );
+        } else {
+          setSegmentPartialSaveWarning(null);
+        }
         facePick?.setPicked(null);
       } catch (e) {
         // Codex Step 7b round 1 HIGH: a 409 revision_conflict
@@ -653,6 +698,22 @@ export function Step3SetupBC({
           className="rounded-sm border border-rose-700/50 bg-rose-900/10 px-2 py-1 text-[11px] text-rose-200"
         >
           Network error: {networkError}
+        </div>
+      )}
+
+      {segmentPartialSaveWarning && (
+        <div
+          data-testid="step3-segment-partial-save-warning"
+          className="flex items-start justify-between gap-2 rounded-sm border border-amber-700/50 bg-amber-900/15 px-2 py-1 text-[11px] text-amber-200"
+        >
+          <span>{segmentPartialSaveWarning}</span>
+          <button
+            type="button"
+            onClick={() => setSegmentPartialSaveWarning(null)}
+            className="text-[10px] uppercase tracking-wider text-amber-300 hover:text-amber-100"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
