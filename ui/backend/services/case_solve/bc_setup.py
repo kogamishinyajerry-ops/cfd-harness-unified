@@ -714,11 +714,14 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         'location "system"; object fvSchemes; }\n'
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
-        # pimpleFoam tolerates "bounded" div schemes which improve
-        # stability when adjustTimeStep is active and Courant is
-        # bouncing. Keep the linear core to match the icoFoam-era
-        # numerics so accuracy on stable meshes is unchanged.
-        "divSchemes  { default none; div(phi,U) Gauss linear; }\n"
+        # pimpleFoam (vs icoFoam) routes through the turbulence
+        # model's divDevReff which evaluates ``div((nuEff*dev2(T(grad(U)))))``
+        # every step — even with ``simulationType laminar``. Without
+        # an explicit scheme here, OpenFOAM-10's createFields aborts
+        # on the first timestep with "keyword ... is undefined".
+        # Codex a1b5e29 review P1 closure 2026-04-30.
+        "divSchemes  { default none; div(phi,U) Gauss linear; "
+        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
         "laplacianSchemes { default Gauss linear orthogonal; }\n"
         "interpolationSchemes { default linear; }\n"
         "snGradSchemes { default orthogonal; }\n",

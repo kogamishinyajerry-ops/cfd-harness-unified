@@ -95,16 +95,32 @@ def _release_run(case_id: str, run_id: str) -> None:
 
 
 # Line-level patterns (single-line variants of solver_runner regexes).
+#
+# The solver-name prefix is intentionally permissive (any "[A-Za-z]+:")
+# so we capture pimpleFoam alternates: GAMG, smoothSolver, PBiCGStab,
+# even ``diagonal:`` (used on trivial fully-orthogonal meshes where
+# the matrix solve is closed-form). The diagonal: variant emits NO
+# initial/final residual fields — Codex a1b5e29 review P2 closure
+# 2026-04-30 — handled by the dedicated _RES_DIAGONAL_LINE pattern
+# below which synthesizes init=final=0 events so the chart still
+# advances on those steps.
 _TIME_LINE = re.compile(r"^Time\s*=\s*([0-9.eE+-]+)s?\s*$")
 _RES_U_LINE = re.compile(
-    r"smoothSolver:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
+    r"[A-Za-z]+:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),\s+Final residual\s*=\s*([0-9.eE+-]+),\s+"
     r"No Iterations\s+(\d+)"
 )
 _RES_P_LINE = re.compile(
-    r"DICPCG:\s+Solving for p,\s+Initial residual\s*=\s*"
+    r"[A-Za-z]+:\s+Solving for p,\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),\s+Final residual\s*=\s*([0-9.eE+-]+),\s+"
     r"No Iterations\s+(\d+)"
+)
+# OpenFOAM ``diagonal`` solver shape (trivial-matrix path):
+#   diagonal:  Solving for Ux, No Iterations 0
+# (no Initial/Final residual fields). Treat as residual=0 so the
+# UI chart still gets a tick.
+_RES_DIAGONAL_LINE = re.compile(
+    r"diagonal:\s+Solving for ([UpxyzkTepsilonomega]+),\s+No Iterations\s+(\d+)"
 )
 _CONT_LINE = re.compile(
     r"time step continuity errors\s*:\s*sum local\s*=\s*"
@@ -178,6 +194,30 @@ def _parse_line_to_events(
                 "t": current_time[0],
             },
         )
+        return
+
+    # diagonal: trivial-matrix solve — emit residual=0 so the UI
+    # tick still advances on otherwise-silent timesteps.
+    m_d = _RES_DIAGONAL_LINE.search(line)
+    if m_d:
+        field_raw = m_d.group(1)
+        # Map the field name to the chart's known kinds; pimpleFoam
+        # most commonly hits this on "Ux"/"Uy"/"Uz"/"p" for trivial
+        # meshes. Anything else (T, k, ...) gets dropped silently —
+        # those don't appear in the icoFoam/pimpleFoam channel path
+        # and the chart wouldn't render them anyway.
+        if field_raw in ("Ux", "Uy", "Uz", "p"):
+            iters = int(m_d.group(2))
+            yield _sse(
+                "residual",
+                {
+                    "field": field_raw,
+                    "init": 0.0,
+                    "final": 0.0,
+                    "iters": iters,
+                    "t": current_time[0],
+                },
+            )
         return
 
     m_c = _CONT_LINE.search(line)

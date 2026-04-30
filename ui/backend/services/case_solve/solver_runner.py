@@ -73,12 +73,18 @@ class SolverRunResult:
 
 
 _TIME_LINE = re.compile(r"^Time\s*=\s*([0-9.eE+-]+)s?\s*$", re.MULTILINE)
+# Solver prefix is permissive ([A-Za-z]+) so we match icoFoam's
+# default smoothSolver + DICPCG AND pimpleFoam's GAMG / PBiCGStab
+# alternates. ``diagonal:`` (no Initial/Final residual fields) is
+# matched separately; on those steps run summary residuals fall back
+# to whatever the previous PISO step recorded, which is fine for the
+# converged final state.
 _RES_U_LINE = re.compile(
-    r"smoothSolver:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
+    r"[A-Za-z]+:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),\s+Final residual\s*=\s*([0-9.eE+-]+),"
 )
 _RES_P_LINE = re.compile(
-    r"DICPCG:\s+Solving for p,\s+Initial residual\s*=\s*"
+    r"[A-Za-z]+:\s+Solving for p,\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),\s+Final residual\s*=\s*([0-9.eE+-]+),"
 )
 _CONT_LINE = re.compile(
