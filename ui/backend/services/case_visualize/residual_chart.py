@@ -19,12 +19,16 @@ class ResidualChartError(RuntimeError):
 
 
 _TIME_LINE = re.compile(r"^Time\s*=\s*([0-9.eE+-]+)s?\s*$", re.MULTILINE)
+# Solver prefix is permissive ([A-Za-z]+) so we match icoFoam's
+# default smoothSolver + DICPCG AND pimpleFoam's GAMG / PBiCGStab
+# alternates. Codex af9579e round-3 P3 closure 2026-04-30 — kept
+# in sync with solver_runner._RES_U_LINE / _RES_P_LINE.
 _RES_U = re.compile(
-    r"smoothSolver:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
+    r"[A-Za-z]+:\s+Solving for U([xyz]),\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),"
 )
 _RES_P = re.compile(
-    r"DICPCG:\s+Solving for p,\s+Initial residual\s*=\s*([0-9.eE+-]+),"
+    r"[A-Za-z]+:\s+Solving for p,\s+Initial residual\s*=\s*([0-9.eE+-]+),"
 )
 
 

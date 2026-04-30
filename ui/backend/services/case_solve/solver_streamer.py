@@ -196,24 +196,25 @@ def _parse_line_to_events(
         )
         return
 
-    # diagonal: trivial-matrix solve — emit residual=0 so the UI
-    # tick still advances on otherwise-silent timesteps.
+    # diagonal: trivial-matrix solve — emit a small positive floor
+    # so the UI tick still advances on otherwise-silent timesteps.
+    # Codex af9579e round-3 P2-a: LiveResidualChart filters
+    # residual <= 0 before plotting on the log-scale axis, so a
+    # literal 0.0 would be invisible. 1e-12 is far below any real
+    # iterative residual (typical icoFoam lower bound is ~1e-7
+    # tolerance) so it's unambiguous as "diagonal trivial closure"
+    # while still drawing on the chart.
     m_d = _RES_DIAGONAL_LINE.search(line)
     if m_d:
         field_raw = m_d.group(1)
-        # Map the field name to the chart's known kinds; pimpleFoam
-        # most commonly hits this on "Ux"/"Uy"/"Uz"/"p" for trivial
-        # meshes. Anything else (T, k, ...) gets dropped silently —
-        # those don't appear in the icoFoam/pimpleFoam channel path
-        # and the chart wouldn't render them anyway.
         if field_raw in ("Ux", "Uy", "Uz", "p"):
             iters = int(m_d.group(2))
             yield _sse(
                 "residual",
                 {
                     "field": field_raw,
-                    "init": 0.0,
-                    "final": 0.0,
+                    "init": 1e-12,
+                    "final": 1e-12,
                     "iters": iters,
                     "t": current_time[0],
                 },

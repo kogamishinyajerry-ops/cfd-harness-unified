@@ -87,6 +87,13 @@ _RES_P_LINE = re.compile(
     r"[A-Za-z]+:\s+Solving for p,\s+Initial residual\s*=\s*"
     r"([0-9.eE+-]+),\s+Final residual\s*=\s*([0-9.eE+-]+),"
 )
+# diagonal: trivial-matrix solve emits no residual fields. Codex
+# af9579e round-3 P2-b: parse these so the final summary's
+# last_initial_residual_* reflects the true zero-iteration state
+# instead of a stale earlier residual or None.
+_RES_DIAGONAL_LINE = re.compile(
+    r"diagonal:\s+Solving for ([UpxyzkTepsilonomega]+),\s+No Iterations\s+(\d+)"
+)
 _CONT_LINE = re.compile(
     r"time step continuity errors\s*:\s*sum local\s*=\s*"
     r"([0-9.eE+-]+),\s+global\s*=\s*([0-9.eE+-]+)"
@@ -107,6 +114,7 @@ def _parse_log(log_text: str) -> dict[str, object]:
     # Final residuals are the LAST occurrence of each pattern.
     res_u = list(_RES_U_LINE.finditer(log_text))
     res_p = list(_RES_P_LINE.finditer(log_text))
+    res_diag = list(_RES_DIAGONAL_LINE.finditer(log_text))
     cont = list(_CONT_LINE.finditer(log_text))
     exec_t = list(_EXEC_TIME.finditer(log_text))
 
@@ -127,7 +135,32 @@ def _parse_log(log_text: str) -> dict[str, object]:
         if ux is not None and uy is not None and uz is not None:
             break
 
-    p_init = float(res_p[-1].group(1)) if res_p else None
+    # Fallback: if a U component never showed up in _RES_U_LINE
+    # (the trivial-orthogonal-mesh case where pimpleFoam took the
+    # diagonal: path on the final step), look for the tail-most
+    # diagonal line for that field and treat as residual=0.
+    # Codex af9579e round-3 P2-b closure.
+    if ux is None or uy is None or uz is None:
+        for m in reversed(res_diag):
+            field = m.group(1)
+            if field == "Ux" and ux is None:
+                ux = 0.0
+            elif field == "Uy" and uy is None:
+                uy = 0.0
+            elif field == "Uz" and uz is None:
+                uz = 0.0
+            if ux is not None and uy is not None and uz is not None:
+                break
+
+    p_init: float | None = None
+    if res_p:
+        p_init = float(res_p[-1].group(1))
+    else:
+        # Diagonal-only p path: the solve closed in zero iterations.
+        for m in reversed(res_diag):
+            if m.group(1) == "p":
+                p_init = 0.0
+                break
     cont_local = float(cont[-1].group(1)) if cont else None
     wall_clock = float(exec_t[-1].group(1)) if exec_t else 0.0
 
