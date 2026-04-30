@@ -36,6 +36,7 @@ import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
 import {
   FacePickProvider,
+  useFacePickOptional,
   useFacePickPublisher,
 } from "./step_panel_shell/FacePickContext";
 import { Step3StateProvider } from "./step_panel_shell/Step3StateContext";
@@ -63,14 +64,45 @@ function ViewportWithFacePick({
   pickMode: boolean;
 }) {
   const publish = useFacePickPublisher();
+  const facePick = useFacePickOptional();
+  // Dogfood feedback 2026-04-30: without a HUD the user has no way
+  // to tell whether a click hit a face or just rotated the camera.
+  // The HUD shows "Click a face" hint when no pick yet and the
+  // current face_id once a pick succeeds, mirroring the AnnotationPanel
+  // surface-coming-up-below cue. Only rendered when pickMode is on
+  // (i.e., on Step 3) so the other steps' viewports stay clean.
   return (
-    <Viewport
-      {...viewportProps}
-      caseId={caseId}
-      pickMode={pickMode}
-      onFacePick={publish}
-      height={420}
-    />
+    <div className="relative w-full">
+      <Viewport
+        {...viewportProps}
+        caseId={caseId}
+        pickMode={pickMode}
+        onFacePick={publish}
+        height={420}
+      />
+      {pickMode && (
+        <div
+          data-testid="viewport-pick-hud"
+          className="pointer-events-none absolute left-2 top-2 max-w-[280px] rounded-sm border border-surface-700/60 bg-surface-950/85 px-2 py-1 font-mono text-[10px] backdrop-blur-sm"
+        >
+          {facePick?.picked ? (
+            <>
+              <div className="text-cyan-300">✓ picked</div>
+              <div className="text-surface-300 break-all">
+                {facePick.picked.faceId}
+              </div>
+              <div className="text-surface-500">
+                edit / save in the right rail ↘
+              </div>
+            </>
+          ) : (
+            <div className="text-surface-400">
+              click a face to pin a boundary annotation
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

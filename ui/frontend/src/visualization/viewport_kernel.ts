@@ -19,6 +19,7 @@ import vtkActor from "@kitware/vtk.js/Rendering/Core/Actor";
 import vtkCellPicker from "@kitware/vtk.js/Rendering/Core/CellPicker";
 import vtkMapper from "@kitware/vtk.js/Rendering/Core/Mapper";
 import vtkGenericRenderWindow from "@kitware/vtk.js/Rendering/Misc/GenericRenderWindow";
+import vtkSphereSource from "@kitware/vtk.js/Filters/Sources/SphereSource";
 
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
@@ -68,6 +69,15 @@ export interface ViewportKernel {
    *  vtkCellPicker subscription idempotently. (DEC-V61-098 spec_v2 §A6)
    */
   setPickHandler(handler: PickHandler | null): void;
+  /** Place a small bright sphere at the given world position so the
+   *  user gets immediate visual confirmation that a pick succeeded.
+   *  Pass ``null`` to hide the marker. Sized relative to the current
+   *  scene bounds so it stays visible without occluding the geometry.
+   *  Idempotent: calling repeatedly with new positions just moves the
+   *  same sphere actor. (Dogfood feedback 2026-04-30 — without
+   *  visual feedback the user can't tell pick from no-op.)
+   */
+  setPickMarker(world: [number, number, number] | null): void;
   dispose(): void;
 }
 
@@ -111,6 +121,14 @@ export function createKernel(
   let picker: ReturnType<typeof vtkCellPicker.newInstance> | undefined;
   let pickHandler: PickHandler | null = null;
   let pickSubscription: { unsubscribe: () => void } | undefined;
+
+  // Pick-marker actor (sphere placed at the last successful pick's
+  // worldPosition). Built lazily on first setPickMarker call.
+  let markerSource:
+    | ReturnType<typeof vtkSphereSource.newInstance>
+    | undefined;
+  let markerMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
+  let markerActor: ReturnType<typeof vtkActor.newInstance> | undefined;
   // Map: actor object identity → its glTF primitive.name. Empty for
   // STL (single anonymous actor; we record "" and the React layer
   // falls back to primitive index 0).
@@ -253,6 +271,58 @@ export function createKernel(
     });
   }
 
+  function setPickMarker(world: [number, number, number] | null): void {
+    const renderer = grw.getRenderer();
+    if (world === null) {
+      // Hide the marker (keep the actor + source allocated so a
+      // subsequent pick re-shows it without re-allocation churn).
+      if (markerActor) {
+        markerActor.setVisibility(false);
+        grw.getRenderWindow().render();
+      }
+      return;
+    }
+    // Lazy-allocate on first pick.
+    if (!markerSource) {
+      markerSource = vtkSphereSource.newInstance({
+        thetaResolution: 16,
+        phiResolution: 16,
+      });
+    }
+    if (!markerMapper) {
+      markerMapper = vtkMapper.newInstance();
+      markerMapper.setInputConnection(markerSource.getOutputPort());
+    }
+    if (!markerActor) {
+      markerActor = vtkActor.newInstance();
+      markerActor.setMapper(markerMapper);
+      // Bright cyan with full alpha — distinct from any patch color
+      // (lid red / wall gray / frontAndBack slate). Slight emissive
+      // tint via ambient so it stays visible even when the geometry's
+      // lighting puts it in shadow.
+      markerActor.getProperty().setColor(0.0, 1.0, 0.85);
+      markerActor.getProperty().setAmbient(0.6);
+      markerActor.getProperty().setDiffuse(0.4);
+      renderer.addActor(markerActor);
+    }
+    // Size the sphere relative to the scene bounds so it stays
+    // visible without occluding meaningful geometry. Falls back to a
+    // small absolute radius if bounds are degenerate.
+    const bounds = renderer.computeVisiblePropBounds();
+    let radius = 0.01;
+    if (Array.isArray(bounds) && bounds.length === 6) {
+      const dx = (bounds[1] - bounds[0]) || 0;
+      const dy = (bounds[3] - bounds[2]) || 0;
+      const dz = (bounds[5] - bounds[4]) || 0;
+      const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (diag > 0) radius = Math.max(diag * 0.012, 1e-6);
+    }
+    markerSource.setCenter(world[0], world[1], world[2]);
+    markerSource.setRadius(radius);
+    markerActor.setVisibility(true);
+    grw.getRenderWindow().render();
+  }
+
   function resetCamera(): void {
     grw.getRenderer().resetCamera();
     grw.getRenderWindow().render();
@@ -316,6 +386,21 @@ export function createKernel(
       // see above
     }
     try {
+      markerActor?.delete();
+    } catch {
+      // see above
+    }
+    try {
+      markerMapper?.delete();
+    } catch {
+      // see above
+    }
+    try {
+      markerSource?.delete();
+    } catch {
+      // see above
+    }
+    try {
       grw.delete();
     } catch {
       // see above
@@ -333,6 +418,7 @@ export function createKernel(
     attachGltf,
     resetCamera,
     setPickHandler,
+    setPickMarker,
     dispose,
   };
 }

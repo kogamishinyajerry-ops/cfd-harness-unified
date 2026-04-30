@@ -216,10 +216,12 @@ function ViewportVtk({
     if (!kernel) return;
     if (!pickMode) {
       kernel.setPickHandler?.(null);
+      kernel.setPickMarker?.(null);
       return;
     }
     if (!caseId) {
       kernel.setPickHandler?.(null);
+      kernel.setPickMarker?.(null);
       return;
     }
     if (!kernel.setPickHandler) return;
@@ -238,6 +240,17 @@ function ViewportVtk({
         primitive && result.cellId < primitive.face_ids.length
           ? primitive.face_ids[result.cellId]
           : null;
+      // Visual feedback: drop a bright cyan sphere at the picked
+      // position so the user gets immediate confirmation that the
+      // click registered (dogfood feedback 2026-04-30 — without
+      // this, a successful pick is indistinguishable from a no-op).
+      // Only show the marker when the face_id resolved successfully;
+      // a null faceId means the cellId was out-of-range or the
+      // patch wasn't in the face-index, which is degenerate state
+      // we shouldn't visually reward.
+      if (faceId !== null) {
+        kernelRef.current?.setPickMarker?.(result.worldPosition);
+      }
       onFacePickRef.current?.({
         faceId,
         patchName: result.patchName,
