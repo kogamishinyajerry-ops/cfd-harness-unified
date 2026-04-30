@@ -280,6 +280,98 @@ def _split_lid_walls(
     return n_lid, n_walls, b_start
 
 
+def _atomic_commit_dicts(
+    case_dir: Path,
+    plan: list[tuple[str, str]],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Two-phase atomic commit of a batch of (rel_path, content) pairs.
+
+    Codex round-5 MED #2 closure: the previous "atomic per file" pattern
+    let a partial transaction commit — if write 2/7 failed, write 1 was
+    already live under its final name with no manifest entry, write 2
+    left a ``.tmp`` orphan, and writes 3-7 never happened. Either commit
+    all AI-side files or commit none.
+
+    Phase A — filter user overrides (these are skipped, not part of the
+    transaction).
+    Phase B — snapshot prior bytes for every pending path so we can
+    roll back during phase D.
+    Phase C — write all tempfiles. If any tempfile write fails, clean
+    up tempfiles already written and raise; nothing has been renamed
+    yet so the on-disk state is unchanged.
+    Phase D — rename all tempfiles to final names. If a rename fails
+    mid-way (rare on same FS), restore prior bytes for already-renamed
+    paths and clean up remaining tempfiles. Either all renames commit
+    or all roll back to prior state.
+
+    Returns ``(written, skipped)`` matching the legacy contract.
+    """
+    pending: list[tuple[str, str]] = []
+    skipped: list[str] = []
+    for rel, content in plan:
+        if is_user_override(case_dir, relative_path=rel):
+            skipped.append(rel)
+        else:
+            pending.append((rel, content))
+
+    if not pending:
+        return (), tuple(skipped)
+
+    # Phase B + C: snapshot prior bytes and write tempfiles.
+    prior: dict[str, bytes | None] = {}
+    tempfiles_written: list[str] = []  # rel paths whose .tmp is on disk
+    try:
+        for rel, content in pending:
+            target = case_dir / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            prior[rel] = target.read_bytes() if target.is_file() else None
+            tmp = target.with_name(target.name + ".tmp")
+            tmp.write_text(content)
+            tempfiles_written.append(rel)
+    except OSError:
+        # Tempfile write failed mid-loop. Clean up any tempfiles we
+        # did create, then re-raise. No final name was touched.
+        for rel in tempfiles_written:
+            tmp = (case_dir / rel).with_name((case_dir / rel).name + ".tmp")
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
+
+    # Phase D: rename all tempfiles to finals.
+    renamed: list[str] = []
+    try:
+        for rel, _ in pending:
+            target = case_dir / rel
+            tmp = target.with_name(target.name + ".tmp")
+            os.replace(tmp, target)
+            renamed.append(rel)
+    except OSError:
+        # Mid-rename failure: roll back already-renamed files to their
+        # prior bytes, clean up leftover tempfiles, re-raise. The
+        # rollback is best-effort — secondary failures are caught
+        # individually so they can't mask the original.
+        for rel in renamed:
+            target = case_dir / rel
+            try:
+                if prior[rel] is not None:
+                    target.write_bytes(prior[rel])
+                else:
+                    target.unlink(missing_ok=True)
+            except OSError:
+                pass
+        for rel, _ in pending:
+            tmp = (case_dir / rel).with_name((case_dir / rel).name + ".tmp")
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
+
+    return tuple(renamed), tuple(skipped)
+
+
 def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Write the 7 OpenFOAM-10 dicts needed by icoFoam.
 
@@ -299,23 +391,13 @@ def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     (case_dir / "system").mkdir(exist_ok=True)
     (case_dir / "constant").mkdir(exist_ok=True)
 
-    written: list[str] = []
-    skipped: list[str] = []
+    plan: list[tuple[str, str]] = []
 
-    # Codex round-4 MED #2 closure: atomic write per dict file.
-    # Tempfile + os.replace gives readers either the old content or
-    # the new — never a torn intermediate. Tempfiles are nameed
-    # ``<orig>.tmp`` in the same directory so os.replace stays on
-    # the same filesystem and is atomic on POSIX.
+    # Codex round-5 MED #2 closure: collect the (rel, content) plan
+    # and delegate the write to ``_atomic_commit_dicts`` for true
+    # all-or-nothing transaction semantics across all 7 files.
     def w(rel: str, content: str) -> None:
-        if is_user_override(case_dir, relative_path=rel):
-            skipped.append(rel)
-            return
-        target = case_dir / rel
-        tmp = target.with_name(target.name + ".tmp")
-        tmp.write_text(content)
-        os.replace(tmp, target)
-        written.append(rel)
+        plan.append((rel, content))
 
     lid_u = " ".join(f"{c}" for c in _LID_VELOCITY)
 
@@ -413,7 +495,7 @@ def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
         "}\n",
     )
 
-    return tuple(written), tuple(skipped)
+    return _atomic_commit_dicts(case_dir, plan)
 
 
 def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
@@ -677,20 +759,12 @@ def _author_channel_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
     (case_dir / "system").mkdir(exist_ok=True)
     (case_dir / "constant").mkdir(exist_ok=True)
 
-    written: list[str] = []
-    skipped: list[str] = []
+    plan: list[tuple[str, str]] = []
 
-    # Codex round-4 MED #2 closure: same atomic-write pattern as the
-    # LDC ``_author_dicts``. Tempfile + os.replace per file.
+    # Codex round-5 MED #2 closure: see _author_dicts — same all-or-nothing
+    # transactional commit semantics via _atomic_commit_dicts.
     def w(rel: str, content: str) -> None:
-        if is_user_override(case_dir, relative_path=rel):
-            skipped.append(rel)
-            return
-        target = case_dir / rel
-        tmp = target.with_name(target.name + ".tmp")
-        tmp.write_text(content)
-        os.replace(tmp, target)
-        written.append(rel)
+        plan.append((rel, content))
 
     inlet_u = " ".join(f"{c}" for c in _CHANNEL_INLET_VELOCITY)
 
@@ -826,7 +900,7 @@ def _author_channel_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
         "}\n",
     )
 
-    return tuple(written), tuple(skipped)
+    return _atomic_commit_dicts(case_dir, plan)
 
 
 def setup_channel_bc(

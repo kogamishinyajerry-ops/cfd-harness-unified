@@ -295,10 +295,21 @@ def post_raw_dict(
                 # state stays the source of truth. We only enter this
                 # branch if mark_user_override raised — typically a
                 # ManifestParseError or write_case_manifest IO error.
-                if prior_bytes is not None:
-                    abs_path.write_bytes(prior_bytes)
-                else:
-                    abs_path.unlink(missing_ok=True)
+                #
+                # Codex round-5 LOW closure: nest each rollback step
+                # in its own try/except so a secondary failure during
+                # rollback (disk full mid-restore, file vanished, etc.)
+                # cannot mask the original ManifestParseError. Best-effort
+                # rollback is correct here — if we can't restore, the
+                # original error is still the actionable signal for the
+                # caller to retry.
+                try:
+                    if prior_bytes is not None:
+                        abs_path.write_bytes(prior_bytes)
+                    else:
+                        abs_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
                 raise
     except CaseLockError as exc:
         # Codex round-3 MEDIUM: lock-acquisition failure (e.g. planted

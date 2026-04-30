@@ -142,10 +142,21 @@ def write_case_manifest(case_dir: Path, manifest: CaseManifest) -> Path:
     # filesystem is atomic on POSIX, so readers always see either the
     # old content or the new — never a half-written YAML that
     # ManifestParseError would crash on.
+    #
+    # Codex round-5 LOW closure: clean up the .tmp file on os.replace
+    # failure so we don't leave ``case_manifest.yaml.tmp`` orphaned
+    # in the case directory (visible to subsequent operations / exports).
     serialized = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
     tmp_path = path.with_name(path.name + ".tmp")
     tmp_path.write_text(serialized, encoding="utf-8")
-    os.replace(tmp_path, path)
+    try:
+        os.replace(tmp_path, path)
+    except OSError:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
     return path
 
 

@@ -143,8 +143,13 @@ def _stub_split_lid_walls(monkeypatch) -> None:
 
 def _race_user_vs_ai(case_dir: Path, case_id: str, client: TestClient,
                      n_rounds: int) -> None:
-    """Reusable race driver — used by both the lock-enabled and the
-    lock-disabled (negative control) tests below."""
+    """Reusable race driver — used by the lock-enabled positive test.
+
+    Codex round-5 MED #1 closure: assert manifest+disk consistency
+    AFTER EVERY ROUND, not just at the end. The previous version let
+    rounds 1..N-1 silently diverge and only checked the last reset.
+    Also detect stuck workers with is_alive() so a deadlock surfaces
+    as a test failure, not as a silent timeout."""
     capture = _ThreadCapture()
 
     for round_idx in range(n_rounds):
@@ -172,7 +177,39 @@ def _race_user_vs_ai(case_dir: Path, case_id: str, client: TestClient,
         t1.join(timeout=5.0)
         t2.join(timeout=5.0)
 
-    capture.assert_clean()
+        assert not t1.is_alive(), (
+            f"Round {round_idx}: POST worker stuck after 5s — possible "
+            f"deadlock (case_lock not releasing?)"
+        )
+        assert not t2.is_alive(), (
+            f"Round {round_idx}: setup_ldc_bc worker stuck after 5s — "
+            f"possible deadlock"
+        )
+        capture.assert_clean()  # Surface any thread crash on this round.
+
+        # Per-round consistency check: manifest source must match the
+        # authoring side of the on-disk content.
+        manifest = read_case_manifest(case_dir)
+        entry = manifest.overrides.raw_dict_files.get("system/controlDict")
+        ctrl = case_dir / "system" / "controlDict"
+        if not ctrl.is_file():
+            # Both threads ran in an order that left no controlDict.
+            # That's only legitimate if AI completed first then POST
+            # somehow vanished — extremely unusual but not a divergence
+            # claim. Skip the consistency check for this round.
+            continue
+        on_disk = ctrl.read_bytes().decode("utf-8", errors="replace")
+
+        if entry and entry.source == "user":
+            assert on_disk == _USER_BODY, (
+                f"Round {round_idx}: MANIFEST+DISK DIVERGENCE — manifest "
+                f"says source=user but on-disk content is the AI re-author"
+            )
+        else:
+            assert _USER_BODY not in on_disk, (
+                f"Round {round_idx}: MANIFEST+DISK DIVERGENCE — manifest "
+                f"says source=ai but on-disk content is the user body"
+            )
 
 
 def test_setup_ldc_bc_serializes_with_post_dicts(monkeypatch, tmp_path):
