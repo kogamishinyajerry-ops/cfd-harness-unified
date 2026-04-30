@@ -76,8 +76,15 @@ export function Step3SetupBC({
   // banner below already shows.
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
-  // DEC-V61-102 Phase 2 raw-dict editor mount gate (see <details onToggle>).
-  const [rawDictOpen, setRawDictOpen] = useState(false);
+  // DEC-V61-102 Phase 2 raw-dict editor mount gate.
+  //
+  // Codex Phase-2 P2 closure: track whether the disclosure has been
+  // opened AT LEAST ONCE rather than whether it is open RIGHT NOW.
+  // After the first open, the editor stays mounted so closing the
+  // <details> hides it via CSS but does NOT unmount the component
+  // and silently discard any unsaved edits. The user must explicitly
+  // save (or click "Discard local changes") to lose pending content.
+  const [rawDictHasOpened, setRawDictHasOpened] = useState(false);
 
   // M-AI-COPILOT face-annotation state (DEC-V61-098 spec_v2 §A8). The
   // FacePickContext (populated by the Viewport pickMode wiring) is
@@ -763,14 +770,18 @@ export function Step3SetupBC({
       )}
 
       {/* DEC-V61-102 M-RESCUE Phase 2 · raw dict editor. Collapsed by
-       *  default and lazily mounted when the engineer expands the
-       *  details — the editor uses @tanstack/react-query so we keep
-       *  it out of the render tree until needed (existing Step 3
-       *  tests don't wrap in QueryClientProvider). */}
+       *  default; lazily mounted on first expand so existing Step 3
+       *  tests (which don't wrap in QueryClientProvider) stay green.
+       *  Once mounted, stays mounted — collapsing the disclosure hides
+       *  it via CSS but preserves unsaved edits (Codex P2 closure). */}
       <details
         data-testid="step3-raw-dict-editor"
         className="mt-3 rounded-sm border border-slate-700/50 bg-slate-900/30"
-        onToggle={(e) => setRawDictOpen((e.target as HTMLDetailsElement).open)}
+        onToggle={(e) => {
+          if ((e.target as HTMLDetailsElement).open) {
+            setRawDictHasOpened(true);
+          }
+        }}
       >
         <summary className="cursor-pointer px-2 py-1 text-[11px] uppercase tracking-wider text-slate-300 hover:text-slate-100">
           Advanced · edit raw dicts (manual override)
@@ -778,7 +789,7 @@ export function Step3SetupBC({
         <div className="px-2 py-2">
           {!caseId ? (
             <p className="text-[11px] text-slate-400">Open a case first.</p>
-          ) : rawDictOpen ? (
+          ) : rawDictHasOpened ? (
             <RawDictEditor
               caseId={caseId}
               allowedPaths={STEP3_RAW_DICT_PATHS}

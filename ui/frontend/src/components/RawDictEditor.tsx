@@ -83,27 +83,52 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
   });
 
   // 4. Local editor buffer + dirty tracking.
+  //
+  // Codex Phase-2 P1 closure: the buffer is cleared IMMEDIATELY on
+  // path change (no longer shows the previous tab's content while
+  // the new GET is in flight) and stays empty until ``detail.data``
+  // arrives. The save button is also gated on ``detail.data`` for
+  // existing files, so a user cannot type and save before the etag
+  // round-trip has completed — the backend's race-protection contract
+  // (compare expected_etag with current_etag) is unconditionally
+  // honored from the first POST.
   const [buffer, setBuffer] = useState<string>("");
   const [bufferEtag, setBufferEtag] = useState<string | null>(null);
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
 
+  // Clear buffer the moment the user picks a different tab, so the
+  // editor never displays stale-under-new-path content. detail.data
+  // arriving later populates it.
   useEffect(() => {
-    // Reset buffer on path change OR when a fresh GET arrives.
+    setBuffer("");
+    setBufferEtag(null);
+    setStatus({ kind: "idle" });
+  }, [activePath]);
+
+  // Once a fresh GET arrives, populate from server. For paths that
+  // don't exist yet (no manifest, no on-disk file), we leave the
+  // buffer empty so the user can author from scratch — saving will
+  // create the file with no expected_etag (server treats as new).
+  useEffect(() => {
     if (detail.data) {
       setBuffer(detail.data.content);
       setBufferEtag(detail.data.etag);
-      setStatus({ kind: "idle" });
-    } else if (activePath && activeEntry && !activeEntry.exists) {
-      setBuffer("");
-      setBufferEtag(null);
-      setStatus({ kind: "idle" });
     }
-  }, [detail.data, activePath, activeEntry]);
+  }, [detail.data]);
+
+  // For existing files, the save button must wait until the GET
+  // returns the current etag — otherwise a POST without expected_etag
+  // would skip race protection. For never-authored paths, save is
+  // available immediately (no etag to honor).
+  const isExistingFileLoading = !!activeEntry?.exists && !detail.data;
 
   const isDirty = useMemo(() => {
-    if (!detail.data) return buffer.length > 0;
+    if (!detail.data) {
+      // For not-yet-existing paths the user can author from scratch.
+      return !activeEntry?.exists && buffer.length > 0;
+    }
     return buffer !== detail.data.content;
-  }, [buffer, detail.data]);
+  }, [buffer, detail.data, activeEntry]);
 
   // 5. Save handler. Honors etag for race protection; on 409 surfaces
   //    a refresh prompt; on 422 surfaces validation issues with optional
@@ -254,7 +279,19 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
           </header>
 
           {detail.isFetching && (
-            <div className="raw-dict-loading">Loading content…</div>
+            <div className="raw-dict-loading" data-testid="raw-dict-loading">
+              Loading content…
+            </div>
+          )}
+          {detail.isError && (
+            <div
+              className="raw-dict-status error"
+              role="alert"
+              data-testid="raw-dict-load-error"
+            >
+              Could not load file:{" "}
+              {(detail.error as Error)?.message ?? "unknown error"}
+            </div>
           )}
 
           <CodeMirror
@@ -273,8 +310,18 @@ export function RawDictEditor({ caseId, allowedPaths }: Props) {
             <button
               type="button"
               className="raw-dict-save"
-              disabled={!isDirty || status.kind === "saving"}
+              data-testid="raw-dict-save"
+              disabled={
+                !isDirty ||
+                status.kind === "saving" ||
+                isExistingFileLoading
+              }
               onClick={() => save()}
+              title={
+                isExistingFileLoading
+                  ? "Waiting for the current file etag — save unlocks once the file is loaded so race protection is preserved."
+                  : undefined
+              }
             >
               {status.kind === "saving" ? "Saving…" : "Save (record as user override)"}
             </button>
