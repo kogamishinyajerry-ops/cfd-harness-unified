@@ -294,10 +294,24 @@ export function Step3SetupBC({
       if (!annotations) {
         throw new Error("annotations not loaded yet");
       }
+      // Codex e844a6f review P1: when the picked highlight covers
+      // multiple face_ids (curved patch on a gmsh tet mesh), fan
+      // the annotation out across every face_id in the segment so
+      // the saved state matches the visual highlight. For axis-
+      // aligned cube faces this collapses to length 1 and the
+      // request is identical to the pre-fix shape.
+      const targetFaceIds =
+        facePick?.picked?.faceIds && facePick.picked.faceIds.length > 0
+          ? facePick.picked.faceIds
+          : [patch.face_id];
+      const facesToWrite: FaceAnnotation[] = targetFaceIds.map((fid) => ({
+        ...patch,
+        face_id: fid,
+      }));
       try {
         const updated = await api.putFaceAnnotations(caseId, {
           if_match_revision: annotations.revision,
-          faces: [patch],
+          faces: facesToWrite,
           annotated_by: "human",
         });
         setAnnotations(updated);
@@ -617,6 +631,7 @@ export function Step3SetupBC({
       {facePick?.picked && (
         <AnnotationPanel
           faceId={facePick.picked.faceId}
+          faceIdCount={facePick.picked.faceIds.length}
           existing={existingForPicked}
           disabled={!annotations}
           onSave={handleSaveAnnotation}

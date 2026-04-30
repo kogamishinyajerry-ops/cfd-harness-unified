@@ -376,6 +376,7 @@ describe("Viewport", () => {
 
     expect(onFacePick).toHaveBeenCalledWith({
       faceId: "fid_w1",
+      faceIds: ["fid_w1"],
       patchName: "fixedWalls",
       cellId: 2,
       worldPosition: [0.5, 0.5, 0.5],

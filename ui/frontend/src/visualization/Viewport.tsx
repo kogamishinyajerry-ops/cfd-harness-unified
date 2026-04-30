@@ -63,9 +63,19 @@ function attachSiblingMap(
  *  cell hit that the face-index couldn't resolve (unknown patch_name
  *  or out-of-bounds cellId — rare). The Viewport surfaces this as a
  *  soft status, not an error.
+ *
+ *  ``faceIds`` carries every distinct face_id within the visually
+ *  expanded segment (smooth surface or coplanar group). For axis-
+ *  aligned cube faces this collapses to a single id; for curved
+ *  patches like a gmsh-tet cylinder side it lists every face_id
+ *  the highlight covers. Downstream consumers MUST iterate this
+ *  list when persisting BCs, otherwise the UI shows a whole-face
+ *  highlight while only one triangle's annotation is recorded
+ *  (Codex e844a6f review P1).
  */
 export interface FacePickEvent {
   faceId: string | null;
+  faceIds: string[];
   patchName: string;
   cellId: number;
   worldPosition: [number, number, number];
@@ -313,6 +323,38 @@ function ViewportVtk({
       return [result.cellId];
     };
 
+    // Collect every distinct face_id covered by the expanded
+    // sibling set. Codex e844a6f review P1: when a smooth-surface
+    // segment crosses many face_ids (e.g. cylinder wall on a gmsh
+    // tet mesh, where each polyMesh face is one triangle), the BC
+    // persistence layer must annotate ALL of them; otherwise the
+    // user sees a whole-curved-face highlight but only one
+    // triangle is actually annotated. The primary ``faceId`` is
+    // the directly-picked one (kept stable for dialog answers).
+    const collectFaceIds = (
+      primitive: FaceIndexWithSiblings["primitives"][number],
+      sibs: number[],
+      primary: string | null,
+    ): string[] => {
+      if (sibs.length <= 1) return primary !== null ? [primary] : [];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      // Push primary first so consumers iterating in order get a
+      // stable "head" that matches faceId.
+      if (primary !== null) {
+        seen.add(primary);
+        out.push(primary);
+      }
+      for (const cid of sibs) {
+        if (cid < 0 || cid >= primitive.face_ids.length) continue;
+        const fid = primitive.face_ids[cid];
+        if (!fid || seen.has(fid)) continue;
+        seen.add(fid);
+        out.push(fid);
+      }
+      return out;
+    };
+
     const handleKernelPick = (result: PickResult) => {
       const primitive = resolvePrimitive(result.patchName);
       if (!primitive) return;
@@ -326,8 +368,10 @@ function ViewportVtk({
       } else {
         kernelRef.current?.clearPickHighlight?.();
       }
+      const faceIds = collectFaceIds(primitive, sibs, faceId);
       onFacePickRef.current?.({
         faceId,
+        faceIds,
         patchName: result.patchName,
         cellId: result.cellId,
         worldPosition: result.worldPosition,

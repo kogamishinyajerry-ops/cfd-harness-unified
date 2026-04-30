@@ -79,7 +79,8 @@ function Primer({ faceId }: { faceId: string }) {
   // the Viewport's onFacePick callback; the test bypasses the kernel.
   if (faceId) {
     setTimeout(
-      () => setPicked({ faceId, worldPosition: [0.5, 0.5, 0.5] }),
+      () =>
+        setPicked({ faceId, faceIds: [faceId], worldPosition: [0.5, 0.5, 0.5] }),
       0,
     );
   }
@@ -528,6 +529,7 @@ function FacePushHelper() {
       onClick={() =>
         setPicked({
           faceId: "fid_lid_a",
+          faceIds: ["fid_lid_a"],
           worldPosition: [0.5, 0.5, 1.0],
         })
       }

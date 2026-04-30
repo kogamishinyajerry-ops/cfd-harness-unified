@@ -17,6 +17,14 @@ interface AnnotationPanelProps {
   /** The face_id that was picked. The form is keyed off this so it
    *  remounts (resets state) when the engineer picks a new face. */
   faceId: string;
+  /** Total number of face_ids the save will be applied to (the
+   *  visually-highlighted segment). When >1 the panel surfaces a
+   *  badge so the engineer knows the BC will fan out across every
+   *  triangle of the curved patch — e.g. "Applies to 124 faces"
+   *  on a tet-meshed cylinder side (Codex e844a6f review P1).
+   *  Defaults to 1 (back-compat for single-face dogfood paths
+   *  and tests that synthesize the panel directly). */
+  faceIdCount?: number;
   /** Existing annotation for this face_id, if any. Used to seed the
    *  form with the latest persisted values. */
   existing?: FaceAnnotation;
@@ -36,6 +44,7 @@ interface AnnotationPanelProps {
 
 export function AnnotationPanel({
   faceId,
+  faceIdCount = 1,
   existing,
   disabled = false,
   onSave,
@@ -101,6 +110,14 @@ export function AnnotationPanel({
           {faceId.slice(0, 12)}…
         </span>
       </div>
+      {faceIdCount > 1 && (
+        <div
+          data-testid="annotation-panel-multi-face-badge"
+          className="rounded-sm border border-amber-700/40 bg-amber-900/20 px-2 py-1 text-[11px] text-amber-200"
+        >
+          Applies to {faceIdCount} faces (smooth surface segment).
+        </div>
+      )}
 
       <label className="block space-y-1">
         <span className="text-[11px] text-surface-300">Name</span>

@@ -18,8 +18,22 @@ import {
 } from "react";
 
 export interface PickedFaceState {
-  /** Stable face_id resolved by the Viewport. */
+  /** Stable face_id resolved by the Viewport — the triangle the
+   *  user actually clicked. ``faceIds`` always contains this id
+   *  as its head; consumers that need "the picked face" should
+   *  read ``faceId``, while consumers that need "every face under
+   *  the highlight" should iterate ``faceIds`` (Codex e844a6f
+   *  review P1).
+   */
   faceId: string;
+  /** Every distinct face_id covered by the visually-expanded
+   *  segment (smooth surface or coplanar group). Length 1 for
+   *  axis-aligned cube faces; >1 for curved patches like a gmsh-
+   *  tet cylinder side. Consumers persisting BCs MUST iterate
+   *  this list so the saved annotation matches what the user
+   *  highlighted on screen.
+   */
+  faceIds: string[];
   /** World-space click position — used by the AnnotationPanel to
    *  optionally anchor itself near the picked face (Tier-A: just
    *  metadata, no positioning yet). */
@@ -82,13 +96,23 @@ export function useFacePickPublisher() {
   return useCallback(
     (event: {
       faceId: string | null;
+      faceIds?: string[];
       patchName: string;
       cellId: number;
       worldPosition: [number, number, number];
     }) => {
       if (!setPicked || !event.faceId) return;
+      // ``faceIds`` should always be present from the Viewport
+      // (added in the e844a6f review fix), but guard anyway so
+      // callers that synthesize FacePickEvent in tests without
+      // it don't break.
+      const faceIds =
+        event.faceIds && event.faceIds.length > 0
+          ? event.faceIds
+          : [event.faceId];
       setPicked({
         faceId: event.faceId,
+        faceIds,
         worldPosition: event.worldPosition,
       });
     },

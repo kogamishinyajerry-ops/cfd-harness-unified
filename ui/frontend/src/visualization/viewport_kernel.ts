@@ -629,11 +629,15 @@ export function createKernel(
     // whose adjacent normals form a smooth dihedral. Threshold
     // 30° (cos ≈ 0.866) keeps cube faces split (90° edges fail)
     // while merging typical CAD discretization (≤15° per step
-    // on circular features). Allow signed dot OR its absolute
-    // value: if neighbor's GLB-side winding flipped its normal,
-    // |dot| still recovers coplanarity (a self-back-to-back fan
-    // case that gmsh sometimes emits at degenerate polyMesh
-    // faces).
+    // on circular features). The check is signed dot (NOT |dot|)
+    // — Codex e844a6f review P2: an absolute-value check would
+    // flood across opposite-facing folds where two normals point
+    // in opposite directions (dot ≈ -1) but |dot| ≈ 1, merging a
+    // genuinely sharp re-entrant crease into one segment.
+    // GLTFImporter preserves gmsh's outward winding, so the
+    // self-back-to-back fan case the |dot| variant guarded
+    // against does not occur in practice; the trade was anti-
+    // correctness.
     const COS_THRESHOLD = Math.cos((30 * Math.PI) / 180);
     const segmentOfCell = new Int32Array(cellCount).fill(-1);
     const segmentLists: number[][] = [];
@@ -679,7 +683,7 @@ export function createKernel(
             const my = cellNormals[nb * 3 + 1];
             const mz = cellNormals[nb * 3 + 2];
             const dot = nx * mx + ny * my + nz * mz;
-            if (Math.abs(dot) >= COS_THRESHOLD) {
+            if (dot >= COS_THRESHOLD) {
               segmentOfCell[nb] = segId;
               queue.push(nb);
             }
