@@ -8,11 +8,25 @@
 // User report 2026-04-29: "第4步应该直接实时监控求解器的残差图，
 // 而不是跑完了给我一个截图." This component implements that.
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useSolveStream } from "../SolveStreamContext";
+import { RawDictEditor } from "@/components/RawDictEditor";
 
 import type { StepTaskPanelProps } from "../types";
+
+// DEC-V61-102 M-RESCUE Phase 2 · Step 4 raw-dict footprint. Matches
+// the "switch_solver" _ACTION_AUTHORS set in
+// services/case_inspect/preview.py: the three system dicts that
+// control the solver itself. BCs (constant/momentumTransport,
+// constant/physicalProperties) live in Step 3's RawDictEditor and
+// are deliberately omitted here so the engineer's edit surface
+// matches the conceptual step boundary.
+const STEP4_RAW_DICT_PATHS = [
+  "system/controlDict",
+  "system/fvSchemes",
+  "system/fvSolution",
+] as const;
 
 const REJECTION_HINTS: Record<string, string> = {
   bc_not_setup:
@@ -35,6 +49,13 @@ export function Step4SolveRun({
   registerAiAction,
 }: StepTaskPanelProps) {
   const { phase, summary, errorMessage, start, series } = useSolveStream();
+  // DEC-V61-102 Phase 2 raw-dict editor mount gate. Same pattern as
+  // Step 3: lazily mount on first <details> open to keep the editor
+  // (which uses @tanstack/react-query) out of the render tree until
+  // needed; sticky once opened so collapse doesn't unmount and lose
+  // unsaved edits. Cross-step navigation is covered by RawDictEditor's
+  // own sessionStorage persistence (Codex Phase-2 round-2 closure).
+  const [rawDictHasOpened, setRawDictHasOpened] = useState(false);
 
   const triggerSolve = useCallback(async () => {
     await start(caseId);
@@ -157,6 +178,37 @@ export function Step4SolveRun({
           )}
         </div>
       )}
+
+      {/* DEC-V61-102 M-RESCUE Phase 2 · raw dict editor for the
+       *  solver-control set. When the AI's controlDict / fvSchemes /
+       *  fvSolution choice doesn't fit a particular case (different
+       *  solver, finer deltaT, custom relaxation factors, switching
+       *  to PIMPLE for stability, etc.), the engineer can edit them
+       *  directly here without leaving the workbench. Saved as
+       *  source=user; subsequent re-runs of [AI 处理] preserve the edit. */}
+      <details
+        data-testid="step4-raw-dict-editor"
+        className="rounded-sm border border-slate-700/50 bg-slate-900/30"
+        onToggle={(e) => {
+          if ((e.target as HTMLDetailsElement).open) {
+            setRawDictHasOpened(true);
+          }
+        }}
+      >
+        <summary className="cursor-pointer px-2 py-1 text-[11px] uppercase tracking-wider text-slate-300 hover:text-slate-100">
+          Advanced · edit solver dicts (manual override)
+        </summary>
+        <div className="px-2 py-2">
+          {!caseId ? (
+            <p className="text-[11px] text-slate-400">Open a case first.</p>
+          ) : rawDictHasOpened ? (
+            <RawDictEditor
+              caseId={caseId}
+              allowedPaths={STEP4_RAW_DICT_PATHS}
+            />
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
