@@ -13,6 +13,7 @@ human-readable.
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -133,10 +134,18 @@ def write_case_manifest(case_dir: Path, manifest: CaseManifest) -> Path:
         payload.pop("overrides", None)
     if payload.get("bc", {}).get("patches") == {}:
         payload.pop("bc", None)
-    path.write_text(
-        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+
+    # Codex round-4 MED #2 closure: atomic write via tempfile + os.replace.
+    # Direct path.write_text leaves a torn manifest visible to any
+    # concurrent reader if the process crashes mid-write (or the kernel
+    # decides to flush only the first half). os.replace on the same
+    # filesystem is atomic on POSIX, so readers always see either the
+    # old content or the new — never a half-written YAML that
+    # ManifestParseError would crash on.
+    serialized = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    tmp_path = path.with_name(path.name + ".tmp")
+    tmp_path.write_text(serialized, encoding="utf-8")
+    os.replace(tmp_path, path)
     return path
 
 

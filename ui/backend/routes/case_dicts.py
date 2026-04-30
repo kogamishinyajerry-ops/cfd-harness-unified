@@ -21,6 +21,7 @@ manifest (see :mod:`ui.backend.services.case_manifest.overrides`).
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -266,23 +267,39 @@ def post_raw_dict(
                         },
                     )
 
-            # Write. Make parent dirs if missing (the system/ and constant/
-            # directories are normally pre-created by setup_*_bc, but for a
-            # bare freshly-imported case the user might want to seed
-            # controlDict before any AI run — let them).
+            # Codex round-4 MED #2 closure: atomic file+manifest update.
+            # Snapshot the prior file bytes (None if it didn't exist),
+            # write to a tempfile + os.replace (atomic on POSIX same-FS),
+            # then update the manifest. If mark_user_override fails, the
+            # file rename has already committed — roll it back to the
+            # snapshot so the manifest+disk pair stays self-consistent.
             abs_path.parent.mkdir(parents=True, exist_ok=True)
-            abs_path.write_bytes(new_bytes)
-
-            # Mark the override in the manifest.
-            mark_user_override(
-                case_dir,
-                relative_path=relative_path,
-                new_content=new_bytes,
-                detail={
-                    "force_bypass": bool(force),
-                    "size": len(new_bytes),
-                },
+            prior_bytes: bytes | None = (
+                abs_path.read_bytes() if abs_path.is_file() else None
             )
+            tmp_path = abs_path.with_name(abs_path.name + ".tmp")
+            tmp_path.write_bytes(new_bytes)
+            os.replace(tmp_path, abs_path)
+            try:
+                mark_user_override(
+                    case_dir,
+                    relative_path=relative_path,
+                    new_content=new_bytes,
+                    detail={
+                        "force_bypass": bool(force),
+                        "size": len(new_bytes),
+                    },
+                )
+            except Exception:
+                # Roll back the file write so the manifest's prior
+                # state stays the source of truth. We only enter this
+                # branch if mark_user_override raised — typically a
+                # ManifestParseError or write_case_manifest IO error.
+                if prior_bytes is not None:
+                    abs_path.write_bytes(prior_bytes)
+                else:
+                    abs_path.unlink(missing_ok=True)
+                raise
     except CaseLockError as exc:
         # Codex round-3 MEDIUM: lock-acquisition failure (e.g. planted
         # symlink at .case_lock under O_NOFOLLOW) maps to 422 instead

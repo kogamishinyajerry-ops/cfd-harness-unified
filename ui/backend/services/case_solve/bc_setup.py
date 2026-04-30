@@ -29,6 +29,7 @@ Numerical choices (Codex-reviewed in DEC-V61-097):
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -301,11 +302,19 @@ def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     written: list[str] = []
     skipped: list[str] = []
 
+    # Codex round-4 MED #2 closure: atomic write per dict file.
+    # Tempfile + os.replace gives readers either the old content or
+    # the new — never a torn intermediate. Tempfiles are nameed
+    # ``<orig>.tmp`` in the same directory so os.replace stays on
+    # the same filesystem and is atomic on POSIX.
     def w(rel: str, content: str) -> None:
         if is_user_override(case_dir, relative_path=rel):
             skipped.append(rel)
             return
-        (case_dir / rel).write_text(content)
+        target = case_dir / rel
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(content)
+        os.replace(tmp, target)
         written.append(rel)
 
     lid_u = " ".join(f"{c}" for c in _LID_VELOCITY)
@@ -671,11 +680,16 @@ def _author_channel_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
     written: list[str] = []
     skipped: list[str] = []
 
+    # Codex round-4 MED #2 closure: same atomic-write pattern as the
+    # LDC ``_author_dicts``. Tempfile + os.replace per file.
     def w(rel: str, content: str) -> None:
         if is_user_override(case_dir, relative_path=rel):
             skipped.append(rel)
             return
-        (case_dir / rel).write_text(content)
+        target = case_dir / rel
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(content)
+        os.replace(tmp, target)
         written.append(rel)
 
     inlet_u = " ".join(f"{c}" for c in _CHANNEL_INLET_VELOCITY)
