@@ -16,10 +16,12 @@
 
 import "@kitware/vtk.js/Rendering/Profiles/Geometry";
 import vtkActor from "@kitware/vtk.js/Rendering/Core/Actor";
+import vtkCellArray from "@kitware/vtk.js/Common/Core/CellArray";
 import vtkCellPicker from "@kitware/vtk.js/Rendering/Core/CellPicker";
 import vtkMapper from "@kitware/vtk.js/Rendering/Core/Mapper";
 import vtkGenericRenderWindow from "@kitware/vtk.js/Rendering/Misc/GenericRenderWindow";
-import vtkSphereSource from "@kitware/vtk.js/Filters/Sources/SphereSource";
+import vtkPoints from "@kitware/vtk.js/Common/Core/Points";
+import vtkPolyData from "@kitware/vtk.js/Common/DataModel/PolyData";
 
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
@@ -78,13 +80,15 @@ export interface ViewportKernel {
    *  face they're about to commit to.)
    */
   setHoverHandler(handler: PickHandler | null): void;
-  /** Place a small bright cyan sphere at the given world position
-   *  so the user gets immediate visual confirmation that a pick
-   *  succeeded. Pass ``null`` to hide the marker. Sized relative to
-   *  the current scene bounds. (Dogfood feedback 2026-04-30 —
-   *  without visual feedback the user can't tell pick from no-op.)
+  /** Hide the cyan committed-pick overlay (the actual triangle of
+   *  the previously picked cell). Idempotent. (Used on
+   *  pickMode=false / case-switch / step-leave.)
    */
-  setPickMarker(world: [number, number, number] | null): void;
+  clearPickHighlight(): void;
+  /** Hide the yellow hover overlay (the triangle currently under
+   *  the cursor). Idempotent.
+   */
+  clearHoverHighlight(): void;
   dispose(): void;
 }
 
@@ -136,22 +140,24 @@ export function createKernel(
   let hoverSubscription: { unsubscribe: () => void } | undefined;
   let hoverPending = false;
 
-  // Pick-marker actor (sphere placed at the last successful pick's
-  // worldPosition). Built lazily on first setPickMarker call.
-  let markerSource:
-    | ReturnType<typeof vtkSphereSource.newInstance>
+  // Cell-highlight overlays. Two separate actors: one for the
+  // committed click (cyan, opaque, drawn in front of the geometry)
+  // and one for the hover ghost (yellow, slightly translucent). Each
+  // owns its own vtkPolyData containing JUST the picked triangles —
+  // we update setData on every pick so a single allocation handles
+  // any cellId. (Dogfood feedback 2026-04-30: a small point-marker
+  // is too weak; the user wants the FACE itself to change color so
+  // the selection is unambiguous.)
+  let pickHighlightPolyData:
+    | ReturnType<typeof vtkPolyData.newInstance>
     | undefined;
-  let markerMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
-  let markerActor: ReturnType<typeof vtkActor.newInstance> | undefined;
-  // Hover-marker (translucent yellow ghost that tracks the cursor).
-  // Separate from the click marker so the click marker can stay parked
-  // at the engineer's confirmed selection while the hover one flits
-  // around. Lazy-allocated.
-  let hoverMarkerSource:
-    | ReturnType<typeof vtkSphereSource.newInstance>
+  let pickHighlightMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
+  let pickHighlightActor: ReturnType<typeof vtkActor.newInstance> | undefined;
+  let hoverHighlightPolyData:
+    | ReturnType<typeof vtkPolyData.newInstance>
     | undefined;
-  let hoverMarkerMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
-  let hoverMarkerActor: ReturnType<typeof vtkActor.newInstance> | undefined;
+  let hoverHighlightMapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
+  let hoverHighlightActor: ReturnType<typeof vtkActor.newInstance> | undefined;
   // Map: actor object identity → its glTF primitive.name. Empty for
   // STL (single anonymous actor; we record "" and the React layer
   // falls back to primitive index 0).
@@ -301,6 +307,16 @@ export function createKernel(
             Number(world[2]) || 0,
           ]
         : [0, 0, 0];
+      // Highlight the picked triangle in cyan. If we can't extract
+      // its vertices the click still fires (the right-rail
+      // AnnotationPanel will surface), but the user won't see
+      // visual confirmation in the viewport — that's acceptable
+      // degradation.
+      const tri = extractTriangleVertices(
+        pickedActor as ReturnType<typeof vtkActor.newInstance>,
+        cellId,
+      );
+      if (tri) applyHighlight(tri, "selected");
       localHandler({ patchName, cellId, worldPosition });
     });
   }
@@ -309,11 +325,7 @@ export function createKernel(
     if (handler === null) {
       hoverSubscription?.unsubscribe();
       hoverSubscription = undefined;
-      // Hide the hover marker if any.
-      if (hoverMarkerActor) {
-        hoverMarkerActor.setVisibility(false);
-        grw.getRenderWindow().render();
-      }
+      clearHoverHighlight();
       return;
     }
     if (!picker) {
@@ -345,11 +357,8 @@ export function createKernel(
         picker.pick([pos.x, pos.y, 0], renderer);
         const pickedActors = picker.getActors();
         if (!Array.isArray(pickedActors) || pickedActors.length === 0) {
-          // Cursor moved off the geometry — hide the hover marker.
-          if (hoverMarkerActor && hoverMarkerActor.getVisibility?.()) {
-            hoverMarkerActor.setVisibility(false);
-            grw.getRenderWindow().render();
-          }
+          // Cursor moved off the geometry — hide the hover overlay.
+          clearHoverHighlight();
           return;
         }
         const pickedActor = pickedActors[0];
@@ -367,104 +376,172 @@ export function createKernel(
               Number(world[2]) || 0,
             ]
           : [0, 0, 0];
-        // Move the hover marker to the new spot. Independently from
-        // the click marker so a confirmed selection stays parked
-        // even as the user moves on to consider a different face.
-        showHoverMarker(worldPosition);
+        // Re-tint the hover overlay onto the triangle the cursor
+        // is currently aiming at. Independently from the pick
+        // overlay so a confirmed selection stays cyan even as the
+        // user moves the cursor over to consider a different face.
+        const tri = extractTriangleVertices(
+          pickedActor as ReturnType<typeof vtkActor.newInstance>,
+          cellId,
+        );
+        if (tri) applyHighlight(tri, "hover");
+        else clearHoverHighlight();
         handler({ patchName, cellId, worldPosition });
       });
     });
   }
 
-  function showHoverMarker(world: [number, number, number]): void {
+  // Extract the 3 vertices of cell ``cellId`` from the actor's
+  // underlying vtkPolyData. Returns null on any structural mismatch
+  // (cellId out of range, missing polys, non-triangle cell).
+  function extractTriangleVertices(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellId: number,
+  ): Float32Array | null {
+    try {
+      const inputData = actor.getMapper()?.getInputData?.();
+      if (!inputData) return null;
+      const points = inputData.getPoints?.();
+      const polys = inputData.getPolys?.();
+      if (!points || !polys) return null;
+      const pointArray = points.getData?.();
+      const cellData = polys.getData?.();
+      if (!pointArray || !cellData) return null;
+
+      // vtkCellArray "legacy" packed format:
+      //   [n0, p00, p01, ..., p0_(n0-1), n1, p10, ..., n1_(n1-1)]
+      // For an all-triangle GLB this means each cell occupies 4
+      // entries: [3, p0, p1, p2]. Most polyData built by GLTFImporter
+      // uses this layout, so we can index directly.
+      let pointIndices: number[] | null = null;
+      const directOffset = cellId * 4;
+      if (
+        directOffset + 3 < cellData.length &&
+        cellData[directOffset] === 3
+      ) {
+        pointIndices = [
+          cellData[directOffset + 1],
+          cellData[directOffset + 2],
+          cellData[directOffset + 3],
+        ];
+      } else {
+        // Mixed-cell fallback: walk the array. Slow but defensive
+        // for hand-rolled polyData with mixed cell sizes.
+        let idx = 0;
+        let cellCount = 0;
+        while (idx < cellData.length) {
+          const n = cellData[idx];
+          if (cellCount === cellId) {
+            if (n !== 3) return null;
+            pointIndices = [
+              cellData[idx + 1],
+              cellData[idx + 2],
+              cellData[idx + 3],
+            ];
+            break;
+          }
+          idx += n + 1;
+          cellCount++;
+        }
+      }
+      if (!pointIndices) return null;
+
+      const out = new Float32Array(9);
+      for (let j = 0; j < 3; j++) {
+        const pIdx = pointIndices[j];
+        if (pIdx * 3 + 2 >= pointArray.length) return null;
+        out[j * 3 + 0] = pointArray[pIdx * 3 + 0];
+        out[j * 3 + 1] = pointArray[pIdx * 3 + 1];
+        out[j * 3 + 2] = pointArray[pIdx * 3 + 2];
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  // Update the given highlight overlay (pick OR hover) to render
+  // exactly the supplied triangle. Lazy-allocates the polyData /
+  // mapper / actor on first call. ``mode`` controls color/opacity.
+  function applyHighlight(
+    triangleXyz: Float32Array,
+    mode: "selected" | "hover",
+  ): void {
     const renderer = grw.getRenderer();
-    if (!hoverMarkerSource) {
-      hoverMarkerSource = vtkSphereSource.newInstance({
-        thetaResolution: 12,
-        phiResolution: 12,
-      });
+    const isSelected = mode === "selected";
+    let polyData = isSelected ? pickHighlightPolyData : hoverHighlightPolyData;
+    let mapper = isSelected ? pickHighlightMapper : hoverHighlightMapper;
+    let actor = isSelected ? pickHighlightActor : hoverHighlightActor;
+
+    if (!polyData) {
+      polyData = vtkPolyData.newInstance();
+      const pts = vtkPoints.newInstance();
+      pts.setData(new Float32Array(9));
+      polyData.setPoints(pts);
+      const cells = vtkCellArray.newInstance();
+      cells.setData(new Uint32Array([3, 0, 1, 2]));
+      polyData.setPolys(cells);
+      if (isSelected) pickHighlightPolyData = polyData;
+      else hoverHighlightPolyData = polyData;
     }
-    if (!hoverMarkerMapper) {
-      hoverMarkerMapper = vtkMapper.newInstance();
-      hoverMarkerMapper.setInputConnection(hoverMarkerSource.getOutputPort());
+    if (!mapper) {
+      mapper = vtkMapper.newInstance();
+      mapper.setInputData(polyData);
+      if (isSelected) pickHighlightMapper = mapper;
+      else hoverHighlightMapper = mapper;
     }
-    if (!hoverMarkerActor) {
-      hoverMarkerActor = vtkActor.newInstance();
-      hoverMarkerActor.setMapper(hoverMarkerMapper);
-      // Soft yellow with high opacity so it reads as "you're aiming
-      // here" — distinct from the cyan click marker which means
-      // "you've committed to this face".
-      hoverMarkerActor.getProperty().setColor(1.0, 0.9, 0.2);
-      hoverMarkerActor.getProperty().setAmbient(0.7);
-      hoverMarkerActor.getProperty().setDiffuse(0.3);
-      hoverMarkerActor.getProperty().setOpacity(0.7);
-      renderer.addActor(hoverMarkerActor);
+    if (!actor) {
+      actor = vtkActor.newInstance();
+      actor.setMapper(mapper);
+      const prop = actor.getProperty();
+      if (isSelected) {
+        // Bright cyan, fully opaque, strong ambient so the highlight
+        // stays readable on dark patches and on shadowed sides.
+        prop.setColor(0.05, 1.0, 0.8);
+        prop.setOpacity(1.0);
+        prop.setAmbient(0.85);
+        prop.setDiffuse(0.15);
+      } else {
+        // Saturated yellow with high opacity but not 1.0 so the
+        // pick highlight underneath is still readable when hover
+        // moves back over a previously-selected face.
+        prop.setColor(1.0, 0.92, 0.18);
+        prop.setOpacity(0.85);
+        prop.setAmbient(0.85);
+        prop.setDiffuse(0.15);
+      }
+      // Lift the highlight slightly toward the camera so z-fighting
+      // with the underlying patch's coplanar triangle doesn't strobe
+      // the color.
+      prop.setRepresentation(2); // SURFACE
+      renderer.addActor(actor);
+      if (isSelected) pickHighlightActor = actor;
+      else hoverHighlightActor = actor;
     }
-    const bounds = renderer.computeVisiblePropBounds();
-    let radius = 0.008;
-    if (Array.isArray(bounds) && bounds.length === 6) {
-      const dx = (bounds[1] - bounds[0]) || 0;
-      const dy = (bounds[3] - bounds[2]) || 0;
-      const dz = (bounds[5] - bounds[4]) || 0;
-      const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (diag > 0) radius = Math.max(diag * 0.009, 1e-6);
-    }
-    hoverMarkerSource.setCenter(world[0], world[1], world[2]);
-    hoverMarkerSource.setRadius(radius);
-    hoverMarkerActor.setVisibility(true);
+
+    // Update the polyData's vertex coordinates in place. vtk.js needs
+    // an explicit modified() ping or the mapper will reuse the old
+    // GPU buffer.
+    const ptsArr = polyData.getPoints().getData() as Float32Array;
+    ptsArr.set(triangleXyz);
+    polyData.getPoints().modified();
+    polyData.modified();
+    actor.setVisibility(true);
     grw.getRenderWindow().render();
   }
 
-  function setPickMarker(world: [number, number, number] | null): void {
-    const renderer = grw.getRenderer();
-    if (world === null) {
-      // Hide the marker (keep the actor + source allocated so a
-      // subsequent pick re-shows it without re-allocation churn).
-      if (markerActor) {
-        markerActor.setVisibility(false);
-        grw.getRenderWindow().render();
-      }
-      return;
+  function clearPickHighlight(): void {
+    if (pickHighlightActor) {
+      pickHighlightActor.setVisibility(false);
+      grw.getRenderWindow().render();
     }
-    // Lazy-allocate on first pick.
-    if (!markerSource) {
-      markerSource = vtkSphereSource.newInstance({
-        thetaResolution: 16,
-        phiResolution: 16,
-      });
+  }
+
+  function clearHoverHighlight(): void {
+    if (hoverHighlightActor) {
+      hoverHighlightActor.setVisibility(false);
+      grw.getRenderWindow().render();
     }
-    if (!markerMapper) {
-      markerMapper = vtkMapper.newInstance();
-      markerMapper.setInputConnection(markerSource.getOutputPort());
-    }
-    if (!markerActor) {
-      markerActor = vtkActor.newInstance();
-      markerActor.setMapper(markerMapper);
-      // Bright cyan with full alpha — distinct from any patch color
-      // (lid red / wall gray / frontAndBack slate). Slight emissive
-      // tint via ambient so it stays visible even when the geometry's
-      // lighting puts it in shadow.
-      markerActor.getProperty().setColor(0.0, 1.0, 0.85);
-      markerActor.getProperty().setAmbient(0.6);
-      markerActor.getProperty().setDiffuse(0.4);
-      renderer.addActor(markerActor);
-    }
-    // Size the sphere relative to the scene bounds so it stays
-    // visible without occluding meaningful geometry. Falls back to a
-    // small absolute radius if bounds are degenerate.
-    const bounds = renderer.computeVisiblePropBounds();
-    let radius = 0.01;
-    if (Array.isArray(bounds) && bounds.length === 6) {
-      const dx = (bounds[1] - bounds[0]) || 0;
-      const dy = (bounds[3] - bounds[2]) || 0;
-      const dz = (bounds[5] - bounds[4]) || 0;
-      const diag = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (diag > 0) radius = Math.max(diag * 0.012, 1e-6);
-    }
-    markerSource.setCenter(world[0], world[1], world[2]);
-    markerSource.setRadius(radius);
-    markerActor.setVisibility(true);
-    grw.getRenderWindow().render();
   }
 
   function resetCamera(): void {
@@ -535,32 +612,32 @@ export function createKernel(
       // see above
     }
     try {
-      markerActor?.delete();
+      pickHighlightActor?.delete();
     } catch {
       // see above
     }
     try {
-      markerMapper?.delete();
+      pickHighlightMapper?.delete();
     } catch {
       // see above
     }
     try {
-      markerSource?.delete();
+      pickHighlightPolyData?.delete();
     } catch {
       // see above
     }
     try {
-      hoverMarkerActor?.delete();
+      hoverHighlightActor?.delete();
     } catch {
       // see above
     }
     try {
-      hoverMarkerMapper?.delete();
+      hoverHighlightMapper?.delete();
     } catch {
       // see above
     }
     try {
-      hoverMarkerSource?.delete();
+      hoverHighlightPolyData?.delete();
     } catch {
       // see above
     }
@@ -583,7 +660,8 @@ export function createKernel(
     resetCamera,
     setPickHandler,
     setHoverHandler,
-    setPickMarker,
+    clearPickHighlight,
+    clearHoverHighlight,
     dispose,
   };
 }
