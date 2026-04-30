@@ -33,6 +33,7 @@ from ui.backend.services.case_dicts.validator import (
 )
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_manifest import (
+    CaseLockError,
     ManifestNotFoundError,
     case_lock,
     compute_etag,
@@ -248,39 +249,56 @@ def post_raw_dict(
     # second — manifest ends up source=user but disk content reflects an
     # interleaved partial. Locking serializes mutations end-to-end.
     new_bytes = body.content.encode("utf-8")
-    with case_lock(case_dir):
-        if body.expected_etag is not None and abs_path.is_file():
-            current_etag = compute_etag(abs_path.read_bytes())
-            if current_etag != body.expected_etag:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "failing_check": "etag_mismatch",
-                        "expected_etag": body.expected_etag,
-                        "current_etag": current_etag,
-                        "hint": (
-                            "file changed since last GET; re-fetch and merge before retry"
-                        ),
-                    },
-                )
+    try:
+        with case_lock(case_dir):
+            if body.expected_etag is not None and abs_path.is_file():
+                current_etag = compute_etag(abs_path.read_bytes())
+                if current_etag != body.expected_etag:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "failing_check": "etag_mismatch",
+                            "expected_etag": body.expected_etag,
+                            "current_etag": current_etag,
+                            "hint": (
+                                "file changed since last GET; re-fetch and merge before retry"
+                            ),
+                        },
+                    )
 
-        # Write. Make parent dirs if missing (the system/ and constant/
-        # directories are normally pre-created by setup_*_bc, but for a
-        # bare freshly-imported case the user might want to seed
-        # controlDict before any AI run — let them).
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_bytes(new_bytes)
+            # Write. Make parent dirs if missing (the system/ and constant/
+            # directories are normally pre-created by setup_*_bc, but for a
+            # bare freshly-imported case the user might want to seed
+            # controlDict before any AI run — let them).
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_bytes(new_bytes)
 
-        # Mark the override in the manifest.
-        mark_user_override(
-            case_dir,
-            relative_path=relative_path,
-            new_content=new_bytes,
+            # Mark the override in the manifest.
+            mark_user_override(
+                case_dir,
+                relative_path=relative_path,
+                new_content=new_bytes,
+                detail={
+                    "force_bypass": bool(force),
+                    "size": len(new_bytes),
+                },
+            )
+    except CaseLockError as exc:
+        # Codex round-3 MEDIUM: lock-acquisition failure (e.g. planted
+        # symlink at .case_lock under O_NOFOLLOW) maps to 422 instead
+        # of a 500 with raw OSError text. HTTPException raised inside
+        # the with-block (etag mismatch 409) is NOT caught here — it
+        # propagates as a normal FastAPI response.
+        raise HTTPException(
+            status_code=422,
             detail={
-                "force_bypass": bool(force),
-                "size": len(new_bytes),
+                "failing_check": exc.failing_check,
+                "hint": (
+                    "the case directory's .case_lock could not be opened "
+                    "safely; remove any unexpected file/symlink at this path"
+                ),
             },
-        )
+        ) from exc
 
     # Surface advisories (severity != "error") to the caller so the
     # editor can show a yellow toast even on a successful save.

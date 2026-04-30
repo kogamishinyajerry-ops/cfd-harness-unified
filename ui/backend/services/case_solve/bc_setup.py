@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ui.backend.services.case_manifest import (
+    CaseLockError,
     case_lock,
     is_user_override,
     mark_ai_authored,
@@ -439,15 +440,23 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
     # is_user_override returning False and the AI write. Without the
     # lock, manifest.source=user could persist while disk content was
     # silently re-authored by AI (manifest+disk divergence).
-    with case_lock(case_dir):
-        written, skipped = _author_dicts(case_dir)
-        if written:
-            mark_ai_authored(
-                case_dir,
-                relative_paths=list(written),
-                action="setup_ldc_bc",
-                detail={"skipped_user_overrides": list(skipped)} if skipped else None,
-            )
+    try:
+        with case_lock(case_dir):
+            written, skipped = _author_dicts(case_dir)
+            if written:
+                mark_ai_authored(
+                    case_dir,
+                    relative_paths=list(written),
+                    action="setup_ldc_bc",
+                    detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+                )
+    except CaseLockError as exc:
+        # Round-3: translate to BCSetupError so the caller (route layer)
+        # gets a uniform "setup_bc_failed" envelope instead of a raw
+        # OSError percolating up.
+        raise BCSetupError(
+            f"could not acquire case lock for setup_ldc_bc: {exc}"
+        ) from exc
 
     return BCSetupResult(
         case_id=case_id,
@@ -847,15 +856,20 @@ def setup_channel_bc(
     # Codex round-2 P1-HIGH closure: see setup_ldc_bc — lock the
     # author + manifest-record sequence so concurrent POST /dicts can't
     # race past is_user_override.
-    with case_lock(case_dir):
-        written, skipped = _author_channel_dicts(case_dir)
-        if written:
-            mark_ai_authored(
-                case_dir,
-                relative_paths=list(written),
-                action="setup_channel_bc",
-                detail={"skipped_user_overrides": list(skipped)} if skipped else None,
-            )
+    try:
+        with case_lock(case_dir):
+            written, skipped = _author_channel_dicts(case_dir)
+            if written:
+                mark_ai_authored(
+                    case_dir,
+                    relative_paths=list(written),
+                    action="setup_channel_bc",
+                    detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+                )
+    except CaseLockError as exc:
+        raise BCSetupError(
+            f"could not acquire case lock for setup_channel_bc: {exc}"
+        ) from exc
 
     # Codex DEC-V61-101 R1 LOW closure: use the MIN bbox extent as
     # L_char (hydraulic-diameter approximation for narrow channels).
