@@ -218,23 +218,33 @@ def _parse_line_to_events(
         if field_raw in ("Ux", "Uy", "Uz", "p"):
             iters = int(m_d.group(2))
             carry = last_residual_per_field.get(field_raw)
-            if carry is not None:
-                yield _sse(
-                    "residual",
-                    {
-                        "field": field_raw,
-                        "init": carry,
-                        "final": carry,
-                        "iters": iters,
-                        "t": current_time[0],
-                        "diagonal": True,
-                    },
-                )
-            # If the very first step is diagonal (no carry value
-            # exists yet), drop silently — the chart will catch up
-            # on the first iterative step. This keeps the y-axis
-            # well-calibrated when the only residuals so far are
-            # zero-iteration trivial solves.
+            if carry is None:
+                # Codex 1e257e9 round-6 P2: diagonal-first / diagonal-
+                # only fields had no carry value, so the earlier rev
+                # dropped them silently and the chart stayed blank
+                # for those fields — exactly the failure mode this
+                # patchset set out to fix. Seed with a near-tolerance
+                # floor that matches the configured solver tolerances
+                # (smoothSolver U 1e-5, DICPCG p 1e-6). This anchors
+                # the chart at "successfully converged" without
+                # creating an axis-distorting cliff like the earlier
+                # 1e-12 sentinel did. Once stored, future diagonal
+                # steps for the same field use this same value (no
+                # axis bouncing); an iterative residual will
+                # override and the carry adapts.
+                carry = 1e-7
+                last_residual_per_field[field_raw] = carry
+            yield _sse(
+                "residual",
+                {
+                    "field": field_raw,
+                    "init": carry,
+                    "final": carry,
+                    "iters": iters,
+                    "t": current_time[0],
+                    "diagonal": True,
+                },
+            )
         return
 
     m_c = _CONT_LINE.search(line)
