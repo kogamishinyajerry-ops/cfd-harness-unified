@@ -617,11 +617,16 @@ describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
     expect(
       screen.getByTestId("dialog-panel-face-hint-outlet_face"),
     ).not.toHaveTextContent(/picked:/i);
-    // M9 Step 3 R1 Finding 2 (LOW) closure: a stray pick while an
-    // envelope-with-face-questions is open MUST NOT surface
-    // AnnotationPanel — the dialog flow is the only sanctioned
-    // mutation surface in that state.
-    expect(screen.queryByTestId("annotation-panel")).toBeNull();
+    // 2026-04-30 dogfood feedback: previously the M9 R1 Finding 2 LOW
+    // closure swallowed bare picks while the envelope had unresolved
+    // face questions, so AnnotationPanel never surfaced. That left
+    // the engineer unable to set BCs at all when the highlight
+    // landed. The new behavior surfaces AnnotationPanel for free
+    // annotation alongside the dialog; specific dialog routing only
+    // happens after "Select this face" is clicked. Both surfaces
+    // coexist and never observe the same pick (active-question
+    // branch clears the pick before AnnotationPanel renders).
+    expect(screen.getByTestId("annotation-panel")).toBeInTheDocument();
 
     // Now click 'Select this face' on the outlet question, then pick.
     await user.click(

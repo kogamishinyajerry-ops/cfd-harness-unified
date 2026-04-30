@@ -27,6 +27,37 @@ import {
 
 import type { FaceIndexDocument } from "@/pages/workbench/step_panel_shell/types";
 
+/** Reverse-map: face_id → list of cellIds where face_ids[i] === face_id.
+ *  Built once per primitive on face-index load so the hover pick (which
+ *  fires every RAF) is O(1) lookup instead of O(N) scan. (2026-04-30
+ *  dogfood feedback closure: highlight ALL triangles of a polyMesh
+ *  face, not just the one the picker happened to hit, so the
+ *  selection looks like a "face" instead of a fragment.)
+ */
+type FaceIndexWithSiblings = FaceIndexDocument & {
+  primitives: Array<
+    FaceIndexDocument["primitives"][number] & {
+      _faceIdToCellIds?: Map<string, number[]>;
+    }
+  >;
+};
+
+function attachSiblingMap(
+  doc: FaceIndexDocument,
+): FaceIndexWithSiblings {
+  for (const p of doc.primitives) {
+    const map = new Map<string, number[]>();
+    for (let i = 0; i < p.face_ids.length; i++) {
+      const fid = p.face_ids[i];
+      const list = map.get(fid);
+      if (list) list.push(i);
+      else map.set(fid, [i]);
+    }
+    (p as FaceIndexWithSiblings["primitives"][number])._faceIdToCellIds = map;
+  }
+  return doc as FaceIndexWithSiblings;
+}
+
 /** Payload delivered to ``onFacePick`` after a successful pick.
  *  ``face_id`` is null when pickMode is on but the kernel emitted a
  *  cell hit that the face-index couldn't resolve (unknown patch_name
@@ -231,26 +262,43 @@ function ViewportVtk({
     if (!kernel.setPickHandler) return;
     let disposed = false;
 
+    const resolvePrimitive = (
+      patchName: string,
+    ): FaceIndexWithSiblings["primitives"][number] | null => {
+      const idx = faceIndexRef.current as FaceIndexWithSiblings | null;
+      if (!idx) return null;
+      // STL emits patchName === "" → fallback to primitives[0]. The
+      // face-index backend service guarantees primitives[i].patch_name
+      // uniqueness; on miss we also fall through to primitives[0]
+      // (single-actor GLBs that vtk.js loaded with an unmapped name).
+      return (
+        (patchName
+          ? idx.primitives.find((p) => p.patch_name === patchName)
+          : idx.primitives[0]) ??
+        idx.primitives[0] ??
+        null
+      );
+    };
+
     const handleKernelPick = (result: PickResult) => {
-      const idx = faceIndexRef.current;
-      if (!idx) return;
-      // Resolve actor → primitive by patch_name equality. STL emits
-      // patchName === "" → fallback to primitives[0]. The face-index
-      // backend service guarantees primitives[i].patch_name uniqueness.
-      const primitive = result.patchName
-        ? idx.primitives.find((p) => p.patch_name === result.patchName)
-        : idx.primitives[0];
+      const primitive = resolvePrimitive(result.patchName);
+      if (!primitive) return;
       const faceId =
-        primitive && result.cellId < primitive.face_ids.length
+        result.cellId < primitive.face_ids.length
           ? primitive.face_ids[result.cellId]
           : null;
-      // The kernel itself paints the cyan triangle highlight on a
-      // successful pick (see viewport_kernel.applyHighlight). We
-      // could clear it here for a faceId=null degenerate case, but
-      // by the time React sees that case the kernel has already
-      // committed the highlight — leaving it visible is honest:
-      // the user clicked SOMETHING, just that something didn't
-      // resolve to a face_id we could surface in the right rail.
+      // Highlight every triangle that shares the picked face_id —
+      // a polyMesh face that triangulates to several GLB triangles
+      // ends up fully colored, not half. (2026-04-30 dogfood
+      // feedback closure.)
+      if (faceId !== null) {
+        const sibs = primitive._faceIdToCellIds?.get(faceId) ?? [
+          result.cellId,
+        ];
+        kernelRef.current?.setPickHighlightCells?.(result.actor, sibs);
+      } else {
+        kernelRef.current?.clearPickHighlight?.();
+      }
       onFacePickRef.current?.({
         faceId,
         patchName: result.patchName,
@@ -259,16 +307,27 @@ function ViewportVtk({
       });
     };
 
-    // Hover handler: same resolution path as click, but only places
-    // the kernel hover marker (yellow ghost). Doesn't fire onFacePick
-    // — that's reserved for committed clicks. Independently from the
-    // click handler so they can be enabled/disabled separately.
-    const handleKernelHover = (_result: PickResult) => {
-      // The kernel itself manages the hover marker actor + position;
-      // this React-side handler doesn't need to do anything beyond
-      // confirming the cell hit (the marker has already been moved
-      // by the time this fires). We pass a no-op so the kernel's
-      // setHoverHandler treats it as enabled.
+    // Hover handler: same resolve path, but updates the yellow ghost
+    // overlay instead of the cyan committed pick. Doesn't fire
+    // onFacePick — that's reserved for committed clicks.
+    const handleKernelHover = (result: PickResult) => {
+      const primitive = resolvePrimitive(result.patchName);
+      if (!primitive) {
+        kernelRef.current?.clearHoverHighlight?.();
+        return;
+      }
+      const faceId =
+        result.cellId < primitive.face_ids.length
+          ? primitive.face_ids[result.cellId]
+          : null;
+      if (faceId === null) {
+        kernelRef.current?.clearHoverHighlight?.();
+        return;
+      }
+      const sibs = primitive._faceIdToCellIds?.get(faceId) ?? [
+        result.cellId,
+      ];
+      kernelRef.current?.setHoverHighlightCells?.(result.actor, sibs);
     };
 
     if (faceIndexRef.current) {
@@ -279,7 +338,7 @@ function ViewportVtk({
         .getFaceIndex(caseId)
         .then((doc) => {
           if (disposed) return;
-          faceIndexRef.current = doc;
+          faceIndexRef.current = attachSiblingMap(doc);
           kernelRef.current?.setPickHandler?.(handleKernelPick);
           kernelRef.current?.setHoverHandler?.(handleKernelHover);
         })

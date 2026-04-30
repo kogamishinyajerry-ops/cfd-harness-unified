@@ -52,10 +52,15 @@ export interface PickResult {
    *  index for triangulated surfaces).
    */
   cellId: number;
-  /** World-space pick position (xyz). Useful for the AnnotationPanel
-   *  to anchor itself near the picked face.
-   */
+  /** World-space pick position (xyz). */
   worldPosition: [number, number, number];
+  /** The vtk.js actor that owns ``cellId``. Surfaced so the React
+   *  layer can call setPick/HoverHighlightCells with sibling cellIds
+   *  (resolved from the face-index reverse map) to highlight the
+   *  whole polyMesh face, not just the single triangle that the
+   *  picker happened to hit. (2026-04-30 dogfood feedback closure.)
+   */
+  actor: ReturnType<typeof vtkActor.newInstance>;
 }
 
 export type PickHandler = (result: PickResult) => void;
@@ -80,15 +85,28 @@ export interface ViewportKernel {
    *  face they're about to commit to.)
    */
   setHoverHandler(handler: PickHandler | null): void;
-  /** Hide the cyan committed-pick overlay (the actual triangle of
-   *  the previously picked cell). Idempotent. (Used on
+  /** Hide the cyan committed-pick overlay. Idempotent. (Used on
    *  pickMode=false / case-switch / step-leave.)
    */
   clearPickHighlight(): void;
-  /** Hide the yellow hover overlay (the triangle currently under
-   *  the cursor). Idempotent.
-   */
+  /** Hide the yellow hover overlay. Idempotent. */
   clearHoverHighlight(): void;
+  /** Replace the cyan committed-pick overlay with the union of the
+   *  given cells from the picked actor's underlying polyData. Used
+   *  by the React layer to highlight every triangle that shares the
+   *  same face_id (so a polyMesh face whose triangulation produced
+   *  multiple GLB triangles ends up fully colored, not half).
+   *  Pass empty array or call clearPickHighlight to hide.
+   */
+  setPickHighlightCells(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellIds: number[],
+  ): void;
+  /** Same as setPickHighlightCells but for the yellow hover overlay. */
+  setHoverHighlightCells(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellIds: number[],
+  ): void;
   dispose(): void;
 }
 
@@ -307,17 +325,17 @@ export function createKernel(
             Number(world[2]) || 0,
           ]
         : [0, 0, 0];
-      // Highlight the picked triangle in cyan. If we can't extract
-      // its vertices the click still fires (the right-rail
-      // AnnotationPanel will surface), but the user won't see
-      // visual confirmation in the viewport — that's acceptable
-      // degradation.
-      const tri = extractTriangleVertices(
-        pickedActor as ReturnType<typeof vtkActor.newInstance>,
+      // The actual highlight is now driven by the React layer via
+      // setPickHighlightCells (so all sibling triangles sharing the
+      // same face_id can be coalesced into a single overlay). The
+      // kernel just reports the hit; the React layer looks up the
+      // sibling cellIds in the face-index and fires back.
+      localHandler({
+        patchName,
         cellId,
-      );
-      if (tri) applyHighlight(tri, "selected");
-      localHandler({ patchName, cellId, worldPosition });
+        worldPosition,
+        actor: pickedActor as ReturnType<typeof vtkActor.newInstance>,
+      });
     });
   }
 
@@ -376,17 +394,16 @@ export function createKernel(
               Number(world[2]) || 0,
             ]
           : [0, 0, 0];
-        // Re-tint the hover overlay onto the triangle the cursor
-        // is currently aiming at. Independently from the pick
-        // overlay so a confirmed selection stays cyan even as the
-        // user moves the cursor over to consider a different face.
-        const tri = extractTriangleVertices(
-          pickedActor as ReturnType<typeof vtkActor.newInstance>,
+        // The React layer will call setHoverHighlightCells with
+        // the sibling cellIds resolved from the face-index. We
+        // hand off the actor so the kernel can extract the
+        // triangle vertices when that arrives.
+        handler({
+          patchName,
           cellId,
-        );
-        if (tri) applyHighlight(tri, "hover");
-        else clearHoverHighlight();
-        handler({ patchName, cellId, worldPosition });
+          worldPosition,
+          actor: pickedActor as ReturnType<typeof vtkActor.newInstance>,
+        });
       });
     });
   }
@@ -460,27 +477,38 @@ export function createKernel(
     }
   }
 
-  // Update the given highlight overlay (pick OR hover) to render
-  // exactly the supplied triangle. Lazy-allocates the polyData /
-  // mapper / actor on first call. ``mode`` controls color/opacity.
+  // Replace the given highlight overlay (pick OR hover) with the
+  // supplied triangles. ``trianglesXyz`` is a flat array of N*9 floats
+  // (3 vertices per triangle, no shared indices). Lazy-allocates the
+  // polyData/mapper/actor on first call; subsequent calls reallocate
+  // the points + cell arrays only when the triangle count changes
+  // (vtk.js needs a fresh array if the size differs from the
+  // previously-bound one).
   function applyHighlight(
-    triangleXyz: Float32Array,
+    trianglesXyz: Float32Array,
     mode: "selected" | "hover",
   ): void {
     const renderer = grw.getRenderer();
     const isSelected = mode === "selected";
+    const triCount = trianglesXyz.length / 9;
+    if (triCount === 0) {
+      // No triangles — hide the overlay.
+      const a = isSelected ? pickHighlightActor : hoverHighlightActor;
+      if (a) {
+        a.setVisibility(false);
+        grw.getRenderWindow().render();
+      }
+      return;
+    }
+
     let polyData = isSelected ? pickHighlightPolyData : hoverHighlightPolyData;
     let mapper = isSelected ? pickHighlightMapper : hoverHighlightMapper;
     let actor = isSelected ? pickHighlightActor : hoverHighlightActor;
 
     if (!polyData) {
       polyData = vtkPolyData.newInstance();
-      const pts = vtkPoints.newInstance();
-      pts.setData(new Float32Array(9));
-      polyData.setPoints(pts);
-      const cells = vtkCellArray.newInstance();
-      cells.setData(new Uint32Array([3, 0, 1, 2]));
-      polyData.setPolys(cells);
+      polyData.setPoints(vtkPoints.newInstance());
+      polyData.setPolys(vtkCellArray.newInstance());
       if (isSelected) pickHighlightPolyData = polyData;
       else hoverHighlightPolyData = polyData;
     }
@@ -510,24 +538,76 @@ export function createKernel(
         prop.setAmbient(0.85);
         prop.setDiffuse(0.15);
       }
-      // Lift the highlight slightly toward the camera so z-fighting
-      // with the underlying patch's coplanar triangle doesn't strobe
-      // the color.
       prop.setRepresentation(2); // SURFACE
       renderer.addActor(actor);
       if (isSelected) pickHighlightActor = actor;
       else hoverHighlightActor = actor;
     }
 
-    // Update the polyData's vertex coordinates in place. vtk.js needs
-    // an explicit modified() ping or the mapper will reuse the old
-    // GPU buffer.
-    const ptsArr = polyData.getPoints().getData() as Float32Array;
-    ptsArr.set(triangleXyz);
+    // (Re-)bind the points and cells. We always replace the arrays
+    // when the triangle count changes; for the same triangle count
+    // we'd still need to update the data + ping modified, so just
+    // always replace — the cost is N*36 bytes for points + N*16 for
+    // indices, trivial at our scales.
+    polyData.getPoints().setData(trianglesXyz);
+    const cellData = new Uint32Array(triCount * 4);
+    for (let i = 0; i < triCount; i++) {
+      cellData[i * 4 + 0] = 3;
+      cellData[i * 4 + 1] = i * 3 + 0;
+      cellData[i * 4 + 2] = i * 3 + 1;
+      cellData[i * 4 + 3] = i * 3 + 2;
+    }
+    polyData.getPolys().setData(cellData);
     polyData.getPoints().modified();
+    polyData.getPolys().modified();
     polyData.modified();
     actor.setVisibility(true);
     grw.getRenderWindow().render();
+  }
+
+  // Helper used by both the kernel-internal pick handlers and the
+  // public setPick/HoverHighlightCells API: build the triangle blob
+  // for a list of cellIds against a single actor's polyData.
+  function buildTriangleBlob(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellIds: number[],
+  ): Float32Array {
+    const result = new Float32Array(cellIds.length * 9);
+    let outOffset = 0;
+    for (const cellId of cellIds) {
+      const tri = extractTriangleVertices(actor, cellId);
+      if (!tri) continue;
+      result.set(tri, outOffset);
+      outOffset += 9;
+    }
+    // Trim if some cellIds didn't resolve.
+    return outOffset === result.length
+      ? result
+      : result.slice(0, outOffset);
+  }
+
+  function setPickHighlightCells(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellIds: number[],
+  ): void {
+    if (cellIds.length === 0) {
+      clearPickHighlight();
+      return;
+    }
+    const tris = buildTriangleBlob(actor, cellIds);
+    applyHighlight(tris, "selected");
+  }
+
+  function setHoverHighlightCells(
+    actor: ReturnType<typeof vtkActor.newInstance>,
+    cellIds: number[],
+  ): void {
+    if (cellIds.length === 0) {
+      clearHoverHighlight();
+      return;
+    }
+    const tris = buildTriangleBlob(actor, cellIds);
+    applyHighlight(tris, "hover");
   }
 
   function clearPickHighlight(): void {
@@ -660,6 +740,8 @@ export function createKernel(
     resetCamera,
     setPickHandler,
     setHoverHandler,
+    setPickHighlightCells,
+    setHoverHighlightCells,
     clearPickHighlight,
     clearHoverHighlight,
     dispose,

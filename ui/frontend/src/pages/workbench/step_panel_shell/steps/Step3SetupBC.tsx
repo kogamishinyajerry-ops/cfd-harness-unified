@@ -247,9 +247,6 @@ export function Step3SetupBC({
   // AnnotationPanel — opening a separate mutation surface that
   // bypasses the dialog flow entirely. We now swallow such picks so
   // "explicit slot selection required" stays true at the UX level.
-  const envelopeAwaitsFaceSelection = Boolean(
-    envelope?.unresolved_questions.some((q) => q.needs_face_selection),
-  );
   useEffect(() => {
     if (!facePick?.picked) return;
     if (activeFaceQuestion) {
@@ -266,12 +263,24 @@ export function Step3SetupBC({
       facePick.setPicked(null);
       return;
     }
-    if (envelopeAwaitsFaceSelection) {
-      // Envelope expects face answers via dialog — drop the stray
-      // pick rather than surfacing AnnotationPanel.
-      facePick.setPicked(null);
-    }
-  }, [facePick, activeFaceQuestion, envelopeAwaitsFaceSelection]);
+    // Dogfood feedback 2026-04-30: previously the M9 R1 Finding 2
+    // (LOW) closure swallowed bare picks whenever the envelope had
+    // any unresolved face question, on the theory that AnnotationPanel
+    // would "open a separate mutation surface that bypasses the dialog
+    // flow." But that left the engineer with no way to set BCs after
+    // the highlight landed — the panel never surfaced.
+    //
+    // Now both surfaces coexist:
+    //   - With NO active dialog question: bare picks surface
+    //     AnnotationPanel below, the engineer can free-annotate.
+    //   - With an active dialog question (the engineer clicked
+    //     "Select this face" on a specific row): picks route into
+    //     that question's slot (handled above) — the AnnotationPanel
+    //     does NOT surface for that pick.
+    // The two paths can't conflict on the same pick because the
+    // active-question branch above clears facePick.picked before
+    // any AnnotationPanel render observes it.
+  }, [facePick, activeFaceQuestion]);
 
   const existingForPicked = useMemo<FaceAnnotation | undefined>(() => {
     if (!facePick?.picked || !annotations) return undefined;
