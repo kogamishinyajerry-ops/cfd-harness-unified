@@ -51,6 +51,7 @@ from .solver_runner import (
     SolverRunResult,
     _is_converged,
     _parse_log,
+    read_application_from_control_dict,
 )
 
 
@@ -348,12 +349,16 @@ def _prepare_stream_icofoam(
                 f"docker SDK error preparing container workspace: {exc}"
             ) from exc
 
-        # Spawn icoFoam. ``stdbuf -oL`` line-buffers stdout so PISO
-        # iterations arrive promptly instead of in 4KB chunks.
+        # Spawn the OpenFOAM solver named in controlDict (icoFoam for
+        # the LDC dogfood path; pimpleFoam for the channel path so
+        # adjustTimeStep takes effect — Codex cce9c29 review P1
+        # closure 2026-04-30). ``stdbuf -oL`` line-buffers stdout so
+        # PISO iterations arrive promptly instead of in 4KB chunks.
+        application = read_application_from_control_dict(case_host_dir)
         bash_cmd = (
             "source /opt/openfoam10/etc/bashrc && "
             f"cd {container_work_dir} && "
-            "stdbuf -oL -eL icoFoam 2>&1"
+            f"stdbuf -oL -eL {application} 2>&1"
         )
         try:
             exec_result = container.exec_run(
@@ -362,7 +367,9 @@ def _prepare_stream_icofoam(
                 demux=False,
             )
         except docker.errors.DockerException as exc:
-            raise SolverRunError(f"docker SDK error invoking icoFoam: {exc}") from exc
+            raise SolverRunError(
+                f"docker SDK error invoking {application}: {exc}"
+            ) from exc
     except BaseException:
         # Any failure during preflight releases the lock so the user
         # can retry. The generator path takes ownership of the lock

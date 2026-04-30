@@ -670,19 +670,27 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "system/controlDict",
         'FoamFile { version 2.0; format ascii; class dictionary; '
         'location "system"; object controlDict; }\n'
-        "application icoFoam;\n"
+        # pimpleFoam (NOT icoFoam): incompressible laminar transient
+        # solver with PISO/PIMPLE hybrid that honors adjustTimeStep.
+        # Codex cce9c29 review P1 (2026-04-30): icoFoam in OpenFOAM-10
+        # has no setDeltaT.H include, so the adjustTimeStep/maxCo/
+        # maxDeltaT keys here would be silently ignored if icoFoam
+        # were used — leaving deltaT fixed at the seed value and
+        # producing either "5x too many timesteps" (small seed) or
+        # "user-reported crawl" (large seed + fine mesh + Courant
+        # blowup). pimpleFoam includes setDeltaT.H (verified against
+        # /opt/openfoam10/applications/solvers/incompressible/
+        # pimpleFoam/pimpleFoam.C) so the keys actually take effect.
+        "application pimpleFoam;\n"
         "startFrom startTime;\n"
         "startTime 0;\n"
         "stopAt endTime;\n"
         "endTime 5;\n"
-        # Initial deltaT is conservative; adjustTimeStep will scale up
-        # as the flow stabilizes and down if Co spikes. This protects
-        # against the dogfood failure mode (2026-04-30) where the
-        # channel path hit unknown CAD meshes whose cell sizing made
-        # the fixed deltaT 0.01 violate CFL — PISO then iterated tens
-        # of times per step and a 5s sim took 20+ minutes wall-time,
-        # surfacing to the user as "仿真无法进行到底，算到一半就卡住了".
-        "deltaT 0.001;\n"
+        # Seed deltaT is intentionally larger than the icoFoam-era
+        # 0.005 because pimpleFoam will scale it down on the first
+        # CourantNo evaluation if the seed is too aggressive. Caps
+        # below protect against unbounded scale-up on coarse meshes.
+        "deltaT 0.005;\n"
         "writeControl runTime;\n"
         "writeInterval 1;\n"
         "purgeWrite 0;\n"
@@ -695,7 +703,7 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "adjustTimeStep yes;\n"
         "maxCo 0.5;\n"
         # Cap deltaT so even an empty/over-coarse mesh (where Co stays
-        # low at any step size) cannot stretch a single PISO step past
+        # low at any step size) cannot stretch a single timestep past
         # the resolution we want to record residuals at.
         "maxDeltaT 0.05;\n",
     )
@@ -706,6 +714,10 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         'location "system"; object fvSchemes; }\n'
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
+        # pimpleFoam tolerates "bounded" div schemes which improve
+        # stability when adjustTimeStep is active and Courant is
+        # bouncing. Keep the linear core to match the icoFoam-era
+        # numerics so accuracy on stable meshes is unchanged.
         "divSchemes  { default none; div(phi,U) Gauss linear; }\n"
         "laplacianSchemes { default Gauss linear orthogonal; }\n"
         "interpolationSchemes { default linear; }\n"
@@ -722,9 +734,17 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "    pFinal { $p; relTol 0; }\n"
         "    U  { solver smoothSolver; smoother symGaussSeidel; "
         "tolerance 1e-05; relTol 0; }\n"
+        "    UFinal { $U; relTol 0; }\n"
         "}\n"
-        "PISO\n"
+        # pimpleFoam reads ``PIMPLE``, not ``PISO``. Setting
+        # nOuterCorrectors=1 makes pimpleFoam behave like icoFoam
+        # (single PISO loop per timestep) so the numerics are the
+        # closest possible to the icoFoam baseline. Bumping to 2+
+        # would enable PIMPLE under-relaxation but is unnecessary
+        # for laminar channel flow at modest Re.
+        "PIMPLE\n"
         "{\n"
+        "    nOuterCorrectors 1;\n"
         "    nCorrectors 2;\n"
         "    nNonOrthogonalCorrectors 2;\n"
         "    pRefCell 0;\n"

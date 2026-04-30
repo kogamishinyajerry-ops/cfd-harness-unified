@@ -32,6 +32,32 @@ class SolverRunError(RuntimeError):
     breaks. The route maps this to 502 ``solver_failed``."""
 
 
+_APPLICATION_RE = re.compile(
+    r"^\s*application\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
+    re.MULTILINE,
+)
+
+
+def read_application_from_control_dict(case_host_dir: Path) -> str:
+    """Return the OpenFOAM solver binary named in ``system/controlDict``.
+
+    Falls back to ``"icoFoam"`` on missing file, parse failure, or any
+    OS error so callers always get a runnable name. Used by the
+    blocking and streaming exec paths to dispatch the correct binary
+    when the BC-setup writes a non-default application (e.g.
+    pimpleFoam for the channel path so adjustTimeStep actually takes
+    effect — Codex cce9c29 review P1, 2026-04-30).
+    """
+    try:
+        text = (case_host_dir / "system" / "controlDict").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return "icoFoam"
+    m = _APPLICATION_RE.search(text)
+    return m.group(1) if m else "icoFoam"
+
+
 @dataclass(frozen=True, slots=True)
 class SolverRunResult:
     case_id: str
@@ -218,15 +244,18 @@ def run_icofoam(
             f"host filesystem fault staging case: {exc}"
         ) from exc
 
+    application = read_application_from_control_dict(case_host_dir)
     bash_cmd = (
         "source /opt/openfoam10/etc/bashrc && "
         f"cd {container_work_dir} && "
-        "icoFoam > log.icoFoam 2>&1"
+        f"{application} > log.icoFoam 2>&1"
     )
     try:
         exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
     except docker.errors.DockerException as exc:
-        raise SolverRunError(f"docker SDK error invoking icoFoam: {exc}") from exc
+        raise SolverRunError(
+            f"docker SDK error invoking {application}: {exc}"
+        ) from exc
 
     # Always pull the log first, even if exit_code != 0 — we need it
     # for the rejection message.
@@ -259,7 +288,7 @@ def run_icofoam(
 
     if exec_result.exit_code != 0:
         raise SolverRunError(
-            f"icoFoam exited with code {exec_result.exit_code}; "
+            f"{application} exited with code {exec_result.exit_code}; "
             f"see {log_dest} for full output."
         )
 
