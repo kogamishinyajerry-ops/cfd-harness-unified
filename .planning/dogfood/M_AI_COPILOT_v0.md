@@ -276,8 +276,11 @@ browser, but the dev workflow does NOT block on them:
 - Cross-tab 409 conflict UX flow (advanced §6)
 - Real face-pick from the 3D viewport (the smoke uses HTTP shortcuts)
 - Channel real-solver smoke (the `--with-solver` opt-in currently
-  validates LDC only — channel solve will be added once a small
-  channel STL fixture lands in `examples/imports/`)
+  validates LDC only — channel STL fixture is now committed at
+  `examples/imports/channel_box.stl` (1×1×2 cuboid · 12 ASCII triangles ·
+  1.4 KB); channel solve will be wired into the smoke once the
+  scaffolder helper for tmpdir-based imports is extracted from the
+  HTTP route into a callable service)
 
 ---
 

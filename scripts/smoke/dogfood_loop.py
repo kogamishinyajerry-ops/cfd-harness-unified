@@ -262,6 +262,238 @@ def _smoke_negative_paths(client, imported: Path, face_id_fn) -> None:
     _say("neg-chan", "bogus pins → channel_pin_mismatch question · executor NOT invoked ✓")
 
 
+def _smoke_real_solver_channel(repo_root: Path) -> None:
+    """OPT-IN (--with-solver): full Step 1→4 pipeline on a channel STL.
+
+    Stages a fresh `examples/imports/channel_box.stl` (1×1×2 cuboid),
+    drives it through `/api/import/stl` → `/api/import/{id}/mesh` →
+    `/api/import/{id}/setup-bc?envelope=1` (uncertain) → PUT pins →
+    setup-bc again (confident · setup_channel_bc writes dicts) → real
+    `icoFoam` solve. Validates that DEC-V61-101's channel executor
+    actually drives a non-LDC simulation to convergence.
+
+    Skipped silently when Docker / cfd-openfoam / channel STL are
+    unavailable — must not break the default-fast smoke.
+
+    Wall-time: ~4-6 minutes (mesh ~30-60s · solve ~3-5min).
+    """
+    import shutil
+    import subprocess
+    import tempfile
+    import time
+    from contextlib import ExitStack
+
+    print("\n┌─ Step 1→4 · channel STL · full pipeline (slow · opt-in) ─")
+
+    # Docker availability check (mirrors _smoke_real_solver).
+    try:
+        import docker  # type: ignore[import-not-found]
+        import docker.errors  # type: ignore[import-not-found]
+    except ImportError:
+        _say("skip", "docker SDK not installed — channel solver skipped")
+        return
+    try:
+        client_docker = docker.from_env()
+        container = client_docker.containers.get("cfd-openfoam")
+        if container.status != "running":
+            _say("skip", f"cfd-openfoam status={container.status!r} — channel solver skipped")
+            return
+    except docker.errors.NotFound:
+        _say("skip", "cfd-openfoam container not found — channel solver skipped")
+        return
+    except docker.errors.DockerException as exc:
+        _say("skip", f"docker not available ({exc}) — channel solver skipped")
+        return
+
+    stl_path = repo_root / "examples" / "imports" / "channel_box.stl"
+    if not stl_path.is_file():
+        _say("skip", f"no channel STL at {stl_path} — channel solver skipped")
+        return
+
+    # Repoint IMPORTED_DIR + DRAFTS_DIR for both the import scaffolder
+    # and every consumer route. Use ExitStack to keep monkeypatch
+    # cleanup precise — leaking IMPORTED_DIR after the smoke would
+    # break later tests that share process state.
+    from fastapi.testclient import TestClient
+    from ui.backend.main import app
+    from ui.backend.services.case_annotations import face_id
+    from ui.backend.services.case_solve import run_icofoam
+
+    with tempfile.TemporaryDirectory(prefix="channel_smoke_") as td:
+        drafts = Path(td) / "user_drafts"
+        imported = drafts / "imported"
+        imported.mkdir(parents=True)
+
+        # Patch IMPORTED_DIR / DRAFTS_DIR everywhere they're imported.
+        from ui.backend.routes import case_solve as rcs
+        from ui.backend.routes import case_annotations as rca
+        from ui.backend.services.case_scaffold import template_clone as tc
+        from ui.backend.services import case_drafts as cd
+        from ui.backend.services.meshing_gmsh import pipeline as pipe_mod
+        import ui.backend.services.case_scaffold as cs
+
+        originals = {
+            "cs.IMPORTED_DIR": cs.IMPORTED_DIR,
+            "tc.IMPORTED_DIR": tc.IMPORTED_DIR,
+            "tc.DRAFTS_DIR": tc.DRAFTS_DIR,
+            "cd.DRAFTS_DIR": cd.DRAFTS_DIR,
+            "rcs.IMPORTED_DIR": rcs.IMPORTED_DIR,
+            "rca.IMPORTED_DIR": rca.IMPORTED_DIR,
+            "pipe_mod.IMPORTED_DIR": pipe_mod.IMPORTED_DIR,
+        }
+        cs.IMPORTED_DIR = imported
+        tc.IMPORTED_DIR = imported
+        tc.DRAFTS_DIR = drafts
+        cd.DRAFTS_DIR = drafts
+        rcs.IMPORTED_DIR = imported
+        rca.IMPORTED_DIR = imported
+        pipe_mod.IMPORTED_DIR = imported
+
+        try:
+            client = TestClient(app)
+
+            # Step 1: import.
+            t0 = time.time()
+            with stl_path.open("rb") as f:
+                r = client.post(
+                    "/api/import/stl",
+                    files={"file": ("channel_box.stl", f.read(), "application/octet-stream")},
+                )
+            assert r.status_code == 200, r.text
+            case_id = r.json()["case_id"]
+            _say("step1", f"import → case_id={case_id} ({time.time()-t0:.1f}s)")
+
+            # Step 2: mesh (gmsh + gmshToFoam in container). The mesh
+            # route requires a JSON body with mesh_mode (defaults to
+            # "beginner") — TestClient doesn't auto-send {} like a
+            # browser would, so be explicit.
+            t0 = time.time()
+            r = client.post(
+                f"/api/import/{case_id}/mesh",
+                json={"mesh_mode": "beginner"},
+            )
+            assert r.status_code == 200, r.text
+            mesh_dt = time.time() - t0
+            _say("step2", f"mesh → polyMesh on host ({mesh_dt:.1f}s · cells={r.json().get('cell_count', '?')})")
+
+            # Step 3a: first envelope call → uncertain (asks inlet/outlet).
+            r = client.post(f"/api/import/{case_id}/setup-bc", params={"envelope": 1})
+            assert r.status_code == 200, r.text
+            env = r.json()
+            assert env["confidence"] == "uncertain", env
+            qids = {q["id"] for q in env["unresolved_questions"]}
+            assert "inlet_face" in qids and "outlet_face" in qids
+            _say("step3a", "envelope=uncertain · inlet_face + outlet_face questions ✓")
+
+            # Step 3b: read the meshed polyMesh to find ALL z≈0 plane
+            # faces (inlet) and z≈2 plane faces (outlet). gmsh
+            # tessellates each STL face into many triangles, so a
+            # single hand-computed face_id won't match — we need to
+            # collect the post-mesh face_id for every triangle whose
+            # vertices lie on the cap plane. PUT all of them as
+            # inlet/outlet pins so the executor routes the full cap
+            # into the inlet/outlet patches (the rest stays as walls).
+            from ui.backend.services.render.polymesh_parser import (
+                parse_faces, parse_points, validate_face_indices,
+            )
+            from ui.backend.services.render.bc_glb import (
+                _bc_source_files, _read_boundary_patches,
+            )
+            case_dir_path = imported / case_id
+            polymesh = case_dir_path / "constant" / "polyMesh"
+            points_path, faces_path, boundary_path = _bc_source_files(
+                polymesh, case_dir_path
+            )
+            points = parse_points(points_path)
+            faces = parse_faces(faces_path)
+            validate_face_indices(faces, len(points))
+            patches = _read_boundary_patches(boundary_path)
+            CAP_EPS = 1e-4
+            inlet_face_ids: list[str] = []
+            outlet_face_ids: list[str] = []
+            for _name, (start_face, n_faces) in patches.items():
+                for face_idx in range(start_face, start_face + n_faces):
+                    if face_idx >= len(faces):
+                        continue
+                    verts_xyz = [
+                        (
+                            float(points[v][0]),
+                            float(points[v][1]),
+                            float(points[v][2]),
+                        )
+                        for v in faces[face_idx]
+                    ]
+                    fid = face_id(verts_xyz)
+                    if all(abs(v[2] - 0.0) < CAP_EPS for v in verts_xyz):
+                        inlet_face_ids.append(fid)
+                    elif all(abs(v[2] - 2.0) < CAP_EPS for v in verts_xyz):
+                        outlet_face_ids.append(fid)
+            assert inlet_face_ids and outlet_face_ids, (
+                f"no boundary faces matched z=0 / z=2 cap planes "
+                f"(found inlet={len(inlet_face_ids)} outlet={len(outlet_face_ids)})"
+            )
+
+            # Build the PUT body — name each pin slot uniquely (inlet_NNN,
+            # outlet_NNN) so the classifier substring-matcher collects
+            # them all into the inlet/outlet pin sets.
+            put_faces: list[dict[str, object]] = []
+            for i, fid in enumerate(inlet_face_ids):
+                put_faces.append({
+                    "face_id": fid, "name": f"inlet_{i:03d}",
+                    "confidence": "user_authoritative",
+                })
+            for i, fid in enumerate(outlet_face_ids):
+                put_faces.append({
+                    "face_id": fid, "name": f"outlet_{i:03d}",
+                    "confidence": "user_authoritative",
+                })
+            r_put = client.put(
+                f"/api/cases/{case_id}/face-annotations",
+                json={
+                    "if_match_revision": 0,
+                    "annotated_by": "human",
+                    "faces": put_faces,
+                },
+            )
+            assert r_put.status_code == 200, r_put.text
+            _say(
+                "step3b",
+                f"PUT {len(inlet_face_ids)} inlet · {len(outlet_face_ids)} outlet "
+                f"pins · revision={r_put.json()['revision']} ✓",
+            )
+
+            # Step 3c: re-run envelope → confident · setup_channel_bc writes dicts.
+            r = client.post(f"/api/import/{case_id}/setup-bc", params={"envelope": 1})
+            assert r.status_code == 200, r.text
+            env = r.json()
+            assert env["confidence"] == "confident", env
+            _say("step3c", f"envelope=confident · {env['summary'][:80]}…")
+
+            # Step 4: real icoFoam solve.
+            case_dir = imported / case_id
+            t0 = time.time()
+            res = run_icofoam(case_host_dir=case_dir)
+            solve_dt = time.time() - t0
+            assert res.converged, (
+                f"channel icoFoam did NOT converge "
+                f"(wall_time={solve_dt:.1f}s · time_dirs={res.time_directories})"
+            )
+            assert len(res.time_directories) >= 2
+            _say(
+                "step4",
+                f"icoFoam converged in {solve_dt:.1f}s · {len(res.time_directories)} "
+                f"time dirs · residual_p={res.last_initial_residual_p}",
+            )
+        finally:
+            cs.IMPORTED_DIR = originals["cs.IMPORTED_DIR"]
+            tc.IMPORTED_DIR = originals["tc.IMPORTED_DIR"]
+            tc.DRAFTS_DIR = originals["tc.DRAFTS_DIR"]
+            cd.DRAFTS_DIR = originals["cd.DRAFTS_DIR"]
+            rcs.IMPORTED_DIR = originals["rcs.IMPORTED_DIR"]
+            rca.IMPORTED_DIR = originals["rca.IMPORTED_DIR"]
+            pipe_mod.IMPORTED_DIR = originals["pipe_mod.IMPORTED_DIR"]
+
+
 def _smoke_real_solver(repo_root: Path) -> None:
     """OPT-IN (--with-solver): run icoFoam in the cfd-openfoam Docker
     container against a real meshed LDC fixture. Validates Step 4 of
@@ -552,6 +784,7 @@ def main() -> int:
 
     if "--with-solver" in sys.argv:
         _smoke_real_solver(repo_root)
+        _smoke_real_solver_channel(repo_root)
     else:
         print("\n┌─ Step 4 · real solver · skipped (pass --with-solver to enable) ─")
 
