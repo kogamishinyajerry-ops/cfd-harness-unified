@@ -126,24 +126,26 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Setup",
     longLabel: "3 · Setup BC",
     viewportConfig: {
-      // Phase-1A (DEC-V61-097, user feedback 2026-04-29): replaced the
-      // static bc-overlay.png with an interactive 3D viewport — same
-      // vtk.js orbit controls as Step 1, but each polyMesh boundary
-      // patch is rendered as its own TRIANGLES primitive with a
-      // distinct PBR baseColorFactor: lid in red, fixedWalls in gray,
-      // frontAndBack in muted blue (semi-transparent). Gated on Step 3
-      // completion so the glb only builds AFTER setup-bc has split the
-      // patches; pre-setup the user sees the viewportEmptyHint instead.
+      // 2026-04-30 user-feedback fix: previously gated on Step 3
+      // completion, which inverted the workflow — picking is the input
+      // to setup-bc, so the viewport must be live BEFORE the executor
+      // runs. Now gates on Step 2 (mesh) instead, and renders
+      // /mesh/render so face-picking maps to polyMesh cells directly.
+      // Post-completion the same URL keeps working (boundary patches
+      // are re-written but vertex hashes / face_ids are stable). The
+      // BC color overlay (red lid / gray walls) is layered back in a
+      // follow-up — picking interactivity blocks the user, color is
+      // polish.
       format: "glb",
       glbUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/bc/render` : null,
+        caseId ? `/api/cases/${caseId}/mesh/render` : null,
       stlUrl: () => null,
-      gateOnStepCompletion: 3,
+      gateOnStepCompletion: 2,
     },
     taskPanelComponent: Step3SetupBC,
     aiActionWiredInTierA: true,
     viewportEmptyHint:
-      "Step 3 · Setup BC — click [AI 处理] in the right rail to label the lid + walls. The viewport will then show the cube in 3D with the lid (red), walls (gray), and front/back patches (semi-transparent blue) — drag to rotate.",
+      "Step 3 · Setup BC — finish meshing in Step 2 first. Once the polyMesh exists you can click faces here to pin them (e.g. mark the LDC lid), then click [AI 处理] to run setup-bc with your annotations.",
   },
   {
     id: 4,
@@ -402,10 +404,7 @@ export function StepPanelShell() {
                     <ViewportWithFacePick
                       viewportProps={viewportProps}
                       caseId={caseId}
-                      pickMode={
-                        activeStep.id === 3 &&
-                        stepStates[3] === "completed"
-                      }
+                      pickMode={activeStep.id === 3}
                     />
                   )}
                 </Suspense>
