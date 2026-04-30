@@ -499,20 +499,29 @@ export function createKernel(
     }
   }
 
-  // Precompute coplanar groups for an actor. Walks every triangle,
-  // computes its plane (normalized normal + signed distance from
-  // origin), quantizes to a string key, and bins cellIds by that
-  // key. (Dogfood feedback 2026-04-30: gmsh tet meshes give 1
-  // triangle per polyMesh face, so face_id-grouping is 1:1 — no
-  // visible expansion. Coplanar grouping recovers the "highlight
-  // the whole flat side of the cube" semantics for axis-aligned
-  // dogfood geometries.)
+  // Precompute face-segment groups for an actor by region-growing
+  // BFS over edge-adjacent triangles, only crossing edges whose
+  // dihedral angle is smooth (below ~30°). This subsumes pure
+  // coplanar grouping:
+  //   - Cube: same-face triangles share dihedral=0 (merge), cross-
+  //     face triangles share dihedral=90° (split). Result: 6 faces.
+  //   - Cylinder side: gmsh's circumferential discretization has
+  //     ~360°/N dihedral per segment-step (typically 5–15° for
+  //     N≥24). All triangles merge into one smooth segment.
+  //   - Cylinder side meeting flat caps: dihedral spike at the
+  //     rim (90°) splits side from caps cleanly.
   //
-  // For ~3260 triangles on the LDC this is ~1 ms. For curved
-  // surfaces every triangle ends up in its own group, which
-  // gracefully degrades to single-triangle highlight — that's
-  // the right behavior for a curved face anyway.
-  function precomputeCoplanarGroups(
+  // Edge keys are built from quantized vertex POSITIONS rather
+  // than vertex indices, so the algorithm is robust to vertex
+  // duplication at primitive boundaries. Quantization is tight
+  // enough (1e-5) to avoid false-merging numerically-near-but-
+  // -physically-distinct vertices.
+  //
+  // For ~3260 LDC triangles this runs in ~3 ms (one-shot,
+  // cached). Curved surfaces no longer degrade to singletons.
+  // (Dogfood feedback 2026-04-30: cylinder side was unselectable
+  // as one face under pure coplanar grouping.)
+  function precomputeFaceSegments(
     actor: ReturnType<typeof vtkActor.newInstance>,
   ): void {
     if (coplanarGroups.has(actor)) return;
@@ -525,23 +534,21 @@ export function createKernel(
     const pointArray = points.getData?.();
     if (!cellData || !pointArray) return;
 
-    // Quantize to ~4 decimal places (TOL=1e4 multiply-then-round).
-    // Tet meshes from gmsh emit boundary triangles whose vertex
-    // coords are exactly equal on a flat face, so 1e-4 is more
-    // than enough; tighter risks fragmenting a single cube face
-    // into multiple groups due to FP drift.
-    const TOL = 1e4;
-    const groups = new Map<number, number[]>();
-    const keyToList = new Map<string, number[]>();
-
-    let cellId = 0;
+    // Pass 1: walk cellData, compute per-cell normalized normal +
+    // record vertex indices in cell-id order. Skip non-triangles
+    // (still increment cellId so the index space stays aligned
+    // with picker.getCellId()).
+    const cellNormals: number[] = []; // flat: cellId*3 + axis
+    const cellVerts: number[] = []; // flat: cellId*3 + slot
+    let cellCount = 0;
     for (let i = 0; i + 3 < cellData.length; ) {
       const n = cellData[i];
       if (n !== 3) {
-        // Skip non-triangle cells (defensive for mixed-cell
-        // polyData; bc_glb always emits triangles).
+        // Push placeholders so cellId space stays contiguous.
+        cellNormals.push(0, 0, 0);
+        cellVerts.push(-1, -1, -1);
         i += n + 1;
-        cellId++;
+        cellCount++;
         continue;
       }
       const a = cellData[i + 1];
@@ -549,17 +556,16 @@ export function createKernel(
       const c = cellData[i + 3];
       i += 4;
 
-      const ax = pointArray[a * 3 + 0];
-      const ay = pointArray[a * 3 + 1];
-      const az = pointArray[a * 3 + 2];
-      const bx = pointArray[b * 3 + 0];
-      const by = pointArray[b * 3 + 1];
-      const bz = pointArray[b * 3 + 2];
-      const cx = pointArray[c * 3 + 0];
-      const cy = pointArray[c * 3 + 1];
-      const cz = pointArray[c * 3 + 2];
+      const ax = pointArray[a * 3 + 0],
+        ay = pointArray[a * 3 + 1],
+        az = pointArray[a * 3 + 2];
+      const bx = pointArray[b * 3 + 0],
+        by = pointArray[b * 3 + 1],
+        bz = pointArray[b * 3 + 2];
+      const cx = pointArray[c * 3 + 0],
+        cy = pointArray[c * 3 + 1],
+        cz = pointArray[c * 3 + 2];
 
-      // Plane normal via cross product, normalized.
       const ux = bx - ax,
         uy = by - ay,
         uz = bz - az;
@@ -570,47 +576,118 @@ export function createKernel(
       let ny = uz * vx - ux * vz;
       let nz = ux * vy - uy * vx;
       const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      if (len === 0) {
-        // Degenerate triangle — record a singleton group.
-        groups.set(cellId, [cellId]);
-        cellId++;
+      if (len > 0) {
+        nx /= len;
+        ny /= len;
+        nz /= len;
+      }
+      cellNormals.push(nx, ny, nz);
+      cellVerts.push(a, b, c);
+      cellCount++;
+    }
+
+    // Pass 2: build position-quantized edge → cellIds map. Edge
+    // key uses sorted quantized endpoint coords, so two triangles
+    // that share a physical edge but use different vertex INDICES
+    // (because the GLB primitive boundary duplicated the vertex)
+    // still hash to the same edge.
+    const POS_TOL = 1e5;
+    const quantize = (idx: number): string => {
+      const x = pointArray[idx * 3 + 0];
+      const y = pointArray[idx * 3 + 1];
+      const z = pointArray[idx * 3 + 2];
+      return (
+        Math.round(x * POS_TOL) +
+        "/" +
+        Math.round(y * POS_TOL) +
+        "/" +
+        Math.round(z * POS_TOL)
+      );
+    };
+    const edgeKey = (qa: string, qb: string): string =>
+      qa < qb ? qa + "|" + qb : qb + "|" + qa;
+    const edgeMap = new Map<string, number[]>();
+    for (let cid = 0; cid < cellCount; cid++) {
+      const a = cellVerts[cid * 3 + 0];
+      const b = cellVerts[cid * 3 + 1];
+      const c = cellVerts[cid * 3 + 2];
+      if (a < 0) continue; // skipped non-triangle
+      const qa = quantize(a),
+        qb = quantize(b),
+        qc = quantize(c);
+      for (const k of [edgeKey(qa, qb), edgeKey(qb, qc), edgeKey(qc, qa)]) {
+        let list = edgeMap.get(k);
+        if (!list) {
+          list = [];
+          edgeMap.set(k, list);
+        }
+        list.push(cid);
+      }
+    }
+
+    // Pass 3: BFS from each unvisited cell, traversing edges
+    // whose adjacent normals form a smooth dihedral. Threshold
+    // 30° (cos ≈ 0.866) keeps cube faces split (90° edges fail)
+    // while merging typical CAD discretization (≤15° per step
+    // on circular features). Allow signed dot OR its absolute
+    // value: if neighbor's GLB-side winding flipped its normal,
+    // |dot| still recovers coplanarity (a self-back-to-back fan
+    // case that gmsh sometimes emits at degenerate polyMesh
+    // faces).
+    const COS_THRESHOLD = Math.cos((30 * Math.PI) / 180);
+    const segmentOfCell = new Int32Array(cellCount).fill(-1);
+    const segmentLists: number[][] = [];
+    const groups = new Map<number, number[]>();
+
+    for (let start = 0; start < cellCount; start++) {
+      if (segmentOfCell[start] !== -1) continue;
+      const a = cellVerts[start * 3 + 0];
+      if (a < 0) {
+        // Non-triangle placeholder: own group.
+        const seg = [start];
+        segmentLists.push(seg);
+        groups.set(start, seg);
+        segmentOfCell[start] = segmentLists.length - 1;
         continue;
       }
-      nx /= len;
-      ny /= len;
-      nz /= len;
-      // Canonicalize sign so antiparallel-but-coplanar normals
-      // hash to the same key (a quad fan-triangulated in opposite
-      // winding still belongs to the same flat face).
-      if (
-        nx < 0 ||
-        (nx === 0 && ny < 0) ||
-        (nx === 0 && ny === 0 && nz < 0)
-      ) {
-        nx = -nx;
-        ny = -ny;
-        nz = -nz;
+      const segId = segmentLists.length;
+      const seg: number[] = [];
+      segmentLists.push(seg);
+      // Use array-based queue with head pointer (shift() is O(n)).
+      const queue: number[] = [start];
+      let head = 0;
+      segmentOfCell[start] = segId;
+      while (head < queue.length) {
+        const cell = queue[head++];
+        seg.push(cell);
+        const nx = cellNormals[cell * 3 + 0];
+        const ny = cellNormals[cell * 3 + 1];
+        const nz = cellNormals[cell * 3 + 2];
+        const va = cellVerts[cell * 3 + 0];
+        const vb = cellVerts[cell * 3 + 1];
+        const vc = cellVerts[cell * 3 + 2];
+        const qa = quantize(va),
+          qb = quantize(vb),
+          qc = quantize(vc);
+        const edges = [edgeKey(qa, qb), edgeKey(qb, qc), edgeKey(qc, qa)];
+        for (const k of edges) {
+          const neighbors = edgeMap.get(k);
+          if (!neighbors) continue;
+          for (const nb of neighbors) {
+            if (nb === cell || segmentOfCell[nb] !== -1) continue;
+            const mx = cellNormals[nb * 3 + 0];
+            const my = cellNormals[nb * 3 + 1];
+            const mz = cellNormals[nb * 3 + 2];
+            const dot = nx * mx + ny * my + nz * mz;
+            if (Math.abs(dot) >= COS_THRESHOLD) {
+              segmentOfCell[nb] = segId;
+              queue.push(nb);
+            }
+          }
+        }
       }
-      const offset = nx * ax + ny * ay + nz * az;
-
-      const key =
-        Math.round(nx * TOL) +
-        "/" +
-        Math.round(ny * TOL) +
-        "/" +
-        Math.round(nz * TOL) +
-        "/" +
-        Math.round(offset * TOL);
-      let list = keyToList.get(key);
-      if (!list) {
-        list = [];
-        keyToList.set(key, list);
-      }
-      list.push(cellId);
-      // Every cellId in the group shares a reference to the same
-      // list, so any pick resolves to the full set.
-      groups.set(cellId, list);
-      cellId++;
+      // Bind every cellId in the segment to the same list ref.
+      for (const cid of seg) groups.set(cid, seg);
     }
     coplanarGroups.set(actor, groups);
   }
@@ -619,7 +696,7 @@ export function createKernel(
     actor: ReturnType<typeof vtkActor.newInstance>,
     cellId: number,
   ): number[] {
-    precomputeCoplanarGroups(actor);
+    precomputeFaceSegments(actor);
     return coplanarGroups.get(actor)?.get(cellId) ?? [cellId];
   }
 
