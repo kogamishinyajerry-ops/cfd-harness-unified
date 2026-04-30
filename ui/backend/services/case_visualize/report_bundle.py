@@ -270,7 +270,6 @@ def _select_slab(
         Ux_raw,
         Uy_raw,
         p_raw,
-        n_bins=_GRID_RES // 2,
     )
     return _SliceFields(
         Cx=Cx_grid,
@@ -289,54 +288,56 @@ def _project_slab(
     Ux: np.ndarray,
     Uy: np.ndarray,
     p: np.ndarray | None,
-    n_bins: int,
+    n_bins: int = 0,  # legacy arg kept for signature stability; unused
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
-    """Bin slab cells onto a regular (Cx, Cy) grid, averaging values
-    that fall in the same bin. Returns the bin-centre coordinates +
-    averaged field values for non-empty bins.
+    """Collapse cells with EXACTLY-coincident (Cx, Cy) by averaging
+    their field values. Preserves every distinct projection unchanged.
 
-    For pseudo-2D meshes (one cell thick on the slab axis) almost
-    every input (Cx, Cy) is unique → binning preserves the original
-    sample count. For genuinely 3D meshes (LDC unit cube etc.) the
-    slab catches multiple depth samples per (Cx, Cy) → binning
-    deduplicates by averaging. Pure numpy; no scipy KD-tree needed.
+    Codex round 6 P2 asked for dedup so matplotlib.tri.Triangulation
+    didn't choke on duplicate (x, y) for genuinely 3D meshes. Codex
+    round 7 P2 noted that the round-6 implementation (fixed
+    110×110 binning) blurred fine pseudo-2D meshes by merging
+    unrelated samples that happened to land in the same coarse bin.
+
+    This implementation collapses ONLY exact-equal (Cx, Cy) pairs:
+
+    * Use np.unique with axis=0 to find unique (Cx, Cy) rows; cells
+      that map to the same row get averaged via np.bincount.
+    * For pseudo-2D meshes (every cell has a unique centroid) the
+      output is identical to the input — fast path returns originals.
+    * For genuinely 3D meshes (the rare case where two distinct cells
+      have IDENTICAL float (x, y) centroids — possible after a
+      structured-mesh extrusion), averaging is the right reduction.
+
+    np.unique on float64 needs the values to be bit-equal — which is
+    what we want here. Anything that round-trips through OpenFOAM's
+    cell-centres parser stays bit-stable, so true projection
+    duplicates from a structured mesh hit the average branch and
+    everything else passes through.
     """
+    del n_bins  # legacy
     n = len(Cx)
     if n == 0:
         return Cx, Cy, Ux, Uy, p
-    xmin, xmax = float(Cx.min()), float(Cx.max())
-    ymin, ymax = float(Cy.min()), float(Cy.max())
-    dx = xmax - xmin
-    dy = ymax - ymin
-    if dx <= 0 or dy <= 0:
-        # Degenerate domain — pass through; downstream handles the
-        # error path.
+    coords = np.column_stack([Cx, Cy])
+    unique_coords, inverse = np.unique(coords, axis=0, return_inverse=True)
+    if len(unique_coords) == n:
+        # No exact duplicates — every cell already has a distinct
+        # (Cx, Cy). This is the common path on every gmsh-meshed
+        # case we run today; matplotlib.tri can triangulate the
+        # original (Cx, Cy) cloud directly without losing fidelity.
         return Cx, Cy, Ux, Uy, p
-    # +1 padding on the upper edge so xmax/ymax fall inside the last bin.
-    eps_x = dx * 1e-9
-    eps_y = dy * 1e-9
-    ix = np.clip(((Cx - xmin) / (dx + eps_x) * n_bins).astype(np.int64), 0, n_bins - 1)
-    iy = np.clip(((Cy - ymin) / (dy + eps_y) * n_bins).astype(np.int64), 0, n_bins - 1)
-    flat_idx = ix * n_bins + iy
-    # Aggregate via np.bincount for sums + counts.
-    counts = np.bincount(flat_idx, minlength=n_bins * n_bins)
-    nonempty = np.flatnonzero(counts > 0)
-    if len(nonempty) >= n:
-        # No collisions — every cell got its own bin. Return originals
-        # so we don't pay the binning cost. This is the pseudo-2D
-        # path on every dogfood mesh we ship today (gmsh tet mesh on
-        # LDC unit cube generates ~1500 unique slab cells, n_bins²
-        # = 12100 bins).
-        return Cx, Cy, Ux, Uy, p
+
+    counts = np.bincount(inverse, minlength=len(unique_coords)).astype(np.float64)
 
     def _avg(values: np.ndarray) -> np.ndarray:
-        sums = np.bincount(flat_idx, weights=values, minlength=n_bins * n_bins)
-        return sums[nonempty] / counts[nonempty]
+        sums = np.bincount(
+            inverse, weights=values, minlength=len(unique_coords)
+        )
+        return sums / counts
 
-    bx = nonempty // n_bins
-    by = nonempty % n_bins
-    Cx_out = xmin + (bx + 0.5) * (dx / n_bins)
-    Cy_out = ymin + (by + 0.5) * (dy / n_bins)
+    Cx_out = unique_coords[:, 0]
+    Cy_out = unique_coords[:, 1]
     Ux_out = _avg(Ux)
     Uy_out = _avg(Uy)
     p_out = _avg(p) if p is not None else None

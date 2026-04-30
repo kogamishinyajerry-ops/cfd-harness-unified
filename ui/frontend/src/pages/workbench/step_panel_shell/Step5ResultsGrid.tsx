@@ -178,6 +178,12 @@ export function Step5ResultsGrid({ caseId, height }: Step5ResultsGridProps) {
 
   const cells = data.cell_count.toLocaleString();
   const planeLabel = data.plane_axes.join("-");
+  // Codex round-7 P3 (2026-04-30): the backend auto-picks non-x-y
+  // planes (e.g. x-z for NACA-like meshes), but the previous
+  // captions hard-coded U_x/U_y/x/y. Drive captions from
+  // data.plane_axes so the right rail matches the rendered plot
+  // titles regardless of which plane was picked.
+  const [a0, a1] = data.plane_axes;
   return (
     <div
       style={{ height }}
@@ -208,13 +214,13 @@ export function Step5ResultsGrid({ caseId, height }: Step5ResultsGridProps) {
         />
         <FigureCard
           title="vorticity"
-          caption="∂Uy/∂x − ∂Ux/∂y"
+          caption={`∂U${a1}/∂${a0} − ∂U${a0}/∂${a1}`}
           url={data.artifacts.vorticity}
           onStale={handleStale}
         />
         <FigureCard
           title="centreline profiles"
-          caption="U_x(y) · U_y(x) at midlines"
+          caption={`U_${a0}(${a1}) · U_${a1}(${a0}) at midlines`}
           url={data.artifacts.centerline}
           onStale={handleStale}
         />

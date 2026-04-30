@@ -18,12 +18,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
 import type {
   CaseSolveRejection,
-  ReportBundle,
   ResultsSummary,
 } from "@/types/case_solve";
 
@@ -43,20 +42,37 @@ export function Step5ResultsView({
   registerAiAction,
 }: StepTaskPanelProps) {
   const queryClient = useQueryClient();
-  const [bundle, setBundle] = useState<ReportBundle | null>(null);
-  // Codex round-3 P1 (2026-04-30): the previous Phase-1A view also
-  // surfaced the recirculation sanity check from /results-summary
-  // (warns when a "converged" LDC field doesn't actually look like a
-  // closed-cavity recirculation — bad BCs, plug flow, etc.). My
-  // initial rewrite dropped this gate and the new green banner fired
-  // unconditionally on any solve that produced renderable plots,
-  // which is a truthfulness regression. Re-fetch results-summary
-  // alongside the bundle so the sanity banner stays.
+  // Codex round-7 P3 (2026-04-30): observe the same React Query cache
+  // entry the grid uses so the right rail's "✓ Bundle ready" card
+  // disappears when the grid drops the cache (e.g. on 410 stale-tile
+  // detection). Local useState held bundle independently and could
+  // drift out of sync. resultsSummary stays in local state because
+  // it's a separate endpoint with its own lifecycle, but it's reset
+  // alongside the bundle on every fetchBundle call.
+  const bundleQuery = useQuery({
+    queryKey: ["report-bundle", caseId],
+    queryFn: () => api.reportBundle(caseId),
+    enabled: false,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const bundle = bundleQuery.data ?? null;
   const [resultsSummary, setResultsSummary] = useState<ResultsSummary | null>(
     null,
   );
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+
+  // Reset resultsSummary whenever the bundle cache is dropped (the
+  // grid's onStale handler removeQueries it on a 410 / SolveStream
+  // does the same on a re-solve). Without this, the right rail
+  // would keep showing stale recirculation text after the grid
+  // already collapsed back to its empty hint.
+  useEffect(() => {
+    if (bundle === null) {
+      setResultsSummary(null);
+    }
+  }, [bundle]);
 
   const fetchBundle = useCallback(async () => {
     setRejection(null);
@@ -73,14 +89,15 @@ export function Step5ResultsView({
       await queryClient.invalidateQueries({
         queryKey: ["report-bundle", caseId],
       });
-      const [r, s] = await Promise.all([
+      const [, s] = await Promise.all([
+        // fetchQuery populates the shared cache that bundleQuery
+        // observes; we don't need the return value separately.
         queryClient.fetchQuery({
           queryKey: ["report-bundle", caseId],
           queryFn: () => api.reportBundle(caseId),
         }),
         api.resultsSummary(caseId),
       ]);
-      setBundle(r);
       setResultsSummary(s);
       onStepComplete();
     } catch (e) {

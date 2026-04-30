@@ -303,19 +303,19 @@ def test_project_slab_collapses_duplicate_xy_samples():
     Ux = np.array([0, 10, 0, 10] * 4, dtype=float)
     Uy = np.zeros(16)
     Cx_out, Cy_out, Ux_out, Uy_out, p_out = _project_slab(
-        Cx, Cy, Ux, Uy, None, n_bins=2
+        Cx, Cy, Ux, Uy, None
     )
-    # 4 unique (x, y) bins → 4 output cells
+    # 4 unique (x, y) → 4 output cells
     assert len(Cx_out) == 4
-    # Every bin should average to 5 (mean of 0, 10, 0, 10)
+    # Every group should average to 5 (mean of 0, 10, 0, 10)
     assert np.allclose(Ux_out, 5.0)
     assert p_out is None
 
 
 def test_project_slab_passthrough_when_no_collisions():
-    """Pseudo-2D mesh: every (Cx, Cy) is unique → binning is a
+    """Pseudo-2D mesh: every (Cx, Cy) is unique → dedup is a
     no-op and the function returns the original arrays so we don't
-    pay the binning cost.
+    pay the cost.
     """
     from ui.backend.services.case_visualize.report_bundle import _project_slab
 
@@ -323,8 +323,27 @@ def test_project_slab_passthrough_when_no_collisions():
     Cy = np.array([0, 1, 2, 3], dtype=float)
     Ux = np.array([0, 1, 2, 3], dtype=float)
     Uy = np.zeros(4)
-    Cx_out, *_ = _project_slab(Cx, Cy, Ux, Uy, None, n_bins=64)
+    Cx_out, *_ = _project_slab(Cx, Cy, Ux, Uy, None)
     assert Cx_out is Cx  # identity check — pass-through
+
+
+def test_project_slab_preserves_close_but_distinct_samples():
+    """Codex round-7 P2 (2026-04-30): the previous 110x110 binning
+    blurred unrelated cells that happened to land in the same coarse
+    bin. The new exact-duplicate dedup must NOT collapse cells whose
+    coords differ by even one ULP.
+    """
+    from ui.backend.services.case_visualize.report_bundle import _project_slab
+
+    n = 200
+    Cx = np.linspace(0, 1, n)  # all distinct
+    Cy = np.linspace(0, 1, n)
+    Ux = np.arange(n, dtype=float)
+    Uy = np.zeros(n)
+    Cx_out, _, Ux_out, *_ = _project_slab(Cx, Cy, Ux, Uy, None)
+    # Identity pass-through preserves every distinct sample.
+    assert Cx_out is Cx
+    assert Ux_out is Ux
 
 
 # -- stale C recovery (Codex round-5 P1) -------------------------------
