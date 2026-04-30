@@ -68,6 +68,43 @@ describe("Step4SolveRun · raw dict editor wiring (DEC-V61-102 Phase 2)", () => 
     expect(apiMock.listRawDicts).toHaveBeenCalledWith("imported_test");
   });
 
+  it("stays mounted across collapse cycles (sticky after first open)", async () => {
+    // Codex Step-4 review LOW closure: the prior version of this
+    // suite only checked that toggle MOUNTS the editor, never that
+    // a subsequent close→reopen leaves it mounted. The sticky
+    // rawDictHasOpened gate is the critical bit — without it,
+    // collapsing the disclosure would unmount RawDictEditor and
+    // discard unsaved buffer.
+    apiMock.listRawDicts.mockResolvedValue([
+      { path: "system/controlDict", exists: true, source: "ai", etag: "1" },
+    ]);
+    renderStep4();
+    const details = screen.getByTestId("step4-raw-dict-editor") as HTMLDetailsElement;
+
+    // First open → editor mounts.
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    // Wait for the editor to render at least one tab.
+    await screen.findAllByText("system/controlDict");
+
+    // Close the disclosure. The list-fetch call count snapshot lets
+    // us confirm the editor was NOT torn down (a remount would
+    // re-trigger the listRawDicts query and bump the call count).
+    const callsAfterFirstOpen = apiMock.listRawDicts.mock.calls.length;
+    details.open = false;
+    fireEvent(details, new Event("toggle"));
+
+    // Reopen.
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+
+    // The editor's tab(s) should still be present without any new fetch.
+    // (Both the tab and the path header render the same text — that's
+    // why we use queryAllByText here.)
+    expect(screen.queryAllByText("system/controlDict").length).toBeGreaterThan(0);
+    expect(apiMock.listRawDicts.mock.calls.length).toBe(callsAfterFirstOpen);
+  });
+
   it("limits visible paths to the solver-control set (controlDict/fvSchemes/fvSolution)", async () => {
     apiMock.listRawDicts.mockResolvedValue([
       { path: "system/controlDict", exists: true, source: "ai", etag: "1" },
