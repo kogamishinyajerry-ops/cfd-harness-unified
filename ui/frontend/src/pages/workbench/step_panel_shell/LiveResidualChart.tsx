@@ -30,7 +30,7 @@ const _COLORS = {
 export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChartProps) {
   const { series, phase, errorMessage, summary } = useSolveStream();
 
-  const { plotW, plotH, xMax, yMinLog, yMaxLog, polylines } = useMemo(() => {
+  const { plotW, plotH, xMax, yMinLog, yMaxLog, polylines, singletons } = useMemo(() => {
     const plotW = _W - _PAD_L - _PAD_R;
     const plotH = height - _PAD_T - _PAD_B;
     if (series.length === 0) {
@@ -41,6 +41,7 @@ export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChart
         yMinLog: -3,
         yMaxLog: 0,
         polylines: { p: "", Ux: "", Uy: "", Uz: "" },
+        singletons: { p: null, Ux: null, Uy: null, Uz: null },
       };
     }
     const xMax = series[series.length - 1].t || 1;
@@ -61,19 +62,37 @@ export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChart
       : 0;
     const yLogSpan = Math.max(yMaxLog - yMinLog, 1);
 
-    const buildPath = (key: "p" | "Ux" | "Uy" | "Uz") => {
-      const points: string[] = [];
+    const buildSeries = (key: "p" | "Ux" | "Uy" | "Uz") => {
+      const coords: { px: number; py: number }[] = [];
       for (const row of series) {
         const v = row[key];
         if (v === undefined || v <= 0) continue;
         const xFrac = row.t / xMax;
         const yFrac = (safeLog10(v) - yMinLog) / yLogSpan;
-        const px = _PAD_L + xFrac * plotW;
-        const py = _PAD_T + (1 - yFrac) * plotH;
-        points.push(`${px.toFixed(1)},${py.toFixed(1)}`);
+        coords.push({
+          px: _PAD_L + xFrac * plotW,
+          py: _PAD_T + (1 - yFrac) * plotH,
+        });
       }
-      return points.length >= 2 ? `M ${points.join(" L ")}` : "";
+      const path =
+        coords.length >= 2
+          ? `M ${coords
+              .map((c) => `${c.px.toFixed(1)},${c.py.toFixed(1)}`)
+              .join(" L ")}`
+          : "";
+      // Codex 45960a1 round-10 P2-a: when a field has only ONE
+      // iterative residual (e.g. one early step then everything
+      // diagonal), the polyline path is empty (needs ≥2 points)
+      // and the chart shows nothing. Surface the singleton as a
+      // marker so the user still sees the measurement.
+      const singleton = coords.length === 1 ? coords[0] : null;
+      return { path, singleton };
     };
+
+    const seriesP = buildSeries("p");
+    const seriesUx = buildSeries("Ux");
+    const seriesUy = buildSeries("Uy");
+    const seriesUz = buildSeries("Uz");
 
     return {
       plotW,
@@ -82,10 +101,16 @@ export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChart
       yMinLog,
       yMaxLog,
       polylines: {
-        p: buildPath("p"),
-        Ux: buildPath("Ux"),
-        Uy: buildPath("Uy"),
-        Uz: buildPath("Uz"),
+        p: seriesP.path,
+        Ux: seriesUx.path,
+        Uy: seriesUy.path,
+        Uz: seriesUz.path,
+      },
+      singletons: {
+        p: seriesP.singleton,
+        Ux: seriesUx.singleton,
+        Uy: seriesUy.singleton,
+        Uz: seriesUz.singleton,
       },
     };
   }, [series, height]);
@@ -251,6 +276,24 @@ export function LiveResidualChart({ caseId: _caseId, height }: LiveResidualChart
             fill="none"
           />
         )}
+
+        {/* Singleton markers — one iterative residual then all
+         *  diagonal: shows up here so the chart isn't empty.
+         *  Codex 45960a1 round-10 P2-a closure 2026-04-30. */}
+        {(["Ux", "Uy", "Uz", "p"] as const).map((key) => {
+          const s = singletons[key];
+          if (!s) return null;
+          return (
+            <circle
+              key={`singleton-${key}`}
+              data-testid={`live-residual-${key}-singleton`}
+              cx={s.px}
+              cy={s.py}
+              r="2.5"
+              fill={_COLORS[key]}
+            />
+          );
+        })}
 
         {/* Legend */}
         {(["Ux", "Uy", "Uz", "p"] as const).map((key, i) => (
