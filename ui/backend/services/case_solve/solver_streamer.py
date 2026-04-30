@@ -579,7 +579,13 @@ def stream_icofoam(
             )
 
         # Final summary event — mirrors SolverRunResult shape.
-        parsed = _parse_log(log_buf.getvalue().decode("utf-8", errors="replace"))
+        # Stream-specific: skip diagonal: lines so the summary
+        # aligns with the chart (which can't render zero on a log
+        # axis). Codex round-11 closure 2026-04-30.
+        parsed = _parse_log(
+            log_buf.getvalue().decode("utf-8", errors="replace"),
+            include_diagonal=False,
+        )
         converged = _is_converged(parsed) and not fatal_seen[0]
         summary = {
             "case_id": case_host_dir.name,

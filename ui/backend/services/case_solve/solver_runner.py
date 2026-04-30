@@ -103,36 +103,43 @@ _EXEC_TIME = re.compile(
 )
 
 
-def _parse_log(log_text: str) -> dict[str, object]:
+def _parse_log(
+    log_text: str,
+    *,
+    include_diagonal: bool = True,
+) -> dict[str, object]:
     """Pull the tail-end residuals + last time + wall-clock from the
     solver log. Used both as a convergence check and to populate the
     SolverRunResult.
+
+    ``include_diagonal=True`` (default) treats ``diagonal:`` trivial-
+    matrix lines as residual=0.0 candidates. The blocking
+    ``run_icofoam`` path keeps this on so a fully-diagonal solve
+    reports a numeric residual that satisfies the smoke harness
+    contract (scripts/smoke/dogfood_loop.py asserts non-None).
+
+    ``include_diagonal=False`` is used by the SSE streamer's final
+    ``done`` event so the summary aligns with the live chart, which
+    cannot truthfully render zero on a log-scale axis. With this
+    flag off, fully-diagonal fields report None — matching what the
+    chart visually shows (no series). Codex round-11 closure
+    2026-04-30: split the path so blocking and streaming summaries
+    each tell the truth their consumer expects.
     """
     times = [float(m.group(1)) for m in _TIME_LINE.finditer(log_text)]
     end_time_reached = times[-1] if times else 0.0
 
-    # Pick the most-recent residual per field by log position.
-    # Diagonal lines DO contribute (as 0.0) so a fully-diagonal
-    # solve reports a numeric residual instead of None — the
-    # smoke harness in scripts/smoke/dogfood_loop.py asserts
-    # last_initial_residual_p is not None, and Codex round-10
-    # called this out as a contract regression. The live SSE
-    # streamer separately skips diagonal events to keep the
-    # log-scale chart calibrated; chart/summary disagreement
-    # on a pure-orthogonal mesh's final-step diagonal is an
-    # accepted limitation since the live chart cannot truthfully
-    # render zero on a log axis. Real CAD workflows (the user's
-    # reported failure mode) never hit this edge.
     last_per_field: dict[str, float] = {}
     candidates: list[tuple[int, str, float]] = []
     for m in _RES_U_LINE.finditer(log_text):
         candidates.append((m.start(), f"U{m.group(1)}", float(m.group(2))))
     for m in _RES_P_LINE.finditer(log_text):
         candidates.append((m.start(), "p", float(m.group(1))))
-    for m in _RES_DIAGONAL_LINE.finditer(log_text):
-        field = m.group(1)
-        if field in ("Ux", "Uy", "Uz", "p"):
-            candidates.append((m.start(), field, 0.0))
+    if include_diagonal:
+        for m in _RES_DIAGONAL_LINE.finditer(log_text):
+            field = m.group(1)
+            if field in ("Ux", "Uy", "Uz", "p"):
+                candidates.append((m.start(), field, 0.0))
     candidates.sort(key=lambda x: -x[0])
     for _pos, field, val in candidates:
         if field not in last_per_field:
