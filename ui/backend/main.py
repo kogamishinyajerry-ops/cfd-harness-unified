@@ -111,6 +111,21 @@ try:
 except ModuleNotFoundError:
     case_annotations = None  # type: ignore[assignment]
 
+# case_dicts routes (DEC-V61-102 M-RESCUE Phase 1.2 · raw OpenFOAM dict
+# GET/POST so engineers can override AI-authored controlDict, fvSchemes,
+# fvSolution, etc. when AI's choice doesn't fit the case).
+try:
+    from ui.backend.routes import case_dicts  # noqa: F401
+except ModuleNotFoundError:
+    case_dicts = None  # type: ignore[assignment]
+
+# case_inspect route (DEC-V61-102 M-RESCUE Phase 1.3 · case state
+# preview for the inspect-before-act UI flow).
+try:
+    from ui.backend.routes import case_inspect  # noqa: F401
+except ModuleNotFoundError:
+    case_inspect = None  # type: ignore[assignment]
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -166,3 +181,7 @@ if case_visualize is not None:
     app.include_router(case_visualize.router, prefix="/api", tags=["case-visualize"])
 if case_annotations is not None:
     app.include_router(case_annotations.router, prefix="/api", tags=["case-annotations"])
+if case_dicts is not None:
+    app.include_router(case_dicts.router, prefix="/api", tags=["case-dicts"])
+if case_inspect is not None:
+    app.include_router(case_inspect.router, prefix="/api", tags=["case-inspect"])
