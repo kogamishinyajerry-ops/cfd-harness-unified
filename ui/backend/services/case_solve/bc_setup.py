@@ -675,7 +675,14 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "startTime 0;\n"
         "stopAt endTime;\n"
         "endTime 5;\n"
-        "deltaT 0.01;\n"
+        # Initial deltaT is conservative; adjustTimeStep will scale up
+        # as the flow stabilizes and down if Co spikes. This protects
+        # against the dogfood failure mode (2026-04-30) where the
+        # channel path hit unknown CAD meshes whose cell sizing made
+        # the fixed deltaT 0.01 violate CFL — PISO then iterated tens
+        # of times per step and a 5s sim took 20+ minutes wall-time,
+        # surfacing to the user as "仿真无法进行到底，算到一半就卡住了".
+        "deltaT 0.001;\n"
         "writeControl runTime;\n"
         "writeInterval 1;\n"
         "purgeWrite 0;\n"
@@ -684,7 +691,13 @@ def _author_channel_dicts(case_dir: Path) -> tuple[str, ...]:
         "writeCompression off;\n"
         "timeFormat general;\n"
         "timePrecision 6;\n"
-        "runTimeModifiable true;\n",
+        "runTimeModifiable true;\n"
+        "adjustTimeStep yes;\n"
+        "maxCo 0.5;\n"
+        # Cap deltaT so even an empty/over-coarse mesh (where Co stays
+        # low at any step size) cannot stretch a single PISO step past
+        # the resolution we want to record residuals at.
+        "maxDeltaT 0.05;\n",
     )
 
     w(
