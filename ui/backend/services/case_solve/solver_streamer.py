@@ -143,6 +143,7 @@ def _parse_line_to_events(
     current_time: list[float | None],
     last_p: list[float | None],
     fatal_seen: list[bool],
+    last_residual_per_field: dict[str, float],
 ) -> Iterator[bytes]:
     """Mutate the parser-state lists and yield SSE bytes for any
     events the line generates. Mutating-arg pattern lets us keep
@@ -169,11 +170,13 @@ def _parse_line_to_events(
     m_u = _RES_U_LINE.search(line)
     if m_u:
         comp = m_u.group(1)
+        init_val = float(m_u.group(2))
+        last_residual_per_field[f"U{comp}"] = init_val
         yield _sse(
             "residual",
             {
                 "field": f"U{comp}",
-                "init": float(m_u.group(2)),
+                "init": init_val,
                 "final": float(m_u.group(3)),
                 "iters": int(m_u.group(4)),
                 "t": current_time[0],
@@ -184,6 +187,7 @@ def _parse_line_to_events(
     m_p = _RES_P_LINE.search(line)
     if m_p:
         last_p[0] = float(m_p.group(1))
+        last_residual_per_field["p"] = last_p[0]
         yield _sse(
             "residual",
             {
@@ -196,17 +200,41 @@ def _parse_line_to_events(
         )
         return
 
-    # diagonal: trivial-matrix solve. Codex ebd6ff3 round-4 P2:
-    # earlier rev emitted a 1e-12 sentinel so the chart drew a
-    # tick, but on mixed runs (real residuals + occasional
-    # diagonal) that sentinel forced the chart's log y-axis to
-    # span 11+ decades and squashed the real curves near the top.
-    # Solution: don't emit a residual SSE event at all for the
-    # diagonal: line. The chart simply doesn't get a point for
-    # that field on that step — physically accurate (no iteration
-    # happened, no residual to report) and y-axis stays calibrated
-    # to the actual iterative residuals around it.
-    if _RES_DIAGONAL_LINE.search(line):
+    # diagonal: trivial-matrix solve. Codex 7564541 round-5 P2:
+    # earlier revs either emitted a 1e-12 sentinel (round-3, broke
+    # log-axis scaling on mixed runs) or dropped the line entirely
+    # (round-4, made diagonal-only runs blank and mixed-end-with-
+    # diagonal disagree with the final summary). Carry-forward the
+    # last-known iterative residual for the field instead — the
+    # chart draws a flat line at the previous level (physically:
+    # "this step achieved at least the convergence we already had,
+    # since no iteration was needed") without distorting the y-
+    # axis or going blank. ``diagonal: true`` flag lets the
+    # frontend decorate or filter the marker if it ever wants to,
+    # but the default render still works.
+    m_d = _RES_DIAGONAL_LINE.search(line)
+    if m_d:
+        field_raw = m_d.group(1)
+        if field_raw in ("Ux", "Uy", "Uz", "p"):
+            iters = int(m_d.group(2))
+            carry = last_residual_per_field.get(field_raw)
+            if carry is not None:
+                yield _sse(
+                    "residual",
+                    {
+                        "field": field_raw,
+                        "init": carry,
+                        "final": carry,
+                        "iters": iters,
+                        "t": current_time[0],
+                        "diagonal": True,
+                    },
+                )
+            # If the very first step is diagonal (no carry value
+            # exists yet), drop silently — the chart will catch up
+            # on the first iterative step. This keeps the y-axis
+            # well-calibrated when the only residuals so far are
+            # zero-iteration trivial solves.
         return
 
     m_c = _CONT_LINE.search(line)
@@ -467,6 +495,10 @@ def stream_icofoam(
     current_time: list[float | None] = [None]
     last_p: list[float | None] = [None]
     fatal_seen: list[bool] = [False]
+    # Per-field carry-forward residuals so diagonal-step lines can
+    # render at the previous level instead of distorting the y-axis.
+    # Codex 7564541 round-5 P2 closure 2026-04-30.
+    last_residual_per_field: dict[str, float] = {}
 
     # Codex rounds 2 & 3: wrap the ENTIRE generator body (including the
     # very first `start` yield) in an outer try/finally so a
@@ -503,6 +535,7 @@ def stream_icofoam(
                         current_time=current_time,
                         last_p=last_p,
                         fatal_seen=fatal_seen,
+                        last_residual_per_field=last_residual_per_field,
                     )
         except Exception as exc:  # noqa: BLE001 — stream interruption
             yield _sse("error", {"detail": f"stream interrupted: {exc}"})
@@ -519,6 +552,7 @@ def stream_icofoam(
                     current_time=current_time,
                     last_p=last_p,
                     fatal_seen=fatal_seen,
+                    last_residual_per_field=last_residual_per_field,
                 )
             except Exception:  # noqa: BLE001
                 pass
