@@ -155,9 +155,21 @@ def get_report_bundle(case_id: str) -> dict:
 
 
 @router.get("/cases/{case_id}/report/{artifact}.png", tags=["case-visualize"])
-def get_report_artifact(case_id: str, artifact: str) -> Response:
+def get_report_artifact(
+    case_id: str,
+    artifact: str,
+    v: str | None = None,
+) -> Response:
     """Serve one of the cached report PNGs. ``artifact`` must be one of
     ``ARTIFACT_NAMES``; anything else returns 404.
+
+    ``v`` is the optional cache_version token from /report-bundle's
+    artifact URLs. When provided and the case has been re-solved
+    between metadata fetch and PNG fetch (Codex round-3 P2), the
+    bundle's current cache_version no longer matches ``v`` — return
+    410 Gone so the client knows to re-fetch /report-bundle. When
+    omitted, serve the current bundle (backward compatibility for
+    callers that don't pass the version, e.g. direct curl).
     """
     if artifact not in ARTIFACT_NAMES:
         raise HTTPException(
@@ -166,6 +178,19 @@ def get_report_artifact(case_id: str, artifact: str) -> Response:
         )
     case_dir = _resolve(case_id)
     try:
+        # build_report_bundle is idempotent + cached, so calling it
+        # here is cheap when nothing changed and still gives us the
+        # current cache_version to validate ``v`` against.
+        from ui.backend.services.case_visualize import build_report_bundle
+        bundle = build_report_bundle(case_dir)
+        if v is not None and v != bundle.cache_version:
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    f"artifact version {v!r} is stale; current is "
+                    f"{bundle.cache_version!r}. Re-fetch /report-bundle."
+                ),
+            )
         png = read_report_artifact(case_dir, artifact)
     except ReportBundleError as exc:
         raise _report_bundle_error_to_http(exc) from exc

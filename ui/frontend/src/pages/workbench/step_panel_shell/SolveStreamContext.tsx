@@ -19,6 +19,8 @@ import {
   useState,
 } from "react";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 export type SolveResidualKind = "p" | "Ux" | "Uy" | "Uz";
 
 export interface ResidualEvent {
@@ -76,6 +78,7 @@ interface SolveStreamState {
 const Ctx = createContext<SolveStreamState | null>(null);
 
 export function SolveStreamProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [phase, setPhase] = useState<SolveStreamPhase>("idle");
   const [caseId, setCaseId] = useState<string | null>(null);
   const [series, setSeries] = useState<PerTimestepRow[]>([]);
@@ -265,6 +268,18 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
         const s = payload as SolveStreamSummary;
         setSummary(s);
         setPhase("completed");
+        // Codex round-3 P2 (2026-04-30): a re-solve invalidates the
+        // Step 5 report bundle. The grid observer reads from React
+        // Query cache with enabled:false, so without this, navigating
+        // back to Step 5 after a re-solve would show the previous
+        // bundle's plots until the user clicked [AI 处理] again. Drop
+        // the cache entry as soon as the new solve finishes so the
+        // grid renders empty + the next click fetches fresh.
+        if (s.case_id) {
+          queryClient.invalidateQueries({
+            queryKey: ["report-bundle", s.case_id],
+          });
+        }
       } else if (eventName === "error") {
         const e = payload as { detail: string };
         // In-stream errors don't kill the stream — icoFoam may still

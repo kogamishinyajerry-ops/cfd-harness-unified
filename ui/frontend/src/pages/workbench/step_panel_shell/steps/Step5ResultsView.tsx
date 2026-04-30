@@ -24,6 +24,7 @@ import { api, ApiError } from "@/api/client";
 import type {
   CaseSolveRejection,
   ReportBundle,
+  ResultsSummary,
 } from "@/types/case_solve";
 
 import type { StepTaskPanelProps } from "../types";
@@ -43,6 +44,17 @@ export function Step5ResultsView({
 }: StepTaskPanelProps) {
   const queryClient = useQueryClient();
   const [bundle, setBundle] = useState<ReportBundle | null>(null);
+  // Codex round-3 P1 (2026-04-30): the previous Phase-1A view also
+  // surfaced the recirculation sanity check from /results-summary
+  // (warns when a "converged" LDC field doesn't actually look like a
+  // closed-cavity recirculation — bad BCs, plug flow, etc.). My
+  // initial rewrite dropped this gate and the new green banner fired
+  // unconditionally on any solve that produced renderable plots,
+  // which is a truthfulness regression. Re-fetch results-summary
+  // alongside the bundle so the sanity banner stays.
+  const [resultsSummary, setResultsSummary] = useState<ResultsSummary | null>(
+    null,
+  );
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
 
@@ -53,27 +65,23 @@ export function Step5ResultsView({
       // fetchQuery populates the React Query cache under
       // ['report-bundle', caseId]; the matching Step5ResultsGrid
       // useQuery hook observes the same cache entry and re-renders
-      // automatically when this resolves.
-      //
-      // Codex round-1 P1 (2026-04-30): an earlier draft set
-      // staleTime: Infinity, which made fetchQuery short-circuit on
-      // every subsequent click — the right-rail and grid kept
-      // showing the OLD bundle even after a re-solve produced a new
-      // final_time. The contract here is "user clicks [AI 处理] =>
-      // hit the backend"; the backend already caches the matplotlib
-      // render keyed on final_time on disk, so an unchanged
-      // final_time short-circuits at the disk level (~50 ms) and a
-      // changed final_time produces fresh PNGs (~1.5 s). The right
-      // place to short-circuit is the SERVER, not the client cache.
-      // invalidateQueries first so any stale observers re-render.
+      // automatically when this resolves. invalidateQueries first
+      // so any stale observers re-render — the matplotlib render is
+      // already cached on disk keyed by cache_version (final_time +
+      // U mtime) so the network request is cheap when nothing
+      // changed.
       await queryClient.invalidateQueries({
         queryKey: ["report-bundle", caseId],
       });
-      const r = await queryClient.fetchQuery({
-        queryKey: ["report-bundle", caseId],
-        queryFn: () => api.reportBundle(caseId),
-      });
+      const [r, s] = await Promise.all([
+        queryClient.fetchQuery({
+          queryKey: ["report-bundle", caseId],
+          queryFn: () => api.reportBundle(caseId),
+        }),
+        api.resultsSummary(caseId),
+      ]);
       setBundle(r);
+      setResultsSummary(s);
       onStepComplete();
     } catch (e) {
       if (
@@ -124,10 +132,28 @@ export function Step5ResultsView({
       {bundle && (
         <div
           data-testid="step5-results-success"
-          className="space-y-2 rounded-sm border border-emerald-700/40 bg-emerald-900/10 p-2"
+          className={
+            "space-y-2 rounded-sm border p-2 " +
+            // Codex round-3 P1: the green tint goes ONLY when both
+            // (a) the bundle rendered and (b) the recirculation
+            // sanity check passed. A "render succeeded but field
+            // looks wrong" solve gets the amber warn tint instead.
+            (resultsSummary && !resultsSummary.is_recirculating
+              ? "border-amber-700/50 bg-amber-900/10"
+              : "border-emerald-700/40 bg-emerald-900/10")
+          }
         >
-          <div className="font-mono text-[11px] text-emerald-200">
-            ✓ Bundle ready — see grid in the centre pane.
+          <div
+            className={
+              "font-mono text-[11px] " +
+              (resultsSummary && !resultsSummary.is_recirculating
+                ? "text-amber-200"
+                : "text-emerald-200")
+            }
+          >
+            {resultsSummary && !resultsSummary.is_recirculating
+              ? "⚠ Bundle ready — but field doesn't look like a closed-cavity recirculation. Check BCs / convergence."
+              : "✓ Bundle ready — see grid in the centre pane."}
           </div>
           <ul className="space-y-1 font-mono text-[10px] text-surface-300">
             <li>final time: t = {bundle.final_time}s</li>
@@ -136,11 +162,18 @@ export function Step5ResultsView({
               plane: {bundle.plane_axes.join("-")} ·{" "}
               {bundle.slab_cell_count.toLocaleString()} slab cells
             </li>
+            {resultsSummary && (
+              <li className="pt-1 text-surface-500">
+                {resultsSummary.is_recirculating
+                  ? "Mean Ux ≈ 0 with min/max spanning ±values: vortex confirmed."
+                  : "Mean Ux ≠ 0: would indicate plug flow or solver issue."}
+              </li>
+            )}
           </ul>
           <p className="pt-1 text-[10px] text-surface-500">
             Re-click [AI 处理] after a re-solve to refresh; matplotlib
-            output is cached per final_time so unchanged solves return
-            in &lt;1 s.
+            output is cached per cache_version (final_time + U mtime)
+            so unchanged solves return in &lt;1 s.
           </p>
         </div>
       )}
