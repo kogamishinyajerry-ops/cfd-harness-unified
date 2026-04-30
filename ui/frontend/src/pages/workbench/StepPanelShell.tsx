@@ -30,6 +30,7 @@ import { SolveStreamProvider } from "./step_panel_shell/SolveStreamContext";
 import { Step3SetupBC } from "./step_panel_shell/steps/Step3SetupBC";
 import { Step4SolveRun } from "./step_panel_shell/steps/Step4SolveRun";
 import { Step5ResultsView } from "./step_panel_shell/steps/Step5ResultsView";
+import { Step5ResultsGrid } from "./step_panel_shell/Step5ResultsGrid";
 import { StepTree } from "./step_panel_shell/StepTree";
 import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
@@ -172,23 +173,21 @@ const STEPS: readonly StepDef[] = [
     shortLabel: "Results",
     longLabel: "5 · Results",
     viewportConfig: {
-      // Phase-1A: |U| heatmap on the z=0 midplane slice. Viridis
-      // colormap, clipped at 95th percentile so the lid corner
-      // singularity overshoot doesn't wash out the bulk vortex.
-      // Gated on Step 5 completion: rendering the slice triggers an
-      // in-container postProcess for cell centres on first call (~2s),
-      // then becomes cached.
-      format: "image",
+      // 2026-04-30 dogfood feedback: the original Step 5 viewport was
+      // a single midplane PNG which the user rejected as far below
+      // the line-B pipeline's research-grade reports. Step5ResultsGrid
+      // mounts a 2×2 grid of matplotlib figures (|U|+streamlines,
+      // pressure, vorticity, centerline) populated by the right-rail's
+      // /report-bundle fetch via React Query. No completion gate — the
+      // grid handles its own empty state when the bundle hasn't been
+      // requested yet (or 409s if Step 4 hasn't run).
+      format: "custom",
       glbUrl: () => null,
       stlUrl: () => null,
-      imageUrl: (caseId) =>
-        caseId ? `/api/cases/${caseId}/velocity-slice.png` : null,
-      gateOnStepCompletion: 5,
+      customViewport: Step5ResultsGrid,
     },
     taskPanelComponent: Step5ResultsView,
     aiActionWiredInTierA: true,
-    viewportEmptyHint:
-      "Step 5 · Results — click [AI 处理] to extract the velocity field. A |U| heatmap on the z=0 midplane will render here, showing the LDC vortex.",
   },
 ] as const;
 

@@ -30,11 +30,23 @@ from .velocity_slice import (
     VelocitySliceError,
     render_velocity_slice_png,
 )
+from .report_bundle import (
+    ARTIFACT_NAMES,
+    ReportBundle,
+    ReportBundleError,
+    build_report_bundle,
+    read_report_artifact,
+)
 
 __all__ = [
+    "ARTIFACT_NAMES",
     "BcOverlayError",
+    "ReportBundle",
+    "ReportBundleError",
     "ResidualChartError",
     "VelocitySliceError",
+    "build_report_bundle",
+    "read_report_artifact",
     "render_bc_overlay_png",
     "render_residual_chart_png",
     "render_velocity_slice_png",

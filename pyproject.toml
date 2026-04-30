@@ -95,10 +95,16 @@ workbench = [
     "docker>=7.0",
     # Phase-1A (DEC-V61-097): server-rendered visualization PNGs for
     # Steps 3-5 (bc-overlay, residual-history, velocity-slice). Pillow
-    # is small (~3 MB) and avoids the matplotlib footprint (~50 MB).
-    # Colormap + line-chart renderers are hand-rolled in
-    # ui/backend/services/case_visualize/.
+    # stays for the lightweight overlays (bc-overlay) where matplotlib
+    # is overkill.
+    # 2026-04-30 dogfood feedback: matplotlib added to the workbench
+    # dep tree (~50 MB) so Step 5 can show research-grade multi-panel
+    # reports — tricontourf + streamplot + multi-data layouts — in
+    # parity with scripts/render_case_report.py. The original Pillow-
+    # only design capped Step 5 at "single |U| midplane PNG + text
+    # stats", which the user flagged as far below the line-B pipeline.
     "Pillow>=10.0",
+    "matplotlib>=3.8",
 ]
 
 [tool.pytest.ini_options]

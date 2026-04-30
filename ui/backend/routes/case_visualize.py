@@ -20,9 +20,13 @@ from fastapi.responses import Response
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
 from ui.backend.services.case_visualize import (
+    ARTIFACT_NAMES,
     BcOverlayError,
+    ReportBundleError,
     ResidualChartError,
     VelocitySliceError,
+    build_report_bundle,
+    read_report_artifact,
     render_bc_overlay_png,
     render_residual_chart_png,
     render_velocity_slice_png,
@@ -98,4 +102,66 @@ def get_velocity_slice(case_id: str) -> Response:
         if "container" in msg.lower() and "not running" in msg.lower():
             raise HTTPException(status_code=503, detail=msg) from exc
         raise HTTPException(status_code=500, detail=msg) from exc
+    return _png_response(png)
+
+
+# 2026-04-30 dogfood feedback: the original Step 5 viewport was a single
+# midplane PNG which the user rejected as far below the line-B pipeline's
+# multi-data reports. The bundle endpoint computes |U|+streamlines,
+# pressure, vorticity, and centreline profiles in one matplotlib pass
+# and exposes them as four separate PNG URLs the frontend lays out as
+# a grid. See ui/backend/services/case_visualize/report_bundle.py.
+
+def _report_bundle_error_to_http(exc: ReportBundleError) -> HTTPException:
+    msg = str(exc)
+    if "solver hasn't run" in msg or "no time directories" in msg:
+        return HTTPException(status_code=409, detail=msg)
+    if "container" in msg.lower() and "not running" in msg.lower():
+        return HTTPException(status_code=503, detail=msg)
+    return HTTPException(status_code=500, detail=msg)
+
+
+@router.get("/cases/{case_id}/report-bundle", tags=["case-visualize"])
+def get_report_bundle(case_id: str) -> dict:
+    """Render (or read from cache) the four research-grade post-
+    processing figures and return their URLs + summary stats.
+    """
+    case_dir = _resolve(case_id)
+    try:
+        bundle = build_report_bundle(case_dir)
+    except ReportBundleError as exc:
+        raise _report_bundle_error_to_http(exc) from exc
+
+    base = f"/api/cases/{case_id}"
+    return {
+        "final_time": bundle.final_time,
+        "cell_count": bundle.cell_count,
+        "slab_cell_count": bundle.slab_cell_count,
+        "plane_axes": list(bundle.plane_axes),
+        "summary_text": bundle.summary_text,
+        # Each artifact gets a stable URL the frontend can <img src> at.
+        # Names match ARTIFACT_NAMES in report_bundle.py; the route
+        # below resolves them through read_report_artifact().
+        "artifacts": {
+            name: f"{base}/report/{name}.png"
+            for name in ARTIFACT_NAMES
+        },
+    }
+
+
+@router.get("/cases/{case_id}/report/{artifact}.png", tags=["case-visualize"])
+def get_report_artifact(case_id: str, artifact: str) -> Response:
+    """Serve one of the cached report PNGs. ``artifact`` must be one of
+    ``ARTIFACT_NAMES``; anything else returns 404.
+    """
+    if artifact not in ARTIFACT_NAMES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown artifact: {artifact!r}",
+        )
+    case_dir = _resolve(case_id)
+    try:
+        png = read_report_artifact(case_dir, artifact)
+    except ReportBundleError as exc:
+        raise _report_bundle_error_to_http(exc) from exc
     return _png_response(png)

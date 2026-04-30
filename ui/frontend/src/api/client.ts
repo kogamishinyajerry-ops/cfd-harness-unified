@@ -529,4 +529,38 @@ export const api = {
     }
     return (await resp.json()) as import("@/types/case_solve").ResultsSummary;
   },
+
+  /** Step 5 multi-figure post-processing bundle (2026-04-30 dogfood
+   *  feedback). Returns metadata + URLs to the four cached PNGs:
+   *  contour+streamlines, pressure, vorticity, centerline.
+   */
+  reportBundle: async (
+    caseId: string,
+  ): Promise<import("@/types/case_solve").ReportBundle> => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/report-bundle`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "detail" in detail
+          ? (detail as { detail: string }).detail
+          : typeof detail === "string"
+            ? detail
+            : `report-bundle failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/case_solve").ReportBundle;
+  },
 };

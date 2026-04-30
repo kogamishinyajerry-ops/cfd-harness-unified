@@ -39,3 +39,22 @@ export interface CaseSolveRejection {
   failing_check: string;
   detail: string;
 }
+
+/** Step 5 multi-figure post-processing bundle (2026-04-30). The
+ *  artifacts map carries fully-qualified URLs the frontend can
+ *  &lt;img src&gt; directly; the backend renders to disk and serves the
+ *  cached PNGs. plane_axes documents which 2D plane was auto-picked
+ *  (e.g. ['x','y'] for a z-midplane slab). */
+export interface ReportBundle {
+  final_time: number;
+  cell_count: number;
+  slab_cell_count: number;
+  plane_axes: string[];
+  summary_text: string;
+  artifacts: {
+    contour_streamlines: string;
+    pressure: string;
+    vorticity: string;
+    centerline: string;
+  };
+}
