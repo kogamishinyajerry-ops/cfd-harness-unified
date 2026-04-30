@@ -708,6 +708,14 @@ def _smoke_backend_pytest_slice(repo_root: Path) -> None:
         "ui/backend/tests/test_meshing_gmsh.py",
         "ui/backend/tests/test_face_annotations_route.py",
         "ui/backend/tests/test_ai_action_schema.py",
+        # Codex round-13 P2 (2026-04-30): the report_bundle module
+        # added in the dogfood UX rewrite has 17 regression tests under
+        # ui/backend/tests/, but pytest's testpaths = ["tests"] means
+        # the default collector skips them — the file ships without
+        # automated guard. Add explicitly to the smoke slice so any
+        # future change to the matplotlib renderers / cache_version
+        # logic / stale-C recovery loop trips this lane.
+        "ui/backend/tests/test_report_bundle.py",
     ]
     if not Path(cmd[0]).is_file():
         _say("skip", f"no .venv at {cmd[0]} — backend slice skipped")

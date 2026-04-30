@@ -299,8 +299,25 @@ export function StepPanelShell() {
   // mesh viewport. HEAD /mesh/render to detect a pre-existing polyMesh
   // and restore the completed state. 200 = mesh artifacts on disk →
   // mark Step 2 completed; any other status leaves it pending.
+  //
+  // Codex round-13 P1 (2026-04-30): the probe used to ONLY set
+  // completed on a 200; it never reset the state on a 404. Switching
+  // from a meshed case to an unmeshed one therefore left
+  // stepStates[2] sticky at "completed" — Step 3's viewport gate
+  // trusted that flag and immediately fetched /bc/render → 404/409
+  // → red error banner. Now we synchronously reset all step states
+  // back to "pending" when caseId changes, then let the probe lift
+  // Step 2 back to "completed" only if mesh artifacts actually exist
+  // for the new case.
   useEffect(() => {
     if (!caseId) return;
+    setStepStates({
+      1: "pending",
+      2: "pending",
+      3: "pending",
+      4: "pending",
+      5: "pending",
+    });
     let cancelled = false;
     fetch(`/api/cases/${encodeURIComponent(caseId)}/mesh/render`, {
       method: "HEAD",
@@ -312,6 +329,9 @@ export function StepPanelShell() {
             prev[2] === "completed" ? prev : { ...prev, 2: "completed" },
           );
         }
+        // Non-200 leaves Step 2 pending (already reset above) — that's
+        // the correct pre-mesh state and Step 3's viewport gate will
+        // show the placeholder hint instead of a 404 banner.
       })
       .catch(() => {
         // network errors leave stepStates[2] pending — same outcome as a
@@ -373,7 +393,15 @@ export function StepPanelShell() {
   return (
     <SolveStreamProvider>
     <FacePickProvider>
-    <Step3StateProvider caseId={caseId}>
+    {/* Codex round-13 P2 (2026-04-30): keying the provider by caseId
+     *  forces React to fully unmount the previous provider (and any
+     *  consumers below) when the engineer switches cases. Without
+     *  this, the in-effect reset would land one render LATE — the
+     *  first render after a caseId flip would show case A's
+     *  envelope/picks under case B's caseId prop, and clicking
+     *  [继续 AI 处理] in that brief window would write to the
+     *  wrong case. The hard remount is synchronous. */}
+    <Step3StateProvider key={caseId} caseId={caseId}>
     <div
       data-testid="step-panel-shell"
       data-current-step-id={currentStepId}

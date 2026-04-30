@@ -4,10 +4,15 @@
 // __tests__ files; per-step wireup tests live in step_panel_shell/steps
 // alongside the components.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useNavigate,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { MeshSuccessResponse } from "@/types/mesh_imported";
@@ -317,4 +322,95 @@ describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
       }
     },
   );
+});
+
+// Codex round-13 P1 regression: switching from a meshed case to an
+// unmeshed one used to leave stepStates[2]="completed" sticky, so
+// Step 3's viewport gate trusted the stale flag and 404'd on
+// /bc/render. The shell now resets all step states on caseId change
+// before the HEAD probe runs.
+describe("StepPanelShell · case-switch step-state reset (Codex round-13 P1)", () => {
+  // Per-case mesh availability the mocked fetch reports.
+  const meshAvailable = new Map<string, boolean>();
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    meshAvailable.clear();
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const match = url.match(
+        /\/api\/cases\/([^/]+)\/mesh\/render/,
+      );
+      if (match) {
+        const id = decodeURIComponent(match[1]);
+        const ok = meshAvailable.get(id) ?? false;
+        return new Response(null, { status: ok ? 200 : 404 });
+      }
+      return new Response(null, { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("Step 3 viewport gate falls back to placeholder after switching to an unmeshed case", async () => {
+    meshAvailable.set("meshed_case", true);
+    meshAvailable.set("fresh_case", false);
+
+    function NavHelper() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          data-testid="nav-to-fresh"
+          onClick={() => navigate("/workbench/case/fresh_case?step=3")}
+        >
+          go fresh
+        </button>
+      );
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/workbench/case/meshed_case?step=3"]}>
+          <NavHelper />
+          <Routes>
+            <Route
+              path="/workbench/case/:caseId"
+              element={<StepPanelShell />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Wait for the HEAD probe to lift Step 2 to completed → Step 3
+    // viewport unblocks and renders the actual Viewport (no placeholder).
+    await waitFor(() => {
+      expect(screen.queryByTestId("viewport-placeholder")).toBeNull();
+    });
+
+    // Now switch to fresh_case (no mesh). Pre-fix the stale
+    // stepStates[2]="completed" carried over and Step 3's gate
+    // immediately fetched /bc/render → red error banner. With the
+    // round-14 fix the shell resets stepStates synchronously and
+    // the placeholder hint comes back.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("nav-to-fresh"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("viewport-placeholder")).toBeInTheDocument();
+    });
+    // The case_id should also have flipped on the top-bar — sanity
+    // check that we did navigate (not just hit some other placeholder
+    // path).
+    expect(screen.getByTestId("top-bar-case-id")).toHaveTextContent(
+      "fresh_case",
+    );
+  });
 });
