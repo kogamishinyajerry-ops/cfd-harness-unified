@@ -10,7 +10,7 @@ see the distance between *getting a number* and *getting it right*.
 # Python 3.12 is the supported runtime. Everything below assumes .venv is
 # Python 3.12.x (see `./.venv/bin/python --version`).
 python3.12 -m venv .venv
-.venv/bin/pip install -e ".[ui,dev]"
+.venv/bin/pip install -e ".[ui,dev,workbench]"
 (cd ui/frontend && npm install)
 
 ./scripts/start-ui-dev.sh

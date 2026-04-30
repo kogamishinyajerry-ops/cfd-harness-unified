@@ -747,4 +747,98 @@ describe("Step3SetupBC navigate-away regression (Codex round-9 P1)", () => {
       "uncertain",
     );
   });
+
+  it("Codex round-11 P1: in-flight envelope for case A doesn't stomp case B's state", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+
+    // Hold the case-A response until we've already switched to case B.
+    let resolveCaseA: ((value: unknown) => void) | null = null;
+    const caseAPromise = new Promise((res) => {
+      resolveCaseA = res;
+    });
+    setupBCWithEnvelopeMock.mockReturnValueOnce(caseAPromise);
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    function CaseSwitcher() {
+      const [currentCase, setCurrentCase] = useState("abc");
+      return (
+        <Step3StateProvider caseId={currentCase}>
+          <button
+            type="button"
+            data-testid="switch-case"
+            onClick={() => setCurrentCase("xyz")}
+          >
+            switch
+          </button>
+          <Step3SetupBC
+            caseId={currentCase}
+            onStepComplete={vi.fn()}
+            onStepError={vi.fn()}
+            registerAiAction={(action) => {
+              registeredAction = action;
+            }}
+          />
+        </Step3StateProvider>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <CaseSwitcher />
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    // Start the request for case "abc" but DON'T await — the mock is
+    // still pending; we need to switch the case before resolving.
+    const inFlight = registeredAction!();
+
+    // Switch to a different case while the request is in flight.
+    await user.click(screen.getByTestId("switch-case"));
+    // Step3StateProvider's caseId-change useEffect will reset the
+    // shell-level state. The case-A envelope (still in flight) must
+    // NOT re-populate it.
+
+    // Now resolve the case-A request. With the round-12 fix
+    // currentCaseIdRef.current is now "xyz" while requestCaseId
+    // captured "abc", so isStale() returns true and the result is
+    // dropped — no DialogPanel for case xyz from case abc's data.
+    resolveCaseA!({
+      confidence: "uncertain",
+      summary: "Case-A leaked into case-B!",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [
+        {
+          id: "lid_orientation",
+          kind: "face_label",
+          prompt: "case-A question",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+      next_step_suggestion: null,
+      error_detail: null,
+    });
+    await act(async () => {
+      await inFlight;
+    });
+
+    // Case-A response must NOT have leaked into case-B's view.
+    expect(screen.queryByTestId("dialog-panel")).toBeNull();
+    expect(
+      screen.queryByText(/Case-A leaked into case-B/),
+    ).toBeNull();
+  });
 });

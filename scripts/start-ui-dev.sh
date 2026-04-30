@@ -4,8 +4,14 @@
 #   - Vite dev server on :5180 (React + HMR, proxies /api) [CFD_FRONTEND_PORT overrides]
 #
 # Prereqs (one-time):
-#   pip install -e ".[ui,dev]"
+#   pip install -e ".[ui,dev,workbench]"
 #   (cd ui/frontend && npm install)
+#
+# The [workbench] extra is required for Steps 1-2 (STL import + gmsh
+# meshing — trimesh / gmsh) AND Step 5 (matplotlib report-bundle —
+# 2026-04-30 dogfood rewrite). Installing only [ui,dev] mounts the
+# basic /api/cases routes but skips import_geometry / mesh_imported /
+# case_visualize, breaking the dogfood path past the case list.
 #
 # Ctrl-C stops both.
 
@@ -22,7 +28,7 @@ fi
 # PATH (e.g. user-site installs, Homebrew Python layouts). Detect the module
 # rather than the binary, and invoke via `python3 -m`.
 if ! python3 -c "import uvicorn" 2>/dev/null; then
-  echo "✗ uvicorn Python module not found. Install with: pip install -e '.[ui]'" >&2
+  echo "✗ uvicorn Python module not found. Install with: pip install -e '.[ui,dev,workbench]'" >&2
   exit 1
 fi
 if ! command -v npm >/dev/null 2>&1; then

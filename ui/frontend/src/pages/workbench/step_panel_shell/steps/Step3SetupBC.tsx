@@ -159,6 +159,33 @@ export function Step3SetupBC({
     setNetworkError(null);
   }, [aiMode, setEnvelope, setPickedFaceIdForQuestion, setActiveFaceQuestionId]);
 
+  // Codex round-11 P1 (2026-04-30): with envelope state lifted into
+  // shell-scoped Step3StateContext, an in-flight setupBCWithEnvelope()
+  // for case A can outlive the Step3SetupBC instance — and when it
+  // resolves it would call setEnvelope() through the (still-alive)
+  // shell context, stomping case B's freshly-reset state with case
+  // A's dialog. From there [继续 AI 处理] would write annotations to
+  // the wrong case. Two complementary guards:
+  //   1. cancelledRef: flipped true on unmount cleanup, so a request
+  //      whose Step3SetupBC instance is gone aborts its post-resolve
+  //      writes.
+  //   2. currentCaseIdRef: tracks the latest caseId across re-renders
+  //      of the SAME instance (React Router updates :caseId in place
+  //      without remounting the route element). runEnvelope captures
+  //      the requestCaseId at start and compares it to the ref at
+  //      resolve time.
+  const cancelledRef = useRef(false);
+  const currentCaseIdRef = useRef(caseId);
+  useEffect(() => {
+    currentCaseIdRef.current = caseId;
+  }, [caseId]);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
+
   // Lazy-load annotations doc once the case_id is known. We don't gate
   // the panel on this because the existing-annotation seed is purely
   // optional UX (the AnnotationPanel handles the no-existing case).
@@ -325,11 +352,21 @@ export function Step3SetupBC({
     async (fold: { useForceFlags: boolean }) => {
       setRejection(null);
       setNetworkError(null);
-      // Capture the generation token at request start; if the engineer
-      // flips ai_mode while this promise is in flight, the post-resolve
-      // state writes are dropped (Codex M9 Step 3 R1 Finding 1).
+      // Capture the generation token + caseId at request start. The
+      // post-resolve writes are dropped if either:
+      //   - the engineer flipped ai_mode while we were in flight
+      //     (Codex M9 Step 3 R1 Finding 1), OR
+      //   - the engineer switched cases mid-flight, EITHER by
+      //     unmounting Step3SetupBC entirely (cancelledRef) or by
+      //     re-rendering the same instance with a new caseId
+      //     (currentCaseIdRef differs from requestCaseId; Codex
+      //     round-11 P1).
       const generation = aiModeGenRef.current;
-      const isStale = () => aiModeGenRef.current !== generation;
+      const requestCaseId = caseId;
+      const isStale = () =>
+        cancelledRef.current ||
+        aiModeGenRef.current !== generation ||
+        currentCaseIdRef.current !== requestCaseId;
       try {
         const result = await api.setupBCWithEnvelope(
           caseId,
