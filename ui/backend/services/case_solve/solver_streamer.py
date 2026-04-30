@@ -209,29 +209,19 @@ def _parse_line_to_events(
     # axis or going blank. ``diagonal: true`` flag lets the
     # frontend decorate or filter the marker if it ever wants to,
     # but the default render still works.
-    # diagonal: trivial-matrix solve — emit residual=0.0 so the
-    # chart and the final summary agree (solver_runner._parse_log
-    # also reports 0.0 for diagonal lines). The frontend
-    # LiveResidualChart filters v<=0 out of axis-scaling but
-    # renders 0 values at the y-axis floor, so these points
-    # extend the line to the final step instead of distorting the
-    # log-scale span. Codex 2008105 round-8 closure 2026-04-30.
-    m_d = _RES_DIAGONAL_LINE.search(line)
-    if m_d:
-        field_raw = m_d.group(1)
-        if field_raw in ("Ux", "Uy", "Uz", "p"):
-            iters = int(m_d.group(2))
-            yield _sse(
-                "residual",
-                {
-                    "field": field_raw,
-                    "init": 0.0,
-                    "final": 0.0,
-                    "iters": iters,
-                    "t": current_time[0],
-                    "diagonal": True,
-                },
-            )
+    # diagonal: trivial-matrix solve — no SSE event. A log-scale
+    # chart cannot truthfully represent zero, so emitting any
+    # synthetic value (1e-12 sentinel, carry-forward, 0.0 floor,
+    # axis-min marker) creates a misleading endpoint. The final
+    # ``done`` summary is computed from the last ITERATIVE residual
+    # too (solver_runner._parse_log change in this same commit), so
+    # chart and summary agree by reporting "the last residual that
+    # was actually computed." On a fully-orthogonal trivial mesh
+    # the summary reports None for affected fields and the chart
+    # has no series — accurate to the underlying physics. Codex
+    # rounds 3–9 closure: stop pretending diagonal steps have a
+    # measurable residual.
+    if _RES_DIAGONAL_LINE.search(line):
         return
 
     m_c = _CONT_LINE.search(line)

@@ -111,27 +111,23 @@ def _parse_log(log_text: str) -> dict[str, object]:
     times = [float(m.group(1)) for m in _TIME_LINE.finditer(log_text)]
     end_time_reached = times[-1] if times else 0.0
 
-    # Codex ebd6ff3 round-4 P1: pick the MOST-RECENT residual per
-    # field by log position, considering both iterative (_RES_U/P)
-    # and diagonal patterns. The earlier rev only fell back to
-    # diagonal when iterative was empty, so a mixed run (early
-    # steps iterative, final step diagonal) reported the stale
-    # earlier residual instead of the final zero-iteration state.
-    # Strategy: collect (position, field, value) for both patterns,
-    # then walk in reverse to find the most-recent value per field.
+    # Codex rounds 3–9 closure 2026-04-30: report the last
+    # ITERATIVE residual per field, ignoring ``diagonal:``
+    # trivial-matrix lines entirely. Diagonal steps have no
+    # real residual to report (the matrix solved in zero
+    # iterations); a log-scale chart cannot truthfully render
+    # zero, and any synthetic value we tried (1e-12, carry-
+    # forward, axis floor) created a different inconsistency
+    # between chart and summary. Reporting "the last actual
+    # residual we measured" is honest in both surfaces — the
+    # streamer skips diagonal events too, so chart and summary
+    # agree by construction.
     last_per_field: dict[str, float] = {}
     candidates: list[tuple[int, str, float]] = []
     for m in _RES_U_LINE.finditer(log_text):
         candidates.append((m.start(), f"U{m.group(1)}", float(m.group(2))))
     for m in _RES_P_LINE.finditer(log_text):
         candidates.append((m.start(), "p", float(m.group(1))))
-    for m in _RES_DIAGONAL_LINE.finditer(log_text):
-        field = m.group(1)
-        if field in ("Ux", "Uy", "Uz", "p"):
-            # Diagonal solve produced no residual; physically the
-            # field is at zero residual on this step.
-            candidates.append((m.start(), field, 0.0))
-    # Sort by position descending so the first hit per field wins.
     candidates.sort(key=lambda x: -x[0])
     for _pos, field, val in candidates:
         if field not in last_per_field:
