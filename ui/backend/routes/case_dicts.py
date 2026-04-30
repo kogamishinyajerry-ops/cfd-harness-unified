@@ -34,6 +34,7 @@ from ui.backend.services.case_dicts.validator import (
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_manifest import (
     ManifestNotFoundError,
+    case_lock,
     compute_etag,
     is_user_override,
     mark_user_override,
@@ -226,21 +227,7 @@ def post_raw_dict(
     case_dir = _resolve_case_dir(case_id)
     abs_path = _resolve_dict_path(case_dir, relative_path)
 
-    # Race check before touching anything.
-    if body.expected_etag is not None and abs_path.is_file():
-        current_etag = compute_etag(abs_path.read_bytes())
-        if current_etag != body.expected_etag:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "failing_check": "etag_mismatch",
-                    "expected_etag": body.expected_etag,
-                    "current_etag": current_etag,
-                    "hint": "file changed since last GET; re-fetch and merge before retry",
-                },
-            )
-
-    # Validation (unless force).
+    # Validation runs before the lock — pure CPU, no shared state.
     issues = validate_raw_dict(
         relative_path=relative_path, content=body.content
     )
@@ -254,24 +241,46 @@ def post_raw_dict(
             },
         )
 
-    # Write. Make parent dirs if missing (the system/ and constant/
-    # directories are normally pre-created by setup_*_bc, but for a
-    # bare freshly-imported case the user might want to seed
-    # controlDict before any AI run — let them).
-    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    # Codex round-2 P1-HIGH closure: serialize the etag re-check + write +
+    # manifest record under the per-case lock. Without this, a setup_*_bc
+    # call could write the AI version AFTER our etag check passed but
+    # BEFORE our write lands, then mark_ai_authored runs first and ours
+    # second — manifest ends up source=user but disk content reflects an
+    # interleaved partial. Locking serializes mutations end-to-end.
     new_bytes = body.content.encode("utf-8")
-    abs_path.write_bytes(new_bytes)
+    with case_lock(case_dir):
+        if body.expected_etag is not None and abs_path.is_file():
+            current_etag = compute_etag(abs_path.read_bytes())
+            if current_etag != body.expected_etag:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "failing_check": "etag_mismatch",
+                        "expected_etag": body.expected_etag,
+                        "current_etag": current_etag,
+                        "hint": (
+                            "file changed since last GET; re-fetch and merge before retry"
+                        ),
+                    },
+                )
 
-    # Mark the override in the manifest.
-    mark_user_override(
-        case_dir,
-        relative_path=relative_path,
-        new_content=new_bytes,
-        detail={
-            "force_bypass": bool(force),
-            "size": len(new_bytes),
-        },
-    )
+        # Write. Make parent dirs if missing (the system/ and constant/
+        # directories are normally pre-created by setup_*_bc, but for a
+        # bare freshly-imported case the user might want to seed
+        # controlDict before any AI run — let them).
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_bytes(new_bytes)
+
+        # Mark the override in the manifest.
+        mark_user_override(
+            case_dir,
+            relative_path=relative_path,
+            new_content=new_bytes,
+            detail={
+                "force_bypass": bool(force),
+                "size": len(new_bytes),
+            },
+        )
 
     # Surface advisories (severity != "error") to the caller so the
     # editor can show a yellow toast even on a successful save.

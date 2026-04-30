@@ -41,7 +41,7 @@ _ACTION_AUTHORS: dict[str, frozenset[str]] = {
             "system/fvSchemes",
             "system/fvSolution",
             "constant/momentumTransport",
-            "constant/transportProperties",
+            "constant/physicalProperties",
         }
     ),
     "setup_channel_bc": frozenset(
@@ -50,7 +50,7 @@ _ACTION_AUTHORS: dict[str, frozenset[str]] = {
             "system/fvSchemes",
             "system/fvSolution",
             "constant/momentumTransport",
-            "constant/transportProperties",
+            "constant/physicalProperties",
         }
     ),
     "switch_solver": frozenset(

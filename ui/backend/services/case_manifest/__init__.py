@@ -12,6 +12,7 @@ from .io import (
     read_case_manifest,
     write_case_manifest,
 )
+from .locking import case_lock
 from .overrides import (
     is_user_override,
     mark_ai_authored,
@@ -36,6 +37,7 @@ __all__ = [
     "compute_etag",
     "read_case_manifest",
     "write_case_manifest",
+    "case_lock",
     "is_user_override",
     "mark_ai_authored",
     "mark_user_override",

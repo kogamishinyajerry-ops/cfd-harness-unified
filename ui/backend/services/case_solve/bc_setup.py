@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ui.backend.services.case_manifest import (
+    case_lock,
     is_user_override,
     mark_ai_authored,
 )
@@ -431,19 +432,22 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
         )
 
     n_lid, n_walls, _ = _split_lid_walls(polymesh)
-    written, skipped = _author_dicts(case_dir)
 
-    # Record AI authorship for the paths we actually wrote. mark_ai_authored
-    # itself is a second guard that refuses to flip source=user → source=ai
-    # (the manifest invariant), so even if a race opened the override
-    # window between is_user_override and write, the manifest stays honest.
-    if written:
-        mark_ai_authored(
-            case_dir,
-            relative_paths=list(written),
-            action="setup_ldc_bc",
-            detail={"skipped_user_overrides": list(skipped)} if skipped else None,
-        )
+    # Codex round-2 P1-HIGH closure: the is_user_override check + write
+    # + mark_ai_authored sequence runs inside an exclusive per-case lock
+    # so a concurrent POST /dicts manual edit can't slip in between
+    # is_user_override returning False and the AI write. Without the
+    # lock, manifest.source=user could persist while disk content was
+    # silently re-authored by AI (manifest+disk divergence).
+    with case_lock(case_dir):
+        written, skipped = _author_dicts(case_dir)
+        if written:
+            mark_ai_authored(
+                case_dir,
+                relative_paths=list(written),
+                action="setup_ldc_bc",
+                detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+            )
 
     return BCSetupResult(
         case_id=case_id,
@@ -840,14 +844,18 @@ def setup_channel_bc(
     n_inlet, n_outlet, n_walls, _ = _split_channel_patches(
         polymesh, inlet_face_ids, outlet_face_ids
     )
-    written, skipped = _author_channel_dicts(case_dir)
-    if written:
-        mark_ai_authored(
-            case_dir,
-            relative_paths=list(written),
-            action="setup_channel_bc",
-            detail={"skipped_user_overrides": list(skipped)} if skipped else None,
-        )
+    # Codex round-2 P1-HIGH closure: see setup_ldc_bc — lock the
+    # author + manifest-record sequence so concurrent POST /dicts can't
+    # race past is_user_override.
+    with case_lock(case_dir):
+        written, skipped = _author_channel_dicts(case_dir)
+        if written:
+            mark_ai_authored(
+                case_dir,
+                relative_paths=list(written),
+                action="setup_channel_bc",
+                detail={"skipped_user_overrides": list(skipped)} if skipped else None,
+            )
 
     # Codex DEC-V61-101 R1 LOW closure: use the MIN bbox extent as
     # L_char (hydraulic-diameter approximation for narrow channels).

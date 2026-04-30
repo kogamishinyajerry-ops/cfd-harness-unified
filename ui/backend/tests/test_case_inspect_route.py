@@ -91,7 +91,7 @@ def test_preview_ai_authored_case_no_overwrite_warning(monkeypatch, tmp_path):
             "system/fvSchemes": "FoamFile {} ",
             "system/fvSolution": "FoamFile {} ",
             "constant/momentumTransport": "FoamFile {} simulationType laminar;",
-            "constant/transportProperties": "FoamFile {} nu 0.01;",
+            "constant/physicalProperties": "FoamFile {} nu 0.01;",
         },
     )
     mark_ai_authored(
@@ -101,7 +101,7 @@ def test_preview_ai_authored_case_no_overwrite_warning(monkeypatch, tmp_path):
             "system/fvSchemes",
             "system/fvSolution",
             "constant/momentumTransport",
-            "constant/transportProperties",
+            "constant/physicalProperties",
         ],
         action="setup_ldc_bc",
     )
@@ -195,6 +195,33 @@ def test_preview_unknown_action_silently_no_warning(monkeypatch, tmp_path):
     )
     assert resp.status_code == 200
     assert resp.json()["next_action_will_overwrite"] == []
+
+
+def test_preview_warns_on_physicalProperties_user_override(monkeypatch, tmp_path):
+    """Codex round-2 MEDIUM closure: preview.py used to hard-code
+    `constant/transportProperties` in _ACTION_AUTHORS while bc_setup
+    actually writes `constant/physicalProperties`. A case where the
+    engineer manually edited physicalProperties must surface in
+    next_action_will_overwrite for setup_ldc_bc."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    case_dir = _stage(
+        imported,
+        case_id,
+        files={"constant/physicalProperties": "FoamFile {} nu 0.005;\n"},
+    )
+    mark_user_override(
+        case_dir,
+        relative_path="constant/physicalProperties",
+        new_content=b"FoamFile {} nu 0.005;\n",
+    )
+
+    resp = _client().get(
+        f"/api/cases/{case_id}/state-preview?next_action=setup_ldc_bc"
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "constant/physicalProperties" in body["next_action_will_overwrite"]
 
 
 def test_preview_unknown_case_404(monkeypatch, tmp_path):
