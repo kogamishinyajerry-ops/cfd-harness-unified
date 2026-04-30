@@ -2,9 +2,10 @@
 // Codex round 1 HIGH closure — 409 revision_conflict re-fetch).
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { useState } from "react";
 
 import { Step3SetupBC } from "../steps/Step3SetupBC";
 import {
@@ -636,5 +637,114 @@ describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
     expect(
       screen.getByTestId("dialog-panel-face-hint-inlet_face"),
     ).not.toHaveTextContent(/picked:/i);
+  });
+});
+
+// Codex round-9 P1 regression: when the engineer navigates from
+// Step 3 to another step and back, the lifted Step3StateContext
+// values must NOT be wiped. The round-8 lift was neutralized
+// because Step3SetupBC's `useEffect([aiMode])` ran on every
+// remount and reset envelope/picks/activeQuestion. The round-10
+// fix skips the effect on the first run after each mount.
+describe("Step3SetupBC navigate-away regression (Codex round-9 P1)", () => {
+  beforeEach(() => {
+    setupBCWithEnvelopeMock.mockReset();
+    getFaceAnnotationsMock.mockReset();
+    putFaceAnnotationsMock.mockReset();
+  });
+
+  it("envelope state survives unmount + remount of Step3SetupBC", async () => {
+    getFaceAnnotationsMock.mockResolvedValue({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 1,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [],
+    });
+    setupBCWithEnvelopeMock.mockResolvedValue({
+      confidence: "uncertain",
+      summary: "Pick the lid.",
+      annotations_revision_consumed: 1,
+      annotations_revision_after: 1,
+      unresolved_questions: [
+        {
+          id: "lid_orientation",
+          kind: "face_label",
+          prompt: "Click the lid.",
+          needs_face_selection: true,
+          candidate_face_ids: [],
+          candidate_options: [],
+          default_answer: null,
+        },
+      ],
+      next_step_suggestion: null,
+      error_detail: null,
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    function NavSimulator() {
+      const [showStep3, setShowStep3] = useState(true);
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="nav-toggle"
+            onClick={() => setShowStep3((v) => !v)}
+          >
+            toggle
+          </button>
+          {showStep3 ? (
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+          ) : (
+            <span data-testid="other-step">on step 4</span>
+          )}
+        </>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3StateProvider caseId="abc">
+            <NavSimulator />
+          </Step3StateProvider>
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+
+    // Populate the dialog state via the registered AI action.
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await act(async () => {
+      await registeredAction!();
+    });
+    await screen.findByTestId("dialog-panel");
+    expect(screen.getByTestId("dialog-panel-confidence")).toHaveTextContent(
+      "uncertain",
+    );
+
+    // Navigate away — Step3SetupBC unmounts.
+    await user.click(screen.getByTestId("nav-toggle"));
+    expect(screen.getByTestId("other-step")).toBeInTheDocument();
+    expect(screen.queryByTestId("dialog-panel")).toBeNull();
+
+    // Navigate back — Step3SetupBC remounts. Pre-fix the aiMode
+    // useEffect would clear envelope here and the dialog would not
+    // re-render until the engineer re-clicked [AI 处理]. With the
+    // round-10 fix the dialog comes straight back from context.
+    await user.click(screen.getByTestId("nav-toggle"));
+    await waitFor(() =>
+      expect(screen.getByTestId("dialog-panel")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("dialog-panel-confidence")).toHaveTextContent(
+      "uncertain",
+    );
   });
 });

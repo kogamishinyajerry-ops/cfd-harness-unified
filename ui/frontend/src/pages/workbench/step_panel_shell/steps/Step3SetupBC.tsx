@@ -133,15 +133,31 @@ export function Step3SetupBC({
   // a generation token on every aiMode flip; in-flight runEnvelope
   // resolutions ignore themselves when their captured token no longer
   // matches the current one.
+  //
+  // Codex round-9 P1 (2026-04-30): now that envelope/pickedFaceIdForQuestion/
+  // activeFaceQuestionId live in a shell-scoped Step3StateContext, this
+  // effect must NOT fire on every Step3SetupBC mount — TaskPanel
+  // remounts the body on step navigation, so resetting unconditionally
+  // would re-wipe the lifted state and re-introduce the round-8 P1
+  // regression. We skip the very first effect run (the natural mount)
+  // and only reset on subsequent runs (an actual aiMode change while
+  // the component is alive). aiModeGenRef still bumps on a real
+  // change so any in-flight envelope from the previous mode gets
+  // dropped on resolve.
   const aiModeGenRef = useRef(0);
+  const aiModeFirstRunRef = useRef(true);
   useEffect(() => {
+    if (aiModeFirstRunRef.current) {
+      aiModeFirstRunRef.current = false;
+      return;
+    }
     aiModeGenRef.current += 1;
     setEnvelope(null);
     setPickedFaceIdForQuestion({});
     setActiveFaceQuestionId(null);
     setRejection(null);
     setNetworkError(null);
-  }, [aiMode]);
+  }, [aiMode, setEnvelope, setPickedFaceIdForQuestion, setActiveFaceQuestionId]);
 
   // Lazy-load annotations doc once the case_id is known. We don't gate
   // the panel on this because the existing-annotation seed is purely

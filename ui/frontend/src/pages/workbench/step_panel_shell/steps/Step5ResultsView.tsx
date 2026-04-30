@@ -77,6 +77,15 @@ export function Step5ResultsView({
   const fetchBundle = useCallback(async () => {
     setRejection(null);
     setNetworkError(null);
+    // Codex round-9 P2 (2026-04-30): the prior implementation Promise.all'd
+    // fetchQuery(report-bundle) and api.resultsSummary, then dropped the
+    // bundle cache from a single shared catch block. A summary failure
+    // would therefore wipe an already-successful bundle (4 PNGs) from
+    // the cache and collapse the grid back to the empty hint —
+    // confusing because the figures had already rendered server-side.
+    // We now sequence the two fetches so the cleanup only fires when
+    // /report-bundle itself failed; a downstream summary fetch error
+    // is best-effort (the recirculation banner just doesn't surface).
     try {
       // fetchQuery populates the React Query cache under
       // ['report-bundle', caseId]; the matching Step5ResultsGrid
@@ -89,25 +98,16 @@ export function Step5ResultsView({
       await queryClient.invalidateQueries({
         queryKey: ["report-bundle", caseId],
       });
-      const [, s] = await Promise.all([
-        // fetchQuery populates the shared cache that bundleQuery
-        // observes; we don't need the return value separately.
-        queryClient.fetchQuery({
-          queryKey: ["report-bundle", caseId],
-          queryFn: () => api.reportBundle(caseId),
-        }),
-        api.resultsSummary(caseId),
-      ]);
-      setResultsSummary(s);
-      onStepComplete();
+      await queryClient.fetchQuery({
+        queryKey: ["report-bundle", caseId],
+        queryFn: () => api.reportBundle(caseId),
+      });
     } catch (e) {
       // Codex round-8 P2 (2026-04-30): React Query preserves the
       // previous successful `data` payload when a later fetchQuery
-      // throws. Without this, the right rail keeps showing the
-      // stale "✓ Bundle ready" card alongside the new rejection /
-      // network-error banner — internally inconsistent. removeQueries
-      // drops the cache entry, which both the grid (observer) and
-      // this view (also observer) see immediately as data===undefined.
+      // throws. Drop the cache entry so the right rail and grid
+      // both see data===undefined immediately and don't show a
+      // stale "✓ Bundle ready" card next to the new error.
       queryClient.removeQueries({
         queryKey: ["report-bundle", caseId],
       });
@@ -146,6 +146,18 @@ export function Step5ResultsView({
       }
       throw e;
     }
+    // Bundle fetch succeeded; the grid is already rendering. Pull the
+    // results-summary as a best-effort enrichment — its only consumer
+    // is the LDC recirculation sanity banner, which simply hides if
+    // resultsSummary stays null. A failure here must NOT drop the
+    // freshly-fetched bundle.
+    try {
+      const s = await api.resultsSummary(caseId);
+      setResultsSummary(s);
+    } catch {
+      setResultsSummary(null);
+    }
+    onStepComplete();
   }, [caseId, onStepComplete, onStepError, queryClient]);
 
   useEffect(() => {
