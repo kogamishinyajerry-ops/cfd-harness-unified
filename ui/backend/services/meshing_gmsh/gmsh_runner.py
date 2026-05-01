@@ -187,7 +187,7 @@ def _gmsh_inline(
             # gmshToFoam emits one Foam patch per named solid.
             from .stl_solid_index import (
                 AmbiguousSurfaceAssignment,
-                assign_surface_to_solid,
+                assign_surface_to_solid_by_voting,
                 parse_named_solids_from_path,
             )
 
@@ -204,27 +204,60 @@ def _gmsh_inline(
                 # boundary file missing whole patches. Track
                 # unassigned surfaces and raise instead of falling
                 # through.
+                #
+                # Adversarial iter04 (L-bend) upgrade: switched from
+                # single-centroid match to per-triangle voting. The
+                # L-bend's walls patch extends close to the inlet
+                # end-cap, and the single-point centroid match would
+                # fire the ambiguity threshold even though majority
+                # of triangles in each parametric surface clearly
+                # belong to one source solid. Voting handles the
+                # mixed-source case correctly.
                 unassigned: list[int] = []
+                import numpy as _np
+
                 for _dim, tag in surfaces:
-                    _types, _etags, node_tags_list = gmsh.model.mesh.getElements(
-                        dim=2, tag=tag
+                    _types, elem_tags_list, node_tags_list = (
+                        gmsh.model.mesh.getElements(dim=2, tag=tag)
                     )
                     if not node_tags_list or len(node_tags_list[0]) == 0:
                         unassigned.append(tag)
                         continue
-                    node_ids = set(int(n) for n in node_tags_list[0])
-                    coords: list[list[float]] = []
-                    for nid in node_ids:
-                        c, _, _, _ = gmsh.model.mesh.getNode(nid)
-                        coords.append([c[0], c[1], c[2]])
-                    if not coords:
+                    # Build per-triangle centroids. node_tags_list[0]
+                    # is a flat array; triangle elements use 3 nodes
+                    # each, in row-major order.
+                    flat_nodes = node_tags_list[0]
+                    n_tri = len(flat_nodes) // 3
+                    if n_tri == 0:
                         unassigned.append(tag)
                         continue
-                    import numpy as _np
-
-                    centroid = _np.asarray(coords).mean(axis=0)
+                    # Cache node coords; many triangles share nodes.
+                    node_coord_cache: dict[int, list[float]] = {}
+                    tri_centroids: list[list[float]] = []
+                    for i in range(n_tri):
+                        n0, n1, n2 = (
+                            int(flat_nodes[3 * i]),
+                            int(flat_nodes[3 * i + 1]),
+                            int(flat_nodes[3 * i + 2]),
+                        )
+                        coords = []
+                        for nid in (n0, n1, n2):
+                            if nid not in node_coord_cache:
+                                c, _, _, _ = gmsh.model.mesh.getNode(nid)
+                                node_coord_cache[nid] = [c[0], c[1], c[2]]
+                            coords.append(node_coord_cache[nid])
+                        tri_centroids.append(
+                            [
+                                (coords[0][0] + coords[1][0] + coords[2][0]) / 3.0,
+                                (coords[0][1] + coords[1][1] + coords[2][1]) / 3.0,
+                                (coords[0][2] + coords[1][2] + coords[2][2]) / 3.0,
+                            ]
+                        )
+                    centroids_arr = _np.asarray(tri_centroids, dtype=float)
                     try:
-                        name = assign_surface_to_solid(centroid, named_solids)
+                        name = assign_surface_to_solid_by_voting(
+                            centroids_arr, named_solids
+                        )
                     except AmbiguousSurfaceAssignment as exc:
                         # MED-1 ambiguity guard. Surface as a mesh
                         # generation failure so the engineer sees a

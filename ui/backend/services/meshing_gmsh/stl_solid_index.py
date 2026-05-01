@@ -104,25 +104,19 @@ def assign_surface_to_solid(
     *,
     ambiguity_ratio: float = 0.7,
 ) -> str | None:
-    """Pick the solid whose triangle cloud is nearest to ``surface_centroid``.
+    """Single-point centroid match (legacy path).
 
-    Returns ``None`` if ``solids`` is empty. The "nearest cloud" test
-    uses the minimum point-to-cloud distance — robust when patches are
-    spatially well-separated (the canonical case for engineering CAD
-    where inlet/outlet/walls live on distinct faces of the model).
+    Pick the solid whose triangle cloud is nearest to
+    ``surface_centroid``. Raises ``AmbiguousSurfaceAssignment`` when
+    the best-candidate distance is within ``ambiguity_ratio`` of the
+    second-best.
 
-    Raises ``AmbiguousSurfaceAssignment`` when the best-candidate
-    distance is within ``ambiguity_ratio`` of the second-best
-    (Codex review R1 MED-1). This catches T-junctions, concentric
-    shells, and overlapping near-patches where centroid matching
-    could silently mis-assign. The caller is expected to surface this
-    as a mesh-generation failure rather than guessing — the engineer
-    can then disambiguate via the raw-dict editor or the eventual
-    per-triangle voting upgrade.
-
-    ``ambiguity_ratio=0.7`` means "best must be at least 30 % closer
-    than second-best"; tuned empirically against the inlet/outlet/walls
-    duct cases where best/second-best ratios are ≪ 0.5.
+    KNOWN LIMITATION: a single point can't disambiguate parametric
+    surfaces that span triangles from multiple source solids (e.g.
+    L-bend where walls extend close to the inlet end-cap). Use
+    :func:`assign_surface_to_solid_by_voting` for those cases — the
+    L-bend regression test in adversarial-loop iter04 documents the
+    failure mode this function couldn't handle.
     """
     if not solids:
         return None
@@ -135,10 +129,6 @@ def assign_surface_to_solid(
     distances.sort(key=lambda t: t[0])
     best_dist, best_name = distances[0]
     second_dist, second_name = distances[1]
-    # Ratio guard: if best/second ≥ ambiguity_ratio (e.g. 0.7), the
-    # call is too close to make confidently. Equality (ratio = 1.0)
-    # is the worst case. Identical distances (best = second = 0.0)
-    # also tip into ambiguity (ratio undefined → treat as ambiguous).
     if second_dist <= 0.0 or best_dist / second_dist >= ambiguity_ratio:
         raise AmbiguousSurfaceAssignment(
             best_name=best_name,
@@ -147,3 +137,62 @@ def assign_surface_to_solid(
             second_dist=second_dist,
         )
     return best_name
+
+
+def assign_surface_to_solid_by_voting(
+    triangle_centroids: np.ndarray,
+    solids: list[SolidCentroids],
+    *,
+    min_majority: float = 0.6,
+) -> str | None:
+    """Per-triangle voting (preferred path · adversarial iter04 fix).
+
+    For each triangle in the parametric surface, find the nearest
+    source-solid centroid cloud and vote for that solid. Majority
+    wins. Raises ``AmbiguousSurfaceAssignment`` when the winning
+    vote share is below ``min_majority``.
+
+    Robust on geometries where one parametric surface spans triangles
+    from multiple source solids (L-bend walls extending near the inlet
+    end, T-junctions where walls share an edge with inlet, etc.) —
+    cases where the single-point centroid match fired the ambiguity
+    threshold and rejected an otherwise-mappable surface.
+
+    ``triangle_centroids`` is shape ``(n_tri, 3)``; ``min_majority=0.6``
+    means the winner needs ≥60 % of votes. Ties or weaker majorities
+    raise — the engineer disambiguates via raw-dict editor.
+    """
+    if not solids:
+        return None
+    if len(solids) == 1:
+        return solids[0].name
+    if triangle_centroids.shape[0] == 0:
+        return None
+
+    votes: dict[str, int] = {s.name: 0 for s in solids}
+    for tri_centroid in triangle_centroids:
+        best_name: str | None = None
+        best_dist = float("inf")
+        for s in solids:
+            d = float(np.linalg.norm(s.centroids - tri_centroid, axis=1).min())
+            if d < best_dist:
+                best_dist = d
+                best_name = s.name
+        if best_name is not None:
+            votes[best_name] += 1
+
+    total = sum(votes.values())
+    if total == 0:
+        return None
+    ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
+    winner_name, winner_votes = ranked[0]
+    runner_name, runner_votes = ranked[1] if len(ranked) > 1 else (winner_name, 0)
+    winner_share = winner_votes / total
+    if winner_share < min_majority:
+        raise AmbiguousSurfaceAssignment(
+            best_name=winner_name,
+            second_name=runner_name,
+            best_dist=float(winner_votes),
+            second_dist=float(runner_votes),
+        )
+    return winner_name
