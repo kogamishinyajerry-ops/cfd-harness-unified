@@ -510,7 +510,24 @@ def _build_dict_plan(
             "system/controlDict",
             'FoamFile { version 2.0; format ascii; class dictionary; '
             'location "system"; object controlDict; }\n'
-            "application icoFoam;\n"
+            # DEC-V61-107.5 (2026-05-01): switched from icoFoam to
+            # pimpleFoam for the named-patch path. icoFoam in
+            # OpenFOAM-10 has no setDeltaT.H include, so the
+            # adjustTimeStep keys would be ignored if icoFoam were
+            # used — fixed dt + tetrahedral STL meshes with high
+            # aspect-ratio cells in tight gap regions force CFL_max
+            # >> 1 → NaN regardless of the global dt chosen (proved
+            # by the dt sweep at iter01_dt_sweep_2026-05-01.md).
+            # pimpleFoam includes setDeltaT.H so adjustTimeStep
+            # actually scales dt to honor maxCo. nOuterCorrectors=1
+            # in fvSolution makes pimpleFoam behave like an
+            # icoFoam-style PISO loop, so numerics stay close to the
+            # historical baseline for the cube/channel cases.
+            # Codex-validated path: bc_setup.py:setup_channel_bc was
+            # the prior pimpleFoam migration (Codex cce9c29 + a1b5e29
+            # reviews 2026-04-30) — this is a mechanical port of the
+            # same template.
+            "application pimpleFoam;\n"
             "startFrom startTime;\n"
             "startTime 0;\n"
             "stopAt endTime;\n"
@@ -524,7 +541,13 @@ def _build_dict_plan(
             "writeCompression off;\n"
             "timeFormat general;\n"
             "timePrecision 6;\n"
-            "runTimeModifiable true;\n",
+            "runTimeModifiable true;\n"
+            "adjustTimeStep yes;\n"
+            "maxCo 0.5;\n"
+            # Cap deltaT so an over-coarse mesh (where Co stays low at
+            # any step size) cannot stretch a single timestep past the
+            # resolution we need for residual sampling.
+            "maxDeltaT 0.05;\n",
         ),
         (
             "system/fvSchemes",
@@ -547,7 +570,16 @@ def _build_dict_plan(
             # diffusion-dominated so the choice is invisible there;
             # this only matters for cases with sharp internal
             # obstacles or high local Reynolds.
-            "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); }\n"
+            # DEC-V61-107.5: pimpleFoam routes through the turbulence
+            # model's divDevReff which evaluates
+            # ``div((nuEff*dev2(T(grad(U)))))`` every step even with
+            # ``simulationType laminar``. Without an explicit scheme
+            # for that term, OpenFOAM-10's createFields aborts on the
+            # first timestep with "keyword ... is undefined" (Codex
+            # a1b5e29 P1 closure 2026-04-30 in the channel path —
+            # same constraint applies here).
+            "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); "
+            "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
             # DEC-V61-107: changed laplacian + snGrad from "orthogonal"
             # to "corrected". Tetrahedral meshes from gmsh on STL
             # imports are inherently non-orthogonal — the LDC
@@ -572,9 +604,19 @@ def _build_dict_plan(
             "    pFinal { $p; relTol 0; }\n"
             "    U  { solver smoothSolver; smoother symGaussSeidel; "
             "tolerance 1e-05; relTol 0; }\n"
+            # DEC-V61-107.5: pimpleFoam needs UFinal alongside pFinal
+            # (the *Final variants are used in the LAST PISO corrector
+            # of each timestep with stricter relTol).
+            "    UFinal { $U; relTol 0; }\n"
             "}\n"
-            "PISO\n"
+            # DEC-V61-107.5: pimpleFoam reads PIMPLE, not PISO. Setting
+            # nOuterCorrectors=1 makes pimpleFoam behave like icoFoam's
+            # single PISO loop per timestep so numerics stay close to
+            # the icoFoam baseline for cube/channel cases. The 2026-04-30
+            # channel migration (Codex cce9c29) used the same value.
+            "PIMPLE\n"
             "{\n"
+            "    nOuterCorrectors 1;\n"
             "    nCorrectors 2;\n"
             "    nNonOrthogonalCorrectors 2;\n"
             "    pRefCell 0;\n"
