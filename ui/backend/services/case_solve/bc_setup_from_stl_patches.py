@@ -532,10 +532,34 @@ def _build_dict_plan(
             'location "system"; object fvSchemes; }\n'
             "ddtSchemes  { default Euler; }\n"
             "gradSchemes { default Gauss linear; }\n"
-            "divSchemes  { default none; div(phi,U) Gauss linear; }\n"
-            "laplacianSchemes { default Gauss linear orthogonal; }\n"
+            # DEC-V61-107: changed div(phi,U) from "Gauss linear"
+            # (central differencing) to "Gauss linearUpwind grad(U)"
+            # (second-order upwind). Central differencing produces
+            # oscillatory NaN solutions on convection-dominated flow
+            # past sharp interior obstacles (iter01-style: Re=320,
+            # thin blade in plenum) regardless of dt — confirmed by
+            # the dt sweep at tools/adversarial/results/iter01_dt_sweep_2026-05-01.md
+            # (NaN at all dt ∈ {1.0, 0.1, 0.01}). linearUpwind is the
+            # OpenFOAM-recommended baseline for transient icoFoam on
+            # arbitrary geometry — second-order accurate where the
+            # mesh is well-resolved, drops to first-order upwind near
+            # discontinuities. The simpler LDC / channel cases are
+            # diffusion-dominated so the choice is invisible there;
+            # this only matters for cases with sharp internal
+            # obstacles or high local Reynolds.
+            "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); }\n"
+            # DEC-V61-107: changed laplacian + snGrad from "orthogonal"
+            # to "corrected". Tetrahedral meshes from gmsh on STL
+            # imports are inherently non-orthogonal — the LDC
+            # (cube blockMesh) was the only path where "orthogonal"
+            # was correct. Mismatch produced NaN on iter01-class
+            # geometries (blade in plenum, gap region creates highly
+            # non-orthogonal cells) regardless of dt or convection
+            # scheme. fvSolution already declares
+            # nNonOrthogonalCorrectors 2 expecting these schemes.
+            "laplacianSchemes { default Gauss linear corrected; }\n"
             "interpolationSchemes { default linear; }\n"
-            "snGradSchemes { default orthogonal; }\n",
+            "snGradSchemes { default corrected; }\n",
         ),
         (
             "system/fvSolution",
