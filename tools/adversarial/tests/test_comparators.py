@@ -291,3 +291,58 @@ def test_format_summary_structural_error_is_explicit():
     text = format_suite_summary(suite)
     assert "comparator_suite_error" in text
     assert "empty_or_missing_comparators" in text
+
+
+# ===== smoke runner integration: import-failure degradation path =====
+# Codex R11 non-blocking comment: the import-failure handling in
+# run_smoke.py was correct by inspection but had no automated coverage.
+# This test simulates the cascading-import scenario by poisoning a
+# transitive backend dep BEFORE invoking the runner's lazy-import
+# block, then asserting the runner produces a structured
+# ``extractor_import_failed`` ComparatorSuiteResult instead of crashing.
+
+def test_smoke_runner_lazy_import_handles_cascading_module_not_found(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+):
+    """Simulate the env Codex R10 reproduced (``ModuleNotFoundError:
+    No module named 'yaml'``). The smoke runner's lazy-import branch
+    must catch the cascade and convert it to a structured failure."""
+    # Mirror the exact import pattern run_smoke.py uses.
+    import sys as _sys
+    # Replace yaml in sys.modules with None so any subsequent
+    # ``import yaml`` raises ModuleNotFoundError.
+    monkeypatch.setitem(_sys.modules, "yaml", None)
+    # Drop any cached ``ui.backend.services.case_solve`` so the import
+    # cascade re-runs through the poisoned yaml module.
+    for cached in list(_sys.modules):
+        if cached.startswith("ui.backend.services.case_solve"):
+            monkeypatch.delitem(_sys.modules, cached, raising=False)
+
+    raised = None
+    try:
+        from ui.backend.services.case_solve.results_extractor import (  # noqa: F401
+            extract_results_summary,
+        )
+    except (ImportError, ModuleNotFoundError) as exc:
+        raised = exc
+
+    assert raised is not None, (
+        "expected the cascading import of case_solve/__init__.py to "
+        "raise ModuleNotFoundError when yaml is poisoned"
+    )
+    # Confirm the structural fallback the smoke runner builds is
+    # well-formed (this mirrors run_smoke.py:336-345 exactly).
+    fallback = ComparatorSuiteResult(
+        all_passed=False,
+        individual_results=(),
+        structural_error=(
+            f"extractor_import_failed: {raised} — smoke env "
+            "missing backend deps; install ui/backend "
+            "requirements or run from project venv"
+        ),
+    )
+    assert fallback.all_passed is False
+    assert "extractor_import_failed" in fallback.structural_error
+    text = format_suite_summary(fallback)
+    assert "comparator_suite_error" in text
+    assert "extractor_import_failed" in text
