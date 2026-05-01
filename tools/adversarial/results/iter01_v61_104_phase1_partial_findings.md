@@ -120,6 +120,38 @@ Replaces the original 3 candidate approaches (OCC cut / surface reversal / angle
 
 This honest correction is itself a Phase 1.5 deliverable (the previous diagnosis would have caused real engineering effort to be spent on a non-problem).
 
+### iter01 end-to-end re-test result (2026-05-01)
+
+Ran iter01 through the full production pipeline against a fresh backend on port 8050:
+
+| stage | result | detail |
+|---|---|---|
+| Import STL | ✅ HTTP 200 | 4 named patches detected (inlet, outlet, walls, blade), watertight |
+| Mesh | ✅ HTTP 200 | 7159 cells in 0.10s, no cells inside blade bbox |
+| BC setup (V61-103 named-patch path) | ✅ HTTP 200 | inlet→velocity_inlet, outlet→pressure_outlet, walls→no_slip_wall, blade→no_slip_wall — all 4 patches correctly classified |
+| Solve (250-step smoke cap) | ✅ HTTP 200 | 251 time directories written, no NaN, no divergence |
+
+Final residuals at t=250s (250 steps × dt=1.0):
+- `p`: 1.33e-04 (well-converged)
+- `U`: `[1.0, 0.937, 0.0]` (**not steady-state-converged**)
+- `continuity_error`: 1.16e-03 (just above smoke runner's 1e-3 threshold)
+
+**Interpretation**: iter01's geometry (thin blade in plenum at Re=320 with downstream recirculation) does NOT reach steady state within 250 simpleFoam iterations. The pipeline is fundamentally working; the smoke window is too aggressive. The previous "physics_validation_required" classification was based on the wrong root cause (assumed obstacle was meshed as fluid).
+
+**True defect classes for iter01**:
+- ❌ NOT a meshing defect (verified across 5 mesh densities)
+- ❌ NOT a BC mapping defect (V61-103 path produces correct patch classifications)
+- ❌ NOT a solver crash (no divergence, no NaN)
+- ✅ Slow convergence — needs >250 steps OR a tighter convergence tolerance OR a different solver setup (turbulence model, relaxation factors)
+
+**Next-step options for iter01 reclassification**:
+1. Promote to `converged` and increase smoke step cap to 1000 (15-20 min wall time per smoke run, breaks fast-feedback)
+2. Add new `expected_status: "converges_slowly"` that runs the full 250 steps but accepts cont_err < 5e-3 (loosened tolerance)
+3. Add an analytical comparator (e.g., target Reynolds-scaled bypass velocity) that the convergence-blind smoke runner can check at step 250 even if residuals are high
+4. Keep at `physics_validation_required` but with corrected rationale
+
+Recommendation: option **3** (analytical comparator) is the truest fit for the original adversarial intent — iter01 was always meant to validate that the obstacle creates the expected bypass jet + recirculation pattern, which is a qualitative physics check, not a residual check.
+
 ## Codex R8 closure (commit bec98b2 · 2026-05-01)
 
 R8 returned APPROVE_WITH_COMMENTS with 2 MED findings. Closure:

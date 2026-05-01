@@ -58,6 +58,6 @@
   },
   "smoke_runner": {
     "expected_status": "physics_validation_required",
-    "rationale": "Interior obstacle (suspended blade) \u2014 DEC-V61-104. The case converges numerically at smoke scale (no divergence, finite residuals) but the underlying physics is wrong because gmsh fills the void with fluid. Skipped by the convergence-based smoke runner; requires an analytical or experimental comparison to validate. Keep as adversarial canary for future V61-104 implementation."
+    "rationale": "Interior obstacle (suspended blade) \u2014 DEC-V61-104 Phase 1.5 corrected diagnosis (2026-05-01). End-to-end re-test on a fresh backend confirmed: gmsh meshes correctly (0 cells inside blade bbox), V61-103 named-patch BC mapper assigns all 4 patches correctly (inlet\u2192velocity_inlet, outlet\u2192pressure_outlet, walls\u2192no_slip_wall, blade\u2192no_slip_wall), simpleFoam runs 250 steps without divergence or NaN. The actual issue is SLOW CONVERGENCE: at step 250 the U residuals are ~[1.0, 0.94, 0.0] (still not steady-state-converged), continuity_error=1.16e-3 (just above smoke runner's 1e-3 threshold). Stays at physics_validation_required because the original adversarial intent was qualitative (verify bypass jet + downstream recirculation pattern) \u2014 that needs an analytical comparator, not a residual check. See tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md \u00a7iter01 end-to-end re-test result."
   }
 }
