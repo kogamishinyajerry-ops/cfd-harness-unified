@@ -13,6 +13,7 @@ Covers the 8 cases mandated by the DEC's Phase 3 test plan:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -176,6 +177,25 @@ def test_four_patch_with_symmetry_emits_symmetry_block(tmp_path: Path):
     # Symmetry patch must use type symmetry on both U and p.
     assert "    symmetry\n    {\n        type            symmetry;" in u_text
     assert "    symmetry\n    {\n        type            symmetry;" in p_text
+
+    # Defect-8 (iter06) regression: ``constant/polyMesh/boundary`` must
+    # ALSO upgrade the symmetry patch's ``type`` from the gmshToFoam
+    # default ``patch`` to ``symmetry``. Without this, icoFoam exits
+    # with FATAL IO ERROR ``patch type 'patch' not constraint type
+    # 'symmetry'`` when reading 0/p.
+    boundary_text = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
+    assert "constant/polyMesh/boundary" in result.written_files
+    # Find the symmetry block and assert type is symmetry.
+    sym_match = re.search(
+        r"\bsymmetry\s*\{[^}]*?type\s+(\w+);", boundary_text, re.DOTALL
+    )
+    assert sym_match is not None, "symmetry block not found in boundary file"
+    assert sym_match.group(1) == "symmetry"
+    # And the non-constraint patches stay as ``patch``.
+    inlet_match = re.search(
+        r"\binlet\s*\{[^}]*?type\s+(\w+);", boundary_text, re.DOTALL
+    )
+    assert inlet_match is not None and inlet_match.group(1) == "patch"
 
 
 def test_unknown_patch_name_falls_through_with_warning(tmp_path: Path):

@@ -129,6 +129,22 @@ _PATCH_RE = re.compile(
 )
 
 
+# BCClass → OpenFOAM constraint type that the polyMesh ``boundary``
+# file must declare. Constraint-type patches (symmetry, wedge, cyclic,
+# empty, processor) require the boundary file's ``type`` to match the
+# field BC dict's constraint type — otherwise icoFoam exits with FATAL
+# IO ERROR ``patch type 'patch' not constraint type 'symmetry'``.
+# gmshToFoam emits all patches as ``type patch`` by default, so we
+# rewrite affected patches in-place during BC setup.
+#
+# Wall patches are NOT rewritten: ``type patch`` + ``noSlip`` field BC
+# is valid OpenFOAM (no constraint requirement), and the cosmetic
+# ``type wall`` upgrade is out of scope for the symmetry-defect fix.
+_CONSTRAINT_PATCH_TYPES: dict[BCClass, str] = {
+    BCClass.SYMMETRY: "symmetry",
+}
+
+
 def _read_patch_ranges(boundary_path: Path) -> list[tuple[str, int, int]]:
     """Return ordered ``[(name, startFace, nFaces), ...]`` from
     ``constant/polyMesh/boundary``. Skips the OpenFOAM ``FoamFile``
@@ -149,6 +165,64 @@ def _read_patch_ranges(boundary_path: Path) -> list[tuple[str, int, int]]:
 def _read_named_patches(boundary_path: Path) -> list[str]:
     """Convenience wrapper returning patch names only."""
     return [name for name, _start, _n in _read_patch_ranges(boundary_path)]
+
+
+def _rewrite_polymesh_boundary_constraint_types(
+    boundary_path: Path,
+    patches_with_class: list[tuple[str, BCClass]],
+) -> str | None:
+    """Return rewritten ``constant/polyMesh/boundary`` content with
+    ``type`` and ``physicalType`` upgraded to the OpenFOAM constraint
+    type for any patch whose BCClass is in ``_CONSTRAINT_PATCH_TYPES``.
+
+    Returns ``None`` when no rewrites are needed (no constraint patches
+    in the case) — caller skips the extra atomic-commit entry.
+
+    Adversarial-loop iter06 defect-8 closure: half-pipe with symmetry
+    plane caused icoFoam FATAL IO ERROR because the field BC dict
+    declared ``type symmetry`` while the boundary file kept
+    gmshToFoam's default ``type patch`` for that patch.
+    """
+    rewrites = {
+        name: _CONSTRAINT_PATCH_TYPES[cls]
+        for name, cls in patches_with_class
+        if cls in _CONSTRAINT_PATCH_TYPES
+    }
+    if not rewrites:
+        return None
+    text = boundary_path.read_text()
+    for patch_name, openfoam_type in rewrites.items():
+        # Match the patch block ``<name> { ... }`` and rewrite the
+        # ``type`` line. Both gmshToFoam-generated entries (which also
+        # carry a ``physicalType`` line) and minimal test scaffolds
+        # (which don't) are supported. ``physicalType`` is rewritten
+        # in a separate pass below if present.
+        type_pattern = re.compile(
+            rf"(\b{re.escape(patch_name)}\s*\{{[^}}]*?)"
+            rf"type(\s+)\w+;",
+            re.DOTALL,
+        )
+        text, n = type_pattern.subn(
+            rf"\1type\2{openfoam_type};",
+            text,
+            count=1,
+        )
+        if n == 0:
+            # Patch entry not in the expected format — leave the file
+            # alone and let icoFoam surface the constraint error rather
+            # than silently corrupting the boundary file.
+            continue
+        physical_pattern = re.compile(
+            rf"(\b{re.escape(patch_name)}\s*\{{[^}}]*?)"
+            rf"physicalType(\s+)\w+;",
+            re.DOTALL,
+        )
+        text, _ = physical_pattern.subn(
+            rf"\1physicalType\2{openfoam_type};",
+            text,
+            count=1,
+        )
+    return text
 
 
 def _compute_patch_inward_normals(
@@ -525,6 +599,17 @@ def setup_bc_from_stl_patches(
         delta_t=delta_t,
         end_time=end_time,
     )
+
+    # Defect-8 (iter06): if any patch has a constraint-type BCClass
+    # (symmetry, …), rewrite ``constant/polyMesh/boundary`` so its
+    # ``type`` matches the field BC dict. Otherwise icoFoam exits with
+    # FATAL IO ERROR on the constraint-type mismatch. Included in the
+    # atomic commit so a partial write rolls back along with the dicts.
+    boundary_rewrite = _rewrite_polymesh_boundary_constraint_types(
+        boundary_path, patches_with_class
+    )
+    if boundary_rewrite is not None:
+        plan.append(("constant/polyMesh/boundary", boundary_rewrite))
 
     try:
         with case_lock(case_dir):

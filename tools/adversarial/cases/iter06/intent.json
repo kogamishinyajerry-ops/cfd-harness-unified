@@ -1,0 +1,51 @@
+{
+  "name": "half_pipe_with_symmetry_plane",
+  "description": "Half-cylinder pipe (radius 50 mm, length 300 mm) lying along +z, half-disk cross-section above the y=0 symmetry plane. Four named STL solids (inlet, outlet, walls, symmetry). Stresses two pipeline behaviors not yet covered by iter02..iter05: (a) curved cylindrical wall surfaces — gmsh splits the curved wall into multiple parametric surfaces, exercising per-triangle voting on quad strips of mixed orientation; (b) SYMMETRY BCClass driven end-to-end via named-patches mode — the class has been in bc_setup_from_stl_patches.py since cacda9f but no adversarial case has executed it.",
+  "patches": {
+    "inlet": {
+      "role": "inlet",
+      "U": [0.0, 0.0, 0.5],
+      "p": "zeroGradient"
+    },
+    "outlet": {
+      "role": "outlet",
+      "U": "zeroGradient",
+      "p": {
+        "type": "fixedValue",
+        "value": 0.0
+      }
+    },
+    "walls": {
+      "role": "wall",
+      "U": [0.0, 0.0, 0.0],
+      "p": "zeroGradient"
+    },
+    "symmetry": {
+      "role": "symmetry",
+      "note": "y=0 plane; OpenFOAM 'symmetry' boundary should mirror flow"
+    }
+  },
+  "solver": {
+    "name": "icoFoam",
+    "end_time_s": 1.0,
+    "delta_t_s": 0.001
+  },
+  "physics": {
+    "rho_kg_m3": 1.0,
+    "nu_m2_s": 1.0e-3,
+    "characteristic_velocity_m_s": 0.5,
+    "characteristic_length_m": 0.1,
+    "reynolds": 50.0
+  },
+  "expected_outcome": {
+    "converges": true,
+    "expected_residual_p_final": 1.0e-5,
+    "expected_residual_U_final": 1.0e-6,
+    "mass_balance": {
+      "inflow_patches": ["inlet"],
+      "outflow_patches": ["outlet"],
+      "expectation": "volumetric_flow[inlet] ~= volumetric_flow[outlet] (symmetry plane contributes zero flux)"
+    },
+    "qualitative_description": "Steady-state pipe flow develops along +z. Velocity profile is parabolic at fully developed cross-sections (Poiseuille-like, but on half-disk). Axial Uz peaks near the cylinder axis (~0.5 m/s if undeveloped, up to ~1.0 m/s if fully developed in this ~6:1 length-to-diameter ratio). Symmetry plane should show no normal velocity component (zero v_y on y=0 face)."
+  }
+}
