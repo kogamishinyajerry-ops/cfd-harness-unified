@@ -135,10 +135,26 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
     """Map a patch name to a BCClass via the project default table.
     Returns (class, warning_or_None). Unrecognized names fall through
     to NO_SLIP_WALL with a warning.
+
+    Lookup order:
+        1. Exact case-insensitive match against ``_DEFAULT_PATCH_CLASS``
+        2. Prefix match — strip a trailing ``_<digits>`` or ``<digits>``
+           suffix and re-lookup. Handles canonical multi-instance naming
+           like ``inlet_1`` / ``inlet_2`` / ``walls01`` that CAD exporters
+           emit when one logical patch is split into multiple meshing
+           regions.
+        3. Fall through to NO_SLIP_WALL with warning.
     """
-    cls = _DEFAULT_PATCH_CLASS.get(name.lower())
+    lower = name.lower()
+    cls = _DEFAULT_PATCH_CLASS.get(lower)
     if cls is not None:
         return cls, None
+    # Strip ``_<digits>`` or trailing digits and retry.
+    stripped = re.sub(r"_?\d+$", "", lower)
+    if stripped and stripped != lower:
+        cls = _DEFAULT_PATCH_CLASS.get(stripped)
+        if cls is not None:
+            return cls, None
     return (
         BCClass.NO_SLIP_WALL,
         f"patch {name!r} not in default classification table; "

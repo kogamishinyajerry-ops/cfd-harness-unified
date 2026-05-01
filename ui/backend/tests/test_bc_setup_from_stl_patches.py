@@ -195,6 +195,32 @@ def test_idempotent_two_calls_produce_same_state(tmp_path: Path):
     assert r2.skipped_user_overrides == ()
 
 
+def test_numbered_patch_suffixes_classify_via_prefix_match(tmp_path: Path):
+    """Multi-instance patches like ``inlet_1``/``inlet_2``/``walls01``
+    (canonical when a CAD exporter splits one logical patch into mesh
+    regions) must classify by stripped prefix, not fall through to
+    NO_SLIP_WALL."""
+    case_dir = tmp_path / "numbered_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_boundary(
+        case_dir,
+        [
+            ("inlet_1", 50, 1000),
+            ("inlet_2", 50, 1050),
+            ("outlet_1", 100, 1100),
+            ("walls01", 1500, 1200),
+        ],
+    )
+
+    result = setup_bc_from_stl_patches(case_dir, case_id="numbered_case")
+    bc_classes = dict(result.patches)
+    assert bc_classes["inlet_1"] == BCClass.VELOCITY_INLET
+    assert bc_classes["inlet_2"] == BCClass.VELOCITY_INLET
+    assert bc_classes["outlet_1"] == BCClass.PRESSURE_OUTLET
+    assert bc_classes["walls01"] == BCClass.NO_SLIP_WALL
+    assert result.warnings == ()
+
+
 def test_user_override_invariant_preserves_engineer_edits(tmp_path: Path):
     case_dir = tmp_path / "override_case"
     _scaffold_case(case_dir)
