@@ -1,0 +1,176 @@
+solid inlet
+facet normal -1.0 0.0 0.0
+outer loop
+vertex -0.12 -0.04 0.02
+vertex -0.12 0.04 0.02
+vertex -0.12 -0.04 -0.02
+endloop
+endfacet
+facet normal -1.0 0.0 0.0
+outer loop
+vertex -0.12 -0.04 -0.02
+vertex -0.12 0.04 0.02
+vertex -0.12 0.04 -0.02
+endloop
+endfacet
+endsolid inlet
+solid outlet
+facet normal 1.0 0.0 0.0
+outer loop
+vertex 0.12 0.04 -0.02
+vertex 0.12 -0.04 0.02
+vertex 0.12 -0.04 -0.02
+endloop
+endfacet
+facet normal 1.0 0.0 0.0
+outer loop
+vertex 0.12 0.04 0.02
+vertex 0.12 -0.04 0.02
+vertex 0.12 0.04 -0.02
+endloop
+endfacet
+endsolid outlet
+solid walls
+facet normal 0.0 -1.0 0.0
+outer loop
+vertex 0.12 -0.04 -0.02
+vertex -0.12 -0.04 0.02
+vertex -0.12 -0.04 -0.02
+endloop
+endfacet
+facet normal 0.0 0.0 -1.0
+outer loop
+vertex -0.12 0.04 -0.02
+vertex 0.12 -0.04 -0.02
+vertex -0.12 -0.04 -0.02
+endloop
+endfacet
+facet normal 0.0 0.0 1.0
+outer loop
+vertex -0.12 -0.04 0.02
+vertex 0.12 0.04 0.02
+vertex -0.12 0.04 0.02
+endloop
+endfacet
+facet normal 0.0 -1.0 0.0
+outer loop
+vertex 0.12 -0.04 0.02
+vertex -0.12 -0.04 0.02
+vertex 0.12 -0.04 -0.02
+endloop
+endfacet
+facet normal 0.0 0.0 1.0
+outer loop
+vertex 0.12 -0.04 0.02
+vertex 0.12 0.04 0.02
+vertex -0.12 -0.04 0.02
+endloop
+endfacet
+facet normal 0.0 1.0 0.0
+outer loop
+vertex -0.12 0.04 0.02
+vertex 0.12 0.04 0.02
+vertex -0.12 0.04 -0.02
+endloop
+endfacet
+facet normal 0.0 0.0 -1.0
+outer loop
+vertex 0.12 0.04 -0.02
+vertex 0.12 -0.04 -0.02
+vertex -0.12 0.04 -0.02
+endloop
+endfacet
+facet normal 0.0 1.0 0.0
+outer loop
+vertex -0.12 0.04 -0.02
+vertex 0.12 0.04 0.02
+vertex 0.12 0.04 -0.02
+endloop
+endfacet
+endsolid walls
+solid blade
+facet normal -1.0 0.0 0.0
+outer loop
+vertex 0.019 -0.036 0.016
+vertex 0.019 0.036 0.016
+vertex 0.019 -0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 -1.0 0.0
+outer loop
+vertex 0.021 -0.036 -0.016
+vertex 0.019 -0.036 0.016
+vertex 0.019 -0.036 -0.016
+endloop
+endfacet
+facet normal -1.0 0.0 0.0
+outer loop
+vertex 0.019 -0.036 -0.016
+vertex 0.019 0.036 0.016
+vertex 0.019 0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 0.0 -1.0
+outer loop
+vertex 0.019 0.036 -0.016
+vertex 0.021 -0.036 -0.016
+vertex 0.019 -0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 0.0 1.0
+outer loop
+vertex 0.019 -0.036 0.016
+vertex 0.021 0.036 0.016
+vertex 0.019 0.036 0.016
+endloop
+endfacet
+facet normal 0.0 -1.0 0.0
+outer loop
+vertex 0.021 -0.036 0.016
+vertex 0.019 -0.036 0.016
+vertex 0.021 -0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 0.0 1.0
+outer loop
+vertex 0.021 -0.036 0.016
+vertex 0.021 0.036 0.016
+vertex 0.019 -0.036 0.016
+endloop
+endfacet
+facet normal 0.0 1.0 0.0
+outer loop
+vertex 0.019 0.036 0.016
+vertex 0.021 0.036 0.016
+vertex 0.019 0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 0.0 -1.0
+outer loop
+vertex 0.021 0.036 -0.016
+vertex 0.021 -0.036 -0.016
+vertex 0.019 0.036 -0.016
+endloop
+endfacet
+facet normal 0.0 1.0 0.0
+outer loop
+vertex 0.019 0.036 -0.016
+vertex 0.021 0.036 0.016
+vertex 0.021 0.036 -0.016
+endloop
+endfacet
+facet normal 1.0 0.0 0.0
+outer loop
+vertex 0.021 0.036 -0.016
+vertex 0.021 -0.036 0.016
+vertex 0.021 -0.036 -0.016
+endloop
+endfacet
+facet normal 1.0 0.0 0.0
+outer loop
+vertex 0.021 0.036 0.016
+vertex 0.021 -0.036 0.016
+vertex 0.021 0.036 -0.016
+endloop
+endfacet
+endsolid blade

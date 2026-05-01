@@ -1,0 +1,59 @@
+{
+  "name": "thin_blade_bypass_plenum",
+  "description": "Chosen adversarial class: thin features. This is a viscous internal plenum with a 2 mm suspended blade inside a 240 x 80 x 40 mm cavity, leaving only 4 mm roof, floor, and side bypass gaps; that geometry is realistic for an instrumented service duct but likely to expose thin-gap loss or patch-seam defects in the import and meshing pipeline. If the narrow passages survive, the expected physics is a steady bypass jet around the blade edges with a downstream recirculation pocket.",
+  "patches": {
+    "inlet": {
+      "role": "inlet",
+      "U": [
+        0.8,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    },
+    "outlet": {
+      "role": "outlet",
+      "U": "zeroGradient",
+      "p": {
+        "type": "fixedValue",
+        "value": 0.0
+      }
+    },
+    "walls": {
+      "role": "wall",
+      "U": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    },
+    "blade": {
+      "role": "wall",
+      "U": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    }
+  },
+  "solver": {
+    "name": "simpleFoam",
+    "end_time_s": 600.0,
+    "delta_t_s": 1.0
+  },
+  "physics": {
+    "rho_kg_m3": 1.0,
+    "nu_m2_s": 0.0002,
+    "characteristic_velocity_m_s": 0.8,
+    "characteristic_length_m": 0.08,
+    "reynolds": 320.0
+  },
+  "expected_outcome": {
+    "converges": true,
+    "expected_residual_p_final": 1e-05,
+    "expected_residual_U_final": 1e-06,
+    "qualitative_description": "Most of the flow accelerates through the 4 mm bypass gaps around the blade, then expands into a low-speed wake region immediately downstream. Expect symmetric roof/floor leakage streams, weak 3D side leakage, and a recirculation pocket behind the blade rather than a trivial plug-flow field."
+  }
+}

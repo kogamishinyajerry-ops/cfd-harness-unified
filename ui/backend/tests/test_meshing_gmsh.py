@@ -27,7 +27,7 @@ from ui.backend.services.meshing_gmsh.pipeline import (
     MeshPipelineError,
     mesh_imported_case,
 )
-from ui.backend.tests.conftest import box_stl
+from ui.backend.tests.conftest import box_stl, seamed_multi_solid_box_stl
 
 
 # ----- cell_budget --------------------------------------------------------
@@ -79,6 +79,57 @@ def test_gmsh_runs_on_real_box_stl(tmp_path: Path):
     assert result.point_count > 0
     assert result.face_count > 0
     assert result.generation_time_s >= 0.0
+
+
+def test_gmsh_preserves_stl_solid_names_as_physical_groups(tmp_path: Path):
+    """Adversarial-loop iter02 regression (defect 2a): a multi-solid
+    ASCII STL with named solids inlet/outlet/walls must produce one
+    ``$PhysicalNames`` entry per solid in the written MSH, with each
+    boundary triangle tagged to the matching physical group. Without
+    this, gmshToFoam emits a single ``patch0`` and the named-patch
+    metadata that the engineer encoded in the CAD export evaporates."""
+    stl_path = tmp_path / "duct.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())  # inlet/outlet/walls
+    msh_path = tmp_path / "duct.msh"
+
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0
+
+    text = msh_path.read_text()
+    # PhysicalNames section: dim=2 (surface) groups for each solid.
+    assert '"inlet"' in text
+    assert '"outlet"' in text
+    assert '"walls"' in text
+
+    # Element-line physical tags must be non-zero on the boundary
+    # triangles. Format: ``elem_id elem_type num_tags physical_group ...``
+    in_elements = False
+    found_nonzero_triangle = False
+    for line in text.splitlines():
+        if line.startswith("$Elements"):
+            in_elements = True
+            continue
+        if line.startswith("$EndElements"):
+            break
+        if not in_elements:
+            continue
+        parts = line.split()
+        # Skip the count line (single-token) at the start of section.
+        if len(parts) < 5:
+            continue
+        elem_type, num_tags, physical = parts[1], parts[2], parts[3]
+        if elem_type == "2" and num_tags == "2" and physical != "0":
+            found_nonzero_triangle = True
+            break
+    assert found_nonzero_triangle, (
+        "expected at least one boundary triangle tagged to a physical "
+        "group; all elements have physical_tag=0 (regression — physical "
+        "groups dropped during export)"
+    )
 
 
 def test_gmsh_raises_on_missing_stl(tmp_path: Path):

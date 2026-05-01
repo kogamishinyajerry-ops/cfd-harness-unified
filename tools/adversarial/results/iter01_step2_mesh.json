@@ -1,0 +1,13 @@
+{
+    "case_id": "imported_2026-04-30T17-34-54Z_ba972c7c",
+    "mesh_summary": {
+        "cell_count": 7159,
+        "face_count": 2594,
+        "point_count": 1832,
+        "mesh_mode_used": "beginner",
+        "polyMesh_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/user_drafts/imported/imported_2026-04-30T17-34-54Z_ba972c7c/constant/polyMesh",
+        "msh_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/ui/backend/user_drafts/imported/imported_2026-04-30T17-34-54Z_ba972c7c/imported.msh",
+        "generation_time_s": 0.13596216589212418,
+        "warning": null
+    }
+}

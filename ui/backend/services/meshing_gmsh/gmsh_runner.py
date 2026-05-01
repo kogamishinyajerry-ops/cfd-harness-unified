@@ -173,6 +173,65 @@ def _gmsh_inline(
             gmsh.model.geo.addVolume([surface_loop])
             gmsh.model.geo.synchronize()
 
+            # Adversarial-loop iter02 fix (defect 2a): re-attach STL
+            # ``solid <name>`` identity to the post-classify parametric
+            # surfaces. Without this, gmshToFoam writes a single
+            # ``patch0`` for every multi-patch CAD import — the named
+            # inlet/outlet/walls metadata that the engineer encoded in
+            # the STL evaporates between merge() and write(). For each
+            # parametric surface we compute a representative centroid
+            # from its mesh nodes (still the original STL triangles at
+            # this point — generate(3) hasn't run yet) and match to the
+            # nearest STL solid's centroid cloud. Surfaces sharing a
+            # solid name are grouped under one PhysicalGroup so
+            # gmshToFoam emits one Foam patch per named solid.
+            from .stl_solid_index import (
+                assign_surface_to_solid,
+                parse_named_solids_from_path,
+            )
+
+            named_solids = parse_named_solids_from_path(stl_path)
+            if named_solids:
+                surfaces_by_name: dict[str, list[int]] = {}
+                for _dim, tag in surfaces:
+                    _types, _etags, node_tags_list = gmsh.model.mesh.getElements(
+                        dim=2, tag=tag
+                    )
+                    if not node_tags_list or len(node_tags_list[0]) == 0:
+                        continue
+                    node_ids = set(int(n) for n in node_tags_list[0])
+                    coords: list[list[float]] = []
+                    for nid in node_ids:
+                        c, _, _, _ = gmsh.model.mesh.getNode(nid)
+                        coords.append([c[0], c[1], c[2]])
+                    if not coords:
+                        continue
+                    import numpy as _np
+
+                    centroid = _np.asarray(coords).mean(axis=0)
+                    name = assign_surface_to_solid(centroid, named_solids)
+                    if name is not None:
+                        surfaces_by_name.setdefault(name, []).append(tag)
+                for name, tags in surfaces_by_name.items():
+                    pg_tag = gmsh.model.addPhysicalGroup(2, tags)
+                    gmsh.model.setPhysicalName(2, pg_tag, name)
+                # gmsh's MSH 2.2 export only writes elements that
+                # belong to a physical group when any physical group
+                # exists; ``Mesh.SaveAll=1`` is meant to override that
+                # but in practice it also strips the per-element
+                # physical tags, leaving gmshToFoam with no
+                # patch information. The robust workaround is to add
+                # a physical group for the volume too, so every
+                # element gets a non-zero tag through export. The
+                # name is internal-only (gmshToFoam treats dim=3
+                # physical groups as cellZones, not patches).
+                volume_entities = gmsh.model.getEntities(dim=3)
+                if volume_entities:
+                    vol_pg = gmsh.model.addPhysicalGroup(
+                        3, [t for _d, t in volume_entities]
+                    )
+                    gmsh.model.setPhysicalName(3, vol_pg, "fluid")
+
             # Characteristic length sizing: explicit override >
             # bbox-derived default. The cap layer (cell_budget.py) is
             # the ultimate guard.

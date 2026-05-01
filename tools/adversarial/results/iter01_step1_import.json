@@ -1,0 +1,53 @@
+{
+    "detail": {
+        "reason": "STL is not watertight \u2014 open edges or non-manifold faces present. Heal the geometry in the source CAD before re-uploading.",
+        "failing_check": "watertight",
+        "ingest_report": {
+            "is_watertight": false,
+            "bbox_min": [
+                -0.12,
+                -0.04,
+                -0.02
+            ],
+            "bbox_max": [
+                0.12,
+                0.04,
+                0.02
+            ],
+            "bbox_extent": [
+                0.24,
+                0.08,
+                0.04
+            ],
+            "unit_guess": "m",
+            "solid_count": 4,
+            "face_count": 24,
+            "is_single_shell": false,
+            "patches": [
+                {
+                    "name": "inlet",
+                    "face_count": 2
+                },
+                {
+                    "name": "outlet",
+                    "face_count": 2
+                },
+                {
+                    "name": "walls",
+                    "face_count": 8
+                },
+                {
+                    "name": "blade",
+                    "face_count": 12
+                }
+            ],
+            "all_default_faces": false,
+            "warnings": [
+                "STL contains 4 disconnected bodies; M7 mesh generation may need explicit cell-zone setup."
+            ],
+            "errors": [
+                "STL is not watertight \u2014 open edges or non-manifold faces present. Heal the geometry in the source CAD before re-uploading."
+            ]
+        }
+    }
+}

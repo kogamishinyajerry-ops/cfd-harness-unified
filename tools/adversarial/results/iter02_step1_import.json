@@ -1,0 +1,43 @@
+{
+    "case_id": "imported_2026-04-30T17-42-25Z_0e1eb396",
+    "ingest_report": {
+        "is_watertight": true,
+        "bbox_min": [
+            -0.12,
+            -0.04,
+            -0.02
+        ],
+        "bbox_max": [
+            0.12,
+            0.04,
+            0.02
+        ],
+        "bbox_extent": [
+            0.24,
+            0.08,
+            0.04
+        ],
+        "unit_guess": "m",
+        "solid_count": 3,
+        "face_count": 12,
+        "is_single_shell": true,
+        "patches": [
+            {
+                "name": "inlet",
+                "face_count": 2
+            },
+            {
+                "name": "outlet",
+                "face_count": 2
+            },
+            {
+                "name": "walls",
+                "face_count": 8
+            }
+        ],
+        "all_default_faces": false,
+        "warnings": [],
+        "errors": []
+    },
+    "edit_url": "/workbench/case/imported_2026-04-30T17-42-25Z_0e1eb396/edit"
+}
