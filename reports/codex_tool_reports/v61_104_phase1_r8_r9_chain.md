@@ -48,10 +48,25 @@ Phase 1 ships **scaffolding only**. Empirical finding documented in
 
 iter01 status correctly reclassified as `physics_validation_required` until Phase 1.5 lands a working subtraction strategy.
 
-## Phase 1.5 follow-up DEC scope
+## Phase 1.5 empirical correction (2026-05-01) — original Phase 1 root-cause was wrong
 
-- **Approach A**: OCC-kernel boolean cut (`gmsh.model.occ.cut`) — proper boolean operation
-- **Approach B**: explicit surface-orientation reversal via `gmsh.model.geo.reverse` before addSurfaceLoop
-- **Approach C**: classifySurfaces angle tuning (40° → 90°+)
+Probe across mesh densities `lc ∈ {0.0085, 0.005, 0.003, 0.002, 0.001}` on actual `iter01/geometry.stl`:
 
-Each is 1-3 days of investigation + tests. Best handled in a fresh DEC-V61-104.1 follow-up with its own Codex chain.
+| lc | single-loop total | inside blade bbox | multi-loop total | inside blade bbox |
+|---|---|---|---|---|
+| 0.0085 | 7,133 | **0** | 7,133 | **0** |
+| 0.005 | 30,237 | **0** | 30,237 | **0** |
+| 0.003 | 132,089 | **0** | 132,089 | **0** |
+| 0.002 | 434,121 | **0** | 434,121 | **0** |
+| 0.001 | 3,407,604 | **0** | 3,407,604 | **0** |
+
+gmsh's single-loop `addVolume([all_surfaces])` ALREADY treats internal shells as obstacles — zero cells inside blade across 3 orders of magnitude of density. The Phase 1 multi-loop scaffolding produces byte-identical output. **The "no subtraction" claim was a probe artifact** (previous probe only counted total cells, not their location).
+
+### What this means
+
+- **Phase 1 multi-loop code is functionally redundant** but not harmful (same output as single-loop)
+- **R8 TopologyPartitionError containment guard remains valuable**: protects against disconnected exterior shells (two separate cubes that would silently mesh wrong otherwise)
+- **The original 3 Phase 1.5 approaches are RETIRED**: OCC cut / surface reversal / angle tuning all unnecessary
+- **Phase 1.5 re-scoped**: investigate iter01's actual physics defect (BC mapping, solver, etc.) — the meshing layer is innocent
+
+This honest correction prevented 1-3 days of engineering on a non-problem.

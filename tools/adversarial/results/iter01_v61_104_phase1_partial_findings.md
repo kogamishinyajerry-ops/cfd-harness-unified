@@ -74,6 +74,52 @@ Each approach is 1-3 days of investigation + tests. Best done in a fresh DEC-V61
 
 Phase 1 ships the right abstractions; Phase 1.5 makes them actually subtract.
 
+## Phase 1.5 empirical correction (2026-05-01) — **previous root-cause analysis was wrong**
+
+When investigating Phase 1.5 (the "make subtraction work" follow-up), an empirical probe on the actual `iter01/geometry.stl` and on a synthetic cube-in-cube fixture revealed that **the original Phase 1 root-cause diagnosis was incorrect**.
+
+### Probe methodology
+
+For each mesh density (`lc` ∈ {0.0085, 0.005, 0.003, 0.002, 0.001}, spanning production beginner-mode through fine), run gmsh end-to-end on iter01:
+1. `merge` → `classifySurfaces(40°)` → `createGeometry`
+2. `addSurfaceLoop([all_surfaces])` + `addVolume([loop])` (single-loop path)
+3. `generate(3)`
+4. Count tetrahedra whose centroid falls inside the blade body's bounding box
+
+Repeat with the Phase 1 multi-loop path (`addVolume([outer, -inner])`).
+
+### Probe result
+
+| lc | single-loop total | inside blade bbox | multi-loop total | inside blade bbox |
+|---|---|---|---|---|
+| 0.0085 | 7,133 | **0** | 7,133 | **0** |
+| 0.005 | 30,237 | **0** | 30,237 | **0** |
+| 0.003 | 132,089 | **0** | 132,089 | **0** |
+| 0.002 | 434,121 | **0** | 434,121 | **0** |
+| 0.001 | 3,407,604 | **0** | 3,407,604 | **0** |
+
+### Interpretation
+
+gmsh's geo-kernel **already** treats internal closed shells as obstacles when given a single `addSurfaceLoop` covering all surfaces. Zero tetrahedra are placed inside the blade across 3 orders of magnitude of mesh density. The Phase 1 multi-loop `addVolume([outer, -inner])` produces byte-identical cell counts because it does the same thing the geo kernel was already doing.
+
+The previous "5212 cells in both modes" claim and the "addVolume hole subtraction is a no-op" hypothesis were artifacts of a probe that didn't verify cell location — only total cell count, which is dominated by mesher density choices.
+
+### What this means for Phase 1 / Phase 1.5
+
+- **Phase 1's multi-loop scaffolding is functionally redundant** (same output as single-loop) but **not harmful**.
+- **The R8 containment guard (TopologyPartitionError) is still valuable**: it loud-rejects disconnected exterior shells (two separate cubes that aren't outer+inner). Single-loop addVolume on disconnected shells would produce wrong physics silently; the partitioner now refuses.
+- **Phase 1.5 "make subtraction work" is no longer needed** — subtraction already works.
+- **iter01's ORIGINAL physics defect must have a different root cause** (BC mapping wrong, blade patch label not propagated, solver divergence on thin geometry, etc.) — needs separate investigation. The mesh layer is innocent.
+
+### Phase 1.5 re-scope
+
+Replaces the original 3 candidate approaches (OCC cut / surface reversal / angle tuning) — all unnecessary. New scope:
+1. Re-test iter01 end-to-end through the production pipeline (`POST /import/{id}/mesh` → `POST /case/{id}/solve`) and identify what actually went wrong.
+2. Fix that defect.
+3. Update DEC-V61-104 status to reflect honest scope.
+
+This honest correction is itself a Phase 1.5 deliverable (the previous diagnosis would have caused real engineering effort to be spent on a non-problem).
+
 ## Codex R8 closure (commit bec98b2 · 2026-05-01)
 
 R8 returned APPROVE_WITH_COMMENTS with 2 MED findings. Closure:

@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-104
 title: Interior-obstacle topology — gmsh runner builds outer surface loop + reversed-inner loops for cases with interior bodies
-status: Phase 1 Implemented · Phase 1.5 Pending (2026-05-01 · Phase 1 ships scaffolding only — topology partitioner + multi-loop addVolume call site + TopologyPartitionError containment guard + 14/14 tests · Codex chain R8 APPROVE_WITH_COMMENTS → R9 APPROVE clean close · empirical finding: gmsh's geo-kernel addVolume hole subtraction does NOT actually subtract for STL-imported surfaces, iter01 still 7159 cells · Phase 1.5 follow-up to add OCC-kernel cut OR explicit surface-orientation reversal — see tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md)
+status: Phase 1 Implemented · Phase 1.5 Re-Scoped (2026-05-01 · Phase 1 ships partitioner + multi-loop addVolume call site + TopologyPartitionError containment guard + 14/14 tests · Codex chain R8 APPROVE_WITH_COMMENTS → R9 APPROVE clean close · **2026-05-01 empirical correction**: probe across mesh densities lc=0.0085→0.001 confirmed gmsh's single-loop addVolume ALREADY correctly treats internal shells as obstacles (0 cells inside blade bbox at all densities); the previous "no subtraction" claim was a probe artifact. Multi-loop scaffolding is functionally redundant but the R8 containment guard remains valuable. Phase 1.5 re-scoped to investigating iter01's ACTUAL physics defect (likely BC/solver, not meshing) — see tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md "Phase 1.5 empirical correction" section)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-30
 authored_under: tools/adversarial/results/iter01_findings.md (defect 2b root cause + scope)
@@ -19,10 +19,9 @@ phase1_implementation_commits:
   - 30b659b (feat: topology partitioner + multi-body addVolume scaffolding · 9 tests)
   - bec98b2 (fix: close Codex R8 MED findings · TopologyPartitionError containment guard + real-gmsh addVolume coverage · 14/14 tests)
 phase1_5_follow_up_scope:
-  - approach_a: occ-kernel boolean cut (gmsh.model.occ.cut) — robust regardless of STL orientation; requires re-architecting from geo to occ kernel after classifySurfaces
-  - approach_b: explicit surface-orientation reversal via gmsh.model.geo.reverse before addSurfaceLoop — lighter touch but fragile on degenerate normals
-  - approach_c: classifySurfaces angle tuning (40° → 90°+) — may preserve topological gap that triggers clean addVolume separation
-  - estimated_effort: 1-3 days investigation + tests per approach
+  - retired_2026_05_01: original 3 candidate approaches (OCC cut / surface reversal / angle tuning) all RETIRED — empirical probe proved gmsh single-loop addVolume already subtracts correctly across all mesh densities tested
+  - new_scope: re-investigate iter01's actual physics defect (BC mapping, solver divergence, blade-patch label propagation, etc.) — the meshing layer is innocent
+  - corrective_value: even though no code change is required for "subtraction", documenting the misdiagnosis prevents 1-3 days of wasted engineering on OCC kernel re-architecture or surface-orientation hacks
 notion_sync_status: synced 2026-04-30 (https://app.notion.com/p/353c68942bed81bb9a0bfcf29a07d09c) · re-sync pending for Phase 1 status update + R9 APPROVE
 
 # Why now
