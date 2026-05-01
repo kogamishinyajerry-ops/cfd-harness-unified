@@ -217,23 +217,34 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
 
     Lookup order:
         1. Exact case-insensitive match against ``_DEFAULT_PATCH_CLASS``
-        2. Prefix match — strip a trailing ``_<digits>`` or ``<digits>``
-           suffix and re-lookup. Handles canonical multi-instance naming
-           like ``inlet_1`` / ``inlet_2`` / ``walls01`` that CAD exporters
-           emit when one logical patch is split into multiple meshing
-           regions.
-        3. Fall through to NO_SLIP_WALL with warning.
+        2. Strip a trailing ``_<digits>`` or ``<digits>`` suffix and
+           retry (canonical multi-instance numbering like ``inlet_1``,
+           ``walls01``).
+        3. Strip everything after (and including) the first underscore
+           and retry (compound names like ``outlet_branch``,
+           ``inlet_main``, ``walls_top``). Adversarial-loop iter05
+           defect-7 closure: T-junction's ``outlet_branch`` was getting
+           mis-classified to NO_SLIP_WALL because step 2 doesn't match
+           non-numeric suffixes.
+        4. Fall through to NO_SLIP_WALL with warning.
     """
     lower = name.lower()
     cls = _DEFAULT_PATCH_CLASS.get(lower)
     if cls is not None:
         return cls, None
-    # Strip ``_<digits>`` or trailing digits and retry.
+    # Step 2: strip trailing digits.
     stripped = re.sub(r"_?\d+$", "", lower)
     if stripped and stripped != lower:
         cls = _DEFAULT_PATCH_CLASS.get(stripped)
         if cls is not None:
             return cls, None
+    # Step 3: strip everything after the first underscore.
+    if "_" in lower:
+        prefix = lower.split("_", 1)[0]
+        if prefix:
+            cls = _DEFAULT_PATCH_CLASS.get(prefix)
+            if cls is not None:
+                return cls, None
     return (
         BCClass.NO_SLIP_WALL,
         f"patch {name!r} not in default classification table; "
