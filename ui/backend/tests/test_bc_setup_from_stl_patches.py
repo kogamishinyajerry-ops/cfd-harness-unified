@@ -485,7 +485,14 @@ def test_inlet_velocity_falls_back_when_polymesh_files_missing(tmp_path: Path):
     )
 
 
-def test_user_override_invariant_preserves_engineer_edits(tmp_path: Path):
+def test_user_override_partial_solver_group_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R12 P1: with the pimpleFoam migration the
+    {controlDict, fvSchemes, fvSolution} group is authored as a coherent
+    template. A partial user override (e.g. only controlDict) would let
+    AI-authored pimpleFoam fvSolution coexist with user-edited
+    icoFoam-era controlDict — the resulting case aborts at startup with
+    a dictionary-keyword mismatch. Refuse with a structured error
+    instead so the engineer can reconcile."""
     case_dir = tmp_path / "override_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
@@ -497,27 +504,107 @@ def test_user_override_invariant_preserves_engineer_edits(tmp_path: Path):
         ],
     )
 
-    # First setup: AI authors all 7 dicts.
+    # First setup: AI authors all dicts (pimpleFoam template).
     r1 = setup_bc_from_stl_patches(case_dir, case_id="override_case")
     assert r1.skipped_user_overrides == ()
 
-    # Engineer manually edits system/controlDict (raw-dict editor flow).
+    # Engineer overrides ONLY controlDict (not fvSchemes / fvSolution).
     custom_control_dict = (
         'FoamFile { version 2.0; format ascii; class dictionary; '
         'location "system"; object controlDict; }\n'
         "application icoFoam;\n"
-        "endTime 100;\n"  # engineer wants longer simulation
-        "deltaT 0.001;\n"  # finer dt
+        "endTime 100;\n"
+        "deltaT 0.001;\n"
     )
     (case_dir / "system/controlDict").write_text(custom_control_dict)
     mark_user_override(
         case_dir,
         relative_path="system/controlDict",
         new_content=custom_control_dict.encode("utf-8"),
-        detail={"reason": "engineer override for finer dt"},
+        detail={"reason": "engineer override"},
     )
 
-    # Re-run setup-bc — should NOT overwrite the engineer's controlDict.
-    r2 = setup_bc_from_stl_patches(case_dir, case_id="override_case")
-    assert "system/controlDict" in r2.skipped_user_overrides
-    assert (case_dir / "system/controlDict").read_text() == custom_control_dict
+    # Re-run setup-bc — must REFUSE because the override is partial.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="override_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    assert "system/controlDict" in str(exc.value)
+
+
+def test_user_override_full_solver_group_preserves_all_three(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R12 P1: when the engineer overrides ALL
+    THREE of {controlDict, fvSchemes, fvSolution} together, the
+    re-author proceeds and the engineer-authored set is preserved
+    intact (the override-preservation contract still holds for the
+    coherent group case)."""
+    case_dir = tmp_path / "override_full"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="override_full")
+
+    custom = {
+        "system/controlDict": (
+            'FoamFile { version 2.0; format ascii; class dictionary; '
+            'location "system"; object controlDict; }\n'
+            "application icoFoam;\nendTime 100;\ndeltaT 0.001;\n"
+        ),
+        "system/fvSchemes": (
+            'FoamFile { version 2.0; format ascii; class dictionary; '
+            'location "system"; object fvSchemes; }\n'
+            "ddtSchemes  { default Euler; }\n"
+        ),
+        "system/fvSolution": (
+            'FoamFile { version 2.0; format ascii; class dictionary; '
+            'location "system"; object fvSolution; }\n'
+            "solvers { p { solver PCG; } }\nPISO { nCorrectors 2; }\n"
+        ),
+    }
+    for rel, content in custom.items():
+        (case_dir / rel).write_text(content)
+        mark_user_override(
+            case_dir, relative_path=rel,
+            new_content=content.encode("utf-8"),
+            detail={"reason": "coherent icoFoam override group"},
+        )
+
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="override_full")
+    for rel in custom:
+        assert rel in r2.skipped_user_overrides
+        assert (case_dir / rel).read_text() == custom[rel]
+
+
+def test_max_delta_t_honors_caller_delta_t(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R12 P2: maxDeltaT must equal the
+    caller's delta_t so pimpleFoam can scale DOWN for stability but
+    cannot ramp UP past the caller's requested cap (which would defeat
+    the smoke runner's max_steps budgeting for cases like
+    iter04/05/06 that declare dt=0.001-0.002)."""
+    case_dir = tmp_path / "maxdt_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(
+        case_dir, case_id="maxdt_case", delta_t=0.002, end_time=1.0,
+    )
+    control_dict = (case_dir / "system/controlDict").read_text()
+    assert "maxDeltaT 0.002" in control_dict, (
+        f"maxDeltaT must equal the caller's delta_t (0.002), got "
+        f"controlDict:\n{control_dict}"
+    )
+    # Also verify adjustTimeStep is enabled (otherwise maxDeltaT is
+    # silently ignored — the V61-107 lesson).
+    assert "adjustTimeStep yes" in control_dict
+    assert "maxCo 0.5" in control_dict

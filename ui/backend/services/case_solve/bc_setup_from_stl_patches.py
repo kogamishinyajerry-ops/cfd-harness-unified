@@ -26,6 +26,7 @@ import numpy as np
 from ui.backend.services.case_manifest import (
     CaseLockError,
     case_lock,
+    is_user_override,
     mark_ai_authored,
 )
 from ui.backend.services.render.polymesh_parser import (
@@ -97,6 +98,14 @@ class StlPatchBCError(RuntimeError):
     * ``write_failed`` — atomic commit failed (rolled back)
     * ``case_lock_failed`` — couldn't acquire case lock (concurrent
       writer); 409
+    * ``solver_dicts_partial_override`` — DEC-V61-107.5 / Codex R12
+      P1: subset of {controlDict, fvSchemes, fvSolution} is
+      user-overridden but not all three; the new pimpleFoam template
+      authors all three together as a coherent solver-config group,
+      so a partial override would leave a mix of icoFoam-era +
+      pimpleFoam-era dicts that OpenFOAM would reject at startup.
+      Engineer must either revert all overrides (re-author from
+      AI defaults) or override all three together.
     """
 
     def __init__(self, message: str, *, failing_check: str) -> None:
@@ -544,10 +553,20 @@ def _build_dict_plan(
             "runTimeModifiable true;\n"
             "adjustTimeStep yes;\n"
             "maxCo 0.5;\n"
-            # Cap deltaT so an over-coarse mesh (where Co stays low at
-            # any step size) cannot stretch a single timestep past the
-            # resolution we need for residual sampling.
-            "maxDeltaT 0.05;\n",
+            # Codex R12 P2 closure: maxDeltaT honors the caller's
+            # delta_t. Hardcoding 0.05 let pimpleFoam silently ramp
+            # the timestep ABOVE caller-requested limits (e.g.
+            # iter04/05/06 declare dt=0.001-0.002 in intent.json;
+            # smoke_runner uses that to budget step counts. Allowing
+            # pimpleFoam to scale up to 0.05 would defeat the
+            # max_steps cap and change the time resolution callers
+            # rely on for residual sampling. By tying maxDeltaT to
+            # delta_t, callers get exactly the cap they requested;
+            # pimpleFoam can still scale DOWN for stability when
+            # the local CFL forces it (which is the whole point of
+            # adjustTimeStep on pathological meshes like iter01's
+            # blade gap region).
+            f"maxDeltaT {delta_t};\n",
         ),
         (
             "system/fvSchemes",
@@ -710,6 +729,37 @@ def setup_bc_from_stl_patches(
         delta_t=delta_t,
         end_time=end_time,
     )
+
+    # Codex R12 P1 closure: the pimpleFoam template authors three
+    # solver-config dicts (controlDict, fvSchemes, fvSolution) as a
+    # coherent group. _atomic_commit_dicts skips user-overridden
+    # files; if any subset of the three is user-overridden the
+    # written dicts would mix pimpleFoam-era (e.g. PIMPLE block,
+    # adjustTimeStep) with icoFoam-era (e.g. PISO block, fixed dt)
+    # and OpenFOAM aborts at startup with a dictionary-keyword
+    # mismatch. Refuse with a structured error so the engineer can
+    # either revert all three to AI defaults or re-override them
+    # together. Note: this check runs OUTSIDE case_lock — only reads
+    # case_manifest, so no race vs writers; if the engineer flips an
+    # override between this check and the lock acquisition the
+    # atomic commit's per-file is_user_override re-check will catch
+    # the inconsistency at write time.
+    _SOLVER_GROUP = ("system/controlDict", "system/fvSchemes", "system/fvSolution")
+    overridden = [
+        rel for rel in _SOLVER_GROUP
+        if is_user_override(case_dir, relative_path=rel)
+    ]
+    if 0 < len(overridden) < len(_SOLVER_GROUP):
+        raise StlPatchBCError(
+            f"solver-dict group {_SOLVER_GROUP} is partially user-"
+            f"overridden ({overridden}); the pimpleFoam template "
+            "authors all three as a coherent group, mixing user-"
+            "edited icoFoam-era dicts with AI-authored pimpleFoam "
+            "would abort the solver at startup. Revert all three to "
+            "AI defaults via the raw-dict editor's reset action, or "
+            "override all three together.",
+            failing_check="solver_dicts_partial_override",
+        )
 
     try:
         with case_lock(case_dir):

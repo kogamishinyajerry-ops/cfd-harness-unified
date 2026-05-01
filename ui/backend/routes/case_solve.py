@@ -250,6 +250,11 @@ def setup_bc(
                 "no_named_patches": 409,
                 "write_failed": 500,
                 "case_lock_failed": 409,
+                # DEC-V61-107.5 / Codex R12 P1: case has partial
+                # user-override on the {controlDict, fvSchemes,
+                # fvSolution} group. 409 (Conflict) — engineer must
+                # reconcile the override state before retrying.
+                "solver_dicts_partial_override": 409,
             }.get(exc.failing_check, 400)
             raise HTTPException(
                 status_code=status,
