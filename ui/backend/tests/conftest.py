@@ -24,6 +24,56 @@ def open_box_stl() -> bytes:
     return buf.getvalue()
 
 
+def seamed_multi_solid_box_stl(
+    *,
+    inlet: str = "inlet",
+    outlet: str = "outlet",
+    walls: str = "walls",
+    size: float = 0.1,
+) -> bytes:
+    """Compose an ASCII STL where a single watertight cube is split into
+    three named patches whose triangles share seam vertices.
+
+    This mirrors the canonical CAD-export form: ParaView/Salome/FreeCAD
+    write one ``solid <name>`` block per surface group of the same body,
+    and the inlet/walls/outlet blocks share vertices at the patch seams.
+    ``multi_solid_ascii_stl`` (translated disjoint cubes) does NOT
+    exercise that seam topology — ``stl_loader.combine`` must call
+    ``merge_vertices`` for this case to pass watertight checks.
+    """
+    import numpy as np
+
+    import re as _re
+
+    box = trimesh.creation.box([size, size, size])
+    normals = box.face_normals
+    inlet_mask = np.isclose(normals[:, 0], -1.0)
+    outlet_mask = np.isclose(normals[:, 0], 1.0)
+    walls_mask = ~(inlet_mask | outlet_mask)
+
+    solid_re = _re.compile(rb"^\s*solid\b[^\n]*", _re.MULTILINE)
+    endsolid_re = _re.compile(rb"^\s*endsolid\b[^\n]*", _re.MULTILINE)
+
+    chunks: list[bytes] = []
+    for name, mask in (
+        (inlet, inlet_mask),
+        (outlet, outlet_mask),
+        (walls, walls_mask),
+    ):
+        face_index = np.flatnonzero(mask)
+        patch = box.submesh([face_index], append=True, repair=False)
+        raw = patch.export(file_type="stl_ascii")
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        encoded = name.encode("ascii")
+        raw = solid_re.sub(b"solid " + encoded, raw, count=1)
+        raw = endsolid_re.sub(b"endsolid " + encoded, raw, count=1)
+        if not raw.endswith(b"\n"):
+            raw += b"\n"
+        chunks.append(raw)
+    return b"".join(chunks)
+
+
 def multi_solid_ascii_stl(*names: str) -> bytes:
     """Compose a multi-solid ASCII STL with the given solid names. Each
     solid is a translated cube so trimesh ingests them as distinct

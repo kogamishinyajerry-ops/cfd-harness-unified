@@ -45,13 +45,28 @@ def combine(loaded: LoadedSTL) -> trimesh.Trimesh | None:
 
     Returns ``None`` for an empty Scene. Patch identity is NOT lost — the
     caller still has ``loaded.geometry`` for per-solid name extraction.
+
+    Multi-solid STLs from real CAD exports share seam vertices across
+    ``solid`` blocks (e.g. inlet/walls/outlet on the same outer box).
+    ``trimesh.util.concatenate`` does NOT weld those — it stacks vertex
+    arrays — so the resulting Trimesh has open edges at every patch seam
+    and ``is_watertight`` returns False even though the union is closed.
+    Calling ``merge_vertices()`` collapses coincident vertices within
+    trimesh's default tolerance and makes the watertight + body_count
+    checks reflect the actual geometry. Idempotent on already-merged
+    single-Trimesh inputs.
     """
     if isinstance(loaded, trimesh.Scene):
         meshes = list(loaded.geometry.values())
         if not meshes:
             return None
-        return trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
-    return loaded
+        combined = (
+            trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
+        )
+    else:
+        combined = loaded
+    combined.merge_vertices()
+    return combined
 
 
 def solid_count(loaded: LoadedSTL) -> int:

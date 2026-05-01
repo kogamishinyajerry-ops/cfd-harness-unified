@@ -11,7 +11,12 @@ from ui.backend.services.geometry_ingest import (
     run_health_checks,
     solid_count,
 )
-from ui.backend.tests.conftest import box_stl, multi_solid_ascii_stl, open_box_stl
+from ui.backend.tests.conftest import (
+    box_stl,
+    multi_solid_ascii_stl,
+    open_box_stl,
+    seamed_multi_solid_box_stl,
+)
 
 
 def test_cube_ingest_passes_with_default_face_warning():
@@ -99,6 +104,20 @@ def test_canonical_bytes_preserves_named_regions():
     patches2, all_default2 = detect_patches(loaded2)
     assert all_default2 is False
     assert {p.name for p in patches2} == {"inlet", "outlet", "wall"}
+
+
+def test_seamed_multi_solid_box_passes_watertight_check():
+    """Adversarial-loop iter01 regression: a single closed cube split
+    into inlet/outlet/walls solids — the canonical CAD-export form —
+    must report ``is_watertight=True``. Before the ``stl_loader.combine``
+    fix this returned False because seam vertices weren't welded across
+    solid boundaries."""
+    report = ingest_stl(seamed_multi_solid_box_stl())
+    assert report.errors == []
+    assert report.is_watertight is True
+    assert report.solid_count == 3
+    assert {p.name for p in report.patches} == {"inlet", "outlet", "walls"}
+    assert report.is_single_shell is True
 
 
 def test_canonical_bytes_sanitizes_invalid_names_round_trip():
