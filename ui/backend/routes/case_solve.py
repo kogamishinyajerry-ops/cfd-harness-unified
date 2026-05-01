@@ -46,6 +46,10 @@ from ui.backend.services.case_solve import (
     setup_ldc_bc,
     stream_icofoam,
 )
+from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
+    StlPatchBCError,
+    setup_bc_from_stl_patches,
+)
 from ui.backend.services.case_solve.solver_streamer import (
     SolveAlreadyRunning,
     _prepare_stream_icofoam,
@@ -157,17 +161,70 @@ def setup_bc(
             "force_uncertain; if both are passed, force_blocked wins."
         ),
     ),
+    from_stl_patches: int = Query(
+        default=0,
+        ge=0,
+        le=1,
+        description=(
+            "DEC-V61-103: when 1, drive BC dict authoring from named "
+            "polyMesh patches (multi-patch CAD imports) instead of "
+            "the LDC lid/fixedWalls split. Mutually exclusive with "
+            "envelope; if both are passed, from_stl_patches wins."
+        ),
+    ),
 ):
-    """Split gmshToFoam's single patch into ``lid`` + ``fixedWalls`` and
-    author OpenFOAM dicts for icoFoam Re=100. Idempotent.
+    """Author OpenFOAM dicts for the case in one of three modes.
 
-    Default response shape is ``SetupBcSummary`` (V61-097 contract).
-    Set ``?envelope=1`` to receive ``AIActionEnvelope`` instead — the
-    M-AI-COPILOT (DEC-V61-098) collab dialog wraps the outcome with
-    structured uncertainty. The ``force_uncertain`` / ``force_blocked``
-    query parameters drive the LDC dogfood dialog flow.
+    * Default (V61-097): split single patch into ``lid``/``fixedWalls``
+      and author icoFoam Re=100 — LDC demo path.
+    * ``?envelope=1`` (V61-098): wrap legacy outcome with
+      ``AIActionEnvelope`` for the M-AI-COPILOT dialog flow.
+    * ``?from_stl_patches=1`` (V61-103): read named patches from
+      ``constant/polyMesh/boundary`` (preserved through gmsh by
+      DEC-V61-102's defect-2a fix), map each to a default BC class
+      via the project table (inlet/outlet/walls/symmetry/...), author
+      the 7 icoFoam dicts referencing the actual patch names. The
+      engineer can then fine-tune any field via the V61-102 raw-dict
+      editor without re-running setup-bc.
+
+    All three modes are idempotent.
     """
     case_dir = _resolve_case_dir(case_id)
+
+    if from_stl_patches:
+        try:
+            result = setup_bc_from_stl_patches(case_dir, case_id=case_id)
+        except StlPatchBCError as exc:
+            status = {
+                "mesh_not_setup": 409,
+                "no_named_patches": 409,
+                "write_failed": 500,
+                "case_lock_failed": 409,
+            }.get(exc.failing_check, 400)
+            raise HTTPException(
+                status_code=status,
+                detail=SetupBcRejection(
+                    failing_check=exc.failing_check,
+                    detail=str(exc),
+                ).model_dump(),
+            ) from exc
+        return JSONResponse(
+            content={
+                "case_id": result.case_id,
+                "patches": [
+                    {"name": name, "bc_class": cls.value}
+                    for name, cls in result.patches
+                ],
+                "inlet_velocity": list(result.inlet_velocity),
+                "nu": result.nu,
+                "delta_t": result.delta_t,
+                "end_time": result.end_time,
+                "written_files": list(result.written_files),
+                "skipped_user_overrides": list(result.skipped_user_overrides),
+                "warnings": list(result.warnings),
+            },
+            status_code=200,
+        )
 
     if envelope:
         try:
