@@ -198,6 +198,77 @@ def test_four_patch_with_symmetry_emits_symmetry_block(tmp_path: Path):
     assert inlet_match is not None and inlet_match.group(1) == "patch"
 
 
+def test_symmetry_boundary_rewrite_ignores_line_comments(tmp_path: Path):
+    """Codex post-merge HIGH finding: the original regex-only rewrite
+    matched ``// type patch;`` (commented out) and rewrote the comment
+    while leaving the live ``type patch;`` line unchanged, so icoFoam
+    still hit the constraint-type FATAL IO ERROR. The line-based
+    parser strips ``//`` comments before matching. This test injects
+    a hostile comment line and asserts the LIVE field is what gets
+    rewritten."""
+    from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
+        _rewrite_polymesh_boundary_constraint_types,
+    )
+
+    hostile_text = (
+        "FoamFile {}\n"
+        "1\n"
+        "(\n"
+        "    symmetry\n"
+        "    {\n"
+        "        // type patch;  // sneaky commented-out line\n"
+        "        type            patch;\n"
+        "        physicalType    patch;\n"
+        "        nFaces          100;\n"
+        "        startFace       0;\n"
+        "    }\n"
+        ")\n"
+    )
+    rewritten = _rewrite_polymesh_boundary_constraint_types(
+        hostile_text, [("symmetry", BCClass.SYMMETRY)]
+    )
+    assert rewritten is not None
+    # The LIVE type/physicalType fields must have been upgraded to
+    # ``symmetry``. The commented-out line must be left unchanged.
+    assert "        type            symmetry;" in rewritten
+    assert "        physicalType    symmetry;" in rewritten
+    assert "// type patch;  // sneaky commented-out line" in rewritten
+    # Sanity: no leftover live ``type patch;`` for the symmetry patch.
+    sym_block = rewritten[
+        rewritten.index("symmetry") : rewritten.index("}", rewritten.index("symmetry"))
+    ]
+    assert "type            patch;" not in sym_block
+
+
+def test_setup_bc_idempotent_with_symmetry_patch(tmp_path: Path):
+    """Defect-8 fix correctness: re-running setup_bc_from_stl_patches
+    on a case that ALREADY had its boundary file rewritten must be a
+    no-op (idempotent). Re-rewrites of ``type symmetry; → type
+    symmetry;`` should produce the same byte-identical content."""
+    case_dir = tmp_path / "idem_sym_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 800, 100, "+z"),
+            ("symmetry", 200, 900, "-z"),
+        ],
+    )
+    boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
+
+    setup_bc_from_stl_patches(case_dir, case_id="idem_sym_case")
+    first_boundary = boundary_path.read_bytes()
+
+    setup_bc_from_stl_patches(case_dir, case_id="idem_sym_case")
+    second_boundary = boundary_path.read_bytes()
+
+    assert first_boundary == second_boundary, (
+        "boundary file changed on second setup-bc run — not idempotent"
+    )
+
+
 def test_unknown_patch_name_falls_through_with_warning(tmp_path: Path):
     case_dir = tmp_path / "unknown_case"
     _scaffold_case(case_dir)

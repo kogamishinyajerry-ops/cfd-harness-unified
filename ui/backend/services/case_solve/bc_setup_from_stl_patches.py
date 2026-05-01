@@ -167,8 +167,19 @@ def _read_named_patches(boundary_path: Path) -> list[str]:
     return [name for name, _start, _n in _read_patch_ranges(boundary_path)]
 
 
+_FIELD_LINE_RE = re.compile(r"^(\s*)(type|physicalType)(\s+)(\w+)(\s*;\s*)$")
+
+
+def _strip_line_comment(line: str) -> str:
+    """Remove OpenFOAM ``//`` line comments. Block comments
+    ``/* ... */`` are out of scope (gmshToFoam doesn't emit them
+    inside patch blocks)."""
+    idx = line.find("//")
+    return line if idx < 0 else line[:idx]
+
+
 def _rewrite_polymesh_boundary_constraint_types(
-    boundary_path: Path,
+    boundary_text: str,
     patches_with_class: list[tuple[str, BCClass]],
 ) -> str | None:
     """Return rewritten ``constant/polyMesh/boundary`` content with
@@ -182,6 +193,18 @@ def _rewrite_polymesh_boundary_constraint_types(
     plane caused icoFoam FATAL IO ERROR because the field BC dict
     declared ``type symmetry`` while the boundary file kept
     gmshToFoam's default ``type patch`` for that patch.
+
+    Implementation note (Codex post-merge round-1 finding closure):
+    line-based parser that tracks patch context via brace depth and
+    strips line comments before matching the ``type`` / ``physicalType``
+    fields. Earlier regex-only version could rewrite commented-out
+    ``// type patch;`` text while leaving the live field unchanged,
+    or fail entirely on a stray ``}`` inside a comment.
+
+    Caller responsibility: read the boundary file under the case_lock
+    so the read/rewrite/write sequence is one critical section. The
+    function takes the pre-read text rather than a Path to make the
+    locking discipline explicit at the call site.
     """
     rewrites = {
         name: _CONSTRAINT_PATCH_TYPES[cls]
@@ -190,39 +213,61 @@ def _rewrite_polymesh_boundary_constraint_types(
     }
     if not rewrites:
         return None
-    text = boundary_path.read_text()
-    for patch_name, openfoam_type in rewrites.items():
-        # Match the patch block ``<name> { ... }`` and rewrite the
-        # ``type`` line. Both gmshToFoam-generated entries (which also
-        # carry a ``physicalType`` line) and minimal test scaffolds
-        # (which don't) are supported. ``physicalType`` is rewritten
-        # in a separate pass below if present.
-        type_pattern = re.compile(
-            rf"(\b{re.escape(patch_name)}\s*\{{[^}}]*?)"
-            rf"type(\s+)\w+;",
-            re.DOTALL,
-        )
-        text, n = type_pattern.subn(
-            rf"\1type\2{openfoam_type};",
-            text,
-            count=1,
-        )
-        if n == 0:
-            # Patch entry not in the expected format — leave the file
-            # alone and let icoFoam surface the constraint error rather
-            # than silently corrupting the boundary file.
+
+    lines = boundary_text.splitlines(keepends=True)
+    out_lines: list[str] = []
+    current_patch: str | None = None
+    block_depth = 0
+    pending_patch_name: str | None = None
+    name_token_re = re.compile(r"^\s*(\w+)\s*$")
+
+    for line in lines:
+        logic_line = _strip_line_comment(line)
+
+        if current_patch is None and pending_patch_name is None:
+            m = name_token_re.match(logic_line)
+            if m and m.group(1) in rewrites:
+                pending_patch_name = m.group(1)
+                out_lines.append(line)
+                continue
+
+        if current_patch is None and pending_patch_name is not None:
+            if "{" in logic_line:
+                current_patch = pending_patch_name
+                pending_patch_name = None
+                block_depth = logic_line.count("{") - logic_line.count("}")
+                out_lines.append(line)
+                continue
+            # Pending name but no opening brace yet; pass through.
+            out_lines.append(line)
+            # If this line has non-whitespace content other than the
+            # name itself, it was a false positive (e.g. ``symmetry``
+            # appeared as a value or list element). Drop the pending
+            # tracker.
+            if logic_line.strip():
+                pending_patch_name = None
             continue
-        physical_pattern = re.compile(
-            rf"(\b{re.escape(patch_name)}\s*\{{[^}}]*?)"
-            rf"physicalType(\s+)\w+;",
-            re.DOTALL,
-        )
-        text, _ = physical_pattern.subn(
-            rf"\1physicalType\2{openfoam_type};",
-            text,
-            count=1,
-        )
-    return text
+
+        if current_patch is not None:
+            block_depth += logic_line.count("{") - logic_line.count("}")
+            field_match = _FIELD_LINE_RE.match(logic_line.rstrip("\n").rstrip("\r"))
+            if field_match and block_depth >= 1:
+                indent, field_name, sep, _value, tail = field_match.groups()
+                new_value = rewrites[current_patch]
+                trailing = "\n" if line.endswith("\n") else ""
+                out_lines.append(
+                    f"{indent}{field_name}{sep}{new_value}{tail.rstrip()}{trailing}"
+                )
+            else:
+                out_lines.append(line)
+            if block_depth <= 0:
+                current_patch = None
+                block_depth = 0
+            continue
+
+        out_lines.append(line)
+
+    return "".join(out_lines)
 
 
 def _compute_patch_inward_normals(
@@ -600,19 +645,22 @@ def setup_bc_from_stl_patches(
         end_time=end_time,
     )
 
-    # Defect-8 (iter06): if any patch has a constraint-type BCClass
-    # (symmetry, …), rewrite ``constant/polyMesh/boundary`` so its
-    # ``type`` matches the field BC dict. Otherwise icoFoam exits with
-    # FATAL IO ERROR on the constraint-type mismatch. Included in the
-    # atomic commit so a partial write rolls back along with the dicts.
-    boundary_rewrite = _rewrite_polymesh_boundary_constraint_types(
-        boundary_path, patches_with_class
-    )
-    if boundary_rewrite is not None:
-        plan.append(("constant/polyMesh/boundary", boundary_rewrite))
-
     try:
         with case_lock(case_dir):
+            # Defect-8 (iter06) + Codex post-merge MED: if any patch has
+            # a constraint-type BCClass (symmetry, …), rewrite
+            # ``constant/polyMesh/boundary`` so its ``type`` matches the
+            # field BC dict. Otherwise icoFoam exits with FATAL IO ERROR
+            # on the constraint-type mismatch. The boundary file is read
+            # INSIDE case_lock so the read/rewrite/write sequence is one
+            # critical section — no TOCTOU window where another writer
+            # could clobber a stale snapshot. Included in the atomic
+            # commit so a partial write rolls back with the dicts.
+            boundary_rewrite = _rewrite_polymesh_boundary_constraint_types(
+                boundary_path.read_text(), patches_with_class
+            )
+            if boundary_rewrite is not None:
+                plan.append(("constant/polyMesh/boundary", boundary_rewrite))
             try:
                 written, skipped = _atomic_commit_dicts(case_dir, plan)
             except OSError as exc:
