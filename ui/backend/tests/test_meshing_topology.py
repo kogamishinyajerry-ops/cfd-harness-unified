@@ -2,11 +2,19 @@
 
 Two layers:
   - Pure-logic tests on the partitioner with a fake gmsh stub (no
-    real gmsh load). Cheap and deterministic.
-  - One real-gmsh integration test on the cube-in-cube STL fixture
-    that exercises classifySurfaces + topology partitioner end-to-end
-    and asserts the cell count is lower than the equivalent single-body
-    cube (validates obstacle volume is actually subtracted).
+    real gmsh load). Cheap and deterministic. Covers union-find,
+    bbox-volume sorting, single-body fall-through, and the
+    TopologyPartitionError disconnected-exterior-shells guard.
+  - Real-gmsh integration tests on the cube-in-cube STL fixture:
+    (a) classifySurfaces + partitioner returns 2 bodies with outer
+    first, and (b) the gmsh_runner multi-loop addVolume call site
+    accepts the negated inner loop and runs generate(3) without
+    error. Note: Phase 1 ships the scaffolding; gmsh's geo-kernel
+    addVolume hole subtraction is empirically a no-op on STL-imported
+    surfaces, so cell counts are NOT asserted to drop here. Phase 1.5
+    will add OCC-kernel cut or surface-orientation reversal to
+    actually subtract the obstacle volume; cell-count regression
+    assertions belong in that follow-up.
 """
 
 from __future__ import annotations
@@ -18,6 +26,8 @@ import pytest
 import trimesh
 
 from ui.backend.services.meshing_gmsh.topology import (
+    TopologyPartitionError,
+    _bbox_contains,
     _bbox_volume,
     _body_bbox,
     partition_surfaces_by_body,
@@ -185,6 +195,75 @@ def test_bbox_volume_normal_case():
     assert _bbox_volume((0, 0, 0, 2, 3, 4)) == pytest.approx(24.0)
 
 
+def test_partition_raises_when_inner_bbox_not_contained_in_outer():
+    """Two disconnected exterior shells (e.g. two separate cubes that
+    do NOT enclose one another) must raise TopologyPartitionError —
+    the multi-loop addVolume path would silently corrupt the geometry
+    by treating the smaller shell as a hole. Codex post-merge MED
+    guard for DEC-V61-104 Phase 1."""
+    fake = _FakeGmsh(
+        surface_to_edges={
+            # Body A (larger): bbox (0,0,0)-(10,10,10), volume=1000.
+            1: [100], 2: [100],
+            # Body B (smaller): bbox (20,20,20)-(25,25,25), volume=125.
+            # Sits OUTSIDE body A entirely — the disconnected-shells case.
+            3: [200], 4: [200],
+        },
+        surface_to_nodes={
+            1: [(0, 0, 0), (10, 0, 0), (0, 10, 0), (0, 0, 10)],
+            2: [(10, 10, 10), (0, 10, 10), (10, 0, 10), (10, 10, 0)],
+            3: [(20, 20, 20), (25, 20, 20), (20, 25, 20), (20, 20, 25)],
+            4: [(25, 25, 25), (20, 25, 25), (25, 20, 25), (25, 25, 20)],
+        },
+    )
+    with pytest.raises(TopologyPartitionError) as exc_info:
+        partition_surfaces_by_body(
+            fake, [(2, 1), (2, 2), (2, 3), (2, 4)]
+        )
+    assert exc_info.value.failing_check == "topology_disconnected_exterior_shells"
+
+
+def test_partition_accepts_valid_interior_obstacle_topology():
+    """Outer body fully contains inner body — partitioner returns
+    [outer, inner] without raising. Sanity-checks the containment
+    guard does NOT false-positive on the legitimate topology."""
+    fake = _FakeGmsh(
+        surface_to_edges={
+            1: [100], 2: [100],   # outer
+            3: [200], 4: [200],   # inner, sits inside outer
+        },
+        surface_to_nodes={
+            1: [(0, 0, 0), (10, 0, 0), (0, 10, 0), (0, 0, 10)],
+            2: [(10, 10, 10), (0, 10, 10), (10, 0, 10), (10, 10, 0)],
+            3: [(4, 4, 4), (5, 4, 4), (4, 5, 4), (4, 4, 5)],
+            4: [(5, 5, 5), (4, 5, 5), (5, 4, 5), (5, 5, 4)],
+        },
+    )
+    result = partition_surfaces_by_body(
+        fake, [(2, 1), (2, 2), (2, 3), (2, 4)]
+    )
+    assert len(result) == 2
+    assert sorted(result[0]) == [1, 2]
+
+
+def test_bbox_contains_basic_cases():
+    outer = (0.0, 0.0, 0.0, 10.0, 10.0, 10.0)
+    assert _bbox_contains(outer, (1.0, 1.0, 1.0, 9.0, 9.0, 9.0)) is True
+    assert _bbox_contains(outer, (0.0, 0.0, 0.0, 10.0, 10.0, 10.0)) is True
+    # Inner protrudes past outer max — not contained.
+    assert _bbox_contains(outer, (1.0, 1.0, 1.0, 11.0, 9.0, 9.0)) is False
+    # Inner sits entirely outside.
+    assert _bbox_contains(outer, (20.0, 20.0, 20.0, 25.0, 25.0, 25.0)) is False
+
+
+def test_bbox_contains_tolerates_floating_point_noise():
+    outer = (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+    # Inner exceeds outer by less than tolerance — should still be True.
+    assert _bbox_contains(
+        outer, (-1.0e-12, -1.0e-12, -1.0e-12, 1.0 + 1.0e-12, 1.0, 1.0)
+    ) is True
+
+
 def test_body_bbox_handles_no_elements_gracefully():
     """A surface with no mesh elements returns the degenerate (0,0,0,0,0,0)
     bbox so partition doesn't crash."""
@@ -204,12 +283,16 @@ def _skip_if_no_gmsh():
 
 
 def test_cube_in_cube_partitions_into_outer_plus_inner_via_real_gmsh(tmp_path: Path):
-    """Real-gmsh end-to-end: load a cube-in-cube STL through the
-    classifySurfaces + partition pipeline, assert two bodies are
-    returned with outer (large cube) first.
+    """Real-gmsh partition coverage: load a cube-in-cube STL through
+    classifySurfaces + the topology partitioner, assert two bodies are
+    returned with the outer (large cube) first.
 
-    DEC-V61-104 happy-path validation; iter01 thin-blade plenum is a
-    follow-up adversarial validation.
+    Scope: this test ONLY exercises the partitioner against real gmsh
+    output — it does NOT call ``addVolume([outer, -inner])`` or
+    ``generate(3)``. The addVolume + mesh-generation path is covered
+    by ``test_cube_in_cube_multi_loop_addvolume_runs_via_real_gmsh``
+    below. DEC-V61-104 Phase 1 happy-path validation; iter01
+    thin-blade plenum is a follow-up adversarial validation.
     """
     _skip_if_no_gmsh()
     import gmsh
@@ -258,3 +341,69 @@ def test_cube_in_cube_partitions_into_outer_plus_inner_via_real_gmsh(tmp_path: P
     )
     assert outer_volume >= 0.5, f"outer body bbox volume {outer_volume} too small"
     assert inner_volume <= 0.05, f"inner body bbox volume {inner_volume} too big"
+
+
+def test_cube_in_cube_multi_loop_addvolume_runs_via_real_gmsh(tmp_path: Path):
+    """Real-gmsh end-to-end coverage for the gmsh_runner multi-loop
+    branch added by DEC-V61-104 Phase 1: load a cube-in-cube STL,
+    partition, build ``addVolume([outer_loop, -inner_loop])``,
+    synchronize, and run ``generate(3)`` without raising. Asserts a
+    non-zero tetrahedral cell count.
+
+    Honest scope: Phase 1 documented (see
+    ``tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md``)
+    that gmsh's geo-kernel does NOT actually subtract the inner volume
+    for STL-imported surfaces — cell counts are roughly equivalent to
+    the single-loop path. This test guards against the
+    ``addVolume([outer, -inner])`` call regressing into a hard error
+    (which WOULD silently break the production pipeline), not against
+    the no-op subtraction. Phase 1.5 will add OCC-kernel cut and a
+    cell-count drop assertion.
+    """
+    _skip_if_no_gmsh()
+    import gmsh
+
+    outer = trimesh.creation.box([1.0, 1.0, 1.0])
+    inner = trimesh.creation.box([0.2, 0.2, 0.2])
+    combined = trimesh.util.concatenate([outer, inner])
+    stl_path = tmp_path / "cube_in_cube.stl"
+    buf = io.BytesIO()
+    combined.export(buf, file_type="stl")
+    stl_path.write_bytes(buf.getvalue())
+
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.merge(str(stl_path))
+        gmsh.model.mesh.classifySurfaces(
+            angle=40.0 * 3.141592653589793 / 180.0,
+            boundary=True,
+            forReparametrization=True,
+            curveAngle=180.0 * 3.141592653589793 / 180.0,
+        )
+        gmsh.model.mesh.createGeometry()
+        surfaces = gmsh.model.getEntities(dim=2)
+        bodies = partition_surfaces_by_body(gmsh, surfaces)
+        assert len(bodies) >= 2, (
+            f"cube-in-cube must partition into >=2 bodies, got {bodies}"
+        )
+
+        outer_loop = gmsh.model.geo.addSurfaceLoop(bodies[0])
+        inner_loops = [
+            gmsh.model.geo.addSurfaceLoop(body) for body in bodies[1:]
+        ]
+        gmsh.model.geo.addVolume([outer_loop] + [-loop for loop in inner_loops])
+        gmsh.model.geo.synchronize()
+        gmsh.model.mesh.generate(3)
+
+        elem_types, _elem_tags, _node_tags = gmsh.model.mesh.getElements(dim=3)
+        total_cells = 0
+        for et_idx, et in enumerate(elem_types):
+            if et == 4:  # 4-node tetrahedron
+                total_cells += len(_elem_tags[et_idx])
+    finally:
+        gmsh.finalize()
+
+    assert total_cells > 0, (
+        "multi-loop addVolume + generate(3) produced zero tetrahedral cells"
+    )

@@ -24,6 +24,25 @@ from __future__ import annotations
 from typing import Any
 
 
+class TopologyPartitionError(RuntimeError):
+    """Raised when the partitioner finds a multi-body topology that's
+    NOT a valid outer-cavity-with-interior-obstacles arrangement.
+
+    Most common case: an STL with two disconnected EXTERIOR shells
+    (e.g. two separate cubes) — Codex post-merge MED finding. Without
+    this check, the partitioner would arbitrarily pick the larger one
+    as outer and treat the smaller as a hole, silently corrupting the
+    geometry.
+
+    Carries ``failing_check`` so the meshing route can map to a 4xx
+    HTTP error without leaking internals.
+    """
+
+    def __init__(self, message: str, *, failing_check: str = "topology_invalid"):
+        super().__init__(message)
+        self.failing_check = failing_check
+
+
 def partition_surfaces_by_body(
     gmsh: Any, surfaces: list[tuple[int, int]]
 ) -> list[list[int]]:
@@ -93,15 +112,63 @@ def partition_surfaces_by_body(
     # attached to each surface. classifySurfaces+createGeometry hasn't
     # destroyed the original STL triangle mesh yet, so the per-surface
     # nodes still cover the body's bounding region.
-    sizes_with_idx = [
-        (_bbox_volume(_body_bbox(gmsh, body)), idx)
-        for idx, body in enumerate(bodies)
-    ]
+    bboxes = [_body_bbox(gmsh, body) for body in bodies]
+    sizes_with_idx = [(_bbox_volume(b), idx) for idx, b in enumerate(bboxes)]
     sizes_with_idx.sort(reverse=True)  # largest first
     outer_idx = sizes_with_idx[0][1]
     outer = bodies[outer_idx]
-    inners = [bodies[i] for i in range(len(bodies)) if i != outer_idx]
+    outer_bbox = bboxes[outer_idx]
+    inners: list[list[int]] = []
+    for i in range(len(bodies)):
+        if i == outer_idx:
+            continue
+        # Codex post-merge MED: containment sanity check. An interior
+        # obstacle's bbox MUST be contained within the outer body's
+        # bbox; otherwise the multi-body STL is two disconnected
+        # exterior shells (e.g. two separate cubes), not an
+        # outer-cavity-with-interior-obstacle arrangement. The
+        # multi-loop addVolume call would silently corrupt that
+        # geometry by treating one shell as a hole. Raise instead so
+        # the engineer sees a structured error.
+        if not _bbox_contains(outer_bbox, bboxes[i]):
+            raise TopologyPartitionError(
+                f"multi-body STL has body {i} (bbox {bboxes[i]}) NOT "
+                f"contained in the largest body's bbox ({outer_bbox}). "
+                "This looks like two disconnected exterior shells, not "
+                "an interior-obstacle topology. Re-author the STL as "
+                "either (a) one connected outer cavity with N interior "
+                "obstacles or (b) separate single-body imports.",
+                failing_check="topology_disconnected_exterior_shells",
+            )
+        inners.append(bodies[i])
     return [outer] + inners
+
+
+def _bbox_contains(
+    outer: tuple[float, ...],
+    inner: tuple[float, ...],
+    tolerance: float = 1.0e-9,
+) -> bool:
+    """Return True iff the inner axis-aligned bbox fits within the outer
+    axis-aligned bbox (with a small numerical tolerance to absorb
+    floating-point noise).
+
+    Codex post-merge MED guard for ``partition_surfaces_by_body``: the
+    multi-body addVolume path assumes interior obstacles. Two
+    disconnected exterior shells fail containment and the partitioner
+    raises ``TopologyPartitionError`` rather than silently corrupting
+    the geometry.
+    """
+    o_xmin, o_ymin, o_zmin, o_xmax, o_ymax, o_zmax = outer
+    i_xmin, i_ymin, i_zmin, i_xmax, i_ymax, i_zmax = inner
+    return (
+        i_xmin >= o_xmin - tolerance
+        and i_ymin >= o_ymin - tolerance
+        and i_zmin >= o_zmin - tolerance
+        and i_xmax <= o_xmax + tolerance
+        and i_ymax <= o_ymax + tolerance
+        and i_zmax <= o_zmax + tolerance
+    )
 
 
 def _body_bbox(gmsh: Any, body_surface_tags: list[int]) -> tuple[float, ...]:

@@ -178,19 +178,35 @@ def _gmsh_inline(
             # Single-body geometries (LDC, channel, naca0012, cylinder)
             # fall through to the single-loop path so byte-identical
             # mesh output is preserved.
-            from .topology import partition_surfaces_by_body
+            from .topology import (
+                TopologyPartitionError,
+                partition_surfaces_by_body,
+            )
 
-            bodies = partition_surfaces_by_body(gmsh, surfaces)
+            try:
+                bodies = partition_surfaces_by_body(gmsh, surfaces)
+            except TopologyPartitionError as exc:
+                # Codex post-merge MED guard: disconnected exterior
+                # shells, not interior obstacles. Surface as a 4xx-class
+                # mesh failure with a clear message rather than silently
+                # corrupting the geometry.
+                raise GmshMeshGenerationError(
+                    f"topology partition rejected the STL: {exc}"
+                ) from exc
             if len(bodies) <= 1:
                 surface_loop = gmsh.model.geo.addSurfaceLoop(
                     [s[1] for s in surfaces]
                 )
                 gmsh.model.geo.addVolume([surface_loop])
             else:
-                # bodies[0] is the outer (largest bbox); the rest are
-                # interior obstacles. Each inner loop is negated in the
-                # addVolume call so gmsh treats it as a hole rather than
-                # a second fluid region.
+                # bodies[0] is the outer (largest bbox + verified to
+                # contain all others); the rest are interior obstacles.
+                # Each inner loop is negated in the addVolume call so
+                # gmsh treats it as a hole rather than a second fluid
+                # region. (Note: gmsh's geo-kernel hole subtraction is
+                # unreliable for thin obstacles — see
+                # tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md
+                # for the Phase 1.5 follow-up scope.)
                 outer_loop = gmsh.model.geo.addSurfaceLoop(bodies[0])
                 inner_loops = [
                     gmsh.model.geo.addSurfaceLoop(body) for body in bodies[1:]
