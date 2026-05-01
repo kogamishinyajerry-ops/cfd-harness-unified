@@ -1,0 +1,22 @@
+{
+    "case_id": "imported_2026-04-30T17-42-25Z_0e1eb396",
+    "end_time_reached": 5.0,
+    "last_initial_residual_p": 4.88861e-07,
+    "last_initial_residual_U": [
+        2.82928e-07,
+        5.8693e-07,
+        6.3556e-07
+    ],
+    "last_continuity_error": 9.2001e-08,
+    "n_time_steps_written": 6,
+    "time_directories": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+    ],
+    "wall_time_s": 2.20247,
+    "converged": true
+}
