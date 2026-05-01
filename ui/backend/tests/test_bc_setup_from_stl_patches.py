@@ -607,12 +607,12 @@ def test_user_override_pimplefoam_compatible_tuning_proceeds(tmp_path: Path):
     assert (case_dir / "system/controlDict").read_text() == custom_compat
 
 
-def test_user_override_fvschemes_alone_proceeds(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R13 P2-B: fvSchemes has no flavor-
-    specific marker that distinguishes icoFoam from pimpleFoam (both
-    accept the same scheme keys). A standalone fvSchemes override
-    should NOT trigger the guard."""
-    case_dir = tmp_path / "fvschemes_only_case"
+def test_user_override_fvschemes_with_pimplefoam_terms_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R14 P1: fvSchemes overrides that PRESERVE
+    the pimpleFoam-required div((nuEff*dev2(T(grad(U))))) entry are
+    safe and should proceed (engineer changes div(phi,U) scheme but
+    keeps the divDevReff term)."""
+    case_dir = tmp_path / "fvschemes_compat_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
         case_dir,
@@ -622,14 +622,15 @@ def test_user_override_fvschemes_alone_proceeds(tmp_path: Path):
             ("walls", 500, 100, "+z"),
         ],
     )
-    setup_bc_from_stl_patches(case_dir, case_id="fvschemes_only_case")
+    setup_bc_from_stl_patches(case_dir, case_id="fvschemes_compat_case")
 
     custom_fvschemes = (
         'FoamFile { version 2.0; format ascii; class dictionary; '
         'location "system"; object fvSchemes; }\n'
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
-        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"
+        "divSchemes  { default none; div(phi,U) Gauss upwind; "
+        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
         "laplacianSchemes { default Gauss linear corrected; }\n"
         "interpolationSchemes { default linear; }\n"
         "snGradSchemes { default corrected; }\n"
@@ -638,12 +639,92 @@ def test_user_override_fvschemes_alone_proceeds(tmp_path: Path):
     mark_user_override(
         case_dir, relative_path="system/fvSchemes",
         new_content=custom_fvschemes.encode("utf-8"),
-        detail={"reason": "engineer wants pure upwind"},
+        detail={"reason": "engineer wants pure upwind, kept divDevReff"},
     )
 
-    r2 = setup_bc_from_stl_patches(case_dir, case_id="fvschemes_only_case")
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="fvschemes_compat_case")
     assert "system/fvSchemes" in r2.skipped_user_overrides
     assert (case_dir / "system/fvSchemes").read_text() == custom_fvschemes
+
+
+def test_user_override_fvschemes_dropping_divdevreff_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R14 P1: fvSchemes overrides that DROP
+    the pimpleFoam-required div((nuEff*dev2(T(grad(U))))) entry
+    must be refused — pimpleFoam createFields aborts at startup
+    with 'keyword undefined' otherwise."""
+    case_dir = tmp_path / "fvschemes_broken_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="fvschemes_broken_case")
+
+    custom_broken = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        # Missing div((nuEff*dev2(T(grad(U))))) — pimpleFoam will abort.
+        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+    (case_dir / "system/fvSchemes").write_text(custom_broken)
+    mark_user_override(
+        case_dir, relative_path="system/fvSchemes",
+        new_content=custom_broken.encode("utf-8"),
+        detail={"reason": "engineer omitted divDevReff"},
+    )
+
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="fvschemes_broken_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    assert "system/fvSchemes" in str(exc.value)
+
+
+def test_piso_block_inline_brace_detected(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R14 P2: PISO block with inline brace
+    (e.g. `PISO { ... }` on one line, valid OpenFOAM formatting)
+    must be detected — earlier regex required brace on next line
+    and missed this case, letting icoFoam-flavor fvSolution slip
+    past the guard."""
+    case_dir = tmp_path / "piso_inline_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="piso_inline_case")
+
+    custom_inline = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSolution; }\n'
+        "solvers { p { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; } "
+        "U { solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0; } }\n"
+        # Inline-brace PISO — valid OpenFOAM, must be caught.
+        "PISO { nCorrectors 2; nNonOrthogonalCorrectors 2; pRefCell 0; pRefValue 0; }\n"
+    )
+    (case_dir / "system/fvSolution").write_text(custom_inline)
+    mark_user_override(
+        case_dir, relative_path="system/fvSolution",
+        new_content=custom_inline.encode("utf-8"),
+        detail={"reason": "engineer wrote inline-brace PISO"},
+    )
+
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="piso_inline_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    assert "system/fvSolution" in str(exc.value)
 
 
 def test_user_override_full_solver_group_preserves_all_three(tmp_path: Path):

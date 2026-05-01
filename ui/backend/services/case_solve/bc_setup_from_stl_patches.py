@@ -474,8 +474,24 @@ _ICOFOAM_APPLICATION_RE = re.compile(
 # PISO block at top level (not nested inside another dict). icoFoam
 # reads PISO; pimpleFoam reads PIMPLE. A user fvSolution that has
 # PISO but no PIMPLE is icoFoam-flavored.
-_PISO_BLOCK_RE = re.compile(r"(?ms)^PISO\s*\n\s*\{")
-_PIMPLE_BLOCK_RE = re.compile(r"(?ms)^PIMPLE\s*\n\s*\{")
+#
+# Codex R14 P2 closure: matches both `PISO\n{` AND `PISO {`
+# formatting (any whitespace before the opening brace). Anchored to
+# line start (^) so it doesn't match the substring `PISO` inside
+# comments or solver-name strings; ``\s+`` is permissive across
+# spaces, tabs, and newlines.
+_PISO_BLOCK_RE = re.compile(r"(?m)^PISO\s*\{")
+_PIMPLE_BLOCK_RE = re.compile(r"(?m)^PIMPLE\s*\{")
+# Codex R14 P1 closure: pimpleFoam routes div terms through the
+# turbulence model's divDevReff which evaluates this expression
+# every step even with simulationType laminar. If a user-overridden
+# fvSchemes drops it, OpenFOAM-10's createFields aborts with
+# "keyword div((nuEff*dev2(T(grad(U))))) is undefined". The AI
+# template includes it; a user override that drops it leaves the
+# committed case broken.
+_NUEFF_DIV_RE = re.compile(
+    r"div\(\s*\(?\s*nuEff\s*\*\s*dev2\s*\(\s*T\s*\(\s*grad\s*\(\s*U\s*\)\s*\)\s*\)\s*\)?\s*\)"
+)
 
 
 def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
@@ -522,10 +538,15 @@ def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
             has_pimple = bool(_PIMPLE_BLOCK_RE.search(content))
             if has_piso and not has_pimple:
                 icofoam_offenders.append(rel)
-        # fvSchemes has no static flavor marker — both icoFoam and
-        # pimpleFoam accept the same keys. Missing div((nuEff*...))
-        # would surface as a pimpleFoam createFields runtime error,
-        # not a static marker.
+        elif rel.endswith("fvSchemes"):
+            # Codex R14 P1: an fvSchemes override that drops the
+            # pimpleFoam-required div((nuEff*dev2(T(grad(U)))))
+            # entry leaves the committed case broken at solver
+            # startup. Treat as an icoFoam-flavor marker (the term
+            # is unique to pimpleFoam-family solvers; icoFoam
+            # doesn't reference it).
+            if not _NUEFF_DIV_RE.search(content):
+                icofoam_offenders.append(rel)
     return icofoam_offenders
 
 
