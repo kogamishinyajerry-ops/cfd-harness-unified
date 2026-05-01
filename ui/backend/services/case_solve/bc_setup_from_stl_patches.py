@@ -492,6 +492,31 @@ _PIMPLE_BLOCK_RE = re.compile(r"(?m)^PIMPLE\s*\{")
 _NUEFF_DIV_RE = re.compile(
     r"div\(\s*\(?\s*nuEff\s*\*\s*dev2\s*\(\s*T\s*\(\s*grad\s*\(\s*U\s*\)\s*\)\s*\)\s*\)?\s*\)"
 )
+# Codex R15 P2-A closure: an fvSchemes that omits the explicit
+# div((nuEff*...)) term is still valid IF divSchemes.default is a
+# non-``none`` scheme (OpenFOAM falls back to default for any
+# unmatched div term). Detect the divSchemes block and check its
+# default keyword; if non-none, the file is coherent regardless of
+# explicit divDevReff. Permissive whitespace + multi-line.
+_DIVSCHEMES_DEFAULT_RE = re.compile(
+    r"divSchemes\s*\{[^}]*?\bdefault\s+([^;]+);", re.DOTALL,
+)
+# Codex R15 P2-B closure: line-comment stripping before regex.
+# OpenFOAM accepts ``//`` line comments and ``/* */`` block comments;
+# both must be stripped so a commented-out divDevReff doesn't
+# satisfy the guard. Apply BEFORE the divDevReff and divSchemes
+# default checks.
+_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _strip_foam_comments(content: str) -> str:
+    """Strip ``//`` line comments and ``/* */`` block comments. Other
+    parsers (e.g. _detect_icofoam_marker_overrides regex) operate on
+    the result so commented-out keywords do not satisfy guards."""
+    stripped = _BLOCK_COMMENT_RE.sub("", content)
+    stripped = _LINE_COMMENT_RE.sub("", stripped)
+    return stripped
 
 
 def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
@@ -523,13 +548,17 @@ def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
         if not is_overridden:
             continue
         try:
-            content = (case_dir / rel).read_text()
+            raw = (case_dir / rel).read_text()
         except OSError:
             # File marked overridden but unreadable — surface so the
             # engineer investigates rather than silently allowing a
             # broken commit.
             icofoam_offenders.append(rel)
             continue
+        # Codex R15 P2-B: strip OpenFOAM comments BEFORE applying
+        # detection regexes so a commented-out keyword can't satisfy
+        # the guard.
+        content = _strip_foam_comments(raw)
         if rel.endswith("controlDict"):
             if _ICOFOAM_APPLICATION_RE.search(content):
                 icofoam_offenders.append(rel)
@@ -539,13 +568,25 @@ def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
             if has_piso and not has_pimple:
                 icofoam_offenders.append(rel)
         elif rel.endswith("fvSchemes"):
-            # Codex R14 P1: an fvSchemes override that drops the
-            # pimpleFoam-required div((nuEff*dev2(T(grad(U)))))
-            # entry leaves the committed case broken at solver
-            # startup. Treat as an icoFoam-flavor marker (the term
-            # is unique to pimpleFoam-family solvers; icoFoam
-            # doesn't reference it).
-            if not _NUEFF_DIV_RE.search(content):
+            # Codex R14 P1: pimpleFoam's createFields requires the
+            # div((nuEff*dev2(T(grad(U))))) term. The user's
+            # fvSchemes can satisfy this either:
+            # (a) Explicit `div((nuEff*dev2(T(grad(U))))) ... ;` line
+            # (b) Codex R15 P2-A: divSchemes default = <non-none>
+            #     scheme (OpenFOAM falls back to default for any
+            #     unmatched div term).
+            # If neither path satisfies, refuse.
+            has_explicit = bool(_NUEFF_DIV_RE.search(content))
+            has_nonnone_default = False
+            m = _DIVSCHEMES_DEFAULT_RE.search(content)
+            if m:
+                default_scheme = m.group(1).strip().lower()
+                # ``none`` is the only OpenFOAM default value that
+                # forces unmatched div terms to error out. Any other
+                # scheme (Gauss linear, Gauss upwind, etc.) covers
+                # the divDevReff term implicitly.
+                has_nonnone_default = default_scheme not in ("none", "")
+            if not (has_explicit or has_nonnone_default):
                 icofoam_offenders.append(rel)
     return icofoam_offenders
 

@@ -688,6 +688,159 @@ def test_user_override_fvschemes_dropping_divdevreff_raises(tmp_path: Path):
     assert "system/fvSchemes" in str(exc.value)
 
 
+def test_user_override_fvschemes_with_nonnone_default_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R15 P2-A: an fvSchemes that omits the
+    explicit div((nuEff*dev2(T(grad(U))))) term but has a non-none
+    divSchemes.default is still coherent with pimpleFoam (OpenFOAM
+    falls back to default for unmatched div terms). Must NOT trigger
+    the guard."""
+    case_dir = tmp_path / "default_div_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="default_div_case")
+
+    # divSchemes default is `Gauss linear` (non-none). No explicit
+    # divDevReff entry — pimpleFoam will use the default for it.
+    custom_default = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        "divSchemes  { default Gauss linear; div(phi,U) Gauss upwind; }\n"
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+    (case_dir / "system/fvSchemes").write_text(custom_default)
+    mark_user_override(
+        case_dir, relative_path="system/fvSchemes",
+        new_content=custom_default.encode("utf-8"),
+        detail={"reason": "engineer relies on divSchemes default"},
+    )
+
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="default_div_case")
+    assert "system/fvSchemes" in r2.skipped_user_overrides
+
+
+def test_user_override_fvschemes_with_default_none_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R15 P2-A: when divSchemes.default is
+    ``none`` AND there's no explicit divDevReff, OpenFOAM still
+    aborts. Must trigger the guard."""
+    case_dir = tmp_path / "default_none_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="default_none_case")
+
+    custom_none = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"  # default=none, no divDevReff
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+    (case_dir / "system/fvSchemes").write_text(custom_none)
+    mark_user_override(
+        case_dir, relative_path="system/fvSchemes",
+        new_content=custom_none.encode("utf-8"),
+        detail={"reason": "engineer omitted both default and divDevReff"},
+    )
+
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="default_none_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+
+
+def test_user_override_fvschemes_commented_divdevreff_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R15 P2-B: a commented-out divDevReff
+    entry must NOT satisfy the guard — OpenFOAM ignores comments,
+    pimpleFoam will still abort."""
+    case_dir = tmp_path / "commented_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="commented_case")
+
+    custom_comment = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        "divSchemes  { default none; div(phi,U) Gauss upwind; "
+        # Commented-out — OpenFOAM ignores. Guard must not be fooled.
+        "// div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+    (case_dir / "system/fvSchemes").write_text(custom_comment)
+    mark_user_override(
+        case_dir, relative_path="system/fvSchemes",
+        new_content=custom_comment.encode("utf-8"),
+        detail={"reason": "engineer commented out divDevReff by mistake"},
+    )
+
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="commented_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+
+
+def test_user_override_controldict_with_commented_icofoam_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R15 P2-B: comment stripping should also
+    prevent commented-out icoFoam markers from triggering false
+    positives in controlDict."""
+    case_dir = tmp_path / "commented_appl"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="commented_appl")
+
+    custom = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "// application icoFoam;  // engineer's old comment\n"
+        "application pimpleFoam;\n"
+        "endTime 999;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom)
+    mark_user_override(
+        case_dir, relative_path="system/controlDict",
+        new_content=custom.encode("utf-8"),
+        detail={"reason": "old comment, still pimpleFoam"},
+    )
+
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="commented_appl")
+    assert "system/controlDict" in r2.skipped_user_overrides
+
+
 def test_piso_block_inline_brace_detected(tmp_path: Path):
     """DEC-V61-107.5 / Codex R14 P2: PISO block with inline brace
     (e.g. `PISO { ... }` on one line, valid OpenFOAM formatting)
