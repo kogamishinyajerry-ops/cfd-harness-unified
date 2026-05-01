@@ -461,134 +461,71 @@ def _p_block(name: str, cls: BCClass) -> str:
 _SOLVER_GROUP = (
     "system/controlDict", "system/fvSchemes", "system/fvSolution",
 )
-# Codex R13 P2-B closure: content-aware icoFoam-marker detection.
-# These regexes match icoFoam-only constructs that would conflict
-# with the AI-authored pimpleFoam template in the OTHER solver-group
-# slots. Both are matched against the user-overridden file content;
-# either match means the case carries an icoFoam-flavored solver
-# config in at least one slot.
+# DEC-V61-107.5 / Codex R16 closure rationale: the override-content
+# guard's job is to catch the ONE dominant defect class — engineer
+# overrides controlDict and reverts to icoFoam, AI re-authors
+# pimpleFoam fvSolution → solver aborts with cryptic error. Earlier
+# rounds (R13 P2-B, R14 P1+P2, R15 P2-A+P2-B, R16 P2+P3) chased
+# subtler defect classes via regex: PISO/PIMPLE blocks (R14),
+# divDevReff in fvSchemes (R14, R15), divSchemes default fallback
+# (R15, R16), comment-stripping precedence (R15, R16). Each round
+# closed real issues but the regex stack now competes with OpenFOAM's
+# own parser — a battle we can't win statically.
+#
+# Pragmatic scope reduction (R16 closure): catch ONLY `application
+# icoFoam;` literal in user-overridden controlDict (the originally
+# motivating defect, dominant in the wild because that's the only
+# one-line revert engineers do). Long-tail mismatches in fvSchemes
+# / fvSolution still surface as `solver_diverged` (HTTP 502) at
+# /solve time with the OpenFOAM error in the response — the
+# engineer sees the real cause directly rather than a static-guard
+# false positive/negative.
 _ICOFOAM_APPLICATION_RE = re.compile(
     r"^\s*application\s+icoFoam\s*;",
     re.MULTILINE,
 )
-# PISO block at top level (not nested inside another dict). icoFoam
-# reads PISO; pimpleFoam reads PIMPLE. A user fvSolution that has
-# PISO but no PIMPLE is icoFoam-flavored.
-#
-# Codex R14 P2 closure: matches both `PISO\n{` AND `PISO {`
-# formatting (any whitespace before the opening brace). Anchored to
-# line start (^) so it doesn't match the substring `PISO` inside
-# comments or solver-name strings; ``\s+`` is permissive across
-# spaces, tabs, and newlines.
-_PISO_BLOCK_RE = re.compile(r"(?m)^PISO\s*\{")
-_PIMPLE_BLOCK_RE = re.compile(r"(?m)^PIMPLE\s*\{")
-# Codex R14 P1 closure: pimpleFoam routes div terms through the
-# turbulence model's divDevReff which evaluates this expression
-# every step even with simulationType laminar. If a user-overridden
-# fvSchemes drops it, OpenFOAM-10's createFields aborts with
-# "keyword div((nuEff*dev2(T(grad(U))))) is undefined". The AI
-# template includes it; a user override that drops it leaves the
-# committed case broken.
-_NUEFF_DIV_RE = re.compile(
-    r"div\(\s*\(?\s*nuEff\s*\*\s*dev2\s*\(\s*T\s*\(\s*grad\s*\(\s*U\s*\)\s*\)\s*\)\s*\)?\s*\)"
-)
-# Codex R15 P2-A closure: an fvSchemes that omits the explicit
-# div((nuEff*...)) term is still valid IF divSchemes.default is a
-# non-``none`` scheme (OpenFOAM falls back to default for any
-# unmatched div term). Detect the divSchemes block and check its
-# default keyword; if non-none, the file is coherent regardless of
-# explicit divDevReff. Permissive whitespace + multi-line.
-_DIVSCHEMES_DEFAULT_RE = re.compile(
-    r"divSchemes\s*\{[^}]*?\bdefault\s+([^;]+);", re.DOTALL,
-)
-# Codex R15 P2-B closure: line-comment stripping before regex.
-# OpenFOAM accepts ``//`` line comments and ``/* */`` block comments;
-# both must be stripped so a commented-out divDevReff doesn't
-# satisfy the guard. Apply BEFORE the divDevReff and divSchemes
-# default checks.
+# Comment stripping for the `application` regex. R16 P3 fix:
+# C++/OpenFOAM comment precedence is line-first then block, but
+# both regexes operating on the same input is fundamentally fragile
+# (Codex R16 caught the precedence flaw). Restrict comment handling
+# to the simple line-comment case which is the dominant form in
+# OpenFOAM dicts; block comments inside controlDict are vanishingly
+# rare and an `application icoFoam;` smuggled inside `/* */` would
+# also confuse OpenFOAM itself.
 _LINE_COMMENT_RE = re.compile(r"//[^\n]*")
-_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
-
-
-def _strip_foam_comments(content: str) -> str:
-    """Strip ``//`` line comments and ``/* */`` block comments. Other
-    parsers (e.g. _detect_icofoam_marker_overrides regex) operate on
-    the result so commented-out keywords do not satisfy guards."""
-    stripped = _BLOCK_COMMENT_RE.sub("", content)
-    stripped = _LINE_COMMENT_RE.sub("", stripped)
-    return stripped
 
 
 def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
-    """Return the subset of _SOLVER_GROUP files that would create a
-    mismatch between AI-authored pimpleFoam and user-overridden
-    icoFoam-flavored files in the FINAL committed state.
+    """Return user-overridden controlDict iff it carries
+    ``application icoFoam;`` AND not all 3 solver-group files are
+    user-overridden (full-group override = engineer owns coherence,
+    guard steps out).
 
-    Rule: if any user-overridden file carries an icoFoam-only marker
-    AND any file in the solver group is NOT user-overridden (i.e.
-    would be AI-authored pimpleFoam), the final state mixes flavors
-    → refuse. If ALL three files are user-overridden, the engineer
-    has full control over the solver group's coherence (whether they
-    keep it pure icoFoam, pure pimpleFoam, or a deliberate hybrid)
-    and the guard does not interfere.
-
-    Empty list = safe to proceed.
+    Scope: catches the dominant defect class only. Long-tail
+    mismatches (PISO block in fvSolution, missing divDevReff in
+    fvSchemes, etc.) surface as solver_diverged at /solve time
+    with the OpenFOAM error in the response — see DEC-V61-107.5
+    R16 closure rationale above.
     """
     overridden_status: dict[str, bool] = {
         rel: is_user_override(case_dir, relative_path=rel)
         for rel in _SOLVER_GROUP
     }
     if all(overridden_status.values()):
-        # Engineer fully owns the solver group. Codex R13 P2-B: don't
-        # second-guess a coherent user-authored stack.
+        # Engineer fully owns the solver group.
         return []
 
-    icofoam_offenders: list[str] = []
-    for rel, is_overridden in overridden_status.items():
-        if not is_overridden:
-            continue
-        try:
-            raw = (case_dir / rel).read_text()
-        except OSError:
-            # File marked overridden but unreadable — surface so the
-            # engineer investigates rather than silently allowing a
-            # broken commit.
-            icofoam_offenders.append(rel)
-            continue
-        # Codex R15 P2-B: strip OpenFOAM comments BEFORE applying
-        # detection regexes so a commented-out keyword can't satisfy
-        # the guard.
-        content = _strip_foam_comments(raw)
-        if rel.endswith("controlDict"):
-            if _ICOFOAM_APPLICATION_RE.search(content):
-                icofoam_offenders.append(rel)
-        elif rel.endswith("fvSolution"):
-            has_piso = bool(_PISO_BLOCK_RE.search(content))
-            has_pimple = bool(_PIMPLE_BLOCK_RE.search(content))
-            if has_piso and not has_pimple:
-                icofoam_offenders.append(rel)
-        elif rel.endswith("fvSchemes"):
-            # Codex R14 P1: pimpleFoam's createFields requires the
-            # div((nuEff*dev2(T(grad(U))))) term. The user's
-            # fvSchemes can satisfy this either:
-            # (a) Explicit `div((nuEff*dev2(T(grad(U))))) ... ;` line
-            # (b) Codex R15 P2-A: divSchemes default = <non-none>
-            #     scheme (OpenFOAM falls back to default for any
-            #     unmatched div term).
-            # If neither path satisfies, refuse.
-            has_explicit = bool(_NUEFF_DIV_RE.search(content))
-            has_nonnone_default = False
-            m = _DIVSCHEMES_DEFAULT_RE.search(content)
-            if m:
-                default_scheme = m.group(1).strip().lower()
-                # ``none`` is the only OpenFOAM default value that
-                # forces unmatched div terms to error out. Any other
-                # scheme (Gauss linear, Gauss upwind, etc.) covers
-                # the divDevReff term implicitly.
-                has_nonnone_default = default_scheme not in ("none", "")
-            if not (has_explicit or has_nonnone_default):
-                icofoam_offenders.append(rel)
-    return icofoam_offenders
+    rel = "system/controlDict"
+    if not overridden_status[rel]:
+        return []
+    try:
+        raw = (case_dir / rel).read_text()
+    except OSError:
+        return [rel]
+    content = _LINE_COMMENT_RE.sub("", raw)
+    if _ICOFOAM_APPLICATION_RE.search(content):
+        return [rel]
+    return []
 
 
 def _build_dict_plan(

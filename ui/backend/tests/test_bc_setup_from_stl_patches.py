@@ -530,11 +530,19 @@ def test_user_override_with_icofoam_marker_raises(tmp_path: Path):
     assert "system/controlDict" in str(exc.value)
 
 
-def test_user_override_with_piso_only_fvsolution_raises(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R13 P2-B: PISO block (without PIMPLE) in
-    a user-overridden fvSolution is also an icoFoam-only marker —
-    pimpleFoam reads PIMPLE, not PISO."""
-    case_dir = tmp_path / "piso_only_case"
+def test_user_override_with_piso_only_fvsolution_proceeds_without_static_guard(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R16 closure (scope reduction): PISO-block
+    fvSolution overrides are NO LONGER caught by the static guard.
+    The override-content guard's scope is now restricted to the
+    dominant defect class (`application icoFoam;` literal in
+    controlDict). Long-tail mismatches like PISO-without-PIMPLE in
+    user fvSolution will surface as solver_diverged at /solve time —
+    the engineer sees the OpenFOAM error directly, not a regex
+    proxy. This trades false-positive risk for missed false-negatives
+    that the regex stack couldn't reliably detect anyway (Codex R14
+    P2 brace formatting + R15 P2 comment precedence + R16 P2/P3
+    fundamental parser limits)."""
+    case_dir = tmp_path / "piso_proceeds"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
         case_dir,
@@ -544,7 +552,7 @@ def test_user_override_with_piso_only_fvsolution_raises(tmp_path: Path):
             ("walls", 500, 100, "+z"),
         ],
     )
-    setup_bc_from_stl_patches(case_dir, case_id="piso_only_case")
+    setup_bc_from_stl_patches(case_dir, case_id="piso_proceeds")
 
     custom_fv_solution = (
         'FoamFile { version 2.0; format ascii; class dictionary; '
@@ -557,13 +565,12 @@ def test_user_override_with_piso_only_fvsolution_raises(tmp_path: Path):
     mark_user_override(
         case_dir, relative_path="system/fvSolution",
         new_content=custom_fv_solution.encode("utf-8"),
-        detail={"reason": "engineer wrote PISO block (icoFoam-style)"},
+        detail={"reason": "engineer wrote PISO block; out of static guard scope"},
     )
 
-    with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="piso_only_case")
-    assert exc.value.failing_check == "solver_dicts_partial_override"
-    assert "system/fvSolution" in str(exc.value)
+    # Setup proceeds; PISO mismatch surfaces at solve time, not here.
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="piso_proceeds")
+    assert "system/fvSolution" in r2.skipped_user_overrides
 
 
 def test_user_override_pimplefoam_compatible_tuning_proceeds(tmp_path: Path):
@@ -647,11 +654,12 @@ def test_user_override_fvschemes_with_pimplefoam_terms_proceeds(tmp_path: Path):
     assert (case_dir / "system/fvSchemes").read_text() == custom_fvschemes
 
 
-def test_user_override_fvschemes_dropping_divdevreff_raises(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R14 P1: fvSchemes overrides that DROP
-    the pimpleFoam-required div((nuEff*dev2(T(grad(U))))) entry
-    must be refused — pimpleFoam createFields aborts at startup
-    with 'keyword undefined' otherwise."""
+def test_user_override_fvschemes_dropping_divdevreff_proceeds_without_guard(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R16 closure (scope reduction): fvSchemes
+    overrides that drop divDevReff are no longer caught statically.
+    They surface as solver_diverged at /solve time with OpenFOAM's
+    `keyword undefined` error in the response — the engineer sees
+    the actual cause."""
     case_dir = tmp_path / "fvschemes_broken_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
@@ -669,7 +677,6 @@ def test_user_override_fvschemes_dropping_divdevreff_raises(tmp_path: Path):
         'location "system"; object fvSchemes; }\n'
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
-        # Missing div((nuEff*dev2(T(grad(U))))) — pimpleFoam will abort.
         "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"
         "laplacianSchemes { default Gauss linear corrected; }\n"
         "interpolationSchemes { default linear; }\n"
@@ -679,13 +686,11 @@ def test_user_override_fvschemes_dropping_divdevreff_raises(tmp_path: Path):
     mark_user_override(
         case_dir, relative_path="system/fvSchemes",
         new_content=custom_broken.encode("utf-8"),
-        detail={"reason": "engineer omitted divDevReff"},
+        detail={"reason": "engineer omitted divDevReff; out of guard scope"},
     )
 
-    with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="fvschemes_broken_case")
-    assert exc.value.failing_check == "solver_dicts_partial_override"
-    assert "system/fvSchemes" in str(exc.value)
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="fvschemes_broken_case")
+    assert "system/fvSchemes" in r2.skipped_user_overrides
 
 
 def test_user_override_fvschemes_with_nonnone_default_proceeds(tmp_path: Path):
@@ -729,10 +734,10 @@ def test_user_override_fvschemes_with_nonnone_default_proceeds(tmp_path: Path):
     assert "system/fvSchemes" in r2.skipped_user_overrides
 
 
-def test_user_override_fvschemes_with_default_none_raises(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R15 P2-A: when divSchemes.default is
-    ``none`` AND there's no explicit divDevReff, OpenFOAM still
-    aborts. Must trigger the guard."""
+def test_user_override_fvschemes_with_default_none_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R16 closure: fvSchemes content is no longer
+    statically inspected. Override proceeds; if it's actually broken,
+    pimpleFoam will diverge at /solve time and `solver_diverged` surfaces."""
     case_dir = tmp_path / "default_none_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
@@ -750,7 +755,7 @@ def test_user_override_fvschemes_with_default_none_raises(tmp_path: Path):
         'location "system"; object fvSchemes; }\n'
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
-        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"  # default=none, no divDevReff
+        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"
         "laplacianSchemes { default Gauss linear corrected; }\n"
         "interpolationSchemes { default linear; }\n"
         "snGradSchemes { default corrected; }\n"
@@ -762,15 +767,14 @@ def test_user_override_fvschemes_with_default_none_raises(tmp_path: Path):
         detail={"reason": "engineer omitted both default and divDevReff"},
     )
 
-    with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="default_none_case")
-    assert exc.value.failing_check == "solver_dicts_partial_override"
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="default_none_case")
+    assert "system/fvSchemes" in r2.skipped_user_overrides
 
 
-def test_user_override_fvschemes_commented_divdevreff_raises(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R15 P2-B: a commented-out divDevReff
-    entry must NOT satisfy the guard — OpenFOAM ignores comments,
-    pimpleFoam will still abort."""
+def test_user_override_fvschemes_commented_divdevreff_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R16 closure: fvSchemes content is no longer
+    statically inspected, so commented-out divDevReff no longer matters
+    to the guard — divergence (if any) surfaces at /solve time."""
     case_dir = tmp_path / "commented_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
@@ -789,7 +793,6 @@ def test_user_override_fvschemes_commented_divdevreff_raises(tmp_path: Path):
         "ddtSchemes  { default Euler; }\n"
         "gradSchemes { default Gauss linear; }\n"
         "divSchemes  { default none; div(phi,U) Gauss upwind; "
-        # Commented-out — OpenFOAM ignores. Guard must not be fooled.
         "// div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
         "laplacianSchemes { default Gauss linear corrected; }\n"
         "interpolationSchemes { default linear; }\n"
@@ -802,9 +805,8 @@ def test_user_override_fvschemes_commented_divdevreff_raises(tmp_path: Path):
         detail={"reason": "engineer commented out divDevReff by mistake"},
     )
 
-    with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="commented_case")
-    assert exc.value.failing_check == "solver_dicts_partial_override"
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="commented_case")
+    assert "system/fvSchemes" in r2.skipped_user_overrides
 
 
 def test_user_override_controldict_with_commented_icofoam_proceeds(tmp_path: Path):
@@ -841,13 +843,13 @@ def test_user_override_controldict_with_commented_icofoam_proceeds(tmp_path: Pat
     assert "system/controlDict" in r2.skipped_user_overrides
 
 
-def test_piso_block_inline_brace_detected(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R14 P2: PISO block with inline brace
-    (e.g. `PISO { ... }` on one line, valid OpenFOAM formatting)
-    must be detected — earlier regex required brace on next line
-    and missed this case, letting icoFoam-flavor fvSolution slip
-    past the guard."""
-    case_dir = tmp_path / "piso_inline_case"
+def test_piso_block_inline_brace_proceeds_without_static_guard(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R16 closure (scope reduction): inline-
+    brace PISO blocks in fvSolution are no longer caught by the
+    static guard. The engineer sees the actual mismatch as a solve-
+    time `solver_diverged` HTTP 502 with OpenFOAM's error in the
+    response."""
+    case_dir = tmp_path / "piso_inline_proceeds"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
         case_dir,
@@ -857,14 +859,13 @@ def test_piso_block_inline_brace_detected(tmp_path: Path):
             ("walls", 500, 100, "+z"),
         ],
     )
-    setup_bc_from_stl_patches(case_dir, case_id="piso_inline_case")
+    setup_bc_from_stl_patches(case_dir, case_id="piso_inline_proceeds")
 
     custom_inline = (
         'FoamFile { version 2.0; format ascii; class dictionary; '
         'location "system"; object fvSolution; }\n'
         "solvers { p { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; } "
         "U { solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0; } }\n"
-        # Inline-brace PISO — valid OpenFOAM, must be caught.
         "PISO { nCorrectors 2; nNonOrthogonalCorrectors 2; pRefCell 0; pRefValue 0; }\n"
     )
     (case_dir / "system/fvSolution").write_text(custom_inline)
@@ -874,10 +875,8 @@ def test_piso_block_inline_brace_detected(tmp_path: Path):
         detail={"reason": "engineer wrote inline-brace PISO"},
     )
 
-    with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="piso_inline_case")
-    assert exc.value.failing_check == "solver_dicts_partial_override"
-    assert "system/fvSolution" in str(exc.value)
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="piso_inline_proceeds")
+    assert "system/fvSolution" in r2.skipped_user_overrides
 
 
 def test_user_override_full_solver_group_preserves_all_three(tmp_path: Path):
