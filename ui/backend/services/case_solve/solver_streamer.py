@@ -50,6 +50,7 @@ from .solver_runner import (
     SolverRunError,
     SolverRunResult,
     _is_converged,
+    _read_configured_end_time,
     _parse_log,
     read_application_from_control_dict,
 )
@@ -586,7 +587,10 @@ def stream_icofoam(
             log_buf.getvalue().decode("utf-8", errors="replace"),
             include_diagonal=False,
         )
-        converged = _is_converged(parsed) and not fatal_seen[0]
+        converged = (
+            _is_converged(parsed, _read_configured_end_time(case_host_dir))
+            and not fatal_seen[0]
+        )
         summary = {
             "case_id": case_host_dir.name,
             "end_time_reached": float(parsed["end_time_reached"]),

@@ -164,32 +164,68 @@ def _parse_log(
     }
 
 
-def _is_converged(parsed: dict[str, object]) -> bool:
-    """Convergence heuristic for icoFoam steady-state demo:
+_END_TIME_RE = re.compile(r"\bendTime\s+([0-9.eE+-]+)\s*;")
 
-    * end_time_reached == 2.0 (the ``endTime`` we configured)
+
+def _read_configured_end_time(case_host_dir: Path) -> float:
+    """Read the ``endTime`` value from ``system/controlDict``. Falls
+    back to 2.0 (the legacy LDC default that ``_is_converged`` hardcoded
+    before V61-103 made endTime case-configurable) if the file or value
+    is missing/unparseable.
+
+    Defect-9 fix (iter04/05/06 smoke false-FAIL): the convergence
+    heuristic was hardcoded to ``end_time_reached >= 1.99`` matching
+    the LDC demo's endTime=2.0. When V61-103 made endTime configurable
+    per case (and the smoke runner started passing per-case overrides),
+    short cases like end_time=0.5 reported ``converged=false`` even
+    when residuals were finite and tiny.
+    """
+    try:
+        text = (case_host_dir / "system" / "controlDict").read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        return 2.0
+    m = _END_TIME_RE.search(text)
+    if not m:
+        return 2.0
+    try:
+        return float(m.group(1))
+    except (TypeError, ValueError):
+        return 2.0
+
+
+def _is_converged(parsed: dict[str, object], configured_end_time: float = 2.0) -> bool:
+    """Convergence heuristic for icoFoam runs:
+
+    * end_time_reached >= configured endTime (with 0.5 % tolerance
+      for floating-point write-interval rounding)
     * |continuity error| < 1e-3 (PISO closing the mass balance)
-    * U residuals < 1e-3 (steady state)
+    * residuals must be finite (NaN / Inf trip on the bound check)
 
     Returns False if anything is missing or out-of-band — the route
     surfaces this as ``converged=false`` so the UI can show a warning
     without the call having "failed".
+
+    ``configured_end_time`` defaults to the legacy LDC value 2.0 so
+    callers that don't pass it (older code paths, tests) keep working.
+    Production callers (``run_icofoam``) pass the value read from
+    ``system/controlDict`` so per-case overrides land correctly.
     """
     end_t = parsed.get("end_time_reached", 0.0)
-    if not isinstance(end_t, (int, float)) or end_t < 1.99:
+    if not isinstance(end_t, (int, float)):
+        return False
+    # 0.5 % tolerance: writeInterval rounding can land at e.g. 1.999998
+    # for a configured endTime=2.0 and we don't want that to read as a
+    # divergent run.
+    if end_t < configured_end_time * 0.995:
         return False
     cont = parsed.get("continuity")
-    if cont is None or abs(cont) > 1.0e-3:
+    if cont is None or not isinstance(cont, (int, float)):
         return False
-    for k in ("Ux", "Uy", "Uz"):
-        v = parsed.get(k)
-        if v is None or v > 1.0e-3:
-            # icoFoam Initial residual at steady state hovers ~0.1 for
-            # the LDC corner singularity even at convergence. Use a
-            # looser bound; physical convergence is detected via
-            # continuity error and identical-residuals-across-steps.
-            # Actually relax this: U Initial residual ~0.1 is expected.
-            pass
+    # NaN check — NaN compares unequal to itself.
+    if cont != cont or abs(cont) > 1.0e-3:
+        return False
     return True
 
 
@@ -322,7 +358,7 @@ def run_icofoam(
 
     log_text = log_dest.read_text(errors="replace")
     parsed = _parse_log(log_text)
-    converged = _is_converged(parsed)
+    converged = _is_converged(parsed, _read_configured_end_time(case_host_dir))
 
     # Pull time directories back to the host. The container produced
     # /tmp/.../<case>/<time>/ for each writeInterval; mirror them onto

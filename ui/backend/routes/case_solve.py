@@ -172,6 +172,43 @@ def setup_bc(
             "envelope; if both are passed, from_stl_patches wins."
         ),
     ),
+    inlet_speed: float | None = Query(
+        default=None,
+        gt=0.0,
+        description=(
+            "Adversarial-loop iter05/iter06 follow-up: override the "
+            "default inlet velocity magnitude (m/s). Only honored when "
+            "from_stl_patches=1. Required for stability on geometries "
+            "where the default (0.5 m/s) produces a Courant number > 1 "
+            "for the auto-meshed cell size."
+        ),
+    ),
+    delta_t: float | None = Query(
+        default=None,
+        gt=0.0,
+        description=(
+            "Adversarial-loop iter05 follow-up: override the icoFoam "
+            "timestep (s). Only honored when from_stl_patches=1. Lower "
+            "values are required for Courant stability on small cells "
+            "or high-velocity inlets."
+        ),
+    ),
+    end_time: float | None = Query(
+        default=None,
+        gt=0.0,
+        description=(
+            "Override icoFoam endTime (s). Only honored when "
+            "from_stl_patches=1. Default 5.0s."
+        ),
+    ),
+    nu: float | None = Query(
+        default=None,
+        gt=0.0,
+        description=(
+            "Override kinematic viscosity (m²/s). Only honored when "
+            "from_stl_patches=1. Default 1e-3 (water-like)."
+        ),
+    ),
 ):
     """Author OpenFOAM dicts for the case in one of three modes.
 
@@ -192,8 +229,21 @@ def setup_bc(
     case_dir = _resolve_case_dir(case_id)
 
     if from_stl_patches:
+        # Build kwarg dict so callers that pass nothing get the
+        # function's defaults (single source of truth in
+        # setup_bc_from_stl_patches), and explicit None Query values
+        # don't clobber those defaults.
+        bc_kwargs: dict = {}
+        if inlet_speed is not None:
+            bc_kwargs["inlet_speed"] = inlet_speed
+        if delta_t is not None:
+            bc_kwargs["delta_t"] = delta_t
+        if end_time is not None:
+            bc_kwargs["end_time"] = end_time
+        if nu is not None:
+            bc_kwargs["nu"] = nu
         try:
-            result = setup_bc_from_stl_patches(case_dir, case_id=case_id)
+            result = setup_bc_from_stl_patches(case_dir, case_id=case_id, **bc_kwargs)
         except StlPatchBCError as exc:
             status = {
                 "mesh_not_setup": 409,
