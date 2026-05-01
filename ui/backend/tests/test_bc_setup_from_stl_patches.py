@@ -485,15 +485,15 @@ def test_inlet_velocity_falls_back_when_polymesh_files_missing(tmp_path: Path):
     )
 
 
-def test_user_override_partial_solver_group_raises(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R12 P1: with the pimpleFoam migration the
-    {controlDict, fvSchemes, fvSolution} group is authored as a coherent
-    template. A partial user override (e.g. only controlDict) would let
-    AI-authored pimpleFoam fvSolution coexist with user-edited
-    icoFoam-era controlDict — the resulting case aborts at startup with
-    a dictionary-keyword mismatch. Refuse with a structured error
-    instead so the engineer can reconcile."""
-    case_dir = tmp_path / "override_case"
+def test_user_override_with_icofoam_marker_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R12 P1 + R13 P2-B: refuse only when a
+    user-overridden file carries an icoFoam-ONLY marker (e.g.
+    `application icoFoam` in controlDict). Mixing icoFoam-flavored
+    controlDict with AI-authored pimpleFoam fvSolution would abort the
+    solver at startup. Single-file edits that PRESERVE pimpleFoam
+    family markers (e.g. tuning endTime / deltaT) are now allowed —
+    see test_user_override_pimplefoam_compatible_tuning_proceeds."""
+    case_dir = tmp_path / "icofoam_marker_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
         case_dir,
@@ -505,10 +505,10 @@ def test_user_override_partial_solver_group_raises(tmp_path: Path):
     )
 
     # First setup: AI authors all dicts (pimpleFoam template).
-    r1 = setup_bc_from_stl_patches(case_dir, case_id="override_case")
+    r1 = setup_bc_from_stl_patches(case_dir, case_id="icofoam_marker_case")
     assert r1.skipped_user_overrides == ()
 
-    # Engineer overrides ONLY controlDict (not fvSchemes / fvSolution).
+    # Engineer overrides controlDict and reverts to icoFoam — DANGEROUS.
     custom_control_dict = (
         'FoamFile { version 2.0; format ascii; class dictionary; '
         'location "system"; object controlDict; }\n'
@@ -521,14 +521,129 @@ def test_user_override_partial_solver_group_raises(tmp_path: Path):
         case_dir,
         relative_path="system/controlDict",
         new_content=custom_control_dict.encode("utf-8"),
-        detail={"reason": "engineer override"},
+        detail={"reason": "engineer reverted to icoFoam"},
     )
 
-    # Re-run setup-bc — must REFUSE because the override is partial.
     with pytest.raises(StlPatchBCError) as exc:
-        setup_bc_from_stl_patches(case_dir, case_id="override_case")
+        setup_bc_from_stl_patches(case_dir, case_id="icofoam_marker_case")
     assert exc.value.failing_check == "solver_dicts_partial_override"
     assert "system/controlDict" in str(exc.value)
+
+
+def test_user_override_with_piso_only_fvsolution_raises(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R13 P2-B: PISO block (without PIMPLE) in
+    a user-overridden fvSolution is also an icoFoam-only marker —
+    pimpleFoam reads PIMPLE, not PISO."""
+    case_dir = tmp_path / "piso_only_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="piso_only_case")
+
+    custom_fv_solution = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSolution; }\n'
+        "solvers { p { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; } "
+        "U { solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0; } }\n"
+        "PISO\n{\nnCorrectors 2;\nnNonOrthogonalCorrectors 2;\npRefCell 0;\npRefValue 0;\n}\n"
+    )
+    (case_dir / "system/fvSolution").write_text(custom_fv_solution)
+    mark_user_override(
+        case_dir, relative_path="system/fvSolution",
+        new_content=custom_fv_solution.encode("utf-8"),
+        detail={"reason": "engineer wrote PISO block (icoFoam-style)"},
+    )
+
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="piso_only_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    assert "system/fvSolution" in str(exc.value)
+
+
+def test_user_override_pimplefoam_compatible_tuning_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R13 P2-B: legitimate raw-dict tuning
+    that keeps the pimpleFoam family markers should proceed normally
+    and be preserved. Engineer adjusts endTime + deltaT in a
+    pimpleFoam controlDict — no icoFoam marker, content-aware guard
+    must NOT refuse."""
+    case_dir = tmp_path / "compat_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="compat_case")
+
+    # User changes ONLY endTime + deltaT, keeps `application pimpleFoam`.
+    custom_compat = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application pimpleFoam;\n"  # KEY: still pimpleFoam
+        "endTime 999;\n"
+        "deltaT 0.0005;\n"
+        "adjustTimeStep yes;\n"
+        "maxCo 0.5;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom_compat)
+    mark_user_override(
+        case_dir, relative_path="system/controlDict",
+        new_content=custom_compat.encode("utf-8"),
+        detail={"reason": "tune endTime + deltaT"},
+    )
+
+    # Should PROCEED (not raise), and preserve the engineer's edit.
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="compat_case")
+    assert "system/controlDict" in r2.skipped_user_overrides
+    assert (case_dir / "system/controlDict").read_text() == custom_compat
+
+
+def test_user_override_fvschemes_alone_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R13 P2-B: fvSchemes has no flavor-
+    specific marker that distinguishes icoFoam from pimpleFoam (both
+    accept the same scheme keys). A standalone fvSchemes override
+    should NOT trigger the guard."""
+    case_dir = tmp_path / "fvschemes_only_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="fvschemes_only_case")
+
+    custom_fvschemes = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        "divSchemes  { default none; div(phi,U) Gauss upwind; }\n"
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+    (case_dir / "system/fvSchemes").write_text(custom_fvschemes)
+    mark_user_override(
+        case_dir, relative_path="system/fvSchemes",
+        new_content=custom_fvschemes.encode("utf-8"),
+        detail={"reason": "engineer wants pure upwind"},
+    )
+
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="fvschemes_only_case")
+    assert "system/fvSchemes" in r2.skipped_user_overrides
+    assert (case_dir / "system/fvSchemes").read_text() == custom_fvschemes
 
 
 def test_user_override_full_solver_group_preserves_all_three(tmp_path: Path):

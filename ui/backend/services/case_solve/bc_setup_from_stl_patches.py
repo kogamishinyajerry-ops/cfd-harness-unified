@@ -458,6 +458,77 @@ def _p_block(name: str, cls: BCClass) -> str:
     )
 
 
+_SOLVER_GROUP = (
+    "system/controlDict", "system/fvSchemes", "system/fvSolution",
+)
+# Codex R13 P2-B closure: content-aware icoFoam-marker detection.
+# These regexes match icoFoam-only constructs that would conflict
+# with the AI-authored pimpleFoam template in the OTHER solver-group
+# slots. Both are matched against the user-overridden file content;
+# either match means the case carries an icoFoam-flavored solver
+# config in at least one slot.
+_ICOFOAM_APPLICATION_RE = re.compile(
+    r"^\s*application\s+icoFoam\s*;",
+    re.MULTILINE,
+)
+# PISO block at top level (not nested inside another dict). icoFoam
+# reads PISO; pimpleFoam reads PIMPLE. A user fvSolution that has
+# PISO but no PIMPLE is icoFoam-flavored.
+_PISO_BLOCK_RE = re.compile(r"(?ms)^PISO\s*\n\s*\{")
+_PIMPLE_BLOCK_RE = re.compile(r"(?ms)^PIMPLE\s*\n\s*\{")
+
+
+def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
+    """Return the subset of _SOLVER_GROUP files that would create a
+    mismatch between AI-authored pimpleFoam and user-overridden
+    icoFoam-flavored files in the FINAL committed state.
+
+    Rule: if any user-overridden file carries an icoFoam-only marker
+    AND any file in the solver group is NOT user-overridden (i.e.
+    would be AI-authored pimpleFoam), the final state mixes flavors
+    → refuse. If ALL three files are user-overridden, the engineer
+    has full control over the solver group's coherence (whether they
+    keep it pure icoFoam, pure pimpleFoam, or a deliberate hybrid)
+    and the guard does not interfere.
+
+    Empty list = safe to proceed.
+    """
+    overridden_status: dict[str, bool] = {
+        rel: is_user_override(case_dir, relative_path=rel)
+        for rel in _SOLVER_GROUP
+    }
+    if all(overridden_status.values()):
+        # Engineer fully owns the solver group. Codex R13 P2-B: don't
+        # second-guess a coherent user-authored stack.
+        return []
+
+    icofoam_offenders: list[str] = []
+    for rel, is_overridden in overridden_status.items():
+        if not is_overridden:
+            continue
+        try:
+            content = (case_dir / rel).read_text()
+        except OSError:
+            # File marked overridden but unreadable — surface so the
+            # engineer investigates rather than silently allowing a
+            # broken commit.
+            icofoam_offenders.append(rel)
+            continue
+        if rel.endswith("controlDict"):
+            if _ICOFOAM_APPLICATION_RE.search(content):
+                icofoam_offenders.append(rel)
+        elif rel.endswith("fvSolution"):
+            has_piso = bool(_PISO_BLOCK_RE.search(content))
+            has_pimple = bool(_PIMPLE_BLOCK_RE.search(content))
+            if has_piso and not has_pimple:
+                icofoam_offenders.append(rel)
+        # fvSchemes has no static flavor marker — both icoFoam and
+        # pimpleFoam accept the same keys. Missing div((nuEff*...))
+        # would surface as a pimpleFoam createFields runtime error,
+        # not a static marker.
+    return icofoam_offenders
+
+
 def _build_dict_plan(
     patches_with_class: list[tuple[str, BCClass]],
     *,
@@ -730,39 +801,34 @@ def setup_bc_from_stl_patches(
         end_time=end_time,
     )
 
-    # Codex R12 P1 closure: the pimpleFoam template authors three
-    # solver-config dicts (controlDict, fvSchemes, fvSolution) as a
-    # coherent group. _atomic_commit_dicts skips user-overridden
-    # files; if any subset of the three is user-overridden the
-    # written dicts would mix pimpleFoam-era (e.g. PIMPLE block,
-    # adjustTimeStep) with icoFoam-era (e.g. PISO block, fixed dt)
-    # and OpenFOAM aborts at startup with a dictionary-keyword
-    # mismatch. Refuse with a structured error so the engineer can
-    # either revert all three to AI defaults or re-override them
-    # together. Note: this check runs OUTSIDE case_lock — only reads
-    # case_manifest, so no race vs writers; if the engineer flips an
-    # override between this check and the lock acquisition the
-    # atomic commit's per-file is_user_override re-check will catch
-    # the inconsistency at write time.
-    _SOLVER_GROUP = ("system/controlDict", "system/fvSchemes", "system/fvSolution")
-    overridden = [
-        rel for rel in _SOLVER_GROUP
-        if is_user_override(case_dir, relative_path=rel)
-    ]
-    if 0 < len(overridden) < len(_SOLVER_GROUP):
-        raise StlPatchBCError(
-            f"solver-dict group {_SOLVER_GROUP} is partially user-"
-            f"overridden ({overridden}); the pimpleFoam template "
-            "authors all three as a coherent group, mixing user-"
-            "edited icoFoam-era dicts with AI-authored pimpleFoam "
-            "would abort the solver at startup. Revert all three to "
-            "AI defaults via the raw-dict editor's reset action, or "
-            "override all three together.",
-            failing_check="solver_dicts_partial_override",
-        )
-
     try:
         with case_lock(case_dir):
+            # Codex R13 P2-A + P2-B closure: content-aware
+            # icoFoam-marker check, INSIDE case_lock so override
+            # status can't flip between check and commit. The AI
+            # always authors pimpleFoam now (V61-107.5). The dangerous
+            # case isn't "any single-file override" (which Codex R13
+            # P2-B correctly flagged as too aggressive — engineers
+            # legitimately tune endTime / deltaT / relTol in single
+            # files); it's specifically when a user-overridden file
+            # carries an icoFoam-only marker (`application icoFoam` or
+            # `PISO` block without `PIMPLE`). That + AI-authored
+            # pimpleFoam in the OTHER files = OpenFOAM startup abort.
+            # Tuning a single field while keeping pimpleFoam family
+            # markers is safe and proceeds normally.
+            _icofoam_offenders = _detect_icofoam_marker_overrides(case_dir)
+            if _icofoam_offenders:
+                raise StlPatchBCError(
+                    "solver-dict group contains user-overridden file(s) "
+                    f"with icoFoam-only markers: {_icofoam_offenders}. "
+                    "AI-authored pimpleFoam dicts in the other slots "
+                    "would mismatch (pimpleFoam reads PIMPLE not PISO; "
+                    "icoFoam reads neither adjustTimeStep nor maxCo). "
+                    "Either: (a) revert these overrides via raw-dict "
+                    "editor reset, or (b) also override the OTHER "
+                    "files to a coherent icoFoam template.",
+                    failing_check="solver_dicts_partial_override",
+                )
             # Defect-8 (iter06) + Codex post-merge MED: if any patch has
             # a constraint-type BCClass (symmetry, …), rewrite
             # ``constant/polyMesh/boundary`` so its ``type`` matches the
