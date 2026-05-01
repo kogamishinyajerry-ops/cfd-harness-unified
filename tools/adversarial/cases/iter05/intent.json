@@ -1,0 +1,69 @@
+{
+  "name": "rotated_t_junction_dual_inlet_single_outlet",
+  "description": "Non-axis-aligned T-junction closed shell with four STL solids (inlet_1, inlet_2, outlet_1, walls). Geometry is a single connected manifold extruded to 80 mm depth from a 340x200 mm T-profile, then rotated in 3D to stress multi-patch centroid voting and patch-normal-aware inlet BC authoring on three differently oriented terminal faces.",
+  "patches": {
+    "inlet_1": {
+      "role": "inlet",
+      "U": [
+        0.2533,
+        0.0774,
+        0.1408
+      ],
+      "p": "zeroGradient"
+    },
+    "inlet_2": {
+      "role": "inlet",
+      "U": [
+        -0.2533,
+        -0.0774,
+        -0.1408
+      ],
+      "p": "zeroGradient"
+    },
+    "outlet_1": {
+      "role": "outlet",
+      "U": "zeroGradient",
+      "p": {
+        "type": "fixedValue",
+        "value": 0.0
+      }
+    },
+    "walls": {
+      "role": "wall",
+      "U": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    }
+  },
+  "solver": {
+    "name": "icoFoam",
+    "end_time_s": 2.5,
+    "delta_t_s": 0.002
+  },
+  "physics": {
+    "rho_kg_m3": 1.0,
+    "nu_m2_s": 3.6e-05,
+    "characteristic_velocity_m_s": 0.3,
+    "characteristic_length_m": 0.06,
+    "reynolds": 500.0
+  },
+  "expected_outcome": {
+    "converges": true,
+    "expected_residual_p_final": 0.0006,
+    "expected_residual_U_final": 3e-05,
+    "mass_balance": {
+      "inflow_patches": [
+        "inlet_1",
+        "inlet_2"
+      ],
+      "outflow_patches": [
+        "outlet_1"
+      ],
+      "expectation": "sum(volumetric_flow[inlet_1,inlet_2]) ~= volumetric_flow[outlet_1]"
+    },
+    "qualitative_description": "Two opposing angled inflows merge inside the rotated T-junction and are redirected through the stem outlet. Expect a high-shear collision zone near the junction center, pressure recovery toward the outlet branch, and sensitivity to multi-patch face classification where inlet edges share adjacent wall seams."
+  }
+}
