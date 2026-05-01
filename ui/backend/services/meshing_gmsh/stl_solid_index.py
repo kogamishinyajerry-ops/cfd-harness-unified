@@ -80,9 +80,29 @@ def parse_named_solids_from_path(stl_path: Path) -> list[SolidCentroids]:
     return parse_named_solids(stl_path.read_bytes())
 
 
+class AmbiguousSurfaceAssignment(ValueError):
+    """The nearest-cloud match for a parametric surface is too close
+    to its second-best to be safely picked. The caller should escalate
+    to a per-triangle vote or surface this as a hard mesh-generation
+    error so an engineer reviews the geometry before BC assignment.
+    """
+
+    def __init__(self, best_name: str, second_name: str, best_dist: float, second_dist: float) -> None:
+        super().__init__(
+            f"surface→solid match ambiguous: {best_name!r} (d={best_dist:.4g}) "
+            f"vs {second_name!r} (d={second_dist:.4g}); ratio={best_dist / max(second_dist, 1e-12):.3f}"
+        )
+        self.best_name = best_name
+        self.second_name = second_name
+        self.best_dist = best_dist
+        self.second_dist = second_dist
+
+
 def assign_surface_to_solid(
     surface_centroid: np.ndarray,
     solids: list[SolidCentroids],
+    *,
+    ambiguity_ratio: float = 0.7,
 ) -> str | None:
     """Pick the solid whose triangle cloud is nearest to ``surface_centroid``.
 
@@ -91,18 +111,39 @@ def assign_surface_to_solid(
     spatially well-separated (the canonical case for engineering CAD
     where inlet/outlet/walls live on distinct faces of the model).
 
-    Edge case: if two patches share a sub-face (T-junctions, complex
-    assemblies) this heuristic can mis-assign. Adversarial iter03+ will
-    hunt for that case and the caller should switch to a more rigorous
-    membership test (per-triangle vertex-set equality) at that point.
+    Raises ``AmbiguousSurfaceAssignment`` when the best-candidate
+    distance is within ``ambiguity_ratio`` of the second-best
+    (Codex review R1 MED-1). This catches T-junctions, concentric
+    shells, and overlapping near-patches where centroid matching
+    could silently mis-assign. The caller is expected to surface this
+    as a mesh-generation failure rather than guessing — the engineer
+    can then disambiguate via the raw-dict editor or the eventual
+    per-triangle voting upgrade.
+
+    ``ambiguity_ratio=0.7`` means "best must be at least 30 % closer
+    than second-best"; tuned empirically against the inlet/outlet/walls
+    duct cases where best/second-best ratios are ≪ 0.5.
     """
     if not solids:
         return None
-    best_name: str | None = None
-    best_dist = float("inf")
+    if len(solids) == 1:
+        return solids[0].name
+    distances: list[tuple[float, str]] = []
     for s in solids:
         d = float(np.linalg.norm(s.centroids - surface_centroid, axis=1).min())
-        if d < best_dist:
-            best_dist = d
-            best_name = s.name
+        distances.append((d, s.name))
+    distances.sort(key=lambda t: t[0])
+    best_dist, best_name = distances[0]
+    second_dist, second_name = distances[1]
+    # Ratio guard: if best/second ≥ ambiguity_ratio (e.g. 0.7), the
+    # call is too close to make confidently. Equality (ratio = 1.0)
+    # is the worst case. Identical distances (best = second = 0.0)
+    # also tip into ambiguity (ratio undefined → treat as ambiguous).
+    if second_dist <= 0.0 or best_dist / second_dist >= ambiguity_ratio:
+        raise AmbiguousSurfaceAssignment(
+            best_name=best_name,
+            second_name=second_name,
+            best_dist=best_dist,
+            second_dist=second_dist,
+        )
     return best_name

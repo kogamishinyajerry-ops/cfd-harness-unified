@@ -186,6 +186,7 @@ def _gmsh_inline(
             # solid name are grouped under one PhysicalGroup so
             # gmshToFoam emits one Foam patch per named solid.
             from .stl_solid_index import (
+                AmbiguousSurfaceAssignment,
                 assign_surface_to_solid,
                 parse_named_solids_from_path,
             )
@@ -193,11 +194,23 @@ def _gmsh_inline(
             named_solids = parse_named_solids_from_path(stl_path)
             if named_solids:
                 surfaces_by_name: dict[str, list[int]] = {}
+                # Codex review R1 MED-2: completeness check. When
+                # named-solid mode is active, every classified
+                # parametric surface MUST resolve to one of the
+                # source solids — otherwise that surface's triangles
+                # silently disappear from MSH 2.2 export (gmsh's
+                # implicit "physical groups exist → drop untagged
+                # elements" behavior) and gmshToFoam emits a
+                # boundary file missing whole patches. Track
+                # unassigned surfaces and raise instead of falling
+                # through.
+                unassigned: list[int] = []
                 for _dim, tag in surfaces:
                     _types, _etags, node_tags_list = gmsh.model.mesh.getElements(
                         dim=2, tag=tag
                     )
                     if not node_tags_list or len(node_tags_list[0]) == 0:
+                        unassigned.append(tag)
                         continue
                     node_ids = set(int(n) for n in node_tags_list[0])
                     coords: list[list[float]] = []
@@ -205,13 +218,37 @@ def _gmsh_inline(
                         c, _, _, _ = gmsh.model.mesh.getNode(nid)
                         coords.append([c[0], c[1], c[2]])
                     if not coords:
+                        unassigned.append(tag)
                         continue
                     import numpy as _np
 
                     centroid = _np.asarray(coords).mean(axis=0)
-                    name = assign_surface_to_solid(centroid, named_solids)
-                    if name is not None:
-                        surfaces_by_name.setdefault(name, []).append(tag)
+                    try:
+                        name = assign_surface_to_solid(centroid, named_solids)
+                    except AmbiguousSurfaceAssignment as exc:
+                        # MED-1 ambiguity guard. Surface as a mesh
+                        # generation failure so the engineer sees a
+                        # 422 with a structured error and can decide
+                        # to disambiguate via raw-dict editor or
+                        # re-export the STL with cleaner solid
+                        # boundaries.
+                        raise GmshMeshGenerationError(
+                            f"named-solid patch assignment ambiguous on "
+                            f"parametric surface {tag}: {exc}"
+                        ) from exc
+                    if name is None:
+                        unassigned.append(tag)
+                        continue
+                    surfaces_by_name.setdefault(name, []).append(tag)
+                if unassigned:
+                    raise GmshMeshGenerationError(
+                        f"named-solid mode failed to assign "
+                        f"{len(unassigned)} classified surface(s) to a "
+                        f"source solid; surface tags={unassigned}. This "
+                        f"would silently drop boundary triangles from "
+                        f"MSH export — re-author the STL with cleaner "
+                        f"per-patch surfaces or use single-solid mode."
+                    )
                 for name, tags in surfaces_by_name.items():
                     pg_tag = gmsh.model.addPhysicalGroup(2, tags)
                     gmsh.model.setPhysicalName(2, pg_tag, name)

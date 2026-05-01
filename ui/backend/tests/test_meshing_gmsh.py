@@ -100,36 +100,81 @@ def test_gmsh_preserves_stl_solid_names_as_physical_groups(tmp_path: Path):
     assert result.cell_count > 0
 
     text = msh_path.read_text()
-    # PhysicalNames section: dim=2 (surface) groups for each solid.
-    assert '"inlet"' in text
-    assert '"outlet"' in text
-    assert '"walls"' in text
 
-    # Element-line physical tags must be non-zero on the boundary
-    # triangles. Format: ``elem_id elem_type num_tags physical_group ...``
-    in_elements = False
-    found_nonzero_triangle = False
+    # PhysicalNames: parse the dim=2 group set strictly. The set
+    # must equal {inlet, outlet, walls} — no missing names, no extras
+    # (Codex R1 LOW-3 strengthening).
+    in_pn = False
+    dim2_names: set[str] = set()
+    name_to_tag: dict[str, int] = {}
+    for line in text.splitlines():
+        if line.startswith("$PhysicalNames"):
+            in_pn = True
+            continue
+        if line.startswith("$EndPhysicalNames"):
+            break
+        if not in_pn:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            dim = int(parts[0])
+            tag = int(parts[1])
+        except ValueError:
+            continue
+        # Name is the remaining tokens joined; strip surrounding quotes.
+        raw_name = " ".join(parts[2:]).strip().strip('"')
+        if dim == 2:
+            dim2_names.add(raw_name)
+            name_to_tag[raw_name] = tag
+    assert dim2_names == {"inlet", "outlet", "walls"}, (
+        f"expected dim=2 physical names {{inlet,outlet,walls}}, got {dim2_names}"
+    )
+
+    # Every dim=2 element MUST carry a non-zero physical tag matching
+    # one of the three group tags. Otherwise gmshToFoam silently drops
+    # untagged triangles or rejects ambiguous patches downstream.
+    expected_tags = set(name_to_tag.values())
+    in_el = False
+    triangle_tags_seen: dict[int, int] = {}
     for line in text.splitlines():
         if line.startswith("$Elements"):
-            in_elements = True
+            in_el = True
             continue
         if line.startswith("$EndElements"):
             break
-        if not in_elements:
+        if not in_el:
             continue
         parts = line.split()
-        # Skip the count line (single-token) at the start of section.
         if len(parts) < 5:
             continue
-        elem_type, num_tags, physical = parts[1], parts[2], parts[3]
-        if elem_type == "2" and num_tags == "2" and physical != "0":
-            found_nonzero_triangle = True
-            break
-    assert found_nonzero_triangle, (
-        "expected at least one boundary triangle tagged to a physical "
-        "group; all elements have physical_tag=0 (regression — physical "
-        "groups dropped during export)"
-    )
+        try:
+            elem_type = int(parts[1])
+            num_tags = int(parts[2])
+            physical = int(parts[3])
+        except ValueError:
+            continue
+        if elem_type != 2 or num_tags < 2:
+            continue
+        assert physical != 0, (
+            f"boundary triangle has physical_tag=0 in element line {line!r}; "
+            "physical groups dropped during export"
+        )
+        assert physical in expected_tags, (
+            f"boundary triangle has physical_tag={physical} not matching any "
+            f"$PhysicalNames entry {expected_tags}"
+        )
+        triangle_tags_seen[physical] = triangle_tags_seen.get(physical, 0) + 1
+
+    # Each named patch must have at least one boundary triangle. A
+    # patch with zero triangles indicates the centroid mapping put
+    # all of that solid's faces into the wrong group.
+    for name, tag in name_to_tag.items():
+        assert triangle_tags_seen.get(tag, 0) > 0, (
+            f"patch {name!r} (physical tag {tag}) has zero boundary "
+            f"triangles; surface→solid mapping mis-assigned"
+        )
 
 
 def test_gmsh_raises_on_missing_stl(tmp_path: Path):
