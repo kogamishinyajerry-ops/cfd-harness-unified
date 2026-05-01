@@ -94,6 +94,24 @@ def _parse_internal_field(u_path: Path) -> list[tuple[float, float, float]]:
     body_end = text.index("\n)", body_start)
     body = text[body_start:body_end]
 
+    # Detect divergence-to-NaN explicitly so callers can distinguish
+    # "solver wrote a corrupt file" from "solver diverged". OpenFOAM
+    # writes ``(nan nan -nan)`` (or ``(inf inf -inf)``) per cell when
+    # the residuals blow up; the float-only regex below would silently
+    # discard these lines and the count check would then fire with a
+    # confusing "0 entries but declared N" message that hides the real
+    # cause. Surface the divergence directly.
+    nan_inf_count = sum(
+        1 for line in body.splitlines()
+        if line.strip() and re.search(r"\b(?:nan|-nan|inf|-inf)\b", line.lower())
+    )
+    if nan_inf_count > 0:
+        raise ResultsExtractError(
+            f"U field at {u_path} contains {nan_inf_count} NaN/Inf entries — "
+            "solver diverged to non-finite values. Re-run with smaller dt, "
+            "tighter relaxation factors, or different initial conditions."
+        )
+
     vels: list[tuple[float, float, float]] = []
     for line in body.splitlines():
         line = line.strip()

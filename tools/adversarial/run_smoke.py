@@ -22,6 +22,12 @@ Per-case behavior is declared via ``intent.json`` field
   - ``expected_failure_v61_104`` — known to fail until DEC-V61-104 ships
                                    (interior obstacle topology). Failure
                                    is logged but doesn't fail the suite.
+  - ``analytical_comparator_pass`` — DEC-V61-106. Run full pipeline,
+                                     ignore residual gate, evaluate the
+                                     case's ``analytical_comparators``
+                                     block against the extractor's
+                                     ResultsSummary measures. PASS iff
+                                     all comparators pass.
 
 Default backend URL is http://127.0.0.1:8003. Override via --base-url
 or CFD_BACKEND_URL env. Exits non-zero when any case fails its declared
@@ -45,6 +51,19 @@ from typing import Any
 
 import urllib.error
 import urllib.request
+
+# DEC-V61-106: analytical_comparator_pass support. The comparator
+# evaluator is pure-logic (no backend deps). The extractor IS a backend
+# import — kept lazy so that the smoke runner stays importable without
+# the full backend env when the user runs it for help/dry-run.
+# Add the project root (two levels up from tools/adversarial/) so both
+# ``tools.adversarial.*`` and ``ui.backend.*`` resolve.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.adversarial.comparators import (  # noqa: E402
+    ComparatorSuiteResult,
+    evaluate_comparator_suite,
+    format_suite_summary,
+)
 
 
 CASES_ROOT = Path(__file__).resolve().parent / "cases"
@@ -152,14 +171,12 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
         return {"case": case_dir.name, "status": "skipped",
                 "reason": "manual_bc_baseline — run via case-specific driver"}
     if expected == "physics_validation_required":
-        # Case converges numerically but the physics is wrong (e.g.
-        # iter01's interior-obstacle plenum where gmsh fills the void
-        # with fluid). The convergence-based smoke can't catch this
-        # defect class; needs analytical or experimental comparison.
-        # Skipped here; keep the case as an adversarial canary for the
-        # future analytical-comparator runner.
+        # Case converges numerically but the physics needs domain-
+        # knowledge validation. DEC-V61-106 deprecates this class —
+        # cases should declare an explicit analytical_comparator_pass
+        # block. Until each is migrated, skip with a hint.
         return {"case": case_dir.name, "status": "skipped",
-                "reason": "physics_validation_required — needs analytical comparator"}
+                "reason": "physics_validation_required — migrate to analytical_comparator_pass (DEC-V61-106)"}
 
     started = time.monotonic()
 
@@ -223,9 +240,27 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
             bc_qs_parts.append(f"nu={float(physics['nu_m2_s'])}")
         intent_dt = float(solver.get("delta_t_s", 0.01))
         intent_end = float(solver.get("end_time_s", 5.0))
-        smoke_dt = min(intent_dt, 0.01)
+        # For converged / expected_failure cases the smoke runner caps
+        # dt to keep the smoke window short. For analytical-comparator
+        # cases the intent's dt was chosen for stability on that
+        # specific geometry — overriding it can push CFL into a
+        # divergence regime that has nothing to do with the case's
+        # physics intent. Trust intent_dt and only cap end_time.
+        if expected == "analytical_comparator_pass":
+            smoke_dt = intent_dt
+        else:
+            smoke_dt = min(intent_dt, 0.01)
         if expected.startswith("expected_failure"):
             max_steps, max_end = SMOKE_MAX_STEPS_FAIL, SMOKE_MAX_END_FAIL
+        elif expected == "analytical_comparator_pass":
+            # Analytical-comparator cases need enough steps for the
+            # physics primitives (bypass jet, recirculation) to
+            # develop. Keep the step cap (250) but relax the wall-time
+            # cap — at intent_dt=1.0 the case needs ~250s run-time, not
+            # the 2.5s SMOKE_MAX_END_PASS that's calibrated for
+            # transient icoFoam at dt=0.01.
+            max_steps = SMOKE_MAX_STEPS_PASS
+            max_end = float("inf")
         else:
             max_steps, max_end = SMOKE_MAX_STEPS_PASS, SMOKE_MAX_END_PASS
         smoke_end = min(intent_end, smoke_dt * max_steps, max_end)
@@ -272,8 +307,70 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
         and residual_p == residual_p
     )
     converged = converged_backend and finite
+
+    # DEC-V61-106: analytical_comparator_pass branch. After solve, run
+    # the extractor on the case_dir and evaluate the case's comparator
+    # block. Verdict is decoupled from the residual gate (the case may
+    # not have reached steady state yet, but the physics primitives —
+    # bypass jet, recirculation, etc. — should already be present).
+    comparator_suite: ComparatorSuiteResult | None = None
+    if expected == "analytical_comparator_pass":
+        polymesh = mesh_resp.get("mesh_summary", {}).get("polyMesh_path")
+        case_disk_dir: Path | None = None
+        if polymesh:
+            # polyMesh path is "<case_dir>/constant/polyMesh"; walk up 2.
+            case_disk_dir = Path(polymesh).parent.parent
+        if case_disk_dir is None or not case_disk_dir.is_dir():
+            comparator_suite = ComparatorSuiteResult(
+                all_passed=False,
+                individual_results=(),
+                structural_error=f"case_dir_not_found_for_extractor: {case_disk_dir}",
+            )
+        else:
+            try:
+                # Lazy import: backend dep, only imported on this branch.
+                from ui.backend.services.case_solve.results_extractor import (
+                    ResultsExtractError,
+                    extract_results_summary,
+                )
+                summary_obj = extract_results_summary(
+                    case_disk_dir, case_id=case_id,
+                )
+                # Pull comparator block from intent.json
+                intent_path = case_dir / "intent.json"
+                comparators = []
+                if intent_path.is_file():
+                    try:
+                        intent_data = json.loads(intent_path.read_text())
+                        comparators = (
+                            intent_data.get("smoke_runner", {})
+                            .get("analytical_comparators", [])
+                        )
+                    except (json.JSONDecodeError, OSError):
+                        comparators = []
+                summary_dict = {
+                    "final_time": summary_obj.final_time,
+                    "cell_count": summary_obj.cell_count,
+                    "u_magnitude_min": summary_obj.u_magnitude_min,
+                    "u_magnitude_max": summary_obj.u_magnitude_max,
+                    "u_magnitude_mean": summary_obj.u_magnitude_mean,
+                    "u_x_mean": summary_obj.u_x_mean,
+                    "u_x_min": summary_obj.u_x_min,
+                    "u_x_max": summary_obj.u_x_max,
+                    "is_recirculating": summary_obj.is_recirculating,
+                }
+                comparator_suite = evaluate_comparator_suite(
+                    comparators, summary_dict,
+                )
+            except (ResultsExtractError, OSError, ValueError) as exc:
+                comparator_suite = ComparatorSuiteResult(
+                    all_passed=False,
+                    individual_results=(),
+                    structural_error=f"extractor_error: {exc}",
+                )
+
     elapsed = time.monotonic() - started
-    return {
+    result: dict[str, Any] = {
         "case": case_dir.name,
         "status": "converged" if converged else "diverged",
         "expected_status": expected,
@@ -286,6 +383,16 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
         "wall_time_s": solve_resp.get("wall_time_s"),
         "smoke_elapsed_s": round(elapsed, 2),
     }
+    if comparator_suite is not None:
+        # Override status with the comparator verdict for this branch.
+        result["status"] = (
+            "comparator_pass" if comparator_suite.all_passed
+            else "comparator_fail"
+        )
+        result["comparator_summary"] = format_suite_summary(comparator_suite)
+        result["comparator_all_passed"] = comparator_suite.all_passed
+        result["comparator_structural_error"] = comparator_suite.structural_error
+    return result
 
 
 def _classify(result: dict[str, Any]) -> str:
@@ -302,6 +409,11 @@ def _classify(result: dict[str, Any]) -> str:
         if status == "converged":
             return "UNEXPECTED_PASS"
         return "EXPECTED_FAILURE"
+    if expected == "analytical_comparator_pass":
+        # DEC-V61-106: verdict driven by the comparator suite, not the
+        # residual gate. status is set to "comparator_pass" or
+        # "comparator_fail" upstream.
+        return "PASS" if status == "comparator_pass" else "FAIL"
     # Default: expected to converge.
     return "PASS" if status == "converged" else "FAIL"
 
@@ -311,6 +423,13 @@ def _format_result(result: dict[str, Any], verdict: str) -> str:
     if verdict == "SKIP":
         return f"  ⊘ {name:<10} SKIPPED — {result.get('reason', '')}"
     if verdict == "PASS":
+        if result.get("expected_status") == "analytical_comparator_pass":
+            return (
+                f"  ✓ {name:<10} cells={result.get('cell_count')} "
+                f"comparator=PASS wall={result.get('wall_time_s'):.1f}s "
+                f"(smoke {result.get('smoke_elapsed_s')}s)\n"
+                f"{result.get('comparator_summary', '')}"
+            )
         return (
             f"  ✓ {name:<10} cells={result.get('cell_count')} "
             f"cont_err={result.get('cont_err'):.2e} "
@@ -326,6 +445,12 @@ def _format_result(result: dict[str, Any], verdict: str) -> str:
         return f"  ⁉ {name:<10} UNEXPECTED_PASS — investigate (V61-104 silently landed?)"
     # FAIL
     err = result.get("error", "")
+    if result.get("expected_status") == "analytical_comparator_pass":
+        return (
+            f"  ✗ {name:<10} FAIL (comparator) "
+            f"cells={result.get('cell_count')} err={err[:200]}\n"
+            f"{result.get('comparator_summary', '')}"
+        )
     return (
         f"  ✗ {name:<10} FAIL ({result['status']}) "
         f"cont_err={result.get('cont_err')} err={err[:200]}"
