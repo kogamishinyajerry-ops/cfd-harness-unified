@@ -73,3 +73,21 @@ Each approach is 1-3 days of investigation + tests. Best done in a fresh DEC-V61
 - 4 PASS · 2 SKIP · 0 FAIL adversarial smoke baseline (unchanged)
 
 Phase 1 ships the right abstractions; Phase 1.5 makes them actually subtract.
+
+## Codex R8 closure (commit bec98b2 · 2026-05-01)
+
+R8 returned APPROVE_WITH_COMMENTS with 2 MED findings. Closure:
+
+1. **Test coverage gap** — added `test_cube_in_cube_multi_loop_addvolume_runs_via_real_gmsh` that exercises `addSurfaceLoop` + `addVolume([outer, -inner])` + `synchronize()` + `generate(3)` end-to-end. Tightened existing test docstring to declare actual scope (partitioner only, NOT addVolume path).
+2. **Silent geometry corruption** — added `TopologyPartitionError` exception class with `failing_check` field, `_bbox_contains` containment check with floating-point tolerance, and a containment validation loop in `partition_surfaces_by_body` that raises on disconnected exterior shells. `gmsh_runner.py` catches and re-raises as `GmshMeshGenerationError` so the meshing route surfaces a 4xx-class failure rather than silently producing corrupt mesh.
+
+R9 verdict: **APPROVE · 0 findings** (clean close).
+
+Tests added (4 pure-logic + 1 real-gmsh):
+- `test_partition_raises_when_inner_bbox_not_contained_in_outer`
+- `test_partition_accepts_valid_interior_obstacle_topology`
+- `test_bbox_contains_basic_cases`
+- `test_bbox_contains_tolerates_floating_point_noise`
+- `test_cube_in_cube_multi_loop_addvolume_runs_via_real_gmsh`
+
+14/14 topology tests pass. See `reports/codex_tool_reports/v61_104_phase1_r8_r9_chain.md` for the full review chain.

@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-104
 title: Interior-obstacle topology — gmsh runner builds outer surface loop + reversed-inner loops for cases with interior bodies
-status: Proposed (2026-04-30 · authored under user direction "全权授予你开发，全都按你的建议来" after adversarial-loop iter01 surfaced defect 2b — 2 mm interior blade in the Codex-generated plenum was tetrahedralized as fluid instead of treated as an obstacle hole)
+status: Phase 1 Implemented · Phase 1.5 Pending (2026-05-01 · Phase 1 ships scaffolding only — topology partitioner + multi-loop addVolume call site + TopologyPartitionError containment guard + 14/14 tests · Codex chain R8 APPROVE_WITH_COMMENTS → R9 APPROVE clean close · empirical finding: gmsh's geo-kernel addVolume hole subtraction does NOT actually subtract for STL-imported surfaces, iter01 still 7159 cells · Phase 1.5 follow-up to add OCC-kernel cut OR explicit surface-orientation reversal — see tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-30
 authored_under: tools/adversarial/results/iter01_findings.md (defect 2b root cause + scope)
@@ -14,8 +14,16 @@ parent_artifacts:
   - ui/backend/services/geometry_ingest/health_check.py:104-105 (existing `body_count` reporting that already detects multi-body cases)
 counter_impact: +1 (autonomous_governance: true)
 self_estimated_pass_rate: 50% (deeper architectural change — gmsh entity-to-body partitioning is non-trivial and the inner-vs-outer determination has multiple correct-looking heuristics that fail on degenerate cases · expect Codex round 2 minimum)
-codex_tool_report_path: (TBD)
-notion_sync_status: synced 2026-04-30 (https://app.notion.com/p/353c68942bed81bb9a0bfcf29a07d09c)
+codex_tool_report_path: reports/codex_tool_reports/v61_104_phase1_r8_r9_chain.md (R8 APPROVE_WITH_COMMENTS 2 MED findings → R9 APPROVE clean close)
+phase1_implementation_commits:
+  - 30b659b (feat: topology partitioner + multi-body addVolume scaffolding · 9 tests)
+  - bec98b2 (fix: close Codex R8 MED findings · TopologyPartitionError containment guard + real-gmsh addVolume coverage · 14/14 tests)
+phase1_5_follow_up_scope:
+  - approach_a: occ-kernel boolean cut (gmsh.model.occ.cut) — robust regardless of STL orientation; requires re-architecting from geo to occ kernel after classifySurfaces
+  - approach_b: explicit surface-orientation reversal via gmsh.model.geo.reverse before addSurfaceLoop — lighter touch but fragile on degenerate normals
+  - approach_c: classifySurfaces angle tuning (40° → 90°+) — may preserve topological gap that triggers clean addVolume separation
+  - estimated_effort: 1-3 days investigation + tests per approach
+notion_sync_status: synced 2026-04-30 (https://app.notion.com/p/353c68942bed81bb9a0bfcf29a07d09c) · re-sync pending for Phase 1 status update + R9 APPROVE
 
 # Why now
 
