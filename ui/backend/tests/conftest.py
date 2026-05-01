@@ -74,6 +74,30 @@ def seamed_multi_solid_box_stl(
     return b"".join(chunks)
 
 
+def cube_with_interior_obstacle_stl(
+    *,
+    outer_size: float = 1.0,
+    inner_size: float = 0.2,
+) -> bytes:
+    """Two concentric cubes as a single multi-solid binary STL: outer
+    cavity (size ``outer_size``) + interior obstacle (size
+    ``inner_size``). DEC-V61-104 fixture: exercises the topology
+    partitioner's ability to identify two connected bodies and treat
+    the smaller-bbox one as a hole.
+
+    Both cubes are emitted with standard outward-facing normals (default
+    trimesh orientation). gmsh's ``addVolume([outer_loop, -inner_loop])``
+    handles the orientation reversal needed to mark the inner body as a
+    hole rather than a second fluid region.
+    """
+    outer = trimesh.creation.box([outer_size, outer_size, outer_size])
+    inner = trimesh.creation.box([inner_size, inner_size, inner_size])
+    combined = trimesh.util.concatenate([outer, inner])
+    buf = io.BytesIO()
+    combined.export(buf, file_type="stl")
+    return buf.getvalue()
+
+
 def multi_solid_ascii_stl(*names: str) -> bytes:
     """Compose a multi-solid ASCII STL with the given solid names. Each
     solid is a translated cube so trimesh ingests them as distinct

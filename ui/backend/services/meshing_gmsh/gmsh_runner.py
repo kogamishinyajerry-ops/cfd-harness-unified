@@ -169,8 +169,35 @@ def _gmsh_inline(
                     "(likely a corrupt or non-watertight upload that slipped "
                     "past M5.0's health check)."
                 )
-            surface_loop = gmsh.model.geo.addSurfaceLoop([s[1] for s in surfaces])
-            gmsh.model.geo.addVolume([surface_loop])
+
+            # DEC-V61-104 Phase 1: partition surfaces by topological body
+            # so interior obstacles (turbine blades, valve seats,
+            # instrument probes) become holes in the fluid volume rather
+            # than getting tetrahedralized as fluid cells.
+            #
+            # Single-body geometries (LDC, channel, naca0012, cylinder)
+            # fall through to the single-loop path so byte-identical
+            # mesh output is preserved.
+            from .topology import partition_surfaces_by_body
+
+            bodies = partition_surfaces_by_body(gmsh, surfaces)
+            if len(bodies) <= 1:
+                surface_loop = gmsh.model.geo.addSurfaceLoop(
+                    [s[1] for s in surfaces]
+                )
+                gmsh.model.geo.addVolume([surface_loop])
+            else:
+                # bodies[0] is the outer (largest bbox); the rest are
+                # interior obstacles. Each inner loop is negated in the
+                # addVolume call so gmsh treats it as a hole rather than
+                # a second fluid region.
+                outer_loop = gmsh.model.geo.addSurfaceLoop(bodies[0])
+                inner_loops = [
+                    gmsh.model.geo.addSurfaceLoop(body) for body in bodies[1:]
+                ]
+                gmsh.model.geo.addVolume(
+                    [outer_loop] + [-loop for loop in inner_loops]
+                )
             gmsh.model.geo.synchronize()
 
             # Adversarial-loop iter02 fix (defect 2a): re-attach STL
