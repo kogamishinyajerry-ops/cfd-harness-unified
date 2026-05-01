@@ -327,47 +327,64 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
                 structural_error=f"case_dir_not_found_for_extractor: {case_disk_dir}",
             )
         else:
+            # Codex R10: ``case_solve/__init__.py`` eagerly re-exports
+            # other backend modules (yaml-dependent, etc.). If the
+            # smoke runner runs in a slim env that lacks those deps,
+            # the import cascade aborts the whole smoke run instead of
+            # surfacing a structured comparator failure. Catch
+            # ImportError / ModuleNotFoundError up-front.
             try:
-                # Lazy import: backend dep, only imported on this branch.
                 from ui.backend.services.case_solve.results_extractor import (
                     ResultsExtractError,
                     extract_results_summary,
                 )
-                summary_obj = extract_results_summary(
-                    case_disk_dir, case_id=case_id,
-                )
-                # Pull comparator block from intent.json
-                intent_path = case_dir / "intent.json"
-                comparators = []
-                if intent_path.is_file():
-                    try:
-                        intent_data = json.loads(intent_path.read_text())
-                        comparators = (
-                            intent_data.get("smoke_runner", {})
-                            .get("analytical_comparators", [])
-                        )
-                    except (json.JSONDecodeError, OSError):
-                        comparators = []
-                summary_dict = {
-                    "final_time": summary_obj.final_time,
-                    "cell_count": summary_obj.cell_count,
-                    "u_magnitude_min": summary_obj.u_magnitude_min,
-                    "u_magnitude_max": summary_obj.u_magnitude_max,
-                    "u_magnitude_mean": summary_obj.u_magnitude_mean,
-                    "u_x_mean": summary_obj.u_x_mean,
-                    "u_x_min": summary_obj.u_x_min,
-                    "u_x_max": summary_obj.u_x_max,
-                    "is_recirculating": summary_obj.is_recirculating,
-                }
-                comparator_suite = evaluate_comparator_suite(
-                    comparators, summary_dict,
-                )
-            except (ResultsExtractError, OSError, ValueError) as exc:
+            except (ImportError, ModuleNotFoundError) as exc:
                 comparator_suite = ComparatorSuiteResult(
                     all_passed=False,
                     individual_results=(),
-                    structural_error=f"extractor_error: {exc}",
+                    structural_error=(
+                        f"extractor_import_failed: {exc} — smoke env "
+                        "missing backend deps; install ui/backend "
+                        "requirements or run from project venv"
+                    ),
                 )
+            else:
+                try:
+                    summary_obj = extract_results_summary(
+                        case_disk_dir, case_id=case_id,
+                    )
+                    # Pull comparator block from intent.json
+                    intent_path = case_dir / "intent.json"
+                    comparators = []
+                    if intent_path.is_file():
+                        try:
+                            intent_data = json.loads(intent_path.read_text())
+                            comparators = (
+                                intent_data.get("smoke_runner", {})
+                                .get("analytical_comparators", [])
+                            )
+                        except (json.JSONDecodeError, OSError):
+                            comparators = []
+                    summary_dict = {
+                        "final_time": summary_obj.final_time,
+                        "cell_count": summary_obj.cell_count,
+                        "u_magnitude_min": summary_obj.u_magnitude_min,
+                        "u_magnitude_max": summary_obj.u_magnitude_max,
+                        "u_magnitude_mean": summary_obj.u_magnitude_mean,
+                        "u_x_mean": summary_obj.u_x_mean,
+                        "u_x_min": summary_obj.u_x_min,
+                        "u_x_max": summary_obj.u_x_max,
+                        "is_recirculating": summary_obj.is_recirculating,
+                    }
+                    comparator_suite = evaluate_comparator_suite(
+                        comparators, summary_dict,
+                    )
+                except (ResultsExtractError, OSError, ValueError) as exc:
+                    comparator_suite = ComparatorSuiteResult(
+                        all_passed=False,
+                        individual_results=(),
+                        structural_error=f"extractor_error: {exc}",
+                    )
 
     elapsed = time.monotonic() - started
     result: dict[str, Any] = {

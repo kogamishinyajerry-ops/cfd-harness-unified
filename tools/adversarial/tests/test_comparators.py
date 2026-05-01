@@ -207,6 +207,47 @@ def test_nan_actual_value_short_circuits_to_fail():
     assert "measure_nan" in suite.individual_results[0].failure_reason
 
 
+def test_inf_actual_value_short_circuits_to_fail():
+    """Codex R10: +inf would otherwise pass `u_magnitude_max >= 1.0`
+    silently, masking solver divergence the framework exists to
+    expose."""
+    summary_inf = dict(_GOOD_SUMMARY)
+    summary_inf["u_magnitude_max"] = math.inf
+    suite = evaluate_comparator_suite(
+        [{"measure": "u_magnitude_max", "op": ">=", "value": 1.0}],
+        summary_inf,
+    )
+    assert suite.all_passed is False
+    assert "measure_inf" in suite.individual_results[0].failure_reason
+
+
+def test_negative_inf_actual_value_also_short_circuits():
+    summary_neg_inf = dict(_GOOD_SUMMARY)
+    summary_neg_inf["u_x_min"] = -math.inf
+    suite = evaluate_comparator_suite(
+        [{"measure": "u_x_min", "op": "<", "value": 0.0}],
+        summary_neg_inf,
+    )
+    assert suite.all_passed is False
+    assert "measure_inf" in suite.individual_results[0].failure_reason
+
+
+def test_bool_actual_for_float_measure_rejected():
+    """Codex R10: ``isinstance(True, (int, float))`` is True because
+    bool subclasses int. Without an explicit bool guard a corrupted
+    summary with True/False for u_magnitude_max would pass numeric
+    comparators."""
+    summary_bool = dict(_GOOD_SUMMARY)
+    summary_bool["u_magnitude_max"] = True
+    suite = evaluate_comparator_suite(
+        [{"measure": "u_magnitude_max", "op": ">=", "value": 1.0}],
+        summary_bool,
+    )
+    assert suite.all_passed is False
+    assert "measure_type_mismatch" in suite.individual_results[0].failure_reason
+    assert "bool" in suite.individual_results[0].failure_reason
+
+
 def test_summary_with_string_for_float_measure_fails():
     summary_bad = dict(_GOOD_SUMMARY)
     summary_bad["u_magnitude_max"] = "1.6"

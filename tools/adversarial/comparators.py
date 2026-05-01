@@ -86,17 +86,29 @@ class ComparatorSuiteResult:
 
 def _coerce_actual(measure: str, summary: dict[str, Any]) -> tuple[Any, str | None]:
     """Pull the measure value from a ResultsSummary-shape dict. Returns
-    ``(value, error_reason_or_None)``."""
+    ``(value, error_reason_or_None)``.
+
+    Codex R10: explicitly rejects ``bool`` for float measures (Python's
+    ``isinstance(True, (int, float))`` is True since bool subclasses
+    int) and rejects ``inf`` / ``-inf`` alongside ``nan``. Both
+    leakage paths could produce false PASS verdicts on corrupted
+    summaries — the exact hidden-defect class this framework exists
+    to expose.
+    """
     if measure not in _VALID_MEASURES:
         return None, f"unknown_measure: '{measure}' not in {sorted(_VALID_MEASURES)}"
     if measure not in summary:
         return None, f"measure_not_in_summary: '{measure}' missing from extractor output"
     val = summary[measure]
     if measure in _FLOAT_MEASURES:
-        if not isinstance(val, (int, float)):
+        # Reject bool explicitly (bool is a subclass of int).
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
             return None, f"measure_type_mismatch: '{measure}' expected numeric, got {type(val).__name__}"
-        if isinstance(val, float) and math.isnan(val):
-            return None, f"measure_nan: '{measure}' is NaN — solver likely diverged"
+        if isinstance(val, float):
+            if math.isnan(val):
+                return None, f"measure_nan: '{measure}' is NaN — solver likely diverged"
+            if math.isinf(val):
+                return None, f"measure_inf: '{measure}' is {'+' if val > 0 else '-'}Inf — solver likely diverged"
     elif measure in _BOOL_MEASURES:
         if not isinstance(val, bool):
             return None, f"measure_type_mismatch: '{measure}' expected bool, got {type(val).__name__}"
