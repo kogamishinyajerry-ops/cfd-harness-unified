@@ -55,5 +55,9 @@
     "expected_residual_p_final": 1e-05,
     "expected_residual_U_final": 1e-06,
     "qualitative_description": "Most of the flow accelerates through the 4 mm bypass gaps around the blade, then expands into a low-speed wake region immediately downstream. Expect symmetric roof/floor leakage streams, weak 3D side leakage, and a recirculation pocket behind the blade rather than a trivial plug-flow field."
+  },
+  "smoke_runner": {
+    "expected_status": "physics_validation_required",
+    "rationale": "Interior obstacle (suspended blade) \u2014 DEC-V61-104. The case converges numerically at smoke scale (no divergence, finite residuals) but the underlying physics is wrong because gmsh fills the void with fluid. Skipped by the convergence-based smoke runner; requires an analytical or experimental comparison to validate. Keep as adversarial canary for future V61-104 implementation."
   }
 }

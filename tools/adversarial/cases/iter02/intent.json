@@ -1,15 +1,44 @@
 {
   "name": "straight_rectangular_duct",
-  "description": "Iter01's plenum minus the blade — same 240x80x40 mm cavity as a clean straight duct. Multi-patch closed shell (3 named solids: inlet, outlet, walls). Isolates defect 2a (gmsh patch-name preservation) from defect 2b (interior-obstacle handling).",
+  "description": "Iter01's plenum minus the blade \u2014 same 240x80x40 mm cavity as a clean straight duct. Multi-patch closed shell (3 named solids: inlet, outlet, walls). Isolates defect 2a (gmsh patch-name preservation) from defect 2b (interior-obstacle handling).",
   "patches": {
-    "inlet":  {"role": "inlet",  "U": [0.5, 0.0, 0.0], "p": "zeroGradient"},
-    "outlet": {"role": "outlet", "U": "zeroGradient", "p": {"type": "fixedValue", "value": 0.0}},
-    "walls":  {"role": "wall",   "U": [0.0, 0.0, 0.0], "p": "zeroGradient"}
+    "inlet": {
+      "role": "inlet",
+      "U": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    },
+    "outlet": {
+      "role": "outlet",
+      "U": "zeroGradient",
+      "p": {
+        "type": "fixedValue",
+        "value": 0.0
+      }
+    },
+    "walls": {
+      "role": "wall",
+      "U": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "p": "zeroGradient"
+    }
   },
-  "solver": {"name": "simpleFoam", "end_time_s": 200.0, "delta_t_s": 1.0},
+  "solver": {
+    "name": "simpleFoam",
+    "end_time_s": 200.0,
+    "delta_t_s": 1.0
+  },
   "physics": {
-    "rho_kg_m3": 1.0, "nu_m2_s": 1.0e-3,
-    "characteristic_velocity_m_s": 0.5, "characteristic_length_m": 0.04,
+    "rho_kg_m3": 1.0,
+    "nu_m2_s": 0.001,
+    "characteristic_velocity_m_s": 0.5,
+    "characteristic_length_m": 0.04,
     "reynolds": 20.0
   },
   "expected_outcome": {
@@ -17,5 +46,9 @@
     "expected_residual_p_final": 1e-06,
     "expected_residual_U_final": 1e-07,
     "qualitative_description": "Fully developed parabolic-ish channel flow at low Re. Pressure drops linearly along the duct. No separation, no recirculation."
+  },
+  "smoke_runner": {
+    "expected_status": "converged",
+    "rationale": "Axis-aligned duct; baseline 3-patch case (defect 2a closure)."
   }
 }

@@ -65,5 +65,9 @@
       "expectation": "sum(volumetric_flow[inlet_1,inlet_2]) ~= volumetric_flow[outlet_1]"
     },
     "qualitative_description": "Two opposing angled inflows merge inside the rotated T-junction and are redirected through the stem outlet. Expect a high-shear collision zone near the junction center, pressure recovery toward the outlet branch, and sensitivity to multi-patch face classification where inlet edges share adjacent wall seams."
+  },
+  "smoke_runner": {
+    "expected_status": "converged",
+    "rationale": "Codex rotated T-junction (Euler 21/-28/17\u00b0); validates compound patch names + multi-inlet topology."
   }
 }

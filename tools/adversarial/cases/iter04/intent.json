@@ -36,15 +36,19 @@
   },
   "physics": {
     "rho_kg_m3": 1.0,
-    "nu_m2_s": 4.0e-05,
+    "nu_m2_s": 4e-05,
     "characteristic_velocity_m_s": 0.35,
     "characteristic_length_m": 0.06,
     "reynolds": 525.0
   },
   "expected_outcome": {
     "converges": true,
-    "expected_residual_p_final": 5e-04,
+    "expected_residual_p_final": 0.0005,
     "expected_residual_U_final": 2e-05,
     "qualitative_description": "Flow enters through an angled inlet, turns 90 degrees around the inner L-corner, and exits through an angled outlet. Expect strong corner acceleration, a mild separation pocket near the outer bend wall, and sensitivity to non-orthogonality requiring stable nNonOrthogonalCorrectors handling in PISO."
+  },
+  "smoke_runner": {
+    "expected_status": "converged",
+    "rationale": "Codex rotated L-bend (Euler 15/30/20\u00b0); validates per-triangle voting + patch-normal-aware inlet U."
   }
 }
