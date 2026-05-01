@@ -143,4 +143,5 @@ Per-case results:
 | Defect 5+7 follow-up | R3 | APPROVE_WITH_COMMENTS | both R2 closed |
 | Defect 8 (iter06 symmetry) | R4 | CHANGES_REQUIRED | regex hazard + TOCTOU |
 | Defect 8 closure | R5 | APPROVE_WITH_COMMENTS | both R4 closed |
-| Defect 9 + smoke runner (this DEC) | R6 | (in flight) | TBD |
+| Defect 9 + smoke runner (this DEC) | R6 | CHANGES_REQUIRED | 0.5% relative tolerance too generous; missed 1-step early stops |
+| Defect 9 threshold tighten (commit 297c4e5) | R7 | APPROVE | half-timestep absolute tolerance closes R6 HIGH; Codex re-ran pytest locally to verify (12/12 + 11/11 + 24/24) |
