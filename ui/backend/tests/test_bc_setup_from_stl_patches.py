@@ -51,6 +51,64 @@ def _write_polymesh_boundary(case_dir: Path, patches: list[tuple[str, int, int]]
     )
 
 
+def _write_polymesh_axis_aligned_box(
+    case_dir: Path,
+    patches: list[tuple[str, int, int, str]],
+) -> None:
+    """Write a fully-valid minimal polyMesh with 8-vertex unit cube
+    points + per-patch face triangulations. ``patches`` items are
+    ``(name, nFaces, startFace, side)`` where side is one of
+    ``-x|+x|-y|+y|-z|+z``. Lets bc_setup_from_stl_patches compute
+    actual face normals during tests.
+    """
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True, exist_ok=True)
+    # Unit cube vertices indexed 0-7 by binary (x,y,z) mask.
+    pts = [
+        (0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0),
+        (0, 0, 1), (1, 0, 1), (0, 1, 1), (1, 1, 1),
+    ]
+    (polymesh / "points").write_text(
+        "FoamFile {}\n8\n("
+        + "".join(f"({x} {y} {z}) " for x, y, z in pts)
+        + ")\n"
+    )
+    side_quads = {
+        "-x": [0, 4, 6, 2], "+x": [1, 3, 7, 5],
+        "-y": [0, 1, 5, 4], "+y": [2, 6, 7, 3],
+        "-z": [0, 2, 3, 1], "+z": [4, 5, 7, 6],
+    }
+    # Build face list: pad with placeholder faces if startFace > current
+    # count, then emit nFaces copies of the chosen side quad.
+    all_faces: list[list[int]] = []
+    for name, nfaces, start, side in patches:
+        while len(all_faces) < start:
+            all_faces.append([0, 1, 2])  # placeholder triangle
+        for _ in range(nfaces):
+            all_faces.append(side_quads[side])
+    (polymesh / "faces").write_text(
+        "FoamFile {}\n"
+        f"{len(all_faces)}\n("
+        + "".join(
+            f"{len(f)}({' '.join(str(v) for v in f)}) "
+            for f in all_faces
+        )
+        + ")\n"
+    )
+    body_lines = "\n".join(
+        f"    {name}\n    {{\n        type            patch;\n"
+        f"        nFaces          {nfaces};\n        startFace       {start};\n    }}"
+        for name, nfaces, start, _side in patches
+    )
+    (polymesh / "boundary").write_text(
+        "FoamFile {}\n"
+        f"{len(patches)}\n"
+        "(\n"
+        f"{body_lines}\n"
+        ")\n"
+    )
+
+
 def _scaffold_case(case_dir: Path) -> None:
     """Minimal manifest + scaffold so case_lock + mark_ai_authored work."""
     case_dir.mkdir(parents=True, exist_ok=True)
@@ -60,9 +118,13 @@ def _scaffold_case(case_dir: Path) -> None:
 def test_three_patch_duct_authors_seven_dicts(tmp_path: Path):
     case_dir = tmp_path / "duct_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
-        [("inlet", 100, 1000), ("outlet", 100, 1100), ("walls", 2000, 1200)],
+        [
+            ("inlet", 100, 0, "-x"),
+            ("outlet", 100, 100, "+x"),
+            ("walls", 2000, 200, "+z"),
+        ],
     )
 
     result = setup_bc_from_stl_patches(case_dir, case_id="duct_case")
@@ -95,13 +157,13 @@ def test_three_patch_duct_authors_seven_dicts(tmp_path: Path):
 def test_four_patch_with_symmetry_emits_symmetry_block(tmp_path: Path):
     case_dir = tmp_path / "sym_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
         [
-            ("inlet", 50, 1000),
-            ("outlet", 50, 1050),
-            ("walls", 800, 1100),
-            ("symmetry", 200, 1900),
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 800, 100, "+z"),
+            ("symmetry", 200, 900, "-z"),
         ],
     )
 
@@ -119,12 +181,12 @@ def test_four_patch_with_symmetry_emits_symmetry_block(tmp_path: Path):
 def test_unknown_patch_name_falls_through_with_warning(tmp_path: Path):
     case_dir = tmp_path / "unknown_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
         [
-            ("inlet", 50, 1000),
-            ("outlet", 50, 1050),
-            ("mystery_zone", 500, 1100),
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("mystery_zone", 500, 100, "+z"),
         ],
     )
 
@@ -137,12 +199,12 @@ def test_unknown_patch_name_falls_through_with_warning(tmp_path: Path):
 def test_patch_name_case_insensitive(tmp_path: Path):
     case_dir = tmp_path / "case_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
         [
-            ("Inlet", 50, 1000),
-            ("OUTLET", 50, 1050),
-            ("Walls", 500, 1100),
+            ("Inlet", 50, 0, "-x"),
+            ("OUTLET", 50, 50, "+x"),
+            ("Walls", 500, 100, "+z"),
         ],
     )
 
@@ -179,9 +241,13 @@ def test_legacy_patch0_only_rejects_with_no_named_patches(tmp_path: Path):
 def test_idempotent_two_calls_produce_same_state(tmp_path: Path):
     case_dir = tmp_path / "idem"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
-        [("inlet", 50, 1000), ("outlet", 50, 1050), ("walls", 500, 1100)],
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
     )
 
     r1 = setup_bc_from_stl_patches(case_dir, case_id="idem")
@@ -202,13 +268,13 @@ def test_numbered_patch_suffixes_classify_via_prefix_match(tmp_path: Path):
     NO_SLIP_WALL."""
     case_dir = tmp_path / "numbered_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
         [
-            ("inlet_1", 50, 1000),
-            ("inlet_2", 50, 1050),
-            ("outlet_1", 100, 1100),
-            ("walls01", 1500, 1200),
+            ("inlet_1", 50, 0, "-x"),
+            ("inlet_2", 50, 50, "-y"),
+            ("outlet_1", 100, 100, "+x"),
+            ("walls01", 1500, 200, "+z"),
         ],
     )
 
@@ -221,12 +287,92 @@ def test_numbered_patch_suffixes_classify_via_prefix_match(tmp_path: Path):
     assert result.warnings == ()
 
 
+def test_inlet_velocity_follows_patch_inward_normal(tmp_path: Path):
+    """Defect-6 fix: inlet velocity vector points along the patch's
+    inward normal. For a -x face, the outward normal is (-1,0,0) and
+    the inward direction is (+1,0,0); so an inlet on the -x face gets
+    U=(speed, 0, 0). For a +y face, inward is (0,-1,0).
+    """
+    case_dir = tmp_path / "normal_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 100, 100, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir, case_id="normal_case", inlet_speed=0.5
+    )
+    inlet_u = dict(result.inlet_velocities)["inlet"]
+    # Inlet on -x face: outward normal -x → inward +x → U=(+0.5, 0, 0).
+    assert abs(inlet_u[0] - 0.5) < 1e-9, f"expected (+0.5,0,0), got {inlet_u}"
+    assert abs(inlet_u[1]) < 1e-9
+    assert abs(inlet_u[2]) < 1e-9
+
+
+def test_inlet_velocity_handles_non_axis_face_correctly(tmp_path: Path):
+    """Defect-6 fix coverage: inlet on the +y face → inward normal
+    -y → U=(0, -speed, 0). Confirms the sign flip works on every axis."""
+    case_dir = tmp_path / "ynormal_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 30, 0, "+y"),
+            ("outlet", 30, 30, "-y"),
+            ("walls", 60, 60, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir, case_id="ynormal_case", inlet_speed=0.7
+    )
+    inlet_u = dict(result.inlet_velocities)["inlet"]
+    # Inlet on +y face: outward +y → inward -y → U=(0, -0.7, 0).
+    assert abs(inlet_u[0]) < 1e-9
+    assert abs(inlet_u[1] + 0.7) < 1e-9, f"expected (0,-0.7,0), got {inlet_u}"
+    assert abs(inlet_u[2]) < 1e-9
+
+
+def test_inlet_velocity_falls_back_when_polymesh_files_missing(tmp_path: Path):
+    """Defect-6 fix safety: when polyMesh/{points,faces} are missing
+    (route called before mesh stage completed), we still author dicts
+    using the legacy +x default and emit a warning so the engineer
+    knows to override via raw-dict editor."""
+    case_dir = tmp_path / "no_polymesh_files"
+    _scaffold_case(case_dir)
+    # Boundary file exists, but no points/faces — simulates the
+    # mid-mesh-failure or partial-import state.
+    _write_polymesh_boundary(
+        case_dir,
+        [("inlet", 50, 0), ("outlet", 50, 50), ("walls", 100, 100)],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir, case_id="no_polymesh_files", inlet_speed=0.5
+    )
+    inlet_u = dict(result.inlet_velocities)["inlet"]
+    # Fallback: +x axis at speed 0.5
+    assert abs(inlet_u[0] - 0.5) < 1e-9
+    assert abs(inlet_u[1]) < 1e-9
+    assert abs(inlet_u[2]) < 1e-9
+    # Warning surfaced
+    assert any("face normals" in w for w in result.warnings), (
+        f"expected fallback warning, got {result.warnings}"
+    )
+
+
 def test_user_override_invariant_preserves_engineer_edits(tmp_path: Path):
     case_dir = tmp_path / "override_case"
     _scaffold_case(case_dir)
-    _write_polymesh_boundary(
+    _write_polymesh_axis_aligned_box(
         case_dir,
-        [("inlet", 50, 1000), ("outlet", 50, 1050), ("walls", 500, 1100)],
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
     )
 
     # First setup: AI authors all 7 dicts.

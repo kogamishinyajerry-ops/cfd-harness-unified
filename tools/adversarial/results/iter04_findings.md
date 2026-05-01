@@ -26,15 +26,18 @@
 **Fix:** New `assign_surface_to_solid_by_voting` function. For each triangle in a parametric surface, vote for the nearest source-solid centroid cloud. Majority wins; raise only when winner has <60% of votes (true ambiguity, not just spatial-overlap). gmsh_runner now uses voting instead of single centroid.
 **Verification:** Hand-crafted L-bend (axis-aligned) still has imperfect splitting (inlet over-counted because L-corner walls share edges with inlet face), but Codex's rotated L-bend gets symmetric inlet=78/outlet=78 counts (correct, since both are 60×70 mm faces).
 
-### Defect 6 — BC mapper applies hardcoded inlet velocity, ignoring patch orientation (OPEN)
+### Defect 6 — BC mapper applies hardcoded inlet velocity, ignoring patch orientation (FIXED)
 
 **Severity:** Critical for non-axis-aligned geometries (=most realistic CAD imports)
 **Location:** `services/case_solve/bc_setup_from_stl_patches.py:_DEFAULT_INLET_U` + `_u_block`
-**Symptom:** icoFoam diverged with continuity error = 1.04e+47 on rotated L-bend. Residuals 3-4 orders above expected.
-**Root cause:** BC mapper applies `U=(0.5, 0, 0)` along global +x axis regardless of patch orientation. Codex's rotated L-bend has inlet normal ≠ +x; flow tries to enter at the wrong angle and rams into walls. Mass conservation breaks immediately.
-**Fix path:** Read patch face normals from polyMesh (same parser as `services/render/bc_glb.py`). For each `velocity_inlet` patch, compute the average inward normal (`-mean(face_normals)` over the patch's faces), set inlet `U = magnitude * inward_normal`. Magnitude default 0.5 m/s. ~30-50 LOC in `bc_setup_from_stl_patches`.
-**Severity assessment:** This isn't a workflow blocker (V61-102 raw-dict editor still lets engineer override U). But it makes the auto-author defaults useless on any non-axis-aligned geometry — which is most realistic CAD. Should be addressed before iter05+ generates more rotated cases.
-**Estimated effort:** 60-80 LOC + 3 unit tests. Could be a small follow-up commit on V61-103 or a separate defect-6 commit.
+**Symptom (before fix):** icoFoam diverged with continuity error = 1.04e+47 on rotated L-bend. Residuals 3-4 orders above expected.
+**Root cause:** BC mapper applied `U=(0.5, 0, 0)` along global +x axis regardless of patch orientation. Codex's rotated L-bend has inlet normal ≠ +x; flow tried to enter at the wrong angle and rammed into walls. Mass conservation broke immediately.
+**Fix:** New `_compute_patch_inward_normals` reads `polyMesh/{points, faces}` and computes per-patch average inward normal via Newell's method (handles non-planar n-gons). For each `velocity_inlet` patch, sets `U = inlet_speed * inward_normal`. Default speed unchanged at 0.5 m/s. Falls back to +x axis with warning when polyMesh files are missing/malformed. Also: signature changed from `inlet_u: tuple[3]` (hardcoded vector) to `inlet_speed: float` (scalar magnitude); per-patch U vectors are now in `result.inlet_velocities`.
+**Verification (Codex iter04 rotated L-bend):**
+- Before: `converged=false`, continuity_error=1.04e+47, residuals p=1.13e-3
+- After: `converged=true`, continuity_error=1.30e-7, residuals p=9.47e-7
+- Inlet U vector: `(-0.41, -0.25, -0.15)` (magnitude 0.5 m/s, direction = inlet inward normal in rotated frame)
+**Tests:** 3 new unit tests added (`test_inlet_velocity_follows_patch_inward_normal`, `test_inlet_velocity_handles_non_axis_face_correctly`, `test_inlet_velocity_falls_back_when_polymesh_files_missing`). 12/12 BC tests pass; 202/202 BC+solve+geometry+mesh tests pass.
 
 ## Iteration outcome
 

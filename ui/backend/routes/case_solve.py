@@ -215,7 +215,11 @@ def setup_bc(
                     {"name": name, "bc_class": cls.value}
                     for name, cls in result.patches
                 ],
-                "inlet_velocity": list(result.inlet_velocity),
+                "inlet_speed": result.inlet_speed,
+                "inlet_velocities": [
+                    {"name": name, "U": list(u)}
+                    for name, u in result.inlet_velocities
+                ],
                 "nu": result.nu,
                 "delta_t": result.delta_t,
                 "end_time": result.end_time,
