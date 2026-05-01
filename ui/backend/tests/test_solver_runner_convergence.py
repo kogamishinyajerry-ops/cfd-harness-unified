@@ -34,25 +34,55 @@ def _good_parse(end_time: float = 2.0) -> dict[str, object]:
 
 def test_is_converged_default_end_time_legacy_ldc_value():
     """Pre-V61-103 callers (and bare _is_converged calls in tests) get
-    the legacy LDC default endTime=2.0 — preserved for backward compat."""
+    the legacy LDC defaults endTime=2.0 + deltaT=0.01 — preserved for
+    backward compat."""
     assert _is_converged(_good_parse(end_time=2.0)) is True
-    assert _is_converged(_good_parse(end_time=1.0)) is False  # 1.0 < 0.995 * 2.0
+    # Tolerance window is 0.5 * dt = 0.005; 1.0 is way below.
+    assert _is_converged(_good_parse(end_time=1.0)) is False
 
 
 def test_is_converged_honors_configured_end_time():
     """V61-103 introduced per-case endTime. The heuristic now compares
     against the configured value, not the hardcoded 2.0."""
-    # Half-second smoke run with all-good residuals: should converge.
-    assert _is_converged(_good_parse(end_time=0.5), configured_end_time=0.5) is True
-    # Stopped early at 0.4 vs configured 0.5 (just above 0.5%-tolerance window): diverged.
-    assert _is_converged(_good_parse(end_time=0.4), configured_end_time=0.5) is False
+    assert (
+        _is_converged(_good_parse(end_time=0.5), configured_end_time=0.5,
+                      configured_delta_t=0.002)
+        is True
+    )
+    # Stopped early at 0.4 vs configured 0.5: way outside half-step window.
+    assert (
+        _is_converged(_good_parse(end_time=0.4), configured_end_time=0.5,
+                      configured_delta_t=0.002)
+        is False
+    )
+
+
+def test_is_converged_rejects_one_step_early_stop():
+    """Codex post-merge HIGH (this commit's reason): the previous 0.5%
+    relative tolerance let endTime=0.5 + dt=0.002 read as converged at
+    end_t=0.498 — a genuine 1-step early stop. The new 0.5*dt absolute
+    tolerance rejects this case."""
+    # 1 timestep short: end_t = 0.498 < 0.5 - 0.5*0.002 = 0.499.
+    assert (
+        _is_converged(_good_parse(end_time=0.498), configured_end_time=0.5,
+                      configured_delta_t=0.002)
+        is False
+    )
+    # Exactly the half-step boundary: 0.499 = 0.5 - 0.5*0.002 → converged.
+    assert (
+        _is_converged(_good_parse(end_time=0.499), configured_end_time=0.5,
+                      configured_delta_t=0.002)
+        is True
+    )
 
 
 def test_is_converged_tolerates_writeinterval_rounding():
     """OpenFOAM writeInterval rounding can land at 1.999998 for endTime
-    2.0; the 0.5% tolerance prevents a false-FAIL."""
+    2.0 + dt=0.01; the half-timestep tolerance (0.005) prevents a
+    false-FAIL on legitimate end-time-reached values just under target."""
     parsed = _good_parse(end_time=1.99999)
-    assert _is_converged(parsed, configured_end_time=2.0) is True
+    assert _is_converged(parsed, configured_end_time=2.0,
+                         configured_delta_t=0.01) is True
 
 
 def test_is_converged_rejects_nan_continuity():
@@ -93,14 +123,16 @@ def test_read_configured_end_time_parses_controldict(tmp_path: Path):
         "endTime         0.5;\n"
         "deltaT          0.002;\n"
     )
-    assert _read_configured_end_time(case) == pytest.approx(0.5)
+    end_t, dt = _read_configured_end_time(case)
+    assert end_t == pytest.approx(0.5)
+    assert dt == pytest.approx(0.002)
 
 
 def test_read_configured_end_time_handles_missing_file(tmp_path: Path):
     case = tmp_path / "case"
     case.mkdir()
-    # No controlDict — falls back to 2.0 (legacy LDC default).
-    assert _read_configured_end_time(case) == pytest.approx(2.0)
+    # No controlDict — falls back to (2.0, 0.01) legacy LDC defaults.
+    assert _read_configured_end_time(case) == (pytest.approx(2.0), pytest.approx(0.01))
 
 
 def test_read_configured_end_time_handles_unparseable_value(tmp_path: Path):
@@ -109,5 +141,21 @@ def test_read_configured_end_time_handles_unparseable_value(tmp_path: Path):
     (case / "system" / "controlDict").write_text(
         "FoamFile { format ascii; }\n"
         "endTime         not_a_number;\n"
+        "deltaT          also_garbage;\n"
     )
-    assert _read_configured_end_time(case) == pytest.approx(2.0)
+    end_t, dt = _read_configured_end_time(case)
+    assert end_t == pytest.approx(2.0)
+    assert dt == pytest.approx(0.01)
+
+
+def test_read_configured_end_time_partial_parse(tmp_path: Path):
+    """endTime parses, deltaT missing → endTime taken, dt falls back."""
+    case = tmp_path / "case"
+    (case / "system").mkdir(parents=True)
+    (case / "system" / "controlDict").write_text(
+        "FoamFile { format ascii; }\n"
+        "endTime         3.7;\n"
+    )
+    end_t, dt = _read_configured_end_time(case)
+    assert end_t == pytest.approx(3.7)
+    assert dt == pytest.approx(0.01)

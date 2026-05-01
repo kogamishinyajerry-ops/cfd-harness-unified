@@ -587,9 +587,9 @@ def stream_icofoam(
             log_buf.getvalue().decode("utf-8", errors="replace"),
             include_diagonal=False,
         )
+        end_t_cfg, dt_cfg = _read_configured_end_time(case_host_dir)
         converged = (
-            _is_converged(parsed, _read_configured_end_time(case_host_dir))
-            and not fatal_seen[0]
+            _is_converged(parsed, end_t_cfg, dt_cfg) and not fatal_seen[0]
         )
         summary = {
             "case_id": case_host_dir.name,

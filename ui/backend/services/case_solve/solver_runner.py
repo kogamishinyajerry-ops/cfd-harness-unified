@@ -165,13 +165,13 @@ def _parse_log(
 
 
 _END_TIME_RE = re.compile(r"\bendTime\s+([0-9.eE+-]+)\s*;")
+_DELTA_T_RE = re.compile(r"\bdeltaT\s+([0-9.eE+-]+)\s*;")
 
 
-def _read_configured_end_time(case_host_dir: Path) -> float:
-    """Read the ``endTime`` value from ``system/controlDict``. Falls
-    back to 2.0 (the legacy LDC default that ``_is_converged`` hardcoded
-    before V61-103 made endTime case-configurable) if the file or value
-    is missing/unparseable.
+def _read_configured_end_time(case_host_dir: Path) -> tuple[float, float]:
+    """Read ``endTime`` and ``deltaT`` from ``system/controlDict``. Returns
+    a tuple ``(end_time, delta_t)``. Falls back to ``(2.0, 0.01)`` (the
+    legacy LDC defaults) on missing file or unparseable values.
 
     Defect-9 fix (iter04/05/06 smoke false-FAIL): the convergence
     heuristic was hardcoded to ``end_time_reached >= 1.99`` matching
@@ -179,27 +179,43 @@ def _read_configured_end_time(case_host_dir: Path) -> float:
     per case (and the smoke runner started passing per-case overrides),
     short cases like end_time=0.5 reported ``converged=false`` even
     when residuals were finite and tiny.
+
+    Codex post-merge HIGH: returning deltaT alongside endTime so the
+    convergence threshold can use a 0.5-timestep absolute tolerance
+    (instead of the original 0.5 % relative tolerance, which was too
+    generous for short runs — e.g. endTime=0.5 + dt=0.002 made
+    end_t=0.498 read as converged even though it stopped 1 step short).
     """
     try:
         text = (case_host_dir / "system" / "controlDict").read_text(
             encoding="utf-8", errors="replace"
         )
     except OSError:
-        return 2.0
-    m = _END_TIME_RE.search(text)
-    if not m:
-        return 2.0
+        return (2.0, 0.01)
+    end_match = _END_TIME_RE.search(text)
+    delta_match = _DELTA_T_RE.search(text)
     try:
-        return float(m.group(1))
+        end_t = float(end_match.group(1)) if end_match else 2.0
     except (TypeError, ValueError):
-        return 2.0
+        end_t = 2.0
+    try:
+        dt = float(delta_match.group(1)) if delta_match else 0.01
+    except (TypeError, ValueError):
+        dt = 0.01
+    return (end_t, dt)
 
 
-def _is_converged(parsed: dict[str, object], configured_end_time: float = 2.0) -> bool:
+def _is_converged(
+    parsed: dict[str, object],
+    configured_end_time: float = 2.0,
+    configured_delta_t: float = 0.01,
+) -> bool:
     """Convergence heuristic for icoFoam runs:
 
-    * end_time_reached >= configured endTime (with 0.5 % tolerance
-      for floating-point write-interval rounding)
+    * end_time_reached >= configured endTime - 0.5 * deltaT (allow at
+      most one half-timestep wiggle for writeInterval rounding; tighter
+      than a relative tolerance which would over-shoot on long runs and
+      under-shoot on short ones)
     * |continuity error| < 1e-3 (PISO closing the mass balance)
     * residuals must be finite (NaN / Inf trip on the bound check)
 
@@ -207,18 +223,24 @@ def _is_converged(parsed: dict[str, object], configured_end_time: float = 2.0) -
     surfaces this as ``converged=false`` so the UI can show a warning
     without the call having "failed".
 
-    ``configured_end_time`` defaults to the legacy LDC value 2.0 so
-    callers that don't pass it (older code paths, tests) keep working.
-    Production callers (``run_icofoam``) pass the value read from
-    ``system/controlDict`` so per-case overrides land correctly.
+    ``configured_end_time`` and ``configured_delta_t`` default to the
+    legacy LDC values (2.0, 0.01) so callers that don't pass them
+    (older code paths, tests) keep working. Production callers
+    (``run_icofoam``) pass the values read from ``system/controlDict``
+    so per-case overrides land correctly.
+
+    Codex post-merge HIGH (this commit): the original ``configured_end_time
+    * 0.995`` threshold was too generous on short cases. With
+    endTime=0.5 + dt=0.002 the slack window was 2.5ms = 1.25 timesteps,
+    so a run that stopped 1 step short (end_t=0.498) read as converged.
+    Replaced with absolute ``0.5 * deltaT`` tolerance: half a timestep
+    wiggle absorbs the writeInterval rounding without admitting a
+    genuine early stop.
     """
     end_t = parsed.get("end_time_reached", 0.0)
     if not isinstance(end_t, (int, float)):
         return False
-    # 0.5 % tolerance: writeInterval rounding can land at e.g. 1.999998
-    # for a configured endTime=2.0 and we don't want that to read as a
-    # divergent run.
-    if end_t < configured_end_time * 0.995:
+    if end_t < configured_end_time - 0.5 * configured_delta_t:
         return False
     cont = parsed.get("continuity")
     if cont is None or not isinstance(cont, (int, float)):
@@ -358,7 +380,8 @@ def run_icofoam(
 
     log_text = log_dest.read_text(errors="replace")
     parsed = _parse_log(log_text)
-    converged = _is_converged(parsed, _read_configured_end_time(case_host_dir))
+    end_t_cfg, dt_cfg = _read_configured_end_time(case_host_dir)
+    converged = _is_converged(parsed, end_t_cfg, dt_cfg)
 
     # Pull time directories back to the host. The container produced
     # /tmp/.../<case>/<time>/ for each writeInterval; mirror them onto
