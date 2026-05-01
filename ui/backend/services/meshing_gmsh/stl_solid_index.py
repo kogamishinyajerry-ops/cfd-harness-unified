@@ -144,6 +144,7 @@ def assign_surface_to_solid_by_voting(
     solids: list[SolidCentroids],
     *,
     min_majority: float = 0.6,
+    triangle_areas: np.ndarray | None = None,
 ) -> str | None:
     """Per-triangle voting (preferred path · adversarial iter04 fix).
 
@@ -159,8 +160,18 @@ def assign_surface_to_solid_by_voting(
     threshold and rejected an otherwise-mappable surface.
 
     ``triangle_centroids`` is shape ``(n_tri, 3)``; ``min_majority=0.6``
-    means the winner needs ≥60 % of votes. Ties or weaker majorities
-    raise — the engineer disambiguates via raw-dict editor.
+    means the winner needs ≥60 % of (weighted) vote share. Ties or
+    weaker majorities raise — the engineer disambiguates via raw-dict
+    editor.
+
+    ``triangle_areas`` (shape ``(n_tri,)``, optional) area-weights each
+    vote. Codex post-merge finding (defect-5 follow-up): equal-weight
+    voting is fooled by skewed triangle distributions where a long
+    boundary edge gets refined into many small triangles that outvote
+    fewer large interior triangles. Area-weighting reflects the true
+    geometric coverage of each source solid. When omitted, falls back
+    to equal-weight voting (legacy behavior preserved for callers that
+    don't have area data).
     """
     if not solids:
         return None
@@ -169,8 +180,15 @@ def assign_surface_to_solid_by_voting(
     if triangle_centroids.shape[0] == 0:
         return None
 
-    votes: dict[str, int] = {s.name: 0 for s in solids}
-    for tri_centroid in triangle_centroids:
+    n_tri = triangle_centroids.shape[0]
+    if triangle_areas is not None and triangle_areas.shape[0] != n_tri:
+        raise ValueError(
+            f"triangle_areas length {triangle_areas.shape[0]} != "
+            f"triangle_centroids length {n_tri}"
+        )
+
+    votes: dict[str, float] = {s.name: 0.0 for s in solids}
+    for i, tri_centroid in enumerate(triangle_centroids):
         best_name: str | None = None
         best_dist = float("inf")
         for s in solids:
@@ -179,14 +197,15 @@ def assign_surface_to_solid_by_voting(
                 best_dist = d
                 best_name = s.name
         if best_name is not None:
-            votes[best_name] += 1
+            weight = float(triangle_areas[i]) if triangle_areas is not None else 1.0
+            votes[best_name] += weight
 
     total = sum(votes.values())
-    if total == 0:
+    if total <= 0.0:
         return None
     ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
     winner_name, winner_votes = ranked[0]
-    runner_name, runner_votes = ranked[1] if len(ranked) > 1 else (winner_name, 0)
+    runner_name, runner_votes = ranked[1] if len(ranked) > 1 else (winner_name, 0.0)
     winner_share = winner_votes / total
     if winner_share < min_majority:
         raise AmbiguousSurfaceAssignment(

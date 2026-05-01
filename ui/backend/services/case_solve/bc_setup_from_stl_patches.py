@@ -210,6 +210,19 @@ def _compute_patch_inward_normals(
     return out
 
 
+# Canonical role tokens scanned across compound patch names. Priority
+# order matters: a name like ``inlet_wall_seam`` should classify as an
+# inlet (the actual flow boundary) rather than a wall, so inlet/outlet/
+# symmetry are checked before wall. Each entry is (token_substring,
+# class). Tokens are matched as substrings of the lowercased name.
+_CANONICAL_ROLE_TOKENS: tuple[tuple[str, BCClass], ...] = (
+    ("inlet", BCClass.VELOCITY_INLET),
+    ("outlet", BCClass.PRESSURE_OUTLET),
+    ("symmetry", BCClass.SYMMETRY),
+    ("wall", BCClass.NO_SLIP_WALL),
+)
+
+
 def _classify_patch(name: str) -> tuple[BCClass, str | None]:
     """Map a patch name to a BCClass via the project default table.
     Returns (class, warning_or_None). Unrecognized names fall through
@@ -217,15 +230,20 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
 
     Lookup order:
         1. Exact case-insensitive match against ``_DEFAULT_PATCH_CLASS``
+           (covers single-token names like ``inlet``, ``walls``,
+           ``left``, ``top``).
         2. Strip a trailing ``_<digits>`` or ``<digits>`` suffix and
            retry (canonical multi-instance numbering like ``inlet_1``,
            ``walls01``).
-        3. Strip everything after (and including) the first underscore
-           and retry (compound names like ``outlet_branch``,
-           ``inlet_main``, ``walls_top``). Adversarial-loop iter05
-           defect-7 closure: T-junction's ``outlet_branch`` was getting
-           mis-classified to NO_SLIP_WALL because step 2 doesn't match
-           non-numeric suffixes.
+        3. Canonical role-token scan: search for ``inlet`` / ``outlet`` /
+           ``symmetry`` / ``wall`` as a substring (priority order: inlet
+           before outlet before symmetry before wall). Handles compound
+           CAD-export names where the role token is embedded:
+           ``outlet_branch`` → outlet, ``left_inlet`` → inlet,
+           ``inlet_main`` → inlet, ``walls_perimeter`` → wall.
+           Codex post-merge finding (defect-7 follow-up): the previous
+           strip-after-first-underscore rule mis-classified ``left_inlet``
+           as wall because ``left`` matched the default wall token.
         4. Fall through to NO_SLIP_WALL with warning.
     """
     lower = name.lower()
@@ -238,13 +256,10 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
         cls = _DEFAULT_PATCH_CLASS.get(stripped)
         if cls is not None:
             return cls, None
-    # Step 3: strip everything after the first underscore.
-    if "_" in lower:
-        prefix = lower.split("_", 1)[0]
-        if prefix:
-            cls = _DEFAULT_PATCH_CLASS.get(prefix)
-            if cls is not None:
-                return cls, None
+    # Step 3: canonical role-token substring scan, prioritized.
+    for token, token_cls in _CANONICAL_ROLE_TOKENS:
+        if token in lower:
+            return token_cls, None
     return (
         BCClass.NO_SLIP_WALL,
         f"patch {name!r} not in default classification table; "

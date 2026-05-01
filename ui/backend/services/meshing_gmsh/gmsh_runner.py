@@ -234,6 +234,7 @@ def _gmsh_inline(
                     # Cache node coords; many triangles share nodes.
                     node_coord_cache: dict[int, list[float]] = {}
                     tri_centroids: list[list[float]] = []
+                    tri_areas: list[float] = []
                     for i in range(n_tri):
                         n0, n1, n2 = (
                             int(flat_nodes[3 * i]),
@@ -246,17 +247,35 @@ def _gmsh_inline(
                                 c, _, _, _ = gmsh.model.mesh.getNode(nid)
                                 node_coord_cache[nid] = [c[0], c[1], c[2]]
                             coords.append(node_coord_cache[nid])
+                        a, b, c = coords[0], coords[1], coords[2]
                         tri_centroids.append(
                             [
-                                (coords[0][0] + coords[1][0] + coords[2][0]) / 3.0,
-                                (coords[0][1] + coords[1][1] + coords[2][1]) / 3.0,
-                                (coords[0][2] + coords[1][2] + coords[2][2]) / 3.0,
+                                (a[0] + b[0] + c[0]) / 3.0,
+                                (a[1] + b[1] + c[1]) / 3.0,
+                                (a[2] + b[2] + c[2]) / 3.0,
                             ]
                         )
+                        # Triangle area = 0.5 * |(b - a) x (c - a)|.
+                        # Codex post-merge finding (defect-5 follow-up):
+                        # area-weighted voting prevents skewed triangle
+                        # distributions (many tiny refined triangles
+                        # along an edge) from outvoting fewer large
+                        # triangles that represent the true patch face.
+                        u0, u1, u2 = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+                        v0, v1, v2 = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+                        cx = u1 * v2 - u2 * v1
+                        cy = u2 * v0 - u0 * v2
+                        cz = u0 * v1 - u1 * v0
+                        tri_areas.append(
+                            0.5 * (cx * cx + cy * cy + cz * cz) ** 0.5
+                        )
                     centroids_arr = _np.asarray(tri_centroids, dtype=float)
+                    areas_arr = _np.asarray(tri_areas, dtype=float)
                     try:
                         name = assign_surface_to_solid_by_voting(
-                            centroids_arr, named_solids
+                            centroids_arr,
+                            named_solids,
+                            triangle_areas=areas_arr,
                         )
                     except AmbiguousSurfaceAssignment as exc:
                         # MED-1 ambiguity guard. Surface as a mesh

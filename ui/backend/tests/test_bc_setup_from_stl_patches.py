@@ -287,19 +287,24 @@ def test_numbered_patch_suffixes_classify_via_prefix_match(tmp_path: Path):
     assert result.warnings == ()
 
 
-def test_compound_patch_names_classify_via_underscore_split(tmp_path: Path):
-    """Adversarial-loop iter05 (T-junction) regression: compound names
-    like ``outlet_branch``, ``inlet_main``, ``walls_top`` must classify
-    via the prefix BEFORE the first underscore. Without this they fell
-    through to NO_SLIP_WALL because numeric-suffix stripping doesn't
-    cover non-numeric suffixes."""
+def test_compound_patch_names_classify_via_canonical_token_scan(tmp_path: Path):
+    """Adversarial-loop iter05 (T-junction) regression + Codex post-merge
+    finding: compound names embedding ``inlet`` / ``outlet`` / ``wall``
+    as a substring must classify by that role token regardless of
+    surrounding qualifiers (``outlet_branch``, ``left_inlet``,
+    ``walls_perimeter``).
+
+    The Codex finding showed that the original strip-after-first-underscore
+    rule mis-classified ``left_inlet`` as wall (because ``left`` matched
+    the default wall token), defeating the very purpose of the fix.
+    Replaced with canonical-role-token substring scan."""
     case_dir = tmp_path / "compound_case"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
         case_dir,
         [
             ("inlet_main", 50, 0, "-x"),
-            ("outlet_right", 50, 50, "+x"),
+            ("left_inlet", 50, 50, "+x"),
             ("outlet_branch", 50, 100, "+y"),
             ("walls_perimeter", 200, 150, "+z"),
         ],
@@ -307,7 +312,7 @@ def test_compound_patch_names_classify_via_underscore_split(tmp_path: Path):
     result = setup_bc_from_stl_patches(case_dir, case_id="compound_case")
     bc_classes = dict(result.patches)
     assert bc_classes["inlet_main"] == BCClass.VELOCITY_INLET
-    assert bc_classes["outlet_right"] == BCClass.PRESSURE_OUTLET
+    assert bc_classes["left_inlet"] == BCClass.VELOCITY_INLET
     assert bc_classes["outlet_branch"] == BCClass.PRESSURE_OUTLET
     assert bc_classes["walls_perimeter"] == BCClass.NO_SLIP_WALL
     assert result.warnings == ()
