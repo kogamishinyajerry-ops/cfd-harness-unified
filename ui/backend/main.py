@@ -111,6 +111,14 @@ try:
 except ModuleNotFoundError:
     case_annotations = None  # type: ignore[assignment]
 
+# case_patch_classification routes (DEC-V61-108 Phase A · per-patch
+# user-authored BC classification overrides). Bridges the 3D viewport
+# click-to-classify UX into the BC mapper's _classify_patch heuristic.
+try:
+    from ui.backend.routes import case_patch_classification  # noqa: F401
+except ModuleNotFoundError:
+    case_patch_classification = None  # type: ignore[assignment]
+
 # case_dicts routes (DEC-V61-102 M-RESCUE Phase 1.2 · raw OpenFOAM dict
 # GET/POST so engineers can override AI-authored controlDict, fvSchemes,
 # fvSolution, etc. when AI's choice doesn't fit the case).
@@ -181,6 +189,12 @@ if case_visualize is not None:
     app.include_router(case_visualize.router, prefix="/api", tags=["case-visualize"])
 if case_annotations is not None:
     app.include_router(case_annotations.router, prefix="/api", tags=["case-annotations"])
+if case_patch_classification is not None:
+    app.include_router(
+        case_patch_classification.router,
+        prefix="/api",
+        tags=["case-patch-classification"],
+    )
 if case_dicts is not None:
     app.include_router(case_dicts.router, prefix="/api", tags=["case-dicts"])
 if case_inspect is not None:

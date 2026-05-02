@@ -351,12 +351,21 @@ _CANONICAL_ROLE_TOKENS: tuple[tuple[str, BCClass], ...] = (
 )
 
 
-def _classify_patch(name: str) -> tuple[BCClass, str | None]:
+def _classify_patch(
+    name: str,
+    *,
+    overrides: dict[str, BCClass] | None = None,
+) -> tuple[BCClass, str | None]:
     """Map a patch name to a BCClass via the project default table.
     Returns (class, warning_or_None). Unrecognized names fall through
     to NO_SLIP_WALL with a warning.
 
     Lookup order:
+        0. DEC-V61-108 Phase A: per-patch user override from
+           ``system/patch_classification.yaml``. Engineer-authored
+           overrides take precedence over every heuristic step
+           below — this is the bridge from the 3D viewport's
+           click-to-classify UX into the BC mapper.
         1. Exact case-insensitive match against ``_DEFAULT_PATCH_CLASS``
            (covers single-token names like ``inlet``, ``walls``,
            ``left``, ``top``).
@@ -374,6 +383,8 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
            as wall because ``left`` matched the default wall token.
         4. Fall through to NO_SLIP_WALL with warning.
     """
+    if overrides is not None and name in overrides:
+        return overrides[name], None
     lower = name.lower()
     cls = _DEFAULT_PATCH_CLASS.get(lower)
     if cls is not None:
@@ -394,6 +405,59 @@ def _classify_patch(name: str) -> tuple[BCClass, str | None]:
         f"defaulting to no-slip wall (override via raw-dict editor "
         f"if needed)",
     )
+
+
+# DEC-V61-108 Phase A: sidecar holding per-patch user-authored
+# classification overrides. Lives at
+# ``<case_dir>/system/patch_classification.yaml`` (system/ is already
+# the engineer-owned dict directory under the V61-102 raw-dict editor
+# convention, so co-locating here keeps the case directory tidy and
+# the lifecycle bound to the case). Format:
+#
+#   schema_version: 1
+#   overrides:
+#     <patch_name_as_in_polymesh_boundary>: <bc_class_str>
+#     ...
+#
+# Reads return {} for missing/malformed files (the heuristic still
+# runs unaltered). Writes are managed by the patch-classification
+# route, which is the single point of validation.
+_PATCH_CLASSIFICATION_REL = "system/patch_classification.yaml"
+_PATCH_CLASSIFICATION_SCHEMA_VERSION = 1
+
+
+def load_patch_classification_overrides(case_dir: Path) -> dict[str, BCClass]:
+    """Return ``{patch_name: BCClass}`` from the sidecar, or ``{}``.
+
+    Tolerates a missing file (no overrides yet) and a malformed file
+    (treated as empty so the heuristic still runs — the route layer
+    is responsible for surfacing parse errors at write time).
+    Unknown ``bc_class`` strings are silently dropped, NOT raised:
+    a stale override referencing a removed class shouldn't block
+    BC authoring on the rest of the case.
+    """
+    p = case_dir / _PATCH_CLASSIFICATION_REL
+    if not p.is_file():
+        return {}
+    try:
+        import yaml  # local import — yaml is already a project dep
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    raw = data.get("overrides")
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, BCClass] = {}
+    for patch_name, cls_str in raw.items():
+        if not isinstance(patch_name, str) or not isinstance(cls_str, str):
+            continue
+        try:
+            out[patch_name] = BCClass(cls_str)
+        except ValueError:
+            continue
+    return out
 
 
 def _u_block(
@@ -757,10 +821,13 @@ def setup_bc_from_stl_patches(
             failing_check="no_named_patches",
         )
 
+    # DEC-V61-108 Phase A: load per-patch user overrides once. Empty
+    # dict when the case has no overrides (the common path).
+    overrides = load_patch_classification_overrides(case_dir)
     patches_with_class: list[tuple[str, BCClass]] = []
     warnings: list[str] = []
     for name in patch_names:
-        cls, warning = _classify_patch(name)
+        cls, warning = _classify_patch(name, overrides=overrides)
         patches_with_class.append((name, cls))
         if warning:
             warnings.append(warning)
