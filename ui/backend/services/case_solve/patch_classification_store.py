@@ -190,34 +190,30 @@ def _assert_fd_still_matches_path(fd_case: int, case_dir: Path) -> None:
     """Raise if ``fd_case`` no longer references the inode currently
     visible at ``case_dir``.
 
-    Codex DEC-V61-108 R5 P1: closes the delete-recreate race.
-    ``case_lock`` cannot be the synchronization boundary on its own
-    because its ``mkdir(exist_ok=True)`` will re-create a deleted
-    case dir and lock the NEW inode, leaving our fd_case pointing
-    at an orphaned old inode. Comparing ``fstat(fd_case)`` to
-    ``lstat(case_dir)`` after lock acquisition detects the drift.
+    Codex DEC-V61-108 R5 P1 + R6 P3: closes the swap-between-open-
+    and-lock race. ``case_lock`` cannot be the synchronization
+    boundary on its own because its ``mkdir(exist_ok=True)`` will
+    re-create a deleted case dir and lock the NEW inode, leaving
+    our fd_case pointing at an orphaned old inode. Comparing
+    ``fstat(fd_case)`` to ``lstat(case_dir)`` after lock acquisition
+    detects every such drift: delete-recreate, rename-swap,
+    symlink-replacement.
 
-    DEC-V61-110 (this DEC): the symlink-replacement branch that
-    used to live here was removed because DEC-V61-109 made it
-    unreachable: case_lock now opens case_dir with ``O_NOFOLLOW |
-    O_DIRECTORY`` and raises ``CaseLockError(symlink_escape)``
-    BEFORE this assert can run. Concretely the swap-to-symlink
-    test (``test_upsert_returns_symlink_escape_when_path_swapped_
-    to_symlink``) now exercises the case_lock path, not this assert
-    — and still passes because the failing_check enum
-    (``symlink_escape``) is identical.
+    R6 P3 refinement: distinguish symlink-replacement (return
+    ``symlink_escape`` so the route maps to 422) from plain
+    delete-recreate (``case_dir_missing`` → 404). Misclassifying
+    the symlink case as 404 made containment violations harder to
+    diagnose than they should be.
 
-    What this assert still covers post-V109/V110:
-      * ``case_dir`` was deleted then re-created at the same path
-        with a NEW real-directory inode. case_lock's V109 O_NOFOLLOW
-        open succeeds (NEW path is a real dir, not a symlink), but
-        fd_case still references the OLD orphaned inode. Without
-        this check, writes via fd_case would land in the orphaned
-        tree while case_lock's serialization is on the NEW dir.
-      * ``case_dir`` disappeared entirely between pre-lock open and
-        the assert (rare; usually case_lock would have already
-        failed by then because mkdir(exist_ok=True) succeeded but
-        the path was unlinked again before V109's open).
+    DEC-V61-110 (this DEC) post-mortem: the V61-109 framing that
+    "case_lock's V109 O_NOFOLLOW open makes the symlink branch
+    unreachable" was wrong. V109 protects only the case_lock OPEN
+    moment; once case_lock yields with the dir_fd pinned, an
+    attacker can still rename case_dir away and plant a symlink at
+    the path BEFORE this assert runs. Codex caught this on the
+    V61-110 "drop the dead branch" attempt — the branch is NOT
+    dead. V61-110 narrowed to docstring-only correction so future
+    readers don't mis-trust the branch as defensive-only.
     """
     try:
         path_st = os.stat(str(case_dir), follow_symlinks=False)
@@ -232,6 +228,17 @@ def _assert_fd_still_matches_path(fd_case: int, case_dir: Path) -> None:
             f"could not lstat case_dir post-lock: {case_dir}: {exc}",
             failing_check="case_dir_missing",
         ) from exc
+    # R6 P3: a symlink at the case_dir path is a containment
+    # violation regardless of whether the inode also changed. V109
+    # only protects case_lock's OPEN moment; post-lock-yield swap
+    # to symlink is still reachable here (Codex V61-110 finding).
+    if stat.S_ISLNK(path_st.st_mode):
+        raise PatchClassificationIOError(
+            f"case_dir replaced by a symlink between pre-lock open "
+            f"and lock acquisition: {case_dir} — refusing the "
+            f"mutation (containment violation)",
+            failing_check="symlink_escape",
+        )
     try:
         fd_st = os.fstat(fd_case)
     except OSError as exc:

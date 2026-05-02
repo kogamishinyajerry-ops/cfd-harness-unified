@@ -715,6 +715,73 @@ def test_symlink_escape_no_residual_lockfile_leak(
     )
 
 
+def test_assert_fd_still_matches_path_catches_post_lock_yield_symlink_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """DEC-V61-110 / Codex R1 finding: V109's case_lock O_NOFOLLOW
+    protects only the open moment. Once case_lock yields with the
+    dir_fd pinned to the original real inode, an attacker can rename
+    the original case_dir away and plant a symlink at the path
+    BEFORE _assert_fd_still_matches_path runs. The S_ISLNK branch
+    in that assert is therefore reachable and load-bearing — it
+    surfaces ``symlink_escape`` (→ HTTP 422) instead of letting the
+    inode-mismatch fallthrough mis-classify the containment
+    violation as ``case_dir_missing`` (→ HTTP 404).
+
+    This test was added by DEC-V61-110 after Codex flagged the
+    initial "drop the dead branch" attempt as wrong. It locks the
+    branch's reachable contract so a future "this looks dead, let's
+    remove it" attempt fails loudly.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_manifest import locking as locking_mod
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
+    )
+
+    real_dir = tmp_path / "case_post_yield_swap"
+    real_dir.mkdir()
+    moved = tmp_path / "case_renamed_away"
+    decoy = tmp_path / "decoy_target"
+    decoy.mkdir()
+
+    real_case_lock = locking_mod.case_lock
+
+    @contextmanager
+    def case_lock_then_swap(cd):
+        # Enter the REAL case_lock — it opens fd_case on the real
+        # inode (V109 O_NOFOLLOW succeeds because cd is a real dir).
+        with real_case_lock(cd):
+            # Now, while the lock is held and fd_case is pinned,
+            # rename the real dir away and plant a symlink at the
+            # original path. The pinned fd_case still references
+            # the renamed real inode, but path-based stat now
+            # resolves to a symlink. This is the race V109 does
+            # NOT cover — the swap happens AFTER case_lock's open.
+            cd.rename(moved)
+            cd.symlink_to(decoy, target_is_directory=True)
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", case_lock_then_swap)
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            real_dir,
+            patch_name="x",
+            bc_class=BCClass.SYMMETRY,
+        )
+    assert exc_info.value.failing_check == "symlink_escape", (
+        "V61-110 contract: post-lock-yield symlink swap must surface "
+        "symlink_escape (422), not case_dir_missing (404). The "
+        "S_ISLNK branch in _assert_fd_still_matches_path is reachable "
+        "and load-bearing — do NOT remove it without re-checking this "
+        "race scenario."
+    )
+    # Decoy untouched — containment held.
+    assert not (decoy / "system").exists()
+
+
 def test_cleanup_refuses_to_remove_dir_without_dot_case_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
