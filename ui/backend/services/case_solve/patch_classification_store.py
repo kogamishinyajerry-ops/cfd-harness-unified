@@ -129,29 +129,18 @@ def _cleanup_case_lock_orphan_stub(case_dir: Path) -> None:
     same path with a NEW inode).
 
     The ``symlink_escape`` drift class — case_dir swapped to a
-    symlink, case_lock follows it and creates ``<target>/.case_lock``
-    in an external dir — is intentionally NOT cleaned up here.
-    R6→R8→R9 demonstrated that any path-based attempt to clean
-    up the leaked artifact is racy or unprovably-ours:
-
-      * No POSIX API tells us "did O_CREAT just create the file or
-        open an existing one?" so we can't prove the .case_lock we
-        see at the symlink target is ours rather than a victim's
-        pre-existing lockfile (R9 P1).
-      * The check/unlink sequence is racy on a mutable symlink:
-        attacker repoints between listdir and unlink → unlink lands
-        at a different inode than was checked (R9 P2).
-
-    The proper fix is at the ``case_lock`` layer — make case_lock
-    itself open case_dir with ``O_NOFOLLOW`` before opening its
-    lockfile, so a swapped case_dir is refused before any artifact
-    is created. That's a wider blast radius (case_lock is shared
-    with setup_bc, raw_dict editor, etc.) and is tracked as a
-    follow-up DEC. Until then, the symlink-swap-during-PUT race
-    leaks one ``.case_lock`` to the symlink target. Threat model
-    note: this race requires an active attacker swapping case_dir
-    at the right moment, which is outside the realistic threat
-    model for the local single-tenant dev workbench.
+    symlink — is no longer reachable here as of DEC-V61-109:
+    case_lock now opens case_dir itself with ``O_NOFOLLOW |
+    O_DIRECTORY`` BEFORE opening its lockfile, so a swapped
+    case_dir is refused with ``CaseLockError(failing_check=
+    "symlink_escape")`` before any artifact is created. The
+    historical R6→R8→R9 demonstration (path-based cleanup of the
+    leaked artifact is racy / unprovably-ours) is preserved in
+    the V108-A R9 chain report for context, but the underlying
+    leak no longer occurs. The post-lock
+    ``_assert_fd_still_matches_path`` check below remains as
+    belt-and-braces for now — DEC-V61-110 candidate is queued to
+    drop it once that simplification is reviewed.
 
     Race-safety rules (case_dir_missing branch):
       * R7 P1 — use fd-based ops via ``O_NOFOLLOW | O_DIRECTORY``

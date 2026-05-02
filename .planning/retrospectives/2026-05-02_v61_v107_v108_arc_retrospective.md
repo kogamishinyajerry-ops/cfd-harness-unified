@@ -24,11 +24,11 @@ kogami_findings_addressed: |
   R1 P2 #2 (R5 §10.5.4a escalation) — CLOSED inline; DEC-V61-109 must trigger high-risk-PR Kogami when filed
   R1 P3 (Kogami column in counter table) — CLOSED inline with NOT_APPLICABLE note per §4.2 routine-code-bearing exemption
 related_chain_reports:
-  - reports/codex_tool_reports/v61_107_partial.md (commit 47ae9e5)
-  - reports/codex_tool_reports/v61_107_5_r12_r16_chain.md (commit e10c9b5 — R12-R16 leg)
-  - reports/codex_tool_reports/v61_107_5_r17_r20_chain.md (commit e10c9b5 — R17-R20 leg)
+  - reports/codex_tool_reports/v61_107_partial_fvschemes_upgrade.md (commit 47ae9e5)
+  - reports/codex_tool_reports/v61_107_5_r17_r20_chain.md (commit e10c9b5 — R17-R20 tail-leg; R12-R16 leg lives in commit messages 7ac83a1/d63e14d/c1225da/3210994/6bdcf21 per "chain report covers tail of the chain" convention, no separate chain file)
   - reports/codex_tool_reports/v61_108_phase_a_r1_r11_chain.md (commit 656b82a)
   - reports/codex_tool_reports/v61_108_phase_b_r1_r3_chain.md (commit 2b34191)
+  - reports/codex_tool_reports/v61_109_r1_r2_chain.md (commit 24fe8a1)
 ---
 
 # RETRO-V61-V107-V108 · Per-patch BC governance arc
