@@ -631,19 +631,36 @@ def test_symlink_escape_does_not_mutate_populated_target(
     assert (decoy / "important_file").read_text() == "DO_NOT_LOSE\n"
 
 
-def test_symlink_escape_cleans_up_lockfile_in_empty_target(
+def test_symlink_escape_documented_residual_lockfile_leak(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Codex R8 P1: when case_dir is swapped to a symlink to an
-    OTHERWISE-EMPTY directory, ``case_lock`` creates ``.case_lock``
-    in the target. The cleanup helper MUST remove that artifact —
-    it's a containment write we created. The R7 P2 "only act if
-    dir contains exactly .case_lock" gate makes this safe: empty-
-    except-our-lock proves we're acting only on what we created.
+    """Codex R9 closure: documents the known residual artifact
+    on the symlink_escape path.
 
-    The external target directory itself is preserved (we don't
-    rmdir external dirs); the bare symlink at case_dir is left
-    for the operator to inspect.
+    When case_dir is swapped to a symlink between pre-lock open
+    and case_lock acquisition, ``case_lock`` (whose path-based
+    open follows the symlink) creates ``<target>/.case_lock``
+    BEFORE our R5 inode-drift detection fires. R6→R8→R9 explored
+    every path-based cleanup option and Codex demonstrated each
+    is racy or unprovably-ours:
+
+      * R8 attempt: unlink if target contains exactly .case_lock
+        → R9 P1: can't prove the .case_lock is ours vs a victim's
+        pre-existing lockfile (POSIX has no "was_just_created" flag)
+      * R8 attempt: check + unlink in sequence
+        → R9 P2: symlink can be re-pointed between check and unlink
+
+    Resolution: skip cleanup on symlink_escape and accept the
+    residual .case_lock leak. The proper fix is at case_lock's
+    layer (O_NOFOLLOW on case_dir before opening lockfile) —
+    out of scope for this DEC. Threat model note: this race
+    requires an active attacker swapping case_dir at the right
+    moment, which is outside the realistic threat model for the
+    local single-tenant dev workbench.
+
+    This test pins the documented behavior so a future "let me
+    add cleanup back" change is forced to acknowledge the
+    upstream case_lock fix as the right place.
     """
     from contextlib import contextmanager
 
@@ -651,11 +668,10 @@ def test_symlink_escape_cleans_up_lockfile_in_empty_target(
         patch_classification_store as mod,
     )
 
-    real_dir = tmp_path / "case_real_r8_empty"
+    real_dir = tmp_path / "case_real_r9_residual"
     real_dir.mkdir()
-    empty_decoy = tmp_path / "empty_decoy"
+    empty_decoy = tmp_path / "empty_decoy_r9"
     empty_decoy.mkdir()
-    # No pre-existing content.
 
     real_case_lock = mod.case_lock
 
@@ -675,12 +691,18 @@ def test_symlink_escape_cleans_up_lockfile_in_empty_target(
             real_dir, patch_name="x", bc_class=BCClass.SYMMETRY
         )
     assert exc_info.value.failing_check == "symlink_escape"
-    # R8 P1: case_lock's .case_lock artifact is cleaned up.
-    assert not (empty_decoy / ".case_lock").exists(), (
-        "case_lock's leaked .case_lock must be cleaned up (R8 P1)"
+    # Documented residual: case_lock's .case_lock at the symlink
+    # target is left behind. NO patch_classification.yaml landed
+    # (the security-critical write was correctly refused).
+    assert (empty_decoy / ".case_lock").exists(), (
+        "test pins documented residual: case_lock leaks .case_lock "
+        "to symlink target on swap-during-PUT race (case_lock layer "
+        "fix is the proper resolution, tracked as future work)"
     )
-    assert empty_decoy.exists() and empty_decoy.is_dir(), (
-        "external target directory itself must be preserved"
+    assert not (empty_decoy / "patch_classification.yaml").exists(), (
+        "but the security-critical sidecar write was correctly "
+        "refused — no override data was persisted to the external "
+        "target"
     )
 
 
