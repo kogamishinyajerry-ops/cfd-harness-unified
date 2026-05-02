@@ -25,7 +25,7 @@ codex_tool_report_path: reports/codex_tool_reports/v61_105_phase2_4_chain.md (Ph
 implementation_commits:
   - 147ba92 (Phase 2.4 R0 · two defensive checks at named-solid voting block · Codex R1 CHANGES_REQUIRED P2)
   - 980e026 (Phase 2.4 R1 P2 closure · OSError reclassification + locked-in regression test · Codex R2 APPROVE clean)
-notion_sync_status: synced 2026-05-01 (https://app.notion.com/p/353c68942bed81e4b4c1ee3f8eebb420) · Phase 2.4 closure resync pending
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/353c68942bed81e4b4c1ee3f8eebb420) · Status flipped Proposed → Accepted + Phase 2.4 closure note added to Decision + Canonical Follow-up properties
 ---
 
 # Why now
