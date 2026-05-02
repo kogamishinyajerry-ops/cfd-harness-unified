@@ -752,9 +752,12 @@ export function Step3SetupBC({
        *  Always mounted on Step 3 (not gated on a pick) so the engineer
        *  can scan all patches at a glance and override any of them.
        *  Picked-face highlighting is purely a hint — the panel works
-       *  without a pick. */}
+       *  without a pick. ``key={caseId}`` forces a full remount when
+       *  React Router swaps caseId in place — Codex DEC-V61-108
+       *  Phase B R1 P1 #2 closure. */}
       {caseId && (
         <PatchClassificationPanel
+          key={caseId}
           caseId={caseId}
           pickedFaceId={facePick?.picked?.faceId ?? null}
         />

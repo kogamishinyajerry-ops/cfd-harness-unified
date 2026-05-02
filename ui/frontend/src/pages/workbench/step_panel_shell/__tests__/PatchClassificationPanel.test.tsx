@@ -212,15 +212,23 @@ describe("PatchClassificationPanel", () => {
     ).toBe("");
   });
 
-  it("surfaces a load error when GET 404s", async () => {
+  it("surfaces ApiError.failing_check on a 404 load failure", async () => {
     getPatchClassificationMock.mockRejectedValueOnce(
-      new ApiError(404, "not found", { failing_check: "case_not_found" }),
+      new ApiError(404, "getPatchClassification failed (404)", {
+        failing_check: "case_not_found",
+        detail: "case_id absent from imported drafts",
+      }),
     );
     render(<PatchClassificationPanel caseId="case-1" pickedFaceId={null} />);
     const errBox = await screen.findByTestId(
       "patch-classification-load-error",
     );
-    expect(errBox.textContent).toContain("not found");
+    // Codex R1 P3 closure: prefer the structured failing_check over
+    // the generic "getPatchClassification failed (404)" message.
+    expect(errBox.textContent).toContain("case_not_found");
+    expect(errBox.textContent).toContain(
+      "case_id absent from imported drafts",
+    );
   });
 
   it("renders the no-mesh state when available_patches is empty", async () => {
@@ -232,5 +240,114 @@ describe("PatchClassificationPanel", () => {
     });
     render(<PatchClassificationPanel caseId="case-1" pickedFaceId={null} />);
     await screen.findByTestId("patch-classification-no-mesh");
+  });
+
+  // ─── Codex R1 P1 #1 closure · request-generation token ───
+  // Two saves on different rows fire in order A, B but resolve in
+  // reverse order B, A. Without the generation guard the older A
+  // response would clobber the newer B state. With the guard the
+  // stale A is dropped and the panel reflects B's payload.
+  it("rejects out-of-order PUT resolutions (last-issued wins)", async () => {
+    getPatchClassificationMock.mockResolvedValueOnce(baseState);
+
+    let resolveA!: (s: PatchClassificationState) => void;
+    let resolveB!: (s: PatchClassificationState) => void;
+    const pendingA = new Promise<PatchClassificationState>((r) => {
+      resolveA = r;
+    });
+    const pendingB = new Promise<PatchClassificationState>((r) => {
+      resolveB = r;
+    });
+    putPatchClassificationMock
+      .mockReturnValueOnce(pendingA)
+      .mockReturnValueOnce(pendingB);
+
+    render(<PatchClassificationPanel caseId="case-1" pickedFaceId={null} />);
+    await screen.findByTestId("patch-classification-panel");
+
+    // Issue A (inlet → no_slip_wall) then B (outlet → symmetry).
+    await userEvent.selectOptions(
+      screen.getByTestId("override-select-inlet"),
+      "no_slip_wall",
+    );
+    await userEvent.selectOptions(
+      screen.getByTestId("override-select-outlet"),
+      "symmetry",
+    );
+
+    // Resolve B first (newest), then A (stale). The stale A response
+    // claims overrides={inlet: no_slip_wall} only, dropping outlet.
+    // The panel must NOT regress to that state.
+    resolveB({
+      ...baseState,
+      overrides: { inlet: "no_slip_wall", outlet: "symmetry" },
+    });
+    resolveA({
+      ...baseState,
+      overrides: { inlet: "no_slip_wall" },
+    });
+
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByTestId(
+            "override-select-outlet",
+          ) as HTMLSelectElement
+        ).value,
+      ).toBe("symmetry");
+    });
+    // And inlet's override stays from B's payload — not regressed.
+    expect(
+      (
+        screen.getByTestId("override-select-inlet") as HTMLSelectElement
+      ).value,
+    ).toBe("no_slip_wall");
+  });
+
+  // ─── Codex R1 P1 #2 closure · caseId mid-flight ───
+  // The parent mounts the panel with key={caseId}, so a caseId switch
+  // remounts and starts fresh. As an extra defense, the panel itself
+  // bumps stateGenRef on caseId change so even an in-flight GET from
+  // the previous case is dropped before it can rehydrate the new one.
+  it("drops a stale GET that resolves after caseId changes", async () => {
+    let resolveOld!: (s: PatchClassificationState) => void;
+    const oldGet = new Promise<PatchClassificationState>((r) => {
+      resolveOld = r;
+    });
+    const newState: PatchClassificationState = {
+      ...baseState,
+      case_id: "case-2",
+      overrides: { inlet: "velocity_inlet" },
+    };
+    getPatchClassificationMock
+      .mockReturnValueOnce(oldGet)
+      .mockResolvedValueOnce(newState);
+
+    const { rerender } = render(
+      <PatchClassificationPanel caseId="case-1" pickedFaceId={null} />,
+    );
+    // Switch to case-2 BEFORE the case-1 GET resolves.
+    rerender(<PatchClassificationPanel caseId="case-2" pickedFaceId={null} />);
+
+    // Now resolve the stale case-1 GET with surprising data; it must
+    // not land because the generation token has moved.
+    resolveOld({ ...baseState, overrides: { wall_left: "symmetry" } });
+
+    // The case-2 fetch should win — the inlet override is the marker.
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByTestId("override-select-inlet") as HTMLSelectElement
+        ).value,
+      ).toBe("velocity_inlet");
+    });
+    // wall_left from the stale response must NOT have leaked through.
+    expect(
+      (
+        screen.getByTestId(
+          "override-select-wall_left",
+        ) as HTMLSelectElement
+      ).value,
+    ).toBe("");
   });
 });

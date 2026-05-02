@@ -18,7 +18,7 @@
 // only ever populates from out-of-band scripts, which defeats the
 // "human can freely select+edit" half of the workbench charter.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
 import type {
@@ -49,6 +49,22 @@ interface PatchClassificationPanelProps {
   pickedFaceId: string | null;
 }
 
+/** Codex R1 P3 closure: pull the structured ``failing_check`` /
+ *  ``detail`` payload out of an ``ApiError`` if present, otherwise
+ *  fall back to the bare error message. Used by both the initial
+ *  GET path and the per-row save path so error UX is consistent.
+ */
+function formatApiErrorDetail(e: unknown): string {
+  if (e instanceof ApiError && e.detail && typeof e.detail === "object") {
+    const detail = e.detail as { failing_check?: string; detail?: string };
+    if (detail.failing_check) {
+      return `${detail.failing_check}${detail.detail ? `: ${detail.detail}` : ""}`;
+    }
+  }
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
 export function PatchClassificationPanel({
   caseId,
   pickedFaceId,
@@ -63,25 +79,60 @@ export function PatchClassificationPanel({
   const [rowError, setRowError] = useState<Record<string, string>>({});
   const [savingPatch, setSavingPatch] = useState<string | null>(null);
 
-  // Fetch state on mount + whenever the case changes.
+  // Codex R1 P1 #1 closure: monotonically-increasing token bumped on
+  // every state-mutating dispatch. handleChange / load capture the
+  // value at request start and only commit setState if the token
+  // hasn't moved. This prevents two concurrent edits to different
+  // patches from regressing the UI to whichever response happened to
+  // resolve last. See PatchClassificationPanel.test.tsx
+  // "rejects out-of-order resolutions".
+  //
+  // Codex R1 P1 #2 closure (defense in depth): the parent already
+  // mounts the panel as <PatchClassificationPanel key={caseId} ... />
+  // so a caseId switch fully remounts and restarts these refs. The
+  // caseId-change effect below is belt-and-braces in case a future
+  // refactor drops the key prop.
+  const stateGenRef = useRef(0);
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
+
+  // Codex R1 P1 #2 closure: proactively wipe case-scoped local state
+  // the moment caseId changes, BEFORE the new fetches resolve. Without
+  // this, the engineer would briefly see case A's overrides under
+  // case B's URL even with the parent's key prop missing. With the
+  // key prop in place, this effect runs on mount only and is a no-op.
+  useEffect(() => {
+    stateGenRef.current += 1;
+    setState(null);
+    setLoadError(null);
+    setFaceIndex(null);
+    setRowError({});
+    setSavingPatch(null);
+  }, [caseId]);
+
+  // Fetch state on mount + whenever the case changes. The captured
+  // ``generation`` lets us drop late responses from a previous case.
   useEffect(() => {
     if (!caseId) return;
-    let cancelled = false;
+    const generation = stateGenRef.current;
+    const isStale = () =>
+      cancelledRef.current || stateGenRef.current !== generation;
     api
       .getPatchClassification(caseId)
       .then((doc) => {
-        if (cancelled) return;
+        if (isStale()) return;
         setState(doc);
         setLoadError(null);
       })
       .catch((e) => {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        setLoadError(msg);
+        if (isStale()) return;
+        setLoadError(formatApiErrorDetail(e));
       });
-    return () => {
-      cancelled = true;
-    };
   }, [caseId]);
 
   // FaceIndex is only needed to resolve picked-face → patch. Fetch
@@ -89,19 +140,18 @@ export function PatchClassificationPanel({
   // and we just degrade to "no highlight on pick".
   useEffect(() => {
     if (!caseId) return;
-    let cancelled = false;
+    const generation = stateGenRef.current;
+    const isStale = () =>
+      cancelledRef.current || stateGenRef.current !== generation;
     api
       .getFaceIndex(caseId)
       .then((doc) => {
-        if (!cancelled) setFaceIndex(doc);
+        if (!isStale()) setFaceIndex(doc);
       })
       .catch(() => {
         // Non-fatal — picked-face highlight just won't activate.
-        if (!cancelled) setFaceIndex(null);
+        if (!isStale()) setFaceIndex(null);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [caseId]);
 
   // Resolve picked face_id → patch_name using FaceIndex primitives.
@@ -117,7 +167,14 @@ export function PatchClassificationPanel({
 
   const handleChange = useCallback(
     async (patchName: string, nextValue: string) => {
-      if (!state) return;
+      // Bump the generation BEFORE issuing the request — any in-flight
+      // sibling request now becomes "stale" and its post-resolve
+      // setState will be dropped (Codex R1 P1 #1 closure).
+      stateGenRef.current += 1;
+      const generation = stateGenRef.current;
+      const isStale = () =>
+        cancelledRef.current || stateGenRef.current !== generation;
+
       setSavingPatch(patchName);
       setRowError((prev) => {
         if (!(patchName in prev)) return prev;
@@ -134,24 +191,16 @@ export function PatchClassificationPanel({
             bc_class: nextValue as BCClassValue,
           });
         }
+        if (isStale()) return;
         setState(next);
       } catch (e) {
-        // Surface the backend's failing_check string when present —
-        // it's the most actionable bit for the engineer (e.g.
-        // "patch_not_in_mesh" tells them the mesh changed under them).
-        let msg = e instanceof Error ? e.message : String(e);
-        if (e instanceof ApiError && e.detail && typeof e.detail === "object") {
-          const detail = e.detail as { failing_check?: string; detail?: string };
-          if (detail.failing_check) {
-            msg = `${detail.failing_check}${detail.detail ? `: ${detail.detail}` : ""}`;
-          }
-        }
-        setRowError((prev) => ({ ...prev, [patchName]: msg }));
+        if (isStale()) return;
+        setRowError((prev) => ({ ...prev, [patchName]: formatApiErrorDetail(e) }));
       } finally {
-        setSavingPatch(null);
+        if (!isStale()) setSavingPatch(null);
       }
     },
-    [caseId, state],
+    [caseId],
   );
 
   if (loadError) {
