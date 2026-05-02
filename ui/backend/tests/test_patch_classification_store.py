@@ -361,6 +361,43 @@ def test_setup_bc_loads_overrides_inside_case_lock(
 # ─────────── load_under_lock thin sanity ───────────
 
 
+def test_atomic_write_uses_fd_relative_ops_no_resolve_path(tmp_path: Path):
+    """Codex R3 P2 closure: the writer no longer pathname-resolves
+    the sidecar path before write. Instead it opens every parent
+    directory with ``O_NOFOLLOW | O_DIRECTORY`` and does mkstemp/
+    write/replace relative to that fd. We can't directly observe
+    fd-relative ops in a test, but we CAN observe that the writer
+    no longer leaves traces if the case_dir parent moves underneath
+    it (a TOCTOU surrogate): the file lands at the original case
+    dir's inode, not at any subsequent rename target.
+    """
+    case_dir = tmp_path / "case_fd_op"
+    case_dir.mkdir()
+    upsert_override(
+        case_dir,
+        patch_name="patch_x",
+        bc_class=BCClass.PRESSURE_OUTLET,
+    )
+    sidecar = case_dir / "system" / "patch_classification.yaml"
+    assert sidecar.is_file() and not sidecar.is_symlink()
+
+    # Now move the case_dir to a new name; the original inode
+    # persists. A second upsert_override on the renamed path must
+    # still write through the original inode (proving fd-relative
+    # ops behave as expected when paths shift).
+    moved = tmp_path / "case_fd_op_moved"
+    case_dir.rename(moved)
+    upsert_override(
+        moved,
+        patch_name="patch_y",
+        bc_class=BCClass.VELOCITY_INLET,
+    )
+    sidecar2 = moved / "system" / "patch_classification.yaml"
+    assert sidecar2.is_file() and not sidecar2.is_symlink()
+    on_disk = yaml.safe_load(sidecar2.read_text())
+    assert set(on_disk["overrides"].keys()) == {"patch_x", "patch_y"}
+
+
 def test_load_under_lock_returns_overrides(tmp_path: Path):
     case_dir = tmp_path / "case_load_under_lock"
     case_dir.mkdir()

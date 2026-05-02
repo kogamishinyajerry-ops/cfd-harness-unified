@@ -33,8 +33,10 @@ Hardening (Codex DEC-V61-108 R1):
 """
 from __future__ import annotations
 
+import errno
 import os
-import tempfile
+import secrets
+import stat
 from pathlib import Path
 
 import yaml
@@ -83,128 +85,224 @@ class PatchClassificationIOError(RuntimeError):
         self.failing_check = failing_check
 
 
-def _resolve_sidecar_path(case_dir: Path) -> Path:
-    """Resolve ``<case_dir>/system/patch_classification.yaml`` and
-    assert NO path component (including the leaf) is a symlink.
+_SIDECAR_DIR_REL = "system"
+_SIDECAR_FILE_NAME = "patch_classification.yaml"
 
-    Codex DEC-V61-108 R2 P1 closure: the prior implementation only
-    checked containment after ``resolve()``, which accepted in-tree
-    symlinks like ``patch_classification.yaml -> system/controlDict``.
-    A subsequent ``os.replace`` then silently overwrote the symlink
-    target — the engineer's authored ``controlDict`` in this example.
 
-    The fix walks each component from ``case_root`` down to the leaf
-    and rejects any symlink, regardless of where it points. Combined
-    with the existing containment check (kept as defense-in-depth),
-    this denies both out-of-tree and in-tree symlink redirects.
+def _open_dir_no_follow(parent_fd: int | None, name: str) -> int:
+    """Open a directory by name with ``O_NOFOLLOW | O_DIRECTORY``.
+
+    If ``parent_fd`` is ``None`` ``name`` is interpreted absolutely;
+    otherwise it is resolved relative to ``parent_fd`` (POSIX
+    ``openat`` semantics via Python's ``dir_fd=`` parameter). Maps
+    every error to a ``symlink_escape`` ``PatchClassificationIOError``
+    so the caller can return a uniform 422 instead of bubbling raw
+    OSError as a 500.
     """
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        if parent_fd is None:
+            return os.open(name, flags)
+        return os.open(name, flags, dir_fd=parent_fd)
+    except OSError as exc:
+        # ELOOP — symlink at this component (O_NOFOLLOW refusal)
+        # ENOTDIR — non-directory planted (e.g. regular file)
+        # ENOENT — caller is responsible for mkdir-then-retry; we
+        #          surface as symlink_escape so a missing-parent path
+        #          is still uniform.
+        raise PatchClassificationIOError(
+            f"refusing to traverse {name!r} (errno {exc.errno}: "
+            f"{exc.strerror}) — possible symlink escape or "
+            f"missing parent",
+            failing_check="symlink_escape",
+        ) from exc
+
+
+def _atomic_write_under_case(
+    case_dir: Path, *, payload: dict
+) -> None:
+    """Race-free atomic write of the sidecar.
+
+    Codex DEC-V61-108 R3 P2 closure: the previous design preflighted
+    the path then later opened by name, leaving a TOCTOU window
+    where ``system/`` could be swapped to a symlink between
+    validation and write. The fix opens every directory ancestor
+    with ``O_NOFOLLOW | O_DIRECTORY`` and does **every** subsequent
+    operation (mkstemp-equivalent, fdopen, os.replace) relative to
+    that fd. An attacker who swaps the directory after our open
+    sees no effect — our fd still references the original inode,
+    not the symlink target.
+
+    Steps:
+        1. open(case_dir) with O_NOFOLLOW + O_DIRECTORY → fd_case.
+        2. mkdir("system", dir_fd=fd_case) if missing (tolerate
+           EEXIST).
+        3. open("system", dir_fd=fd_case) with O_NOFOLLOW +
+           O_DIRECTORY → fd_system. ELOOP here proves the dir was
+           a symlink at the time of open (whether planted before or
+           racing with us — either way we refuse).
+        4. Generate random tmp name via ``secrets.token_hex``.
+        5. open(tmp, dir_fd=fd_system) with O_WRONLY | O_CREAT |
+           O_EXCL | O_NOFOLLOW → fd_tmp. EEXIST is statistically
+           impossible with 16-byte randomness; if it does happen,
+           we retry once.
+        6. fdopen(fd_tmp, "w") → write text.
+        7. os.replace(tmp, sidecar_name, src_dir_fd=fd_system,
+           dst_dir_fd=fd_system) — atomic, fd-relative.
+        8. Always close fd_system + fd_case in a finally block.
+
+    Note that this implementation deliberately bypasses
+    ``tempfile.mkstemp`` (which doesn't accept ``dir_fd``) and
+    ``Path``-based resolution entirely once the case_dir fd is
+    open.
+    """
+    text = yaml.safe_dump(payload, sort_keys=True, default_flow_style=False)
+
     if not case_dir.exists():
         raise PatchClassificationIOError(
             f"case directory does not exist: {case_dir}",
             failing_check="case_dir_missing",
         )
-    try:
-        case_root = case_dir.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise PatchClassificationIOError(
-            f"could not resolve case directory: {case_dir}: {exc}",
-            failing_check="case_dir_missing",
-        ) from exc
 
-    # Walk every component from case_root → sidecar leaf. Reject if
-    # any is a symlink, even if its target lands inside case_root.
-    sidecar = case_root / _PATCH_CLASSIFICATION_REL
-    rel_parts = Path(_PATCH_CLASSIFICATION_REL).parts
-    cursor = case_root
-    for part in rel_parts:
-        cursor = cursor / part
+    fd_case = _open_dir_no_follow(None, str(case_dir))
+    try:
+        # Ensure system/ exists. mkdir refuses to create through a
+        # symlink that already exists at the path (it returns EEXIST
+        # whether the existing entry is a real dir or a symlink),
+        # so a planted symlink can't trick us into creating
+        # something elsewhere; the subsequent O_NOFOLLOW open will
+        # detect the symlink and abort.
         try:
-            is_link = cursor.is_symlink()
+            os.mkdir(_SIDECAR_DIR_REL, mode=0o755, dir_fd=fd_case)
+        except FileExistsError:
+            pass
         except OSError as exc:
             raise PatchClassificationIOError(
-                f"could not stat sidecar component {cursor}: {exc}",
-                failing_check="symlink_escape",
+                f"could not mkdir {_SIDECAR_DIR_REL}: {exc}",
+                failing_check="write_failed",
             ) from exc
-        if is_link:
-            raise PatchClassificationIOError(
-                f"refusing symlinked sidecar component at {cursor} — "
-                f"writes through symlinks (even in-tree) are denied",
-                failing_check="symlink_escape",
+
+        fd_system = _open_dir_no_follow(fd_case, _SIDECAR_DIR_REL)
+        try:
+            # Belt-and-braces: if a symlink already exists at the
+            # sidecar leaf, refuse before writing. ``rename(2)``
+            # operates on directory entries, so the subsequent
+            # ``os.replace`` would only replace the symlink entry
+            # (the target file is preserved), but a strict refusal
+            # surfaces the misconfiguration to the engineer instead
+            # of silently swapping the link out. The lstat is
+            # fd-relative + follow_symlinks=False, so a planted
+            # symlink that races our open of fd_system can't make
+            # this check follow it.
+            try:
+                leaf_st = os.stat(
+                    _SIDECAR_FILE_NAME,
+                    dir_fd=fd_system,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass  # No prior sidecar; clean write.
+            except OSError as exc:
+                raise PatchClassificationIOError(
+                    f"could not lstat sidecar leaf: {exc}",
+                    failing_check="symlink_escape",
+                ) from exc
+            else:
+                if stat.S_ISLNK(leaf_st.st_mode):
+                    raise PatchClassificationIOError(
+                        f"refusing pre-existing symlink at sidecar "
+                        f"leaf {_SIDECAR_FILE_NAME!r}",
+                        failing_check="symlink_escape",
+                    )
+
+            tmp_name = _atomic_create_tmp_file(
+                fd_system, text=text
             )
+            # Atomic rename relative to the same vetted directory
+            # fd. An attacker who swaps system/ AFTER we opened
+            # fd_system cannot affect this rename — it operates on
+            # the original inode our fd still references.
+            try:
+                os.replace(
+                    tmp_name,
+                    _SIDECAR_FILE_NAME,
+                    src_dir_fd=fd_system,
+                    dst_dir_fd=fd_system,
+                )
+            except OSError as exc:
+                # Best-effort cleanup on rename failure.
+                try:
+                    os.unlink(tmp_name, dir_fd=fd_system)
+                except OSError:
+                    pass
+                raise PatchClassificationIOError(
+                    f"could not replace {_SIDECAR_FILE_NAME} via "
+                    f"fd-relative rename: {exc}",
+                    failing_check="write_failed",
+                ) from exc
+        finally:
+            try:
+                os.close(fd_system)
+            except OSError:
+                pass
+    finally:
+        try:
+            os.close(fd_case)
+        except OSError:
+            pass
 
-    # Defense-in-depth: even though the per-component check above
-    # makes this redundant for the symlink-redirect class, the
-    # containment check below still catches any future regression
-    # (e.g. ``..`` in the relpath, hardlink-style escape).
-    try:
-        resolved = sidecar.resolve(strict=False)
-    except (OSError, RuntimeError) as exc:
-        raise PatchClassificationIOError(
-            f"could not resolve sidecar path: {sidecar}: {exc}",
-            failing_check="symlink_escape",
-        ) from exc
-    try:
-        resolved.relative_to(case_root)
-    except ValueError as exc:
-        raise PatchClassificationIOError(
-            f"sidecar path escapes case root: "
-            f"resolved={resolved}, case_root={case_root}",
-            failing_check="symlink_escape",
-        ) from exc
-    # Return the unresolved path: ``os.replace`` then operates on the
-    # exact ``case_root/system/patch_classification.yaml`` we vetted
-    # rather than a symlink-resolved alias of it.
-    return sidecar
 
+def _atomic_create_tmp_file(
+    fd_system: int, *, text: str, max_retries: int = 3
+) -> str:
+    """Create a unique temp file inside the directory referred to
+    by ``fd_system`` and write ``text`` to it. Returns the tmp
+    filename (relative to fd_system) so the caller can rename it
+    into the final sidecar name.
 
-def _atomic_write(path: Path, payload: dict) -> None:
-    """Serialize ``payload`` to YAML and atomically replace ``path``.
-
-    Uses ``tempfile.mkstemp`` so the temp file name is random per
-    call (immune to symlink planting at the legacy fixed name) and
-    ``os.replace`` for the atomic rename. The destination
-    containment was already enforced by ``_resolve_sidecar_path``;
-    here we only need to ensure the temp lives next to the target
-    so the replace is on the same filesystem (atomic on POSIX).
+    Uses ``O_NOFOLLOW | O_CREAT | O_EXCL`` so that:
+      * If a file (or symlink) exists at the random name, EEXIST.
+      * If the random name is a symlink at create time, ELOOP.
+    Both retry up to ``max_retries`` times.
     """
-    text = yaml.safe_dump(payload, sort_keys=True, default_flow_style=False)
-    parent = path.parent
-    parent.mkdir(parents=True, exist_ok=True)
-    try:
-        fd, tmp_str = tempfile.mkstemp(
-            prefix="patch_classification.",
-            suffix=".tmp",
-            dir=str(parent),
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    last_exc: OSError | None = None
+    for _ in range(max_retries):
+        tmp_name = (
+            f"patch_classification.{secrets.token_hex(8)}.tmp"
         )
-    except OSError as exc:
-        raise PatchClassificationIOError(
-            f"could not create temp file in {parent}: {exc}",
-            failing_check="write_failed",
-        ) from exc
-    tmp = Path(tmp_str)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fp:
-            fp.write(text)
-    except OSError as exc:
         try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise PatchClassificationIOError(
-            f"could not write temp {tmp}: {exc}",
-            failing_check="write_failed",
-        ) from exc
-    try:
-        os.replace(str(tmp), str(path))
-    except OSError as exc:
+            fd_tmp = os.open(
+                tmp_name, flags, 0o600, dir_fd=fd_system
+            )
+        except OSError as exc:
+            if exc.errno in (errno.EEXIST, errno.ELOOP):
+                # Race: another writer or a planted symlink. Retry
+                # with a fresh random suffix.
+                last_exc = exc
+                continue
+            raise PatchClassificationIOError(
+                f"could not create temp file {tmp_name!r}: {exc}",
+                failing_check="write_failed",
+            ) from exc
         try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise PatchClassificationIOError(
-            f"could not replace {path}: {exc}",
-            failing_check="write_failed",
-        ) from exc
+            with os.fdopen(fd_tmp, "w", encoding="utf-8") as fp:
+                fp.write(text)
+        except OSError as exc:
+            try:
+                os.unlink(tmp_name, dir_fd=fd_system)
+            except OSError:
+                pass
+            raise PatchClassificationIOError(
+                f"could not write temp file {tmp_name!r}: {exc}",
+                failing_check="write_failed",
+            ) from exc
+        return tmp_name
+    raise PatchClassificationIOError(
+        f"could not create unique temp file after {max_retries} "
+        f"retries: {last_exc}",
+        failing_check="write_failed",
+    )
 
 
 def _payload(overrides: dict[str, BCClass]) -> dict:
@@ -234,15 +332,14 @@ def upsert_override(
     state.
 
     Acquires ``case_lock`` (same lock as setup_bc, so concurrent
-    setup-bc cannot interleave with this update) and uses the
-    symlink-safe write path.
+    setup-bc cannot interleave with this update) and writes via
+    the race-free fd-based ``_atomic_write_under_case``.
     """
-    sidecar = _resolve_sidecar_path(case_dir)
     try:
         with case_lock(case_dir):
             overrides = load_patch_classification_overrides(case_dir)
             overrides[patch_name] = bc_class
-            _atomic_write(sidecar, _payload(overrides))
+            _atomic_write_under_case(case_dir, payload=_payload(overrides))
             return overrides
     except CaseLockError as exc:
         raise PatchClassificationIOError(
@@ -256,12 +353,11 @@ def delete_override(
 ) -> dict[str, BCClass]:
     """Atomically remove one override (no-op if absent) and return
     the merged state. Same lock semantics as ``upsert_override``."""
-    sidecar = _resolve_sidecar_path(case_dir)
     try:
         with case_lock(case_dir):
             overrides = load_patch_classification_overrides(case_dir)
             overrides.pop(patch_name, None)
-            _atomic_write(sidecar, _payload(overrides))
+            _atomic_write_under_case(case_dir, payload=_payload(overrides))
             return overrides
     except CaseLockError as exc:
         raise PatchClassificationIOError(
