@@ -843,6 +843,45 @@ def test_user_override_controldict_with_commented_icofoam_proceeds(tmp_path: Pat
     assert "system/controlDict" in r2.skipped_user_overrides
 
 
+def test_user_override_controldict_with_block_commented_icofoam_proceeds(tmp_path: Path):
+    """DEC-V61-107.5 / Codex R17 P3: an ``application icoFoam;`` token
+    wrapped in a C-style block comment ``/* ... */`` must not trigger
+    the static guard. OpenFOAM strips block comments at parse time,
+    so it sees only the live ``application pimpleFoam;`` and runs the
+    pimple-friendly authored dicts unchanged."""
+    case_dir = tmp_path / "block_commented_appl"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="block_commented_appl")
+
+    custom = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "/* old config kept for posterity:\n"
+        "   application icoFoam;\n"
+        "   endTime 100;\n"
+        "*/\n"
+        "application pimpleFoam;\n"
+        "endTime 999;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom)
+    mark_user_override(
+        case_dir, relative_path="system/controlDict",
+        new_content=custom.encode("utf-8"),
+        detail={"reason": "block-commented historical config"},
+    )
+
+    r2 = setup_bc_from_stl_patches(case_dir, case_id="block_commented_appl")
+    assert "system/controlDict" in r2.skipped_user_overrides
+
+
 def test_piso_block_inline_brace_proceeds_without_static_guard(tmp_path: Path):
     """DEC-V61-107.5 / Codex R16 closure (scope reduction): inline-
     brace PISO blocks in fvSolution are no longer caught by the

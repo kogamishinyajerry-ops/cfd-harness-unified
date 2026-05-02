@@ -128,6 +128,15 @@ _CONT_LINE = re.compile(
     r"([0-9.eE+-]+),\s+global\s*=\s*([0-9.eE+-]+)"
 )
 _FOAM_FATAL = re.compile(r"^--> FOAM FATAL ERROR")
+# DEC-V61-107.5 / Codex R17 P1: extract the FOAM FATAL block from the
+# captured log so the `done` summary can carry an actionable
+# `failed_reason`. OpenFOAM fatal blocks are bounded by the FATAL
+# header and the trailing `FOAM exiting` token; if `FOAM exiting` is
+# missing (truncated log), we fall back to ~12 lines after the header.
+_FOAM_FATAL_BLOCK = re.compile(
+    r"-->\s*FOAM FATAL (?:ERROR|IO ERROR).*?(?:FOAM exiting|\Z)",
+    re.DOTALL,
+)
 
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:
@@ -591,6 +600,23 @@ def stream_icofoam(
         converged = (
             _is_converged(parsed, end_t_cfg, dt_cfg) and not fatal_seen[0]
         )
+        # DEC-V61-107.5 / Codex R17 P1: when the solver hit a FOAM
+        # FATAL, extract the block from the persisted log and surface
+        # it in the terminal `done` event. This makes runtime
+        # divergence (incompatible fvSchemes/fvSolution overrides
+        # plus any solver-level fault) actionable for the engineer
+        # without depending on a brittle pre-flight regex guard.
+        failed = bool(fatal_seen[0])
+        failed_reason: str | None = None
+        if failed:
+            log_text = log_buf.getvalue().decode("utf-8", errors="replace")
+            m = _FOAM_FATAL_BLOCK.search(log_text)
+            if m:
+                # Trim to a manageable size: front-load the FATAL line,
+                # cap at ~2KB to keep the SSE payload small.
+                failed_reason = m.group(0).strip()[:2048]
+            else:
+                failed_reason = "FOAM FATAL ERROR observed; see log for details."
         summary = {
             "case_id": case_host_dir.name,
             "end_time_reached": float(parsed["end_time_reached"]),
@@ -605,6 +631,8 @@ def stream_icofoam(
             "time_directories": sorted(pulled, key=lambda s: float(s)),
             "wall_time_s": float(parsed["wall_clock"]),
             "converged": converged,
+            "failed": failed,
+            "failed_reason": failed_reason,
         }
         yield _sse("done", summary)
     finally:

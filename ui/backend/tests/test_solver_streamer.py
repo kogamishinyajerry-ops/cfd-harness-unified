@@ -504,3 +504,99 @@ def test_generator_close_releases_run_id_mid_loop(tmp_path, monkeypatch):
     assert "case_disconnect" not in _active_runs, (
         "GeneratorExit mid-loop must release the per-case run lock"
     )
+
+
+# ────────── DEC-V61-107.5 / Codex R17 P1: failed_reason in `done` ──────────
+
+
+def test_done_event_carries_failed_reason_when_fatal_observed(
+    tmp_path, monkeypatch
+):
+    """When the streamed log contains a FOAM FATAL block, the terminal
+    `done` event must expose ``failed=True`` and a ``failed_reason``
+    string carrying the FATAL block. Replaces the static fvSchemes/
+    fvSolution pre-flight guard the R16 closure removed (R17 P1)."""
+    import json
+
+    from ui.backend.services.case_solve.solver_streamer import (
+        _prepare_stream_icofoam,
+        stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_fatal"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    fatal_log = (
+        b"Time = 0.005s\n"
+        b"--> FOAM FATAL ERROR: \n"
+        b"keyword div((nuEff*dev2(T(grad(U))))) is undefined in dictionary\n"
+        b"\"system/fvSchemes::divSchemes\"\n"
+        b"\n"
+        b"    From function void Foam::dictionary::lookupEntry(...) const\n"
+        b"    in file db/dictionary/dictionary.C at line 480.\n"
+        b"\n"
+        b"FOAM exiting\n"
+    )
+    container = _FakeContainer(status="running", exec_lines=[fatal_log])
+    _install_fake_docker(monkeypatch, container)
+
+    prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    events = list(stream_icofoam(prepared=prepared))
+
+    # Last event must be the `done` summary.
+    last = events[-1]
+    assert last.startswith(b"event: done"), (
+        "stream must terminate with a `done` event"
+    )
+    payload_line = next(
+        ln for ln in last.splitlines() if ln.startswith(b"data: ")
+    )
+    summary = json.loads(payload_line[len(b"data: "):])
+
+    assert summary["failed"] is True, (
+        "fatal_seen → summary.failed must be True"
+    )
+    assert summary["failed_reason"] is not None, (
+        "fatal block must be exposed via failed_reason for actionable UX"
+    )
+    assert "div((nuEff*dev2(T(grad(U)))))" in summary["failed_reason"], (
+        "failed_reason must carry the FATAL block content (the engineer "
+        "needs the offending keyword in front of them)"
+    )
+    assert summary["converged"] is False
+
+
+def test_done_event_failed_false_when_no_fatal(
+    tmp_path, monkeypatch
+):
+    """Negative case: a clean run emits ``failed=False`` and
+    ``failed_reason=None``. Pins down the contract change so future
+    refactors don't accidentally drop the field."""
+    import json
+
+    from ui.backend.services.case_solve.solver_streamer import (
+        _prepare_stream_icofoam,
+        stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_clean"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    container = _FakeContainer(
+        status="running", exec_lines=[b"Time = 0.005s\nEnd\n"]
+    )
+    _install_fake_docker(monkeypatch, container)
+
+    prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    events = list(stream_icofoam(prepared=prepared))
+
+    last = events[-1]
+    payload_line = next(
+        ln for ln in last.splitlines() if ln.startswith(b"data: ")
+    )
+    summary = json.loads(payload_line[len(b"data: "):])
+
+    assert summary["failed"] is False
+    assert summary["failed_reason"] is None

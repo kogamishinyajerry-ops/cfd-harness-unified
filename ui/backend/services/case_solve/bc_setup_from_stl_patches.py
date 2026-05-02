@@ -484,15 +484,13 @@ _ICOFOAM_APPLICATION_RE = re.compile(
     r"^\s*application\s+icoFoam\s*;",
     re.MULTILINE,
 )
-# Comment stripping for the `application` regex. R16 P3 fix:
-# C++/OpenFOAM comment precedence is line-first then block, but
-# both regexes operating on the same input is fundamentally fragile
-# (Codex R16 caught the precedence flaw). Restrict comment handling
-# to the simple line-comment case which is the dominant form in
-# OpenFOAM dicts; block comments inside controlDict are vanishingly
-# rare and an `application icoFoam;` smuggled inside `/* */` would
-# also confuse OpenFOAM itself.
-_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
+# Comment stripping for the `application` regex. R17 P3 closure:
+# strip both line `// ...` and block `/* ... */` comments in a single
+# alternation pass to avoid the precedence flaw that bit R15. Using
+# alternation rather than two sequential subs keeps each match
+# independent, so a `// /* */` line is correctly handled by the line
+# branch and a `/* // */` block by the block branch.
+_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 
 def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
@@ -522,7 +520,7 @@ def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
         raw = (case_dir / rel).read_text()
     except OSError:
         return [rel]
-    content = _LINE_COMMENT_RE.sub("", raw)
+    content = _COMMENT_RE.sub("", raw)
     if _ICOFOAM_APPLICATION_RE.search(content):
         return [rel]
     return []
