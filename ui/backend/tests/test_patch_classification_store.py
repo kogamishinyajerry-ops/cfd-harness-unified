@@ -699,10 +699,25 @@ def test_symlink_escape_documented_residual_lockfile_leak(
         "to symlink target on swap-during-PUT race (case_lock layer "
         "fix is the proper resolution, tracked as future work)"
     )
-    assert not (empty_decoy / "patch_classification.yaml").exists(), (
-        "but the security-critical sidecar write was correctly "
+    # R10 P2: the store writes to <dir>/system/patch_classification.yaml,
+    # NOT <dir>/patch_classification.yaml at the root. The latter
+    # would never exist regardless of containment correctness, so
+    # asserting on it would let a regression slip through. Check
+    # the actual write target.
+    assert not (
+        empty_decoy / "system" / "patch_classification.yaml"
+    ).exists(), (
+        "the security-critical sidecar write was correctly "
         "refused — no override data was persisted to the external "
-        "target"
+        "target's system/ directory"
+    )
+    # Belt-and-braces: the entire system/ directory should not have
+    # been created in the external target either (the store would
+    # only mkdir it as part of the write path).
+    assert not (empty_decoy / "system").exists(), (
+        "no system/ subdir created in external target — proves the "
+        "store's mkdir + write pipeline never executed against the "
+        "leaked-symlink path"
     )
 
 
