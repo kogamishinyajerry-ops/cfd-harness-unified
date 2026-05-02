@@ -18,7 +18,7 @@ parent_review:
     > ROADMAP §60-day 已勾选项,这是 ROADMAP 状态读取失败,不是"两条独立线"。
     > 如果接受"server hardening 与 client UI 平行演化"作为通用借口,下一次会
     > 变成"在已有 X 旁边重写 X′"的合理化。
-notion_sync_status: pending (sync after Kogami review + Codex DEC-design review)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81c487fbe424d82d524c)
 autonomous_governance: true  # this DEC modifies Claude Code's own startup discipline; does NOT modify Kogami contract or files (P-1..P-5), so §4 skip rule does NOT fire — Kogami review IS required per §4 first item (autonomous_governance rule-change DEC)
 kogami_review_round1_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/review.md
 kogami_review_round2_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md
