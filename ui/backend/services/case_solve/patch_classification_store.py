@@ -119,62 +119,85 @@ def _open_dir_no_follow(parent_fd: int | None, name: str) -> int:
         ) from exc
 
 
-def _cleanup_case_lock_orphan_stub(case_dir: Path) -> None:
+def _cleanup_case_lock_orphan_stub(
+    case_dir: Path, *, allow_symlink_target: bool
+) -> None:
     """Remove the empty ``case_dir`` + ``.case_lock`` that
-    ``case_lock`` re-created on a deleted case path.
+    ``case_lock`` re-created on a deleted case path, OR (when
+    ``allow_symlink_target=True``) the ``.case_lock`` it created
+    inside an external symlink target.
 
-    Codex DEC-V61-108 R6 P2 + R7 P1+P2 closure: tightened to
-    minimize blast radius.
+    Codex DEC-V61-108 R6 P2 + R7 P1+P2 + R8 P1 closure: balances
+    the conflicting demands of:
 
-    Race-safety rules:
+      * R7 P1: don't path-traverse blindly on the symlink_escape
+        branch — would mutate arbitrary external content.
+      * R8 P1: don't leave ``case_lock``'s ``.case_lock`` artifact
+        behind in the symlink target either — it's a containment
+        write we created and must clean up if we can.
 
-    * **R7 P1**: caller MUST gate this on the inode-drift error
-      class. Calling this when ``case_dir`` is currently a symlink
-      (the R6 P3 ``symlink_escape`` path) would let ``iterdir`` /
-      ``unlink`` follow the symlink and mutate an external target.
-      The caller now branches on ``failing_check`` and only
-      invokes us for ``case_dir_missing``.
-    * **R7 P2**: refuse to remove the directory unless
-      ``.case_lock`` is one of its children. Empty-but-no-lockfile
-      means we're not authoritative for this dir — another
-      process replaced it independently, or already cleaned up.
-    * Symlink hardening at the call site: open ``case_dir`` with
-      ``O_NOFOLLOW`` before ``iterdir``-equivalent listing so a
-      symlink that gets planted between R5 detection and our
-      cleanup still can't redirect us.
+    The compromise (matching Codex R8's "the previous code at least
+    removed the stray file for empty targets"): cleanup runs on
+    BOTH drift paths, but every removal is gated by "the
+    directory contains EXACTLY ``.case_lock`` and nothing else"
+    (R7 P2). That makes the operation:
+      * safe for empty-target symlink_escape: removes only the
+        artifact we created, leaves any populated target alone.
+      * safe for case_dir_missing: removes only the orphan stub.
 
-    Best-effort: if anything fails (concurrent writer, perms,
-    new symlink), we silently bail. The stub remaining on disk
-    is a UX issue, not a security one — the security boundary
-    (no writes through symlinks, no writes to wrong inode) is
-    already enforced upstream.
+    Differences by branch:
+      * ``case_dir_missing`` (real dir at path): use fd-based
+        ``os.open(O_NOFOLLOW | O_DIRECTORY)`` so a late symlink
+        swap can't redirect listing/unlink; rmdir at the end.
+      * ``symlink_escape`` (symlink at path): the unlink MUST
+        follow the symlink to reach ``case_lock``'s artifact at
+        the target. We use path-based ``os.unlink`` after listing
+        the target via ``os.listdir(case_dir)``. We do NOT rmdir
+        the symlink target (it might be an unrelated dir that
+        legitimately holds other state).
+
+    Best-effort throughout: any OSError silently bails.
     """
-    # Race-safe directory listing: open the path with O_NOFOLLOW
-    # so a symlink that races us can't redirect ``iterdir``.
+    if allow_symlink_target:
+        # Symlink_escape branch: list the target via path (follows
+        # symlink intentionally to reach case_lock's artifact).
+        try:
+            children = sorted(os.listdir(case_dir))
+        except OSError:
+            return
+        if children != [".case_lock"]:
+            # Target has other content — not ours to mutate (R8's
+            # "empty target" qualifier).
+            return
+        try:
+            os.unlink(case_dir / ".case_lock")
+        except OSError:
+            return
+        # Do NOT rmdir the symlink target — it's external and
+        # might be a legitimate (now-empty) dir we shouldn't
+        # erase. The bare symlink at case_dir is left for the
+        # operator to inspect.
+        return
+
+    # case_dir_missing branch: case_dir is now a real dir
+    # (case_lock recreated it via mkdir). Use fd-relative ops so
+    # a late symlink swap can't redirect us.
     try:
         fd_dir = os.open(
             str(case_dir),
             os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
         )
     except OSError:
-        # Not a directory (e.g. symlink swap raced us), or gone,
-        # or perms — nothing safe to clean up.
         return
     try:
         try:
             children = set(os.listdir(fd_dir))
         except OSError:
             return
-        # R7 P2: require .case_lock present as authority signal.
-        # An empty dir without our lockfile is not ours to remove.
         if ".case_lock" not in children:
-            return
-        # R6 P2: only clean up if the lockfile is the ONLY child
-        # (i.e. nothing else has been written into the stub).
+            return  # R7 P2: not our authority
         if children - {".case_lock"}:
-            return
-        # Unlink lockfile via fd-relative op so a symlink that
-        # races us still can't redirect the unlink.
+            return  # not a stub state
         try:
             os.unlink(".case_lock", dir_fd=fd_dir)
         except OSError:
@@ -184,11 +207,6 @@ def _cleanup_case_lock_orphan_stub(case_dir: Path) -> None:
             os.close(fd_dir)
         except OSError:
             pass
-    # rmdir uses path-based open (no fd-relative rmdir on macOS
-    # for arbitrary paths). At this point we've already proved the
-    # dir was a regular directory containing only our lockfile,
-    # which we just unlinked. The remaining race window before
-    # rmdir is small and bounded; failure is tolerated.
     try:
         case_dir.rmdir()
     except OSError:
@@ -534,22 +552,32 @@ def _apply_under_case(
                 try:
                     _assert_fd_still_matches_path(fd_case, case_dir)
                 except PatchClassificationIOError as drift_exc:
-                    # Codex DEC-V61-108 R6 P2 closure (refined R7 P1):
+                    # Codex DEC-V61-108 R6 P2 + R7 + R8 closure:
                     # case_lock has already executed its
-                    # ``mkdir(exist_ok=True)`` and created its lockfile,
-                    # leaving an empty stub at the case_dir path that
-                    # future GET/PUT calls would treat as a live case.
-                    # Best-effort cleanup BEFORE re-raising so the
-                    # caller still sees the original error.
-                    #
-                    # R7 P1: ONLY clean up on the case_dir_missing
-                    # branch (delete-recreate). On the symlink_escape
-                    # branch (case_dir was swapped to a symlink),
-                    # path-based cleanup ops would follow the symlink
-                    # and mutate an external target — exactly the
-                    # containment violation we're trying to prevent.
-                    if drift_exc.failing_check == "case_dir_missing":
-                        _cleanup_case_lock_orphan_stub(case_dir)
+                    # ``mkdir(exist_ok=True)`` and created its
+                    # lockfile, leaving an artifact at either:
+                    #   * the case_dir path (case_dir_missing
+                    #     branch — real dir was recreated), or
+                    #   * the symlink target (symlink_escape branch
+                    #     — case_lock followed the symlink).
+                    # Both leave behind a `.case_lock` we created
+                    # and must clean up (R8 P1 — leaving it behind
+                    # in an external target is itself a containment
+                    # write). The cleanup helper handles both paths
+                    # but uses different traversal ops per branch
+                    # (fd-relative for the real-dir case, path-based
+                    # for the symlink case where we explicitly need
+                    # to follow the symlink to reach our artifact).
+                    # R7 P2 invariant — "only act if the dir
+                    # contains exactly .case_lock" — applies to
+                    # both branches, so populated victim targets
+                    # remain untouched.
+                    _cleanup_case_lock_orphan_stub(
+                        case_dir,
+                        allow_symlink_target=(
+                            drift_exc.failing_check == "symlink_escape"
+                        ),
+                    )
                     raise
                 # We're now serialized against setup_bc and other
                 # PUT/DELETEs on this case. Open system/ via the

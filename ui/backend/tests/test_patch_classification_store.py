@@ -584,15 +584,15 @@ def test_upsert_returns_symlink_escape_when_path_swapped_to_symlink(
     assert not (decoy / "system").exists()
 
 
-def test_cleanup_skipped_on_symlink_escape_path(
+def test_symlink_escape_does_not_mutate_populated_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Codex R7 P1: when the post-lock validation raises
-    ``symlink_escape`` (case_dir replaced by a symlink), the
-    orphan-stub cleanup must NOT run. Path-based ``iterdir`` /
-    ``unlink`` would otherwise follow the symlink and mutate an
-    external target — exactly the containment violation we're
-    trying to prevent.
+    """Codex R7 P1 + R8 P1 closure: when case_dir is swapped to a
+    symlink to a populated directory, the cleanup helper MUST
+    refuse to remove anything. The R7 P2 invariant "only act if
+    dir contains exactly .case_lock" guards us: decoy has both
+    .case_lock and important_file, so cleanup aborts and BOTH
+    files survive.
     """
     from contextlib import contextmanager
 
@@ -604,7 +604,7 @@ def test_cleanup_skipped_on_symlink_escape_path(
     real_dir.mkdir()
     decoy = tmp_path / "decoy_with_lockfile"
     decoy.mkdir()
-    (decoy / ".case_lock").write_text("")  # would-be victim
+    (decoy / ".case_lock").write_text("victim_lock_content")
     (decoy / "important_file").write_text("DO_NOT_LOSE\n")
 
     real_case_lock = mod.case_lock
@@ -620,30 +620,68 @@ def test_cleanup_skipped_on_symlink_escape_path(
 
     monkeypatch.setattr(mod, "case_lock", swap_to_symlink)
 
-    # Spy: track whether cleanup runs.
-    cleanup_called = False
-    real_cleanup = mod._cleanup_case_lock_orphan_stub
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            real_dir, patch_name="x", bc_class=BCClass.SYMMETRY
+        )
+    assert exc_info.value.failing_check == "symlink_escape"
+    # R7 P2 / R8 P1 invariant — populated target is not ours to
+    # clean up; both files survive.
+    assert (decoy / ".case_lock").read_text() == "victim_lock_content"
+    assert (decoy / "important_file").read_text() == "DO_NOT_LOSE\n"
 
-    def spying_cleanup(case_dir):
-        nonlocal cleanup_called
-        cleanup_called = True
-        return real_cleanup(case_dir)
 
-    monkeypatch.setattr(
-        mod, "_cleanup_case_lock_orphan_stub", spying_cleanup
+def test_symlink_escape_cleans_up_lockfile_in_empty_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex R8 P1: when case_dir is swapped to a symlink to an
+    OTHERWISE-EMPTY directory, ``case_lock`` creates ``.case_lock``
+    in the target. The cleanup helper MUST remove that artifact —
+    it's a containment write we created. The R7 P2 "only act if
+    dir contains exactly .case_lock" gate makes this safe: empty-
+    except-our-lock proves we're acting only on what we created.
+
+    The external target directory itself is preserved (we don't
+    rmdir external dirs); the bare symlink at case_dir is left
+    for the operator to inspect.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
     )
+
+    real_dir = tmp_path / "case_real_r8_empty"
+    real_dir.mkdir()
+    empty_decoy = tmp_path / "empty_decoy"
+    empty_decoy.mkdir()
+    # No pre-existing content.
+
+    real_case_lock = mod.case_lock
+
+    @contextmanager
+    def swap_to_symlink_to_empty(cd):
+        import shutil
+
+        shutil.rmtree(cd)
+        cd.symlink_to(empty_decoy, target_is_directory=True)
+        with real_case_lock(cd):
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", swap_to_symlink_to_empty)
 
     with pytest.raises(PatchClassificationIOError) as exc_info:
         upsert_override(
             real_dir, patch_name="x", bc_class=BCClass.SYMMETRY
         )
     assert exc_info.value.failing_check == "symlink_escape"
-    assert not cleanup_called, (
-        "cleanup must NOT run on the symlink_escape path"
+    # R8 P1: case_lock's .case_lock artifact is cleaned up.
+    assert not (empty_decoy / ".case_lock").exists(), (
+        "case_lock's leaked .case_lock must be cleaned up (R8 P1)"
     )
-    # Decoy completely untouched.
-    assert (decoy / ".case_lock").read_text() == ""
-    assert (decoy / "important_file").read_text() == "DO_NOT_LOSE\n"
+    assert empty_decoy.exists() and empty_decoy.is_dir(), (
+        "external target directory itself must be preserved"
+    )
 
 
 def test_cleanup_refuses_to_remove_dir_without_dot_case_lock(
