@@ -821,52 +821,63 @@ def setup_bc_from_stl_patches(
             failing_check="no_named_patches",
         )
 
-    # DEC-V61-108 Phase A: load per-patch user overrides once. Empty
-    # dict when the case has no overrides (the common path).
-    overrides = load_patch_classification_overrides(case_dir)
-    patches_with_class: list[tuple[str, BCClass]] = []
+    # DEC-V61-108 Phase A · Codex R1 P2: classification, inlet-velocity
+    # synthesis, and plan-build all happen INSIDE the case_lock below
+    # so a concurrent PUT /patch-classification cannot land between
+    # override-read and dict-author. Pre-lock state below is limited
+    # to caller arguments + read-only polyMesh ground truth.
     warnings: list[str] = []
-    for name in patch_names:
-        cls, warning = _classify_patch(name, overrides=overrides)
-        patches_with_class.append((name, cls))
-        if warning:
-            warnings.append(warning)
-
-    # Defect-6 fix: compute per-patch inward normals so velocity inlets
-    # get flow direction matching the actual patch orientation. For
-    # axis-aligned cases this still resolves to ±x/±y/±z (matching the
-    # iter02/iter03 pre-defect-6 behavior); for rotated geometries
-    # (iter04 Codex L-bend) it produces the correct rotated direction.
-    inward_normals = _compute_patch_inward_normals(case_dir, patch_ranges)
-    inlet_u_per_patch: dict[str, tuple[float, float, float]] = {}
-    fallback_axis = np.array([1.0, 0.0, 0.0])
-    for name, cls in patches_with_class:
-        if cls != BCClass.VELOCITY_INLET:
-            continue
-        n_in = inward_normals.get(name, np.zeros(3))
-        if float(np.linalg.norm(n_in)) < 1e-9:
-            # Degenerate patch (no readable faces) — fall back to +x
-            # axis. Engineers can override via raw-dict editor.
-            n_in = fallback_axis
-            warnings.append(
-                f"patch {name!r}: could not read face normals from "
-                f"polyMesh; defaulting inlet velocity to {inlet_speed} "
-                f"m/s along +x. Override via raw-dict editor if the "
-                f"geometry isn't axis-aligned."
-            )
-        u_vec = inlet_speed * n_in
-        inlet_u_per_patch[name] = (float(u_vec[0]), float(u_vec[1]), float(u_vec[2]))
-
-    plan = _build_dict_plan(
-        patches_with_class,
-        inlet_u_per_patch=inlet_u_per_patch,
-        nu=nu,
-        delta_t=delta_t,
-        end_time=end_time,
-    )
 
     try:
         with case_lock(case_dir):
+            # DEC-V61-108 R1 P2: load overrides + classify INSIDE the
+            # lock. Same critical section as the dict commit below, so
+            # the on-disk dicts and the saved override state agree on
+            # exit (no observable interleaving with route PUT/DELETE,
+            # which take the same lock).
+            overrides = load_patch_classification_overrides(case_dir)
+            patches_with_class: list[tuple[str, BCClass]] = []
+            for name in patch_names:
+                cls, warning = _classify_patch(name, overrides=overrides)
+                patches_with_class.append((name, cls))
+                if warning:
+                    warnings.append(warning)
+
+            # Defect-6 fix: compute per-patch inward normals so velocity
+            # inlets get flow direction matching the actual patch
+            # orientation. polyMesh/faces is read-only ground truth so
+            # this read inside the lock is cheap.
+            inward_normals = _compute_patch_inward_normals(
+                case_dir, patch_ranges
+            )
+            inlet_u_per_patch: dict[str, tuple[float, float, float]] = {}
+            fallback_axis = np.array([1.0, 0.0, 0.0])
+            for name, cls in patches_with_class:
+                if cls != BCClass.VELOCITY_INLET:
+                    continue
+                n_in = inward_normals.get(name, np.zeros(3))
+                if float(np.linalg.norm(n_in)) < 1e-9:
+                    # Degenerate patch (no readable faces) — fall back to
+                    # +x axis. Engineers can override via raw-dict editor.
+                    n_in = fallback_axis
+                    warnings.append(
+                        f"patch {name!r}: could not read face normals from "
+                        f"polyMesh; defaulting inlet velocity to "
+                        f"{inlet_speed} m/s along +x. Override via "
+                        f"raw-dict editor if the geometry isn't axis-aligned."
+                    )
+                u_vec = inlet_speed * n_in
+                inlet_u_per_patch[name] = (
+                    float(u_vec[0]), float(u_vec[1]), float(u_vec[2])
+                )
+
+            plan = _build_dict_plan(
+                patches_with_class,
+                inlet_u_per_patch=inlet_u_per_patch,
+                nu=nu,
+                delta_t=delta_t,
+                end_time=end_time,
+            )
             # Codex R13 P2-A + P2-B closure: content-aware
             # icoFoam-marker check, INSIDE case_lock so override
             # status can't flip between check and commit. The AI

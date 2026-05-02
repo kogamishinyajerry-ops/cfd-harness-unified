@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -29,11 +28,15 @@ from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
     BCClass,
-    _PATCH_CLASSIFICATION_REL,
     _PATCH_CLASSIFICATION_SCHEMA_VERSION,
     _classify_patch,
     _read_patch_ranges,
     load_patch_classification_overrides,
+)
+from ui.backend.services.case_solve.patch_classification_store import (
+    PatchClassificationIOError,
+    delete_override,
+    upsert_override,
 )
 
 __all__ = ["router"]
@@ -108,20 +111,28 @@ def _build_state(case_dir: Path, case_id: str) -> dict[str, Any]:
     }
 
 
-def _write_overrides(case_dir: Path, overrides: dict[str, BCClass]) -> None:
-    """Persist the overrides dict to the sidecar. Atomic write via
-    temp+rename so a crash mid-write can't leave a half-baked file
-    that the loader would silently treat as empty.
+def _store_error_to_http(exc: PatchClassificationIOError) -> HTTPException:
+    """Translate a store exception into a structured HTTPException.
+
+    Codex DEC-V61-108 R1 closure: the store now owns lock acquisition
+    and symlink containment, so the route just maps its failing_check
+    enum into HTTP statuses. Symlink-escape and lock-acquire failures
+    are 422 (the case directory is in a state the operator must
+    repair); write failures are 500.
     """
-    p = case_dir / _PATCH_CLASSIFICATION_REL
-    p.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema_version": _PATCH_CLASSIFICATION_SCHEMA_VERSION,
-        "overrides": {name: cls.value for name, cls in overrides.items()},
-    }
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
-    tmp.replace(p)
+    status = {
+        "case_dir_missing": 404,
+        "symlink_escape": 422,
+        "lock_acquire_failed": 422,
+        "write_failed": 500,
+    }.get(exc.failing_check, 500)
+    return HTTPException(
+        status_code=status,
+        detail={
+            "failing_check": exc.failing_check,
+            "detail": str(exc),
+        },
+    )
 
 
 @router.get(
@@ -170,9 +181,10 @@ def put_patch_classification(
             },
         )
 
-    overrides = load_patch_classification_overrides(case_dir)
-    overrides[body.patch_name] = cls
-    _write_overrides(case_dir, overrides)
+    try:
+        upsert_override(case_dir, patch_name=body.patch_name, bc_class=cls)
+    except PatchClassificationIOError as exc:
+        raise _store_error_to_http(exc) from exc
     return _build_state(case_dir, case_id)
 
 
@@ -185,7 +197,8 @@ def delete_patch_classification(
     patch_name: str = Query(..., min_length=1, max_length=128),
 ) -> dict[str, Any]:
     case_dir = _resolve_case_dir(case_id)
-    overrides = load_patch_classification_overrides(case_dir)
-    overrides.pop(patch_name, None)
-    _write_overrides(case_dir, overrides)
+    try:
+        delete_override(case_dir, patch_name=patch_name)
+    except PatchClassificationIOError as exc:
+        raise _store_error_to_http(exc) from exc
     return _build_state(case_dir, case_id)
