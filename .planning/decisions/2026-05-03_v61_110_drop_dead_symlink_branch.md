@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-110
 title: Codex-corrected V109 framing in patch_classification_store._assert_fd_still_matches_path — keep S_ISLNK branch (not dead), update docstring + add post-lock-yield regression
-status: Proposed (2026-05-03 · pending Codex re-review on R2 commit)
+status: Accepted (2026-05-03 · Codex APPROVE on R2 commit 767ed6c after 2 rounds R1-R2)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: |
@@ -27,8 +27,11 @@ parent_artifacts:
 counter_impact: +1 (autonomous_governance: true)
 self_estimated_pass_rate: 95% (R1 was a successful Codex catch on R1 round · R2 is docstring-only + regression test that proves the bug-fix · low blast radius)
 risk_class: low (post-Codex correction: no production behavior change; only docstring + test)
-codex_tool_report_path: reports/codex_tool_reports/v61_110_r1_codex_findings.md (pending after R2 sweep)
-notion_sync_status: pending — to sync after Codex APPROVE
+codex_tool_report_path: reports/codex_tool_reports/v61_110_r1_r2_chain.md
+implementation_commits:
+  - 80ed3a8 (R0 attempt · drop S_ISLNK branch · Codex CHANGES_REQUIRED)
+  - 767ed6c (R2 closure · restore branch + add regression test · Codex APPROVE)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed8199bea3efb0c6a5d324)
 post_r3_defects:
   - "R1 finding (Codex caught at static review): 'S_ISLNK branch is dead post-V109' was wrong; branch is reachable on post-lock-yield symlink swap. Working as intended — Codex caught at the right layer, before any post-merge incident. Counts as Codex-prevented regression, not post-R3 defect."
 
