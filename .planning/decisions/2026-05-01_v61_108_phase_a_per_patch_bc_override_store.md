@@ -115,9 +115,13 @@ R11 APPROVE.
   every closure commit across 11 rounds
 - 0 post-R3 defects
 
-# Future work
+# Future work / status post-arc
 
-DEC-V61-108 Phase B ships the frontend wiring (Step 3 panel).
-The `case_lock` upstream `O_NOFOLLOW` gap documented as residual
-needs DEC-V61-109; per RETRO-V61-V107-V108 R5 it must trigger
-§10.5.4a high-risk-PR Kogami when filed.
+DEC-V61-108 Phase B shipped the frontend wiring (Step 3 panel · Codex
+3 rounds R1-R3 APPROVE on commit f6d40e1, Notion synced 2026-05-02).
+The `case_lock` upstream `O_NOFOLLOW` gap documented here as residual
+was closed by DEC-V61-109 (Codex 2 rounds R1-R2 APPROVE on commit
+85b88e3, Kogami high-risk-PR APPROVE_WITH_COMMENTS recommended_next=merge,
+Notion synced 2026-05-02). Per RETRO-V61-V107-V108 R5, V109 was filed
+with §10.5.4a high-risk-PR Kogami escalation as required — see
+`.planning/decisions/2026-05-02_v61_109_case_lock_o_nofollow_upstream.md`.

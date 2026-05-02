@@ -317,24 +317,28 @@ in the V108-A chain report. It should be a real DEC (or
 (case_lock is shared by setup_bc/raw_dict editor/etc.), and the
 proposed fix. Without it the residual silently rots.
 
-**Escalation (addressing Kogami arc-size R1 P2 #2)**: when DEC-V61-109
-is filed, it MUST explicitly invoke methodology v2.0 §10.5.4a
-audit-required-surface treatment. `case_lock` lives upstream of
-FoamAgentExecutor call sites (§10.5.4a surface #1) and `user_drafts
-→ TaskSpec` plumbing (§10.5.4a surface #5); a symlink-swap window
-on it is an operator-layer security finding (sampling-audit Cat 2),
-not a layer-internal hardening tweak. Concretely DEC-V61-109 must:
+**Escalation (addressing Kogami arc-size R1 P2 #2) — RESOLVED end-to-end
+in same session post-retro**: DEC-V61-109 was filed and DID invoke
+methodology v2.0 §10.5.4a audit-required-surface treatment. `case_lock`
+lives upstream of FoamAgentExecutor call sites (§10.5.4a surface #1)
+and `user_drafts → TaskSpec` plumbing (§10.5.4a surface #5); a symlink-
+swap window on it is an operator-layer security finding (sampling-audit
+Cat 2), not a layer-internal hardening tweak. The DEC-V61-109 filing
+satisfied each escalation condition:
 
-- Carry `risk_class: high` in its strategic-package
-  `merge_risk_summary.md`
-- Trigger the high-risk-PR Kogami review per project CLAUDE.md
+- Carried `risk_class: high` in
+  `.planning/reviews/kogami/v109_case_lock_o_nofollow_2026-05-02/merge_risk_summary.md`
+- Triggered the high-risk-PR Kogami review per project CLAUDE.md
   §"Strategic package authoring" rule (Kogami after Codex APPROVE,
-  before merge)
-- Be authored with `intent_summary.md` + `merge_risk_summary.md`
-  validated by `scripts/governance/validate_strategic_package.py`
-- Update the §10.5.4a surface list in methodology v2.0 if the fix
-  exposes new shared-infra primitives that warrant audit-required
-  status (e.g., the new `O_NOFOLLOW`-protected open path)
+  before merge); review at
+  `.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/`
+  returned APPROVE_WITH_COMMENTS, recommended_next=merge
+- Was authored with `intent_summary.md` + `merge_risk_summary.md`,
+  both validated by `scripts/governance/validate_strategic_package.py`
+- §10.5.4a surface list disposition closed in DEC-V61-109 body as
+  option (a): the new `O_NOFOLLOW`-protected open path is a hardening
+  of existing surfaces #1 and #5, not a new surface — no list addition
+  required
 
 The residual-as-paragraph-in-chain-report risk is real precisely
 because the threat model touches shared infra. R5's "filing as a
