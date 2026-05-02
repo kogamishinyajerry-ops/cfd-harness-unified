@@ -21,7 +21,7 @@ kogami_findings_addressed: |
     .planning/decisions/2026-05-02_v61_108_phase_b_step3_override_panel.md
   R1 P1 #2 (V107.5 R16 ratification) — CLOSED inline as ONE-OFF PRECEDENT FLAG (non-repeating)
   R1 P2 #1 (STATE.md counter lag) — CLOSED by landing ANCHOR-5 stamp 53→57 in same-session commit
-  R1 P2 #2 (R5 §10.5.4a escalation) — CLOSED inline; DEC-V61-109 must trigger high-risk-PR Kogami when filed
+  R1 P2 #2 (R5 §10.5.4a escalation) — CLOSED inline at retro draft time; DEC-V61-109 was subsequently filed AND triggered high-risk-PR Kogami (APPROVE_WITH_COMMENTS at .planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/, recommended_next=merge); R5 substantively closed end-to-end
   R1 P3 (Kogami column in counter table) — CLOSED inline with NOT_APPLICABLE note per §4.2 routine-code-bearing exemption
 related_chain_reports:
   - reports/codex_tool_reports/v61_107_partial_fvschemes_upgrade.md (commit 47ae9e5)
