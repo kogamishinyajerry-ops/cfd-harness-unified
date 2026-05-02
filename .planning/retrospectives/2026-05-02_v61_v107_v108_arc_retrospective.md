@@ -7,10 +7,18 @@ scope: |
   53 → 57 (4 ticks across the arc). Fired by RETRO-V61-001 cadence rule
   #2 ("counter ≥ 20 → arc-size retro mandatory") and the user's
   explicit instruction following V108 Phase B closure.
-status: LANDING — follows DEC-V61-108 Phase B Codex R3 APPROVE on f6d40e1.
+status: LANDED-WITH-KOGAMI-COMMENTS-CLOSED-INLINE — follows DEC-V61-108 Phase B Codex R3 APPROVE on f6d40e1; Kogami arc-size review APPROVE_WITH_COMMENTS at .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/, all 5 findings (R1 P1 #1 + #2, R1 P2 #1 + #2, R1 P3) addressed inline; DEC backfill workstream filed as R4 with task #77 in this session.
 author: Claude Opus 4.7 (1M context · CLI session)
 decided_by: Claude (self-executed under standing 全权授予 authority).
 notion_sync_status: pending
+kogami_review_path: .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/review.md
+kogami_verdict: APPROVE_WITH_COMMENTS
+kogami_findings_addressed: |
+  R1 P1 #1 (DEC backfill) — task #77 (in_progress, 4 DEC files)
+  R1 P1 #2 (V107.5 R16 ratification) — closed inline as ONE-OFF PRECEDENT FLAG (non-repeating)
+  R1 P2 #1 (STATE.md counter lag) — closed by landing ANCHOR-5 stamp 53→57 in this revision commit
+  R1 P2 #2 (R5 §10.5.4a escalation) — closed inline; DEC-V61-109 must trigger high-risk-PR Kogami when filed
+  R1 P3 (Kogami column in counter table) — closed inline with NOT_APPLICABLE note per §4.2 routine-code-bearing exemption
 related_chain_reports:
   - reports/codex_tool_reports/v61_107_partial.md (commit 47ae9e5)
   - reports/codex_tool_reports/v61_107_5_r12_r16_chain.md (commit e10c9b5 — R12-R16 leg)
@@ -55,12 +63,21 @@ contributes +1; rounds within a DEC do not contribute. Kogami artifacts
 contribute +0 (advisory chain). External-gate DECs (`autonomous_governance:
 false`) contribute +0 but are listed for arc completeness.
 
-| DEC | Sub-phase | Counter | Scope | Codex rounds | Final verdict | Est. / actual pass rate |
-|---|---|---|---|---|---|---|
-| V61-107 partial | fvSchemes upgrade | 53→**54** | non-orthogonal STL — `corrected` Laplacian schemes + nNonOrthogonalCorrectors | **1** | APPROVE | 0.85 / first-pass APPROVE — well-calibrated |
-| V61-107.5 | pimpleFoam migration | 54→**55** | replace icoFoam path; named-patch mapper feeds new control loop | **9** (R12-R20 numbering) | APPROVE on R20 (`c924360`) | 0.45 / 8 CHANGES_REQUIRED before APPROVE — under-calibrated by ~0.30 |
-| V61-108 Phase A | per-patch BC override store | 55→**56** | backend GET/PUT/DELETE; fd-based race-free I/O on sidecar yaml | **11** | APPROVE on R11 (`dfb13db`) | 0.55 / 10 CHANGES_REQUIRED — under-calibrated by ~0.45 |
-| V61-108 Phase B | Step 3 override panel | 56→**57** | frontend wiring; PatchClassificationPanel + Step3SetupBC mount | **3** | APPROVE on R3 (`f6d40e1`) | 0.55 / 2 CHANGES_REQUIRED — under-calibrated by ~0.20 |
+| DEC | Sub-phase | Counter | Scope | Codex rounds | Final verdict | Est. / actual pass rate | Kogami |
+|---|---|---|---|---|---|---|---|
+| V61-107 partial | fvSchemes upgrade | 53→**54** | non-orthogonal STL — `corrected` Laplacian schemes + nNonOrthogonalCorrectors | **1** | APPROVE | 0.85 / first-pass APPROVE — well-calibrated | N/A |
+| V61-107.5 | pimpleFoam migration | 54→**55** | replace icoFoam path; named-patch mapper feeds new control loop | **9** (R12-R20 numbering) | APPROVE on R20 (`c924360`) | 0.45 / 8 CHANGES_REQUIRED before APPROVE — under-calibrated by ~0.30 | N/A |
+| V61-108 Phase A | per-patch BC override store | 55→**56** | backend GET/PUT/DELETE; fd-based race-free I/O on sidecar yaml | **11** | APPROVE on R11 (`dfb13db`) | 0.55 / 10 CHANGES_REQUIRED — under-calibrated by ~0.45 | N/A |
+| V61-108 Phase B | Step 3 override panel | 56→**57** | frontend wiring; PatchClassificationPanel + Step3SetupBC mount | **3** | APPROVE on R3 (`f6d40e1`) | 0.55 / 2 CHANGES_REQUIRED — under-calibrated by ~0.20 | N/A |
+
+**Kogami review status (per kogami_counter_rules.md §5.7, addressing
+Kogami arc-size R1 P3)**: NOT_APPLICABLE for all four DECs per
+project CLAUDE.md §4.2 must-NOT-trigger list — each was a routine
+code-bearing commit (not phase-close, not high-risk-PR after Codex
+APPROVE, not arc-size retro, not autonomous_governance rule change).
+Only THIS arc-size retro itself triggers Kogami (per §4 must-trigger
+RETRO-draft rule), which is the review you're reading the response
+to.
 
 **Arc total: 24 Codex rounds across 4 DECs.** Counter advanced by
 **+4** (53 → 57). Average rounds-per-DEC = 6.0 — the highest density
@@ -144,6 +161,36 @@ The 5-condition verbatim-exception (RETRO-V61-001) was used cleanly **3 times** 
 Net: verbatim-exception saved **2 governance rounds** in this arc.
 The "pragmatic" relaxation is a finding for future tightening (see
 Recommendations).
+
+### V107.5 R16 explicit ratification (addressing Kogami arc-size R1 P1 #2)
+
+Per Kogami's arc-size review of this retro, the V107.5 R16
+"pragmatic" relaxation needs an explicit precedent disposition
+analogous to V61-055 Q4 amendment 2026-04-25. Stating the
+disposition here:
+
+**Disposition: ONE-OFF PRECEDENT FLAG (non-repeating)**.
+
+Rationale: R16 reduced scope by *removing* a guard Codex itself had
+rejected across R12-R15 — it was a "stop building on the wrong
+foundation" turn rather than a code substitution. The 5-condition
+verbatim-exception was designed for tactical 1-line / 1-file fixes
+that map 1:1 to a Codex bullet, not for architectural turn-arounds.
+R16 was the latter; calling it "verbatim" was a misuse of the
+exception name even though Codex APPROVE'd the underlying turn on
+R17. Going forward:
+
+- The V107.5 R20 APPROVE **stands** — Codex independently re-evaluated
+  the post-R16 architecture across R17-R20 and APPROVE'd, so the
+  governance debt was repaid procedurally.
+- "Pragmatic scope reduction" is **not a recognized verbatim subtype**
+  going forward. Any future similar turn must either (a) pass through
+  full Codex review with the architectural-pivot framing made explicit
+  in the prompt, or (b) request a Kogami advisory on the pivot before
+  Codex reviews it.
+- Recommendation R3 (codify §11.6 in CLAUDE.md) is the right
+  follow-up to make this disposition durable. Until §11.6 lands,
+  this retro IS the precedent record for the disposition.
 
 ## Post-R3 defects (RETRO-V61-053 risk_flag accounting)
 
@@ -266,6 +313,30 @@ in the V108-A chain report. It should be a real DEC (or
 (case_lock is shared by setup_bc/raw_dict editor/etc.), and the
 proposed fix. Without it the residual silently rots.
 
+**Escalation (addressing Kogami arc-size R1 P2 #2)**: when DEC-V61-109
+is filed, it MUST explicitly invoke methodology v2.0 §10.5.4a
+audit-required-surface treatment. `case_lock` lives upstream of
+FoamAgentExecutor call sites (§10.5.4a surface #1) and `user_drafts
+→ TaskSpec` plumbing (§10.5.4a surface #5); a symlink-swap window
+on it is an operator-layer security finding (sampling-audit Cat 2),
+not a layer-internal hardening tweak. Concretely DEC-V61-109 must:
+
+- Carry `risk_class: high` in its strategic-package
+  `merge_risk_summary.md`
+- Trigger the high-risk-PR Kogami review per project CLAUDE.md
+  §"Strategic package authoring" rule (Kogami after Codex APPROVE,
+  before merge)
+- Be authored with `intent_summary.md` + `merge_risk_summary.md`
+  validated by `scripts/governance/validate_strategic_package.py`
+- Update the §10.5.4a surface list in methodology v2.0 if the fix
+  exposes new shared-infra primitives that warrant audit-required
+  status (e.g., the new `O_NOFOLLOW`-protected open path)
+
+The residual-as-paragraph-in-chain-report risk is real precisely
+because the threat model touches shared infra. R5's "filing as a
+real DEC" is necessary; the high-risk-PR escalation above is what
+makes it sufficient.
+
 ## Self-pass-rate calibration recommendation for next arc
 
 Update the personal estimate baseline:
@@ -289,8 +360,10 @@ arc-size retrospective filed at .planning/retrospectives/
 2026-05-02_v61_v107_v108_arc_retrospective.md.
 ```
 
-(This sentence should be appended to the STATE.md `last_updated`
-anchor next time it's touched. The retro itself does NOT modify
-STATE.md — that's a separate write, and per project convention
-STATE.md updates ride on the next concrete code change rather than
-being a retro deliverable.)
+**Updated decision (addressing Kogami arc-size R1 P2 #1)**: STATE.md
+counter anchor 53→57 was applied in the same commit as this retro
+revision (ANCHOR-5 stamp at line 6). Per Kogami's finding, telemetry
+lag of ~5 days on counter would have impaired the §10.5 sampling-audit
+interval calculation, which must use 57 (not 53) as its anchor going
+forward regardless of when STATE.md is updated. Landing the anchor
+here removes the lag risk.

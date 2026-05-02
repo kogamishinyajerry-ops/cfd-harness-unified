@@ -1,0 +1,53 @@
+# Kogami Review · v107_v108_arc_retro · 2026-05-02
+
+**Verdict**: `APPROVE_WITH_COMMENTS`
+**Recommended next**: `revise`
+**Trigger**: retro-draft
+**Artifact**: `.planning/retrospectives/2026-05-02_v61_v107_v108_arc_retrospective.md`
+**Prompt SHA256**: `2ab778fb0e76ee422e3d8bc1024323582db6f7b72b3582a67b849ccd315045fa`
+
+## Summary
+
+The retrospective is substantive, honest about calibration misses, and arc-coherent — it ties V107/V107.5/V108-A/V108-B to the strategic North Star (engineer-editable BCs on arbitrary CAD) and produces actionable methodology recommendations (R1-R5). Two material gaps weaken it: (a) the DEC-frontmatter/Notion-sync gap is correctly named but the retrospective itself violates §11.5 SSOT-consistency expectations by landing without paired DEC files; (b) the V107.5 R16 'pragmatic scope reduction' admits a verbatim-exception precision violation with no remediation commitment beyond a deferred §11.6 proposal.
+
+## Strategic Assessment
+
+Decision-arc coherence is strong: the four DECs trace a clean line from solver numerics (V107) → solver-physics fit (V107.5) → backend override store (V108-A) → frontend wiring (V108-B), materially advancing the user's restated North Star ('arbitrary CAD geometry, hand-authored BCs'). This sits squarely in the post-pivot M5–M8 sequence (Beginner Full Stack — STL import, gmsh, sHM, beginner reports), and per-patch BC governance is a precondition for M7's 'imported case → real run' flow. The honest -0.31 average self-pass-rate overshoot and the explicit calibration-baseline downgrades for fd-hardening (0.55 → 0.30) and solver-family migration (0.45 → 0.30) are the kind of empirical anchoring RETRO-V61-004 stair-anchor convention demands. Roadmap fit is good but the missing DEC files leave the Notion control-plane four ticks behind git, which is a methodology regression vs. the §11.5 standing rule the retro itself codifies. The retro is genuinely useful but cannot fully ratify the arc until R4 (DEC backfill) closes.
+
+## Findings
+
+### [P1] Retrospective lands while violating §11.5 SSOT consistency it cites
+**Position**: §'DEC frontmatter / Notion sync gap' and frontmatter `notion_sync_status: pending`
+
+**Problem**: The retro identifies that no DEC files exist for V107 partial, V107.5, V108-A, V108-B — a direct violation of methodology v2.0 §11.5 (SSOT consistency check per phase: 'Every DEC-V61-XXX issued during the phase has frontmatter notion_sync_status: synced...'). Recommendation R4 acknowledges the backfill but the retro itself is being filed *before* that backfill, meaning the counter table (53→57) cites four DECs that have no canonical frontmatter source-of-truth. Per RETRO-V61-001 cadence, an arc-size retro that references missing artifacts may itself be unverifiable — counter ticks attribute to DECs that don't exist as DEC files.
+
+**Recommendation**: Either (a) backfill the four DEC files before this retro is sealed (R4 is ~2h work and is on the critical path for retro validity, not a follow-up), OR (b) explicitly downgrade this artifact to 'DRAFT pending DEC backfill' and have the retro's `status` field reflect that the counter table is provisional until DEC files materialize. Sealing as LANDING with frontmatter-truth missing risks the same 'silent SSOT drift' §11.5 was designed to prevent.
+
+### [P1] V107.5 R16 'pragmatic verbatim' admitted as out-of-spec with deferred remediation only
+**Position**: §'Verbatim-exception usage' table row 3 + Recommendation R3
+
+**Problem**: The retro openly admits R16 was a *broader* scope reduction than the 5-condition verbatim-exception (RETRO-V61-001 §Q4) permits, and that calling it 'verbatim' was 'loose'. Per RETRO-V61-001 Q4 amendment 2026-04-25, the precedent flag established at V61-055 explicitly says 'one-off precedent is fine; repeat pattern needs formal policy' — and there's no evidence here that R16 went through the precedent-flag accounting. R3 defers remediation to a future §11.6 in CLAUDE.md, but the immediate question (does the V107.5 R20 APPROVE stand if R16 was governance-non-compliant?) is unanswered.
+
+**Recommendation**: Add an explicit ratification statement: either (i) declare R16 a one-off precedent flag (analog to V61-055 Q4 amendment), citing why it is non-repeating, OR (ii) acknowledge the V107.5 commit chain carries an unresolved governance debt that R3/§11.6 must close before any future 'pragmatic' relaxation is permitted. The current text leaves the precedent ambiguous.
+
+### [P2] Counter advance entry not yet applied to STATE.md; risk of telemetry lag
+**Position**: §'Counter advance entry for STATE.md' (last paragraph)
+
+**Problem**: The retro defers STATE.md update to 'next concrete code change' per project convention, but STATE.md frontmatter shown in briefing context still reads counter v6.1 53 (last_updated 2026-04-27). The arc spans 2026-04-27 → 2026-05-02; STATE.md will be ~5 days stale on counter telemetry. RETRO-V61-001 keeps counter as 'pure telemetry' but §10.5 sampling-audit interval ratchet depends on accurate counter-anchored phase boundaries.
+
+**Recommendation**: Either land the STATE.md anchor stamp in the same commit as this retro (more conservative; the retro IS a concrete event), or explicitly note in the retro that the next sampling audit's interval calculation must use 57 not 53 as its anchor regardless of when STATE.md is updated.
+
+### [P2] Recommendation R5 (case_lock O_NOFOLLOW residual) lacks blast-radius escalation given §10.5.4a surface
+**Position**: §'Recommendations' R5
+
+**Problem**: The V108-A residual targets `case_lock`, which the retro notes is 'shared by setup_bc/raw_dict editor/etc.' This makes it adjacent to §10.5.4a audit-required surface #1 (FoamAgentExecutor call sites) and arguably surface #5 (user_drafts → TaskSpec plumbing). R5 recommends 'a real DEC-V61-109 or charter-future entry' but does not flag this as needing a Kogami high-risk-PR review under the §10.5.4a regime. A symlink-swap window on a primitive feeding setup_bc is an operator-layer security finding (sampling-audit Cat 2).
+
+**Recommendation**: Strengthen R5: when filed, DEC-V61-109 (or whatever closes the residual) must explicitly invoke §10.5.4a audit-required-surface treatment and the high-risk-PR Kogami trigger, not just sit as a 'real DEC'. The residual-as-paragraph-in-chain-report risk is real precisely because the threat model touches shared infra.
+
+### [P3] Counter table cites Kogami review status as absent without comment
+**Position**: §'Counter progression' table
+
+**Problem**: Per kogami_counter_rules.md §5.7, post-V61-088 RETROs SHOULD include a Kogami review column. V107/V107.5/V108-A/V108-B are post-V61-087 so Kogami applicability needs at least a note. The table omits the Kogami column entirely; readers cannot tell whether Kogami was correctly skipped (per §4.2 must-NOT-trigger routine) or was incorrectly bypassed.
+
+**Recommendation**: Add a one-line note under the counter table: 'Kogami review: NOT_APPLICABLE for all four DECs per §4.2 (routine code-bearing, not phase-close / high-risk-PR / arc-size retro / autonomous_governance rule change).' If Kogami WAS triggered and APPROVE'd anywhere, surface that here.
+
