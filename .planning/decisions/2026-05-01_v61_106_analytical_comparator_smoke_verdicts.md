@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-106
 title: Analytical-comparator smoke verdicts — let adversarial cases declare physics-correctness checks the residual-only smoke runner can't catch
-status: Proposed (2026-05-01 · authored under user direction "全权授予你开发，全都按你的建议来" after DEC-V61-104 Phase 1.5 closure exposed iter01's actual defect class — slow convergence + need for qualitative physics validation, not obstacle subtraction failure)
+status: Accepted (2026-05-03 · Phase 1.1 (analytical_comparators schema + extractor wiring) + Phase 1.2 (analytical_comparator_pass expected_status) LANDED via commits 742f478 / 83a74e0 / ff95b71 with Codex R10→R11→post-comment-closure APPROVE_WITH_COMMENTS chain · Phase 1.3 (iter01 reclassification) BLOCKED at integration time and DEFERRED to follow-up DEC: empirical inspection of iter01 time directories revealed every time-step contains 21477 NaN entries — actual defect is solver divergence not slow convergence as the original DEC §Why hypothesis stated; backend's "finite residual" signal misleads because icoFoam log captures residual BEFORE field corruption catches up. iter01 stays at physics_validation_required (SKIPPED) until numerical setup is fixed (CFL / relaxation / icoFoam→simpleFoam — case originally declared simpleFoam in intent but route runs icoFoam). cfb13f5 dt sweep disproves CFL hypothesis and surfaces 2 deeper defects, queued for follow-up DEC. Phase 2 (sweep iter04/iter05/iter06 to analytical_comparator_pass) explicitly remains out-of-scope as documented in §Phase 2. User's 2026-05-03 autonomous-mode ratification "全权授予你开发" covers acceptance.)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-01
 authored_under: tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md §iter01 end-to-end re-test result (option 3 recommendation)
@@ -15,8 +15,8 @@ parent_artifacts:
   - tools/adversarial/cases/iter01/intent.json (canonical case that needs this — currently SKIP'd)
 counter_impact: +1 (autonomous_governance: true)
 self_estimated_pass_rate: 70% (incremental extension of existing smoke_runner block schema · reuses existing extractor · low blast radius · the open question is whether Codex flags edge cases in the comparator DSL — float comparison tolerance, NaN handling, missing-field handling)
-codex_tool_report_path: (TBD — runs after implementation)
-notion_sync_status: pending (project rules say sync after acceptance; sync after Codex chain closes)
+codex_tool_report_path: reports/codex_tool_reports/v61_106_r10_r11_chain.md
+notion_sync_status: pending (sync follows acceptance flip)
 
 # Why now
 
@@ -128,3 +128,39 @@ Plan: 2-3 round chain to clean APPROVE.
 - Multi-time-step trajectory comparators (e.g. "U_mag drops below 0.1 by t=10s") — needs richer extractor
 - Surface-pressure comparators against a CSV reference — needs a new pressure parser
 - Patch-level summaries (e.g. "max U on blade patch < 0.01") — needs boundary field parsing
+
+## Closure note (2026-05-03)
+
+### What landed
+
+- **Phase 1.1** — `analytical_comparators` field added to `smoke_runner` block schema; extractor wiring at `tools/adversarial/comparators.py` evaluates each comparator against `ResultsSummary` fields with type-safe handling (rejects `bool` for float measures; rejects `±NaN`/`±Inf` via `math.isnan`/`math.isinf`)
+- **Phase 1.2** — `analytical_comparator_pass` `expected_status` implemented in `tools/adversarial/run_smoke.py:330-365` with graceful degradation paths: `extractor_error` (extractor raises) / `unknown_measure` (typo) / `value_type_mismatch` (schema drift) / `extractor_import_failed` (cascading ModuleNotFoundError caught after Codex R10 finding 1)
+- **Test coverage** — 3 R10-closure tests (`test_inf_actual_value_short_circuits_to_fail` / `test_negative_inf_actual_value_also_short_circuits` / `test_bool_actual_for_float_measure_rejected`) + 1 R11 non-blocking-comment closure test (`test_smoke_runner_lazy_import_handles_cascading_module_not_found`)
+- **Implementation commits**: `742f478` (initial) → `83a74e0` (R10 closure) → `ff95b71` (R11 import-failure regression test)
+
+### What was BLOCKED and deferred
+
+**Phase 1.3 iter01 reclassification** — when migrating iter01 from `physics_validation_required` to `analytical_comparator_pass` with the proposed comparators (`u_magnitude_max >= 1.0`, `u_x_min < 0.0`, `cell_count == 7159`), end-to-end smoke run revealed a deeper defect: every time directory in iter01 (t=100/150/200/250) contains 21477 NaN entries. The icoFoam solver log captures the residual signal BEFORE field corruption propagates, so the "finite residual" verdict is misleading. The original DEC §Why characterized iter01's defect as "slow convergence" — empirical inspection corrected this to "solver divergence with delayed residual signal." The proposed comparator suite would correctly mark iter01 as FAIL (NaN propagation triggers `measure_inf` reject), but the underlying numerical-setup defect is out of scope for V61-106's framework-only contract.
+
+**iter01 stays at `physics_validation_required` (SKIPPED)** with the rationale documented in `tools/adversarial/cases/iter01/intent.json:60-61` pointing at this DEC. Follow-up commit `cfb13f5` ("iter01 dt sweep") empirically disproved the CFL hypothesis and surfaces 2 deeper defects (icoFoam vs declared simpleFoam route mismatch + relaxation factor sensitivity); both are queued for a follow-up DEC.
+
+**Phase 2 (sweep iter04/iter05/iter06)** explicitly remains out-of-scope per §Phase 2.
+
+### Codex chain summary
+
+- **R10** (commit `742f478`): CHANGES_REQUIRED · 2 valid findings (cascading import failure + bool/Inf type-guard gap)
+- **R10 closure** (commit `83a74e0`): both findings closed inline + 3 new tests
+- **R11** (commit `83a74e0`): APPROVE_WITH_COMMENTS · 0 blocking findings · 1 non-blocking comment (no smoke-level regression for `extractor_import_failed`)
+- **R11 closure** (commit `ff95b71`): non-blocking comment closed via cascading-ModuleNotFoundError regression test
+
+Self-pass-rate calibration: estimated 70% at DEC authoring; actual outcome 1 round of substantive CHANGES_REQUIRED before clean APPROVE — estimate was reasonable.
+
+### Acceptance criteria status
+
+- §Phase 1 framework (1.1 + 1.2) — **MET**
+- §Phase 1.3 iter01 reclassification — **BLOCKED + DEFERRED** to follow-up DEC for numerical-setup fix
+- §Phase 2 expand to other physics_validation_required cases — **OUT OF SCOPE per §Phase 2**
+
+### Codex review re-trigger judgment (2026-05-03 closure-only commit)
+
+This closure commit is docs-only (DEC body + frontmatter status flip); none of the RETRO-V61-001 risk-tier triggers fire (not multi-file frontend, not API contract, not solver, not foam_agent_adapter, not new geometry, not phase E2E batch ≥3 fail, not Docker+OpenFOAM). No new Codex review required for the closure commit itself; the implementation chain (R10→R11→post-comment closure) already cleared APPROVE_WITH_COMMENTS.
