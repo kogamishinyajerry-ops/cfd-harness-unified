@@ -7,18 +7,22 @@ scope: |
   53 → 57 (4 ticks across the arc). Fired by RETRO-V61-001 cadence rule
   #2 ("counter ≥ 20 → arc-size retro mandatory") and the user's
   explicit instruction following V108 Phase B closure.
-status: LANDED-WITH-KOGAMI-COMMENTS-CLOSED-INLINE — follows DEC-V61-108 Phase B Codex R3 APPROVE on f6d40e1; Kogami arc-size review APPROVE_WITH_COMMENTS at .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/, all 5 findings (R1 P1 #1 + #2, R1 P2 #1 + #2, R1 P3) addressed inline; DEC backfill workstream filed as R4 with task #77 in this session.
+status: LANDED-ALL-KOGAMI-FINDINGS-CLOSED — follows DEC-V61-108 Phase B Codex R3 APPROVE on f6d40e1; Kogami arc-size review APPROVE_WITH_COMMENTS at .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/, all 5 findings closed (4 inline + DEC backfill landed in same session per Kogami P1 #1 critical-path requirement).
 author: Claude Opus 4.7 (1M context · CLI session)
 decided_by: Claude (self-executed under standing 全权授予 authority).
-notion_sync_status: pending
+notion_sync_status: pending — to sync with the 4 backfilled DEC files in one batch
 kogami_review_path: .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/review.md
 kogami_verdict: APPROVE_WITH_COMMENTS
 kogami_findings_addressed: |
-  R1 P1 #1 (DEC backfill) — task #77 (in_progress, 4 DEC files)
-  R1 P1 #2 (V107.5 R16 ratification) — closed inline as ONE-OFF PRECEDENT FLAG (non-repeating)
-  R1 P2 #1 (STATE.md counter lag) — closed by landing ANCHOR-5 stamp 53→57 in this revision commit
-  R1 P2 #2 (R5 §10.5.4a escalation) — closed inline; DEC-V61-109 must trigger high-risk-PR Kogami when filed
-  R1 P3 (Kogami column in counter table) — closed inline with NOT_APPLICABLE note per §4.2 routine-code-bearing exemption
+  R1 P1 #1 (DEC backfill) — CLOSED · 4 DEC files landed:
+    .planning/decisions/2026-04-30_v61_107_partial_fvschemes_non_orthogonal_stl.md
+    .planning/decisions/2026-04-30_v61_107_5_pimplefoam_migration.md
+    .planning/decisions/2026-05-01_v61_108_phase_a_per_patch_bc_override_store.md
+    .planning/decisions/2026-05-02_v61_108_phase_b_step3_override_panel.md
+  R1 P1 #2 (V107.5 R16 ratification) — CLOSED inline as ONE-OFF PRECEDENT FLAG (non-repeating)
+  R1 P2 #1 (STATE.md counter lag) — CLOSED by landing ANCHOR-5 stamp 53→57 in same-session commit
+  R1 P2 #2 (R5 §10.5.4a escalation) — CLOSED inline; DEC-V61-109 must trigger high-risk-PR Kogami when filed
+  R1 P3 (Kogami column in counter table) — CLOSED inline with NOT_APPLICABLE note per §4.2 routine-code-bearing exemption
 related_chain_reports:
   - reports/codex_tool_reports/v61_107_partial.md (commit 47ae9e5)
   - reports/codex_tool_reports/v61_107_5_r12_r16_chain.md (commit e10c9b5 — R12-R16 leg)
