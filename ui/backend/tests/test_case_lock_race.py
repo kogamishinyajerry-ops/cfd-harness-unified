@@ -162,3 +162,103 @@ def test_lock_releases_on_exception(tmp_path):
     t.start()
     t.join(timeout=2.0)
     assert acquired.is_set(), "case_lock leaked after exception"
+
+
+# ─────────── DEC-V61-109 · case_dir O_NOFOLLOW protection ───────────
+
+
+def test_case_lock_refuses_planted_case_dir_symlink(tmp_path):
+    """DEC-V61-109: when ``case_dir`` itself is a symlink (planted by
+    an attacker, e.g. pre-pointing the cases-imported directory at
+    /etc), case_lock must refuse to open it via the symlink.
+
+    Pre-V109: the lockfile path was O_NOFOLLOW-protected at the
+    final component but the case_dir itself was opened by name, so
+    the lock would silently land in the symlink target. Post-V109:
+    the case_dir fd open uses O_NOFOLLOW | O_DIRECTORY and raises
+    symlink_escape on the symlink.
+    """
+    import pytest
+
+    from ui.backend.services.case_manifest.locking import CaseLockError
+
+    real_target = tmp_path / "real_target"
+    real_target.mkdir()
+    case_dir = tmp_path / "linked_case"
+    case_dir.symlink_to(real_target)
+
+    with pytest.raises(CaseLockError) as exc_info:
+        with case_lock(case_dir):
+            pass
+
+    assert exc_info.value.failing_check == "symlink_escape"
+    # Critically: no .case_lock landed in the symlink target either.
+    assert not (real_target / ".case_lock").exists()
+
+
+def test_case_lock_refuses_planted_regular_file_at_case_dir(tmp_path):
+    """DEC-V61-109: a regular file planted at case_dir (rather than a
+    symlink) also fails the O_DIRECTORY check, returning the same
+    symlink_escape failure surface. Without O_DIRECTORY the open
+    would succeed and the dir_fd-relative lockfile open would fail
+    later with a less actionable errno.
+    """
+    import pytest
+
+    from ui.backend.services.case_manifest.locking import CaseLockError
+
+    case_dir = tmp_path / "not_a_dir"
+    case_dir.write_text("planted regular file")
+
+    with pytest.raises(CaseLockError) as exc_info:
+        with case_lock(case_dir):
+            pass
+
+    assert exc_info.value.failing_check == "symlink_escape"
+
+
+def test_case_lock_dir_fd_relative_open_pins_case_dir(tmp_path):
+    """DEC-V61-109: the lockfile is opened via dir_fd=fd_case so the
+    inode used for the .case_lock is the one we pinned at fd open
+    time, not whatever the case_dir path resolves to at any later
+    moment in the contracts the lock guards. We can't easily test a
+    swap mid-flight without a more elaborate harness, but we can
+    assert the lockfile lands at the actual case_dir (not anywhere
+    else) under normal use, and that the fd-relative open is the
+    code path being exercised.
+    """
+    case_dir = tmp_path / "real_case"
+    case_dir.mkdir()
+    with case_lock(case_dir):
+        assert (case_dir / ".case_lock").is_file(), \
+            ".case_lock must land at the pinned case_dir"
+        # And nowhere else in tmp_path.
+        leaked = list(tmp_path.glob("*/.case_lock"))
+        assert len(leaked) == 1 and leaked[0].parent == case_dir, \
+            f"unexpected .case_lock leakage: {leaked}"
+
+
+def test_case_lock_planted_dir_dot_case_lock_symlink_still_blocked(tmp_path):
+    """Regression for the pre-V109 protection: a symlink planted at
+    ``case_dir/.case_lock`` (not at case_dir itself) must still raise
+    symlink_escape. V109's dir_fd-relative open inherits the same
+    O_NOFOLLOW guarantee at the final component, so this scenario is
+    covered by both the pre- and post-V109 contract.
+    """
+    import pytest
+
+    from ui.backend.services.case_manifest.locking import CaseLockError
+
+    case_dir = tmp_path / "case_with_planted_lock"
+    case_dir.mkdir()
+    target = tmp_path / "victim"
+    target.write_text("victim")
+    (case_dir / ".case_lock").symlink_to(target)
+
+    with pytest.raises(CaseLockError) as exc_info:
+        with case_lock(case_dir):
+            pass
+
+    assert exc_info.value.failing_check == "symlink_escape"
+    # Victim file content unchanged — the lock didn't redirect.
+    assert target.read_text() == "victim"

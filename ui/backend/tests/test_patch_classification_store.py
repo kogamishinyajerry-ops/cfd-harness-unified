@@ -631,36 +631,29 @@ def test_symlink_escape_does_not_mutate_populated_target(
     assert (decoy / "important_file").read_text() == "DO_NOT_LOSE\n"
 
 
-def test_symlink_escape_documented_residual_lockfile_leak(
+def test_symlink_escape_no_residual_lockfile_leak(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Codex R9 closure: documents the known residual artifact
-    on the symlink_escape path.
+    """DEC-V61-109 closure of the V108-A R9 documented residual.
 
-    When case_dir is swapped to a symlink between pre-lock open
-    and case_lock acquisition, ``case_lock`` (whose path-based
-    open follows the symlink) creates ``<target>/.case_lock``
-    BEFORE our R5 inode-drift detection fires. R6→R8→R9 explored
-    every path-based cleanup option and Codex demonstrated each
-    is racy or unprovably-ours:
+    The original V108-A behavior on the swap-during-PUT race:
+      * fd_case opened on the real dir BEFORE case_lock entry
+      * monkeypatched case_lock rmtree's real_dir + plants a symlink
+        to empty_decoy
+      * old case_lock would mkdir(exist_ok=True) the symlink (no-op,
+        target exists), open .case_lock by path — and the path
+        traversed the symlink → .case_lock landed in empty_decoy
+      * R5 inode-drift detection caught it post-lock and raised
+        symlink_escape, but the lockfile was already leaked
 
-      * R8 attempt: unlink if target contains exactly .case_lock
-        → R9 P1: can't prove the .case_lock is ours vs a victim's
-        pre-existing lockfile (POSIX has no "was_just_created" flag)
-      * R8 attempt: check + unlink in sequence
-        → R9 P2: symlink can be re-pointed between check and unlink
+    V109 changes case_lock to open ``case_dir`` itself with
+    ``O_NOFOLLOW | O_DIRECTORY`` BEFORE opening the lockfile. That
+    open raises ELOOP on the swapped symlink → CaseLockError(
+    failing_check="symlink_escape") raised BEFORE any lockfile
+    creation. So the .case_lock leak is fully closed.
 
-    Resolution: skip cleanup on symlink_escape and accept the
-    residual .case_lock leak. The proper fix is at case_lock's
-    layer (O_NOFOLLOW on case_dir before opening lockfile) —
-    out of scope for this DEC. Threat model note: this race
-    requires an active attacker swapping case_dir at the right
-    moment, which is outside the realistic threat model for the
-    local single-tenant dev workbench.
-
-    This test pins the documented behavior so a future "let me
-    add cleanup back" change is forced to acknowledge the
-    upstream case_lock fix as the right place.
+    This test was V108-A's "pin the documented residual" guard;
+    V109 inverts it to "assert the residual is no longer present".
     """
     from contextlib import contextmanager
 
@@ -668,9 +661,9 @@ def test_symlink_escape_documented_residual_lockfile_leak(
         patch_classification_store as mod,
     )
 
-    real_dir = tmp_path / "case_real_r9_residual"
+    real_dir = tmp_path / "case_real_v109"
     real_dir.mkdir()
-    empty_decoy = tmp_path / "empty_decoy_r9"
+    empty_decoy = tmp_path / "empty_decoy_v109"
     empty_decoy.mkdir()
 
     real_case_lock = mod.case_lock
@@ -691,13 +684,14 @@ def test_symlink_escape_documented_residual_lockfile_leak(
             real_dir, patch_name="x", bc_class=BCClass.SYMMETRY
         )
     assert exc_info.value.failing_check == "symlink_escape"
-    # Documented residual: case_lock's .case_lock at the symlink
-    # target is left behind. NO patch_classification.yaml landed
-    # (the security-critical write was correctly refused).
-    assert (empty_decoy / ".case_lock").exists(), (
-        "test pins documented residual: case_lock leaks .case_lock "
-        "to symlink target on swap-during-PUT race (case_lock layer "
-        "fix is the proper resolution, tracked as future work)"
+    # DEC-V61-109 closure: .case_lock no longer leaks to the
+    # symlink target. case_lock's O_NOFOLLOW open of case_dir
+    # raises before any lockfile creation can run.
+    assert not (empty_decoy / ".case_lock").exists(), (
+        "DEC-V61-109 regression: .case_lock leaked to the symlink "
+        "target on swap-during-PUT race. The case_lock O_NOFOLLOW "
+        "guard on case_dir should have refused before opening any "
+        "lockfile. Check ui/backend/services/case_manifest/locking.py."
     )
     # R10 P2: the store writes to <dir>/system/patch_classification.yaml,
     # NOT <dir>/patch_classification.yaml at the root. The latter
