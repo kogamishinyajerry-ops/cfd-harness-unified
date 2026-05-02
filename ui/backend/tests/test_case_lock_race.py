@@ -217,25 +217,63 @@ def test_case_lock_refuses_planted_regular_file_at_case_dir(tmp_path):
     assert exc_info.value.failing_check == "symlink_escape"
 
 
-def test_case_lock_dir_fd_relative_open_pins_case_dir(tmp_path):
-    """DEC-V61-109: the lockfile is opened via dir_fd=fd_case so the
-    inode used for the .case_lock is the one we pinned at fd open
-    time, not whatever the case_dir path resolves to at any later
-    moment in the contracts the lock guards. We can't easily test a
-    swap mid-flight without a more elaborate harness, but we can
-    assert the lockfile lands at the actual case_dir (not anywhere
-    else) under normal use, and that the fd-relative open is the
-    code path being exercised.
+def test_case_lock_dir_fd_pinning_survives_swap_after_fd_open(
+    tmp_path, monkeypatch
+):
+    """DEC-V61-109 (Codex R1 P2 closure): the lockfile is opened via
+    dir_fd=fd_case so the inode used is the one we pinned at fd open
+    time, not whatever case_dir resolves to at any later moment.
+
+    To prove this is a REAL regression for V109 (not something the
+    pre-V109 path-based open would also pass), we monkeypatch
+    ``_open_or_create_lock_fd`` to perform an attacker-style swap
+    BETWEEN ``case_lock`` opening fd_case and calling the helper:
+
+      1. rename real case_dir → a sibling "moved" path
+         (fd_case still references the original inode by file handle)
+      2. plant a symlink at case_dir → "malicious" target dir
+
+    Then call the real helper. With V109's dir_fd-relative open the
+    lockfile lands at <moved>/.case_lock (the pinned inode), NOT at
+    <malicious>/.case_lock (the swapped path's resolution). The
+    pre-V109 path-based open would have landed it at <malicious>/.
     """
-    case_dir = tmp_path / "real_case"
+    from ui.backend.services.case_manifest import locking as locking_mod
+
+    case_dir = tmp_path / "case_swap_target"
     case_dir.mkdir()
+    moved = tmp_path / "case_moved"  # where the real case_dir ends up
+    malicious = tmp_path / "malicious_target"
+    malicious.mkdir()
+
+    real_helper = locking_mod._open_or_create_lock_fd
+
+    def swapping_helper(fd_case):
+        # Attacker swap: rename case_dir away, replace its path with a
+        # symlink to malicious. fd_case still references the renamed
+        # inode (fd-based access doesn't follow path renames).
+        case_dir.rename(moved)
+        case_dir.symlink_to(malicious, target_is_directory=True)
+        return real_helper(fd_case)
+
+    monkeypatch.setattr(
+        locking_mod, "_open_or_create_lock_fd", swapping_helper
+    )
+
     with case_lock(case_dir):
-        assert (case_dir / ".case_lock").is_file(), \
-            ".case_lock must land at the pinned case_dir"
-        # And nowhere else in tmp_path.
-        leaked = list(tmp_path.glob("*/.case_lock"))
-        assert len(leaked) == 1 and leaked[0].parent == case_dir, \
-            f"unexpected .case_lock leakage: {leaked}"
+        # The lockfile lands at the pinned inode (now visible at
+        # `moved`), NOT at the malicious symlink target.
+        assert (moved / ".case_lock").is_file(), (
+            "DEC-V61-109 regression: .case_lock must land at the "
+            "fd_case-pinned inode (moved/), not at the swapped "
+            "case_dir path's symlink target"
+        )
+        assert not (malicious / ".case_lock").exists(), (
+            "DEC-V61-109 regression: .case_lock leaked to the "
+            "swapped malicious target. The dir_fd=fd_case anchor "
+            "should have prevented this. Check "
+            "ui/backend/services/case_manifest/locking.py."
+        )
 
 
 def test_case_lock_planted_dir_dot_case_lock_symlink_still_blocked(tmp_path):
