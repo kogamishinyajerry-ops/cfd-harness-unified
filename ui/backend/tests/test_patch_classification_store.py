@@ -525,6 +525,63 @@ def test_upsert_detects_case_dir_swap_between_open_and_lock(
     assert exc_info.value.failing_check == "case_dir_missing"
     # No sidecar landed in the new (recreated) case dir.
     assert not (case_dir / "system" / "patch_classification.yaml").exists()
+    # R6 P2: the orphan stub case_lock left behind (empty case_dir
+    # + .case_lock) must be cleaned up so subsequent GET requests
+    # don't treat the resurrected path as a live case.
+    assert not case_dir.exists(), (
+        "case_lock's orphan stub must be cleaned up after drift detection"
+    )
+
+
+def test_upsert_returns_symlink_escape_when_path_swapped_to_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex R6 P3: when ``case_dir`` is replaced by a symlink between
+    the pre-lock open (which got fd_case for the original real
+    directory) and case_lock acquisition, the post-lock validation
+    must surface ``symlink_escape`` (→ HTTP 422), NOT the generic
+    ``case_dir_missing`` (→ 404). The 422 contract lets operators
+    diagnose containment violations cleanly.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
+    )
+
+    real_dir = tmp_path / "case_real"
+    real_dir.mkdir()
+    decoy = tmp_path / "decoy_target"
+    decoy.mkdir()
+
+    real_case_lock = mod.case_lock
+
+    @contextmanager
+    def swapping_to_symlink(cd):
+        # Delete the real dir and replace with a symlink to decoy
+        # BEFORE entering the original case_lock (which would
+        # otherwise mkdir-recreate cd as a regular dir).
+        import shutil
+
+        shutil.rmtree(cd)
+        cd.symlink_to(decoy, target_is_directory=True)
+        with real_case_lock(cd):
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", swapping_to_symlink)
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            real_dir,
+            patch_name="x",
+            bc_class=BCClass.SYMMETRY,
+        )
+    assert exc_info.value.failing_check == "symlink_escape", (
+        "symlink-replacement must map to symlink_escape, not "
+        "case_dir_missing — preserves the 422 containment contract"
+    )
+    # Decoy untouched.
+    assert not (decoy / "system").exists()
 
 
 def test_load_under_lock_returns_overrides(tmp_path: Path):

@@ -119,17 +119,64 @@ def _open_dir_no_follow(parent_fd: int | None, name: str) -> int:
         ) from exc
 
 
+def _cleanup_case_lock_orphan_stub(case_dir: Path) -> None:
+    """Remove the empty ``case_dir`` + ``.case_lock`` that
+    ``case_lock`` re-created on a deleted case path.
+
+    Codex DEC-V61-108 R6 P2 closure: ``case_lock(case_dir)`` runs
+    ``mkdir(parents=True, exist_ok=True)`` then opens ``.case_lock``
+    inside it. When the case had been deleted before the lock
+    acquisition, this leaves an orphan stub at the case_dir path
+    that subsequent ``GET /patch-classification`` (and any other
+    case_id-keyed route) would treat as a live empty case. We
+    best-effort tear it down: if the directory contains only the
+    expected lockfile (i.e. nothing else has been written into the
+    stub), unlink + rmdir it.
+
+    Best-effort: a concurrent writer that landed real content into
+    the stub between ``case_lock`` exit and our cleanup will block
+    the rmdir; we tolerate that and leave the stub. The stub is
+    not a security issue per se — it's a UX/observability issue
+    Codex flagged.
+    """
+    try:
+        children = sorted(p.name for p in case_dir.iterdir())
+    except OSError:
+        # case_dir gone or unreadable — nothing to clean up.
+        return
+    # Only the lockfile case_lock created and possibly nothing else.
+    if children and set(children) - {".case_lock"}:
+        # Real content exists — refuse to rmtree (would lose data).
+        return
+    try:
+        (case_dir / ".case_lock").unlink(missing_ok=True)
+    except OSError:
+        return
+    try:
+        case_dir.rmdir()
+    except OSError:
+        # Concurrent re-create or non-empty after unlink — tolerate.
+        return
+
+
 def _assert_fd_still_matches_path(fd_case: int, case_dir: Path) -> None:
     """Raise if ``fd_case`` no longer references the inode currently
     visible at ``case_dir``.
 
-    Codex DEC-V61-108 R5 P1: closes the swap-between-open-and-lock
-    race. ``case_lock`` cannot be the synchronization boundary on
-    its own because its ``mkdir(exist_ok=True)`` will re-create a
-    deleted case dir and lock the NEW inode, leaving our fd_case
-    pointing at an orphaned old inode. Comparing ``fstat(fd_case)``
-    to ``lstat(case_dir)`` after lock acquisition detects every
-    such drift: delete-recreate, rename-swap, symlink-replacement.
+    Codex DEC-V61-108 R5 P1 + R6 P3: closes the swap-between-open-
+    and-lock race. ``case_lock`` cannot be the synchronization
+    boundary on its own because its ``mkdir(exist_ok=True)`` will
+    re-create a deleted case dir and lock the NEW inode, leaving
+    our fd_case pointing at an orphaned old inode. Comparing
+    ``fstat(fd_case)`` to ``lstat(case_dir)`` after lock acquisition
+    detects every such drift: delete-recreate, rename-swap,
+    symlink-replacement.
+
+    R6 P3 refinement: distinguish symlink-replacement (return
+    ``symlink_escape`` so the route maps to 422) from plain
+    delete-recreate (``case_dir_missing`` → 404). Misclassifying
+    the symlink case as 404 made containment violations harder to
+    diagnose than they should be.
     """
     try:
         path_st = os.stat(str(case_dir), follow_symlinks=False)
@@ -144,6 +191,15 @@ def _assert_fd_still_matches_path(fd_case: int, case_dir: Path) -> None:
             f"could not lstat case_dir post-lock: {case_dir}: {exc}",
             failing_check="case_dir_missing",
         ) from exc
+    # R6 P3: a symlink at the case_dir path is a containment
+    # violation regardless of whether the inode also changed.
+    if stat.S_ISLNK(path_st.st_mode):
+        raise PatchClassificationIOError(
+            f"case_dir replaced by a symlink between pre-lock open "
+            f"and lock acquisition: {case_dir} — refusing the "
+            f"mutation (containment violation)",
+            failing_check="symlink_escape",
+        )
     try:
         fd_st = os.fstat(fd_case)
     except OSError as exc:
@@ -439,7 +495,20 @@ def _apply_under_case(
                 # tree while the visible case is locked elsewhere —
                 # losing the serialization guarantee. The fstat-vs-
                 # lstat compare catches every such race.
-                _assert_fd_still_matches_path(fd_case, case_dir)
+                try:
+                    _assert_fd_still_matches_path(fd_case, case_dir)
+                except PatchClassificationIOError:
+                    # Codex DEC-V61-108 R6 P2 closure: case_lock has
+                    # already executed its ``mkdir(exist_ok=True)``
+                    # and created its lockfile, leaving an empty
+                    # stub at the case_dir path that future
+                    # GET/PUT calls would treat as a live case.
+                    # Best-effort cleanup so the case_id appears
+                    # truly deleted to subsequent requests. We do
+                    # this BEFORE re-raising so the caller still
+                    # sees the original error.
+                    _cleanup_case_lock_orphan_stub(case_dir)
+                    raise
                 # We're now serialized against setup_bc and other
                 # PUT/DELETEs on this case. Open system/ via the
                 # already-vetted fd_case (mkdir if needed).
