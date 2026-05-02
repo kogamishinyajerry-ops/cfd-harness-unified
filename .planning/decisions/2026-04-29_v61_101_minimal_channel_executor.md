@@ -70,7 +70,7 @@ prerequisite_status:
   v61_100_acceptance: Implementation Complete · Awaiting CFDJerry visual smoke on multi-q channel path (this DEC upgrades the §4c smoke from "blocked" to "confident · dicts written")
   break_freeze_quota: NOT consumed — V61-098 used the final §11.1 BREAK_FREEZE slot. This DEC routes through the normal feature-freeze process per §11.1 §H.
 
-notion_sync_status: pending (Codex APPROVE'd at R2 commit 44d1716; awaiting next Notion-MCP-online window for sync)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81d8bed2c9fc1d6e70f8)
 codex_tool_report_path:
   step_1_round_1: reports/codex_tool_reports/dec_v61_101_step1_r1.md (CHANGES_REQUIRED · 2026-04-30 commit b7986ba · 1 HIGH partial-stale-pin acceptance + 1 MED channel-error HTTP mapping + 1 LOW Re calculation)
   step_1_round_2: reports/codex_tool_reports/dec_v61_101_step1_r2.md (APPROVE · 2026-04-30 commit e470618 · 0 findings · 34/34 in classifier+route slice · Re≈100 verified · HTTP precedence preserved)

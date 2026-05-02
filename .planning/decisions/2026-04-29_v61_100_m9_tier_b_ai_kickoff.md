@@ -38,7 +38,7 @@ prerequisite_status:
   v61_098_acceptance: Implementation Complete · Awaiting CFDJerry visual smoke (per dogfood guide) — Tier-B Step 1 builds ON TOP of Tier-A's 8 commits (d06d41d..0abdd74) which are pushed to origin and Codex-verified across 7 rounds. M9 Step 1 (this DEC) was CLASS-1 docs-only-OUTPUT-equivalent (frontend wiring of already-shipped backend); no new contract, no new persistent state. Step 2 will require V61-098 Accepted before backend changes (Kogami trigger evaluation may apply).
   break_freeze_quota: Tier-A consumes the FINAL §11.1 BREAK_FREEZE slot (3/3) per V61-098 frontmatter. M9 Step 1 lands UNDER the same quota slot since it's a layered extension of the Tier-A surface; no new quota required. M9 Step 2 (backend classifier) routes through normal feature freeze (post-Tier-A-Acceptance).
 
-notion_sync_status: pending (will sync after Step 1 review fully closed + Step 2 plan firms up)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed812fa1f1d9b54b37e4e2)
 autonomous_governance: true
 
 codex_tool_report_path:
