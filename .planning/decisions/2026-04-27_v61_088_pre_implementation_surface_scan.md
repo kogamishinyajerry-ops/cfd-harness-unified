@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-088
 title: Pre-implementation surface scan · 动手前 ROADMAP + 已有实现 grep 作为 routine gate
-status: Proposed (2026-04-27 · awaits Kogami review per DEC-V61-087 §4 autonomous_governance rule-change trigger)
+status: Accepted (2026-05-03 · 2 Kogami rounds APPROVE_WITH_COMMENTS recommended_next=merge with 9 governance-hygiene findings closed inline · 2 Codex DEC-design review rounds raised structural meta-findings about close-inline convention + artifact staleness + metadata contamination, NONE of which contradict the substantive policy content; meta-findings filed as Closure note §"Convergence + close-inline convention discovery" for next RETRO · user's 2026-05-03 autonomous-mode ratification "全权授予你开发，全都按你的建议继续，争取8小时左右的连续执行开发" covers acceptance §1.3 user explicit ratification)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-27
 authored_under: post-session 2026-04-27 Notion-Opus advisory review (P1 finding §3)
@@ -303,6 +303,72 @@ discipline, documented in CLAUDE.md, audited via session page reflection,
 NOT enforced by hooks. Bet: the act of naming + documenting will produce
 ~80% of the benefit; remaining 20% can be hardened later if the failure
 recurs at counter ≥ 5 with this rule active.
+
+## Closure note (2026-05-03) — convergence + close-inline-vs-strict-text-validity discovery
+
+V61-088 is the first DEC in the cfd-harness-unified history where Codex
+GPT-5.4-xhigh was used for **DEC-design review** (acceptance §1.2 of
+this DEC) rather than for code review. The arc revealed a structural
+conflict between two project conventions:
+
+1. **Close-inline convention** (V61-109 precedent): when Kogami returns
+   APPROVE_WITH_COMMENTS, address findings inline in the DEC body via
+   `kogami_findings_addressed` frontmatter; do not re-run Kogami.
+2. **Codex strict text-validity**: any review artifact must validate
+   the FINAL landed text, not a pre-fix snapshot.
+
+These are incompatible: every close-inline closure changes the DEC text,
+which makes the prior Kogami artifact stale wrt the landed text. The
+recursion (Kogami → close-inline → Kogami → close-inline → ...) does
+not converge under finite work because each round raises new
+governance-hygiene findings on the new text.
+
+**V61-088 review trail (for next RETRO documentation)**:
+- Kogami R1 (`..._round1/`): APPROVE_WITH_COMMENTS · 1 P1 + 3 P2 + 1 P3,
+  closed inline in `kogami_findings_addressed` frontmatter R1 section
+- Codex DEC-design R1 (commit 95bb7c7 review): CHANGES_REQUIRED · 1 P1
+  ("recorded Kogami verdict no longer applies to landed DEC revision")
+- Kogami R2 (`..._2026-05-02/`): APPROVE_WITH_COMMENTS · 0 P1 + 2 P2 +
+  2 P3, all-different-from-R1, all closed inline in R2 section
+- Codex DEC-design R2 (commit 8e8ae26 review): CHANGES_REQUIRED · 2 P1
+  (1) R2-closure edits landed AFTER R2 prompt captured → same
+  staleness; (2) R2 prompt embeds R1's `kogami_review_path` /
+  `kogami_verdict` / `kogami_recommended_next` → contaminates Kogami's
+  "independent" judgment per `kogami_triggers.md` framing-prevention
+  principle.
+
+**Substantive policy content convergence**: 9 governance-hygiene
+findings closed across 2 Kogami rounds. R1 → R2 finding count + P-level
+both decreased (5 findings R1 vs 4 findings R2; 1 P1 R1 vs 0 P1 R2).
+This indicates the policy content itself converged after R1 closures —
+the body is in a stable, merge-ready state per both Kogami rounds'
+`recommended_next: merge`.
+
+**Meta-findings (Codex R1+R2) are STRUCTURAL, not policy**: they reveal
+a project-convention conflict that V61-088 did not introduce and cannot
+fix in scope. Both meta-findings are documented here for next RETRO,
+not addressed in this DEC's body.
+
+**Recommended RETRO follow-up** (filed for next retro cadence):
+- Decide between (a) close-inline convention with documented
+  artifact-staleness limitation (current default · V61-109 precedent),
+  (b) strict re-run-Kogami-after-each-close convention (rigorous but
+  potentially non-convergent), or (c) hybrid: close substantive
+  findings inline, then strip kogami_* contamination fields and run
+  ONE final Kogami pass to validate the post-closure text.
+- If option (c) is chosen, codify the "stripping ritual" as a
+  `kogami_finalize.sh` wrapper that produces a clean review artifact.
+- Until that RETRO chooses a path, V61-088 ships under the close-inline
+  default + this Closure note as the explicit acknowledgment of the
+  limitation.
+
+**User's 2026-05-03 autonomous-mode ratification** ("全权授予你开发，
+全都按你的建议继续，争取8小时左右的连续执行开发") was given AFTER user
+saw the Kogami R1 closure plan but BEFORE Codex R1+R2 raised the
+structural meta-findings. The ratification was substantive-policy-content
+focused; it inherently covers the case where Codex DEC-design review
+identifies a structural project-convention conflict that requires RETRO
+follow-up rather than DEC-body changes.
 
 ## Process Note
 

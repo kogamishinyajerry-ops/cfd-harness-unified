@@ -90,6 +90,50 @@ Tier 2 implementation options (out-of-scope for DEC-V61-087):
 - `python3 scripts/governance/verify_q4_counter_truth_table.py` — Q4 counter truth table compatibility (target: 0 drift)
 - `bash scripts/governance/test_strategic_package.sh` — P-2.5 schema validator (target: 8/8 pass)
 
+## Pre-implementation discipline (per DEC-V61-088 · 2026-05-03)
+
+Before starting any non-trivial implementation work — **≥30 LOC OR new
+top-level page/route/service file** — run a 2-step pre-implementation
+surface scan and write findings to session memory:
+
+1. **ROADMAP scan** — read the relevant ROADMAP §30/§60/§90-day section,
+   identify whether the proposed feature maps to a known item, note its
+   current status + planning artifact link.
+2. **Existing-implementation grep** — `grep -rin "<feature_keyword>"` over
+   `src/ ui/backend/ ui/frontend/src/ scripts/`; read first 60 lines of any
+   matched file. If a substantial pre-existing implementation is found,
+   STOP and surface to user with disposition options (a) extend / (b)
+   parallel new / (c) refactor.
+
+**Top-level file** = new file under `ui/backend/routes/*.py`,
+`ui/backend/services/*.py` (top-level, not nested helper),
+`ui/frontend/src/pages/**/*.tsx` (top-level page component), or
+`scripts/*.py` (user-facing entry point). Internal helpers do NOT count.
+
+**Skip clauses**: routine bugfix on already-located file · CLASS-1 docs-only ·
+user explicitly says "rewrite X" · trivial single-file edit ≤10 LOC AND no
+new top-level file. Trigger wins on conflict (a 9-LOC edit creating a new
+top-level route file → scan mandatory).
+
+**Commit-trailer discipline**:
+- When prior implementation found: commit MUST carry
+  `Surface-scan-found: <path> · disposition: extend|parallel|refactor`
+- When scan finds nothing: commit SHOULD carry `Surface-scan: clean` (optional
+  but encouraged — its absence is auditable).
+
+**Interaction with §11 standing rules**: §11.1 freeze defaults to
+extend-existing on workbench territory; parallel-new requires
+BREAK_FREEZE rationale + Kogami acknowledgment. §11.4 quota accounting is
+unchanged; what's new is awareness — check current quota before choosing
+parallel-new vs extend on §11.4-tracked paths.
+
+**Out of scope**: does NOT modify §10.5.4a audit-required surface gating
+(supplements, does not replace).
+
+See DEC-V61-088 for full rationale, Kogami review trail (2 rounds
+APPROVE_WITH_COMMENTS · 9 governance-hygiene findings closed inline), and
+RETRO follow-up on close-inline-vs-strict-text-validity convention.
+
 ## Inherited rules from `~/CLAUDE.md`
 
 User-level CLAUDE.md governs:
