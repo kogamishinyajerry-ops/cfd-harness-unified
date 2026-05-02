@@ -9,7 +9,7 @@
 // on the public `useSolveStream` hook state after the stream drains.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, act, screen } from "@testing-library/react";
+import { render, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 
