@@ -1336,3 +1336,295 @@ def test_to_foam_normalizes_msh_stat_oserror(tmp_path: Path):
         f"PermissionError on msh stat must surface as GmshToFoamError "
         f"mentioning stat/filesystem, got: {excinfo.value}"
     )
+
+
+# ----- DEC-V61-105 Phase 2.4 defensive-hardening tests -------------------
+#
+# These tests cover the two forward-looking guards added to
+# ``_gmsh_inline``'s named-solid voting block. Both are paranoid against
+# future Phase 2.3 (parametric generator) emitting non-Triangle3 surface
+# elements or against gmsh-binding payload corruption — they are NOT
+# exercised by the current real-gmsh path (Mesh.Algorithm3D=1 over STL
+# input always yields Triangle3 + length-divisible-by-3 arrays).
+#
+# Strategy: real seamed multi-solid STL so ``parse_named_solids_from_path``
+# returns a non-empty dict and the named-solid branch activates; fake
+# gmsh module so ``getElements(dim=2, tag=...)`` injects the bad data
+# this guard is meant to catch.
+
+
+def _v61_105_p24_fake_gmsh(*, getelements_for_voting):
+    """Build a _FakeGmsh stub adequate for ``_gmsh_inline`` up to (but
+    not past) the named-solid voting block.
+
+    ``getelements_for_voting`` is a callable that returns the
+    ``(types, elem_tags_list, node_tags_list)`` triple for a given
+    surface tag. The stub installs a single shared edge across all
+    surfaces so ``partition_surfaces_by_body`` returns a single-body
+    list (skipping the multi-body topology branch this DEC isn't
+    about).
+    """
+    surfaces_list = [(2, 1), (2, 2), (2, 3)]
+    # Force a single shared edge so union-find groups all surfaces
+    # into one body — exercises the single-loop addSurfaceLoop path
+    # at line 196 + falls through to the named-solid voting block.
+    shared_edge_tag = 100
+
+    class _FakeGeo:
+        @staticmethod
+        def addSurfaceLoop(_tags):
+            return 1
+
+        @staticmethod
+        def addVolume(_loops):
+            return 1
+
+        @staticmethod
+        def synchronize():
+            return None
+
+    class _FakeMesh:
+        @staticmethod
+        def classifySurfaces(**_kwargs):
+            return None
+
+        @staticmethod
+        def createGeometry():
+            return None
+
+        @staticmethod
+        def generate(_dim):
+            return None
+
+        @staticmethod
+        def getNodes(*_args, **_kwargs):
+            # _bbox_diagonal at line 371 needs ``len(nodes) >= 2`` and
+            # ``len(nodes[1]) > 0``; return one fake node.
+            import numpy as _np
+
+            return ([1], _np.array([0.0, 0.0, 0.0]), [])
+
+        @staticmethod
+        def getElement(*_args, **_kwargs):
+            return ([], [], [])
+
+        @staticmethod
+        def getNode(_nid):
+            # Won't be called — defensive check raises before voting
+            # consumes coords. Defined as a safety net.
+            return ((0.0, 0.0, 0.0), (), 0, 0)
+
+        @staticmethod
+        def getElements(dim, tag=None):
+            # The voting block calls with (dim=2, tag=<surface>).
+            if dim == 2 and tag is not None:
+                return getelements_for_voting(tag)
+            # Anything else returns the empty triple — we never
+            # reach the post-generate getElements paths because
+            # defensive check raises first.
+            return ([], [], [])
+
+    class _FakeModel:
+        geo = _FakeGeo
+        mesh = _FakeMesh
+
+        @staticmethod
+        def getEntities(dim):
+            if dim == 2:
+                return list(surfaces_list)
+            if dim == 3:
+                return [(3, 1)]
+            return []
+
+        @staticmethod
+        def getBoundary(target, *, oriented=False, **_kwargs):
+            # All surfaces report the same bounding edge → union-find
+            # merges them into one body → single-loop branch.
+            return [(1, shared_edge_tag)]
+
+        @staticmethod
+        def addPhysicalGroup(*_args, **_kwargs):
+            return 1
+
+        @staticmethod
+        def setPhysicalName(*_args, **_kwargs):
+            return None
+
+    class _FakeOption:
+        @staticmethod
+        def setNumber(*_args, **_kwargs):
+            return None
+
+    class _FakeGmsh:
+        option = _FakeOption
+        model = _FakeModel
+
+        @staticmethod
+        def initialize():
+            return None
+
+        @staticmethod
+        def finalize():
+            return None
+
+        @staticmethod
+        def merge(_path):
+            return None
+
+        @staticmethod
+        def write(_path):
+            return None
+
+    return _FakeGmsh
+
+
+def test_v61_105_phase2_4_rejects_non_triangle3_surface_element(
+    tmp_path: Path, monkeypatch
+):
+    """DEC-V61-105 Phase 2.4 defensive check #1: named-solid voting
+    must reject non-Triangle3 surface elements before silently
+    misinterpreting their node array. Forward-looking guard for the
+    Phase 2.3 parametric generator and any future curved/higher-order
+    branch."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "named.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())
+
+    def _bad_types_for(tag):
+        # First surface: pretend gmsh returned mixed Triangle3 + Triangle6.
+        # Triangle6 is gmsh element type 9. The voting block's
+        # ``len(flat_nodes) // 3`` would silently misinterpret the
+        # Triangle6 nodes as 2× the actual triangle count.
+        return ([2, 9], [[1, 2]], [[100, 101, 102, 200, 201, 202, 203, 204, 205]])
+
+    fake_gmsh = _v61_105_p24_fake_gmsh(getelements_for_voting=_bad_types_for)
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", fake_gmsh)
+
+    with pytest.raises(runner_mod.GmshMeshGenerationError) as excinfo:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    msg = str(excinfo.value)
+    assert "Triangle3" in msg, f"defensive #1 message must name Triangle3: {msg}"
+    assert "9" in msg, f"defensive #1 message must list the unsupported type: {msg}"
+    assert "unsupported" in msg.lower(), (
+        f"defensive #1 message must signal the rejection class: {msg}"
+    )
+
+
+def test_v61_105_phase2_4_rejects_malformed_triangle3_node_array(
+    tmp_path: Path, monkeypatch
+):
+    """DEC-V61-105 Phase 2.4 defensive check #2: named-solid voting
+    must reject a Triangle3 node array whose length is not divisible
+    by 3 instead of silently dropping the truncated remainder. Guards
+    against gmsh-binding payload corruption / partial-element-write
+    races / version-mismatch."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    stl_path = tmp_path / "named.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())
+
+    def _malformed_array_for(tag):
+        # All Triangle3 (type 2) but the flat node array has length 4
+        # — one full triangle + one truncated remainder. Without the
+        # divisibility guard, ``n_tri = 4 // 3 = 1`` would silently
+        # drop the trailing two node tags.
+        return ([2], [[1]], [[100, 101, 102, 200]])
+
+    fake_gmsh = _v61_105_p24_fake_gmsh(
+        getelements_for_voting=_malformed_array_for
+    )
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", fake_gmsh)
+
+    with pytest.raises(runner_mod.GmshMeshGenerationError) as excinfo:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    msg = str(excinfo.value)
+    assert "malformed" in msg.lower(), (
+        f"defensive #2 message must classify as malformed: {msg}"
+    )
+    assert "divisible by 3" in msg, (
+        f"defensive #2 message must explain the divisibility contract: {msg}"
+    )
+    assert "length 4" in msg, (
+        f"defensive #2 message must report the offending length: {msg}"
+    )
+
+
+def test_v61_105_phase2_4_passes_through_clean_triangle3(
+    tmp_path: Path, monkeypatch
+):
+    """Regression guard: the two defensive checks must NOT fire on the
+    standard well-formed Triangle3 path. A single-type ``[2]``
+    response with a length-divisible-by-3 node array should fall
+    through to the existing voting code (which then proceeds to its
+    own assignment logic — we only verify the defensive checks pass,
+    not that voting completes)."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+    from ui.backend.services.meshing_gmsh import stl_solid_index as si_mod
+
+    stl_path = tmp_path / "named.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())
+
+    def _clean_triangle3(tag):
+        # Three well-formed Triangle3s (length 9, divisible by 3).
+        return ([2], [[1, 2, 3]], [[100, 101, 102, 103, 104, 105, 106, 107, 108]])
+
+    fake_gmsh = _v61_105_p24_fake_gmsh(getelements_for_voting=_clean_triangle3)
+
+    # Voting still depends on getNode for centroid → patch to return a
+    # constant coord, then short-circuit assign_surface_to_solid_by_voting
+    # to a deterministic name so the path completes.
+    fake_gmsh.model.mesh.getNode = staticmethod(  # type: ignore[attr-defined]
+        lambda _nid: ((0.0, 0.0, 0.0), (), 0, 0)
+    )
+
+    monkeypatch.setattr(
+        si_mod, "assign_surface_to_solid_by_voting",
+        lambda centroids, named_solids, **_kwargs: next(iter(named_solids))
+    )
+
+    import sys
+
+    monkeypatch.setitem(sys.modules, "gmsh", fake_gmsh)
+
+    # Whether the rest of the meshing flow succeeds or raises a
+    # different error is not what we're testing here; we only assert
+    # the defensive checks themselves DO NOT fire on clean Triangle3
+    # input. Any GmshMeshGenerationError mentioning the defensive
+    # markers ("Triangle3" + "unsupported", or "malformed" + "divisible")
+    # would be a regression.
+    try:
+        runner_mod._gmsh_inline(
+            stl_path=stl_path,
+            output_msh_path=tmp_path / "out.msh",
+            mesh_mode="beginner",
+            characteristic_length_override=None,
+        )
+    except runner_mod.GmshMeshGenerationError as exc:
+        msg = str(exc)
+        assert not (
+            "Triangle3" in msg and "unsupported" in msg.lower()
+        ), f"defensive #1 must not fire on clean input, got: {msg}"
+        assert not (
+            "malformed" in msg.lower() and "divisible by 3" in msg
+        ), f"defensive #2 must not fire on clean input, got: {msg}"
+    except Exception:
+        # Any other exception class is fine — we only assert the
+        # defensive checks didn't misfire.
+        pass

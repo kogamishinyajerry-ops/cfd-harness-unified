@@ -260,16 +260,69 @@ def _gmsh_inline(
                 import numpy as _np
 
                 for _dim, tag in surfaces:
-                    _types, elem_tags_list, node_tags_list = (
+                    elem_types, elem_tags_list, node_tags_list = (
                         gmsh.model.mesh.getElements(dim=2, tag=tag)
                     )
                     if not node_tags_list or len(node_tags_list[0]) == 0:
                         unassigned.append(tag)
                         continue
+                    # DEC-V61-105 Phase 2.4 defensive check #1:
+                    # surface element-type guard. The voting block
+                    # below consumes ``node_tags_list[0]`` as a flat
+                    # 3N-node array assuming Triangle3 (gmsh element
+                    # type 2). A higher-order surface element
+                    # (Triangle6 = type 9, Quad4 = 3, Quad8 = 16,
+                    # etc.) would silently misinterpret the array —
+                    # Triangle6 reads as 2× the actual count with
+                    # wrong centroids, leading to wrong patch
+                    # assignments without any surfaced error. Current
+                    # pipeline only emits Triangle3 (Mesh.Algorithm3D
+                    # = 1 over STL input), so this guard is
+                    # forward-looking for the Phase 2.3 parametric
+                    # generator and any future curved/higher-order
+                    # branch. Raise loudly rather than silently
+                    # misinterpret.
+                    non_triangle3 = [
+                        int(et) for et in elem_types if int(et) != 2
+                    ]
+                    if non_triangle3:
+                        raise GmshMeshGenerationError(
+                            f"named-solid voting requires Triangle3 "
+                            f"(gmsh element type 2) surface elements; "
+                            f"parametric surface tag={tag} reported "
+                            f"types={[int(et) for et in elem_types]} "
+                            f"(unsupported: {non_triangle3}). The "
+                            f"per-triangle voting block assumes "
+                            f"Triangle3 row-major node arrays — "
+                            f"re-mesh with Mesh.ElementOrder=1 + "
+                            f"Mesh.SecondOrderIncomplete=0, or extend "
+                            f"the voting block to handle higher-order "
+                            f"elements."
+                        )
                     # Build per-triangle centroids. node_tags_list[0]
                     # is a flat array; triangle elements use 3 nodes
                     # each, in row-major order.
                     flat_nodes = node_tags_list[0]
+                    # DEC-V61-105 Phase 2.4 defensive check #2:
+                    # malformed Triangle3 node array guard. Each
+                    # Triangle3 emits exactly 3 node tags; a flat
+                    # array length not divisible by 3 means gmsh
+                    # returned a corrupted/truncated payload (partial
+                    # element write mid-iteration, plugin-induced
+                    # inconsistency, binding-version mismatch).
+                    # Without this guard ``len(flat_nodes) // 3``
+                    # silently drops the truncated remainder and the
+                    # loop iterates over only the well-formed prefix.
+                    if len(flat_nodes) % 3 != 0:
+                        raise GmshMeshGenerationError(
+                            f"named-solid voting received a malformed "
+                            f"Triangle3 node array on parametric "
+                            f"surface tag={tag}: length "
+                            f"{len(flat_nodes)} not divisible by 3. "
+                            f"This indicates a corrupted or truncated "
+                            f"gmsh element payload — re-run meshing "
+                            f"or report as a gmsh-binding bug."
+                        )
                     n_tri = len(flat_nodes) // 3
                     if n_tri == 0:
                         unassigned.append(tag)
