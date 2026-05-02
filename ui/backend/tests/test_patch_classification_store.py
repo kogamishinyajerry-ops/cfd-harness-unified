@@ -472,6 +472,61 @@ def test_atomic_write_uses_fd_relative_ops_no_resolve_path(tmp_path: Path):
     assert set(on_disk["overrides"].keys()) == {"patch_x", "patch_y"}
 
 
+def test_upsert_detects_case_dir_swap_between_open_and_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex R5 P1: if ``case_dir`` is delete-recreated between
+    ``_open_case_no_follow`` (which gets fd_case for the OLD inode)
+    and ``case_lock`` (which mkdir-recreates and locks the NEW
+    inode), writes through fd_case land in the orphaned old tree
+    while other writers serialize on the new tree's lock —
+    breaking serialization.
+
+    The fix: after ``case_lock`` returns, fstat(fd_case) vs
+    lstat(case_dir) must agree on (st_ino, st_dev). Mismatch →
+    ``case_dir_missing``.
+
+    We simulate the swap by monkeypatching ``case_lock`` to
+    delete + recreate ``case_dir`` inside its critical section,
+    so by the time the store re-validates, the path resolves to
+    a different inode than fd_case.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
+    )
+
+    case_dir = tmp_path / "case_inode_drift"
+    case_dir.mkdir()
+
+    real_case_lock = mod.case_lock
+
+    @contextmanager
+    def swapping_case_lock(cd):
+        # Delete + recreate case_dir to force inode change BEFORE
+        # we yield (so the store's post-lock fstat compare runs
+        # against the new inode).
+        import shutil
+
+        shutil.rmtree(cd)
+        cd.mkdir()
+        with real_case_lock(cd):
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", swapping_case_lock)
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            case_dir,
+            patch_name="x",
+            bc_class=BCClass.VELOCITY_INLET,
+        )
+    assert exc_info.value.failing_check == "case_dir_missing"
+    # No sidecar landed in the new (recreated) case dir.
+    assert not (case_dir / "system" / "patch_classification.yaml").exists()
+
+
 def test_load_under_lock_returns_overrides(tmp_path: Path):
     case_dir = tmp_path / "case_load_under_lock"
     case_dir.mkdir()

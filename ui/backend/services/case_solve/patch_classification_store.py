@@ -119,6 +119,49 @@ def _open_dir_no_follow(parent_fd: int | None, name: str) -> int:
         ) from exc
 
 
+def _assert_fd_still_matches_path(fd_case: int, case_dir: Path) -> None:
+    """Raise if ``fd_case`` no longer references the inode currently
+    visible at ``case_dir``.
+
+    Codex DEC-V61-108 R5 P1: closes the swap-between-open-and-lock
+    race. ``case_lock`` cannot be the synchronization boundary on
+    its own because its ``mkdir(exist_ok=True)`` will re-create a
+    deleted case dir and lock the NEW inode, leaving our fd_case
+    pointing at an orphaned old inode. Comparing ``fstat(fd_case)``
+    to ``lstat(case_dir)`` after lock acquisition detects every
+    such drift: delete-recreate, rename-swap, symlink-replacement.
+    """
+    try:
+        path_st = os.stat(str(case_dir), follow_symlinks=False)
+    except FileNotFoundError as exc:
+        raise PatchClassificationIOError(
+            f"case_dir disappeared between open and lock acquisition: "
+            f"{case_dir}",
+            failing_check="case_dir_missing",
+        ) from exc
+    except OSError as exc:
+        raise PatchClassificationIOError(
+            f"could not lstat case_dir post-lock: {case_dir}: {exc}",
+            failing_check="case_dir_missing",
+        ) from exc
+    try:
+        fd_st = os.fstat(fd_case)
+    except OSError as exc:
+        raise PatchClassificationIOError(
+            f"could not fstat case fd: {exc}",
+            failing_check="case_dir_missing",
+        ) from exc
+    if (path_st.st_ino, path_st.st_dev) != (fd_st.st_ino, fd_st.st_dev):
+        raise PatchClassificationIOError(
+            f"case_dir inode/dev changed between pre-lock open and "
+            f"lock acquisition (path now (ino={path_st.st_ino}, "
+            f"dev={path_st.st_dev}); fd was (ino={fd_st.st_ino}, "
+            f"dev={fd_st.st_dev})) — likely concurrent delete/recreate "
+            f"or rename-swap; refusing the mutation",
+            failing_check="case_dir_missing",
+        )
+
+
 def _open_case_no_follow(case_dir: Path) -> int:
     """Open ``case_dir`` with ``O_NOFOLLOW | O_DIRECTORY``.
 
@@ -384,6 +427,19 @@ def _apply_under_case(
     try:
         try:
             with case_lock(case_dir):
+                # Codex DEC-V61-108 R5 P1 closure: re-validate that
+                # fd_case still corresponds to the inode at the
+                # case_dir path. If the directory was deleted-and-
+                # recreated, renamed-and-swapped, or replaced with a
+                # symlink between ``_open_case_no_follow`` and
+                # ``case_lock`` (whose mkdir(exist_ok=True) would
+                # silently re-create + lock the NEW inode while our
+                # fd still references the orphaned OLD inode),
+                # writes through fd_case would land in the orphaned
+                # tree while the visible case is locked elsewhere —
+                # losing the serialization guarantee. The fstat-vs-
+                # lstat compare catches every such race.
+                _assert_fd_still_matches_path(fd_case, case_dir)
                 # We're now serialized against setup_bc and other
                 # PUT/DELETEs on this case. Open system/ via the
                 # already-vetted fd_case (mkdir if needed).
