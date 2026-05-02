@@ -16,7 +16,7 @@ parent_artifacts:
 counter_impact: +1 (autonomous_governance: true)
 self_estimated_pass_rate: 70% (incremental extension of existing smoke_runner block schema · reuses existing extractor · low blast radius · the open question is whether Codex flags edge cases in the comparator DSL — float comparison tolerance, NaN handling, missing-field handling)
 codex_tool_report_path: reports/codex_tool_reports/v61_106_r10_r11_chain.md
-notion_sync_status: pending (sync follows acceptance flip)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81fab7e2ce221f4f0940)
 
 # Why now
 
