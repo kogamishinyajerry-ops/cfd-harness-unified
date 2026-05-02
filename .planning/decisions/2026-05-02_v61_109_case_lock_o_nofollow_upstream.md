@@ -41,7 +41,7 @@ unblocks_followup: |
   runs). Removing it is a small refactor that touches only the
   patch_classification_store module — bounded, low-risk, queued as separate
   DEC-V61-110 to maintain trackability per Kogami P2 #2.
-notion_sync_status: pending — to sync 2026-05-02 with the V109 chain report
+notion_sync_status: synced 2026-05-02 (https://www.notion.so/354c68942bed81abb9eecf8103c2dbb1)
 
 # Why now
 

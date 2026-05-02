@@ -24,7 +24,7 @@ implementation_commits:
   - e929f01 (fix(case-solve): DEC-V61-107 partial — fvSchemes upgrade for non-orthogonal STL meshes)
   - 47ae9e5 (docs(reports): DEC-V61-107 partial — Codex APPROVE via 86gs relay)
 follow_up_dec: V61-107.5 (the broader V107 plan — pimpleFoam migration — was peeled into V107.5 the same day; V107 closes here as the partial-scope fvSchemes change only)
-notion_sync_status: pending — to sync 2026-05-02
+notion_sync_status: synced 2026-05-02 (https://www.notion.so/354c68942bed81d881f1f36b3cd2ca03)
 
 # Why now
 

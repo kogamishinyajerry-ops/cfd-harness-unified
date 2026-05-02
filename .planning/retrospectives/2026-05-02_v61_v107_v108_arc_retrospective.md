@@ -10,7 +10,7 @@ scope: |
 status: LANDED-ALL-KOGAMI-FINDINGS-CLOSED — follows DEC-V61-108 Phase B Codex R3 APPROVE on f6d40e1; Kogami arc-size review APPROVE_WITH_COMMENTS at .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/, all 5 findings closed (4 inline + DEC backfill landed in same session per Kogami P1 #1 critical-path requirement).
 author: Claude Opus 4.7 (1M context · CLI session)
 decided_by: Claude (self-executed under standing 全权授予 authority).
-notion_sync_status: pending — to sync with the 4 backfilled DEC files in one batch
+notion_sync_status: synced 2026-05-02 (5 DECs landed in Decisions DB · V107=https://www.notion.so/354c68942bed81d881f1f36b3cd2ca03 · V107.5=https://www.notion.so/354c68942bed813e831edaa48db49335 · V108-A=https://www.notion.so/354c68942bed813a8896c6accba2498a · V108-B=https://www.notion.so/354c68942bed81a4b547c4b80e459e9a · V109=https://www.notion.so/354c68942bed81abb9eecf8103c2dbb1)
 kogami_review_path: .planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/review.md
 kogami_verdict: APPROVE_WITH_COMMENTS
 kogami_findings_addressed: |

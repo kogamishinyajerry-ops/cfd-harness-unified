@@ -30,7 +30,7 @@ implementation_commits:
   - c7cb785 (R1 P1+P2+P3 closure · single stateGenRef + key={caseId} + ApiError.detail formatting)
   - f6d40e1 (R2 P1+P3 closure · dual-token split caseGenRef vs saveSeqRef/committedSeqRef)
   - 2b34191 (R1-R3 chain report)
-notion_sync_status: pending — to sync 2026-05-02
+notion_sync_status: synced 2026-05-02 (https://www.notion.so/354c68942bed81a4b547c4b80e459e9a)
 
 # Why now
 

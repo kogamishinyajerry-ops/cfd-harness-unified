@@ -35,7 +35,7 @@ implementation_commits:
   - f28e70d (R9 P1+P2 architectural closure · accept residual)
   - dfb13db (R10 P2 verbatim closure)
   - 656b82a (R1-R11 chain report)
-notion_sync_status: pending — to sync 2026-05-02
+notion_sync_status: synced 2026-05-02 (https://www.notion.so/354c68942bed813a8896c6accba2498a)
 documented_residuals:
   - case_lock leaks .case_lock artifact to symlink target on swap-during-PUT race; proper fix requires upstream case_lock O_NOFOLLOW work — tracked as DEC-V61-109 candidate (RETRO-V61-V107-V108 R5 with §10.5.4a high-risk-PR Kogami escalation requirement)
 
