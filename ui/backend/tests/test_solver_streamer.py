@@ -567,6 +567,59 @@ def test_done_event_carries_failed_reason_when_fatal_observed(
     assert summary["converged"] is False
 
 
+def test_done_event_carries_failed_reason_for_io_error_variant(
+    tmp_path, monkeypatch
+):
+    """Codex R18 P1-A: ``--> FOAM FATAL IO ERROR`` (the variant
+    OpenFOAM emits for missing dict keys / malformed dict syntax)
+    must also trigger ``failed=True`` and a populated
+    ``failed_reason``. Earlier R17 implementation only matched the
+    plain `ERROR` form."""
+    import json
+
+    from ui.backend.services.case_solve.solver_streamer import (
+        _prepare_stream_icofoam,
+        stream_icofoam,
+    )
+
+    case_dir = tmp_path / "case_io_fatal"
+    case_dir.mkdir()
+    _stage_minimal_case(case_dir)
+
+    fatal_log = (
+        b"Time = 0.005s\n"
+        b"--> FOAM FATAL IO ERROR: \n"
+        b"keyword nuTilda is undefined in dictionary "
+        b"\"constant/transportProperties\"\n"
+        b"\n"
+        b"file: constant/transportProperties at line 17.\n"
+        b"\n"
+        b"    From function void Foam::dictionary::lookup(...) const\n"
+        b"    in file db/dictionary/dictionaryIO.C at line 187.\n"
+        b"\n"
+        b"FOAM exiting\n"
+    )
+    container = _FakeContainer(status="running", exec_lines=[fatal_log])
+    _install_fake_docker(monkeypatch, container)
+
+    prepared = _prepare_stream_icofoam(case_host_dir=case_dir)
+    events = list(stream_icofoam(prepared=prepared))
+    last = events[-1]
+    payload_line = next(
+        ln for ln in last.splitlines() if ln.startswith(b"data: ")
+    )
+    summary = json.loads(payload_line[len(b"data: "):])
+
+    assert summary["failed"] is True, (
+        "IO ERROR variant must flip failed=True (R18 P1-A)"
+    )
+    assert summary["failed_reason"] is not None
+    assert "nuTilda" in summary["failed_reason"], (
+        "failed_reason must carry the IO ERROR block content"
+    )
+    assert summary["converged"] is False
+
+
 def test_done_event_failed_false_when_no_fatal(
     tmp_path, monkeypatch
 ):

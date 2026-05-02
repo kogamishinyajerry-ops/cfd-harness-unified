@@ -47,6 +47,15 @@ export interface SolveStreamSummary {
   time_directories: string[];
   wall_time_s: number;
   converged: boolean;
+  // DEC-V61-107.5 / Codex R18 P1-B: backend now surfaces FOAM FATAL
+  // outcomes via the terminal `done` event. `failed=true` means the
+  // solver hit a fatal (regular ERROR or IO ERROR) before reaching
+  // endTime; `failed_reason` carries the captured FATAL block (≤2KB,
+  // truncated). Frontend treats failed runs as `phase="error"` so
+  // the workbench surfaces an actionable rejection instead of an
+  // amber "completed" panel.
+  failed?: boolean;
+  failed_reason?: string | null;
 }
 
 export type SolveStreamPhase =
@@ -267,23 +276,32 @@ export function SolveStreamProvider({ children }: { children: ReactNode }) {
         flushPending();
         const s = payload as SolveStreamSummary;
         setSummary(s);
-        setPhase("completed");
-        // Codex round-3 P2 + round-4 P2 (2026-04-30): a re-solve
-        // invalidates the Step 5 report bundle. The grid observer
-        // reads from React Query cache with enabled:false, so without
-        // this, navigating back to Step 5 after a re-solve would show
-        // the previous bundle's plots until the user clicked [AI 处理]
-        // again.
-        //
-        // Round-3 used invalidateQueries which marks data stale but
-        // KEEPS it in cache; an enabled:false observer will re-render
-        // with the same stale value. Round-4 uses removeQueries which
-        // actually drops the entry — the grid sees `data === undefined`
-        // and renders the empty hint until the user clicks [AI 处理].
-        if (s.case_id) {
-          queryClient.removeQueries({
-            queryKey: ["report-bundle", s.case_id],
-          });
+        // DEC-V61-107.5 / Codex R18 P1-B: when the backend reports
+        // failed=true, the run hit a FOAM FATAL — surface it as
+        // phase="error" so Step4SolveRun maps to onStepError and the
+        // workbench renders the rejection card instead of advancing
+        // to Step 5. Carry failed_reason as the actionable message.
+        if (s.failed) {
+          const reason =
+            s.failed_reason && s.failed_reason.length > 0
+              ? s.failed_reason
+              : "Solver hit a FOAM FATAL error; see log.";
+          setErrorMessage(reason);
+          setPhase("error");
+        } else {
+          setPhase("completed");
+          // Codex round-3 P2 + round-4 P2 (2026-04-30): a re-solve
+          // invalidates the Step 5 report bundle. removeQueries (vs
+          // invalidateQueries) actually drops the entry — the grid
+          // sees `data === undefined` and renders the empty hint
+          // until the user clicks [AI 处理] again. ONLY runs on
+          // successful completion: a failed run did not produce a
+          // new bundle so we must NOT drop the prior bundle.
+          if (s.case_id) {
+            queryClient.removeQueries({
+              queryKey: ["report-bundle", s.case_id],
+            });
+          }
         }
       } else if (eventName === "error") {
         const e = payload as { detail: string };

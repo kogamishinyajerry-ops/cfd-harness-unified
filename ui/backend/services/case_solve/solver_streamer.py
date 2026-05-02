@@ -127,7 +127,13 @@ _CONT_LINE = re.compile(
     r"time step continuity errors\s*:\s*sum local\s*=\s*"
     r"([0-9.eE+-]+),\s+global\s*=\s*([0-9.eE+-]+)"
 )
-_FOAM_FATAL = re.compile(r"^--> FOAM FATAL ERROR")
+# DEC-V61-107.5 / Codex R18 P1-A: also match the IO ERROR variant —
+# OpenFOAM emits `--> FOAM FATAL IO ERROR` for missing dictionary
+# keys, malformed dict syntax, etc. The original regex only matched
+# the plain ERROR form, so an IO-fatal stream would silently keep
+# `fatal_seen` false and reach the terminal `done` event marked as
+# "completed" rather than "failed".
+_FOAM_FATAL = re.compile(r"^--> FOAM FATAL (?:ERROR|IO ERROR)")
 # DEC-V61-107.5 / Codex R17 P1: extract the FOAM FATAL block from the
 # captured log so the `done` summary can carry an actionable
 # `failed_reason`. OpenFOAM fatal blocks are bounded by the FATAL
