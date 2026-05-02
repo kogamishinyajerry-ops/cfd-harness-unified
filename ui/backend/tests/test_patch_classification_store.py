@@ -584,6 +584,118 @@ def test_upsert_returns_symlink_escape_when_path_swapped_to_symlink(
     assert not (decoy / "system").exists()
 
 
+def test_cleanup_skipped_on_symlink_escape_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex R7 P1: when the post-lock validation raises
+    ``symlink_escape`` (case_dir replaced by a symlink), the
+    orphan-stub cleanup must NOT run. Path-based ``iterdir`` /
+    ``unlink`` would otherwise follow the symlink and mutate an
+    external target — exactly the containment violation we're
+    trying to prevent.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
+    )
+
+    real_dir = tmp_path / "case_real_r7"
+    real_dir.mkdir()
+    decoy = tmp_path / "decoy_with_lockfile"
+    decoy.mkdir()
+    (decoy / ".case_lock").write_text("")  # would-be victim
+    (decoy / "important_file").write_text("DO_NOT_LOSE\n")
+
+    real_case_lock = mod.case_lock
+
+    @contextmanager
+    def swap_to_symlink(cd):
+        import shutil
+
+        shutil.rmtree(cd)
+        cd.symlink_to(decoy, target_is_directory=True)
+        with real_case_lock(cd):
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", swap_to_symlink)
+
+    # Spy: track whether cleanup runs.
+    cleanup_called = False
+    real_cleanup = mod._cleanup_case_lock_orphan_stub
+
+    def spying_cleanup(case_dir):
+        nonlocal cleanup_called
+        cleanup_called = True
+        return real_cleanup(case_dir)
+
+    monkeypatch.setattr(
+        mod, "_cleanup_case_lock_orphan_stub", spying_cleanup
+    )
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            real_dir, patch_name="x", bc_class=BCClass.SYMMETRY
+        )
+    assert exc_info.value.failing_check == "symlink_escape"
+    assert not cleanup_called, (
+        "cleanup must NOT run on the symlink_escape path"
+    )
+    # Decoy completely untouched.
+    assert (decoy / ".case_lock").read_text() == ""
+    assert (decoy / "important_file").read_text() == "DO_NOT_LOSE\n"
+
+
+def test_cleanup_refuses_to_remove_dir_without_dot_case_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex R7 P2: the cleanup helper must require ``.case_lock``
+    in the dir's children before doing any removal. An empty dir
+    without our lockfile is not ours to remove — it could be a
+    fresh case being staged by another process, or an empty dir
+    that pre-existed.
+    """
+    from contextlib import contextmanager
+
+    from ui.backend.services.case_solve import (
+        patch_classification_store as mod,
+    )
+
+    case_dir = tmp_path / "case_no_lock_in_stub"
+    case_dir.mkdir()
+
+    real_case_lock = mod.case_lock
+
+    @contextmanager
+    def swap_to_empty_unrelated_dir(cd):
+        # Delete + recreate (different inode) but DO NOT enter
+        # case_lock — instead nuke the .case_lock that case_lock
+        # would create, simulating "another process replaced this
+        # dir between case_lock release and our cleanup".
+        import shutil
+
+        shutil.rmtree(cd)
+        cd.mkdir()
+        with real_case_lock(cd):
+            # case_lock created .case_lock inside cd; remove it
+            # so cleanup sees an empty dir without our authority
+            # signal.
+            (cd / ".case_lock").unlink(missing_ok=True)
+            yield
+
+    monkeypatch.setattr(mod, "case_lock", swap_to_empty_unrelated_dir)
+
+    with pytest.raises(PatchClassificationIOError):
+        upsert_override(
+            case_dir, patch_name="x", bc_class=BCClass.NO_SLIP_WALL
+        )
+    # case_dir must STILL exist — cleanup refused to rmdir it
+    # because .case_lock was absent.
+    assert case_dir.exists() and case_dir.is_dir(), (
+        "cleanup must not rmdir an empty dir lacking .case_lock"
+    )
+
+
 def test_load_under_lock_returns_overrides(tmp_path: Path):
     case_dir = tmp_path / "case_load_under_lock"
     case_dir.mkdir()

@@ -123,39 +123,75 @@ def _cleanup_case_lock_orphan_stub(case_dir: Path) -> None:
     """Remove the empty ``case_dir`` + ``.case_lock`` that
     ``case_lock`` re-created on a deleted case path.
 
-    Codex DEC-V61-108 R6 P2 closure: ``case_lock(case_dir)`` runs
-    ``mkdir(parents=True, exist_ok=True)`` then opens ``.case_lock``
-    inside it. When the case had been deleted before the lock
-    acquisition, this leaves an orphan stub at the case_dir path
-    that subsequent ``GET /patch-classification`` (and any other
-    case_id-keyed route) would treat as a live empty case. We
-    best-effort tear it down: if the directory contains only the
-    expected lockfile (i.e. nothing else has been written into the
-    stub), unlink + rmdir it.
+    Codex DEC-V61-108 R6 P2 + R7 P1+P2 closure: tightened to
+    minimize blast radius.
 
-    Best-effort: a concurrent writer that landed real content into
-    the stub between ``case_lock`` exit and our cleanup will block
-    the rmdir; we tolerate that and leave the stub. The stub is
-    not a security issue per se — it's a UX/observability issue
-    Codex flagged.
+    Race-safety rules:
+
+    * **R7 P1**: caller MUST gate this on the inode-drift error
+      class. Calling this when ``case_dir`` is currently a symlink
+      (the R6 P3 ``symlink_escape`` path) would let ``iterdir`` /
+      ``unlink`` follow the symlink and mutate an external target.
+      The caller now branches on ``failing_check`` and only
+      invokes us for ``case_dir_missing``.
+    * **R7 P2**: refuse to remove the directory unless
+      ``.case_lock`` is one of its children. Empty-but-no-lockfile
+      means we're not authoritative for this dir — another
+      process replaced it independently, or already cleaned up.
+    * Symlink hardening at the call site: open ``case_dir`` with
+      ``O_NOFOLLOW`` before ``iterdir``-equivalent listing so a
+      symlink that gets planted between R5 detection and our
+      cleanup still can't redirect us.
+
+    Best-effort: if anything fails (concurrent writer, perms,
+    new symlink), we silently bail. The stub remaining on disk
+    is a UX issue, not a security one — the security boundary
+    (no writes through symlinks, no writes to wrong inode) is
+    already enforced upstream.
     """
+    # Race-safe directory listing: open the path with O_NOFOLLOW
+    # so a symlink that races us can't redirect ``iterdir``.
     try:
-        children = sorted(p.name for p in case_dir.iterdir())
+        fd_dir = os.open(
+            str(case_dir),
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
     except OSError:
-        # case_dir gone or unreadable — nothing to clean up.
-        return
-    # Only the lockfile case_lock created and possibly nothing else.
-    if children and set(children) - {".case_lock"}:
-        # Real content exists — refuse to rmtree (would lose data).
+        # Not a directory (e.g. symlink swap raced us), or gone,
+        # or perms — nothing safe to clean up.
         return
     try:
-        (case_dir / ".case_lock").unlink(missing_ok=True)
-    except OSError:
-        return
+        try:
+            children = set(os.listdir(fd_dir))
+        except OSError:
+            return
+        # R7 P2: require .case_lock present as authority signal.
+        # An empty dir without our lockfile is not ours to remove.
+        if ".case_lock" not in children:
+            return
+        # R6 P2: only clean up if the lockfile is the ONLY child
+        # (i.e. nothing else has been written into the stub).
+        if children - {".case_lock"}:
+            return
+        # Unlink lockfile via fd-relative op so a symlink that
+        # races us still can't redirect the unlink.
+        try:
+            os.unlink(".case_lock", dir_fd=fd_dir)
+        except OSError:
+            return
+    finally:
+        try:
+            os.close(fd_dir)
+        except OSError:
+            pass
+    # rmdir uses path-based open (no fd-relative rmdir on macOS
+    # for arbitrary paths). At this point we've already proved the
+    # dir was a regular directory containing only our lockfile,
+    # which we just unlinked. The remaining race window before
+    # rmdir is small and bounded; failure is tolerated.
     try:
         case_dir.rmdir()
     except OSError:
-        # Concurrent re-create or non-empty after unlink — tolerate.
         return
 
 
@@ -497,17 +533,23 @@ def _apply_under_case(
                 # lstat compare catches every such race.
                 try:
                     _assert_fd_still_matches_path(fd_case, case_dir)
-                except PatchClassificationIOError:
-                    # Codex DEC-V61-108 R6 P2 closure: case_lock has
-                    # already executed its ``mkdir(exist_ok=True)``
-                    # and created its lockfile, leaving an empty
-                    # stub at the case_dir path that future
-                    # GET/PUT calls would treat as a live case.
-                    # Best-effort cleanup so the case_id appears
-                    # truly deleted to subsequent requests. We do
-                    # this BEFORE re-raising so the caller still
-                    # sees the original error.
-                    _cleanup_case_lock_orphan_stub(case_dir)
+                except PatchClassificationIOError as drift_exc:
+                    # Codex DEC-V61-108 R6 P2 closure (refined R7 P1):
+                    # case_lock has already executed its
+                    # ``mkdir(exist_ok=True)`` and created its lockfile,
+                    # leaving an empty stub at the case_dir path that
+                    # future GET/PUT calls would treat as a live case.
+                    # Best-effort cleanup BEFORE re-raising so the
+                    # caller still sees the original error.
+                    #
+                    # R7 P1: ONLY clean up on the case_dir_missing
+                    # branch (delete-recreate). On the symlink_escape
+                    # branch (case_dir was swapped to a symlink),
+                    # path-based cleanup ops would follow the symlink
+                    # and mutate an external target — exactly the
+                    # containment violation we're trying to prevent.
+                    if drift_exc.failing_check == "case_dir_missing":
+                        _cleanup_case_lock_orphan_stub(case_dir)
                     raise
                 # We're now serialized against setup_bc and other
                 # PUT/DELETEs on this case. Open system/ via the
