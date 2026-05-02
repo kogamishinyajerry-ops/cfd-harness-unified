@@ -124,6 +124,48 @@ export interface FaceIndexDocument {
   primitives: FaceIndexPrimitive[];
 }
 
+// ────────── DEC-V61-108 Phase A · per-patch BC classification ──────────
+
+/** Mirrors backend ``services.case_solve.bc_setup_from_stl_patches.BCClass``.
+ *  The string set MUST match the backend enum exactly — adding a new
+ *  class means coordinated backend + frontend + classifier work.
+ */
+export type BCClassValue =
+  | "velocity_inlet"
+  | "pressure_outlet"
+  | "no_slip_wall"
+  | "symmetry";
+
+/** GET /api/cases/{case_id}/patch-classification response shape.
+ *  Matches ``ui/backend/routes/case_patch_classification._build_state``.
+ *
+ *  ``available_patches`` is the live list from polyMesh/boundary (or
+ *  empty when the mesh hasn't been generated yet — a UX state the
+ *  panel surfaces explicitly so the engineer doesn't think the case
+ *  is broken).
+ *
+ *  ``auto_classifications`` is what the heuristic emits WITHOUT the
+ *  override layer applied; ``overrides`` is what the engineer has
+ *  saved. The panel renders both columns so "you're overriding X"
+ *  is visible at a glance.
+ */
+export interface PatchClassificationState {
+  case_id: string;
+  schema_version: number;
+  available_patches: string[];
+  auto_classifications: Record<string, BCClassValue>;
+  overrides: Record<string, BCClassValue>;
+}
+
+/** PUT body — single-patch upsert. Matches backend
+ *  ``_PatchClassificationPutBody``. Multi-patch batches are sent as a
+ *  sequence of PUTs so concurrent edits to different patches don't
+ *  contend on the sidecar file. */
+export interface PatchClassificationPutBody {
+  patch_name: string;
+  bc_class: BCClassValue;
+}
+
 /** Viewport configuration the step prescribes for the center pane.
  *  Tier-A: Step 1 → /geometry/render glb · Step 2 → /mesh/render glb ·
  *  Steps 3-5 fall back to Step 1's geometry as a placeholder background. */

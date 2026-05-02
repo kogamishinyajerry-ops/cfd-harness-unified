@@ -33,6 +33,7 @@ import type { CaseSolveRejection } from "@/types/case_solve";
 
 import { AnnotationPanel } from "../AnnotationPanel";
 import { DialogPanel } from "../DialogPanel";
+import { PatchClassificationPanel } from "../PatchClassificationPanel";
 import { RawDictEditor } from "@/components/RawDictEditor";
 
 // DEC-V61-102 M-RESCUE Phase 2 · Step 3 raw-dict footprint. These are
@@ -745,6 +746,18 @@ export function Step3SetupBC({
             Dismiss
           </button>
         </div>
+      )}
+
+      {/* DEC-V61-108 Phase B · per-patch BC classification override.
+       *  Always mounted on Step 3 (not gated on a pick) so the engineer
+       *  can scan all patches at a glance and override any of them.
+       *  Picked-face highlighting is purely a hint — the panel works
+       *  without a pick. */}
+      {caseId && (
+        <PatchClassificationPanel
+          caseId={caseId}
+          pickedFaceId={facePick?.picked?.faceId ?? null}
+        />
       )}
 
       {/* M-AI-COPILOT face annotations (DEC-V61-098 §A8). The panel

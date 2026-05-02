@@ -470,6 +470,119 @@ export const api = {
     ).FaceIndexDocument;
   },
 
+  // DEC-V61-108 Phase A · per-patch BC classification overrides.
+  // GET → state · PUT → upsert one (returns merged state) · DELETE
+  // → clear one (returns merged state). The store layer (backend)
+  // owns case_lock + symlink containment + atomic write — see
+  // services/case_solve/patch_classification_store.py.
+  getPatchClassification: async (
+    caseId: string,
+  ): Promise<
+    import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState
+  > => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/patch-classification`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `getPatchClassification failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState;
+  },
+
+  putPatchClassification: async (
+    caseId: string,
+    body: import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationPutBody,
+  ): Promise<
+    import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState
+  > => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/patch-classification`,
+      {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `putPatchClassification failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState;
+  },
+
+  deletePatchClassification: async (
+    caseId: string,
+    patchName: string,
+  ): Promise<
+    import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState
+  > => {
+    const params = new URLSearchParams({ patch_name: patchName });
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/patch-classification?${params.toString()}`,
+      {
+        method: "DELETE",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `deletePatchClassification failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).PatchClassificationState;
+  },
+
   solve: async (
     caseId: string,
   ): Promise<import("@/types/case_solve").SolveSummary> => {
