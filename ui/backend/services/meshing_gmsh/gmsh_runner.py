@@ -313,15 +313,32 @@ def _gmsh_inline(
                     # Without this guard ``len(flat_nodes) // 3``
                     # silently drops the truncated remainder and the
                     # loop iterates over only the well-formed prefix.
+                    #
+                    # Codex R1 P2 (V61-105 Phase 2.4): this is a
+                    # BACKEND fault (binding/version mismatch /
+                    # internal corruption), not a user-geometry
+                    # fault. Raising GmshMeshGenerationError would
+                    # map to ``gmsh_diverged`` / HTTP 422 and falsely
+                    # blame the operator's STL. Raise OSError
+                    # instead so the existing ``except OSError:
+                    # raise`` boundary at the catch-all layer (and
+                    # the ``os_error`` queue kind in
+                    # _subprocess_target) carries it through as 5xx,
+                    # matching the project's "backend/host fault →
+                    # 5xx, never relabeled as bad-geometry" contract
+                    # already enforced for disk-full / permission
+                    # failures.
                     if len(flat_nodes) % 3 != 0:
-                        raise GmshMeshGenerationError(
-                            f"named-solid voting received a malformed "
-                            f"Triangle3 node array on parametric "
-                            f"surface tag={tag}: length "
-                            f"{len(flat_nodes)} not divisible by 3. "
-                            f"This indicates a corrupted or truncated "
-                            f"gmsh element payload — re-run meshing "
-                            f"or report as a gmsh-binding bug."
+                        raise OSError(
+                            f"gmsh returned a malformed Triangle3 "
+                            f"node array on parametric surface "
+                            f"tag={tag}: length {len(flat_nodes)} "
+                            f"not divisible by 3. This indicates a "
+                            f"corrupted or truncated gmsh element "
+                            f"payload (binding/version mismatch or "
+                            f"internal inconsistency) — re-run "
+                            f"meshing or report as a gmsh-binding "
+                            f"bug."
                         )
                     n_tri = len(flat_nodes) // 3
                     if n_tri == 0:

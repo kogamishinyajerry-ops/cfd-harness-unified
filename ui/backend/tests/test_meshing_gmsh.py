@@ -1526,7 +1526,13 @@ def test_v61_105_phase2_4_rejects_malformed_triangle3_node_array(
     must reject a Triangle3 node array whose length is not divisible
     by 3 instead of silently dropping the truncated remainder. Guards
     against gmsh-binding payload corruption / partial-element-write
-    races / version-mismatch."""
+    races / version-mismatch.
+
+    Codex R1 P2 closure: this is a BACKEND fault, not user-geometry.
+    The guard raises ``OSError`` (not ``GmshMeshGenerationError``)
+    so the existing ``except OSError: raise`` boundary bubbles it as
+    5xx instead of falsely 4xx-blaming the operator's STL.
+    """
     from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
 
     stl_path = tmp_path / "named.stl"
@@ -1547,13 +1553,33 @@ def test_v61_105_phase2_4_rejects_malformed_triangle3_node_array(
 
     monkeypatch.setitem(sys.modules, "gmsh", fake_gmsh)
 
-    with pytest.raises(runner_mod.GmshMeshGenerationError) as excinfo:
+    # Must be OSError (5xx fault classification per Codex R1 P2),
+    # NOT GmshMeshGenerationError (which would map to 422 and falsely
+    # blame the operator's STL for a binding/version corruption).
+    with pytest.raises(OSError) as excinfo:
         runner_mod._gmsh_inline(
             stl_path=stl_path,
             output_msh_path=tmp_path / "out.msh",
             mesh_mode="beginner",
             characteristic_length_override=None,
         )
+    # Confirm the raised exception is exactly OSError, not a subclass
+    # (FileNotFoundError, PermissionError, etc.) — those carry
+    # different operational semantics. We want the bare OSError class
+    # the project uses for "generic backend / host fault".
+    assert type(excinfo.value) is OSError, (
+        f"defensive #2 must raise bare OSError, not subclass: "
+        f"got {type(excinfo.value).__name__}"
+    )
+    # And confirm it's NOT GmshMeshGenerationError (the 4xx-relabel
+    # bug Codex R1 P2 caught).
+    assert not isinstance(
+        excinfo.value, runner_mod.GmshMeshGenerationError
+    ), (
+        f"defensive #2 must NOT raise GmshMeshGenerationError "
+        f"(would 422-relabel a backend fault as bad-geometry); "
+        f"got {type(excinfo.value).__name__}"
+    )
     msg = str(excinfo.value)
     assert "malformed" in msg.lower(), (
         f"defensive #2 message must classify as malformed: {msg}"
