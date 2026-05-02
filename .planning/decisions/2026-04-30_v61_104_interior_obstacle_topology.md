@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-104
 title: Interior-obstacle topology — gmsh runner builds outer surface loop + reversed-inner loops for cases with interior bodies
-status: Phase 1 Implemented · Phase 1.5 Re-Scoped (2026-05-01 · Phase 1 ships partitioner + multi-loop addVolume call site + TopologyPartitionError containment guard + 14/14 tests · Codex chain R8 APPROVE_WITH_COMMENTS → R9 APPROVE clean close · **2026-05-01 empirical correction**: probe across mesh densities lc=0.0085→0.001 confirmed gmsh's single-loop addVolume ALREADY correctly treats internal shells as obstacles (0 cells inside blade bbox at all densities); the previous "no subtraction" claim was a probe artifact. Multi-loop scaffolding is functionally redundant but the R8 containment guard remains valuable. Phase 1.5 re-scoped to investigating iter01's ACTUAL physics defect (likely BC/solver, not meshing) — see tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md "Phase 1.5 empirical correction" section)
+status: Accepted (2026-05-03 · governance closure of Phase 1 + Phase 1.5 re-scope · Phase 1 ships partitioner + multi-loop addVolume call site + TopologyPartitionError containment guard + 14/14 tests at commits 30b659b + bec98b2 · Codex chain R8 APPROVE_WITH_COMMENTS → R9 APPROVE clean close at chain report `reports/codex_tool_reports/v61_104_phase1_r8_r9_chain.md` · **2026-05-01 empirical correction**: probe across mesh densities lc=0.0085→0.001 confirmed gmsh's single-loop addVolume ALREADY correctly treats internal shells as obstacles (0 cells inside blade bbox at all densities); the previous "no subtraction" claim was a probe artifact · multi-loop scaffolding is functionally REDUNDANT but TopologyPartitionError containment guard from R8 remains VALUABLE for cases where future probe artifacts mislead diagnosis · Phase 1.5 re-scoped to investigating iter01's ACTUAL physics defect (BC/solver, not meshing) — see `tools/adversarial/results/iter01_v61_104_phase1_partial_findings.md` Phase 1.5 empirical correction section · Phase 1.5 outcome chained into V61-106 (analytical-comparator framework) where iter01 was found to actually have solver-divergence defect (NaN propagation) and remains physics_validation_required SKIPPED pending follow-up DEC for numerical setup · user's 2026-05-03 autonomous-mode ratification covers acceptance.)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-30
 authored_under: tools/adversarial/results/iter01_findings.md (defect 2b root cause + scope)
@@ -22,7 +22,7 @@ phase1_5_follow_up_scope:
   - retired_2026_05_01: original 3 candidate approaches (OCC cut / surface reversal / angle tuning) all RETIRED — empirical probe proved gmsh single-loop addVolume already subtracts correctly across all mesh densities tested
   - new_scope: re-investigate iter01's actual physics defect (BC mapping, solver divergence, blade-patch label propagation, etc.) — the meshing layer is innocent
   - corrective_value: even though no code change is required for "subtraction", documenting the misdiagnosis prevents 1-3 days of wasted engineering on OCC kernel re-architecture or surface-orientation hacks
-notion_sync_status: synced 2026-04-30 (https://app.notion.com/p/353c68942bed81bb9a0bfcf29a07d09c) · re-sync pending for Phase 1 status update + R9 APPROVE
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/353c68942bed81bb9a0bfcf29a07d09c · re-synced with Phase 1 + Phase 1.5 closure status flip)
 
 # Why now
 
