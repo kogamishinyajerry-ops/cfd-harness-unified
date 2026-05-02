@@ -12,11 +12,11 @@
       "sha256": "852a4f9e0b1e45ad9a2c3a7b8b935911568a62e7452daa392ce69a49a10668ea"
     },
     {
-      "bytes": 15211,
+      "bytes": 8713,
       "label": "artifact_under_review",
       "original_path": ".planning/decisions/2026-04-27_v61_088_pre_implementation_surface_scan.md",
       "present": true,
-      "sha256": "44452f25dd7131ee84f7706d58d41e1193cc79e6972580dc278e60007f639013"
+      "sha256": "b4e5a49785b66260954f38641b0b34b537dc705241272a3d8b51a5ac0fe79114"
     },
     {
       "bytes": 1626,
@@ -174,5 +174,5 @@
     }
   ],
   "summary_algorithm_version": "1.0",
-  "trigger": "autonomous_governance_rule_change_round2"
+  "trigger": "autonomous_governance_rule_change"
 }

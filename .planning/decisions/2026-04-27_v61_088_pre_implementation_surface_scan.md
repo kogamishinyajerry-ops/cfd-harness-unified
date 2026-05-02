@@ -20,15 +20,25 @@ parent_review:
     > 变成"在已有 X 旁边重写 X′"的合理化。
 notion_sync_status: pending (sync after Kogami review + Codex DEC-design review)
 autonomous_governance: true  # this DEC modifies Claude Code's own startup discipline; does NOT modify Kogami contract or files (P-1..P-5), so §4 skip rule does NOT fire — Kogami review IS required per §4 first item (autonomous_governance rule-change DEC)
-kogami_review_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md
+kogami_review_round1_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/review.md
+kogami_review_round2_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md
+kogami_review_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md  # round 2 (final · validates the post-R1-closure DEC text)
 kogami_verdict: APPROVE_WITH_COMMENTS
 kogami_recommended_next: merge
+kogami_lineage_note: |
+  Kogami fired twice on this DEC because the project convention is "address findings inline" (cf. DEC-V61-109 precedent), which by definition produces a briefing-manifest hash mismatch between the reviewed-text and the landed-text. R1 fired on the pre-fix DEC body; R1 findings (1 P1 + 3 P2 + 1 P3) closed inline; this changed the DEC body. Codex DEC-design review of the round-1-closure commit (95bb7c7) caught the stale-artifacts issue (Codex R1 P1: "the recorded Kogami verdict no longer applies to the landed DEC revision"). To produce a verdict that DOES apply to the landed text, R2 fired on the post-R1-closure DEC body. R2 findings (2 P2 + 2 P3, all new — different content from R1) closed inline below. R2 is the final verdict that validates the landed DEC.
 kogami_findings_addressed: |
-  P1 (Hard Boundary self-modification disposition) — closed inline in §Counter handling: the DEC modifies autonomous-side startup discipline only, NOT the Kogami isolation contract / counter rules / trigger rules / Tier 1-Tier 2 boundary, so kogami_triggers.md §Hard Boundary meta-DEC clause does NOT apply.
-  P2 #1 (~30 LOC / ~10 LOC threshold edges fuzzy, asymmetric between trigger and skip-clause) — closed inline by sharpening: trigger = ≥30 LOC OR new top-level page/route/service file (no tilde); skip-clause (d) = ≤10 LOC AND no new top-level file (preserves disjunction symmetry); trigger wins on conflict.
-  P2 #2 (interaction with §11.1 Workbench freeze + §11.4 quota unaddressed) — closed inline by adding new §"Interaction with §11 standing rules" section.
-  P2 #3 (quoted-finding requirement under-specified) — closed inline by tightening §Impact: when scan finds prior implementation, commit message MUST carry `Surface-scan-found: <path> · disposition: extend|parallel|refactor` trailer; when scan finds nothing, `Surface-scan: clean` SHOULD be included (optional but encouraged).
-  P3 (Acceptance Criteria #2 sequencing relative to Kogami/Codex/user ratification) — closed inline by reordering as 3 sequenced steps.
+  ─── ROUND 1 (artifacts at kogami_review_round1_path · APPROVE_WITH_COMMENTS · recommended_next: merge) ───
+  R1·P1 (Hard Boundary self-modification disposition) — closed inline in §"Hard Boundary meta-DEC disposition": the DEC modifies autonomous-side startup discipline only, NOT the Kogami isolation contract / counter rules / trigger rules / Tier 1-Tier 2 boundary, so kogami_triggers.md §Hard Boundary meta-DEC clause does NOT apply.
+  R1·P2 #1 (~30 LOC / ~10 LOC threshold edges fuzzy, asymmetric between trigger and skip-clause) — closed inline by sharpening: trigger = ≥30 LOC OR new top-level page/route/service file (no tilde); skip-clause (d) = ≤10 LOC AND no new top-level file (preserves disjunction symmetry); trigger wins on conflict.
+  R1·P2 #2 (interaction with §11.1 Workbench freeze + §11.4 quota unaddressed) — closed inline by adding new §"Interaction with §11 standing rules" section.
+  R1·P2 #3 (quoted-finding requirement under-specified) — closed inline by tightening §Impact: when scan finds prior implementation, commit message MUST carry `Surface-scan-found: <path> · disposition: extend|parallel|refactor` trailer; when scan finds nothing, `Surface-scan: clean` SHOULD be included.
+  R1·P3 (Acceptance Criteria #2 sequencing relative to Kogami/Codex/user ratification) — closed inline by reordering as 3 sequenced steps.
+  ─── ROUND 2 (artifacts at kogami_review_round2_path · APPROVE_WITH_COMMENTS · recommended_next: merge · validates the post-R1-closure DEC text) ───
+  R2·P2 #1 (§11.4 quota wording conflates accounting rule with awareness practice) — closed inline by rephrasing the §11.4 bullet to separate (unchanged) accounting from (new) awareness: "surface scan does not change §11.4 quota accounting; what changes is engineer awareness — should check quota state before committing to parallel-new disposition".
+  R2·P2 #2 (top-level page/route/service file undefined) — closed inline in §Decision threshold note by adding an operational enumeration: top-level = new file under {ui/backend/routes/*.py, ui/backend/services/*.py top-level not nested helper, ui/frontend/src/pages/**/*.tsx top-level page component, scripts/*.py user-facing entry point}; internal helpers under existing modules do NOT count.
+  R2·P3 #1 (~/CLAUDE.md user-level edit lacks rollback path) — closed inline in §Acceptance Criteria #2.1 by adding: "if the rule produces friction on non-cfd projects, the user-level edit can be retracted to project-level only without invalidating this DEC's autonomous-governance scope".
+  R2·P3 #2 (Out of Scope doesn't disclaim §10.5.4a audit-required surfaces) — closed inline in §Out of Scope by adding: "Does NOT modify §10.5.4a audit-required surface list; surface scan supplements §10.5.4a (broader scope: any non-trivial work) but does not replace it".
 ---
 
 # DEC-V61-088 · Pre-implementation surface scan as routine gate
@@ -66,12 +76,26 @@ Before starting any non-trivial implementation work (**≥30 LOC OR new
 top-level page / route / service file**), run a **2-step pre-implementation
 surface scan** and write findings to the session's working memory.
 
-**Threshold note (Kogami P2 #1 closure 2026-05-02)**: the `~30 LOC` /
+**Threshold note (Kogami R1·P2 #1 closure 2026-05-02)**: the `~30 LOC` /
 `~10 LOC` tilde-fuzzed thresholds in earlier drafts were tightened to
 hard `≥30 LOC` / `≤10 LOC` boundaries with the disjunction preserved
 on both sides. When the trigger and skip-clause conflict (e.g. a
 9-LOC edit that introduces a new top-level route file), **the trigger
 wins**: surface scan is mandatory.
+
+**Definition of "top-level page/route/service file" (Kogami R2·P2 #2 closure 2026-05-02)**:
+A new top-level file is one introduced under any of:
+
+- `ui/backend/routes/*.py` (new FastAPI APIRouter modules — top level under `routes/`, not nested helpers)
+- `ui/backend/services/*.py` top-level (new top-level service module — internal helper modules under an existing services subdirectory do NOT count)
+- `ui/frontend/src/pages/**/*.tsx` top-level page components (new pages registered in the router; sub-components under an existing page do NOT count)
+- `scripts/*.py` user-facing entry points (new top-level scripts — utility helpers under existing script subdirectories do NOT count)
+
+Internal helpers / private utility modules / test files / fixture files
+under existing modules are NOT top-level for surface-scan purposes.
+Edge cases (e.g. a new helper service called only by an existing
+route) fall under the LOC threshold (≥30 LOC) — surface scan still
+applies to substantive helper additions but not to small ones.
 
 ### Step 1 · ROADMAP scan
 - Read the relevant ROADMAP section (§30-day / §60-day / §90-day per scope)
@@ -180,19 +204,21 @@ territory:
   refactor existing** is freeze-compatible only when the refactor is
   bounded to internal organization (no public API surface change, no new
   routes / pages / services).
-- **§11.4 ≤30 commits per 90-day rolling window on workbench paths**:
-  when the surface scan triggers on §11.4-tracked paths, the planned
-  commit counts toward the rolling quota **regardless** of whether the
-  scan finds prior work. The scan's finding ("nothing exists" vs
-  "extend X" vs "parallel new") modulates the disposition but NOT the
-  quota cost. Engineers must check §11.4 quota before committing to a
-  parallel-new disposition; if quota is tight, prefer extend-existing
-  even when parallel-new would be cleaner.
+- **§11.4 ≤30 commits per 90-day rolling window on workbench paths**
+  (Kogami R2·P2 #1 closure 2026-05-02): the surface scan does **not**
+  change §11.4 quota accounting — every workbench-path commit already
+  counts toward quota regardless of disposition. What the scan changes
+  is **engineer awareness**: when the scan triggers on §11.4-tracked
+  paths, the engineer SHOULD also check current quota state before
+  committing to a parallel-new disposition, since parallel-new spends a
+  quota slot that could be saved by extend-existing. The accounting
+  rule (every commit counts) is unchanged; the new practice is the
+  awareness check before choosing parallel-new vs extend-existing.
 
-When the scan finds nothing AND the work is in §11.4 territory, the
-commit still consumes one quota slot (this is the rule the surface scan
-PROTECTS — it ensures the engineer knows they're spending a slot, not
-silently committing in territory they didn't realize was tracked).
+The surface scan PROTECTS the engineer from silently spending a
+§11.4 quota slot in territory they didn't realize was tracked: when
+the scan triggers on workbench paths and finds nothing, the engineer
+gets visibility into the (unchanged) quota cost before committing.
 
 ## Acceptance Criteria
 
@@ -207,7 +233,7 @@ silently committing in territory they didn't realize was tracked).
    3. **User explicit ratification** of the DEC as a whole, with Kogami +
       Codex verdicts visible in the ratification context.
 
-2. Once Accepted (sequenced — Kogami P3 closure 2026-05-02 explicit
+2. Once Accepted (sequenced — Kogami R1·P3 closure 2026-05-02 explicit
    ordering of post-acceptance steps):
    1. **User confirms specific edit text** for `~/CLAUDE.md` (user-level,
       outside repo) before that edit lands. Proposed edit text: append
@@ -217,7 +243,16 @@ silently committing in territory they didn't realize was tracked).
       Surface-scan-found: trailer when prior implementation is found".
       The user-level edit is high-blast-radius (affects all projects
       under ~/CLAUDE.md governance) so user confirmation of the exact
-      edit text is a separate gate from DEC ratification.
+      edit text is a separate gate from DEC ratification. **Rollback
+      path (Kogami R2·P3 #1 closure 2026-05-02)**: if the rule
+      produces friction on non-cfd projects (e.g. greenfield prototypes
+      or throwaway scripts where 'pre-implementation surface scan via
+      grep' adds no value), the user-level edit can be retracted to
+      project-level (cfd-harness-unified `CLAUDE.md` only) without
+      invalidating this DEC's autonomous-governance scope. The
+      discipline is justified by cfd-harness-unified evidence
+      (session 2026-04-27 P1) and may not generalize to all
+      project archetypes; project-level scoping is the safe fallback.
    2. **Project CLAUDE.md edit** follows after the user-level edit lands
       (or after the user explicitly defers the user-level edit). Adds a
       new "Pre-implementation discipline" section in `CLAUDE.md`
@@ -233,6 +268,15 @@ silently committing in territory they didn't realize was tracked).
 - Does NOT change Codex review triggers (RETRO-V61-001).
 - Does NOT change counter rules (P-5 / DEC-V61-087 §5).
 - Does NOT change user's manual workflow — only Claude Code's discipline.
+- Does NOT modify §10.5.4a audit-required surface list (Kogami R2·P3 #2
+  closure 2026-05-02). Surface scan supplements but does not replace
+  §10.5.4a Codex audit-required gating: §10.5.4a fires on the 7
+  specific trust-core-adjacent surfaces regardless of surface-scan
+  outcome (different purpose: §10.5.4a is for trust-core-adjacent
+  hot paths; surface-scan is broader-scope discipline for any
+  non-trivial work). When both apply (a non-trivial change to a
+  §10.5.4a surface), both gates fire — surface scan first (find prior
+  implementation), then §10.5.4a Codex audit on the resulting commit.
 
 ## Alternatives Considered
 
