@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-099
 title: M-PANELS Phase-1A · post-R3 live-run defect closure — solver_streamer staging order regression (V61-097 R1 HIGH-2 interaction)
-status: Active (2026-04-29 · post-R3 live-run defect per RETRO-V61-053 addendum methodology · Codex pre-merge mandatory per RETRO-V61-001 "OpenFOAM solver 报错修复" trigger · CFDJerry caught on first LDC dogfood after V61-097 R4 RESOLVED commit `c49fd11`)
+status: Accepted (2026-05-03 · governance closure · post-R3 live-run defect per RETRO-V61-053 addendum methodology · Codex pre-merge 2-round chain: R1 CHANGES_REQUIRED 1 MED (staging exec_run exit_code unchecked, see reports/codex_tool_reports/dec_v61_099_round1.md) → R2 RESOLVED clean (verbatim closure of R1 recommendation, see reports/codex_tool_reports/dec_v61_099_round2.md) · implementation commit 7a15833 · self_estimated_pass_rate 80% honest (1 MED finding then RESOLVED, no calibration drift) · CFDJerry caught on first LDC dogfood after V61-097 R4 RESOLVED commit `c49fd11`; staging-order regression fully closed and post-R3 defect added to RETRO-V61-053 risk_flags)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-29
 authored_under: V61-097 closure arc · post-R3 defect class per RETRO-V61-053 addendum
@@ -15,7 +15,7 @@ parent_artifacts:
 implementation_paths:
   - ui/backend/services/case_solve/solver_streamer.py (MODIFIED · staging order at lines 284-321 · pre-create BASE only · unconditional mv with rm -rf guard)
   - ui/backend/tests/test_solver_streamer.py (MODIFIED · NEW test_staging_renames_extracted_dir_into_run_id_suffix regression test · tracks bash command sequence)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81b99234dcd967a1da98)
 autonomous_governance: true
 codex_review_required: true
 codex_review_phase: pre-merge (RETRO-V61-001 "OpenFOAM solver 报错修复" trigger · post-R3 defect raises stakes)
