@@ -361,6 +361,80 @@ def test_setup_bc_loads_overrides_inside_case_lock(
 # ─────────── load_under_lock thin sanity ───────────
 
 
+def test_upsert_refuses_missing_case_dir_without_recreating(tmp_path: Path):
+    """Codex R4 P2: ``case_lock`` had ``mkdir(parents=True,
+    exist_ok=True)`` baked in, so a delete-then-PUT race would
+    silently re-create an empty case dir + write a sidecar to it.
+    The new code probes ``case_dir`` with ``O_NOFOLLOW`` BEFORE
+    case_lock is acquired, so a missing case is rejected with
+    ``case_dir_missing`` and no recreation happens.
+    """
+    case_dir = tmp_path / "case_will_be_deleted"
+    # Don't create it.
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            case_dir,
+            patch_name="x",
+            bc_class=BCClass.SYMMETRY,
+        )
+    assert exc_info.value.failing_check == "case_dir_missing"
+    # Crucial: case_dir was NOT recreated by case_lock's mkdir.
+    assert not case_dir.exists()
+
+
+def test_upsert_refuses_when_case_dir_is_symlink(tmp_path: Path):
+    """If case_dir itself is a symlink (e.g. attacker plants a
+    symlink at the case_id slot pointing to another case), the
+    O_NOFOLLOW open of case_dir refuses with symlink_escape.
+    No write happens at the symlink target.
+    """
+    real_target = tmp_path / "victim_case"
+    real_target.mkdir()
+    (real_target / "system").mkdir()
+    (real_target / "system" / "patch_classification.yaml").write_text(
+        yaml.safe_dump({"schema_version": 1, "overrides": {"victim": "symmetry"}})
+    )
+
+    sym_case = tmp_path / "case_sym_at_root"
+    sym_case.symlink_to(real_target, target_is_directory=True)
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            sym_case,
+            patch_name="attacker",
+            bc_class=BCClass.VELOCITY_INLET,
+        )
+    assert exc_info.value.failing_check == "symlink_escape"
+    # Victim's overrides untouched — no upsert happened.
+    on_disk = yaml.safe_load(
+        (real_target / "system" / "patch_classification.yaml").read_text()
+    )
+    assert on_disk["overrides"] == {"victim": "symmetry"}
+
+
+def test_load_and_write_share_same_fd_pair(tmp_path: Path):
+    """Codex R4 P1 closure: read-half and write-half use the SAME
+    fd_case + fd_system pair. We exercise this by performing an
+    upsert that depends on a previously-saved override (the load
+    must observe what we just wrote).
+    """
+    case_dir = tmp_path / "case_load_write_share"
+    case_dir.mkdir()
+    upsert_override(
+        case_dir, patch_name="a", bc_class=BCClass.VELOCITY_INLET
+    )
+    # Second upsert reads + appends without losing 'a'.
+    upsert_override(
+        case_dir, patch_name="b", bc_class=BCClass.PRESSURE_OUTLET
+    )
+    sidecar = case_dir / "system" / "patch_classification.yaml"
+    on_disk = yaml.safe_load(sidecar.read_text())
+    assert on_disk["overrides"] == {
+        "a": "velocity_inlet",
+        "b": "pressure_outlet",
+    }
+
+
 def test_atomic_write_uses_fd_relative_ops_no_resolve_path(tmp_path: Path):
     """Codex R3 P2 closure: the writer no longer pathname-resolves
     the sidecar path before write. Instead it opens every parent
