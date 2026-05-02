@@ -304,6 +304,113 @@ describe("PatchClassificationPanel", () => {
     ).toBe("no_slip_wall");
   });
 
+  // ─── Codex R2 P1 closure · A succeeds after B fails ───
+  // The R1 single-token model dropped this case: bumping the gen on
+  // every save invalidated A's older response even though no newer
+  // save had successfully landed. The R2 split (caseGen vs
+  // committedSeq) only advances committedSeq on success, so A still
+  // commits when B fails before A.
+  it("commits an older save's response after a newer save fails", async () => {
+    getPatchClassificationMock.mockResolvedValueOnce(baseState);
+
+    let resolveA!: (s: PatchClassificationState) => void;
+    let rejectB!: (e: unknown) => void;
+    const pendingA = new Promise<PatchClassificationState>((r) => {
+      resolveA = r;
+    });
+    const pendingB = new Promise<PatchClassificationState>((_r, rj) => {
+      rejectB = rj;
+    });
+    putPatchClassificationMock
+      .mockReturnValueOnce(pendingA)
+      .mockReturnValueOnce(pendingB);
+
+    render(<PatchClassificationPanel caseId="case-1" pickedFaceId={null} />);
+    await screen.findByTestId("patch-classification-panel");
+
+    // Issue A first (inlet → no_slip_wall), then B (outlet → symmetry).
+    await userEvent.selectOptions(
+      screen.getByTestId("override-select-inlet"),
+      "no_slip_wall",
+    );
+    await userEvent.selectOptions(
+      screen.getByTestId("override-select-outlet"),
+      "symmetry",
+    );
+
+    // B fails before A resolves.
+    rejectB(
+      new ApiError(422, "rejected", {
+        failing_check: "patch_not_in_mesh",
+        detail: "outlet vanished",
+      }),
+    );
+    // Then A succeeds with its full-state response. Even though
+    // saveSeq has already advanced past A, committedSeq is still 0
+    // (B failed → didn't advance), so A's mySeq=1 > 0 wins.
+    resolveA({ ...baseState, overrides: { inlet: "no_slip_wall" } });
+
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByTestId("override-select-inlet") as HTMLSelectElement
+        ).value,
+      ).toBe("no_slip_wall");
+    });
+    // B's error stays surfaced on its row.
+    expect(screen.getByTestId("override-error-outlet").textContent).toContain(
+      "patch_not_in_mesh",
+    );
+  });
+
+  // ─── Codex R2 P3 closure · faceIndex survives a parallel save ───
+  // The R1 model guarded faceIndex with the same gen token as saves,
+  // so any save dispatched before the faceIndex GET resolved would
+  // permanently drop the highlight data. The R2 split scopes
+  // faceIndex to caseGen only, never to save-seq.
+  it("preserves faceIndex when a save lands before it resolves", async () => {
+    getPatchClassificationMock.mockResolvedValueOnce(baseState);
+    putPatchClassificationMock.mockResolvedValueOnce({
+      ...baseState,
+      overrides: { wall_left: "symmetry" },
+    });
+
+    let resolveFaceIndex!: (doc: FaceIndexDocument) => void;
+    const pendingFaceIndex = new Promise<FaceIndexDocument>((r) => {
+      resolveFaceIndex = r;
+    });
+    getFaceIndexMock.mockReset();
+    getFaceIndexMock.mockReturnValueOnce(pendingFaceIndex);
+
+    render(<PatchClassificationPanel caseId="case-1" pickedFaceId="f3" />);
+    await screen.findByTestId("patch-classification-panel");
+
+    // Save fires + completes BEFORE faceIndex resolves.
+    await userEvent.selectOptions(
+      screen.getByTestId("override-select-wall_left"),
+      "symmetry",
+    );
+    await waitFor(() => {
+      expect(
+        (
+          screen.getByTestId(
+            "override-select-wall_left",
+          ) as HTMLSelectElement
+        ).value,
+      ).toBe("symmetry");
+    });
+
+    // Now faceIndex finally resolves — must still highlight the row.
+    resolveFaceIndex(baseFaceIndex);
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId("patch-row-wall_left")
+          .getAttribute("data-picked"),
+      ).toBe("true");
+    });
+  });
+
   // ─── Codex R1 P1 #2 closure · caseId mid-flight ───
   // The parent mounts the panel with key={caseId}, so a caseId switch
   // remounts and starts fresh. As an extra defense, the panel itself

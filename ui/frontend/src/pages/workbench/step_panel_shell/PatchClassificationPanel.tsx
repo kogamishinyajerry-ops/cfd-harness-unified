@@ -79,20 +79,29 @@ export function PatchClassificationPanel({
   const [rowError, setRowError] = useState<Record<string, string>>({});
   const [savingPatch, setSavingPatch] = useState<string | null>(null);
 
-  // Codex R1 P1 #1 closure: monotonically-increasing token bumped on
-  // every state-mutating dispatch. handleChange / load capture the
-  // value at request start and only commit setState if the token
-  // hasn't moved. This prevents two concurrent edits to different
-  // patches from regressing the UI to whichever response happened to
-  // resolve last. See PatchClassificationPanel.test.tsx
-  // "rejects out-of-order resolutions".
+  // Codex R2 P1+P3 closure: split the single stateGenRef from R1 into
+  // two independent tokens because conflating them dropped legitimate
+  // updates:
+  //   - ``caseGenRef``: bumped only on caseId change. Used by the
+  //     case-scoped fetches (initial GET, getFaceIndex). A save
+  //     dispatch must NOT invalidate an in-flight face-index GET —
+  //     that's the R2 P3 bug.
+  //   - ``committedSeqRef``: tracks the highest save-seq we've already
+  //     applied to ``state``. handleChange captures its mySeq at
+  //     issue; on success it commits iff ``mySeq > committedSeq``,
+  //     then advances committedSeq. Failed saves do NOT advance
+  //     committedSeq — so an older save that succeeds after a newer
+  //     save fails still lands. That's the R2 P1 bug.
+  //   - ``saveSeqRef``: bumped on every save dispatch to mint mySeq.
   //
   // Codex R1 P1 #2 closure (defense in depth): the parent already
   // mounts the panel as <PatchClassificationPanel key={caseId} ... />
-  // so a caseId switch fully remounts and restarts these refs. The
-  // caseId-change effect below is belt-and-braces in case a future
-  // refactor drops the key prop.
-  const stateGenRef = useRef(0);
+  // so a caseId switch fully remounts. The caseId-change effect
+  // below is belt-and-braces in case a future refactor drops the
+  // key prop.
+  const caseGenRef = useRef(0);
+  const saveSeqRef = useRef(0);
+  const committedSeqRef = useRef(0);
   const cancelledRef = useRef(false);
   useEffect(() => {
     cancelledRef.current = false;
@@ -102,12 +111,15 @@ export function PatchClassificationPanel({
   }, []);
 
   // Codex R1 P1 #2 closure: proactively wipe case-scoped local state
-  // the moment caseId changes, BEFORE the new fetches resolve. Without
-  // this, the engineer would briefly see case A's overrides under
-  // case B's URL even with the parent's key prop missing. With the
-  // key prop in place, this effect runs on mount only and is a no-op.
+  // the moment caseId changes, BEFORE the new fetches resolve. With
+  // the parent's key prop in place this effect runs on mount only.
   useEffect(() => {
-    stateGenRef.current += 1;
+    caseGenRef.current += 1;
+    // Reset save sequence counters too — the new case starts from
+    // a clean slate so a stale in-flight save (which also failed
+    // the caseGen guard) can't slip through on seq comparison.
+    saveSeqRef.current = 0;
+    committedSeqRef.current = 0;
     setState(null);
     setLoadError(null);
     setFaceIndex(null);
@@ -116,16 +128,21 @@ export function PatchClassificationPanel({
   }, [caseId]);
 
   // Fetch state on mount + whenever the case changes. The captured
-  // ``generation`` lets us drop late responses from a previous case.
+  // ``caseGen`` lets us drop late responses from a previous case.
+  // The ``committedSeqRef > 0`` guard prevents a slow initial GET
+  // from clobbering a save's authoritative response that arrived
+  // first (PUT/DELETE responses are full merged state, so they
+  // strictly dominate the initial snapshot).
   useEffect(() => {
     if (!caseId) return;
-    const generation = stateGenRef.current;
+    const myCaseGen = caseGenRef.current;
     const isStale = () =>
-      cancelledRef.current || stateGenRef.current !== generation;
+      cancelledRef.current || caseGenRef.current !== myCaseGen;
     api
       .getPatchClassification(caseId)
       .then((doc) => {
         if (isStale()) return;
+        if (committedSeqRef.current > 0) return;
         setState(doc);
         setLoadError(null);
       })
@@ -138,11 +155,15 @@ export function PatchClassificationPanel({
   // FaceIndex is only needed to resolve picked-face → patch. Fetch
   // lazily — if the mesh hasn't been built yet GET /face-index 404s,
   // and we just degrade to "no highlight on pick".
+  //
+  // Codex R2 P3 closure: guarded by caseGenRef ONLY, never by the
+  // save sequence. A user save in flight must not strand the picked-
+  // face highlight feature.
   useEffect(() => {
     if (!caseId) return;
-    const generation = stateGenRef.current;
+    const myCaseGen = caseGenRef.current;
     const isStale = () =>
-      cancelledRef.current || stateGenRef.current !== generation;
+      cancelledRef.current || caseGenRef.current !== myCaseGen;
     api
       .getFaceIndex(caseId)
       .then((doc) => {
@@ -167,13 +188,16 @@ export function PatchClassificationPanel({
 
   const handleChange = useCallback(
     async (patchName: string, nextValue: string) => {
-      // Bump the generation BEFORE issuing the request — any in-flight
-      // sibling request now becomes "stale" and its post-resolve
-      // setState will be dropped (Codex R1 P1 #1 closure).
-      stateGenRef.current += 1;
-      const generation = stateGenRef.current;
-      const isStale = () =>
-        cancelledRef.current || stateGenRef.current !== generation;
+      // Mint a per-dispatch sequence + capture the case generation.
+      // The save commits iff (a) the case hasn't changed under us
+      // AND (b) no newer save has already been applied (Codex R2 P1
+      // closure). Failed saves leave committedSeq alone so an older
+      // save that succeeds later can still land.
+      saveSeqRef.current += 1;
+      const mySeq = saveSeqRef.current;
+      const myCaseGen = caseGenRef.current;
+      const isCancelled = () =>
+        cancelledRef.current || caseGenRef.current !== myCaseGen;
 
       setSavingPatch(patchName);
       setRowError((prev) => {
@@ -191,13 +215,15 @@ export function PatchClassificationPanel({
             bc_class: nextValue as BCClassValue,
           });
         }
-        if (isStale()) return;
+        if (isCancelled()) return;
+        if (mySeq <= committedSeqRef.current) return;
+        committedSeqRef.current = mySeq;
         setState(next);
       } catch (e) {
-        if (isStale()) return;
+        if (isCancelled()) return;
         setRowError((prev) => ({ ...prev, [patchName]: formatApiErrorDetail(e) }));
       } finally {
-        if (!isStale()) setSavingPatch(null);
+        if (!isCancelled()) setSavingPatch(null);
       }
     },
     [caseId],
