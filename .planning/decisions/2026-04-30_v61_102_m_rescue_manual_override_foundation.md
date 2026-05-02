@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-102
 title: M-RESCUE · Manual override foundation — every AI-authored dict becomes engineer-editable
-status: Phase-1+Phase-2 Implemented (2026-04-30 · Phase 1 backend at commits 8b4e602..7677496 cleared by 7-round Codex chain APPROVE_WITH_COMMENTS · Phase 2 frontend at commits 323a326..658bf86 cleared by 4-round Codex chain APPROVE · all pushed to origin/main · authored under user direction "完全交给你决策" + "工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例" deep-planning consensus)
+status: Accepted (2026-05-03 · governance closure of Phase 1 + Phase 2 with Phase 3 explicitly DEFERRED to follow-up DEC) · Phase 1 backend at commits 8b4e602..7677496 cleared by 7-round Codex chain APPROVE_WITH_COMMENTS (case_manifest schema + case_dicts route + case_inspect route) · Phase 2 frontend at commits 323a326..658bf86 cleared by 4-round Codex chain APPROVE (RawDictEditor + Step 3/4 wiring · 658bf86 closes R3 case-id guard + draft-etag preservation; 15424eb consolidates the chain report) · all pushed to origin/main · Phase 3 (solver profile migration: extract setup_ldc_bc + setup_channel_bc hardcoded Python templates into YAML solver-profile files so the override mechanism applies upstream of dict authoring · 5 solver profile unit tests + LDC/channel byte-repro dogfood) DEFERRED to follow-up DEC because the override path landed (Phase 1+2 already make every AI-authored dict engineer-editable via case_dicts route + RawDictEditor); Phase 3 is the cleaner-architecture migration that reduces the override surface but is not gating the rescue capability. Authored under user direction "完全交给你决策" + "工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例" deep-planning consensus.
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-04-30
 authored_under: workbench_long_horizon_roadmap_2026-04-29.md (Era 1 LOOP SPINE — slots in as M9.7, AFTER DEC-V61-101 minimal channel executor and BEFORE M10 STEP/IGES intake) · user direction 2026-04-30 — "我觉得在CAD几何操作、算例设置方面，功能必须完全覆盖，否则项目就是不完整的，工程师在AI表现不佳的情况下，甚至无法手动介入，拯救算例"
@@ -324,21 +324,22 @@ To be confirmed during Phase 1 review.
 
 # Implementation tracking (filled during execution)
 
-- [ ] Phase 1.1 case_manifest schema (commits: ...)
-- [ ] Phase 1.2 case_dicts route (commits: ...)
-- [ ] Phase 1.3 case_inspect route (commits: ...)
-- [ ] Phase 1 Codex review (round count: ...)
-- [ ] Phase 2.1 RawDictEditor component (commits: ...)
-- [ ] Phase 2.2 Step 3 + Step 4 wiring (commits: ...)
-- [ ] Phase 2.3 SolverPickerModal (commits: ...)
-- [ ] Phase 2.4 Restart-from-timestep (commits: ...)
-- [ ] Phase 3 solver profile migration (commits: ...)
-- [ ] Phase 3 Codex review (round count: ...)
-- [ ] Final dogfood smoke pass (script exit 0)
-- [ ] Notion sync of this DEC
+- [x] Phase 1.1 case_manifest schema (commits 8b4e602 + Codex R1-R6 closures up through 7677496)
+- [x] Phase 1.2 case_dicts route (commits within 8b4e602..7677496 range · part of Phase 1 7-round chain)
+- [x] Phase 1.3 case_inspect route (commits within 8b4e602..7677496 range · part of Phase 1 7-round chain)
+- [x] Phase 1 Codex review (7 rounds APPROVE_WITH_COMMENTS · final commit 7677496)
+- [x] Phase 2.1 RawDictEditor component (commits 323a326 + 0ea4a73)
+- [x] Phase 2.2 Step 3 + Step 4 wiring (commit a18121a · Step 4 solver step + db765a0 collapse-cycle stickiness regression test)
+- [x] Phase 2.3 R3 case-id guard + draft-etag preservation (commit 658bf86)
+- [x] Phase 2 Codex review (4 rounds APPROVE · final commit 658bf86 · chain report 15424eb)
+- [ ] Phase 2.4 Restart-from-timestep (DEFERRED 2026-05-03 — orthogonal to override foundation, separate workstream)
+- [ ] Phase 3 solver profile migration (DEFERRED 2026-05-03 to follow-up DEC — not gating rescue capability since Phase 1+2 already deliver engineer-editable path; Phase 3 is the cleaner-architecture refactor that reduces override surface)
+- [ ] Phase 3 Codex review (DEFERRED with Phase 3)
+- [ ] Final dogfood byte-repro smoke pass (DEFERRED with Phase 3 since byte-repro requires solver profile migration to be the new SSOT)
+- [x] Notion sync of this DEC (2026-05-03)
 
 ---
 
-notion_sync_status: pending (Phase 1+2 Codex chain cleared on origin/main; awaiting next Notion-MCP-online window for sync; same status convention as parent DEC-V61-101)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81389ab9f7f094c5a646)
 codex_tool_report_path: reports/codex_tool_reports/2026-04-30_v61_102_m_rescue_phase_1_2_codex_chain.md
 autonomous_governance: true
