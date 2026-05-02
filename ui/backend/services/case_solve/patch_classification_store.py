@@ -85,11 +85,18 @@ class PatchClassificationIOError(RuntimeError):
 
 def _resolve_sidecar_path(case_dir: Path) -> Path:
     """Resolve ``<case_dir>/system/patch_classification.yaml`` and
-    assert it stays inside the case root after symlink resolution.
+    assert NO path component (including the leaf) is a symlink.
 
-    Mirrors ``case_annotations._yaml_io._resolve_annotations_path``
-    semantics so we get the same containment guarantee for this
-    sidecar.
+    Codex DEC-V61-108 R2 P1 closure: the prior implementation only
+    checked containment after ``resolve()``, which accepted in-tree
+    symlinks like ``patch_classification.yaml -> system/controlDict``.
+    A subsequent ``os.replace`` then silently overwrote the symlink
+    target — the engineer's authored ``controlDict`` in this example.
+
+    The fix walks each component from ``case_root`` down to the leaf
+    and rejects any symlink, regardless of where it points. Combined
+    with the existing containment check (kept as defense-in-depth),
+    this denies both out-of-tree and in-tree symlink redirects.
     """
     if not case_dir.exists():
         raise PatchClassificationIOError(
@@ -103,7 +110,32 @@ def _resolve_sidecar_path(case_dir: Path) -> Path:
             f"could not resolve case directory: {case_dir}: {exc}",
             failing_check="case_dir_missing",
         ) from exc
+
+    # Walk every component from case_root → sidecar leaf. Reject if
+    # any is a symlink, even if its target lands inside case_root.
     sidecar = case_root / _PATCH_CLASSIFICATION_REL
+    rel_parts = Path(_PATCH_CLASSIFICATION_REL).parts
+    cursor = case_root
+    for part in rel_parts:
+        cursor = cursor / part
+        try:
+            is_link = cursor.is_symlink()
+        except OSError as exc:
+            raise PatchClassificationIOError(
+                f"could not stat sidecar component {cursor}: {exc}",
+                failing_check="symlink_escape",
+            ) from exc
+        if is_link:
+            raise PatchClassificationIOError(
+                f"refusing symlinked sidecar component at {cursor} — "
+                f"writes through symlinks (even in-tree) are denied",
+                failing_check="symlink_escape",
+            )
+
+    # Defense-in-depth: even though the per-component check above
+    # makes this redundant for the symlink-redirect class, the
+    # containment check below still catches any future regression
+    # (e.g. ``..`` in the relpath, hardlink-style escape).
     try:
         resolved = sidecar.resolve(strict=False)
     except (OSError, RuntimeError) as exc:
@@ -119,7 +151,10 @@ def _resolve_sidecar_path(case_dir: Path) -> Path:
             f"resolved={resolved}, case_root={case_root}",
             failing_check="symlink_escape",
         ) from exc
-    return resolved
+    # Return the unresolved path: ``os.replace`` then operates on the
+    # exact ``case_root/system/patch_classification.yaml`` we vetted
+    # rather than a symlink-resolved alias of it.
+    return sidecar
 
 
 def _atomic_write(path: Path, payload: dict) -> None:

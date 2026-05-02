@@ -95,6 +95,61 @@ def test_delete_refuses_when_sidecar_is_symlink_outside(tmp_path: Path):
     assert outside.read_text() == "# attacker target del\n"
 
 
+def test_upsert_refuses_when_sidecar_is_intree_symlink(tmp_path: Path):
+    """Codex R2 P1 closure: an in-tree symlink (target inside the
+    case root, e.g. ``patch_classification.yaml -> system/controlDict``)
+    must also be refused. The previous resolve()+relative_to() pair
+    silently accepted the link and let ``os.replace`` overwrite the
+    engineer's authored controlDict.
+    """
+    case_dir = tmp_path / "case_intree_link"
+    case_dir.mkdir()
+    (case_dir / "system").mkdir()
+    (case_dir / "system" / "controlDict").write_text(
+        "// engineer-authored controlDict — must NOT be overwritten\n"
+        "application pimpleFoam;\n"
+    )
+    # Plant the in-tree symlink redirect.
+    (case_dir / "system" / "patch_classification.yaml").symlink_to(
+        case_dir / "system" / "controlDict"
+    )
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            case_dir,
+            patch_name="some_patch",
+            bc_class=BCClass.VELOCITY_INLET,
+        )
+    assert exc_info.value.failing_check == "symlink_escape"
+    # Critical: the engineer's controlDict is unchanged.
+    cd_text = (case_dir / "system" / "controlDict").read_text()
+    assert "application pimpleFoam" in cd_text
+    assert "engineer-authored" in cd_text
+
+
+def test_upsert_refuses_when_system_is_intree_symlink(tmp_path: Path):
+    """Sibling case: ``system/`` itself is a symlink to another
+    in-tree directory (e.g. ``constant/``). Walking each component
+    catches it before any write."""
+    case_dir = tmp_path / "case_intree_systemdir"
+    case_dir.mkdir()
+    real_other = case_dir / "constant"
+    real_other.mkdir()
+    (real_other / "file_to_protect").write_text("DO_NOT_TOUCH\n")
+    (case_dir / "system").symlink_to(real_other, target_is_directory=True)
+
+    with pytest.raises(PatchClassificationIOError) as exc_info:
+        upsert_override(
+            case_dir,
+            patch_name="some_patch",
+            bc_class=BCClass.SYMMETRY,
+        )
+    assert exc_info.value.failing_check == "symlink_escape"
+    assert (real_other / "file_to_protect").read_text() == "DO_NOT_TOUCH\n"
+    # And no patch_classification.yaml landed in real_other either.
+    assert not (real_other / "patch_classification.yaml").exists()
+
+
 def test_upsert_immune_to_planted_tmp_symlink(tmp_path: Path):
     """The atomic-write step uses ``tempfile.mkstemp`` (random
     per-call suffix), so a pre-existing symlink at any specific
