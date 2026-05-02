@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-105
 title: Adversarial smoke as hot-path regression gate (RETRO-V61-053 executable_smoke_test risk_flag operationalized)
-status: Proposed (2026-05-01 · authored under user direction "全权授予你开发，全都按你的建议来" + "深度规划开发方向，优化要显著（可以跨大步）" after the 2026-04-30/05-01 adversarial arc found 9 critical/high pipeline defects, several POST-R3)
+status: Accepted (2026-05-03 · Codex APPROVE on R2 commit 980e026 after 2-round Phase 2.4 chain R1 CHANGES_REQUIRED → R2 APPROVE · Phase 2.4 was the last in-scope item per §6.2 in/out-of-scope · Phase 2.1/2.2/2.3 explicitly retained as out-of-scope follow-ups · DEC closes with Phase 2.4 hardening shipped)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-01
 authored_under: tools/adversarial/results/iter01-06_findings.md (full 6-iteration arc) + 9 defect-fix commits b8053f9..27152d7 + smoke-runner commit d414367
@@ -19,8 +19,13 @@ parent_artifacts:
   - ui/backend/routes/case_solve.py (per-case Query params — without this the smoke runner can't pass per-case stable solver settings)
 counter_impact: +1 (autonomous_governance: true · methodology DEC, formalizes existing infrastructure rather than adding new architectural surface)
 self_estimated_pass_rate: 80% (small surface · methodology + opt-in pre-push hook + 9 fixed defects already validate the approach · 2 known follow-ups documented as scope §6)
-codex_tool_report_path: (TBD — review of commits 27152d7 + d414367 in flight)
-notion_sync_status: synced 2026-05-01 (https://app.notion.com/p/353c68942bed81e4b4c1ee3f8eebb420)
+phase2_4_self_estimated_pass_rate: 75% (defensive-only · 2 small guards + 3 tests · Codex pushback risk on "over-defensive without active bug" pre-empted by §6.2.4 framing)
+phase2_4_actual_pass_rate: 50% (R1 CHANGES_REQUIRED on fault-classification — defensive #2 raising GmshMeshGenerationError instead of OSError relabels backend faults as 422 — fixed verbatim in R2 with locked-in regression test)
+codex_tool_report_path: reports/codex_tool_reports/v61_105_phase2_4_chain.md (Phase 2.4 R1 CHANGES_REQUIRED → R2 APPROVE · 2-round arc closed 2026-05-03)
+implementation_commits:
+  - 147ba92 (Phase 2.4 R0 · two defensive checks at named-solid voting block · Codex R1 CHANGES_REQUIRED P2)
+  - 980e026 (Phase 2.4 R1 P2 closure · OSError reclassification + locked-in regression test · Codex R2 APPROVE clean)
+notion_sync_status: synced 2026-05-01 (https://app.notion.com/p/353c68942bed81e4b4c1ee3f8eebb420) · Phase 2.4 closure resync pending
 ---
 
 # Why now
@@ -145,3 +150,72 @@ Per-case results:
 | Defect 8 closure | R5 | APPROVE_WITH_COMMENTS | both R4 closed |
 | Defect 9 + smoke runner (this DEC) | R6 | CHANGES_REQUIRED | 0.5% relative tolerance too generous; missed 1-step early stops |
 | Defect 9 threshold tighten (commit 297c4e5) | R7 | APPROVE | half-timestep absolute tolerance closes R6 HIGH; Codex re-ran pytest locally to verify (12/12 + 11/11 + 24/24) |
+| Phase 2.4 R0 — defensive hardening (commit 147ba92) | R1 | CHANGES_REQUIRED | defensive #2 (malformed Triangle3 array) raised GmshMeshGenerationError → maps to 422 `gmsh_diverged` and falsely blames operator's STL for binding/version corruption; should be 5xx backend-fault class |
+| Phase 2.4 R1 closure (commit 980e026) | R2 | APPROVE | defensive #2 reclassified to OSError (bubbles via existing `except OSError: raise` boundary + `_subprocess_target` os_error queue kind to 5xx); test now locks contract via `not isinstance(exc, GmshMeshGenerationError)` regression assert |
+
+# Phase 2.4 closure (2026-05-03)
+
+The two Codex deferred findings explicitly listed in §6.2.4
+(`gmsh assumes 3-node tris; defensive check for mixed element types`
++ `malformed face-points raise IndexError before the fallback path`)
+landed at the named-solid per-triangle voting block in
+`ui/backend/services/meshing_gmsh/gmsh_runner.py:262-340`:
+
+- **Defensive #1** (mixed surface element type guard, gmsh_runner.py:267-301):
+  validates `elem_types` from `getElements(dim=2, tag=tag)` contains
+  only Triangle3 (gmsh element type 2); raises
+  `GmshMeshGenerationError` listing the unsupported types and
+  pointing at `Mesh.ElementOrder=1` + `Mesh.SecondOrderIncomplete=0`
+  re-mesh remediation. Triangle6/Quad4/etc. response under
+  `Mesh.Algorithm3D=1` over STL input implies the operator
+  misconfigured the mesher → 4xx geometry-rejection class is correct.
+  Codex did NOT flag #1.
+- **Defensive #2** (malformed Triangle3 node array guard,
+  gmsh_runner.py:316-340): asserts `len(flat_nodes) % 3 == 0` before
+  computing `n_tri`; raises `OSError` (NOT
+  `GmshMeshGenerationError`) so the existing `except OSError: raise`
+  boundary at the catch-all + `os_error` queue kind in
+  `_subprocess_target` propagate it as 5xx. Length not divisible by
+  3 indicates gmsh binding/version corruption — operator has no
+  agency, must surface as backend fault. **Codex R1 P2 caught this
+  — initial R0 raised GmshMeshGenerationError which would have
+  4xx-relabeled the backend fault as bad-geometry. Fixed verbatim
+  in R1 closure (commit 980e026); regression test now locks the
+  contract via `not isinstance(exc, GmshMeshGenerationError)`
+  assert.**
+
+Tests landed in `ui/backend/tests/test_meshing_gmsh.py` (+322 net LOC):
+- `test_v61_105_phase2_4_rejects_non_triangle3_surface_element` —
+  injects mixed `[Triangle3, Triangle6]` response; asserts
+  `GmshMeshGenerationError` mentions "Triangle3", "9", "unsupported"
+- `test_v61_105_phase2_4_rejects_malformed_triangle3_node_array` —
+  injects `([2], [[1]], [[100, 101, 102, 200]])` (length=4); asserts
+  `pytest.raises(OSError)` + `type(exc) is OSError` (bare class,
+  not subclass) + `not isinstance(exc, GmshMeshGenerationError)`
+  (locks Codex R1 P2 finding)
+- `test_v61_105_phase2_4_passes_through_clean_triangle3` —
+  regression guard, well-formed Triangle3 input does NOT trigger
+  the defensive markers
+
+Phase 2.4 is the last in-scope item per §6.2 (in scope: smoke
+runner, status semantics, pre-push hook, methodology docs, defect
+9 fix, Phase 2.4 defensive hardening). DEC flips Proposed →
+Accepted. Phase 2.1 (CI integration), 2.2 (analytical comparator),
+2.3 (parametric case generator) explicitly retained as out-of-scope
+follow-ups for separate DECs.
+
+## Methodology takeaway
+
+**Defensive checks that gate user input vs backend faults must
+choose the exception class deliberately.** R0 reflexively used
+`GmshMeshGenerationError` for both defensive checks because both
+fire in the gmsh path. But the two fault classes have different
+agency: #1 (mixed types) is operator misconfig → 4xx; #2 (malformed
+array) is gmsh-binding corruption → 5xx. Project already encodes
+this distinction in 3 places (catch-all boundary, GmshSubprocessError
+docstring, `_subprocess_target` queue protocol); R0 missed it
+because the two new guards looked alike at the call site. Codex R1
+caught it in static review. The new test's
+`not isinstance(exc, GmshMeshGenerationError)` assert locks the
+contract so any future "let's unify the defensive errors" refactor
+fails loudly in CI. Logged for next RETRO.
