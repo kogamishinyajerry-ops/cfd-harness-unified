@@ -54,12 +54,18 @@ class ControlDictBlock:
 
     application: str
     start_from: str = "startTime"
-    start_time: float = 0.0
+    # V61-112 Phase 2 R2 P3 closure: dataclass defaults use INT values
+    # (not Python float literals) so profiles that omit these keys
+    # render integer output (e.g. ``startTime 0;`` not ``startTime 0.0;``)
+    # under the new ``_format_number`` semantics. Type hints stay
+    # ``float`` so callers + YAML can pass either; YAML's int-vs-float
+    # parse distinction round-trips author intent for explicit values.
+    start_time: float = 0  # int default → renders ``0``
     stop_at: str = "endTime"
-    end_time_default: float = 200.0
-    delta_t_default: float = 1.0
+    end_time_default: float = 200  # int default → renders ``200``
+    delta_t_default: float = 1  # int default → renders ``1``
     write_control: str = "timeStep"
-    write_interval: float = 50.0
+    write_interval: float = 50  # int default → renders ``50``
     purge_write: int = 0
     write_format: str = "ascii"
     write_precision: int = 6

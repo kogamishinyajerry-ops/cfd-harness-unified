@@ -642,6 +642,42 @@ def test_pimplefoam_caller_passes_int_end_time_no_decimal():
     assert "endTime 5.0;" not in rendered
 
 
+def test_schema_default_dataclass_values_render_as_integers():
+    """V61-112 Phase 2 R2 P3 closure: ControlDictBlock dataclass
+    defaults use INT values (start_time=0, end_time_default=200,
+    delta_t_default=1, write_interval=50). A profile that OMITS
+    these keys should render integer output (no `.0`) under the
+    new ``_format_number`` semantics that preserve `.0` for
+    YAML-supplied floats. This pins the contract that future
+    profiles omitting fields get clean integer output instead of
+    spurious decimals.
+    """
+    from ui.backend.services.case_solve.solver_profiles.schema import (
+        ControlDictBlock, FvSchemesBlock, FvSolutionBlock, SolverProfile,
+    )
+    # Synthesize a minimal profile that omits start_time, end_time_default,
+    # delta_t_default, write_interval — relies on dataclass defaults.
+    cd = ControlDictBlock(application="testFoam")
+    fs = FvSchemesBlock()
+    fv = FvSolutionBlock(
+        control_block_name="PIMPLE",
+        control_block_fields={"nOuterCorrectors": 1},
+    )
+    profile = SolverProfile(
+        name="testFoam", family="transient",
+        control_dict=cd, fv_schemes=fs, fv_solution=fv,
+    )
+    rendered = profile.render_control_dict()
+    assert "startTime 0;" in rendered
+    assert "startTime 0.0;" not in rendered
+    assert "endTime 200;" in rendered
+    assert "endTime 200.0;" not in rendered
+    assert "deltaT 1;" in rendered
+    assert "deltaT 1.0;" not in rendered
+    assert "writeInterval 50;" in rendered
+    assert "writeInterval 50.0;" not in rendered
+
+
 def test_pimplefoam_byte_identity_with_default_caller_signature_floats():
     """V61-112 Phase 2 R1 P2 regression-pin: setup_bc_from_stl_patches
     passes float-typed end_time/delta_t to _build_pimplefoam_control_dict.
