@@ -628,14 +628,18 @@ def _detect_solver_marker_overrides(
     # commented-out `application X;` and a live one, both this
     # guard and /solve dispatch will pick the same one.
     m = _APPLICATION_RE.search(raw)
-    if m is None:
-        # No application directive at all — let it through; /solve
-        # will fall back to the icoFoam default (the same default
-        # ``read_application_from_control_dict`` uses on parse
-        # failure). The dispatch then exits non-zero with a
-        # dictionary error that surfaces to the engineer.
-        return []
-    user_application = m.group(1)
+    # DEC-V61-111 / Codex R3 P2-1: when the regex finds no match,
+    # ``read_application_from_control_dict`` falls back to icoFoam
+    # at /solve time. To preserve guard/dispatch parity, treat the
+    # no-match case as user_application=icoFoam (the dispatch
+    # fallback). Examples that hit this branch: inline-block-comment
+    # lines like ``/* old */ application simpleFoam;`` where the
+    # ``^\s*application`` anchor doesn't match because non-whitespace
+    # ``*/`` precedes ``application``; a controlDict that simply
+    # omits the directive; a parse-resistant exotic format. In all
+    # those cases /solve will dispatch icoFoam, so the guard must
+    # detect a mismatch when AI authors a non-icoFoam solver.
+    user_application = m.group(1) if m is not None else "icoFoam"
     if user_application != ai_solver:
         return [rel]
     return []
@@ -1196,16 +1200,24 @@ def setup_bc_from_stl_patches(
                         encoding="utf-8", errors="replace"
                     )
                     m = _APPLICATION_RE.search(actual_text)
-                    if m and m.group(1) != resolved_solver:
+                    # DEC-V61-111 / Codex R3 P2-1: align no-match with
+                    # ``read_application_from_control_dict``'s fallback
+                    # to icoFoam so the reported solver_name matches
+                    # what /solve will actually dispatch on a
+                    # parse-resistant user controlDict (e.g.
+                    # ``/* old */ application simpleFoam;`` where the
+                    # ``^\s*application`` anchor fails to match).
+                    actual_solver = m.group(1) if m is not None else "icoFoam"
+                    if actual_solver != resolved_solver:
                         warnings.append(
-                            f"solver_name reports {m.group(1)!r} (read from "
+                            f"solver_name reports {actual_solver!r} (read from "
                             f"user-overridden system/controlDict on disk) "
                             f"rather than the requested {resolved_solver!r}; "
-                            f"`/solve` will run {m.group(1)} per the override. "
+                            f"`/solve` will run {actual_solver} per the override. "
                             f"Revert the controlDict override via raw-dict "
                             f"editor to honor the requested solver."
                         )
-                        resolved_solver = m.group(1)
+                        resolved_solver = actual_solver
                 except OSError:
                     # If we can't read the override, fall through with
                     # the requested resolved_solver unchanged. Down-

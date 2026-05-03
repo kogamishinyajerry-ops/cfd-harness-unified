@@ -1570,3 +1570,63 @@ def test_solver_marker_guard_rejects_arbitrary_mismatched_solver_name(tmp_path: 
     err = str(exc.value)
     assert "pimpleFoam" in err  # AI's solver
     assert "system/controlDict" in err  # the offending file
+
+
+def test_solver_marker_guard_rejects_when_application_unparseable(tmp_path: Path):
+    """V61-111 / Codex R3 P2-1: when ``_APPLICATION_RE`` finds no
+    match in user-overridden controlDict (e.g. inline-block-comment
+    line ``/* old */ application simpleFoam;`` where the
+    ``^\\s*application`` anchor doesn't fire because ``*/`` is
+    non-whitespace), the guard MUST treat the case as
+    ``user_application=icoFoam`` to mirror
+    ``read_application_from_control_dict``'s fallback. Without this,
+    setup proceeds (guard returns []) but /solve dispatches icoFoam
+    against AI-authored pimpleFoam fvSolution → dictionary mismatch.
+
+    Verify both that solver_runner falls back to icoFoam AND that
+    the guard correctly rejects when AI authors a non-icoFoam
+    solver against a parse-resistant user controlDict.
+    """
+    from ui.backend.services.case_solve.solver_runner import (
+        read_application_from_control_dict,
+    )
+
+    case_dir = tmp_path / "unparseable_appl_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="unparseable_appl_case")
+
+    # Inline block-comment + application on same line: `^\s*application`
+    # doesn't match because `*/` is non-whitespace before `application`.
+    # solver_runner falls back to icoFoam.
+    custom = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "/* old config */ application simpleFoam;\n"  # regex-blind
+        "endTime 100;\n"
+        "deltaT 1;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom)
+    mark_user_override(
+        case_dir,
+        relative_path="system/controlDict",
+        new_content=custom.encode("utf-8"),
+        detail={"reason": "inline-block-comment makes application unparseable"},
+    )
+
+    # Confirm solver_runner falls back to icoFoam (the dispatch
+    # behavior we must mirror).
+    assert read_application_from_control_dict(case_dir) == "icoFoam"
+
+    # AI re-runs with default (pimpleFoam). icoFoam (dispatch
+    # fallback) ≠ pimpleFoam → guard must fire.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="unparseable_appl_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
