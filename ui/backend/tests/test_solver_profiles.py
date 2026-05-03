@@ -1038,6 +1038,21 @@ def test_control_dict_adjust_time_step_non_bool_raises_schema_error(bad_value):
     assert "adjust_time_step" in str(exc.value)
 
 
+@pytest.mark.parametrize("bad_value", ["false", "true", 1, 0, [True]])
+def test_control_dict_max_delta_t_follows_delta_t_non_bool_raises_schema_error(bad_value):
+    """Codex Phase 4 R2 P2: max_delta_t_follows_delta_t same
+    non-Optional-bool validation pattern as adjust_time_step. Without
+    this, render() branches on Python truthiness — `"false"` (string)
+    is truthy and silently AUTHORS maxDeltaT, while `1` would also
+    activate the follow path."""
+    raw = _minimal_channel_raw_with_control_dict_field(
+        "max_delta_t_follows_delta_t", bad_value
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "max_delta_t_follows_delta_t" in str(exc.value)
+
+
 @pytest.mark.parametrize("bad_value", ["100", 100.5, True, [100]])
 def test_control_dict_iteration_floor_non_int_raises_schema_error(bad_value):
     """iteration_floor must be int or None."""

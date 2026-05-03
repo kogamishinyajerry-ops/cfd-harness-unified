@@ -153,6 +153,13 @@ def _build_control_dict(raw: dict[str, Any]) -> ControlDictBlock:
     _validate_optional_numeric(kwargs, "max_co")
     _validate_optional_numeric(kwargs, "max_delta_t_value")
     _validate_optional_bool(kwargs, "adjust_time_step")
+    # Codex V61-112 Phase 4 R2 P2 closure: max_delta_t_follows_delta_t
+    # is a non-Optional bool (schema default False) but YAML edits can
+    # supply string/int that ControlDictBlock.render() then evaluates
+    # via Python truthiness — silently authoring or suppressing the
+    # maxDeltaT line. STL pimpleFoam.yaml relies on this field; gap
+    # closes the same lazy-validation surface as the 4 sibling fields.
+    _validate_optional_bool(kwargs, "max_delta_t_follows_delta_t")
     _validate_optional_int(kwargs, "iteration_floor")
 
     return ControlDictBlock(**kwargs)
