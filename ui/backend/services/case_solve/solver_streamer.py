@@ -271,6 +271,14 @@ class _PreparedStream:
     container: Any
     container_work_dir: str
     exec_result: Any  # docker ExecResult
+    # DEC-V61-111 / Codex R1 P1-2: solver application name read from
+    # controlDict at preflight time, propagated so the post-run
+    # convergence check (``_is_converged``) can switch heuristics
+    # for simpleFoam (residualControl early-exit) vs transient
+    # solvers (must run to endTime). Defaulted to icoFoam to match
+    # the legacy contract for any caller constructing _PreparedStream
+    # directly (tests, etc.).
+    application: str = "icoFoam"
 
 
 def _prepare_stream_icofoam(
@@ -443,6 +451,7 @@ def _prepare_stream_icofoam(
         container=container,
         container_work_dir=container_work_dir,
         exec_result=exec_result,
+        application=application,
     )
 
 
@@ -486,6 +495,7 @@ def stream_icofoam(
     container = prepared.container
     container_work_dir = prepared.container_work_dir
     exec_result = prepared.exec_result
+    application = prepared.application
 
     # Lazy-import docker.errors for the catch blocks below; the
     # ImportError path is unreachable here because preflight succeeded.
@@ -598,13 +608,25 @@ def stream_icofoam(
         # Stream-specific: skip diagonal: lines so the summary
         # aligns with the chart (which can't render zero on a log
         # axis). Codex round-11 closure 2026-04-30.
+        log_full_text = log_buf.getvalue().decode("utf-8", errors="replace")
         parsed = _parse_log(
-            log_buf.getvalue().decode("utf-8", errors="replace"),
+            log_full_text,
             include_diagonal=False,
         )
         end_t_cfg, dt_cfg = _read_configured_end_time(case_host_dir)
+        # DEC-V61-111: pass application + log_text so simpleFoam early
+        # residualControl exit is treated as converged (not a half-run
+        # transient miss). ``application`` was read from controlDict
+        # at solver-spawn time at line ~417 above.
         converged = (
-            _is_converged(parsed, end_t_cfg, dt_cfg) and not fatal_seen[0]
+            _is_converged(
+                parsed,
+                end_t_cfg,
+                dt_cfg,
+                application=application,
+                log_text=log_full_text,
+            )
+            and not fatal_seen[0]
         )
         # DEC-V61-107.5 / Codex R17 P1: when the solver hit a FOAM
         # FATAL, extract the block from the persisted log and surface

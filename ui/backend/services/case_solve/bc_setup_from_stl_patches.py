@@ -562,6 +562,20 @@ _ICOFOAM_APPLICATION_RE = re.compile(
     r"^\s*application\s+icoFoam\s*;",
     re.MULTILINE,
 )
+# DEC-V61-111 / Codex R1 P1-1: solver-aware mismatch detection. When
+# the AI authors simpleFoam, a user-overridden controlDict that
+# carries ``application pimpleFoam;`` (a stale value from the prior
+# pimpleFoam-default era) is now the dangerous mismatch — same shape
+# as the icoFoam-vs-pimpleFoam mismatch the original guard caught.
+# Mirror pattern for completeness.
+_PIMPLEFOAM_APPLICATION_RE = re.compile(
+    r"^\s*application\s+pimpleFoam\s*;",
+    re.MULTILINE,
+)
+_SIMPLEFOAM_APPLICATION_RE = re.compile(
+    r"^\s*application\s+simpleFoam\s*;",
+    re.MULTILINE,
+)
 # Comment stripping for the `application` regex. R17 P3 closure:
 # strip both line `// ...` and block `/* ... */` comments in a single
 # alternation pass to avoid the precedence flaw that bit R15. Using
@@ -571,17 +585,32 @@ _ICOFOAM_APPLICATION_RE = re.compile(
 _COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 
-def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
-    """Return user-overridden controlDict iff it carries
-    ``application icoFoam;`` AND not all 3 solver-group files are
-    user-overridden (full-group override = engineer owns coherence,
-    guard steps out).
+def _detect_solver_marker_overrides(
+    case_dir: Path, *, ai_solver: str
+) -> list[str]:
+    """Return user-overridden controlDict iff it carries an
+    ``application <solver>;`` literal that mismatches the solver the
+    AI is authoring AND not all 3 solver-group files are user-
+    overridden (full-group override = engineer owns coherence, guard
+    steps out).
 
-    Scope: catches the dominant defect class only. Long-tail
-    mismatches (PISO block in fvSolution, missing divDevReff in
-    fvSchemes, etc.) surface as solver_diverged at /solve time
-    with the OpenFOAM error in the response — see DEC-V61-107.5
-    R16 closure rationale above.
+    DEC-V61-111 / Codex R1 P1-1 expansion: pre-V61-111 this guard only
+    caught ``application icoFoam;`` because the AI always authored
+    pimpleFoam. With simpleFoam now an AI-authored option, the
+    dangerous mismatch class extended: if AI authors simpleFoam and
+    user-overridden controlDict still says ``application pimpleFoam;``
+    (stale from the prior era), the AI's simpleFoam fvSchemes/
+    fvSolution would mismatch on disk (SIMPLE block expected by
+    simpleFoam vs PIMPLE in fvSolution), aborting OpenFOAM at startup
+    with a cryptic dictionary error. Generalized: catch any
+    application-name in user-overridden controlDict that disagrees
+    with the resolved AI solver.
+
+    Scope: still catches only the dominant defect class
+    (controlDict-only override mismatch). Long-tail mismatches (PISO
+    block in user fvSolution under AI-pimpleFoam, etc.) continue to
+    surface as solver_diverged at /solve time with the OpenFOAM error
+    in the response — see DEC-V61-107.5 R16 closure rationale above.
     """
     overridden_status: dict[str, bool] = {
         rel: is_user_override(case_dir, relative_path=rel)
@@ -599,9 +628,36 @@ def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
     except OSError:
         return [rel]
     content = _COMMENT_RE.sub("", raw)
+    # icoFoam in user controlDict is ALWAYS a mismatch (AI never
+    # authors icoFoam after V61-107.5), regardless of which solver
+    # the AI is currently authoring.
     if _ICOFOAM_APPLICATION_RE.search(content):
         return [rel]
+    # When AI authors simpleFoam, pimpleFoam in user controlDict is
+    # a mismatch (AI's SIMPLE-block fvSolution would clash with user's
+    # transient PIMPLE controlDict).
+    if ai_solver == "simpleFoam" and _PIMPLEFOAM_APPLICATION_RE.search(content):
+        return [rel]
+    # When AI authors pimpleFoam, simpleFoam in user controlDict is
+    # a mismatch (AI's PIMPLE-block fvSolution would clash with user's
+    # steady-state SIMPLE controlDict).
+    if ai_solver == "pimpleFoam" and _SIMPLEFOAM_APPLICATION_RE.search(content):
+        return [rel]
     return []
+
+
+# Backward-compat alias so existing call sites and tests that import
+# the original symbol keep working. New code should call
+# ``_detect_solver_marker_overrides`` directly with the resolved
+# AI solver name.
+def _detect_icofoam_marker_overrides(case_dir: Path) -> list[str]:
+    """DEC-V61-111: thin shim over ``_detect_solver_marker_overrides``
+    pinning ai_solver=pimpleFoam (the pre-V61-111 default). Retained
+    for tests + any caller still on the legacy signature; the
+    in-tree call site in ``setup_bc_from_stl_patches`` was rewired
+    to the new function.
+    """
+    return _detect_solver_marker_overrides(case_dir, ai_solver=_DEFAULT_SOLVER)
 
 
 def _build_dict_plan(
@@ -1064,30 +1120,33 @@ def setup_bc_from_stl_patches(
                 end_time=end_time,
                 solver_name=resolved_solver,
             )
-            # Codex R13 P2-A + P2-B closure: content-aware
-            # icoFoam-marker check, INSIDE case_lock so override
-            # status can't flip between check and commit. The AI
-            # always authors pimpleFoam now (V61-107.5). The dangerous
-            # case isn't "any single-file override" (which Codex R13
-            # P2-B correctly flagged as too aggressive — engineers
-            # legitimately tune endTime / deltaT / relTol in single
-            # files); it's specifically when a user-overridden file
-            # carries an icoFoam-only marker (`application icoFoam` or
-            # `PISO` block without `PIMPLE`). That + AI-authored
-            # pimpleFoam in the OTHER files = OpenFOAM startup abort.
-            # Tuning a single field while keeping pimpleFoam family
-            # markers is safe and proceeds normally.
-            _icofoam_offenders = _detect_icofoam_marker_overrides(case_dir)
-            if _icofoam_offenders:
+            # Codex R13 P2-A + P2-B closure (V61-107.5) + Codex R1
+            # P1-1 closure (V61-111): content-aware solver-marker
+            # check, INSIDE case_lock so override status can't flip
+            # between check and commit. The AI authors either
+            # pimpleFoam (default) or simpleFoam (V61-111). The
+            # dangerous case isn't "any single-file override" (which
+            # Codex R13 P2-B correctly flagged as too aggressive —
+            # engineers legitimately tune endTime / deltaT / relTol in
+            # single files); it's specifically when a user-overridden
+            # controlDict carries an ``application <solver>;`` literal
+            # that mismatches the solver the AI is currently
+            # authoring. That + AI-authored other-solver dicts in the
+            # OTHER files = OpenFOAM startup abort.
+            _solver_offenders = _detect_solver_marker_overrides(
+                case_dir, ai_solver=resolved_solver
+            )
+            if _solver_offenders:
                 raise StlPatchBCError(
                     "solver-dict group contains user-overridden file(s) "
-                    f"with icoFoam-only markers: {_icofoam_offenders}. "
-                    "AI-authored pimpleFoam dicts in the other slots "
-                    "would mismatch (pimpleFoam reads PIMPLE not PISO; "
-                    "icoFoam reads neither adjustTimeStep nor maxCo). "
-                    "Either: (a) revert these overrides via raw-dict "
-                    "editor reset, or (b) also override the OTHER "
-                    "files to a coherent icoFoam template.",
+                    f"with application-name marker mismatching AI-authored "
+                    f"{resolved_solver}: {_solver_offenders}. "
+                    "AI-authored solver dicts in the other slots would "
+                    "mismatch on disk and OpenFOAM would abort at startup. "
+                    "Either: (a) revert the overrides via raw-dict editor "
+                    "reset, or (b) also override the OTHER files to a "
+                    f"coherent {resolved_solver} template, or (c) request "
+                    "the matching solver via ``solver_name`` query param.",
                     failing_check="solver_dicts_partial_override",
                 )
             # Defect-8 (iter06) + Codex post-merge MED: if any patch has
@@ -1124,6 +1183,39 @@ def setup_bc_from_stl_patches(
                         "warnings": warnings,
                     },
                 )
+            # DEC-V61-111 / Codex R1 P2-1: if controlDict was skipped
+            # because the engineer owns it, the on-disk
+            # ``application <solver>;`` is the truth — not the
+            # ``resolved_solver`` we wanted to author. Read the actual
+            # field from the on-disk controlDict so callers
+            # (smoke runner, frontend, tests) see what /solve will
+            # actually run, not what /setup-bc was asked to write.
+            if "system/controlDict" in skipped:
+                try:
+                    actual_text = (case_dir / "system/controlDict").read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                    actual_text = _COMMENT_RE.sub("", actual_text)
+                    m = re.search(
+                        r"^\s*application\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
+                        actual_text,
+                        re.MULTILINE,
+                    )
+                    if m and m.group(1) != resolved_solver:
+                        warnings.append(
+                            f"solver_name reports {m.group(1)!r} (read from "
+                            f"user-overridden system/controlDict on disk) "
+                            f"rather than the requested {resolved_solver!r}; "
+                            f"`/solve` will run {m.group(1)} per the override. "
+                            f"Revert the controlDict override via raw-dict "
+                            f"editor to honor the requested solver."
+                        )
+                        resolved_solver = m.group(1)
+                except OSError:
+                    # If we can't read the override, fall through with
+                    # the requested resolved_solver unchanged. Down-
+                    # stream solve will surface OS errors directly.
+                    pass
     except CaseLockError as exc:
         raise StlPatchBCError(
             f"case lock acquisition failed: {exc}",

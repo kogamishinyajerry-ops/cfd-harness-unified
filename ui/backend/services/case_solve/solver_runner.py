@@ -205,12 +205,20 @@ def _read_configured_end_time(case_host_dir: Path) -> tuple[float, float]:
     return (end_t, dt)
 
 
+_SIMPLEFOAM_RESIDUAL_CONVERGED_RE = re.compile(
+    r"SIMPLE solution converged in \d+ iterations", re.MULTILINE
+)
+
+
 def _is_converged(
     parsed: dict[str, object],
     configured_end_time: float = 2.0,
     configured_delta_t: float = 0.01,
+    *,
+    application: str = "icoFoam",
+    log_text: str | None = None,
 ) -> bool:
-    """Convergence heuristic for icoFoam runs:
+    """Convergence heuristic for transient solvers (icoFoam / pimpleFoam):
 
     * end_time_reached >= configured endTime - 0.5 * deltaT (allow at
       most one half-timestep wiggle for writeInterval rounding; tighter
@@ -218,6 +226,21 @@ def _is_converged(
       under-shoot on short ones)
     * |continuity error| < 1e-3 (PISO closing the mass balance)
     * residuals must be finite (NaN / Inf trip on the bound check)
+
+    DEC-V61-111 / Codex R1 P1-2 closure: simpleFoam (steady-state
+    SIMPLE) terminates early via ``residualControl`` once both p and U
+    initial residuals fall below the configured target; that is the
+    happy-path convergence indicator, NOT the "ran to endTime"
+    indicator the transient path uses. When ``application ==
+    'simpleFoam'`` the heuristic switches to:
+
+    * EITHER ``end_time_reached >= configured endTime - 0.5*deltaT``
+      (ran the full iteration budget without early termination — fine,
+      residuals may still be in band)
+    * OR ``log_text`` contains ``"SIMPLE solution converged in N
+      iterations"`` (residualControl triggered early exit — the
+      OpenFOAM-canonical happy-path message)
+    * AND |continuity| < 1e-3 + finite (same numerical-soundness gates)
 
     Returns False if anything is missing or out-of-band — the route
     surfaces this as ``converged=false`` so the UI can show a warning
@@ -227,26 +250,39 @@ def _is_converged(
     legacy LDC values (2.0, 0.01) so callers that don't pass them
     (older code paths, tests) keep working. Production callers
     (``run_icofoam``) pass the values read from ``system/controlDict``
-    so per-case overrides land correctly.
+    so per-case overrides land correctly. ``application`` defaults to
+    icoFoam to preserve the historical behavior; ``run_icofoam`` and
+    the SSE path pass the actual application name read from
+    controlDict.
 
-    Codex post-merge HIGH (this commit): the original ``configured_end_time
-    * 0.995`` threshold was too generous on short cases. With
-    endTime=0.5 + dt=0.002 the slack window was 2.5ms = 1.25 timesteps,
-    so a run that stopped 1 step short (end_t=0.498) read as converged.
-    Replaced with absolute ``0.5 * deltaT`` tolerance: half a timestep
-    wiggle absorbs the writeInterval rounding without admitting a
-    genuine early stop.
+    Codex V61-053 (post-merge HIGH): original ``configured_end_time *
+    0.995`` threshold was too generous on short cases. With endTime=0.5
+    + dt=0.002 the slack window was 2.5ms = 1.25 timesteps, so a run
+    that stopped 1 step short (end_t=0.498) read as converged. Replaced
+    with absolute ``0.5 * deltaT`` tolerance: half a timestep wiggle
+    absorbs the writeInterval rounding without admitting a genuine
+    early stop.
     """
     end_t = parsed.get("end_time_reached", 0.0)
     if not isinstance(end_t, (int, float)):
-        return False
-    if end_t < configured_end_time - 0.5 * configured_delta_t:
         return False
     cont = parsed.get("continuity")
     if cont is None or not isinstance(cont, (int, float)):
         return False
     # NaN check — NaN compares unequal to itself.
     if cont != cont or abs(cont) > 1.0e-3:
+        return False
+    if application == "simpleFoam":
+        # Steady-state SIMPLE: either ran the full iteration budget OR
+        # residualControl fired the canonical converged message.
+        ran_full = end_t >= configured_end_time - 0.5 * configured_delta_t
+        residual_converged = bool(
+            log_text
+            and _SIMPLEFOAM_RESIDUAL_CONVERGED_RE.search(log_text)
+        )
+        return ran_full or residual_converged
+    # Transient path (icoFoam / pimpleFoam / etc.): must run to endTime.
+    if end_t < configured_end_time - 0.5 * configured_delta_t:
         return False
     return True
 
@@ -381,7 +417,13 @@ def run_icofoam(
     log_text = log_dest.read_text(errors="replace")
     parsed = _parse_log(log_text)
     end_t_cfg, dt_cfg = _read_configured_end_time(case_host_dir)
-    converged = _is_converged(parsed, end_t_cfg, dt_cfg)
+    converged = _is_converged(
+        parsed,
+        end_t_cfg,
+        dt_cfg,
+        application=application,
+        log_text=log_text,
+    )
 
     # Pull time directories back to the host. The container produced
     # /tmp/.../<case>/<time>/ for each writeInterval; mirror them onto

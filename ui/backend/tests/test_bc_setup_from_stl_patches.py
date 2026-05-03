@@ -1172,3 +1172,243 @@ def test_solver_name_unrecognized_falls_back_to_pimplefoam_with_warning(tmp_path
     assert "pimpleFoam" in warning_text
     control_dict = (case_dir / "system/controlDict").read_text()
     assert "application pimpleFoam;" in control_dict
+
+
+# DEC-V61-111 / Codex R1 closure tests.
+
+
+def test_simplefoam_authoring_rejects_user_pimplefoam_marker_override(tmp_path: Path):
+    """V61-111 / Codex R1 P1-1: when the AI authors simpleFoam, a
+    user-overridden controlDict that still says ``application
+    pimpleFoam;`` would land an incoherent solver group on disk
+    (AI-authored simpleFoam fvSolution with SIMPLE block + user
+    pimpleFoam controlDict). The solver-marker guard MUST detect
+    this and raise solver_dicts_partial_override (mirror behavior
+    of the pre-V61-111 icoFoam-marker case for AI-pimpleFoam)."""
+    case_dir = tmp_path / "stale_pimplefoam_override_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    # First setup: AI authors pimpleFoam (default).
+    setup_bc_from_stl_patches(
+        case_dir, case_id="stale_pimplefoam_override_case"
+    )
+    # Engineer overrides controlDict to keep custom endTime but
+    # leaves application pimpleFoam (the default era). Now a
+    # different intent calls for simpleFoam.
+    custom_control_dict = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application pimpleFoam;\n"
+        "endTime 100;\n"
+        "deltaT 0.001;\n"
+        "adjustTimeStep yes;\n"
+        "maxCo 0.5;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom_control_dict)
+    mark_user_override(
+        case_dir,
+        relative_path="system/controlDict",
+        new_content=custom_control_dict.encode("utf-8"),
+        detail={"reason": "engineer pinned pimpleFoam endTime"},
+    )
+
+    # AI now requested for simpleFoam (e.g. intent.json:solver.name
+    # changed to simpleFoam). The user controlDict mismatches.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(
+            case_dir,
+            case_id="stale_pimplefoam_override_case",
+            solver_name="simpleFoam",
+        )
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    err = str(exc.value)
+    assert "simpleFoam" in err  # AI's requested solver
+    assert "system/controlDict" in err  # the offending file
+
+
+def test_pimplefoam_authoring_rejects_user_simplefoam_marker_override(tmp_path: Path):
+    """V61-111 / Codex R1 P1-1: symmetric to the
+    pimpleFoam-mismatch test above. AI authoring pimpleFoam +
+    user controlDict carrying ``application simpleFoam;`` would
+    land an incoherent group (AI's pimpleFoam fvSolution PIMPLE
+    block + user's simpleFoam controlDict, expecting SIMPLE
+    + relaxationFactors that AI didn't author). Must raise."""
+    case_dir = tmp_path / "stale_simplefoam_override_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(
+        case_dir,
+        case_id="stale_simplefoam_override_case",
+        solver_name="simpleFoam",
+    )
+    custom_control_dict = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application simpleFoam;\n"
+        "endTime 500;\n"
+        "deltaT 1;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom_control_dict)
+    mark_user_override(
+        case_dir,
+        relative_path="system/controlDict",
+        new_content=custom_control_dict.encode("utf-8"),
+        detail={"reason": "engineer pinned simpleFoam iteration cap"},
+    )
+
+    # AI now reverts to pimpleFoam (default) — mismatch.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(
+            case_dir, case_id="stale_simplefoam_override_case"
+        )
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    err = str(exc.value)
+    assert "pimpleFoam" in err  # AI's requested solver
+    assert "system/controlDict" in err
+
+
+def test_solver_name_reports_actual_on_disk_when_controldict_user_owned(tmp_path: Path):
+    """V61-111 / Codex R1 P2-1: when controlDict is user-owned and
+    skipped by atomic_commit_dicts, the result.solver_name must
+    reflect what's actually on disk (what /solve will read), not
+    what the caller asked for. This makes the verification field
+    reliable for the exact raw-dict workflow it's meant to support.
+
+    Test scenario: AI first authors pimpleFoam; engineer overrides
+    fvSchemes + fvSolution + controlDict ALL THREE to a coherent
+    custom-tuned pimpleFoam template (full-group override → guard
+    steps out per the V61-107.5 R16 contract). Caller then asks for
+    simpleFoam — the on-disk controlDict still says pimpleFoam, so
+    result.solver_name reports pimpleFoam + a warning."""
+    case_dir = tmp_path / "ondisk_truth_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    # First AI run authors pimpleFoam.
+    setup_bc_from_stl_patches(case_dir, case_id="ondisk_truth_case")
+
+    # Engineer fully owns the solver group (all 3 files marked
+    # user-overridden) — guard steps out per V61-107.5 R16 contract.
+    for rel in ("system/controlDict", "system/fvSchemes", "system/fvSolution"):
+        text = (case_dir / rel).read_text()
+        mark_user_override(
+            case_dir,
+            relative_path=rel,
+            new_content=text.encode("utf-8"),
+            detail={"reason": "full-group pimpleFoam override"},
+        )
+
+    # Caller asks for simpleFoam. The atomic_commit_dicts skips the
+    # 3 overridden files; on-disk controlDict still says
+    # ``application pimpleFoam;``. result.solver_name must reflect
+    # that truth, not the requested simpleFoam.
+    result = setup_bc_from_stl_patches(
+        case_dir, case_id="ondisk_truth_case", solver_name="simpleFoam"
+    )
+    assert result.solver_name == "pimpleFoam"
+    # Warning surfaces the divergence + names the override path so
+    # the engineer can act.
+    warning_text = " ".join(result.warnings)
+    assert "pimpleFoam" in warning_text
+    assert "simpleFoam" in warning_text
+    assert "controlDict" in warning_text
+    # On-disk controlDict still pimpleFoam (was user-overridden).
+    on_disk = (case_dir / "system/controlDict").read_text()
+    assert "application pimpleFoam;" in on_disk
+
+
+def test_simplefoam_residual_control_early_exit_treated_as_converged():
+    """V61-111 / Codex R1 P1-2: simpleFoam terminates early via
+    ``residualControl`` once both p and U initial residuals fall
+    below the configured target. ``_is_converged`` must treat this
+    as the happy-path indicator for application=simpleFoam, NOT as
+    "ran short of endTime" (which would misclassify the normal
+    convergence path as ``converged=false``).
+
+    Pre-V61-111 ``_is_converged`` only checked
+    end_time_reached >= configured_end_time - 0.5*dt. With simpleFoam
+    + residualControl exiting at iteration N < endTime, that gate
+    returned False → ``/solve`` reported converged=False on the
+    happy path.
+
+    Fix: when application=simpleFoam, accept either ``ran full
+    iteration budget`` OR log contains ``SIMPLE solution converged
+    in N iterations`` (the OpenFOAM-canonical message).
+    """
+    from ui.backend.services.case_solve.solver_runner import _is_converged
+
+    # Steady-state run terminated by residualControl at iteration
+    # 87 of an endTime=200 budget. continuity error tiny + finite.
+    parsed_early = {
+        "end_time_reached": 87.0,  # short of 200 endTime
+        "continuity": 1e-7,
+    }
+    log_with_residual_msg = (
+        "Time = 87\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 1e-05, ...\n"
+        "GAMG:  Solving for p, Initial residual = 5e-04, ...\n"
+        "SIMPLE solution converged in 87 iterations\n"
+        "End\n"
+    )
+    # WITHOUT the new application+log_text params, default behavior
+    # (icoFoam) would reject this as not-yet-reached endTime.
+    assert _is_converged(parsed_early, configured_end_time=200, configured_delta_t=1) is False
+    # WITH simpleFoam + log_text, residualControl-message detection
+    # promotes early-exit to converged=True.
+    assert _is_converged(
+        parsed_early,
+        configured_end_time=200,
+        configured_delta_t=1,
+        application="simpleFoam",
+        log_text=log_with_residual_msg,
+    ) is True
+
+    # Sanity: simpleFoam log WITHOUT the converged message must NOT
+    # be promoted (ran short of endTime AND no residualControl
+    # signal → genuine early stop, e.g. solver crashed).
+    log_without_msg = "Time = 87\nFOAM Warning ...\n"
+    assert _is_converged(
+        parsed_early,
+        configured_end_time=200,
+        configured_delta_t=1,
+        application="simpleFoam",
+        log_text=log_without_msg,
+    ) is False
+
+    # Sanity: simpleFoam that ran the full iteration budget without
+    # residualControl message is converged=True (ran full budget +
+    # finite residuals = ok).
+    parsed_full = {"end_time_reached": 200.0, "continuity": 1e-7}
+    assert _is_converged(
+        parsed_full,
+        configured_end_time=200,
+        configured_delta_t=1,
+        application="simpleFoam",
+        log_text="Time = 200\nEnd\n",
+    ) is True
+
+    # Backward compat: transient solver path unchanged (default
+    # application=icoFoam, end_t < endTime → False).
+    assert _is_converged(
+        parsed_early, configured_end_time=200, configured_delta_t=1
+    ) is False
