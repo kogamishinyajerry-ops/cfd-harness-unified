@@ -209,9 +209,20 @@ def _build_fv_solution(raw: dict[str, Any]) -> FvSolutionBlock:
                 f"(str/int/float/bool) or nested mapping; got {type(fv).__name__}"
             )
 
+    # Codex V61-112 R2 P2: control_block_name MUST be a string. The
+    # previous str(...) coercion accepted null/list/dict and silently
+    # rendered invalid OpenFOAM block headers (e.g. "None
+    # { ... }" or "['SIMPLE'] { ... }"). Reject at load time.
+    cbn = raw["control_block_name"]
+    if not isinstance(cbn, str):
+        raise TypeError(
+            f"fv_solution.control_block_name must be a string; "
+            f"got {type(cbn).__name__}"
+        )
+
     kwargs: dict[str, Any] = {
         "solvers": solvers,
-        "control_block_name": str(raw["control_block_name"]),
+        "control_block_name": cbn,
         "control_block_fields": raw_fields,
     }
     if "relaxation_factors_fields" in raw:

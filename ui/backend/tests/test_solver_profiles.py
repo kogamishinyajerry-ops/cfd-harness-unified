@@ -314,3 +314,15 @@ def test_fv_solution_relaxation_factors_list_raises_schema_error():
     with pytest.raises(ProfileSchemaError) as exc:
         _build_profile_from_dict(raw)
     assert "relaxation_factors_fields" in str(exc.value)
+
+
+# Codex V61-112 R2 P2: control_block_name must be string-typed.
+
+
+@pytest.mark.parametrize("bad_value", [None, ["SIMPLE"], {"name": "SIMPLE"}, 42])
+def test_fv_solution_control_block_name_non_string_raises_schema_error(bad_value):
+    raw = _minimal_simplefoam_raw()
+    raw["fv_solution"]["control_block_name"] = bad_value
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw)
+    assert "control_block_name" in str(exc.value)

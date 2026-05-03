@@ -39,7 +39,13 @@ jobs:
           # ui/backend/tests/test_report_bundle.py only run via the
           # local dogfood smoke loop, leaving CI blind to renderer
           # regressions in the Step 5 multi-figure pipeline.
-          pip install -e ".[dev,workbench]"
+          # 2026-05-03 (Codex V61-112 R2 P1): include the [ui] extra
+          # so the solver-profile tests collect. The new
+          # test_solver_profiles.py imports through
+          # ui.backend.services.case_solve, whose __init__.py eagerly
+          # imports case_manifest → pydantic. Without [ui], the
+          # backend lane fails at pytest collection on a clean runner.
+          pip install -e ".[dev,workbench,ui]"
 
       - name: Gold YAML schema validator gate
         run: |
