@@ -39,33 +39,47 @@ const NAV: NavItem[] = [
 
 export function Layout() {
   return (
-    <div className="flex h-full">
-      {/* DEC-V61-115 Codex R1 P2 #1: collapse sidebar below md (768px). The
-          fixed w-56 sidebar regressed narrow-viewport UX after / flipped from
-          /learn to /workbench. Below md, hide the sidebar entirely so the
-          main pane gets the full width — WorkbenchIndexPage's hero ships its
-          own /workbench/new + /workbench/import CTAs plus a /learn footer
-          link, so a phone-width visitor still reaches the engineer-facing
-          routes without sidebar nav. Power-user routes (/pro, /decisions,
-          /audit-package) remain desktop-targeted; users on narrow screens who
-          need them can still deep-link directly. */}
-      <aside className="hidden md:block w-56 shrink-0 border-r border-surface-800 bg-surface-900/60 px-3 py-4">
-        <div className="px-2 pb-6">
+    // DEC-V61-115 Codex R2 P2 #1: previous draft hid the sidebar entirely
+    // below md, which stranded mobile users on routes that don't render
+    // their own back-nav (DashboardPage / CaseListPage / DecisionsQueuePage /
+    // AuditPackagePage). This iteration reflows the sidebar into a
+    // horizontal top-bar below md instead of hiding it: same NavLinks, same
+    // active-state styling, but laid out as a scrollable row so every route
+    // remains reachable from every Layout-mounted page on any viewport.
+    // Phase-label chips + brand subtitle + footer attribution collapse on
+    // narrow screens to keep the bar compact; full vertical sidebar
+    // restored at md+.
+    <div className="flex h-full flex-col md:flex-row">
+      <aside
+        className="
+          shrink-0 border-b border-surface-800 bg-surface-900/60
+          md:w-56 md:border-b-0 md:border-r
+          px-3 py-2
+          md:px-3 md:py-4
+        "
+      >
+        {/* Brand block: full vertical block at md+, compact inline at narrow.
+            Hide the buyer-bridge subtitle below md to save horizontal space —
+            it's a navigation surface there, not a hero. */}
+        <div className="flex items-baseline gap-3 md:block md:px-2 md:pb-6">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-surface-400">
             CFD Harness
           </p>
-          <h1 className="mt-0.5 text-sm font-semibold text-surface-100">
+          <h1 className="text-sm font-semibold text-surface-100 md:mt-0.5">
             V&amp;V Workbench
           </h1>
-          {/* DEC-V61-046 round-1 R1-N1: buyer-readable bridge copy instead of
-              the internal-language "Path B · Phase 0..5 MVP" (which reads as
-              governance-speak to someone arriving from /learn). Internal
-              phase provenance moved to the sidebar footer. */}
-          <p className="mt-0.5 text-[10px] leading-snug text-surface-500">
+          {/* DEC-V61-046 round-1 R1-N1: buyer-readable bridge copy. Hidden
+              below md so the top-bar stays single-line. */}
+          <p className="hidden md:block md:mt-0.5 text-[10px] leading-snug text-surface-500">
             Evidence workbench for reviewers, auditors, and team leads.
           </p>
         </div>
-        <nav className="space-y-0.5">
+        <nav
+          className="
+            mt-2 flex gap-1 overflow-x-auto
+            md:mt-0 md:flex-col md:gap-0 md:space-y-0.5 md:overflow-visible
+          "
+        >
           {NAV.map((item) =>
             item.enabled ? (
               <NavLink
@@ -73,16 +87,16 @@ export function Layout() {
                 to={item.to}
                 end={item.to === "/pro"}
                 className={({ isActive }) =>
-                  `flex items-center justify-between rounded-sm px-2 py-1.5 text-sm transition-colors ${
+                  `flex shrink-0 items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors md:shrink ${
                     isActive
                       ? "bg-surface-700 text-surface-100"
                       : "text-surface-300 hover:bg-surface-800 hover:text-surface-100"
                   }`
                 }
               >
-                <span>{item.label}</span>
+                <span className="whitespace-nowrap">{item.label}</span>
                 {item.phaseLabel && (
-                  <span className="text-[9px] uppercase tracking-wider text-surface-500">
+                  <span className="hidden md:inline text-[9px] uppercase tracking-wider text-surface-500">
                     {item.phaseLabel}
                   </span>
                 )}
@@ -91,12 +105,12 @@ export function Layout() {
               <span
                 key={item.label}
                 aria-disabled
-                className="flex cursor-not-allowed items-center justify-between rounded-sm px-2 py-1.5 text-sm text-surface-500"
+                className="flex shrink-0 cursor-not-allowed items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm text-surface-500 md:shrink"
                 title={`Coming in ${item.phaseLabel}`}
               >
-                <span>{item.label}</span>
+                <span className="whitespace-nowrap">{item.label}</span>
                 {item.phaseLabel && (
-                  <span className="text-[9px] uppercase tracking-wider">
+                  <span className="hidden md:inline text-[9px] uppercase tracking-wider">
                     {item.phaseLabel}
                   </span>
                 )}
@@ -104,7 +118,7 @@ export function Layout() {
             ),
           )}
         </nav>
-        <footer className="mt-8 border-t border-surface-800 px-2 pt-4 text-[10px] leading-snug text-surface-500">
+        <footer className="hidden md:block mt-8 border-t border-surface-800 px-2 pt-4 text-[10px] leading-snug text-surface-500">
           Path B · agentic V&amp;V workbench<br />
           Phase 0..6 MVP · DEC-V61-002 / 003 / 092
         </footer>
