@@ -14,9 +14,15 @@
 // data-step-status attribute on parent rows is unchanged. Existing
 // StepTree.test.tsx 6-test contract stays green without modification.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { StepDef, StepId, StepStatus } from "./types";
+
+/** Origin tag distinguishing auto-expansion (active-step default) from
+ *  manual-pinning (user clicked the chevron). Auto entries collapse
+ *  when the active step transitions away; manual entries persist
+ *  until the user clicks the chevron again. */
+type ExpansionSource = "auto" | "manual";
 
 interface StepTreeProps {
   steps: readonly StepDef[];
@@ -65,38 +71,62 @@ export function StepTree({
   onStepClick,
   disabled = false,
 }: StepTreeProps) {
-  // Local expansion state. Initialize with the active step expanded
-  // so the engineer sees the active step's sub-actions immediately.
+  // Local expansion state. Each entry carries an origin tag
+  // ("auto" = active-step default, "manual" = user-pinned).
   // Multiple steps may be expanded simultaneously (matches Fluent
   // multi-expand convention).
-  const [expanded, setExpanded] = useState<ReadonlySet<StepId>>(
-    () => new Set<StepId>([currentStepId]),
-  );
+  //
+  // Codex R1 P2 fix (2026-05-04): the previous additive-only
+  // expansion model left auto-expanded rows behind when the user
+  // navigated step-by-step, progressively filling the rail. Now
+  // auto entries are evicted on active-step transition; only
+  // manually-pinned rows survive (the contract spelled out in the
+  // DEC §"Auto-expand" bullet).
+  const [expansion, setExpansion] = useState<
+    ReadonlyMap<StepId, ExpansionSource>
+  >(() => {
+    const initial = steps.find((s) => s.id === currentStepId);
+    if (initial?.subNodes && initial.subNodes.length > 0) {
+      return new Map<StepId, ExpansionSource>([[currentStepId, "auto"]]);
+    }
+    return new Map<StepId, ExpansionSource>();
+  });
+  const prevStepIdRef = useRef<StepId>(currentStepId);
 
-  // When the active step changes, additively expand it. We don't
-  // collapse other manually-expanded steps — engineers often want
-  // to keep "BC patches" visible while glancing at "Residuals".
-  // Only auto-expand when the step has sub-nodes; skip Step 1
-  // (no sub-nodes → no expansion state to track). Codex round-1
-  // expected to probe: what if the user manually collapses the
-  // active step? Answer: we don't fight them — the auto-expand
-  // only fires on stepId TRANSITIONS, not every render.
   useEffect(() => {
-    const target = steps.find((s) => s.id === currentStepId);
-    if (!target?.subNodes || target.subNodes.length === 0) return;
-    setExpanded((prev) => {
-      if (prev.has(currentStepId)) return prev;
-      const next = new Set(prev);
-      next.add(currentStepId);
+    const prevId = prevStepIdRef.current;
+    if (prevId === currentStepId) return;
+    prevStepIdRef.current = currentStepId;
+    setExpansion((prev) => {
+      const next = new Map(prev);
+      // Drop the previous active step IFF it was only auto-expanded
+      // (manual pins survive navigation).
+      if (next.get(prevId) === "auto") next.delete(prevId);
+      // Auto-expand the new active step when it has sub-nodes — but
+      // only if it isn't already manually pinned (don't downgrade
+      // manual → auto).
+      const target = steps.find((s) => s.id === currentStepId);
+      if (
+        target?.subNodes &&
+        target.subNodes.length > 0 &&
+        !next.has(currentStepId)
+      ) {
+        next.set(currentStepId, "auto");
+      }
       return next;
     });
   }, [currentStepId, steps]);
 
+  // Chevron click toggles expansion. Adding from collapsed always
+  // marks the entry as "manual" — the user has now explicitly
+  // expressed an intent that should outlive active-step changes.
+  // Removing simply deletes regardless of prior origin (collapse
+  // an auto-expanded active step or unpin a manually-pinned one).
   const toggleExpanded = (stepId: StepId) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
+    setExpansion((prev) => {
+      const next = new Map(prev);
       if (next.has(stepId)) next.delete(stepId);
-      else next.add(stepId);
+      else next.set(stepId, "manual");
       return next;
     });
   };
@@ -114,7 +144,7 @@ export function StepTree({
       {steps.map((step) => {
         const status = step.id === currentStepId ? "active" : stepStates[step.id];
         const hasSubNodes = !!step.subNodes && step.subNodes.length > 0;
-        const isExpanded = hasSubNodes && expanded.has(step.id);
+        const isExpanded = hasSubNodes && expansion.has(step.id);
         return (
           <div key={step.id} className="flex flex-col gap-0.5">
             <div className="flex items-stretch gap-1">

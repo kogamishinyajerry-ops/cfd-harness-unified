@@ -270,6 +270,51 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
     expect(onStepClick).not.toHaveBeenCalled();
   });
 
+  // Codex R1 P2 regression: navigating step→step used to leave each
+  // visited step's auto-expansion behind, progressively filling the rail.
+  // Auto entries must collapse when the active step transitions away;
+  // only manually-pinned rows persist.
+  it("collapses the previously-active step's auto-expansion on navigation", () => {
+    const { rerender } = render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={2}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-2")).toBeInTheDocument();
+    // Navigate 2 → 3.
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
+    // Navigate 3 → 4.
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={4}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
+  });
+
   it("preserves manual expansion when a different step becomes active", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
