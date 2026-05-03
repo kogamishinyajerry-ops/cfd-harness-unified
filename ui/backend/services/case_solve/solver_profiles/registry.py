@@ -81,7 +81,12 @@ def load_profile(name: str) -> SolverProfile:
 
     try:
         profile = _build_profile(name, raw)
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        # DEC-V61-113 closure: AttributeError added to handler. A
+        # malformed top-level YAML where a sub-block is e.g. a string
+        # used to crash builders with ``str.keys()`` AttributeError
+        # which escaped past load_profile() as raw 500. Now caught
+        # alongside the other builder-side type-mismatch exceptions.
         raise ProfileSchemaError(
             f"profile {name!r} schema mismatch: {exc}"
         ) from exc
@@ -106,6 +111,20 @@ def _build_profile(name: str, raw: dict[str, Any]) -> SolverProfile:
         raise ValueError(
             f"family must be 'steady' or 'transient', got {family!r}"
         )
+
+    # DEC-V61-113 closure: validate dict-shape for the 3 sub-block
+    # keys before delegating. Pre-fix: ``raw["control_dict"]`` could
+    # be a string / list / None and ``_build_control_dict`` would
+    # crash with AttributeError on `.keys()` access — AttributeError
+    # was NOT caught by load_profile()'s except block → escaped as
+    # raw 500. Eager dict-shape check raises TypeError → wrapped to
+    # ProfileSchemaError.
+    for sub_key in ("control_dict", "fv_schemes", "fv_solution"):
+        if not isinstance(raw[sub_key], dict):
+            raise TypeError(
+                f"top-level.{sub_key} must be a mapping; "
+                f"got {type(raw[sub_key]).__name__}"
+            )
 
     cd = _build_control_dict(raw["control_dict"])
     fs = _build_fv_schemes(raw["fv_schemes"])
@@ -219,7 +238,27 @@ def _build_fv_schemes(raw: dict[str, Any]) -> FvSchemesBlock:
                 raise TypeError(
                     f"fv_schemes.{key} must be a mapping; got {type(value).__name__}"
                 )
-            # Coerce all values to str; YAML may parse numerics.
+            # DEC-V61-113 closure: validate scheme expression values
+            # are scalars (str/int/float). Pre-fix: ``str(v)`` coerced
+            # ANY shape including list/dict/None into garbage strings
+            # like ``"['Gauss', 'linear']"`` or ``"None"`` that
+            # OpenFOAM rejects at solver startup. Reject at load time
+            # so the failure surfaces as ProfileSchemaError →
+            # BCSetupError/StlPatchBCError envelope, not deferred to
+            # render-time render-into-disk-then-fail-on-startup.
+            for sk, sv in value.items():
+                # bool is int subclass — reject explicitly (would
+                # render as "True"/"False", invalid OpenFOAM).
+                if isinstance(sv, bool):
+                    raise TypeError(
+                        f"fv_schemes.{key}[{sk!r}] must be a scalar "
+                        f"(str/int/float); got bool"
+                    )
+                if not isinstance(sv, (str, int, float)):
+                    raise TypeError(
+                        f"fv_schemes.{key}[{sk!r}] must be a scalar "
+                        f"(str/int/float); got {type(sv).__name__}"
+                    )
             kwargs[key] = {str(k): str(v) for k, v in value.items()}
     return FvSchemesBlock(**kwargs)
 

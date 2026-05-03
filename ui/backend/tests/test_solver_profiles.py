@@ -1064,6 +1064,83 @@ def test_control_dict_iteration_floor_non_int_raises_schema_error(bad_value):
     assert "iteration_floor" in str(exc.value)
 
 
+# ===========================================================================
+# DEC-V61-113 · post-V61-112 lazy-validation audit sweep
+# ===========================================================================
+
+
+@pytest.mark.parametrize("bad_value", [["Gauss", "linear"], {"a": 1}, None, True, False])
+def test_fv_schemes_value_non_scalar_raises_schema_error(bad_value):
+    """V61-113 closure: fv_schemes scheme expression values must be
+    scalar (str/int/float). Pre-fix: str(v) coerced list/dict/None/bool
+    silently into garbage strings rendered into fvSchemes file.
+    """
+    raw = {
+        "name": "channelPimpleFoam",
+        "family": "transient",
+        "control_dict": {"application": "pimpleFoam"},
+        "fv_schemes": {
+            "div_schemes": {"div(phi,U)": bad_value},
+        },
+        "fv_solution": {
+            "control_block_name": "PIMPLE",
+            "control_block_fields": {"nOuterCorrectors": 1},
+            "solvers": {"p": "solver PCG;"},
+        },
+    }
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "div_schemes" in str(exc.value)
+
+
+@pytest.mark.parametrize("sub_key", ["control_dict", "fv_schemes", "fv_solution"])
+@pytest.mark.parametrize("bad_value", ["string-not-dict", ["list"], None, 42])
+def test_top_level_sub_block_non_dict_raises_schema_error(sub_key, bad_value):
+    """V61-113 closure: top-level control_dict / fv_schemes /
+    fv_solution must be dict-typed. Pre-fix: a string / list / None
+    would crash builders with AttributeError that escaped past
+    load_profile() as raw 500."""
+    raw = {
+        "name": "channelPimpleFoam",
+        "family": "transient",
+        "control_dict": {"application": "pimpleFoam"},
+        "fv_schemes": {},
+        "fv_solution": {
+            "control_block_name": "PIMPLE",
+            "control_block_fields": {"nOuterCorrectors": 1},
+            "solvers": {"p": "solver PCG;"},
+        },
+    }
+    raw[sub_key] = bad_value
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert sub_key in str(exc.value)
+
+
+def test_load_profile_catches_attribute_error_from_builders(tmp_path, monkeypatch):
+    """V61-113 closure: load_profile()'s except handler now catches
+    AttributeError too. Verify that a builder-side AttributeError
+    surfaces as ProfileSchemaError, not raw 500."""
+    from ui.backend.services.case_solve.solver_profiles import registry as reg
+
+    def boom_with_attribute_error(name, raw):
+        raise AttributeError("simulated builder-side crash")
+
+    monkeypatch.setattr(reg, "_build_profile", boom_with_attribute_error)
+    # Stage a valid YAML file for load_profile to read.
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir()
+    (profiles_dir / "fooFoam.yaml").write_text("name: fooFoam\nfamily: steady\n")
+    monkeypatch.setattr(reg, "_PROFILES_DIR", profiles_dir)
+    # Clear the cache so the load attempt re-runs _build_profile.
+    monkeypatch.setattr(reg, "_CACHE", {})
+
+    with pytest.raises(ProfileSchemaError) as exc:
+        reg.load_profile("fooFoam")
+    assert "fooFoam" in str(exc.value)
+    assert isinstance(exc.value.__cause__, AttributeError)
+
+
 def test_max_delta_t_both_none_omits_line():
     """When both fields are unset, maxDeltaT line omitted (icoFoam
     Phase 3 behavior preserved)."""
