@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-116
 title: Case completeness analyzer · backend service + sticky right-rail "距离入库标准还差 N 项" card
-status: Proposed (2026-05-04 · authored under user 2026-05-04 autonomous-mode mandate "全都按你的建议来"; arc item C; awaiting Codex pre-merge approval per RETRO-V61-001 risk-tier)
-codex_tool_report_path: pending
+status: Accepted (2026-05-04 · Codex pre-merge 11-round chain APPROVE on commit 0e19235 [longest chain in repo history; severity progression P1×8 → P2 → P3 → clean]; chain report at reports/codex_tool_reports/v61_116_r1_through_r11_chain.md; user 2026-05-04 autonomous-mode mandate "全都按你的建议来" covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_116_r1_through_r11_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User 2026-05-04 design discussion — "AI助手不仅提供自动化的操作建议，同时也要时刻记得'按照项目的治理规则，用户目前还需要提供哪些信息，才能让这个case更完整，指引、配合用户来让case最终达到可以入库的标准'". Five-DEC arc plan A→C→B→D→E confirmed by user "全都按你的建议来"; this is item C — the rule-based foundation for the eventual LLM-wrapped completeness coaching (V61-119 · item E).
@@ -21,7 +21,7 @@ parent_artifacts:
   - ui/frontend/src/pages/workbench/step_panel_shell/TaskPanel.tsx:22-57 (right-rail mount point: above the scrollable Body div, below the header)
 counter_impact: +1 (autonomous_governance: true · new presentation surface for existing governance schemas, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a high-risk PR (no enforcement — `ready_for_archive` is informational, not gating archival), not arc-size retro, not a governance rule-change DEC · Kogami SKIP per DEC-V61-087 §4.2. Codex pre-merge MANDATORY per RETRO-V61-001 multi-file frontend + new operator endpoint triggers.)
 self_estimated_pass_rate: 60% (MEDIUM baseline. Scope: new backend module (~3 files: analyzer.py + schemas.py + __init__.py) + new route + new frontend type + new sticky card component (~6 files total, ~400-500 LOC). Risk surface: (a) Codex may flag the gold-vs-draft schema divergence (different shapes need different completeness rules), (b) Codex may want explicit ready_for_archive threshold rationale rather than ad-hoc, (c) Codex may catch that "missing field X" must distinguish "absent" from "explicitly null", (d) Codex may want unit tests for the analyzer with both whitelist + imported drafts, (e) Codex may want the right-rail card to gracefully degrade when /api/cases/{id}/completeness 404s (case not yet saved). Expect 2-3 rounds; possible P1-P2 on edge cases.)
-notion_sync_status: pending (will sync after Codex APPROVE + commit lands)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-116-Case-completeness-analyzer-backend-service-sticky-right-rail-N-card-355c68942bed81a58feecddc645313df)
 
 ---
 
@@ -156,3 +156,29 @@ Methodology: V61-115 chain report logged a NEW calibration anchor "engineer-firs
 ## Counter impact
 
 This DEC's acceptance advances `autonomous_governance_counter_v61` 74 → 75. Arc retro V61-088 → V61-114 stays explicitly deferred per user mandate (task #23) until between this DEC and V61-117. Counter at retro time will be 75 (this DEC's acceptance + retro itself = +0).
+
+## Acceptance closure (2026-05-04 · Codex pre-merge 11-round chain APPROVE)
+
+V61-116 became the longest Codex chain in repo history (11 rounds vs. previous max ~6 on V61-053). Each round caught a legitimate correctness issue about the imported-case state machine — not Codex over-fitting, but the actual depth of the problem. Severity progression P1×8 → P2 → P3 → APPROVE clean.
+
+| Round | Commit | Verdict | Findings | Layer caught |
+|-------|--------|---------|----------|--------------|
+| R1 | b0eecd8 | APPROVE_W_C | 1 P1 + 2 P2 | Resolution priority + Pydantic default-fill + Re-rule denominator |
+| R2 | 0a8389b | APPROVE_W_C | 1 P1 + 1 P2 | Scaffold writes both files / ManifestParseError silent fallthrough |
+| R3 | 3133eff | APPROVE_W_C | 1 P1 + 1 P2 | mtime arbitration fragile (sub-second + metadata-only writes) |
+| R4 | f49ee53 | APPROVE_W_C | 1 P1 | Scaffolded manifest empty → manifest-canonical perm-blocks |
+| R5 | a9631fc | APPROVE_W_C | 1 P1 + 1 P2 | Flat boundary_conditions ≠ patch setup; solver dict needs .name |
+| R6 | f9dbbc6 | APPROVE_W_C | 1 P1 | manifest.bc.patches isn't actually written by setup_bc paths |
+| R7 | d33982d | APPROVE_W_C | 1 P1 | Append-only history+overrides don't notice re-mesh staleness |
+| R8 | 24e2ebc | APPROVE_W_C | 1 P1 | polyMesh/boundary touched by BC setup — use points instead |
+| R9 | 706e0b1 | APPROVE_W_C | 1 P2 | Boundary-existence prerequisite (corrupted partial polyMesh) |
+| R10 | 25f405c | APPROVE_W_C | 1 P3 | Remediation copy was dead-end for partial-polyMesh state |
+| **R11** | **0e19235** | **APPROVE clean** | **0** | **Convergence** |
+
+R11 verdict: "The change is limited to branching the bc.patches remediation copy based on on-disk polyMesh state, and that behavior matches the existing downstream setup constraints. I did not find any introduced regression in the analyzer logic or its tests."
+
+**Self-pass-rate calibration**: predicted 60% / actual 11 rounds (predicted by 5x). NEW calibration anchor captured in chain report § Self-pass-rate calibration: "state-machine analyzer for evolving multi-store data: ~20-30% pass rate, 8-12 rounds typical". 5th anchor distinct from bug-fix migration / schema-extension / schema-reuse / cross-cutting cascade / preemptive-audit / engineer-first UI redesign.
+
+**V61-116 acceptance criteria status**: all 10 criteria PASS (§1 service · §2 three-layer analysis (extended to 4-layer with R6-R8 fs-mtime + R10 copy branching) · §3 route 200/404 · §4 client + types · §5 CompletenessCard · §6 35 backend tests · §7 6 frontend tests · §8 1240 backend + 175 frontend tests pass · §9 Codex APPROVE · §10 Surface scan).
+
+**Counter advancement**: 74 → 75. Arc retro V61-088 → V61-116 (now expanded to V61-115/V61-116 inclusive) is the next work item per user mandate · 22-DEC arc · 6 calibration anchor categories.
