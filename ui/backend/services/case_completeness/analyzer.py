@@ -630,25 +630,53 @@ def _analyze_imported(
     bc_present = _bc_dicts_current(case_dir)
     bc_patches_set = _has_in(raw_manifest_yaml, "bc", "patches")
     if not (bc_present or bc_patches_set):
-        missing.append(
-            MissingField(
-                field_path="bc.patches",
-                severity="critical",
-                why=(
-                    "Boundary-patch setup has not run, OR has been "
-                    "invalidated by a later re-mesh. The analyzer accepts "
-                    "either: (a) manifest.bc.patches non-empty, OR (b) at "
-                    "least one BC dict in 0/ (U, p, k, epsilon, omega, "
-                    "nut, …) with mtime ≥ constant/polyMesh/points "
-                    "mtime — proving the BC was authored AGAINST the "
-                    "current mesh geometry. (We compare against `points` "
-                    "rather than `boundary` because BC setup itself "
-                    "rewrites `boundary` to change patch types.) Run the "
-                    "Step 3 [AI 处理] action or annotate faces in the "
-                    "viewport."
-                ),
+        # Codex R10 P3: distinguish the corrupted partial-polyMesh state
+        # from the regular "BC not set up yet" state. setup_bc paths
+        # fail immediately when boundary is missing, so the remediation
+        # copy must point engineer to mesh restore/regen instead of
+        # Step 3 [AI 处理].
+        poly_dir = case_dir / "constant" / "polyMesh"
+        points_exists = (poly_dir / "points").is_file()
+        boundary_exists = (poly_dir / "boundary").is_file()
+        if points_exists and not boundary_exists:
+            missing.append(
+                MissingField(
+                    field_path="bc.patches",
+                    severity="critical",
+                    why=(
+                        "constant/polyMesh/boundary is missing but "
+                        "constant/polyMesh/points exists — the polyMesh "
+                        "is in a corrupted partial state (likely a "
+                        "partial restore or manual cleanup). Step 3 "
+                        "[AI 处理] cannot recover this — setup_ldc_bc / "
+                        "setup_bc_from_stl_patches both fail immediately "
+                        "without `boundary`. Restore the polyMesh from "
+                        "backup OR re-run the mesh wizard to regenerate "
+                        "polyMesh/* from scratch, THEN run Step 3 BC "
+                        "setup."
+                    ),
+                )
             )
-        )
+        else:
+            missing.append(
+                MissingField(
+                    field_path="bc.patches",
+                    severity="critical",
+                    why=(
+                        "Boundary-patch setup has not run, OR has been "
+                        "invalidated by a later re-mesh. The analyzer "
+                        "accepts either: (a) manifest.bc.patches non-empty, "
+                        "OR (b) at least one BC dict in 0/ (U, p, k, "
+                        "epsilon, omega, nut, …) with mtime ≥ "
+                        "constant/polyMesh/points mtime — proving the BC "
+                        "was authored AGAINST the current mesh geometry. "
+                        "(We compare against `points` rather than `boundary` "
+                        "because BC setup itself rewrites `boundary` to "
+                        "change patch types.) Run the Step 3 [AI 处理] "
+                        "action or annotate faces in the viewport."
+                    ),
+                )
+            )
 
     # Re-appropriate turbulence (only counted in total when Re actually
     # present; no Re in the v2 imported-manifest schema today, so this

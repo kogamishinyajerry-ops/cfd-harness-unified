@@ -551,13 +551,17 @@ def test_imported_bc_polymesh_but_no_zero_dicts_flagged(isolated_drafts):
 
 
 def test_imported_bc_partial_polymesh_missing_boundary_flagged(isolated_drafts):
-    """Codex R9 P2 regression — DEC-V61-116.
+    """Codex R9 P2 + R10 P3 regression — DEC-V61-116.
 
     Corrupted partial polyMesh (points exists, boundary missing) is a
     real failure mode after a partial restore or manual cleanup.
     Downstream setup_bc paths require boundary to exist; the analyzer
     must fail closed (BC missing) so completeness verdict tracks
-    downstream reality.
+    downstream reality (R9 P2).
+
+    R10 P3: the remediation copy must NOT tell the user to run Step 3
+    [AI 处理] (that path fails on missing boundary). Instead point at
+    polyMesh restore / re-mesh.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_partial_polymesh"
@@ -570,6 +574,13 @@ def test_imported_bc_partial_polymesh_missing_boundary_flagged(isolated_drafts):
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1, (
         f"missing polyMesh/boundary must fail closed; got {bc_missing}"
+    )
+    why = bc_missing[0].why
+    # R10 P3: copy must name the corrupted-state cause + suggest restore
+    # or re-mesh, NOT just "run Step 3" (which would fail).
+    assert "corrupted partial state" in why, f"wrong remediation copy: {why}"
+    assert "Restore" in why or "re-run the mesh wizard" in why, (
+        f"copy must point at restore/re-mesh; got: {why}"
     )
 
 
