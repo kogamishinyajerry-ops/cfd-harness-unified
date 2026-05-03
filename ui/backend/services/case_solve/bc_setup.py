@@ -42,6 +42,16 @@ from ui.backend.services.case_manifest import (
     mark_ai_authored,
 )
 
+# DEC-V61-112 Phase 3: solver-profile YAML migration. Imported at
+# module level (not inside _author_dicts) so test_bc_setup_user_override
+# can monkeypatch load_profile to simulate ProfileNotFoundError /
+# ProfileSchemaError per Codex Phase 3 R1 P2 closure.
+from .solver_profiles import (
+    ProfileNotFoundError,
+    ProfileSchemaError,
+    load_profile,
+)
+
 # Lid plane is at z = +0.05 (top of the [-0.05, +0.05] cube). EPS is the
 # numerical tolerance for "all 3 vertices on the lid plane" — gmsh
 # rounds vertex coords to ~1e-7, so 1e-4 is generous-enough that
@@ -458,8 +468,21 @@ def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     # pass end_time / delta_t — the profile's YAML defaults
     # (`end_time_default: 2`, `delta_t_default: 0.005`,
     # `write_interval: 0.5`) supply the V61-097 literals.
-    from .solver_profiles import load_profile
-    icofoam_profile = load_profile("icoFoam")
+    #
+    # Codex V61-112 Phase 3 R1 P2 closure: wrap profile load failures
+    # in BCSetupError so a missing / malformed icoFoam.yaml surfaces
+    # via the established route-level error envelope (4xx / 5xx via
+    # the BCSetupError handler chain) rather than as an unhandled 500
+    # after polyMesh has already been rewritten. ``load_profile`` is
+    # imported at module level (above) so tests can monkeypatch.
+    try:
+        icofoam_profile = load_profile("icoFoam")
+    except (ProfileNotFoundError, ProfileSchemaError) as exc:
+        raise BCSetupError(
+            f"icoFoam solver-profile load failed (V61-112 Phase 3 "
+            f"deployment hazard — profile YAML missing or malformed): "
+            f"{exc}"
+        ) from exc
     w("system/controlDict", icofoam_profile.render_control_dict())
     w("system/fvSchemes", icofoam_profile.render_fv_schemes())
     w("system/fvSolution", icofoam_profile.render_fv_solution())

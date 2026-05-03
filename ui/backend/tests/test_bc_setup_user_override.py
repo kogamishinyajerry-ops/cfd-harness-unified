@@ -253,3 +253,69 @@ def test_author_dicts_records_authorship_via_caller(tmp_path):
     for rel in ("system/controlDict", "system/fvSchemes"):
         entry = manifest.overrides.raw_dict_files[rel]
         assert entry.source == "user", f"{rel} lost user override"
+
+
+def test_author_dicts_translates_profile_load_error_to_bc_setup_error(
+    tmp_path, monkeypatch
+):
+    """DEC-V61-112 Phase 3 R1 P2 closure: if icoFoam.yaml is missing
+    or malformed at runtime, _author_dicts MUST raise BCSetupError
+    (not the raw ProfileNotFoundError / ProfileSchemaError) so the
+    setup_bc route's error envelope handles it as a 4xx/5xx instead
+    of an unhandled 500.
+    """
+    from ui.backend.services.case_solve import bc_setup as bc_setup_mod
+    from ui.backend.services.case_solve.solver_profiles import (
+        ProfileNotFoundError, ProfileSchemaError,
+    )
+
+    case_dir = tmp_path / "case-profile-fail"
+    _stage_case(case_dir)
+
+    # Force load_profile to raise ProfileNotFoundError.
+    def boom_not_found(name):
+        raise ProfileNotFoundError(f"simulated missing profile {name!r}")
+
+    monkeypatch.setattr(bc_setup_mod, "load_profile", boom_not_found)
+
+    raised = None
+    try:
+        bc_setup_mod._author_dicts(case_dir)
+    except bc_setup_mod.BCSetupError as exc:
+        raised = exc
+
+    assert raised is not None, (
+        "expected BCSetupError when icoFoam profile load fails; "
+        "raw ProfileNotFoundError would bypass setup_bc envelope"
+    )
+    assert "icoFoam" in str(raised)
+    # Underlying cause preserved for diagnostics.
+    assert isinstance(raised.__cause__, ProfileNotFoundError)
+
+
+def test_author_dicts_translates_profile_schema_error_to_bc_setup_error(
+    tmp_path, monkeypatch
+):
+    """Variant: ProfileSchemaError (malformed YAML) → BCSetupError."""
+    from ui.backend.services.case_solve import bc_setup as bc_setup_mod
+    from ui.backend.services.case_solve.solver_profiles import (
+        ProfileSchemaError,
+    )
+
+    case_dir = tmp_path / "case-profile-schema-fail"
+    _stage_case(case_dir)
+
+    def boom_schema(name):
+        raise ProfileSchemaError(f"simulated schema error in {name!r}")
+
+    monkeypatch.setattr(bc_setup_mod, "load_profile", boom_schema)
+
+    raised = None
+    try:
+        bc_setup_mod._author_dicts(case_dir)
+    except bc_setup_mod.BCSetupError as exc:
+        raised = exc
+
+    assert raised is not None
+    assert "icoFoam" in str(raised)
+    assert isinstance(raised.__cause__, ProfileSchemaError)
