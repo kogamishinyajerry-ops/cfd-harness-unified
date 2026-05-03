@@ -843,12 +843,31 @@ def test_user_override_controldict_with_commented_icofoam_proceeds(tmp_path: Pat
     assert "system/controlDict" in r2.skipped_user_overrides
 
 
-def test_user_override_controldict_with_block_commented_icofoam_proceeds(tmp_path: Path):
-    """DEC-V61-107.5 / Codex R17 P3: an ``application icoFoam;`` token
-    wrapped in a C-style block comment ``/* ... */`` must not trigger
-    the static guard. OpenFOAM strips block comments at parse time,
-    so it sees only the live ``application pimpleFoam;`` and runs the
-    pimple-friendly authored dicts unchanged."""
+def test_user_override_controldict_with_block_commented_icofoam_rejects(tmp_path: Path):
+    """DEC-V61-111 / Codex R2 P2-1 supersedes V61-107.5 R17 P3.
+
+    Pre-V61-111 R2, the guard had its own comment-stripping pass that
+    saw past the C-style ``/* application icoFoam; */`` comment to the
+    live ``application pimpleFoam;`` below. The test then asserted
+    "guard does not fire" because the engineer's live application
+    matched the AI-authored pimpleFoam.
+
+    Codex R2 P2-1 caught the disagreement: ``read_application_from_control_dict``
+    in solver_runner.py (which /solve uses to pick the binary) does NOT
+    strip comments. Its regex anchors at ``^\\s*application\\s+(\\w+)\\s*;``
+    on raw text, so an indented ``application icoFoam;`` inside a
+    /* block comment */ MATCHES (only the leading whitespace is consumed
+    before ``application``; the regex doesn't know about ``/*``).
+
+    So under the pre-R2 behavior:
+    - guard saw stripped text → live pimpleFoam → no fire → setup proceeds
+    - /solve saw raw text → first match icoFoam → dispatched icoFoam
+
+    User thought pimpleFoam was running; reality was icoFoam. Silent
+    bug. R2 closure makes the guard use the SAME raw-text parser, so
+    if /solve will run icoFoam, the guard rejects partial-override
+    consistently. Test updated to assert the rejection.
+    """
     case_dir = tmp_path / "block_commented_appl"
     _scaffold_case(case_dir)
     _write_polymesh_axis_aligned_box(
@@ -878,8 +897,17 @@ def test_user_override_controldict_with_block_commented_icofoam_proceeds(tmp_pat
         detail={"reason": "block-commented historical config"},
     )
 
-    r2 = setup_bc_from_stl_patches(case_dir, case_id="block_commented_appl")
-    assert "system/controlDict" in r2.skipped_user_overrides
+    # Verify solver_runner's parser sees the FIRST match (the
+    # commented icoFoam) — that's what /solve will dispatch.
+    from ui.backend.services.case_solve.solver_runner import (
+        read_application_from_control_dict,
+    )
+    assert read_application_from_control_dict(case_dir) == "icoFoam"
+
+    # Guard MUST agree with /solve's parser → reject partial override.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="block_commented_appl")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
 
 
 def test_piso_block_inline_brace_proceeds_without_static_guard(tmp_path: Path):
@@ -1412,3 +1440,133 @@ def test_simplefoam_residual_control_early_exit_treated_as_converged():
     assert _is_converged(
         parsed_early, configured_end_time=200, configured_delta_t=1
     ) is False
+
+
+def test_solver_marker_guard_uses_same_parser_as_solve_dispatch(tmp_path: Path):
+    """V61-111 / Codex R2 P2-1: the on-disk solver_name re-read AND
+    the override-marker guard must both use the SAME parser as
+    ``read_application_from_control_dict`` in solver_runner.py — the
+    one /solve actually uses to pick the binary. Without that, a
+    user controlDict with a block-commented stale application +
+    live replacement could produce a result.solver_name that
+    disagrees with what /solve dispatches.
+
+    The chosen parser is ``^\\s*application\\s+(\\w+)\\s*;`` on raw
+    text (no comment stripping), matching solver_runner.py exactly.
+    Block comments (`/* ... */`) are NOT stripped — both the guard
+    and /solve see them as live source on lines starting with
+    whitespace + ``application``. Line comments (`// ...`) are
+    naturally skipped because the regex anchors at ``^\\s*application``
+    which `// application X;` doesn't match (`/` is non-whitespace).
+    """
+    from ui.backend.services.case_solve.solver_runner import (
+        read_application_from_control_dict,
+    )
+
+    case_dir = tmp_path / "parser_parity_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="parser_parity_case")
+
+    # Engineer overrides controlDict with a line-commented stale
+    # application + live replacement. Both parsers should pick the
+    # SAME live one because solver_runner's regex anchors at
+    # `^\s*application` so `// application icoFoam;` is naturally
+    # skipped (the `//` is non-whitespace before `application`).
+    custom = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "// application icoFoam;  // commented-out stale value\n"
+        "application simpleFoam;\n"
+        "endTime 100;\n"
+        "deltaT 1;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom)
+    mark_user_override(
+        case_dir,
+        relative_path="system/controlDict",
+        new_content=custom.encode("utf-8"),
+        detail={"reason": "engineer pinned simpleFoam"},
+    )
+    # Mark the other 2 overrides too so guard steps out (V61-107.5
+    # R16 full-group contract) — we want to exercise the
+    # ``solver_name re-read`` path here, not the guard.
+    for rel in ("system/fvSchemes", "system/fvSolution"):
+        text = (case_dir / rel).read_text()
+        mark_user_override(
+            case_dir,
+            relative_path=rel,
+            new_content=text.encode("utf-8"),
+            detail={"reason": "full-group override"},
+        )
+
+    # Re-run with solver_name=pimpleFoam (the default). result
+    # should report simpleFoam (matching what /solve will dispatch)
+    # NOT pimpleFoam (the requested), because the user controlDict
+    # is on disk + live ``application simpleFoam;`` is what BOTH
+    # parsers see.
+    result = setup_bc_from_stl_patches(case_dir, case_id="parser_parity_case")
+    dispatch_solver = read_application_from_control_dict(case_dir)
+    assert result.solver_name == dispatch_solver, (
+        f"BC setup reports solver_name={result.solver_name!r} but /solve "
+        f"will dispatch {dispatch_solver!r} — parsers MUST agree"
+    )
+    assert result.solver_name == "simpleFoam"
+
+
+def test_solver_marker_guard_rejects_arbitrary_mismatched_solver_name(tmp_path: Path):
+    """V61-111 / Codex R2 P2-2: the override guard must use generic
+    application-name matching, not a hardcoded set of 3 names.
+    User-overridden controlDict with ``application pisoFoam;`` (a
+    valid OpenFOAM solver outside the V61-111 R1 hardcoded
+    {icoFoam, pimpleFoam, simpleFoam} set) while AI authors
+    pimpleFoam fvSchemes + fvSolution = OpenFOAM startup abort on
+    PIMPLE/PISO block mismatch. Pre-R2 the guard returned [];
+    post-R2 it must reject with solver_dicts_partial_override.
+    """
+    case_dir = tmp_path / "arbitrary_solver_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(case_dir, case_id="arbitrary_solver_case")
+
+    # User overrides controlDict to pisoFoam (NOT in the R1
+    # hardcoded 3-set). fvSchemes + fvSolution stay AI-authored
+    # (pimpleFoam template). This is the partial-override mismatch
+    # that R2 P2-2 surfaced.
+    custom = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application pisoFoam;\n"  # arbitrary name outside R1 set
+        "endTime 100;\n"
+        "deltaT 0.001;\n"
+    )
+    (case_dir / "system/controlDict").write_text(custom)
+    mark_user_override(
+        case_dir,
+        relative_path="system/controlDict",
+        new_content=custom.encode("utf-8"),
+        detail={"reason": "engineer wrote pisoFoam — arbitrary solver"},
+    )
+
+    # AI re-runs with default (pimpleFoam). pisoFoam ≠ pimpleFoam,
+    # AI's pimpleFoam fvSolution would mismatch → guard must fire.
+    with pytest.raises(StlPatchBCError) as exc:
+        setup_bc_from_stl_patches(case_dir, case_id="arbitrary_solver_case")
+    assert exc.value.failing_check == "solver_dicts_partial_override"
+    err = str(exc.value)
+    assert "pimpleFoam" in err  # AI's solver
+    assert "system/controlDict" in err  # the offending file

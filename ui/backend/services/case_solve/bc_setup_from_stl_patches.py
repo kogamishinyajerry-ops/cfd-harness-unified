@@ -558,31 +558,17 @@ _SOLVER_GROUP = (
 # /solve time with the OpenFOAM error in the response — the
 # engineer sees the real cause directly rather than a static-guard
 # false positive/negative.
-_ICOFOAM_APPLICATION_RE = re.compile(
-    r"^\s*application\s+icoFoam\s*;",
+# DEC-V61-111 / Codex R2 P2-1 closure: shared with solver_runner.py
+# so the solver-name re-read uses the SAME parser as the dispatch
+# path (``read_application_from_control_dict``). Pre-fix used a
+# comment-stripping pass that diverged from solver_runner's raw-text
+# regex on contrived inputs (block-commented stale ``application`` +
+# live replacement); now both paths use the identical regex so the
+# reported solver_name matches what /solve actually dispatches.
+_APPLICATION_RE = re.compile(
+    r"^\s*application\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
     re.MULTILINE,
 )
-# DEC-V61-111 / Codex R1 P1-1: solver-aware mismatch detection. When
-# the AI authors simpleFoam, a user-overridden controlDict that
-# carries ``application pimpleFoam;`` (a stale value from the prior
-# pimpleFoam-default era) is now the dangerous mismatch — same shape
-# as the icoFoam-vs-pimpleFoam mismatch the original guard caught.
-# Mirror pattern for completeness.
-_PIMPLEFOAM_APPLICATION_RE = re.compile(
-    r"^\s*application\s+pimpleFoam\s*;",
-    re.MULTILINE,
-)
-_SIMPLEFOAM_APPLICATION_RE = re.compile(
-    r"^\s*application\s+simpleFoam\s*;",
-    re.MULTILINE,
-)
-# Comment stripping for the `application` regex. R17 P3 closure:
-# strip both line `// ...` and block `/* ... */` comments in a single
-# alternation pass to avoid the precedence flaw that bit R15. Using
-# alternation rather than two sequential subs keeps each match
-# independent, so a `// /* */` line is correctly handled by the line
-# branch and a `/* // */` block by the block branch.
-_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 
 def _detect_solver_marker_overrides(
@@ -602,9 +588,17 @@ def _detect_solver_marker_overrides(
     (stale from the prior era), the AI's simpleFoam fvSchemes/
     fvSolution would mismatch on disk (SIMPLE block expected by
     simpleFoam vs PIMPLE in fvSolution), aborting OpenFOAM at startup
-    with a cryptic dictionary error. Generalized: catch any
-    application-name in user-overridden controlDict that disagrees
-    with the resolved AI solver.
+    with a cryptic dictionary error.
+
+    DEC-V61-111 / Codex R2 P2-2 expansion: the original V61-107.5
+    guard hardcoded ``icoFoam``; the V61-111 R1 closure widened to
+    ``{icoFoam, pimpleFoam, simpleFoam}``; Codex R2 caught that any
+    other solver name (``pisoFoam``, ``coalChemistryFoam``, etc.) in
+    user controlDict still slipped through. Now: extract the
+    application name with the SAME ``_APPLICATION_RE`` that
+    ``read_application_from_control_dict`` uses for /solve dispatch,
+    then reject iff it disagrees with ``ai_solver``. Generic over
+    any solver name a user might paste in.
 
     Scope: still catches only the dominant defect class
     (controlDict-only override mismatch). Long-tail mismatches (PISO
@@ -624,24 +618,25 @@ def _detect_solver_marker_overrides(
     if not overridden_status[rel]:
         return []
     try:
-        raw = (case_dir / rel).read_text()
+        raw = (case_dir / rel).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return [rel]
-    content = _COMMENT_RE.sub("", raw)
-    # icoFoam in user controlDict is ALWAYS a mismatch (AI never
-    # authors icoFoam after V61-107.5), regardless of which solver
-    # the AI is currently authoring.
-    if _ICOFOAM_APPLICATION_RE.search(content):
-        return [rel]
-    # When AI authors simpleFoam, pimpleFoam in user controlDict is
-    # a mismatch (AI's SIMPLE-block fvSolution would clash with user's
-    # transient PIMPLE controlDict).
-    if ai_solver == "simpleFoam" and _PIMPLEFOAM_APPLICATION_RE.search(content):
-        return [rel]
-    # When AI authors pimpleFoam, simpleFoam in user controlDict is
-    # a mismatch (AI's PIMPLE-block fvSolution would clash with user's
-    # steady-state SIMPLE controlDict).
-    if ai_solver == "pimpleFoam" and _SIMPLEFOAM_APPLICATION_RE.search(content):
+    # DEC-V61-111 / Codex R2 P2-1: scan the raw file (no comment
+    # stripping) so this guard's verdict matches what
+    # ``read_application_from_control_dict`` in solver_runner.py
+    # will see at /solve time. If a user controlDict has both a
+    # commented-out `application X;` and a live one, both this
+    # guard and /solve dispatch will pick the same one.
+    m = _APPLICATION_RE.search(raw)
+    if m is None:
+        # No application directive at all — let it through; /solve
+        # will fall back to the icoFoam default (the same default
+        # ``read_application_from_control_dict`` uses on parse
+        # failure). The dispatch then exits non-zero with a
+        # dictionary error that surfaces to the engineer.
+        return []
+    user_application = m.group(1)
+    if user_application != ai_solver:
         return [rel]
     return []
 
@@ -1183,24 +1178,24 @@ def setup_bc_from_stl_patches(
                         "warnings": warnings,
                     },
                 )
-            # DEC-V61-111 / Codex R1 P2-1: if controlDict was skipped
-            # because the engineer owns it, the on-disk
+            # DEC-V61-111 / Codex R1 P2-1 + R2 P2-1: if controlDict
+            # was skipped because the engineer owns it, the on-disk
             # ``application <solver>;`` is the truth — not the
             # ``resolved_solver`` we wanted to author. Read the actual
-            # field from the on-disk controlDict so callers
-            # (smoke runner, frontend, tests) see what /solve will
-            # actually run, not what /setup-bc was asked to write.
+            # field with the SAME ``_APPLICATION_RE`` parser that
+            # ``read_application_from_control_dict`` in
+            # solver_runner.py uses for /solve dispatch. Pre-R2 used
+            # a comment-stripped scan that diverged from the dispatch
+            # parser on contrived inputs (block-commented stale
+            # ``application`` + live replacement); now both paths
+            # match so the reported solver_name == what /solve
+            # actually runs.
             if "system/controlDict" in skipped:
                 try:
                     actual_text = (case_dir / "system/controlDict").read_text(
                         encoding="utf-8", errors="replace"
                     )
-                    actual_text = _COMMENT_RE.sub("", actual_text)
-                    m = re.search(
-                        r"^\s*application\s+([A-Za-z][A-Za-z0-9_]*)\s*;",
-                        actual_text,
-                        re.MULTILINE,
-                    )
+                    m = _APPLICATION_RE.search(actual_text)
                     if m and m.group(1) != resolved_solver:
                         warnings.append(
                             f"solver_name reports {m.group(1)!r} (read from "
