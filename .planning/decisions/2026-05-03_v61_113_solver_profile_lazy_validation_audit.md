@@ -14,7 +14,8 @@ parent_artifacts:
   - reports/codex_tool_reports/v61_112_phase1_r1_r2_r3_chain.md (R1 P2-3 fv_solution validation gap precedent)
 counter_impact: +1 (autonomous_governance: true · preventive hardening, no external gate required)
 self_estimated_pass_rate: 70% (HIGH baseline because this DEC is preemptive: applying KNOWN methodology lessons to KNOWN sibling surfaces. Audit scope is narrow — 2 loader functions (`_build_fv_schemes` + top-level `_build_profile`) + 1 exception class extension in `load_profile`. No new schema fields. No new render paths. Expect Codex 1-2 rounds; possible P3 nits on parametrized test coverage breadth.)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-113-Solver-profile-loader-post-V61-112-lazy-validation-audit-sweep-355c68942bed8169b15fc505a02d784e)
+---
 
 # DEC-V61-113 · Solver-profile loader lazy-validation audit
 

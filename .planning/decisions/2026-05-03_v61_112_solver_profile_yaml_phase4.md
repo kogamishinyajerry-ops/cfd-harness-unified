@@ -17,7 +17,8 @@ parent_artifacts:
   - ui/backend/services/case_solve/bc_setup.py:806-893 (V61-101 inline channel pimpleFoam controlDict + fvSchemes + fvSolution — extraction targets for this Phase)
 counter_impact: +1 (autonomous_governance: true · final architectural foundation in V61-112 series · no external gate required)
 self_estimated_pass_rate: 55% (calibrated between Phase 1+2's 50% baseline and Phase 3's 60% achievement. Phase 4 introduces ONE schema extension (max_delta_t_value: float | None for fixed-cap maxDeltaT distinct from "follows caller delta_t"), so it's not a pure schema-reuse migration like Phase 3. The cross-module error-contract pattern from Phase 3 R1 P2 is applied PROACTIVELY (BCSetupError wrapping at the setup_channel_bc call site) to avoid a repeat finding. Expect 2-3 rounds; possible P2 on the new max_delta_t_value field validation or on subtle byte-identity gaps from the channel template's int-vs-float literals (writeInterval=1 INT vs STL pimpleFoam's 1.0 FLOAT).)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-112-Phase4-Solver-profile-YAML-migration-Phase-4-channel-pimpleFoam-profile-V61-101-s-355c68942bed812297b6c79515b35cd2)
+---
 
 # DEC-V61-112 Phase 4 · channel pimpleFoam profile (final phase)
 

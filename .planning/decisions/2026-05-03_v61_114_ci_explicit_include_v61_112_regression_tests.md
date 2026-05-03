@@ -16,7 +16,8 @@ parent_artifacts:
   - reports/codex_tool_reports/v61_112_phase4_r1_r6_chain.md (5-stage cascade lesson § stage 5 CI exposure)
 counter_impact: +1 (autonomous_governance: true · CI hardening, no external gate required) — this acceptance triggers RETRO-V61-001 cadence rule #2 (counter ≥20 since prior retro · last anchor RETRO-V61-V107-V108 at counter 53 → arc retro at counter 73)
 self_estimated_pass_rate: 80% (HIGH baseline per V61-113-established "preemptive-audit migration" calibration anchor of ~80-90%. Scope is minimal: 2 explicit-include lines in ci.yml's 2 pytest invocations = 4 total line additions. No source code changes. No new tests. Risk surface narrows to: Codex possibly suggesting (a) adding a meta-test that audits CI coverage, (b) consolidating the explicit-include list into a variable, (c) catching that the test files might have additional dependencies the [ui] extra doesn't cover. Expect 1 round APPROVE; possible P3 nit.)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-114-CI-explicit-include-for-V61-112-cross-module-error-contract-regression-tests-post-V61-355c68942bed811ab486f32532c89e77)
+---
 
 # DEC-V61-114 · CI explicit-include for V61-112 regression tests
 

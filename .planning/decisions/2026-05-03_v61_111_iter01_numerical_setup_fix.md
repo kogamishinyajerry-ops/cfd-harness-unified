@@ -20,7 +20,7 @@ counter_impact: +1 (autonomous_governance: true · no external gate required)
 self_estimated_pass_rate: 50% (multi-file backend route surface + solver-profile branching + fvSchemes/fvSolution dict variations per solver + adversarial smoke regression on iter01 as live verification — high blast radius; expect Codex 2-3 round chain minimum)
 self_estimated_pass_rate_actual: 4 rounds (R1 CHANGES_REQUIRED 2 P1 + 1 P2 → R2 CHANGES_REQUIRED 0 P1 + 2 P2 → R3 CHANGES_REQUIRED 0 P1 + 1 P2 → R4 APPROVE clean) — calibration was reasonable, slightly underestimated; each round reduced P-level so substantive content converged on a stable contract
 codex_tool_report_path: reports/codex_tool_reports/v61_111_r1_r2_r3_r4_chain.md
-notion_sync_status: pending (Codex chain APPROVE'd at R4 commit 26183da; Notion MCP offline this session — sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-111-iter01-numerical-setup-fix-honor-intent-json-solver-name-diagnose-NaN-divergence-r-355c68942bed81c5a44ecf2198f999ac)
 ---
 
 # DEC-V61-111 · iter01 numerical setup fix

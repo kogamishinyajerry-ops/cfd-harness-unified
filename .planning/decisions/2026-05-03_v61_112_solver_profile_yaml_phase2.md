@@ -16,7 +16,8 @@ parent_artifacts:
   - ui/backend/services/case_solve/solver_profiles/schema.py (Phase 1 schema · extended in this Phase to support per-solver `name_pad` for byte-identity preservation)
 counter_impact: +1 (autonomous_governance: true · architectural foundation continuation, no external gate required)
 self_estimated_pass_rate: 50% (calibrated DOWN from Phase 1's 60% per Phase 1 closure recommendation: "for next retro: config-schema-migration anchor should drop to ~50%". Schema extension introduces a new dispatch path (per-solver name_pad — string vs dict-shaped solver entries); Phase 1 lessons on golden snapshots + nested validation applied; expect Codex 2-3 rounds with possible P2 findings on the new SolverEntry shape validation)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-112-Phase2-Solver-profile-YAML-migration-Phase-2-pimpleFoam-profile-V61-107-5-transie-355c68942bed810f8094de0f35c179fd)
+---
 
 # DEC-V61-112 Phase 2 · pimpleFoam profile + schema extension
 

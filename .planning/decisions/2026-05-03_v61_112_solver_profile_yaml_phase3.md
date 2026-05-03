@@ -17,7 +17,8 @@ parent_artifacts:
   - ui/backend/services/case_solve/solver_profiles/schema.py (Phase 1+2 schema · reused unchanged for Phase 3; icoFoam fits within existing dataclass without further schema extensions)
 counter_impact: +1 (autonomous_governance: true · architectural foundation continuation, no external gate required)
 self_estimated_pass_rate: 60% (calibrated UP from Phase 1+2's 50%/50% baseline because Phase 3 introduces NO new schema extensions — reuses Phase 1+2 schema as-is. icoFoam template is structurally simpler than pimpleFoam: fewer solver entries (no UFinal), simpler controlDict (no adjustTimeStep / maxCo / maxDeltaT_follows), simpler fvSchemes (no divDevReff term, orthogonal laplacian/snGrad). Risk surface narrows to: (a) PISO control_block_name (new value alongside SIMPLE/PIMPLE), (b) `endTime 2;` int literal preservation, (c) wrapper rewire pattern slightly different — `_author_dicts` is the single call site, not 3 wrapper helpers like Phase 2)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-112-Phase3-Solver-profile-YAML-migration-Phase-3-icoFoam-LDC-profile-V61-097-setup_ld-355c68942bed81d999e0de9274b96fa2)
+---
 
 # DEC-V61-112 Phase 3 · icoFoam LDC profile
 

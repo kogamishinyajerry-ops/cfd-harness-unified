@@ -18,7 +18,8 @@ parent_artifacts:
   - ui/backend/services/case_solve/bc_setup.py:822-906 (channel inline pimpleFoam template — extraction target deferred to Phase 4)
 counter_impact: +1 (autonomous_governance: true · architectural foundation, no external gate required)
 self_estimated_pass_rate: 60% (config schema + registry loader + ONE profile is bounded scope · V61-111 lessons applied — single-source-of-truth parser, no comment-stripping mismatches, dataclass-validated schema; expect Codex 2 rounds with possible 1-2 P2 schema-validation finer points)
-notion_sync_status: pending (Notion MCP offline this session; sync queued for next online window)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-112-Solver-profile-YAML-migration-Phase-1-schema-registry-simpleFoam-profile-V61--355c68942bed81548cd4e2469dfeb0ec)
+---
 
 # DEC-V61-112 · Solver-profile YAML migration · Phase 1
 
