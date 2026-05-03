@@ -811,6 +811,189 @@ def test_icofoam_profile_control_block_name_is_piso():
     assert profile.fv_solution.control_block_name == "PISO"
 
 
+# ===========================================================================
+# DEC-V61-112 Phase 4 · channel pimpleFoam profile golden snapshots +
+# max_delta_t_value schema extension tests.
+# ===========================================================================
+
+# Golden V61-101 inline channel pimpleFoam bytes captured 2026-05-03
+# from `bc_setup.py:806-893` BEFORE the wrapper-equivalent rewire.
+# Channel pimpleFoam uses int writeInterval=1 (NOT 1.0 like STL
+# pimpleFoam V61-107.5) and FIXED maxDeltaT=0.05 (NOT follows caller
+# delta_t). These distinctions necessitate a SEPARATE profile +
+# the Phase 4 schema extension `max_delta_t_value`.
+
+V61_101_GOLDEN_CHANNEL_CONTROL_DICT = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object controlDict; }\n'
+    "application pimpleFoam;\n"
+    "startFrom startTime;\n"
+    "startTime 0;\n"
+    "stopAt endTime;\n"
+    "endTime 5;\n"
+    "deltaT 0.005;\n"
+    "writeControl runTime;\n"
+    "writeInterval 1;\n"  # INT (not 1.0) — distinct from STL pimpleFoam
+    "purgeWrite 0;\n"
+    "writeFormat ascii;\n"
+    "writePrecision 6;\n"
+    "writeCompression off;\n"
+    "timeFormat general;\n"
+    "timePrecision 6;\n"
+    "runTimeModifiable true;\n"
+    "adjustTimeStep yes;\n"
+    "maxCo 0.5;\n"
+    "maxDeltaT 0.05;\n"  # FIXED cap — distinct from STL pimpleFoam (follows caller)
+)
+
+V61_101_GOLDEN_CHANNEL_FV_SCHEMES = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSchemes; }\n'
+    "ddtSchemes  { default Euler; }\n"
+    "gradSchemes { default Gauss linear; }\n"
+    "divSchemes  { default none; div(phi,U) Gauss linear; "
+    "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
+    "laplacianSchemes { default Gauss linear orthogonal; }\n"  # orthogonal, not corrected
+    "interpolationSchemes { default linear; }\n"
+    "snGradSchemes { default orthogonal; }\n"  # orthogonal, not corrected
+)
+
+V61_101_GOLDEN_CHANNEL_FV_SOLUTION = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSolution; }\n'
+    "solvers\n"
+    "{\n"
+    "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; }\n"
+    "    pFinal { $p; relTol 0; }\n"
+    "    U  { solver smoothSolver; smoother symGaussSeidel; "
+    "tolerance 1e-05; relTol 0; }\n"
+    "    UFinal { $U; relTol 0; }\n"
+    "}\n"
+    "PIMPLE\n"
+    "{\n"
+    "    nOuterCorrectors 1;\n"
+    "    nCorrectors 2;\n"
+    "    nNonOrthogonalCorrectors 2;\n"
+    "    pRefCell 0;\n"
+    "    pRefValue 0;\n"
+    "}\n"
+)
+
+
+def test_list_profile_names_includes_channelpimplefoam():
+    assert "channelPimpleFoam" in list_profile_names()
+
+
+def test_load_profile_channelpimplefoam_returns_solver_profile():
+    profile = load_profile("channelPimpleFoam")
+    assert isinstance(profile, SolverProfile)
+    assert profile.name == "channelPimpleFoam"
+    assert profile.family == "transient"
+    # Application name is `pimpleFoam` (same OpenFOAM solver as STL
+    # pimpleFoam) — the profile name distinguishes the channel
+    # variant in the registry.
+    assert profile.control_dict.application == "pimpleFoam"
+
+
+def test_channelpimplefoam_profile_control_dict_byte_identical_to_v61_101_golden():
+    profile = load_profile("channelPimpleFoam")
+    rendered = profile.render_control_dict()
+    assert rendered == V61_101_GOLDEN_CHANNEL_CONTROL_DICT, (
+        f"channelPimpleFoam controlDict drift from V61-101 golden:\n"
+        f"=== profile ({len(rendered)} bytes) ===\n{rendered!r}\n"
+        f"=== golden ({len(V61_101_GOLDEN_CHANNEL_CONTROL_DICT)} bytes) ===\n"
+        f"{V61_101_GOLDEN_CHANNEL_CONTROL_DICT!r}"
+    )
+
+
+def test_channelpimplefoam_profile_fv_schemes_byte_identical_to_v61_101_golden():
+    profile = load_profile("channelPimpleFoam")
+    assert profile.render_fv_schemes() == V61_101_GOLDEN_CHANNEL_FV_SCHEMES
+
+
+def test_channelpimplefoam_profile_fv_solution_byte_identical_to_v61_101_golden():
+    profile = load_profile("channelPimpleFoam")
+    assert profile.render_fv_solution() == V61_101_GOLDEN_CHANNEL_FV_SOLUTION
+
+
+def test_channelpimplefoam_max_delta_t_value_renders_fixed_cap():
+    """V61-101 channel uses `maxDeltaT 0.05;` FIXED cap — distinct
+    from STL pimpleFoam V61-107.5 which uses `maxDeltaT == caller
+    delta_t`. The Phase 4 schema extension `max_delta_t_value`
+    enables this byte-identity."""
+    profile = load_profile("channelPimpleFoam")
+    rendered = profile.render_control_dict()
+    assert "maxDeltaT 0.05;" in rendered
+
+
+def test_channelpimplefoam_distinct_from_stl_pimplefoam():
+    """V61-112 Phase 4 contract: channel pimpleFoam differs from STL
+    pimpleFoam in writeInterval format (int vs float), maxDeltaT
+    semantics (fixed vs follows-caller), and fvSchemes (linear
+    vs linearUpwind, orthogonal vs corrected)."""
+    channel = load_profile("channelPimpleFoam")
+    stl = load_profile("pimpleFoam")
+    # Same application but distinct rendering.
+    assert channel.control_dict.application == stl.control_dict.application == "pimpleFoam"
+    # Distinct writeInterval rendering (channel int vs STL float).
+    assert "writeInterval 1;" in channel.render_control_dict()
+    assert "writeInterval 1.0;" in stl.render_control_dict(end_time=5, delta_t=0.001)
+    # Distinct fvSchemes for divSchemes (channel linear, STL linearUpwind).
+    assert "div(phi,U) Gauss linear;" in channel.render_fv_schemes()
+    assert "div(phi,U) Gauss linearUpwind grad(U);" in stl.render_fv_schemes()
+    # Distinct laplacian (channel orthogonal, STL corrected).
+    assert "laplacianSchemes { default Gauss linear orthogonal; }" in channel.render_fv_schemes()
+    assert "laplacianSchemes { default Gauss linear corrected; }" in stl.render_fv_schemes()
+
+
+# Phase 4 schema extension tests · max_delta_t_value field.
+
+
+def test_max_delta_t_value_takes_precedence_over_follows_delta_t():
+    """V61-112 Phase 4 schema extension: when max_delta_t_value is
+    set, it takes precedence over max_delta_t_follows_delta_t."""
+    from ui.backend.services.case_solve.solver_profiles.schema import (
+        ControlDictBlock,
+    )
+    cd = ControlDictBlock(
+        application="testFoam",
+        max_delta_t_value=0.05,
+        max_delta_t_follows_delta_t=True,  # would normally render dt
+    )
+    rendered = cd.render(end_time=5, delta_t=0.001)
+    # Fixed value wins.
+    assert "maxDeltaT 0.05;" in rendered
+    # Caller delta_t value NOT rendered as maxDeltaT.
+    assert "maxDeltaT 0.001;" not in rendered
+
+
+def test_max_delta_t_value_none_falls_through_to_follows_delta_t():
+    """When max_delta_t_value is None and follows_delta_t is True,
+    falls through to caller delta_t (STL pimpleFoam Phase 2 behavior
+    preserved)."""
+    from ui.backend.services.case_solve.solver_profiles.schema import (
+        ControlDictBlock,
+    )
+    cd = ControlDictBlock(
+        application="pimpleFoam",
+        max_delta_t_value=None,
+        max_delta_t_follows_delta_t=True,
+    )
+    rendered = cd.render(end_time=5, delta_t=0.001)
+    assert "maxDeltaT 0.001;" in rendered
+
+
+def test_max_delta_t_both_none_omits_line():
+    """When both fields are unset, maxDeltaT line omitted (icoFoam
+    Phase 3 behavior preserved)."""
+    from ui.backend.services.case_solve.solver_profiles.schema import (
+        ControlDictBlock,
+    )
+    cd = ControlDictBlock(application="icoFoam")
+    rendered = cd.render(end_time=2, delta_t=0.005)
+    assert "maxDeltaT" not in rendered
+
+
 def test_pimplefoam_byte_identity_with_default_caller_signature_floats():
     """V61-112 Phase 2 R1 P2 regression-pin: setup_bc_from_stl_patches
     passes float-typed end_time/delta_t to _build_pimplefoam_control_dict.

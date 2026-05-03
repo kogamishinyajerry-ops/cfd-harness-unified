@@ -1,0 +1,118 @@
+# DEC-V61-112 Phase 4 · channel pimpleFoam transient PIMPLE solver profile.
+#
+# Extracts V61-101 inline templates from
+# `ui/backend/services/case_solve/bc_setup.py:806-893`
+# (`_author_channel_dicts`). Byte-identity is the acceptance
+# criterion: profile-rendered output MUST match the V61-101 inline
+# output verbatim for the channel default case parameters (no
+# caller args — `endTime 5`, `deltaT 0.005`, `writeInterval 1`,
+# `maxDeltaT 0.05` are literals in the inline f-string).
+#
+# V61-101 background:
+# - pimpleFoam (NOT icoFoam) — incompressible laminar transient
+#   PISO/PIMPLE hybrid that honors adjustTimeStep
+# - icoFoam in OpenFOAM-10 has no setDeltaT.H include → adjustTimeStep
+#   keys would be silently ignored if icoFoam were used (Codex
+#   cce9c29 review P1 closure 2026-04-30 chose pimpleFoam for the
+#   channel path explicitly because of this)
+# - Channel mesh (built by gmsh from quad-extruded primitives) is
+#   STRUCTURED + ORTHOGONAL — distinct from V61-107.5 STL path's
+#   tetrahedral non-orthogonal meshes. fvSchemes accordingly use
+#   `Gauss linear` (no linearUpwind) + `orthogonal` (no corrected)
+# - pimpleFoam routes through divDevReff which evaluates
+#   `div((nuEff*dev2(T(grad(U)))))` even with simulationType laminar
+#   — explicit scheme required (Codex a1b5e29 review P1 closure
+#   2026-04-30)
+# - maxDeltaT 0.05 is a FIXED cap (distinct from STL pimpleFoam's
+#   "follow caller delta_t"); protects against unbounded scale-up
+#   on coarse meshes where Co stays low at any step size
+
+name: channelPimpleFoam
+family: transient
+
+control_dict:
+  application: pimpleFoam
+  start_from: startTime
+  start_time: 0
+  stop_at: endTime
+  # V61-101 inline literal `endTime 5;` — caller does NOT pass
+  # end_time. YAML int 5 → renders as `endTime 5;`.
+  end_time_default: 5
+  # V61-101 inline literal `deltaT 0.005;`. Float YAML → renders
+  # via _format_number → `0.005` (small mid-range float, no `.0`
+  # strip).
+  delta_t_default: 0.005
+  write_control: runTime
+  # V61-101 inline literal `writeInterval 1;` (INT, not 1.0 like
+  # STL pimpleFoam V61-107.5 which writes `writeInterval 1.0;`).
+  # YAML int 1 → renders as `writeInterval 1;`.
+  write_interval: 1
+  purge_write: 0
+  write_format: ascii
+  write_precision: 6
+  write_compression: "off"
+  time_format: general
+  time_precision: 6
+  run_time_modifiable: true
+  # V61-101 inline `adjustTimeStep yes; maxCo 0.5; maxDeltaT 0.05;`
+  adjust_time_step: true
+  max_co: 0.5
+  # V61-112 Phase 4 schema extension: max_delta_t_value (fixed cap).
+  # Distinct from STL pimpleFoam's max_delta_t_follows_delta_t: true
+  # (which renders maxDeltaT == caller delta_t).
+  max_delta_t_value: 0.05
+  max_delta_t_follows_delta_t: false
+  iteration_floor: null
+
+fv_schemes:
+  ddt_schemes:
+    default: Euler
+  grad_schemes:
+    default: "Gauss linear"
+  div_schemes:
+    default: "none"
+    # V61-101 channel: simplest convection scheme. NO `linearUpwind`
+    # (channel mesh is structured + orthogonal — no convection-
+    # dominated NaN risk like the V61-107.5 STL pimpleFoam path).
+    div(phi,U): "Gauss linear"
+    # pimpleFoam routes through divDevReff which evaluates
+    # div((nuEff*dev2(T(grad(U))))) — explicit scheme required even
+    # with simulationType laminar. Codex a1b5e29 review P1 closure.
+    div((nuEff*dev2(T(grad(U))))): "Gauss linear"
+  laplacian_schemes:
+    # V61-101 channel: orthogonal — channel mesh is structured.
+    # Distinct from V61-107.5 STL path's `corrected` for tetrahedral
+    # non-orthogonal STL meshes.
+    default: "Gauss linear orthogonal"
+  interpolation_schemes:
+    default: "linear"
+  sn_grad_schemes:
+    default: "orthogonal"
+
+fv_solution:
+  # Same 4-solver shape as V61-107.5 STL pimpleFoam (PIMPLE block →
+  # 4 entries: p, pFinal, U, UFinal). Same name_pad pattern: 1-char
+  # names use 2-space pad ("p  {", "U  {"); 6-char names use 1-space
+  # pad ("pFinal {", "UFinal {").
+  solvers:
+    p: "solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05;"
+    pFinal:
+      body: "$p; relTol 0;"
+      name_pad: 1
+    U: "solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0;"
+    UFinal:
+      body: "$U; relTol 0;"
+      name_pad: 1
+  # PIMPLE block (same as V61-107.5 STL pimpleFoam). nOuterCorrectors
+  # =1 makes pimpleFoam behave like icoFoam (single PISO loop per
+  # timestep) — closest possible to the icoFoam baseline. Bumping to
+  # 2+ would enable PIMPLE under-relaxation but is unnecessary for
+  # laminar channel flow at modest Re.
+  control_block_name: PIMPLE
+  control_block_fields:
+    nOuterCorrectors: 1
+    nCorrectors: 2
+    nNonOrthogonalCorrectors: 2
+    pRefCell: 0
+    pRefValue: 0
+  # No relaxationFactors. No residualControl.

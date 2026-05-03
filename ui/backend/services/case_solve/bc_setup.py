@@ -803,94 +803,34 @@ def _author_channel_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
         "simulationType laminar;\n",
     )
 
-    w(
-        "system/controlDict",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object controlDict; }\n'
-        # pimpleFoam (NOT icoFoam): incompressible laminar transient
-        # solver with PISO/PIMPLE hybrid that honors adjustTimeStep.
-        # Codex cce9c29 review P1 (2026-04-30): icoFoam in OpenFOAM-10
-        # has no setDeltaT.H include, so the adjustTimeStep/maxCo/
-        # maxDeltaT keys here would be silently ignored if icoFoam
-        # were used — leaving deltaT fixed at the seed value and
-        # producing either "5x too many timesteps" (small seed) or
-        # "user-reported crawl" (large seed + fine mesh + Courant
-        # blowup). pimpleFoam includes setDeltaT.H (verified against
-        # /opt/openfoam10/applications/solvers/incompressible/
-        # pimpleFoam/pimpleFoam.C) so the keys actually take effect.
-        "application pimpleFoam;\n"
-        "startFrom startTime;\n"
-        "startTime 0;\n"
-        "stopAt endTime;\n"
-        "endTime 5;\n"
-        # Seed deltaT is intentionally larger than the icoFoam-era
-        # 0.005 because pimpleFoam will scale it down on the first
-        # CourantNo evaluation if the seed is too aggressive. Caps
-        # below protect against unbounded scale-up on coarse meshes.
-        "deltaT 0.005;\n"
-        "writeControl runTime;\n"
-        "writeInterval 1;\n"
-        "purgeWrite 0;\n"
-        "writeFormat ascii;\n"
-        "writePrecision 6;\n"
-        "writeCompression off;\n"
-        "timeFormat general;\n"
-        "timePrecision 6;\n"
-        "runTimeModifiable true;\n"
-        "adjustTimeStep yes;\n"
-        "maxCo 0.5;\n"
-        # Cap deltaT so even an empty/over-coarse mesh (where Co stays
-        # low at any step size) cannot stretch a single timestep past
-        # the resolution we want to record residuals at.
-        "maxDeltaT 0.05;\n",
-    )
-
-    w(
-        "system/fvSchemes",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSchemes; }\n'
-        "ddtSchemes  { default Euler; }\n"
-        "gradSchemes { default Gauss linear; }\n"
-        # pimpleFoam (vs icoFoam) routes through the turbulence
-        # model's divDevReff which evaluates ``div((nuEff*dev2(T(grad(U)))))``
-        # every step — even with ``simulationType laminar``. Without
-        # an explicit scheme here, OpenFOAM-10's createFields aborts
-        # on the first timestep with "keyword ... is undefined".
-        # Codex a1b5e29 review P1 closure 2026-04-30.
-        "divSchemes  { default none; div(phi,U) Gauss linear; "
-        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
-        "laplacianSchemes { default Gauss linear orthogonal; }\n"
-        "interpolationSchemes { default linear; }\n"
-        "snGradSchemes { default orthogonal; }\n",
-    )
-
-    w(
-        "system/fvSolution",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSolution; }\n'
-        "solvers\n"
-        "{\n"
-        "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; }\n"
-        "    pFinal { $p; relTol 0; }\n"
-        "    U  { solver smoothSolver; smoother symGaussSeidel; "
-        "tolerance 1e-05; relTol 0; }\n"
-        "    UFinal { $U; relTol 0; }\n"
-        "}\n"
-        # pimpleFoam reads ``PIMPLE``, not ``PISO``. Setting
-        # nOuterCorrectors=1 makes pimpleFoam behave like icoFoam
-        # (single PISO loop per timestep) so the numerics are the
-        # closest possible to the icoFoam baseline. Bumping to 2+
-        # would enable PIMPLE under-relaxation but is unnecessary
-        # for laminar channel flow at modest Re.
-        "PIMPLE\n"
-        "{\n"
-        "    nOuterCorrectors 1;\n"
-        "    nCorrectors 2;\n"
-        "    nNonOrthogonalCorrectors 2;\n"
-        "    pRefCell 0;\n"
-        "    pRefValue 0;\n"
-        "}\n",
-    )
+    # DEC-V61-112 Phase 4: V61-101 inline channel pimpleFoam controlDict
+    # / fvSchemes / fvSolution templates extracted into the YAML solver-
+    # profile registry. Byte-identity to V61-101 inline output verified
+    # by ``test_solver_profiles.py``. See
+    # ``solver_profiles/profiles/channelPimpleFoam.yaml`` for the source
+    # of truth. Caller signature ``_author_channel_dicts(case_dir)``
+    # does NOT pass end_time / delta_t — the profile's YAML defaults
+    # (`end_time_default: 5`, `delta_t_default: 0.005`,
+    # `write_interval: 1` int, `max_delta_t_value: 0.05` fixed cap)
+    # supply the V61-101 literals.
+    #
+    # Codex V61-112 Phase 3 R1 P2 lesson applied PROACTIVELY: wrap
+    # profile load failures in BCSetupError so a missing / malformed
+    # channelPimpleFoam.yaml surfaces via the established route-level
+    # error envelope (4xx / 5xx via the BCSetupError handler chain)
+    # rather than as an unhandled 500 after the channel polyMesh has
+    # already been rewritten.
+    try:
+        channel_profile = load_profile("channelPimpleFoam")
+    except (ProfileNotFoundError, ProfileSchemaError) as exc:
+        raise BCSetupError(
+            f"channelPimpleFoam solver-profile load failed (V61-112 "
+            f"Phase 4 deployment hazard — profile YAML missing or "
+            f"malformed): {exc}"
+        ) from exc
+    w("system/controlDict", channel_profile.render_control_dict())
+    w("system/fvSchemes", channel_profile.render_fv_schemes())
+    w("system/fvSolution", channel_profile.render_fv_solution())
 
     return _atomic_commit_dicts(case_dir, plan)
 

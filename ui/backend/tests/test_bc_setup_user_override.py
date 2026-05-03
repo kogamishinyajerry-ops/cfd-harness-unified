@@ -319,3 +319,73 @@ def test_author_dicts_translates_profile_schema_error_to_bc_setup_error(
     assert raised is not None
     assert "icoFoam" in str(raised)
     assert isinstance(raised.__cause__, ProfileSchemaError)
+
+
+def test_author_channel_dicts_translates_profile_load_error_to_bc_setup_error(
+    tmp_path, monkeypatch
+):
+    """DEC-V61-112 Phase 4 cross-module error-contract: same
+    BCSetupError translation as Phase 3 LDC, applied PROACTIVELY
+    to the channel path (Phase 3 R1 P2 lesson)."""
+    from ui.backend.services.case_solve import bc_setup as bc_setup_mod
+    from ui.backend.services.case_solve.solver_profiles import (
+        ProfileNotFoundError,
+    )
+
+    case_dir = tmp_path / "case-channel-profile-fail"
+    _stage_case(case_dir)
+
+    # Stage minimal channel dict scaffolding so _author_channel_dicts
+    # gets to the load_profile call before any other failure.
+    (case_dir / "0").mkdir(exist_ok=True)
+    (case_dir / "system").mkdir(exist_ok=True)
+    (case_dir / "constant").mkdir(exist_ok=True)
+
+    def boom_not_found(name):
+        raise ProfileNotFoundError(f"simulated missing profile {name!r}")
+
+    monkeypatch.setattr(bc_setup_mod, "load_profile", boom_not_found)
+
+    raised = None
+    try:
+        bc_setup_mod._author_channel_dicts(case_dir)
+    except bc_setup_mod.BCSetupError as exc:
+        raised = exc
+
+    assert raised is not None, (
+        "expected BCSetupError when channelPimpleFoam profile load "
+        "fails; raw ProfileNotFoundError would bypass envelope"
+    )
+    assert "channelPimpleFoam" in str(raised)
+    assert isinstance(raised.__cause__, ProfileNotFoundError)
+
+
+def test_author_channel_dicts_translates_profile_schema_error_to_bc_setup_error(
+    tmp_path, monkeypatch
+):
+    """Variant: ProfileSchemaError → BCSetupError for channel path."""
+    from ui.backend.services.case_solve import bc_setup as bc_setup_mod
+    from ui.backend.services.case_solve.solver_profiles import (
+        ProfileSchemaError,
+    )
+
+    case_dir = tmp_path / "case-channel-schema-fail"
+    _stage_case(case_dir)
+    (case_dir / "0").mkdir(exist_ok=True)
+    (case_dir / "system").mkdir(exist_ok=True)
+    (case_dir / "constant").mkdir(exist_ok=True)
+
+    def boom_schema(name):
+        raise ProfileSchemaError(f"simulated schema error in {name!r}")
+
+    monkeypatch.setattr(bc_setup_mod, "load_profile", boom_schema)
+
+    raised = None
+    try:
+        bc_setup_mod._author_channel_dicts(case_dir)
+    except bc_setup_mod.BCSetupError as exc:
+        raised = exc
+
+    assert raised is not None
+    assert "channelPimpleFoam" in str(raised)
+    assert isinstance(raised.__cause__, ProfileSchemaError)

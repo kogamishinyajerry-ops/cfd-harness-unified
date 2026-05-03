@@ -78,6 +78,12 @@ class ControlDictBlock:
     adjust_time_step: bool | None = None
     max_co: float | None = None
     max_delta_t_follows_delta_t: bool = False  # pimpleFoam: maxDeltaT = caller delta_t
+    # V61-112 Phase 4: channel pimpleFoam V61-101 inline writes a
+    # FIXED ``maxDeltaT 0.05;`` cap (distinct from STL pimpleFoam
+    # which follows caller delta_t). When set, takes precedence
+    # over ``max_delta_t_follows_delta_t``. ``None`` falls through
+    # to the follows_delta_t / omit fallback.
+    max_delta_t_value: float | None = None
     # simpleFoam-only: floor on end_time when caller passes a small
     # value (smoke runners default to seconds-shaped values, which
     # would under-budget steady-state iteration count).
@@ -125,7 +131,12 @@ class ControlDictBlock:
             )
         if self.max_co is not None:
             lines.append(f"maxCo {_format_number(self.max_co)};")
-        if self.max_delta_t_follows_delta_t:
+        # V61-112 Phase 4: max_delta_t_value (fixed cap) takes
+        # precedence over max_delta_t_follows_delta_t (caller delta_t
+        # follows). If neither is set, maxDeltaT line is omitted.
+        if self.max_delta_t_value is not None:
+            lines.append(f"maxDeltaT {_format_number(self.max_delta_t_value)};")
+        elif self.max_delta_t_follows_delta_t:
             lines.append(f"maxDeltaT {_format_number(dt)};")
         return "\n".join(lines) + "\n"
 

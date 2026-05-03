@@ -138,6 +138,7 @@ def _build_control_dict(raw: dict[str, Any]) -> ControlDictBlock:
         "write_format", "write_precision", "write_compression",
         "time_format", "time_precision", "run_time_modifiable",
         "adjust_time_step", "max_co", "max_delta_t_follows_delta_t",
+        "max_delta_t_value",
         "iteration_floor",
     ):
         if key in raw:
