@@ -157,7 +157,12 @@ def _seed_imported_manifest(
 
 
 def test_imported_case_full_minimal_contract(isolated_drafts):
-    """Imported case with all 3 minimal fields → 3/3, ready_for_archive=True."""
+    """Imported case with all 3 minimal fields → 4/4, ready_for_archive=True.
+
+    Total of 4 = 3 base critical (solver, turbulence, bc.patches) + 1
+    manifest_schema_invalid slot (counts as present when manifest passes
+    Pydantic validation).
+    """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_test001"
     _seed_imported_manifest(imported, case_id)
@@ -166,7 +171,7 @@ def test_imported_case_full_minimal_contract(isolated_drafts):
     assert r.ready_for_archive is True
     assert r.blocked_by_critical == 0
     assert r.percentage == 100.0
-    assert r.total_count == 3  # solver + turbulence + bc.patches
+    assert r.total_count == 4  # 3 base + manifest schema validity slot
 
 
 def test_imported_case_missing_solver_blocks_archive(isolated_drafts):
@@ -236,22 +241,31 @@ def test_imported_case_with_unset_turbulence_in_yaml_flagged_despite_default(
     )
 
 
-def test_flat_draft_wins_over_imported_manifest(isolated_drafts):
-    """Codex R1 P1 regression — DEC-V61-116.
+def test_flat_draft_wins_when_newer_than_manifest(isolated_drafts):
+    """Codex R1 P1 + R2 P1 regression — DEC-V61-116.
 
-    For an imported case the editor saves to `user_drafts/{id}.yaml`
-    (flat draft) regardless of the import-time
-    `imported/{id}/case_manifest.yaml` snapshot. The analyzer must
-    surface the flat draft's state, not the stale manifest, so the
-    right-rail card reflects the engineer's current edits.
+    When the editor saves to `user_drafts/{id}.yaml` AFTER the import
+    scaffold wrote `imported/{id}/case_manifest.yaml`, the flat draft
+    has a newer mtime and must win the resolution race so the
+    completeness report reflects the engineer's current edits.
+
+    Scaffold-time tie (or manifest newer) lets the manifest win — that
+    case is covered by `test_manifest_wins_when_newer_than_flat`.
     """
+    import os
+    import time
+
     drafts, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_flat_wins"
-    # Stale import-time manifest: complete (would report ready=True).
+    # Step 1: scaffold-time manifest (older mtime).
     _seed_imported_manifest(imported, case_id)
-    # Engineer's edited flat draft: missing turbulence_model + BC →
-    # would be incomplete on the flat-draft schema.
-    (drafts / f"{case_id}.yaml").write_text(
+    manifest_path = imported / case_id / "case_manifest.yaml"
+    # Force the manifest mtime back so we don't race the test clock.
+    old = time.time() - 60
+    os.utime(manifest_path, (old, old))
+    # Step 2: engineer edits flat draft (newer mtime).
+    flat_path = drafts / f"{case_id}.yaml"
+    flat_path.write_text(
         yaml.safe_dump(
             {
                 "id": case_id,
@@ -264,15 +278,129 @@ def test_flat_draft_wins_over_imported_manifest(isolated_drafts):
         encoding="utf-8",
     )
     r = analyze_case_completeness(case_id)
-    # Resolution priority: flat draft wins → case_kind = "draft"
     assert r.case_kind == "draft", (
-        "flat draft must take resolution priority over imported manifest"
+        f"flat draft (newer mtime) must win; got case_kind={r.case_kind}"
     )
     # The flat draft's missing turbulence_model must surface in the report.
     assert any(
         m.field_path == "turbulence_model" and m.severity == "critical"
         for m in r.missing
     )
+
+
+def test_manifest_wins_when_newer_than_flat(isolated_drafts):
+    """Codex R2 P1 regression — DEC-V61-116.
+
+    When `setup_bc_from_stl_patches()` or another M-PANELS action
+    rewrites `case_manifest.yaml`, the manifest mtime advances past
+    the scaffold-time flat YAML. The analyzer must then re-pick the
+    manifest as canonical so manifest-side updates surface in the
+    report.
+
+    This is the symmetric counterpart of
+    `test_flat_draft_wins_when_newer_than_manifest`.
+    """
+    import os
+    import time
+
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_manifest_wins"
+    # Step 1: scaffold-time flat YAML (older mtime).
+    flat_path = drafts / f"{case_id}.yaml"
+    flat_path.write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported",
+                "flow_type": "INTERNAL",
+                "geometry_type": "CUSTOM",
+                # turbulence_model intentionally absent in scaffold YAML
+            }
+        ),
+        encoding="utf-8",
+    )
+    old = time.time() - 60
+    os.utime(flat_path, (old, old))
+    # Step 2: a manifest-rewriting action lands a complete manifest.
+    _seed_imported_manifest(imported, case_id)
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user", (
+        f"manifest (newer mtime) must win; got case_kind={r.case_kind}"
+    )
+    # Complete manifest → ready
+    assert r.ready_for_archive is True
+
+
+def test_scaffold_time_tie_manifest_wins(isolated_drafts):
+    """Codex R2 P1 regression — DEC-V61-116.
+
+    `scaffold_imported_case()` writes BOTH files in quick succession at
+    import time, so their mtimes are essentially equal. Equal mtimes
+    must let the manifest win because it's the schema-typed canonical
+    state and the flat YAML is just an editor view of it.
+    """
+    import os
+    import time
+
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_tie"
+    _seed_imported_manifest(imported, case_id)
+    flat_path = drafts / f"{case_id}.yaml"
+    flat_path.write_text(
+        yaml.safe_dump({"id": case_id, "name": "Scaffold view"}),
+        encoding="utf-8",
+    )
+    # Force exact-tie mtimes so the test doesn't race the file system.
+    same = time.time()
+    manifest_path = imported / case_id / "case_manifest.yaml"
+    os.utime(flat_path, (same, same))
+    os.utime(manifest_path, (same, same))
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user", (
+        f"mtime tie must let manifest win; got case_kind={r.case_kind}"
+    )
+
+
+def test_schema_invalid_manifest_blocks_archive(isolated_drafts):
+    """Codex R2 P2 regression — DEC-V61-116.
+
+    A parseable-but-schema-invalid manifest (e.g. `bc.patches: 1`
+    instead of dict) must surface as a critical missing entry that
+    blocks ready_for_archive. Earlier draft only logged a note and
+    fell through to `_raw_has` which could declare ready=True while
+    every downstream route that calls read_case_manifest() would 500.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_schema_invalid"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # bc.patches as a scalar instead of dict → ManifestParseError on
+    # read_case_manifest(). Raw YAML still parses.
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "laminar",
+                },
+                "bc": {"patches": 1},  # ← invalid
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.ready_for_archive is False, (
+        "schema-invalid manifest must block archive readiness"
+    )
+    assert any(
+        m.field_path == "case_manifest.yaml" and m.severity == "critical"
+        for m in r.missing
+    ), f"expected manifest_schema_invalid critical entry; missing = {r.missing}"
 
 
 def test_re_rule_contributes_to_total_count(isolated_for_whitelist):
