@@ -246,13 +246,19 @@ def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
 
     Scaffolded manifest has empty physics + bc sections. Engineer
     later edits flat YAML to set solver + turbulence_model via the
-    editor. The merged analyzer must count those as present (sourced
-    from flat draft) even though the manifest doesn't have them.
+    editor. The merged analyzer must count those as present from
+    the flat draft.
+
+    Note: flat-draft `boundary_conditions` does NOT satisfy bc.patches
+    (Codex R5 P1 — only manifest patch setup counts), so this test
+    seeds bc.patches in the manifest separately.
     """
     drafts, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_merge_flat"
 
-    # Scaffold-state manifest: empty physics + bc (matches scaffold reality).
+    # Scaffold-state manifest: empty physics; bc.patches populated by
+    # setup_bc (post-scaffold). physics still empty because engineer
+    # hasn't run switch_solver.
     case_dir = imported / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "case_manifest.yaml").write_text(
@@ -260,10 +266,12 @@ def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
             {
                 "schema_version": 2,
                 "case_id": case_id,
-                # physics + bc intentionally minimal/absent — scaffold
-                # state. setup_bc / switch_solver would populate them.
                 "physics": {},
-                "bc": {"patches": {}},
+                "bc": {
+                    "patches": {
+                        "inlet": {"patch_type": "patch", "fields": {}}
+                    }
+                },
                 "numerics": {},
                 "overrides": {},
                 "history": [],
@@ -272,9 +280,7 @@ def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
         encoding="utf-8",
     )
 
-    # Flat draft: engineer edited solver + turbulence via editor. BC
-    # also explicitly set (geometry_type=CUSTOM still uses canonical
-    # imported workflow but engineer typed BC values).
+    # Flat draft: engineer edited solver + turbulence via editor.
     (drafts / f"{case_id}.yaml").write_text(
         yaml.safe_dump(
             {
@@ -284,7 +290,6 @@ def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
                 "geometry_type": "CUSTOM",
                 "turbulence_model": "kOmegaSST",
                 "solver": {"name": "simpleFoam", "family": "incompressible"},
-                "boundary_conditions": {"inlet_u": 1.0},
             }
         ),
         encoding="utf-8",
@@ -294,12 +299,17 @@ def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
     assert r.case_kind == "imported_user", (
         f"imported_dir presence keeps imported analysis path; got {r.case_kind}"
     )
-    # Solver, turbulence, BC all sourced from flat draft → not missing.
-    flat_supplied = {"physics.solver", "physics.turbulence_model", "bc.patches"}
+    # Solver + turbulence sourced from flat → not missing.
+    # bc.patches sourced from manifest → not missing.
+    flat_or_manifest_supplied = {
+        "physics.solver",
+        "physics.turbulence_model",
+        "bc.patches",
+    }
     actually_missing = {m.field_path for m in r.missing}
-    overlap = flat_supplied & actually_missing
+    overlap = flat_or_manifest_supplied & actually_missing
     assert overlap == set(), (
-        f"merged analyzer must count flat-supplied fields as present; "
+        f"merged analyzer must count source-supplied fields as present; "
         f"unexpectedly missing = {overlap}"
     )
     assert r.ready_for_archive is True
@@ -344,6 +354,111 @@ def test_imported_merged_manifest_supplies_bc_patches(isolated_drafts):
         f"manifest-supplied bc.patches must not be flagged missing; "
         f"got {bc_missing}"
     )
+
+
+def test_imported_flat_boundary_conditions_does_not_satisfy_bc_patches(
+    isolated_drafts,
+):
+    """Codex R5 P1 regression — DEC-V61-116.
+
+    Flat-draft `boundary_conditions` is the editor's per-patch VALUES
+    block (e.g. `top_wall_u: 1.0`); it does NOT register patches with
+    OpenFOAM. Only `manifest.bc.patches` (set by setup_bc /
+    face-annotation) counts. Earlier R4 merge accepted flat
+    `boundary_conditions` as equivalent — that was wrong.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_flat_bc_only"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Manifest: scaffold state, NO bc.patches (setup_bc hasn't run).
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {"solver": "simpleFoam", "turbulence_model": "laminar"},
+                "bc": {"patches": {}},  # ← empty
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Flat draft: engineer typed boundary_conditions VALUES but
+    # didn't run setup_bc.
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported",
+                "turbulence_model": "laminar",
+                "solver": {"name": "simpleFoam"},
+                "boundary_conditions": {"inlet_u": 1.0, "outlet_p": 0.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert len(bc_missing) == 1, (
+        f"flat boundary_conditions must NOT satisfy bc.patches contract; "
+        f"got missing = {[m.field_path for m in r.missing]}"
+    )
+    assert r.ready_for_archive is False
+
+
+def test_imported_solver_dict_without_name_still_flagged(isolated_drafts):
+    """Codex R5 P2 regression — DEC-V61-116.
+
+    A flat-draft `solver` dict without a `.name` key (metadata-only:
+    family / steady_state / note) does NOT satisfy the solver
+    requirement. Only a string `solver: simpleFoam` or a dict with
+    `solver.name: simpleFoam` counts.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_solver_no_name"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Manifest: no physics.solver.
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {"turbulence_model": "laminar"},
+                "bc": {"patches": {"inlet": {"patch_type": "patch", "fields": {}}}},
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Flat draft: solver is a dict with metadata only (no `name`).
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported",
+                "turbulence_model": "laminar",
+                "solver": {
+                    "family": "incompressible",
+                    "steady_state": True,
+                    "note": "user removed the name",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    solver_missing = [m for m in r.missing if m.field_path == "physics.solver"]
+    assert len(solver_missing) == 1, (
+        f"solver dict without .name must NOT satisfy contract; "
+        f"got missing = {[m.field_path for m in r.missing]}"
+    )
+    assert r.ready_for_archive is False
 
 
 def test_imported_merge_both_empty_still_flags(isolated_drafts):

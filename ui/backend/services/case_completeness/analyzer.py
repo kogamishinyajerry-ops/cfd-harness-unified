@@ -437,23 +437,16 @@ def _analyze_imported(
             cur = cur[seg]
         return cur not in (None, "", [], {})
 
-    # Helper: per-field merge — present if either source has it. Allows
-    # multiple alternative paths per source (e.g. solver may live at
-    # `physics.solver` in the manifest OR `solver` / `solver.name` in
-    # the flat editor YAML).
-    def _present(manifest_path: tuple[str, ...], flat_paths: list[tuple[str, ...]]) -> bool:
-        if _has_in(raw_manifest_yaml, *manifest_path):
-            return True
-        # Flat editor YAML may store `solver` as a string OR `solver.name`
-        # dict — both shapes count as present.
+    # Helper: per-field merge — present if either source has it. Each
+    # source can supply MULTIPLE alternative paths; ALL paths must
+    # narrow to a *meaningful* presence (not just "the key exists").
+    def _present(manifest_paths: list[tuple[str, ...]], flat_paths: list[tuple[str, ...]]) -> bool:
+        for mp in manifest_paths:
+            if _has_in(raw_manifest_yaml, *mp):
+                return True
         for fp in flat_paths:
             if _has_in(raw_flat_yaml, *fp):
                 return True
-        # Special case for solver-as-dict: flat YAML's `solver: {name: X}`
-        # only resolves through the dict-shape path, but truthiness via
-        # _has_in with a single segment treats `{name: X}` as a non-empty
-        # dict → returns True. Covered above by passing both `("solver",)`
-        # and `("solver", "name")`.
         return False
 
     schema_invalid = False
@@ -487,15 +480,30 @@ def _analyze_imported(
         manifest = None  # type: ignore[assignment]
 
     # Per-field presence: merged across manifest YAML + flat editor YAML.
-    # A field counts as "present" if either source has it; this matches
-    # the actual workflow where setup_bc populates manifest.bc.patches
-    # while the editor populates flat top-level fields like
-    # `solver`/`turbulence_model`.
+    # The fields-vs-sources matrix below is intentional and narrow:
+    # only paths that genuinely express the canonical state count.
+    #
+    # Codex R5 P1+P2 fixes:
+    #  - bc.patches: ONLY manifest bc.patches counts. Flat-draft
+    #    `boundary_conditions` is the editor's values block; nothing
+    #    in the codebase syncs it into manifest patch setup.
+    #  - solver: dict shape requires `solver.name`. Bare `solver: {...}`
+    #    without a `name` is metadata-only (family / steady_state /
+    #    note) and doesn't satisfy the contract.
 
-    # Solver: manifest path is physics.solver; flat may use either
-    # `solver: simpleFoam` (whitelist-style string) or `solver: {name:
-    # simpleFoam, ...}` (imported scaffold dict shape).
-    if not _present(("physics", "solver"), [("solver",), ("solver", "name")]):
+    # Solver: manifest physics.solver, OR flat `solver` (string), OR
+    # flat `solver.name` (dict shape). Bare `solver` *dict* without
+    # `.name` does NOT count.
+    flat_solver = raw_flat_yaml.get("solver")
+    flat_solver_string = isinstance(flat_solver, str) and bool(flat_solver)
+    flat_solver_named = (
+        isinstance(flat_solver, dict) and bool(flat_solver.get("name"))
+    )
+    if not (
+        _has_in(raw_manifest_yaml, "physics", "solver")
+        or flat_solver_string
+        or flat_solver_named
+    ):
         missing.append(
             MissingField(
                 field_path="physics.solver",
@@ -503,15 +511,22 @@ def _analyze_imported(
                 why=(
                     "OpenFOAM solver name is required (simpleFoam / "
                     "pimpleFoam / icoFoam / …). Set it in the editor "
-                    "(/workbench/case/{id}/edit) or via switch_solver."
+                    "(/workbench/case/{id}/edit) or via switch_solver. "
+                    "If your flat draft has `solver: {family: ..., note: "
+                    "...}` without a `name`, that doesn't count — the "
+                    "name is what every OpenFOAM author path consumes."
                 ),
                 suggested_default="simpleFoam",
             )
         )
 
     # Turbulence model: manifest physics.turbulence_model OR flat
-    # turbulence_model.
-    if not _present(("physics", "turbulence_model"), [("turbulence_model",)]):
+    # turbulence_model. (No dict-shape ambiguity here — turbulence_model
+    # is always a plain string.)
+    if not _present(
+        manifest_paths=[("physics", "turbulence_model")],
+        flat_paths=[("turbulence_model",)],
+    ):
         missing.append(
             MissingField(
                 field_path="physics.turbulence_model",
@@ -527,17 +542,23 @@ def _analyze_imported(
             )
         )
 
-    # Boundary patches: manifest bc.patches OR flat boundary_conditions.
-    if not _present(("bc", "patches"), [("boundary_conditions",)]):
+    # Boundary patches: ONLY the manifest's bc.patches counts. Flat
+    # draft `boundary_conditions` is the editor's per-patch values
+    # block (e.g. `top_wall_u: 1.0`) — nothing syncs it into
+    # `manifest.bc.patches`. setup_bc_from_stl_patches() / face
+    # annotation are the only paths that do.
+    if not _has_in(raw_manifest_yaml, "bc", "patches"):
         missing.append(
             MissingField(
                 field_path="bc.patches",
                 severity="critical",
                 why=(
-                    "At least one boundary patch must be configured — "
-                    "without BC, OpenFOAM cannot start. Run the Step 3 "
-                    "[AI 处理] action / annotate faces in the viewport / "
-                    "or set boundary_conditions in the editor."
+                    "At least one boundary patch must be configured in "
+                    "the manifest — without setup_bc / face annotation, "
+                    "OpenFOAM cannot start. Editor `boundary_conditions` "
+                    "block is values-only and does not register patches; "
+                    "run the Step 3 [AI 处理] action or annotate faces "
+                    "in the viewport."
                 ),
             )
         )
