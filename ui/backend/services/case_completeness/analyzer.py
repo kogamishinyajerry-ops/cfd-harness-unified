@@ -384,38 +384,77 @@ def _build_report(
 # ---------------------------------------------------------------------------
 
 
-def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
-    """Imported user STL case → CaseManifest v2 + minimal contract.
+def _analyze_imported(
+    case_id: str,
+    case_dir: Path,
+    flat_draft: Path | None = None,
+) -> CaseCompletenessReport:
+    """Imported user STL case → merged-source minimal contract.
 
-    Codex R1 P2 #1 fix: read the manifest YAML *raw* before letting the
-    Pydantic schema fill defaults. `read_case_manifest()` will migrate
-    a missing `physics.turbulence_model` to the schema default `'laminar'`,
-    making the field look "set" when the engineer never touched it.
-    Comparing the raw YAML's nested keys preserves the user-vs-default
-    distinction so unset fields surface as missing.
+    Per Codex R4: the scaffold writes a manifest *without* the physics/bc
+    sections that this analyzer requires; those get filled by setup_bc /
+    switch_solver / mesh-wizard later. The flat editor YAML at
+    `user_drafts/{id}.yaml` is what the engineer mutates via PUT
+    /api/cases/{id}/yaml in the meantime. So neither file alone has all
+    the engineer-set state — the analyzer has to consider both.
 
-    Codex R2 P2 fix: when `read_case_manifest()` raises ManifestParseError
-    (parseable YAML that fails Pydantic validation, e.g. `bc.patches: 1`),
-    surface a critical "manifest_schema_invalid" missing entry so the
-    completeness verdict tracks downstream-route reality. Earlier draft
-    only logged a note and let `_raw_has()` proceed, which could declare
-    `ready_for_archive=True` while every route that calls
-    `read_case_manifest()` would 500.
+    Field-presence rule: a required field counts as "present" if *either*
+    the manifest YAML or the flat draft has it set to a non-empty value.
+    This makes:
+      · scaffold-state import without flat edits → bc.patches absent in
+        both → flagged missing (correct: engineer hasn't run setup_bc yet)
+      · engineer edits flat YAML to set turbulence_model → flat has it →
+        not flagged missing even if manifest lacks the field
+      · setup_bc populates manifest.bc.patches → manifest has it → not
+        flagged missing even if flat draft never set boundary_conditions
+
+    History: R1-R3 each tried different single-source rules with
+    structural failure modes (R1 stale manifest, R2 fresh-import
+    skipped imported path, R3 mtime fragile, R4 manifest-only ignores
+    flat edits). R5 settles on a per-field merge.
+
+    Codex R1 P2 #1 carry-over: read raw YAMLs (not Pydantic-migrated
+    instances) so schema defaults like turbulence_model='laminar'
+    don't mask user-unset fields.
+
+    Codex R2 P2 carry-over: ManifestParseError → critical missing entry
+    so the verdict tracks downstream-route reality.
     """
     notes: list[str] = []
     missing: list[MissingField] = []
 
     raw_manifest_yaml = _read_flat_yaml(case_dir / "case_manifest.yaml")
+    raw_flat_yaml: dict[str, Any] = (
+        _read_flat_yaml(flat_draft) if flat_draft is not None else {}
+    )
 
-    # Helper: was a field actually present in the raw YAML (not just
-    # filled by Pydantic defaults)?
-    def _raw_has(*path: str) -> bool:
-        cur: Any = raw_manifest_yaml
+    # Per-source presence helpers (raw, not Pydantic-defaulted).
+    def _has_in(d: dict[str, Any], *path: str) -> bool:
+        cur: Any = d
         for seg in path:
             if not isinstance(cur, dict) or seg not in cur:
                 return False
             cur = cur[seg]
         return cur not in (None, "", [], {})
+
+    # Helper: per-field merge — present if either source has it. Allows
+    # multiple alternative paths per source (e.g. solver may live at
+    # `physics.solver` in the manifest OR `solver` / `solver.name` in
+    # the flat editor YAML).
+    def _present(manifest_path: tuple[str, ...], flat_paths: list[tuple[str, ...]]) -> bool:
+        if _has_in(raw_manifest_yaml, *manifest_path):
+            return True
+        # Flat editor YAML may store `solver` as a string OR `solver.name`
+        # dict — both shapes count as present.
+        for fp in flat_paths:
+            if _has_in(raw_flat_yaml, *fp):
+                return True
+        # Special case for solver-as-dict: flat YAML's `solver: {name: X}`
+        # only resolves through the dict-shape path, but truthiness via
+        # _has_in with a single segment treats `{name: X}` as a non-empty
+        # dict → returns True. Covered above by passing both `("solver",)`
+        # and `("solver", "name")`.
+        return False
 
     schema_invalid = False
     try:
@@ -428,10 +467,6 @@ def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
         manifest = None  # type: ignore[assignment]
     except ManifestParseError as exc:
         schema_invalid = True
-        # Codex R2 P2: emit a critical missing entry so this case can
-        # never report ready_for_archive=True. Downstream routes that
-        # call read_case_manifest() will 500 on this same manifest, so
-        # the completeness verdict has to agree.
         missing.append(
             MissingField(
                 field_path="case_manifest.yaml",
@@ -446,43 +481,54 @@ def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
         )
         notes.append(
             "Manifest schema invalid — completeness checks below run "
-            "best-effort against the raw YAML; downstream routes will "
+            "best-effort against the raw YAMLs; downstream routes will "
             "still 500 until the manifest is repaired."
         )
         manifest = None  # type: ignore[assignment]
 
-    # Manifest layer (3 expected critical: solver, turbulence_model, bc.patches).
-    # Use raw YAML presence (not Pydantic-filled defaults) so a missing
-    # field shows up as missing, even if the schema would default-fill it.
-    if not _raw_has("physics", "solver"):
+    # Per-field presence: merged across manifest YAML + flat editor YAML.
+    # A field counts as "present" if either source has it; this matches
+    # the actual workflow where setup_bc populates manifest.bc.patches
+    # while the editor populates flat top-level fields like
+    # `solver`/`turbulence_model`.
+
+    # Solver: manifest path is physics.solver; flat may use either
+    # `solver: simpleFoam` (whitelist-style string) or `solver: {name:
+    # simpleFoam, ...}` (imported scaffold dict shape).
+    if not _present(("physics", "solver"), [("solver",), ("solver", "name")]):
         missing.append(
             MissingField(
                 field_path="physics.solver",
                 severity="critical",
                 why=(
                     "OpenFOAM solver name is required (simpleFoam / "
-                    "pimpleFoam / icoFoam / …). Even if a default was "
-                    "scaffolded, the engineer must explicitly confirm."
+                    "pimpleFoam / icoFoam / …). Set it in the editor "
+                    "(/workbench/case/{id}/edit) or via switch_solver."
                 ),
                 suggested_default="simpleFoam",
             )
         )
-    if not _raw_has("physics", "turbulence_model"):
+
+    # Turbulence model: manifest physics.turbulence_model OR flat
+    # turbulence_model.
+    if not _present(("physics", "turbulence_model"), [("turbulence_model",)]):
         missing.append(
             MissingField(
                 field_path="physics.turbulence_model",
                 severity="critical",
                 why=(
                     "Turbulence model declaration is required (laminar / "
-                    "kEpsilon / kOmegaSST / …). The schema default is "
-                    "`laminar` but Codex R1 P2 caught that this default-"
-                    "fill silently passed user-unset cases. Engineer must "
-                    "explicitly choose."
+                    "kEpsilon / kOmegaSST / …). Codex R1 P2 caught that "
+                    "Pydantic default-fill silently passed user-unset "
+                    "cases — analyzer reads raw YAML to require an "
+                    "explicit engineer choice."
                 ),
                 suggested_default="laminar",
             )
         )
-    if not _raw_has("bc", "patches"):
+
+    # Boundary patches: manifest bc.patches OR flat boundary_conditions.
+    if not _present(("bc", "patches"), [("boundary_conditions",)]):
         missing.append(
             MissingField(
                 field_path="bc.patches",
@@ -490,7 +536,8 @@ def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
                 why=(
                     "At least one boundary patch must be configured — "
                     "without BC, OpenFOAM cannot start. Run the Step 3 "
-                    "[AI 处理] action or annotate faces in the viewport."
+                    "[AI 处理] action / annotate faces in the viewport / "
+                    "or set boundary_conditions in the editor."
                 ),
             )
         )
@@ -637,39 +684,39 @@ def _analyze_whitelist_like(
 def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     """Resolve `case_id` and run the matching completeness analysis.
 
-    Resolution policy (Codex R3 · 2026-05-04):
+    Resolution policy (Codex R4 → R5 · 2026-05-04):
 
-      Imported cases have TWO independent state stores that diverge
-      over different operations:
+      Imported cases have TWO independent state stores updated by
+      different code paths:
         - `user_drafts/imported/{id}/case_manifest.yaml` — schema-typed
-          v2 manifest. Updated by setup_bc_from_stl_patches, mesh
-          wizard, switch_solver, mark_user_override, mark_ai_authored,
-          and any M-PANELS action that writes the manifest.
+          v2 manifest. Updated by setup_bc_from_stl_patches (bc.patches),
+          mesh wizard (history + bc.patches), switch_solver, and
+          mark_user_override / mark_ai_authored (overrides + history).
+          NOT updated by the editor PUT.
         - `user_drafts/{id}.yaml` — flat editor YAML. Updated by
           `PUT /api/cases/{id}/yaml` (CaseEditorPage / EditCasePage).
+          NOT updated by setup_bc / mesh / switch_solver.
 
-      The two CAN diverge: editor edits never auto-sync into the
-      manifest, and manifest writes never auto-sync into the flat
-      YAML. Earlier mtime-based heuristics (R1, R2) are structurally
-      fragile — sub-second mtimes flip on APFS/ext4 (R3 P1) and any
-      manifest-side metadata write (mark_user_override / mark_ai_authored)
-      flips the analyzer back to manifest mid-workflow, hiding
-      engineer flat edits (R3 P2).
+      Neither file alone has all the engineer-set state. R1 (manifest-
+      first), R2 (flat-first), R3 (mtime arbitration), and R4
+      (manifest-canonical) each hit a different correctness wall.
 
-      Final policy: **for imported cases, the manifest is canonical**.
-      It's the schema-typed state every downstream solver/route reads,
-      so the completeness verdict tracks downstream reality. Editor
-      flat-draft edits don't surface in the missing list directly —
-      we surface the dual-state limitation as a note instead.
-
-      Future DEC may add an editor → manifest sync hook so flat edits
-      propagate; that's out of scope for V61-116.
+      R5 settles on **per-field merge**: for the 3 base critical fields
+      (solver, turbulence_model, bc.patches), a field counts as
+      "present" if EITHER source has it. This matches the actual
+      workflow:
+        · scaffold-time, no edits: bc.patches absent in both → flagged
+          missing (correct: engineer hasn't set up BC yet)
+        · engineer edits flat YAML to set turbulence_model: flat has it
+          → not flagged missing
+        · setup_bc populates manifest.bc.patches: manifest has it → not
+          flagged missing even if flat draft never set it
 
     Resolution rules:
-        1. imported_dir exists → analyze manifest. If flat draft also
-           exists, append a note about the dual-state limitation.
+        1. imported_dir exists → run merged analysis (`_analyze_imported`
+           with flat_draft passed in).
         2. flat_draft exists alone (whitelist fork or fresh manual
-           draft) → analyze flat draft as "draft".
+           draft, not from STL import) → analyze flat draft as "draft".
         3. whitelist[case_id] exists → analyze whitelist entry.
         4. Else → raise CaseNotFoundError.
 
@@ -679,11 +726,12 @@ def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
       - R2: flat → imported_dir → whitelist (flat first).
         Codex R2 P1: scaffold writes flat YAML too, so fresh imports
         always resolve as draft, never imported_user.
-      - R3 (this): mtime-based imported with both. Codex R3 P1+P2:
+      - R3: mtime-based imported with both. Codex R3 P1+P2:
         sub-second mtimes regress; metadata-only manifest writes flip
         analyzer mid-workflow.
-      - R4 (final): manifest-canonical for imported cases; flat
-        existence surfaced as note.
+      - R4: manifest-canonical for imported cases. Codex R4 P1:
+        scaffolded manifest lacks physics/bc; permanently blocks.
+      - R5 (this · final): per-field merge across both sources.
 
     Raises:
         CaseNotFoundError: case_id resolves to nothing.
@@ -695,21 +743,14 @@ def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     imported_dir = _resolve_imported_dir(case_id)
 
     # Case 1: imported case (with or without a co-existing flat draft).
-    # Manifest is canonical. Always.
+    # Per Codex R4: pass both files to _analyze_imported so it can merge
+    # presence checks across the manifest YAML and flat editor YAML.
+    # Neither file is sole canonical — solver/turbulence flow through the
+    # editor (PUT /api/cases/{id}/yaml → flat draft); bc.patches flows
+    # through setup_bc / mesh wizard → manifest. A field is "present"
+    # if either source has it.
     if imported_dir is not None:
-        report = _analyze_imported(case_id, imported_dir)
-        if flat_draft is not None:
-            # Surface the dual-state limitation so engineers know edits
-            # via PUT /api/cases/{id}/yaml don't propagate here yet.
-            report.notes.append(
-                "A flat editor YAML also exists at user_drafts/{id}.yaml. "
-                "Engineer edits made via /workbench/case/{id}/edit are NOT "
-                "reflected in this report — the analyzer tracks the schema-"
-                "canonical case_manifest.yaml. To sync flat-draft edits into "
-                "the manifest, run an M-PANELS action (setup-bc, mesh, "
-                "switch-solver) that re-authors the affected sections."
-            )
-        return report
+        return _analyze_imported(case_id, imported_dir, flat_draft=flat_draft)
 
     # Case 2: flat_draft alone (whitelist fork or fresh manual draft).
     if flat_draft is not None:

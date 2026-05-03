@@ -241,110 +241,157 @@ def test_imported_case_with_unset_turbulence_in_yaml_flagged_despite_default(
     )
 
 
-def test_imported_case_always_uses_manifest_when_dir_exists(isolated_drafts):
-    """Codex R3 fix — DEC-V61-116.
+def test_imported_merged_flat_supplies_solver_and_turbulence(isolated_drafts):
+    """Codex R4 P1 fix · R5 merge — DEC-V61-116.
 
-    Per the manifest-canonical policy: when imported_dir/{id}/case_manifest.yaml
-    exists, analysis ALWAYS uses the manifest, regardless of whether a
-    flat draft also exists or which file is newer. mtime-based
-    arbitration was structurally fragile (sub-second mtimes on APFS;
-    metadata-only manifest writes that don't change schema state).
-
-    The manifest is the schema-typed canonical state every downstream
-    solver/route consults; the analyzer agrees with that source so the
-    completeness verdict tracks downstream reality.
+    Scaffolded manifest has empty physics + bc sections. Engineer
+    later edits flat YAML to set solver + turbulence_model via the
+    editor. The merged analyzer must count those as present (sourced
+    from flat draft) even though the manifest doesn't have them.
     """
     drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_canonical"
-    # Manifest: complete (would say ready=True).
-    _seed_imported_manifest(imported, case_id)
-    # Flat draft: incomplete (would say not ready if it were the source).
-    (drafts / f"{case_id}.yaml").write_text(
+    case_id = "imported_2026-05-04T00-00-00Z_merge_flat"
+
+    # Scaffold-state manifest: empty physics + bc (matches scaffold reality).
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
         yaml.safe_dump(
             {
-                "id": case_id,
-                "name": "Edited",
-                "flow_type": "INTERNAL",
-                "geometry_type": "CUSTOM",
-                # turbulence_model + solver intentionally absent
+                "schema_version": 2,
+                "case_id": case_id,
+                # physics + bc intentionally minimal/absent — scaffold
+                # state. setup_bc / switch_solver would populate them.
+                "physics": {},
+                "bc": {"patches": {}},
+                "numerics": {},
+                "overrides": {},
+                "history": [],
             }
         ),
         encoding="utf-8",
     )
+
+    # Flat draft: engineer edited solver + turbulence via editor. BC
+    # also explicitly set (geometry_type=CUSTOM still uses canonical
+    # imported workflow but engineer typed BC values).
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported · cylinder.stl",
+                "flow_type": "INTERNAL",
+                "geometry_type": "CUSTOM",
+                "turbulence_model": "kOmegaSST",
+                "solver": {"name": "simpleFoam", "family": "incompressible"},
+                "boundary_conditions": {"inlet_u": 1.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user", (
-        f"manifest-canonical policy: imported_dir always wins; got {r.case_kind}"
+        f"imported_dir presence keeps imported analysis path; got {r.case_kind}"
     )
-    # Manifest is complete → ready.
+    # Solver, turbulence, BC all sourced from flat draft → not missing.
+    flat_supplied = {"physics.solver", "physics.turbulence_model", "bc.patches"}
+    actually_missing = {m.field_path for m in r.missing}
+    overlap = flat_supplied & actually_missing
+    assert overlap == set(), (
+        f"merged analyzer must count flat-supplied fields as present; "
+        f"unexpectedly missing = {overlap}"
+    )
     assert r.ready_for_archive is True
-    # The flat-draft existence note must surface so engineer knows the
-    # dual-state limitation.
-    assert any(
-        "user_drafts/{id}.yaml" in n and "not reflected" in n.lower()
-        for n in r.notes
-    ), f"expected dual-state note; got notes = {r.notes}"
 
 
-def test_imported_case_no_flat_draft_no_dual_state_note(isolated_drafts):
-    """When only the manifest exists (no flat draft co-pilot), the
-    dual-state note must NOT appear — there's no flat draft for the
-    engineer to be confused about."""
+def test_imported_merged_manifest_supplies_bc_patches(isolated_drafts):
+    """Codex R4 P1 fix · R5 merge — DEC-V61-116.
+
+    setup_bc_from_stl_patches() populates manifest.bc.patches but does
+    NOT touch the flat draft's `boundary_conditions` block. The merged
+    analyzer must count bc as present (sourced from manifest) even if
+    flat draft has no boundary_conditions key.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_merge_manifest_bc"
+
+    # Manifest: setup_bc has run → bc.patches populated. physics still
+    # has scaffold-time defaults (engineer hasn't switched solver).
+    _seed_imported_manifest(imported, case_id)  # has solver + turbulence + 1 patch
+
+    # Flat draft: scaffolded with no boundary_conditions block.
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported",
+                "flow_type": "INTERNAL",
+                "geometry_type": "CUSTOM",
+                # turbulence_model + solver in flat too (but manifest
+                # also has them; either source counts).
+                "turbulence_model": "laminar",
+                "solver": {"name": "simpleFoam"},
+                # boundary_conditions intentionally absent in flat.
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert bc_missing == [], (
+        f"manifest-supplied bc.patches must not be flagged missing; "
+        f"got {bc_missing}"
+    )
+
+
+def test_imported_merge_both_empty_still_flags(isolated_drafts):
+    """Sanity — when neither manifest NOR flat draft has the required
+    fields, the merge still flags them missing.
+
+    Replaces test_imported_case_with_unset_turbulence_in_yaml_flagged_despite_default
+    semantics under R5: missing means missing in BOTH sources.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_merge_both_empty"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {},
+                "bc": {"patches": {}},
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"id": case_id, "name": "Bare scaffold view"}),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.ready_for_archive is False
+    paths = {m.field_path for m in r.missing}
+    assert "physics.solver" in paths
+    assert "physics.turbulence_model" in paths
+    assert "bc.patches" in paths
+
+
+def test_imported_case_no_flat_draft_uses_manifest_only(isolated_drafts):
+    """When no flat draft exists, the merge degenerates to manifest-only.
+    A complete manifest still passes."""
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_no_flat"
     _seed_imported_manifest(imported, case_id)
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user"
-    assert not any(
-        "flat editor YAML also exists" in n for n in r.notes
-    ), f"unexpected dual-state note when no flat draft; notes = {r.notes}"
-
-
-def test_imported_case_metadata_write_does_not_flip_resolution(isolated_drafts):
-    """Codex R3 P2 regression — DEC-V61-116.
-
-    Sequence under the previous mtime-based resolver that broke:
-      1. scaffold writes flat + manifest
-      2. engineer edits flat YAML (flat newer)
-      3. mark_user_override touches manifest (manifest newer again →
-         old resolver flipped back to manifest, hiding flat edits)
-
-    Under the manifest-canonical policy this whole sequence is moot —
-    imported_dir always wins. Verify by simulating: scaffold + flat
-    edit + later manifest-touch → still uses manifest, still surfaces
-    the dual-state note.
-    """
-    import os
-    import time
-
-    drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_metadata_touch"
-
-    # Step 1: scaffold + flat draft.
-    _seed_imported_manifest(imported, case_id)
-    flat_path = drafts / f"{case_id}.yaml"
-    flat_path.write_text(
-        yaml.safe_dump(
-            {"id": case_id, "name": "Edited", "flow_type": "INTERNAL"}
-        ),
-        encoding="utf-8",
-    )
-
-    # Step 2: simulate engineer flat edit landing strictly later.
-    later = time.time()
-    os.utime(flat_path, (later, later))
-
-    # Step 3: simulate mark_user_override bumping manifest mtime past flat.
-    manifest_path = imported / case_id / "case_manifest.yaml"
-    much_later = later + 100
-    os.utime(manifest_path, (much_later, much_later))
-
-    r = analyze_case_completeness(case_id)
-    assert r.case_kind == "imported_user", (
-        "manifest-canonical policy makes mtime ordering irrelevant"
-    )
-    assert any(
-        "user_drafts/{id}.yaml" in n for n in r.notes
-    ), "dual-state note must still surface"
+    assert r.ready_for_archive is True
 
 
 def test_schema_invalid_manifest_blocks_archive(isolated_drafts):
