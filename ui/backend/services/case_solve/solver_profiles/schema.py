@@ -22,7 +22,7 @@ extraction + Phase 2 pimpleFoam follow-up. icoFoam-only fields
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 
 # OpenFOAM dict syntax helpers. Profiles emit content that the
@@ -60,6 +60,13 @@ class ControlDictBlock:
     delta_t_default: float = 1.0
     write_control: str = "timeStep"
     write_interval: float = 50.0
+    # V61-112 Phase 2: pimpleFoam V61-107.5 inline renders
+    # ``writeInterval 1.0;`` (explicit decimal) while simpleFoam
+    # V61-111 inline renders ``writeInterval 50;`` (integer-valued
+    # float without ``.0``). Byte-identity to both inlines requires
+    # per-profile control over decimal rendering. ``True`` forces
+    # decimal even for integer-valued floats.
+    write_interval_decimal: bool = False
     purge_write: int = 0
     write_format: str = "ascii"
     write_precision: int = 6
@@ -104,7 +111,7 @@ class ControlDictBlock:
             f"endTime {_format_endtime(et, self.iteration_floor is not None)};",
             f"deltaT {_format_number(dt)};",
             f"writeControl {self.write_control};",
-            f"writeInterval {_format_number(self.write_interval)};",
+            f"writeInterval {_format_write_interval(self.write_interval, self.write_interval_decimal)};",
             f"purgeWrite {self.purge_write};",
             f"writeFormat {self.write_format};",
             f"writePrecision {self.write_precision};",
@@ -182,8 +189,18 @@ class FvSolutionBlock:
     """
 
     # Linear-solver dict per field (p, U, pFinal, UFinal, etc.).
-    # Each entry: {field_name: "PCG; preconditioner DIC; tolerance ..."}
-    solvers: dict[str, str] = field(default_factory=dict)
+    # Each entry value is a normalized dict with keys:
+    #   - body: str (mandatory) — the OpenFOAM solver dict body, e.g.
+    #     "solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05;"
+    #   - name_pad: int (optional, default 2) — number of spaces between
+    #     the field name and the opening "{". V61-112 Phase 2 adds this
+    #     to preserve V61-107.5 inline pimpleFoam fvSolution byte-identity:
+    #     `p` and `U` use 2-space pad ("p  {"); `pFinal` and `UFinal`
+    #     use 1-space pad ("pFinal {"). The Phase 1 simpleFoam profile
+    #     uses uniform 2-space (default).
+    # Loader normalizes string-typed YAML entries into {body: <str>,
+    # name_pad: 2}, so Phase 1 simpleFoam.yaml stays unchanged.
+    solvers: dict[str, dict[str, Any]] = field(default_factory=dict)
     # control_block: name + nested-dict of fields. The nested dict
     # is rendered as `name { key value; ... }` with multi-line
     # support (residualControl is itself a sub-dict).
@@ -200,8 +217,14 @@ class FvSolutionBlock:
             "solvers",
             "{",
         ]
-        for field_name, body in self.solvers.items():
-            lines.append(f"    {field_name}  {{ {body} }}")
+        for field_name, entry in self.solvers.items():
+            # entry is the normalized {body, name_pad} dict (registry
+            # loader guarantees this shape; string-typed YAML values
+            # are normalized to {body: <str>, name_pad: 2}).
+            body = entry["body"]
+            pad = entry.get("name_pad", 2)
+            pad_str = " " * pad
+            lines.append(f"    {field_name}{pad_str}{{ {body} }}")
         lines.append("}")
 
         # Control block (PIMPLE / SIMPLE / PISO).
@@ -304,6 +327,17 @@ def _format_number(value: float | int) -> str:
     # Trim trailing zeros for compactness (0.05 not 0.050000).
     s = f"{value:.6g}"
     return s
+
+
+def _format_write_interval(value: float, force_decimal: bool) -> str:
+    """V61-112 Phase 2: pimpleFoam inline forces ``writeInterval 1.0;``
+    (decimal even for integer-valued floats); simpleFoam inline writes
+    ``writeInterval 50;`` (no decimal). Both byte-contracts preserved
+    via per-profile ``write_interval_decimal`` flag.
+    """
+    if force_decimal and isinstance(value, (int, float)) and value == int(value):
+        return f"{float(value):.1f}"
+    return _format_number(value)
 
 
 def _format_endtime(value: float, is_iteration_count: bool) -> str:

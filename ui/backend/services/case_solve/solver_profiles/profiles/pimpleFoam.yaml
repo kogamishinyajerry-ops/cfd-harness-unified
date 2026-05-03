@@ -1,0 +1,113 @@
+# DEC-V61-112 Phase 2 · pimpleFoam transient PIMPLE solver profile.
+#
+# Extracts V61-107.5 inline templates from
+# `ui/backend/services/case_solve/bc_setup_from_stl_patches.py`
+# (`_build_pimplefoam_control_dict`, `_build_pimplefoam_fv_schemes`,
+# `_build_pimplefoam_fv_solution`). Byte-identity is the
+# acceptance criterion: profile-rendered output MUST match the
+# V61-107.5 inline output verbatim for the iter02-style canonical
+# case parameters (end_time=5, delta_t=0.001).
+#
+# V61-107.5 background (DEC-V61-107.5 R12-R20 chain):
+# - icoFoam was the original named-patch path solver but OpenFOAM-10
+#   removed setDeltaT.H from icoFoam, so adjustTimeStep keys are
+#   ignored. Tetrahedral STL meshes with high-aspect-ratio cells in
+#   tight gap regions force CFL_max >> 1 → NaN regardless of dt.
+# - pimpleFoam re-enables adjustTimeStep + maxCo gating, so the
+#   solver auto-shrinks dt when local CFL violates the bound.
+# - linearUpwind for div(phi,U) handles sharp interior obstacles
+#   without NaN oscillation. corrected (not orthogonal) laplacian
+#   accommodates non-orthogonal tetrahedral meshes.
+
+name: pimpleFoam
+family: transient
+
+control_dict:
+  application: pimpleFoam
+  start_from: startTime
+  start_time: 0
+  stop_at: endTime
+  end_time_default: 5.0
+  delta_t_default: 0.001
+  write_control: runTime
+  write_interval: 1.0
+  # V61-107.5 inline renders `writeInterval 1.0;` (decimal preserved)
+  # — distinct from simpleFoam V61-111 inline which renders `50` (no
+  # `.0`). V61-112 Phase 2 schema-extension flag preserves byte-
+  # identity to both inlines.
+  write_interval_decimal: true
+  purge_write: 0
+  write_format: ascii
+  write_precision: 6
+  write_compression: "off"
+  time_format: general
+  time_precision: 6
+  run_time_modifiable: true
+  # Transient adjustTimeStep gating (V61-107.5 R12 P2):
+  # adjustTimeStep yes + maxCo 0.5 + maxDeltaT == caller delta_t.
+  adjust_time_step: true
+  max_co: 0.5
+  # Codex V61-107.5 R12 P2: maxDeltaT honors caller delta_t (callers
+  # rely on the cap for residual sampling cadence). pimpleFoam can
+  # still scale DOWN for stability via maxCo.
+  max_delta_t_follows_delta_t: true
+  # No iteration_floor — pimpleFoam endTime is physical seconds.
+  iteration_floor: null
+
+fv_schemes:
+  ddt_schemes:
+    default: Euler
+  grad_schemes:
+    default: "Gauss linear"
+  div_schemes:
+    default: "none"
+    # V61-107: linearUpwind avoids NaN on convection-dominated flow
+    # past sharp interior obstacles. NOTE: NO `bounded` prefix here
+    # (vs simpleFoam's `bounded Gauss linearUpwind grad(U)`); the
+    # bounded variant is steady-state-specific (kills source-term
+    # contributions when residual is small).
+    div(phi,U): "Gauss linearUpwind grad(U)"
+    # V61-107.5: pimpleFoam routes through divDevReff which evaluates
+    # div((nuEff*dev2(T(grad(U))))) — needs explicit scheme even for
+    # laminar simulationType.
+    div((nuEff*dev2(T(grad(U))))): "Gauss linear"
+  laplacian_schemes:
+    # V61-107: corrected (not orthogonal) — tetrahedral STL meshes are
+    # inherently non-orthogonal.
+    default: "Gauss linear corrected"
+  interpolation_schemes:
+    default: "linear"
+  sn_grad_schemes:
+    default: "corrected"
+
+fv_solution:
+  # V61-107.5 inline pimpleFoam fvSolution uses INCONSISTENT solver-
+  # line whitespace: `p` and `U` (1-char names) have 2-space pad
+  # before the `{`; `pFinal` and `UFinal` (6-char names) have 1-space
+  # pad. V61-112 Phase 2 schema-extension (per-solver `name_pad`)
+  # preserves byte-identity to the V61-107.5 inline template.
+  solvers:
+    p: "solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05;"
+    # pFinal references $p via OpenFOAM dict-include syntax — the
+    # body is rendered verbatim with no substitution at YAML-load
+    # time. OpenFOAM resolves `$p` at solver runtime.
+    pFinal:
+      body: "$p; relTol 0;"
+      name_pad: 1
+    U: "solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0;"
+    UFinal:
+      body: "$U; relTol 0;"
+      name_pad: 1
+  # PIMPLE block (transient) — distinct from simpleFoam's SIMPLE
+  # (steady-state). nOuterCorrectors=1 keeps numerics close to the
+  # icoFoam-style PISO loop for the cube/channel baseline.
+  control_block_name: PIMPLE
+  control_block_fields:
+    nOuterCorrectors: 1
+    nCorrectors: 2
+    nNonOrthogonalCorrectors: 2
+    pRefCell: 0
+    pRefValue: 0
+  # No residualControl (PIMPLE doesn't use it the same way SIMPLE
+  # does). No relaxationFactors (transient PIMPLE doesn't need them
+  # — outer-loop convergence handles instability).

@@ -28,6 +28,9 @@ from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
     _build_simplefoam_control_dict,
     _build_simplefoam_fv_schemes,
     _build_simplefoam_fv_solution,
+    _build_pimplefoam_control_dict,
+    _build_pimplefoam_fv_schemes,
+    _build_pimplefoam_fv_solution,
 )
 
 
@@ -326,3 +329,279 @@ def test_fv_solution_control_block_name_non_string_raises_schema_error(bad_value
     with pytest.raises(ProfileSchemaError) as exc:
         _build_profile_from_dict(raw)
     assert "control_block_name" in str(exc.value)
+
+
+# ===========================================================================
+# DEC-V61-112 Phase 2 · pimpleFoam profile golden snapshots + schema
+# extension tests (per-solver name_pad).
+# ===========================================================================
+
+# Golden V61-107.5 inline pimpleFoam bytes captured 2026-05-03 from the
+# pre-rewire helpers. These are the V61-112 Phase 2 acceptance contract;
+# do NOT regenerate without an explicit DEC saying V61-107.5 changed.
+# Canonical case parameters: end_time=5, delta_t=0.001 (representative
+# iter02 smoke parameters per V61-107.5 R12 default profile).
+
+V61_107_5_GOLDEN_PIMPLEFOAM_CONTROL_DICT = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object controlDict; }\n'
+    "application pimpleFoam;\n"
+    "startFrom startTime;\n"
+    "startTime 0;\n"
+    "stopAt endTime;\n"
+    "endTime 5;\n"
+    "deltaT 0.001;\n"
+    "writeControl runTime;\n"
+    "writeInterval 1.0;\n"
+    "purgeWrite 0;\n"
+    "writeFormat ascii;\n"
+    "writePrecision 6;\n"
+    "writeCompression off;\n"
+    "timeFormat general;\n"
+    "timePrecision 6;\n"
+    "runTimeModifiable true;\n"
+    "adjustTimeStep yes;\n"
+    "maxCo 0.5;\n"
+    "maxDeltaT 0.001;\n"
+)
+
+V61_107_5_GOLDEN_PIMPLEFOAM_FV_SCHEMES = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSchemes; }\n'
+    "ddtSchemes  { default Euler; }\n"
+    "gradSchemes { default Gauss linear; }\n"
+    "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); "
+    "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
+    "laplacianSchemes { default Gauss linear corrected; }\n"
+    "interpolationSchemes { default linear; }\n"
+    "snGradSchemes { default corrected; }\n"
+)
+
+V61_107_5_GOLDEN_PIMPLEFOAM_FV_SOLUTION = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSolution; }\n'
+    "solvers\n"
+    "{\n"
+    "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; }\n"
+    "    pFinal { $p; relTol 0; }\n"
+    "    U  { solver smoothSolver; smoother symGaussSeidel; "
+    "tolerance 1e-05; relTol 0; }\n"
+    "    UFinal { $U; relTol 0; }\n"
+    "}\n"
+    "PIMPLE\n"
+    "{\n"
+    "    nOuterCorrectors 1;\n"
+    "    nCorrectors 2;\n"
+    "    nNonOrthogonalCorrectors 2;\n"
+    "    pRefCell 0;\n"
+    "    pRefValue 0;\n"
+    "}\n"
+)
+
+
+def test_list_profile_names_includes_pimplefoam():
+    """V61-112 Phase 2: pimpleFoam profile is on disk and listable."""
+    assert "pimpleFoam" in list_profile_names()
+
+
+def test_load_profile_pimplefoam_returns_solver_profile():
+    profile = load_profile("pimpleFoam")
+    assert isinstance(profile, SolverProfile)
+    assert profile.name == "pimpleFoam"
+    assert profile.family == "transient"
+
+
+def test_pimplefoam_profile_control_dict_byte_identical_to_v61_107_5_golden():
+    """V61-112 Phase 2 acceptance gate: pimpleFoam profile renders
+    bytes byte-identical to V61-107.5 inline output for the canonical
+    case parameters (end_time=5, delta_t=0.001).
+    """
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_control_dict(end_time=5, delta_t=0.001)
+    assert rendered == V61_107_5_GOLDEN_PIMPLEFOAM_CONTROL_DICT, (
+        f"pimpleFoam controlDict drift from V61-107.5 golden:\n"
+        f"=== profile ({len(rendered)} bytes) ===\n{rendered!r}\n"
+        f"=== golden ({len(V61_107_5_GOLDEN_PIMPLEFOAM_CONTROL_DICT)} bytes) ===\n"
+        f"{V61_107_5_GOLDEN_PIMPLEFOAM_CONTROL_DICT!r}"
+    )
+
+
+def test_pimplefoam_profile_fv_schemes_byte_identical_to_v61_107_5_golden():
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_fv_schemes()
+    assert rendered == V61_107_5_GOLDEN_PIMPLEFOAM_FV_SCHEMES, (
+        f"pimpleFoam fvSchemes drift from V61-107.5 golden:\n"
+        f"=== profile ({len(rendered)} bytes) ===\n{rendered!r}\n"
+        f"=== golden ({len(V61_107_5_GOLDEN_PIMPLEFOAM_FV_SCHEMES)} bytes) ===\n"
+        f"{V61_107_5_GOLDEN_PIMPLEFOAM_FV_SCHEMES!r}"
+    )
+
+
+def test_pimplefoam_profile_fv_solution_byte_identical_to_v61_107_5_golden():
+    """V61-112 Phase 2: pimpleFoam fvSolution renders byte-identical
+    to V61-107.5 inline including the per-solver name_pad variation
+    (p/U have 2-space pad; pFinal/UFinal have 1-space pad).
+    """
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_fv_solution()
+    assert rendered == V61_107_5_GOLDEN_PIMPLEFOAM_FV_SOLUTION, (
+        f"pimpleFoam fvSolution drift from V61-107.5 golden:\n"
+        f"=== profile ({len(rendered)} bytes) ===\n{rendered!r}\n"
+        f"=== golden ({len(V61_107_5_GOLDEN_PIMPLEFOAM_FV_SOLUTION)} bytes) ===\n"
+        f"{V61_107_5_GOLDEN_PIMPLEFOAM_FV_SOLUTION!r}"
+    )
+
+
+def test_pimplefoam_wrappers_route_to_profile_control_dict():
+    profile = load_profile("pimpleFoam")
+    assert _build_pimplefoam_control_dict(5, 0.001) == profile.render_control_dict(
+        end_time=5, delta_t=0.001
+    )
+
+
+def test_pimplefoam_wrappers_route_to_profile_fv_schemes():
+    profile = load_profile("pimpleFoam")
+    assert _build_pimplefoam_fv_schemes() == profile.render_fv_schemes()
+
+
+def test_pimplefoam_wrappers_route_to_profile_fv_solution():
+    profile = load_profile("pimpleFoam")
+    assert _build_pimplefoam_fv_solution() == profile.render_fv_solution()
+
+
+# Schema-extension tests · per-solver name_pad (Phase 2 contract).
+
+
+def _minimal_pimplefoam_raw_with_solver_entry(p_entry):
+    """Minimal valid raw dict with one customizable solvers[p] entry.
+    Used to test the str-vs-dict acceptance contract and bad-shape
+    rejection for the Phase 2 schema extension.
+    """
+    return {
+        "name": "pimpleFoam",
+        "family": "transient",
+        "control_dict": {"application": "pimpleFoam"},
+        "fv_schemes": {},
+        "fv_solution": {
+            "control_block_name": "PIMPLE",
+            "control_block_fields": {"nOuterCorrectors": 1},
+            "solvers": {"p": p_entry},
+        },
+    }
+
+
+def test_solvers_string_entry_normalizes_to_default_pad(tmp_path):
+    """Phase 2 backward-compat: string-typed solvers value loads as
+    {body: <str>, name_pad: 2}. simpleFoam Phase 1 contract."""
+    raw = _minimal_pimplefoam_raw_with_solver_entry("solver PCG;")
+    profile = _build_profile_from_dict(raw, name="pimpleFoam")
+    p_entry = profile.fv_solution.solvers["p"]
+    assert p_entry["body"] == "solver PCG;"
+    assert p_entry["name_pad"] == 2
+
+
+def test_solvers_dict_entry_with_explicit_name_pad():
+    """Phase 2 extension: dict-typed solvers value with custom
+    name_pad takes precedence over default."""
+    raw = _minimal_pimplefoam_raw_with_solver_entry(
+        {"body": "$p; relTol 0;", "name_pad": 1}
+    )
+    profile = _build_profile_from_dict(raw, name="pimpleFoam")
+    p_entry = profile.fv_solution.solvers["p"]
+    assert p_entry["body"] == "$p; relTol 0;"
+    assert p_entry["name_pad"] == 1
+
+
+def test_solvers_dict_entry_default_name_pad_when_omitted():
+    raw = _minimal_pimplefoam_raw_with_solver_entry({"body": "solver PCG;"})
+    profile = _build_profile_from_dict(raw, name="pimpleFoam")
+    assert profile.fv_solution.solvers["p"]["name_pad"] == 2
+
+
+def test_solvers_dict_entry_missing_body_raises():
+    raw = _minimal_pimplefoam_raw_with_solver_entry({"name_pad": 1})
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="pimpleFoam")
+    assert "body" in str(exc.value)
+
+
+def test_solvers_dict_entry_unknown_keys_raises():
+    raw = _minimal_pimplefoam_raw_with_solver_entry(
+        {"body": "solver PCG;", "extra_key": 42}
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="pimpleFoam")
+    assert "extra_key" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_pad", ["1", 1.5, None, [1], {"value": 1}])
+def test_solvers_dict_entry_non_int_name_pad_raises(bad_pad):
+    raw = _minimal_pimplefoam_raw_with_solver_entry(
+        {"body": "solver PCG;", "name_pad": bad_pad}
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="pimpleFoam")
+    assert "name_pad" in str(exc.value)
+
+
+def test_solvers_dict_entry_negative_name_pad_raises():
+    raw = _minimal_pimplefoam_raw_with_solver_entry(
+        {"body": "solver PCG;", "name_pad": -1}
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="pimpleFoam")
+    assert "name_pad" in str(exc.value)
+
+
+def test_solvers_dict_entry_zero_name_pad_renders_no_space():
+    """Edge case: name_pad=0 should render `name{ body }` (no space).
+    Useful for highly compact custom profiles; legal value."""
+    from ui.backend.services.case_solve.solver_profiles.schema import (
+        FvSolutionBlock,
+    )
+    block = FvSolutionBlock(
+        solvers={"p": {"body": "solver PCG;", "name_pad": 0}},
+        control_block_name="PIMPLE",
+        control_block_fields={"nOuterCorrectors": 1},
+    )
+    rendered = block.render()
+    assert "    p{ solver PCG; }" in rendered
+
+
+def test_pimplefoam_profile_solvers_have_correct_per_entry_pad():
+    """V61-112 Phase 2 contract: pimpleFoam profile honors the V61-
+    107.5 inline pad pattern — p/U use 2-space pad, pFinal/UFinal use
+    1-space pad."""
+    profile = load_profile("pimpleFoam")
+    solvers = profile.fv_solution.solvers
+    assert solvers["p"]["name_pad"] == 2
+    assert solvers["U"]["name_pad"] == 2
+    assert solvers["pFinal"]["name_pad"] == 1
+    assert solvers["UFinal"]["name_pad"] == 1
+
+
+def test_simplefoam_profile_solvers_normalize_to_default_pad():
+    """V61-112 Phase 1 backward-compat: simpleFoam string-typed
+    solvers entries normalize to name_pad=2."""
+    profile = load_profile("simpleFoam")
+    for entry in profile.fv_solution.solvers.values():
+        assert entry["name_pad"] == 2
+
+
+# write_interval_decimal · per-profile flag for byte-identity to both
+# simpleFoam V61-111 (`writeInterval 50;`) and pimpleFoam V61-107.5
+# (`writeInterval 1.0;`) inlines.
+
+
+def test_pimplefoam_control_dict_write_interval_renders_with_decimal():
+    profile = load_profile("pimpleFoam")
+    assert profile.control_dict.write_interval_decimal is True
+    rendered = profile.render_control_dict(end_time=5, delta_t=0.001)
+    assert "writeInterval 1.0;" in rendered
+
+
+def test_simplefoam_control_dict_write_interval_renders_without_decimal():
+    profile = load_profile("simpleFoam")
+    assert profile.control_dict.write_interval_decimal is False
+    rendered = profile.render_control_dict(end_time=200)
+    assert "writeInterval 50;" in rendered

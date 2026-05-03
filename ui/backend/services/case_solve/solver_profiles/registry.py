@@ -134,7 +134,8 @@ def _build_control_dict(raw: dict[str, Any]) -> ControlDictBlock:
     for key in (
         "start_from", "start_time", "stop_at",
         "end_time_default", "delta_t_default",
-        "write_control", "write_interval", "purge_write",
+        "write_control", "write_interval", "write_interval_decimal",
+        "purge_write",
         "write_format", "write_precision", "write_compression",
         "time_format", "time_precision", "run_time_modifiable",
         "adjust_time_step", "max_co", "max_delta_t_follows_delta_t",
@@ -165,20 +166,60 @@ def _build_fv_schemes(raw: dict[str, Any]) -> FvSchemesBlock:
 def _build_fv_solution(raw: dict[str, Any]) -> FvSolutionBlock:
     _require_keys(raw, {"control_block_name", "control_block_fields"}, "fv_solution")
 
-    # solvers: required to be a mapping of {field_name: solver_body_str}.
+    # solvers: required to be a mapping. Each value is either:
+    #   - a scalar (str/int/float) → normalized to {body: <str>, name_pad: 2}
+    #     (Phase 1 backward-compat, used by simpleFoam.yaml)
+    #   - a dict with required `body: str` and optional `name_pad: int`
+    #     (Phase 2 extension for byte-identity to V61-107.5 pimpleFoam
+    #     pFinal/UFinal 1-space pad)
     raw_solvers = raw.get("solvers", {})
     if not isinstance(raw_solvers, dict):
         raise TypeError(
             f"fv_solution.solvers must be a mapping; got {type(raw_solvers).__name__}"
         )
-    solvers: dict[str, str] = {}
+    solvers: dict[str, dict[str, Any]] = {}
     for sk, sv in raw_solvers.items():
-        if not isinstance(sv, (str, int, float)):
+        if isinstance(sv, (str, int, float)) and not isinstance(sv, bool):
+            # Phase 1 string-typed entry: normalize to {body, name_pad: 2}.
+            solvers[str(sk)] = {"body": str(sv), "name_pad": 2}
+        elif isinstance(sv, dict):
+            # Phase 2 SolverEntry-typed: must contain `body: str`,
+            # optionally `name_pad: int`. Reject extra unknown keys.
+            allowed_keys = {"body", "name_pad"}
+            extra = set(sv.keys()) - allowed_keys
+            if extra:
+                raise TypeError(
+                    f"fv_solution.solvers[{sk!r}] has unknown keys "
+                    f"{sorted(extra)}; allowed: {sorted(allowed_keys)}"
+                )
+            if "body" not in sv:
+                raise KeyError(
+                    f"fv_solution.solvers[{sk!r}] (dict-typed) must have "
+                    f"a 'body' field"
+                )
+            body = sv["body"]
+            if not isinstance(body, (str, int, float)) or isinstance(body, bool):
+                raise TypeError(
+                    f"fv_solution.solvers[{sk!r}].body must be a scalar "
+                    f"(str/int/float); got {type(body).__name__}"
+                )
+            name_pad = sv.get("name_pad", 2)
+            if not isinstance(name_pad, int) or isinstance(name_pad, bool):
+                raise TypeError(
+                    f"fv_solution.solvers[{sk!r}].name_pad must be int; "
+                    f"got {type(name_pad).__name__}"
+                )
+            if name_pad < 0:
+                raise ValueError(
+                    f"fv_solution.solvers[{sk!r}].name_pad must be >= 0; "
+                    f"got {name_pad}"
+                )
+            solvers[str(sk)] = {"body": str(body), "name_pad": name_pad}
+        else:
             raise TypeError(
-                f"fv_solution.solvers[{sk!r}] must be a scalar (str/int/float); "
-                f"got {type(sv).__name__}"
+                f"fv_solution.solvers[{sk!r}] must be a scalar (str/int/float) "
+                f"or a dict with body+name_pad; got {type(sv).__name__}"
             )
-        solvers[str(sk)] = str(sv)
 
     # control_block_fields: required to be a mapping. Nested values may
     # be scalars (rendered as `key value;`) OR a dict (rendered as a

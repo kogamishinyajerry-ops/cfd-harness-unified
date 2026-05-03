@@ -757,92 +757,40 @@ def _build_pimplefoam_control_dict(end_time: float, delta_t: float) -> str:
     for the named-patch path). Adjustable timestep with maxCo=0.5 gates
     CFL stability on tetrahedral STL meshes with high-aspect-ratio
     cells (iter01 blade-gap region etc.).
+
+    DEC-V61-112 Phase 2: extracted into the YAML solver-profile
+    registry. This wrapper preserves the V61-107.5 call signature for
+    backward compatibility (callers + tests) but the actual template
+    lives in
+    ``ui/backend/services/case_solve/solver_profiles/profiles/pimpleFoam.yaml``.
+    Byte-identity is verified by ``test_solver_profiles.py``.
     """
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object controlDict; }\n'
-        # DEC-V61-107.5 (2026-05-01): switched from icoFoam to
-        # pimpleFoam for the named-patch path. icoFoam in OpenFOAM-10
-        # has no setDeltaT.H include so adjustTimeStep keys are
-        # ignored — fixed dt + tetrahedral STL meshes with high
-        # aspect-ratio cells in tight gap regions force CFL_max >> 1
-        # → NaN regardless of the global dt chosen.
-        "application pimpleFoam;\n"
-        "startFrom startTime;\n"
-        "startTime 0;\n"
-        "stopAt endTime;\n"
-        f"endTime {end_time};\n"
-        f"deltaT {delta_t};\n"
-        "writeControl runTime;\n"
-        "writeInterval 1.0;\n"
-        "purgeWrite 0;\n"
-        "writeFormat ascii;\n"
-        "writePrecision 6;\n"
-        "writeCompression off;\n"
-        "timeFormat general;\n"
-        "timePrecision 6;\n"
-        "runTimeModifiable true;\n"
-        "adjustTimeStep yes;\n"
-        "maxCo 0.5;\n"
-        # Codex R12 P2: maxDeltaT honors caller's delta_t (callers
-        # rely on the cap for residual sampling cadence). pimpleFoam
-        # can still scale DOWN for stability.
-        f"maxDeltaT {delta_t};\n"
+    from .solver_profiles import load_profile
+    return load_profile("pimpleFoam").render_control_dict(
+        end_time=end_time, delta_t=delta_t
     )
 
 
 def _build_pimplefoam_fv_schemes() -> str:
-    """DEC-V61-107 / V61-107.5 pimpleFoam fvSchemes: linearUpwind for
-    convection (handles sharp interior obstacles without NaN
-    oscillation), corrected laplacian/snGrad for non-orthogonal
-    tetrahedral meshes.
+    """DEC-V61-107 / V61-107.5 pimpleFoam fvSchemes (linearUpwind for
+    convection, corrected laplacian/snGrad for non-orthogonal meshes).
+
+    DEC-V61-112 Phase 2: see ``pimpleFoam.yaml`` for the source of
+    truth; this wrapper preserves the V61-107.5 call signature.
     """
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSchemes; }\n'
-        "ddtSchemes  { default Euler; }\n"
-        "gradSchemes { default Gauss linear; }\n"
-        # V61-107: linearUpwind avoids NaN on convection-dominated
-        # flow past sharp interior obstacles. V61-107.5: pimpleFoam
-        # routes through divDevReff which evaluates
-        # div((nuEff*dev2(T(grad(U))))) — needs explicit scheme even
-        # for laminar simulationType.
-        "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); "
-        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
-        # V61-107: corrected (not orthogonal) — tetrahedral STL
-        # meshes are inherently non-orthogonal.
-        "laplacianSchemes { default Gauss linear corrected; }\n"
-        "interpolationSchemes { default linear; }\n"
-        "snGradSchemes { default corrected; }\n"
-    )
+    from .solver_profiles import load_profile
+    return load_profile("pimpleFoam").render_fv_schemes()
 
 
 def _build_pimplefoam_fv_solution() -> str:
-    """DEC-V61-107.5 pimpleFoam fvSolution: PIMPLE block with
-    nOuterCorrectors=1 to keep numerics close to the icoFoam-style
-    PISO loop for the cube/channel baseline.
+    """DEC-V61-107.5 pimpleFoam fvSolution (PIMPLE block,
+    nOuterCorrectors=1 for icoFoam-PISO-equivalent numerics).
+
+    DEC-V61-112 Phase 2: see ``pimpleFoam.yaml`` for the source of
+    truth; this wrapper preserves the V61-107.5 call signature.
     """
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSolution; }\n'
-        "solvers\n"
-        "{\n"
-        "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; "
-        "relTol 0.05; }\n"
-        "    pFinal { $p; relTol 0; }\n"
-        "    U  { solver smoothSolver; smoother symGaussSeidel; "
-        "tolerance 1e-05; relTol 0; }\n"
-        "    UFinal { $U; relTol 0; }\n"
-        "}\n"
-        "PIMPLE\n"
-        "{\n"
-        "    nOuterCorrectors 1;\n"
-        "    nCorrectors 2;\n"
-        "    nNonOrthogonalCorrectors 2;\n"
-        "    pRefCell 0;\n"
-        "    pRefValue 0;\n"
-        "}\n"
-    )
+    from .solver_profiles import load_profile
+    return load_profile("pimpleFoam").render_fv_solution()
 
 
 def _build_simplefoam_control_dict(end_time: float) -> str:
