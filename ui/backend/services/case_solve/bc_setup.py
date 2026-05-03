@@ -449,58 +449,20 @@ def _author_dicts(case_dir: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
         "simulationType laminar;\n",
     )
 
-    w(
-        "system/controlDict",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object controlDict; }\n'
-        "application icoFoam;\n"
-        "startFrom startTime;\n"
-        "startTime 0;\n"
-        "stopAt endTime;\n"
-        "endTime 2;\n"
-        "deltaT 0.005;\n"
-        "writeControl runTime;\n"
-        "writeInterval 0.5;\n"
-        "purgeWrite 0;\n"
-        "writeFormat ascii;\n"
-        "writePrecision 6;\n"
-        "writeCompression off;\n"
-        "timeFormat general;\n"
-        "timePrecision 6;\n"
-        "runTimeModifiable true;\n",
-    )
-
-    w(
-        "system/fvSchemes",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSchemes; }\n'
-        "ddtSchemes  { default Euler; }\n"
-        "gradSchemes { default Gauss linear; }\n"
-        "divSchemes  { default none; div(phi,U) Gauss linear; }\n"
-        "laplacianSchemes { default Gauss linear orthogonal; }\n"
-        "interpolationSchemes { default linear; }\n"
-        "snGradSchemes { default orthogonal; }\n",
-    )
-
-    w(
-        "system/fvSolution",
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSolution; }\n'
-        "solvers\n"
-        "{\n"
-        "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; }\n"
-        "    pFinal { $p; relTol 0; }\n"
-        "    U  { solver smoothSolver; smoother symGaussSeidel; "
-        "tolerance 1e-05; relTol 0; }\n"
-        "}\n"
-        "PISO\n"
-        "{\n"
-        "    nCorrectors 2;\n"
-        "    nNonOrthogonalCorrectors 2;\n"
-        "    pRefCell 0;\n"
-        "    pRefValue 0;\n"
-        "}\n",
-    )
+    # DEC-V61-112 Phase 3: V61-097 inline LDC icoFoam controlDict /
+    # fvSchemes / fvSolution templates extracted into the YAML solver-
+    # profile registry. Byte-identity to the V61-097 inline output is
+    # verified by ``test_solver_profiles.py``. See
+    # ``solver_profiles/profiles/icoFoam.yaml`` for the source of
+    # truth. Caller signature ``_author_dicts(case_dir)`` does NOT
+    # pass end_time / delta_t — the profile's YAML defaults
+    # (`end_time_default: 2`, `delta_t_default: 0.005`,
+    # `write_interval: 0.5`) supply the V61-097 literals.
+    from .solver_profiles import load_profile
+    icofoam_profile = load_profile("icoFoam")
+    w("system/controlDict", icofoam_profile.render_control_dict())
+    w("system/fvSchemes", icofoam_profile.render_fv_schemes())
+    w("system/fvSolution", icofoam_profile.render_fv_solution())
 
     return _atomic_commit_dicts(case_dir, plan)
 

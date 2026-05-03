@@ -1,0 +1,101 @@
+# DEC-V61-112 Phase 3 · icoFoam LDC transient PISO solver profile.
+#
+# Extracts V61-097 inline templates from
+# `ui/backend/services/case_solve/bc_setup.py:452-503`
+# (`_author_dicts` LDC pipeline). Byte-identity is the acceptance
+# criterion: profile-rendered output MUST match the V61-097 inline
+# output verbatim for the LDC default case parameters (no caller
+# args — `endTime 2`, `deltaT 0.005`, `writeInterval 0.5` are
+# literals in the inline f-string).
+#
+# V61-097 background:
+# - icoFoam is OpenFOAM-10's LDC default transient PISO solver
+# - LDC pipeline is the M-PANELS Phase-C demo's hot path (cube /
+#   cavity dogfood smoke + e2e + adversarial)
+# - Mesh is built by gmsh from the cube STL, mostly orthogonal —
+#   so divSchemes/laplacianSchemes/snGradSchemes use orthogonal
+#   variants (NOT corrected like the V61-107.5 STL pimpleFoam path)
+# - icoFoam doesn't use turbulent viscosity — no divDevReff term
+# - icoFoam ignores adjustTimeStep / maxCo (no setDeltaT.H in
+#   OpenFOAM-10 icoFoam) — they are OMITTED from the rendered
+#   controlDict via schema's null-suppression
+
+name: icoFoam
+family: transient
+
+control_dict:
+  application: icoFoam
+  start_from: startTime
+  start_time: 0
+  stop_at: endTime
+  # V61-097 inline: literal `endTime 2;` — caller signature does NOT
+  # pass end_time. YAML int 2 → renders as `endTime 2;`.
+  end_time_default: 2
+  # YAML float 0.005 → renders as `deltaT 0.005;` via _format_number
+  # (typical mid-range float, not stripped, not scientific).
+  delta_t_default: 0.005
+  write_control: runTime
+  # YAML float 0.5 → renders as `writeInterval 0.5;` (typical mid-
+  # range float, no `.0` strip needed since 0.5 != int(0.5)).
+  write_interval: 0.5
+  purge_write: 0
+  write_format: ascii
+  write_precision: 6
+  write_compression: "off"
+  time_format: general
+  time_precision: 6
+  run_time_modifiable: true
+  # icoFoam in OpenFOAM-10 ignores adjustTimeStep / maxCo (no
+  # setDeltaT.H include). null suppresses these lines from the
+  # rendered controlDict.
+  adjust_time_step: null
+  max_co: null
+  max_delta_t_follows_delta_t: false
+  iteration_floor: null
+
+fv_schemes:
+  ddt_schemes:
+    default: Euler
+  grad_schemes:
+    default: "Gauss linear"
+  div_schemes:
+    default: "none"
+    # V61-097 LDC: simplest possible div scheme. No `linearUpwind` (no
+    # convection-dominated NaN risk in cavity flow) and no
+    # `div((nuEff*dev2(...)))` term (icoFoam doesn't compute it).
+    div(phi,U): "Gauss linear"
+  laplacian_schemes:
+    # V61-097: orthogonal — gmsh-meshed cube is mostly orthogonal.
+    # Distinct from V61-107.5 STL path which uses `corrected` for
+    # tetrahedral non-orthogonal STL meshes.
+    default: "Gauss linear orthogonal"
+  interpolation_schemes:
+    default: "linear"
+  sn_grad_schemes:
+    # Same orthogonality argument — orthogonal LDC cube mesh.
+    default: "orthogonal"
+
+fv_solution:
+  # V61-097 LDC fvSolution has 3 solver entries (p, pFinal, U) — no
+  # UFinal because icoFoam's PISO loop reuses the U solver settings
+  # for the final corrector. Same name_pad pattern as V61-107.5
+  # pimpleFoam: 1-char names use 2-space pad ("p  {", "U  {");
+  # 6-char names use 1-space pad ("pFinal {").
+  solvers:
+    p: "solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05;"
+    pFinal:
+      body: "$p; relTol 0;"
+      name_pad: 1
+    U: "solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0;"
+  # PISO block (transient PISO) — distinct from PIMPLE (pimpleFoam)
+  # and SIMPLE (simpleFoam). icoFoam's PISO is a fixed 2-corrector
+  # loop with no outer correctors.
+  control_block_name: PISO
+  control_block_fields:
+    nCorrectors: 2
+    nNonOrthogonalCorrectors: 2
+    pRefCell: 0
+    pRefValue: 0
+  # No relaxationFactors (PISO transient doesn't need them).
+  # No residualControl (icoFoam runs to endTime, not to residual
+  # threshold like simpleFoam SIMPLE).

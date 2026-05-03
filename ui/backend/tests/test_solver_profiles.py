@@ -678,6 +678,139 @@ def test_schema_default_dataclass_values_render_as_integers():
     assert "writeInterval 50.0;" not in rendered
 
 
+# ===========================================================================
+# DEC-V61-112 Phase 3 · icoFoam LDC profile golden snapshots.
+# ===========================================================================
+
+# Golden V61-097 inline LDC icoFoam bytes captured 2026-05-03 from
+# ``bc_setup.py:452-503`` BEFORE the wrapper-equivalent rewire (the
+# inline `w("system/controlDict", ...)` / fvSchemes / fvSolution
+# calls). icoFoam has no caller-supplied end_time/delta_t — the
+# inline used hardcoded literals (endTime 2, deltaT 0.005,
+# writeInterval 0.5). The profile's YAML defaults (end_time_default,
+# delta_t_default, write_interval) supply these.
+
+V61_097_GOLDEN_ICOFOAM_CONTROL_DICT = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object controlDict; }\n'
+    "application icoFoam;\n"
+    "startFrom startTime;\n"
+    "startTime 0;\n"
+    "stopAt endTime;\n"
+    "endTime 2;\n"
+    "deltaT 0.005;\n"
+    "writeControl runTime;\n"
+    "writeInterval 0.5;\n"
+    "purgeWrite 0;\n"
+    "writeFormat ascii;\n"
+    "writePrecision 6;\n"
+    "writeCompression off;\n"
+    "timeFormat general;\n"
+    "timePrecision 6;\n"
+    "runTimeModifiable true;\n"
+)
+
+V61_097_GOLDEN_ICOFOAM_FV_SCHEMES = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSchemes; }\n'
+    "ddtSchemes  { default Euler; }\n"
+    "gradSchemes { default Gauss linear; }\n"
+    "divSchemes  { default none; div(phi,U) Gauss linear; }\n"
+    "laplacianSchemes { default Gauss linear orthogonal; }\n"
+    "interpolationSchemes { default linear; }\n"
+    "snGradSchemes { default orthogonal; }\n"
+)
+
+V61_097_GOLDEN_ICOFOAM_FV_SOLUTION = (
+    'FoamFile { version 2.0; format ascii; class dictionary; '
+    'location "system"; object fvSolution; }\n'
+    "solvers\n"
+    "{\n"
+    "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; }\n"
+    "    pFinal { $p; relTol 0; }\n"
+    "    U  { solver smoothSolver; smoother symGaussSeidel; "
+    "tolerance 1e-05; relTol 0; }\n"
+    "}\n"
+    "PISO\n"
+    "{\n"
+    "    nCorrectors 2;\n"
+    "    nNonOrthogonalCorrectors 2;\n"
+    "    pRefCell 0;\n"
+    "    pRefValue 0;\n"
+    "}\n"
+)
+
+
+def test_list_profile_names_includes_icofoam():
+    assert "icoFoam" in list_profile_names()
+
+
+def test_load_profile_icofoam_returns_solver_profile():
+    profile = load_profile("icoFoam")
+    assert isinstance(profile, SolverProfile)
+    assert profile.name == "icoFoam"
+    assert profile.family == "transient"
+
+
+def test_icofoam_profile_control_dict_byte_identical_to_v61_097_golden():
+    """V61-112 Phase 3 acceptance gate: icoFoam profile renders bytes
+    byte-identical to V61-097 inline output. No caller-supplied
+    end_time/delta_t — relies on YAML defaults."""
+    profile = load_profile("icoFoam")
+    rendered = profile.render_control_dict()
+    assert rendered == V61_097_GOLDEN_ICOFOAM_CONTROL_DICT, (
+        f"icoFoam controlDict drift from V61-097 golden:\n"
+        f"=== profile ({len(rendered)} bytes) ===\n{rendered!r}\n"
+        f"=== golden ({len(V61_097_GOLDEN_ICOFOAM_CONTROL_DICT)} bytes) ===\n"
+        f"{V61_097_GOLDEN_ICOFOAM_CONTROL_DICT!r}"
+    )
+
+
+def test_icofoam_profile_fv_schemes_byte_identical_to_v61_097_golden():
+    profile = load_profile("icoFoam")
+    rendered = profile.render_fv_schemes()
+    assert rendered == V61_097_GOLDEN_ICOFOAM_FV_SCHEMES
+
+
+def test_icofoam_profile_fv_solution_byte_identical_to_v61_097_golden():
+    """V61-112 Phase 3: icoFoam fvSolution renders byte-identical to
+    V61-097 inline including the PISO control_block_name (new value
+    alongside SIMPLE/PIMPLE) and the 3-solver shape (no UFinal)."""
+    profile = load_profile("icoFoam")
+    rendered = profile.render_fv_solution()
+    assert rendered == V61_097_GOLDEN_ICOFOAM_FV_SOLUTION
+
+
+def test_icofoam_profile_omits_adjust_time_step_and_max_co():
+    """V61-097 LDC icoFoam controlDict does NOT have adjustTimeStep
+    or maxCo lines (icoFoam in OpenFOAM-10 ignores them). Phase 3
+    profile sets adjust_time_step / max_co to null → omitted from
+    rendered output."""
+    profile = load_profile("icoFoam")
+    rendered = profile.render_control_dict()
+    assert "adjustTimeStep" not in rendered
+    assert "maxCo" not in rendered
+    assert "maxDeltaT" not in rendered
+
+
+def test_icofoam_profile_solvers_no_ufinal_present():
+    """V61-097 LDC fvSolution has p, pFinal, U — but NO UFinal
+    (icoFoam PISO reuses U solver settings for final corrector).
+    Distinct from V61-107.5 pimpleFoam which has all 4 solvers."""
+    profile = load_profile("icoFoam")
+    solvers = profile.fv_solution.solvers
+    assert set(solvers.keys()) == {"p", "pFinal", "U"}
+    assert "UFinal" not in solvers
+
+
+def test_icofoam_profile_control_block_name_is_piso():
+    """V61-097: icoFoam uses PISO control block (transient PISO
+    solver). Distinct from PIMPLE (pimpleFoam) and SIMPLE
+    (simpleFoam)."""
+    profile = load_profile("icoFoam")
+    assert profile.fv_solution.control_block_name == "PISO"
+
+
 def test_pimplefoam_byte_identity_with_default_caller_signature_floats():
     """V61-112 Phase 2 R1 P2 regression-pin: setup_bc_from_stl_patches
     passes float-typed end_time/delta_t to _build_pimplefoam_control_dict.
