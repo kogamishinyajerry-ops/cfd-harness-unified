@@ -164,17 +164,74 @@ def _build_fv_schemes(raw: dict[str, Any]) -> FvSchemesBlock:
 
 def _build_fv_solution(raw: dict[str, Any]) -> FvSolutionBlock:
     _require_keys(raw, {"control_block_name", "control_block_fields"}, "fv_solution")
+
+    # solvers: required to be a mapping of {field_name: solver_body_str}.
+    raw_solvers = raw.get("solvers", {})
+    if not isinstance(raw_solvers, dict):
+        raise TypeError(
+            f"fv_solution.solvers must be a mapping; got {type(raw_solvers).__name__}"
+        )
+    solvers: dict[str, str] = {}
+    for sk, sv in raw_solvers.items():
+        if not isinstance(sv, (str, int, float)):
+            raise TypeError(
+                f"fv_solution.solvers[{sk!r}] must be a scalar (str/int/float); "
+                f"got {type(sv).__name__}"
+            )
+        solvers[str(sk)] = str(sv)
+
+    # control_block_fields: required to be a mapping. Nested values may
+    # be scalars (rendered as `key value;`) OR a dict (rendered as a
+    # nested OpenFOAM sub-dict, e.g. `residualControl { p 1e-3; }`).
+    # Codex V61-112 R1 P2-3: validate the shape eagerly so a malformed
+    # YAML edit fails ProfileSchemaError at load time, not OpenFOAM
+    # runtime.
+    raw_fields = raw["control_block_fields"]
+    if not isinstance(raw_fields, dict):
+        raise TypeError(
+            f"fv_solution.control_block_fields must be a mapping; "
+            f"got {type(raw_fields).__name__}"
+        )
+    for fk, fv in raw_fields.items():
+        if isinstance(fv, dict):
+            # Nested sub-dict (e.g. residualControl). Each leaf must be
+            # a scalar — list/None/nested-dict-of-dict are rejected.
+            for nk, nv in fv.items():
+                if not isinstance(nv, (str, int, float)) or isinstance(nv, bool):
+                    raise TypeError(
+                        f"fv_solution.control_block_fields[{fk!r}][{nk!r}] "
+                        f"must be a non-bool scalar (str/int/float); "
+                        f"got {type(nv).__name__}"
+                    )
+        elif not isinstance(fv, (str, int, float, bool)):
+            raise TypeError(
+                f"fv_solution.control_block_fields[{fk!r}] must be a scalar "
+                f"(str/int/float/bool) or nested mapping; got {type(fv).__name__}"
+            )
+
     kwargs: dict[str, Any] = {
-        "solvers": {str(k): str(v) for k, v in raw.get("solvers", {}).items()},
-        "control_block_name": raw["control_block_name"],
-        "control_block_fields": raw["control_block_fields"],
+        "solvers": solvers,
+        "control_block_name": str(raw["control_block_name"]),
+        "control_block_fields": raw_fields,
     }
     if "relaxation_factors_fields" in raw:
+        rff = raw["relaxation_factors_fields"]
+        if not isinstance(rff, dict):
+            raise TypeError(
+                f"fv_solution.relaxation_factors_fields must be a mapping; "
+                f"got {type(rff).__name__}"
+            )
         kwargs["relaxation_factors_fields"] = {
-            str(k): float(v) for k, v in raw["relaxation_factors_fields"].items()
+            str(k): float(v) for k, v in rff.items()
         }
     if "relaxation_factors_equations" in raw:
+        rfe = raw["relaxation_factors_equations"]
+        if not isinstance(rfe, dict):
+            raise TypeError(
+                f"fv_solution.relaxation_factors_equations must be a mapping; "
+                f"got {type(rfe).__name__}"
+            )
         kwargs["relaxation_factors_equations"] = {
-            str(k): float(v) for k, v in raw["relaxation_factors_equations"].items()
+            str(k): float(v) for k, v in rfe.items()
         }
     return FvSolutionBlock(**kwargs)
