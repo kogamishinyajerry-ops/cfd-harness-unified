@@ -87,12 +87,18 @@ jobs:
           # the V61-112 Phase 4 R3 P2 STL-path StlPatchBCError
           # translation regression. DEC-V61-114 closure: same
           # preemptive sibling-gap fix.
+          # ui/backend/tests/test_case_completeness.py covers the
+          # DEC-V61-116 governance-aware completeness analyzer + route
+          # (case_completeness service). 18 tests across 6 layers
+          # (whitelist · imported manifest · Re-turbulence rule ·
+          # tri-state precondition · manifest-equivalent · HTTP route).
           python -m pytest tests/ \
             ui/backend/tests/test_report_bundle.py \
             ui/backend/tests/test_solver_profiles.py \
             ui/backend/tests/test_setup_bc_envelope_route.py \
             ui/backend/tests/test_bc_setup_user_override.py \
-            ui/backend/tests/test_bc_setup_from_stl_patches.py -q
+            ui/backend/tests/test_bc_setup_from_stl_patches.py \
+            ui/backend/tests/test_case_completeness.py -q
 
       # ADR-002 §5 W4 dogfood window 2026-04-25 → 2026-05-09:
       # Re-run pytest with the runtime guard installed in WARN mode so any
@@ -115,7 +121,8 @@ jobs:
             ui/backend/tests/test_solver_profiles.py \
             ui/backend/tests/test_setup_bc_envelope_route.py \
             ui/backend/tests/test_bc_setup_user_override.py \
-            ui/backend/tests/test_bc_setup_from_stl_patches.py -q --no-header -p no:cacheprovider \
+            ui/backend/tests/test_bc_setup_from_stl_patches.py \
+            ui/backend/tests/test_case_completeness.py -q --no-header -p no:cacheprovider \
             -o "log_cli=true" -o "log_cli_level=WARNING" \
             2>&1 | tee reports/plane_guard/ci_warn_pytest.log
           python scripts/plane_guard_rollback_eval.py \

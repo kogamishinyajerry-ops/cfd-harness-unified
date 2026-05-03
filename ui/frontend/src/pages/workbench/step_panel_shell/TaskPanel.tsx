@@ -1,8 +1,14 @@
 // Right rail · per-step task panel. Renders the active step's body +
 // the shared StepNavigation row.
+//
+// DEC-V61-116: a CompletenessCard pins to the top of the scrollable
+// Body, surfacing "距离入库标准还差 N 项" + status pill + missing
+// fields list. Independent of the active step — drives the engineer's
+// archive-readiness awareness on every step.
 
 import type { ComponentType } from "react";
 
+import { CompletenessCard } from "./CompletenessCard";
 import { StepNavigation } from "./StepNavigation";
 import type {
   StepDef,
@@ -41,6 +47,7 @@ export function TaskPanel({
         </h2>
       </header>
       <div className="flex-1 overflow-y-auto">
+        {caseId && <CompletenessCard caseId={caseId} />}
         <Body
           caseId={caseId}
           onStepComplete={onStepComplete}

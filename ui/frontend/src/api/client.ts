@@ -19,6 +19,7 @@ import type {
 } from "@/types/decisions";
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { BatchMatrix } from "@/types/batch_matrix";
+import type { CaseCompletenessReport } from "@/types/case_completeness";
 import type { ExportManifest } from "@/types/exports";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
@@ -162,6 +163,13 @@ export const api = {
   getPreflight: (caseId: string) =>
     request<PreflightSummary>(
       `/api/cases/${encodeURIComponent(caseId)}/preflight`,
+    ),
+
+  // DEC-V61-116 — governance-aware completeness diff for the
+  // right-rail "距离入库标准还差 N 项" card.
+  getCaseCompleteness: (caseId: string) =>
+    request<CaseCompletenessReport>(
+      `/api/cases/${encodeURIComponent(caseId)}/completeness`,
     ),
 
   // Stage 5 — GoldOps batch matrix
