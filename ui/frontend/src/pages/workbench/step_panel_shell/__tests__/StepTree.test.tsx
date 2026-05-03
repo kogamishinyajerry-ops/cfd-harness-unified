@@ -270,11 +270,10 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
     expect(onStepClick).not.toHaveBeenCalled();
   });
 
-  // Codex R1+R2+R3 design: chevron is a pure ARIA disclosure toggle.
-  // Active-step navigation does NOT auto-expand the new step (auto-expand
-  // only happens once on first mount); user has full control thereafter.
-  // Manual expansions persist across navigation in both directions.
-  it("does not auto-expand the new active step on navigation", () => {
+  // Codex R1 + R4: route-driven step changes update disclosure state.
+  // The new active step auto-expands and the previous one auto-collapses
+  // unless the user explicitly toggled either (manuallyTouched protection).
+  it("auto-expands the new active step and auto-collapses the previous one on navigation", () => {
     const { rerender } = render(
       <StepTree
         steps={HIER_STEPS}
@@ -283,9 +282,8 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    // Step 2 is auto-expanded on first mount.
     expect(screen.getByTestId("step-tree-subnodes-2")).toBeInTheDocument();
-    // Navigate 2 → 3. Step 3 should NOT auto-expand; user controls.
+    // Navigate 2 → 3.
     rerender(
       <StepTree
         steps={HIER_STEPS}
@@ -294,8 +292,23 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    // Step 2's previous expansion persists (pure user-controlled).
-    expect(screen.getByTestId("step-tree-subnodes-2")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
+    // Navigate 3 → 4 — same pattern, no accumulation (R1 P2).
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={4}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("step-tree-subnodes-3"),
     ).not.toBeInTheDocument();
@@ -311,12 +324,11 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    // User manually expands Step 5 while on Step 1 (Step 1 has no
-    // sub-nodes so initial auto-expand seeds nothing).
+    // User manually expands Step 5 while on Step 1.
     await user.click(screen.getByTestId("step-tree-chevron-5"));
     expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
-    // Active step flips to 3 → Step 5 stays expanded; Step 3 stays
-    // collapsed (no auto-expand on transition).
+    // Active step flips to 3 → Step 3 auto-expands AND Step 5 stays expanded
+    // (user touched it, so it's exempt from auto-collapse).
     rerender(
       <StepTree
         steps={HIER_STEPS}
@@ -325,7 +337,46 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
     expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
+  });
+
+  // Codex R2 (acknowledged tradeoff): user who explicitly collapsed an
+  // active step doesn't have it spring back open on subsequent navigation.
+  it("respects user collapse of active step across navigation", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    // User collapses active step 3.
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
+    // Navigate 3 → 4 → 3. Step 3 stays collapsed (manuallyTouched
+    // protects it from re-auto-expand).
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={4}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
     expect(
       screen.queryByTestId("step-tree-subnodes-3"),
     ).not.toBeInTheDocument();

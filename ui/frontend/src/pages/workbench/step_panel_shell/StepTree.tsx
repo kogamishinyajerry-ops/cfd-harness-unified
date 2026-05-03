@@ -14,7 +14,7 @@
 // data-step-status attribute on parent rows is unchanged. Existing
 // StepTree.test.tsx 6-test contract stays green without modification.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { StepDef, StepId, StepStatus } from "./types";
 
@@ -65,33 +65,63 @@ export function StepTree({
   onStepClick,
   disabled = false,
 }: StepTreeProps) {
-  // Local expansion state. The active step is auto-expanded ONCE on
-  // first mount (so the engineer immediately sees what's inside the
-  // step they landed on); thereafter the user has full control via
-  // the chevron disclosure toggles.
+  // Expansion model after Codex R1+R2+R3+R4:
   //
-  // Design history (Codex R1 P2 / R2 P2 / R3 P2): earlier iterations
-  // tracked an "auto" vs "manual" origin and either (a) accumulated
-  // stale auto-expansions across navigation (R1) or (b) overloaded
-  // chevron clicks to pin auto-expanded rows, breaking the ARIA
-  // disclosure contract (R3 — `aria-expanded=true` controls must
-  // collapse on activation). Dropping the per-transition auto-expand
-  // and keeping chevrons as pure disclosure toggles satisfies all
-  // three concerns: no stale state, no ARIA violation, and aligns
-  // with how real Fluent / Star-CCM+ trees behave (each node is
-  // independently expanded by the user, not auto-driven by which
-  // node is "active").
+  // - `expanded` is the visible disclosure state (drives `aria-expanded`).
+  // - The chevron is a pure disclosure toggle (R3): click an expanded
+  //   row → collapse; click a collapsed row → expand.
+  // - Active-step transitions auto-expand the new step and auto-collapse
+  //   the previous one (R1 + R4) — so route-driven step changes update
+  //   the disclosure state and stale rows don't accumulate.
+  // - `manuallyTouchedRef` (ref, not state — no re-render needed)
+  //   records which steps the user has explicitly toggled. Manually-
+  //   touched steps are exempt from the auto-collapse / auto-expand
+  //   logic, so a user who clicks chevron N to expand an inactive row
+  //   will keep that row visible across subsequent navigation (R2),
+  //   and a user who clicks chevron N to collapse an active row won't
+  //   have it spring back open when they navigate to it again.
+  //
+  // Trade-off: pinning an already-auto-expanded active row before
+  // navigating away requires the click-twice path (collapse → reopen),
+  // which marks it manually-touched. Codex R2 P2 flagged this as
+  // unergonomic; we accept that tradeoff because R3 P2 (ARIA disclosure
+  // semantics) is non-negotiable for assistive tech. A separate pin
+  // affordance is a follow-up if engineer dogfood demands it.
   const [expanded, setExpanded] = useState<ReadonlySet<StepId>>(() => {
     const initial = steps.find((s) => s.id === currentStepId);
     return initial?.subNodes && initial.subNodes.length > 0
       ? new Set<StepId>([currentStepId])
       : new Set<StepId>();
   });
+  const manuallyTouchedRef = useRef<Set<StepId>>(new Set());
+  const prevStepIdRef = useRef<StepId>(currentStepId);
 
-  // Chevron click is a pure disclosure toggle (matches `aria-expanded`
-  // semantics): if the row is currently expanded → collapse; else
-  // expand. No hidden state, no second-click required.
+  useEffect(() => {
+    const prevId = prevStepIdRef.current;
+    if (prevId === currentStepId) return;
+    prevStepIdRef.current = currentStepId;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      // Auto-collapse the previously active step unless the user
+      // explicitly toggled it (manual decisions outlive navigation).
+      if (!manuallyTouchedRef.current.has(prevId)) next.delete(prevId);
+      // Auto-expand the newly active step (when it has sub-nodes)
+      // unless the user explicitly toggled it earlier — respect a
+      // prior collapse-by-user.
+      const target = steps.find((s) => s.id === currentStepId);
+      if (
+        target?.subNodes &&
+        target.subNodes.length > 0 &&
+        !manuallyTouchedRef.current.has(currentStepId)
+      ) {
+        next.add(currentStepId);
+      }
+      return next;
+    });
+  }, [currentStepId, steps]);
+
   const toggleExpanded = (stepId: StepId) => {
+    manuallyTouchedRef.current.add(stepId);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(stepId)) next.delete(stepId);
