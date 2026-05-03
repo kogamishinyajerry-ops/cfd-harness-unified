@@ -1,7 +1,8 @@
 ---
 decision_id: DEC-V61-112-Phase2
 title: Solver-profile YAML migration · Phase 2 — pimpleFoam profile (V61-107.5 transient template extraction)
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发"; user explicit follow-up "start V61-112 Phase 2 (pimpleFoam profile extraction) now")
+status: Accepted (2026-05-03 · Codex pre-merge 3-round chain APPROVE on commit fdf7215; chain report at reports/codex_tool_reports/v61_112_phase2_r1_r2_r3_chain.md; user 2026-05-03 autonomous-mode mandate + explicit "start V61-112 Phase 2 (pimpleFoam profile extraction) now" follow-up covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_112_phase2_r1_r2_r3_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-112 Phase 1 acceptance closure (commit d0402e8) explicitly identifies Phase 2 (pimpleFoam profile) as the immediate follow-up; user direct authorization to proceed
@@ -83,3 +84,52 @@ V61-112 Phase 2 explicitly applies the V61-088 pre-implementation surface scan r
 `Surface-scan-found: ui/backend/services/case_solve/bc_setup_from_stl_patches.py:755-845 (V61-107.5 inline pimpleFoam template helpers) + ui/backend/services/case_solve/bc_setup.py:822-906 (channel pimpleFoam — Phase 4 follow-up) + ui/backend/services/case_solve/solver_profiles/schema.py:184-185 (Phase 1 solvers field hardcoded 2-space pad — extending) · disposition: refactor existing (Phase 2 extracts STL-path pimpleFoam only; channel deferred to Phase 4; schema extended backward-compat)`
 
 V61-112 Phase 2 applies Phase 1 R1 P2-2 methodology lesson directly: golden snapshots are captured BEFORE the wrapper rewire and embedded as literal constants in test_solver_profiles.py, ensuring the byte-identity gate detects future drift.
+
+## Acceptance closure (2026-05-03 · Codex pre-merge 3-round APPROVE)
+
+Phase 2 implementation landed across commits `fb3170a` (initial) →
+`88a3692` (R1 fix · 1 P2 closed) → `fdf7215` (R2 fix · 1 P3 closed).
+Codex pre-merge chain on 86gs `gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings | Closure approach |
+|-------|--------|---------|----------|------------------|
+| R1 | fb3170a | CHANGES_REQUIRED | 0 P1 + 1 P2 | `_format_number` rewrite (preserve `.0` for integer-valued floats) + `write_interval_decimal` flag removal as redundant + 4 caller-float regression tests |
+| R2 | 88a3692 | CHANGES_REQUIRED | 0 P1 + 0 P2 + 1 P3 | ControlDictBlock dataclass defaults tightened to int values (start_time/end_time_default/delta_t_default/write_interval) + 1 synthesized-profile regression test |
+| R3 | fdf7215 | APPROVE clean | — | "I did not find a concrete breakage introduced by this commit in the current codebase" |
+
+**Substantive convergence**: monotone severity decrease (P2 → P3 → 0).
+
+**Tests**: 50/50 V61-112 + 1131/1134 CI-equivalent regression-clean.
+
+**Self-pass-rate calibration**: predicted 50% / actual 3 rounds (1
+P2 substantive + 1 P3 edge case). Calibration honest; baseline holds.
+
+**New methodology lessons captured in chain report** (full text in
+report § Methodology lessons captured for next RETRO):
+
+1. **Golden snapshots must exercise real caller input types** — Phase
+   2 R1 P2 surfaced that golden bytes captured for `end_time=5` (int)
+   missed the float-typed-integer path. When caller signatures declare
+   `float`, snapshot tests must pass values that exercise the type
+   explicitly (`5.0` not `5`). RETRO-V61-001 candidate intake.
+2. **Dataclass defaults are part of the contract** — Phase 2 R2 P3
+   surfaced that `field: float = X.0` defaults render with spurious
+   `.0` under the new format semantics. Choose dataclass default
+   LITERAL TYPE (int vs float) based on rendered output convention,
+   not Python's natural float-default style.
+
+**Phase 2 acceptance criteria status**:
+- §1 Schema extension supports per-solver `name_pad` via str|dict
+  value type, default 2, backward-compat for Phase 1 simpleFoam.yaml
+  string-only values + malformed dict shape rejection: PASS
+- §2 Phase 2 pimpleFoam.yaml byte-identical to V61-107.5 inline
+  output for canonical case parameters (end_time=5/5.0, delta_t=
+  0.001/1.0): PASS (golden-snapshot + caller-float regression tests)
+- §3 Phase 1 simpleFoam.yaml + golden tests UNCHANGED: PASS
+  (21/21 Phase 1 tests continue to pass; backward-compat preserved)
+- §4 `_build_pimplefoam_*` wrappers rewired to delegate: PASS
+- §5 Codex pre-merge APPROVE: PASS (R3 APPROVE clean)
+- §6 Surface scan applied per V61-088: PASS
+
+**Phases 3-4 (deferred)**: icoFoam LDC migration · channel pimpleFoam
+migration. Each ships as separate DEC.
