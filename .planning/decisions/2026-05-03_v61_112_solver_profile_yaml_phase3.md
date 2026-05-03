@@ -1,7 +1,8 @@
 ---
 decision_id: DEC-V61-112-Phase3
 title: Solver-profile YAML migration · Phase 3 — icoFoam LDC profile (V61-097 setup_ldc_bc inline template extraction)
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发"; user explicit follow-up "start V61-112 Phase 3 (LDC icoFoam migration)")
+status: Accepted (2026-05-03 · Codex pre-merge 2-round chain APPROVE on commit fce714d; chain report at reports/codex_tool_reports/v61_112_phase3_r1_r2_chain.md; user 2026-05-03 autonomous-mode mandate + explicit "start V61-112 Phase 3 (LDC icoFoam migration)" follow-up covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_112_phase3_r1_r2_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-112 Phase 2 acceptance closure (commit 528bc6b · counter 68→69) explicitly identifies Phase 3 (LDC icoFoam migration) as the immediate follow-up
@@ -73,3 +74,60 @@ V61-112 Phase 3 explicitly applies the V61-088 pre-implementation surface scan r
 V61-112 Phase 3 applies the 2 Phase 2 methodology lessons (chain report § Methodology lessons captured for next RETRO):
 - Lesson 1: golden snapshots exercise real input scenarios — `_author_dicts` no-args render path
 - Lesson 2: dataclass defaults tightened to int by Phase 2 R2 P3 closure — Phase 3 inherits the contract
+
+## Acceptance closure (2026-05-03 · Codex pre-merge 2-round APPROVE)
+
+Phase 3 implementation landed across commits `f09992a` (initial) →
+`fce714d` (R1 fix · 1 P2 closed). Codex pre-merge chain on 86gs
+`gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings | Closure approach |
+|-------|--------|---------|----------|------------------|
+| R1 | f09992a | CHANGES_REQUIRED | 0 P1 + 1 P2 | Wrap load_profile() failures (ProfileNotFoundError + ProfileSchemaError) in BCSetupError at the _author_dicts service-module boundary; module-level import + 2 regression tests |
+| R2 | fce714d | APPROVE clean | — | "I did not find a concrete correctness regression introduced by this commit" |
+
+**Substantive convergence**: monotone (1 P2 → 0). Best convergence
+in V61-112 series (Phase 1: 3 rounds · Phase 2: 3 rounds · Phase 3: 2
+rounds), reflecting the "schema reused, no extensions" scope
+discipline that bounded the migration risk surface.
+
+**Tests**: 67/67 V61-112 + setup_bc_user_override (8 prior + 2 new
+BCSetupError-translation regression tests) + 1172/1175
+CI-equivalent regression-clean.
+
+**Self-pass-rate calibration**: predicted 60% / actual 2 rounds (1
+P2 + APPROVE). Calibration honest underestimate by ~10pp; "no schema
+extensions" scope discipline paid off as predicted. For RETRO-V61-001
+trend across V61-112 series: differentiate "schema-extension
+migration" (~50% baseline · Phases 1+2) from "schema-reuse migration"
+(~60-70% · Phase 3).
+
+**New methodology lesson captured in chain report** (full text in
+report § Methodology lesson · Cross-module error contracts when
+introducing new dependencies):
+
+When a refactor introduces a NEW MODULE-LEVEL dependency (not just
+a new helper from the same module), audit the service module's
+error envelope and translate any new exception types at the entry
+point with `raise <ServiceError>(...) from exc` to preserve
+diagnostics. Pattern applicable to: future solver-profile call sites
+(Phase 4 channel pimpleFoam), any future cross-module dependency
+introductions (e.g., when cloud meshing service is integrated; when
+external solver process management is wrapped).
+
+**Phase 3 acceptance criteria status**:
+- §1 Phase 3 icoFoam.yaml byte-identical to V61-097 inline output
+  for LDC default case parameters: PASS (3 byte-identity golden
+  snapshots — controlDict, fvSchemes, fvSolution)
+- §2 Phase 1+2 profiles + golden tests UNCHANGED: PASS (50/50
+  Phase 1+2 tests continue to pass; backward-compat preserved)
+- §3 `_author_dicts` rewire delegates to load_profile: PASS (3
+  inline `w(...)` calls replaced; no `_build_icofoam_*` helpers
+  introduced)
+- §4 Codex pre-merge APPROVE: PASS (R2 APPROVE clean)
+- §5 Surface scan applied per V61-088: PASS
+- §6 Phase 2 methodology lessons applied: PASS
+
+**Phase 4 (deferred)**: channel pimpleFoam migration
+(`bc_setup.py:822-906` `setup_channel_bc`) — final phase in the
+V61-112 series.
