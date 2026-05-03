@@ -1,7 +1,8 @@
 ---
 decision_id: DEC-V61-113
 title: Solver-profile loader · post-V61-112 lazy-validation audit sweep
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发"; user explicit "按你的建议继续，执行开发" follow-up after V61-112 series closure)
+status: Accepted (2026-05-03 · Codex pre-merge 1-round APPROVE on commit 0abf18f; chain report at reports/codex_tool_reports/v61_113_r1_chain.md; user 2026-05-03 autonomous-mode mandate + explicit "按你的建议继续，执行开发" follow-up covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_113_r1_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-112 series closure (commit 8601183 · counter 70→71) closed 4 inline-template extraction phases. The series surfaced 2 separate instances of the same lazy-validation pattern (Phase 1 R1 P2-3 fv_solution + Phase 4 R1+R2 controlDict). DEC-V61-113 audits the remaining solver-profile loader surface for sibling gaps before they're caught in production or by future Codex rounds on unrelated PRs.
@@ -89,3 +90,42 @@ V61-112 series methodology lessons applied directly:
 - Lesson "byte-identity gates need golden constants" (Phase 1): no impact — this DEC doesn't change render paths, only load-time validation. Existing 87+ V61-112 tests verify no render drift.
 
 `Surface-scan-found: ui/backend/services/case_solve/solver_profiles/registry.py:93-120 (top-level builder, missing control_dict/fv_schemes/fv_solution dict-shape validation) + ui/backend/services/case_solve/solver_profiles/registry.py:210-224 (fv_schemes builder, value-type str-coercion bypasses bool/list/dict/None rejection) · disposition: extend existing (preemptive sibling-gap closure; no schema/render contract changes)`
+
+## Acceptance closure (2026-05-03 · Codex pre-merge 1-round APPROVE)
+
+V61-113 implementation landed in commit `0abf18f`. Codex pre-merge
+chain on 86gs `gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings |
+|-------|--------|---------|----------|
+| R1 | 0abf18f | APPROVE clean | "Static review of the loader hardening and accompanying tests did not reveal a concrete correctness regression in the modified paths. The new validations and error wrapping appear internally consistent with the existing call sites that translate ProfileSchemaError into service-layer failures." |
+
+**Single-round outcome — first in this session's V61-111 → V61-113
+arc**. Direct application of V61-112 methodology lessons (recorded
+in Phase 1 + Phase 4 chain reports) translated to first-pass success.
+
+**Tests**: 18 new V61-113 parametrized tests + 110 V61-112+V61-113
+total + 1215/1218 CI-equivalent regression-clean.
+
+**Self-pass-rate calibration**: predicted 70% / actual 1 round
+APPROVE. Calibration honest slight underestimate.
+
+**NEW calibration baseline** captured in chain report § Self-pass-
+rate calibration: "preemptive-audit migration (driven by prior
+chain reports): ~80-90%". Becomes the 4th calibration anchor
+alongside schema-extension (~50%), schema-reuse (~60-70%),
+cross-cutting cascade (~30-40%).
+
+**NEW methodology lesson** captured in chain report § Methodology
+validation: "preemptive audit driven by prior chain reports works".
+The chain-report-as-knowledge-transfer pattern justifies the writing
+cost of detailed methodology-lesson sections — V61-112's chain
+reports directly produced V61-113's first-pass success. RETRO-V61-001
+candidate intake: track "lessons-applied count" per retro as the
+leading indicator that chain-report methodology is paying off.
+
+**V61-113 acceptance criteria status**: all 7 criteria PASS
+(§1 fv_schemes value-type validation · §2 top-level dict-shape
+validation · §3 AttributeError handler widening · §4 4 V61-112
+profiles continue to load+render byte-identical · §5 parametrized
+regression tests · §6 Codex APPROVE · §7 Surface scan applied).
