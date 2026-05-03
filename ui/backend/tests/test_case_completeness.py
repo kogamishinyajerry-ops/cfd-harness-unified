@@ -409,62 +409,13 @@ def test_imported_flat_boundary_conditions_does_not_satisfy_bc_patches(
     assert r.ready_for_archive is False
 
 
-def test_imported_bc_setup_history_entry_satisfies_bc(isolated_drafts):
-    """Codex R6 P1 regression — DEC-V61-116.
-
-    Real BC-setup flows (setup_ldc_bc, setup_channel_bc,
-    setup_bc_from_stl_patches) call mark_ai_authored() which writes to
-    overrides.raw_dict_files + history, NOT to manifest.bc.patches.
-    The analyzer must accept a history entry as proof of BC setup,
-    otherwise imported cases are permanently blocked even after
-    Step 3 succeeds.
+def _seed_minimal_imported_for_bc_check(
+    imported_dir: Path, case_id: str
+) -> Path:
+    """Helper: write a minimal valid manifest with solver+turbulence set.
+    Returns case_dir. Used by BC-mtime tests below.
     """
-    drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_bc_via_history"
-    case_dir = imported / case_id
-    case_dir.mkdir(parents=True, exist_ok=True)
-    (case_dir / "case_manifest.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 2,
-                "case_id": case_id,
-                "physics": {
-                    "solver": "simpleFoam",
-                    "turbulence_model": "kOmegaSST",
-                },
-                "bc": {"patches": {}},  # ← still empty per current flows
-                "numerics": {},
-                "overrides": {"raw_dict_files": {}},
-                "history": [
-                    {
-                        "timestamp": "2026-05-04T00:00:00+00:00",
-                        "action": "setup_bc_from_stl_patches",
-                        "source": "ai",
-                        "detail": {},
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    r = analyze_case_completeness(case_id)
-    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
-    assert bc_missing == [], (
-        f"history-tracked BC setup must satisfy contract; got {bc_missing}"
-    )
-    assert r.ready_for_archive is True
-
-
-def test_imported_bc_setup_zero_dir_override_satisfies_bc(isolated_drafts):
-    """Codex R6 P1 regression — DEC-V61-116.
-
-    A `0/U` entry in overrides.raw_dict_files (independent corroboration
-    that BC dicts have been authored) must also satisfy the bc.patches
-    requirement.
-    """
-    drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_bc_via_overrides"
-    case_dir = imported / case_id
+    case_dir = imported_dir / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "case_manifest.yaml").write_text(
         yaml.safe_dump(
@@ -477,67 +428,116 @@ def test_imported_bc_setup_zero_dir_override_satisfies_bc(isolated_drafts):
                 },
                 "bc": {"patches": {}},
                 "numerics": {},
-                "overrides": {
-                    "raw_dict_files": {
-                        "0/U": {"source": "ai"},
-                        "0/p": {"source": "ai"},
-                    }
-                },
+                "overrides": {"raw_dict_files": {}},
                 "history": [],
             }
         ),
         encoding="utf-8",
     )
+    return case_dir
+
+
+def _write_polymesh_boundary(case_dir: Path, mtime: float) -> Path:
+    """Helper: create constant/polyMesh/boundary at given mtime."""
+    import os
+
+    poly_dir = case_dir / "constant" / "polyMesh"
+    poly_dir.mkdir(parents=True, exist_ok=True)
+    boundary = poly_dir / "boundary"
+    boundary.write_text("// gmshToFoam-generated boundary\n", encoding="utf-8")
+    os.utime(boundary, (mtime, mtime))
+    return boundary
+
+
+def _write_bc_dict(case_dir: Path, name: str, mtime: float) -> Path:
+    """Helper: create 0/{name} at given mtime."""
+    import os
+
+    zero_dir = case_dir / "0"
+    zero_dir.mkdir(parents=True, exist_ok=True)
+    f = zero_dir / name
+    f.write_text(f"// dummy {name}\n", encoding="utf-8")
+    os.utime(f, (mtime, mtime))
+    return f
+
+
+def test_imported_bc_currentdict_satisfies_when_newer_than_polymesh(
+    isolated_drafts,
+):
+    """Codex R7 P1 regression — DEC-V61-116.
+
+    setup_*_bc authored 0/U at T=200, polyMesh boundary at T=100.
+    BC dict mtime ≥ polyMesh mtime → BC current → not flagged missing.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_current"
+    case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
+    _write_polymesh_boundary(case_dir, mtime=100.0)
+    _write_bc_dict(case_dir, "U", mtime=200.0)
+    _write_bc_dict(case_dir, "p", mtime=200.0)
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert bc_missing == [], (
-        f"0/ time-zero dict overrides must satisfy contract; got {bc_missing}"
+        f"BC dict newer than polyMesh must satisfy contract; got {bc_missing}"
     )
 
 
-def test_imported_bc_unrelated_history_does_not_satisfy_bc(isolated_drafts):
-    """Sanity — only the BC-setup action names count, not arbitrary
-    history entries. A switch_solver entry should NOT clear bc.patches.
+def test_imported_bc_stale_after_remesh_flagged(isolated_drafts):
+    """Codex R7 P1 regression — DEC-V61-116.
+
+    Workflow: setup_bc at T=100 (0/U mtime=100) → re-mesh at T=200
+    (polyMesh.boundary mtime=200). BC dict is now stale; the analyzer
+    must flag bc.patches missing so engineer reruns setup_bc.
     """
-    drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_unrelated_history"
-    case_dir = imported / case_id
-    case_dir.mkdir(parents=True, exist_ok=True)
-    (case_dir / "case_manifest.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 2,
-                "case_id": case_id,
-                "physics": {
-                    "solver": "simpleFoam",
-                    "turbulence_model": "kOmegaSST",
-                },
-                "bc": {"patches": {}},
-                "numerics": {},
-                "overrides": {"raw_dict_files": {}},
-                "history": [
-                    {
-                        "timestamp": "2026-05-04T00:00:00+00:00",
-                        "action": "switch_solver",  # ← not BC
-                        "source": "ai",
-                        "detail": {},
-                    },
-                    {
-                        "timestamp": "2026-05-04T00:01:00+00:00",
-                        "action": "edit_dict",  # ← not BC
-                        "source": "user",
-                        "detail": {},
-                    },
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_stale"
+    case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
+    _write_bc_dict(case_dir, "U", mtime=100.0)
+    _write_polymesh_boundary(case_dir, mtime=200.0)  # remeshed AFTER BC
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1, (
-        f"unrelated history actions must NOT satisfy bc.patches; got {bc_missing}"
+        f"stale BC dict (older than polyMesh) must be flagged; got {bc_missing}"
     )
+    assert "re-mesh" in bc_missing[0].why or "current mesh" in bc_missing[0].why
+
+
+def test_imported_bc_no_polymesh_flagged(isolated_drafts):
+    """Without a polyMesh boundary file, BC can't be set up against any
+    mesh → flag missing. Engineer needs to mesh first."""
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_no_mesh"
+    _seed_minimal_imported_for_bc_check(imported, case_id)
+    # Note: no polyMesh.boundary written.
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert len(bc_missing) == 1
+
+
+def test_imported_bc_polymesh_but_no_zero_dicts_flagged(isolated_drafts):
+    """polyMesh.boundary exists but no 0/X files yet (mesh ran, BC
+    didn't). Flag missing."""
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_meshed_no_bc"
+    case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
+    _write_polymesh_boundary(case_dir, mtime=100.0)
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert len(bc_missing) == 1
+
+
+def test_imported_bc_patches_set_in_manifest_satisfies(isolated_drafts):
+    """Future-proof signal: if bc.patches is non-empty in the manifest
+    schema, the analyzer accepts it without checking filesystem mtimes.
+    Lets future flows that DO populate the schema field bypass the
+    filesystem check.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_patches_set"
+    _seed_imported_manifest(imported, case_id)  # has solver + turbulence + 1 patch
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert bc_missing == []
 
 
 def test_imported_solver_dict_without_name_still_flagged(isolated_drafts):

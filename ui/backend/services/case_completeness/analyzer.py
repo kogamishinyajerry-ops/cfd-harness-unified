@@ -36,6 +36,55 @@ from .schemas import CaseCompletenessReport, CaseKind, MissingField, Severity
 from ui.backend.services.case_drafts import DRAFTS_DIR
 
 
+# BC field set OpenFOAM authors at time-zero (0/). Any one of these
+# present and newer than the polyMesh boundary indicates a setup_bc
+# has run AGAINST the current mesh. Codex R7 fix.
+_BC_TIME_ZERO_DICT_NAMES = (
+    "U",
+    "p",
+    "p_rgh",  # buoyant variants
+    "k",
+    "epsilon",
+    "omega",
+    "nut",
+    "T",  # natural convection
+    "alphat",
+    "nuTilda",
+)
+
+
+def _bc_dicts_current(case_dir: Path) -> bool:
+    """True iff the case has a BC dict file (under 0/) whose mtime is
+    ≥ the polyMesh boundary's mtime — i.e. the BC was authored against
+    the current mesh, not a stale earlier mesh.
+
+    Returns False if:
+      - polyMesh boundary doesn't exist (case not meshed yet)
+      - no 0/X file exists
+      - all 0/X mtimes are older than polyMesh.boundary mtime (BC stale
+        after a re-mesh)
+
+    All errors swallow → False (analyzer never crashes on filesystem
+    weirdness; it just reports the field as missing).
+    """
+    try:
+        boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
+        if not boundary_path.is_file():
+            return False
+        boundary_mtime = boundary_path.stat().st_mtime
+        zero_dir = case_dir / "0"
+        if not zero_dir.is_dir():
+            return False
+        for name in _BC_TIME_ZERO_DICT_NAMES:
+            candidate = zero_dir / name
+            if candidate.is_file():
+                if candidate.stat().st_mtime >= boundary_mtime:
+                    return True
+        return False
+    except OSError:
+        return False
+
+
 # Re-appropriate turbulence threshold. Above this Re, a `laminar`
 # turbulence model is flagged as critical — the simulation will trigger
 # numerical instability or yield non-physical results in the steady RANS
@@ -542,58 +591,42 @@ def _analyze_imported(
             )
         )
 
-    # Boundary-patch setup signal — Codex R6 P1 fix.
+    # Boundary-patch setup signal — Codex R7 P1 fix.
     #
-    # Real-world BC state for imported cases lives in (a) OpenFOAM dicts
-    # under 0/ and system/ (written by setup_ldc_bc / setup_channel_bc /
-    # setup_bc_from_stl_patches), and (b) face_annotations.yaml. The
-    # manifest's `bc.patches` field exists in the schema but is NOT
-    # populated by current setup flows — they call mark_ai_authored()
-    # which writes to `overrides.raw_dict_files` and appends a history
-    # entry instead.
+    # Earlier rounds tried manifest-only sources for BC presence (R5:
+    # bc.patches non-empty; R6: bc.patches OR setup_*_bc history entry
+    # OR 0/ override). R7 caught that all three are append-only manifest
+    # records that don't reflect a re-mesh: after `mesh_imported_case()`
+    # rewrites constant/polyMesh, the previously-authored 0/U / 0/p
+    # files are now stale (boundary topology may have changed), but
+    # history + overrides still say "setup_bc done".
     #
-    # So the canonical "BC has been set up" signal in the manifest is
-    # one of:
-    #   1. `bc.patches` non-empty (future-proof: if any future flow
-    #      populates the field, the analyzer respects it)
-    #   2. `history` has an entry with action in the setup-BC set
-    #      (covers the current setup_ldc_bc / setup_channel_bc /
-    #      setup_bc_from_stl_patches paths)
-    #   3. `overrides.raw_dict_files` has any 0/ time-zero dict
-    #      (independent corroboration that BC dicts have been authored)
-    bc_action_names = {
-        "setup_ldc_bc",
-        "setup_channel_bc",
-        "setup_bc_from_stl_patches",
-    }
-    history = raw_manifest_yaml.get("history", [])
-    bc_action_in_history = isinstance(history, list) and any(
-        isinstance(h, dict) and h.get("action") in bc_action_names
-        for h in history
-    )
-    overrides = raw_manifest_yaml.get("overrides", {})
-    raw_dict_files = (
-        overrides.get("raw_dict_files", {}) if isinstance(overrides, dict) else {}
-    )
-    has_zero_dir_dict = isinstance(raw_dict_files, dict) and any(
-        isinstance(p, str) and p.startswith("0/")
-        for p in raw_dict_files.keys()
-    )
+    # R7 settles on a **filesystem-mtime check**: a BC dict file
+    # (0/U, 0/p, 0/k, …) must have mtime ≥ polyMesh.boundary mtime
+    # to count as current. This directly tracks the workflow:
+    #   · meshed but no BC → 0/X absent → flag missing (correct)
+    #   · setup_bc ran → 0/X mtime > polyMesh mtime → BC current
+    #   · re-mesh after setup_bc → polyMesh mtime > 0/X mtime → BC stale
+    #     → flag missing (correct: setup_bc must rerun)
+    #
+    # If polyMesh.boundary doesn't exist (case isn't meshed yet),
+    # BC can't be set up either, so the layered analyzer flags it.
+    bc_present = _bc_dicts_current(case_dir)
     bc_patches_set = _has_in(raw_manifest_yaml, "bc", "patches")
-    if not (bc_patches_set or bc_action_in_history or has_zero_dir_dict):
+    if not (bc_present or bc_patches_set):
         missing.append(
             MissingField(
                 field_path="bc.patches",
                 severity="critical",
                 why=(
-                    "Boundary-patch setup has not run. The analyzer accepts "
-                    "any of: (a) manifest.bc.patches non-empty (schema-level), "
-                    "(b) a history entry with action in {setup_ldc_bc, "
-                    "setup_channel_bc, setup_bc_from_stl_patches} (current "
-                    "M-PANELS Step 3 paths), or (c) at least one "
-                    "overrides.raw_dict_files entry under 0/ (time-zero "
-                    "OpenFOAM dicts authored). Run the Step 3 [AI 处理] "
-                    "action or annotate faces in the viewport."
+                    "Boundary-patch setup has not run, OR has been "
+                    "invalidated by a later re-mesh. The analyzer accepts "
+                    "either: (a) manifest.bc.patches non-empty, OR (b) at "
+                    "least one BC dict in 0/ (U, p, k, epsilon, omega, "
+                    "nut, …) with mtime ≥ constant/polyMesh/boundary "
+                    "mtime — proving the BC was authored AGAINST the "
+                    "current mesh, not a previous one. Run the Step 3 "
+                    "[AI 处理] action or annotate faces in the viewport."
                 ),
             )
         )
