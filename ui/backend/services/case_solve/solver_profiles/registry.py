@@ -143,7 +143,61 @@ def _build_control_dict(raw: dict[str, Any]) -> ControlDictBlock:
     ):
         if key in raw:
             kwargs[key] = raw[key]
+
+    # Codex V61-112 Phase 4 R1 P2 closure: validate transient-only
+    # numeric / bool fields at load time so a malformed YAML edit
+    # raises ProfileSchemaError eagerly rather than rendering invalid
+    # OpenFOAM (e.g. `maxDeltaT yes;` from a stray bool, or an
+    # uncaught format exception that bypasses the BCSetupError
+    # envelope at the _author_*_dicts call site).
+    _validate_optional_numeric(kwargs, "max_co")
+    _validate_optional_numeric(kwargs, "max_delta_t_value")
+    _validate_optional_bool(kwargs, "adjust_time_step")
+    _validate_optional_int(kwargs, "iteration_floor")
+
     return ControlDictBlock(**kwargs)
+
+
+def _validate_optional_numeric(kwargs: dict[str, Any], key: str) -> None:
+    """Validate a control_dict field that must be int/float or None."""
+    if key not in kwargs or kwargs[key] is None:
+        return
+    value = kwargs[key]
+    if isinstance(value, bool):
+        # bool is a subclass of int but is NEVER a valid numeric here
+        # (would render as 1 / 0 misleadingly). Reject explicitly.
+        raise TypeError(
+            f"control_dict.{key} must be a numeric (int/float) or null; "
+            f"got bool"
+        )
+    if not isinstance(value, (int, float)):
+        raise TypeError(
+            f"control_dict.{key} must be a numeric (int/float) or null; "
+            f"got {type(value).__name__}"
+        )
+
+
+def _validate_optional_bool(kwargs: dict[str, Any], key: str) -> None:
+    """Validate a control_dict field that must be bool or None."""
+    if key not in kwargs or kwargs[key] is None:
+        return
+    if not isinstance(kwargs[key], bool):
+        raise TypeError(
+            f"control_dict.{key} must be a bool or null; "
+            f"got {type(kwargs[key]).__name__}"
+        )
+
+
+def _validate_optional_int(kwargs: dict[str, Any], key: str) -> None:
+    """Validate a control_dict field that must be int or None."""
+    if key not in kwargs or kwargs[key] is None:
+        return
+    value = kwargs[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"control_dict.{key} must be an int or null; "
+            f"got {type(value).__name__}"
+        )
 
 
 def _build_fv_schemes(raw: dict[str, Any]) -> FvSchemesBlock:

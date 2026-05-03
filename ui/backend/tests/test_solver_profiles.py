@@ -983,6 +983,72 @@ def test_max_delta_t_value_none_falls_through_to_follows_delta_t():
     assert "maxDeltaT 0.001;" in rendered
 
 
+# Codex Phase 4 R1 P2: control_dict transient-field schema validation.
+
+
+def _minimal_channel_raw_with_control_dict_field(field_name, field_value):
+    return {
+        "name": "channelPimpleFoam",
+        "family": "transient",
+        "control_dict": {
+            "application": "pimpleFoam",
+            field_name: field_value,
+        },
+        "fv_schemes": {},
+        "fv_solution": {
+            "control_block_name": "PIMPLE",
+            "control_block_fields": {"nOuterCorrectors": 1},
+            "solvers": {"p": "solver PCG;"},
+        },
+    }
+
+
+@pytest.mark.parametrize("bad_value", ["0.05", True, False, [0.05], {"v": 0.05}])
+def test_control_dict_max_delta_t_value_non_numeric_raises_schema_error(bad_value):
+    """Codex Phase 4 R1 P2: max_delta_t_value must be int/float/None;
+    bool/string/list/dict rejected at load time, not deferred to
+    render time where _format_number would emit `maxDeltaT yes;` or
+    raise an uncaught exception."""
+    raw = _minimal_channel_raw_with_control_dict_field(
+        "max_delta_t_value", bad_value
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "max_delta_t_value" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_value", ["0.5", True, False, [0.5], {"v": 0.5}])
+def test_control_dict_max_co_non_numeric_raises_schema_error(bad_value):
+    """max_co same validation pattern as max_delta_t_value."""
+    raw = _minimal_channel_raw_with_control_dict_field("max_co", bad_value)
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "max_co" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_value", ["yes", "true", 1, 0, [True]])
+def test_control_dict_adjust_time_step_non_bool_raises_schema_error(bad_value):
+    """adjust_time_step must be bool or None; reject string and int
+    (int 0/1 would silently coerce to False/True via bool subclass)."""
+    raw = _minimal_channel_raw_with_control_dict_field(
+        "adjust_time_step", bad_value
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "adjust_time_step" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_value", ["100", 100.5, True, [100]])
+def test_control_dict_iteration_floor_non_int_raises_schema_error(bad_value):
+    """iteration_floor must be int or None."""
+    raw = _minimal_channel_raw_with_control_dict_field(
+        "iteration_floor", bad_value
+    )
+    with pytest.raises(ProfileSchemaError) as exc:
+        _build_profile_from_dict(raw, name="channelPimpleFoam")
+    assert "iteration_floor" in str(exc.value)
+
+
 def test_max_delta_t_both_none_omits_line():
     """When both fields are unset, maxDeltaT line omitted (icoFoam
     Phase 3 behavior preserved)."""
