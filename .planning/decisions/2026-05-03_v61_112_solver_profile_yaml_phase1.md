@@ -1,7 +1,8 @@
 ---
 decision_id: DEC-V61-112
 title: Solver-profile YAML migration · Phase 1 — schema + registry + simpleFoam profile (V61-102 Phase 3 supersedes step 1 of 4)
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发")
+status: Accepted (2026-05-03 · Codex pre-merge 3-round chain APPROVE on commit ca5d2ab; chain report at reports/codex_tool_reports/v61_112_phase1_r1_r2_r3_chain.md; user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发" covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_112_phase1_r1_r2_r3_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-111 closure note: "V61-102 Phase 3 (solver-profile YAML migration) should consolidate this into a single canonical parser used by all readers" + V61-102 Phase 3 explicitly deferred at V61-102 closure
@@ -314,3 +315,49 @@ similar discoveries (e.g. multiple sites computing the same mesh
 metric, multiple sites parsing the same log format) should follow
 the same phased-migration discipline rather than big-bang
 refactor.
+
+## Acceptance closure (2026-05-03 · Codex pre-merge 3-round APPROVE)
+
+Phase 1 implementation landed across commits `6f49017` (initial) →
+`c3afd33` (R1 fix · 3 P2 closed) → `ca5d2ab` (R2 fix · 1 P1 + 1 P2
+closed). Codex pre-merge chain on 86gs `gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings | Closure approach |
+|-------|--------|---------|----------|------------------|
+| R1 | 6f49017 | CHANGES_REQUIRED | 0 P1 + 3 P2 | CI test-include + golden-snapshot bytes (replaces tautology) + nested-dict schema validation |
+| R2 | c3afd33 | CHANGES_REQUIRED | 1 P1 + 1 P2 | CI installs `[ui]` extra (pydantic for case_manifest import chain) + `control_block_name` non-string rejection |
+| R3 | ca5d2ab | APPROVE clean | — | "I did not find a discrete regression introduced by this commit" |
+
+**Substantive convergence**: monotone — R1's 3 P2 → R2's 1 P1 + 1 P2
+→ R3 zero. R2 P1 was a SURFACED gap (pydantic dependency was always
+in the import chain; R1 just made the test reachable in CI lane). R2
+P2 was an "incomplete-fix" from R1 P2-3 stopping short of the
+top-level string field.
+
+**Tests**: 21/21 V61-112 + 1063/1066 CI-equivalent regression-clean.
+
+**Self-pass-rate calibration**: predicted 60% / actual 3 rounds (with
+substantive content slightly larger than predicted "1-2 P2").
+Calibration honest; for RETRO-V61-001 trend, "config-schema migration
+with golden-byte gate + schema validation" should anchor at ~50%, not
+60%.
+
+**Methodology lesson** (full text in chain report § Methodology
+lesson · acceptance gate authoring): when a refactor's acceptance
+gate is "new code produces same bytes as old code", the
+`assert new_func() == old_func()` pattern becomes blind to drift
+the moment OLD is rewired to delegate to NEW. Fix: capture pre-rewire
+output as literal golden bytes embedded in the test as immovable
+constants. Pattern applicable to V61-112 Phases 2-4 and any future
+extract-template-into-config refactor. RETRO-V61-001 candidate intake
+recorded for next retro.
+
+**Phase 1 acceptance criteria status**:
+- §1 schema covers simpleFoam controlDict + fvSchemes + fvSolution: PASS (21/21 tests)
+- §2 byte-identity to V61-111 inline output: PASS (golden-snapshot regression test)
+- §3 Codex pre-merge APPROVE / APPROVE_WITH_COMMENTS: PASS (R3 APPROVE clean)
+- §4 Phase 2-4 deferral documented: PASS (Out of scope section)
+
+**Phases 2-4 (deferred)**: pimpleFoam profile extraction (V61-107.5
++ V61-111 channel/STL paths) · icoFoam LDC migration with byte-repro
+gate · channel pimpleFoam migration. Each ships as separate DEC.
