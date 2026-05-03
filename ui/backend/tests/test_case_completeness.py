@@ -437,8 +437,29 @@ def _seed_minimal_imported_for_bc_check(
     return case_dir
 
 
+def _write_polymesh_points(case_dir: Path, mtime: float) -> Path:
+    """Helper: create constant/polyMesh/points at given mtime.
+
+    Codex R8 P1: the analyzer compares 0/X mtimes against polyMesh
+    `points` (mesh geometry), NOT polyMesh `boundary` (BC setup
+    rewrites boundary to change patch types).
+    """
+    import os
+
+    poly_dir = case_dir / "constant" / "polyMesh"
+    poly_dir.mkdir(parents=True, exist_ok=True)
+    points = poly_dir / "points"
+    points.write_text("// gmshToFoam-generated points\n", encoding="utf-8")
+    os.utime(points, (mtime, mtime))
+    return points
+
+
 def _write_polymesh_boundary(case_dir: Path, mtime: float) -> Path:
-    """Helper: create constant/polyMesh/boundary at given mtime."""
+    """Helper: create constant/polyMesh/boundary at given mtime.
+
+    Used by tests that simulate setup_bc rewriting boundary AFTER
+    setup; the analyzer should ignore this file's mtime.
+    """
     import os
 
     poly_dir = case_dir / "constant" / "polyMesh"
@@ -472,7 +493,7 @@ def test_imported_bc_currentdict_satisfies_when_newer_than_polymesh(
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_bc_current"
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
-    _write_polymesh_boundary(case_dir, mtime=100.0)
+    _write_polymesh_points(case_dir, mtime=100.0)
     _write_bc_dict(case_dir, "U", mtime=200.0)
     _write_bc_dict(case_dir, "p", mtime=200.0)
     r = analyze_case_completeness(case_id)
@@ -493,7 +514,7 @@ def test_imported_bc_stale_after_remesh_flagged(isolated_drafts):
     case_id = "imported_2026-05-04T00-00-00Z_bc_stale"
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
     _write_bc_dict(case_dir, "U", mtime=100.0)
-    _write_polymesh_boundary(case_dir, mtime=200.0)  # remeshed AFTER BC
+    _write_polymesh_points(case_dir, mtime=200.0)  # remeshed AFTER BC
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1, (
@@ -520,10 +541,46 @@ def test_imported_bc_polymesh_but_no_zero_dicts_flagged(isolated_drafts):
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_meshed_no_bc"
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
-    _write_polymesh_boundary(case_dir, mtime=100.0)
+    _write_polymesh_points(case_dir, mtime=100.0)
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1
+
+
+def test_imported_bc_setup_rewriting_boundary_still_current(isolated_drafts):
+    """Codex R8 P1 regression — DEC-V61-116.
+
+    setup_bc_from_stl_patches() with symmetry / non-default patches
+    rewrites constant/polyMesh/boundary as part of BC setup itself.
+    The analyzer must compare against polyMesh/`points` (mesh
+    geometry), NOT polyMesh/`boundary` (which BC also touches).
+    Otherwise BC setup that includes patch-type changes spuriously
+    fails completeness right after success.
+
+    Workflow:
+      T=100: mesh runs → points + boundary mtime=100
+      T=200: setup_bc → 0/U=200, polyMesh/boundary=200 (rewritten)
+      Check: 0/U(200) >= points(100) → BC current ✓
+      The boundary mtime(200) > 0/U(200) tie is irrelevant because
+      the analyzer no longer reads boundary's mtime.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_rewrites_boundary"
+    case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
+    # Mesh ran at T=100: points + boundary stamped 100.
+    _write_polymesh_points(case_dir, mtime=100.0)
+    _write_polymesh_boundary(case_dir, mtime=100.0)
+    # setup_bc ran at T=200: 0/U + 0/p stamped 200, AND BOUNDARY
+    # rewritten to 200 (symmetry case).
+    _write_bc_dict(case_dir, "U", mtime=200.0)
+    _write_bc_dict(case_dir, "p", mtime=200.0)
+    _write_polymesh_boundary(case_dir, mtime=200.0)  # ← rewritten by BC
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert bc_missing == [], (
+        f"BC setup that rewrites polyMesh/boundary must NOT trigger "
+        f"stale-BC flag (R8 P1 regression); got {bc_missing}"
+    )
 
 
 def test_imported_bc_patches_set_in_manifest_satisfies(isolated_drafts):

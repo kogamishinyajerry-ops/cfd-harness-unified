@@ -55,30 +55,39 @@ _BC_TIME_ZERO_DICT_NAMES = (
 
 def _bc_dicts_current(case_dir: Path) -> bool:
     """True iff the case has a BC dict file (under 0/) whose mtime is
-    ≥ the polyMesh boundary's mtime — i.e. the BC was authored against
-    the current mesh, not a stale earlier mesh.
+    ≥ the polyMesh points file's mtime — i.e. the BC was authored
+    against the current mesh, not a stale earlier mesh.
+
+    Codex R8 P1 fix: use `constant/polyMesh/points` as the mesh-only
+    signal, NOT `boundary`. setup_bc_from_stl_patches() rewrites
+    `polyMesh/boundary` to update patch types (e.g. wall → symmetry)
+    as part of BC setup itself, so a boundary-mtime gate would
+    spuriously fail right after a successful BC setup. `points` is
+    the actual mesh geometry (vertex coordinates) — it's only
+    rewritten by mesh generation (gmshToFoam / blockMesh), never
+    by BC setup.
 
     Returns False if:
-      - polyMesh boundary doesn't exist (case not meshed yet)
+      - polyMesh points doesn't exist (case not meshed yet)
       - no 0/X file exists
-      - all 0/X mtimes are older than polyMesh.boundary mtime (BC stale
+      - all 0/X mtimes are older than polyMesh.points mtime (BC stale
         after a re-mesh)
 
     All errors swallow → False (analyzer never crashes on filesystem
     weirdness; it just reports the field as missing).
     """
     try:
-        boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
-        if not boundary_path.is_file():
+        points_path = case_dir / "constant" / "polyMesh" / "points"
+        if not points_path.is_file():
             return False
-        boundary_mtime = boundary_path.stat().st_mtime
+        points_mtime = points_path.stat().st_mtime
         zero_dir = case_dir / "0"
         if not zero_dir.is_dir():
             return False
         for name in _BC_TIME_ZERO_DICT_NAMES:
             candidate = zero_dir / name
             if candidate.is_file():
-                if candidate.stat().st_mtime >= boundary_mtime:
+                if candidate.stat().st_mtime >= points_mtime:
                     return True
         return False
     except OSError:
@@ -591,26 +600,22 @@ def _analyze_imported(
             )
         )
 
-    # Boundary-patch setup signal — Codex R7 P1 fix.
+    # Boundary-patch setup signal — Codex R7 → R8 fix.
     #
-    # Earlier rounds tried manifest-only sources for BC presence (R5:
-    # bc.patches non-empty; R6: bc.patches OR setup_*_bc history entry
-    # OR 0/ override). R7 caught that all three are append-only manifest
-    # records that don't reflect a re-mesh: after `mesh_imported_case()`
-    # rewrites constant/polyMesh, the previously-authored 0/U / 0/p
-    # files are now stale (boundary topology may have changed), but
-    # history + overrides still say "setup_bc done".
-    #
-    # R7 settles on a **filesystem-mtime check**: a BC dict file
-    # (0/U, 0/p, 0/k, …) must have mtime ≥ polyMesh.boundary mtime
-    # to count as current. This directly tracks the workflow:
+    # Filesystem-mtime check: a BC dict file (0/U, 0/p, 0/k, …) must
+    # have mtime ≥ polyMesh.points mtime to count as current. R8
+    # corrected the earlier draft that compared against polyMesh.boundary:
+    # boundary is rewritten by setup_bc_from_stl_patches() too (to
+    # change patch types like wall → symmetry), so it's not a clean
+    # mesh-only signal. polyMesh.points is the vertex-coordinates
+    # file — it's only rewritten by mesh generation (gmshToFoam /
+    # blockMesh), never by BC setup. Workflow:
     #   · meshed but no BC → 0/X absent → flag missing (correct)
-    #   · setup_bc ran → 0/X mtime > polyMesh mtime → BC current
-    #   · re-mesh after setup_bc → polyMesh mtime > 0/X mtime → BC stale
+    #   · setup_bc ran → 0/X mtime > points mtime → BC current
+    #   · re-mesh after setup_bc → points mtime > 0/X mtime → BC stale
     #     → flag missing (correct: setup_bc must rerun)
-    #
-    # If polyMesh.boundary doesn't exist (case isn't meshed yet),
-    # BC can't be set up either, so the layered analyzer flags it.
+    #   · BC setup that also rewrites boundary (symmetry case) → 0/X
+    #     mtime > points mtime → still current (R8 P1 fix)
     bc_present = _bc_dicts_current(case_dir)
     bc_patches_set = _has_in(raw_manifest_yaml, "bc", "patches")
     if not (bc_present or bc_patches_set):
@@ -623,10 +628,13 @@ def _analyze_imported(
                     "invalidated by a later re-mesh. The analyzer accepts "
                     "either: (a) manifest.bc.patches non-empty, OR (b) at "
                     "least one BC dict in 0/ (U, p, k, epsilon, omega, "
-                    "nut, …) with mtime ≥ constant/polyMesh/boundary "
+                    "nut, …) with mtime ≥ constant/polyMesh/points "
                     "mtime — proving the BC was authored AGAINST the "
-                    "current mesh, not a previous one. Run the Step 3 "
-                    "[AI 处理] action or annotate faces in the viewport."
+                    "current mesh geometry. (We compare against `points` "
+                    "rather than `boundary` because BC setup itself "
+                    "rewrites `boundary` to change patch types.) Run the "
+                    "Step 3 [AI 处理] action or annotate faces in the "
+                    "viewport."
                 ),
             )
         )
