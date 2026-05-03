@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-111
 title: iter01 numerical setup fix — honor intent.json solver.name + diagnose NaN-divergence root cause + unblock V61-106 Phase 1.3 reclassification
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，争取8小时左右的连续执行开发" · scoped after V61-106 closure surfaced iter01 solver-divergence as the deferred follow-up)
+status: Accepted (2026-05-03 · Codex pre-merge 4-round chain R1 CHANGES_REQUIRED 2 P1 + 1 P2 → R2 CHANGES_REQUIRED 0 P1 + 2 P2 → R3 CHANGES_REQUIRED 0 P1 + 1 P2 → R4 APPROVE clean · Phase 1+2+3 implementation shipped via commits 4832a85 / ddcff1f / c38ff43 / 26183da · self_estimated_pass_rate 50% calibrated reasonable · 53/53 V61-111-scope tests pass · 850/854 full backend pass (4 pre-existing baseline failures unrelated) · V61-106 Phase 1.3 unblock: iter01 intent.json migrated to analytical_comparator_pass with the prototype comparator block untouched; smoke runner forwards intent.json:solver.name → /setup-bc?solver_name=simpleFoam → backend writes simpleFoam steady-state SIMPLE template → /solve dispatches simpleFoam · live iter01 end-to-end dogfood verification (Docker OpenFOAM container required) remains the §Phase 3 outstanding gate; Codex covers static correctness, live-run validates runtime contract · user's 2026-05-03 autonomous-mode ratification covers acceptance.)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-106 Phase 1.3 deferral closure note + V61-104 Phase 1.5 chained-into-V61-106 narrative + iter01 intent.json:60-61 rationale pointing here
@@ -18,7 +18,9 @@ parent_artifacts:
   - cfb13f5 commit: "iter01 dt sweep — disproves CFL hypothesis, surfaces 2 deeper defects" (icoFoam-vs-declared-simpleFoam route mismatch + relaxation factor sensitivity)
 counter_impact: +1 (autonomous_governance: true · no external gate required)
 self_estimated_pass_rate: 50% (multi-file backend route surface + solver-profile branching + fvSchemes/fvSolution dict variations per solver + adversarial smoke regression on iter01 as live verification — high blast radius; expect Codex 2-3 round chain minimum)
-notion_sync_status: pending (sync follows acceptance flip after Codex chain closes)
+self_estimated_pass_rate_actual: 4 rounds (R1 CHANGES_REQUIRED 2 P1 + 1 P2 → R2 CHANGES_REQUIRED 0 P1 + 2 P2 → R3 CHANGES_REQUIRED 0 P1 + 1 P2 → R4 APPROVE clean) — calibration was reasonable, slightly underestimated; each round reduced P-level so substantive content converged on a stable contract
+codex_tool_report_path: reports/codex_tool_reports/v61_111_r1_r2_r3_r4_chain.md
+notion_sync_status: pending (Codex chain APPROVE'd at R4 commit 26183da; Notion MCP offline this session — sync queued for next online window)
 ---
 
 # DEC-V61-111 · iter01 numerical setup fix

@@ -144,6 +144,19 @@ Plan: 2-3 round chain to clean APPROVE.
 
 **iter01 stays at `physics_validation_required` (SKIPPED)** with the rationale documented in `tools/adversarial/cases/iter01/intent.json:60-61` pointing at this DEC. Follow-up commit `cfb13f5` ("iter01 dt sweep") empirically disproved the CFL hypothesis and surfaces 2 deeper defects (icoFoam vs declared simpleFoam route mismatch + relaxation factor sensitivity); both are queued for a follow-up DEC.
 
+### Phase 1.3 UNBLOCKED 2026-05-03 by DEC-V61-111
+
+DEC-V61-111 (iter01 numerical setup fix · solver_name routing + simpleFoam template + iter01 reclassify) ACCEPTED 2026-05-03 with Codex 4-round APPROVE chain (R1 CHANGES_REQUIRED 2 P1 + 1 P2 → R2 0 P1 + 2 P2 → R3 0 P1 + 1 P2 → R4 APPROVE clean). Implementation commits 4832a85 / ddcff1f / c38ff43 / 26183da land:
+
+1. `setup_bc_from_stl_patches` honors `solver_name` (default pimpleFoam preserves V61-107.5 behavior; simpleFoam writes steady-state SIMPLE template; icoFoam upgraded to pimpleFoam with warning per V61-107.5 STL-mesh NaN finding)
+2. simpleFoam controlDict + fvSchemes (ddtSchemes steadyState + bounded linearUpwind) + fvSolution (SIMPLE block + relaxationFactors p=0.3/U=0.7 + residualControl 1e-3/1e-4) authored inline
+3. `tools/adversarial/run_smoke.py` forwards `intent.json:solver.name` as query param to `/setup-bc?solver_name=`
+4. iter01 `intent.json` migrated from `physics_validation_required` to `analytical_comparator_pass` with the V61-106 §Phase 1.3 prototype comparators (u_magnitude_max>=1.0, u_x_min<0.0, cell_count==7159) untouched
+
+**Live iter01 dogfood verification (Docker OpenFOAM container required) is the V61-111 §Phase 3 outstanding gate**; Codex covers static correctness, live-run validates runtime contract. Once dogfood passes, iter01 will transition from SKIPPED to PASS in the smoke runner verdict table — the SKIP-forever pathology V61-106 was designed to close is finally closed for the canonical adversarial case.
+
+V61-106 §Phase 1.3 status: **deferred → unblocked → pending live verification** (per V61-111 §Phase 3).
+
 **Phase 2 (sweep iter04/iter05/iter06)** explicitly remains out-of-scope per §Phase 2.
 
 ### Codex chain summary
