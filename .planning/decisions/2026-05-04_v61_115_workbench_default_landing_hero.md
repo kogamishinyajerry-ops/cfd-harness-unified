@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-115
 title: Workbench-first default landing + hero CTA (flip / → /workbench, demote /learn)
-status: Proposed (2026-05-04 · authored under user 2026-05-04 autonomous-mode mandate "全都按你的建议来"; awaiting Codex pre-merge approval per RETRO-V61-001 risk-tier)
-codex_tool_report_path: pending
+status: Accepted (2026-05-04 · Codex pre-merge 3-round chain APPROVE on commit 6568164 [R1 a19f553 APPROVE_WITH_COMMENTS · R2 c517687 APPROVE_WITH_COMMENTS · R3 6568164 APPROVE clean]; chain report at reports/codex_tool_reports/v61_115_r1_r2_r3_chain.md; user 2026-05-04 autonomous-mode mandate "全都按你的建议来" covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_115_r1_r2_r3_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User feedback 2026-05-04 — "目前的UI仍然看起来过于压抑，10个gold case的展示固然是不错的，但是作为一个工作台，主角应该是CFD的仿真工作台，一个工程师一眼就知道自己该怎么新建case的入口". Five-DEC arc plan A→C→B→D→E confirmed by user "全都按你的建议来"; this is item A (smallest, immediately-visible value).
@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/frontend/src/components/Layout.tsx (sidebar already exposes /workbench; /learn already linked as "← Learn")
 counter_impact: +1 (autonomous_governance: true · UX flip with no external gate; Kogami skip-clause: docs-only? — NO, UI change. Skip-clause "single-file ≤50 LOC routine"? — NO, multi-file. Kogami-trigger check: not a phase-close, not a RETRO draft, not a high-risk operator-endpoint PR · Kogami SKIP per DEC-V61-087 §4.2 — UI default-landing flip with no governance-rule change is below high-risk-PR threshold. Codex pre-merge MANDATORY per RETRO-V61-001 multi-file-frontend trigger.)
 self_estimated_pass_rate: 70% (HIGH baseline · small scope, 3 files, ~100 LOC. Risk surface: (a) Codex may flag a11y on new hero CTAs, (b) Codex may want focus management on default-landing flip, (c) Codex may suggest preserving /learn as canonical link in hero for buyers/reviewers, (d) Codex may catch that the catch-all-redirect flip needs to also update the workbench-relative deep-link fallback. Expect 1-2 rounds; possible P3 nits.)
-notion_sync_status: pending (will sync after Codex APPROVE + commit lands)
+notion_sync_status: synced 2026-05-03 (https://www.notion.so/DEC-V61-115-Workbench-first-default-landing-hero-CTA-flip-workbench-demote-learn-355c68942bed819a9b39c1e693357e62)
 
 ---
 
@@ -114,3 +114,26 @@ This is item A of the user-confirmed 5-DEC arc (A → C → B → D → E):
 ## Counter impact
 
 This DEC's acceptance advances `autonomous_governance_counter_v61` 73 → 74. RETRO-V61-001 cadence rule #2 (counter ≥20 since prior retro · last anchor RETRO-V61-V107-V108 at counter 53 → arc retro at counter 73) is **already triggered** but explicitly deferred per user 2026-05-04 mandate to between C and B+D in the 5-DEC arc plan. Tracked as task #23.
+
+## Acceptance closure (2026-05-04 · Codex pre-merge 3-round chain APPROVE)
+
+V61-115 implementation landed across 3 commits (a19f553 → c517687 → 6568164). Codex pre-merge chain on 86gs `gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings |
+|-------|--------|---------|----------|
+| R1 | a19f553 | APPROVE_WITH_COMMENTS | 2 P2 (responsive UX regression + hero gated by query) |
+| R2 | c517687 | APPROVE_WITH_COMMENTS | 1 P2 (sibling regression: hidden sidebar strands mobile users on Layout-mounted routes) |
+| R3 | 6568164 | APPROVE clean | 0 |
+
+R3 verdict: "The change appears to implement the intended below-md top-bar reflow without introducing a clear functional regression in the modified code. I did not find a deterministic routing, state, or layout breakage attributable to this commit."
+
+**Self-pass-rate calibration**: predicted 70% / actual 3 rounds. Calibration honest with two refinements:
+1. Predicted possible P3 nits, got P2s → UI changes default to P2 not P3 (user-visible)
+2. NEW calibration anchor: "engineer-first UI redesign with new contract" → ~70% / 2-3 rounds typical (distinct from preemptive-audit anchor ~80-90% / 1 round)
+
+**Sibling-regression handled in-chain**: R1→R2 fix introduced a regression that R2 caught + R2→R3 fix resolved uniformly. Positive case for chain-driven remediation; lesson captured in chain report § Sibling-regression learnings: enumerate ALL Layout consumers when fixing a layout primitive.
+
+**V61-115 acceptance criteria status**: all 7 criteria PASS
+(§1 redirects flipped · §2 hero block with required components · §3 reference-cases retitling · §4 /learn preserved · §5 169/169 tests pass · §6 Codex APPROVE · §7 Surface scan applied).
+
+**Counter advancement**: 73 → 74. Arc retro V61-088 → V61-114 stays explicitly deferred (task #23) per user mandate. Next arc DEC: V61-116 (item C — completeness analyzer · task #21).
