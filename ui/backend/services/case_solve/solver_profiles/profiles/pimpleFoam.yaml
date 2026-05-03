@@ -30,12 +30,12 @@ control_dict:
   end_time_default: 5.0
   delta_t_default: 0.001
   write_control: runTime
+  # YAML float `1.0` parses as Python float 1.0; _format_number
+  # preserves `.0` for integer-valued floats so this renders as
+  # `writeInterval 1.0;` matching V61-107.5 inline byte-identity.
+  # (Compare simpleFoam.yaml which uses `write_interval: 50` int
+  # and renders as `writeInterval 50;` no `.0`.)
   write_interval: 1.0
-  # V61-107.5 inline renders `writeInterval 1.0;` (decimal preserved)
-  # — distinct from simpleFoam V61-111 inline which renders `50` (no
-  # `.0`). V61-112 Phase 2 schema-extension flag preserves byte-
-  # identity to both inlines.
-  write_interval_decimal: true
   purge_write: 0
   write_format: ascii
   write_precision: 6

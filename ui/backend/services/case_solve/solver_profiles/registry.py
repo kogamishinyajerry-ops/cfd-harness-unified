@@ -134,8 +134,7 @@ def _build_control_dict(raw: dict[str, Any]) -> ControlDictBlock:
     for key in (
         "start_from", "start_time", "stop_at",
         "end_time_default", "delta_t_default",
-        "write_control", "write_interval", "write_interval_decimal",
-        "purge_write",
+        "write_control", "write_interval", "purge_write",
         "write_format", "write_precision", "write_compression",
         "time_format", "time_precision", "run_time_modifiable",
         "adjust_time_step", "max_co", "max_delta_t_follows_delta_t",

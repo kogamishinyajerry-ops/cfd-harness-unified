@@ -588,20 +588,89 @@ def test_simplefoam_profile_solvers_normalize_to_default_pad():
         assert entry["name_pad"] == 2
 
 
-# write_interval_decimal · per-profile flag for byte-identity to both
-# simpleFoam V61-111 (`writeInterval 50;`) and pimpleFoam V61-107.5
-# (`writeInterval 1.0;`) inlines.
+# V61-112 Phase 2 R1 P2 closure: byte-identity to V61-107.5 inline
+# requires preserving `.0` for caller-passed float-typed integer-
+# valued numerics (end_time=5.0, delta_t=1.0). The fix relies on
+# YAML int-vs-float parse distinction and Python's float repr.
 
 
-def test_pimplefoam_control_dict_write_interval_renders_with_decimal():
+def test_pimplefoam_control_dict_write_interval_yaml_float_renders_with_decimal():
+    """pimpleFoam.yaml has `write_interval: 1.0` (YAML float) which
+    must render as `writeInterval 1.0;` to match V61-107.5 inline."""
     profile = load_profile("pimpleFoam")
-    assert profile.control_dict.write_interval_decimal is True
     rendered = profile.render_control_dict(end_time=5, delta_t=0.001)
     assert "writeInterval 1.0;" in rendered
 
 
-def test_simplefoam_control_dict_write_interval_renders_without_decimal():
+def test_simplefoam_control_dict_write_interval_yaml_int_renders_without_decimal():
+    """simpleFoam.yaml has `write_interval: 50` (YAML int) which
+    must render as `writeInterval 50;` (no `.0`) to match V61-111
+    inline."""
     profile = load_profile("simpleFoam")
-    assert profile.control_dict.write_interval_decimal is False
     rendered = profile.render_control_dict(end_time=200)
     assert "writeInterval 50;" in rendered
+
+
+def test_pimplefoam_caller_passes_float_end_time_preserves_decimal():
+    """Codex Phase 2 R1 P2: caller passing end_time=5.0 (float) must
+    render as `endTime 5.0;` matching V61-107.5 inline f-string
+    output `f"endTime {end_time};"` for float input."""
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_control_dict(end_time=5.0, delta_t=0.001)
+    assert "endTime 5.0;" in rendered
+    assert "endTime 5;" not in rendered
+
+
+def test_pimplefoam_caller_passes_float_delta_t_preserves_decimal():
+    """Codex Phase 2 R1 P2: caller passing delta_t=1.0 (float) must
+    render as `deltaT 1.0;` and `maxDeltaT 1.0;` (V61-107.5 inline
+    behavior — used Python f-string default)."""
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_control_dict(end_time=10.0, delta_t=1.0)
+    assert "deltaT 1.0;" in rendered
+    assert "maxDeltaT 1.0;" in rendered
+    # Negative assertion: must NOT strip the decimal.
+    assert "deltaT 1;" not in rendered
+
+
+def test_pimplefoam_caller_passes_int_end_time_no_decimal():
+    """Caller passing end_time=5 (int) renders as `endTime 5;` (no
+    `.0`). Mirrors the inline behavior `f"endTime {5};"` → "5"."""
+    profile = load_profile("pimpleFoam")
+    rendered = profile.render_control_dict(end_time=5, delta_t=0.001)
+    assert "endTime 5;" in rendered
+    assert "endTime 5.0;" not in rendered
+
+
+def test_pimplefoam_byte_identity_with_default_caller_signature_floats():
+    """V61-112 Phase 2 R1 P2 regression-pin: setup_bc_from_stl_patches
+    passes float-typed end_time/delta_t to _build_pimplefoam_control_dict.
+    The profile path MUST byte-match the inline f-string behavior for
+    common float-valued integer inputs (5.0, 1.0)."""
+    profile = load_profile("pimpleFoam")
+    # Reproduce the V61-107.5 inline output for the real default-caller
+    # values that Codex P2 R1 flagged.
+    expected = (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application pimpleFoam;\n"
+        "startFrom startTime;\n"
+        "startTime 0;\n"
+        "stopAt endTime;\n"
+        "endTime 5.0;\n"  # caller passed float 5.0 → `.0` preserved
+        "deltaT 1.0;\n"   # caller passed float 1.0 → `.0` preserved
+        "writeControl runTime;\n"
+        "writeInterval 1.0;\n"
+        "purgeWrite 0;\n"
+        "writeFormat ascii;\n"
+        "writePrecision 6;\n"
+        "writeCompression off;\n"
+        "timeFormat general;\n"
+        "timePrecision 6;\n"
+        "runTimeModifiable true;\n"
+        "adjustTimeStep yes;\n"
+        "maxCo 0.5;\n"
+        "maxDeltaT 1.0;\n"  # follows delta_t → `.0` preserved
+    )
+    rendered = profile.render_control_dict(end_time=5.0, delta_t=1.0)
+    assert rendered == expected

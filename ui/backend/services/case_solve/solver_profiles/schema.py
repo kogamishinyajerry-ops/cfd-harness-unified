@@ -60,13 +60,6 @@ class ControlDictBlock:
     delta_t_default: float = 1.0
     write_control: str = "timeStep"
     write_interval: float = 50.0
-    # V61-112 Phase 2: pimpleFoam V61-107.5 inline renders
-    # ``writeInterval 1.0;`` (explicit decimal) while simpleFoam
-    # V61-111 inline renders ``writeInterval 50;`` (integer-valued
-    # float without ``.0``). Byte-identity to both inlines requires
-    # per-profile control over decimal rendering. ``True`` forces
-    # decimal even for integer-valued floats.
-    write_interval_decimal: bool = False
     purge_write: int = 0
     write_format: str = "ascii"
     write_precision: int = 6
@@ -111,7 +104,7 @@ class ControlDictBlock:
             f"endTime {_format_endtime(et, self.iteration_floor is not None)};",
             f"deltaT {_format_number(dt)};",
             f"writeControl {self.write_control};",
-            f"writeInterval {_format_write_interval(self.write_interval, self.write_interval_decimal)};",
+            f"writeInterval {_format_number(self.write_interval)};",
             f"purgeWrite {self.purge_write};",
             f"writeFormat {self.write_format};",
             f"writePrecision {self.write_precision};",
@@ -305,39 +298,40 @@ class SolverProfile:
 
 
 def _format_number(value: float | int) -> str:
-    """Format a numeric value for OpenFOAM dict syntax. Integers
-    render without trailing ``.0``; floats render with up to 6
-    significant digits, no scientific notation for typical
-    relaxation/tolerance values, scientific for very small numbers
-    (1e-06 etc.).
+    """Format a numeric value for OpenFOAM dict syntax.
+
+    Integers render without trailing ``.0`` (e.g. ``50`` not ``50.0``).
+    Floats preserve their type — integer-valued floats render WITH
+    ``.0`` (e.g. ``1.0`` not ``1``). This matches Python's default
+    float repr and is required for V61-107.5 pimpleFoam inline byte-
+    identity (caller-passed ``end_time=5.0``, ``delta_t=1.0``).
+
+    V61-112 Phase 2 R1 P2 closure: prior implementation stripped
+    ``.0`` from integer-valued floats, breaking byte-identity for any
+    caller passing float-typed integer values. The fix here relies on
+    YAML's int-vs-float type distinction (``1`` vs ``1.0``) and
+    Python's float repr to round-trip author intent.
+
+    Small numbers (|x| < 1e-3) render as scientific (``1e-06``);
+    typical mid-range render as decimal with up to 6 significant
+    digits (``0.05``, not ``0.050000``).
     """
     if isinstance(value, bool):
         # Should not reach here in numeric paths; defensive.
         return "yes" if value else "no"
     if isinstance(value, int):
         return str(value)
-    # Float. Match the V61-111 inline rendering convention:
-    # - integer-valued floats render as "1" (deltaT 1) not "1.0"
-    # - small numbers render as scientific: 1e-06 not 0.000001
-    # - mid-range render as decimal: 0.5 not 5e-01
+    # Float branch.
     if value == int(value):
-        return str(int(value))
+        # Integer-valued float — preserve ``.0`` to match Python's
+        # default f-string output (``f"{5.0}"`` → ``"5.0"``). This is
+        # what V61-107.5 pimpleFoam inline relied on.
+        return f"{value:.1f}"
     if 0 < abs(value) < 1e-3 or abs(value) >= 1e6:
         return f"{value:g}"
     # Trim trailing zeros for compactness (0.05 not 0.050000).
     s = f"{value:.6g}"
     return s
-
-
-def _format_write_interval(value: float, force_decimal: bool) -> str:
-    """V61-112 Phase 2: pimpleFoam inline forces ``writeInterval 1.0;``
-    (decimal even for integer-valued floats); simpleFoam inline writes
-    ``writeInterval 50;`` (no decimal). Both byte-contracts preserved
-    via per-profile ``write_interval_decimal`` flag.
-    """
-    if force_decimal and isinstance(value, (int, float)) and value == int(value):
-        return f"{float(value):.1f}"
-    return _format_number(value)
 
 
 def _format_endtime(value: float, is_iteration_count: bool) -> str:
