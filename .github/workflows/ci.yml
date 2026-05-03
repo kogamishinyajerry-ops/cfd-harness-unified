@@ -78,10 +78,21 @@ jobs:
           # R5 P2 closure: ensures the 400→500 fix for
           # solver_profile_load_failed is automated-tested in CI,
           # not just local runs).
+          # ui/backend/tests/test_bc_setup_user_override.py covers
+          # the V61-112 Phase 3 + Phase 4 cross-module-error-contract
+          # regression tests for LDC + channel paths (BCSetupError
+          # translation when load_profile fails). DEC-V61-114 closure:
+          # preemptive sibling-gap fix mirroring Phase 4 R5 P2.
+          # ui/backend/tests/test_bc_setup_from_stl_patches.py covers
+          # the V61-112 Phase 4 R3 P2 STL-path StlPatchBCError
+          # translation regression. DEC-V61-114 closure: same
+          # preemptive sibling-gap fix.
           python -m pytest tests/ \
             ui/backend/tests/test_report_bundle.py \
             ui/backend/tests/test_solver_profiles.py \
-            ui/backend/tests/test_setup_bc_envelope_route.py -q
+            ui/backend/tests/test_setup_bc_envelope_route.py \
+            ui/backend/tests/test_bc_setup_user_override.py \
+            ui/backend/tests/test_bc_setup_from_stl_patches.py -q
 
       # ADR-002 §5 W4 dogfood window 2026-04-25 → 2026-05-09:
       # Re-run pytest with the runtime guard installed in WARN mode so any
@@ -102,7 +113,9 @@ jobs:
           python -m pytest tests/ \
             ui/backend/tests/test_report_bundle.py \
             ui/backend/tests/test_solver_profiles.py \
-            ui/backend/tests/test_setup_bc_envelope_route.py -q --no-header -p no:cacheprovider \
+            ui/backend/tests/test_setup_bc_envelope_route.py \
+            ui/backend/tests/test_bc_setup_user_override.py \
+            ui/backend/tests/test_bc_setup_from_stl_patches.py -q --no-header -p no:cacheprovider \
             -o "log_cli=true" -o "log_cli_level=WARNING" \
             2>&1 | tee reports/plane_guard/ci_warn_pytest.log
           python scripts/plane_guard_rollback_eval.py \
