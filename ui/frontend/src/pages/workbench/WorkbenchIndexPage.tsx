@@ -25,23 +25,29 @@ export function WorkbenchIndexPage() {
     queryFn: () => api.listCases(),
   });
 
-  if (casesQuery.isLoading) {
-    return <Section><p className="text-surface-300">Loading cases…</p></Section>;
-  }
-  if (casesQuery.isError || !casesQuery.data) {
-    const msg =
-      casesQuery.error instanceof ApiError
+  // DEC-V61-115 Codex R1 P2 #2: render the hero unconditionally — it does
+  // not depend on /api/cases. Earlier draft gated the hero behind the
+  // loading/error states, which meant a slow or hanging /api/cases left the
+  // newly-promoted 新建案例 / 导入 STL CTAs unreachable from the default
+  // landing. The 参考案例 section below the hero still respects the query
+  // states (loading spinner / error message / cards), so the hero is always
+  // actionable while the reference grid degrades gracefully.
+  const refCasesBody = casesQuery.isLoading ? (
+    <p className="text-surface-300">Loading reference cases…</p>
+  ) : casesQuery.isError || !casesQuery.data ? (
+    <p className="text-sm text-contract-fail">
+      Failed to load reference cases:{" "}
+      {casesQuery.error instanceof ApiError
         ? `${casesQuery.error.status}: ${casesQuery.error.message}`
-        : String(casesQuery.error);
-    return (
-      <Section>
-        <WorkbenchHero />
-        <p className="mt-6 text-sm text-contract-fail">Failed to load cases: {msg}</p>
-      </Section>
-    );
-  }
-
-  const cases = casesQuery.data;
+        : String(casesQuery.error)}
+    </p>
+  ) : (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {casesQuery.data.map((c) => (
+        <CaseCard key={c.case_id} c={c} />
+      ))}
+    </div>
+  );
 
   return (
     <Section>
@@ -64,11 +70,7 @@ export function WorkbenchIndexPage() {
         </Link>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {cases.map((c) => (
-          <CaseCard key={c.case_id} c={c} />
-        ))}
-      </div>
+      {refCasesBody}
     </Section>
   );
 }
@@ -135,7 +137,13 @@ function WorkbenchHero() {
 }
 
 function Section({ children }: { children: React.ReactNode }) {
-  return <section className="mx-auto max-w-6xl px-8 py-8">{children}</section>;
+  // Responsive padding (DEC-V61-115 Codex R1 P2 #1 follow-on): tighter on
+  // narrow screens, full breathing room from md+. Pairs with Layout sidebar
+  // collapse so a phone-width visitor gets the full viewport for the hero +
+  // CTAs without wasted edge gutter.
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</section>
+  );
 }
 
 function CaseCard({ c }: { c: CaseIndexEntry }) {

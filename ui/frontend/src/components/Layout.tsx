@@ -40,7 +40,16 @@ const NAV: NavItem[] = [
 export function Layout() {
   return (
     <div className="flex h-full">
-      <aside className="w-56 shrink-0 border-r border-surface-800 bg-surface-900/60 px-3 py-4">
+      {/* DEC-V61-115 Codex R1 P2 #1: collapse sidebar below md (768px). The
+          fixed w-56 sidebar regressed narrow-viewport UX after / flipped from
+          /learn to /workbench. Below md, hide the sidebar entirely so the
+          main pane gets the full width — WorkbenchIndexPage's hero ships its
+          own /workbench/new + /workbench/import CTAs plus a /learn footer
+          link, so a phone-width visitor still reaches the engineer-facing
+          routes without sidebar nav. Power-user routes (/pro, /decisions,
+          /audit-package) remain desktop-targeted; users on narrow screens who
+          need them can still deep-link directly. */}
+      <aside className="hidden md:block w-56 shrink-0 border-r border-surface-800 bg-surface-900/60 px-3 py-4">
         <div className="px-2 pb-6">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-surface-400">
             CFD Harness
