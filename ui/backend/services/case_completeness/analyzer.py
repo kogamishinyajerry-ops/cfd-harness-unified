@@ -542,23 +542,58 @@ def _analyze_imported(
             )
         )
 
-    # Boundary patches: ONLY the manifest's bc.patches counts. Flat
-    # draft `boundary_conditions` is the editor's per-patch values
-    # block (e.g. `top_wall_u: 1.0`) — nothing syncs it into
-    # `manifest.bc.patches`. setup_bc_from_stl_patches() / face
-    # annotation are the only paths that do.
-    if not _has_in(raw_manifest_yaml, "bc", "patches"):
+    # Boundary-patch setup signal — Codex R6 P1 fix.
+    #
+    # Real-world BC state for imported cases lives in (a) OpenFOAM dicts
+    # under 0/ and system/ (written by setup_ldc_bc / setup_channel_bc /
+    # setup_bc_from_stl_patches), and (b) face_annotations.yaml. The
+    # manifest's `bc.patches` field exists in the schema but is NOT
+    # populated by current setup flows — they call mark_ai_authored()
+    # which writes to `overrides.raw_dict_files` and appends a history
+    # entry instead.
+    #
+    # So the canonical "BC has been set up" signal in the manifest is
+    # one of:
+    #   1. `bc.patches` non-empty (future-proof: if any future flow
+    #      populates the field, the analyzer respects it)
+    #   2. `history` has an entry with action in the setup-BC set
+    #      (covers the current setup_ldc_bc / setup_channel_bc /
+    #      setup_bc_from_stl_patches paths)
+    #   3. `overrides.raw_dict_files` has any 0/ time-zero dict
+    #      (independent corroboration that BC dicts have been authored)
+    bc_action_names = {
+        "setup_ldc_bc",
+        "setup_channel_bc",
+        "setup_bc_from_stl_patches",
+    }
+    history = raw_manifest_yaml.get("history", [])
+    bc_action_in_history = isinstance(history, list) and any(
+        isinstance(h, dict) and h.get("action") in bc_action_names
+        for h in history
+    )
+    overrides = raw_manifest_yaml.get("overrides", {})
+    raw_dict_files = (
+        overrides.get("raw_dict_files", {}) if isinstance(overrides, dict) else {}
+    )
+    has_zero_dir_dict = isinstance(raw_dict_files, dict) and any(
+        isinstance(p, str) and p.startswith("0/")
+        for p in raw_dict_files.keys()
+    )
+    bc_patches_set = _has_in(raw_manifest_yaml, "bc", "patches")
+    if not (bc_patches_set or bc_action_in_history or has_zero_dir_dict):
         missing.append(
             MissingField(
                 field_path="bc.patches",
                 severity="critical",
                 why=(
-                    "At least one boundary patch must be configured in "
-                    "the manifest — without setup_bc / face annotation, "
-                    "OpenFOAM cannot start. Editor `boundary_conditions` "
-                    "block is values-only and does not register patches; "
-                    "run the Step 3 [AI 处理] action or annotate faces "
-                    "in the viewport."
+                    "Boundary-patch setup has not run. The analyzer accepts "
+                    "any of: (a) manifest.bc.patches non-empty (schema-level), "
+                    "(b) a history entry with action in {setup_ldc_bc, "
+                    "setup_channel_bc, setup_bc_from_stl_patches} (current "
+                    "M-PANELS Step 3 paths), or (c) at least one "
+                    "overrides.raw_dict_files entry under 0/ (time-zero "
+                    "OpenFOAM dicts authored). Run the Step 3 [AI 处理] "
+                    "action or annotate faces in the viewport."
                 ),
             )
         )

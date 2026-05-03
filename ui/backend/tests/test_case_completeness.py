@@ -409,6 +409,137 @@ def test_imported_flat_boundary_conditions_does_not_satisfy_bc_patches(
     assert r.ready_for_archive is False
 
 
+def test_imported_bc_setup_history_entry_satisfies_bc(isolated_drafts):
+    """Codex R6 P1 regression — DEC-V61-116.
+
+    Real BC-setup flows (setup_ldc_bc, setup_channel_bc,
+    setup_bc_from_stl_patches) call mark_ai_authored() which writes to
+    overrides.raw_dict_files + history, NOT to manifest.bc.patches.
+    The analyzer must accept a history entry as proof of BC setup,
+    otherwise imported cases are permanently blocked even after
+    Step 3 succeeds.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_via_history"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "kOmegaSST",
+                },
+                "bc": {"patches": {}},  # ← still empty per current flows
+                "numerics": {},
+                "overrides": {"raw_dict_files": {}},
+                "history": [
+                    {
+                        "timestamp": "2026-05-04T00:00:00+00:00",
+                        "action": "setup_bc_from_stl_patches",
+                        "source": "ai",
+                        "detail": {},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert bc_missing == [], (
+        f"history-tracked BC setup must satisfy contract; got {bc_missing}"
+    )
+    assert r.ready_for_archive is True
+
+
+def test_imported_bc_setup_zero_dir_override_satisfies_bc(isolated_drafts):
+    """Codex R6 P1 regression — DEC-V61-116.
+
+    A `0/U` entry in overrides.raw_dict_files (independent corroboration
+    that BC dicts have been authored) must also satisfy the bc.patches
+    requirement.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_bc_via_overrides"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "kOmegaSST",
+                },
+                "bc": {"patches": {}},
+                "numerics": {},
+                "overrides": {
+                    "raw_dict_files": {
+                        "0/U": {"source": "ai"},
+                        "0/p": {"source": "ai"},
+                    }
+                },
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert bc_missing == [], (
+        f"0/ time-zero dict overrides must satisfy contract; got {bc_missing}"
+    )
+
+
+def test_imported_bc_unrelated_history_does_not_satisfy_bc(isolated_drafts):
+    """Sanity — only the BC-setup action names count, not arbitrary
+    history entries. A switch_solver entry should NOT clear bc.patches.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_unrelated_history"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "kOmegaSST",
+                },
+                "bc": {"patches": {}},
+                "numerics": {},
+                "overrides": {"raw_dict_files": {}},
+                "history": [
+                    {
+                        "timestamp": "2026-05-04T00:00:00+00:00",
+                        "action": "switch_solver",  # ← not BC
+                        "source": "ai",
+                        "detail": {},
+                    },
+                    {
+                        "timestamp": "2026-05-04T00:01:00+00:00",
+                        "action": "edit_dict",  # ← not BC
+                        "source": "user",
+                        "detail": {},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert len(bc_missing) == 1, (
+        f"unrelated history actions must NOT satisfy bc.patches; got {bc_missing}"
+    )
+
+
 def test_imported_solver_dict_without_name_still_flagged(isolated_drafts):
     """Codex R5 P2 regression — DEC-V61-116.
 
