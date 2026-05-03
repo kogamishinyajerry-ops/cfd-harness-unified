@@ -14,15 +14,9 @@
 // data-step-status attribute on parent rows is unchanged. Existing
 // StepTree.test.tsx 6-test contract stays green without modification.
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import type { StepDef, StepId, StepStatus } from "./types";
-
-/** Origin tag distinguishing auto-expansion (active-step default) from
- *  manual-pinning (user clicked the chevron). Auto entries collapse
- *  when the active step transitions away; manual entries persist
- *  until the user clicks the chevron again. */
-type ExpansionSource = "auto" | "manual";
 
 interface StepTreeProps {
   steps: readonly StepDef[];
@@ -71,75 +65,37 @@ export function StepTree({
   onStepClick,
   disabled = false,
 }: StepTreeProps) {
-  // Local expansion state. Each entry carries an origin tag
-  // ("auto" = active-step default, "manual" = user-pinned).
-  // Multiple steps may be expanded simultaneously (matches Fluent
-  // multi-expand convention).
+  // Local expansion state. The active step is auto-expanded ONCE on
+  // first mount (so the engineer immediately sees what's inside the
+  // step they landed on); thereafter the user has full control via
+  // the chevron disclosure toggles.
   //
-  // Codex R1 P2 fix (2026-05-04): the previous additive-only
-  // expansion model left auto-expanded rows behind when the user
-  // navigated step-by-step, progressively filling the rail. Now
-  // auto entries are evicted on active-step transition; only
-  // manually-pinned rows survive (the contract spelled out in the
-  // DEC §"Auto-expand" bullet).
-  const [expansion, setExpansion] = useState<
-    ReadonlyMap<StepId, ExpansionSource>
-  >(() => {
+  // Design history (Codex R1 P2 / R2 P2 / R3 P2): earlier iterations
+  // tracked an "auto" vs "manual" origin and either (a) accumulated
+  // stale auto-expansions across navigation (R1) or (b) overloaded
+  // chevron clicks to pin auto-expanded rows, breaking the ARIA
+  // disclosure contract (R3 — `aria-expanded=true` controls must
+  // collapse on activation). Dropping the per-transition auto-expand
+  // and keeping chevrons as pure disclosure toggles satisfies all
+  // three concerns: no stale state, no ARIA violation, and aligns
+  // with how real Fluent / Star-CCM+ trees behave (each node is
+  // independently expanded by the user, not auto-driven by which
+  // node is "active").
+  const [expanded, setExpanded] = useState<ReadonlySet<StepId>>(() => {
     const initial = steps.find((s) => s.id === currentStepId);
-    if (initial?.subNodes && initial.subNodes.length > 0) {
-      return new Map<StepId, ExpansionSource>([[currentStepId, "auto"]]);
-    }
-    return new Map<StepId, ExpansionSource>();
+    return initial?.subNodes && initial.subNodes.length > 0
+      ? new Set<StepId>([currentStepId])
+      : new Set<StepId>();
   });
-  const prevStepIdRef = useRef<StepId>(currentStepId);
 
-  useEffect(() => {
-    const prevId = prevStepIdRef.current;
-    if (prevId === currentStepId) return;
-    prevStepIdRef.current = currentStepId;
-    setExpansion((prev) => {
-      const next = new Map(prev);
-      // Drop the previous active step IFF it was only auto-expanded
-      // (manual pins survive navigation).
-      if (next.get(prevId) === "auto") next.delete(prevId);
-      // Auto-expand the new active step when it has sub-nodes — but
-      // only if it isn't already manually pinned (don't downgrade
-      // manual → auto).
-      const target = steps.find((s) => s.id === currentStepId);
-      if (
-        target?.subNodes &&
-        target.subNodes.length > 0 &&
-        !next.has(currentStepId)
-      ) {
-        next.set(currentStepId, "auto");
-      }
-      return next;
-    });
-  }, [currentStepId, steps]);
-
-  // Chevron click logic, three-state cycle:
-  //   absent     → "manual"  (expand a collapsed row as a manual pin)
-  //   "auto"     → "manual"  (pin an auto-expanded active row so it
-  //                           survives active-step transitions, per
-  //                           Codex R2 P2 — without this, the user
-  //                           would have to discover a click-twice
-  //                           collapse-then-reopen workaround)
-  //   "manual"   → absent    (collapse a manual pin)
-  //
-  // The first click on an auto-expanded active row therefore does NOT
-  // visually collapse it — it promotes the entry to "manual" while
-  // staying expanded. The aria-label + data-step-pinned attribute
-  // shifts so screen readers and tests can detect the pin state. A
-  // second click then collapses.
+  // Chevron click is a pure disclosure toggle (matches `aria-expanded`
+  // semantics): if the row is currently expanded → collapse; else
+  // expand. No hidden state, no second-click required.
   const toggleExpanded = (stepId: StepId) => {
-    setExpansion((prev) => {
-      const next = new Map(prev);
-      const current = next.get(stepId);
-      if (current === "manual") {
-        next.delete(stepId);
-      } else {
-        next.set(stepId, "manual");
-      }
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
       return next;
     });
   };
@@ -157,9 +113,7 @@ export function StepTree({
       {steps.map((step) => {
         const status = step.id === currentStepId ? "active" : stepStates[step.id];
         const hasSubNodes = !!step.subNodes && step.subNodes.length > 0;
-        const expansionSource = expansion.get(step.id);
-        const isExpanded = hasSubNodes && expansion.has(step.id);
-        const isPinned = expansionSource === "manual";
+        const isExpanded = hasSubNodes && expanded.has(step.id);
         return (
           <div key={step.id} className="flex flex-col gap-0.5">
             <div className="flex items-stretch gap-1">
@@ -168,37 +122,19 @@ export function StepTree({
                   type="button"
                   data-testid={`step-tree-chevron-${step.id}`}
                   data-step-expanded={isExpanded ? "true" : "false"}
-                  data-step-pinned={isPinned ? "true" : "false"}
                   aria-expanded={isExpanded}
                   aria-label={
-                    // Three-state aria-label communicates the next
-                    // click's effect to assistive tech: collapse a
-                    // pin / pin an auto-expanded row / expand a
-                    // collapsed row.
-                    isPinned
+                    isExpanded
                       ? `Collapse step ${step.id}`
-                      : isExpanded
-                      ? `Pin step ${step.id} open`
                       : `Expand step ${step.id}`
-                  }
-                  title={
-                    isPinned
-                      ? "Click to collapse"
-                      : isExpanded
-                      ? "Click to pin open (stays expanded across navigation)"
-                      : "Click to expand"
                   }
                   disabled={disabled}
                   onClick={() => toggleExpanded(step.id)}
-                  className={`flex w-4 shrink-0 items-center justify-center text-[10px] hover:text-surface-300 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    isPinned ? "text-emerald-400" : "text-surface-500"
-                  }`}
+                  className="flex w-4 shrink-0 items-center justify-center text-[10px] text-surface-500 hover:text-surface-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {/* Chevron triangles — small enough to not steal
                    *  visual weight from the status dot, but large
-                   *  enough to be a real click target. The colored
-                   *  variant signals "pinned" — engineers learn the
-                   *  pin convention without reading docs. */}
+                   *  enough to be a real click target. */}
                   <span aria-hidden>{isExpanded ? "▼" : "▶"}</span>
                 </button>
               ) : (

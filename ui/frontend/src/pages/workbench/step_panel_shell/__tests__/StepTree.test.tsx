@@ -270,11 +270,11 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
     expect(onStepClick).not.toHaveBeenCalled();
   });
 
-  // Codex R1 P2 regression: navigating step→step used to leave each
-  // visited step's auto-expansion behind, progressively filling the rail.
-  // Auto entries must collapse when the active step transitions away;
-  // only manually-pinned rows persist.
-  it("collapses the previously-active step's auto-expansion on navigation", () => {
+  // Codex R1+R2+R3 design: chevron is a pure ARIA disclosure toggle.
+  // Active-step navigation does NOT auto-expand the new step (auto-expand
+  // only happens once on first mount); user has full control thereafter.
+  // Manual expansions persist across navigation in both directions.
+  it("does not auto-expand the new active step on navigation", () => {
     const { rerender } = render(
       <StepTree
         steps={HIER_STEPS}
@@ -283,8 +283,9 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
+    // Step 2 is auto-expanded on first mount.
     expect(screen.getByTestId("step-tree-subnodes-2")).toBeInTheDocument();
-    // Navigate 2 → 3.
+    // Navigate 2 → 3. Step 3 should NOT auto-expand; user controls.
     rerender(
       <StepTree
         steps={HIER_STEPS}
@@ -293,23 +294,8 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("step-tree-subnodes-2"),
-    ).not.toBeInTheDocument();
-    // Navigate 3 → 4.
-    rerender(
-      <StepTree
-        steps={HIER_STEPS}
-        currentStepId={4}
-        stepStates={ALL_PENDING}
-        onStepClick={() => {}}
-      />,
-    );
-    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("step-tree-subnodes-2"),
-    ).not.toBeInTheDocument();
+    // Step 2's previous expansion persists (pure user-controlled).
+    expect(screen.getByTestId("step-tree-subnodes-2")).toBeInTheDocument();
     expect(
       screen.queryByTestId("step-tree-subnodes-3"),
     ).not.toBeInTheDocument();
@@ -325,10 +311,12 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    // User manually expands Step 5 while on Step 1.
+    // User manually expands Step 5 while on Step 1 (Step 1 has no
+    // sub-nodes so initial auto-expand seeds nothing).
     await user.click(screen.getByTestId("step-tree-chevron-5"));
     expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
-    // Active step flips to 3 → Step 3 auto-expands AND Step 5 stays expanded.
+    // Active step flips to 3 → Step 5 stays expanded; Step 3 stays
+    // collapsed (no auto-expand on transition).
     rerender(
       <StepTree
         steps={HIER_STEPS}
@@ -337,8 +325,10 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
     expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
   });
 
   it("disables chevron buttons when disabled=true", async () => {
@@ -361,57 +351,12 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
     ).not.toBeInTheDocument();
   });
 
-  // Codex R2 P2 regression: clicking the chevron on the currently
-  // auto-expanded active step must PIN the row (auto → manual)
-  // without collapsing — so the engineer doesn't have to discover
-  // the click-twice collapse-then-reopen workaround to keep a
-  // step's sub-actions visible across navigation.
-  it("pins auto-expanded active row on chevron click and survives navigation", async () => {
+  // Codex R3 P2: chevron with `aria-expanded=true` must collapse the
+  // disclosure on activation (matches WAI-ARIA disclosure pattern).
+  // First click on auto-expanded active row → collapses; second click
+  // → expands. No hidden state, no pin overload.
+  it("chevron click collapses an auto-expanded active row (pure disclosure semantics)", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <StepTree
-        steps={HIER_STEPS}
-        currentStepId={3}
-        stepStates={ALL_PENDING}
-        onStepClick={() => {}}
-      />,
-    );
-    // Step 3 is active; auto-expanded; not pinned.
-    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
-    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
-      "data-step-pinned",
-      "false",
-    );
-    // First chevron click on auto-expanded active row → PIN, still visible.
-    await user.click(screen.getByTestId("step-tree-chevron-3"));
-    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
-    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
-      "data-step-pinned",
-      "true",
-    );
-    // Navigate 3 → 4 → step 3 stays expanded because pinned.
-    rerender(
-      <StepTree
-        steps={HIER_STEPS}
-        currentStepId={4}
-        stepStates={ALL_PENDING}
-        onStepClick={() => {}}
-      />,
-    );
-    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
-    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
-    // Click pinned step 3 chevron → collapse.
-    await user.click(screen.getByTestId("step-tree-chevron-3"));
-    expect(
-      screen.queryByTestId("step-tree-subnodes-3"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
-      "data-step-pinned",
-      "false",
-    );
-  });
-
-  it("uses tri-state aria-label reflecting next click effect", () => {
     render(
       <StepTree
         steps={HIER_STEPS}
@@ -420,10 +365,43 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
         onStepClick={() => {}}
       />,
     );
-    // Step 3 active, auto-expanded → next click pins.
+    // Step 3 is active; auto-expanded on first mount.
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // First click → collapse (matches aria-expanded contract).
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    // Second click → re-expand.
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("uses two-state aria-label reflecting current disclosure state", () => {
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // Step 3 active, auto-expanded → next click collapses.
     expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
       "aria-label",
-      "Pin step 3 open",
+      "Collapse step 3",
     );
     // Step 2 collapsed → next click expands.
     expect(screen.getByTestId("step-tree-chevron-2")).toHaveAttribute(
