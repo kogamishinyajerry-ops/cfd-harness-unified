@@ -269,6 +269,11 @@ def setup_bc(
                 # fvSolution} group. 409 (Conflict) — engineer must
                 # reconcile the override state before retrying.
                 "solver_dicts_partial_override": 409,
+                # DEC-V61-112 Phase 4 R4 P2 closure: server-side
+                # deployment fault (YAML missing or malformed) — must
+                # surface as 5xx so retry/alerting logic sees a server
+                # error, NOT the default-400 client-error fallback.
+                "solver_profile_load_failed": 500,
             }.get(exc.failing_check, 400)
             raise HTTPException(
                 status_code=status,

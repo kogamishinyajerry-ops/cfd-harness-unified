@@ -686,3 +686,48 @@ def test_envelope_channel_executor_failure_routes_to_422_pin_mismatch(
     assert (
         "stale pins" in detail or "no boundary face matched" in detail
     ), detail
+
+
+def test_setup_bc_route_maps_solver_profile_load_failed_to_500(
+    monkeypatch, tmp_path
+):
+    """DEC-V61-112 Phase 4 R4 P2 closure: when setup_bc_from_stl_patches
+    raises StlPatchBCError(failing_check="solver_profile_load_failed"),
+    the route's status mapping must surface 500 (server-side
+    deployment fault), NOT the default-400 fallback. Without the
+    mapping, a missing/malformed solver-profile YAML at runtime is
+    misreported to clients as a client error → breaks retry/alerting
+    logic for the deployment hazard.
+    """
+    from ui.backend.services.case_solve import (
+        bc_setup_from_stl_patches as stl_module,
+    )
+    from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
+        StlPatchBCError,
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    _stage_imported_case(imported, case_id)
+
+    def boom(*args, **kwargs):
+        raise StlPatchBCError(
+            "simulated channelPimpleFoam.yaml schema mismatch "
+            "(deployment hazard)",
+            failing_check="solver_profile_load_failed",
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.setup_bc_from_stl_patches", boom
+    )
+
+    client = _new_client()
+    resp = client.post(
+        f"/api/import/{case_id}/setup-bc?from_stl_patches=1"
+    )
+    assert resp.status_code == 500, (
+        f"expected 500 for solver_profile_load_failed (server-side "
+        f"deployment fault), got {resp.status_code}"
+    )
+    body = resp.json()
+    assert body["detail"]["failing_check"] == "solver_profile_load_failed"
