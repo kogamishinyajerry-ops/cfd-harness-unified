@@ -1,7 +1,8 @@
 ---
 decision_id: DEC-V61-114
 title: CI explicit-include for V61-112 cross-module-error-contract regression tests (post-V61-113 audit continuation)
-status: Proposed (2026-05-03 · authored under user 2026-05-03 autonomous-mode mandate "全权授予你开发，全都按你的建议继续，执行开发"; user explicit "continue with one more DEC to trigger the arc retro" follow-up after V61-113 closure)
+status: Accepted (2026-05-03 · Codex pre-merge 1-round APPROVE on commit 39e4ef4; chain report at reports/codex_tool_reports/v61_114_r1_chain.md; user 2026-05-03 autonomous-mode mandate + explicit "continue with one more DEC to trigger the arc retro" follow-up covers acceptance flip)
+codex_tool_report_path: reports/codex_tool_reports/v61_114_r1_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-03
 authored_under: V61-113 closure (commit 351bb2a · counter 71→72) demonstrated the preemptive-audit-driven-by-prior-chain-reports pattern works (1-round APPROVE). DEC-V61-114 applies the SAME pattern to a sibling gap surfaced by V61-112 Phase 4 R5 P2 + Phase 1 R1 P2-1: V61-112 series added 5 regression tests across 2 outside-testpaths test files that are NOT in CI explicit-include. Without this DEC, the regression guards merge but never run on PRs.
@@ -85,3 +86,35 @@ V61-113 lesson "preemptive audit driven by prior chain reports works" applied di
 This DEC's acceptance advances `autonomous_governance_counter_v61` 72 → 73, triggering RETRO-V61-001 cadence rule #2 (counter ≥20 since prior retro · last anchor RETRO-V61-V107-V108 at counter 53 → arc retro at counter 73). The next session begins with the arc retro.
 
 V61-114's small scope is intentional: it's the "right-sized" DEC to close a real gap AND yield a clean arc boundary for retro analysis. The retro will have 20 acceptances to analyze (V61-088 → V61-114) covering the full V61-112 series + supporting work + V61-111 + V61-113.
+
+## Acceptance closure (2026-05-03 · Codex pre-merge 1-round APPROVE)
+
+V61-114 implementation landed in commit `39e4ef4`. Codex pre-merge
+chain on 86gs `gpt-5.4` xhigh:
+
+| Round | Commit | Verdict | Findings |
+|-------|--------|---------|----------|
+| R1 | 39e4ef4 | APPROVE clean | "The workflow change consistently adds the two missing backend test files to both pytest invocations in CI, which closes the stated coverage gap without introducing an obvious regression in the job configuration." |
+
+**Note**: First Codex run truncated mid-grep (no verdict produced).
+Re-run yielded clean APPROVE on the same commit.
+
+**Second consecutive 1-round APPROVE in this session** (after V61-113).
+Validates the V61-113-established preemptive-audit calibration anchor
+(~80-90% pass-rate) — pattern is reproducible.
+
+**Self-pass-rate calibration**: predicted 80% / actual 1 round APPROVE.
+Calibration honest.
+
+**Counter advancement**: 72 → 73. Triggers RETRO-V61-001 cadence rule
+#2 (counter ≥20 since prior retro · last anchor RETRO-V61-V107-V108 at
+counter 53 → arc retro at counter 73). Arc retro is next session's
+first work item; analyzes 20-DEC arc V61-088 → V61-114 with self-pass-
+rate calibration data across 5 distinct categories established this
+session: bug-fix migration · schema-extension · schema-reuse ·
+cross-cutting cascade · preemptive audit.
+
+**V61-114 acceptance criteria status**: all 5 criteria PASS
+(§1 mainline pytest invocation extended · §2 plane-guard dogfood
+extended · §3 local verification · §4 Codex APPROVE · §5 Surface scan
+applied).
