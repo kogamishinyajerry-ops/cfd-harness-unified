@@ -637,41 +637,53 @@ def _analyze_whitelist_like(
 def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     """Resolve `case_id` and run the matching completeness analysis.
 
-    Resolution order (Codex R2 P1 fix · 2026-05-04):
+    Resolution policy (Codex R3 · 2026-05-04):
 
-      Imported cases have BOTH `user_drafts/imported/{id}/case_manifest.yaml`
-      AND `user_drafts/{id}.yaml` from the moment `scaffold_imported_case()`
-      runs — the flat YAML is just the editor's view of the same scaffold
-      state. The two files diverge over time:
-        - flat draft mtime advances when the engineer saves via
-          /workbench/case/{id}/edit (case_drafts.put_case_yaml)
-        - manifest mtime advances when an M-PANELS action runs
-          (setup_bc_from_stl_patches, mesh wizard, switch_solver, …)
+      Imported cases have TWO independent state stores that diverge
+      over different operations:
+        - `user_drafts/imported/{id}/case_manifest.yaml` — schema-typed
+          v2 manifest. Updated by setup_bc_from_stl_patches, mesh
+          wizard, switch_solver, mark_user_override, mark_ai_authored,
+          and any M-PANELS action that writes the manifest.
+        - `user_drafts/{id}.yaml` — flat editor YAML. Updated by
+          `PUT /api/cases/{id}/yaml` (CaseEditorPage / EditCasePage).
 
-      Whichever file was modified more recently reflects current engineer
-      intent. mtime tie (or both at scaffold time) → manifest wins, since
-      the manifest is the schema-typed canonical state and the editor's
-      flat YAML is a derivation.
+      The two CAN diverge: editor edits never auto-sync into the
+      manifest, and manifest writes never auto-sync into the flat
+      YAML. Earlier mtime-based heuristics (R1, R2) are structurally
+      fragile — sub-second mtimes flip on APFS/ext4 (R3 P1) and any
+      manifest-side metadata write (mark_user_override / mark_ai_authored)
+      flips the analyzer back to manifest mid-workflow, hiding
+      engineer flat edits (R3 P2).
+
+      Final policy: **for imported cases, the manifest is canonical**.
+      It's the schema-typed state every downstream solver/route reads,
+      so the completeness verdict tracks downstream reality. Editor
+      flat-draft edits don't surface in the missing list directly —
+      we surface the dual-state limitation as a note instead.
+
+      Future DEC may add an editor → manifest sync hook so flat edits
+      propagate; that's out of scope for V61-116.
 
     Resolution rules:
-        1. If imported_dir exists AND flat_draft exists:
-              · flat_draft.mtime > manifest.mtime → analyze flat draft as
-                "draft" (engineer-edited)
-              · else                              → analyze imported_dir
-                as "imported_user" (manifest-canonical)
-        2. If imported_dir exists alone (older scaffolds without editor
-           write) → analyze imported_dir as "imported_user"
-        3. If flat_draft exists alone (whitelist fork or fresh manual
-           draft) → analyze flat draft as "draft"
-        4. If whitelist[case_id] exists → analyze whitelist entry
-        5. Else → raise CaseNotFoundError
+        1. imported_dir exists → analyze manifest. If flat draft also
+           exists, append a note about the dual-state limitation.
+        2. flat_draft exists alone (whitelist fork or fresh manual
+           draft) → analyze flat draft as "draft".
+        3. whitelist[case_id] exists → analyze whitelist entry.
+        4. Else → raise CaseNotFoundError.
 
-    History: R1 fix (flat-draft-always-wins) regressed the fresh-import
-    happy path because `scaffold_imported_case()` writes both files at
-    import time, so freshly-imported cases would always resolve as
-    "draft" instead of "imported_user" and the minimal-contract path
-    would never run (Codex R2 P1). The mtime gate is the correct
-    arbitrator.
+    History:
+      - R1 (initial): imported_dir → flat → whitelist (manifest first).
+        Codex R1 P1: stale manifest hides engineer flat edits.
+      - R2: flat → imported_dir → whitelist (flat first).
+        Codex R2 P1: scaffold writes flat YAML too, so fresh imports
+        always resolve as draft, never imported_user.
+      - R3 (this): mtime-based imported with both. Codex R3 P1+P2:
+        sub-second mtimes regress; metadata-only manifest writes flip
+        analyzer mid-workflow.
+      - R4 (final): manifest-canonical for imported cases; flat
+        existence surfaced as note.
 
     Raises:
         CaseNotFoundError: case_id resolves to nothing.
@@ -682,49 +694,35 @@ def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     flat_draft = _resolve_flat_draft(case_id)
     imported_dir = _resolve_imported_dir(case_id)
 
-    # Case 1: BOTH exist → mtime wins.
-    if flat_draft is not None and imported_dir is not None:
-        try:
-            flat_mtime = flat_draft.stat().st_mtime
-            manifest_mtime = (imported_dir / "case_manifest.yaml").stat().st_mtime
-        except OSError:
-            # Stat failure on either side → fall back to manifest as
-            # the schema-typed canonical source.
-            return _analyze_imported(case_id, imported_dir)
-        # Strict greater-than: equal mtimes (scaffold time) → manifest
-        # wins because it's the canonical state and the flat YAML is
-        # just an editor view of it.
-        if flat_mtime > manifest_mtime:
-            raw = _read_flat_yaml(flat_draft)
-            notes = [
-                "Analyzing the editor's saved draft (user_drafts/{id}.yaml) "
-                "because it has been modified more recently than the "
-                "import-time case_manifest.yaml. Engineer edits via "
-                "/workbench/case/{id}/edit drive the analysis until the "
-                "manifest is rewritten by an M-PANELS action."
-            ]
-            return _analyze_whitelist_like(
-                case_id=case_id, raw=raw, case_kind="draft", notes=notes
-            )
-        # Manifest is newer (or equal): canonical imported analysis.
-        return _analyze_imported(case_id, imported_dir)
-
-    # Case 2: imported_dir alone (no flat draft) → imported analysis.
+    # Case 1: imported case (with or without a co-existing flat draft).
+    # Manifest is canonical. Always.
     if imported_dir is not None:
-        return _analyze_imported(case_id, imported_dir)
+        report = _analyze_imported(case_id, imported_dir)
+        if flat_draft is not None:
+            # Surface the dual-state limitation so engineers know edits
+            # via PUT /api/cases/{id}/yaml don't propagate here yet.
+            report.notes.append(
+                "A flat editor YAML also exists at user_drafts/{id}.yaml. "
+                "Engineer edits made via /workbench/case/{id}/edit are NOT "
+                "reflected in this report — the analyzer tracks the schema-"
+                "canonical case_manifest.yaml. To sync flat-draft edits into "
+                "the manifest, run an M-PANELS action (setup-bc, mesh, "
+                "switch-solver) that re-authors the affected sections."
+            )
+        return report
 
-    # Case 3: flat_draft alone (whitelist fork or fresh manual draft).
+    # Case 2: flat_draft alone (whitelist fork or fresh manual draft).
     if flat_draft is not None:
         raw = _read_flat_yaml(flat_draft)
         notes = [
             "Analyzing user_drafts/{case_id}.yaml (flat draft, may be "
-            "a whitelist fork or a pre-import edit)."
+            "a whitelist fork or a fresh manual draft)."
         ]
         return _analyze_whitelist_like(
             case_id=case_id, raw=raw, case_kind="draft", notes=notes
         )
 
-    # Case 4: whitelist entry.
+    # Case 3: whitelist entry.
     whitelist = _load_whitelist()
     entry = whitelist.get(case_id)
     if entry is not None:
@@ -735,5 +733,5 @@ def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
             notes=[],
         )
 
-    # Case 5: not found.
+    # Case 4: not found.
     raise CaseNotFoundError(f"case_id not found: {case_id}")

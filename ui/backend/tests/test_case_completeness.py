@@ -241,31 +241,25 @@ def test_imported_case_with_unset_turbulence_in_yaml_flagged_despite_default(
     )
 
 
-def test_flat_draft_wins_when_newer_than_manifest(isolated_drafts):
-    """Codex R1 P1 + R2 P1 regression — DEC-V61-116.
+def test_imported_case_always_uses_manifest_when_dir_exists(isolated_drafts):
+    """Codex R3 fix — DEC-V61-116.
 
-    When the editor saves to `user_drafts/{id}.yaml` AFTER the import
-    scaffold wrote `imported/{id}/case_manifest.yaml`, the flat draft
-    has a newer mtime and must win the resolution race so the
-    completeness report reflects the engineer's current edits.
+    Per the manifest-canonical policy: when imported_dir/{id}/case_manifest.yaml
+    exists, analysis ALWAYS uses the manifest, regardless of whether a
+    flat draft also exists or which file is newer. mtime-based
+    arbitration was structurally fragile (sub-second mtimes on APFS;
+    metadata-only manifest writes that don't change schema state).
 
-    Scaffold-time tie (or manifest newer) lets the manifest win — that
-    case is covered by `test_manifest_wins_when_newer_than_flat`.
+    The manifest is the schema-typed canonical state every downstream
+    solver/route consults; the analyzer agrees with that source so the
+    completeness verdict tracks downstream reality.
     """
-    import os
-    import time
-
     drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_flat_wins"
-    # Step 1: scaffold-time manifest (older mtime).
+    case_id = "imported_2026-05-04T00-00-00Z_canonical"
+    # Manifest: complete (would say ready=True).
     _seed_imported_manifest(imported, case_id)
-    manifest_path = imported / case_id / "case_manifest.yaml"
-    # Force the manifest mtime back so we don't race the test clock.
-    old = time.time() - 60
-    os.utime(manifest_path, (old, old))
-    # Step 2: engineer edits flat draft (newer mtime).
-    flat_path = drafts / f"{case_id}.yaml"
-    flat_path.write_text(
+    # Flat draft: incomplete (would say not ready if it were the source).
+    (drafts / f"{case_id}.yaml").write_text(
         yaml.safe_dump(
             {
                 "id": case_id,
@@ -278,87 +272,79 @@ def test_flat_draft_wins_when_newer_than_manifest(isolated_drafts):
         encoding="utf-8",
     )
     r = analyze_case_completeness(case_id)
-    assert r.case_kind == "draft", (
-        f"flat draft (newer mtime) must win; got case_kind={r.case_kind}"
+    assert r.case_kind == "imported_user", (
+        f"manifest-canonical policy: imported_dir always wins; got {r.case_kind}"
     )
-    # The flat draft's missing turbulence_model must surface in the report.
+    # Manifest is complete → ready.
+    assert r.ready_for_archive is True
+    # The flat-draft existence note must surface so engineer knows the
+    # dual-state limitation.
     assert any(
-        m.field_path == "turbulence_model" and m.severity == "critical"
-        for m in r.missing
-    )
+        "user_drafts/{id}.yaml" in n and "not reflected" in n.lower()
+        for n in r.notes
+    ), f"expected dual-state note; got notes = {r.notes}"
 
 
-def test_manifest_wins_when_newer_than_flat(isolated_drafts):
-    """Codex R2 P1 regression — DEC-V61-116.
+def test_imported_case_no_flat_draft_no_dual_state_note(isolated_drafts):
+    """When only the manifest exists (no flat draft co-pilot), the
+    dual-state note must NOT appear — there's no flat draft for the
+    engineer to be confused about."""
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_no_flat"
+    _seed_imported_manifest(imported, case_id)
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert not any(
+        "flat editor YAML also exists" in n for n in r.notes
+    ), f"unexpected dual-state note when no flat draft; notes = {r.notes}"
 
-    When `setup_bc_from_stl_patches()` or another M-PANELS action
-    rewrites `case_manifest.yaml`, the manifest mtime advances past
-    the scaffold-time flat YAML. The analyzer must then re-pick the
-    manifest as canonical so manifest-side updates surface in the
-    report.
 
-    This is the symmetric counterpart of
-    `test_flat_draft_wins_when_newer_than_manifest`.
+def test_imported_case_metadata_write_does_not_flip_resolution(isolated_drafts):
+    """Codex R3 P2 regression — DEC-V61-116.
+
+    Sequence under the previous mtime-based resolver that broke:
+      1. scaffold writes flat + manifest
+      2. engineer edits flat YAML (flat newer)
+      3. mark_user_override touches manifest (manifest newer again →
+         old resolver flipped back to manifest, hiding flat edits)
+
+    Under the manifest-canonical policy this whole sequence is moot —
+    imported_dir always wins. Verify by simulating: scaffold + flat
+    edit + later manifest-touch → still uses manifest, still surfaces
+    the dual-state note.
     """
     import os
     import time
 
     drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_manifest_wins"
-    # Step 1: scaffold-time flat YAML (older mtime).
+    case_id = "imported_2026-05-04T00-00-00Z_metadata_touch"
+
+    # Step 1: scaffold + flat draft.
+    _seed_imported_manifest(imported, case_id)
     flat_path = drafts / f"{case_id}.yaml"
     flat_path.write_text(
         yaml.safe_dump(
-            {
-                "id": case_id,
-                "name": "Imported",
-                "flow_type": "INTERNAL",
-                "geometry_type": "CUSTOM",
-                # turbulence_model intentionally absent in scaffold YAML
-            }
+            {"id": case_id, "name": "Edited", "flow_type": "INTERNAL"}
         ),
         encoding="utf-8",
     )
-    old = time.time() - 60
-    os.utime(flat_path, (old, old))
-    # Step 2: a manifest-rewriting action lands a complete manifest.
-    _seed_imported_manifest(imported, case_id)
-    r = analyze_case_completeness(case_id)
-    assert r.case_kind == "imported_user", (
-        f"manifest (newer mtime) must win; got case_kind={r.case_kind}"
-    )
-    # Complete manifest → ready
-    assert r.ready_for_archive is True
 
+    # Step 2: simulate engineer flat edit landing strictly later.
+    later = time.time()
+    os.utime(flat_path, (later, later))
 
-def test_scaffold_time_tie_manifest_wins(isolated_drafts):
-    """Codex R2 P1 regression — DEC-V61-116.
-
-    `scaffold_imported_case()` writes BOTH files in quick succession at
-    import time, so their mtimes are essentially equal. Equal mtimes
-    must let the manifest win because it's the schema-typed canonical
-    state and the flat YAML is just an editor view of it.
-    """
-    import os
-    import time
-
-    drafts, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_tie"
-    _seed_imported_manifest(imported, case_id)
-    flat_path = drafts / f"{case_id}.yaml"
-    flat_path.write_text(
-        yaml.safe_dump({"id": case_id, "name": "Scaffold view"}),
-        encoding="utf-8",
-    )
-    # Force exact-tie mtimes so the test doesn't race the file system.
-    same = time.time()
+    # Step 3: simulate mark_user_override bumping manifest mtime past flat.
     manifest_path = imported / case_id / "case_manifest.yaml"
-    os.utime(flat_path, (same, same))
-    os.utime(manifest_path, (same, same))
+    much_later = later + 100
+    os.utime(manifest_path, (much_later, much_later))
+
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user", (
-        f"mtime tie must let manifest win; got case_kind={r.case_kind}"
+        "manifest-canonical policy makes mtime ordering irrelevant"
     )
+    assert any(
+        "user_drafts/{id}.yaml" in n for n in r.notes
+    ), "dual-state note must still surface"
 
 
 def test_schema_invalid_manifest_blocks_archive(isolated_drafts):
