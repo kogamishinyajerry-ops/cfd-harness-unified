@@ -215,6 +215,25 @@ export interface StepTaskPanelProps {
   registerAiAction: (action: (() => Promise<void>) | null) => void;
 }
 
+/** Sub-node descriptor for the Fluent-style hierarchical StepTree
+ *  (DEC-V61-117). Sub-nodes are display-only labels indented under
+ *  their parent step row when the parent is expanded — they describe
+ *  "what's inside this step" so the engineer can see the action
+ *  decomposition at a glance, matching the canonical Fluent /
+ *  Star-CCM+ tree-of-actions mental model. Click navigation /
+ *  scroll-to-anchor is explicitly out of scope for V61-117 V1
+ *  ("不需要过多的子菜单"); a future DEC may layer it additively.
+ */
+export interface StepSubNode {
+  /** Stable id used in `data-testid="step-tree-subnode-${parentId}-${id}"`.
+   *  Must be unique within a single parent step. */
+  id: string;
+  /** Visible label rendered in the indented sub-row. Mirrors Fluent
+   *  action vocabulary (e.g. "BC patches", "Residuals") so engineers
+   *  recognize the decomposition without reading docs. */
+  label: string;
+}
+
 /** Static descriptor for one step in the 5-step tree. */
 export interface StepDef {
   id: StepId;
@@ -226,6 +245,11 @@ export interface StepDef {
   viewportConfig: ViewportConfig;
   /** The right-rail body. */
   taskPanelComponent: ComponentType<StepTaskPanelProps>;
+  /** Optional Fluent-style sub-nodes rendered indented when the parent
+   *  is expanded (DEC-V61-117). Steps without sub-nodes (e.g. Step 1
+   *  Import) render no chevron — just a leading spacer to keep
+   *  alignment with sibling rows. */
+  subNodes?: readonly StepSubNode[];
   /** Whether this step's [AI 处理] button is wired in M-PANELS Tier-A.
    *  - true  → button is enabled (Step 2 mesh trigger lands in Step 5 of
    *           spec_v2 §E sequence)

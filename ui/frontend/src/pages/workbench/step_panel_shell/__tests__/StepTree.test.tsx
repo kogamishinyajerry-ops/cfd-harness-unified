@@ -7,9 +7,18 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { StepTree } from "../StepTree";
-import type { StepDef, StepId, StepStatus } from "../types";
+import type {
+  StepDef,
+  StepId,
+  StepStatus,
+  StepSubNode,
+} from "../types";
 
-function makeStubStep(id: StepId, shortLabel: string): StepDef {
+function makeStubStep(
+  id: StepId,
+  shortLabel: string,
+  subNodes?: readonly StepSubNode[],
+): StepDef {
   return {
     id,
     shortLabel,
@@ -21,6 +30,7 @@ function makeStubStep(id: StepId, shortLabel: string): StepDef {
     },
     taskPanelComponent: () => null,
     aiActionWiredInTierA: false,
+    subNodes,
   };
 }
 
@@ -150,5 +160,174 @@ describe("StepTree · component unit tests", () => {
     }
     await user.click(screen.getByTestId("step-tree-row-3"));
     expect(onStepClick).not.toHaveBeenCalled();
+  });
+});
+
+// DEC-V61-117 · Fluent-style hierarchy refactor — sub-node rendering,
+// chevron expand/collapse, auto-expand of active step.
+describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
+  const HIER_STEPS: readonly StepDef[] = [
+    makeStubStep(1, "Import"), // no sub-nodes
+    makeStubStep(2, "Mesh", [
+      { id: "mode", label: "Mode" },
+      { id: "quality", label: "Quality" },
+    ]),
+    makeStubStep(3, "Setup", [
+      { id: "annotations", label: "Annotations" },
+      { id: "patches", label: "BC patches" },
+    ]),
+    makeStubStep(4, "Solve", [
+      { id: "run", label: "Run" },
+      { id: "residuals", label: "Residuals" },
+    ]),
+    makeStubStep(5, "Results", [
+      { id: "fields", label: "Fields" },
+      { id: "report", label: "Report" },
+    ]),
+  ];
+
+  it("renders no chevron for steps without subNodes", () => {
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={1}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // Step 1 has no sub-nodes → no chevron button, but a spacer for alignment.
+    expect(
+      screen.queryByTestId("step-tree-chevron-1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("step-tree-chevron-spacer-1"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-row-1")).toHaveAttribute(
+      "data-step-has-subnodes",
+      "false",
+    );
+  });
+
+  it("auto-expands the active step's sub-nodes on first render", () => {
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // Step 3 is active → its sub-nodes are visible.
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("step-tree-subnode-3-annotations"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("step-tree-subnode-3-patches"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "data-step-expanded",
+      "true",
+    );
+    // Step 2 (not active) is collapsed by default.
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-2")).toHaveAttribute(
+      "data-step-expanded",
+      "false",
+    );
+  });
+
+  it("toggles sub-nodes visibility when chevron is clicked, without firing onStepClick", async () => {
+    const user = userEvent.setup();
+    const onStepClick = vi.fn();
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={1}
+        stepStates={ALL_PENDING}
+        onStepClick={onStepClick}
+      />,
+    );
+    // Initially Step 4 is collapsed.
+    expect(
+      screen.queryByTestId("step-tree-subnodes-4"),
+    ).not.toBeInTheDocument();
+    // Click chevron → expand.
+    await user.click(screen.getByTestId("step-tree-chevron-4"));
+    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-4")).toHaveAttribute(
+      "data-step-expanded",
+      "true",
+    );
+    // Click again → collapse.
+    await user.click(screen.getByTestId("step-tree-chevron-4"));
+    expect(
+      screen.queryByTestId("step-tree-subnodes-4"),
+    ).not.toBeInTheDocument();
+    // Chevron clicks must NOT trigger step navigation.
+    expect(onStepClick).not.toHaveBeenCalled();
+  });
+
+  it("preserves manual expansion when a different step becomes active", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={1}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // User manually expands Step 5 while on Step 1.
+    await user.click(screen.getByTestId("step-tree-chevron-5"));
+    expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
+    // Active step flips to 3 → Step 3 auto-expands AND Step 5 stays expanded.
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-subnodes-5")).toBeInTheDocument();
+  });
+
+  it("disables chevron buttons when disabled=true", async () => {
+    const user = userEvent.setup();
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={1}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+        disabled
+      />,
+    );
+    const chevron = screen.getByTestId("step-tree-chevron-2");
+    expect(chevron).toBeDisabled();
+    // Click is a no-op while disabled.
+    await user.click(chevron);
+    expect(
+      screen.queryByTestId("step-tree-subnodes-2"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders sub-row labels with stable data-testid format", () => {
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={2}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    const modeRow = screen.getByTestId("step-tree-subnode-2-mode");
+    expect(modeRow).toHaveAttribute("data-parent-step-id", "2");
+    expect(modeRow).toHaveAttribute("data-subnode-id", "mode");
+    expect(modeRow).toHaveTextContent("Mode");
   });
 });

@@ -127,11 +127,18 @@ const STEPS: readonly StepDef[] = [
     aiActionWiredInTierA: false,
     aiActionDeferredTooltip:
       "Step 1 has no AI 处理 action — uploading is the engineer's gesture (re-upload at /workbench/import).",
+    // No sub-nodes: Step 1 is a single upload action, no internal
+    // decomposition is meaningful to surface (DEC-V61-117 §sub-node
+    // config table).
   },
   {
     id: 2,
     shortLabel: "Mesh",
     longLabel: "2 · Mesh",
+    subNodes: [
+      { id: "mode", label: "Mode" },
+      { id: "quality", label: "Quality" },
+    ],
     viewportConfig: {
       // Wired in spec_v2 §E Step 5 (DEC-V61-096): the polyMesh wireframe
       // is fetched as glb via M-RENDER-API's /mesh/render endpoint and
@@ -159,6 +166,10 @@ const STEPS: readonly StepDef[] = [
     id: 3,
     shortLabel: "Setup",
     longLabel: "3 · Setup BC",
+    subNodes: [
+      { id: "annotations", label: "Annotations" },
+      { id: "patches", label: "BC patches" },
+    ],
     viewportConfig: {
       // 2026-04-30 user-feedback fix: previously gated on Step 3
       // completion (the original Phase-1A design), which inverted the
@@ -190,6 +201,10 @@ const STEPS: readonly StepDef[] = [
     id: 4,
     shortLabel: "Solve",
     longLabel: "4 · Solve",
+    subNodes: [
+      { id: "run", label: "Run" },
+      { id: "residuals", label: "Residuals" },
+    ],
     viewportConfig: {
       // Phase-1A live-streaming variant (DEC-V61-097): the residual
       // chart is no longer a post-mortem PNG. The SolveStream context
@@ -210,6 +225,10 @@ const STEPS: readonly StepDef[] = [
     id: 5,
     shortLabel: "Results",
     longLabel: "5 · Results",
+    subNodes: [
+      { id: "fields", label: "Fields" },
+      { id: "report", label: "Report" },
+    ],
     viewportConfig: {
       // 2026-04-30 dogfood feedback: the original Step 5 viewport was
       // a single midplane PNG which the user rejected as far below
