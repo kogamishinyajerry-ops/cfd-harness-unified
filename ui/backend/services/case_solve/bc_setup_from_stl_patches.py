@@ -847,138 +847,40 @@ def _build_pimplefoam_fv_solution() -> str:
 
 def _build_simplefoam_control_dict(end_time: float) -> str:
     """DEC-V61-111 simpleFoam controlDict template (steady-state SIMPLE
-    algorithm). For low-Re internal flow with bypass jets like iter01
-    where transient PIMPLE diverges to NaN regardless of dt — the
-    underlying issue is that iter01 is a STEADY problem whose
-    transient discretization spends itself fighting initial-condition
-    decay rather than reaching the physical bypass-jet flow field.
+    algorithm).
 
-    simpleFoam does iteration-based marching (deltaT=1 = one
-    iteration), so endTime is interpreted as iteration count, not
-    seconds. adjustTimeStep + maxCo are NOT used (no physical time
-    coordinate). Convergence is gated by SIMPLE residualControl in
-    fvSolution.
+    DEC-V61-112 Phase 1: extracted into the YAML solver-profile
+    registry. This wrapper preserves the V61-111 call signature for
+    backward compatibility (callers + tests) but the actual
+    template lives in
+    ``ui/backend/services/case_solve/solver_profiles/profiles/simpleFoam.yaml``.
+    Byte-identity is verified by ``test_solver_profiles.py``.
     """
-    # simpleFoam treats endTime as iteration count when deltaT=1.
-    # If caller passed end_time<5 (low value typical of transient
-    # smoke budgeting), bump to 100 minimum so the steady solver
-    # has enough iterations to converge from the zero-IC.
-    iterations = max(int(end_time), 100)
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object controlDict; }\n'
-        "application simpleFoam;\n"
-        "startFrom startTime;\n"
-        "startTime 0;\n"
-        "stopAt endTime;\n"
-        f"endTime {iterations};\n"
-        # SIMPLE iteration step is unitless; deltaT=1 gives 1
-        # iteration per Time= step in the log.
-        "deltaT 1;\n"
-        "writeControl timeStep;\n"
-        # Write final state + a few intermediates (every 50 iter)
-        # so callers extracting the last time directory get the
-        # converged solution.
-        "writeInterval 50;\n"
-        "purgeWrite 0;\n"
-        "writeFormat ascii;\n"
-        "writePrecision 6;\n"
-        "writeCompression off;\n"
-        "timeFormat general;\n"
-        "timePrecision 6;\n"
-        "runTimeModifiable true;\n"
-        # adjustTimeStep / maxCo / maxDeltaT are NOT meaningful for
-        # simpleFoam (no physical time). Omitted by design.
-    )
+    from .solver_profiles import load_profile
+    return load_profile("simpleFoam").render_control_dict(end_time=end_time)
 
 
 def _build_simplefoam_fv_schemes() -> str:
-    """DEC-V61-111 simpleFoam fvSchemes: ddtSchemes steadyState
-    (zeroes the ddt term so the iteration is a true steady marching
-    rather than transient), bounded linearUpwind for convection
-    (steady-state-bounded-corrected), corrected laplacian/snGrad for
-    non-orthogonal tetrahedral STL meshes.
+    """DEC-V61-111 simpleFoam fvSchemes (steadyState ddt + bounded
+    linearUpwind + corrected laplacian/snGrad).
+
+    DEC-V61-112 Phase 1: see ``simpleFoam.yaml`` for the source of
+    truth; this wrapper preserves the V61-111 call signature.
     """
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSchemes; }\n'
-        # steadyState ddt scheme zeroes the d/dt term → iteration is
-        # pure spatial marching, not transient. This is the principal
-        # difference from pimpleFoam and the reason simpleFoam
-        # reaches the steady physical solution iteratively without
-        # the transient initial-condition explosion that diverges
-        # iter01 in pimpleFoam.
-        "ddtSchemes  { default steadyState; }\n"
-        "gradSchemes { default Gauss linear; "
-        "grad(U) cellLimited Gauss linear 1; }\n"
-        # bounded prefix is the OpenFOAM-recommended steady-state
-        # convection scheme — adds a boundedness correction that
-        # keeps SIMPLE from diverging when the flow field is far
-        # from steady (initial iterations).
-        "divSchemes  { default none; div(phi,U) bounded Gauss linearUpwind grad(U); "
-        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
-        "laplacianSchemes { default Gauss linear corrected; }\n"
-        "interpolationSchemes { default linear; }\n"
-        "snGradSchemes { default corrected; }\n"
-    )
+    from .solver_profiles import load_profile
+    return load_profile("simpleFoam").render_fv_schemes()
 
 
 def _build_simplefoam_fv_solution() -> str:
-    """DEC-V61-111 simpleFoam fvSolution: SIMPLE block with relaxation
-    factors p=0.3, U=0.7 (OpenFOAM tutorial-standard for laminar
-    SIMPLE), residualControl 1e-3/1e-4 (loose convergence appropriate
-    for adversarial-loop case validation; engineers can tighten via
-    raw-dict editor).
+    """DEC-V61-111 simpleFoam fvSolution (SIMPLE block + GAMG p
+    solver + relaxationFactors p=0.3/U=0.7 + residualControl
+    1e-3/1e-4).
 
-    Key difference from pimpleFoam: NO PIMPLE block; instead a SIMPLE
-    block + relaxationFactors block. simpleFoam reads SIMPLE not PIMPLE.
+    DEC-V61-112 Phase 1: see ``simpleFoam.yaml`` for the source of
+    truth; this wrapper preserves the V61-111 call signature.
     """
-    return (
-        'FoamFile { version 2.0; format ascii; class dictionary; '
-        'location "system"; object fvSolution; }\n'
-        "solvers\n"
-        "{\n"
-        # GAMG is the OpenFOAM-recommended pressure solver for
-        # SIMPLE. PCG is fine but GAMG converges faster on the
-        # smoothly-varying steady pressure field.
-        "    p  { solver GAMG; tolerance 1e-06; relTol 0.1; "
-        "smoother GaussSeidel; }\n"
-        "    U  { solver smoothSolver; smoother symGaussSeidel; "
-        "tolerance 1e-05; relTol 0.1; nSweeps 1; }\n"
-        "}\n"
-        "SIMPLE\n"
-        "{\n"
-        # nNonOrthogonalCorrectors handles the corrected laplacian/snGrad
-        # schemes' non-orthogonal mesh terms.
-        "    nNonOrthogonalCorrectors 2;\n"
-        "    pRefCell 0;\n"
-        "    pRefValue 0;\n"
-        # residualControl gates convergence: when both p AND U
-        # initial residuals fall below the listed tolerance,
-        # simpleFoam stops iterating. 1e-3/1e-4 are loose targets
-        # appropriate for adversarial-case validation; the converged
-        # check in run_smoke also enforces finiteness.
-        "    residualControl\n"
-        "    {\n"
-        "        p   1e-3;\n"
-        "        U   1e-4;\n"
-        "    }\n"
-        "}\n"
-        "relaxationFactors\n"
-        "{\n"
-        # OpenFOAM-tutorial-standard SIMPLE relaxation factors for
-        # laminar incompressible. p=0.3 damps pressure-correction
-        # over-shoot; U=0.7 is the standard momentum factor.
-        "    fields\n"
-        "    {\n"
-        "        p   0.3;\n"
-        "    }\n"
-        "    equations\n"
-        "    {\n"
-        "        U   0.7;\n"
-        "    }\n"
-        "}\n"
-    )
+    from .solver_profiles import load_profile
+    return load_profile("simpleFoam").render_fv_solution()
 
 
 def setup_bc_from_stl_patches(

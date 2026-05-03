@@ -1,0 +1,85 @@
+# DEC-V61-112 Phase 1 · simpleFoam steady-state SIMPLE solver profile.
+#
+# Extracts V61-111 inline templates from
+# `ui/backend/services/case_solve/bc_setup_from_stl_patches.py`
+# (`_build_simplefoam_control_dict`, `_build_simplefoam_fv_schemes`,
+# `_build_simplefoam_fv_solution`). Byte-identity is the
+# acceptance criterion: profile-rendered output MUST match the
+# V61-111 inline output verbatim for the iter01 case parameters.
+#
+# Engineers customize per-case fields via the V61-102 raw-dict
+# editor (which produces user-overrides on system/controlDict);
+# the profile defines AI-authored defaults only.
+
+name: simpleFoam
+family: steady
+
+control_dict:
+  application: simpleFoam
+  start_from: startTime
+  start_time: 0
+  stop_at: endTime
+  end_time_default: 200
+  delta_t_default: 1
+  write_control: timeStep
+  write_interval: 50
+  purge_write: 0
+  write_format: ascii
+  write_precision: 6
+  write_compression: "off"
+  time_format: general
+  time_precision: 6
+  run_time_modifiable: true
+  # simpleFoam has no physical time coordinate. adjust_time_step /
+  # max_co / max_delta_t are omitted from the rendered controlDict
+  # by leaving them null (schema default).
+  adjust_time_step: null
+  max_co: null
+  max_delta_t_follows_delta_t: false
+  # simpleFoam treats endTime as iteration count; floor at 100 so
+  # callers passing transient-style small end_time values (smoke
+  # runners default to a few seconds) get a meaningful steady budget.
+  iteration_floor: 100
+
+fv_schemes:
+  ddt_schemes:
+    default: steadyState
+  grad_schemes:
+    default: "Gauss linear"
+    grad(U): "cellLimited Gauss linear 1"
+  div_schemes:
+    default: "none"
+    div(phi,U): "bounded Gauss linearUpwind grad(U)"
+    div((nuEff*dev2(T(grad(U))))): "Gauss linear"
+  laplacian_schemes:
+    default: "Gauss linear corrected"
+  interpolation_schemes:
+    default: "linear"
+  sn_grad_schemes:
+    default: "corrected"
+
+fv_solution:
+  solvers:
+    # Store the body verbatim with trailing ';' so the rendered
+    # `name { body }` byte-matches V61-111 inline (which writes
+    # the trailing ';' inside the body).
+    p: "solver GAMG; tolerance 1e-06; relTol 0.1; smoother GaussSeidel;"
+    U: "solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0.1; nSweeps 1;"
+  control_block_name: SIMPLE
+  control_block_fields:
+    nNonOrthogonalCorrectors: 2
+    pRefCell: 0
+    pRefValue: 0
+    # residualControl values stored as STRINGS to preserve the
+    # V61-111 literal scientific-notation rendering ("1e-3" not
+    # "0.001"). The schema renders nested-dict string values
+    # verbatim.
+    residualControl:
+      p: "1e-3"
+      U: "1e-4"
+  # simpleFoam SIMPLE relaxation factors. Stored as floats (these
+  # render fine via _format_number for typical values 0.3 / 0.7).
+  relaxation_factors_fields:
+    p: 0.3
+  relaxation_factors_equations:
+    U: 0.7
