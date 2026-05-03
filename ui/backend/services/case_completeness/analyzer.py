@@ -69,6 +69,9 @@ def _bc_dicts_current(case_dir: Path) -> bool:
 
     Returns False if:
       - polyMesh points doesn't exist (case not meshed yet)
+      - polyMesh boundary doesn't exist (corrupted partial polyMesh —
+        downstream setup_bc paths still require this file even though
+        the analyzer's mtime gate is on points; Codex R9 P2)
       - no 0/X file exists
       - all 0/X mtimes are older than polyMesh.points mtime (BC stale
         after a re-mesh)
@@ -77,8 +80,16 @@ def _bc_dicts_current(case_dir: Path) -> bool:
     weirdness; it just reports the field as missing).
     """
     try:
-        points_path = case_dir / "constant" / "polyMesh" / "points"
-        if not points_path.is_file():
+        poly_dir = case_dir / "constant" / "polyMesh"
+        points_path = poly_dir / "points"
+        boundary_path = poly_dir / "boundary"
+        # Codex R9 P2: fail closed when boundary is missing — downstream
+        # setup_bc / setup_bc_from_stl_patches require boundary to
+        # exist even though the analyzer's mtime gate is on points.
+        # Otherwise a partial-restore state (points present, boundary
+        # absent) could spuriously clear bc.patches while every BC
+        # setup path would still fail.
+        if not (points_path.is_file() and boundary_path.is_file()):
             return False
         points_mtime = points_path.stat().st_mtime
         zero_dir = case_dir / "0"

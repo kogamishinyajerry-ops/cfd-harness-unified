@@ -487,13 +487,14 @@ def test_imported_bc_currentdict_satisfies_when_newer_than_polymesh(
 ):
     """Codex R7 P1 regression — DEC-V61-116.
 
-    setup_*_bc authored 0/U at T=200, polyMesh boundary at T=100.
-    BC dict mtime ≥ polyMesh mtime → BC current → not flagged missing.
+    setup_*_bc authored 0/U at T=200, polyMesh points + boundary at T=100.
+    BC dict mtime ≥ polyMesh.points mtime → BC current → not flagged missing.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_bc_current"
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
     _write_polymesh_points(case_dir, mtime=100.0)
+    _write_polymesh_boundary(case_dir, mtime=100.0)
     _write_bc_dict(case_dir, "U", mtime=200.0)
     _write_bc_dict(case_dir, "p", mtime=200.0)
     r = analyze_case_completeness(case_id)
@@ -515,6 +516,7 @@ def test_imported_bc_stale_after_remesh_flagged(isolated_drafts):
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
     _write_bc_dict(case_dir, "U", mtime=100.0)
     _write_polymesh_points(case_dir, mtime=200.0)  # remeshed AFTER BC
+    _write_polymesh_boundary(case_dir, mtime=200.0)
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1, (
@@ -542,9 +544,33 @@ def test_imported_bc_polymesh_but_no_zero_dicts_flagged(isolated_drafts):
     case_id = "imported_2026-05-04T00-00-00Z_meshed_no_bc"
     case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
     _write_polymesh_points(case_dir, mtime=100.0)
+    _write_polymesh_boundary(case_dir, mtime=100.0)
     r = analyze_case_completeness(case_id)
     bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
     assert len(bc_missing) == 1
+
+
+def test_imported_bc_partial_polymesh_missing_boundary_flagged(isolated_drafts):
+    """Codex R9 P2 regression — DEC-V61-116.
+
+    Corrupted partial polyMesh (points exists, boundary missing) is a
+    real failure mode after a partial restore or manual cleanup.
+    Downstream setup_bc paths require boundary to exist; the analyzer
+    must fail closed (BC missing) so completeness verdict tracks
+    downstream reality.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_partial_polymesh"
+    case_dir = _seed_minimal_imported_for_bc_check(imported, case_id)
+    # Partial state: points exists + 0/U exists, but boundary is gone.
+    _write_polymesh_points(case_dir, mtime=100.0)
+    _write_bc_dict(case_dir, "U", mtime=200.0)
+    # Note: no _write_polymesh_boundary call.
+    r = analyze_case_completeness(case_id)
+    bc_missing = [m for m in r.missing if m.field_path == "bc.patches"]
+    assert len(bc_missing) == 1, (
+        f"missing polyMesh/boundary must fail closed; got {bc_missing}"
+    )
 
 
 def test_imported_bc_setup_rewriting_boundary_still_current(isolated_drafts):
