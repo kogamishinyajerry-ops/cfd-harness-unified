@@ -190,6 +190,143 @@ def test_imported_case_missing_patches_blocks_archive(isolated_drafts):
     assert any(m.field_path == "bc.patches" for m in r.missing)
 
 
+def test_imported_case_with_unset_turbulence_in_yaml_flagged_despite_default(
+    isolated_drafts,
+):
+    """Codex R1 P2 #1 regression — DEC-V61-116.
+
+    `read_case_manifest()` migrates a manifest that omits
+    `physics.turbulence_model` to the schema default `'laminar'`. A
+    truthiness check on the migrated Pydantic instance would silently
+    pass, undercounting critical gaps. The analyzer now reads the raw
+    YAML so a YAML missing the field gets flagged regardless of what
+    Pydantic's default-fill produced.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_unset_turb"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Note: no `turbulence_model` under `physics`. Schema default would
+    # fill `'laminar'` post-migration.
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "end_time": 100.0,
+                },
+                "bc": {"patches": {"inlet": {"patch_type": "patch", "fields": {}}}},
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.ready_for_archive is False, (
+        "unset turbulence_model in YAML must be flagged even though "
+        "Pydantic schema default fills 'laminar' post-migration"
+    )
+    assert any(
+        m.field_path == "physics.turbulence_model" and m.severity == "critical"
+        for m in r.missing
+    )
+
+
+def test_flat_draft_wins_over_imported_manifest(isolated_drafts):
+    """Codex R1 P1 regression — DEC-V61-116.
+
+    For an imported case the editor saves to `user_drafts/{id}.yaml`
+    (flat draft) regardless of the import-time
+    `imported/{id}/case_manifest.yaml` snapshot. The analyzer must
+    surface the flat draft's state, not the stale manifest, so the
+    right-rail card reflects the engineer's current edits.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_flat_wins"
+    # Stale import-time manifest: complete (would report ready=True).
+    _seed_imported_manifest(imported, case_id)
+    # Engineer's edited flat draft: missing turbulence_model + BC →
+    # would be incomplete on the flat-draft schema.
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Edited",
+                "flow_type": "INTERNAL",
+                "geometry_type": "CUSTOM",
+                # turbulence_model + solver intentionally absent
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    # Resolution priority: flat draft wins → case_kind = "draft"
+    assert r.case_kind == "draft", (
+        "flat draft must take resolution priority over imported manifest"
+    )
+    # The flat draft's missing turbulence_model must surface in the report.
+    assert any(
+        m.field_path == "turbulence_model" and m.severity == "critical"
+        for m in r.missing
+    )
+
+
+def test_re_rule_contributes_to_total_count(isolated_for_whitelist):
+    """Codex R1 P2 #2 regression — DEC-V61-116.
+
+    When `parameters.Re` is present, `_check_re_appropriate_turbulence`
+    runs and (if it flags) appends to `missing`. The denominator must
+    likewise include the Re-rule slot, otherwise present_count + missing
+    can't reconstruct total. Earlier draft hard-coded denominator at 8 +
+    gold preconds even when the rule fired, producing 14/15 instead of
+    14/16 on Re-based cases.
+
+    Verify by analyzing lid_driven_cavity (Re=100, laminar — rule
+    doesn't flag) and confirming total_count includes the slot.
+    """
+    r = analyze_case_completeness("lid_driven_cavity")
+    # Top-level critical (7) + parameters (1) + Re-rule (1, gated on Re
+    # presence) + N gold preconditions. lid_driven_cavity has Re=100 in
+    # parameters, so the +1 must apply.
+    assert r.total_count >= 9, (
+        f"total_count must include the Re-rule slot when parameters.Re is "
+        f"present; got {r.total_count}"
+    )
+
+
+def test_solver_dict_shape_normalized(isolated_drafts):
+    """Imported flat drafts may store solver as a dict {name: X}; the
+    whitelist-like analyzer normalizes that to the string form before
+    truthiness checks so engineer-edited imported cases don't trigger a
+    false-critical "solver missing".
+    """
+    drafts, _ = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_dict_solver"
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": case_id,
+                "name": "Imported · cylinder.stl",
+                "flow_type": "INTERNAL",
+                "geometry_type": "CUSTOM",
+                "turbulence_model": "laminar",
+                "solver": {"name": "simpleFoam", "family": "incompressible"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    # solver should NOT be in critical missing — the dict-shape was
+    # normalized to its name string.
+    assert not any(
+        m.field_path == "solver" and m.severity == "critical" for m in r.missing
+    ), f"solver dict shape not normalized; missing = {r.missing}"
+
+
 # ---------------------------------------------------------------------------
 # Layer 3 — Re-appropriate turbulence rule (unit-level)
 # ---------------------------------------------------------------------------

@@ -385,59 +385,95 @@ def _build_report(
 
 
 def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
-    """Imported user STL case → CaseManifest v2 + minimal contract."""
+    """Imported user STL case → CaseManifest v2 + minimal contract.
+
+    Codex R1 P2 #1 fix: read the manifest YAML *raw* before letting the
+    Pydantic schema fill defaults. `read_case_manifest()` will migrate
+    a missing `physics.turbulence_model` to the schema default `'laminar'`,
+    making the field look "set" when the engineer never touched it.
+    Comparing the raw YAML's nested keys preserves the user-vs-default
+    distinction so unset fields surface as missing.
+    """
     notes: list[str] = []
     missing: list[MissingField] = []
+
+    raw_manifest_yaml = _read_flat_yaml(case_dir / "case_manifest.yaml")
+
+    # Helper: was a field actually present in the raw YAML (not just
+    # filled by Pydantic defaults)?
+    def _raw_has(*path: str) -> bool:
+        cur: Any = raw_manifest_yaml
+        for seg in path:
+            if not isinstance(cur, dict) or seg not in cur:
+                return False
+            cur = cur[seg]
+        return cur not in (None, "", [], {})
 
     try:
         manifest = read_case_manifest(case_dir)
     except (ManifestNotFoundError, ManifestParseError) as exc:
-        # Manifest unreadable — treat as "everything missing" + note.
-        # We still don't crash; the WHOLE POINT is to surface gaps.
         notes.append(
             f"Imported case_manifest could not be parsed: {type(exc).__name__}. "
             "Editing the manifest by hand may have left it invalid."
         )
         manifest = None  # type: ignore[assignment]
 
-    # Manifest layer (3 expected critical: solver, turbulence_model, bc.patches)
-    if manifest is not None:
-        missing.extend(_check_imported_manifest(manifest))
-    else:
-        # All 3 critical fields counted as missing.
-        missing.extend(
-            [
-                MissingField(
-                    field_path="physics.solver",
-                    severity="critical",
-                    why="manifest unreadable; cannot verify solver presence.",
+    # Manifest layer (3 expected critical: solver, turbulence_model, bc.patches).
+    # Use raw YAML presence (not Pydantic-filled defaults) so a missing
+    # field shows up as missing, even if the schema would default-fill it.
+    if not _raw_has("physics", "solver"):
+        missing.append(
+            MissingField(
+                field_path="physics.solver",
+                severity="critical",
+                why=(
+                    "OpenFOAM solver name is required (simpleFoam / "
+                    "pimpleFoam / icoFoam / …). Even if a default was "
+                    "scaffolded, the engineer must explicitly confirm."
                 ),
-                MissingField(
-                    field_path="physics.turbulence_model",
-                    severity="critical",
-                    why="manifest unreadable; cannot verify turbulence_model.",
-                ),
-                MissingField(
-                    field_path="bc.patches",
-                    severity="critical",
-                    why="manifest unreadable; cannot verify boundary patches.",
-                ),
-            ]
-        )
-
-    # Re-appropriate turbulence (info layer; no expected count if Re absent)
-    if manifest is not None:
-        # Re might be parked under a v1 fallback or not present at all in
-        # the v2 manifest. Imported STL cases generally don't have Re —
-        # they're geometry-only. Skip the layer if no Re data exists.
-        # (A future iteration can ask the engineer for a Re hint.)
-        re_value: float | None = None  # No structured Re in v2 manifest yet.
-        missing.extend(
-            _check_re_appropriate_turbulence(
-                turbulence_model=manifest.physics.turbulence_model,
-                re_value=re_value,
+                suggested_default="simpleFoam",
             )
         )
+    if not _raw_has("physics", "turbulence_model"):
+        missing.append(
+            MissingField(
+                field_path="physics.turbulence_model",
+                severity="critical",
+                why=(
+                    "Turbulence model declaration is required (laminar / "
+                    "kEpsilon / kOmegaSST / …). The schema default is "
+                    "`laminar` but Codex R1 P2 caught that this default-"
+                    "fill silently passed user-unset cases. Engineer must "
+                    "explicitly choose."
+                ),
+                suggested_default="laminar",
+            )
+        )
+    if not _raw_has("bc", "patches"):
+        missing.append(
+            MissingField(
+                field_path="bc.patches",
+                severity="critical",
+                why=(
+                    "At least one boundary patch must be configured — "
+                    "without BC, OpenFOAM cannot start. Run the Step 3 "
+                    "[AI 处理] action or annotate faces in the viewport."
+                ),
+            )
+        )
+
+    # Re-appropriate turbulence (only counted in total when Re actually
+    # present; no Re in the v2 imported-manifest schema today, so this
+    # layer is effectively dormant for imported cases. Kept for parity
+    # with the whitelist analyzer in case a future v2 adds Re.)
+    re_value: float | None = None
+    re_layer_missing: list[MissingField] = []
+    if manifest is not None:
+        re_layer_missing = _check_re_appropriate_turbulence(
+            turbulence_model=manifest.physics.turbulence_model,
+            re_value=re_value,
+        )
+        missing.extend(re_layer_missing)
 
     notes.append(
         "Imported STL cases use a minimal contract (solver + turbulence + "
@@ -459,12 +495,27 @@ def _analyze_imported(case_id: str, case_dir: Path) -> CaseCompletenessReport:
     return _build_report(
         case_id=case_id,
         case_kind="imported_user",
-        expected_critical_count=3,  # solver, turbulence, bc.patches
+        expected_critical_count=3 + (1 if re_value is not None else 0),
         expected_warning_count=0,
         expected_info_count=0,
         missing=missing,
         notes=notes,
     )
+
+
+def _normalize_flat_yaml(raw: dict[str, Any]) -> dict[str, Any]:
+    """Normalize flat-YAML shape variants so checks work uniformly.
+
+    Imported flat drafts may store solver as a dict ``{name: simpleFoam}``
+    while whitelist entries use a plain string ``simpleFoam``. Lift the
+    nested form so `_check_whitelist_or_draft` can apply one truthiness
+    rule.
+    """
+    out = dict(raw)
+    s = out.get("solver")
+    if isinstance(s, dict) and s.get("name"):
+        out["solver"] = s["name"]
+    return out
 
 
 def _analyze_whitelist_like(
@@ -476,15 +527,22 @@ def _analyze_whitelist_like(
 ) -> CaseCompletenessReport:
     """Whitelist case OR flat-draft (whitelist-fork) — 6 critical top-level
     + 2 critical/warning (parameters, boundary_conditions) + gold contract.
+
+    Codex R1 P2 #2 fix: Re-rule contributes to both `missing` AND
+    `total_count` when it actually runs. Earlier draft hard-coded the
+    denominator at 8 + gold preconds even when the rule fired, producing
+    14/15 instead of 14/16 on Re-based whitelist cases.
     """
     missing: list[MissingField] = []
+    raw_norm = _normalize_flat_yaml(raw)
 
-    # Manifest-equivalent layer (6 critical + 1 critical + 1 warning = 8)
-    missing.extend(_check_whitelist_or_draft(raw))
+    # Manifest-equivalent layer (6 critical top-level + 1 critical bc + 1
+    # warning parameters = 8 expected total)
+    missing.extend(_check_whitelist_or_draft(raw_norm))
 
     # Re-appropriate turbulence layer (1 critical, gated on Re presence)
     re_value: float | None = None
-    params = raw.get("parameters")
+    params = raw_norm.get("parameters")
     if isinstance(params, dict):
         try:
             re_raw = params.get("Re")
@@ -494,7 +552,7 @@ def _analyze_whitelist_like(
             re_value = None
 
     re_layer_missing = _check_re_appropriate_turbulence(
-        turbulence_model=str(raw.get("turbulence_model") or "") or None,
+        turbulence_model=str(raw_norm.get("turbulence_model") or "") or None,
         re_value=re_value,
     )
     missing.extend(re_layer_missing)
@@ -516,10 +574,14 @@ def _analyze_whitelist_like(
             "physics_contract precondition checks."
         )
 
+    # Codex R1 P2 #2: include the Re-rule in expected_critical_count when
+    # it actually ran (i.e. Re is present).
+    re_rule_expected = 1 if re_value is not None else 0
+
     return _build_report(
         case_id=case_id,
         case_kind=case_kind,
-        expected_critical_count=7,  # 6 top-level + boundary_conditions
+        expected_critical_count=7 + re_rule_expected,
         expected_warning_count=1,  # parameters
         expected_info_count=gold_expected,  # gold-contract preconds
         missing=missing,
@@ -535,11 +597,22 @@ def _analyze_whitelist_like(
 def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     """Resolve `case_id` and run the matching completeness analysis.
 
-    Resolution order:
-        1. user_drafts/imported/{case_id}/case_manifest.yaml → imported_user
-        2. user_drafts/{case_id}.yaml → draft (flat YAML, whitelist-fork)
+    Resolution order (Codex R1 P1 fix · 2026-05-04):
+        1. user_drafts/{case_id}.yaml → draft (flat YAML)
+           — engineer's saved edits ALWAYS win when present, regardless
+             of whether the case is whitelist-forked or imported. The
+             editor (`case_drafts.put_case_yaml`) writes here unconditionally,
+             so this is the source of truth for current intent.
+        2. user_drafts/imported/{case_id}/case_manifest.yaml → imported_user
+           — import-time scaffold; used only if no flat draft exists yet.
         3. whitelist[case_id] → whitelist
+           — fallback for un-edited canonical cases.
         4. raise CaseNotFoundError
+
+    Earlier draft inverted (1) and (2): for an imported case with edits,
+    the imported manifest short-circuited the flat draft and the
+    completeness report stayed stuck on the import-time snapshot
+    (Codex R1 P1).
 
     Raises:
         CaseNotFoundError: case_id resolves to nothing.
@@ -547,22 +620,35 @@ def analyze_case_completeness(case_id: str) -> CaseCompletenessReport:
     if not case_id:
         raise CaseNotFoundError("case_id is empty")
 
-    # Resolution 1: imported case_dir
-    imported_dir = _resolve_imported_dir(case_id)
-    if imported_dir is not None:
-        return _analyze_imported(case_id, imported_dir)
-
-    # Resolution 2: flat draft
+    # Resolution 1: flat draft (engineer's most recent edits — always wins)
     flat_draft = _resolve_flat_draft(case_id)
     if flat_draft is not None:
         raw = _read_flat_yaml(flat_draft)
+        # Imported case_ids are detectable by prefix; surface the origin
+        # in notes so the engineer knows the editor is now driving.
+        is_imported = case_id.startswith("imported_") or _resolve_imported_dir(
+            case_id
+        ) is not None
         notes = [
-            "Analyzing user_drafts/{case_id}.yaml (flat draft, may be "
-            "a whitelist fork or a pre-import edit)."
+            (
+                "Analyzing the editor's saved draft (user_drafts/{id}.yaml). "
+                + (
+                    "This is an imported case with engineer edits — the "
+                    "import-time case_manifest.yaml is no longer the source "
+                    "of truth; the flat draft is."
+                    if is_imported
+                    else "Whitelist fork or fresh draft."
+                )
+            )
         ]
         return _analyze_whitelist_like(
             case_id=case_id, raw=raw, case_kind="draft", notes=notes
         )
+
+    # Resolution 2: imported case_dir (no flat draft yet)
+    imported_dir = _resolve_imported_dir(case_id)
+    if imported_dir is not None:
+        return _analyze_imported(case_id, imported_dir)
 
     # Resolution 3: whitelist entry
     whitelist = _load_whitelist()
