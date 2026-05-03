@@ -22,21 +22,24 @@ import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
 
-// Demo-first routing (convergence round, 2026-04-22): the default landing is
-// now the /learn shell — the student-facing catalog of 10 canonical cases.
-// Pro Workbench (evidence-heavy validation / decisions / audit package) stays
-// mounted under /pro and every /learn case has a "进入专业工作台 →" hook.
+// Engineer-first routing (DEC-V61-115, 2026-05-04): default landing flipped
+// from /learn → /workbench. Rationale: the product's primary user is the CFD
+// engineer creating a new case, not a buyer browsing 10 canonical demos. The
+// /learn catalog stays mounted (sidebar "← Learn" link + Workbench hero footer
+// link) for the demo / teaching surface, but the front door now opens onto the
+// simulation workbench so 新建案例 / 导入 STL is one click from "/".
 //
-// Rationale: the workbench builds credibility but the demo story starts from
-// "ten canonical flows, honest comparison against literature". Landing on the
-// dashboard surfaced governance jargon (Phase 8 Sprint 1, attestor, gates,
-// verdict split) before the user had any anchor case to tie them to. Flipping
-// the default solves that without touching either shell internally.
+// History: the 2026-04-22 convergence round (DEC-V61-046) made /learn the
+// default to surface buyer positioning + literature-comparator differentiation.
+// That priority was correct for the buyer-impression problem at the time but
+// was misaligned with ROADMAP §L9's documented north star (`你能每天打开
+// /workbench, 改 LDC 参数...`). This DEC realigns the running UI to that
+// north star. /pro / /cases / /decisions / /audit-package routing unchanged.
 export default function App() {
   return (
     <Routes>
-      {/* Default: redirect / → /learn */}
-      <Route index element={<Navigate to="/learn" replace />} />
+      {/* DEC-V61-115: default redirect / → /workbench (was /learn). */}
+      <Route index element={<Navigate to="/workbench" replace />} />
 
       {/* Student-facing learn shell */}
       <Route path="/learn" element={<LearnLayout />}>
@@ -100,7 +103,8 @@ export default function App() {
             runs of the same case. Reads run IDs from ?a=…&b=… so the URL is
             shareable. Reuses /run-history/{run_id} detail surface for data. */}
         <Route path="/workbench/case/:caseId/compare" element={<RunComparePage />} />
-        <Route path="*" element={<Navigate to="/learn" replace />} />
+        {/* DEC-V61-115: catch-all redirects to /workbench (was /learn). */}
+        <Route path="*" element={<Navigate to="/workbench" replace />} />
       </Route>
     </Routes>
   );

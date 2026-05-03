@@ -4,14 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/api/client";
 import type { CaseIndexEntry } from "@/types/validation";
 
-// Workbench 60-day extension · 2026-04-26 — /workbench landing index.
+// Workbench landing index. Engineer-first surface (DEC-V61-115, 2026-05-04):
+// the page leads with a hero that puts 新建案例 / 导入 STL front-and-center,
+// because those are the entry gestures for a CFD engineer creating a real
+// case. The 10 whitelist cases stay below the hero as `参考案例 · Reference
+// cases` — a baseline of literature-backed flows the engineer can fork or
+// study, but no longer the visual headline.
 //
-// Surfaces the 10 whitelist cases as a card grid so users can land on
-// /workbench, pick one, and discover the closed loop without having to
-// know the case_id URL fragment by hand. Each card links to the three
-// per-case workbench surfaces: edit params, run history, and the most
-// recent run detail. Reuses the existing api.listCases() response —
-// no new backend endpoint, line-A only.
+// History: between 2026-04-26 and 2026-05-04 this page opened with a small
+// `Workbench` h1 + a `Pick a case to edit parameters and run...` line, then
+// jumped straight into the 10 CaseCard grid. With /learn as the default
+// landing (DEC-V61-046 era), that two-step "click /workbench → see 10 demos"
+// path made the new-case flow feel like a side-quest. DEC-V61-115 flipped /
+// → /workbench AND raised the new-case CTA visual weight to match the engineer
+// north-star in ROADMAP §L9.
 
 export function WorkbenchIndexPage() {
   const casesQuery = useQuery({
@@ -29,7 +35,8 @@ export function WorkbenchIndexPage() {
         : String(casesQuery.error);
     return (
       <Section>
-        <p className="text-sm text-contract-fail">Failed to load cases: {msg}</p>
+        <WorkbenchHero />
+        <p className="mt-6 text-sm text-contract-fail">Failed to load cases: {msg}</p>
       </Section>
     );
   }
@@ -38,32 +45,23 @@ export function WorkbenchIndexPage() {
 
   return (
     <Section>
-      <header className="mb-6">
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-2xl font-semibold text-surface-100">Workbench</h1>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/workbench/import"
-              className="rounded-sm border border-surface-700 bg-surface-900/40 px-3 py-1 text-xs text-surface-200 transition hover:bg-surface-800"
-            >
-              Import STL →
-            </Link>
-            <Link
-              to="/workbench/today"
-              className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
-            >
-              Today's runs →
-            </Link>
-          </div>
+      <WorkbenchHero />
+
+      <header className="mt-10 mb-4 flex items-baseline justify-between">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-surface-300">
+            参考案例 · Reference cases
+          </h2>
+          <p className="mt-1 text-[12px] text-surface-500">
+            10 个金标准案例 — 复现历史文献，可直接编辑参数二次仿真，是验证 workbench 可信度的基线。
+          </p>
         </div>
-        <p className="mt-1 text-[13px] text-surface-400">
-          Pick a case to edit parameters and run a real Docker + OpenFOAM
-          execution. Every run is persisted under
-          <code className="mx-1 rounded-sm bg-surface-900 px-1 py-0.5 font-mono text-[11px]">
-            reports/{`{case_id}`}/runs/{`{run_id}`}/
-          </code>
-          as an audit trail.
-        </p>
+        <Link
+          to="/workbench/today"
+          className="rounded-sm border border-surface-700 bg-surface-900/40 px-2.5 py-1 text-[11px] text-surface-300 transition hover:bg-surface-800"
+        >
+          Today's runs →
+        </Link>
       </header>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -72,6 +70,67 @@ export function WorkbenchIndexPage() {
         ))}
       </div>
     </Section>
+  );
+}
+
+// Hero — engineer-first entry block. Two large primary CTAs (new case /
+// import STL) carry the visual weight; an AI-assistant explainer line under
+// the CTAs makes the "AI on demand per step" contract visible; a small
+// footer link points buyers/reviewers at the demo gallery (/learn).
+function WorkbenchHero() {
+  return (
+    <section
+      aria-labelledby="workbench-hero-title"
+      className="rounded-md border border-surface-800 bg-gradient-to-b from-surface-900/80 to-surface-950 px-6 py-7"
+    >
+      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-surface-500">
+        CFD Simulation Workbench
+      </p>
+      <h1
+        id="workbench-hero-title"
+        className="mt-2 text-2xl font-semibold leading-tight text-surface-100"
+      >
+        CFD 仿真工作台
+      </h1>
+      <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-surface-300">
+        从空白模板新建案例、上传几何，或编辑已有案例 — 全在 GUI 中完成。
+        每个步骤右侧 [AI 处理] = 召唤 AI 跑当前阶段（网格 / 边界条件 / 求解 / 报告生成）。
+      </p>
+
+      <div className="mt-5 flex flex-wrap items-stretch gap-3">
+        <Link
+          to="/workbench/new"
+          className="group flex min-w-[14rem] flex-1 items-center gap-3 rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-3 text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/25"
+        >
+          <span aria-hidden className="text-2xl leading-none">▶</span>
+          <span className="flex flex-col">
+            <span className="text-[15px] font-semibold">新建案例（从模板）</span>
+            <span className="text-[11px] text-emerald-200/80">
+              New case from template — 方腔 / 后台阶 / 层流圆管
+            </span>
+          </span>
+        </Link>
+        <Link
+          to="/workbench/import"
+          className="group flex min-w-[14rem] flex-1 items-center gap-3 rounded-md border border-sky-500/50 bg-sky-500/15 px-4 py-3 text-sky-100 transition hover:border-sky-400 hover:bg-sky-500/25"
+        >
+          <span aria-hidden className="text-2xl leading-none">📥</span>
+          <span className="flex flex-col">
+            <span className="text-[15px] font-semibold">导入 STL 几何</span>
+            <span className="text-[11px] text-sky-200/80">
+              Import STL geometry — trimesh 摄入 + 自动建 case 目录
+            </span>
+          </span>
+        </Link>
+      </div>
+
+      <p className="mt-4 text-[11px] text-surface-500">
+        想看 10 个金标准案例的演示模式？
+        <Link to="/learn" className="ml-1 text-sky-300 hover:text-sky-200">
+          → /learn
+        </Link>
+      </p>
+    </section>
   );
 }
 
