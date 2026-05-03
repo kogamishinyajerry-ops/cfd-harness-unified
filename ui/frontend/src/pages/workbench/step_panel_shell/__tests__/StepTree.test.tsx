@@ -361,6 +361,77 @@ describe("StepTree · Fluent-style hierarchy (DEC-V61-117)", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Codex R2 P2 regression: clicking the chevron on the currently
+  // auto-expanded active step must PIN the row (auto → manual)
+  // without collapsing — so the engineer doesn't have to discover
+  // the click-twice collapse-then-reopen workaround to keep a
+  // step's sub-actions visible across navigation.
+  it("pins auto-expanded active row on chevron click and survives navigation", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // Step 3 is active; auto-expanded; not pinned.
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "data-step-pinned",
+      "false",
+    );
+    // First chevron click on auto-expanded active row → PIN, still visible.
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "data-step-pinned",
+      "true",
+    );
+    // Navigate 3 → 4 → step 3 stays expanded because pinned.
+    rerender(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={4}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-subnodes-4")).toBeInTheDocument();
+    // Click pinned step 3 chevron → collapse.
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "data-step-pinned",
+      "false",
+    );
+  });
+
+  it("uses tri-state aria-label reflecting next click effect", () => {
+    render(
+      <StepTree
+        steps={HIER_STEPS}
+        currentStepId={3}
+        stepStates={ALL_PENDING}
+        onStepClick={() => {}}
+      />,
+    );
+    // Step 3 active, auto-expanded → next click pins.
+    expect(screen.getByTestId("step-tree-chevron-3")).toHaveAttribute(
+      "aria-label",
+      "Pin step 3 open",
+    );
+    // Step 2 collapsed → next click expands.
+    expect(screen.getByTestId("step-tree-chevron-2")).toHaveAttribute(
+      "aria-label",
+      "Expand step 2",
+    );
+  });
+
   it("renders sub-row labels with stable data-testid format", () => {
     render(
       <StepTree

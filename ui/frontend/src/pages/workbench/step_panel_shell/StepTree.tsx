@@ -117,16 +117,29 @@ export function StepTree({
     });
   }, [currentStepId, steps]);
 
-  // Chevron click toggles expansion. Adding from collapsed always
-  // marks the entry as "manual" — the user has now explicitly
-  // expressed an intent that should outlive active-step changes.
-  // Removing simply deletes regardless of prior origin (collapse
-  // an auto-expanded active step or unpin a manually-pinned one).
+  // Chevron click logic, three-state cycle:
+  //   absent     → "manual"  (expand a collapsed row as a manual pin)
+  //   "auto"     → "manual"  (pin an auto-expanded active row so it
+  //                           survives active-step transitions, per
+  //                           Codex R2 P2 — without this, the user
+  //                           would have to discover a click-twice
+  //                           collapse-then-reopen workaround)
+  //   "manual"   → absent    (collapse a manual pin)
+  //
+  // The first click on an auto-expanded active row therefore does NOT
+  // visually collapse it — it promotes the entry to "manual" while
+  // staying expanded. The aria-label + data-step-pinned attribute
+  // shifts so screen readers and tests can detect the pin state. A
+  // second click then collapses.
   const toggleExpanded = (stepId: StepId) => {
     setExpansion((prev) => {
       const next = new Map(prev);
-      if (next.has(stepId)) next.delete(stepId);
-      else next.set(stepId, "manual");
+      const current = next.get(stepId);
+      if (current === "manual") {
+        next.delete(stepId);
+      } else {
+        next.set(stepId, "manual");
+      }
       return next;
     });
   };
@@ -144,7 +157,9 @@ export function StepTree({
       {steps.map((step) => {
         const status = step.id === currentStepId ? "active" : stepStates[step.id];
         const hasSubNodes = !!step.subNodes && step.subNodes.length > 0;
+        const expansionSource = expansion.get(step.id);
         const isExpanded = hasSubNodes && expansion.has(step.id);
+        const isPinned = expansionSource === "manual";
         return (
           <div key={step.id} className="flex flex-col gap-0.5">
             <div className="flex items-stretch gap-1">
@@ -153,19 +168,37 @@ export function StepTree({
                   type="button"
                   data-testid={`step-tree-chevron-${step.id}`}
                   data-step-expanded={isExpanded ? "true" : "false"}
+                  data-step-pinned={isPinned ? "true" : "false"}
                   aria-expanded={isExpanded}
                   aria-label={
-                    isExpanded
+                    // Three-state aria-label communicates the next
+                    // click's effect to assistive tech: collapse a
+                    // pin / pin an auto-expanded row / expand a
+                    // collapsed row.
+                    isPinned
                       ? `Collapse step ${step.id}`
+                      : isExpanded
+                      ? `Pin step ${step.id} open`
                       : `Expand step ${step.id}`
+                  }
+                  title={
+                    isPinned
+                      ? "Click to collapse"
+                      : isExpanded
+                      ? "Click to pin open (stays expanded across navigation)"
+                      : "Click to expand"
                   }
                   disabled={disabled}
                   onClick={() => toggleExpanded(step.id)}
-                  className="flex w-4 shrink-0 items-center justify-center text-[10px] text-surface-500 hover:text-surface-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`flex w-4 shrink-0 items-center justify-center text-[10px] hover:text-surface-300 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isPinned ? "text-emerald-400" : "text-surface-500"
+                  }`}
                 >
                   {/* Chevron triangles — small enough to not steal
                    *  visual weight from the status dot, but large
-                   *  enough to be a real click target. */}
+                   *  enough to be a real click target. The colored
+                   *  variant signals "pinned" — engineers learn the
+                   *  pin convention without reading docs. */}
                   <span aria-hidden>{isExpanded ? "▼" : "▶"}</span>
                 </button>
               ) : (
