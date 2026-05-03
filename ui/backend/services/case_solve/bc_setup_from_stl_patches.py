@@ -106,6 +106,10 @@ class StlPatchBCError(RuntimeError):
       pimpleFoam-era dicts that OpenFOAM would reject at startup.
       Engineer must either revert all overrides (re-author from
       AI defaults) or override all three together.
+    * ``solver_profile_load_failed`` — DEC-V61-112 Phase 4 R3 P2:
+      ``load_profile()`` raised ``ProfileNotFoundError`` (YAML
+      missing) or ``ProfileSchemaError`` (malformed YAML); the
+      route-level envelope handles this as a 5xx deployment hazard.
     """
 
     def __init__(self, message: str, *, failing_check: str) -> None:
@@ -690,15 +694,30 @@ def _build_dict_plan(
     p_blocks = "".join(_p_block(name, cls) for name, cls in patches_with_class)
 
     # DEC-V61-111: solver-specific controlDict / fvSchemes / fvSolution.
-    if solver_name == "simpleFoam":
-        control_dict = _build_simplefoam_control_dict(end_time)
-        fv_schemes = _build_simplefoam_fv_schemes()
-        fv_solution = _build_simplefoam_fv_solution()
-    else:
-        # pimpleFoam (default) — the V61-107.5 transient path.
-        control_dict = _build_pimplefoam_control_dict(end_time, delta_t)
-        fv_schemes = _build_pimplefoam_fv_schemes()
-        fv_solution = _build_pimplefoam_fv_solution()
+    # Codex V61-112 Phase 4 R3 P2 closure: wrap solver-profile load
+    # failures in StlPatchBCError so a missing / malformed profile
+    # YAML surfaces via the established route-level error envelope
+    # (4xx via the StlPatchBCError handler chain) rather than as an
+    # unhandled 500. Mirror of Phase 3 R1 P2 closure for the LDC
+    # path (BCSetupError translation).
+    from .solver_profiles import ProfileNotFoundError, ProfileSchemaError
+    try:
+        if solver_name == "simpleFoam":
+            control_dict = _build_simplefoam_control_dict(end_time)
+            fv_schemes = _build_simplefoam_fv_schemes()
+            fv_solution = _build_simplefoam_fv_solution()
+        else:
+            # pimpleFoam (default) — the V61-107.5 transient path.
+            control_dict = _build_pimplefoam_control_dict(end_time, delta_t)
+            fv_schemes = _build_pimplefoam_fv_schemes()
+            fv_solution = _build_pimplefoam_fv_solution()
+    except (ProfileNotFoundError, ProfileSchemaError) as exc:
+        raise StlPatchBCError(
+            f"{solver_name!r} solver-profile load failed (V61-112 "
+            f"deployment hazard — profile YAML missing or malformed): "
+            f"{exc}",
+            failing_check="solver_profile_load_failed",
+        ) from exc
 
     plan: list[tuple[str, str]] = [
         (

@@ -1630,3 +1630,51 @@ def test_solver_marker_guard_rejects_when_application_unparseable(tmp_path: Path
     with pytest.raises(StlPatchBCError) as exc:
         setup_bc_from_stl_patches(case_dir, case_id="unparseable_appl_case")
     assert exc.value.failing_check == "solver_dicts_partial_override"
+
+
+def test_setup_bc_from_stl_patches_translates_profile_load_error_to_stl_patch_error(
+    tmp_path: Path, monkeypatch
+):
+    """DEC-V61-112 Phase 4 R3 P2 closure: cross-module error-contract
+    pattern applied to STL path. ProfileNotFoundError /
+    ProfileSchemaError from load_profile() must be translated to
+    StlPatchBCError(failing_check="solver_profile_load_failed") so
+    the /setup-bc?from_stl_patches=1 route's error envelope handles
+    it as a structured 5xx instead of an unhandled 500.
+    """
+    from ui.backend.services.case_solve import bc_setup_from_stl_patches as mod
+    from ui.backend.services.case_solve.solver_profiles import (
+        ProfileSchemaError,
+    )
+
+    case_dir = tmp_path / "case-stl-profile-fail"
+    case_dir.mkdir(parents=True)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    # Minimal polyMesh/boundary so the function reaches the profile
+    # load (passing the mesh_not_setup / no_named_patches gates).
+    (polymesh / "boundary").write_text(
+        "FoamFile { version 2.0; format ascii; class polyBoundaryMesh; "
+        'location "constant/polyMesh"; object boundary; }\n'
+        "1\n(\n"
+        "  inlet { type patch; nFaces 1; startFace 0; }\n"
+        ")\n"
+    )
+
+    def boom_simple(end_time):
+        raise ProfileSchemaError("simulated malformed simpleFoam.yaml")
+
+    monkeypatch.setattr(mod, "_build_simplefoam_control_dict", boom_simple)
+
+    raised = None
+    try:
+        mod.setup_bc_from_stl_patches(
+            case_dir, case_id="stl_profile_fail", solver_name="simpleFoam"
+        )
+    except StlPatchBCError as exc:
+        raised = exc
+
+    assert raised is not None
+    assert raised.failing_check == "solver_profile_load_failed"
+    assert "simpleFoam" in str(raised)
+    assert isinstance(raised.__cause__, ProfileSchemaError)
