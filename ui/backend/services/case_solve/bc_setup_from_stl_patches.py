@@ -127,9 +127,23 @@ class StlPatchBCResult:
     nu: float
     delta_t: float
     end_time: float
+    # DEC-V61-111: solver actually authored into controlDict. Reflects
+    # ``solver_name`` after fallback (icoFoam → pimpleFoam upgrade per
+    # V61-107.5; unknown → pimpleFoam default).
+    solver_name: str
     written_files: tuple[str, ...]
     skipped_user_overrides: tuple[str, ...]
     warnings: tuple[str, ...]
+
+
+# DEC-V61-111: solvers the dict plan can author. ``icoFoam`` is
+# DEPRECATED for the named-patch path (V61-107.5 found it produces
+# NaN on STL meshes regardless of dt); a request for icoFoam is
+# upgraded to pimpleFoam with a warning. simpleFoam is the new
+# steady-state path for cases like iter01 where the intent is a
+# bypass-jet steady solution at low Re.
+_SUPPORTED_SOLVERS: frozenset[str] = frozenset({"pimpleFoam", "simpleFoam"})
+_DEFAULT_SOLVER: str = "pimpleFoam"
 
 
 _PATCH_RE = re.compile(
@@ -597,6 +611,7 @@ def _build_dict_plan(
     nu: float,
     delta_t: float,
     end_time: float,
+    solver_name: str = _DEFAULT_SOLVER,
 ) -> list[tuple[str, str]]:
     """Compose the 7-dict (rel, content) plan for the named patches.
 
@@ -604,12 +619,31 @@ def _build_dict_plan(
     patch (defect-6 fix: each inlet's direction comes from its own
     polyMesh face normals, so rotated geometries get flow heading into
     the duct rather than into walls).
+
+    ``solver_name`` selects the solver-specific controlDict / fvSchemes /
+    fvSolution templates. DEC-V61-111: branches between pimpleFoam
+    (V61-107.5 default for transient cases) and simpleFoam (steady-state
+    SIMPLE algorithm for cases where intent.json declares ``solver.name:
+    simpleFoam`` — appropriate for low-Re internal flow with
+    bypass jets like iter01 where transient PIMPLE diverges to NaN
+    regardless of dt).
     """
     u_blocks = "".join(
         _u_block(name, cls, inlet_u_per_patch.get(name, (0.0, 0.0, 0.0)))
         for name, cls in patches_with_class
     )
     p_blocks = "".join(_p_block(name, cls) for name, cls in patches_with_class)
+
+    # DEC-V61-111: solver-specific controlDict / fvSchemes / fvSolution.
+    if solver_name == "simpleFoam":
+        control_dict = _build_simplefoam_control_dict(end_time)
+        fv_schemes = _build_simplefoam_fv_schemes()
+        fv_solution = _build_simplefoam_fv_solution()
+    else:
+        # pimpleFoam (default) — the V61-107.5 transient path.
+        control_dict = _build_pimplefoam_control_dict(end_time, delta_t)
+        fv_schemes = _build_pimplefoam_fv_schemes()
+        fv_solution = _build_pimplefoam_fv_solution()
 
     plan: list[tuple[str, str]] = [
         (
@@ -649,133 +683,247 @@ def _build_dict_plan(
         ),
         (
             "system/controlDict",
-            'FoamFile { version 2.0; format ascii; class dictionary; '
-            'location "system"; object controlDict; }\n'
-            # DEC-V61-107.5 (2026-05-01): switched from icoFoam to
-            # pimpleFoam for the named-patch path. icoFoam in
-            # OpenFOAM-10 has no setDeltaT.H include, so the
-            # adjustTimeStep keys would be ignored if icoFoam were
-            # used — fixed dt + tetrahedral STL meshes with high
-            # aspect-ratio cells in tight gap regions force CFL_max
-            # >> 1 → NaN regardless of the global dt chosen (proved
-            # by the dt sweep at iter01_dt_sweep_2026-05-01.md).
-            # pimpleFoam includes setDeltaT.H so adjustTimeStep
-            # actually scales dt to honor maxCo. nOuterCorrectors=1
-            # in fvSolution makes pimpleFoam behave like an
-            # icoFoam-style PISO loop, so numerics stay close to the
-            # historical baseline for the cube/channel cases.
-            # Codex-validated path: bc_setup.py:setup_channel_bc was
-            # the prior pimpleFoam migration (Codex cce9c29 + a1b5e29
-            # reviews 2026-04-30) — this is a mechanical port of the
-            # same template.
-            "application pimpleFoam;\n"
-            "startFrom startTime;\n"
-            "startTime 0;\n"
-            "stopAt endTime;\n"
-            f"endTime {end_time};\n"
-            f"deltaT {delta_t};\n"
-            "writeControl runTime;\n"
-            "writeInterval 1.0;\n"
-            "purgeWrite 0;\n"
-            "writeFormat ascii;\n"
-            "writePrecision 6;\n"
-            "writeCompression off;\n"
-            "timeFormat general;\n"
-            "timePrecision 6;\n"
-            "runTimeModifiable true;\n"
-            "adjustTimeStep yes;\n"
-            "maxCo 0.5;\n"
-            # Codex R12 P2 closure: maxDeltaT honors the caller's
-            # delta_t. Hardcoding 0.05 let pimpleFoam silently ramp
-            # the timestep ABOVE caller-requested limits (e.g.
-            # iter04/05/06 declare dt=0.001-0.002 in intent.json;
-            # smoke_runner uses that to budget step counts. Allowing
-            # pimpleFoam to scale up to 0.05 would defeat the
-            # max_steps cap and change the time resolution callers
-            # rely on for residual sampling. By tying maxDeltaT to
-            # delta_t, callers get exactly the cap they requested;
-            # pimpleFoam can still scale DOWN for stability when
-            # the local CFL forces it (which is the whole point of
-            # adjustTimeStep on pathological meshes like iter01's
-            # blade gap region).
-            f"maxDeltaT {delta_t};\n",
+            control_dict,
         ),
         (
             "system/fvSchemes",
-            'FoamFile { version 2.0; format ascii; class dictionary; '
-            'location "system"; object fvSchemes; }\n'
-            "ddtSchemes  { default Euler; }\n"
-            "gradSchemes { default Gauss linear; }\n"
-            # DEC-V61-107: changed div(phi,U) from "Gauss linear"
-            # (central differencing) to "Gauss linearUpwind grad(U)"
-            # (second-order upwind). Central differencing produces
-            # oscillatory NaN solutions on convection-dominated flow
-            # past sharp interior obstacles (iter01-style: Re=320,
-            # thin blade in plenum) regardless of dt — confirmed by
-            # the dt sweep at tools/adversarial/results/iter01_dt_sweep_2026-05-01.md
-            # (NaN at all dt ∈ {1.0, 0.1, 0.01}). linearUpwind is the
-            # OpenFOAM-recommended baseline for transient icoFoam on
-            # arbitrary geometry — second-order accurate where the
-            # mesh is well-resolved, drops to first-order upwind near
-            # discontinuities. The simpler LDC / channel cases are
-            # diffusion-dominated so the choice is invisible there;
-            # this only matters for cases with sharp internal
-            # obstacles or high local Reynolds.
-            # DEC-V61-107.5: pimpleFoam routes through the turbulence
-            # model's divDevReff which evaluates
-            # ``div((nuEff*dev2(T(grad(U)))))`` every step even with
-            # ``simulationType laminar``. Without an explicit scheme
-            # for that term, OpenFOAM-10's createFields aborts on the
-            # first timestep with "keyword ... is undefined" (Codex
-            # a1b5e29 P1 closure 2026-04-30 in the channel path —
-            # same constraint applies here).
-            "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); "
-            "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
-            # DEC-V61-107: changed laplacian + snGrad from "orthogonal"
-            # to "corrected". Tetrahedral meshes from gmsh on STL
-            # imports are inherently non-orthogonal — the LDC
-            # (cube blockMesh) was the only path where "orthogonal"
-            # was correct. Mismatch produced NaN on iter01-class
-            # geometries (blade in plenum, gap region creates highly
-            # non-orthogonal cells) regardless of dt or convection
-            # scheme. fvSolution already declares
-            # nNonOrthogonalCorrectors 2 expecting these schemes.
-            "laplacianSchemes { default Gauss linear corrected; }\n"
-            "interpolationSchemes { default linear; }\n"
-            "snGradSchemes { default corrected; }\n",
+            fv_schemes,
         ),
         (
             "system/fvSolution",
-            'FoamFile { version 2.0; format ascii; class dictionary; '
-            'location "system"; object fvSolution; }\n'
-            "solvers\n"
-            "{\n"
-            "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; "
-            "relTol 0.05; }\n"
-            "    pFinal { $p; relTol 0; }\n"
-            "    U  { solver smoothSolver; smoother symGaussSeidel; "
-            "tolerance 1e-05; relTol 0; }\n"
-            # DEC-V61-107.5: pimpleFoam needs UFinal alongside pFinal
-            # (the *Final variants are used in the LAST PISO corrector
-            # of each timestep with stricter relTol).
-            "    UFinal { $U; relTol 0; }\n"
-            "}\n"
-            # DEC-V61-107.5: pimpleFoam reads PIMPLE, not PISO. Setting
-            # nOuterCorrectors=1 makes pimpleFoam behave like icoFoam's
-            # single PISO loop per timestep so numerics stay close to
-            # the icoFoam baseline for cube/channel cases. The 2026-04-30
-            # channel migration (Codex cce9c29) used the same value.
-            "PIMPLE\n"
-            "{\n"
-            "    nOuterCorrectors 1;\n"
-            "    nCorrectors 2;\n"
-            "    nNonOrthogonalCorrectors 2;\n"
-            "    pRefCell 0;\n"
-            "    pRefValue 0;\n"
-            "}\n",
+            fv_solution,
         ),
     ]
     return plan
+
+
+def _build_pimplefoam_control_dict(end_time: float, delta_t: float) -> str:
+    """DEC-V61-107.5 pimpleFoam controlDict template (default solver
+    for the named-patch path). Adjustable timestep with maxCo=0.5 gates
+    CFL stability on tetrahedral STL meshes with high-aspect-ratio
+    cells (iter01 blade-gap region etc.).
+    """
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        # DEC-V61-107.5 (2026-05-01): switched from icoFoam to
+        # pimpleFoam for the named-patch path. icoFoam in OpenFOAM-10
+        # has no setDeltaT.H include so adjustTimeStep keys are
+        # ignored — fixed dt + tetrahedral STL meshes with high
+        # aspect-ratio cells in tight gap regions force CFL_max >> 1
+        # → NaN regardless of the global dt chosen.
+        "application pimpleFoam;\n"
+        "startFrom startTime;\n"
+        "startTime 0;\n"
+        "stopAt endTime;\n"
+        f"endTime {end_time};\n"
+        f"deltaT {delta_t};\n"
+        "writeControl runTime;\n"
+        "writeInterval 1.0;\n"
+        "purgeWrite 0;\n"
+        "writeFormat ascii;\n"
+        "writePrecision 6;\n"
+        "writeCompression off;\n"
+        "timeFormat general;\n"
+        "timePrecision 6;\n"
+        "runTimeModifiable true;\n"
+        "adjustTimeStep yes;\n"
+        "maxCo 0.5;\n"
+        # Codex R12 P2: maxDeltaT honors caller's delta_t (callers
+        # rely on the cap for residual sampling cadence). pimpleFoam
+        # can still scale DOWN for stability.
+        f"maxDeltaT {delta_t};\n"
+    )
+
+
+def _build_pimplefoam_fv_schemes() -> str:
+    """DEC-V61-107 / V61-107.5 pimpleFoam fvSchemes: linearUpwind for
+    convection (handles sharp interior obstacles without NaN
+    oscillation), corrected laplacian/snGrad for non-orthogonal
+    tetrahedral meshes.
+    """
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        "ddtSchemes  { default Euler; }\n"
+        "gradSchemes { default Gauss linear; }\n"
+        # V61-107: linearUpwind avoids NaN on convection-dominated
+        # flow past sharp interior obstacles. V61-107.5: pimpleFoam
+        # routes through divDevReff which evaluates
+        # div((nuEff*dev2(T(grad(U))))) — needs explicit scheme even
+        # for laminar simulationType.
+        "divSchemes  { default none; div(phi,U) Gauss linearUpwind grad(U); "
+        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
+        # V61-107: corrected (not orthogonal) — tetrahedral STL
+        # meshes are inherently non-orthogonal.
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+
+
+def _build_pimplefoam_fv_solution() -> str:
+    """DEC-V61-107.5 pimpleFoam fvSolution: PIMPLE block with
+    nOuterCorrectors=1 to keep numerics close to the icoFoam-style
+    PISO loop for the cube/channel baseline.
+    """
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSolution; }\n'
+        "solvers\n"
+        "{\n"
+        "    p  { solver PCG; preconditioner DIC; tolerance 1e-06; "
+        "relTol 0.05; }\n"
+        "    pFinal { $p; relTol 0; }\n"
+        "    U  { solver smoothSolver; smoother symGaussSeidel; "
+        "tolerance 1e-05; relTol 0; }\n"
+        "    UFinal { $U; relTol 0; }\n"
+        "}\n"
+        "PIMPLE\n"
+        "{\n"
+        "    nOuterCorrectors 1;\n"
+        "    nCorrectors 2;\n"
+        "    nNonOrthogonalCorrectors 2;\n"
+        "    pRefCell 0;\n"
+        "    pRefValue 0;\n"
+        "}\n"
+    )
+
+
+def _build_simplefoam_control_dict(end_time: float) -> str:
+    """DEC-V61-111 simpleFoam controlDict template (steady-state SIMPLE
+    algorithm). For low-Re internal flow with bypass jets like iter01
+    where transient PIMPLE diverges to NaN regardless of dt — the
+    underlying issue is that iter01 is a STEADY problem whose
+    transient discretization spends itself fighting initial-condition
+    decay rather than reaching the physical bypass-jet flow field.
+
+    simpleFoam does iteration-based marching (deltaT=1 = one
+    iteration), so endTime is interpreted as iteration count, not
+    seconds. adjustTimeStep + maxCo are NOT used (no physical time
+    coordinate). Convergence is gated by SIMPLE residualControl in
+    fvSolution.
+    """
+    # simpleFoam treats endTime as iteration count when deltaT=1.
+    # If caller passed end_time<5 (low value typical of transient
+    # smoke budgeting), bump to 100 minimum so the steady solver
+    # has enough iterations to converge from the zero-IC.
+    iterations = max(int(end_time), 100)
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object controlDict; }\n'
+        "application simpleFoam;\n"
+        "startFrom startTime;\n"
+        "startTime 0;\n"
+        "stopAt endTime;\n"
+        f"endTime {iterations};\n"
+        # SIMPLE iteration step is unitless; deltaT=1 gives 1
+        # iteration per Time= step in the log.
+        "deltaT 1;\n"
+        "writeControl timeStep;\n"
+        # Write final state + a few intermediates (every 50 iter)
+        # so callers extracting the last time directory get the
+        # converged solution.
+        "writeInterval 50;\n"
+        "purgeWrite 0;\n"
+        "writeFormat ascii;\n"
+        "writePrecision 6;\n"
+        "writeCompression off;\n"
+        "timeFormat general;\n"
+        "timePrecision 6;\n"
+        "runTimeModifiable true;\n"
+        # adjustTimeStep / maxCo / maxDeltaT are NOT meaningful for
+        # simpleFoam (no physical time). Omitted by design.
+    )
+
+
+def _build_simplefoam_fv_schemes() -> str:
+    """DEC-V61-111 simpleFoam fvSchemes: ddtSchemes steadyState
+    (zeroes the ddt term so the iteration is a true steady marching
+    rather than transient), bounded linearUpwind for convection
+    (steady-state-bounded-corrected), corrected laplacian/snGrad for
+    non-orthogonal tetrahedral STL meshes.
+    """
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSchemes; }\n'
+        # steadyState ddt scheme zeroes the d/dt term → iteration is
+        # pure spatial marching, not transient. This is the principal
+        # difference from pimpleFoam and the reason simpleFoam
+        # reaches the steady physical solution iteratively without
+        # the transient initial-condition explosion that diverges
+        # iter01 in pimpleFoam.
+        "ddtSchemes  { default steadyState; }\n"
+        "gradSchemes { default Gauss linear; "
+        "grad(U) cellLimited Gauss linear 1; }\n"
+        # bounded prefix is the OpenFOAM-recommended steady-state
+        # convection scheme — adds a boundedness correction that
+        # keeps SIMPLE from diverging when the flow field is far
+        # from steady (initial iterations).
+        "divSchemes  { default none; div(phi,U) bounded Gauss linearUpwind grad(U); "
+        "div((nuEff*dev2(T(grad(U))))) Gauss linear; }\n"
+        "laplacianSchemes { default Gauss linear corrected; }\n"
+        "interpolationSchemes { default linear; }\n"
+        "snGradSchemes { default corrected; }\n"
+    )
+
+
+def _build_simplefoam_fv_solution() -> str:
+    """DEC-V61-111 simpleFoam fvSolution: SIMPLE block with relaxation
+    factors p=0.3, U=0.7 (OpenFOAM tutorial-standard for laminar
+    SIMPLE), residualControl 1e-3/1e-4 (loose convergence appropriate
+    for adversarial-loop case validation; engineers can tighten via
+    raw-dict editor).
+
+    Key difference from pimpleFoam: NO PIMPLE block; instead a SIMPLE
+    block + relaxationFactors block. simpleFoam reads SIMPLE not PIMPLE.
+    """
+    return (
+        'FoamFile { version 2.0; format ascii; class dictionary; '
+        'location "system"; object fvSolution; }\n'
+        "solvers\n"
+        "{\n"
+        # GAMG is the OpenFOAM-recommended pressure solver for
+        # SIMPLE. PCG is fine but GAMG converges faster on the
+        # smoothly-varying steady pressure field.
+        "    p  { solver GAMG; tolerance 1e-06; relTol 0.1; "
+        "smoother GaussSeidel; }\n"
+        "    U  { solver smoothSolver; smoother symGaussSeidel; "
+        "tolerance 1e-05; relTol 0.1; nSweeps 1; }\n"
+        "}\n"
+        "SIMPLE\n"
+        "{\n"
+        # nNonOrthogonalCorrectors handles the corrected laplacian/snGrad
+        # schemes' non-orthogonal mesh terms.
+        "    nNonOrthogonalCorrectors 2;\n"
+        "    pRefCell 0;\n"
+        "    pRefValue 0;\n"
+        # residualControl gates convergence: when both p AND U
+        # initial residuals fall below the listed tolerance,
+        # simpleFoam stops iterating. 1e-3/1e-4 are loose targets
+        # appropriate for adversarial-case validation; the converged
+        # check in run_smoke also enforces finiteness.
+        "    residualControl\n"
+        "    {\n"
+        "        p   1e-3;\n"
+        "        U   1e-4;\n"
+        "    }\n"
+        "}\n"
+        "relaxationFactors\n"
+        "{\n"
+        # OpenFOAM-tutorial-standard SIMPLE relaxation factors for
+        # laminar incompressible. p=0.3 damps pressure-correction
+        # over-shoot; U=0.7 is the standard momentum factor.
+        "    fields\n"
+        "    {\n"
+        "        p   0.3;\n"
+        "    }\n"
+        "    equations\n"
+        "    {\n"
+        "        U   0.7;\n"
+        "    }\n"
+        "}\n"
+    )
 
 
 def setup_bc_from_stl_patches(
@@ -786,17 +934,54 @@ def setup_bc_from_stl_patches(
     nu: float = _DEFAULT_NU,
     delta_t: float = _DEFAULT_DELTA_T,
     end_time: float = _DEFAULT_END_TIME,
+    solver_name: str | None = None,
 ) -> StlPatchBCResult:
-    """Author the icoFoam dict tree using named patches from polyMesh/boundary.
+    """Author the OpenFOAM dict tree using named patches from polyMesh/boundary.
 
     Idempotent. The atomic commit + V61-102 user-override invariant
     means: dicts the engineer manually edited (via raw-dict editor →
     manifest source=user) are NOT clobbered by re-runs.
 
+    ``solver_name`` (DEC-V61-111) selects the solver-specific
+    controlDict / fvSchemes / fvSolution templates:
+
+    * ``None`` or unrecognized → ``pimpleFoam`` (default, V61-107.5
+      transient PIMPLE) with a warning if the caller asked for something
+      else.
+    * ``"pimpleFoam"`` → V61-107.5 transient PIMPLE template.
+    * ``"simpleFoam"`` → steady-state SIMPLE template (iter01-class
+      cases where transient PIMPLE diverges to NaN).
+    * ``"icoFoam"`` → upgraded to ``pimpleFoam`` with a warning. icoFoam
+      on STL meshes was found to NaN regardless of dt (V61-107.5
+      empirical finding); the upgrade path keeps callers from silently
+      hitting that failure mode.
+
     Raises ``StlPatchBCError`` with structured ``failing_check`` for
     every detectable failure mode; the route maps each to an HTTP 4xx
     code.
     """
+    # DEC-V61-111: resolve the requested solver to one of the
+    # supported authoring paths. Unknown / icoFoam → pimpleFoam with
+    # a warning; None → pimpleFoam silent default. Resolved name
+    # written into the result for callers to verify.
+    solver_warnings: list[str] = []
+    if solver_name in (None, ""):
+        resolved_solver = _DEFAULT_SOLVER
+    elif solver_name == "icoFoam":
+        resolved_solver = "pimpleFoam"
+        solver_warnings.append(
+            "solver_name='icoFoam' upgraded to 'pimpleFoam' per "
+            "DEC-V61-107.5 (icoFoam on STL meshes produces NaN "
+            "regardless of dt)."
+        )
+    elif solver_name in _SUPPORTED_SOLVERS:
+        resolved_solver = solver_name
+    else:
+        resolved_solver = _DEFAULT_SOLVER
+        solver_warnings.append(
+            f"solver_name={solver_name!r} unrecognized; defaulting to "
+            f"{_DEFAULT_SOLVER}. Supported: {sorted(_SUPPORTED_SOLVERS)}."
+        )
     boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
     if not boundary_path.is_file():
         raise StlPatchBCError(
@@ -826,7 +1011,7 @@ def setup_bc_from_stl_patches(
     # so a concurrent PUT /patch-classification cannot land between
     # override-read and dict-author. Pre-lock state below is limited
     # to caller arguments + read-only polyMesh ground truth.
-    warnings: list[str] = []
+    warnings: list[str] = list(solver_warnings)
 
     try:
         with case_lock(case_dir):
@@ -877,6 +1062,7 @@ def setup_bc_from_stl_patches(
                 nu=nu,
                 delta_t=delta_t,
                 end_time=end_time,
+                solver_name=resolved_solver,
             )
             # Codex R13 P2-A + P2-B closure: content-aware
             # icoFoam-marker check, INSIDE case_lock so override
@@ -953,6 +1139,7 @@ def setup_bc_from_stl_patches(
         nu=nu,
         delta_t=delta_t,
         end_time=end_time,
+        solver_name=resolved_solver,
         written_files=written,
         skipped_user_overrides=skipped,
         warnings=tuple(warnings),

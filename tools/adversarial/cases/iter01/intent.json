@@ -57,7 +57,27 @@
     "qualitative_description": "Most of the flow accelerates through the 4 mm bypass gaps around the blade, then expands into a low-speed wake region immediately downstream. Expect symmetric roof/floor leakage streams, weak 3D side leakage, and a recirculation pocket behind the blade rather than a trivial plug-flow field."
   },
   "smoke_runner": {
-    "expected_status": "physics_validation_required",
-    "rationale": "DEC-V61-106 (2026-05-01): empirically confirmed iter01 actually DIVERGES at every time directory \u2014 extractor inspection of t=100/150/200/250 all show 21477 NaN entries, the backend's 'finite residual' signal is misleading (icoFoam log captures the residual BEFORE the field corruption catches up). The analytical-comparator framework correctly surfaces this when migrated to analytical_comparator_pass \u2014 but the underlying solver-divergence defect is out of scope for V61-106. Stays at physics_validation_required (SKIPPED) until a follow-up DEC fixes the numerical setup (likely lower CFL, better relaxation factors, or icoFoam \u2192 simpleFoam \u2014 case originally declared simpleFoam in intent but the route runs icoFoam). Once stable, migrate to analytical_comparator_pass with the comparator block prototyped in commit history (u_magnitude_max>=1.0, u_x_min<0.0, cell_count==7159)."
+    "expected_status": "analytical_comparator_pass",
+    "rationale": "DEC-V61-111 (2026-05-03): migrated from physics_validation_required to analytical_comparator_pass after V61-111 Phase 1+2 landed solver_name routing in setup_bc_from_stl_patches + simpleFoam controlDict/fvSchemes/fvSolution templates. The intent.json:solver.name=simpleFoam is now honored end-to-end (run_smoke forwards `solver_name` query to /setup-bc, backend writes simpleFoam steady-state SIMPLE template instead of pimpleFoam transient PIMPLE). Steady-state SIMPLE escapes the transient-PIMPLE NaN-divergence regime that V61-106 closure observed (every time directory had 21477 NaN entries because pimpleFoam at delta_t=1.0 with maxCo=0.5 explodes on the first step before adjustTimeStep can react). The 3 comparators below are the V61-106 \u00a7Phase 1.3 prototype, untouched: u_magnitude_max>=1.0 (bypass jet must accelerate), u_x_min<0.0 (downstream recirculation must produce at least one cell with negative x-velocity), cell_count==7159 (mesh regression canary).",
+    "analytical_comparators": [
+      {
+        "measure": "u_magnitude_max",
+        "op": ">=",
+        "value": 1.0,
+        "rationale": "Bypass jet around the 80 mm tall blade with 4 mm gaps must accelerate above 1.0 m/s by continuity (inlet 0.8 m/s; gap fraction ~5%/face times 4 faces \u2248 20% effective bypass area)."
+      },
+      {
+        "measure": "u_x_min",
+        "op": "<",
+        "value": 0.0,
+        "rationale": "Downstream recirculation pocket behind the blade must produce at least one cell with negative x-velocity (the wake reversal). Without this, the solver is producing plug flow that ignores the obstacle."
+      },
+      {
+        "measure": "cell_count",
+        "op": "==",
+        "value": 7159,
+        "rationale": "Meshing regression canary: locks the cell count we measured 2026-05-01. Any future change to gmsh runner / topology partitioner / mesh density that affects iter01's cell count flags this comparator."
+      }
+    ]
   }
 }

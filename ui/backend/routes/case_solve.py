@@ -209,6 +209,18 @@ def setup_bc(
             "from_stl_patches=1. Default 1e-3 (water-like)."
         ),
     ),
+    solver_name: str | None = Query(
+        default=None,
+        description=(
+            "DEC-V61-111: select OpenFOAM solver. Only honored when "
+            "from_stl_patches=1. Supported: 'pimpleFoam' (default · "
+            "transient PIMPLE), 'simpleFoam' (steady-state SIMPLE). "
+            "'icoFoam' is upgraded to 'pimpleFoam' with a warning per "
+            "V61-107.5 (icoFoam on STL meshes produces NaN regardless "
+            "of dt). Unrecognized values default to 'pimpleFoam' with "
+            "a warning."
+        ),
+    ),
 ):
     """Author OpenFOAM dicts for the case in one of three modes.
 
@@ -242,6 +254,8 @@ def setup_bc(
             bc_kwargs["end_time"] = end_time
         if nu is not None:
             bc_kwargs["nu"] = nu
+        if solver_name is not None:
+            bc_kwargs["solver_name"] = solver_name
         try:
             result = setup_bc_from_stl_patches(case_dir, case_id=case_id, **bc_kwargs)
         except StlPatchBCError as exc:
@@ -278,6 +292,7 @@ def setup_bc(
                 "nu": result.nu,
                 "delta_t": result.delta_t,
                 "end_time": result.end_time,
+                "solver_name": result.solver_name,
                 "written_files": list(result.written_files),
                 "skipped_user_overrides": list(result.skipped_user_overrides),
                 "warnings": list(result.warnings),

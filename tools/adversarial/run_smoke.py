@@ -266,6 +266,13 @@ def run_case(case_dir: Path, base_url: str) -> dict[str, Any]:
         smoke_end = min(intent_end, smoke_dt * max_steps, max_end)
         bc_qs_parts.append(f"delta_t={smoke_dt}")
         bc_qs_parts.append(f"end_time={smoke_end}")
+        # DEC-V61-111: forward intent.json:solver.name to the setup-bc
+        # route so steady-state cases (iter01-class) get the simpleFoam
+        # template rather than the pimpleFoam default. Backend
+        # upgrades icoFoam → pimpleFoam with a warning per V61-107.5.
+        intent_solver = solver.get("name")
+        if isinstance(intent_solver, str) and intent_solver:
+            bc_qs_parts.append(f"solver_name={intent_solver}")
     bc_url = f"{base_url}/api/import/{case_id}/setup-bc?" + "&".join(bc_qs_parts)
     try:
         bc_resp = _http_post_json(bc_url, None, timeout=60)

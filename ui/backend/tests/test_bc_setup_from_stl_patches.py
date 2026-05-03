@@ -995,3 +995,180 @@ def test_max_delta_t_honors_caller_delta_t(tmp_path: Path):
     # silently ignored — the V61-107 lesson).
     assert "adjustTimeStep yes" in control_dict
     assert "maxCo 0.5" in control_dict
+
+
+# DEC-V61-111: solver_name routing tests.
+
+
+def test_solver_name_default_authors_pimplefoam(tmp_path: Path):
+    """V61-111: omitting ``solver_name`` preserves pre-V61-111 behavior
+    (pimpleFoam template). This pins the backward-compat invariant —
+    every existing call site that does not pass solver_name continues
+    to get the V61-107.5 transient PIMPLE template byte-identical to
+    the pre-V61-111 output."""
+    case_dir = tmp_path / "default_solver_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(case_dir, case_id="default_solver_case")
+    assert result.solver_name == "pimpleFoam"
+    control_dict = (case_dir / "system/controlDict").read_text()
+    assert "application pimpleFoam;" in control_dict
+    fv_solution = (case_dir / "system/fvSolution").read_text()
+    assert "PIMPLE" in fv_solution
+    assert "SIMPLE" not in fv_solution
+    fv_schemes = (case_dir / "system/fvSchemes").read_text()
+    assert "ddtSchemes  { default Euler; }" in fv_schemes
+
+
+def test_solver_name_simplefoam_authors_steady_state_template(tmp_path: Path):
+    """V61-111 Phase 1.3: passing ``solver_name='simpleFoam'`` writes
+    the steady-state SIMPLE template — application simpleFoam,
+    ddtSchemes steadyState, SIMPLE block (not PIMPLE), bounded
+    linearUpwind divSchemes, relaxationFactors p=0.3 / U=0.7. This is
+    the contract iter01 relies on to escape the transient-PIMPLE
+    NaN-divergence regime (V61-106 Phase 1.3 deferred root cause)."""
+    case_dir = tmp_path / "simplefoam_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir,
+        case_id="simplefoam_case",
+        solver_name="simpleFoam",
+        end_time=200,
+    )
+    assert result.solver_name == "simpleFoam"
+    # No "icoFoam upgrade" warning since the caller asked for a
+    # supported solver explicitly.
+    assert all("simpleFoam" in w for w in result.warnings) or result.warnings == ()
+
+    control_dict = (case_dir / "system/controlDict").read_text()
+    assert "application simpleFoam;" in control_dict
+    # simpleFoam interprets endTime as iteration count when deltaT=1.
+    assert "endTime 200" in control_dict
+    assert "deltaT 1" in control_dict
+    # adjustTimeStep / maxCo / maxDeltaT must NOT be in simpleFoam
+    # controlDict (no physical time coordinate).
+    assert "adjustTimeStep" not in control_dict
+    assert "maxCo" not in control_dict
+    assert "maxDeltaT" not in control_dict
+
+    fv_schemes = (case_dir / "system/fvSchemes").read_text()
+    # ddtSchemes steadyState is THE distinguishing simpleFoam scheme.
+    assert "ddtSchemes  { default steadyState; }" in fv_schemes
+    # bounded linearUpwind for steady-state convection stability.
+    assert "div(phi,U) bounded Gauss linearUpwind grad(U)" in fv_schemes
+    # corrected laplacian/snGrad (non-orthogonal STL meshes).
+    assert "laplacianSchemes { default Gauss linear corrected; }" in fv_schemes
+
+    fv_solution = (case_dir / "system/fvSolution").read_text()
+    # simpleFoam reads SIMPLE not PIMPLE.
+    assert "SIMPLE" in fv_solution
+    assert "PIMPLE" not in fv_solution
+    # OpenFOAM-tutorial-standard SIMPLE relaxation factors.
+    assert "p   0.3;" in fv_solution
+    assert "U   0.7;" in fv_solution
+    # residualControl gates convergence at loose targets.
+    assert "residualControl" in fv_solution
+    assert "p   1e-3;" in fv_solution
+    assert "U   1e-4;" in fv_solution
+
+
+def test_solver_name_simplefoam_min_iteration_floor(tmp_path: Path):
+    """V61-111 controlDict: simpleFoam interprets endTime as iteration
+    count. If callers pass a transient-style end_time (small floats
+    like 2.5s), the floor at 100 iterations gives the steady solver
+    enough marching room to converge from zero-IC. iter01-class
+    smoke runs declare end_time_s=600 in intent.json, far above the
+    floor — the floor only protects misconfigured short windows."""
+    case_dir = tmp_path / "min_iter_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    setup_bc_from_stl_patches(
+        case_dir,
+        case_id="min_iter_case",
+        solver_name="simpleFoam",
+        end_time=2.5,  # transient-style; simpleFoam needs more iterations
+    )
+    control_dict = (case_dir / "system/controlDict").read_text()
+    # Floor at 100 iterations.
+    assert "endTime 100" in control_dict
+
+
+def test_solver_name_icofoam_upgraded_to_pimplefoam_with_warning(tmp_path: Path):
+    """V61-111: icoFoam requests are upgraded to pimpleFoam per
+    V61-107.5 (icoFoam on STL meshes produces NaN regardless of dt).
+    The upgrade is silent at the controlDict level (`application
+    pimpleFoam` written) but surfaced as a warning in the result.
+    Engineers who genuinely need icoFoam authoring can override
+    controlDict via the raw-dict editor."""
+    case_dir = tmp_path / "icofoam_upgrade_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir, case_id="icofoam_upgrade_case", solver_name="icoFoam"
+    )
+    assert result.solver_name == "pimpleFoam"
+    # Warning must mention BOTH the requested solver AND the upgrade target.
+    warning_text = " ".join(result.warnings)
+    assert "icoFoam" in warning_text
+    assert "pimpleFoam" in warning_text
+    # controlDict is the pimpleFoam template, NOT icoFoam.
+    control_dict = (case_dir / "system/controlDict").read_text()
+    assert "application pimpleFoam;" in control_dict
+    assert "application icoFoam" not in control_dict
+
+
+def test_solver_name_unrecognized_falls_back_to_pimplefoam_with_warning(tmp_path: Path):
+    """V61-111: unrecognized solver names default to pimpleFoam (the
+    safe baseline) with a warning. Protects against typos +
+    intent.json mistakes; the warning surfaces the typo to the
+    engineer rather than silently authoring a degenerate template."""
+    case_dir = tmp_path / "unknown_solver_case"
+    _scaffold_case(case_dir)
+    _write_polymesh_axis_aligned_box(
+        case_dir,
+        [
+            ("inlet", 50, 0, "-x"),
+            ("outlet", 50, 50, "+x"),
+            ("walls", 500, 100, "+z"),
+        ],
+    )
+    result = setup_bc_from_stl_patches(
+        case_dir,
+        case_id="unknown_solver_case",
+        solver_name="pisoFoam",  # plausible-looking typo
+    )
+    assert result.solver_name == "pimpleFoam"
+    warning_text = " ".join(result.warnings)
+    assert "pisoFoam" in warning_text
+    assert "pimpleFoam" in warning_text
+    control_dict = (case_dir / "system/controlDict").read_text()
+    assert "application pimpleFoam;" in control_dict
