@@ -88,6 +88,33 @@ def _non_loopback_override_enabled() -> bool:
     return os.environ.get(_NON_LOOPBACK_OVERRIDE_ENV, "").strip() == "1"
 
 
+def _client_label_for_log(request: Request) -> str:
+    """Build an audit-friendly identifier for the request's caller.
+
+    Codex R3 P2-1: when a same-host reverse proxy trips the guard,
+    ``request.client.host`` is the loopback proxy peer, not the real
+    remote caller. The warning/info logs need the X-Forwarded-For /
+    X-Real-IP / Forwarded value so operators can track who actually
+    hit the endpoint. We surface the forwarded address along with
+    the immediate peer so the audit trail records both hops.
+    """
+    immediate_peer = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        # XFF format is "client, proxy1, proxy2" — first hop is the
+        # original caller per RFC convention.
+        original = forwarded_for.split(",")[0].strip()
+        if original:
+            return f"{original} (via peer={immediate_peer})"
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return f"{real_ip.strip()} (via peer={immediate_peer})"
+    forwarded = request.headers.get("forwarded")
+    if forwarded:
+        return f"{forwarded} (via peer={immediate_peer})"
+    return immediate_peer
+
+
 @router.post("/ai-chat", response_model=ChatResponse)
 async def ai_chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     """Execute a chat completion against the configured LLM provider.
@@ -103,10 +130,12 @@ async def ai_chat(request: ChatRequest, http_request: Request) -> ChatResponse:
       * 500 — provider misconfiguration / unexpected
     """
     if not _is_loopback_request(http_request) and not _non_loopback_override_enabled():
-        client_host = http_request.client.host if http_request.client else "unknown"
+        # R3 P2-1: log the forwarded caller (XFF / Forwarded / X-Real-IP)
+        # not just the loopback proxy peer, so audits can track who
+        # actually hit the endpoint.
         logger.warning(
             "Rejecting /api/ai-chat from non-loopback host %s (set %s=1 to allow)",
-            client_host,
+            _client_label_for_log(http_request),
             _NON_LOOPBACK_OVERRIDE_ENV,
         )
         raise HTTPException(
@@ -121,10 +150,9 @@ async def ai_chat(request: ChatRequest, http_request: Request) -> ChatResponse:
         # Override active — log so the audit trail records the
         # remote caller; do NOT log the request body (could include
         # sensitive prompts).
-        client_host = http_request.client.host if http_request.client else "unknown"
         logger.info(
             "Allowing /api/ai-chat from non-loopback host %s (override env=%s)",
-            client_host,
+            _client_label_for_log(http_request),
             _NON_LOOPBACK_OVERRIDE_ENV,
         )
 

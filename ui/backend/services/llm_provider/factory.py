@@ -8,6 +8,7 @@ that exercise the singleton lifecycle call it in a fixture.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -49,6 +50,36 @@ def _fingerprint(api_key: str) -> str:
     return f"sha256:{digest}"
 
 
+def _schedule_aclose(provider: LLMProvider) -> None:
+    """Close an evicted provider's underlying client on the running
+    event loop, if one exists. Codex R3 P2-2: same-length key
+    rotations now trigger a cache rebuild, and without this the old
+    DeepSeekProvider's persistent AsyncClient leaked.
+
+    Production calls ``get_default_provider()`` from inside async
+    request handlers, so a running loop is the common case. When no
+    loop is running (e.g. tests calling the factory in a sync
+    context), we fall back to ``asyncio.run`` for the cleanup so
+    connections don't accumulate even outside FastAPI."""
+    aclose = getattr(provider, "aclose", None)
+    if aclose is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        loop.create_task(aclose())
+        return
+    # No running loop — run aclose synchronously in a fresh loop.
+    # Swallow any error: cleanup of an evicted provider should never
+    # break the live request that triggered the rebuild.
+    try:
+        asyncio.run(aclose())
+    except Exception:
+        logger.debug("Best-effort aclose of evicted provider failed", exc_info=True)
+
+
 def get_default_provider() -> LLMProvider:
     """Return the LLM provider configured for the current environment.
 
@@ -66,13 +97,17 @@ def get_default_provider() -> LLMProvider:
     api_key = os.environ.get(_API_KEY_ENV_VAR, "").strip()
     fingerprint = _fingerprint(api_key)
 
+    evicted: LLMProvider | None = None
     with _lock:
         if (
             _cached_provider is not None
             and _cached_key_fingerprint == fingerprint
         ):
             return _cached_provider
-        # Env changed (or first call) — rebuild.
+        # Env changed (or first call) — rebuild. Hold the previously
+        # cached provider for cleanup AFTER releasing the lock so we
+        # don't run async work under it.
+        evicted = _cached_provider
         if not api_key:
             logger.warning(
                 "%s is unset — using MockLLMProvider. Real LLM calls disabled.",
@@ -82,7 +117,11 @@ def get_default_provider() -> LLMProvider:
         else:
             _cached_provider = DeepSeekProvider(api_key=api_key)
         _cached_key_fingerprint = fingerprint
-        return _cached_provider
+        result = _cached_provider
+
+    if evicted is not None:
+        _schedule_aclose(evicted)
+    return result
 
 
 def reset_default_provider() -> None:

@@ -334,6 +334,43 @@ def test_factory_rebuilds_on_same_length_key_rotation(monkeypatch):
     assert p1 is not p2, "same-length key rotation must invalidate cache"
 
 
+def test_factory_closes_evicted_provider_on_rebuild(monkeypatch):
+    """Codex R3 P2-2 regression: a rebuild must aclose() the previous
+    DeepSeekProvider so its long-lived AsyncClient doesn't leak. We
+    monkeypatch DeepSeekProvider to record aclose invocations."""
+    reset_default_provider()
+
+    aclose_calls: list[str] = []
+
+    class _RecordingProvider(MockLLMProvider):
+        def __init__(self, tag: str) -> None:
+            super().__init__()
+            self._tag = tag
+
+        async def aclose(self) -> None:  # pragma: no cover - simple
+            aclose_calls.append(self._tag)
+
+    # Stub the factory's import so each new key produces a fresh
+    # _RecordingProvider with a distinct tag.
+    from ui.backend.services.llm_provider import factory as factory_module
+
+    counter = {"n": 0}
+
+    def _fake_deepseek_provider(api_key: str) -> _RecordingProvider:
+        counter["n"] += 1
+        return _RecordingProvider(f"p{counter['n']}")
+
+    monkeypatch.setattr(factory_module, "DeepSeekProvider", _fake_deepseek_provider)
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    get_default_provider()  # build p1
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-key-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    get_default_provider()  # build p2; p1 evicted
+    # The rebuild path scheduled aclose on p1 (sync fallback because
+    # no event loop is running in this test).
+    assert "p1" in aclose_calls, f"expected p1 to be aclose'd; got {aclose_calls}"
+
+
 def test_factory_reset_clears_cache(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-cache-test")
     reset_default_provider()
