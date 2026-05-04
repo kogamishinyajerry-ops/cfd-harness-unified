@@ -26,7 +26,7 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ui.backend.services.case_manifest.locking import case_lock
+from ui.backend.services.case_manifest.locking import CaseLockError, case_lock
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
 from ui.backend.services.case_solve.patch_classification_store import (
     PatchClassificationIOError,
@@ -49,11 +49,25 @@ class ToolDispatchError(RuntimeError):
       * ``arg_validation_failed``
       * ``underlying_service_error`` (V108-style typed underlying error)
       * ``unexpected``
+
+    ``inner_failing_check`` is the underlying service's typed
+    ``failing_check`` when one exists (V123 R1 P2-1: e.g. ``cell_cap_exceeded``,
+    ``symlink_escape``, ``gmshToFoam_failed``). The route layer surfaces
+    this in the response body so the frontend ProposalCard can branch
+    on it for actionable remediation messages instead of a generic
+    failure.
     """
 
-    def __init__(self, message: str, *, failing_check: str) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        failing_check: str,
+        inner_failing_check: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.failing_check = failing_check
+        self.inner_failing_check = inner_failing_check
 
 
 class UnknownToolError(ToolDispatchError):
@@ -183,14 +197,29 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
     typed = args  # type: RegenerateMeshArgs (caller already validated)
     assert isinstance(typed, RegenerateMeshArgs)
     case_id = case_dir.name
+    # V123 R1 P3: case_lock unconditionally calls case_dir.mkdir(parents=
+    # True, exist_ok=True). If the imported case dir was deleted between
+    # the route's case_dir.is_dir() check and this handler entering, the
+    # lock would silently RECREATE it as an empty dir, mesh_imported_case
+    # would then surface ``source_not_imported``, and the resurrected
+    # empty dir would leak under user_drafts/imported/. Pre-lock check
+    # closes the common-case race; the narrow remaining TOCTTOU window
+    # (between this check and case_lock's mkdir) is documented and
+    # accepts the same correctness boundary as V108/V109 caller patterns.
+    if not case_dir.is_dir():
+        raise ToolDispatchError(
+            f"case_dir {case_dir} does not exist or is not a directory",
+            failing_check="underlying_service_error",
+            inner_failing_check="case_disappeared",
+        )
     # Serialize concurrent regenerate proposals via V108's case_lock —
     # mesh_imported_case rewrites polyMesh/ in place; two concurrent
     # accepts on the same case would race on file content. case_lock is
     # NOT reentrant, but mesh_imported_case does not itself acquire it,
-    # so a single acquisition here is sound. MeshPipelineError is NOT
-    # caught here — the dispatcher's typed-error translation layer
-    # converts it to ToolDispatchError(underlying_service_error), same
-    # contract V121 uses for PatchClassificationIOError.
+    # so a single acquisition here is sound. MeshPipelineError and
+    # CaseLockError are NOT caught here — the dispatcher's typed-error
+    # translation layer maps each to ToolDispatchError preserving the
+    # underlying failing_check as inner_failing_check (V123 R1 P2-1/2-2).
     with case_lock(case_dir):
         result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
     summary = (
@@ -266,19 +295,40 @@ def dispatch(case_dir: Path, tool: str, args: dict[str, Any]) -> ApplyResult:
         raise ToolArgError(tool, exc.errors()) from exc
     try:
         return descriptor.handler(case_dir, validated)
+    except ToolDispatchError:
+        # Handlers may legitimately raise ToolDispatchError themselves
+        # (e.g. V123 P3 case_disappeared pre-check). Pass through so the
+        # blanket Exception handler below doesn't reclassify them as
+        # ``unexpected``.
+        raise
     except PatchClassificationIOError as exc:
         raise ToolDispatchError(
             f"underlying V108 service failed: {exc.failing_check}",
             failing_check="underlying_service_error",
+            inner_failing_check=exc.failing_check,
         ) from exc
     except MeshPipelineError as exc:
-        # V123: regenerate_mesh's underlying service has its own typed
-        # envelope. Preserve the original failing_check in the message
-        # so the route's structured detail surfaces gmsh_diverged /
-        # cell_cap_exceeded / etc rather than a generic 500 string.
+        # V123 R1 P2-1: preserve the underlying mesh failing_check
+        # (cell_cap_exceeded / source_not_imported / gmsh_diverged /
+        # gmshToFoam_failed / case_not_found) so /apply-proposal can
+        # surface it in detail.inner_failing_check instead of collapsing
+        # to a generic underlying_service_error string.
         raise ToolDispatchError(
             f"mesh pipeline failed: {exc.failing_check}: {exc}",
             failing_check="underlying_service_error",
+            inner_failing_check=exc.failing_check,
+        ) from exc
+    except CaseLockError as exc:
+        # V123 R1 P2-2: case_lock's typed errors (symlink_escape /
+        # lock_acquire_failed) used to fall into the catch-all and
+        # surface as 500/unexpected, regressing V108/V109's 422
+        # symlink_escape contract specifically for the new tool path.
+        # Translate explicitly so the route maps to 422 with the
+        # underlying failing_check preserved.
+        raise ToolDispatchError(
+            f"case lock failed: {exc.failing_check}: {exc}",
+            failing_check="underlying_service_error",
+            inner_failing_check=exc.failing_check,
         ) from exc
     except Exception as exc:  # noqa: BLE001 — we want to surface as typed
         raise ToolDispatchError(

@@ -412,9 +412,11 @@ def test_regenerate_mesh_missing_mode_raises_arg_error(tmp_path):
 def test_regenerate_mesh_pipeline_error_translated_to_underlying(
     tmp_path, monkeypatch
 ):
-    """MeshPipelineError raised by the underlying pipeline must surface
-    as ToolDispatchError(failing_check='underlying_service_error') with
-    the original failing_check preserved in the message."""
+    """V123 R1 P2-1: MeshPipelineError must surface as
+    ToolDispatchError(failing_check='underlying_service_error') AND
+    preserve the underlying mesh failing_check in
+    inner_failing_check so the frontend ProposalCard can branch on
+    actionable remediation."""
     from ui.backend.services.meshing_gmsh import MeshPipelineError
 
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_err")
@@ -429,7 +431,123 @@ def test_regenerate_mesh_pipeline_error_translated_to_underlying(
     with pytest.raises(ToolDispatchError) as exc_info:
         dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
     assert exc_info.value.failing_check == "underlying_service_error"
+    assert exc_info.value.inner_failing_check == "cell_cap_exceeded"
     assert "cell_cap_exceeded" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "underlying_check",
+    [
+        "case_not_found",
+        "source_not_imported",
+        "gmsh_diverged",
+        "cell_cap_exceeded",
+        "gmshToFoam_failed",
+    ],
+)
+def test_regenerate_mesh_preserves_each_pipeline_failing_check(
+    tmp_path, monkeypatch, underlying_check
+):
+    """V123 R1 P2-1: every documented MeshPipelineError.failing_check
+    value round-trips through dispatch as inner_failing_check so the
+    route can include it in the response detail."""
+    from ui.backend.services.meshing_gmsh import MeshPipelineError
+
+    case_dir = _make_minimal_case_dir(
+        tmp_path, case_id=f"ldc_v123_{underlying_check}"
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        lambda case_id, *, mesh_mode: (_ for _ in ()).throw(
+            MeshPipelineError(f"surface {underlying_check}", underlying_check)
+        ),
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.inner_failing_check == underlying_check
+
+
+def test_regenerate_mesh_case_lock_error_translates_to_typed_dispatch(
+    tmp_path, monkeypatch
+):
+    """V123 R1 P2-2: CaseLockError (symlink_escape, lock_acquire_failed)
+    must NOT fall into dispatch's catch-all → 500/unexpected. Translate
+    to ToolDispatchError(underlying_service_error) so the route maps to
+    422 with the underlying failing_check preserved as
+    inner_failing_check, matching V108/V109's 422 symlink_escape
+    contract."""
+    from ui.backend.services.case_manifest.locking import CaseLockError
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_locksym")
+
+    def fake_lock(case_dir):
+        raise CaseLockError(
+            f"refusing to use {case_dir}", failing_check="symlink_escape"
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.case_lock", fake_lock
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.failing_check == "underlying_service_error"
+    assert exc_info.value.inner_failing_check == "symlink_escape"
+
+
+def test_regenerate_mesh_case_lock_acquire_failure_translated(
+    tmp_path, monkeypatch
+):
+    """V123 R1 P2-2: lock_acquire_failed (flock contention / EBUSY) is
+    the second documented CaseLockError surface and must round-trip
+    the same way."""
+    from ui.backend.services.case_manifest.locking import CaseLockError
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_lockacq")
+
+    def fake_lock(case_dir):
+        raise CaseLockError(
+            "could not acquire lock", failing_check="lock_acquire_failed"
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.case_lock", fake_lock
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.failing_check == "underlying_service_error"
+    assert exc_info.value.inner_failing_check == "lock_acquire_failed"
+
+
+def test_regenerate_mesh_disappeared_case_dir_does_not_resurrect(
+    tmp_path, monkeypatch
+):
+    """V123 R1 P3: if case_dir vanishes between the route's
+    case_dir.is_dir() check and the handler entering, case_lock would
+    silently mkdir(parents=True, exist_ok=True) and resurrect an empty
+    directory. The pre-lock case_dir.is_dir() check must surface
+    inner_failing_check='case_disappeared' instead, AND must not call
+    mesh_imported_case at all (so no garbage gets written)."""
+    case_dir = tmp_path / "ldc_v123_gone"
+    # Note: case_dir does NOT exist on disk.
+
+    called = {"value": False}
+
+    def should_not_be_called(*args, **kwargs):
+        called["value"] = True
+        return _stub_mesh_result()
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        should_not_be_called,
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.failing_check == "underlying_service_error"
+    assert exc_info.value.inner_failing_check == "case_disappeared"
+    assert called["value"] is False
+    # Critical: the pre-check must NOT have created the case_dir.
+    # (case_lock is skipped since the handler raises before with-block.)
+    assert not case_dir.exists()
 
 
 def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):

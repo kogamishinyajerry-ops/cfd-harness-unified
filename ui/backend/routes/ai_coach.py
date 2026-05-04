@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -469,13 +469,20 @@ async def ai_coach_apply_proposal(
     except ToolDispatchError as exc:
         if exc.failing_check == "underlying_service_error":
             logger.error("apply-proposal underlying service error: %s", exc)
+            detail: dict[str, Any] = {
+                "failing_check": "underlying_service_error",
+                "tool": body.tool,
+                "message": str(exc),
+            }
+            # V123 R1 P2-1: surface the underlying typed failing_check
+            # (cell_cap_exceeded · symlink_escape · gmshToFoam_failed
+            # etc) so the frontend ProposalCard can show actionable
+            # remediation messages instead of a generic 422 string.
+            if exc.inner_failing_check is not None:
+                detail["inner_failing_check"] = exc.inner_failing_check
             raise HTTPException(
                 status_code=422,
-                detail={
-                    "failing_check": "underlying_service_error",
-                    "tool": body.tool,
-                    "message": str(exc),
-                },
+                detail=detail,
             ) from exc
         logger.exception("apply-proposal unexpected dispatch failure")
         raise HTTPException(
