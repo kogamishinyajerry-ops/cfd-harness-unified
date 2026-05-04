@@ -45,6 +45,12 @@ from ui.backend.services.case_completeness import (
 )
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
+from ui.backend.services.mesh_quality import (
+    MeshQualityNotAvailableError,
+    MeshQualityParseError,
+    MeshQualityReport,
+    analyze_mesh_quality,
+)
 from ui.backend.services.llm_coach import (
     AuditWriteError,
     ToolArgError,
@@ -155,7 +161,32 @@ async def ai_coach_stream(
             detail=f"Completeness analyzer error: {type(exc).__name__}",
         ) from exc
 
-    system_prompt = build_coach_system_prompt(report)
+    # DEC-V61-122: best-effort fetch the mesh-quality report so the
+    # AI can ground answers in the actual polyMesh state when the
+    # case has been meshed. Missing polyMesh is a normal pre-mesh
+    # state — log debug, prompt skips the section. Parse errors are
+    # logged but do NOT abort the chat — the engineer's coaching
+    # continues without mesh data.
+    mesh_quality_report: MeshQualityReport | None = None
+    if is_safe_case_id(body.case_id):
+        case_dir = IMPORTED_DIR / body.case_id
+        if case_dir.is_dir():
+            try:
+                mesh_quality_report = analyze_mesh_quality(case_dir)
+            except MeshQualityNotAvailableError:
+                # Pre-mesh case state — expected, no log noise.
+                pass
+            except MeshQualityParseError as exc:
+                logger.warning(
+                    "mesh-quality parse failed for case_id=%r failing_check=%s; "
+                    "proceeding without mesh section in coach prompt",
+                    body.case_id,
+                    exc.failing_check,
+                )
+
+    system_prompt = build_coach_system_prompt(
+        report, mesh_quality_report=mesh_quality_report
+    )
 
     # Build the LLM ChatRequest. The system message is OWNED by the
     # route — caller cannot inject (CoachHistoryMessage validator

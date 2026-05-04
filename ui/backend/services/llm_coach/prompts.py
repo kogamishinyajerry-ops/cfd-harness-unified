@@ -25,6 +25,10 @@ from ui.backend.services.case_completeness import (
     CaseCompletenessReport,
     MissingField,
 )
+from ui.backend.services.mesh_quality import (
+    MeshQualityReport,
+    MeshWarning,
+)
 
 # Role + governance preamble. Kept compact; the bulk of token budget
 # goes to the inlined case state below.
@@ -166,11 +170,53 @@ def _select_top_missing(
     return picked, remainder
 
 
+def _format_mesh_warning(w: MeshWarning) -> str:
+    return f"- [{w.severity.upper()}] {w.code}: {w.message}"
+
+
+def _format_mesh_quality_section(report: MeshQualityReport) -> str:
+    """Render the V61-122 mesh-quality block for the system prompt.
+
+    Pure: no I/O. Always emits a deterministic shape for a given
+    report so prompt readbacks are reproducible. Capped by the
+    upstream report's own structure (V122 caps patch_face_counts
+    naturally because patch counts per case are typically small).
+    """
+    parts: list[str] = ["=== Current mesh snapshot ==="]
+    bb_min = report.bounding_box_min
+    bb_max = report.bounding_box_max
+    summary = (
+        f"cells={report.cell_count} · points={report.point_count} · "
+        f"internal_faces={report.internal_face_count} · "
+        f"boundary_faces={report.boundary_face_count} · "
+        f"bounding_box=[({bb_min[0]:g},{bb_min[1]:g},{bb_min[2]:g}),"
+        f"({bb_max[0]:g},{bb_max[1]:g},{bb_max[2]:g})] · "
+        f"volume={report.bounding_box_volume:g}"
+    )
+    if report.cells_per_unit_volume is not None:
+        summary += f" · density={report.cells_per_unit_volume:g} cells/unit_vol"
+    parts.append(summary)
+    if report.warnings:
+        parts.append("")
+        parts.append(
+            f"Mesh warnings ({len(report.warnings)}):"
+        )
+        parts.extend(_format_mesh_warning(w) for w in report.warnings)
+    if report.patch_face_counts:
+        parts.append("")
+        parts.append("Patch face counts:")
+        # Stable order so the prompt is reproducible across runs.
+        for name in sorted(report.patch_face_counts):
+            parts.append(f"- {name}: {report.patch_face_counts[name]}")
+    return "\n".join(parts)
+
+
 def build_coach_system_prompt(
     report: CaseCompletenessReport,
     project_rules: str = DEFAULT_PROJECT_RULES,
     *,
     max_missing_to_inline: int = 8,
+    mesh_quality_report: MeshQualityReport | None = None,
 ) -> str:
     """Compose the coach system prompt from a completeness snapshot.
 
@@ -231,5 +277,14 @@ def build_coach_system_prompt(
         parts.append("")
         parts.append("=== Analyzer notes ===")
         parts.extend(f"- {note}" for note in report.notes)
+
+    # DEC-V61-122: optional mesh-quality section. Appended LAST so
+    # the case-completeness layer (the load-bearing context) is
+    # always near the top of the prompt; mesh quality is supplementary
+    # context the AI may reference but is not the primary grounding
+    # for "ready_for_archive" reasoning.
+    if mesh_quality_report is not None:
+        parts.append("")
+        parts.append(_format_mesh_quality_section(mesh_quality_report))
 
     return "\n".join(parts)

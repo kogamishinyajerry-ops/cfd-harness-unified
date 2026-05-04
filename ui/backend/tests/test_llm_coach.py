@@ -197,6 +197,55 @@ def test_prompt_is_pure_deterministic():
     assert a == b
 
 
+def test_prompt_omits_mesh_section_when_no_report_passed():
+    """V120/V121 callers compose without mesh_quality_report — the
+    prompt must remain backwards-compatible (no mesh section)."""
+    report = _make_report()
+    prompt = build_coach_system_prompt(report)
+    assert "Current mesh snapshot" not in prompt
+
+
+def test_prompt_includes_mesh_section_when_report_passed():
+    """DEC-V61-122: when a MeshQualityReport is passed, the prompt
+    appends a 'Current mesh snapshot' section AFTER the case state."""
+    from ui.backend.services.mesh_quality import (
+        MeshQualityReport,
+        MeshWarning,
+    )
+
+    mesh = MeshQualityReport(
+        case_id="ldc",
+        polymesh_present=True,
+        cell_count=125,
+        point_count=8,
+        internal_face_count=200,
+        boundary_face_count=100,
+        bounding_box_min=(0.0, 0.0, 0.0),
+        bounding_box_max=(1.0, 1.0, 1.0),
+        bounding_box_volume=1.0,
+        cells_per_unit_volume=125.0,
+        patch_face_counts={"walls": 60, "inlet": 40},
+        warnings=[
+            MeshWarning(
+                severity="warning",
+                code="cell_count_low",
+                message="125 cells; under-refined",
+            )
+        ],
+    )
+    report = _make_report()
+    prompt = build_coach_system_prompt(report, mesh_quality_report=mesh)
+    assert "Current mesh snapshot" in prompt
+    assert "cells=125" in prompt
+    assert "cell_count_low" in prompt
+    assert "walls: 60" in prompt
+    assert "inlet: 40" in prompt
+    # Case state still appears BEFORE the mesh section.
+    case_idx = prompt.index("Current case snapshot")
+    mesh_idx = prompt.index("Current mesh snapshot")
+    assert case_idx < mesh_idx
+
+
 def test_prompt_does_not_leak_default_project_rules_when_overridden():
     """Custom project_rules string fully replaces the default — useful
     if a future deployment wants different role wording."""
