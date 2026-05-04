@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-117
 title: StepTree → Fluent-style hierarchical tree · expandable parent rows + indented sub-node labels
-status: Proposed (awaiting Codex pre-merge review per RETRO-V61-001 multi-file-frontend trigger)
+status: Accepted (2026-05-04 · Codex pre-merge 6-round chain APPROVE on commit 3736f5c [R1 P2 stale auto-expansion → R2 P2 pin-active-row → R3 P2 ARIA disclosure contract → R4 P2 transition sync → R5 P2 cross-case state leak → R6 clean]; chain report at reports/codex_tool_reports/v61_117_r1_chain.md; user 2026-05-04 autonomous-mode mandate "全都按你的建议来" covers acceptance flip)
 codex_tool_report_path: reports/codex_tool_reports/v61_117_r1_chain.md
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
