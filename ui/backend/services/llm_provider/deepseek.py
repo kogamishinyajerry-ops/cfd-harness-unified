@@ -12,14 +12,16 @@ header is only ever attached at request time.
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 
 from ui.backend.services.llm_provider.base import (
     ChatRequest,
     ChatResponse,
+    ChatStreamChunk,
     DeepSeekModelId,
     LLMAuthError,
     LLMBadRequestError,
@@ -203,6 +205,149 @@ class DeepSeekProvider(LLMProvider):
         return await self._client.post(
             self._endpoint, json=payload, headers=headers, timeout=self._timeout
         )
+
+    async def chat_stream(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream a chat completion via DeepSeek's OpenAI-compatible SSE.
+
+        Yields :class:`ChatStreamChunk` per delta frame, then a terminal
+        frame with ``done=True``. Mid-stream upstream failure raises
+        the appropriate :class:`LLMProviderError` subclass; callers
+        in the route layer translate that to a final SSE error event.
+
+        Per DEC-V61-119 §V1 explicit scope-down: NO mid-stream
+        fallback. The stream commits to ``request.model`` and surfaces
+        any failure to the caller.
+        """
+        model = request.model
+        payload = {
+            "model": model,
+            "messages": [m.model_dump() for m in request.messages],
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stream": True,
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._timeout)
+
+        try:
+            async with self._client.stream(
+                "POST",
+                self._endpoint,
+                json=payload,
+                headers=headers,
+                timeout=self._timeout,
+            ) as response:
+                # Pre-stream status check: if the upstream rejected the
+                # request before opening the stream, we still know the
+                # status code and can map it the same way `chat()` does.
+                if response.status_code in (401, 403):
+                    raise LLMAuthError(
+                        f"DeepSeek auth failed (status {response.status_code})"
+                    )
+                if response.status_code == 429:
+                    raise LLMRateLimitError("DeepSeek rate-limited")
+                if response.status_code >= 500:
+                    raise LLMUpstreamError(
+                        f"DeepSeek upstream error (status {response.status_code})"
+                    )
+                if 400 <= response.status_code < 500:
+                    raise LLMBadRequestError(
+                        f"DeepSeek rejected request (status {response.status_code})"
+                    )
+                if response.status_code != 200:
+                    raise LLMBadRequestError(
+                        f"DeepSeek unexpected status {response.status_code}"
+                    )
+
+                # Stream loop. httpx.aiter_lines() handles line-buffered
+                # framing across TCP read boundaries — never byte-buffer
+                # manually (Risk-1 in the DEC).
+                final_usage: dict[str, int] | None = None
+                terminal_emitted = False
+                async for line in response.aiter_lines():
+                    if not line:
+                        # Blank line = SSE event separator; ignore.
+                        continue
+                    if not line.startswith("data:"):
+                        # OpenAI/DeepSeek SSE only ever uses `data:`
+                        # lines; `event:`/`id:` etc. would be silently
+                        # skipped.
+                        continue
+                    data = line[len("data:"):].strip()
+                    if data == "[DONE]":
+                        # Terminal marker. Emit the synthesized done
+                        # chunk with whatever usage we accumulated.
+                        yield ChatStreamChunk(
+                            delta="",
+                            done=True,
+                            usage=final_usage,
+                            model_used=model,
+                            fallback_used=False,
+                        )
+                        terminal_emitted = True
+                        break
+                    try:
+                        event = json.loads(data)
+                    except ValueError as exc:
+                        raise LLMUpstreamError(
+                            "DeepSeek stream emitted malformed JSON event"
+                        ) from exc
+                    # Capture usage if the upstream attached it to this
+                    # frame (typically the finish_reason frame).
+                    usage_raw = event.get("usage")
+                    if isinstance(usage_raw, dict):
+                        final_usage = {
+                            k: int(v)
+                            for k, v in usage_raw.items()
+                            if isinstance(v, (int, float))
+                            and k in {"prompt_tokens", "completion_tokens", "total_tokens"}
+                        }
+                    # Extract delta content if present. Frames without
+                    # a content delta (e.g. role-announce frame, usage
+                    # frame, finish_reason frame) are silently skipped
+                    # — callers that concatenate `delta`s see only the
+                    # text payload.
+                    choices = event.get("choices") or []
+                    if not choices:
+                        continue
+                    delta_obj = choices[0].get("delta") or {}
+                    content = delta_obj.get("content")
+                    if not isinstance(content, str) or content == "":
+                        continue
+                    yield ChatStreamChunk(
+                        delta=content,
+                        done=False,
+                        model_used=model,
+                        fallback_used=False,
+                    )
+
+                # Some providers close the stream without an explicit
+                # `[DONE]` marker. If we exited the loop normally,
+                # synthesize the terminal chunk so consumers always
+                # see exactly one done=True frame per stream.
+                if not terminal_emitted:
+                    yield ChatStreamChunk(
+                        delta="",
+                        done=True,
+                        usage=final_usage,
+                        model_used=model,
+                        fallback_used=False,
+                    )
+        except httpx.TimeoutException as exc:
+            raise LLMTimeoutError(
+                f"DeepSeek stream timed out after {self._timeout.read}s"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise LLMUpstreamError(
+                f"DeepSeek transport error: {type(exc).__name__}"
+            ) from exc
 
     @staticmethod
     def _parse_response(

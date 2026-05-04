@@ -50,6 +50,7 @@ from ui.backend.services.llm_provider import close_cached_provider
 
 from ui.backend.routes import (
     ai_chat,
+    ai_coach,
     audit_package,
     batch_matrix,
     case_editor,
@@ -199,6 +200,7 @@ app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
 app.include_router(ai_chat.router, prefix="/api", tags=["ai-chat"])
+app.include_router(ai_coach.router, prefix="/api", tags=["ai-coach"])
 if import_geometry is not None:
     app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])
 if demo_fixtures is not None:

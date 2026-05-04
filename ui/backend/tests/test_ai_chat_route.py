@@ -15,6 +15,7 @@ from ui.backend.routes import ai_chat as ai_chat_route
 from ui.backend.services.llm_provider import (
     ChatRequest,
     ChatResponse,
+    ChatStreamChunk,
     LLMAuthError,
     LLMConfigError,
     LLMProvider,
@@ -51,6 +52,13 @@ class _StubProvider(LLMProvider):
             raise self._exc
         assert self._response is not None
         return self._response
+
+    async def chat_stream(self, request: ChatRequest):
+        # V61-119: LLMProvider now requires chat_stream too, but the
+        # /api/ai-chat (non-streaming) tests don't exercise it. Keep a
+        # no-op so the ABC instantiation succeeds.
+        if False:  # pragma: no cover
+            yield ChatStreamChunk(model_used="stub")
 
 
 def _ok_payload(content: str = "test reply") -> dict[str, Any]:
@@ -250,7 +258,8 @@ def test_ai_chat_rejects_non_loopback_caller_without_override(monkeypatch):
     )
     app = _make_app(provider)
     # Patch the loopback check to simulate a non-loopback caller.
-    monkeypatch.setattr(route_module, "_is_loopback_request", lambda req: False)
+    from ui.backend.routes import _loopback_guard
+    monkeypatch.setattr(_loopback_guard, "is_loopback_request", lambda req: False)
 
     client = TestClient(app)
     resp = client.post("/api/ai-chat", json=_ok_payload())
@@ -270,7 +279,8 @@ def test_ai_chat_allows_non_loopback_with_explicit_override(monkeypatch):
         response=ChatResponse(content="ok", model_used="deepseek-v4-pro")
     )
     app = _make_app(provider)
-    monkeypatch.setattr(route_module, "_is_loopback_request", lambda req: False)
+    from ui.backend.routes import _loopback_guard
+    monkeypatch.setattr(_loopback_guard, "is_loopback_request", lambda req: False)
 
     client = TestClient(app)
     resp = client.post("/api/ai-chat", json=_ok_payload())

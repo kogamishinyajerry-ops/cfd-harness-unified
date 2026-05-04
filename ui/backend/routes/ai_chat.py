@@ -1,8 +1,8 @@
 """AI chat endpoint (DEC-V61-118 V1).
 
 POST /api/ai-chat — non-streaming chat with the configured LLM provider.
-V1 ships the foundation; V61-119 will add SSE streaming + tool calling
-+ governance-aware system prompt composition.
+V1 ships the foundation; V61-119 layers SSE streaming + governance
+context onto a distinct ``/api/ai-coach/stream`` route.
 
 Provider is resolved per-request via the factory so tests can monkey-
 patch ``get_default_provider`` to inject a mock.
@@ -11,18 +11,17 @@ Security (Codex R1 P1): the route is GUARDED to loopback-only callers.
 DeepSeek calls spend the server's API key, so an accidentally-exposed
 deployment must NOT serve as an open relay. The guard rejects any
 remote address outside ``127.0.0.1`` / ``::1`` / ``localhost`` with
-HTTP 403. Operators who genuinely want to expose the route (e.g. a
-trusted reverse proxy with its own auth in front) can set
-``AI_CHAT_ALLOW_NON_LOOPBACK=1`` to bypass; the route logs the decision
-so the override is auditable.
+HTTP 403. The guard helper lives in :mod:`._loopback_guard` (extracted
+in V61-119 so the new ``ai_coach`` route can reuse the exact same
+semantics — no copy-paste).
 """
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, HTTPException, Request
 
+from ui.backend.routes._loopback_guard import require_loopback
 from ui.backend.services.llm_provider import (
     ChatRequest,
     ChatResponse,
@@ -40,79 +39,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Loopback addresses accepted by the V1 route guard. IPv4 + IPv6 +
-# Unix-socket clients (FastAPI/uvicorn surfaces ``None`` for socket-
-# transport callers in some versions, treat that as loopback too).
-# ``"testclient"`` is what fastapi.testclient.TestClient sets as
-# client.host for in-process integration tests — by definition not
-# a real network caller.
-_LOOPBACK_HOSTS = frozenset(
-    {"127.0.0.1", "::1", "localhost", "testclient", None, ""}
-)
-
-# Codex R2 P1: a same-host reverse proxy presents ``client.host =
-# 127.0.0.1`` even when the real caller is remote, so a peer-only
-# loopback check is not sufficient. Presence of any of these forwarded
-# headers signals a proxy chain — refuse to treat that request as
-# loopback unless the operator has explicitly opted in via env.
-_PROXY_FORWARDED_HEADERS = (
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-    "x-real-ip",
-    "forwarded",
-)
-
-_NON_LOOPBACK_OVERRIDE_ENV = "AI_CHAT_ALLOW_NON_LOOPBACK"
-
-
-def _request_has_proxy_headers(request: Request) -> bool:
-    return any(h in request.headers for h in _PROXY_FORWARDED_HEADERS)
-
-
-def _is_loopback_request(request: Request) -> bool:
-    client = request.client
-    if client is None:
-        # No client info (testclient + some uvicorn modes). Only
-        # treat as loopback when there are also no proxy-forwarded
-        # headers; otherwise something is in front of us.
-        return not _request_has_proxy_headers(request)
-    if client.host not in _LOOPBACK_HOSTS:
-        return False
-    # Peer is loopback BUT it could be a same-host reverse proxy.
-    # Codex R2 P1: any forwarded header → assume proxy → not loopback.
-    return not _request_has_proxy_headers(request)
-
-
-def _non_loopback_override_enabled() -> bool:
-    return os.environ.get(_NON_LOOPBACK_OVERRIDE_ENV, "").strip() == "1"
-
-
-def _client_label_for_log(request: Request) -> str:
-    """Build an audit-friendly identifier for the request's caller.
-
-    Codex R3 P2-1: when a same-host reverse proxy trips the guard,
-    ``request.client.host`` is the loopback proxy peer, not the real
-    remote caller. The warning/info logs need the proxy-forwarded
-    headers so operators can track who actually hit the endpoint.
-
-    Codex R4 P1: do NOT pick a single forwarded hop as "the caller" —
-    XFF is fully client-controlled and the leftmost entry can be
-    spoofed, so an honest audit log records the entire chain
-    verbatim. Operators interpret using their own knowledge of how
-    many trusted proxies sit in front of the app.
-    """
-    parts: list[str] = []
-    immediate_peer = request.client.host if request.client else "unknown"
-    parts.append(f"peer={immediate_peer}")
-    if xff := request.headers.get("x-forwarded-for"):
-        parts.append(f"x-forwarded-for={xff!r}")
-    if real_ip := request.headers.get("x-real-ip"):
-        parts.append(f"x-real-ip={real_ip!r}")
-    if forwarded := request.headers.get("forwarded"):
-        parts.append(f"forwarded={forwarded!r}")
-    return " ".join(parts)
-
 
 @router.post("/ai-chat", response_model=ChatResponse)
 async def ai_chat(request: ChatRequest, http_request: Request) -> ChatResponse:
@@ -128,32 +54,7 @@ async def ai_chat(request: ChatRequest, http_request: Request) -> ChatResponse:
       * 502 — upstream timeout / 5xx / malformed response
       * 500 — provider misconfiguration / unexpected
     """
-    if not _is_loopback_request(http_request) and not _non_loopback_override_enabled():
-        # R3 P2-1: log the forwarded caller (XFF / Forwarded / X-Real-IP)
-        # not just the loopback proxy peer, so audits can track who
-        # actually hit the endpoint.
-        logger.warning(
-            "Rejecting /api/ai-chat from non-loopback host %s (set %s=1 to allow)",
-            _client_label_for_log(http_request),
-            _NON_LOOPBACK_OVERRIDE_ENV,
-        )
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "/api/ai-chat is restricted to loopback callers; "
-                f"set {_NON_LOOPBACK_OVERRIDE_ENV}=1 to allow remote access "
-                "(only with a trusted reverse proxy + auth in front)."
-            ),
-        )
-    if not _is_loopback_request(http_request):
-        # Override active — log so the audit trail records the
-        # remote caller; do NOT log the request body (could include
-        # sensitive prompts).
-        logger.info(
-            "Allowing /api/ai-chat from non-loopback host %s (override env=%s)",
-            _client_label_for_log(http_request),
-            _NON_LOOPBACK_OVERRIDE_ENV,
-        )
+    require_loopback(http_request, route_label="/api/ai-chat")
 
     provider = get_default_provider()
     try:

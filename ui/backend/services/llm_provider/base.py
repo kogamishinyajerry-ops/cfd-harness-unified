@@ -13,7 +13,7 @@ string-matching exception messages.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -65,6 +65,26 @@ class ChatResponse(BaseModel):
     usage: dict[str, int] = Field(default_factory=dict)
 
 
+class ChatStreamChunk(BaseModel):
+    """One frame of a streamed chat completion (DEC-V61-119).
+
+    ``delta`` is the incremental text for this frame. ``done`` is True
+    only on the terminal frame; that frame may also carry ``usage``
+    when the upstream reports it (DeepSeek emits usage on the
+    finish_reason frame, which we forward on the synthesized done
+    chunk). ``fallback_used`` is reserved for parity with
+    :class:`ChatResponse` but in V1 is always False — mid-stream
+    fallback is explicitly out of V61-119 V1 scope (see DEC-V61-119
+    §V1 explicit scope-down).
+    """
+
+    delta: str = ""
+    done: bool = False
+    usage: dict[str, int] | None = None
+    model_used: str
+    fallback_used: bool = False
+
+
 # ────────── Error hierarchy ──────────
 
 
@@ -113,14 +133,40 @@ class LLMConfigError(LLMProviderError):
 
 
 class LLMProvider(ABC):
-    """Minimal async chat interface. V1 has one method; V61-119 will
-    add ``stream_chat`` + tool-calling support."""
+    """Minimal async chat interface.
+
+    V61-118 added ``chat`` (non-streaming). V61-119 adds ``chat_stream``
+    (SSE-driven incremental delivery for the AI coach UI). Mid-stream
+    fallback and LLM-side tool calling are explicitly deferred — see
+    DEC-V61-119 §V1 explicit scope-down."""
 
     @abstractmethod
     async def chat(self, request: ChatRequest) -> ChatResponse:
         """Execute a chat completion. May raise any LLMProviderError
         subclass; callers decide whether to retry/fallback based on
         the typed exception."""
+
+    @abstractmethod
+    def chat_stream(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream a chat completion frame-by-frame.
+
+        Yields :class:`ChatStreamChunk` instances until a terminal
+        chunk with ``done=True``. Mid-stream upstream failure raises
+        an :class:`LLMProviderError` subclass — callers should wrap
+        the ``async for`` loop in a try/except and surface the typed
+        exception to the client (in the SSE route layer, this becomes
+        a final ``data: {"error": "..."}`` event before close).
+
+        Implementations MUST:
+          * yield exactly one terminal chunk with ``done=True`` per
+            successful stream
+          * not include the API key in any logged context
+          * propagate :class:`LLMTimeoutError` for read/connect timeouts
+            and :class:`LLMUpstreamError` for malformed frames or
+            transport failures
+        """
 
 
 # ────────── Mock provider for tests + no-key dev workflows ──────────
@@ -153,6 +199,34 @@ class MockLLMProvider(LLMProvider):
             )
         return ChatResponse(
             content=content,
+            model_used="mock",
+            fallback_used=False,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        )
+
+    async def chat_stream(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Yield deterministic chunks so route-level streaming tests
+        have a no-network fixture. Splits the synthetic echo into
+        word-sized frames; emits a terminal frame with done=True."""
+        full_response = await self.chat(request)
+        # Word-level split so tests can assert on chunk count without
+        # binding to character-level framing (which would be fragile).
+        words = full_response.content.split(" ")
+        for i, word in enumerate(words):
+            # Re-attach the trailing space for non-final words so a
+            # consumer that concatenates `delta`s reproduces the original.
+            delta = word if i == len(words) - 1 else f"{word} "
+            yield ChatStreamChunk(
+                delta=delta,
+                done=False,
+                model_used="mock",
+                fallback_used=False,
+            )
+        yield ChatStreamChunk(
+            delta="",
+            done=True,
             model_used="mock",
             fallback_used=False,
             usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
