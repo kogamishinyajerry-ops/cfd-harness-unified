@@ -1,9 +1,9 @@
 ---
 decision_id: DEC-V61-120
 title: AI coach chat panel · TaskPanel right-rail mount · streaming consumer for /api/ai-coach/stream
-status: Proposed (2026-05-04 · pre-implementation surface scan complete; Codex pre-merge required per RETRO-V61-001 multi-file frontend + new operator-facing surface + LLM-streaming consumer triggers)
-codex_tool_report_path: reports/codex_tool_reports/v61_120_r1_chain.md (to be created)
-codex_review_relay: 86gs gpt-5.4 xhigh (initial · CRS gpt-5.4 high reserved as fallback per V61-119 §L2 sustained-86gs-instability observation)
+status: Accepted (2026-05-04 · Codex pre-merge 2-round chain APPROVE on commit 8dabc54 [R1 P1+P2 → R2 clean]; chain report at reports/codex_tool_reports/v61_120_r1_chain.md; user 2026-05-04 mandate "先打 #1" covers acceptance flip · the AI coach is now visible in the UI — first user-visible deliverable of the differentiation pivot)
+codex_tool_report_path: reports/codex_tool_reports/v61_120_r1_chain.md
+codex_review_relay: CRS gpt-5.4 high (R1 fallback after 86gs 522, R2 default-to-CRS per V61-119 §L2 sustained-86gs-instability protocol — first arc to operationalize the workflow change)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User 2026-05-04 mid-session pivot — quote verbatim "推进到什么进度了？我感觉仍然没什么变化啊？并没有完成对标Fluent、StarCCM的转向啊". User authorized 2-step arc F→G ("先打 #1") to (a) finally make the AI coach VISIBLE in the UI (V61-120) and (b) give the AI hands-on capability via tool-calling + approval flow (V61-121). The five-DEC arc V61-115..V61-119 delivered foundations but the user-visible surface barely moved; this 2-step arc closes the foundation-to-differentiation gap.
@@ -22,8 +22,8 @@ parent_artifacts:
   - ui/backend/routes/ai_coach.py:108-122 (V119 SSE endpoint · V120 consumes verbatim; pre-stream HTTP error mapping from V119 R1 P1 means UI needs to handle 401/429/400/502/500 BEFORE opening reader as well as mid-stream `error` SSE frames — UI logic mirrors backend dual-path)
   - ui/backend/services/llm_provider/base.py:68-85 (ChatStreamChunk schema · UI parses to this shape)
 counter_impact: +1 (autonomous_governance: true · new UI surface + new API client method, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not arc-size retro at counter 79, not a governance-rule-change DEC. High-risk PR check: this is a USER-FACING UI change after explicit user UX criticism — RETRO-V61-001 "user UX批评后的首次实现" trigger DOES fire. Codex pre-merge MANDATORY. Kogami still SKIP per DEC-V61-087 §4.2 — this is a feature DEC, not a governance rule change · same disposition as V117/V120 sibling pattern.)
-notion_sync_status: pending — Notion MCP server still disconnected at proposal time; sync when reconnected
-self_estimated_pass_rate: 60% (3-4 rounds expected · SSE consumer in browser fetch + ReadableStream is well-trodden but has known traps: chunk boundaries split JSON events, abort/cancel cleanup, error-frame distinction from delta-frame, accessibility for streaming text · V1 explicit scope-down keeps surface narrow; cascade dimension is single-axis since no tool calling)
+notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+self_estimated_pass_rate: 60% (predicted 3-4 rounds) → ACTUAL 2 rounds (well-calibrated overestimate · scope-down kept findings to single-axis UX/contract issues · IME-composition CJK find from Codex was the calibrated win that would have shipped to user base otherwise — see chain report §L4)
 
 ---
 
