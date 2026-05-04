@@ -982,3 +982,64 @@ export function streamAICoach(
     },
   };
 }
+
+// ────────── DEC-V61-121 · Apply AI proposal ──────────
+
+export interface ApplyAIProposalRequest {
+  case_id: string;
+  tool: string;
+  args: Record<string, unknown>;
+  model_used?: string | null;
+  conversation_turn_id?: string | null;
+}
+
+export interface ApplyAIProposalResponse {
+  applied: true;
+  tool: string;
+  summary: string;
+  state_after: Record<string, unknown>;
+  audit_id: string | null;
+  audit_warning?: string;
+}
+
+/**
+ * POST /api/ai-coach/apply-proposal — apply a proposal the engineer
+ * [Accepted] in the AICoachPanel ProposalCard. Validates against the
+ * V121 tool registry server-side and writes an audit entry.
+ *
+ * Throws ApiError on non-2xx; the route's structured `detail` body
+ * is preserved on the error so the UI can surface the failing_check
+ * + tool name + arg-validation errors.
+ */
+export async function applyAIProposal(
+  req: ApplyAIProposalRequest,
+): Promise<ApplyAIProposalResponse> {
+  const resp = await fetch("/api/ai-coach/apply-proposal", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(req),
+    credentials: "same-origin",
+  });
+  if (!resp.ok) {
+    let detail: unknown;
+    try {
+      const parsed = await resp.json();
+      detail = parsed?.detail ?? parsed;
+    } catch {
+      try {
+        detail = await resp.text();
+      } catch {
+        detail = resp.statusText;
+      }
+    }
+    const message =
+      typeof detail === "object" && detail !== null && "failing_check" in detail
+        ? `apply-proposal failed: ${(detail as { failing_check: string }).failing_check}`
+        : `apply-proposal failed (${resp.status})`;
+    throw new ApiError(resp.status, message, detail);
+  }
+  return (await resp.json()) as ApplyAIProposalResponse;
+}

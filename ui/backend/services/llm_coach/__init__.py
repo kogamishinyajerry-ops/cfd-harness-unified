@@ -15,12 +15,38 @@ Public entry point:
 """
 from __future__ import annotations
 
+from ui.backend.services.llm_coach.audit import (
+    AuditWriteError,
+    write_audit,
+)
 from ui.backend.services.llm_coach.prompts import (
     DEFAULT_PROJECT_RULES,
+    DEFAULT_PROPOSAL_INSTRUCTIONS,
     build_coach_system_prompt,
+)
+from ui.backend.services.llm_coach.tool_registry import (
+    ApplyResult,
+    SetPatchBcTypeArgs,
+    ToolArgError,
+    ToolDescriptor,
+    ToolDispatchError,
+    UnknownToolError,
+    dispatch,
+    list_tools,
 )
 
 __all__ = [
+    "ApplyResult",
+    "AuditWriteError",
     "DEFAULT_PROJECT_RULES",
+    "DEFAULT_PROPOSAL_INSTRUCTIONS",
+    "SetPatchBcTypeArgs",
+    "ToolArgError",
+    "ToolDescriptor",
+    "ToolDispatchError",
+    "UnknownToolError",
     "build_coach_system_prompt",
+    "dispatch",
+    "list_tools",
+    "write_audit",
 ]

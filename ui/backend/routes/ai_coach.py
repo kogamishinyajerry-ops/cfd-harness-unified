@@ -1,8 +1,14 @@
 """DEC-V61-119 · LLM-wrapped completeness coaching (SSE streaming).
+DEC-V61-121 · AI coach action proposals (apply-proposal route).
 
 POST /api/ai-coach/stream — pre-fetches the case completeness report,
 composes a governance-aware system prompt, then streams an LLM
 completion frame-by-frame as SSE events.
+
+POST /api/ai-coach/apply-proposal — V61-121 dispatcher that takes a
+proposal the user [Accepted] in the chat panel UI, validates the
+tool against the registry, applies it via the V108-style service
+layer, writes an audit entry, and returns the apply result.
 
 Wire format (one SSE event per JSON line):
     data: {"delta":"...","done":false,"model_used":"deepseek-v4-pro"}
@@ -37,7 +43,17 @@ from ui.backend.services.case_completeness import (
     CaseNotFoundError,
     analyze_case_completeness,
 )
-from ui.backend.services.llm_coach import build_coach_system_prompt
+from ui.backend.services.case_drafts import is_safe_case_id
+from ui.backend.services.case_scaffold import IMPORTED_DIR
+from ui.backend.services.llm_coach import (
+    AuditWriteError,
+    ToolArgError,
+    ToolDispatchError,
+    UnknownToolError,
+    build_coach_system_prompt,
+    dispatch as dispatch_tool,
+    write_audit,
+)
 from ui.backend.services.llm_provider import (
     ChatMessage,
     ChatRequest,
@@ -345,3 +361,129 @@ async def ai_coach_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+# ────────── DEC-V61-121 · Apply proposal ──────────
+
+
+class ApplyProposalRequest(BaseModel):
+    """Body for POST /api/ai-coach/apply-proposal.
+
+    Sent by the UI when the engineer clicks [Accept] on a
+    ProposalCard rendered from the chat stream.
+    """
+
+    case_id: str = Field(min_length=1, max_length=128)
+    tool: str = Field(min_length=1, max_length=64)
+    args: dict = Field(default_factory=dict)
+    model_used: str | None = Field(default=None, max_length=64)
+    conversation_turn_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/ai-coach/apply-proposal")
+async def ai_coach_apply_proposal(
+    body: ApplyProposalRequest, http_request: Request
+):
+    """Validate + apply an AI proposal, write audit, return result.
+
+    Status code mapping:
+      * 200 → applied (and audited; if audit failed, response carries
+              `audit_warning` so the UI can surface it without
+              undoing the change)
+      * 400 → unknown tool, malformed args, bad case_id
+      * 403 → non-loopback caller without override
+      * 404 → case_id resolves to no case directory
+      * 422 → underlying service-layer error (V108 store IO failure,
+              symlink escape, lock contention, etc)
+      * 500 → unexpected dispatch failure
+    """
+    require_loopback(http_request, route_label="/api/ai-coach/apply-proposal")
+
+    if not is_safe_case_id(body.case_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"failing_check": "bad_case_id", "case_id": body.case_id},
+        )
+    case_dir = IMPORTED_DIR / body.case_id
+    if not case_dir.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail={"failing_check": "case_not_found", "case_id": body.case_id},
+        )
+
+    try:
+        result = dispatch_tool(case_dir, body.tool, body.args)
+    except UnknownToolError as exc:
+        logger.warning("apply-proposal unknown tool: %s", exc.tool_name)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "unknown_tool",
+                "tool": exc.tool_name,
+            },
+        ) from exc
+    except ToolArgError as exc:
+        logger.warning(
+            "apply-proposal arg validation failed for %s: %s",
+            exc.tool_name,
+            exc.validation_errors,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "arg_validation_failed",
+                "tool": exc.tool_name,
+                "errors": exc.validation_errors,
+            },
+        ) from exc
+    except ToolDispatchError as exc:
+        if exc.failing_check == "underlying_service_error":
+            logger.error("apply-proposal underlying service error: %s", exc)
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "failing_check": "underlying_service_error",
+                    "tool": body.tool,
+                    "message": str(exc),
+                },
+            ) from exc
+        logger.exception("apply-proposal unexpected dispatch failure")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "failing_check": "unexpected",
+                "tool": body.tool,
+            },
+        ) from exc
+
+    # Dispatch succeeded — write audit. If the audit fails, the
+    # change is already applied; we surface a warning rather than
+    # report an overall failure (the route contract above documents
+    # this compensation decision, V61-121 risk register #4).
+    audit_warning: str | None = None
+    audit_id: str | None = None
+    try:
+        audit_id = write_audit(
+            case_dir,
+            tool=body.tool,
+            args=body.args,
+            model_used=body.model_used,
+            conversation_turn_id=body.conversation_turn_id,
+        )
+    except AuditWriteError as exc:
+        logger.exception("apply-proposal audit write failed AFTER dispatch")
+        audit_warning = (
+            f"action applied but audit log write failed: {exc}. "
+            "Operators should grep the FastAPI logs for the underlying error."
+        )
+
+    response = {
+        "applied": True,
+        "tool": result.tool,
+        "summary": result.summary,
+        "state_after": result.state_after,
+        "audit_id": audit_id,
+    }
+    if audit_warning is not None:
+        response["audit_warning"] = audit_warning
+    return response
+

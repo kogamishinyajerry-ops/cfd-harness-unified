@@ -14,12 +14,15 @@
 // see the chat without scrolling past the per-step Body. Mobile
 // adaptation is out of V1 scope (workbench is desktop-first).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   streamAICoach,
   type StreamAICoachHandle,
 } from "@/api/client";
+
+import { ProposalCard } from "./ProposalCard";
+import { parseProposals } from "./proposal_parser";
 
 interface AICoachPanelProps {
   caseId: string;
@@ -28,6 +31,14 @@ interface AICoachPanelProps {
 interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  /** Stable identifier — passed to ProposalCard so the audit log can
+   *  thread proposal back to the conversation turn that emitted it
+   *  (DEC-V61-121). */
+  turnId: string;
+  /** model_used reported by the stream's terminal frame; passed to
+   *  applyAIProposal so the audit row records which provider was
+   *  responsible for the action. */
+  modelUsed: string | null;
   /** Set on the assistant turn currently being streamed. */
   streaming?: boolean;
   /**
@@ -97,10 +108,18 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
     const trimmed = draft.trim();
     if (!trimmed || streaming) return;
 
-    const userTurn: ChatTurn = { role: "user", content: trimmed };
+    const turnTimestamp = Date.now().toString(36);
+    const userTurn: ChatTurn = {
+      role: "user",
+      content: trimmed,
+      turnId: `u-${turnTimestamp}`,
+      modelUsed: null,
+    };
     const assistantTurn: ChatTurn = {
       role: "assistant",
       content: "",
+      turnId: `a-${turnTimestamp}`,
+      modelUsed: null,
       streaming: true,
     };
     // Take a snapshot of the prior turns to send as `history`. The
@@ -151,6 +170,7 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
               next[lastIdx] = {
                 ...next[lastIdx],
                 streaming: false,
+                modelUsed: final.model_used,
                 // Codex R1 P1: ONLY successful completion marks the
                 // turn eligible for history replay. Errors and aborts
                 // leave `complete` undefined, so the next send's
@@ -260,36 +280,12 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
           </p>
         ) : (
           turns.map((turn, idx) => (
-            <div
-              key={idx}
-              data-testid={`ai-coach-turn-${idx}`}
-              data-role={turn.role}
-              className="mb-2"
-            >
-              <span
-                className={`mr-1 inline-block font-mono text-[10px] uppercase tracking-wider ${
-                  turn.role === "user"
-                    ? "text-surface-400"
-                    : "text-emerald-400"
-                }`}
-              >
-                {turn.role === "user" ? "你" : "AI"}
-              </span>
-              <span
-                aria-live={turn.streaming ? "polite" : "off"}
-                className="whitespace-pre-wrap"
-              >
-                {turn.content}
-                {turn.streaming && (
-                  <span
-                    className="ml-0.5 inline-block animate-pulse text-surface-500"
-                    aria-hidden="true"
-                  >
-                    ▍
-                  </span>
-                )}
-              </span>
-            </div>
+            <TurnRow
+              key={turn.turnId}
+              caseId={caseId}
+              turn={turn}
+              idx={idx}
+            />
           ))
         )}
       </div>
@@ -331,5 +327,68 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+
+/**
+ * One row in the chat history. Assistant turns parse PROPOSAL blocks
+ * out of the streamed content and render each as a ProposalCard
+ * inline below the visible text. User turns just render their text.
+ */
+interface TurnRowProps {
+  caseId: string;
+  turn: ChatTurn;
+  idx: number;
+}
+
+function TurnRow({ caseId, turn, idx }: TurnRowProps) {
+  // Parse proposals on every render of the assistant turn. The parser
+  // is pure + cheap; useMemo guards against re-parsing identical
+  // content across unrelated re-renders.
+  const parsed = useMemo(() => {
+    if (turn.role !== "assistant") {
+      return { displayText: turn.content, proposals: [], pendingPartial: false };
+    }
+    return parseProposals(turn.content);
+  }, [turn.role, turn.content]);
+
+  return (
+    <div
+      data-testid={`ai-coach-turn-${idx}`}
+      data-role={turn.role}
+      className="mb-2"
+    >
+      <span
+        className={`mr-1 inline-block font-mono text-[10px] uppercase tracking-wider ${
+          turn.role === "user" ? "text-surface-400" : "text-emerald-400"
+        }`}
+      >
+        {turn.role === "user" ? "你" : "AI"}
+      </span>
+      <span
+        aria-live={turn.streaming ? "polite" : "off"}
+        className="whitespace-pre-wrap"
+      >
+        {parsed.displayText}
+        {turn.streaming && (
+          <span
+            className="ml-0.5 inline-block animate-pulse text-surface-500"
+            aria-hidden="true"
+          >
+            ▍
+          </span>
+        )}
+      </span>
+      {parsed.proposals.map((p) => (
+        <ProposalCard
+          key={`${turn.turnId}-prop-${p.index}`}
+          caseId={caseId}
+          proposal={p}
+          modelUsed={turn.modelUsed}
+          turnId={turn.turnId}
+        />
+      ))}
+    </div>
   );
 }

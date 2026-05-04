@@ -28,13 +28,20 @@ from ui.backend.services.case_completeness import (
 
 # Role + governance preamble. Kept compact; the bulk of token budget
 # goes to the inlined case state below.
+#
+# DEC-V61-121: the rules now permit the AI to PROPOSE actions via a
+# strict delimiter format. The engineer approves/rejects each
+# proposal before anything applies — the AI itself still cannot
+# mutate state directly.
 DEFAULT_PROJECT_RULES = """\
 You are the CFD Harness AI coach. Your role is to help an engineer \
 complete and validate a CFD case under the project's governance rules.
 
 Hard constraints:
-  * Read-only adviser. You MUST NOT claim to perform autonomous \
-actions — the UI applies edits, not you.
+  * Adviser + proposer. You MAY propose case modifications using the \
+PROPOSAL delimiter format described below; the engineer must \
+explicitly approve each one. You MUST NOT claim that an action has \
+been applied — only the engineer's [Accept] click does that.
   * Point the engineer at the exact ``field_path`` coordinates the \
 case-completeness analyzer reported. DO NOT invent field paths or \
 fabricate values you weren't told.
@@ -48,6 +55,57 @@ guess.
 analyzer may have authored ``why`` strings in zh-CN; reply in the \
 same language unless the engineer switches.
 """
+
+
+# DEC-V61-121: PROPOSAL delimiter contract. The frontend parser is
+# strict — proposals MUST appear with these exact delimiters on
+# their own lines, with valid YAML in between. Malformed proposals
+# render as plain text and the engineer doesn't see an Accept button.
+DEFAULT_PROPOSAL_INSTRUCTIONS = """\
+
+=== Proposal protocol (DEC-V61-121) ===
+
+When you want to propose a case modification, emit a YAML-fenced \
+block with these exact delimiters on their own lines:
+
+<<PROPOSAL
+tool: <one of the registered tools below>
+args:
+  <key>: <value>
+  ...
+reason: <one-line zh/en explanation the engineer will see>
+PROPOSAL>>
+
+Rules:
+  * The opening line MUST be exactly `<<PROPOSAL` and the closing \
+line MUST be exactly `PROPOSAL>>`. No surrounding ``` fences.
+  * `tool` MUST be one of the registered tools (see below). \
+Unregistered tool names are rejected by the dispatcher.
+  * `args` MUST satisfy the tool's argument schema. Bad args are \
+rejected.
+  * Emit at most ONE proposal per actionable item. If multiple \
+patches need the same fix, emit one proposal per patch — the UI \
+shows one Accept button per proposal.
+  * NEVER emit a PROPOSAL block inside a Markdown code fence \
+(``` ... ```) — that is for examples only, not real actions.
+"""
+
+
+def format_tool_registry_for_prompt() -> str:
+    """Render the V121 tool registry as a string the system prompt
+    can append. Pulled at compose time so changes to the registry
+    propagate without any other edits."""
+    # Local import to avoid a hard dep cycle when the registry imports
+    # are not yet available at module load (unusual but defensive).
+    from ui.backend.services.llm_coach.tool_registry import list_tools
+
+    tools = list_tools()
+    if not tools:
+        return "(no tools registered — proposals are disabled this turn)"
+    lines = ["=== Registered tools ==="]
+    for t in tools:
+        lines.append(f"- {t.name}: {t.description}")
+    return "\n".join(lines)
 
 
 # Heuristic: a suggested_default value of >40 chars matching common
@@ -130,6 +188,13 @@ def build_coach_system_prompt(
         raise ValueError("max_missing_to_inline must be non-negative")
 
     parts: list[str] = [project_rules.rstrip()]
+    # DEC-V61-121: PROPOSAL protocol instructions + registered tool
+    # list. Append AFTER the role preamble so the action-surface
+    # rules sit alongside the role rules; engineers see the same
+    # composition order in the audit-trail readback.
+    parts.append(DEFAULT_PROPOSAL_INSTRUCTIONS.rstrip())
+    parts.append("")
+    parts.append(format_tool_registry_for_prompt())
 
     parts.append("")  # blank separator
     parts.append("=== Current case snapshot ===")

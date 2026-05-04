@@ -60,9 +60,25 @@ def test_prompt_includes_case_state_line():
 def test_prompt_includes_default_project_rules():
     report = _make_report()
     prompt = build_coach_system_prompt(report)
-    # First layer is the role preamble; spot-check key constraint.
-    assert "Read-only adviser" in prompt
+    # First layer is the role preamble; spot-check key constraints.
+    # V61-121 updated the role from "Read-only adviser" to
+    # "Adviser + proposer" — the engineer-approval guarantee remains
+    # the load-bearing constraint.
+    assert "Adviser + proposer" in prompt
+    assert "MUST NOT claim that an action has been applied" in prompt
     assert DEFAULT_PROJECT_RULES.rstrip() in prompt
+
+
+def test_prompt_includes_v121_proposal_protocol_and_tool_registry():
+    """DEC-V61-121: the system prompt must enumerate the PROPOSAL
+    delimiter rules and the registered tools so the LLM knows what
+    it may emit."""
+    report = _make_report()
+    prompt = build_coach_system_prompt(report)
+    assert "<<PROPOSAL" in prompt
+    assert "PROPOSAL>>" in prompt
+    assert "Registered tools" in prompt
+    assert "set_patch_bc_type" in prompt
 
 
 def test_prompt_renders_missing_field_entries():

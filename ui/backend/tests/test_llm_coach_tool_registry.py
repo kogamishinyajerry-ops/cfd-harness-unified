@@ -1,0 +1,257 @@
+"""DEC-V61-121 · LLM coach tool-registry + audit unit tests.
+
+Coverage:
+  * registry list includes the V1 tool
+  * unknown tool raises UnknownToolError
+  * bad args raise ToolArgError with structured errors
+  * happy path dispatches into V108 upsert_override
+  * V108 IO error translates to ToolDispatchError(underlying_service_error)
+  * audit.write_audit appends a new entry with required fields
+  * audit reads existing file + appends; preserves prior entries
+  * audit handles missing audit dir / corrupt file paths
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
+from ui.backend.services.llm_coach import (
+    AuditWriteError,
+    SetPatchBcTypeArgs,
+    ToolArgError,
+    ToolDispatchError,
+    UnknownToolError,
+    dispatch,
+    list_tools,
+    write_audit,
+)
+
+
+def _make_minimal_case_dir(root: Path, case_id: str = "lid_driven_cavity") -> Path:
+    """Build a case dir that V108's upsert_override will accept.
+
+    The store needs a writable directory with no symlink shenanigans;
+    V108's code path also wants a polyMesh boundary if it's going to
+    re-classify, but upsert_override itself only writes the override
+    file, so a bare case dir is enough for this test.
+    """
+    case_dir = root / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    return case_dir
+
+
+# ────────── list_tools ──────────
+
+
+def test_list_tools_includes_v1_set_patch_bc_type():
+    tools = list_tools()
+    names = [t.name for t in tools]
+    assert "set_patch_bc_type" in names
+
+
+def test_list_tools_v1_tool_describes_args():
+    [tool] = [t for t in list_tools() if t.name == "set_patch_bc_type"]
+    desc = tool.description
+    assert "patch_name" in desc
+    assert "bc_class" in desc
+    # The four enum members must be enumerated for the LLM.
+    assert "velocity_inlet" in desc
+    assert "no_slip_wall" in desc
+
+
+# ────────── dispatch — error paths ──────────
+
+
+def test_dispatch_unknown_tool_raises_unknown_tool_error(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(UnknownToolError) as exc_info:
+        dispatch(case_dir, "no_such_tool", {"x": 1})
+    assert exc_info.value.tool_name == "no_such_tool"
+    assert exc_info.value.failing_check == "unknown_tool"
+
+
+def test_dispatch_bad_args_raises_tool_arg_error(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    # bc_class is a Literal; "garbage" must fail Pydantic validation.
+    with pytest.raises(ToolArgError) as exc_info:
+        dispatch(
+            case_dir,
+            "set_patch_bc_type",
+            {"patch_name": "walls", "bc_class": "garbage"},
+        )
+    assert exc_info.value.tool_name == "set_patch_bc_type"
+    assert exc_info.value.failing_check == "arg_validation_failed"
+    assert len(exc_info.value.validation_errors) >= 1
+
+
+def test_dispatch_missing_required_arg_raises_tool_arg_error(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError):
+        dispatch(case_dir, "set_patch_bc_type", {"bc_class": "no_slip_wall"})
+
+
+def test_dispatch_empty_patch_name_raises_tool_arg_error(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError):
+        dispatch(
+            case_dir,
+            "set_patch_bc_type",
+            {"patch_name": "", "bc_class": "no_slip_wall"},
+        )
+
+
+# ────────── dispatch — happy path ──────────
+
+
+def test_dispatch_set_patch_bc_type_writes_override(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    result = dispatch(
+        case_dir,
+        "set_patch_bc_type",
+        {"patch_name": "walls", "bc_class": "no_slip_wall"},
+    )
+    assert result.tool == "set_patch_bc_type"
+    assert "walls" in result.summary
+    assert "no_slip_wall" in result.summary
+    # state_after exposes the merged overrides.
+    assert result.state_after["overrides"]["walls"] == "no_slip_wall"
+    # Underlying file written by V108's store.
+    override_file = case_dir / "system" / "patch_classification.yaml"
+    assert override_file.is_file()
+
+
+def test_dispatch_idempotent_for_same_args(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    args = {"patch_name": "inlet", "bc_class": "velocity_inlet"}
+    r1 = dispatch(case_dir, "set_patch_bc_type", args)
+    r2 = dispatch(case_dir, "set_patch_bc_type", args)
+    # Same final state on both calls.
+    assert r1.state_after == r2.state_after
+
+
+def test_dispatch_overrides_replace_prior_classification(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    dispatch(
+        case_dir,
+        "set_patch_bc_type",
+        {"patch_name": "outlet", "bc_class": "pressure_outlet"},
+    )
+    result = dispatch(
+        case_dir,
+        "set_patch_bc_type",
+        {"patch_name": "outlet", "bc_class": "symmetry"},
+    )
+    assert result.state_after["overrides"]["outlet"] == "symmetry"
+
+
+# ────────── SetPatchBcTypeArgs schema ──────────
+
+
+def test_set_patch_bc_type_args_accepts_all_four_bc_classes():
+    for bc in ("velocity_inlet", "pressure_outlet", "no_slip_wall", "symmetry"):
+        SetPatchBcTypeArgs(patch_name="x", bc_class=bc)
+
+
+def test_set_patch_bc_type_args_rejects_unrelated_bc_class():
+    with pytest.raises(ValueError):
+        SetPatchBcTypeArgs(patch_name="x", bc_class="not_a_real_bc_class")
+
+
+# ────────── audit.write_audit ──────────
+
+
+def test_write_audit_creates_file_and_returns_audit_id(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    audit_id = write_audit(
+        case_dir,
+        tool="set_patch_bc_type",
+        args={"patch_name": "walls", "bc_class": "no_slip_wall"},
+        model_used="deepseek-v4-pro",
+        conversation_turn_id=None,
+    )
+    assert isinstance(audit_id, str)
+    assert len(audit_id) >= 16
+    audit_path = case_dir / "system" / "ai_audit" / "applied.yaml"
+    assert audit_path.is_file()
+    doc = yaml.safe_load(audit_path.read_text())
+    assert doc["schema_version"] == 1
+    assert len(doc["entries"]) == 1
+    entry = doc["entries"][0]
+    assert entry["tool"] == "set_patch_bc_type"
+    assert entry["args"] == {"patch_name": "walls", "bc_class": "no_slip_wall"}
+    assert entry["audit_id"] == audit_id
+    assert entry["model_used"] == "deepseek-v4-pro"
+    # applied_at is ISO-8601 with Z suffix.
+    assert entry["applied_at"].endswith("Z")
+
+
+def test_write_audit_appends_to_existing_file(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    a1 = write_audit(
+        case_dir,
+        tool="set_patch_bc_type",
+        args={"patch_name": "walls", "bc_class": "no_slip_wall"},
+        model_used="x",
+        conversation_turn_id=None,
+    )
+    a2 = write_audit(
+        case_dir,
+        tool="set_patch_bc_type",
+        args={"patch_name": "inlet", "bc_class": "velocity_inlet"},
+        model_used="y",
+        conversation_turn_id=None,
+    )
+    audit_path = case_dir / "system" / "ai_audit" / "applied.yaml"
+    doc = yaml.safe_load(audit_path.read_text())
+    assert [e["audit_id"] for e in doc["entries"]] == [a1, a2]
+    assert doc["entries"][0]["args"]["patch_name"] == "walls"
+    assert doc["entries"][1]["args"]["patch_name"] == "inlet"
+
+
+def test_write_audit_creates_parent_dirs(tmp_path):
+    # Case dir exists but `system/` doesn't yet.
+    case_dir = tmp_path / "freshcase"
+    case_dir.mkdir()
+    write_audit(
+        case_dir,
+        tool="set_patch_bc_type",
+        args={"patch_name": "x", "bc_class": "symmetry"},
+        model_used=None,
+        conversation_turn_id=None,
+    )
+    assert (case_dir / "system" / "ai_audit" / "applied.yaml").is_file()
+
+
+def test_write_audit_rejects_corrupt_existing_file(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    audit_dir = case_dir / "system" / "ai_audit"
+    audit_dir.mkdir(parents=True)
+    (audit_dir / "applied.yaml").write_text("not: a: valid: yaml: structure: ::: ::")
+    with pytest.raises(AuditWriteError):
+        write_audit(
+            case_dir,
+            tool="set_patch_bc_type",
+            args={"patch_name": "x", "bc_class": "symmetry"},
+            model_used=None,
+            conversation_turn_id=None,
+        )
+
+
+def test_write_audit_rejects_schema_version_mismatch(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    audit_dir = case_dir / "system" / "ai_audit"
+    audit_dir.mkdir(parents=True)
+    (audit_dir / "applied.yaml").write_text(
+        yaml.safe_dump({"schema_version": 99, "entries": []})
+    )
+    with pytest.raises(AuditWriteError):
+        write_audit(
+            case_dir,
+            tool="set_patch_bc_type",
+            args={"patch_name": "x", "bc_class": "symmetry"},
+            model_used=None,
+            conversation_turn_id=None,
+        )
