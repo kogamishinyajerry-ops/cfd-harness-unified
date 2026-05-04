@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/pyproject.toml:54-59 (`ui` optional dep group · `httpx>=0.27` already declared — V61-118 uses it without dep additions)
   - ui/backend/services/case_completeness/ (V61-116 output · V61-119 will plumb the analyzer's CaseCompletenessReport into the LLM system prompt; V61-118's response shape is provider-agnostic so V61-119 can swap prompts without re-touching the adapter)
 counter_impact: +1 (autonomous_governance: true · new backend service + new operator endpoint, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a high-risk PR — secrets-handling is via env-var convention already established for NOTION_TOKEN with no new auth/authz semantics; not arc-size retro; not a governance rule-change DEC · Kogami SKIP per DEC-V61-087 §4.2. Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + new operator endpoint + external-API integration triggers.)
-notion_sync_status: pending (queued for Codex APPROVE)
+notion_sync_status: synced 2026-05-04 (https://www.notion.so/DEC-V61-118-LLM-provider-integration-DeepSeek-V4-Pro-primary-V4-Flash-fallback-POST-api-ai--356c68942bed81c8a537f343334b3e82)
 
 ---
 
