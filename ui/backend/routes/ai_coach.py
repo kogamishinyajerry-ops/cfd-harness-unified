@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import stat
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
@@ -436,24 +437,23 @@ async def ai_coach_apply_proposal(
             detail={"failing_check": "bad_case_id", "case_id": body.case_id},
         )
     case_dir = IMPORTED_DIR / body.case_id
-    # V123 R3 P2 / R4 P2: split the case_dir gate into two explicit
-    # checks so the tamper-path contract holds end-to-end regardless of
-    # subsequent tool/arg validation outcomes.
-    #   * lexists()=False → truly absent → 404 case_not_found (existing
-    #     contract, unchanged).
-    #   * lexists()=True but is_dir()=False → tampered (planted regular
-    #     file, broken symlink, symlink-to-non-dir) → 422 with
-    #     inner_failing_check='symlink_escape'. This preempts
-    #     UnknownToolError/ToolArgError so a request with an unknown
-    #     tool against a tampered case still surfaces the safety
-    #     contract, matching V108/V109's uniform symlink_escape
-    #     handling.
-    if not os.path.lexists(case_dir):
+    # V123 R3 P2 / R4 P2 / R5 P2: classify case_dir atomically with a
+    # single os.lstat so a case that disappears between the absence
+    # check and the type check cannot be misclassified as tampering.
+    #   * ENOENT from lstat → truly absent → 404 case_not_found.
+    #   * lstat succeeds + non-DIR mode → tampered (planted regular
+    #     file, symlink, etc) → 422 inner_failing_check='symlink_escape'
+    #     (preempts UnknownToolError/ToolArgError so the safety
+    #     contract holds end-to-end regardless of tool/args validity).
+    #   * lstat succeeds + DIR mode → real directory → proceed.
+    try:
+        case_st = os.lstat(case_dir)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail={"failing_check": "case_not_found", "case_id": body.case_id},
-        )
-    if not case_dir.is_dir():
+        ) from None
+    if not stat.S_ISDIR(case_st.st_mode):
         raise HTTPException(
             status_code=422,
             detail={
