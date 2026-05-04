@@ -304,3 +304,189 @@ def test_write_audit_rejects_schema_version_mismatch(tmp_path):
             model_used=None,
             conversation_turn_id=None,
         )
+
+
+# ────────── DEC-V61-123 · regenerate_mesh tool ──────────
+
+
+def _stub_mesh_result(case_id: str = "lid_driven_cavity", **overrides):
+    """Construct a MeshResult-shaped object the handler can return.
+
+    We use the real dataclass so the handler's attribute access is
+    type-checked end-to-end."""
+    from ui.backend.services.meshing_gmsh import MeshResult
+
+    defaults = dict(
+        case_id=case_id,
+        mesh_mode="power",
+        cell_count=350_000,
+        face_count=2_100_000,
+        point_count=400_000,
+        polyMesh_path=Path("/tmp/imported") / case_id / "constant" / "polyMesh",
+        msh_path=Path("/tmp/imported") / case_id / "imported.msh",
+        generation_time_s=42.5,
+        warning=None,
+    )
+    defaults.update(overrides)
+    return MeshResult(**defaults)
+
+
+def test_list_tools_includes_regenerate_mesh():
+    """V123: regenerate_mesh appears in the registry alongside V121's
+    set_patch_bc_type."""
+    names = [t.name for t in list_tools()]
+    assert "regenerate_mesh" in names
+
+
+def test_regenerate_mesh_tool_describes_args():
+    [tool] = [t for t in list_tools() if t.name == "regenerate_mesh"]
+    desc = tool.description
+    assert "mesh_mode" in desc
+    assert "beginner" in desc
+    assert "power" in desc
+
+
+def test_dispatch_regenerate_mesh_happy_path(tmp_path, monkeypatch):
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123")
+
+    def fake_mesh(case_id, *, mesh_mode):
+        assert case_id == "ldc_v123"
+        assert mesh_mode == "power"
+        return _stub_mesh_result(case_id=case_id, mesh_mode=mesh_mode)
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        fake_mesh,
+    )
+    result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert result.tool == "regenerate_mesh"
+    assert "350000" in result.summary or "350,000" in result.summary
+    assert result.state_after["cell_count"] == 350_000
+    assert result.state_after["face_count"] == 2_100_000
+    assert result.state_after["mesh_mode"] == "power"
+
+
+def test_dispatch_regenerate_mesh_includes_warning_in_summary(
+    tmp_path, monkeypatch
+):
+    """When the underlying pipeline returns a soft-cap warning (beginner
+    mode only), the operator-facing summary surfaces it."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_warn")
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        lambda case_id, *, mesh_mode: _stub_mesh_result(
+            case_id=case_id,
+            mesh_mode=mesh_mode,
+            warning="beginner soft cap exceeded; consider 'power' mode",
+        ),
+    )
+    result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "beginner"})
+    assert "Warning" in result.summary
+    assert "soft cap" in result.summary
+
+
+def test_regenerate_mesh_rejects_extra_keys(tmp_path):
+    """V121 trust-boundary discipline: extra="forbid" rejects
+    off-contract keys, never silently drops them."""
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError):
+        dispatch(
+            case_dir,
+            "regenerate_mesh",
+            {"mesh_mode": "power", "lc_override": 0.001},
+        )
+
+
+def test_regenerate_mesh_rejects_invalid_mode(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError):
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "ultra"})
+
+
+def test_regenerate_mesh_missing_mode_raises_arg_error(tmp_path):
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError):
+        dispatch(case_dir, "regenerate_mesh", {})
+
+
+def test_regenerate_mesh_pipeline_error_translated_to_underlying(
+    tmp_path, monkeypatch
+):
+    """MeshPipelineError raised by the underlying pipeline must surface
+    as ToolDispatchError(failing_check='underlying_service_error') with
+    the original failing_check preserved in the message."""
+    from ui.backend.services.meshing_gmsh import MeshPipelineError
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_err")
+
+    def boom(case_id, *, mesh_mode):
+        raise MeshPipelineError("cap exceeded", "cell_cap_exceeded")
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        boom,
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.failing_check == "underlying_service_error"
+    assert "cell_cap_exceeded" in str(exc_info.value)
+
+
+def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):
+    """gmsh is naturally idempotent (deterministic seed); two sequential
+    dispatches with same args both succeed without a replay-key store."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_idem")
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        lambda case_id, *, mesh_mode: _stub_mesh_result(
+            case_id=case_id, mesh_mode=mesh_mode
+        ),
+    )
+    r1 = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    r2 = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert r1.state_after == r2.state_after
+
+
+def test_regenerate_mesh_holds_case_lock_during_pipeline(
+    tmp_path, monkeypatch
+):
+    """Concurrent regenerate proposals must serialize via case_lock —
+    mesh_imported_case rewrites polyMesh/ in place and would race on
+    file content. We assert the lock is HELD at the moment the
+    pipeline runs by checking that .case_lock exists and is locked
+    via flock from inside the fake handler."""
+    import fcntl
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_lock")
+    lock_held = {"value": False}
+
+    def assert_lock_held(case_id, *, mesh_mode):
+        lock_path = case_dir / ".case_lock"
+        # The lockfile must exist while the pipeline is running.
+        assert lock_path.is_file()
+        # And a non-blocking attempt to take the lock from a fresh fd
+        # must fail (it's already held by case_lock above us).
+        fd = None
+        try:
+            fd = lock_path.open("r+")
+            try:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_held["value"] = False  # we got it → not held
+            except BlockingIOError:
+                lock_held["value"] = True
+            finally:
+                try:
+                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+                except OSError:
+                    pass
+        finally:
+            if fd is not None:
+                fd.close()
+        return _stub_mesh_result(case_id=case_id, mesh_mode=mesh_mode)
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        assert_lock_held,
+    )
+    dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert lock_held["value"] is True

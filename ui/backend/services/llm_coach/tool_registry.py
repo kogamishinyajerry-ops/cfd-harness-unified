@@ -26,10 +26,15 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ui.backend.services.case_manifest.locking import case_lock
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
 from ui.backend.services.case_solve.patch_classification_store import (
     PatchClassificationIOError,
     upsert_override,
+)
+from ui.backend.services.meshing_gmsh import (
+    MeshPipelineError,
+    mesh_imported_case,
 )
 
 
@@ -99,6 +104,30 @@ class SetPatchBcTypeArgs(BaseModel):
     ]
 
 
+class RegenerateMeshArgs(BaseModel):
+    """Args for ``regenerate_mesh`` (DEC-V61-123).
+
+    Re-runs gmsh + gmshToFoam on the case's imported STL with the
+    requested density preset, replacing ``polyMesh/`` in place.
+
+    ``extra="forbid"`` matches V121's trust-boundary discipline — a
+    proposal that ships off-contract keys MUST fail at the registry
+    boundary, not silently drop them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mesh_mode: Literal["beginner", "power"] = Field(
+        ...,
+        description=(
+            "Density preset. 'beginner' targets a few hundred thousand "
+            "cells (lc ~ diagonal/30); 'power' targets ~10x finer "
+            "(lc ~ diagonal/60). Both are bounded by the V61-105 "
+            "cell-budget guard."
+        ),
+    )
+
+
 # ────────── ApplyResult shape ──────────
 
 
@@ -150,6 +179,38 @@ def _handle_set_patch_bc_type(case_dir: Path, args: BaseModel) -> ApplyResult:
     )
 
 
+def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
+    typed = args  # type: RegenerateMeshArgs (caller already validated)
+    assert isinstance(typed, RegenerateMeshArgs)
+    case_id = case_dir.name
+    # Serialize concurrent regenerate proposals via V108's case_lock —
+    # mesh_imported_case rewrites polyMesh/ in place; two concurrent
+    # accepts on the same case would race on file content. case_lock is
+    # NOT reentrant, but mesh_imported_case does not itself acquire it,
+    # so a single acquisition here is sound. MeshPipelineError is NOT
+    # caught here — the dispatcher's typed-error translation layer
+    # converts it to ToolDispatchError(underlying_service_error), same
+    # contract V121 uses for PatchClassificationIOError.
+    with case_lock(case_dir):
+        result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
+    summary = (
+        f"Regenerated mesh in '{typed.mesh_mode}' mode: "
+        f"{result.cell_count} cells, {result.face_count} faces."
+    )
+    if result.warning:
+        summary += f" Warning: {result.warning}"
+    return ApplyResult(
+        tool="regenerate_mesh",
+        summary=summary,
+        state_after={
+            "cell_count": result.cell_count,
+            "face_count": result.face_count,
+            "point_count": result.point_count,
+            "mesh_mode": result.mesh_mode,
+        },
+    )
+
+
 _TOOL_REGISTRY: dict[str, ToolDescriptor] = {
     "set_patch_bc_type": ToolDescriptor(
         name="set_patch_bc_type",
@@ -160,6 +221,18 @@ _TOOL_REGISTRY: dict[str, ToolDescriptor] = {
             "in the case. Maps to DEC-V61-108's per-patch override store. "
             "args: patch_name (str, required), bc_class (one of "
             "velocity_inlet | pressure_outlet | no_slip_wall | symmetry)."
+        ),
+    ),
+    "regenerate_mesh": ToolDescriptor(
+        name="regenerate_mesh",
+        args_model=RegenerateMeshArgs,
+        handler=_handle_regenerate_mesh,
+        description=(
+            "Re-run gmsh + gmshToFoam on the case's imported STL to "
+            "produce a fresh polyMesh with the requested density. Use "
+            "after the mesh-quality snapshot reports cell_count_low or "
+            "when the engineer asks to refine. args: mesh_mode (one of "
+            "beginner | power)."
         ),
     ),
 }
@@ -196,6 +269,15 @@ def dispatch(case_dir: Path, tool: str, args: dict[str, Any]) -> ApplyResult:
     except PatchClassificationIOError as exc:
         raise ToolDispatchError(
             f"underlying V108 service failed: {exc.failing_check}",
+            failing_check="underlying_service_error",
+        ) from exc
+    except MeshPipelineError as exc:
+        # V123: regenerate_mesh's underlying service has its own typed
+        # envelope. Preserve the original failing_check in the message
+        # so the route's structured detail surfaces gmsh_diverged /
+        # cell_cap_exceeded / etc rather than a generic 500 string.
+        raise ToolDispatchError(
+            f"mesh pipeline failed: {exc.failing_check}: {exc}",
             failing_check="underlying_service_error",
         ) from exc
     except Exception as exc:  # noqa: BLE001 — we want to surface as typed

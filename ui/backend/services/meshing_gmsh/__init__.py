@@ -24,7 +24,7 @@ from .cell_budget import (
     classify_cell_count,
 )
 from .gmsh_runner import GmshRunResult, run_gmsh_on_imported_case
-from .pipeline import MeshResult, mesh_imported_case
+from .pipeline import MeshPipelineError, MeshResult, mesh_imported_case
 from .to_foam import GmshToFoamError, run_gmsh_to_foam
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "BudgetVerdict",
     "GmshRunResult",
     "GmshToFoamError",
+    "MeshPipelineError",
     "MeshResult",
     "POWER_HARD_CAP_CELLS",
     "classify_cell_count",

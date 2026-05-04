@@ -79,6 +79,9 @@ def test_prompt_includes_v121_proposal_protocol_and_tool_registry():
     assert "PROPOSAL>>" in prompt
     assert "Registered tools" in prompt
     assert "set_patch_bc_type" in prompt
+    # DEC-V61-123: the regenerate_mesh tool surfaces alongside V121's
+    # set_patch_bc_type once registered.
+    assert "regenerate_mesh" in prompt
 
 
 def test_prompt_renders_missing_field_entries():
