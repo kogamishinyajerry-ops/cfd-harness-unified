@@ -348,14 +348,12 @@ def test_apply_proposal_tampered_case_dir_with_invalid_args_still_returns_symlin
         assert body["detail"]["inner_failing_check"] == "symlink_escape"
 
 
-def test_apply_proposal_lstat_oserror_routes_to_symlink_escape(
+def test_apply_proposal_lstat_eacces_routes_to_symlink_escape(
     tmp_path, monkeypatch
 ):
-    """V123 R6 P2: non-ENOENT OSError from os.lstat (PermissionError,
-    NotADirectoryError on ancestor, ELOOP, etc) must NOT escape as an
-    unhandled 500. Translate to 422 inner_failing_check='symlink_escape'
-    so the route's documented 4xx contract holds for tampered or
-    misconfigured filesystem states."""
+    """V123 R6 P2 / R7 P2: containment-class errnos (EACCES on a
+    restricted ancestor) translate to 422 inner_failing_check=
+    'symlink_escape'."""
     app = _make_app(tmp_path, monkeypatch)
 
     def boom_lstat(path):
@@ -376,6 +374,73 @@ def test_apply_proposal_lstat_oserror_routes_to_symlink_escape(
         body = resp.json()
         assert body["detail"]["failing_check"] == "underlying_service_error"
         assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
+def test_apply_proposal_lstat_enotdir_routes_to_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R7 P2: ENOTDIR (an ancestor was replaced with a regular
+    file) is also containment-class → 422 symlink_escape."""
+    app = _make_app(tmp_path, monkeypatch)
+
+    def boom_lstat(path):
+        raise NotADirectoryError(20, "Not a directory")
+
+    monkeypatch.setattr("ui.backend.routes.ai_coach.os.lstat", boom_lstat)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_lstat_enotdir",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
+def test_apply_proposal_lstat_eio_propagates_as_500(tmp_path, monkeypatch):
+    """V123 R7 P2: resource-class errnos (EIO, EMFILE, etc) are real
+    backend failures and must NOT be normalized into a 422 tamper-path
+    hint — that would mislead the UI and hide outages from monitoring.
+    Let them propagate so FastAPI surfaces 500."""
+    import errno as _errno
+
+    app = _make_app(tmp_path, monkeypatch)
+
+    def boom_lstat(path):
+        raise OSError(_errno.EIO, "I/O error")
+
+    monkeypatch.setattr("ui.backend.routes.ai_coach.os.lstat", boom_lstat)
+
+    # raise_server_exceptions=False so the TestClient returns 500
+    # rather than re-raising; we want to assert the HTTP shape, not
+    # catch the exception object.
+    with TestClient(app, raise_server_exceptions=False) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_lstat_eio",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        # An EIO MUST NOT translate to 422 symlink_escape — the route
+        # let it propagate, so FastAPI's default 500 handler runs.
+        assert resp.status_code == 500
+        # Defensive: if FastAPI's 500 body is JSON with a detail, it
+        # must NOT carry the symlink_escape hint.
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict) and isinstance(body.get("detail"), dict):
+            assert (
+                body["detail"].get("inner_failing_check") != "symlink_escape"
+            )
 
 
 def test_apply_proposal_truly_absent_case_dir_still_returns_404(

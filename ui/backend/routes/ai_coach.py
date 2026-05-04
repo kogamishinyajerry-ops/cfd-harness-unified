@@ -30,11 +30,21 @@ NO mid-stream fallback, NO SSE reconnect. Single request scope.
 """
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
 import stat
 from typing import Any, AsyncIterator
+
+
+# V123 R7 P2: errnos lstat() may raise that map to containment failures
+# (planted file/symlink ancestors, EACCES on tampered perms, ELOOP from
+# a symlink chain). Other OSError errnos (EIO, EMFILE, ENFILE, ...) are
+# real backend failures and must escape as 500 so monitoring sees them.
+_CONTAINMENT_ERRNOS: frozenset[int] = frozenset(
+    {errno.ENOTDIR, errno.ELOOP, errno.EACCES}
+)
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -461,19 +471,30 @@ async def ai_coach_apply_proposal(
             detail={"failing_check": "case_not_found", "case_id": body.case_id},
         ) from None
     except OSError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "failing_check": "underlying_service_error",
-                "inner_failing_check": "symlink_escape",
-                "tool": body.tool,
-                "case_id": body.case_id,
-                "message": (
-                    f"refusing to use {case_dir} as a case directory "
-                    f"(errno {exc.errno}: {exc.strerror})"
-                ),
-            },
-        ) from exc
+        # V123 R7 P2: only normalize containment-class errnos (ENOTDIR /
+        # ELOOP / EACCES — tampered path or restricted ancestor) into
+        # 422 symlink_escape. Resource-class errnos (EIO, EMFILE, etc)
+        # are real backend failures that must surface as 500 so
+        # monitoring catches them, not as a misleading tamper-path hint
+        # in the UI.
+        if exc.errno in _CONTAINMENT_ERRNOS:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "failing_check": "underlying_service_error",
+                    "inner_failing_check": "symlink_escape",
+                    "tool": body.tool,
+                    "case_id": body.case_id,
+                    "message": (
+                        f"refusing to use {case_dir} as a case directory "
+                        f"(errno {exc.errno}: {exc.strerror})"
+                    ),
+                },
+            ) from exc
+        # Non-containment OSError → let it propagate as 500 so the
+        # outage is visible. logger.exception in FastAPI's default
+        # handler will capture the traceback for diagnosis.
+        raise
     if not stat.S_ISDIR(case_st.st_mode):
         raise HTTPException(
             status_code=422,
