@@ -1,9 +1,9 @@
 ---
 decision_id: DEC-V61-119
 title: LLM-wrapped completeness coaching · SSE streaming + governance-aware system prompt · POST /api/ai-coach/stream
-status: Proposed (2026-05-04 · pre-implementation surface scan complete; Codex pre-merge required per RETRO-V61-001 multi-file backend + new operator endpoint + external-API streaming triggers)
-codex_tool_report_path: reports/codex_tool_reports/v61_119_r1_chain.md (to be created)
-codex_review_relay: 86gs gpt-5.4 xhigh (initial); CRS gpt-5.4 high reserved as 522-fallback per CLAUDE.md relay protocol
+status: Accepted (2026-05-04 · Codex pre-merge 3-round chain APPROVE on commit 394ae27 [R1 P1 → R2 P2 → R3 clean]; chain report at reports/codex_tool_reports/v61_119_r1_chain.md; user 2026-05-04 autonomous-mode mandate "全都按你的建议来" covers acceptance flip · arc item E closes the five-DEC arc A→C→B→D→E)
+codex_tool_report_path: reports/codex_tool_reports/v61_119_r1_chain.md
+codex_review_relay: CRS gpt-5.4 high (R1-R3 · 86gs gpt-5.4 xhigh attempted on every round but failed via Cloudflare 522 / stream-disconnect; sustained 86gs instability triggered CRS fallback per CLAUDE.md relay protocol on each round — see chain report §L2 for the proposed default-to-CRS workflow change)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User 2026-05-04 autonomous-mode mandate "全都按你的建议来" covering five-DEC arc A→C→B→D→E (V61-115/116/117/118/119); this is item E — the LLM-wrapped governance-aware coaching surface that consumes V61-118's `LLMProvider` foundation + V61-116's `analyze_case_completeness` output and lands the chat experience inside the right-rail TaskPanel V61-117 just hardened.
@@ -20,8 +20,8 @@ parent_artifacts:
   - ui/backend/routes/ai_chat.py:43-115 (loopback guard, proxy header detection, audit log helper · V61-119 extracts to shared helper and reuses)
   - ui/backend/services/case_completeness/__init__.py:24-42 (analyze_case_completeness + CaseCompletenessReport schema · V61-119 invokes synchronously before opening the stream)
 counter_impact: +1 (autonomous_governance: true · new backend service + new operator endpoint extending an existing one. Kogami-trigger check: not a phase-close, not a RETRO draft, not an arc-size retro at counter 78, not a governance-rule change, not a high-risk PR pre-merge — V61-119 is a feature DEC analogous to V61-118 (which Kogami-skipped). Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + new operator endpoint + external-API integration triggers.)
-notion_sync_status: pending — sync after Codex APPROVE chain closes
-self_estimated_pass_rate: 50% (4-5 rounds expected · SSE chunk parsing + cancellation + system prompt composition each have small attack surfaces; deliberate V1 scope-down — NO LLM-side tool calling, NO mid-stream fallback, NO frontend wiring — keeps the surface narrow)
+notion_sync_status: pending — Notion MCP server disconnected during chain close; will sync when reconnected
+self_estimated_pass_rate: 50% (predicted 4-5 rounds) → ACTUAL 3 rounds (well-calibrated underestimate · scope-down discipline paid off · per chain report §L1 the "External-API integration WITHOUT cleanup-mechanism design" anchor is now ~50% / 3-4 rounds vs V61-118's "WITH cleanup contract" anchor at 25% / 7-9 rounds — deliberate exclusion of LLM-side tool calling + mid-stream fallback + SSE reconnect kept the cascade dimension count to 1)
 
 ---
 
