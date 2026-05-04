@@ -22,6 +22,7 @@ from ui.backend.services.llm_provider.base import (
     ChatResponse,
     DeepSeekModelId,
     LLMAuthError,
+    LLMBadRequestError,
     LLMProvider,
     LLMRateLimitError,
     LLMTimeoutError,
@@ -63,8 +64,22 @@ class DeepSeekProvider(LLMProvider):
         self._api_key = api_key
         self._endpoint = endpoint
         self._timeout = timeout
-        # Allow injected client for tests; otherwise lazy-create.
+        # Codex R1 P3: in production paths, the factory hands every
+        # request the SAME provider instance (singleton). The client
+        # is lazily created on first POST and reused thereafter so
+        # subsequent completions get keep-alive connection pooling
+        # instead of fresh DNS+TLS handshakes per turn. Tests inject
+        # an httpx.MockTransport via this same field, so the lazy/
+        # injected paths share one code path.
         self._client = client
+        self._owns_client = client is None
+
+    async def aclose(self) -> None:
+        """Close the long-lived AsyncClient (if any). Idempotent.
+        Called from the FastAPI lifespan-shutdown hook in production."""
+        if self._owns_client and self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     def __repr__(self) -> str:
         # Never embed the api_key.
@@ -75,6 +90,10 @@ class DeepSeekProvider(LLMProvider):
         try:
             return await self._chat_with_model(request, primary, fallback_used=False)
         except (LLMRateLimitError, LLMUpstreamError, LLMTimeoutError) as exc:
+            # Codex R1 P2: LLMBadRequestError (4xx non-auth/non-429)
+            # is intentionally NOT in the retry tuple — same payload
+            # against a different model would just waste a quota slot
+            # and obscure the actionable client error.
             fallback = _FALLBACK_MAP.get(primary)
             if fallback is None:
                 # No fallback configured for this primary (e.g. the
@@ -126,10 +145,21 @@ class DeepSeekProvider(LLMProvider):
             raise LLMUpstreamError(
                 f"DeepSeek upstream error (status {response.status_code})"
             )
+        if 400 <= response.status_code < 500:
+            # Codex R1 P2: a 400/422 (e.g. context_length_exceeded,
+            # invalid_request_error) is the caller's problem, not
+            # ours. Surface as LLMBadRequestError so chat()'s retry
+            # tuple does NOT match — same payload would just produce
+            # the same 400 from the fallback model. The route maps
+            # this to HTTP 400 with the upstream's error code so the
+            # caller can adjust their request.
+            raise LLMBadRequestError(
+                f"DeepSeek rejected request (status {response.status_code})"
+            )
         if response.status_code != 200:
-            # Unexpected 4xx (e.g. 400 invalid request). Treat as
-            # upstream — not user-recoverable mid-request.
-            raise LLMUpstreamError(
+            # Defensive: any non-2xx not enumerated above (1xx/3xx).
+            # Not retryable — surface as bad request.
+            raise LLMBadRequestError(
                 f"DeepSeek unexpected status {response.status_code}"
             )
 
@@ -145,12 +175,17 @@ class DeepSeekProvider(LLMProvider):
         payload: dict[str, Any],
         headers: dict[str, str],
     ) -> httpx.Response:
-        if self._client is not None:
-            return await self._client.post(
-                self._endpoint, json=payload, headers=headers, timeout=self._timeout
-            )
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            return await client.post(self._endpoint, json=payload, headers=headers)
+        # Codex R1 P3: lazy-create a long-lived AsyncClient on first
+        # use and reuse for all subsequent completions. Singleton
+        # provider + persistent client = HTTP keep-alive across chat
+        # turns, no per-request DNS+TLS handshake. Test paths inject
+        # client up-front (with MockTransport) so they bypass this
+        # lazy branch entirely.
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self._timeout)
+        return await self._client.post(
+            self._endpoint, json=payload, headers=headers, timeout=self._timeout
+        )
 
     @staticmethod
     def _parse_response(

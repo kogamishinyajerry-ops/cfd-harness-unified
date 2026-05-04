@@ -208,3 +208,82 @@ def test_ai_chat_does_not_leak_api_key_in_error_detail():
     assert "sk-" not in detail
     # Generic safe template per route handler.
     assert "authentication failed" in detail.lower()
+
+
+# ────────── Codex R1 P2: 400 mapping for LLMBadRequestError ──────────
+
+
+def test_ai_chat_returns_400_on_bad_request():
+    """An LLMBadRequestError (e.g. context_length_exceeded) must
+    surface as HTTP 400 — the caller fixes their request, not the
+    server. Codex R1 P2."""
+    from ui.backend.services.llm_provider import LLMBadRequestError
+
+    provider = _StubProvider(exc=LLMBadRequestError("context_length_exceeded"))
+    client = TestClient(_make_app(provider))
+    resp = client.post("/api/ai-chat", json=_ok_payload())
+    assert resp.status_code == 400
+
+
+# ────────── Codex R1 P1: loopback-only guard ──────────
+
+
+def _make_remote_request_app(provider: LLMProvider) -> FastAPI:
+    """Build the app and patch the request-introspection helper so
+    the test can simulate a non-loopback caller without spinning up
+    a real network listener."""
+    from ui.backend.routes import ai_chat as route_module
+
+    app = _make_app(provider)
+    return app, route_module
+
+
+def test_ai_chat_rejects_non_loopback_caller_without_override(monkeypatch):
+    """A request with a remote client.host (not 127.0.0.1/::1/localhost)
+    must be rejected with 403 unless AI_CHAT_ALLOW_NON_LOOPBACK=1."""
+    from ui.backend.routes import ai_chat as route_module
+
+    monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
+
+    provider = _StubProvider(
+        response=ChatResponse(content="should not see this", model_used="x")
+    )
+    app = _make_app(provider)
+    # Patch the loopback check to simulate a non-loopback caller.
+    monkeypatch.setattr(route_module, "_is_loopback_request", lambda req: False)
+
+    client = TestClient(app)
+    resp = client.post("/api/ai-chat", json=_ok_payload())
+    assert resp.status_code == 403
+    assert "AI_CHAT_ALLOW_NON_LOOPBACK" in resp.json()["detail"]
+    # Provider was NOT called.
+    assert len(provider.calls) == 0
+
+
+def test_ai_chat_allows_non_loopback_with_explicit_override(monkeypatch):
+    """The override env var unlocks remote callers (operator opted
+    in to a trusted reverse proxy). Provider gets called normally."""
+    from ui.backend.routes import ai_chat as route_module
+
+    monkeypatch.setenv("AI_CHAT_ALLOW_NON_LOOPBACK", "1")
+    provider = _StubProvider(
+        response=ChatResponse(content="ok", model_used="deepseek-v4-pro")
+    )
+    app = _make_app(provider)
+    monkeypatch.setattr(route_module, "_is_loopback_request", lambda req: False)
+
+    client = TestClient(app)
+    resp = client.post("/api/ai-chat", json=_ok_payload())
+    assert resp.status_code == 200
+    assert len(provider.calls) == 1
+
+
+def test_ai_chat_allows_loopback_caller_by_default():
+    """The TestClient is loopback by definition (no client.host) —
+    must succeed without override."""
+    provider = _StubProvider(
+        response=ChatResponse(content="ok", model_used="deepseek-v4-pro")
+    )
+    client = TestClient(_make_app(provider))
+    resp = client.post("/api/ai-chat", json=_ok_payload())
+    assert resp.status_code == 200

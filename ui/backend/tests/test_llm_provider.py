@@ -31,6 +31,7 @@ from ui.backend.services.llm_provider import (
     ChatResponse,
     DeepSeekProvider,
     LLMAuthError,
+    LLMBadRequestError,
     LLMRateLimitError,
     LLMTimeoutError,
     LLMUpstreamError,
@@ -38,6 +39,7 @@ from ui.backend.services.llm_provider import (
     get_default_provider,
 )
 from ui.backend.services.llm_provider.base import LLMProviderError
+from ui.backend.services.llm_provider.factory import reset_default_provider
 
 T = TypeVar("T")
 
@@ -238,6 +240,123 @@ def test_deepseek_both_models_fail_raises_last_error():
     transport = httpx.MockTransport(handler)
     with pytest.raises(LLMUpstreamError):
         _run(_do_chat(transport))
+
+
+# ────────── Codex R1 P2: 4xx (non-auth/non-rate-limit) bypasses fallback ──────────
+
+
+def test_deepseek_400_raises_bad_request_no_fallback():
+    """A 400 (e.g. context_length_exceeded) is the caller's problem.
+    Don't waste a flash retry — same payload would just produce the
+    same 400. R1 P2 regression."""
+    call_count = {"n": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return _make_response(400, {"error": "context_length_exceeded"})
+
+    transport = httpx.MockTransport(handler)
+    with pytest.raises(LLMBadRequestError):
+        _run(_do_chat(transport))
+    # Critically: only ONE call. No fallback retry.
+    assert call_count["n"] == 1
+
+
+def test_deepseek_422_raises_bad_request_no_fallback():
+    call_count = {"n": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return _make_response(422, {"error": "invalid_request"})
+
+    transport = httpx.MockTransport(handler)
+    with pytest.raises(LLMBadRequestError):
+        _run(_do_chat(transport))
+    assert call_count["n"] == 1
+
+
+def test_deepseek_404_raises_bad_request_no_fallback():
+    """Any unexpected non-401/403/429 4xx should be non-retryable."""
+    call_count = {"n": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return _make_response(404, {"error": "not found"})
+
+    transport = httpx.MockTransport(handler)
+    with pytest.raises(LLMBadRequestError):
+        _run(_do_chat(transport))
+    assert call_count["n"] == 1
+
+
+# ────────── Codex R1 P3: provider singleton (long-lived AsyncClient) ──────────
+
+
+def test_factory_returns_same_instance_across_calls(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-singleton-test")
+    reset_default_provider()
+    p1 = get_default_provider()
+    p2 = get_default_provider()
+    assert p1 is p2  # singleton
+
+
+def test_factory_rebuilds_when_env_changes(monkeypatch):
+    """Test isolation: flipping DEEPSEEK_API_KEY in the env must
+    invalidate the cache so we don't serve a real provider after the
+    test set the env to empty."""
+    reset_default_provider()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-first")
+    p1 = get_default_provider()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-second")
+    p2 = get_default_provider()
+    assert p1 is not p2  # rebuilt
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    p3 = get_default_provider()
+    assert isinstance(p3, MockLLMProvider)
+
+
+def test_factory_reset_clears_cache(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-cache-test")
+    reset_default_provider()
+    p1 = get_default_provider()
+    reset_default_provider()
+    p2 = get_default_provider()
+    assert p1 is not p2  # cache was cleared
+
+
+def test_factory_does_not_log_api_key_in_fingerprint(monkeypatch, caplog):
+    secret = "sk-NEVER-LEAK-SINGLETON-1234567890abcdef"
+    monkeypatch.setenv("DEEPSEEK_API_KEY", secret)
+    reset_default_provider()
+    caplog.set_level(logging.DEBUG)
+    get_default_provider()
+    for record in caplog.records:
+        assert secret not in record.getMessage()
+
+
+def test_deepseek_aclose_is_idempotent():
+    """aclose can be called twice without error (e.g. lifespan
+    shutdown after a test that already cleaned up)."""
+    provider = DeepSeekProvider(api_key="sk-aclose-test")
+    _run(provider.aclose())
+    _run(provider.aclose())  # no error
+
+
+def test_deepseek_aclose_does_not_close_injected_client():
+    """If the caller injected an httpx client (test path), the
+    provider must NOT close it on aclose() — the caller owns its
+    lifetime."""
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: _make_response(200, _success_body()))
+        ) as client:
+            provider = DeepSeekProvider(api_key="sk-test", client=client)
+            await provider.aclose()
+            # Client should still be usable.
+            assert not client.is_closed
+
+    _run(scenario())
 
 
 # ────────── Secrets non-leakage ──────────

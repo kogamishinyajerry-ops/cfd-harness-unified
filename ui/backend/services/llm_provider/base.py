@@ -83,6 +83,14 @@ class LLMRateLimitError(LLMProviderError):
     cheaper / less-loaded model variant when available."""
 
 
+class LLMBadRequestError(LLMProviderError):
+    """Upstream 4xx (non-auth, non-rate-limit). The request itself is
+    malformed/oversized/otherwise unacceptable; retrying with a
+    different model would just waste another quota slot. Codex R1 P2:
+    do NOT trigger fallback for these. Routes should map to 400 so
+    the caller can fix their request."""
+
+
 class LLMUpstreamError(LLMProviderError):
     """Upstream 5xx or malformed response. Triggers fallback (the
     backend service is having a bad time, alternate variant might
