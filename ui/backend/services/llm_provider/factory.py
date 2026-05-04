@@ -18,7 +18,10 @@ from ui.backend.services.llm_provider.base import (
     LLMProvider,
     MockLLMProvider,
 )
-from ui.backend.services.llm_provider.deepseek import DeepSeekProvider
+from ui.backend.services.llm_provider.deepseek import (
+    MAX_CHAT_DURATION_SECONDS,
+    DeepSeekProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +53,18 @@ def _fingerprint(api_key: str) -> str:
     return f"sha256:{digest}"
 
 
-# Codex R4 P2: closing an evicted provider EAGERLY tears the shared
-# httpx.AsyncClient out from under any in-flight request that's
+# Codex R4 P2 + R5 P1: closing an evicted provider EAGERLY tears the
+# shared httpx.AsyncClient out from under any in-flight request that's
 # still using the old singleton. Delay the close by enough time for
-# any reasonable chat to complete (the provider's read timeout is
-# 60s, so we use 90s as a safe buffer). In a sync test context with
-# no running loop we close immediately because tests don't have
-# overlapping requests on the same provider.
-_EVICTED_PROVIDER_CLOSE_DELAY_SECONDS = 90.0
+# the longest possible single ``chat()`` call to complete — that's a
+# primary-model attempt that consumes its full read timeout, followed
+# by an immediate fallback that consumes another full read timeout.
+# Sourcing the bound from ``MAX_CHAT_DURATION_SECONDS`` (defined next
+# to the timeout itself) means future timeout changes scale this
+# automatically. The +30s buffer covers httpx connect/cleanup overhead
+# and small async scheduling jitter. Sync test contexts with no running
+# loop close immediately (no concurrent requests).
+_EVICTED_PROVIDER_CLOSE_DELAY_SECONDS = MAX_CHAT_DURATION_SECONDS + 30.0
 
 
 async def _delayed_aclose(provider: LLMProvider, delay: float) -> None:

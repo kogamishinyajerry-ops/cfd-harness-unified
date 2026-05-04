@@ -32,10 +32,18 @@ from ui.backend.services.llm_provider.base import (
 logger = logging.getLogger(__name__)
 
 _DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
-_DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_DEFAULT_READ_TIMEOUT_SECONDS = 60.0
+_DEFAULT_TIMEOUT = httpx.Timeout(_DEFAULT_READ_TIMEOUT_SECONDS, connect=10.0)
 _FALLBACK_MAP: dict[DeepSeekModelId, DeepSeekModelId] = {
     "deepseek-v4-pro": "deepseek-v4-flash",
 }
+
+# Maximum wall-clock duration of a single ``chat()`` call, including
+# a primary attempt that times out followed by a fallback retry. The
+# factory uses this to size the post-eviction grace window so a
+# delayed aclose can never tear down an AsyncClient still in use by
+# an in-flight chat.
+MAX_CHAT_DURATION_SECONDS = 2 * _DEFAULT_READ_TIMEOUT_SECONDS
 
 
 class DeepSeekProvider(LLMProvider):
