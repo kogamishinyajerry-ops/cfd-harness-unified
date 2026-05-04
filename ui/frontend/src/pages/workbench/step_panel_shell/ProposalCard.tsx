@@ -78,8 +78,18 @@ export function ProposalCard({
           err.detail !== null &&
           "failing_check" in err.detail
         ) {
-          const d = err.detail as { failing_check: string; tool?: string };
-          detail = `${d.failing_check}${d.tool ? ` (${d.tool})` : ""}`;
+          // V123 R2 P2-2: prefer the underlying typed code
+          // (cell_cap_exceeded / symlink_escape / gmshToFoam_failed
+          // etc) when the dispatcher carries one, so the engineer
+          // sees the actionable remediation hint instead of the
+          // generic 'underlying_service_error' wrapper.
+          const d = err.detail as {
+            failing_check: string;
+            inner_failing_check?: string;
+            tool?: string;
+          };
+          const code = d.inner_failing_check ?? d.failing_check;
+          detail = `${code}${d.tool ? ` (${d.tool})` : ""}`;
         } else {
           detail = err.message;
         }

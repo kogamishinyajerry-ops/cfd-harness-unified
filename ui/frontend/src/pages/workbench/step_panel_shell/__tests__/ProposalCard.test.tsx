@@ -228,6 +228,42 @@ describe("ProposalCard", () => {
     expect(retry).toHaveTextContent("重试");
   });
 
+  it("Apply error prefers inner_failing_check when present (V123 R2 P2-2)", async () => {
+    apiMock.applyAIProposal.mockRejectedValueOnce(
+      new ApiError(422, "apply-proposal failed: cell_cap_exceeded", {
+        failing_check: "underlying_service_error",
+        inner_failing_check: "cell_cap_exceeded",
+        tool: "regenerate_mesh",
+        message:
+          "mesh pipeline failed: cell_cap_exceeded: hard cap exceeded",
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <ProposalCard
+        caseId="ldc"
+        proposal={buildProposal()}
+        modelUsed={null}
+        turnId="a-2"
+      />,
+    );
+    await user.click(screen.getByTestId("proposal-card-accept-0"));
+    await waitFor(() =>
+      expect(screen.getByTestId("proposal-card-0")).toHaveAttribute(
+        "data-card-state",
+        "error",
+      ),
+    );
+    // The actionable inner code surfaces, NOT the wrapping
+    // 'underlying_service_error' string the engineer can't act on.
+    expect(screen.getByTestId("proposal-card-error-0")).toHaveTextContent(
+      "cell_cap_exceeded",
+    );
+    expect(screen.getByTestId("proposal-card-error-0")).not.toHaveTextContent(
+      "underlying_service_error",
+    );
+  });
+
   it("renders audit_warning when the response includes one", async () => {
     apiMock.applyAIProposal.mockResolvedValueOnce(
       buildOkResponse({

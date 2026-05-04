@@ -1035,9 +1035,17 @@ export async function applyAIProposal(
         detail = resp.statusText;
       }
     }
+    // V123 R2 P2-2: prefer inner_failing_check when present so the
+    // ApiError.message surfaces the actionable code (cell_cap_exceeded /
+    // symlink_escape / gmshToFoam_failed etc) rather than the wrapping
+    // 'underlying_service_error'. ProposalCard reads the same field
+    // off detail; both paths now agree.
     const message =
       typeof detail === "object" && detail !== null && "failing_check" in detail
-        ? `apply-proposal failed: ${(detail as { failing_check: string }).failing_check}`
+        ? `apply-proposal failed: ${
+            (detail as { inner_failing_check?: string }).inner_failing_check ??
+            (detail as { failing_check: string }).failing_check
+          }`
         : `apply-proposal failed (${resp.status})`;
     throw new ApiError(resp.status, message, detail);
   }

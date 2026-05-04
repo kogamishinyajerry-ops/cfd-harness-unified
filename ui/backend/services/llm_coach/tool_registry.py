@@ -20,6 +20,7 @@ on ``ToolDescriptor`` — out of V1 scope.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -197,18 +198,24 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
     typed = args  # type: RegenerateMeshArgs (caller already validated)
     assert isinstance(typed, RegenerateMeshArgs)
     case_id = case_dir.name
-    # V123 R1 P3: case_lock unconditionally calls case_dir.mkdir(parents=
-    # True, exist_ok=True). If the imported case dir was deleted between
-    # the route's case_dir.is_dir() check and this handler entering, the
-    # lock would silently RECREATE it as an empty dir, mesh_imported_case
-    # would then surface ``source_not_imported``, and the resurrected
-    # empty dir would leak under user_drafts/imported/. Pre-lock check
-    # closes the common-case race; the narrow remaining TOCTTOU window
-    # (between this check and case_lock's mkdir) is documented and
-    # accepts the same correctness boundary as V108/V109 caller patterns.
-    if not case_dir.is_dir():
+    # V123 R1 P3 / R2 P2-1: case_lock unconditionally calls
+    # case_dir.mkdir(parents=True, exist_ok=True). If the imported case
+    # dir was DELETED between the route's case_dir.is_dir() check and
+    # this handler entering, the lock would silently RECREATE it as an
+    # empty dir and leak garbage under user_drafts/imported/. Pre-lock
+    # check closes that common-case race.
+    #
+    # R2 P2-1 correction: use os.path.lexists, not is_dir(). is_dir()
+    # returns False for symlinks-to-non-dirs and planted regular files,
+    # which would route TAMPERING into case_disappeared instead of the
+    # symlink_escape contract case_lock surfaces. lexists() is True for
+    # any present path (broken symlinks included) and False only when
+    # the path is truly absent — exactly the disappearance-only signal
+    # we want here. Tampered paths fall through to case_lock, which
+    # handles them via O_NOFOLLOW + ENOTDIR/ELOOP → symlink_escape.
+    if not os.path.lexists(case_dir):
         raise ToolDispatchError(
-            f"case_dir {case_dir} does not exist or is not a directory",
+            f"case_dir {case_dir} no longer exists",
             failing_check="underlying_service_error",
             inner_failing_check="case_disappeared",
         )

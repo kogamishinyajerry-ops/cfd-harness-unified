@@ -262,3 +262,42 @@ def test_apply_proposal_422_on_underlying_service_error(tmp_path, monkeypatch):
         assert resp.status_code == 422
         body = resp.json()
         assert body["detail"]["failing_check"] == "underlying_service_error"
+        # V123 R2 P2-2: the underlying typed code must be plumbed
+        # through to the response body so the frontend ProposalCard
+        # can branch on it for actionable remediation.
+        assert body["detail"]["inner_failing_check"] == "lock_acquire_failed"
+
+
+def test_apply_proposal_422_regenerate_mesh_inner_failing_check_plumbed(
+    tmp_path, monkeypatch
+):
+    """V123 R2 P2-2: when the regenerate_mesh path fails with a
+    structured MeshPipelineError, the response body must include
+    detail.inner_failing_check so the frontend ProposalCard surfaces
+    the actionable remediation hint (cell_cap_exceeded etc) instead
+    of a generic 'underlying_service_error'."""
+    _make_case(tmp_path)
+    app = _make_app(tmp_path, monkeypatch)
+
+    from ui.backend.services.llm_coach import tool_registry as registry_module
+    from ui.backend.services.meshing_gmsh import MeshPipelineError
+
+    def fake_mesh(case_id, *, mesh_mode):
+        raise MeshPipelineError("hard cap exceeded", "cell_cap_exceeded")
+
+    monkeypatch.setattr(registry_module, "mesh_imported_case", fake_mesh)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "lid_driven_cavity",
+                "tool": "regenerate_mesh",
+                "args": {"mesh_mode": "power"},
+            },
+        )
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "cell_cap_exceeded"
+        assert "cell_cap_exceeded" in body["detail"]["message"]

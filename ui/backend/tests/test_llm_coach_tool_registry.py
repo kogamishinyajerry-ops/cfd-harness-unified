@@ -518,6 +518,65 @@ def test_regenerate_mesh_case_lock_acquire_failure_translated(
     assert exc_info.value.inner_failing_check == "lock_acquire_failed"
 
 
+def test_regenerate_mesh_planted_symlink_routes_via_case_lock_not_disappeared(
+    tmp_path, monkeypatch
+):
+    """V123 R2 P2-1: a case_dir tampered to a SYMLINK (not absent) must
+    flow through case_lock's O_NOFOLLOW path so the user sees
+    inner_failing_check='symlink_escape', NOT 'case_disappeared'. The
+    pre-check uses os.path.lexists which is True for any present path
+    (including symlinks), so the symlink survives the gate and
+    case_lock surfaces the proper containment error."""
+    real_target = tmp_path / "real_other_dir"
+    real_target.mkdir()
+    case_dir = tmp_path / "ldc_v123_symlink"
+    # Plant a symlink (NOT absent — lexists()=True, is_dir()=True
+    # because the target is a directory; the test's purpose is to
+    # confirm we don't preempt the case_lock symlink-detection path).
+    case_dir.symlink_to(real_target)
+
+    def boom_lock(case_dir):
+        # Stand in for case_lock's real O_NOFOLLOW raise — the actual
+        # case_lock would also raise here; we mock so the test stays
+        # hermetic and doesn't depend on the real symlink-detection
+        # behavior of the host filesystem.
+        from ui.backend.services.case_manifest.locking import CaseLockError
+        raise CaseLockError(
+            f"refusing to use {case_dir}", failing_check="symlink_escape"
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.case_lock", boom_lock
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    # Critical: NOT case_disappeared. The R1 P3 pre-check must let
+    # tampered paths through to case_lock.
+    assert exc_info.value.inner_failing_check == "symlink_escape"
+
+
+def test_regenerate_mesh_planted_regular_file_routes_via_case_lock(
+    tmp_path, monkeypatch
+):
+    """V123 R2 P2-1: a regular file planted at the case_dir path is
+    also tampering, NOT disappearance. Same routing requirement."""
+    case_dir = tmp_path / "ldc_v123_planted_file"
+    case_dir.write_text("not a directory")  # plant a regular file
+
+    def boom_lock(case_dir):
+        from ui.backend.services.case_manifest.locking import CaseLockError
+        raise CaseLockError(
+            f"refusing to use {case_dir}", failing_check="symlink_escape"
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.case_lock", boom_lock
+    )
+    with pytest.raises(ToolDispatchError) as exc_info:
+        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert exc_info.value.inner_failing_check == "symlink_escape"
+
+
 def test_regenerate_mesh_disappeared_case_dir_does_not_resurrect(
     tmp_path, monkeypatch
 ):
