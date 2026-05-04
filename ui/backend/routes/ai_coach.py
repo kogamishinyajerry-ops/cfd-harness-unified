@@ -38,12 +38,16 @@ import stat
 from typing import Any, AsyncIterator
 
 
-# V123 R7 P2: errnos lstat() may raise that map to containment failures
-# (planted file/symlink ancestors, EACCES on tampered perms, ELOOP from
-# a symlink chain). Other OSError errnos (EIO, EMFILE, ENFILE, ...) are
-# real backend failures and must escape as 500 so monitoring sees them.
+# V123 R7 P2 / R8 P2: errnos lstat() may raise that map to containment
+# failures (planted file/symlink ancestors, ACL- or TCC-restricted
+# perms, ELOOP from a symlink chain). EACCES is the POSIX-standard
+# permission-denied; EPERM appears on macOS TCC + some ACL filesystems
+# for the same ancestor-permission class — both must round-trip as
+# symlink_escape so frontend behavior is consistent across platforms.
+# Other OSError errnos (EIO, EMFILE, ENFILE, ...) are real backend
+# failures and must escape as 500 so monitoring sees them.
 _CONTAINMENT_ERRNOS: frozenset[int] = frozenset(
-    {errno.ENOTDIR, errno.ELOOP, errno.EACCES}
+    {errno.ENOTDIR, errno.ELOOP, errno.EACCES, errno.EPERM}
 )
 
 from fastapi import APIRouter, HTTPException, Request

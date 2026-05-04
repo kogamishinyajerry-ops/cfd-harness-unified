@@ -376,6 +376,37 @@ def test_apply_proposal_lstat_eacces_routes_to_symlink_escape(
         assert body["detail"]["inner_failing_check"] == "symlink_escape"
 
 
+def test_apply_proposal_lstat_eperm_routes_to_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R8 P2: macOS TCC + some ACL filesystems raise EPERM (not
+    EACCES) for the same ancestor-permission containment class. Both
+    must round-trip as 422 inner_failing_check='symlink_escape' so
+    frontend behavior is consistent across platforms."""
+    import errno as _errno
+
+    app = _make_app(tmp_path, monkeypatch)
+
+    def boom_lstat(path):
+        raise PermissionError(_errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr("ui.backend.routes.ai_coach.os.lstat", boom_lstat)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_lstat_eperm",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
 def test_apply_proposal_lstat_enotdir_routes_to_symlink_escape(
     tmp_path, monkeypatch
 ):
