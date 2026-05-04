@@ -13,7 +13,7 @@
 //   - history is shipped to streamAICoach on second send (within HISTORY_TURN_LIMIT)
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type {
@@ -245,6 +245,80 @@ describe("AICoachPanel", () => {
     expect(apiMock.streamAICoach).toHaveBeenCalledTimes(1);
     unmount();
     expect(lastHandle().cancelled).toBe(true);
+  });
+
+  it("excludes interrupted assistant turns from history (Codex R1 P1)", async () => {
+    const user = userEvent.setup();
+    render(<AICoachPanel caseId="ldc" />);
+
+    // First send: stream errors mid-flight, NOT a clean done.
+    await user.type(screen.getByTestId("ai-coach-input"), "first question");
+    await user.click(screen.getByTestId("ai-coach-send"));
+    const firstCb = lastHandle().cb;
+    act(() => firstCb.onDelta("partial"));
+    act(() =>
+      firstCb.onError({ kind: "stream", detail: "LLM provider unavailable" }),
+    );
+
+    // Second send: history MUST exclude the failed assistant turn.
+    // The user turn is included (it had real content), but the
+    // assistant turn is dropped because it never reached onDone.
+    await user.type(screen.getByTestId("ai-coach-input"), "retry");
+    await user.click(screen.getByTestId("ai-coach-send"));
+    expect(apiMock.streamAICoach).toHaveBeenCalledTimes(2);
+    const secondReq = lastHandle().request;
+    expect(secondReq.history).toEqual([
+      { role: "user", content: "first question" },
+    ]);
+    // Defensive: no assistant entry — neither the truncated content
+    // nor an empty-content one (which would 422 the backend).
+    expect(secondReq.history?.some((m) => m.role === "assistant")).toBe(false);
+  });
+
+  it("excludes cancelled assistant turns from history (Codex R1 P1)", async () => {
+    const user = userEvent.setup();
+    render(<AICoachPanel caseId="ldc" />);
+
+    // First send: user clicks stop before any delta arrives → empty
+    // assistant turn would 422 the backend (content min_length=1).
+    await user.type(screen.getByTestId("ai-coach-input"), "first question");
+    await user.click(screen.getByTestId("ai-coach-send"));
+    await user.click(await screen.findByTestId("ai-coach-stop"));
+
+    await user.type(screen.getByTestId("ai-coach-input"), "retry");
+    await user.click(screen.getByTestId("ai-coach-send"));
+    const secondReq = lastHandle().request;
+    expect(secondReq.history?.some((m) => m.role === "assistant")).toBe(false);
+    // Empty-content assistant turn must not slip through.
+    expect(secondReq.history?.some((m) => m.content === "")).toBe(false);
+  });
+
+  it("does not submit on Enter while IME is composing (Codex R1 P2)", async () => {
+    const user = userEvent.setup();
+    render(<AICoachPanel caseId="ldc" />);
+    const input = screen.getByTestId("ai-coach-input") as HTMLTextAreaElement;
+    // Use userEvent.type so React's controlled state is updated
+    // (direct .value assignment doesn't trigger React's onChange).
+    await user.type(input, "你好");
+    expect(input.value).toBe("你好");
+
+    // Simulate the IME composition Enter: keydown WITH isComposing=true.
+    // fireEvent.keyDown lets us pass arbitrary KeyboardEvent props.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    // Submission must NOT have happened — Enter is the IME's commit-
+    // candidate gesture for CJK input methods.
+    expect(apiMock.streamAICoach).toHaveBeenCalledTimes(0);
+
+    // The legacy keyCode 229 path covers older browsers / Safari that
+    // don't surface isComposing on the event. Same expectation.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(apiMock.streamAICoach).toHaveBeenCalledTimes(0);
+
+    // After composition completes, a normal Enter (no isComposing flag)
+    // DOES submit.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(apiMock.streamAICoach).toHaveBeenCalledTimes(1);
+    expect(lastHandle().request.user_message).toBe("你好");
   });
 
   it("does not render when caseId is empty (parent gate)", () => {

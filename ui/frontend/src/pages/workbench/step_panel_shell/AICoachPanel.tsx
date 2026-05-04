@@ -30,6 +30,15 @@ interface ChatTurn {
   content: string;
   /** Set on the assistant turn currently being streamed. */
   streaming?: boolean;
+  /**
+   * Codex R1 P1: only assistant turns that finished via onDone are
+   * eligible for history replay on the next request. Cancelled
+   * (abort) or errored streams MUST be excluded — empty content
+   * would 422 the backend (CoachHistoryMessage.content min_length=1)
+   * and truncated content would mislead the LLM with incomplete
+   * prior context. Set ONLY in the onDone callback.
+   */
+  complete?: boolean;
   /** Set on the assistant turn whose final frame reported model="mock" — UI surfaces a "demo mode" pill. */
   mockMode?: boolean;
 }
@@ -95,11 +104,14 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
       streaming: true,
     };
     // Take a snapshot of the prior turns to send as `history`. The
-    // backend rejects role="system" in history (V119 validator), so
-    // we only ship the user/assistant turns we already have. Cap to
-    // HISTORY_TURN_LIMIT to stay well under backend's max_length=32.
+    // backend rejects role="system" in history (V119 validator), and
+    // CoachHistoryMessage.content has min_length=1. Codex R1 P1: a
+    // cancelled or errored assistant turn carries empty/truncated
+    // content — exclude those (only `complete === true` is eligible).
+    // User turns are ALWAYS eligible (they have content by definition
+    // and never enter a streaming state).
     const historyForBackend = turns
-      .filter((t) => !t.streaming)
+      .filter((t) => t.role === "user" || t.complete === true)
       .slice(-HISTORY_TURN_LIMIT)
       .map(({ role, content }) => ({ role, content }));
 
@@ -139,6 +151,11 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
               next[lastIdx] = {
                 ...next[lastIdx],
                 streaming: false,
+                // Codex R1 P1: ONLY successful completion marks the
+                // turn eligible for history replay. Errors and aborts
+                // leave `complete` undefined, so the next send's
+                // history filter drops them.
+                complete: true,
                 mockMode: final.model_used === "mock",
               };
             }
@@ -178,7 +195,15 @@ export function AICoachPanel({ caseId }: AICoachPanelProps) {
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Enter sends; Shift+Enter inserts newline.
-      if (e.key === "Enter" && !e.shiftKey) {
+      // Codex R1 P2: when a CJK IME is mid-composition, the Enter
+      // key commits the active candidate AND fires keydown — we
+      // must not interpret that as "submit", or Chinese/Japanese/
+      // Korean engineers send partial pinyin/romaji instead of
+      // their actual prompt. `isComposing` (and the legacy
+      // `keyCode === 229`) flag this case.
+      const isComposing =
+        e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
+      if (e.key === "Enter" && !e.shiftKey && !isComposing) {
         e.preventDefault();
         send();
       }
