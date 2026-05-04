@@ -18,10 +18,7 @@ from ui.backend.services.llm_provider.base import (
     LLMProvider,
     MockLLMProvider,
 )
-from ui.backend.services.llm_provider.deepseek import (
-    MAX_CHAT_DURATION_SECONDS,
-    DeepSeekProvider,
-)
+from ui.backend.services.llm_provider.deepseek import DeepSeekProvider
 
 logger = logging.getLogger(__name__)
 
@@ -53,47 +50,31 @@ def _fingerprint(api_key: str) -> str:
     return f"sha256:{digest}"
 
 
-# Codex R4 P2 + R5 P1: closing an evicted provider EAGERLY tears the
-# shared httpx.AsyncClient out from under any in-flight request that's
-# still using the old singleton. Delay the close by enough time for
-# the longest possible single ``chat()`` call to complete — that's a
-# primary-model attempt that consumes its full read timeout, followed
-# by an immediate fallback that consumes another full read timeout.
-# Sourcing the bound from ``MAX_CHAT_DURATION_SECONDS`` (defined next
-# to the timeout itself) means future timeout changes scale this
-# automatically. The +30s buffer covers httpx connect/cleanup overhead
-# and small async scheduling jitter. Sync test contexts with no running
-# loop close immediately (no concurrent requests).
-_EVICTED_PROVIDER_CLOSE_DELAY_SECONDS = MAX_CHAT_DURATION_SECONDS + 30.0
-
-
-async def _delayed_aclose(provider: LLMProvider, delay: float) -> None:
+async def _safe_aclose(provider: LLMProvider) -> None:
     aclose = getattr(provider, "aclose", None)
     if aclose is None:
         return
     try:
-        await asyncio.sleep(delay)
         await aclose()
     except Exception:
         logger.debug(
-            "Best-effort delayed aclose of evicted provider failed", exc_info=True
+            "Best-effort aclose of evicted provider failed", exc_info=True
         )
 
 
 def _schedule_aclose(provider: LLMProvider) -> None:
     """Close an evicted provider's underlying client.
 
-    Codex R3 P2-2: same-length key rotations trigger a cache rebuild;
-    without explicit cleanup the old DeepSeekProvider's persistent
-    AsyncClient leaked.
-
-    Codex R4 P2: cleanup must wait for in-flight requests on the old
-    singleton to finish before the AsyncClient is torn down. We
-    schedule the close on the running event loop with a fixed delay
-    that exceeds the per-request read timeout, so any chat that
-    already grabbed a reference to the evicted provider has time to
-    complete. Sync test paths close immediately (no concurrent
-    requests in those scenarios).
+    History (Codex R3 P2-2 → R4 P2 → R5 P1 → R6 P2): closing on
+    eviction is necessary (R3) but must not race with in-flight
+    requests (R4-R6). Time-based delays are intrinsically heuristic
+    — connect / read / write / pool timeouts compound across primary
+    + fallback chains and any fixed bound is a guess. The provider
+    now refcounts in-flight chats and ``aclose`` drains naturally
+    before tearing the client down, so the factory just hands the
+    evicted provider's ``aclose`` to the running loop and trusts it
+    to wait for quiet state. Sync test/cleanup paths block on the
+    drain in a fresh event loop.
     """
     aclose = getattr(provider, "aclose", None)
     if aclose is None:
@@ -103,13 +84,8 @@ def _schedule_aclose(provider: LLMProvider) -> None:
     except RuntimeError:
         loop = None
     if loop is not None and loop.is_running():
-        loop.create_task(
-            _delayed_aclose(provider, _EVICTED_PROVIDER_CLOSE_DELAY_SECONDS)
-        )
+        loop.create_task(_safe_aclose(provider))
         return
-    # No running loop — sync test/cleanup path. Close immediately;
-    # callers in this scenario don't have concurrent in-flight uses
-    # of the evicted provider.
     try:
         asyncio.run(aclose())
     except Exception:

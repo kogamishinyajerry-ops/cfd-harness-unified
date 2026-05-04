@@ -442,6 +442,77 @@ def test_deepseek_aclose_is_idempotent():
     _run(provider.aclose())  # no error
 
 
+def test_deepseek_aclose_drains_in_flight_chat():
+    """Codex R6 P2 regression: aclose must wait for in-flight chats
+    to finish before closing the underlying client. A naive close
+    would race with an active request and tear down the AsyncClient
+    mid-call. The drain refcount makes aclose deterministic."""
+    drain_observed: list[str] = []
+
+    async def scenario():
+        # A handler that suspends so we can observe the drain ordering.
+        gate = asyncio.Event()
+
+        async def handler(_request: httpx.Request) -> httpx.Response:
+            await gate.wait()
+            return _make_response(200, _success_body("late"))
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as injected:
+            # Use an injected client so the test owns its lifetime;
+            # provider's aclose still drains _inflight regardless.
+            provider = DeepSeekProvider(api_key="sk-test", client=injected)
+            chat_task = asyncio.create_task(
+                provider.chat(
+                    ChatRequest(
+                        messages=[ChatMessage(role="user", content="hi")],
+                        model="deepseek-v4-flash",
+                    )
+                )
+            )
+            # Give the chat a moment to start and enter inflight.
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert provider._inflight == 1, "chat should be inflight"
+
+            # Kick off aclose; it should NOT complete while inflight > 0.
+            close_task = asyncio.create_task(provider.aclose())
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert not close_task.done(), "aclose must wait for drain"
+            drain_observed.append("close-waiting")
+
+            # Release the chat → drain → aclose completes.
+            gate.set()
+            await chat_task
+            await close_task
+            drain_observed.append("close-done")
+
+    asyncio.run(scenario())
+    assert drain_observed == ["close-waiting", "close-done"]
+
+
+def test_deepseek_chat_after_aclose_raises_config_error():
+    """Once a provider is draining, new chat() calls fail fast so
+    they don't slip in between the drain decision and the close."""
+
+    async def scenario():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: _make_response(200, _success_body()))
+        ) as injected:
+            provider = DeepSeekProvider(api_key="sk-test", client=injected)
+            await provider.aclose()
+            with pytest.raises(LLMProviderError):
+                await provider.chat(
+                    ChatRequest(
+                        messages=[ChatMessage(role="user", content="hi")],
+                        model="deepseek-v4-flash",
+                    )
+                )
+
+    asyncio.run(scenario())
+
+
 def test_deepseek_aclose_does_not_close_injected_client():
     """If the caller injected an httpx client (test path), the
     provider must NOT close it on aclose() — the caller owns its
