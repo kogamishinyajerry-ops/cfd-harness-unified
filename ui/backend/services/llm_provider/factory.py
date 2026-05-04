@@ -8,6 +8,7 @@ that exercise the singleton lifecycle call it in a fixture.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -33,12 +34,19 @@ _cached_key_fingerprint: str | None = None
 
 
 def _fingerprint(api_key: str) -> str:
-    """Stable but non-revealing tag of the active key. ``"none"`` for
-    an absent key; ``"set:N"`` where N is the key length for a
-    present one. Never includes any key bytes."""
+    """Stable but non-revealing tag of the active key. Codex R2 P2:
+    a length-only fingerprint collides on same-length key rotations
+    (DeepSeek keys are uniformly 35 chars, so two distinct keys would
+    cache-hit). Use a SHA-256 of the key bytes — distinguishes any
+    distinct keys; never reveals key contents in cache state.
+
+    Returns ``"none"`` when no key is set, ``"sha256:<64hex>"`` when
+    set. The fingerprint is held only in-process memory (cached for
+    invalidation comparison) and never logged."""
     if not api_key:
         return "none"
-    return f"set:{len(api_key)}"
+    digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
 
 
 def get_default_provider() -> LLMProvider:

@@ -50,16 +50,38 @@ _LOOPBACK_HOSTS = frozenset(
     {"127.0.0.1", "::1", "localhost", "testclient", None, ""}
 )
 
+# Codex R2 P1: a same-host reverse proxy presents ``client.host =
+# 127.0.0.1`` even when the real caller is remote, so a peer-only
+# loopback check is not sufficient. Presence of any of these forwarded
+# headers signals a proxy chain — refuse to treat that request as
+# loopback unless the operator has explicitly opted in via env.
+_PROXY_FORWARDED_HEADERS = (
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-real-ip",
+    "forwarded",
+)
+
 _NON_LOOPBACK_OVERRIDE_ENV = "AI_CHAT_ALLOW_NON_LOOPBACK"
+
+
+def _request_has_proxy_headers(request: Request) -> bool:
+    return any(h in request.headers for h in _PROXY_FORWARDED_HEADERS)
 
 
 def _is_loopback_request(request: Request) -> bool:
     client = request.client
     if client is None:
-        # No client info available (testclient + some uvicorn modes).
-        # Treat as loopback — testclient is by definition in-process.
-        return True
-    return client.host in _LOOPBACK_HOSTS
+        # No client info (testclient + some uvicorn modes). Only
+        # treat as loopback when there are also no proxy-forwarded
+        # headers; otherwise something is in front of us.
+        return not _request_has_proxy_headers(request)
+    if client.host not in _LOOPBACK_HOSTS:
+        return False
+    # Peer is loopback BUT it could be a same-host reverse proxy.
+    # Codex R2 P1: any forwarded header → assume proxy → not loopback.
+    return not _request_has_proxy_headers(request)
 
 
 def _non_loopback_override_enabled() -> bool:

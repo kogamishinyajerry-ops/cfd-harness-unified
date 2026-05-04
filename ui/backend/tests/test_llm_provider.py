@@ -315,6 +315,25 @@ def test_factory_rebuilds_when_env_changes(monkeypatch):
     assert isinstance(p3, MockLLMProvider)
 
 
+def test_factory_rebuilds_on_same_length_key_rotation(monkeypatch):
+    """Codex R2 P2 regression: a SHA-256 fingerprint distinguishes
+    distinct keys regardless of length. The previous length-only
+    fingerprint collided on same-length rotations (DeepSeek keys are
+    uniformly 35 chars), causing later chats to keep sending the
+    stale credential after a rotation."""
+    reset_default_provider()
+    # Two distinct keys with identical length.
+    key_a = "sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"  # 35 chars
+    key_b = "sk-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"  # 35 chars
+    assert len(key_a) == len(key_b)
+    assert key_a != key_b
+    monkeypatch.setenv("DEEPSEEK_API_KEY", key_a)
+    p1 = get_default_provider()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", key_b)
+    p2 = get_default_provider()
+    assert p1 is not p2, "same-length key rotation must invalidate cache"
+
+
 def test_factory_reset_clears_cache(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-cache-test")
     reset_default_provider()

@@ -287,3 +287,68 @@ def test_ai_chat_allows_loopback_caller_by_default():
     client = TestClient(_make_app(provider))
     resp = client.post("/api/ai-chat", json=_ok_payload())
     assert resp.status_code == 200
+
+
+# ────────── Codex R2 P1: same-host reverse proxy bypass ──────────
+
+
+def test_ai_chat_rejects_loopback_peer_with_xforwarded_for(monkeypatch):
+    """nginx/Caddy on the same host presents client.host=127.0.0.1
+    even when the real caller is remote. X-Forwarded-For signals a
+    proxy chain → reject as non-loopback. R2 P1."""
+    monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
+    provider = _StubProvider(
+        response=ChatResponse(content="should not reach", model_used="x")
+    )
+    client = TestClient(_make_app(provider))
+    resp = client.post(
+        "/api/ai-chat",
+        json=_ok_payload(),
+        headers={"X-Forwarded-For": "203.0.113.42"},
+    )
+    assert resp.status_code == 403
+    assert len(provider.calls) == 0
+
+
+def test_ai_chat_rejects_loopback_peer_with_x_real_ip(monkeypatch):
+    monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
+    provider = _StubProvider(
+        response=ChatResponse(content="should not reach", model_used="x")
+    )
+    client = TestClient(_make_app(provider))
+    resp = client.post(
+        "/api/ai-chat",
+        json=_ok_payload(),
+        headers={"X-Real-IP": "203.0.113.42"},
+    )
+    assert resp.status_code == 403
+
+
+def test_ai_chat_rejects_loopback_peer_with_forwarded_header(monkeypatch):
+    monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
+    provider = _StubProvider(
+        response=ChatResponse(content="should not reach", model_used="x")
+    )
+    client = TestClient(_make_app(provider))
+    resp = client.post(
+        "/api/ai-chat",
+        json=_ok_payload(),
+        headers={"Forwarded": 'for="203.0.113.42"'},
+    )
+    assert resp.status_code == 403
+
+
+def test_ai_chat_allows_proxy_chain_with_explicit_override(monkeypatch):
+    """Operator explicitly opted in to a trusted reverse proxy with
+    its own auth in front."""
+    monkeypatch.setenv("AI_CHAT_ALLOW_NON_LOOPBACK", "1")
+    provider = _StubProvider(
+        response=ChatResponse(content="ok", model_used="deepseek-v4-pro")
+    )
+    client = TestClient(_make_app(provider))
+    resp = client.post(
+        "/api/ai-chat",
+        json=_ok_payload(),
+        headers={"X-Forwarded-For": "203.0.113.42"},
+    )
+    assert resp.status_code == 200
