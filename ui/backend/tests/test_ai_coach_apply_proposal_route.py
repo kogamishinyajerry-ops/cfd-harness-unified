@@ -268,6 +268,58 @@ def test_apply_proposal_422_on_underlying_service_error(tmp_path, monkeypatch):
         assert body["detail"]["inner_failing_check"] == "lock_acquire_failed"
 
 
+def test_apply_proposal_planted_regular_file_routes_to_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R3 P2: a tampered case_dir (regular file planted at the
+    case-id path) must NOT be rejected at the route as 404
+    case_not_found. The route's pre-check uses os.path.lexists so
+    tampered paths fall through to dispatch + case_lock, which surface
+    them as 422 with inner_failing_check='symlink_escape', matching
+    V108/V109's tamper-path contract."""
+    # Plant a regular file at the case-id path BEFORE _make_app so
+    # the route's pre-check sees the planted file.
+    planted = tmp_path / "ldc_planted"
+    planted.write_text("not a directory")
+    app = _make_app(tmp_path, monkeypatch)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_planted",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        # Tampered path → fell through to dispatch → case_lock raised
+        # symlink_escape → 422 with inner_failing_check.
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
+def test_apply_proposal_truly_absent_case_dir_still_returns_404(
+    tmp_path, monkeypatch
+):
+    """V123 R3 P2 negative: a TRULY absent case_id (lexists()=False) must
+    still return the existing 404 case_not_found contract — the lexists
+    switch must not erode the absent-vs-tampered distinction."""
+    app = _make_app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "totally_absent",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["failing_check"] == "case_not_found"
+
+
 def test_apply_proposal_422_regenerate_mesh_inner_failing_check_plumbed(
     tmp_path, monkeypatch
 ):

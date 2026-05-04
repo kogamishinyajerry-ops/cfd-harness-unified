@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Request
@@ -435,7 +436,15 @@ async def ai_coach_apply_proposal(
             detail={"failing_check": "bad_case_id", "case_id": body.case_id},
         )
     case_dir = IMPORTED_DIR / body.case_id
-    if not case_dir.is_dir():
+    # V123 R3 P2: use os.path.lexists, not is_dir(). is_dir() returns
+    # False for tampered paths (planted regular files, broken symlinks,
+    # symlinks-to-non-dirs), which would surface a generic 404
+    # case_not_found and shadow the symlink_escape contract case_lock
+    # produces inside dispatch. lexists() is True for any present path
+    # so tampered paths fall through to dispatch + case_lock (which
+    # raise CaseLockError(symlink_escape) → 422 inner_failing_check=
+    # symlink_escape). Only TRULY absent paths still get 404.
+    if not os.path.lexists(case_dir):
         raise HTTPException(
             status_code=404,
             detail={"failing_check": "case_not_found", "case_id": body.case_id},
