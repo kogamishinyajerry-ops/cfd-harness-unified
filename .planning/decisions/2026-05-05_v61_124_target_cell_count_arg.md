@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-124
 title: Mesh-regenerate · `target_cell_count` arg · AI proposes specific cell counts not just beginner/power presets
-status: Proposed (2026-05-05 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + AI-driven case-mutation triggers + new tool argument that mutates polyMesh files)
-codex_tool_report_path: reports/codex_tool_reports/v61_124_r1_chain.md (to be created)
+status: Accepted (2026-05-05 · Codex CRS gpt-5.4 high R3 APPROVE clean at 2c124a3 · 3-round chain · within predicted 1-2 round band as the §L1 calibration test for "tool registry append, no contract crossing" baseline)
+anchor_commit: 2c124a3
+codex_tool_report_path: reports/codex_tool_reports/v61_124_r1_chain.md
 codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 sustained-86gs-instability protocol — empirically validated at V123 R8 to recover within 25min on both-relay outages)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-05
