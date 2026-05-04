@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/frontend/src/pages/workbench/StepPanelShell.tsx:111-230 (STEPS config · per-step subNodes[] declaration lands here)
   - ui/frontend/src/pages/workbench/step_panel_shell/__tests__/StepTree.test.tsx (existing 6-test contract MUST stay green; new tests added for expand/collapse + sub-node rendering)
 counter_impact: +1 (autonomous_governance: true · UI hierarchy refactor on existing component, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a high-risk PR (no irreversible state, no API contract change, no operator endpoint), not arc-size retro, not a governance rule-change DEC · Kogami SKIP per DEC-V61-087 §4.2. Codex pre-merge MANDATORY per RETRO-V61-001 multi-file frontend + UI interaction-mode change triggers.)
-notion_sync_status: pending (queued for Codex APPROVE)
+notion_sync_status: synced 2026-05-04 (https://www.notion.so/DEC-V61-117-StepTree-Fluent-style-hierarchical-tree-expandable-parent-rows-indented-sub-node-356c68942bed814c90cee3677af56885)
 
 ---
 
