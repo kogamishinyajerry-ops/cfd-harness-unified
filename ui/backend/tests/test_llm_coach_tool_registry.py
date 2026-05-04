@@ -826,6 +826,40 @@ def test_classify_cell_count_target_mode_still_enforces_hard_cap():
     assert "hard cap" in verdict.rejection_reason
 
 
+def test_mesh_summary_schema_serializes_target_mode():
+    """V124 R2 P1: MeshSummary.mesh_mode_used MUST accept 'target' so a
+    caller plumbing target_cell_count through /api/import/{case_id}/mesh
+    (or any other route that builds MeshSummary from MeshResult)
+    doesn't 500 on response-model validation. The R2 finding caught
+    that the schema's MeshMode literal was scoped to beginner/power
+    only — the schema-side expansion is the load-bearing fix."""
+    from ui.backend.schemas.mesh_imported import MeshSummary
+
+    s = MeshSummary(
+        cell_count=10_000_000,
+        face_count=60_000_000,
+        point_count=12_000_000,
+        mesh_mode_used="target",
+        polyMesh_path="/tmp/x/constant/polyMesh",
+        msh_path="/tmp/x/imported.msh",
+        generation_time_s=120.5,
+        warning=None,
+    )
+    assert s.mesh_mode_used == "target"
+
+
+def test_mesh_request_schema_rejects_target_mode():
+    """V124 R2 P1 negative control: MeshRequest must NOT accept
+    'target' as input — the import-mesh POST route does not yet
+    plumb target_cell_count, and accepting 'target' as a mesh_mode
+    input would silently fall through to default beginner sizing.
+    Splitting input vs output literals keeps that boundary honest."""
+    from ui.backend.schemas.mesh_imported import MeshRequest
+
+    with pytest.raises(ValueError):
+        MeshRequest(mesh_mode="target")  # type: ignore[arg-type]
+
+
 def test_classify_cell_count_beginner_soft_warning_still_fires():
     """V124 R1 P2 negative control: the V123 beginner-mode soft warning
     contract is unchanged — beginner > 5M still warns."""

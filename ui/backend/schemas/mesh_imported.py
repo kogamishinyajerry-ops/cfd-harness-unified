@@ -6,7 +6,20 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-MeshMode = Literal["beginner", "power"]
+# Input modes accepted by the /api/import/{case_id}/mesh request.
+# "target" is intentionally NOT in this enum — the import-mesh POST
+# route does not yet accept target_cell_count; that path is currently
+# only reachable via the V124 AI-coach regenerate_mesh tool, which
+# uses its own RegenerateMeshArgs schema (see tool_registry.py).
+MeshRequestMode = Literal["beginner", "power"]
+
+# Output modes the /api/import/{case_id}/mesh response can report.
+# Includes "target" (DEC-V61-124) because mesh_imported_case's
+# pipeline labels target_cell_count runs honestly. R2 P1 fix:
+# without this expansion, a future caller plumbing target_cell_count
+# through to this route would 500 on response-model validation.
+MeshMode = Literal["beginner", "power", "target"]
+
 FailingCheck = Literal[
     "case_not_found",
     "source_not_imported",
@@ -17,7 +30,7 @@ FailingCheck = Literal[
 
 
 class MeshRequest(BaseModel):
-    mesh_mode: MeshMode = Field(
+    mesh_mode: MeshRequestMode = Field(
         default="beginner",
         description="Mesh sizing tier. beginner is the default; power "
         "opts in to the finer characteristic length (D6).",
