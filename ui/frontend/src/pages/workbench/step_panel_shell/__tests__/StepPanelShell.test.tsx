@@ -466,6 +466,68 @@ describe("StepPanelShell · case-switch step-state reset (Codex round-13 P1)", (
     );
   });
 
+  // V61-117 Codex R5 P2: cross-case state pollution. StepTree's local
+  // expansion + manuallyTouchedRef must reset when the engineer
+  // switches /workbench/case/:caseId — keying StepTree on caseId
+  // forces a remount with a fresh per-case slate.
+  it("V61-117 R5 P2: switching cases resets StepTree expansion (no manual-touch leak)", async () => {
+    caseExists.set("case_a", true);
+    caseExists.set("case_b", true);
+    meshAvailable.set("case_a", false);
+    meshAvailable.set("case_b", false);
+
+    function NavHelper() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          data-testid="nav-to-b"
+          onClick={() => navigate("/workbench/case/case_b?step=3")}
+        >
+          go case_b
+        </button>
+      );
+    }
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/workbench/case/case_a?step=3"]}>
+          <NavHelper />
+          <Routes>
+            <Route
+              path="/workbench/case/:caseId"
+              element={<StepPanelShell />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Step 3 is auto-expanded on mount in case_a.
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+    // User collapses Step 3 — marks it manually-touched in case_a's
+    // StepTree instance.
+    await user.click(screen.getByTestId("step-tree-chevron-3"));
+    expect(
+      screen.queryByTestId("step-tree-subnodes-3"),
+    ).not.toBeInTheDocument();
+    // Switch to case_b at step 3.
+    await user.click(screen.getByTestId("nav-to-b"));
+    // Without the per-case key, manuallyTouched would still contain
+    // step 3 from case_a, suppressing the auto-expand for case_b.
+    // With the fix, StepTree remounts and step 3 auto-expands fresh.
+    await waitFor(() => {
+      expect(screen.getByTestId("top-bar-case-id")).toHaveTextContent(
+        "case_b",
+      );
+    });
+    expect(screen.getByTestId("step-tree-subnodes-3")).toBeInTheDocument();
+  });
+
   it("Codex round-15 P3: valid caseId lifts Step 1 to 'completed' on mount", async () => {
     caseExists.set("real_case", true);
     meshAvailable.set("real_case", false);

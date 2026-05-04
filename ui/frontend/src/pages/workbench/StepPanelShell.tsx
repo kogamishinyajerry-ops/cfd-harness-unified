@@ -488,7 +488,14 @@ export function StepPanelShell() {
       <TopBar caseId={caseId} />
       <div className="flex min-h-0 flex-1">
         <div className="w-44 shrink-0 border-r border-surface-800 bg-surface-950/60">
+          {/* Codex R5 P2 fix (V61-117): keying StepTree by caseId
+           *  forces a remount on case switch so the StepTree's local
+           *  expansion state + manuallyTouched ref reset to a fresh
+           *  per-case slate. Without this, manual toggles from case A
+           *  leak into case B's disclosure logic. Same hard-remount
+           *  pattern used for Step3StateProvider above. */}
           <StepTree
+            key={caseId}
             steps={STEPS}
             currentStepId={currentStepId}
             stepStates={stepStates}
