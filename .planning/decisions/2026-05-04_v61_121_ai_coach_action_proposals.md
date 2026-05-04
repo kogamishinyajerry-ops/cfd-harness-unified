@@ -1,9 +1,9 @@
 ---
 decision_id: DEC-V61-121
 title: AI coach action proposals · structured PROPOSAL delimiter + approval UX + bounded tool registry
-status: Proposed (2026-05-04 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend+frontend + new operator-facing surface + AI-driven case-mutation triggers)
-codex_tool_report_path: reports/codex_tool_reports/v61_121_r1_chain.md (to be created)
-codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 sustained-86gs-instability protocol; 86gs xhigh attempted only after 24h stable)
+status: Accepted (2026-05-04 · Codex pre-merge 2-round chain APPROVE on commit 1218fd2 [R1 P2+P2+P3 → R2 clean]; chain report at reports/codex_tool_reports/v61_121_r1_chain.md; user 2026-05-04 mandate "先打 #1" covers acceptance flip · the AI now has hands · differentiation step vs Fluent/StarCCM is operational)
+codex_tool_report_path: reports/codex_tool_reports/v61_121_r1_chain.md
+codex_review_relay: CRS gpt-5.4 high (R1 + R2 · 86gs not attempted per V61-119 §L2 default-to-CRS protocol; R1 hit one mid-review interrupt resolved on retry without further fallback)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User 2026-05-04 mandate "先打 #1" — second half of the 2-DEC arc F→G that closes the foundation→differentiation gap. V120 made the AI coach VISIBLE; V121 gives it HANDS. This is the actual "AI 真实介入" deliverable the user has been asking for since 2026-05-04 design discussion.
@@ -22,7 +22,7 @@ parent_artifacts:
   - ui/frontend/src/api/client.ts (V120 streamAICoach · V121 adds `applyAIProposal()` method)
 counter_impact: +1 (autonomous_governance: true · new backend route + new UI surface element + new tool dispatch + AI-mediated case mutation, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a governance-rule change. High-risk PR check: AI-driven case-mutation is **new safety surface** — RETRO-V61-001 risk-tier dictates Codex pre-merge MANDATORY. Kogami SKIP per DEC-V61-087 §4.2 — feature DEC, not governance rule change. Counter v6.1 reaches 80; arc-size mini-retro for V120+V121 pair owed to RETRO follow-up queue per ongoing user-mandate deferral.)
 notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
-self_estimated_pass_rate: 35% (5-7 rounds expected · AI-mediated mutation introduces 5 new risk axes simultaneously: prompt-injection in PROPOSAL parsing, idempotency on Accept double-click, audit-trail completeness, tool-arg validation strictness, error-state recovery in the UI · this is NOT a scope-down DEC because the central feature IS the action surface · cascade-dimension count is intrinsically multi-axis)
+self_estimated_pass_rate: 35% (predicted 5-7 rounds) → ACTUAL 2 rounds (well-calibrated overestimate by 2.5x · V1 scope-down (delimiter protocol vs OpenAI tool-calling spec, single tool, no multi-step orchestration, no Edit-before-Accept) collapsed multi-axis risk to 3 independent single-axis findings: audit lock, unclosed-fence parsing, ConfigDict(extra="forbid") · see chain report §L1 for the now-3-arcs-confirmed scope-down anti-cascade pattern)
 
 ---
 
