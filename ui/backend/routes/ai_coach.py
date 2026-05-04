@@ -233,6 +233,13 @@ async def ai_coach_stream(
         terminal SSE error event then close. Disconnect detection: poll
         ``http_request.is_disconnected`` between yields so we don't
         keep pulling chunks for a client that's gone away.
+
+        Codex R2 P2: every early-return path (terminal-as-first-chunk,
+        empty-stream synthetic done, client disconnect, mid-stream
+        error) MUST close ``stream_iter`` so the underlying
+        ``httpx.AsyncClient.stream()`` context exits deterministically
+        instead of waiting on GC. The try/finally wraps the entire
+        body so ``aclose()`` runs regardless of exit path.
         """
         try:
             if first_chunk is not None:
@@ -310,6 +317,22 @@ async def ai_coach_stream(
                     "done": True,
                 }
             )
+        finally:
+            # Codex R2 P2: deterministic cleanup of the upstream
+            # iterator on every exit path. ``aclose`` is idempotent
+            # — Python async generators tolerate a second call as
+            # a no-op, and httpx.AsyncClient.stream's __aexit__ is
+            # idempotent too. Skip when the iterator was never
+            # opened (defensive — should always exist by this point).
+            aclose = getattr(stream_iter, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:
+                    logger.exception(
+                        "/api/ai-coach/stream upstream aclose failed; "
+                        "stream socket will close on GC"
+                    )
 
     return StreamingResponse(
         event_source(),

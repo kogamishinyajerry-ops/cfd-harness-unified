@@ -400,6 +400,63 @@ def test_ai_coach_stream_unknown_model_rejected():
         assert resp.status_code == 400
 
 
+class _AcloseTrackingProvider(LLMProvider):
+    """Records whether the upstream iterator's aclose was called.
+    Codex R2 P2: deterministic cleanup on every exit path."""
+
+    def __init__(self, chunks: list[ChatStreamChunk]):
+        self._chunks = chunks
+        self.aclose_called = False
+
+    async def chat(self, request: ChatRequest) -> ChatResponse:
+        raise NotImplementedError
+
+    def chat_stream(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatStreamChunk]:
+        chunks = self._chunks
+        outer = self
+
+        async def gen() -> AsyncIterator[ChatStreamChunk]:
+            try:
+                for c in chunks:
+                    yield c
+            finally:
+                outer.aclose_called = True
+
+        return gen()
+
+
+def test_ai_coach_stream_aclose_called_on_terminal_first_chunk():
+    """Codex R2 P2: when the FIRST chunk is already done=True, the
+    route still must close the upstream iterator (not rely on GC)."""
+    provider = _AcloseTrackingProvider(
+        chunks=[ChatStreamChunk(delta="", done=True, model_used="deepseek-v4-pro")]
+    )
+    app = _make_app(provider, analyzer_result=_make_report())
+    with TestClient(app) as client:
+        resp = client.post("/api/ai-coach/stream", json=_ok_body())
+        # Force the response to be fully consumed so the generator's
+        # finally clause runs.
+        list(resp.iter_lines())
+    assert provider.aclose_called is True
+
+
+def test_ai_coach_stream_aclose_called_after_normal_completion():
+    provider = _AcloseTrackingProvider(
+        chunks=[
+            ChatStreamChunk(delta="a", model_used="deepseek-v4-pro"),
+            ChatStreamChunk(delta="b", model_used="deepseek-v4-pro"),
+            ChatStreamChunk(delta="", done=True, model_used="deepseek-v4-pro"),
+        ]
+    )
+    app = _make_app(provider, analyzer_result=_make_report())
+    with TestClient(app) as client:
+        resp = client.post("/api/ai-coach/stream", json=_ok_body())
+        list(resp.iter_lines())
+    assert provider.aclose_called is True
+
+
 def test_ai_coach_stream_response_disables_proxy_buffering():
     """Cache-Control / X-Accel-Buffering headers are necessary so
     nginx doesn't buffer the stream until close."""
