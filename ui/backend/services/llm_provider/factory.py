@@ -50,17 +50,44 @@ def _fingerprint(api_key: str) -> str:
     return f"sha256:{digest}"
 
 
-def _schedule_aclose(provider: LLMProvider) -> None:
-    """Close an evicted provider's underlying client on the running
-    event loop, if one exists. Codex R3 P2-2: same-length key
-    rotations now trigger a cache rebuild, and without this the old
-    DeepSeekProvider's persistent AsyncClient leaked.
+# Codex R4 P2: closing an evicted provider EAGERLY tears the shared
+# httpx.AsyncClient out from under any in-flight request that's
+# still using the old singleton. Delay the close by enough time for
+# any reasonable chat to complete (the provider's read timeout is
+# 60s, so we use 90s as a safe buffer). In a sync test context with
+# no running loop we close immediately because tests don't have
+# overlapping requests on the same provider.
+_EVICTED_PROVIDER_CLOSE_DELAY_SECONDS = 90.0
 
-    Production calls ``get_default_provider()`` from inside async
-    request handlers, so a running loop is the common case. When no
-    loop is running (e.g. tests calling the factory in a sync
-    context), we fall back to ``asyncio.run`` for the cleanup so
-    connections don't accumulate even outside FastAPI."""
+
+async def _delayed_aclose(provider: LLMProvider, delay: float) -> None:
+    aclose = getattr(provider, "aclose", None)
+    if aclose is None:
+        return
+    try:
+        await asyncio.sleep(delay)
+        await aclose()
+    except Exception:
+        logger.debug(
+            "Best-effort delayed aclose of evicted provider failed", exc_info=True
+        )
+
+
+def _schedule_aclose(provider: LLMProvider) -> None:
+    """Close an evicted provider's underlying client.
+
+    Codex R3 P2-2: same-length key rotations trigger a cache rebuild;
+    without explicit cleanup the old DeepSeekProvider's persistent
+    AsyncClient leaked.
+
+    Codex R4 P2: cleanup must wait for in-flight requests on the old
+    singleton to finish before the AsyncClient is torn down. We
+    schedule the close on the running event loop with a fixed delay
+    that exceeds the per-request read timeout, so any chat that
+    already grabbed a reference to the evicted provider has time to
+    complete. Sync test paths close immediately (no concurrent
+    requests in those scenarios).
+    """
     aclose = getattr(provider, "aclose", None)
     if aclose is None:
         return
@@ -69,11 +96,13 @@ def _schedule_aclose(provider: LLMProvider) -> None:
     except RuntimeError:
         loop = None
     if loop is not None and loop.is_running():
-        loop.create_task(aclose())
+        loop.create_task(
+            _delayed_aclose(provider, _EVICTED_PROVIDER_CLOSE_DELAY_SECONDS)
+        )
         return
-    # No running loop — run aclose synchronously in a fresh loop.
-    # Swallow any error: cleanup of an evicted provider should never
-    # break the live request that triggered the rebuild.
+    # No running loop — sync test/cleanup path. Close immediately;
+    # callers in this scenario don't have concurrent in-flight uses
+    # of the evicted provider.
     try:
         asyncio.run(aclose())
     except Exception:

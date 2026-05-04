@@ -93,26 +93,25 @@ def _client_label_for_log(request: Request) -> str:
 
     Codex R3 P2-1: when a same-host reverse proxy trips the guard,
     ``request.client.host`` is the loopback proxy peer, not the real
-    remote caller. The warning/info logs need the X-Forwarded-For /
-    X-Real-IP / Forwarded value so operators can track who actually
-    hit the endpoint. We surface the forwarded address along with
-    the immediate peer so the audit trail records both hops.
+    remote caller. The warning/info logs need the proxy-forwarded
+    headers so operators can track who actually hit the endpoint.
+
+    Codex R4 P1: do NOT pick a single forwarded hop as "the caller" —
+    XFF is fully client-controlled and the leftmost entry can be
+    spoofed, so an honest audit log records the entire chain
+    verbatim. Operators interpret using their own knowledge of how
+    many trusted proxies sit in front of the app.
     """
+    parts: list[str] = []
     immediate_peer = request.client.host if request.client else "unknown"
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        # XFF format is "client, proxy1, proxy2" — first hop is the
-        # original caller per RFC convention.
-        original = forwarded_for.split(",")[0].strip()
-        if original:
-            return f"{original} (via peer={immediate_peer})"
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return f"{real_ip.strip()} (via peer={immediate_peer})"
-    forwarded = request.headers.get("forwarded")
-    if forwarded:
-        return f"{forwarded} (via peer={immediate_peer})"
-    return immediate_peer
+    parts.append(f"peer={immediate_peer}")
+    if xff := request.headers.get("x-forwarded-for"):
+        parts.append(f"x-forwarded-for={xff!r}")
+    if real_ip := request.headers.get("x-real-ip"):
+        parts.append(f"x-real-ip={real_ip!r}")
+    if forwarded := request.headers.get("forwarded"):
+        parts.append(f"forwarded={forwarded!r}")
+    return " ".join(parts)
 
 
 @router.post("/ai-chat", response_model=ChatResponse)

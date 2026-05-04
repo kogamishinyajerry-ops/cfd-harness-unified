@@ -334,6 +334,50 @@ def test_factory_rebuilds_on_same_length_key_rotation(monkeypatch):
     assert p1 is not p2, "same-length key rotation must invalidate cache"
 
 
+def test_factory_does_not_close_evicted_provider_eagerly_when_loop_running(
+    monkeypatch,
+):
+    """Codex R4 P2 regression: under a running event loop, eviction
+    must SCHEDULE a delayed close, not call aclose() inline. An
+    in-flight chat must still be able to use the old singleton's
+    AsyncClient while the cleanup is pending."""
+    reset_default_provider()
+
+    aclose_calls: list[str] = []
+
+    class _RecordingProvider(MockLLMProvider):
+        def __init__(self, tag: str) -> None:
+            super().__init__()
+            self._tag = tag
+
+        async def aclose(self) -> None:
+            aclose_calls.append(self._tag)
+
+    from ui.backend.services.llm_provider import factory as factory_module
+
+    counter = {"n": 0}
+
+    def _fake_deepseek_provider(api_key: str) -> _RecordingProvider:
+        counter["n"] += 1
+        return _RecordingProvider(f"p{counter['n']}")
+
+    monkeypatch.setattr(factory_module, "DeepSeekProvider", _fake_deepseek_provider)
+
+    async def scenario():
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        get_default_provider()
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        get_default_provider()
+        # The cleanup is a delayed task on this loop. At this point
+        # (immediately after rebuild) the close has NOT fired —
+        # in-flight requests are safe.
+        assert aclose_calls == [], (
+            f"evicted provider should not be closed eagerly; got {aclose_calls}"
+        )
+
+    asyncio.run(scenario())
+
+
 def test_factory_closes_evicted_provider_on_rebuild(monkeypatch):
     """Codex R3 P2-2 regression: a rebuild must aclose() the previous
     DeepSeekProvider so its long-lived AsyncClient doesn't leak. We

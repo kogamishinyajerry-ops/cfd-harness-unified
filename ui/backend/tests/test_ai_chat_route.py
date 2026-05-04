@@ -357,9 +357,12 @@ def test_ai_chat_allows_proxy_chain_with_explicit_override(monkeypatch):
 # ────────── Codex R3 P2-1: log forwarded client IP ──────────
 
 
-def test_ai_chat_403_log_includes_forwarded_xff(monkeypatch, caplog):
-    """When XFF trips the guard, the rejection log must include the
-    REAL remote caller, not just the loopback proxy peer."""
+def test_ai_chat_403_log_includes_full_xff_chain(monkeypatch, caplog):
+    """When XFF trips the guard, the rejection log must record the
+    full chain verbatim (Codex R4 P1: don't pick a single hop as
+    'the caller' — XFF is client-controlled, audit logs both hops
+    and the operator interprets with knowledge of trusted-proxy
+    count)."""
     import logging as _logging
 
     monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
@@ -374,15 +377,15 @@ def test_ai_chat_403_log_includes_forwarded_xff(monkeypatch, caplog):
         headers={"X-Forwarded-For": "203.0.113.99, 10.0.0.1"},
     )
     assert resp.status_code == 403
-    # The first XFF hop is the real caller.
+    # Both hops appear verbatim in the chain log.
+    msgs = [rec.getMessage() for rec in caplog.records if rec.levelno >= _logging.WARNING]
     assert any(
-        "203.0.113.99" in rec.getMessage()
-        for rec in caplog.records
-        if rec.levelno >= _logging.WARNING
+        "203.0.113.99" in m and "10.0.0.1" in m and "x-forwarded-for" in m
+        for m in msgs
     )
 
 
-def test_ai_chat_403_log_includes_forwarded_x_real_ip(monkeypatch, caplog):
+def test_ai_chat_403_log_includes_x_real_ip(monkeypatch, caplog):
     import logging as _logging
 
     monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
@@ -397,16 +400,13 @@ def test_ai_chat_403_log_includes_forwarded_x_real_ip(monkeypatch, caplog):
         headers={"X-Real-IP": "198.51.100.7"},
     )
     assert resp.status_code == 403
-    assert any(
-        "198.51.100.7" in rec.getMessage()
-        for rec in caplog.records
-        if rec.levelno >= _logging.WARNING
-    )
+    msgs = [rec.getMessage() for rec in caplog.records if rec.levelno >= _logging.WARNING]
+    assert any("198.51.100.7" in m and "x-real-ip" in m for m in msgs)
 
 
 def test_ai_chat_override_log_includes_forwarded_caller(monkeypatch, caplog):
     """When the override is active, the audit log of the allowed
-    request must still include the forwarded caller."""
+    request must still include the forwarded chain."""
     import logging as _logging
 
     monkeypatch.setenv("AI_CHAT_ALLOW_NON_LOOPBACK", "1")
@@ -422,7 +422,7 @@ def test_ai_chat_override_log_includes_forwarded_caller(monkeypatch, caplog):
     )
     assert resp.status_code == 200
     assert any(
-        "203.0.113.55" in rec.getMessage()
+        "203.0.113.55" in rec.getMessage() and "Allowing" in rec.getMessage()
         for rec in caplog.records
-        if rec.levelno >= _logging.INFO and "Allowing" in rec.getMessage()
+        if rec.levelno >= _logging.INFO
     )
