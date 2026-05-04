@@ -794,6 +794,52 @@ def test_lc_from_target_cell_count_matches_power_preset_for_250k():
     assert abs(lc_v124 - lc_v123_power) / lc_v123_power < 0.05
 
 
+def test_classify_cell_count_target_mode_suppresses_beginner_soft_warning():
+    """V124 R1 P2: when target_cell_count is the path the engineer
+    chose, classify_cell_count under 'target' mode must NOT emit the
+    'larger than typical beginner sizing' warning that beginner mode
+    fires above 5M cells. The engineer explicitly asked for this
+    count; the hard cap is the only relevant safety check."""
+    from ui.backend.services.meshing_gmsh.cell_budget import (
+        classify_cell_count,
+    )
+
+    verdict = classify_cell_count(10_000_000, "target")
+    assert verdict.ok is True
+    assert verdict.warning is None  # NOT the beginner soft-warning
+    # mesh_mode passed through honestly.
+    assert verdict.mesh_mode == "target"
+
+
+def test_classify_cell_count_target_mode_still_enforces_hard_cap():
+    """V124 R1 P2: even under 'target' mode the 50M hard cap must
+    still reject — the V61-105 resource safety contract is
+    independent of which path supplied lc."""
+    from ui.backend.services.meshing_gmsh.cell_budget import (
+        classify_cell_count,
+        POWER_HARD_CAP_CELLS,
+    )
+
+    verdict = classify_cell_count(POWER_HARD_CAP_CELLS + 1, "target")
+    assert verdict.ok is False
+    assert verdict.rejection_reason is not None
+    assert "hard cap" in verdict.rejection_reason
+
+
+def test_classify_cell_count_beginner_soft_warning_still_fires():
+    """V124 R1 P2 negative control: the V123 beginner-mode soft warning
+    contract is unchanged — beginner > 5M still warns."""
+    from ui.backend.services.meshing_gmsh.cell_budget import (
+        classify_cell_count,
+        BEGINNER_SOFT_CAP_CELLS,
+    )
+
+    verdict = classify_cell_count(BEGINNER_SOFT_CAP_CELLS + 1, "beginner")
+    assert verdict.ok is True
+    assert verdict.warning is not None
+    assert "larger than typical beginner sizing" in verdict.warning
+
+
 def test_lc_from_target_cell_count_degenerate_diagonal_returns_zero():
     """V124: a zero or negative diagonal (degenerate input) returns 0
     so the caller falls back to gmsh's default sizing."""

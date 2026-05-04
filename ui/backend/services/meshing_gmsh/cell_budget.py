@@ -25,7 +25,7 @@ POWER_HARD_CAP_CELLS = 50_000_000
 BEGINNER_SOFT_CAP_CELLS = 5_000_000
 
 
-MeshMode = Literal["beginner", "power"]
+MeshMode = Literal["beginner", "power", "target"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +50,10 @@ def classify_cell_count(cell_count: int, mesh_mode: MeshMode) -> BudgetVerdict:
     Power mode: hard-reject above POWER_HARD_CAP_CELLS.
     Beginner mode: soft-warn above BEGINNER_SOFT_CAP_CELLS, hard-reject
     above POWER_HARD_CAP_CELLS (the resource ceiling still applies).
+    Target mode (DEC-V61-124): the engineer specified a cell count
+    explicitly, so the beginner soft warning is suppressed (would
+    mislabel a successful explicit large-target run); the hard cap
+    still applies for resource safety.
     """
     if cell_count > POWER_HARD_CAP_CELLS:
         return BudgetVerdict(
@@ -77,6 +81,9 @@ def classify_cell_count(cell_count: int, mesh_mode: MeshMode) -> BudgetVerdict:
             "features) if a smaller mesh is required, or accept the "
             "larger mesh and proceed."
         )
+    # mesh_mode == "target": engineer asked explicitly for this count;
+    # no soft warning. mesh_mode == "power": fine sizing already; no
+    # soft warning by design (matches the existing V123 contract).
 
     return BudgetVerdict(
         ok=True,

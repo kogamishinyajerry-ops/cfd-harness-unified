@@ -29,7 +29,7 @@ from .gmsh_runner import (
 from .to_foam import GmshToFoamError, run_gmsh_to_foam
 
 
-MeshMode = Literal["beginner", "power"]
+MeshMode = Literal["beginner", "power", "target"]
 FailingCheck = Literal[
     "case_not_found",
     "source_not_imported",
@@ -137,7 +137,18 @@ def mesh_imported_case(
     # as user-geometry rejections. gmsh_runner is responsible for
     # converting raw gmsh-binding errors into GmshMeshGenerationError.
 
-    verdict: BudgetVerdict = classify_cell_count(gmsh_result.cell_count, mesh_mode)
+    # V124 R1 P2: when target_cell_count is set, classify under the
+    # "target" mode so (a) the beginner soft warning doesn't fire on
+    # successful large-target runs (engineer asked explicitly) and
+    # (b) MeshResult.mesh_mode reports "target" instead of mislabeling
+    # as "beginner" (the mesh_mode default kwarg). The hard 50M cap
+    # still applies for resource safety.
+    effective_mode: MeshMode = (
+        "target" if target_cell_count is not None else mesh_mode
+    )
+    verdict: BudgetVerdict = classify_cell_count(
+        gmsh_result.cell_count, effective_mode
+    )
     if not verdict.ok:
         # Drop the stale .msh so the next attempt is not confused by a
         # leftover oversized mesh file. Codex Round 8 Finding 2: collapse
@@ -167,7 +178,7 @@ def mesh_imported_case(
 
     return MeshResult(
         case_id=case_id,
-        mesh_mode=mesh_mode,
+        mesh_mode=effective_mode,
         cell_count=gmsh_result.cell_count,
         face_count=gmsh_result.face_count,
         point_count=gmsh_result.point_count,
