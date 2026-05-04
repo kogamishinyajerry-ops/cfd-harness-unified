@@ -437,10 +437,17 @@ async def ai_coach_apply_proposal(
             detail={"failing_check": "bad_case_id", "case_id": body.case_id},
         )
     case_dir = IMPORTED_DIR / body.case_id
-    # V123 R3 P2 / R4 P2 / R5 P2: classify case_dir atomically with a
-    # single os.lstat so a case that disappears between the absence
-    # check and the type check cannot be misclassified as tampering.
-    #   * ENOENT from lstat → truly absent → 404 case_not_found.
+    # V123 R3 P2 / R4 P2 / R5 P2 / R6 P2: classify case_dir atomically
+    # via a single os.lstat. The exception arms map all path-state
+    # surfaces into the documented 4xx contract — no path-state can
+    # escape as an unhandled 500.
+    #   * ENOENT (FileNotFoundError) → truly absent → 404 case_not_found.
+    #   * Any other OSError (NotADirectoryError on an ancestor,
+    #     PermissionError on an ancestor, ELOOP, etc) → containment
+    #     failure → 422 inner_failing_check='symlink_escape' since the
+    #     route cannot safely use the path. The pre-R6 lexists() call
+    #     silently coerced these into False; lstat raises so we have
+    #     to translate explicitly.
     #   * lstat succeeds + non-DIR mode → tampered (planted regular
     #     file, symlink, etc) → 422 inner_failing_check='symlink_escape'
     #     (preempts UnknownToolError/ToolArgError so the safety
@@ -453,6 +460,20 @@ async def ai_coach_apply_proposal(
             status_code=404,
             detail={"failing_check": "case_not_found", "case_id": body.case_id},
         ) from None
+    except OSError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "failing_check": "underlying_service_error",
+                "inner_failing_check": "symlink_escape",
+                "tool": body.tool,
+                "case_id": body.case_id,
+                "message": (
+                    f"refusing to use {case_dir} as a case directory "
+                    f"(errno {exc.errno}: {exc.strerror})"
+                ),
+            },
+        ) from exc
     if not stat.S_ISDIR(case_st.st_mode):
         raise HTTPException(
             status_code=422,

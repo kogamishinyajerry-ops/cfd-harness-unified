@@ -348,6 +348,36 @@ def test_apply_proposal_tampered_case_dir_with_invalid_args_still_returns_symlin
         assert body["detail"]["inner_failing_check"] == "symlink_escape"
 
 
+def test_apply_proposal_lstat_oserror_routes_to_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R6 P2: non-ENOENT OSError from os.lstat (PermissionError,
+    NotADirectoryError on ancestor, ELOOP, etc) must NOT escape as an
+    unhandled 500. Translate to 422 inner_failing_check='symlink_escape'
+    so the route's documented 4xx contract holds for tampered or
+    misconfigured filesystem states."""
+    app = _make_app(tmp_path, monkeypatch)
+
+    def boom_lstat(path):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr("ui.backend.routes.ai_coach.os.lstat", boom_lstat)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_lstat_perm",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "no_slip_wall"},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
 def test_apply_proposal_truly_absent_case_dir_still_returns_404(
     tmp_path, monkeypatch
 ):
