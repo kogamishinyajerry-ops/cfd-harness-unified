@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
 from ui.backend.services.case_solve.patch_classification_store import (
@@ -83,7 +83,15 @@ class SetPatchBcTypeArgs(BaseModel):
 
     Field shape mirrors the V61-108 PUT route's body. ``bc_class`` is
     a ``Literal`` so the BCClass enum is enforced at the schema layer
-    — the LLM cannot propose values outside the V108 contract."""
+    — the LLM cannot propose values outside the V108 contract.
+
+    Codex R1 P3: ``extra="forbid"`` — a malformed proposal that ships
+    extra keys (e.g. ``{patch_name, bc_class, note}``) MUST fail
+    validation, not silently drop the stray field. The registry
+    boundary's job is to reject anything off-contract before
+    dispatch."""
+
+    model_config = ConfigDict(extra="forbid")
 
     patch_name: str = Field(..., min_length=1, max_length=128)
     bc_class: Literal[

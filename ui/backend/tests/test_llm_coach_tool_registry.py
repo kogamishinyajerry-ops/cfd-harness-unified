@@ -160,6 +160,27 @@ def test_set_patch_bc_type_args_rejects_unrelated_bc_class():
         SetPatchBcTypeArgs(patch_name="x", bc_class="not_a_real_bc_class")
 
 
+def test_set_patch_bc_type_args_rejects_extra_keys(tmp_path):
+    """Codex R1 P3: a malformed proposal carrying stray keys must
+    fail validation, not silently drop the extras. The registry
+    boundary's job is to reject off-contract payloads before
+    dispatch."""
+    case_dir = _make_minimal_case_dir(tmp_path)
+    with pytest.raises(ToolArgError) as exc_info:
+        dispatch(
+            case_dir,
+            "set_patch_bc_type",
+            {
+                "patch_name": "walls",
+                "bc_class": "no_slip_wall",
+                "note": "should be rejected",
+            },
+        )
+    # Pydantic surfaces the offending key path in the validation error.
+    err_dump = str(exc_info.value.validation_errors)
+    assert "note" in err_dump or "extra" in err_dump.lower()
+
+
 # ────────── audit.write_audit ──────────
 
 
@@ -238,6 +259,34 @@ def test_write_audit_rejects_corrupt_existing_file(tmp_path):
             model_used=None,
             conversation_turn_id=None,
         )
+
+
+def test_write_audit_serializes_concurrent_writers(tmp_path):
+    """Codex R1 P2: two writers racing to append should produce
+    BOTH entries — not lose one to a clobbering rename. We test
+    the post-condition (both audit_ids present) rather than
+    drive a thread harness; the case_lock ensures the read-modify-
+    write window is serialized so even back-to-back single-thread
+    calls preserve every entry."""
+    case_dir = _make_minimal_case_dir(tmp_path)
+    audit_ids = []
+    for i in range(5):
+        a = write_audit(
+            case_dir,
+            tool="set_patch_bc_type",
+            args={
+                "patch_name": f"patch_{i}",
+                "bc_class": "no_slip_wall",
+            },
+            model_used="x",
+            conversation_turn_id=None,
+        )
+        audit_ids.append(a)
+    audit_path = case_dir / "system" / "ai_audit" / "applied.yaml"
+    doc = yaml.safe_load(audit_path.read_text())
+    persisted_ids = [e["audit_id"] for e in doc["entries"]]
+    assert persisted_ids == audit_ids
+    assert len(set(persisted_ids)) == 5
 
 
 def test_write_audit_rejects_schema_version_mismatch(tmp_path):

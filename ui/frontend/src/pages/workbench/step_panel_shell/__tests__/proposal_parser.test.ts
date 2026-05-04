@@ -140,6 +140,47 @@ PROPOSAL>> trailing words here`;
     expect(result.pendingPartial).toBe(true);
   });
 
+  it("ignores PROPOSAL inside an UNCLOSED code fence (Codex R1 P2)", () => {
+    // The assistant is mid-stream: it opened ``` to start an example
+    // but the closing ``` has not arrived yet. A `<<PROPOSAL` inside
+    // that open fence MUST NOT register as a real action — the user
+    // would see an Accept button for inert documentation.
+    const input = `here's the format:
+\`\`\`
+<<PROPOSAL
+tool: set_patch_bc_type
+args: {patch_name: walls, bc_class: no_slip_wall}
+PROPOSAL>>`;
+    // No closing ``` yet.
+    const result = parseProposals(input);
+    expect(result.proposals).toHaveLength(0);
+  });
+
+  it("recognizes a real PROPOSAL once a code-fence example is fully closed", () => {
+    // Same as above but now with the ``` closer arrived AFTER the
+    // (example) PROPOSAL block — fenced content is masked, so the
+    // example is correctly ignored. A REAL proposal AFTER the close
+    // is recognized.
+    const input = `here's the format:
+\`\`\`
+<<PROPOSAL
+tool: set_patch_bc_type
+args: {patch_name: ex, bc_class: no_slip_wall}
+PROPOSAL>>
+\`\`\`
+now the actual proposal:
+<<PROPOSAL
+tool: set_patch_bc_type
+args: {patch_name: real_walls, bc_class: no_slip_wall}
+PROPOSAL>>`;
+    const result = parseProposals(input);
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0].args).toEqual({
+      patch_name: "real_walls",
+      bc_class: "no_slip_wall",
+    });
+  });
+
   it("preserves stable indices across cumulative re-parses", () => {
     // Simulating streaming: first half just text, then proposal arrives.
     const r1 = parseProposals("text only so far");

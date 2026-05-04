@@ -30,6 +30,11 @@ from typing import Any
 
 import yaml
 
+from ui.backend.services.case_manifest.locking import (
+    CaseLockError,
+    case_lock,
+)
+
 
 _SCHEMA_VERSION = 1
 _AUDIT_DIR_NAME = "ai_audit"
@@ -94,10 +99,20 @@ def write_audit(
 ) -> str:
     """Append one entry; return the generated ``audit_id``.
 
-    Atomic: writes to a temp file in the same directory then renames
-    over the audit file. If anything goes wrong AFTER the underlying
-    dispatch succeeded, raise AuditWriteError so the route returns
-    a warning rather than reporting failure.
+    Atomic per writer: writes to a temp file in the same directory
+    then renames over the audit file. Cross-writer concurrency
+    (Codex R1 P2): two simultaneous applies for the same case would
+    each read+modify their own in-memory copy and the later writer's
+    rename would clobber the earlier writer's entry, silently
+    dropping an audit row even though each rename is itself atomic.
+    The fix: take the V108 ``case_lock`` for the read-modify-write
+    window so concurrent writers serialize on a per-case basis. The
+    same lock the underlying tool dispatch already uses.
+
+    If anything goes wrong AFTER the underlying dispatch succeeded,
+    raise AuditWriteError so the route returns a warning rather than
+    reporting failure (compensation pattern · DEC-V61-121 risk
+    register #4).
     """
     audit_dir = _audit_dir(case_dir)
     try:
@@ -107,7 +122,6 @@ def write_audit(
             f"could not create audit dir {audit_dir}: {type(exc).__name__}"
         ) from exc
     audit_path = _audit_path(case_dir)
-    doc = _read_existing(audit_path)
     audit_id = uuid.uuid4().hex
     entry = {
         "applied_at": _now_iso_utc(),
@@ -117,24 +131,32 @@ def write_audit(
         "model_used": model_used,
         "conversation_turn_id": conversation_turn_id,
     }
-    doc["entries"].append(entry)
-    # Atomic temp-then-rename. Per-process unique temp filename so
-    # concurrent writers (unusual but possible) don't clobber each
-    # other's temp file.
-    temp_path = audit_dir / f".applied.{os.getpid()}.{audit_id}.yaml.tmp"
+    # Codex R1 P2: serialize concurrent writers via per-case lock.
+    # Two-tab / two-operator concurrent applies must each persist
+    # their audit row, not race-and-clobber each other.
     try:
-        temp_path.write_text(
-            yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
-        )
-        os.replace(temp_path, audit_path)
-    except OSError as exc:
-        # Clean up the temp file if rename failed.
-        try:
-            temp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        with case_lock(case_dir):
+            # Read inside the lock so we see any commit a concurrent
+            # writer just landed; merge our entry on top; write out.
+            doc = _read_existing(audit_path)
+            doc["entries"].append(entry)
+            temp_path = audit_dir / f".applied.{os.getpid()}.{audit_id}.yaml.tmp"
+            try:
+                temp_path.write_text(
+                    yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8",
+                )
+                os.replace(temp_path, audit_path)
+            except OSError as exc:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise AuditWriteError(
+                    f"audit write failed at {audit_path}: {type(exc).__name__}"
+                ) from exc
+    except CaseLockError as exc:
         raise AuditWriteError(
-            f"audit write failed at {audit_path}: {type(exc).__name__}"
+            f"could not acquire case lock for audit write: {exc.failing_check}"
         ) from exc
     return audit_id

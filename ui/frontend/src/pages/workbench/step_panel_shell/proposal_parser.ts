@@ -57,14 +57,35 @@ const CLOSE = "PROPOSAL>>";
  * fences are unchanged. The parser only looks for PROPOSAL delimiters
  * OUTSIDE code fences (Risk-2).
  *
+ * Codex R1 P2 (V121): during streaming, the assistant may have
+ * emitted an OPENING ``` before any closing ``` arrives. The naive
+ * regex matcher only catches fully-closed fences and would leave
+ * a `<<PROPOSAL` inside the not-yet-closed fence visible — surfacing
+ * an Accept button for what was meant to be inert documentation.
+ * Fix: after masking complete fences, count remaining ``` markers;
+ * if odd, mask everything from the LAST stray ``` to the end of
+ * the buffer.
+ *
  * The returned string is for INTERNAL parsing only; the user-visible
  * displayText uses the original text minus matched proposals.
  */
 function maskCodeFences(text: string): string {
-  // Naive matcher for ```...``` blocks (single or multi-line). The
-  // chat is plain text so there's no nested-fence concern. Replace
-  // with same-length spaces so substring offsets line up.
-  return text.replace(/```[\s\S]*?```/g, (match) => " ".repeat(match.length));
+  // Step 1: replace fully-closed ```...``` blocks with same-length
+  // spaces so offsets outside the fences are unchanged.
+  let masked = text.replace(/```[\s\S]*?```/g, (match) =>
+    " ".repeat(match.length),
+  );
+  // Step 2: scan for an unclosed trailing fence. After step 1, all
+  // FULLY-CLOSED fences are gone; any remaining ``` opens a fence
+  // whose closing has not arrived yet. Mask everything from there
+  // to the end of the buffer so a streamed `<<PROPOSAL` inside an
+  // open fence does NOT match.
+  const strayOpen = masked.indexOf("```");
+  if (strayOpen !== -1) {
+    masked =
+      masked.slice(0, strayOpen) + " ".repeat(masked.length - strayOpen);
+  }
+  return masked;
 }
 
 function isLineWith(text: string, lineStart: number, lineEnd: number, target: string): boolean {
