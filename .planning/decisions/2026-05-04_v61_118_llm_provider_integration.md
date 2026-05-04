@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-118
 title: LLM provider integration · DeepSeek V4 Pro primary + V4 Flash fallback · POST /api/ai-chat foundation
-status: Proposed (awaiting Codex pre-merge review per RETRO-V61-001 multi-file backend + new operator endpoint + secrets-handling triggers)
+status: Accepted (2026-05-04 · Codex pre-merge 9-round chain APPROVE on commit 583bc81 [R1 P1+P2+P3 → R2 P1+P2 → R3 P2×2 → R4 P1+P2 → R5 P1 → R6 P2 → R7 P1×2 → R8 P2 → R9 clean]; chain report at reports/codex_tool_reports/v61_118_r1_chain.md; user 2026-05-04 autonomous-mode mandate "全都按你的建议来" covers acceptance flip)
 codex_tool_report_path: reports/codex_tool_reports/v61_118_r1_chain.md
+codex_review_relay: 86gs gpt-5.4 xhigh (R1-R8) · CRS gpt-5.4 high (R9 fallback after 86gs 522 Cloudflare timeout, per CLAUDE.md relay protocol)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
 authored_under: User 2026-05-04 design discussion — "AI助手的介入方式也需要真实介入LLM（例如DeepSeek v4 Pro、Minimax-M2.7-highspeed），不能完全依赖知识库已有的规则、知识、经验，否则交互体验很差". User 2026-05-04 mid-arc clarification updated the model choice from MiniMax to DeepSeek V4 Flash for the secondary slot (DeepSeek-only family, simpler integration, single API key). Five-DEC arc plan A→C→B→D→E confirmed by user "全都按你的建议来"; this is item D — the LLM provider foundation V61-119 will layer governance-aware coaching on top of.
