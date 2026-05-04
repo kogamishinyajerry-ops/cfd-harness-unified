@@ -300,6 +300,54 @@ def test_apply_proposal_planted_regular_file_routes_to_symlink_escape(
         assert body["detail"]["inner_failing_check"] == "symlink_escape"
 
 
+def test_apply_proposal_tampered_case_dir_with_unknown_tool_still_returns_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R4 P2: tamper-path contract must hold end-to-end —
+    a planted file at the case_dir path with an UNKNOWN TOOL must
+    return 422 symlink_escape, NOT 400 unknown_tool. The route's
+    explicit tamper-check preempts tool dispatch."""
+    planted = tmp_path / "ldc_planted_unknowntool"
+    planted.write_text("not a directory")
+    app = _make_app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_planted_unknowntool",
+                "tool": "no_such_tool",
+                "args": {"x": 1},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
+def test_apply_proposal_tampered_case_dir_with_invalid_args_still_returns_symlink_escape(
+    tmp_path, monkeypatch
+):
+    """V123 R4 P2: same contract for ARG-VALIDATION-FAILED — tamper
+    check preempts arg validation."""
+    planted = tmp_path / "ldc_planted_badargs"
+    planted.write_text("not a directory")
+    app = _make_app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "ldc_planted_badargs",
+                "tool": "set_patch_bc_type",
+                "args": {"patch_name": "walls", "bc_class": "garbage"},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "underlying_service_error"
+        assert body["detail"]["inner_failing_check"] == "symlink_escape"
+
+
 def test_apply_proposal_truly_absent_case_dir_still_returns_404(
     tmp_path, monkeypatch
 ):

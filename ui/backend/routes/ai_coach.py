@@ -436,18 +436,36 @@ async def ai_coach_apply_proposal(
             detail={"failing_check": "bad_case_id", "case_id": body.case_id},
         )
     case_dir = IMPORTED_DIR / body.case_id
-    # V123 R3 P2: use os.path.lexists, not is_dir(). is_dir() returns
-    # False for tampered paths (planted regular files, broken symlinks,
-    # symlinks-to-non-dirs), which would surface a generic 404
-    # case_not_found and shadow the symlink_escape contract case_lock
-    # produces inside dispatch. lexists() is True for any present path
-    # so tampered paths fall through to dispatch + case_lock (which
-    # raise CaseLockError(symlink_escape) → 422 inner_failing_check=
-    # symlink_escape). Only TRULY absent paths still get 404.
+    # V123 R3 P2 / R4 P2: split the case_dir gate into two explicit
+    # checks so the tamper-path contract holds end-to-end regardless of
+    # subsequent tool/arg validation outcomes.
+    #   * lexists()=False → truly absent → 404 case_not_found (existing
+    #     contract, unchanged).
+    #   * lexists()=True but is_dir()=False → tampered (planted regular
+    #     file, broken symlink, symlink-to-non-dir) → 422 with
+    #     inner_failing_check='symlink_escape'. This preempts
+    #     UnknownToolError/ToolArgError so a request with an unknown
+    #     tool against a tampered case still surfaces the safety
+    #     contract, matching V108/V109's uniform symlink_escape
+    #     handling.
     if not os.path.lexists(case_dir):
         raise HTTPException(
             status_code=404,
             detail={"failing_check": "case_not_found", "case_id": body.case_id},
+        )
+    if not case_dir.is_dir():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "failing_check": "underlying_service_error",
+                "inner_failing_check": "symlink_escape",
+                "tool": body.tool,
+                "case_id": body.case_id,
+                "message": (
+                    f"refusing to use {case_dir} as a case directory "
+                    "(planted file, broken symlink, or symlink-to-non-dir)"
+                ),
+            },
         )
 
     try:
