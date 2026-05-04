@@ -12,7 +12,6 @@ header is only ever attached at request time.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -24,7 +23,6 @@ from ui.backend.services.llm_provider.base import (
     DeepSeekModelId,
     LLMAuthError,
     LLMBadRequestError,
-    LLMConfigError,
     LLMProvider,
     LLMRateLimitError,
     LLMTimeoutError,
@@ -76,40 +74,26 @@ class DeepSeekProvider(LLMProvider):
         # injected paths share one code path.
         self._client = client
         self._owns_client = client is None
-        # Codex R6 P2 (drain-based eviction): instead of guessing a
-        # fixed close delay that covers connect+read+write+pool
-        # timeouts × primary+fallback, we refcount in-flight ``chat``
-        # calls and have ``aclose`` block until the count drops to
-        # zero. ``_draining`` is set the moment ``aclose`` is invoked
-        # so new ``chat()`` calls fail fast instead of slipping in
-        # between the drain-decision and the close. ``_drained`` is
-        # initially "set" (no work in flight); it's cleared on the
-        # first ``chat`` and set again whenever the count returns to
-        # zero so multiple ``aclose`` callers can coalesce.
-        self._inflight = 0
-        self._draining = False
-        self._drained: asyncio.Event = asyncio.Event()
-        self._drained.set()
 
     async def aclose(self) -> None:
-        """Drain in-flight chats then close the long-lived AsyncClient.
-        Idempotent. Called from the factory's eviction path on
-        cache rebuild and from FastAPI lifespan-shutdown.
+        """Close the long-lived AsyncClient. Idempotent.
 
-        Behavior:
-          * Sets ``_draining`` so subsequent ``chat()`` calls raise
-            :class:`LLMConfigError` rather than enter the closed
-            client.
-          * Awaits ``_drained`` so the close blocks until every
-            in-flight ``chat()`` has finished its primary + fallback
-            cycle (no time-bound heuristic, no torn-down client
-            mid-request).
-          * Skips closing when the client was caller-injected (test
-            path) — the caller owns its lifetime.
+        Lifecycle contract (single-loop, single-thread):
+          * Designed to run from the same event loop as ``chat()``.
+          * Intended call site is the FastAPI ``lifespan`` shutdown
+            hook, which fires AFTER the server stops accepting new
+            requests, so there are no in-flight ``chat()`` calls
+            when this runs.
+          * Skips closing when the client was caller-injected
+            (test path) — the caller owns its lifetime.
+
+        Cross-loop / multi-thread close is intentionally out of
+        scope: the V1 deployment is single uvicorn worker, single
+        loop. Codex R7 chain (commit dc04f86 → 5cbeb00 → 59111b8)
+        explored drain-based and time-delayed eviction; both opened
+        race surfaces that exceeded V1 scope. Decision documented in
+        DEC-V61-118 §risk register R5.
         """
-        self._draining = True
-        if self._inflight > 0:
-            await self._drained.wait()
         if self._owns_client and self._client is not None:
             await self._client.aclose()
             self._client = None
@@ -119,22 +103,6 @@ class DeepSeekProvider(LLMProvider):
         return f"DeepSeekProvider(endpoint={self._endpoint!r})"
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
-        # Codex R6 P2 drain check: refuse new work the moment the
-        # provider is being evicted so the caller (factory) can wait
-        # confidently for a quiet state. Atomic with the in-flight
-        # increment because there's no await between them.
-        if self._draining:
-            raise LLMConfigError("DeepSeekProvider is shutting down")
-        self._inflight += 1
-        self._drained.clear()
-        try:
-            return await self._chat_impl(request)
-        finally:
-            self._inflight -= 1
-            if self._inflight == 0:
-                self._drained.set()
-
-    async def _chat_impl(self, request: ChatRequest) -> ChatResponse:
         primary = request.model
         try:
             return await self._chat_with_model(request, primary, fallback_used=False)

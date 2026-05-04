@@ -179,6 +179,7 @@ Anchor confidence: I expect 4-5 round chain. P1 likely on (a) or (b); P2 likely 
 - **R3 · Fallback masking auth bugs** — If primary auth is broken, falling back to flash with the same broken auth wastes a request and confuses the error. Auth errors must NOT trigger fallback.
 - **R4 · Mock mode in production** — A production deploy without `DEEPSEEK_API_KEY` would silently use mocks. Mitigation: `model_used="mock"` in response + startup log warning; production deploy checklist will add an explicit env-var presence check.
 - **R5 · DeepSeek API contract drift** — DeepSeek may change OpenAI-compat surface. Mitigation: V1 uses a thin wrapper, easy to swap; integration test against real API is a manual smoke (not in CI).
+- **R6 · In-process key rotation NOT supported** — `DEEPSEEK_API_KEY` is read at process startup. Rotating it without restart leaves the previously-cached provider's `httpx.AsyncClient` for GC (no eager `aclose`). Codex R3-R7 chain explored drain-based and time-delayed eviction designs; both opened cross-loop / cross-thread race surfaces (multi-event-loop atomicity, sync-vs-async drain wakeup) that exceed V1 scope. Decision: scope the cleanup contract to FastAPI lifespan-shutdown only; document in-process rotation as unsupported. Operators rotate keys via deploy-restart; CI/tests use `reset_default_provider()` and own the close themselves. Future Tier-2 may add multi-tenant + rotation if dogfood demands.
 
 ## Successor pointers
 

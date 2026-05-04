@@ -38,7 +38,7 @@ from ui.backend.services.llm_provider import (
     MockLLMProvider,
     get_default_provider,
 )
-from ui.backend.services.llm_provider.base import LLMProviderError
+from ui.backend.services.llm_provider.base import LLMProviderError  # noqa: F401
 from ui.backend.services.llm_provider.factory import reset_default_provider
 
 T = TypeVar("T")
@@ -334,13 +334,13 @@ def test_factory_rebuilds_on_same_length_key_rotation(monkeypatch):
     assert p1 is not p2, "same-length key rotation must invalidate cache"
 
 
-def test_factory_does_not_close_evicted_provider_eagerly_when_loop_running(
-    monkeypatch,
-):
-    """Codex R4 P2 regression: under a running event loop, eviction
-    must SCHEDULE a delayed close, not call aclose() inline. An
-    in-flight chat must still be able to use the old singleton's
-    AsyncClient while the cleanup is pending."""
+def test_factory_drops_evicted_provider_without_close(monkeypatch):
+    """V1 cleanup contract (post-Codex R7): the factory does NOT call
+    aclose on the displaced provider. Lifespan-shutdown is the only
+    close path. In-process key rotation is documented as unsupported
+    (DEC-V61-118 §risk register R5). A test that flips the env var
+    therefore observes a fresh-instance singleton; the previous
+    provider is left for GC."""
     reset_default_provider()
 
     aclose_calls: list[str] = []
@@ -363,56 +363,16 @@ def test_factory_does_not_close_evicted_provider_eagerly_when_loop_running(
 
     monkeypatch.setattr(factory_module, "DeepSeekProvider", _fake_deepseek_provider)
 
-    async def scenario():
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        get_default_provider()
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-2bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-        get_default_provider()
-        # The cleanup is a delayed task on this loop. At this point
-        # (immediately after rebuild) the close has NOT fired —
-        # in-flight requests are safe.
-        assert aclose_calls == [], (
-            f"evicted provider should not be closed eagerly; got {aclose_calls}"
-        )
-
-    asyncio.run(scenario())
-
-
-def test_factory_closes_evicted_provider_on_rebuild(monkeypatch):
-    """Codex R3 P2-2 regression: a rebuild must aclose() the previous
-    DeepSeekProvider so its long-lived AsyncClient doesn't leak. We
-    monkeypatch DeepSeekProvider to record aclose invocations."""
-    reset_default_provider()
-
-    aclose_calls: list[str] = []
-
-    class _RecordingProvider(MockLLMProvider):
-        def __init__(self, tag: str) -> None:
-            super().__init__()
-            self._tag = tag
-
-        async def aclose(self) -> None:  # pragma: no cover - simple
-            aclose_calls.append(self._tag)
-
-    # Stub the factory's import so each new key produces a fresh
-    # _RecordingProvider with a distinct tag.
-    from ui.backend.services.llm_provider import factory as factory_module
-
-    counter = {"n": 0}
-
-    def _fake_deepseek_provider(api_key: str) -> _RecordingProvider:
-        counter["n"] += 1
-        return _RecordingProvider(f"p{counter['n']}")
-
-    monkeypatch.setattr(factory_module, "DeepSeekProvider", _fake_deepseek_provider)
-
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-    get_default_provider()  # build p1
+    p1 = get_default_provider()
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-key-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-    get_default_provider()  # build p2; p1 evicted
-    # The rebuild path scheduled aclose on p1 (sync fallback because
-    # no event loop is running in this test).
-    assert "p1" in aclose_calls, f"expected p1 to be aclose'd; got {aclose_calls}"
+    p2 = get_default_provider()
+    assert p1 is not p2
+    # No automatic aclose on rebuild. The test caller can do it
+    # manually if they want to verify lifecycle:
+    assert aclose_calls == [], (
+        f"factory must NOT call aclose on evicted provider; got {aclose_calls}"
+    )
 
 
 def test_factory_reset_clears_cache(monkeypatch):
@@ -440,77 +400,6 @@ def test_deepseek_aclose_is_idempotent():
     provider = DeepSeekProvider(api_key="sk-aclose-test")
     _run(provider.aclose())
     _run(provider.aclose())  # no error
-
-
-def test_deepseek_aclose_drains_in_flight_chat():
-    """Codex R6 P2 regression: aclose must wait for in-flight chats
-    to finish before closing the underlying client. A naive close
-    would race with an active request and tear down the AsyncClient
-    mid-call. The drain refcount makes aclose deterministic."""
-    drain_observed: list[str] = []
-
-    async def scenario():
-        # A handler that suspends so we can observe the drain ordering.
-        gate = asyncio.Event()
-
-        async def handler(_request: httpx.Request) -> httpx.Response:
-            await gate.wait()
-            return _make_response(200, _success_body("late"))
-
-        transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(transport=transport) as injected:
-            # Use an injected client so the test owns its lifetime;
-            # provider's aclose still drains _inflight regardless.
-            provider = DeepSeekProvider(api_key="sk-test", client=injected)
-            chat_task = asyncio.create_task(
-                provider.chat(
-                    ChatRequest(
-                        messages=[ChatMessage(role="user", content="hi")],
-                        model="deepseek-v4-flash",
-                    )
-                )
-            )
-            # Give the chat a moment to start and enter inflight.
-            await asyncio.sleep(0)
-            await asyncio.sleep(0)
-            assert provider._inflight == 1, "chat should be inflight"
-
-            # Kick off aclose; it should NOT complete while inflight > 0.
-            close_task = asyncio.create_task(provider.aclose())
-            await asyncio.sleep(0)
-            await asyncio.sleep(0)
-            assert not close_task.done(), "aclose must wait for drain"
-            drain_observed.append("close-waiting")
-
-            # Release the chat → drain → aclose completes.
-            gate.set()
-            await chat_task
-            await close_task
-            drain_observed.append("close-done")
-
-    asyncio.run(scenario())
-    assert drain_observed == ["close-waiting", "close-done"]
-
-
-def test_deepseek_chat_after_aclose_raises_config_error():
-    """Once a provider is draining, new chat() calls fail fast so
-    they don't slip in between the drain decision and the close."""
-
-    async def scenario():
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(lambda r: _make_response(200, _success_body()))
-        ) as injected:
-            provider = DeepSeekProvider(api_key="sk-test", client=injected)
-            await provider.aclose()
-            with pytest.raises(LLMProviderError):
-                await provider.chat(
-                    ChatRequest(
-                        messages=[ChatMessage(role="user", content="hi")],
-                        model="deepseek-v4-flash",
-                    )
-                )
-
-    asyncio.run(scenario())
 
 
 def test_deepseek_aclose_does_not_close_injected_client():
