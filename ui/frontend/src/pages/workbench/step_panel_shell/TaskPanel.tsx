@@ -5,9 +5,15 @@
 // Body, surfacing "距离入库标准还差 N 项" + status pill + missing
 // fields list. Independent of the active step — drives the engineer's
 // archive-readiness awareness on every step.
+//
+// DEC-V61-120: an AICoachPanel pins to the BOTTOM of the right rail
+// (above StepNavigation), giving the engineer an always-visible chat
+// surface to ask the LLM about case completeness. Read-only adviser
+// in V120; tool-calling + action-approval lands in V61-121.
 
 import type { ComponentType } from "react";
 
+import { AICoachPanel } from "./AICoachPanel";
 import { CompletenessCard } from "./CompletenessCard";
 import { StepNavigation } from "./StepNavigation";
 import type {
@@ -46,7 +52,7 @@ export function TaskPanel({
           {step.longLabel}
         </h2>
       </header>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {caseId && <CompletenessCard caseId={caseId} />}
         <Body
           caseId={caseId}
@@ -55,6 +61,7 @@ export function TaskPanel({
           registerAiAction={registerAiAction}
         />
       </div>
+      {caseId && <AICoachPanel caseId={caseId} />}
       <StepNavigation
         {...navigation}
         aiActionDeferredTooltip={step.aiActionDeferredTooltip}

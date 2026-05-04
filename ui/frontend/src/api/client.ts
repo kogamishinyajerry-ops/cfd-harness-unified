@@ -767,3 +767,218 @@ export const api = {
     return (await resp.json()) as import("@/types/case_dicts").RawDictPostResponse;
   },
 };
+
+// ────────── DEC-V61-120 · AI coach streaming consumer ──────────
+
+export interface StreamAICoachRequest {
+  case_id: string;
+  user_message: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+export interface StreamAICoachCallbacks {
+  /** Called for each non-terminal delta frame (incremental text). */
+  onDelta: (delta: string) => void;
+  /** Called once on the terminal frame (done=true) with usage + model_used. */
+  onDone: (final: {
+    usage?: Record<string, number>;
+    model_used: string;
+  }) => void;
+  /**
+   * Called once on any error path:
+   *   - kind="http": pre-stream HTTP error (401/429/400/404/502/500),
+   *     status + detail surfaced from FastAPI HTTPException body.
+   *   - kind="stream": mid-stream SSE error event from V61-119 R1 P1
+   *     terminal-error-frame contract.
+   *   - kind="abort": user cancelled via handle.cancel(); UI should
+   *     silently clean up (do NOT show as error).
+   *   - kind="network": fetch-level failure (offline, DNS, CORS).
+   *
+   * Exactly one of onDone or onError fires per request — they are
+   * mutually exclusive terminal callbacks.
+   */
+  onError: (err: {
+    kind: "http" | "stream" | "abort" | "network";
+    status?: number;
+    detail: string;
+  }) => void;
+}
+
+export interface StreamAICoachHandle {
+  /** Abort the in-flight fetch + reader; triggers onError(kind="abort"). */
+  cancel: () => void;
+}
+
+/**
+ * POST /api/ai-coach/stream and consume the SSE response.
+ *
+ * Pre-stream HTTP errors (typed in V61-119 R1 P1) raise via onError
+ * BEFORE any onDelta fires. Mid-stream errors arrive as a final
+ * `data: {"error": "...", "detail": "...", "done": true}` frame and
+ * also raise via onError after any prior deltas.
+ *
+ * The returned handle's `cancel()` aborts the fetch via AbortController.
+ * AbortError is silently translated to onError(kind="abort") so callers
+ * can implement stop buttons without wiring console-noise filters.
+ */
+export function streamAICoach(
+  req: StreamAICoachRequest,
+  cb: StreamAICoachCallbacks,
+): StreamAICoachHandle {
+  const controller = new AbortController();
+  let cancelled = false;
+
+  void (async () => {
+    let response: Response;
+    try {
+      response = await fetch("/api/ai-coach/stream", {
+        method: "POST",
+        headers: {
+          Accept: "text/event-stream",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req),
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (cancelled || (err as Error)?.name === "AbortError") {
+        cb.onError({ kind: "abort", detail: "cancelled by user" });
+      } else {
+        cb.onError({
+          kind: "network",
+          detail: (err as Error)?.message ?? "network failure",
+        });
+      }
+      return;
+    }
+
+    if (!response.ok) {
+      // Pre-stream HTTP error per V61-119 R1 P1. Body is FastAPI's
+      // HTTPException JSON: {"detail": "..."}.
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        detail =
+          typeof body?.detail === "string" ? body.detail : JSON.stringify(body);
+      } catch {
+        try {
+          detail = (await response.text()) || response.statusText;
+        } catch {
+          /* keep statusText */
+        }
+      }
+      cb.onError({ kind: "http", status: response.status, detail });
+      return;
+    }
+
+    if (!response.body) {
+      cb.onError({
+        kind: "stream",
+        detail: "response had no body (browser does not support streaming)",
+      });
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let terminated = false;
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE event separator is "\n\n". Process complete events; keep
+        // any incomplete tail in `buffer` for the next read (Risk-1).
+        let sep = buffer.indexOf("\n\n");
+        while (sep !== -1) {
+          const eventBlock = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          sep = buffer.indexOf("\n\n");
+          // An event block is a sequence of lines; we only care about
+          // the `data:` line per V61-119's wire format.
+          for (const line of eventBlock.split("\n")) {
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice("data:".length).trim();
+            if (!payload) continue;
+            let parsed: Record<string, unknown>;
+            try {
+              parsed = JSON.parse(payload) as Record<string, unknown>;
+            } catch {
+              cb.onError({
+                kind: "stream",
+                detail: "received malformed SSE event from server",
+              });
+              terminated = true;
+              break;
+            }
+            if (typeof parsed.error === "string") {
+              cb.onError({
+                kind: "stream",
+                detail:
+                  typeof parsed.detail === "string"
+                    ? parsed.detail
+                    : (parsed.error as string),
+              });
+              terminated = true;
+              break;
+            }
+            if (parsed.done === true) {
+              cb.onDone({
+                model_used:
+                  typeof parsed.model_used === "string"
+                    ? parsed.model_used
+                    : "unknown",
+                usage:
+                  typeof parsed.usage === "object" && parsed.usage !== null
+                    ? (parsed.usage as Record<string, number>)
+                    : undefined,
+              });
+              terminated = true;
+              break;
+            }
+            if (typeof parsed.delta === "string" && parsed.delta.length > 0) {
+              cb.onDelta(parsed.delta);
+            }
+          }
+          if (terminated) break;
+        }
+        if (terminated) break;
+      }
+    } catch (err) {
+      if (cancelled || (err as Error)?.name === "AbortError") {
+        cb.onError({ kind: "abort", detail: "cancelled by user" });
+      } else {
+        cb.onError({
+          kind: "stream",
+          detail: (err as Error)?.message ?? "stream read failure",
+        });
+      }
+      return;
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        /* releaseLock can throw if already released — best-effort */
+      }
+    }
+
+    if (!terminated) {
+      // Server closed the stream without an explicit done frame.
+      // Synthesize one so the UI cleans up its streaming state.
+      cb.onDone({ model_used: "unknown" });
+    }
+  })();
+
+  return {
+    cancel: () => {
+      cancelled = true;
+      controller.abort();
+    },
+  };
+}
