@@ -4,7 +4,7 @@
 **Trigger**: RETRO-V61-001 multi-file backend + new tool registry entry that mutates polyMesh files + AI-driven case-mutation triggers
 **Scope**: 8 files · ~750 LOC across new `RegenerateMeshArgs`+handler in `tool_registry.py`, dispatch envelope extension, 4 route-level lstat-classification iterations in `routes/ai_coach.py`, frontend `ProposalCard.tsx`+`api/client.ts` plumbing for `inner_failing_check`, registry export in `meshing_gmsh/__init__.py`, and ~20 new tests across 3 test files
 **Self-estimated pass rate**: 70% (predicted 1-2 rounds)
-**Actual**: 7 rounds substantive + R8 PENDING due to sustained CRS/86gs relay instability — significantly worse than predicted; the V1 scope-down on the new tool itself worked, but the route-layer tamper-path contract revealed a 5-iteration path-state classification cascade not anticipated at planning time
+**Actual**: **9 rounds** — significantly worse than predicted. The V1 scope-down on the new tool itself worked (registry append + handler + tests landed cleanly in R0). The cascade was in the route-layer tamper-path contract: a 5-iteration path-state classification refinement (R3-R7) plus a cross-platform errno parity finding (R8) Codex had not raised in any prior DEC. Total wall-clock ~2.5h plus a 25min relay-recovery pause; final R9 APPROVE clean at `0ff51e3`
 
 ---
 
@@ -19,7 +19,8 @@
 | R5 | a3e26ca | 1 | P2 | CHANGES_REQUIRED | CRS gpt-5.4 high |
 | R6 | 72dfc03 | 1 | P2 | CHANGES_REQUIRED | CRS gpt-5.4 high |
 | R7 | 2e52fad | 1 | P2 | CHANGES_REQUIRED | CRS gpt-5.4 high |
-| **R8** | **7e30555** | **PENDING** | — | **PENDING** | **Relay disconnected x3** (2× CRS + 1× 86gs across ~5min) |
+| R8 | 7e30555 | 1 | P2 | CHANGES_REQUIRED | CRS gpt-5.4 high (after 25min wakeup pause; 3 prior attempts all disconnected) |
+| R9 | 0ff51e3 | 0 | — | **APPROVE clean** | CRS gpt-5.4 high |
 
 ---
 
@@ -54,13 +55,25 @@
 
 - **P2 (R7) · OSError catch went too broad**: blanket `except OSError` rebranded resource-class errnos (EIO, EMFILE, etc) as 422 inner_failing_check='symlink_escape', misleading the UI and hiding real backend outages from monitoring. Fix: `_CONTAINMENT_ERRNOS = {ENOTDIR, ELOOP, EACCES}` whitelist; non-containment OSError propagates to FastAPI's 500 handler.
 
-## Round 8 · PENDING — sustained relay instability
+## Round 8 · CHANGES_REQUIRED · 1 P2 (after relay recovery)
 
-Three review attempts on commit `7e30555` (the post-R7 fix) all disconnected mid-stream:
+Five review attempts on commit `7e30555` were needed before the eventual R8 review landed:
 - 2× CRS `gpt-5.4` high (`crs.thinkingflux.com/openai/responses` reconnect 5/5 then "stream disconnected before completion")
 - 1× 86gs `gpt-5.4` xhigh (`api.86gamestore.com/responses` same pattern)
+- 25min wakeup pause to let the relay recover
+- Final attempt landed the substantive R8 review
 
-Per V61-119 §L2 default-to-CRS-on-sustained-instability protocol, the second-tier fallback is to pause the arc. The codebase at `7e30555` is clean: 1189/1194 backend tests pass (5 pre-existing failures unchanged across the entire arc), 8/8 ProposalCard frontend tests pass. The arc may converge cleanly on R8 APPROVE when relays recover, OR Codex may identify another classification edge case. The implementation is functionally complete and tested; only the governance signature is missing.
+R8 finding:
+
+- **P2 · EPERM missing from containment errno whitelist**: R7 narrowed the OSError catch to `{ENOTDIR, ELOOP, EACCES}`. macOS TCC and ACL-restricted filesystems raise `PermissionError(EPERM)` for the same ancestor-permission failures POSIX surfaces as `EACCES`. Without `EPERM` in the whitelist, those cases fell through to bare `raise` → 500 unhandled, breaking the cross-platform 422 `inner_failing_check='symlink_escape'` contract the frontend already understands. Fix: add `errno.EPERM` to `_CONTAINMENT_ERRNOS`. Test: `PermissionError(EPERM)` → 422 symlink_escape (parity with the existing `EACCES` test).
+
+## Round 9 · APPROVE clean · 0 findings
+
+**Backend**: CRS `gpt-5.4` high. Verbatim verdict (Codex):
+
+> "The change narrowly extends the containment errno whitelist to cover EPERM and adds a matching regression test. It does not introduce any observable regressions in the route's existing 4xx/5xx classification logic."
+
+V123 closes at 9 rounds with R9 APPROVE clean at commit `0ff51e3`.
 
 ---
 
@@ -83,7 +96,11 @@ V119 (1 round APPROVE), V120 (1 round APPROVE), V121 (2 rounds), V122 (2 rounds)
 
 ### L2 · Sustained relay instability has reached "both backends 503 simultaneously" mode
 
-V61-119 §L2 default-to-CRS protocol assumed CRS up while 86gs was the unstable backend. The R8 attempt revealed both CRS and 86gs can be down concurrently within a 5-minute window. The protocol's fallback path needs an explicit "pause arc + retry next session" branch. RETRO candidate intake.
+V61-119 §L2 default-to-CRS protocol assumed CRS up while 86gs was the unstable backend. The R8 attempt revealed both CRS and 86gs can be down concurrently within a 5-minute window. The 25min ScheduleWakeup pause was sufficient for CRS to recover and accept the R8 review on the next attempt. The protocol's fallback path now has an empirically-validated branch: **wait ~20-25min on a sustained both-relay outage before retrying** rather than burning cycles polling. RETRO candidate intake.
+
+### L4 · Cross-platform errno parity is its own audit axis
+
+R8's EPERM finding is platform-conditional: on Linux+ext4 the `EACCES`-only whitelist would have shipped with no observable regression; on macOS TCC / ACL filesystems the missing EPERM produces 500s. CI runs on Linux. This is a class of finding that *cannot* be caught by Linux-only test suites because the Python kernel layer never raises EPERM there. RETRO candidate intake: when a route normalizes OS errnos, the whitelist must be cross-referenced against macOS, Linux, and (eventually) Windows surface mappings. The errno module itself doesn't tell you which platforms emit which codes for which syscalls — Codex's training corpus does.
 
 ### L3 · The `inner_failing_check` plumbing pattern is reusable
 
@@ -91,14 +108,13 @@ V123 introduced an optional second-tier failing-check field on `ToolDispatchErro
 
 ---
 
-## Counter / governance (preliminary, pending R8 closure)
+## Counter / governance
 
-- counter: 81 (V122) → 82 (V123 pending Accepted; will advance on R8 APPROVE)
+- counter: 81 (V122) → **82** (V123 Accepted at R9 APPROVE clean)
 - Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 82 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进"), not governance-rule change → Kogami **NOT** triggered
 - Notion sync: pending (V118-V123 all pending sync; MCP server still disconnected since V119)
-- Self-pass-rate calibration: predicted 70% / 1-2 rounds; actual 7+ rounds — **major underestimate**. Calibration baseline correction needed: "new tool entry that crosses a pre-existing safety contract" = ~25% / 5-8 rounds (vs the standard "tool registry append" baseline that would have been ~70% / 1-2 rounds).
+- Self-pass-rate calibration: predicted 70% / 1-2 rounds; actual **9 rounds** — major underestimate. Calibration baseline correction: **"new tool entry that crosses a pre-existing safety contract" ≈ 20% / 7-10 rounds** (vs the standard "tool registry append" baseline ~70% / 1-2 rounds). Apply this baseline to any future DEC where the new feature touches an under-specified safety surface.
 
 ## Anchor
 
-R7 implementation commit (post-fix, R8 pending): `7e30555`
-R8 review commits attempted: 7e30555 (3× attempts, all disconnected)
+R9 APPROVE-clean commit: `0ff51e3`

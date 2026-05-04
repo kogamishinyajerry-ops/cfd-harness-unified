@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-123
 title: Mesh-regenerate tool · `regenerate_mesh` registry entry wrapping `mesh_imported_case` · AI proposes coarse→fine remesh, engineer approves
-status: Pending-R8 (2026-05-05 · 7 rounds substantive Codex chain CHANGES_REQUIRED→fix→CHANGES_REQUIRED → R8 review attempted 3× across CRS+86gs at 7e30555, all disconnected mid-stream — sustained relay instability across both backends. Implementation functionally complete: 1189/1194 backend tests pass (5 pre-existing failures unchanged across the entire arc), 8/8 ProposalCard frontend tests pass. Final R8 governance signature pending relay recovery.)
-anchor_commit_pending_r8: 7e30555
+status: Accepted (2026-05-05 · Codex CRS gpt-5.4 high R9 APPROVE clean at 0ff51e3 · 9-round chain · major overrun vs predicted 70%/1-2 rounds — see chain report §L1 + §L4 for the under-specified-safety-contract and cross-platform-errno-parity calibration baselines)
+anchor_commit: 0ff51e3
 codex_tool_report_path: reports/codex_tool_reports/v61_123_r1_chain.md
 codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 sustained-86gs-instability protocol)
 authored_by: Claude Code Opus 4.7 (1M context)
