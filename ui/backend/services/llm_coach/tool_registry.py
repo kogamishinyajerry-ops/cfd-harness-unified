@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ui.backend.services.case_manifest.locking import CaseLockError, case_lock
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
@@ -120,10 +120,18 @@ class SetPatchBcTypeArgs(BaseModel):
 
 
 class RegenerateMeshArgs(BaseModel):
-    """Args for ``regenerate_mesh`` (DEC-V61-123).
+    """Args for ``regenerate_mesh`` (DEC-V61-123 + V61-124).
 
     Re-runs gmsh + gmshToFoam on the case's imported STL with the
-    requested density preset, replacing ``polyMesh/`` in place.
+    requested density, replacing ``polyMesh/`` in place. Density may
+    be specified two ways:
+
+    * ``mesh_mode`` — preset density (beginner ~30k cells, power ~250k).
+    * ``target_cell_count`` — V124 AI-proposed specific cell count.
+
+    Exactly one of the two must be set. Mutual exclusion is enforced
+    by a model-level validator so a proposal carrying both fields
+    fails at the registry boundary with ``arg_validation_failed``.
 
     ``extra="forbid"`` matches V121's trust-boundary discipline — a
     proposal that ships off-contract keys MUST fail at the registry
@@ -132,15 +140,45 @@ class RegenerateMeshArgs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mesh_mode: Literal["beginner", "power"] = Field(
-        ...,
+    mesh_mode: Literal["beginner", "power"] | None = Field(
+        default=None,
         description=(
             "Density preset. 'beginner' targets a few hundred thousand "
             "cells (lc ~ diagonal/30); 'power' targets ~10x finer "
             "(lc ~ diagonal/60). Both are bounded by the V61-105 "
-            "cell-budget guard."
+            "cell-budget guard. Mutually exclusive with target_cell_count."
         ),
     )
+    target_cell_count: int | None = Field(
+        default=None,
+        ge=1_000,
+        le=50_000_000,
+        description=(
+            "DEC-V61-124: AI-proposed specific cell count (1k-50M). The "
+            "pipeline converts this to a characteristic length via a "
+            "cube approximation; real cell count may differ by up to "
+            "+/-50% for non-cube geometries. Bounded by V61-105 "
+            "cell-budget hard cap (50M). Mutually exclusive with mesh_mode."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_density_axis(self) -> "RegenerateMeshArgs":
+        """V124: enforce mutual exclusion between mesh_mode and
+        target_cell_count. Exactly one must be set; both-set or
+        neither-set both fail validation with a clear message."""
+        mesh_mode_set = self.mesh_mode is not None
+        target_set = self.target_cell_count is not None
+        if mesh_mode_set and target_set:
+            raise ValueError(
+                "mesh_mode and target_cell_count are mutually exclusive; "
+                "set exactly one"
+            )
+        if not mesh_mode_set and not target_set:
+            raise ValueError(
+                "exactly one of mesh_mode or target_cell_count must be set"
+            )
+        return self
 
 
 # ────────── ApplyResult shape ──────────
@@ -228,9 +266,21 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
     # translation layer maps each to ToolDispatchError preserving the
     # underlying failing_check as inner_failing_check (V123 R1 P2-1/2-2).
     with case_lock(case_dir):
-        result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
+        if typed.target_cell_count is not None:
+            # V124 path: AI specified an exact cell count. Pipeline
+            # converts to lc via cube approximation (see DEC-V61-124).
+            result = mesh_imported_case(
+                case_id, target_cell_count=typed.target_cell_count
+            )
+        else:
+            # V123 path: AI picked a preset (beginner / power).
+            result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
+    if typed.target_cell_count is not None:
+        density_label = f"target ~{typed.target_cell_count:,} cells"
+    else:
+        density_label = f"'{typed.mesh_mode}' mode"
     summary = (
-        f"Regenerated mesh in '{typed.mesh_mode}' mode: "
+        f"Regenerated mesh ({density_label}): "
         f"{result.cell_count} cells, {result.face_count} faces."
     )
     if result.warning:
@@ -267,8 +317,10 @@ _TOOL_REGISTRY: dict[str, ToolDescriptor] = {
             "Re-run gmsh + gmshToFoam on the case's imported STL to "
             "produce a fresh polyMesh with the requested density. Use "
             "after the mesh-quality snapshot reports cell_count_low or "
-            "when the engineer asks to refine. args: mesh_mode (one of "
-            "beginner | power)."
+            "when the engineer asks to refine. args: EXACTLY ONE of "
+            "mesh_mode (one of beginner | power) OR target_cell_count "
+            "(integer between 1000 and 50000000 — DEC-V61-124 lets the "
+            "AI propose a specific cell count instead of a preset)."
         ),
     ),
 }

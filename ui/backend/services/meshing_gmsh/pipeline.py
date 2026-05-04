@@ -103,9 +103,17 @@ def mesh_imported_case(
     case_id: str,
     *,
     mesh_mode: MeshMode = "beginner",
+    target_cell_count: int | None = None,
     container_name: str | None = None,
 ) -> MeshResult:
     """Run the full M6.0 pipeline for the given imported case_id.
+
+    DEC-V61-124: ``target_cell_count`` is the AI-coach-friendly knob —
+    when set it overrides ``mesh_mode``-derived sizing with a cube-
+    derived characteristic length (see gmsh_runner._lc_from_cell_count).
+    Real cell counts may differ from target by up to +/-50% on
+    non-cube geometries. The V61-105 cell-budget guard still bounds
+    the result.
 
     Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
     is one of :data:`FailingCheck`. The route maps each value to an
@@ -119,6 +127,7 @@ def mesh_imported_case(
             stl_path=stl_path,
             output_msh_path=msh_path,
             mesh_mode=mesh_mode,
+            target_cell_count=target_cell_count,
         )
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc

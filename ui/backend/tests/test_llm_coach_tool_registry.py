@@ -624,6 +624,188 @@ def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):
     assert r1.state_after == r2.state_after
 
 
+# ────────── DEC-V61-124 · target_cell_count arg ──────────
+
+
+def test_regenerate_args_accepts_target_cell_count():
+    """V124: target_cell_count alone (no mesh_mode) is a valid args
+    payload."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    args = RegenerateMeshArgs(target_cell_count=100_000)
+    assert args.target_cell_count == 100_000
+    assert args.mesh_mode is None
+
+
+def test_regenerate_args_accepts_mesh_mode_only():
+    """V124: existing V123 mesh_mode-only path still works."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    args = RegenerateMeshArgs(mesh_mode="power")
+    assert args.mesh_mode == "power"
+    assert args.target_cell_count is None
+
+
+def test_regenerate_args_rejects_both_set():
+    """V124: mutual exclusion — both fields set at once must fail."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(mesh_mode="power", target_cell_count=100_000)
+
+
+def test_regenerate_args_rejects_neither_set():
+    """V124: mutual exclusion — neither field set must also fail (no
+    ambiguous default)."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs()
+
+
+def test_regenerate_args_target_cell_count_floor():
+    """V124: target_cell_count must be >= 1000 (Pydantic ge=1000)."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(target_cell_count=999)
+    # 1000 is the floor and must accept.
+    RegenerateMeshArgs(target_cell_count=1_000)
+
+
+def test_regenerate_args_target_cell_count_ceiling():
+    """V124: target_cell_count must be <= 50_000_000 (matches V61-105
+    hard cap)."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(target_cell_count=50_000_001)
+    # Exact cap accepts.
+    RegenerateMeshArgs(target_cell_count=50_000_000)
+
+
+def test_dispatch_regenerate_mesh_with_target_cell_count_invokes_pipeline(
+    tmp_path, monkeypatch
+):
+    """V124: dispatch path calls mesh_imported_case with
+    target_cell_count keyword (NOT mesh_mode)."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_target")
+    captured: dict[str, object] = {}
+
+    def fake_mesh(case_id, **kwargs):
+        captured["case_id"] = case_id
+        captured["kwargs"] = kwargs
+        return _stub_mesh_result(case_id=case_id)
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        fake_mesh,
+    )
+    dispatch(case_dir, "regenerate_mesh", {"target_cell_count": 500_000})
+    assert captured["case_id"] == "ldc_v124_target"
+    # Pipeline received target_cell_count, NOT mesh_mode.
+    assert captured["kwargs"] == {"target_cell_count": 500_000}
+
+
+def test_dispatch_regenerate_mesh_summary_says_target_when_set(
+    tmp_path, monkeypatch
+):
+    """V124: ApplyResult summary surfaces 'target ~N cells' when
+    target_cell_count is set, NOT 'mode'."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_summary")
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        lambda case_id, **kwargs: _stub_mesh_result(case_id=case_id),
+    )
+    result = dispatch(
+        case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
+    )
+    assert "target" in result.summary.lower()
+    assert "500,000" in result.summary or "500000" in result.summary
+    # The 'mode' wording is the V123 mesh_mode path; must not appear.
+    assert "'beginner' mode" not in result.summary
+    assert "'power' mode" not in result.summary
+
+
+def test_dispatch_regenerate_mesh_v123_mesh_mode_path_unchanged(
+    tmp_path, monkeypatch
+):
+    """V124 regression: V123's mesh_mode='power' path still flows
+    through unchanged after the args refactor."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_regress")
+    captured: dict[str, object] = {}
+
+    def fake_mesh(case_id, **kwargs):
+        captured["kwargs"] = kwargs
+        return _stub_mesh_result(case_id=case_id, mesh_mode="power")
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        fake_mesh,
+    )
+    result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
+    assert captured["kwargs"] == {"mesh_mode": "power"}
+    assert "'power' mode" in result.summary
+
+
+def test_regenerate_mesh_tool_description_mentions_target_cell_count():
+    """V124: tool description string surfaces target_cell_count + bounds
+    so the LLM knows the schema."""
+    [tool] = [t for t in list_tools() if t.name == "regenerate_mesh"]
+    desc = tool.description
+    assert "target_cell_count" in desc
+    # Bounds must be discoverable for the LLM.
+    assert "1000" in desc or "1,000" in desc or "1k" in desc
+    assert "50000000" in desc or "50,000,000" in desc or "50M" in desc
+
+
+# ────────── V124 cube-formula sanity (lc-from-target_cell_count) ──────────
+
+
+def test_lc_from_target_cell_count_matches_beginner_preset_for_30k():
+    """V124 AC-5: for a unit cube (diagonal=sqrt(3)) and target=30k,
+    the V124 formula must match the V123 beginner preset (d/30) within
+    5%. This regression-protects the formula calibration."""
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        _default_characteristic_length,
+        _lc_from_target_cell_count,
+    )
+    import math
+
+    diagonal = math.sqrt(3.0)  # unit cube
+    lc_v124 = _lc_from_target_cell_count(diagonal, 30_000)
+    lc_v123_beginner = _default_characteristic_length(diagonal, "beginner")
+    # Within 5% of the V123 preset.
+    assert abs(lc_v124 - lc_v123_beginner) / lc_v123_beginner < 0.05
+
+
+def test_lc_from_target_cell_count_matches_power_preset_for_250k():
+    """V124 AC-6: the formula must also match the V123 power preset
+    (d/60) at target=250k within 5%."""
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        _default_characteristic_length,
+        _lc_from_target_cell_count,
+    )
+    import math
+
+    diagonal = math.sqrt(3.0)
+    lc_v124 = _lc_from_target_cell_count(diagonal, 250_000)
+    lc_v123_power = _default_characteristic_length(diagonal, "power")
+    assert abs(lc_v124 - lc_v123_power) / lc_v123_power < 0.05
+
+
+def test_lc_from_target_cell_count_degenerate_diagonal_returns_zero():
+    """V124: a zero or negative diagonal (degenerate input) returns 0
+    so the caller falls back to gmsh's default sizing."""
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        _lc_from_target_cell_count,
+    )
+
+    assert _lc_from_target_cell_count(0.0, 100_000) == 0.0
+    assert _lc_from_target_cell_count(-1.0, 100_000) == 0.0
+    assert _lc_from_target_cell_count(1.0, 0) == 0.0
+
+
 def test_regenerate_mesh_holds_case_lock_during_pipeline(
     tmp_path, monkeypatch
 ):

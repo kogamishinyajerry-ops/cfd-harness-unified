@@ -83,12 +83,36 @@ def _default_characteristic_length(diagonal: float, mesh_mode: str) -> float:
     return diagonal / (60.0 if mesh_mode == "power" else 30.0)
 
 
+def _lc_from_target_cell_count(diagonal: float, target_cell_count: int) -> float:
+    """DEC-V61-124: convert an AI-proposed cell-count target to a
+    characteristic length using a cube approximation.
+
+    Derivation (see DEC-V61-124 §"Why this formula"):
+      * tetrahedral mesh of bbox volume V with characteristic length lc
+        produces ~6 × V / lc**3 cells
+      * for a cube of side s and diagonal d = s × sqrt(3), V = (d/sqrt(3))**3
+      * therefore lc ≈ d × (1.155 / N)**(1/3) ≈ d × 1.05 / N**(1/3)
+
+    Calibrated to match beginner (d/30 → ~30k cells) and power
+    (d/60 → ~250k cells) presets within 1.5% on a unit cube.
+    Real-world non-cube geometries diverge from this approximation by
+    up to ±50%; the cell_budget guard catches gross overshoots.
+
+    Returns 0.0 for degenerate diagonals so the caller falls back to
+    gmsh's default sizing.
+    """
+    if diagonal <= 0 or target_cell_count <= 0:
+        return 0.0
+    return diagonal * 1.05 / (target_cell_count ** (1.0 / 3.0))
+
+
 def _gmsh_inline(
     *,
     stl_path: Path,
     output_msh_path: Path,
     mesh_mode: str,
     characteristic_length_override: float | None,
+    target_cell_count: int | None = None,
 ) -> GmshRunResult:
     """The original gmsh-API meshing logic. Runs in a subprocess so
     ``gmsh.initialize()``'s ``signal.signal()`` call lands on a fresh
@@ -444,11 +468,16 @@ def _gmsh_inline(
             else:
                 diagonal = 0.0
 
-            lc = (
-                characteristic_length_override
-                if characteristic_length_override is not None
-                else _default_characteristic_length(diagonal, mesh_mode)
-            )
+            # V124: target_cell_count > characteristic_length_override
+            # > preset-derived default. The cell_budget guard
+            # (cell_budget.py) is the ultimate cap regardless of which
+            # path supplied lc.
+            if target_cell_count is not None:
+                lc = _lc_from_target_cell_count(diagonal, target_cell_count)
+            elif characteristic_length_override is not None:
+                lc = characteristic_length_override
+            else:
+                lc = _default_characteristic_length(diagonal, mesh_mode)
             if lc > 0:
                 gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
                 gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
@@ -550,6 +579,7 @@ def _subprocess_target(
     output_msh_path_str: str,
     mesh_mode: str,
     characteristic_length_override: float | None,
+    target_cell_count: int | None,
     queue: "multiprocessing.Queue[tuple[str, object]]",
 ) -> None:
     """Run the gmsh meshing job inside a child process and post back the
@@ -569,6 +599,7 @@ def _subprocess_target(
             output_msh_path=Path(output_msh_path_str),
             mesh_mode=mesh_mode,
             characteristic_length_override=characteristic_length_override,
+            target_cell_count=target_cell_count,
         )
         # asdict() handles the Path → str translation for the dataclass
         # via a custom default factory; do it explicitly for safety.
@@ -593,12 +624,17 @@ def run_gmsh_on_imported_case(
     output_msh_path: Path,
     mesh_mode: str = "beginner",
     characteristic_length_override: float | None = None,
+    target_cell_count: int | None = None,
 ) -> GmshRunResult:
     """Mesh ``stl_path`` with gmsh and write ``output_msh_path``.
 
     Spawns a child process so gmsh's mandatory signal-handler install
     lands on a fresh main thread (FastAPI threadpool workers are not
     the main thread; see module docstring).
+
+    DEC-V61-124: ``target_cell_count``, when provided, takes precedence
+    over both ``characteristic_length_override`` and ``mesh_mode`` for
+    lc derivation (cube approximation; see _lc_from_target_cell_count).
     """
     # Use 'spawn' explicitly: macOS defaults to 'spawn' since 3.8 and
     # Linux defaults to 'fork', which copies the parent process state
@@ -613,6 +649,7 @@ def run_gmsh_on_imported_case(
             str(output_msh_path),
             mesh_mode,
             characteristic_length_override,
+            target_cell_count,
             queue,
         ),
     )
