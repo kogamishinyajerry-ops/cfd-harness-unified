@@ -230,6 +230,78 @@ def test_analyze_no_neighbour_file_yields_zero_internal_faces(tmp_path):
     assert report.boundary_face_count == 8 * 6
 
 
+# ────────── Codex R1 P1 (symlink escape) ──────────
+
+
+def test_analyze_refuses_symlinked_points_file(tmp_path):
+    """Codex R1 P1: a planted symlink at polyMesh/points must not be
+    followed — otherwise the analyzer (and the AI-coach prefetch) can
+    exfiltrate arbitrary host files."""
+    case_dir = _make_3d_case(tmp_path)
+    points_path = case_dir / "constant" / "polyMesh" / "points"
+    # Replace the real points file with a symlink to an outside target.
+    outside_target = tmp_path / "outside.txt"
+    outside_target.write_text("FoamFile{}\n1\n(\n(0.0 0.0 0.0)\n)\n")
+    points_path.unlink()
+    points_path.symlink_to(outside_target)
+    with pytest.raises(MeshQualityParseError) as exc_info:
+        analyze_mesh_quality(case_dir)
+    assert exc_info.value.failing_check == "symlink_escape"
+
+
+# ────────── Codex R1 P2 (truncated block detection) ──────────
+
+
+def test_analyze_truncated_owner_body_raises_count_mismatch(tmp_path):
+    """Codex R1 P2: owner declared count must match parsed entries.
+    A truncated owner file otherwise produces a 200 with bogus
+    cell_count derived from max(owner)+1."""
+    case_dir = _make_3d_case(tmp_path)
+    owner_path = case_dir / "constant" / "polyMesh" / "owner"
+    # Declared 999 but only 5 entries provided. Properly terminated.
+    owner_path.write_text(
+        _FOAM_HEADER.replace("object      points", "object      owner")
+        + "\n999\n(\n0\n1\n2\n3\n4\n)\n"
+    )
+    with pytest.raises(MeshQualityParseError) as exc_info:
+        analyze_mesh_quality(case_dir)
+    assert exc_info.value.failing_check == "owner_count_mismatch"
+
+
+def test_analyze_truncated_neighbour_body_raises_count_mismatch(tmp_path):
+    """Codex R1 P2: neighbour declared count must match parsed entries."""
+    case_dir = _make_3d_case(tmp_path)
+    neighbour_path = case_dir / "constant" / "polyMesh" / "neighbour"
+    neighbour_path.write_text(
+        _FOAM_HEADER.replace("object      points", "object      neighbour")
+        + "\n777\n(\n0\n1\n2\n)\n"
+    )
+    with pytest.raises(MeshQualityParseError) as exc_info:
+        analyze_mesh_quality(case_dir)
+    assert exc_info.value.failing_check == "neighbour_count_mismatch"
+
+
+def test_analyze_truncated_boundary_raises_count_mismatch(tmp_path):
+    """Codex R1 P2: boundary declared patch count must match parsed
+    patches when a header is present."""
+    case_dir = _make_3d_case(tmp_path)
+    boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
+    # Declares 5 patches but only 1 patch entry follows.
+    boundary_path.write_text(
+        _FOAM_HEADER.replace("object      points", "object      boundary")
+        + "\n5\n(\n"
+        "    walls\n    {\n"
+        "        type            patch;\n"
+        "        nFaces          12;\n"
+        "        startFace       0;\n"
+        "    }\n"
+        ")\n"
+    )
+    with pytest.raises(MeshQualityParseError) as exc_info:
+        analyze_mesh_quality(case_dir)
+    assert exc_info.value.failing_check == "boundary_count_mismatch"
+
+
 # ────────── Determinism / purity ──────────
 
 

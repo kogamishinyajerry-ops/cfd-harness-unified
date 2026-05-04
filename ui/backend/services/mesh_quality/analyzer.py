@@ -29,6 +29,8 @@ dev hardware. Caching deferred to V61-123 if dogfood shows latency.
 """
 from __future__ import annotations
 
+import errno
+import os
 import re
 from pathlib import Path
 
@@ -88,6 +90,57 @@ _POINT_LINE_RE = re.compile(
 # ────────── Helpers ──────────
 
 
+def _read_text_no_symlink(path: Path, *, failing_check: str) -> str:
+    """Read ``path`` as UTF-8 text without following symlinks.
+
+    Codex R1 P1: a planted symlink at any of the polyMesh files
+    would otherwise let the analyzer (and via the AI-coach prefetch,
+    the LLM) exfiltrate arbitrary host files. Open the file with
+    ``O_NOFOLLOW`` so the kernel raises ``ELOOP`` on a symlinked
+    final component; raise :class:`MeshQualityParseError` with
+    a stable ``failing_check`` so the route surfaces a structured
+    detail rather than an opaque traceback.
+
+    Same containment discipline as
+    ``services.case_manifest.locking._open_or_create_lock_fd``;
+    that module is the project's reference symlink-escape pattern.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            # A symlink was planted at the final path component.
+            # Refuse to follow.
+            raise MeshQualityParseError(
+                f"refused to follow symlink at {path.name}",
+                failing_check="symlink_escape",
+            ) from exc
+        raise MeshQualityParseError(
+            f"could not open {path.name}: {type(exc).__name__}",
+            failing_check=failing_check,
+        ) from exc
+    try:
+        size = os.fstat(fd).st_size
+        raw = os.read(fd, size) if size > 0 else b""
+    except OSError as exc:
+        raise MeshQualityParseError(
+            f"could not read {path.name}: {type(exc).__name__}",
+            failing_check=failing_check,
+        ) from exc
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise MeshQualityParseError(
+            f"{path.name} is not valid UTF-8",
+            failing_check=failing_check,
+        ) from exc
+
+
 def _split_foam_block(path: Path, *, failing_check: str) -> tuple[int, str]:
     """Parse a parens-list FOAM file into (declared_count, body).
 
@@ -98,13 +151,7 @@ def _split_foam_block(path: Path, *, failing_check: str) -> tuple[int, str]:
     doesn't match. ``failing_check`` is the structural problem
     surfaced to the route layer.
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise MeshQualityParseError(
-            f"could not read {path.name}: {type(exc).__name__}",
-            failing_check=failing_check,
-        ) from exc
+    text = _read_text_no_symlink(path, failing_check=failing_check)
     m = _FOAM_BLOCK_HEADER_RE.search(text)
     if not m:
         raise MeshQualityParseError(
@@ -122,27 +169,24 @@ def _split_foam_block(path: Path, *, failing_check: str) -> tuple[int, str]:
     return count, text[body_start:body_end]
 
 
-def _max_int_in_body(body: str) -> int:
-    """Return the largest non-negative integer appearing on any line
-    of the body. Used for owner.max() to derive cell_count.
+def _parse_int_body(body: str) -> list[int]:
+    """Parse all bare-integer entries from a parens-list body.
 
-    Returns -1 when body is empty (caller treats as 'no cells').
-    """
-    largest = -1
+    Returns the list in original order. Used to derive cell_count
+    (max(owner) + 1) AND to verify the declared count against the
+    actual entries (Codex R1 P2: truncated owner/neighbour blocks
+    must be rejected, not silently accepted)."""
+    out: list[int] = []
     for line in body.splitlines():
         line = line.strip()
         if not line:
             continue
-        # Owner/neighbour entries are bare integers, one per line.
-        # Defensive: if a line has multiple tokens (shouldn't happen
-        # in ASCII format), we still grab the first parseable int.
         try:
             value = int(line.split()[0])
         except (ValueError, IndexError):
             continue
-        if value > largest:
-            largest = value
-    return largest
+        out.append(value)
+    return out
 
 
 def _parse_points_body(body: str) -> list[tuple[float, float, float]]:
@@ -154,20 +198,34 @@ def _parse_points_body(body: str) -> list[tuple[float, float, float]]:
 
 def _read_patch_face_counts(boundary_path: Path) -> dict[str, int]:
     """Return {patch_name: nFaces} from polyMesh/boundary. Skips the
-    FoamFile dict that always sits at the head."""
-    try:
-        text = boundary_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise MeshQualityParseError(
-            f"could not read boundary: {type(exc).__name__}",
-            failing_check="boundary_unreadable",
-        ) from exc
+    FoamFile dict that always sits at the head.
+
+    Codex R1 P2: the boundary file declares a count header (``N``
+    followed by ``(``) just like points/owner; verify the declared
+    patch count matches the actual matched patches so a truncated
+    boundary file surfaces as a parse error instead of a partial
+    report.
+    """
+    text = _read_text_no_symlink(
+        boundary_path, failing_check="boundary_unreadable"
+    )
     out: dict[str, int] = {}
     for m in _BOUNDARY_PATCH_RE.finditer(text):
         name = m.group(1)
         if name == "FoamFile":
             continue
         out[name] = int(m.group(2))
+    # Validate against the declared count header. Some boundary
+    # files have no header (just the FoamFile dict + patch list);
+    # only enforce the check when the header is present.
+    header_match = _FOAM_BLOCK_HEADER_RE.search(text)
+    if header_match is not None:
+        declared = int(header_match.group(1))
+        if declared != len(out):
+            raise MeshQualityParseError(
+                f"boundary header declares {declared} patches but parsed {len(out)}",
+                failing_check="boundary_count_mismatch",
+            )
     return out
 
 
@@ -338,13 +396,30 @@ def analyze_mesh_quality(case_dir: Path) -> MeshQualityReport:
     owner_face_count, owner_body = _split_foam_block(
         owner_path, failing_check="owner_unreadable"
     )
-    max_owner = _max_int_in_body(owner_body)
+    owner_entries = _parse_int_body(owner_body)
+    # Codex R1 P2: the declared count header must match the actual
+    # number of entries. A truncated owner file would otherwise
+    # produce a 200 with bogus cell_count.
+    if owner_face_count != len(owner_entries):
+        raise MeshQualityParseError(
+            f"owner header declares {owner_face_count} entries but "
+            f"parsed {len(owner_entries)}",
+            failing_check="owner_count_mismatch",
+        )
+    max_owner = max(owner_entries) if owner_entries else -1
     cell_count = max_owner + 1 if max_owner >= 0 else 0
 
     if neighbour_path.is_file():
-        internal_face_count, _neighbour_body = _split_foam_block(
+        internal_face_count, neighbour_body = _split_foam_block(
             neighbour_path, failing_check="neighbour_unreadable"
         )
+        neighbour_entries = _parse_int_body(neighbour_body)
+        if internal_face_count != len(neighbour_entries):
+            raise MeshQualityParseError(
+                f"neighbour header declares {internal_face_count} entries "
+                f"but parsed {len(neighbour_entries)}",
+                failing_check="neighbour_count_mismatch",
+            )
     else:
         internal_face_count = 0
     boundary_face_count = max(0, owner_face_count - internal_face_count)
