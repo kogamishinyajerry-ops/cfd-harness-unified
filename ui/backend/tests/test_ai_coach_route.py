@@ -290,32 +290,85 @@ def test_ai_coach_stream_override_allows_proxy(monkeypatch):
         assert resp.status_code == 200
 
 
-# ────────── Mid-stream errors → SSE error event ──────────
+# ────────── Pre-stream upstream failures → typed HTTP status ──────────
+# Codex R1 P1: when chat_stream() fails on the FIRST __anext__ (before
+# any chunk has been delivered), the route maps the typed exception to
+# the documented HTTP status (mirroring /api/ai-chat) instead of
+# downgrading to 200 + SSE error event. Only failures that happen
+# AFTER the first chunk has been received surface as SSE error frames
+# (the HTTP status is already committed at that point).
 
 
-def test_ai_coach_stream_emits_error_event_on_upstream_failure():
+def test_ai_coach_stream_502_on_pre_stream_upstream_error():
     provider = _StubStreamProvider(exc=LLMUpstreamError("simulated"))
     app = _make_app(provider, analyzer_result=_make_report())
     with TestClient(app) as client:
         resp = client.post("/api/ai-coach/stream", json=_ok_body())
-        assert resp.status_code == 200  # stream opened
-        events = _parse_sse_events(resp.text)
-        assert any(e.get("error") == "LLMUpstreamError" for e in events)
-        assert events[-1].get("done") is True
+        assert resp.status_code == 502
 
 
-def test_ai_coach_stream_emits_error_event_on_auth_failure():
+def test_ai_coach_stream_401_on_pre_stream_auth_failure():
     provider = _StubStreamProvider(exc=LLMAuthError("bad key"))
+    app = _make_app(provider, analyzer_result=_make_report())
+    with TestClient(app) as client:
+        resp = client.post("/api/ai-coach/stream", json=_ok_body())
+        assert resp.status_code == 401
+        # Detail must NOT include the underlying exception text
+        # (might leak partial key fragments in upstream messages).
+        assert "bad key" not in resp.json()["detail"]
+
+
+def test_ai_coach_stream_429_on_pre_stream_rate_limit():
+    from ui.backend.services.llm_provider import LLMRateLimitError as _RL
+    provider = _StubStreamProvider(exc=_RL("slow down"))
+    app = _make_app(provider, analyzer_result=_make_report())
+    with TestClient(app) as client:
+        resp = client.post("/api/ai-coach/stream", json=_ok_body())
+        assert resp.status_code == 429
+
+
+def test_ai_coach_stream_400_on_pre_stream_bad_request():
+    from ui.backend.services.llm_provider import LLMBadRequestError as _BR
+    provider = _StubStreamProvider(exc=_BR("oversized"))
+    app = _make_app(provider, analyzer_result=_make_report())
+    with TestClient(app) as client:
+        resp = client.post("/api/ai-coach/stream", json=_ok_body())
+        assert resp.status_code == 400
+
+
+# ────────── Mid-stream (post-first-chunk) errors → SSE error event ──────────
+
+
+class _FirstChunkThenErrorProvider(LLMProvider):
+    """Yields one chunk successfully, then raises — so the SSE
+    response is already committed (200) by the time the failure happens.
+    """
+    def __init__(self, exc: Exception):
+        self._exc = exc
+
+    async def chat(self, request: ChatRequest) -> ChatResponse:
+        raise NotImplementedError
+
+    async def chat_stream(
+        self, request: ChatRequest
+    ) -> AsyncIterator[ChatStreamChunk]:
+        yield ChatStreamChunk(delta="partial", model_used="deepseek-v4-pro")
+        raise self._exc
+
+
+def test_ai_coach_stream_emits_sse_error_on_mid_stream_failure():
+    """A failure that occurs AFTER the first chunk has been emitted
+    must surface as a terminal SSE error frame, not a 5xx — the 200
+    status is already committed."""
+    provider = _FirstChunkThenErrorProvider(LLMUpstreamError("mid-stream blip"))
     app = _make_app(provider, analyzer_result=_make_report())
     with TestClient(app) as client:
         resp = client.post("/api/ai-coach/stream", json=_ok_body())
         assert resp.status_code == 200
         events = _parse_sse_events(resp.text)
-        # Detail should NOT include the underlying exception text
-        # (might leak partial key fragments in some upstream messages).
-        last = events[-1]
-        assert last["error"] == "LLMAuthError"
-        assert "bad key" not in last["detail"]
+        assert events[0]["delta"] == "partial"
+        assert events[-1].get("error") == "LLMUpstreamError"
+        assert events[-1].get("done") is True
 
 
 # ────────── Edge cases ──────────

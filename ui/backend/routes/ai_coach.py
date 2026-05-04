@@ -169,16 +169,83 @@ async def ai_coach_stream(
 
     provider = get_default_provider()
 
+    # Codex R1 P1: peek the first chunk BEFORE committing the
+    # StreamingResponse. If the upstream rejects the request
+    # pre-stream-open (bad key, 429, oversized payload, 5xx) the
+    # provider's chat_stream raises a typed exception on the very
+    # first __anext__. We map those to HTTP status codes per the
+    # documented contract, mirroring /api/ai-chat. Only mid-stream
+    # failures — i.e. after the first chunk has already been
+    # received — are surfaced as SSE error frames (the response
+    # status is already committed to 200 at that point).
+    stream_iter = provider.chat_stream(chat_req)
+    try:
+        first_chunk = await stream_iter.__anext__()
+    except StopAsyncIteration:
+        # Empty stream — synthesize a single done frame so the
+        # client still sees a terminal event.
+        first_chunk = None
+    except LLMAuthError as exc:
+        logger.error("AI coach auth error (pre-stream): %s", exc)
+        raise HTTPException(
+            status_code=401,
+            detail="LLM provider authentication failed; check DEEPSEEK_API_KEY",
+        ) from exc
+    except LLMRateLimitError as exc:
+        logger.warning("AI coach rate-limited (pre-stream): %s", exc)
+        raise HTTPException(
+            status_code=429,
+            detail="LLM provider rate-limited; please retry shortly",
+        ) from exc
+    except LLMBadRequestError as exc:
+        logger.warning("AI coach bad request (pre-stream): %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "LLM provider rejected the request "
+                "(likely oversized or malformed payload); adjust and retry"
+            ),
+        ) from exc
+    except (LLMUpstreamError, LLMTimeoutError) as exc:
+        logger.error("AI coach upstream error (pre-stream): %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM provider unavailable: {exc.__class__.__name__}",
+        ) from exc
+    except LLMConfigError as exc:
+        logger.error("AI coach config error (pre-stream): %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="LLM provider misconfigured",
+        ) from exc
+    except LLMProviderError as exc:
+        logger.exception("AI coach unexpected provider error (pre-stream)")
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM provider error: {exc.__class__.__name__}",
+        ) from exc
+
     async def event_source() -> AsyncIterator[str]:
         """Generate SSE events from the provider stream.
 
-        On terminal upstream failure, emit a final ``error`` event
-        then close. Disconnect detection: poll
+        The first chunk has already been pulled by the pre-stream peek
+        (Codex R1 P1) and is yielded first. Mid-stream failures emit a
+        terminal SSE error event then close. Disconnect detection: poll
         ``http_request.is_disconnected`` between yields so we don't
         keep pulling chunks for a client that's gone away.
         """
         try:
-            async for chunk in provider.chat_stream(chat_req):
+            if first_chunk is not None:
+                yield _sse_event(first_chunk.model_dump(exclude_none=True))
+                if first_chunk.done:
+                    return
+            else:
+                # Empty stream synthesized terminal frame.
+                yield _sse_event(
+                    {"delta": "", "done": True, "model_used": chat_req.model}
+                )
+                return
+            async for chunk in stream_iter:
                 if await http_request.is_disconnected():
                     logger.info(
                         "/api/ai-coach/stream client disconnected mid-stream; "
@@ -190,7 +257,7 @@ async def ai_coach_stream(
                 if chunk.done:
                     return
         except LLMAuthError as exc:
-            logger.error("AI coach auth error: %s", exc)
+            logger.error("AI coach auth error (mid-stream): %s", exc)
             yield _sse_event(
                 {
                     "error": "LLMAuthError",
@@ -199,7 +266,7 @@ async def ai_coach_stream(
                 }
             )
         except LLMRateLimitError as exc:
-            logger.warning("AI coach rate-limited: %s", exc)
+            logger.warning("AI coach rate-limited (mid-stream): %s", exc)
             yield _sse_event(
                 {
                     "error": "LLMRateLimitError",
@@ -208,7 +275,7 @@ async def ai_coach_stream(
                 }
             )
         except LLMBadRequestError as exc:
-            logger.warning("AI coach bad request: %s", exc)
+            logger.warning("AI coach bad request (mid-stream): %s", exc)
             yield _sse_event(
                 {
                     "error": "LLMBadRequestError",
@@ -217,7 +284,7 @@ async def ai_coach_stream(
                 }
             )
         except (LLMUpstreamError, LLMTimeoutError) as exc:
-            logger.error("AI coach upstream error: %s", exc)
+            logger.error("AI coach upstream error (mid-stream): %s", exc)
             yield _sse_event(
                 {
                     "error": exc.__class__.__name__,
@@ -226,7 +293,7 @@ async def ai_coach_stream(
                 }
             )
         except LLMConfigError as exc:
-            logger.error("AI coach config error: %s", exc)
+            logger.error("AI coach config error (mid-stream): %s", exc)
             yield _sse_event(
                 {
                     "error": "LLMConfigError",
@@ -235,7 +302,7 @@ async def ai_coach_stream(
                 }
             )
         except LLMProviderError as exc:
-            logger.exception("AI coach unexpected provider error")
+            logger.exception("AI coach unexpected provider error (mid-stream)")
             yield _sse_event(
                 {
                     "error": exc.__class__.__name__,
