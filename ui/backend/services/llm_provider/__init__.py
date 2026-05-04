@@ -26,13 +26,17 @@ from ui.backend.services.llm_provider.base import (
     MockLLMProvider,
 )
 from ui.backend.services.llm_provider.deepseek import DeepSeekProvider
-from ui.backend.services.llm_provider.factory import get_default_provider
+from ui.backend.services.llm_provider.factory import (
+    close_cached_provider,
+    get_default_provider,
+)
 
 __all__ = [
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
     "DeepSeekProvider",
+    "close_cached_provider",
     "LLMAuthError",
     "LLMBadRequestError",
     "LLMConfigError",

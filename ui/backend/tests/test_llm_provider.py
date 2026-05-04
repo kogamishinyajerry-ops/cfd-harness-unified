@@ -36,6 +36,7 @@ from ui.backend.services.llm_provider import (
     LLMTimeoutError,
     LLMUpstreamError,
     MockLLMProvider,
+    close_cached_provider,
     get_default_provider,
 )
 from ui.backend.services.llm_provider.base import LLMProviderError  # noqa: F401
@@ -332,6 +333,43 @@ def test_factory_rebuilds_on_same_length_key_rotation(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", key_b)
     p2 = get_default_provider()
     assert p1 is not p2, "same-length key rotation must invalidate cache"
+
+
+def test_close_cached_provider_calls_aclose_and_clears_cache(monkeypatch):
+    """Codex R8 P2 regression: the documented lifespan close path
+    must actually call aclose on the cached provider AND clear the
+    cache so a subsequent get_default_provider builds a fresh one."""
+    reset_default_provider()
+    aclose_calls: list[str] = []
+
+    class _RecordingProvider(MockLLMProvider):
+        async def aclose(self) -> None:
+            aclose_calls.append("closed")
+
+    from ui.backend.services.llm_provider import factory as factory_module
+
+    monkeypatch.setattr(
+        factory_module,
+        "DeepSeekProvider",
+        lambda api_key: _RecordingProvider(),
+    )
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-lifespan-test-1234567890abcdef")
+    p1 = get_default_provider()
+    assert isinstance(p1, _RecordingProvider)
+
+    asyncio.run(close_cached_provider())
+    assert aclose_calls == ["closed"]
+
+    # Subsequent get_default_provider builds a new instance (cache cleared).
+    p2 = get_default_provider()
+    assert p2 is not p1
+
+
+def test_close_cached_provider_is_noop_when_cache_empty():
+    """Idempotent: safe to call from lifespan-shutdown even if no
+    provider was ever requested."""
+    reset_default_provider()
+    asyncio.run(close_cached_provider())  # should not raise
 
 
 def test_factory_drops_evicted_provider_without_close(monkeypatch):

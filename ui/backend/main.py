@@ -40,8 +40,13 @@ Routes (Phase 0..4 — Path B MVP, per DEC-V61-002 + DEC-V61-003):
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from ui.backend.services.llm_provider import close_cached_provider
 
 from ui.backend.routes import (
     ai_chat,
@@ -135,6 +140,22 @@ try:
 except ModuleNotFoundError:
     case_inspect = None  # type: ignore[assignment]
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan handler.
+
+    Startup is a no-op: provider construction is lazy via
+    ``get_default_provider`` on the first ``/api/ai-chat`` request.
+    Shutdown closes the cached LLM provider (if any) so the
+    long-lived ``httpx.AsyncClient`` is torn down cleanly. Per
+    DEC-V61-118 §risk register R6 (Codex R3-R7 chain), this is the
+    only documented close path — in-process key rotation is
+    explicitly out of V1 scope.
+    """
+    yield
+    await close_cached_provider()
+
+
 app = FastAPI(
     title="CFD Harness UI Backend",
     version="0.5.0-phase-5",
@@ -144,6 +165,7 @@ app = FastAPI(
         "Queue, Run Monitor, Dashboard, Audit Package Builder. "
         "See docs/product_thesis.md + .planning/phase5_audit_package_builder_kickoff.md."
     ),
+    lifespan=_lifespan,
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )

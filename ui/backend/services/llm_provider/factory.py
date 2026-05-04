@@ -108,9 +108,41 @@ def reset_default_provider() -> None:
     Does NOT call ``aclose()`` on the cached provider — tests that
     need a clean teardown ``await provider.aclose()`` explicitly
     against the reference they kept. Production lifecycle goes through
-    the FastAPI ``lifespan`` hook, not this helper.
+    :func:`close_cached_provider` from the FastAPI ``lifespan`` hook.
     """
     global _cached_provider, _cached_key_fingerprint
     with _lock:
         _cached_provider = None
         _cached_key_fingerprint = None
+
+
+async def close_cached_provider() -> None:
+    """Close the active singleton (if any) and clear the cache.
+
+    Wired into the FastAPI ``lifespan`` shutdown handler in
+    :mod:`ui.backend.main` so the long-lived ``httpx.AsyncClient``
+    held by :class:`DeepSeekProvider` is torn down cleanly when the
+    server stops accepting new requests. Idempotent: safe to call
+    even if no provider has been built yet.
+
+    Calling this during normal app lifecycle does NOT affect a
+    process that's still serving traffic — by the time uvicorn fires
+    the lifespan-shutdown, no new ``/api/ai-chat`` requests will
+    arrive, so there is no race surface. Codex R3-R7 chain
+    deliberately scoped the cleanup to this single call site
+    (DEC-V61-118 §risk register R6).
+    """
+    global _cached_provider, _cached_key_fingerprint
+    with _lock:
+        provider = _cached_provider
+        _cached_provider = None
+        _cached_key_fingerprint = None
+    if provider is None:
+        return
+    aclose = getattr(provider, "aclose", None)
+    if aclose is None:
+        return
+    try:
+        await aclose()
+    except Exception:
+        logger.exception("aclose of cached LLM provider failed")
