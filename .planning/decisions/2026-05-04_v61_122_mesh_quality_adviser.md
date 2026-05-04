@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-122
 title: Mesh-quality adviser foundation · polyMesh-derived metrics + AI prompt integration · GET /api/cases/{id}/mesh-quality
-status: Proposed (2026-05-04 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + new operator-facing endpoint + AI-system-prompt extension triggers)
-codex_tool_report_path: reports/codex_tool_reports/v61_122_r1_chain.md (to be created)
+status: Accepted (2026-05-04 · Codex CRS gpt-5.4 high R2 APPROVE clean at 7b368dd · 2-round chain · within predicted 2-3 rounds at 65% pass rate)
+anchor_commit: 7b368dd
+codex_tool_report_path: reports/codex_tool_reports/v61_122_r1_chain.md
 codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 sustained-86gs-instability protocol)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-04
