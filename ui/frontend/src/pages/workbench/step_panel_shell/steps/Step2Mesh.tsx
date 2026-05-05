@@ -174,13 +174,17 @@ export function Step2Mesh({
         </div>
       )}
 
-      {/* V127: Fluent-style quality gauges + per-patch chips. Renders
-       *  only after the first successful mesh (meshGenSeq > 0) and
-       *  re-fetches on every subsequent regenerate (manual or AI).
-       *  Internally graceful-degrades when the cfd-openfoam container
-       *  is down (V126 contract: V122 fields populate, gauges show
-       *  "skipped"). */}
-      {meshGenSeq > 0 && (
+      {/* V127: Fluent-style quality gauges + per-patch chips.
+       *  R1 P1 fix: always mount when caseId is set so the card also
+       *  appears for cases meshed in an earlier session (the
+       *  meshGenSeq>0 gate broke the "review existing mesh" workflow
+       *  — Step 2 marks complete from the /mesh/render probe but
+       *  meshGenSeq stays 0 unless the user re-runs the mesh).
+       *  MeshQualityCard's own 404 handling self-hides when polyMesh
+       *  isn't ready yet, so a fresh case shows nothing here.
+       *  meshGenSeq still drives re-fetches after manual or
+       *  AI-coach-driven regenerate. */}
+      {caseId && (
         <MeshQualityCard caseId={caseId} meshGenSeq={meshGenSeq} />
       )}
 

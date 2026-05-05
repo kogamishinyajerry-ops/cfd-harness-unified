@@ -98,9 +98,28 @@ function classifyValue(value: number, bands: GaugeBand[]): GaugeBand {
   return bands[bands.length - 1];
 }
 
-function clampPercent(value: number, axisMax: number): number {
+type AxisScale = "linear" | "log";
+
+/** Map a value to a 0-100 percentage along the gauge bar.
+ *
+ * R1 P2 fix: aspect-ratio bands span 10 / 100 / 1000 / 10000 — on a
+ * linear axis those bands occupy 0.1 / 0.9 / 9 / 90 percent, bunching
+ * normal values against the left edge. Log scale (`log10(value+1)` /
+ * `log10(axisMax+1)`) gives each decade equal width, matching how
+ * engineers reason about aspect ratio. Linear stays the default for
+ * skewness (0..1) and non-orthogonality (0..90) where the bands are
+ * already evenly distributed.
+ */
+function clampPercent(
+  value: number,
+  axisMax: number,
+  scale: AxisScale = "linear",
+): number {
   if (!isFinite(value) || value <= 0) return 0;
   if (value >= axisMax) return 100;
+  if (scale === "log") {
+    return (Math.log10(value + 1) / Math.log10(axisMax + 1)) * 100;
+  }
   return (value / axisMax) * 100;
 }
 
@@ -158,6 +177,9 @@ interface QualityGaugeProps {
   axisMax: number;
   /** Optional formatter for the displayed value (e.g. "65°", "0.42"). */
   format?: (v: number) => string;
+  /** R1 P2: aspect ratio uses log10 scale so each decade gets equal
+   *  bar width. Default is linear for skewness / non-orthogonality. */
+  scale?: AxisScale;
 }
 
 function QualityGauge({
@@ -166,6 +188,7 @@ function QualityGauge({
   bands,
   axisMax,
   format,
+  scale = "linear",
 }: QualityGaugeProps) {
   // Render the band ladder as a stacked horizontal bar with a needle
   // overlay at the current value. When value is null (skipped), render
@@ -173,7 +196,7 @@ function QualityGauge({
   // threshold geography.
   const skipped = value === null;
   const band = !skipped ? classifyValue(value, bands) : null;
-  const needlePercent = !skipped ? clampPercent(value, axisMax) : 0;
+  const needlePercent = !skipped ? clampPercent(value, axisMax, scale) : 0;
   return (
     <div data-testid={`mesh-quality-gauge-${label.replace(/\s+/g, "-").toLowerCase()}`}>
       <div className="flex items-baseline justify-between text-[11px]">
@@ -203,10 +226,16 @@ function QualityGauge({
         }
       >
         {bands.map((b, i) => {
-          // Each band's width on the axis is (b.max - prevMax) / axisMax.
+          // Each band's width matches the SAME scale the needle uses
+          // (linear or log10), so the band geography on the bar is
+          // visually consistent with where the needle lands. R1 P2
+          // closure: previously linear-only width math collapsed the
+          // 10/100/1000 aspect-ratio bands to <10% combined.
           const prevMax = i === 0 ? 0 : (bands[i - 1].max ?? axisMax);
           const cap = b.max === null ? axisMax : Math.min(b.max, axisMax);
-          const widthPct = ((cap - prevMax) / axisMax) * 100;
+          const startPct = clampPercent(prevMax, axisMax, scale);
+          const endPct = clampPercent(cap, axisMax, scale);
+          const widthPct = endPct - startPct;
           if (widthPct <= 0) return null;
           return (
             <div
@@ -405,6 +434,7 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
               bands={ASPECT_RATIO_BANDS}
               axisMax={ASPECT_RATIO_AXIS_MAX}
               format={(v) => v.toFixed(0)}
+              scale="log"
             />
           </div>
           {state.report.report_kind === "v126" &&
