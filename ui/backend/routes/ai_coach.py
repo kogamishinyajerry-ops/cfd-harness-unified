@@ -62,6 +62,7 @@ from ui.backend.services.case_completeness import (
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
 from ui.backend.services.mesh_quality import (
+    CheckMeshError,
     MeshQualityNotAvailableError,
     MeshQualityParseError,
     MeshQualityReport,
@@ -159,6 +160,22 @@ async def ai_coach_stream(
     """
     require_loopback(http_request, route_label="/api/ai-coach/stream")
 
+    # Codex base-review-3 P1: reject path-traversal case_ids BEFORE
+    # any analyzer touches disk. The other case-backed routes
+    # (/api/cases/{case_id}/...) reject these via is_safe_case_id at
+    # entry; the coach /stream endpoint had only Pydantic length
+    # validation, so a body like {"case_id": "../../some_yaml"} would
+    # let analyze_case_completeness probe paths outside user_drafts
+    # and fold any matching file's contents into the upstream prompt.
+    if not is_safe_case_id(body.case_id):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "bad_case_id",
+                "case_id": body.case_id,
+            },
+        )
+
     # Pre-fetch SYNCHRONOUSLY before opening the stream so a 404 on
     # case_id surfaces as a clean HTTP 404, not as a stream that
     # immediately errors. Acceptable latency: the analyzer is in-memory
@@ -183,22 +200,50 @@ async def ai_coach_stream(
     # state — log debug, prompt skips the section. Parse errors are
     # logged but do NOT abort the chat — the engineer's coaching
     # continues without mesh data.
+    # is_safe_case_id was already enforced above (base-review-3 P1).
     mesh_quality_report: MeshQualityReport | None = None
-    if is_safe_case_id(body.case_id):
-        case_dir = IMPORTED_DIR / body.case_id
-        if case_dir.is_dir():
+    case_dir = IMPORTED_DIR / body.case_id
+    if case_dir.is_dir():
+        try:
+            # Codex base-review-3 P2: pass run_checkmesh=True so the
+            # coach prompt actually surfaces V126's checkMesh metrics
+            # (max skewness, non-orthogonality, aspect ratio, mesh_ok).
+            # Without this, V126's whole feature is invisible to the
+            # AI — the prompt only shows V122 bbox-derived approximations.
+            # analyze_mesh_quality's graceful-degradation contract
+            # handles container-unavailable internally: when the
+            # cfd-openfoam container is down, the V122 fields populate
+            # as normal and checkmesh_* fields stay None — no error,
+            # no extra latency, no operator-visible failure.
+            mesh_quality_report = analyze_mesh_quality(
+                case_dir, run_checkmesh=True
+            )
+        except MeshQualityNotAvailableError:
+            # Pre-mesh case state — expected, no log noise.
+            pass
+        except MeshQualityParseError as exc:
+            logger.warning(
+                "mesh-quality parse failed for case_id=%r failing_check=%s; "
+                "proceeding without mesh section in coach prompt",
+                body.case_id,
+                exc.failing_check,
+            )
+        except CheckMeshError as exc:
+            # checkMesh genuine failure (parse_error, exit_nonzero,
+            # mid-call docker_sdk_error) — V126's graceful-degradation
+            # contract distinguishes these from container-down. Log
+            # and proceed with V122 fields only; don't abort the
+            # coach call over a real-time mesh metric.
+            logger.warning(
+                "checkMesh failed for case_id=%r failing_check=%s; "
+                "proceeding with V122 fields only",
+                body.case_id,
+                exc.failing_check,
+            )
             try:
                 mesh_quality_report = analyze_mesh_quality(case_dir)
-            except MeshQualityNotAvailableError:
-                # Pre-mesh case state — expected, no log noise.
+            except (MeshQualityNotAvailableError, MeshQualityParseError):
                 pass
-            except MeshQualityParseError as exc:
-                logger.warning(
-                    "mesh-quality parse failed for case_id=%r failing_check=%s; "
-                    "proceeding without mesh section in coach prompt",
-                    body.case_id,
-                    exc.failing_check,
-                )
 
     system_prompt = build_coach_system_prompt(
         report, mesh_quality_report=mesh_quality_report

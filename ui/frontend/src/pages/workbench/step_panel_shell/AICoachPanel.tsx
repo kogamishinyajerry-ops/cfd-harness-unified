@@ -381,15 +381,18 @@ function TurnRow({ caseId, turn, idx }: TurnRowProps) {
         )}
       </span>
       {/*
-       * Codex base-review-2 P2: defer proposal acceptance until the
-       * assistant turn has finalized. While turn.streaming is true the
-       * `<<PROPOSAL ... PROPOSAL>>` block may already be parsed, but
-       * (1) the response could still error or be cancelled, (2)
-       * turn.modelUsed is still null until onDone fires — so accepting
-       * mid-stream produces audit rows missing provider attribution.
-       * Render proposal cards only after the terminal frame.
+       * Codex base-review-2 P2 + base-review-3 P1: defer proposal
+       * acceptance until the assistant turn has finalized SUCCESSFULLY.
+       * `!turn.streaming` was insufficient because onError clears
+       * streaming without setting complete — so an aborted/errored
+       * turn that already emitted a full <<PROPOSAL ... PROPOSAL>>
+       * block would still render an active Accept button. Gating on
+       * turn.complete (set ONLY in onDone, same flag history replay
+       * uses) ensures the user can only act on a fully-confirmed
+       * response, and turn.modelUsed is guaranteed populated for the
+       * audit row.
        */}
-      {!turn.streaming &&
+      {turn.complete &&
         parsed.proposals.map((p) => (
           <ProposalCard
             key={`${turn.turnId}-prop-${p.index}`}
