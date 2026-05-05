@@ -15,7 +15,10 @@ import type {
   MeshSuccessResponse,
 } from "@/types/mesh_imported";
 
-import { MeshQualityCard } from "../MeshQualityCard";
+import {
+  MeshQualityCard,
+  invalidateMeshQualityCache,
+} from "../MeshQualityCard";
 import type { StepTaskPanelProps } from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
@@ -54,6 +57,12 @@ export function Step2Mesh({
     try {
       const r = await api.meshImported(caseId, meshMode);
       setResponse(r);
+      // V127 R3 P1: invalidate the mesh-quality cache here AND bump
+      // meshGenSeq. The cache lives at module scope, so this is the
+      // authoritative bust point for manual mesh runs (the AI-coach
+      // regenerate_mesh path bumps via the module-level event
+      // listener registered in MeshQualityCard).
+      invalidateMeshQualityCache(caseId);
       setMeshGenSeq((s) => s + 1);
       onStepComplete();
     } catch (e) {

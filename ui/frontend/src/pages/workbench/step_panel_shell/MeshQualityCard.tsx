@@ -352,38 +352,64 @@ function FailedChecksList({ checks }: { checks: string[] }) {
 
 // ────────── Main component ──────────
 
-/** R2 P2: module-level cache so remounting the card on Step 2 ↔ 3/4
- *  navigation doesn't re-run Docker checkMesh against an unchanged
- *  mesh. Keyed by `${caseId}:${meshGenSeq}` so a fresh mesh (which
- *  bumps meshGenSeq) gets a fresh fetch but a no-op remount hits
- *  the cache and renders instantly. Cache is in-memory only —
- *  acceptable for a workbench session; full reload re-warms.
+/** R2 P2 + R3 P1: module-level cache so remounting the card on
+ *  Step 2 ↔ 3/4 navigation doesn't re-run Docker checkMesh against
+ *  an unchanged mesh. Keyed by ``caseId`` ONLY (R3 P1 closure: prior
+ *  ``${caseId}:${meshGenSeq}`` keying was broken because meshGenSeq
+ *  lived in Step2Mesh local state and reset to 0 on remount). The
+ *  cache is invalidated on:
+ *    1. local meshImported() success (Step2Mesh's triggerMesh)
+ *    2. ai-coach:proposal-applied for regenerate_mesh (registered at
+ *       module level so it fires regardless of which step is mounted)
+ *    3. R3 P2: V126 graceful-degradation responses (checkmesh_mesh_ok
+ *       === null) NOT cached so operator starting the container later
+ *       gets a fresh fetch on next remount
  */
 const meshQualityCache = new Map<string, LoadState>();
 
-function cacheKey(caseId: string, meshGenSeq: number): string {
-  return `${caseId}:${meshGenSeq}`;
+/** Invalidate one or all entries. Called by Step2Mesh after a fresh
+ *  mesh lands and by the module-level regenerate_mesh listener so the
+ *  next remount fetches against the new polyMesh. */
+export function invalidateMeshQualityCache(caseId?: string): void {
+  if (caseId === undefined) {
+    meshQualityCache.clear();
+  } else {
+    meshQualityCache.delete(caseId);
+  }
 }
 
 /** Test-only export: clear the module-level cache so tests with
- *  re-used caseIds don't see stale state from prior runs. NOT for
- *  production use — runtime relies on the cache surviving Step 2 ↔
- *  3/4 navigation. */
+ *  re-used caseIds don't see stale state from prior runs. */
 export function __clearMeshQualityCacheForTests(): void {
   meshQualityCache.clear();
 }
 
+// R3 P1: register the regenerate_mesh listener at module level so AI-
+// driven mesh regenerations bust the cache even when Step2Mesh is not
+// the currently mounted step. Idempotent — safe to register once at
+// module load. The listener filter mirrors what Step2Mesh checks.
+if (typeof window !== "undefined") {
+  window.addEventListener("ai-coach:proposal-applied", (e) => {
+    const evt = e as CustomEvent<{ caseId?: string; tool?: string }>;
+    if (
+      typeof evt.detail?.caseId === "string" &&
+      evt.detail?.tool === "regenerate_mesh"
+    ) {
+      invalidateMeshQualityCache(evt.detail.caseId);
+    }
+  });
+}
+
 export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
   const [state, setState] = useState<LoadState>(() => {
-    const cached = meshQualityCache.get(cacheKey(caseId, meshGenSeq));
+    const cached = meshQualityCache.get(caseId);
     return cached ?? { status: "idle" };
   });
 
   useEffect(() => {
     if (!caseId) return;
-    const key = cacheKey(caseId, meshGenSeq);
     // Cache hit: render the prior result instantly, no network.
-    const cached = meshQualityCache.get(key);
+    const cached = meshQualityCache.get(caseId);
     if (cached && cached.status === "ready") {
       setState(cached);
       return;
@@ -395,7 +421,17 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
       .then((report) => {
         if (cancelled) return;
         const next: LoadState = { status: "ready", report };
-        meshQualityCache.set(key, next);
+        // R3 P2: don't cache V126 graceful-degradation responses
+        // (checkmesh_mesh_ok=null means cfd-openfoam container was
+        // unavailable). If the operator starts the container later
+        // and revisits Step 2, a cached "skipped" entry would
+        // suppress the retry — leave the entry uncached so next
+        // remount tries again.
+        const isGracefulDegrade =
+          report.report_kind === "v126" && report.checkmesh_mesh_ok === null;
+        if (!isGracefulDegrade) {
+          meshQualityCache.set(caseId, next);
+        }
         setState(next);
       })
       .catch((err) => {

@@ -33,6 +33,7 @@ vi.mock("@/api/client", async () => {
 import {
   MeshQualityCard,
   __clearMeshQualityCacheForTests,
+  invalidateMeshQualityCache,
 } from "../MeshQualityCard";
 
 const baseV122: MeshQualityReportV122 = {
@@ -196,7 +197,11 @@ describe("MeshQualityCard · loading + error", () => {
 });
 
 describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
-  it("calls getMeshQuality once per meshGenSeq value", async () => {
+  it("meshGenSeq bump alone does NOT bypass cache (R3 contract: explicit invalidate required)", async () => {
+    // R3 contract change: cache is keyed on caseId alone, so meshGenSeq
+    // bumping without explicit invalidate hits the cache. Step2Mesh's
+    // triggerMesh and the module-level regenerate_mesh listener are
+    // responsible for invalidating BEFORE bumping the seq.
     apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
     const { rerender } = render(
       <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
@@ -205,6 +210,11 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
       expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
     );
     rerender(<MeshQualityCard caseId="ldc" meshGenSeq={2} />);
+    // Cache hit — same caseId. No second fetch.
+    expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1);
+    // Now invalidate (as Step2Mesh's triggerMesh would) + bump seq.
+    invalidateMeshQualityCache("ldc");
+    rerender(<MeshQualityCard caseId="ldc" meshGenSeq={3} />);
     await waitFor(() =>
       expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(2),
     );
@@ -214,7 +224,7 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
     });
   });
 
-  it("R2 P2: cache hit on remount (same caseId+meshGenSeq) skips fetch", async () => {
+  it("R3 P1: cache hit on remount with same caseId skips fetch (Step 2 ↔ 3/4 nav)", async () => {
     // First mount: fetch once, populate cache.
     apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
     const { unmount } = render(
@@ -224,11 +234,78 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
       expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
     );
     unmount();
-    // Second mount with the SAME (caseId, meshGenSeq) — should hit
-    // the module cache, not the network. This models Step 2 ↔ 3/4
-    // ↔ Step 2 navigation.
-    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    // R3 P1: a Step 2 ↔ Step 3 ↔ Step 2 navigation remounts Step2Mesh
+    // with meshGenSeq=0 (local state reset). The cache must still
+    // hit on caseId alone, not block on the gen counter.
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={0} />);
     expect(screen.getByText("Mesh OK")).toBeInTheDocument();
     expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1);
+  });
+
+  it("R3 P1: invalidateMeshQualityCache forces refetch on next mount", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    // Simulate a fresh mesh (manual or AI-driven) busting the cache.
+    invalidateMeshQualityCache("ldc");
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("R3 P1: AI-coach proposal-applied event busts cache for that caseId", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    // Module-level listener: AI applies regenerate_mesh while
+    // Step2Mesh is unmounted (engineer is on Step 3/4).
+    window.dispatchEvent(
+      new CustomEvent("ai-coach:proposal-applied", {
+        detail: { caseId: "ldc", tool: "regenerate_mesh" },
+      }),
+    );
+    // Coming back to Step 2 should re-fetch, not show the stale entry.
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("R3 P2: graceful-degradation responses are NOT cached", async () => {
+    // V126 with all checkmesh_* null = container unavailable.
+    const v126Skipped: MeshQualityReportV126 = {
+      ...v126Healthy,
+      checkmesh_max_non_orthogonality_deg: null,
+      checkmesh_max_skewness: null,
+      checkmesh_max_aspect_ratio: null,
+      checkmesh_mesh_ok: null,
+      checkmesh_n_severe_non_ortho_faces: null,
+      checkmesh_failed_checks: null,
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126Skipped);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    // Operator starts the container; next remount must re-fetch
+    // (not hit the stale "skipped" entry).
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(2),
+    );
   });
 });
