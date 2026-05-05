@@ -399,11 +399,19 @@ export const api = {
     //     ('uncertain'/'blocked' without writing) or fall through to
     //     setup_ldc_bc/setup_channel_bc and return 'confident' (which
     //     always means polyMesh was written).
-    // Therefore: dispatch on `confident` OR when the caller passed
-    // forceUncertain (indistinguishable from a classifier-uncertain
-    // response on the wire, but the caller's intent disambiguates).
+    // Therefore: dispatch on confidence×caller-intent:
+    //   * confident  → always write
+    //   * uncertain  → write only when forceUncertain (force_uncertain
+    //     post-setup wrap); plain classifier-uncertain has no write
+    //   * blocked    → never write (force_blocked short-circuits, AND
+    //     force_blocked wins over force_uncertain server-side per
+    //     /api/import/.../setup-bc spec_v2 §A3)
+    // R7 P3: gating on the response confidence first avoids the
+    // both-debug-flags-set case where forceUncertain is true but the
+    // backend returned 'blocked' (no write happened).
     const polyMeshMutated =
-      result.confidence === "confident" || options.forceUncertain === true;
+      result.confidence === "confident" ||
+      (result.confidence === "uncertain" && options.forceUncertain === true);
     if (polyMeshMutated) {
       dispatchMeshMutated(caseId);
     }

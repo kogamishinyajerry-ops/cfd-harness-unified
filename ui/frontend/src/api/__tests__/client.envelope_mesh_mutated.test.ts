@@ -76,4 +76,17 @@ describe("api.setupBCWithEnvelope · mesh:mutated dispatch (R5 P2)", () => {
     await api.setupBCWithEnvelope("ldc", { forceBlocked: true });
     expect(meshMutatedCalls()).toHaveLength(0);
   });
+
+  it("R7 P3: does NOT dispatch when both force flags are set (force_blocked wins server-side)", async () => {
+    // spec_v2 §A3: when both flags are passed, force_blocked wins and
+    // the backend returns 'blocked' WITHOUT running setup_ldc_bc. The
+    // dispatch must respect the response confidence rather than blindly
+    // trusting forceUncertain.
+    fetchMock.mockResolvedValueOnce(envelopeResponse("blocked"));
+    await api.setupBCWithEnvelope("ldc", {
+      forceUncertain: true,
+      forceBlocked: true,
+    });
+    expect(meshMutatedCalls()).toHaveLength(0);
+  });
 });
