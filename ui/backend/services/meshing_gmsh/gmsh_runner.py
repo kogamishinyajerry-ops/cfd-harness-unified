@@ -636,18 +636,26 @@ def run_gmsh_on_imported_case(
     over both ``characteristic_length_override`` and ``mesh_mode`` for
     lc derivation (cube approximation; see _lc_from_target_cell_count).
 
-    DEC-V61-125 R1 P3: validate ``characteristic_length_override`` here
-    (parent process, before subprocess spawn) so a non-positive value
-    fails fast with a clear ``ValueError`` rather than getting silently
-    ignored by the ``if lc > 0`` guard inside ``_gmsh_inline`` and
-    producing a default-sized mesh that misrepresents the caller's
-    intent. The AI-coach path validates this at the
-    ``RegenerateMeshArgs`` layer with Pydantic ``gt=0``; this guard is
-    the defensive backstop for any direct backend caller that bypasses
-    that schema.
+    DEC-V61-125 R1 P3 + R2 P2: validate
+    ``characteristic_length_override`` here (parent process, before
+    subprocess spawn) so a non-positive value fails fast with a clear
+    ``ValueError`` rather than getting silently ignored by the
+    ``if lc > 0`` guard inside ``_gmsh_inline``. The AI-coach path
+    validates this at the ``RegenerateMeshArgs`` layer with Pydantic
+    ``gt=0``; this guard is the defensive backstop for direct backend
+    callers that bypass that schema.
+
+    R2 P2: respect the documented precedence (target_cell_count >
+    characteristic_length_override > mesh_mode). When
+    ``target_cell_count`` is set the override would be ignored
+    anyway, so validating it would reject previously-tolerated call
+    shapes (e.g. a stale sentinel 0.0 carried over from an older
+    caller). Validation is gated to fire only when the override is
+    actually going to be consumed.
     """
     if (
-        characteristic_length_override is not None
+        target_cell_count is None
+        and characteristic_length_override is not None
         and characteristic_length_override <= 0
     ):
         raise ValueError(

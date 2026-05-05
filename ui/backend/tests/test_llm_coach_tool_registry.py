@@ -774,6 +774,65 @@ def test_run_gmsh_rejects_negative_lc_override_directly(tmp_path):
         )
 
 
+def test_run_gmsh_lc_override_validation_respects_target_cell_count_precedence(
+    tmp_path, monkeypatch
+):
+    """V125 R2 P2: when target_cell_count is also set, the documented
+    precedence (target_cell_count > characteristic_length_override >
+    mesh_mode) means the override is ignored. Therefore a stale
+    sentinel 0.0 carried over from an older call shape must NOT
+    raise — validation is gated to fire only when the override is
+    actually going to be consumed."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    class _FakeProc:
+        exitcode = 0
+
+        def start(self):
+            pass
+
+        def join(self):
+            pass
+
+    class _FakeCtx:
+        def Queue(self):
+            from queue import Queue as _Q
+
+            q = _Q()
+            q.put(("backend_error", "test stub — no real gmsh invoked"))
+            return q
+
+        def Process(self, target, args):
+            return _FakeProc()
+
+    monkeypatch.setattr(
+        "ui.backend.services.meshing_gmsh.gmsh_runner.multiprocessing.get_context",
+        lambda _: _FakeCtx(),
+    )
+    stl_path = tmp_path / "x.stl"
+    stl_path.write_text("dummy")
+    msh_path = tmp_path / "x.msh"
+    # 0.0 is non-positive, but target_cell_count is set — so the
+    # override is ignored by precedence and validation must NOT fire.
+    try:
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=msh_path,
+            target_cell_count=100_000,
+            characteristic_length_override=0.0,
+        )
+    except ValueError as exc:
+        if "must be positive" in str(exc):
+            pytest.fail(
+                "Validation must NOT fire when target_cell_count "
+                "supersedes the override (R2 P2 precedence rule)."
+            )
+    except Exception:
+        # Any other exception is fine — only the must-be-positive
+        # ValueError is forbidden in this scenario.
+        pass
+
+
 def test_run_gmsh_accepts_none_lc_override(tmp_path, monkeypatch):
     """V125 R1 P3 negative control: None is a legal override value
     (means 'use mesh_mode default' — the validation must NOT reject
