@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-128
 title: Patch chip derived coloring · narrow V128 R0 (frontend-only · cell-level data deferred to V129)
-status: Proposed (2026-05-06 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file frontend + UI interaction polish — actually single-file but treated as risk-tier-positive given DEC-V61-127's calibration miss)
-codex_tool_report_path: reports/codex_tool_reports/v61_128_r1_chain.md (to be created)
+status: Accepted (2026-05-06 · Codex R1 APPROVE clean at 02d447f · 1-round chain, BOTTOM of 1-2 prediction band. Calibration recovered after V127's 8-round miss; the deliberately narrow scope worked as intended.)
+codex_tool_report_path: reports/codex_tool_reports/v61_128_r1_chain.md
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline per RETRO-V61-001)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-06
