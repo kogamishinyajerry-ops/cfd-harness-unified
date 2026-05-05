@@ -274,77 +274,91 @@ def run_checkmesh(
     # 502s). UUID hex is 32 chars; truncate to 12 for path readability.
     run_token = uuid.uuid4().hex[:12]
     container_work = f"{CONTAINER_WORK_BASE}/{case_dir.name}/{run_token}"
+    # V126 R2 P2-2: wrap the entire workspace lifecycle in try/finally
+    # so the unique dir is torn down on EVERY exit path, not just the
+    # happy-path checkMesh exec. Without this, a put_archive=False
+    # return, an exec_run raise during controlDict staging, or any
+    # mid-setup CheckMeshError leaks polyMesh copies under
+    # /tmp/cfd-harness-cases-checkmesh inside the container — and
+    # since each run has a unique uuid, those dirs are never reused.
     try:
-        # Provision a clean workspace with both 'constant' (for the
-        # polyMesh tarball) and 'system' (for the controlDict OpenFOAM
-        # requires before any utility will start). Each run gets its
-        # own UUID-suffixed dir, so rm -rf only ever touches this
-        # call's data.
-        container.exec_run(
-            cmd=[
-                "bash",
-                "-c",
-                f"mkdir -p {container_work}/constant {container_work}/system",
-            ]
-        )
-        archive_ok = container.put_archive(
-            path=f"{container_work}/constant",
-            data=_make_polymesh_tarball(polymesh),
-        )
-    except docker.errors.DockerException as exc:
-        raise CheckMeshError(
-            f"docker SDK error preparing checkMesh workspace: {exc}",
-            failing_check="docker_sdk_error",
-        ) from exc
-    except OSError as exc:
-        raise CheckMeshError(
-            f"failed to build checkMesh tarball for {case_dir.name} "
-            f"(host filesystem fault): {exc}",
-            failing_check="docker_sdk_error",
-        ) from exc
+        try:
+            # Provision a clean workspace with both 'constant' (for the
+            # polyMesh tarball) and 'system' (for the controlDict
+            # OpenFOAM requires before any utility will start).
+            container.exec_run(
+                cmd=[
+                    "bash",
+                    "-c",
+                    f"mkdir -p {container_work}/constant {container_work}/system",
+                ]
+            )
+            archive_ok = container.put_archive(
+                path=f"{container_work}/constant",
+                data=_make_polymesh_tarball(polymesh),
+            )
+        except docker.errors.DockerException as exc:
+            raise CheckMeshError(
+                f"docker SDK error preparing checkMesh workspace: {exc}",
+                failing_check="docker_sdk_error",
+            ) from exc
+        except OSError as exc:
+            raise CheckMeshError(
+                f"failed to build checkMesh tarball for {case_dir.name} "
+                f"(host filesystem fault): {exc}",
+                failing_check="docker_sdk_error",
+            ) from exc
 
-    if not archive_ok:
-        raise CheckMeshError(
-            f"failed to copy polyMesh into container at {container_work}",
-            failing_check="docker_sdk_error",
-        )
+        if not archive_ok:
+            raise CheckMeshError(
+                f"failed to copy polyMesh into container at {container_work}",
+                failing_check="docker_sdk_error",
+            )
 
-    # V126 R1 P1: stage system/controlDict so checkMesh's OpenFOAM
-    # bootstrap doesn't error out before producing any metrics.
-    # heredoc-style write via bash -c keeps this self-contained
-    # (no extra put_archive round trip).
-    try:
-        container.exec_run(
-            cmd=[
-                "bash",
-                "-c",
-                f"cat > {container_work}/system/controlDict <<'CONTROLDICT_EOF'\n"
-                f"{_MINIMAL_CONTROL_DICT}"
-                f"CONTROLDICT_EOF",
-            ]
-        )
-    except docker.errors.DockerException as exc:
-        raise CheckMeshError(
-            f"docker SDK error staging controlDict: {exc}",
-            failing_check="docker_sdk_error",
-        ) from exc
+        # V126 R1 P1: stage system/controlDict so checkMesh's OpenFOAM
+        # bootstrap doesn't error out before producing any metrics.
+        # heredoc-style write via bash -c keeps this self-contained
+        # (no extra put_archive round trip).
+        try:
+            container.exec_run(
+                cmd=[
+                    "bash",
+                    "-c",
+                    f"cat > {container_work}/system/controlDict <<'CONTROLDICT_EOF'\n"
+                    f"{_MINIMAL_CONTROL_DICT}"
+                    f"CONTROLDICT_EOF",
+                ]
+            )
+        except docker.errors.DockerException as exc:
+            raise CheckMeshError(
+                f"docker SDK error staging controlDict: {exc}",
+                failing_check="docker_sdk_error",
+            ) from exc
 
-    bash_cmd = (
-        f"source /opt/openfoam10/etc/bashrc && "
-        f"cd {container_work} && "
-        f"checkMesh 2>&1; rc=$?; "
-        # V126 R1 P2-1 (cleanup): best-effort tear down our unique
-        # workspace so we don't leak per-call dirs. The exit code we
-        # return is checkMesh's, not the cleanup's — `rc` preserves it.
-        f"rm -rf {container_work}; exit $rc"
-    )
-    try:
-        exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
-    except docker.errors.DockerException as exc:
-        raise CheckMeshError(
-            f"docker SDK error invoking checkMesh: {exc}",
-            failing_check="docker_sdk_error",
-        ) from exc
+        bash_cmd = (
+            f"source /opt/openfoam10/etc/bashrc && "
+            f"cd {container_work} && "
+            f"checkMesh 2>&1"
+        )
+        try:
+            exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
+        except docker.errors.DockerException as exc:
+            raise CheckMeshError(
+                f"docker SDK error invoking checkMesh: {exc}",
+                failing_check="docker_sdk_error",
+            ) from exc
+    finally:
+        # Best-effort cleanup. Runs on every path — happy success,
+        # CheckMeshError mid-setup, or unexpected exception. We swallow
+        # any exception from the cleanup itself so a transient docker
+        # issue here doesn't mask the original error the caller cares
+        # about. R1's `rc=$?; rm -rf; exit $rc` inline trick was
+        # insufficient because it only fired when the final exec_run
+        # was actually reached.
+        try:
+            container.exec_run(cmd=["bash", "-c", f"rm -rf {container_work}"])
+        except Exception:  # noqa: BLE001 — best-effort, never mask primary error
+            pass
 
     output = exec_result.output.decode("utf-8", errors="replace")
 

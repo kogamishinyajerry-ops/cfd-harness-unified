@@ -36,12 +36,17 @@ router = APIRouter()
 
 @router.get(
     "/cases/{case_id}/mesh-quality",
-    # V126 R1 P2 backward-compat: response_model=None lets FastAPI
-    # serialize the actual returned instance — MeshQualityReport (V122
-    # shape) when run_checkmesh=False, MeshQualityReportV126 (extended)
-    # when run_checkmesh=True. Without this, response_model coercion
-    # would force null checkmesh_* fields into every legacy response.
-    response_model=None,
+    # V126 R1 P2 backward-compat: declare a union response_model so
+    # FastAPI can discriminate at serialization time —
+    # MeshQualityReportV126 (extended) when run_checkmesh=True,
+    # MeshQualityReport (V122 shape) when run_checkmesh=False. The
+    # union preserves the OpenAPI 200-response schema (V126 R2 P2-1
+    # fix: response_model=None erased the documented surface entirely)
+    # while still avoiding the null-checkmesh-fields contract break
+    # that motivated the split. Pydantic discriminates on the
+    # presence of checkmesh_* fields; the more specific V126 type is
+    # listed first so the analyzer's actual instance shape wins.
+    response_model=MeshQualityReportV126 | MeshQualityReport,
     tags=["mesh-quality"],
 )
 def get_mesh_quality(
