@@ -33,6 +33,7 @@ from ui.backend.services.mesh_quality.checkmesh_runner import (
 )
 from ui.backend.services.mesh_quality.schemas import (
     MeshQualityReport,
+    MeshQualityReportV126,
     MeshSeverity,
     MeshWarning,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "MeshQualityNotAvailableError",
     "MeshQualityParseError",
     "MeshQualityReport",
+    "MeshQualityReportV126",
     "MeshSeverity",
     "MeshWarning",
     "analyze_mesh_quality",

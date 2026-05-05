@@ -330,9 +330,10 @@ def test_run_checkmesh_happy_path_parses_output(tmp_path, monkeypatch):
 
 
 def test_mesh_quality_report_schema_v122_backward_compat():
-    """V126 added checkmesh_* fields with default=None; V122 callers
-    that instantiate MeshQualityReport WITHOUT those fields must still
-    succeed and see all defaults."""
+    """V126 R1 P2 backward-compat: V122 base MeshQualityReport must
+    NOT carry checkmesh_* fields. The extended MeshQualityReportV126
+    subclass adds them only when run_checkmesh=True. Legacy callers
+    serializing the base shape never see null checkmesh_* keys."""
     from ui.backend.services.mesh_quality.schemas import MeshQualityReport
 
     report = MeshQualityReport(
@@ -349,20 +350,21 @@ def test_mesh_quality_report_schema_v122_backward_compat():
         patch_face_counts={},
         warnings=[],
     )
-    assert report.checkmesh_max_non_orthogonality_deg is None
-    assert report.checkmesh_max_skewness is None
-    assert report.checkmesh_max_aspect_ratio is None
-    assert report.checkmesh_mesh_ok is None
-    assert report.checkmesh_n_severe_non_ortho_faces is None
-    assert report.checkmesh_failed_checks is None
+    dump = report.model_dump()
+    # V122 contract: NO checkmesh_* keys appear in the serialized
+    # payload — that is the whole point of the schema split.
+    for key in dump:
+        assert not key.startswith("checkmesh_"), (
+            f"V122 base shape leaked checkmesh field {key!r}"
+        )
 
 
-def test_mesh_quality_report_serializes_with_checkmesh_fields():
-    """When checkmesh_* fields are populated, they round-trip through
-    Pydantic serialization."""
-    from ui.backend.services.mesh_quality.schemas import MeshQualityReport
+def test_mesh_quality_report_v126_serializes_with_checkmesh_fields():
+    """When checkmesh_* fields are populated on the V126 extension,
+    they round-trip through Pydantic serialization."""
+    from ui.backend.services.mesh_quality.schemas import MeshQualityReportV126
 
-    report = MeshQualityReport(
+    report = MeshQualityReportV126(
         case_id="ldc",
         polymesh_present=True,
         cell_count=125,
@@ -433,15 +435,24 @@ def _write_synthetic_polymesh(case_dir: Path, cells: int = 8) -> None:
 
 
 def test_analyze_mesh_quality_default_omits_checkmesh(tmp_path):
-    """V126 backward compat: run_checkmesh=False (default) returns the
-    V122 shape with all checkmesh_* fields = None."""
+    """V126 R1 P2 backward compat: run_checkmesh=False (default)
+    returns a V122-shape MeshQualityReport — NOT the V126 extension —
+    so legacy callers never see the checkmesh_* fields at all."""
     from ui.backend.services.mesh_quality import analyze_mesh_quality
+    from ui.backend.services.mesh_quality.schemas import (
+        MeshQualityReport,
+        MeshQualityReportV126,
+    )
 
     case_dir = tmp_path / "ldc"
     _write_synthetic_polymesh(case_dir)
     report = analyze_mesh_quality(case_dir)  # default False
-    assert report.checkmesh_max_skewness is None
-    assert report.checkmesh_mesh_ok is None
+    assert isinstance(report, MeshQualityReport)
+    assert not isinstance(report, MeshQualityReportV126)
+    # The V122 model has no checkmesh_* attributes — accessing one
+    # would AttributeError. Confirm via model_dump.
+    dump = report.model_dump()
+    assert not any(k.startswith("checkmesh_") for k in dump)
 
 
 def test_analyze_mesh_quality_with_checkmesh_augments_report(

@@ -208,44 +208,39 @@ def _format_mesh_quality_section(report: MeshQualityReport) -> str:
         # Stable order so the prompt is reproducible across runs.
         for name in sorted(report.patch_face_counts):
             parts.append(f"- {name}: {report.patch_face_counts[name]}")
-    # DEC-V61-126: surface checkMesh-derived metrics when present. The
-    # AI coach uses these to make Fluent/StarCCM-grade quality
-    # judgments (k-omega SST convergence depends on max skewness <
-    # ~0.7, non-orthogonality < 70 degrees, etc). All fields are
-    # optional; absent fields silently skip the line.
-    has_checkmesh = (
-        report.checkmesh_max_non_orthogonality_deg is not None
-        or report.checkmesh_max_skewness is not None
-        or report.checkmesh_max_aspect_ratio is not None
-        or report.checkmesh_mesh_ok is not None
-    )
-    if has_checkmesh:
+    # DEC-V61-126: surface checkMesh-derived metrics when present. Only
+    # MeshQualityReportV126 instances carry these fields — V122 base
+    # reports have no checkmesh_* attributes (R1 P2 backward-compat
+    # split), so duck-type via getattr to avoid an AttributeError on
+    # the legacy shape.
+    cm_non_ortho = getattr(report, "checkmesh_max_non_orthogonality_deg", None)
+    cm_skew = getattr(report, "checkmesh_max_skewness", None)
+    cm_ar = getattr(report, "checkmesh_max_aspect_ratio", None)
+    cm_severe = getattr(report, "checkmesh_n_severe_non_ortho_faces", None)
+    cm_ok = getattr(report, "checkmesh_mesh_ok", None)
+    cm_failed = getattr(report, "checkmesh_failed_checks", None)
+    if (
+        cm_non_ortho is not None
+        or cm_skew is not None
+        or cm_ar is not None
+        or cm_ok is not None
+    ):
         parts.append("")
         parts.append("checkMesh quality metrics (OpenFOAM):")
-        if report.checkmesh_max_non_orthogonality_deg is not None:
-            parts.append(
-                f"- max_non_orthogonality_deg="
-                f"{report.checkmesh_max_non_orthogonality_deg:g}"
-            )
-        if report.checkmesh_max_skewness is not None:
-            parts.append(
-                f"- max_skewness={report.checkmesh_max_skewness:g}"
-            )
-        if report.checkmesh_max_aspect_ratio is not None:
-            parts.append(
-                f"- max_aspect_ratio={report.checkmesh_max_aspect_ratio:g}"
-            )
-        if report.checkmesh_n_severe_non_ortho_faces is not None:
-            parts.append(
-                f"- severe_non_orthogonal_faces="
-                f"{report.checkmesh_n_severe_non_ortho_faces}"
-            )
-        if report.checkmesh_mesh_ok is not None:
-            verdict = "PASS" if report.checkmesh_mesh_ok else "FAIL"
+        if cm_non_ortho is not None:
+            parts.append(f"- max_non_orthogonality_deg={cm_non_ortho:g}")
+        if cm_skew is not None:
+            parts.append(f"- max_skewness={cm_skew:g}")
+        if cm_ar is not None:
+            parts.append(f"- max_aspect_ratio={cm_ar:g}")
+        if cm_severe is not None:
+            parts.append(f"- severe_non_orthogonal_faces={cm_severe}")
+        if cm_ok is not None:
+            verdict = "PASS" if cm_ok else "FAIL"
             parts.append(f"- mesh_ok={verdict}")
-        if report.checkmesh_failed_checks:
+        if cm_failed:
             parts.append("- failed_checks:")
-            for check in report.checkmesh_failed_checks:
+            for check in cm_failed:
                 parts.append(f"  · {check}")
     return "\n".join(parts)
 

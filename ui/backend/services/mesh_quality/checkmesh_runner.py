@@ -23,6 +23,7 @@ from __future__ import annotations
 import io
 import re
 import tarfile
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -38,6 +39,33 @@ CONTAINER_WORK_BASE = "/tmp/cfd-harness-cases-checkmesh"
 # UID/GID retag for the openfoam user — same as to_foam._retag_for_container.
 _CONTAINER_UID = 98765
 _CONTAINER_GID = 98765
+
+
+# V126 R1 P1: checkMesh refuses to start without system/controlDict.
+# This is the minimum dictionary OpenFOAM 10 accepts — application
+# label is informational, the time-control fields are required-but-
+# unused (checkMesh only reads polyMesh). Same shape as the dictionary
+# services/case_scaffold/bc_injector.write_control_dict() produces but
+# trimmed to the absolute minimum so this module stays self-contained
+# (parallel-new per surface-scan, no cross-import on bc_injector).
+_MINIMAL_CONTROL_DICT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     checkMesh;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         0;
+deltaT          1;
+writeControl    timeStep;
+writeInterval   1;
+"""
 
 
 class CheckMeshError(RuntimeError):
@@ -239,16 +267,24 @@ def run_checkmesh(
             failing_check="docker_sdk_error",
         ) from exc
 
-    container_work = f"{CONTAINER_WORK_BASE}/{case_dir.name}"
+    # V126 R1 P2-1: per-call unique workspace so concurrent calls for
+    # the same case don't clobber each other (a double-click or two
+    # parallel users could otherwise race the rm -rf against an active
+    # checkMesh and produce metrics from the wrong mesh or spurious
+    # 502s). UUID hex is 32 chars; truncate to 12 for path readability.
+    run_token = uuid.uuid4().hex[:12]
+    container_work = f"{CONTAINER_WORK_BASE}/{case_dir.name}/{run_token}"
     try:
-        # The container needs an empty 'constant' dir to receive the
-        # polyMesh tarball; cleanup any prior staging first so a stale
-        # checkmesh run doesn't pollute fresh data.
+        # Provision a clean workspace with both 'constant' (for the
+        # polyMesh tarball) and 'system' (for the controlDict OpenFOAM
+        # requires before any utility will start). Each run gets its
+        # own UUID-suffixed dir, so rm -rf only ever touches this
+        # call's data.
         container.exec_run(
             cmd=[
                 "bash",
                 "-c",
-                f"rm -rf {container_work} && mkdir -p {container_work}/constant",
+                f"mkdir -p {container_work}/constant {container_work}/system",
             ]
         )
         archive_ok = container.put_archive(
@@ -273,10 +309,34 @@ def run_checkmesh(
             failing_check="docker_sdk_error",
         )
 
+    # V126 R1 P1: stage system/controlDict so checkMesh's OpenFOAM
+    # bootstrap doesn't error out before producing any metrics.
+    # heredoc-style write via bash -c keeps this self-contained
+    # (no extra put_archive round trip).
+    try:
+        container.exec_run(
+            cmd=[
+                "bash",
+                "-c",
+                f"cat > {container_work}/system/controlDict <<'CONTROLDICT_EOF'\n"
+                f"{_MINIMAL_CONTROL_DICT}"
+                f"CONTROLDICT_EOF",
+            ]
+        )
+    except docker.errors.DockerException as exc:
+        raise CheckMeshError(
+            f"docker SDK error staging controlDict: {exc}",
+            failing_check="docker_sdk_error",
+        ) from exc
+
     bash_cmd = (
         f"source /opt/openfoam10/etc/bashrc && "
         f"cd {container_work} && "
-        f"checkMesh 2>&1"
+        f"checkMesh 2>&1; rc=$?; "
+        # V126 R1 P2-1 (cleanup): best-effort tear down our unique
+        # workspace so we don't leak per-call dirs. The exit code we
+        # return is checkMesh's, not the cleanup's — `rc` preserves it.
+        f"rm -rf {container_work}; exit $rc"
     )
     try:
         exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])

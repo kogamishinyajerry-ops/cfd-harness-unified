@@ -25,6 +25,7 @@ from ui.backend.services.mesh_quality import (
     MeshQualityNotAvailableError,
     MeshQualityParseError,
     MeshQualityReport,
+    MeshQualityReportV126,
     analyze_mesh_quality,
 )
 
@@ -35,13 +36,18 @@ router = APIRouter()
 
 @router.get(
     "/cases/{case_id}/mesh-quality",
-    response_model=MeshQualityReport,
+    # V126 R1 P2 backward-compat: response_model=None lets FastAPI
+    # serialize the actual returned instance — MeshQualityReport (V122
+    # shape) when run_checkmesh=False, MeshQualityReportV126 (extended)
+    # when run_checkmesh=True. Without this, response_model coercion
+    # would force null checkmesh_* fields into every legacy response.
+    response_model=None,
     tags=["mesh-quality"],
 )
 def get_mesh_quality(
     case_id: str,
     run_checkmesh: bool = False,
-) -> MeshQualityReport:
+) -> MeshQualityReport | MeshQualityReportV126:
     """Get mesh quality report for a case.
 
     DEC-V61-126: when ``run_checkmesh=true`` query param is set, the

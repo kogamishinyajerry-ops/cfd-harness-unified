@@ -37,6 +37,7 @@ from pathlib import Path
 
 from ui.backend.services.mesh_quality.schemas import (
     MeshQualityReport,
+    MeshQualityReportV126,
     MeshWarning,
 )
 
@@ -350,7 +351,7 @@ def analyze_mesh_quality(
     case_dir: Path,
     *,
     run_checkmesh: bool = False,
-) -> MeshQualityReport:
+) -> MeshQualityReport | MeshQualityReportV126:
     """Read polyMesh and produce a :class:`MeshQualityReport`.
 
     Raises :class:`MeshQualityNotAvailableError` if the case has not
@@ -484,12 +485,11 @@ def analyze_mesh_quality(
 
     # V126 augment: only when caller explicitly opts in. Default-False
     # path is byte-identical to V122 / V123 behavior — no Docker call
-    # made, no container probe, no log warning.
-    checkmesh_fields: dict[str, object] = {}
-    if run_checkmesh:
-        checkmesh_fields = _try_run_checkmesh(case_dir)
-
-    return MeshQualityReport(
+    # made, no container probe, no log warning. V126 R1 P2 backward-
+    # compat fix: return MeshQualityReport (V122 shape, no checkmesh_*
+    # keys) when not opted-in; return MeshQualityReportV126 (extended)
+    # only when run_checkmesh=True.
+    base_kwargs = dict(
         case_id=case_id,
         polymesh_present=True,
         cell_count=cell_count,
@@ -502,8 +502,10 @@ def analyze_mesh_quality(
         cells_per_unit_volume=cells_per_unit_volume,
         patch_face_counts=patch_face_counts,
         warnings=warnings,
-        **checkmesh_fields,
     )
+    if not run_checkmesh:
+        return MeshQualityReport(**base_kwargs)
+    return MeshQualityReportV126(**base_kwargs, **_try_run_checkmesh(case_dir))
 
 
 def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:

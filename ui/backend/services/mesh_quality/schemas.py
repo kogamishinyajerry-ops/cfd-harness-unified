@@ -86,13 +86,21 @@ class MeshQualityReport(BaseModel):
     )
     warnings: list[MeshWarning] = Field(default_factory=list)
 
-    # ────────── DEC-V61-126 · Optional Docker checkMesh fields ──────────
-    # All None when the analyzer is invoked without run_checkmesh=True OR
-    # when the cfd-openfoam container is unavailable (graceful degradation).
-    # When present, sourced directly from `checkMesh` stdout via
-    # services/mesh_quality/checkmesh_runner.py. The fields parallel
-    # what an experienced engineer expects from Fluent's mesh quality
-    # panel — max non-orthogonality, max skewness, max aspect ratio.
+
+class MeshQualityReportV126(MeshQualityReport):
+    """V126 extension of :class:`MeshQualityReport` that adds
+    Docker checkMesh-derived fields. Returned by the route ONLY
+    when ``?run_checkmesh=true`` is passed; default V122 callers
+    continue to receive the base shape without null checkMesh
+    fields (V126 R1 P2 backward-compat contract).
+
+    All checkmesh_* fields can be None when the cfd-openfoam
+    container is unavailable (graceful degradation) — the engineer
+    still gets the V122 fields plus the explicit
+    ``checkmesh_unavailable_reason`` so the UI can surface "checkMesh
+    skipped" without conflating it with a real failure.
+    """
+
     checkmesh_max_non_orthogonality_deg: float | None = Field(
         default=None,
         ge=0.0,
@@ -100,7 +108,7 @@ class MeshQualityReport(BaseModel):
             "Max mesh non-orthogonality in degrees from checkMesh. "
             "Fluent's reject threshold is typically 70°; OpenFOAM "
             "schemes with non-orthogonal corrections handle up to ~75°. "
-            "None when checkMesh was not requested or container unavailable."
+            "None when container unavailable / graceful degradation."
         ),
     )
     checkmesh_max_skewness: float | None = Field(
@@ -109,7 +117,7 @@ class MeshQualityReport(BaseModel):
         description=(
             "Max cell skewness from checkMesh (dimensionless). Fluent's "
             "default reject threshold is 0.95; for k-omega SST anything "
-            "over 0.7 risks convergence issues. None when not requested."
+            "over 0.7 risks convergence issues."
         ),
     )
     checkmesh_max_aspect_ratio: float | None = Field(
@@ -117,15 +125,15 @@ class MeshQualityReport(BaseModel):
         ge=0.0,
         description=(
             "Max cell aspect ratio from checkMesh. Boundary-layer prism "
-            "stacks legitimately reach ~100; cell counts above 1000 "
-            "indicate a problem. None when not requested."
+            "stacks legitimately reach ~100; counts above 1000 indicate "
+            "a problem."
         ),
     )
     checkmesh_mesh_ok: bool | None = Field(
         default=None,
         description=(
             "True when checkMesh reports 'Mesh OK', False when 'Failed N "
-            "mesh checks'. None when not requested."
+            "mesh checks'. None when container unavailable."
         ),
     )
     checkmesh_n_severe_non_ortho_faces: int | None = Field(
@@ -133,14 +141,14 @@ class MeshQualityReport(BaseModel):
         ge=0,
         description=(
             "Number of faces with non-orthogonality > 70° per checkMesh. "
-            "Zero is ideal; any nonzero count typically warrants mesh "
-            "smoothing or refinement. None when not requested."
+            "Zero is ideal; nonzero typically warrants mesh smoothing or "
+            "refinement."
         ),
     )
     checkmesh_failed_checks: list[str] | None = Field(
         default=None,
         description=(
             "List of checkMesh failure messages when mesh_ok=False. "
-            "None when not requested OR mesh_ok=True (no failures)."
+            "None when container unavailable OR mesh_ok=True."
         ),
     )
