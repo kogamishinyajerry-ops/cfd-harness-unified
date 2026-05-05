@@ -1,9 +1,9 @@
 ---
 decision_id: DEC-V61-126
 title: Docker `checkMesh` integration · real skewness / non-orthogonality / aspect ratio metrics from OpenFOAM checkMesh · closes Phase A meshing 三明治
-status: Proposed (2026-05-05 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + new operator-facing endpoint + AI-system-prompt extension + container management triggers)
-codex_tool_report_path: reports/codex_tool_reports/v61_126_r1_chain.md (to be created)
-codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 protocol)
+status: Accepted at f783457 (2026-05-05 · R6 APPROVE clean · 6-round cross-contract chain · top of V123 §L1 4-6 round prediction band · DEC-V61-126)
+codex_tool_report_path: reports/codex_tool_reports/v61_126_r1_chain.md
+codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline per RETRO-V61-001; CRS R2 fallback gave APPROVE while 86gs R3 caught a real discriminable-union finding — V119 §L2 datapoint: CRS high < 86gs xhigh for governance)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-05
 authored_under: User 2026-05-05 mandate "按照你的规划、建议，授权你全权推进，记得同步Notion、Github" — V125 closed cleanly at 3 rounds, validating §L1 calibration baseline doubly. V126 starts the **Phase A → E pivot** per the agreed seven-phase roadmap; specifically Phase A item 3 (Docker checkMesh integration) closing the meshing 三明治 with real OpenFOAM-grade quality metrics. Per V123 §L1 lesson, this DEC explicitly **crosses container management surface** (mature V108+ pattern) — predicted round count is between V124/V125's 3 rounds (no-cross) and V123's 9 rounds (path-state safety cross): aim 4-6 rounds.
