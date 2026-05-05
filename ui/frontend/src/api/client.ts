@@ -483,6 +483,45 @@ export const api = {
   // → clear one (returns merged state). The store layer (backend)
   // owns case_lock + symlink containment + atomic write — see
   // services/case_solve/patch_classification_store.py.
+  /** DEC-V61-122 + V126: GET /api/cases/{case_id}/mesh-quality.
+   *  Pass ``runCheckmesh=true`` to opt into V126's Docker checkMesh
+   *  augmentation (max skewness, non-orthogonality, aspect ratio).
+   *  When the cfd-openfoam container is unavailable, the V126
+   *  graceful-degradation contract returns the base V122 shape with
+   *  checkmesh_* fields stay null — same response_model union backs
+   *  both shapes via the ``report_kind`` discriminator. */
+  getMeshQuality: async (
+    caseId: string,
+    options: { runCheckmesh?: boolean } = {},
+  ): Promise<
+    import("@/pages/workbench/step_panel_shell/types").MeshQualityReport
+  > => {
+    const url = `/api/cases/${encodeURIComponent(caseId)}/mesh-quality${
+      options.runCheckmesh ? "?run_checkmesh=true" : ""
+    }`;
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        detail = (await resp.json())?.detail;
+      } catch {
+        detail = await resp.text();
+      }
+      throw new ApiError(
+        resp.status,
+        `getMeshQuality failed (${resp.status})`,
+        detail,
+      );
+    }
+    return (await resp.json()) as import(
+      "@/pages/workbench/step_panel_shell/types"
+    ).MeshQualityReport;
+  },
+
   getPatchClassification: async (
     caseId: string,
   ): Promise<

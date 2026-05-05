@@ -157,6 +157,48 @@ export interface PatchClassificationState {
   overrides: Record<string, BCClassValue>;
 }
 
+/** Mesh quality warning · stable enum codes from V122 analyzer.
+ *  See ui/backend/services/mesh_quality/schemas.py. */
+export type MeshQualitySeverity = "critical" | "warning" | "info";
+
+export interface MeshQualityWarning {
+  severity: MeshQualitySeverity;
+  code: string;
+  message: string;
+}
+
+/** V122 base shape · returned when run_checkmesh=false (default). */
+export interface MeshQualityReportV122 {
+  report_kind: "v122";
+  case_id: string;
+  polymesh_present: boolean;
+  cell_count: number;
+  point_count: number;
+  internal_face_count: number;
+  boundary_face_count: number;
+  bounding_box_min: [number, number, number];
+  bounding_box_max: [number, number, number];
+  bounding_box_volume: number;
+  cells_per_unit_volume: number | null;
+  patch_face_counts: Record<string, number>;
+  warnings: MeshQualityWarning[];
+}
+
+/** V126 extended shape · returned when run_checkmesh=true. checkmesh_*
+ *  fields can be null when the cfd-openfoam container is unavailable
+ *  (graceful degradation — the V122 fields populate as normal). */
+export interface MeshQualityReportV126 extends Omit<MeshQualityReportV122, "report_kind"> {
+  report_kind: "v126";
+  checkmesh_max_non_orthogonality_deg: number | null;
+  checkmesh_max_skewness: number | null;
+  checkmesh_max_aspect_ratio: number | null;
+  checkmesh_mesh_ok: boolean | null;
+  checkmesh_n_severe_non_ortho_faces: number | null;
+  checkmesh_failed_checks: string[] | null;
+}
+
+export type MeshQualityReport = MeshQualityReportV122 | MeshQualityReportV126;
+
 /** PUT body — single-patch upsert. Matches backend
  *  ``_PatchClassificationPutBody``. Multi-patch batches are sent as a
  *  sequence of PUTs so concurrent edits to different patches don't

@@ -15,6 +15,7 @@ import type {
   MeshSuccessResponse,
 } from "@/types/mesh_imported";
 
+import { MeshQualityCard } from "../MeshQualityCard";
 import type { StepTaskPanelProps } from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
@@ -38,6 +39,11 @@ export function Step2Mesh({
   const [response, setResponse] = useState<MeshSuccessResponse | null>(null);
   const [rejection, setRejection] = useState<MeshRejectionDetail | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  // V127: bumped on every successful mesh regeneration so the
+  // MeshQualityCard child re-fetches against the new polyMesh. Also
+  // listens for ai-coach:proposal-applied (regenerate_mesh tool) so
+  // an AI-driven re-mesh refreshes the gauges without remounting.
+  const [meshGenSeq, setMeshGenSeq] = useState(0);
 
   // Register the mesh-generation action with the shell. The shell's
   // wrapped onAiProcess sets aiInFlight + captures errors; this body
@@ -48,6 +54,7 @@ export function Step2Mesh({
     try {
       const r = await api.meshImported(caseId, meshMode);
       setResponse(r);
+      setMeshGenSeq((s) => s + 1);
       onStepComplete();
     } catch (e) {
       if (
@@ -73,6 +80,29 @@ export function Step2Mesh({
     registerAiAction(triggerMesh);
     return () => registerAiAction(null);
   }, [registerAiAction, triggerMesh]);
+
+  // V127: re-fetch the mesh-quality gauges when the AI coach applies a
+  // regenerate_mesh proposal (V125 lifecycle). The same custom event
+  // PatchClassificationPanel listens to.
+  useEffect(() => {
+    if (!caseId) return;
+    const onProposalApplied = (e: Event) => {
+      const evt = e as CustomEvent<{ caseId?: string; tool?: string }>;
+      if (
+        evt.detail?.caseId === caseId &&
+        evt.detail?.tool === "regenerate_mesh"
+      ) {
+        setMeshGenSeq((s) => s + 1);
+      }
+    };
+    window.addEventListener("ai-coach:proposal-applied", onProposalApplied);
+    return () => {
+      window.removeEventListener(
+        "ai-coach:proposal-applied",
+        onProposalApplied,
+      );
+    };
+  }, [caseId]);
 
   return (
     <div className="space-y-3 p-3 text-[12px]" data-testid="step2-mesh-body">
@@ -142,6 +172,16 @@ export function Step2Mesh({
             </p>
           )}
         </div>
+      )}
+
+      {/* V127: Fluent-style quality gauges + per-patch chips. Renders
+       *  only after the first successful mesh (meshGenSeq > 0) and
+       *  re-fetches on every subsequent regenerate (manual or AI).
+       *  Internally graceful-degrades when the cfd-openfoam container
+       *  is down (V126 contract: V122 fields populate, gauges show
+       *  "skipped"). */}
+      {meshGenSeq > 0 && (
+        <MeshQualityCard caseId={caseId} meshGenSeq={meshGenSeq} />
       )}
 
       {rejection && (
