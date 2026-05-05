@@ -388,9 +388,15 @@ export const api = {
     const result = (await resp.json()) as import(
       "@/pages/workbench/step_panel_shell/types"
     ).AIActionEnvelope;
-    // Envelope path runs the same setup-bc routine which rewrites
-    // constant/polyMesh/boundary on commit; bust the cache.
-    dispatchMeshMutated(caseId);
+    // R5 P2: only the "confident" envelope outcome commits the
+    // boundary rewrite — "uncertain" / "blocked" short-circuit before
+    // touching polyMesh (force_blocked=1 path, classifier
+    // short-circuit). Firing mesh:mutated for those would invalidate
+    // the cache spuriously and regress the Step 2 ↔ 3 caching that R3
+    // was added to preserve.
+    if (result.confidence === "confident") {
+      dispatchMeshMutated(caseId);
+    }
     return result;
   },
 
