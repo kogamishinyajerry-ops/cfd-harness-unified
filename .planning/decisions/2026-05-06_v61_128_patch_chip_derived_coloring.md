@@ -16,7 +16,7 @@ parent_artifacts:
   - ui/frontend/src/pages/workbench/step_panel_shell/MeshQualityCard.tsx (existing PatchChips component — V128 extends its props + tone derivation)
   - ui/frontend/src/pages/workbench/step_panel_shell/__tests__/MeshQualityCard.test.tsx (existing tests — V128 adds 4 chip-coloring scenarios)
 counter_impact: +1 (autonomous_governance: true · single-file frontend extension. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro, not governance-rule change — single-file ≤50 LOC routine commit clause applies. Codex pre-merge per RETRO-V61-001 (UI interaction polish triggers it; even though single-file, V127's calibration miss argues for being conservative).)
-notion_sync_status: not_synced (sync after R0 commit)
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-128-Patch-chip-derived-coloring-narrow-V128-R0-frontend-only-cell-level-data-deferred-357c68942bed81d18fe3d996c0c4d95c)
 self_estimated_pass_rate: 75% (predicted 1-2 rounds · narrow no-cross. Single-file frontend, deriving from already-fetched data, no new contract surface. V127's calibration miss was rooted in cross-component cache contracts; V128 has none of that — it's pure render-derive logic. The +5% over V127's prediction reflects the deliberately tighter scope.)
 
 ---
