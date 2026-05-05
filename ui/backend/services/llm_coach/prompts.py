@@ -208,6 +208,45 @@ def _format_mesh_quality_section(report: MeshQualityReport) -> str:
         # Stable order so the prompt is reproducible across runs.
         for name in sorted(report.patch_face_counts):
             parts.append(f"- {name}: {report.patch_face_counts[name]}")
+    # DEC-V61-126: surface checkMesh-derived metrics when present. The
+    # AI coach uses these to make Fluent/StarCCM-grade quality
+    # judgments (k-omega SST convergence depends on max skewness <
+    # ~0.7, non-orthogonality < 70 degrees, etc). All fields are
+    # optional; absent fields silently skip the line.
+    has_checkmesh = (
+        report.checkmesh_max_non_orthogonality_deg is not None
+        or report.checkmesh_max_skewness is not None
+        or report.checkmesh_max_aspect_ratio is not None
+        or report.checkmesh_mesh_ok is not None
+    )
+    if has_checkmesh:
+        parts.append("")
+        parts.append("checkMesh quality metrics (OpenFOAM):")
+        if report.checkmesh_max_non_orthogonality_deg is not None:
+            parts.append(
+                f"- max_non_orthogonality_deg="
+                f"{report.checkmesh_max_non_orthogonality_deg:g}"
+            )
+        if report.checkmesh_max_skewness is not None:
+            parts.append(
+                f"- max_skewness={report.checkmesh_max_skewness:g}"
+            )
+        if report.checkmesh_max_aspect_ratio is not None:
+            parts.append(
+                f"- max_aspect_ratio={report.checkmesh_max_aspect_ratio:g}"
+            )
+        if report.checkmesh_n_severe_non_ortho_faces is not None:
+            parts.append(
+                f"- severe_non_orthogonal_faces="
+                f"{report.checkmesh_n_severe_non_ortho_faces}"
+            )
+        if report.checkmesh_mesh_ok is not None:
+            verdict = "PASS" if report.checkmesh_mesh_ok else "FAIL"
+            parts.append(f"- mesh_ok={verdict}")
+        if report.checkmesh_failed_checks:
+            parts.append("- failed_checks:")
+            for check in report.checkmesh_failed_checks:
+                parts.append(f"  · {check}")
     return "\n".join(parts)
 
 

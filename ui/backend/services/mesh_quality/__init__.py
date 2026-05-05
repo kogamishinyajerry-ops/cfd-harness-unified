@@ -26,6 +26,11 @@ from ui.backend.services.mesh_quality.analyzer import (
     MeshQualityParseError,
     analyze_mesh_quality,
 )
+from ui.backend.services.mesh_quality.checkmesh_runner import (
+    CheckMeshError,
+    CheckMeshResult,
+    run_checkmesh,
+)
 from ui.backend.services.mesh_quality.schemas import (
     MeshQualityReport,
     MeshSeverity,
@@ -33,10 +38,13 @@ from ui.backend.services.mesh_quality.schemas import (
 )
 
 __all__ = [
+    "CheckMeshError",
+    "CheckMeshResult",
     "MeshQualityNotAvailableError",
     "MeshQualityParseError",
     "MeshQualityReport",
     "MeshSeverity",
     "MeshWarning",
     "analyze_mesh_quality",
+    "run_checkmesh",
 ]

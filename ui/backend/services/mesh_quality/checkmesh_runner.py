@@ -1,0 +1,304 @@
+"""DEC-V61-126 · Docker checkMesh runner.
+
+Invokes ``checkMesh`` inside the cfd-openfoam container against a case's
+``constant/polyMesh`` and parses the stdout for canonical quality
+metrics: max non-orthogonality, max skewness, max aspect ratio,
+``Mesh OK`` / ``Failed N mesh checks`` verdict, severe-non-orthogonal
+face count.
+
+Mirrors ``services.meshing_gmsh.to_foam`` Docker SDK error contract:
+container missing → ``container_unavailable``; container stopped →
+``container_not_running``; SDK errors → ``docker_sdk_error``;
+checkMesh exit nonzero → ``checkmesh_exit_nonzero``. The parser
+handles partial/malformed output by returning ``None`` for missing
+metrics rather than raising.
+
+Per V61-122's separation of concerns, this module does NOT import
+from ``meshing_gmsh.to_foam`` — the Docker SDK calls are duplicated
+intentionally so V126 stays decoupled from the meshing pipeline's
+hardening lineage. Same pattern V108 uses for its container ops.
+"""
+from __future__ import annotations
+
+import io
+import re
+import tarfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+# Container conventions match services.meshing_gmsh.to_foam — the
+# cfd-openfoam container lives at the same name with the same UID/GID
+# expectations. Different work dir to avoid colliding with gmshToFoam's
+# staging area; checkMesh is read-only over polyMesh, so the dir can
+# be cleaned up between calls without affecting the meshing pipeline.
+CONTAINER_NAME = "cfd-openfoam"
+CONTAINER_WORK_BASE = "/tmp/cfd-harness-cases-checkmesh"
+
+# UID/GID retag for the openfoam user — same as to_foam._retag_for_container.
+_CONTAINER_UID = 98765
+_CONTAINER_GID = 98765
+
+
+class CheckMeshError(RuntimeError):
+    """Raised when checkMesh cannot run or its output cannot be parsed.
+
+    ``failing_check`` enumerates the structural problem so the route
+    surfaces a stable detail without leaking traceback contents:
+      * ``polymesh_missing`` — case_dir/constant/polyMesh absent
+      * ``docker_sdk_missing`` — docker SDK not installed
+      * ``container_unavailable`` — container not found
+      * ``container_not_running`` — container exists but stopped
+      * ``docker_sdk_error`` — generic Docker SDK failure
+      * ``checkmesh_exit_nonzero`` — checkMesh returned nonzero exit
+        (distinct from "Mesh has issues but was parseable" which is
+        exit 0 + Failed marker in stdout — handled by parser)
+      * ``parse_error`` — output unrecognizable
+    """
+
+    def __init__(self, message: str, *, failing_check: str) -> None:
+        super().__init__(message)
+        self.failing_check = failing_check
+
+
+@dataclass(frozen=True, slots=True)
+class CheckMeshResult:
+    """Parsed checkMesh output. Numeric fields are ``None`` when the
+    corresponding metric line was not found in stdout (e.g. checkMesh
+    aborted mid-stream). ``mesh_ok`` is False unless the canonical
+    "Mesh OK" line was matched."""
+
+    max_non_orthogonality_deg: float | None
+    max_skewness: float | None
+    max_aspect_ratio: float | None
+    mesh_ok: bool
+    n_severe_non_ortho_faces: int | None
+    failed_checks: list[str] = field(default_factory=list)
+    raw_log_excerpt: str = ""
+
+
+# ────────── Regex bank ──────────
+
+# checkMesh's output format has been stable for these lines since
+# OpenFOAM 4.x. The cfd-openfoam container ships OpenFOAM 10. The
+# patterns are anchored on the canonical labels rather than precise
+# whitespace, so future minor format adjustments don't break them.
+
+_RE_NON_ORTHO = re.compile(
+    r"Mesh non-orthogonality Max:\s*([\d.eE+-]+)\s+average:\s*([\d.eE+-]+)"
+)
+_RE_SKEWNESS = re.compile(r"Max skewness\s*=\s*([\d.eE+-]+)")
+_RE_ASPECT = re.compile(r"Max aspect ratio\s*=\s*([\d.eE+-]+)")
+# The "(> N degrees)" parenthetical is OpenFOAM-version-dependent text
+# but the leading "Number of severely non-orthogonal" prefix is stable.
+_RE_SEVERE_NON_ORTHO = re.compile(
+    r"Number of severely non-orthogonal[^:]*:\s*(\d+)"
+)
+_RE_MESH_OK = re.compile(r"^Mesh OK\.?\s*$", re.MULTILINE)
+_RE_FAILED = re.compile(r"Failed\s+(\d+)\s+mesh\s+check")
+
+
+# ────────── Helpers ──────────
+
+
+def _retag_for_container(info: "tarfile.TarInfo") -> "tarfile.TarInfo":
+    info.uid = _CONTAINER_UID
+    info.gid = _CONTAINER_GID
+    info.uname = "openfoam"
+    info.gname = "openfoam"
+    if info.isdir():
+        info.mode = 0o755
+    else:
+        info.mode = 0o644
+    return info
+
+
+def _make_polymesh_tarball(polymesh_dir: Path) -> bytes:
+    """Pack just the polyMesh subset for checkMesh — typically 1-50 MB
+    even for million-cell meshes, much faster than packing the full
+    case_dir. The tar arcname keeps the polyMesh leaf so the container
+    sees ``constant/polyMesh/`` after extraction."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        tar.add(
+            str(polymesh_dir),
+            arcname="polyMesh",
+            filter=_retag_for_container,
+        )
+    return buf.getvalue()
+
+
+def _parse_checkmesh_output(stdout: str) -> CheckMeshResult:
+    """Parse checkMesh stdout into a structured result.
+
+    Missing metrics return None (graceful — checkMesh aborted partway
+    or output a non-canonical format). Parser does NOT raise; the
+    raw_log_excerpt captures the last 50 lines for diagnosis.
+    """
+    non_ortho_match = _RE_NON_ORTHO.search(stdout)
+    skewness_match = _RE_SKEWNESS.search(stdout)
+    aspect_match = _RE_ASPECT.search(stdout)
+    severe_match = _RE_SEVERE_NON_ORTHO.search(stdout)
+    mesh_ok = bool(_RE_MESH_OK.search(stdout))
+    failed_match = _RE_FAILED.search(stdout)
+
+    failed_checks: list[str] = []
+    if failed_match and not mesh_ok:
+        # checkMesh marks specific failures with "***" — typically at
+        # line start, but OpenFOAM 10 sometimes inlines the marker mid-
+        # line (e.g. "Max skewness = 4.2 ***Max skewness = 4.2 > 4 --
+        # SKEWED CELLS DETECTED."). Match anywhere in the stripped line.
+        # Filter "OK"-line noise that still uses ***.
+        for line in stdout.splitlines():
+            stripped = line.strip()
+            if "***" in stripped and "OK" not in stripped:
+                # Capture the substring starting at the *** marker so
+                # the surfaced failure text reads naturally.
+                marker_idx = stripped.find("***")
+                failed_checks.append(stripped[marker_idx:].lstrip("* ").rstrip())
+
+    raw_excerpt = "\n".join(stdout.splitlines()[-50:])
+
+    return CheckMeshResult(
+        max_non_orthogonality_deg=(
+            float(non_ortho_match.group(1)) if non_ortho_match else None
+        ),
+        max_skewness=(
+            float(skewness_match.group(1)) if skewness_match else None
+        ),
+        max_aspect_ratio=(
+            float(aspect_match.group(1)) if aspect_match else None
+        ),
+        mesh_ok=mesh_ok,
+        n_severe_non_ortho_faces=(
+            int(severe_match.group(1)) if severe_match else None
+        ),
+        failed_checks=failed_checks,
+        raw_log_excerpt=raw_excerpt,
+    )
+
+
+# ────────── Public entry point ──────────
+
+
+def run_checkmesh(
+    case_dir: Path,
+    *,
+    container_name: str = CONTAINER_NAME,
+) -> CheckMeshResult:
+    """Run ``checkMesh`` inside the cfd-openfoam container against
+    ``case_dir/constant/polyMesh`` and return parsed quality metrics.
+
+    Raises :class:`CheckMeshError` whose ``failing_check`` attribute
+    enumerates the structural problem so the caller can map it to a
+    stable HTTP detail or graceful-degrade per V126's
+    ``run_checkmesh=True`` opt-in semantics.
+
+    The function is read-only over the host case_dir — only the in-
+    memory tarball touches polyMesh, and the container's work area
+    is independent of the host. Callers do NOT need to hold
+    ``case_lock`` around this call.
+    """
+    polymesh = case_dir / "constant" / "polyMesh"
+    if not polymesh.is_dir():
+        raise CheckMeshError(
+            f"polyMesh directory missing at {polymesh}",
+            failing_check="polymesh_missing",
+        )
+
+    try:
+        import docker  # type: ignore[import-not-found]
+        import docker.errors  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise CheckMeshError(
+            "docker SDK is not installed — install with `pip install "
+            "'docker>=7.0'` (already in the [ui] extra). checkMesh must "
+            "run inside the cfd-openfoam container.",
+            failing_check="docker_sdk_missing",
+        ) from exc
+
+    try:
+        client = docker.from_env()
+        container = client.containers.get(container_name)
+        if container.status != "running":
+            raise CheckMeshError(
+                f"container '{container_name}' is not running "
+                f"(status={container.status!r}); start it with "
+                f"`docker start {container_name}`.",
+                failing_check="container_not_running",
+            )
+    except docker.errors.NotFound as exc:
+        raise CheckMeshError(
+            f"container '{container_name}' not found. Bring up the "
+            f"cfd-openfoam container before requesting checkMesh.",
+            failing_check="container_unavailable",
+        ) from exc
+    except docker.errors.DockerException as exc:
+        raise CheckMeshError(
+            f"docker client init failed: {exc}",
+            failing_check="docker_sdk_error",
+        ) from exc
+
+    container_work = f"{CONTAINER_WORK_BASE}/{case_dir.name}"
+    try:
+        # The container needs an empty 'constant' dir to receive the
+        # polyMesh tarball; cleanup any prior staging first so a stale
+        # checkmesh run doesn't pollute fresh data.
+        container.exec_run(
+            cmd=[
+                "bash",
+                "-c",
+                f"rm -rf {container_work} && mkdir -p {container_work}/constant",
+            ]
+        )
+        archive_ok = container.put_archive(
+            path=f"{container_work}/constant",
+            data=_make_polymesh_tarball(polymesh),
+        )
+    except docker.errors.DockerException as exc:
+        raise CheckMeshError(
+            f"docker SDK error preparing checkMesh workspace: {exc}",
+            failing_check="docker_sdk_error",
+        ) from exc
+    except OSError as exc:
+        raise CheckMeshError(
+            f"failed to build checkMesh tarball for {case_dir.name} "
+            f"(host filesystem fault): {exc}",
+            failing_check="docker_sdk_error",
+        ) from exc
+
+    if not archive_ok:
+        raise CheckMeshError(
+            f"failed to copy polyMesh into container at {container_work}",
+            failing_check="docker_sdk_error",
+        )
+
+    bash_cmd = (
+        f"source /opt/openfoam10/etc/bashrc && "
+        f"cd {container_work} && "
+        f"checkMesh 2>&1"
+    )
+    try:
+        exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
+    except docker.errors.DockerException as exc:
+        raise CheckMeshError(
+            f"docker SDK error invoking checkMesh: {exc}",
+            failing_check="docker_sdk_error",
+        ) from exc
+
+    output = exec_result.output.decode("utf-8", errors="replace")
+
+    # checkMesh exit code semantics (OpenFOAM 10):
+    #   * exit 0 + "Mesh OK" → healthy mesh
+    #   * exit 0 + "Failed N mesh checks" → mesh has issues but checkMesh
+    #     itself ran successfully; parser captures the failures
+    #   * exit nonzero → fatal config error (e.g. polyMesh corrupt,
+    #     missing required files). Surface as typed error.
+    if exec_result.exit_code != 0:
+        raise CheckMeshError(
+            f"checkMesh exit_code={exec_result.exit_code}; "
+            f"output excerpt: {output[-500:]!r}",
+            failing_check="checkmesh_exit_nonzero",
+        )
+
+    return _parse_checkmesh_output(output)

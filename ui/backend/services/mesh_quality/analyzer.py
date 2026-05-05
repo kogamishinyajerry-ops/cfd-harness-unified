@@ -345,7 +345,11 @@ def _emit_warnings(
 # ────────── Public entry point ──────────
 
 
-def analyze_mesh_quality(case_dir: Path) -> MeshQualityReport:
+def analyze_mesh_quality(
+    case_dir: Path,
+    *,
+    run_checkmesh: bool = False,
+) -> MeshQualityReport:
     """Read polyMesh and produce a :class:`MeshQualityReport`.
 
     Raises :class:`MeshQualityNotAvailableError` if the case has not
@@ -355,6 +359,18 @@ def analyze_mesh_quality(case_dir: Path) -> MeshQualityReport:
     but cannot be parsed in the V1 ASCII format. ``failing_check``
     enumerates the structural problem so the route surfaces a stable
     HTTP 500 detail.
+
+    DEC-V61-126: when ``run_checkmesh=True``, additionally invoke
+    OpenFOAM's ``checkMesh`` inside the cfd-openfoam container to
+    augment the report with skewness, non-orthogonality, and aspect-
+    ratio metrics. **Graceful degradation**: when the container is
+    unavailable or not running, the V122 fields populate as normal
+    and the checkmesh_* fields stay None (with a logged warning) —
+    the caller does NOT see an error. Other failure modes (parse
+    errors, exit-nonzero) DO raise so real bugs surface; the only
+    swallowed errors are the explicit "container not present"
+    operational states an engineer might reasonably hit on a fresh
+    install.
     """
     case_id = case_dir.name
     polymesh = case_dir / "constant" / "polyMesh"
@@ -439,6 +455,13 @@ def analyze_mesh_quality(case_dir: Path) -> MeshQualityReport:
         patch_face_counts=patch_face_counts,
     )
 
+    # V126 augment: only when caller explicitly opts in. Default-False
+    # path is byte-identical to V122 / V123 behavior — no Docker call
+    # made, no container probe, no log warning.
+    checkmesh_fields: dict[str, object] = {}
+    if run_checkmesh:
+        checkmesh_fields = _try_run_checkmesh(case_dir)
+
     return MeshQualityReport(
         case_id=case_id,
         polymesh_present=True,
@@ -452,4 +475,62 @@ def analyze_mesh_quality(case_dir: Path) -> MeshQualityReport:
         cells_per_unit_volume=cells_per_unit_volume,
         patch_face_counts=patch_face_counts,
         warnings=warnings,
+        **checkmesh_fields,
     )
+
+
+def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
+    """V126 graceful-degradation wrapper around run_checkmesh.
+
+    Returns a dict suitable for kwargs unpacking into MeshQualityReport.
+    On container-down operational states (container_unavailable /
+    container_not_running / docker_sdk_missing) returns an empty dict
+    with a logged warning so the caller still gets the V122 fields.
+    On parse errors and other genuine failures, RE-raises so real
+    bugs surface.
+    """
+    import logging
+
+    from ui.backend.services.mesh_quality.checkmesh_runner import (
+        CheckMeshError,
+        run_checkmesh,
+    )
+
+    logger = logging.getLogger(__name__)
+    # Operational states an engineer could reasonably hit on a fresh
+    # install — container hasn't been brought up yet, Docker missing,
+    # etc. Surface as warning, NOT error; the V122 fields are still
+    # informative on their own.
+    _GRACEFUL_FAILING_CHECKS = frozenset(
+        {
+            "container_unavailable",
+            "container_not_running",
+            "docker_sdk_missing",
+        }
+    )
+    try:
+        result = run_checkmesh(case_dir)
+    except CheckMeshError as exc:
+        if exc.failing_check in _GRACEFUL_FAILING_CHECKS:
+            logger.warning(
+                "checkMesh skipped for case_id=%r failing_check=%s; "
+                "report will carry V122 fields only.",
+                case_dir.name,
+                exc.failing_check,
+            )
+            return {}
+        # Genuine bug surfaces (parse_error, checkmesh_exit_nonzero,
+        # docker_sdk_error, polymesh_missing — though polymesh_missing
+        # would have been caught by analyze_mesh_quality's earlier
+        # check).
+        raise
+    return {
+        "checkmesh_max_non_orthogonality_deg": result.max_non_orthogonality_deg,
+        "checkmesh_max_skewness": result.max_skewness,
+        "checkmesh_max_aspect_ratio": result.max_aspect_ratio,
+        "checkmesh_mesh_ok": result.mesh_ok,
+        "checkmesh_n_severe_non_ortho_faces": result.n_severe_non_ortho_faces,
+        "checkmesh_failed_checks": (
+            result.failed_checks if result.failed_checks else None
+        ),
+    }
