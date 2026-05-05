@@ -388,13 +388,23 @@ export const api = {
     const result = (await resp.json()) as import(
       "@/pages/workbench/step_panel_shell/types"
     ).AIActionEnvelope;
-    // R5 P2: only the "confident" envelope outcome commits the
-    // boundary rewrite — "uncertain" / "blocked" short-circuit before
-    // touching polyMesh (force_blocked=1 path, classifier
-    // short-circuit). Firing mesh:mutated for those would invalidate
-    // the cache spuriously and regress the Step 2 ↔ 3 caching that R3
-    // was added to preserve.
-    if (result.confidence === "confident") {
+    // R6 P2: polyMesh-mutation map for setupBCWithEnvelope
+    // (ui/backend/services/ai_actions/__init__.py
+    // setup_bc_with_annotations):
+    //   * force_blocked=1 → short-circuits BEFORE setup_ldc_bc;
+    //     confidence='blocked'; NO polyMesh write.
+    //   * force_uncertain=1 → runs setup_ldc_bc THEN wraps as
+    //     'uncertain' for the dogfood dialog; polyMesh IS written.
+    //   * neither force flag → classifier may short-circuit
+    //     ('uncertain'/'blocked' without writing) or fall through to
+    //     setup_ldc_bc/setup_channel_bc and return 'confident' (which
+    //     always means polyMesh was written).
+    // Therefore: dispatch on `confident` OR when the caller passed
+    // forceUncertain (indistinguishable from a classifier-uncertain
+    // response on the wire, but the caller's intent disambiguates).
+    const polyMeshMutated =
+      result.confidence === "confident" || options.forceUncertain === true;
+    if (polyMeshMutated) {
       dispatchMeshMutated(caseId);
     }
     return result;

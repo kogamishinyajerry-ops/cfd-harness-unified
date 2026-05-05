@@ -53,13 +53,25 @@ describe("api.setupBCWithEnvelope · mesh:mutated dispatch (R5 P2)", () => {
     expect(evt.detail.caseId).toBe("ldc");
   });
 
-  it("does NOT dispatch mesh:mutated when confidence='uncertain'", async () => {
+  it("R6 P2: dispatches mesh:mutated for force_uncertain (backend ran setup_ldc_bc before wrapping)", async () => {
+    // force_uncertain runs setup_ldc_bc THEN returns 'uncertain' to
+    // exercise the dialog UI. polyMesh IS written, so the cache must
+    // be busted.
     fetchMock.mockResolvedValueOnce(envelopeResponse("uncertain"));
     await api.setupBCWithEnvelope("ldc", { forceUncertain: true });
+    expect(meshMutatedCalls()).toHaveLength(1);
+  });
+
+  it("does NOT dispatch mesh:mutated when classifier returns 'uncertain' without force flag", async () => {
+    // Without force flags, an 'uncertain' envelope means the
+    // classifier short-circuited BEFORE setup_ldc_bc — polyMesh was
+    // not written.
+    fetchMock.mockResolvedValueOnce(envelopeResponse("uncertain"));
+    await api.setupBCWithEnvelope("ldc");
     expect(meshMutatedCalls()).toHaveLength(0);
   });
 
-  it("does NOT dispatch mesh:mutated when confidence='blocked'", async () => {
+  it("does NOT dispatch mesh:mutated when confidence='blocked' (force_blocked short-circuits before setup)", async () => {
     fetchMock.mockResolvedValueOnce(envelopeResponse("blocked"));
     await api.setupBCWithEnvelope("ldc", { forceBlocked: true });
     expect(meshMutatedCalls()).toHaveLength(0);
