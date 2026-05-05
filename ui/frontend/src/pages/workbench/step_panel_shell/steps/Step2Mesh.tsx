@@ -15,10 +15,7 @@ import type {
   MeshSuccessResponse,
 } from "@/types/mesh_imported";
 
-import {
-  MeshQualityCard,
-  invalidateMeshQualityCache,
-} from "../MeshQualityCard";
+import { MeshQualityCard } from "../MeshQualityCard";
 import type { StepTaskPanelProps } from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
@@ -57,12 +54,12 @@ export function Step2Mesh({
     try {
       const r = await api.meshImported(caseId, meshMode);
       setResponse(r);
-      // V127 R3 P1: invalidate the mesh-quality cache here AND bump
-      // meshGenSeq. The cache lives at module scope, so this is the
-      // authoritative bust point for manual mesh runs (the AI-coach
-      // regenerate_mesh path bumps via the module-level event
-      // listener registered in MeshQualityCard).
-      invalidateMeshQualityCache(caseId);
+      // V127 R4 P2: api.meshImported now dispatches mesh:mutated which
+      // the MeshQualityCard module-level listener handles, so explicit
+      // invalidateMeshQualityCache() is no longer needed here. Still
+      // bump meshGenSeq so the in-mounted card re-fetches against the
+      // new polyMesh (the cache is keyed on caseId and the entry for
+      // this case has just been cleared by the dispatched event).
       setMeshGenSeq((s) => s + 1);
       onStepComplete();
     } catch (e) {

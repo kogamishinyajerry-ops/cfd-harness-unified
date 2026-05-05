@@ -74,6 +74,18 @@ export class ApiError extends Error {
   }
 }
 
+// V127 R4 P2: any backend route that mutates a case's polyMesh must
+// dispatch this event so caches keyed on the polyMesh (notably
+// MeshQualityCard's module-level cache) re-fetch on next remount. The
+// listeners are registered inside the consumers; this helper is the
+// single point where producers fire.
+function dispatchMeshMutated(caseId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("mesh:mutated", { detail: { caseId } }),
+  );
+}
+
 export const api = {
   // Phase 0
   health: () => request<{ status: string; version: string }>("/api/health"),
@@ -287,7 +299,11 @@ export const api = {
             : `mesh failed (${resp.status})`;
       throw new ApiError(resp.status, message, detail);
     }
-    return (await resp.json()) as import("@/types/mesh_imported").MeshSuccessResponse;
+    const result = (await resp.json()) as import(
+      "@/types/mesh_imported"
+    ).MeshSuccessResponse;
+    dispatchMeshMutated(caseId);
+    return result;
   },
 
   // Phase-1A LDC demo (DEC-V61-097): the back-half routes wire Steps
@@ -319,7 +335,13 @@ export const api = {
             : `setup-bc failed (${resp.status})`;
       throw new ApiError(resp.status, message, detail);
     }
-    return (await resp.json()) as import("@/types/case_solve").SetupBcSummary;
+    const result = (await resp.json()) as import(
+      "@/types/case_solve"
+    ).SetupBcSummary;
+    // setup-bc rewrites constant/polyMesh/boundary; treat as polyMesh
+    // mutation so the mesh-quality cache re-fetches.
+    dispatchMeshMutated(caseId);
+    return result;
   },
 
   // M-AI-COPILOT (DEC-V61-098 spec_v2 §B.4): envelope-mode setup-bc.
@@ -363,9 +385,13 @@ export const api = {
             : `setup-bc envelope failed (${resp.status})`;
       throw new ApiError(resp.status, message, detail);
     }
-    return (await resp.json()) as import(
+    const result = (await resp.json()) as import(
       "@/pages/workbench/step_panel_shell/types"
     ).AIActionEnvelope;
+    // Envelope path runs the same setup-bc routine which rewrites
+    // constant/polyMesh/boundary on commit; bust the cache.
+    dispatchMeshMutated(caseId);
+    return result;
   },
 
   // M-AI-COPILOT face-annotations endpoints (DEC-V61-098 spec_v2 §A4).

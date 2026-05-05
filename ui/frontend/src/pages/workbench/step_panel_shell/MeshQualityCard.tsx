@@ -384,10 +384,16 @@ export function __clearMeshQualityCacheForTests(): void {
   meshQualityCache.clear();
 }
 
-// R3 P1: register the regenerate_mesh listener at module level so AI-
-// driven mesh regenerations bust the cache even when Step2Mesh is not
-// the currently mounted step. Idempotent — safe to register once at
-// module load. The listener filter mirrors what Step2Mesh checks.
+// R3 P1 + R4 P2: register cache-invalidation listeners at module level
+// so any mesh mutation busts the cache regardless of which step is
+// mounted. Idempotent — safe to register once at module load.
+//   * ai-coach:proposal-applied (tool=regenerate_mesh) — AI-driven mesh
+//     regeneration via the coach proposal pipeline.
+//   * mesh:mutated — fired by api/client.ts on every polyMesh-mutating
+//     route (meshImported, setupBC, setupBCWithEnvelope). This catches
+//     Step 3's BC setup (rewrites constant/polyMesh/boundary) and the
+//     legacy /workbench/case/:caseId/mesh wizard, neither of which
+//     went through Step2Mesh's local invalidation path before R4.
 if (typeof window !== "undefined") {
   window.addEventListener("ai-coach:proposal-applied", (e) => {
     const evt = e as CustomEvent<{ caseId?: string; tool?: string }>;
@@ -395,6 +401,12 @@ if (typeof window !== "undefined") {
       typeof evt.detail?.caseId === "string" &&
       evt.detail?.tool === "regenerate_mesh"
     ) {
+      invalidateMeshQualityCache(evt.detail.caseId);
+    }
+  });
+  window.addEventListener("mesh:mutated", (e) => {
+    const evt = e as CustomEvent<{ caseId?: string }>;
+    if (typeof evt.detail?.caseId === "string") {
       invalidateMeshQualityCache(evt.detail.caseId);
     }
   });

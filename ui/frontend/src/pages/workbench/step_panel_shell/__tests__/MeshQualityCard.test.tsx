@@ -282,6 +282,52 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
     );
   });
 
+  it("R4 P2: mesh:mutated event busts cache for that caseId", async () => {
+    // The api client dispatches mesh:mutated on success of any
+    // polyMesh-mutating route (meshImported, setupBC,
+    // setupBCWithEnvelope). The module-level listener must invalidate
+    // the cache so the next remount re-fetches.
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    // Step 3 BC setup runs in the background (rewrites
+    // constant/polyMesh/boundary). The api client dispatches
+    // mesh:mutated, which busts the cache.
+    window.dispatchEvent(
+      new CustomEvent("mesh:mutated", {
+        detail: { caseId: "ldc" },
+      }),
+    );
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it("R4 P2: mesh:mutated event for a different caseId does NOT bust this cache", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    window.dispatchEvent(
+      new CustomEvent("mesh:mutated", {
+        detail: { caseId: "other-case" },
+      }),
+    );
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    // No re-fetch — cache for "ldc" still valid.
+    expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1);
+  });
+
   it("R3 P2: graceful-degradation responses are NOT cached", async () => {
     // V126 with all checkmesh_* null = container unavailable.
     const v126Skipped: MeshQualityReportV126 = {
