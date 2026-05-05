@@ -60,13 +60,26 @@ class MeshResult:
     warning: str | None  # populated when beginner soft cap is exceeded
 
 
-def _resolve_imported_case(case_id: str) -> tuple[Path, Path]:
-    """Return ``(case_dir, stl_path)`` or raise pipeline error."""
+def _resolve_imported_case(
+    case_id: str, *, case_dir_override: Path | None = None
+) -> tuple[Path, Path]:
+    """Return ``(case_dir, stl_path)`` or raise pipeline error.
+
+    Codex base-review-4 P1: callers that have already pinned the
+    case directory (via case_lock, dir_fd, or otherwise validated
+    its inode) can pass ``case_dir_override`` to bypass the
+    ``IMPORTED_DIR / case_id`` re-resolution, ensuring the meshing
+    pipeline operates on the SAME inode the caller's lock pins. The
+    AI-coach regenerate_mesh path uses this so a rename/recreate
+    race between case_lock(case_dir) acquisition and pipeline entry
+    cannot redirect the write to a different (replacement) inode
+    while the lock still references the original.
+    """
     if not is_safe_case_id(case_id):
         raise MeshPipelineError(
             f"unsafe case_id: {case_id!r}", "case_not_found"
         )
-    case_dir = IMPORTED_DIR / case_id
+    case_dir = case_dir_override if case_dir_override is not None else IMPORTED_DIR / case_id
     if not case_dir.is_dir():
         raise MeshPipelineError(
             f"imported case {case_id!r} not found at {case_dir}",
@@ -106,6 +119,7 @@ def mesh_imported_case(
     target_cell_count: int | None = None,
     characteristic_length_override: float | None = None,
     container_name: str | None = None,
+    case_dir_override: Path | None = None,
 ) -> MeshResult:
     """Run the full M6.0 pipeline for the given imported case_id.
 
@@ -127,7 +141,9 @@ def mesh_imported_case(
     is one of :data:`FailingCheck`. The route maps each value to an
     HTTP 4xx response.
     """
-    case_dir, stl_path = _resolve_imported_case(case_id)
+    case_dir, stl_path = _resolve_imported_case(
+        case_id, case_dir_override=case_dir_override
+    )
     msh_path = case_dir / "imported.msh"
 
     try:

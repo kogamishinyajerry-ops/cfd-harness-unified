@@ -97,6 +97,19 @@ def write_audit(
         "model_used": model_used,
         "conversation_turn_id": conversation_turn_id,
     }
+    # Codex base-review-4 P2: pre-lock missing-case check. case_lock
+    # unconditionally calls case_dir.mkdir(parents=True, exist_ok=True)
+    # — if the case dir was deleted between dispatch_tool succeeding
+    # and audit logging starting, the lock would silently RECREATE an
+    # empty dir and we'd write applied.yaml into a ghost tree
+    # detached from the case the engineer actually modified. Refuse
+    # to log audit rows against a vanished case.
+    if not os.path.lexists(case_dir):
+        raise AuditWriteError(
+            f"case_dir {case_dir} no longer exists — refusing to "
+            f"recreate via case_lock and write detached audit row"
+        )
+
     # Codex base-review-2 P2 + R1 P2: full fd-relative write path so
     # the symlink-escape and TOCTTOU contract matches the rest of the
     # repo (services/case_solve/patch_classification_store.py is the

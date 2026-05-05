@@ -138,18 +138,48 @@ export function PatchClassificationPanel({
     const myCaseGen = caseGenRef.current;
     const isStale = () =>
       cancelledRef.current || caseGenRef.current !== myCaseGen;
-    api
-      .getPatchClassification(caseId)
-      .then((doc) => {
-        if (isStale()) return;
-        if (committedSeqRef.current > 0) return;
-        setState(doc);
-        setLoadError(null);
-      })
-      .catch((e) => {
-        if (isStale()) return;
-        setLoadError(formatApiErrorDetail(e));
-      });
+    const fetchOverrides = (force = false) => {
+      api
+        .getPatchClassification(caseId)
+        .then((doc) => {
+          if (isStale()) return;
+          // The committedSeq guard prevents the slow initial GET from
+          // clobbering an authoritative PUT/DELETE response. But a
+          // forced re-fetch (e.g. after an AI-coach proposal applied)
+          // explicitly wants to bypass it.
+          if (!force && committedSeqRef.current > 0) return;
+          setState(doc);
+          setLoadError(null);
+        })
+        .catch((e) => {
+          if (isStale()) return;
+          setLoadError(formatApiErrorDetail(e));
+        });
+    };
+    fetchOverrides();
+    // Codex base-review-4 P2: re-fetch when the AI coach successfully
+    // applies a set_patch_bc_type proposal for this case. Without this,
+    // the panel keeps showing the old override and the engineer edits
+    // against stale state until the case view remounts.
+    const onProposalApplied = (e: Event) => {
+      const evt = e as CustomEvent<{
+        caseId?: string;
+        tool?: string;
+      }>;
+      if (
+        evt.detail?.caseId === caseId &&
+        evt.detail?.tool === "set_patch_bc_type"
+      ) {
+        fetchOverrides(true);
+      }
+    };
+    window.addEventListener("ai-coach:proposal-applied", onProposalApplied);
+    return () => {
+      window.removeEventListener(
+        "ai-coach:proposal-applied",
+        onProposalApplied,
+      );
+    };
   }, [caseId]);
 
   // FaceIndex is only needed to resolve picked-face → patch. Fetch

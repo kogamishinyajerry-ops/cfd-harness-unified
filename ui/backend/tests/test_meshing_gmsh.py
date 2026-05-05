@@ -224,7 +224,7 @@ def test_mesh_imported_case_cap_exceeded_path_clean(tmp_path: Path, monkeypatch)
         generation_time_s=0.1,
     )
 
-    def fake_resolve(case_id: str):
+    def fake_resolve(case_id: str, *, case_dir_override=None):
         return case_dir, case_dir / "triSurface" / "input.stl"
 
     monkeypatch.setattr(pipeline_mod, "_resolve_imported_case", fake_resolve)

@@ -349,9 +349,13 @@ def test_regenerate_mesh_tool_describes_args():
 def test_dispatch_regenerate_mesh_happy_path(tmp_path, monkeypatch):
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123")
 
-    def fake_mesh(case_id, *, mesh_mode):
+    def fake_mesh(case_id, *, mesh_mode, case_dir_override=None):
         assert case_id == "ldc_v123"
         assert mesh_mode == "power"
+        # Codex base-review-4 P1: regenerate_mesh handler now passes
+        # the locked case_dir explicitly so case_lock and the pipeline
+        # operate on the same inode.
+        assert case_dir_override is not None
         return _stub_mesh_result(case_id=case_id, mesh_mode=mesh_mode)
 
     monkeypatch.setattr(
@@ -374,7 +378,7 @@ def test_dispatch_regenerate_mesh_includes_warning_in_summary(
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_warn")
     monkeypatch.setattr(
         "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode: _stub_mesh_result(
+        lambda case_id, *, mesh_mode, case_dir_override=None: _stub_mesh_result(
             case_id=case_id,
             mesh_mode=mesh_mode,
             warning="beginner soft cap exceeded; consider 'power' mode",
@@ -421,7 +425,7 @@ def test_regenerate_mesh_pipeline_error_translated_to_underlying(
 
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_err")
 
-    def boom(case_id, *, mesh_mode):
+    def boom(case_id, *, mesh_mode, case_dir_override=None):
         raise MeshPipelineError("cap exceeded", "cell_cap_exceeded")
 
     monkeypatch.setattr(
@@ -458,7 +462,7 @@ def test_regenerate_mesh_preserves_each_pipeline_failing_check(
     )
     monkeypatch.setattr(
         "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode: (_ for _ in ()).throw(
+        lambda case_id, *, mesh_mode, case_dir_override=None: (_ for _ in ()).throw(
             MeshPipelineError(f"surface {underlying_check}", underlying_check)
         ),
     )
@@ -615,7 +619,7 @@ def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_idem")
     monkeypatch.setattr(
         "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode: _stub_mesh_result(
+        lambda case_id, *, mesh_mode, case_dir_override=None: _stub_mesh_result(
             case_id=case_id, mesh_mode=mesh_mode
         ),
     )
@@ -703,8 +707,13 @@ def test_dispatch_regenerate_mesh_with_lc_override_invokes_pipeline(
     dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
     assert captured["case_id"] == "ldc_v125_lc"
     # Pipeline received characteristic_length_override, NOT mesh_mode
-    # or target_cell_count.
-    assert captured["kwargs"] == {"characteristic_length_override": 0.005}
+    # or target_cell_count. Plus the base-review-4 P1 case_dir_override
+    # pin.
+    kwargs = captured["kwargs"]
+    assert kwargs["characteristic_length_override"] == 0.005
+    assert "mesh_mode" not in kwargs
+    assert "target_cell_count" not in kwargs
+    assert kwargs["case_dir_override"] == case_dir
 
 
 def test_dispatch_regenerate_mesh_summary_says_lc_when_set(
@@ -992,8 +1001,12 @@ def test_dispatch_regenerate_mesh_with_target_cell_count_invokes_pipeline(
     )
     dispatch(case_dir, "regenerate_mesh", {"target_cell_count": 500_000})
     assert captured["case_id"] == "ldc_v124_target"
-    # Pipeline received target_cell_count, NOT mesh_mode.
-    assert captured["kwargs"] == {"target_cell_count": 500_000}
+    # Pipeline received target_cell_count, NOT mesh_mode. Plus the
+    # base-review-4 P1 case_dir_override pin.
+    kwargs = captured["kwargs"]
+    assert kwargs["target_cell_count"] == 500_000
+    assert "mesh_mode" not in kwargs
+    assert kwargs["case_dir_override"] == case_dir
 
 
 def test_dispatch_regenerate_mesh_summary_says_target_when_set(
@@ -1033,7 +1046,9 @@ def test_dispatch_regenerate_mesh_v123_mesh_mode_path_unchanged(
         fake_mesh,
     )
     result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert captured["kwargs"] == {"mesh_mode": "power"}
+    kwargs = captured["kwargs"]
+    assert kwargs["mesh_mode"] == "power"
+    assert kwargs["case_dir_override"] == case_dir
     assert "'power' mode" in result.summary
 
 
@@ -1188,7 +1203,7 @@ def test_regenerate_mesh_holds_case_lock_during_pipeline(
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_lock")
     lock_held = {"value": False}
 
-    def assert_lock_held(case_id, *, mesh_mode):
+    def assert_lock_held(case_id, *, mesh_mode, case_dir_override=None):
         lock_path = case_dir / ".case_lock"
         # The lockfile must exist while the pipeline is running.
         assert lock_path.is_file()

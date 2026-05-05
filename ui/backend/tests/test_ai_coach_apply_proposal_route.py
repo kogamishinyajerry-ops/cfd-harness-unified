@@ -508,7 +508,7 @@ def test_apply_proposal_422_regenerate_mesh_inner_failing_check_plumbed(
     from ui.backend.services.llm_coach import tool_registry as registry_module
     from ui.backend.services.meshing_gmsh import MeshPipelineError
 
-    def fake_mesh(case_id, *, mesh_mode):
+    def fake_mesh(case_id, *, mesh_mode, case_dir_override=None):
         raise MeshPipelineError("hard cap exceeded", "cell_cap_exceeded")
 
     monkeypatch.setattr(registry_module, "mesh_imported_case", fake_mesh)

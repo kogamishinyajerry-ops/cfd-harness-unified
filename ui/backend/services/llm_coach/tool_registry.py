@@ -310,11 +310,21 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
     # translation layer maps each to ToolDispatchError preserving the
     # underlying failing_check as inner_failing_check (V123 R1 P2-1/2-2).
     with case_lock(case_dir):
+        # Codex base-review-4 P1: pass case_dir_override so
+        # mesh_imported_case operates on the SAME path object case_lock
+        # is pinning. Without this, mesh_imported_case re-resolves
+        # IMPORTED_DIR / case_id internally — a rename/recreate race
+        # between case_lock acquisition and pipeline entry would let
+        # the meshing run against a replacement directory while the
+        # lock still references the original inode, reopening the
+        # path-swap race the lock is meant to prevent.
         if typed.target_cell_count is not None:
             # V124 path: AI specified an exact cell count. Pipeline
             # converts to lc via cube approximation (see DEC-V61-124).
             result = mesh_imported_case(
-                case_id, target_cell_count=typed.target_cell_count
+                case_id,
+                target_cell_count=typed.target_cell_count,
+                case_dir_override=case_dir,
             )
         elif typed.lc_override is not None:
             # V125 path: engineer supplied the gmsh characteristic
@@ -323,10 +333,15 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
             result = mesh_imported_case(
                 case_id,
                 characteristic_length_override=typed.lc_override,
+                case_dir_override=case_dir,
             )
         else:
             # V123 path: AI picked a preset (beginner / power).
-            result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
+            result = mesh_imported_case(
+                case_id,
+                mesh_mode=typed.mesh_mode,
+                case_dir_override=case_dir,
+            )
     if typed.target_cell_count is not None:
         density_label = f"target ~{typed.target_cell_count:,} cells"
     elif typed.lc_override is not None:

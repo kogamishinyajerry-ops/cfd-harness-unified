@@ -70,6 +70,26 @@ export function ProposalCard({
       });
       setState({ kind: "applied", result });
       onApplied?.(result);
+      // Codex base-review-4 P2: notify any open panels backed by the
+      // case state we just mutated so they can re-fetch and avoid
+      // showing stale data. PatchClassificationPanel (Step 3) is the
+      // V121 case for set_patch_bc_type; future tools that mutate
+      // case state should fold their relevant panel listeners here.
+      // Using a window CustomEvent keeps the parent-tree decoupled —
+      // ProposalCard doesn't need to know which panel is mounted.
+      try {
+        window.dispatchEvent(
+          new CustomEvent("ai-coach:proposal-applied", {
+            detail: {
+              caseId,
+              tool: proposal.tool,
+              audit_id: result.audit_id,
+            },
+          }),
+        );
+      } catch {
+        // SSR / non-browser context — no-op.
+      }
     } catch (err) {
       let detail = "apply failed";
       if (err instanceof ApiError) {

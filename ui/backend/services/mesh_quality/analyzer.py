@@ -92,7 +92,12 @@ _POINT_LINE_RE = re.compile(
 # ────────── Helpers ──────────
 
 
-def _read_text_no_symlink(path: Path, *, failing_check: str) -> str:
+def _read_text_no_symlink(
+    path: Path,
+    *,
+    failing_check: str,
+    dir_fd: int | None = None,
+) -> str:
     """Read ``path`` as UTF-8 text without following symlinks.
 
     Codex R1 P1: a planted symlink at any of the polyMesh files
@@ -103,12 +108,20 @@ def _read_text_no_symlink(path: Path, *, failing_check: str) -> str:
     a stable ``failing_check`` so the route surfaces a structured
     detail rather than an opaque traceback.
 
-    Same containment discipline as
-    ``services.case_manifest.locking._open_or_create_lock_fd``;
-    that module is the project's reference symlink-escape pattern.
+    Codex base-review-4 P1: when ``dir_fd`` is supplied, the open is
+    dir_fd-relative and ``path.name`` is interpreted as a leaf under
+    the pinned parent inode — closes the parent-symlink-swap TOCTTOU
+    where ``constant/`` or ``polyMesh/`` could be retargeted between
+    a path-only lstat preflight and a leaf open. Same containment
+    discipline as ``services.case_solve.patch_classification_store``.
     """
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        if dir_fd is not None:
+            fd = os.open(
+                path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dir_fd
+            )
+        else:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             # A symlink was planted at the final path component.
@@ -143,7 +156,12 @@ def _read_text_no_symlink(path: Path, *, failing_check: str) -> str:
         ) from exc
 
 
-def _split_foam_block(path: Path, *, failing_check: str) -> tuple[int, str]:
+def _split_foam_block(
+    path: Path,
+    *,
+    failing_check: str,
+    dir_fd: int | None = None,
+) -> tuple[int, str]:
     """Parse a parens-list FOAM file into (declared_count, body).
 
     Returns the declared count from the header line and the body
@@ -151,9 +169,10 @@ def _split_foam_block(path: Path, *, failing_check: str) -> tuple[int, str]:
 
     Raises :class:`MeshQualityParseError` when the file format
     doesn't match. ``failing_check`` is the structural problem
-    surfaced to the route layer.
+    surfaced to the route layer. When ``dir_fd`` is supplied, the
+    underlying read is dir_fd-relative — see ``_read_text_no_symlink``.
     """
-    text = _read_text_no_symlink(path, failing_check=failing_check)
+    text = _read_text_no_symlink(path, failing_check=failing_check, dir_fd=dir_fd)
     m = _FOAM_BLOCK_HEADER_RE.search(text)
     if not m:
         raise MeshQualityParseError(
@@ -198,7 +217,9 @@ def _parse_points_body(body: str) -> list[tuple[float, float, float]]:
     return pts
 
 
-def _read_patch_face_counts(boundary_path: Path) -> dict[str, int]:
+def _read_patch_face_counts(
+    boundary_path: Path, *, dir_fd: int | None = None
+) -> dict[str, int]:
     """Return {patch_name: nFaces} from polyMesh/boundary. Skips the
     FoamFile dict that always sits at the head.
 
@@ -206,10 +227,10 @@ def _read_patch_face_counts(boundary_path: Path) -> dict[str, int]:
     followed by ``(``) just like points/owner; verify the declared
     patch count matches the actual matched patches so a truncated
     boundary file surfaces as a parse error instead of a partial
-    report.
+    report. base-review-4 P1: ``dir_fd`` opt for fd-relative reads.
     """
     text = _read_text_no_symlink(
-        boundary_path, failing_check="boundary_unreadable"
+        boundary_path, failing_check="boundary_unreadable", dir_fd=dir_fd
     )
     out: dict[str, int] = {}
     for m in _BOUNDARY_PATCH_RE.finditer(text):
@@ -375,103 +396,138 @@ def analyze_mesh_quality(
     install.
     """
     case_id = case_dir.name
-    constant_dir = case_dir / "constant"
-    polymesh = constant_dir / "polyMesh"
-    # Codex base-review P1 + base-review-2 P2: extend the symlink-
-    # escape contract from the polyMesh files (V122 R1 P1) to the
-    # polyMesh dir, its `constant` parent, AND `case_dir` itself.
-    # ``Path.is_dir()`` follows symlinks — a planted symlink at any
-    # of the three (case_dir included, e.g. user_drafts/imported/<id>
-    # swapped to point outside) could redirect reads outside the case
-    # root. Use ``os.lstat`` and reject S_ISLNK explicitly.
-    for parent_path, label in (
-        (case_dir, "case_dir"),
-        (constant_dir, "constant"),
-        (polymesh, "polyMesh"),
-    ):
+    # Codex base-review-4 P1: pin case_dir → constant → polyMesh as
+    # fds with O_NOFOLLOW|O_DIRECTORY in sequence, then do all leaf
+    # opens dir_fd-relative. The R1 / base-review-2 lstat preflight
+    # was correct at the moment-of-check but had a TOCTTOU window:
+    # `constant/` or `polyMesh/` could be swapped to a symlink AFTER
+    # the lstat returned and BEFORE the leaf O_NOFOLLOW open. Pinning
+    # the inode chain via fds closes that window — every subsequent
+    # op references the inode, not the path, and a mid-read symlink
+    # swap on a parent has no effect.
+    fds_to_close: list[int] = []
+    try:
         try:
-            parent_st = os.lstat(parent_path)
+            fd_case = os.open(
+                case_dir, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            )
         except FileNotFoundError as exc:
             raise MeshQualityNotAvailableError(
                 f"polyMesh directory missing for case_id={case_id!r}"
             ) from exc
         except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise MeshQualityParseError(
+                    "refused to follow symlink at case_dir",
+                    failing_check="symlink_escape",
+                ) from exc
             raise MeshQualityParseError(
-                f"could not stat {label}: {type(exc).__name__}",
+                f"could not open case_dir: errno={exc.errno}",
                 failing_check="symlink_escape",
             ) from exc
-        if stat.S_ISLNK(parent_st.st_mode):
+        fds_to_close.append(fd_case)
+
+        for child_name, label in (("constant", "constant"), ("polyMesh", "polyMesh")):
+            try:
+                fd_child = os.open(
+                    child_name,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=fds_to_close[-1],
+                )
+            except FileNotFoundError as exc:
+                raise MeshQualityNotAvailableError(
+                    f"polyMesh directory missing for case_id={case_id!r}"
+                ) from exc
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise MeshQualityParseError(
+                        f"refused to follow symlink at {label}",
+                        failing_check="symlink_escape",
+                    ) from exc
+                if exc.errno == errno.ENOTDIR:
+                    raise MeshQualityNotAvailableError(
+                        f"polyMesh directory missing for case_id={case_id!r}"
+                    ) from exc
+                raise MeshQualityParseError(
+                    f"could not open {label}: errno={exc.errno}",
+                    failing_check="symlink_escape",
+                ) from exc
+            fds_to_close.append(fd_child)
+        fd_polymesh = fds_to_close[-1]
+
+        polymesh = case_dir / "constant" / "polyMesh"
+        points_path = polymesh / "points"
+        owner_path = polymesh / "owner"
+        neighbour_path = polymesh / "neighbour"
+        boundary_path = polymesh / "boundary"
+
+        # Required-leaf existence check via dir_fd-relative stat.
+        for leaf_name in ("points", "owner", "boundary"):
+            try:
+                os.stat(leaf_name, dir_fd=fd_polymesh, follow_symlinks=False)
+            except FileNotFoundError as exc:
+                raise MeshQualityNotAvailableError(
+                    f"polyMesh/{leaf_name} missing for case_id={case_id!r}"
+                ) from exc
+        # neighbour is optional — strictly internal-face count; absent
+        # for some degenerate meshes (single-cell etc).
+
+        declared_pt_count, points_body = _split_foam_block(
+            points_path, failing_check="points_unreadable", dir_fd=fd_polymesh
+        )
+        pts = _parse_points_body(points_body)
+        if declared_pt_count != len(pts):
+            # Defensive: declared header count should match parsed entries;
+            # mismatch means corrupt file.
             raise MeshQualityParseError(
-                f"refused to follow symlink at {label}",
-                failing_check="symlink_escape",
-            )
-        if not stat.S_ISDIR(parent_st.st_mode):
-            raise MeshQualityNotAvailableError(
-                f"polyMesh directory missing for case_id={case_id!r}"
+                f"points header declares {declared_pt_count} entries but "
+                f"parsed {len(pts)}",
+                failing_check="points_count_mismatch",
             )
 
-    points_path = polymesh / "points"
-    owner_path = polymesh / "owner"
-    neighbour_path = polymesh / "neighbour"
-    boundary_path = polymesh / "boundary"
-
-    for required, name in (
-        (points_path, "points"),
-        (owner_path, "owner"),
-        (boundary_path, "boundary"),
-    ):
-        if not required.is_file():
-            raise MeshQualityNotAvailableError(
-                f"polyMesh/{name} missing for case_id={case_id!r}"
-            )
-    # neighbour is optional — strictly internal-face count; absent
-    # for some degenerate meshes (single-cell etc).
-
-    declared_pt_count, points_body = _split_foam_block(
-        points_path, failing_check="points_unreadable"
-    )
-    pts = _parse_points_body(points_body)
-    if declared_pt_count != len(pts):
-        # Defensive: declared header count should match parsed entries;
-        # mismatch means corrupt file.
-        raise MeshQualityParseError(
-            f"points header declares {declared_pt_count} entries but "
-            f"parsed {len(pts)}",
-            failing_check="points_count_mismatch",
+        owner_face_count, owner_body = _split_foam_block(
+            owner_path, failing_check="owner_unreadable", dir_fd=fd_polymesh
         )
-
-    owner_face_count, owner_body = _split_foam_block(
-        owner_path, failing_check="owner_unreadable"
-    )
-    owner_entries = _parse_int_body(owner_body)
-    # Codex R1 P2: the declared count header must match the actual
-    # number of entries. A truncated owner file would otherwise
-    # produce a 200 with bogus cell_count.
-    if owner_face_count != len(owner_entries):
-        raise MeshQualityParseError(
-            f"owner header declares {owner_face_count} entries but "
-            f"parsed {len(owner_entries)}",
-            failing_check="owner_count_mismatch",
-        )
-    max_owner = max(owner_entries) if owner_entries else -1
-    cell_count = max_owner + 1 if max_owner >= 0 else 0
-
-    if neighbour_path.is_file():
-        internal_face_count, neighbour_body = _split_foam_block(
-            neighbour_path, failing_check="neighbour_unreadable"
-        )
-        neighbour_entries = _parse_int_body(neighbour_body)
-        if internal_face_count != len(neighbour_entries):
+        owner_entries = _parse_int_body(owner_body)
+        # Codex R1 P2: the declared count header must match the actual
+        # number of entries. A truncated owner file would otherwise
+        # produce a 200 with bogus cell_count.
+        if owner_face_count != len(owner_entries):
             raise MeshQualityParseError(
-                f"neighbour header declares {internal_face_count} entries "
-                f"but parsed {len(neighbour_entries)}",
-                failing_check="neighbour_count_mismatch",
+                f"owner header declares {owner_face_count} entries but "
+                f"parsed {len(owner_entries)}",
+                failing_check="owner_count_mismatch",
             )
-    else:
-        internal_face_count = 0
-    boundary_face_count = max(0, owner_face_count - internal_face_count)
+        max_owner = max(owner_entries) if owner_entries else -1
+        cell_count = max_owner + 1 if max_owner >= 0 else 0
 
-    patch_face_counts = _read_patch_face_counts(boundary_path)
+        try:
+            os.stat("neighbour", dir_fd=fd_polymesh, follow_symlinks=False)
+            neighbour_present = True
+        except FileNotFoundError:
+            neighbour_present = False
+        if neighbour_present:
+            internal_face_count, neighbour_body = _split_foam_block(
+                neighbour_path, failing_check="neighbour_unreadable", dir_fd=fd_polymesh
+            )
+            neighbour_entries = _parse_int_body(neighbour_body)
+            if internal_face_count != len(neighbour_entries):
+                raise MeshQualityParseError(
+                    f"neighbour header declares {internal_face_count} entries "
+                    f"but parsed {len(neighbour_entries)}",
+                    failing_check="neighbour_count_mismatch",
+                )
+        else:
+            internal_face_count = 0
+        boundary_face_count = max(0, owner_face_count - internal_face_count)
+
+        patch_face_counts = _read_patch_face_counts(boundary_path, dir_fd=fd_polymesh)
+    finally:
+        for fd in reversed(fds_to_close):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
     bb_min, bb_max, bb_volume, bb_collapsed = _bounding_box(pts)
     cells_per_unit_volume: float | None = None
