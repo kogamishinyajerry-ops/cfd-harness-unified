@@ -45,14 +45,15 @@ class MeshQualityReport(BaseModel):
     # validators).
     model_config = ConfigDict(extra="forbid")
 
-    # V126 R4 P2: required discriminator. With only extra="forbid",
-    # a base-shape payload still validated against BOTH branches of
-    # the union (V126's checkmesh_* fields are all optional). A
-    # required Literal discriminator gives each branch a unique
-    # signature, so consumers can switch on report_kind to choose
-    # the correct schema.
+    # V126 R4+R5 P2: required discriminator. R4 added the field with
+    # default="v122"; R5 removed the default so OpenAPI marks the
+    # discriminator as required (Pydantic emits it in the `required`
+    # array only when there's no default). Schema-driven clients now
+    # see report_kind as a required, reliably-discriminating literal.
+    # Construction sites (analyze_mesh_quality, tests) must pass
+    # report_kind explicitly.
     report_kind: Literal["v122"] = Field(
-        default="v122",
+        ...,
         description=(
             "Schema discriminator. 'v122' = base shape (no checkMesh "
             "fields). MeshQualityReportV126 overrides this to 'v126'."
@@ -124,8 +125,9 @@ class MeshQualityReportV126(MeshQualityReport):
     """
 
     # Override the discriminator — see MeshQualityReport.report_kind.
+    # Required (no default) per R5 P2 so OpenAPI marks it required.
     report_kind: Literal["v126"] = Field(  # type: ignore[assignment]
-        default="v126",
+        ...,
         description=(
             "Schema discriminator. 'v126' = base shape PLUS checkMesh "
             "fields populated when checkMesh ran successfully (or all "

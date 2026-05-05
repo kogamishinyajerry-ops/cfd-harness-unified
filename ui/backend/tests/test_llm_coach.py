@@ -217,6 +217,7 @@ def test_prompt_includes_mesh_section_when_report_passed():
     )
 
     mesh = MeshQualityReport(
+        report_kind="v122",
         case_id="ldc",
         polymesh_present=True,
         cell_count=125,

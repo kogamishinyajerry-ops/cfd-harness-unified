@@ -337,6 +337,7 @@ def test_mesh_quality_report_schema_v122_backward_compat():
     from ui.backend.services.mesh_quality.schemas import MeshQualityReport
 
     report = MeshQualityReport(
+        report_kind="v122",
         case_id="ldc",
         polymesh_present=True,
         cell_count=125,
@@ -365,6 +366,7 @@ def test_mesh_quality_report_v126_serializes_with_checkmesh_fields():
     from ui.backend.services.mesh_quality.schemas import MeshQualityReportV126
 
     report = MeshQualityReportV126(
+        report_kind="v126",
         case_id="ldc",
         polymesh_present=True,
         cell_count=125,

@@ -507,8 +507,12 @@ def analyze_mesh_quality(
         warnings=warnings,
     )
     if not run_checkmesh:
-        return MeshQualityReport(**base_kwargs)
-    return MeshQualityReportV126(**base_kwargs, **_try_run_checkmesh(case_dir))
+        return MeshQualityReport(report_kind="v122", **base_kwargs)
+    return MeshQualityReportV126(
+        report_kind="v126",
+        **base_kwargs,
+        **_try_run_checkmesh(case_dir),
+    )
 
 
 def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
