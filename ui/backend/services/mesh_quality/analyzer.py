@@ -377,12 +377,15 @@ def analyze_mesh_quality(
     case_id = case_dir.name
     constant_dir = case_dir / "constant"
     polymesh = constant_dir / "polyMesh"
-    # Codex base-review P1: extend the symlink-escape contract from
-    # the polyMesh files (V122 R1 P1) to the polyMesh dir AND its
-    # `constant` parent. ``Path.is_dir()`` follows symlinks — a
-    # planted symlink at either link could redirect reads outside the
-    # case root. Use ``os.lstat`` and reject S_ISLNK explicitly.
+    # Codex base-review P1 + base-review-2 P2: extend the symlink-
+    # escape contract from the polyMesh files (V122 R1 P1) to the
+    # polyMesh dir, its `constant` parent, AND `case_dir` itself.
+    # ``Path.is_dir()`` follows symlinks — a planted symlink at any
+    # of the three (case_dir included, e.g. user_drafts/imported/<id>
+    # swapped to point outside) could redirect reads outside the case
+    # root. Use ``os.lstat`` and reject S_ISLNK explicitly.
     for parent_path, label in (
+        (case_dir, "case_dir"),
         (constant_dir, "constant"),
         (polymesh, "polyMesh"),
     ):

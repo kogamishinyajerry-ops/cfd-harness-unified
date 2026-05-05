@@ -380,15 +380,25 @@ function TurnRow({ caseId, turn, idx }: TurnRowProps) {
           </span>
         )}
       </span>
-      {parsed.proposals.map((p) => (
-        <ProposalCard
-          key={`${turn.turnId}-prop-${p.index}`}
-          caseId={caseId}
-          proposal={p}
-          modelUsed={turn.modelUsed}
-          turnId={turn.turnId}
-        />
-      ))}
+      {/*
+       * Codex base-review-2 P2: defer proposal acceptance until the
+       * assistant turn has finalized. While turn.streaming is true the
+       * `<<PROPOSAL ... PROPOSAL>>` block may already be parsed, but
+       * (1) the response could still error or be cancelled, (2)
+       * turn.modelUsed is still null until onDone fires — so accepting
+       * mid-stream produces audit rows missing provider attribution.
+       * Render proposal cards only after the terminal frame.
+       */}
+      {!turn.streaming &&
+        parsed.proposals.map((p) => (
+          <ProposalCard
+            key={`${turn.turnId}-prop-${p.index}`}
+            caseId={caseId}
+            proposal={p}
+            modelUsed={turn.modelUsed}
+            turnId={turn.turnId}
+          />
+        ))}
     </div>
   );
 }
