@@ -1,7 +1,7 @@
 """DEC-V61-122 · MeshQualityReport response schemas."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,13 +38,26 @@ class MeshQualityReport(BaseModel):
     """
 
     # V126 R3 P2: forbid extra keys so OpenAPI emits
-    # additionalProperties=false. Without this, the route's union
+    # additionalProperties=false. Combined with the report_kind
+    # discriminator below (V126 R4 P2), this makes the route's union
     # response_model `MeshQualityReportV126 | MeshQualityReport`
-    # is non-discriminable for schema-driven tooling
-    # (openapi-typescript, validators) — a V126 payload would validate
-    # against both branches of the anyOf, hiding when checkmesh_*
-    # fields are actually part of the contract.
+    # discriminable for schema-driven tooling (openapi-typescript,
+    # validators).
     model_config = ConfigDict(extra="forbid")
+
+    # V126 R4 P2: required discriminator. With only extra="forbid",
+    # a base-shape payload still validated against BOTH branches of
+    # the union (V126's checkmesh_* fields are all optional). A
+    # required Literal discriminator gives each branch a unique
+    # signature, so consumers can switch on report_kind to choose
+    # the correct schema.
+    report_kind: Literal["v122"] = Field(
+        default="v122",
+        description=(
+            "Schema discriminator. 'v122' = base shape (no checkMesh "
+            "fields). MeshQualityReportV126 overrides this to 'v126'."
+        ),
+    )
 
     case_id: str
     polymesh_present: bool = Field(
@@ -110,6 +123,16 @@ class MeshQualityReportV126(MeshQualityReport):
     skipped" without conflating it with a real failure.
     """
 
+    # Override the discriminator — see MeshQualityReport.report_kind.
+    report_kind: Literal["v126"] = Field(  # type: ignore[assignment]
+        default="v126",
+        description=(
+            "Schema discriminator. 'v126' = base shape PLUS checkMesh "
+            "fields populated when checkMesh ran successfully (or all "
+            "None when the cfd-openfoam container was unavailable)."
+        ),
+    )
+
     checkmesh_max_non_orthogonality_deg: float | None = Field(
         default=None,
         ge=0.0,
@@ -161,3 +184,15 @@ class MeshQualityReportV126(MeshQualityReport):
             "None when container unavailable OR mesh_ok=True."
         ),
     )
+
+
+# V126 R4 P2: discriminated union for the GET /mesh-quality 200 body.
+# Pydantic emits OpenAPI's `discriminator: {propertyName: "report_kind"}`
+# so schema-driven tooling (openapi-typescript, validators) cleanly
+# selects the correct branch on the wire `report_kind` literal. The
+# extended type is listed first so it wins when both literals could
+# match (defensive — discriminator already disambiguates).
+MeshQualityReportResponse = Annotated[
+    Union[MeshQualityReportV126, MeshQualityReport],
+    Field(discriminator="report_kind"),
+]

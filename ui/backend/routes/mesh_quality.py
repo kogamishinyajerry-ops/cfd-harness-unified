@@ -25,6 +25,7 @@ from ui.backend.services.mesh_quality import (
     MeshQualityNotAvailableError,
     MeshQualityParseError,
     MeshQualityReport,
+    MeshQualityReportResponse,
     MeshQualityReportV126,
     analyze_mesh_quality,
 )
@@ -36,17 +37,17 @@ router = APIRouter()
 
 @router.get(
     "/cases/{case_id}/mesh-quality",
-    # V126 R1 P2 backward-compat: declare a union response_model so
-    # FastAPI can discriminate at serialization time —
-    # MeshQualityReportV126 (extended) when run_checkmesh=True,
-    # MeshQualityReport (V122 shape) when run_checkmesh=False. The
-    # union preserves the OpenAPI 200-response schema (V126 R2 P2-1
-    # fix: response_model=None erased the documented surface entirely)
-    # while still avoiding the null-checkmesh-fields contract break
-    # that motivated the split. Pydantic discriminates on the
-    # presence of checkmesh_* fields; the more specific V126 type is
-    # listed first so the analyzer's actual instance shape wins.
-    response_model=MeshQualityReportV126 | MeshQualityReport,
+    # V126 R4 P2: use the discriminated union (Pydantic's
+    # `Field(discriminator="report_kind")`) so OpenAPI emits
+    # `discriminator: {propertyName: "report_kind"}` — schema-driven
+    # tooling (openapi-typescript, validators) cleanly chooses
+    # MeshQualityReport (`v122`) vs MeshQualityReportV126 (`v126`)
+    # on the wire literal. Earlier rounds went through:
+    #   R1: response_model=None (erased OpenAPI surface)
+    #   R2: union without discriminator (overlapping anyOf)
+    #   R3: extra="forbid" (still overlapped on base-shape payloads)
+    #   R4: explicit discriminator on report_kind (this).
+    response_model=MeshQualityReportResponse,
     tags=["mesh-quality"],
 )
 def get_mesh_quality(
