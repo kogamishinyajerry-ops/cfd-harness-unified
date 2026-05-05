@@ -635,7 +635,25 @@ def run_gmsh_on_imported_case(
     DEC-V61-124: ``target_cell_count``, when provided, takes precedence
     over both ``characteristic_length_override`` and ``mesh_mode`` for
     lc derivation (cube approximation; see _lc_from_target_cell_count).
+
+    DEC-V61-125 R1 P3: validate ``characteristic_length_override`` here
+    (parent process, before subprocess spawn) so a non-positive value
+    fails fast with a clear ``ValueError`` rather than getting silently
+    ignored by the ``if lc > 0`` guard inside ``_gmsh_inline`` and
+    producing a default-sized mesh that misrepresents the caller's
+    intent. The AI-coach path validates this at the
+    ``RegenerateMeshArgs`` layer with Pydantic ``gt=0``; this guard is
+    the defensive backstop for any direct backend caller that bypasses
+    that schema.
     """
+    if (
+        characteristic_length_override is not None
+        and characteristic_length_override <= 0
+    ):
+        raise ValueError(
+            "characteristic_length_override must be positive, got "
+            f"{characteristic_length_override!r}"
+        )
     # Use 'spawn' explicitly: macOS defaults to 'spawn' since 3.8 and
     # Linux defaults to 'fork', which copies the parent process state
     # (including FastAPI / gmsh module-level imports). 'spawn' gives a

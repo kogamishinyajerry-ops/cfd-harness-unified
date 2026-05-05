@@ -735,6 +735,102 @@ def test_regenerate_mesh_tool_description_mentions_lc_override():
     assert "positive" in desc.lower() or "gt=0" in desc or "> 0" in desc
 
 
+def test_run_gmsh_rejects_zero_lc_override_directly(tmp_path):
+    """V125 R1 P3: a direct backend caller of run_gmsh_on_imported_case
+    that bypasses the RegenerateMeshArgs Pydantic gt=0 validation MUST
+    still fail fast — the parent-layer guard rejects non-positive
+    characteristic_length_override before the subprocess spawn so a
+    bad value can't silently fall through to default-sized meshing."""
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        run_gmsh_on_imported_case,
+    )
+
+    stl_path = tmp_path / "x.stl"
+    stl_path.write_text("dummy")  # path needs to exist; validation
+                                   # fires before the subprocess opens it
+    msh_path = tmp_path / "x.msh"
+    with pytest.raises(ValueError, match="must be positive"):
+        run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=msh_path,
+            characteristic_length_override=0.0,
+        )
+
+
+def test_run_gmsh_rejects_negative_lc_override_directly(tmp_path):
+    """V125 R1 P3 negative path: a negative override is also invalid."""
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        run_gmsh_on_imported_case,
+    )
+
+    stl_path = tmp_path / "x.stl"
+    stl_path.write_text("dummy")
+    msh_path = tmp_path / "x.msh"
+    with pytest.raises(ValueError, match="must be positive"):
+        run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=msh_path,
+            characteristic_length_override=-0.001,
+        )
+
+
+def test_run_gmsh_accepts_none_lc_override(tmp_path, monkeypatch):
+    """V125 R1 P3 negative control: None is a legal override value
+    (means 'use mesh_mode default' — the validation must NOT reject
+    None, only non-positive numbers)."""
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+
+    # Block before subprocess spawn so we don't actually run gmsh —
+    # we just want to verify the new ValueError guard doesn't fire on
+    # None. Patch ctx.Process so .start() is a no-op.
+    class _FakeProc:
+        exitcode = 0
+
+        def start(self):
+            pass
+
+        def join(self):
+            pass
+
+    class _FakeCtx:
+        def Queue(self):
+            from queue import Queue as _Q
+
+            q = _Q()
+            # Pre-populate so the parent's empty-queue detection passes
+            q.put(("backend_error", "test stub — no real gmsh invoked"))
+            return q
+
+        def Process(self, target, args):
+            return _FakeProc()
+
+    monkeypatch.setattr(
+        "ui.backend.services.meshing_gmsh.gmsh_runner.multiprocessing.get_context",
+        lambda _: _FakeCtx(),
+    )
+    stl_path = tmp_path / "x.stl"
+    stl_path.write_text("dummy")
+    msh_path = tmp_path / "x.msh"
+    # The value None must pass the new guard (the run will then fail
+    # later for unrelated reasons in our stub, which is fine — we only
+    # care that the ValueError guard does NOT fire).
+    try:
+        runner_mod.run_gmsh_on_imported_case(
+            stl_path=stl_path,
+            output_msh_path=msh_path,
+            characteristic_length_override=None,
+        )
+    except ValueError as exc:
+        if "must be positive" in str(exc):
+            pytest.fail(
+                "None must NOT trigger the positive-only validation guard"
+            )
+    except Exception:
+        # Any other failure is fine for this test — we're only
+        # asserting that the ValueError guard doesn't reject None.
+        pass
+
+
 def test_regenerate_args_v124_target_cell_count_path_unchanged():
     """V125 regression: V124 target_cell_count-only path still
     validates and dispatches correctly after the 3-way validator
