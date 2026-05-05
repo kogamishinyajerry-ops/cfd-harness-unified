@@ -20,7 +20,7 @@ parent_artifacts:
   - ui/backend/routes/mesh_quality.py (V122 route · V126 adds `?run_checkmesh=true` query param)
   - ui/backend/services/llm_coach/prompts.py (V122 mesh section composer · V126 surfaces checkMesh fields when present in the report)
 counter_impact: +1 (autonomous_governance: true · new backend service module + container management surface + system-prompt extension + new route query param. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 84→85 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进"), not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 (multi-file backend + new operator endpoint + container management) — all three triggers fire.)
-notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-126-Docker-checkMesh-integration-real-skewness-non-orthogonality-aspect-ratio-metr-357c68942bed81ffa781dc2ab6d8f8d8)
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/357c68942bed81ffa781dc2ab6d8f8d8)
 self_estimated_pass_rate: 50% (predicted 4-6 rounds · §L1 contract-crossing baseline. Container management surface is mature (V108+ has 12+ rounds in to_foam.py), but parser logic + checkMesh output stability across OpenFOAM versions is new. Honest middle estimate between V124/V125's 3 rounds (no-cross) and V123's 9 rounds (path-state safety cross). The to_foam.py template covers ~80% of the Docker-side hardening; the new surface is the parser + augmentation logic.)
 
 ---

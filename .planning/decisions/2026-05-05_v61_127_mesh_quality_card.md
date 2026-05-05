@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/frontend/src/api/client.ts (existing api.getMeshQuality call; V127 adds run_checkmesh=true variant)
   - ui/frontend/src/visualization/Viewport.tsx (existing 3D viewport · V127 R0 does NOT touch this; Phase E v2 will add per-cell coloring on the polyMesh boundary surface in a separate DEC)
 counter_impact: +1 (autonomous_governance: true · new top-level frontend component + UI interaction polish + first Fluent-style visualization. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter ≥ 20 (deferred per ongoing user mandate), not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 (multi-file frontend + UI interaction mode change + first user-visible polish).)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-127-Mesh-quality-card-Fluent-style-gauges-per-patch-chips-Phase-E-shell-entry-357c68942bed8191a660e8deaf6e43a0)
 self_estimated_pass_rate: 70% (predicted 3 rounds · §L1 no-cross-contract baseline. V126 R6 APPROVE clean datapoint shows base review surfaces frontend issues fast — base-review-2 P2 + base-review-3 P1 + base-review-4 P2 + base-review-5 P2 #1 all caught frontend stale-state / streaming gap issues. V127 is bounded surface, but Codex tends to find color-blindness / a11y / hover-state edge cases on novel UI components. Honest 70% — V125 §L1 calibration baseline doubly held (V124+V125 = 3 rounds each), V127 should land in the same band.)
 
 ---
