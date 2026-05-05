@@ -104,6 +104,7 @@ def mesh_imported_case(
     *,
     mesh_mode: MeshMode = "beginner",
     target_cell_count: int | None = None,
+    characteristic_length_override: float | None = None,
     container_name: str | None = None,
 ) -> MeshResult:
     """Run the full M6.0 pipeline for the given imported case_id.
@@ -114,6 +115,13 @@ def mesh_imported_case(
     Real cell counts may differ from target by up to +/-50% on
     non-cube geometries. The V61-105 cell-budget guard still bounds
     the result.
+
+    DEC-V61-125: ``characteristic_length_override`` is the engineer
+    escape hatch — supplies gmsh's characteristic length directly,
+    bypassing both ``mesh_mode`` presets and the V124 cube formula.
+    Cell-budget hard cap (50M) still applies. Mutual exclusion with
+    ``target_cell_count`` is enforced one layer up at the
+    ``RegenerateMeshArgs`` validator.
 
     Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
     is one of :data:`FailingCheck`. The route maps each value to an
@@ -128,6 +136,7 @@ def mesh_imported_case(
             output_msh_path=msh_path,
             mesh_mode=mesh_mode,
             target_cell_count=target_cell_count,
+            characteristic_length_override=characteristic_length_override,
         )
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
@@ -137,14 +146,24 @@ def mesh_imported_case(
     # as user-geometry rejections. gmsh_runner is responsible for
     # converting raw gmsh-binding errors into GmshMeshGenerationError.
 
-    # V124 R1 P2: when target_cell_count is set, classify under the
+    # V124 R1 P2 + V125: when EITHER target_cell_count OR
+    # characteristic_length_override is set, classify under the
     # "target" mode so (a) the beginner soft warning doesn't fire on
-    # successful large-target runs (engineer asked explicitly) and
-    # (b) MeshResult.mesh_mode reports "target" instead of mislabeling
-    # as "beginner" (the mesh_mode default kwarg). The hard 50M cap
-    # still applies for resource safety.
+    # successful engineer-supplied-sizing runs (engineer asked
+    # explicitly), and (b) MeshResult.mesh_mode reports "target"
+    # instead of mislabeling as "beginner" (the mesh_mode default
+    # kwarg). The hard 50M cap still applies for resource safety.
+    # V125 reuses V124's "target" label rather than introducing a 4th
+    # MeshMode literal — both are semantically "engineer-supplied
+    # sizing"; consumers that need to distinguish the two paths can
+    # back-reference the request that triggered the run.
     effective_mode: MeshMode = (
-        "target" if target_cell_count is not None else mesh_mode
+        "target"
+        if (
+            target_cell_count is not None
+            or characteristic_length_override is not None
+        )
+        else mesh_mode
     )
     verdict: BudgetVerdict = classify_cell_count(
         gmsh_result.cell_count, effective_mode

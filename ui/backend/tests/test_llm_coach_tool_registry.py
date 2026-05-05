@@ -624,6 +624,140 @@ def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):
     assert r1.state_after == r2.state_after
 
 
+# ────────── DEC-V61-125 · lc_override arg ──────────
+
+
+def test_regenerate_args_accepts_lc_override():
+    """V125: lc_override alone (no mesh_mode, no target_cell_count) is
+    a valid args payload."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    args = RegenerateMeshArgs(lc_override=0.005)
+    assert args.lc_override == 0.005
+    assert args.mesh_mode is None
+    assert args.target_cell_count is None
+
+
+def test_regenerate_args_rejects_lc_override_zero():
+    """V125: lc_override must be >0 (Pydantic gt=0 constraint)."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(lc_override=0)
+
+
+def test_regenerate_args_rejects_lc_override_negative():
+    """V125: negative lc is meaningless and must reject."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(lc_override=-0.001)
+
+
+def test_regenerate_args_rejects_lc_override_with_mesh_mode():
+    """V125: 3-way mutual exclusion — lc_override + mesh_mode rejects."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(mesh_mode="power", lc_override=0.005)
+
+
+def test_regenerate_args_rejects_lc_override_with_target_cell_count():
+    """V125: 3-way mutual exclusion — lc_override + target_cell_count
+    rejects."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(target_cell_count=100_000, lc_override=0.005)
+
+
+def test_regenerate_args_rejects_all_three_set():
+    """V125: 3-way mutual exclusion — all three set rejects."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    with pytest.raises(ValueError):
+        RegenerateMeshArgs(
+            mesh_mode="power",
+            target_cell_count=100_000,
+            lc_override=0.005,
+        )
+
+
+def test_dispatch_regenerate_mesh_with_lc_override_invokes_pipeline(
+    tmp_path, monkeypatch
+):
+    """V125: dispatch path forwards lc_override as
+    characteristic_length_override kwarg to mesh_imported_case."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v125_lc")
+    captured: dict[str, object] = {}
+
+    def fake_mesh(case_id, **kwargs):
+        captured["case_id"] = case_id
+        captured["kwargs"] = kwargs
+        return _stub_mesh_result(case_id=case_id)
+
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        fake_mesh,
+    )
+    dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
+    assert captured["case_id"] == "ldc_v125_lc"
+    # Pipeline received characteristic_length_override, NOT mesh_mode
+    # or target_cell_count.
+    assert captured["kwargs"] == {"characteristic_length_override": 0.005}
+
+
+def test_dispatch_regenerate_mesh_summary_says_lc_when_set(
+    tmp_path, monkeypatch
+):
+    """V125: ApplyResult summary surfaces 'lc=X' when lc_override is
+    set, NOT 'mode' or 'target'."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v125_summary")
+    monkeypatch.setattr(
+        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
+        lambda case_id, **kwargs: _stub_mesh_result(case_id=case_id),
+    )
+    result = dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
+    assert "lc=" in result.summary
+    assert "0.005" in result.summary
+    assert "'beginner' mode" not in result.summary
+    assert "'power' mode" not in result.summary
+    assert "target" not in result.summary.lower()
+
+
+def test_regenerate_mesh_tool_description_mentions_lc_override():
+    """V125: tool description string surfaces lc_override + gt=0
+    constraint so the LLM knows the schema."""
+    [tool] = [t for t in list_tools() if t.name == "regenerate_mesh"]
+    desc = tool.description
+    assert "lc_override" in desc
+    # The "positive" constraint must be discoverable.
+    assert "positive" in desc.lower() or "gt=0" in desc or "> 0" in desc
+
+
+def test_regenerate_args_v124_target_cell_count_path_unchanged():
+    """V125 regression: V124 target_cell_count-only path still
+    validates and dispatches correctly after the 3-way validator
+    refactor."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    args = RegenerateMeshArgs(target_cell_count=100_000)
+    assert args.target_cell_count == 100_000
+    assert args.mesh_mode is None
+    assert args.lc_override is None
+
+
+def test_regenerate_args_v123_mesh_mode_path_unchanged():
+    """V125 regression: V123 mesh_mode-only path still validates
+    after the 3-way validator refactor."""
+    from ui.backend.services.llm_coach.tool_registry import RegenerateMeshArgs
+
+    args = RegenerateMeshArgs(mesh_mode="power")
+    assert args.mesh_mode == "power"
+    assert args.target_cell_count is None
+    assert args.lc_override is None
+
+
 # ────────── DEC-V61-124 · target_cell_count arg ──────────
 
 

@@ -120,18 +120,23 @@ class SetPatchBcTypeArgs(BaseModel):
 
 
 class RegenerateMeshArgs(BaseModel):
-    """Args for ``regenerate_mesh`` (DEC-V61-123 + V61-124).
+    """Args for ``regenerate_mesh`` (DEC-V61-123 + V61-124 + V61-125).
 
     Re-runs gmsh + gmshToFoam on the case's imported STL with the
     requested density, replacing ``polyMesh/`` in place. Density may
-    be specified two ways:
+    be specified three ways:
 
     * ``mesh_mode`` — preset density (beginner ~30k cells, power ~250k).
-    * ``target_cell_count`` — V124 AI-proposed specific cell count.
+    * ``target_cell_count`` — V124 AI-proposed specific cell count via
+      cube formula; real count may diverge ±50% on non-cube geometries.
+    * ``lc_override`` — V125 engineer escape hatch; supplies the gmsh
+      characteristic length directly. Bypasses both presets and the
+      V124 cube formula. Cell-budget hard cap still applies.
 
-    Exactly one of the two must be set. Mutual exclusion is enforced
-    by a model-level validator so a proposal carrying both fields
-    fails at the registry boundary with ``arg_validation_failed``.
+    Exactly one of the three must be set. Mutual exclusion is
+    enforced by a model-level validator so a proposal carrying any
+    other combination fails at the registry boundary with
+    ``arg_validation_failed``.
 
     ``extra="forbid"`` matches V121's trust-boundary discipline — a
     proposal that ships off-contract keys MUST fail at the registry
@@ -146,7 +151,8 @@ class RegenerateMeshArgs(BaseModel):
             "Density preset. 'beginner' targets a few hundred thousand "
             "cells (lc ~ diagonal/30); 'power' targets ~10x finer "
             "(lc ~ diagonal/60). Both are bounded by the V61-105 "
-            "cell-budget guard. Mutually exclusive with target_cell_count."
+            "cell-budget guard. Mutually exclusive with target_cell_count "
+            "and lc_override."
         ),
     )
     target_cell_count: int | None = Field(
@@ -158,25 +164,42 @@ class RegenerateMeshArgs(BaseModel):
             "pipeline converts this to a characteristic length via a "
             "cube approximation; real cell count may differ by up to "
             "+/-50% for non-cube geometries. Bounded by V61-105 "
-            "cell-budget hard cap (50M). Mutually exclusive with mesh_mode."
+            "cell-budget hard cap (50M). Mutually exclusive with "
+            "mesh_mode and lc_override."
+        ),
+    )
+    lc_override: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "DEC-V61-125: engineer-supplied characteristic length (lc) "
+            "in case-geometry units. Bypasses mesh_mode preset sizing "
+            "AND target_cell_count's cube formula. The cell-budget "
+            "hard cap (50M cells) still applies; engineer is "
+            "responsible for picking a reasonable value. Mutually "
+            "exclusive with mesh_mode and target_cell_count."
         ),
     )
 
     @model_validator(mode="after")
     def _exactly_one_density_axis(self) -> "RegenerateMeshArgs":
-        """V124: enforce mutual exclusion between mesh_mode and
-        target_cell_count. Exactly one must be set; both-set or
-        neither-set both fail validation with a clear message."""
-        mesh_mode_set = self.mesh_mode is not None
-        target_set = self.target_cell_count is not None
-        if mesh_mode_set and target_set:
-            raise ValueError(
-                "mesh_mode and target_cell_count are mutually exclusive; "
-                "set exactly one"
+        """V124 + V125: enforce mutual exclusion across the three
+        density axes. Exactly one of {mesh_mode, target_cell_count,
+        lc_override} must be set; any other count fails validation
+        with a clear message."""
+        set_count = sum(
+            1
+            for value in (
+                self.mesh_mode,
+                self.target_cell_count,
+                self.lc_override,
             )
-        if not mesh_mode_set and not target_set:
+            if value is not None
+        )
+        if set_count != 1:
             raise ValueError(
-                "exactly one of mesh_mode or target_cell_count must be set"
+                "exactly one of mesh_mode / target_cell_count / "
+                f"lc_override must be set (got {set_count})"
             )
         return self
 
@@ -272,11 +295,21 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
             result = mesh_imported_case(
                 case_id, target_cell_count=typed.target_cell_count
             )
+        elif typed.lc_override is not None:
+            # V125 path: engineer supplied the gmsh characteristic
+            # length directly (escape hatch when the V124 cube formula
+            # diverges too much on non-cube geometries).
+            result = mesh_imported_case(
+                case_id,
+                characteristic_length_override=typed.lc_override,
+            )
         else:
             # V123 path: AI picked a preset (beginner / power).
             result = mesh_imported_case(case_id, mesh_mode=typed.mesh_mode)
     if typed.target_cell_count is not None:
         density_label = f"target ~{typed.target_cell_count:,} cells"
+    elif typed.lc_override is not None:
+        density_label = f"lc={typed.lc_override:.4g}"
     else:
         density_label = f"'{typed.mesh_mode}' mode"
     summary = (
@@ -320,7 +353,11 @@ _TOOL_REGISTRY: dict[str, ToolDescriptor] = {
             "when the engineer asks to refine. args: EXACTLY ONE of "
             "mesh_mode (one of beginner | power) OR target_cell_count "
             "(integer between 1000 and 50000000 — DEC-V61-124 lets the "
-            "AI propose a specific cell count instead of a preset)."
+            "AI propose a specific cell count instead of a preset) OR "
+            "lc_override (positive float, gmsh characteristic length in "
+            "geometry units — DEC-V61-125 engineer escape hatch when "
+            "the cube formula diverges too much; cell-budget cap still "
+            "applies)."
         ),
     ),
 }
