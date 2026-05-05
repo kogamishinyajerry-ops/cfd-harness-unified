@@ -276,10 +276,42 @@ function QualityGauge({
   );
 }
 
+// V128 R0: per-chip tone derivation from already-fetched report data.
+// No new backend metric — derives the signal from V126's
+// checkmesh_mesh_ok + the V122 patch_face_counts. Rules:
+//   * face_count === 0          → 'rose' (zero-face patch is always wrong)
+//   * V126 mesh_ok === false    → 'amber' (mesh fails globally; can't
+//                                  localize, but this patch is worth
+//                                  the engineer's attention)
+//   * V126 mesh_ok === true     → 'green' (mesh passes globally; no
+//                                  per-patch trouble signal)
+//   * V126 mesh_ok === null OR
+//     V122 fallback             → 'neutral' (existing grey)
+type PatchTone = "neutral" | "green" | "amber" | "rose";
+
+function derivePatchTone(
+  faceCount: number,
+  report: MeshQualityReport,
+): PatchTone {
+  if (faceCount === 0) return "rose";
+  if (report.report_kind !== "v126") return "neutral";
+  if (report.checkmesh_mesh_ok === null) return "neutral";
+  return report.checkmesh_mesh_ok ? "green" : "amber";
+}
+
+const PATCH_TONE_CLASS: Record<PatchTone, string> = {
+  neutral: "border-surface-700 bg-surface-800 text-surface-300",
+  green: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+  amber: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  rose: "border-rose-500/40 bg-rose-500/15 text-rose-200",
+};
+
 function PatchChips({
   patchFaceCounts,
+  report,
 }: {
   patchFaceCounts: Record<string, number>;
+  report: MeshQualityReport;
 }) {
   const entries = Object.entries(patchFaceCounts).sort(([a], [b]) =>
     a.localeCompare(b),
@@ -291,16 +323,29 @@ function PatchChips({
   }
   return (
     <div className="flex flex-wrap gap-1">
-      {entries.map(([name, count]) => (
-        <span
-          key={name}
-          className="rounded-sm border border-surface-700 bg-surface-800 px-1.5 py-0.5 font-mono text-[10px] text-surface-300"
-          title={`${name}: ${count.toLocaleString()} faces`}
-        >
-          {name}
-          <span className="ml-1 text-surface-500">·{count}</span>
-        </span>
-      ))}
+      {entries.map(([name, count]) => {
+        const tone = derivePatchTone(count, report);
+        // a11y: zero-face patches get an explicit "empty" text label so
+        // color-blind users see the same signal as the rose tone.
+        const isEmpty = count === 0;
+        const stateLabel = isEmpty
+          ? "empty"
+          : `${count.toLocaleString()} faces`;
+        return (
+          <span
+            key={name}
+            data-testid={`patch-chip-${name}`}
+            data-tone={tone}
+            className={`rounded-sm border px-1.5 py-0.5 font-mono text-[10px] ${PATCH_TONE_CLASS[tone]}`}
+            title={`${name}: ${stateLabel}`}
+          >
+            {name}
+            <span className="ml-1 opacity-70">
+              {isEmpty ? "· empty" : `·${count}`}
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -562,7 +607,10 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
             <p className="mb-1 text-[10px] uppercase tracking-wider text-surface-500">
               boundary patches
             </p>
-            <PatchChips patchFaceCounts={state.report.patch_face_counts} />
+            <PatchChips
+              patchFaceCounts={state.report.patch_face_counts}
+              report={state.report}
+            />
           </div>
         </>
       )}

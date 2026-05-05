@@ -355,3 +355,80 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
     );
   });
 });
+
+// V128 R0 · DEC-V61-128 · per-patch chip derived coloring tests.
+describe("MeshQualityCard · V128 patch chip coloring", () => {
+  it("V126 mesh_ok=true → all chips green", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    for (const name of ["walls", "inlet", "outlet"]) {
+      const chip = screen.getByTestId(`patch-chip-${name}`);
+      expect(chip.dataset.tone).toBe("green");
+    }
+  });
+
+  it("V126 mesh_ok=false + nonzero faces → all chips amber", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Failed);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    for (const name of ["walls", "inlet", "outlet"]) {
+      const chip = screen.getByTestId(`patch-chip-${name}`);
+      expect(chip.dataset.tone).toBe("amber");
+    }
+  });
+
+  it("zero-face patch → that chip rose with explicit 'empty' label, others follow mesh_ok tone", async () => {
+    const v126WithEmpty: MeshQualityReportV126 = {
+      ...v126Healthy,
+      patch_face_counts: { walls: 1500, inlet: 300, ghost: 0 },
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126WithEmpty);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    const ghost = screen.getByTestId("patch-chip-ghost");
+    expect(ghost.dataset.tone).toBe("rose");
+    expect(ghost.textContent).toContain("empty");
+    expect(screen.getByTestId("patch-chip-walls").dataset.tone).toBe("green");
+    expect(screen.getByTestId("patch-chip-inlet").dataset.tone).toBe("green");
+  });
+
+  it("V122 fallback → all chips neutral (regression guard)", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(baseV122);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    for (const name of ["walls", "inlet", "outlet"]) {
+      const chip = screen.getByTestId(`patch-chip-${name}`);
+      expect(chip.dataset.tone).toBe("neutral");
+    }
+  });
+
+  it("V126 graceful-degrade (mesh_ok=null) → chips neutral except zero-face which stays rose", async () => {
+    const v126Skipped: MeshQualityReportV126 = {
+      ...v126Healthy,
+      patch_face_counts: { walls: 1500, ghost: 0 },
+      checkmesh_max_non_orthogonality_deg: null,
+      checkmesh_max_skewness: null,
+      checkmesh_max_aspect_ratio: null,
+      checkmesh_mesh_ok: null,
+      checkmesh_n_severe_non_ortho_faces: null,
+      checkmesh_failed_checks: null,
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126Skipped);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("patch-chip-walls").dataset.tone).toBe("neutral");
+    // Zero-face wins over the graceful-degrade neutral default.
+    expect(screen.getByTestId("patch-chip-ghost").dataset.tone).toBe("rose");
+  });
+});
