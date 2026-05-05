@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-127
 title: Mesh-quality card · Fluent-style gauges + per-patch chips · Phase E shell entry
-status: Proposed (2026-05-05 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file frontend + UI interaction mode change + first user-visible Fluent-style polish)
-codex_tool_report_path: reports/codex_tool_reports/v61_127_r1_chain.md (to be created)
+status: Accepted (2026-05-06 · Codex R8 APPROVE clean at 5fe9021 · 8-round chain, prediction missed by ~5 rounds — see v61_127_r1_chain.md "Calibration miss" section. No-cross §L1 baseline broke on cache-design surface; methodology patch candidate logged for next RETRO.)
+codex_tool_report_path: reports/codex_tool_reports/v61_127_r1_chain.md
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline per RETRO-V61-001)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-05
