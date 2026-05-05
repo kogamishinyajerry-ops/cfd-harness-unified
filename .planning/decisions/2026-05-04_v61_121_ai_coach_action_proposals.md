@@ -21,7 +21,7 @@ parent_artifacts:
   - ui/frontend/src/pages/workbench/step_panel_shell/AICoachPanel.tsx (V120 panel · V121 extends with PROPOSAL parser + ProposalCard + apply state machine)
   - ui/frontend/src/api/client.ts (V120 streamAICoach · V121 adds `applyAIProposal()` method)
 counter_impact: +1 (autonomous_governance: true · new backend route + new UI surface element + new tool dispatch + AI-mediated case mutation, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a governance-rule change. High-risk PR check: AI-driven case-mutation is **new safety surface** — RETRO-V61-001 risk-tier dictates Codex pre-merge MANDATORY. Kogami SKIP per DEC-V61-087 §4.2 — feature DEC, not governance rule change. Counter v6.1 reaches 80; arc-size mini-retro for V120+V121 pair owed to RETRO follow-up queue per ongoing user-mandate deferral.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-121-AI-coach-action-proposals-structured-PROPOSAL-delimiter-approval-UX-bounded-tool-357c68942bed813396adfb6d8d182cd3)
 self_estimated_pass_rate: 35% (predicted 5-7 rounds) → ACTUAL 2 rounds (well-calibrated overestimate by 2.5x · V1 scope-down (delimiter protocol vs OpenAI tool-calling spec, single tool, no multi-step orchestration, no Edit-before-Accept) collapsed multi-axis risk to 3 independent single-axis findings: audit lock, unclosed-fence parsing, ConfigDict(extra="forbid") · see chain report §L1 for the now-3-arcs-confirmed scope-down anti-cascade pattern)
 
 ---

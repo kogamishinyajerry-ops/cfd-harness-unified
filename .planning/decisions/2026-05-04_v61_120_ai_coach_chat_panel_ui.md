@@ -22,7 +22,7 @@ parent_artifacts:
   - ui/backend/routes/ai_coach.py:108-122 (V119 SSE endpoint · V120 consumes verbatim; pre-stream HTTP error mapping from V119 R1 P1 means UI needs to handle 401/429/400/502/500 BEFORE opening reader as well as mid-stream `error` SSE frames — UI logic mirrors backend dual-path)
   - ui/backend/services/llm_provider/base.py:68-85 (ChatStreamChunk schema · UI parses to this shape)
 counter_impact: +1 (autonomous_governance: true · new UI surface + new API client method, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not arc-size retro at counter 79, not a governance-rule-change DEC. High-risk PR check: this is a USER-FACING UI change after explicit user UX criticism — RETRO-V61-001 "user UX批评后的首次实现" trigger DOES fire. Codex pre-merge MANDATORY. Kogami still SKIP per DEC-V61-087 §4.2 — this is a feature DEC, not a governance rule change · same disposition as V117/V120 sibling pattern.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-120-AI-coach-chat-panel-TaskPanel-right-rail-mount-streaming-consumer-for-api-ai-coac-357c68942bed81ab9befe8191a5f708a)
 self_estimated_pass_rate: 60% (predicted 3-4 rounds) → ACTUAL 2 rounds (well-calibrated overestimate · scope-down kept findings to single-axis UX/contract issues · IME-composition CJK find from Codex was the calibrated win that would have shipped to user base otherwise — see chain report §L4)
 
 ---

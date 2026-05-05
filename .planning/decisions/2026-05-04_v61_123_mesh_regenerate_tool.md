@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/backend/services/meshing_gmsh/pipeline.py:102 (`mesh_imported_case(case_id, *, mesh_mode, container_name)` · V123 handler delegates to this; pipeline already has `MeshPipelineError(failing_check)` envelope so V123 only needs a thin translation)
   - ui/backend/services/llm_coach/audit.py (V121 audit serializer · V123 ApplyResult flows through the existing audit lock — no changes needed)
 counter_impact: +1 (autonomous_governance: true · new backend tool entry that mutates polyMesh files. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 81→82 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进"), not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 (multi-file backend + AI-driven case-mutation) — same trigger pattern as V121.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-123-Mesh-regenerate-tool-regenerate_mesh-registry-entry-wrapping-mesh_imported_case--357c68942bed81758766fdae03b239ba)
 self_estimated_pass_rate: 70% (predicted 1-2 rounds · single-axis surface · V121 trust boundary already validated · `mesh_imported_case` has 23+ rounds of pre-existing Codex audit · risk concentrated in long-blocking-time + idempotency)
 
 ---

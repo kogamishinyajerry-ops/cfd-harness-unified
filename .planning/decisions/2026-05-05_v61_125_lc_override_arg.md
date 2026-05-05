@@ -18,7 +18,7 @@ parent_artifacts:
   - ui/backend/services/meshing_gmsh/pipeline.py:102 (`mesh_imported_case` · V124 added target_cell_count kwarg; V125 adds characteristic_length_override kwarg using identical pattern)
   - ui/backend/services/llm_coach/tool_registry.py (V123/V124 RegenerateMeshArgs · V125 extends with optional lc_override field + extends mutual-exclusion validator from 2-way to 3-way)
 counter_impact: +1 (autonomous_governance: true · backend-only argument extension that mutates polyMesh files via the existing V123/V124 tool path. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 83→84 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进"), not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 (multi-file backend + AI-driven case-mutation) — same trigger pattern as V121/V123/V124.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-125-Mesh-regenerate-lc_override-arg-engineer-escape-hatch-for-direct-characteristic--357c68942bed81d8bb4edc036de809b0)
 self_estimated_pass_rate: 75% (predicted 1-2 rounds · pure additive plumbing on existing characteristic_length_override hook · no route-layer changes · no new safety contract crossing · §L1 calibration baseline applies. Slight uptick from V124's 70% because V125 reuses V124's mutual-exclusion validator pattern + V124's MeshMode literal — incremental change to a structure that just shipped clean.)
 
 ---

@@ -32,6 +32,7 @@ from __future__ import annotations
 import errno
 import os
 import re
+import stat
 from pathlib import Path
 
 from ui.backend.services.mesh_quality.schemas import (
@@ -373,11 +374,37 @@ def analyze_mesh_quality(
     install.
     """
     case_id = case_dir.name
-    polymesh = case_dir / "constant" / "polyMesh"
-    if not polymesh.is_dir():
-        raise MeshQualityNotAvailableError(
-            f"polyMesh directory missing for case_id={case_id!r}"
-        )
+    constant_dir = case_dir / "constant"
+    polymesh = constant_dir / "polyMesh"
+    # Codex base-review P1: extend the symlink-escape contract from
+    # the polyMesh files (V122 R1 P1) to the polyMesh dir AND its
+    # `constant` parent. ``Path.is_dir()`` follows symlinks — a
+    # planted symlink at either link could redirect reads outside the
+    # case root. Use ``os.lstat`` and reject S_ISLNK explicitly.
+    for parent_path, label in (
+        (constant_dir, "constant"),
+        (polymesh, "polyMesh"),
+    ):
+        try:
+            parent_st = os.lstat(parent_path)
+        except FileNotFoundError as exc:
+            raise MeshQualityNotAvailableError(
+                f"polyMesh directory missing for case_id={case_id!r}"
+            ) from exc
+        except OSError as exc:
+            raise MeshQualityParseError(
+                f"could not stat {label}: {type(exc).__name__}",
+                failing_check="symlink_escape",
+            ) from exc
+        if stat.S_ISLNK(parent_st.st_mode):
+            raise MeshQualityParseError(
+                f"refused to follow symlink at {label}",
+                failing_check="symlink_escape",
+            )
+        if not stat.S_ISDIR(parent_st.st_mode):
+            raise MeshQualityNotAvailableError(
+                f"polyMesh directory missing for case_id={case_id!r}"
+            )
 
     points_path = polymesh / "points"
     owner_path = polymesh / "owner"

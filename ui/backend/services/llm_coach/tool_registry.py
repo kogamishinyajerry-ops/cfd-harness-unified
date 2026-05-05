@@ -28,7 +28,10 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ui.backend.services.case_manifest.locking import CaseLockError, case_lock
-from ui.backend.services.case_solve.bc_setup_from_stl_patches import BCClass
+from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
+    BCClass,
+    _read_patch_ranges,
+)
 from ui.backend.services.case_solve.patch_classification_store import (
     PatchClassificationIOError,
     upsert_override,
@@ -240,6 +243,24 @@ def _handle_set_patch_bc_type(case_dir: Path, args: BaseModel) -> ApplyResult:
     typed = args  # type: SetPatchBcTypeArgs (caller already validated)
     assert isinstance(typed, SetPatchBcTypeArgs)
     bc_class_enum = BCClass(typed.bc_class)
+    # Codex base-review P2: gate proposals against the live polyMesh
+    # boundary the same way the manual PUT route does (see
+    # routes/case_patch_classification.py:_read_available_patches).
+    # Without this, a stale or hallucinated patch_name still returns
+    # 200 and writes an override that can never match a real patch.
+    boundary = case_dir / "constant" / "polyMesh" / "boundary"
+    if boundary.is_file():
+        try:
+            available = [name for name, _s, _n in _read_patch_ranges(boundary)]
+        except Exception:  # noqa: BLE001 — defensive over a stable surface
+            available = []
+        if available and typed.patch_name not in available:
+            raise ToolDispatchError(
+                f"patch_name {typed.patch_name!r} is not present in the "
+                f"current polyMesh boundary (available: {available!r}).",
+                failing_check="underlying_service_error",
+                inner_failing_check="patch_not_in_mesh",
+            )
     state_after = upsert_override(
         case_dir, patch_name=typed.patch_name, bc_class=bc_class_enum
     )

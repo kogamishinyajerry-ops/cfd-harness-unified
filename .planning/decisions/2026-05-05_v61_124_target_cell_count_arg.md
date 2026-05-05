@@ -19,7 +19,7 @@ parent_artifacts:
   - ui/backend/services/meshing_gmsh/pipeline.py:102 (`mesh_imported_case` — V124 extends with `target_cell_count: int | None = None` kwarg)
   - ui/backend/services/llm_coach/tool_registry.py (V123's RegenerateMeshArgs · V124 adds optional target_cell_count field with mutual-exclusion validation against mesh_mode)
 counter_impact: +1 (autonomous_governance: true · backend-only argument extension that mutates polyMesh files via the existing V123 tool path. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 82→83 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进"), not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 (multi-file backend + AI-driven case-mutation) — same trigger pattern as V121/V123.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-124-Mesh-regenerate-target_cell_count-arg-AI-proposes-specific-cell-counts-not-just--357c68942bed81969fa8f2438a07401d)
 self_estimated_pass_rate: 70% (predicted 1-2 rounds · single-axis surface · pure additive plumbing on existing characteristic_length_override · no route-layer changes · no new container/Docker logic · no new safety contract crossing — applying V123 R1-R9 chain §L1 lesson by deliberately picking the smallest scope. The "tool registry append" calibration baseline (~70% / 1-2 rounds) applies because V124 does NOT cross the path-state safety surface that V123 had to harden over R3-R8.)
 
 ---

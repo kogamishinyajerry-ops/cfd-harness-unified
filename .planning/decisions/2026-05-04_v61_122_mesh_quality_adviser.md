@@ -21,7 +21,7 @@ parent_artifacts:
   - ui/backend/services/llm_coach/prompts.py (V119/V121 system-prompt composer · V122 extends with optional mesh_quality argument)
   - ui/backend/routes/ai_coach.py:124-138 (V119 stream route · V122 adds an inner mesh-quality fetch, gracefully tolerates 404 / no polyMesh yet)
 counter_impact: +1 (autonomous_governance: true · new backend service + new operator endpoint + system-prompt extension. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter 80 (counter ≥ 20 trigger continues to be deferred per ongoing user mandate "按你的顺序和建议，继续推进" which extends the prior deferral), not governance-rule change. Codex pre-merge MANDATORY.)
-notion_sync_status: pending — Notion MCP server still disconnected; sync when reconnected
+notion_sync_status: synced 2026-05-05 (https://www.notion.so/DEC-V61-122-Mesh-quality-adviser-foundation-polyMesh-derived-metrics-AI-prompt-integration-G-357c68942bed81f091cac88f858c55dd)
 self_estimated_pass_rate: 65% (predicted 2-3 rounds · V1 scope-down pattern proven 3 consecutive arcs · backend-only, pure Python, no Docker, no new UI · cascade-dimension count is single-axis: polyMesh format edge cases · proposal-parser pattern from V121 already validated)
 
 ---

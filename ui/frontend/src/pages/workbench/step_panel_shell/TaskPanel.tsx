@@ -61,7 +61,7 @@ export function TaskPanel({
           registerAiAction={registerAiAction}
         />
       </div>
-      {caseId && <AICoachPanel caseId={caseId} />}
+      {caseId && <AICoachPanel key={caseId} caseId={caseId} />}
       <StepNavigation
         {...navigation}
         aiActionDeferredTooltip={step.aiActionDeferredTooltip}

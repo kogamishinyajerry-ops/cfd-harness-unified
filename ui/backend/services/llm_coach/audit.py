@@ -22,7 +22,9 @@ ApplyResult JSON so the UI can correlate.
 """
 from __future__ import annotations
 
+import errno
 import os
+import stat
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -115,6 +117,35 @@ def write_audit(
     register #4).
     """
     audit_dir = _audit_dir(case_dir)
+    # Codex base-review P2: verify ``system`` and ``ai_audit`` are real
+    # directories — not symlinks — before mkdir/write. Path.mkdir
+    # traverses through directory symlinks, so a planted symlink at
+    # ``system`` (or ``system/ai_audit``) could redirect the audit
+    # write outside the case root, breaking the symlink-escape contract
+    # the rest of the case I/O surface enforces (V108, V122).
+    system_dir = case_dir / "system"
+    for parent_path, label in (
+        (system_dir, "system"),
+        (audit_dir, "system/ai_audit"),
+    ):
+        try:
+            parent_st = os.lstat(parent_path)
+        except FileNotFoundError:
+            # Will be created by mkdir(parents=True, exist_ok=True)
+            # below — that's a fresh directory, no symlink concern.
+            continue
+        except OSError as exc:
+            raise AuditWriteError(
+                f"could not stat {label}: {type(exc).__name__}"
+            ) from exc
+        if stat.S_ISLNK(parent_st.st_mode):
+            raise AuditWriteError(
+                f"refused to follow symlink at {label}"
+            )
+        if not stat.S_ISDIR(parent_st.st_mode):
+            raise AuditWriteError(
+                f"{label} exists but is not a directory"
+            )
     try:
         audit_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
