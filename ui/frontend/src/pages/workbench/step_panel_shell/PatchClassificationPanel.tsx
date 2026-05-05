@@ -135,10 +135,13 @@ export function PatchClassificationPanel({
   // strictly dominate the initial snapshot).
   useEffect(() => {
     if (!caseId) return;
-    const myCaseGen = caseGenRef.current;
-    const isStale = () =>
-      cancelledRef.current || caseGenRef.current !== myCaseGen;
+    // Each fetchOverrides invocation captures its own gen so a forced
+    // refetch can bump caseGenRef to invalidate prior in-flight GETs
+    // without invalidating itself. base-review-5 P2 #2.
     const fetchOverrides = (force = false) => {
+      const myCaseGen = caseGenRef.current;
+      const isStale = () =>
+        cancelledRef.current || caseGenRef.current !== myCaseGen;
       api
         .getPatchClassification(caseId)
         .then((doc) => {
@@ -157,19 +160,32 @@ export function PatchClassificationPanel({
         });
     };
     fetchOverrides();
-    // Codex base-review-4 P2: re-fetch when the AI coach successfully
-    // applies a set_patch_bc_type proposal for this case. Without this,
-    // the panel keeps showing the old override and the engineer edits
-    // against stale state until the case view remounts.
+    // Codex base-review-4 P2 + base-review-5 P2 #1: re-fetch when the
+    // AI coach successfully applies any case-state-mutating proposal.
+    // set_patch_bc_type writes the override the panel displays directly;
+    // regenerate_mesh rewrites constant/polyMesh and invalidates both
+    // the patch list AND the cached face-index/highlight mapping the
+    // panel uses. Both must trigger a refetch — without the
+    // regenerate_mesh case, an engineer who accepts a mesh proposal
+    // while Step 3 is open keeps seeing the old mesh's patches until
+    // the case view remounts.
     const onProposalApplied = (e: Event) => {
       const evt = e as CustomEvent<{
         caseId?: string;
         tool?: string;
       }>;
+      if (evt.detail?.caseId !== caseId) return;
       if (
-        evt.detail?.caseId === caseId &&
-        evt.detail?.tool === "set_patch_bc_type"
+        evt.detail?.tool === "set_patch_bc_type" ||
+        evt.detail?.tool === "regenerate_mesh"
       ) {
+        // base-review-5 P2 #2: bump caseGenRef so any in-flight
+        // mount-time getPatchClassification() promise from before the
+        // forced refetch is treated as stale by isStale() and dropped.
+        // Without this, a slow initial GET that resolves AFTER the
+        // forced refetch would overwrite the AI-applied state with
+        // the pre-apply snapshot until the next remount.
+        caseGenRef.current += 1;
         fetchOverrides(true);
       }
     };
