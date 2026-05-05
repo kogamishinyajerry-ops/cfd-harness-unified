@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 MeshSeverity = Literal["critical", "warning", "info"]
@@ -36,6 +36,15 @@ class MeshQualityReport(BaseModel):
     aligned BB of the points file; ``cells_per_unit_volume`` is None
     when the BB has a collapsed axis (2D mesh).
     """
+
+    # V126 R3 P2: forbid extra keys so OpenAPI emits
+    # additionalProperties=false. Without this, the route's union
+    # response_model `MeshQualityReportV126 | MeshQualityReport`
+    # is non-discriminable for schema-driven tooling
+    # (openapi-typescript, validators) — a V126 payload would validate
+    # against both branches of the anyOf, hiding when checkmesh_*
+    # fields are actually part of the contract.
+    model_config = ConfigDict(extra="forbid")
 
     case_id: str
     polymesh_present: bool = Field(
