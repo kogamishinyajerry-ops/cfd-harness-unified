@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-125
 title: Mesh-regenerate · `lc_override` arg · engineer escape hatch for direct characteristic-length sizing
-status: Proposed (2026-05-05 · pre-implementation surface scan complete; Codex pre-merge MANDATORY per RETRO-V61-001 multi-file backend + AI-driven case-mutation triggers + new tool argument that mutates polyMesh files)
-codex_tool_report_path: reports/codex_tool_reports/v61_125_r1_chain.md (to be created)
+status: Accepted (2026-05-05 · Codex CRS gpt-5.4 high R3 APPROVE clean at 8953484 · 3-round chain · matches V124's 3 rounds exactly; §L1 calibration baseline doubly validated for "tool registry append, no contract crossing" ≈ 3 rounds)
+anchor_commit: 8953484
+codex_tool_report_path: reports/codex_tool_reports/v61_125_r1_chain.md
 codex_review_relay: CRS gpt-5.4 high (default per V61-119 §L2 protocol)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-05
