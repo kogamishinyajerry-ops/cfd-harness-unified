@@ -102,25 +102,34 @@ type AxisScale = "linear" | "log";
 
 /** Map a value to a 0-100 percentage along the gauge bar.
  *
- * R1 P2 fix: aspect-ratio bands span 10 / 100 / 1000 / 10000 — on a
- * linear axis those bands occupy 0.1 / 0.9 / 9 / 90 percent, bunching
- * normal values against the left edge. Log scale (`log10(value+1)` /
- * `log10(axisMax+1)`) gives each decade equal width, matching how
- * engineers reason about aspect ratio. Linear stays the default for
- * skewness (0..1) and non-orthogonality (0..90) where the bands are
- * already evenly distributed.
+ * R1 P2 + R2 P3 fix: aspect-ratio bands span 10 / 100 / 1000 / 10000.
+ * Log scale uses canonical
+ *   (log10(value) - log10(axisMin)) / (log10(axisMax) - log10(axisMin))
+ * so each decade gets EXACTLY equal width. ``axisMin=1`` for aspect
+ * ratio because a cell with AR < 1 is geometrically impossible —
+ * R2 P3 closure: the prior `log10(value+1)` form treated the
+ * impossible 0..1 interval as ~7.5% of the bar, shrinking the
+ * "good" 1..10 decade. Linear stays default for skewness (0..1) and
+ * non-orthogonality (0..90) where bands are already evenly spaced.
  */
 function clampPercent(
   value: number,
   axisMax: number,
   scale: AxisScale = "linear",
+  axisMin = 0,
 ): number {
-  if (!isFinite(value) || value <= 0) return 0;
-  if (value >= axisMax) return 100;
+  if (!isFinite(value)) return 0;
   if (scale === "log") {
-    return (Math.log10(value + 1) / Math.log10(axisMax + 1)) * 100;
+    const lo = Math.max(axisMin, 1); // log scale requires positive axisMin
+    if (value <= lo) return 0;
+    if (value >= axisMax) return 100;
+    return ((Math.log10(value) - Math.log10(lo)) /
+      (Math.log10(axisMax) - Math.log10(lo))) *
+      100;
   }
-  return (value / axisMax) * 100;
+  if (value <= axisMin) return 0;
+  if (value >= axisMax) return 100;
+  return ((value - axisMin) / (axisMax - axisMin)) * 100;
 }
 
 // ────────── Sub-components ──────────
@@ -180,6 +189,10 @@ interface QualityGaugeProps {
   /** R1 P2: aspect ratio uses log10 scale so each decade gets equal
    *  bar width. Default is linear for skewness / non-orthogonality. */
   scale?: AxisScale;
+  /** R2 P3: minimum physically-meaningful axis value. For aspect ratio
+   *  the floor is 1 (a cell with AR<1 is geometrically impossible),
+   *  so the gauge starts at 1 not 0. Defaults to 0 for linear gauges. */
+  axisMin?: number;
 }
 
 function QualityGauge({
@@ -189,6 +202,7 @@ function QualityGauge({
   axisMax,
   format,
   scale = "linear",
+  axisMin = scale === "log" ? 1 : 0,
 }: QualityGaugeProps) {
   // Render the band ladder as a stacked horizontal bar with a needle
   // overlay at the current value. When value is null (skipped), render
@@ -196,7 +210,9 @@ function QualityGauge({
   // threshold geography.
   const skipped = value === null;
   const band = !skipped ? classifyValue(value, bands) : null;
-  const needlePercent = !skipped ? clampPercent(value, axisMax, scale) : 0;
+  const needlePercent = !skipped
+    ? clampPercent(value, axisMax, scale, axisMin)
+    : 0;
   return (
     <div data-testid={`mesh-quality-gauge-${label.replace(/\s+/g, "-").toLowerCase()}`}>
       <div className="flex items-baseline justify-between text-[11px]">
@@ -230,11 +246,13 @@ function QualityGauge({
           // (linear or log10), so the band geography on the bar is
           // visually consistent with where the needle lands. R1 P2
           // closure: previously linear-only width math collapsed the
-          // 10/100/1000 aspect-ratio bands to <10% combined.
-          const prevMax = i === 0 ? 0 : (bands[i - 1].max ?? axisMax);
+          // 10/100/1000 aspect-ratio bands to <10% combined. R2 P3
+          // closure: anchor on axisMin so the impossible <axisMin
+          // interval doesn't consume bar width.
+          const prevMax = i === 0 ? axisMin : (bands[i - 1].max ?? axisMax);
           const cap = b.max === null ? axisMax : Math.min(b.max, axisMax);
-          const startPct = clampPercent(prevMax, axisMax, scale);
-          const endPct = clampPercent(cap, axisMax, scale);
+          const startPct = clampPercent(prevMax, axisMax, scale, axisMin);
+          const endPct = clampPercent(cap, axisMax, scale, axisMin);
           const widthPct = endPct - startPct;
           if (widthPct <= 0) return null;
           return (
@@ -334,18 +352,51 @@ function FailedChecksList({ checks }: { checks: string[] }) {
 
 // ────────── Main component ──────────
 
+/** R2 P2: module-level cache so remounting the card on Step 2 ↔ 3/4
+ *  navigation doesn't re-run Docker checkMesh against an unchanged
+ *  mesh. Keyed by `${caseId}:${meshGenSeq}` so a fresh mesh (which
+ *  bumps meshGenSeq) gets a fresh fetch but a no-op remount hits
+ *  the cache and renders instantly. Cache is in-memory only —
+ *  acceptable for a workbench session; full reload re-warms.
+ */
+const meshQualityCache = new Map<string, LoadState>();
+
+function cacheKey(caseId: string, meshGenSeq: number): string {
+  return `${caseId}:${meshGenSeq}`;
+}
+
+/** Test-only export: clear the module-level cache so tests with
+ *  re-used caseIds don't see stale state from prior runs. NOT for
+ *  production use — runtime relies on the cache surviving Step 2 ↔
+ *  3/4 navigation. */
+export function __clearMeshQualityCacheForTests(): void {
+  meshQualityCache.clear();
+}
+
 export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
-  const [state, setState] = useState<LoadState>({ status: "idle" });
+  const [state, setState] = useState<LoadState>(() => {
+    const cached = meshQualityCache.get(cacheKey(caseId, meshGenSeq));
+    return cached ?? { status: "idle" };
+  });
 
   useEffect(() => {
     if (!caseId) return;
+    const key = cacheKey(caseId, meshGenSeq);
+    // Cache hit: render the prior result instantly, no network.
+    const cached = meshQualityCache.get(key);
+    if (cached && cached.status === "ready") {
+      setState(cached);
+      return;
+    }
     let cancelled = false;
     setState({ status: "loading" });
     api
       .getMeshQuality(caseId, { runCheckmesh: true })
       .then((report) => {
         if (cancelled) return;
-        setState({ status: "ready", report });
+        const next: LoadState = { status: "ready", report };
+        meshQualityCache.set(key, next);
+        setState(next);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -353,6 +404,8 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
         if (err instanceof ApiError) {
           if (err.status === 404) {
             // case not yet meshed — defer rendering by re-entering idle.
+            // Don't cache 404; the next mesh attempt should fire a
+            // fresh GET.
             setState({ status: "idle" });
             return;
           }
@@ -360,6 +413,8 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
         } else if (err instanceof Error) {
           message = err.message;
         }
+        // Don't cache errors either — we want the next remount to
+        // retry rather than render the stale failure.
         setState({ status: "error", message });
       });
     return () => {

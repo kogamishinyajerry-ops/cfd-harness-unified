@@ -30,7 +30,10 @@ vi.mock("@/api/client", async () => {
   };
 });
 
-import { MeshQualityCard } from "../MeshQualityCard";
+import {
+  MeshQualityCard,
+  __clearMeshQualityCacheForTests,
+} from "../MeshQualityCard";
 
 const baseV122: MeshQualityReportV122 = {
   report_kind: "v122",
@@ -72,6 +75,7 @@ const v126Failed: MeshQualityReportV126 = {
 
 beforeEach(() => {
   apiMock.getMeshQuality.mockReset();
+  __clearMeshQualityCacheForTests();
   cleanup();
 });
 
@@ -208,5 +212,23 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
     expect(apiMock.getMeshQuality).toHaveBeenCalledWith("ldc", {
       runCheckmesh: true,
     });
+  });
+
+  it("R2 P2: cache hit on remount (same caseId+meshGenSeq) skips fetch", async () => {
+    // First mount: fetch once, populate cache.
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    const { unmount } = render(
+      <MeshQualityCard caseId="ldc" meshGenSeq={1} />,
+    );
+    await waitFor(() =>
+      expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1),
+    );
+    unmount();
+    // Second mount with the SAME (caseId, meshGenSeq) — should hit
+    // the module cache, not the network. This models Step 2 ↔ 3/4
+    // ↔ Step 2 navigation.
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    expect(screen.getByText("Mesh OK")).toBeInTheDocument();
+    expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1);
   });
 });
