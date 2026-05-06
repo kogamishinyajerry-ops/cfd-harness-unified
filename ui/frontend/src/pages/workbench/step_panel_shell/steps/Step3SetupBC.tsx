@@ -708,49 +708,33 @@ export function Step3SetupBC({
         const detail = e.detail as CaseSolveRejection & {
           unresolved_questions?: UnresolvedQuestion[];
         };
-        // DEC-V61-131 N1.1 R2 P2 close (Codex 86gs R2): the apply
-        // route now returns structured recovery payloads when the
-        // engineer's accepted advisory is stale — handle them by
-        // restoring Step 3 to a recoverable state instead of
-        // surfacing as a plain CaseSolveRejection that leaves the
-        // confident envelope on screen.
+        // DEC-V61-131 N1.1 R3 P1 close (Codex 86gs R3): on stale-pin
+        // or revision-conflict, the right recovery is to RE-RUN the
+        // AI envelope from scratch, NOT to synthesize an uncertain
+        // envelope from the apply route's classifier questions —
+        // those questions can be free_text/needs_face_selection=false
+        // (channel_pin_mismatch surface), which means the dialog
+        // would reopen as a textarea, handleDialogResume would not
+        // persist any face annotation, and the next [继续 AI 处理]
+        // re-runs the envelope with unchanged annotations and gets
+        // the same rejection — an infinite loop. Re-running envelope
+        // returns proper face-selection questions through the
+        // classifier's natural uncertain path.
         if (
-          detail.failing_check === "channel_pin_mismatch" &&
-          Array.isArray(detail.unresolved_questions) &&
-          detail.unresolved_questions.length > 0
-        ) {
-          // Stale pins: synthesize an uncertain envelope from the
-          // backend's classifier questions so the dialog reopens and
-          // the engineer can re-pick.
-          setEnvelope({
-            confidence: "uncertain",
-            summary:
-              detail.detail ||
-              "Channel pins changed since the AI advisory. Re-pick to continue.",
-            annotations_revision_consumed:
-              envelope?.annotations_revision_consumed ?? 0,
-            annotations_revision_after:
-              envelope?.annotations_revision_after ?? 0,
-            unresolved_questions: detail.unresolved_questions,
-            next_step_suggestion:
-              "Re-pick the inlet/outlet face(s), then click [继续 AI 处理].",
-            error_detail: null,
-            suggested_bc_kind: null,
-          });
-          setPickedFaceIdForQuestion({});
-          onStepError(`apply rejected: ${detail.failing_check}`);
-        } else if (
+          detail.failing_check === "channel_pin_mismatch" ||
           detail.failing_check === "annotations_revision_conflict"
         ) {
-          // Concurrent annotations edit: drop the stale envelope so
-          // the engineer re-runs [AI 处理] and gets a fresh advisory
-          // bound to the new revision.
           setEnvelope(null);
           setPickedFaceIdForQuestion({});
-          setNetworkError(
-            "Annotations changed since the AI advisory was shown. Click [AI 处理] to re-run.",
-          );
+          setActiveFaceQuestionId(null);
           onStepError(`apply rejected: ${detail.failing_check}`);
+          // Re-run envelope on a microtask so React processes the
+          // state resets above before the new envelope arrives. The
+          // refreshed envelope reads the (possibly updated)
+          // annotations.yaml and surfaces the right
+          // face-selection questions — recoverable without an
+          // infinite loop.
+          void runEnvelope({ useForceFlags: false });
         } else {
           setRejection(detail);
           onStepError(
@@ -771,6 +755,8 @@ export function Step3SetupBC({
     envelope,
     onStepComplete,
     onStepError,
+    runEnvelope,
+    setActiveFaceQuestionId,
     setEnvelope,
     setPickedFaceIdForQuestion,
   ]);

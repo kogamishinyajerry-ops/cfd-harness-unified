@@ -389,6 +389,26 @@ def setup_bc(
     # Legacy LDC dogfood callers (no params) preserve the pre-N1.1
     # behavior: classifier optionally upgrades to channel; classifier
     # uncertain still falls through to setup_ldc_bc.
+    # Codex N1.1 R3 P2 close: resolve the case_dir to its real
+    # filesystem path BEFORE acquiring the annotations lock, and use
+    # the resolved path for every operation inside the lock. Without
+    # this, a rename/replace race between the route's case_dir lookup
+    # and load_annotations() could let the lock guard a stale path
+    # while classification + execution operate on the new one.
+    # save_annotations applies the same pattern (locks
+    # _resolve_annotations_path(case_dir).parent), so this binding
+    # makes the apply path's lock domain identical.
+    try:
+        resolved_case_dir = case_dir.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=SetupBcRejection(
+                failing_check="case_disappeared",
+                detail=f"could not resolve {case_dir}: {exc}",
+            ).model_dump(),
+        ) from exc
+
     # Codex N1.1 R2 P1 close: hold the annotations-exclusive lock for
     # the entire load → classify → revision-check → dispatch sequence.
     # Without the lock, a concurrent PUT /face-annotations could land
@@ -405,13 +425,13 @@ def setup_bc(
     annotations_for_apply: dict | None = None
     apply_summary: SetupBcSummary | None = None
     try:
-        with annotations_exclusive_lock(case_dir):
+        with annotations_exclusive_lock(resolved_case_dir):
             try:
                 annotations_for_apply = load_annotations(
-                    case_dir, case_id=case_id
+                    resolved_case_dir, case_id=case_id
                 )
                 cls_for_apply = classify_setup_bc(
-                    case_dir, annotations=annotations_for_apply
+                    resolved_case_dir, annotations=annotations_for_apply
                 )
                 if (
                     cls_for_apply.confidence == "confident"
@@ -468,7 +488,7 @@ def setup_bc(
             if use_channel:
                 try:
                     ch_result = setup_channel_bc(
-                        case_dir,
+                        resolved_case_dir,
                         case_id=case_id,
                         inlet_face_ids=cls_inlet,
                         outlet_face_ids=cls_outlet,
@@ -487,7 +507,9 @@ def setup_bc(
                 )
             else:
                 try:
-                    ldc_result = setup_ldc_bc(case_dir, case_id=case_id)
+                    ldc_result = setup_ldc_bc(
+                        resolved_case_dir, case_id=case_id
+                    )
                 except BCSetupError as exc:
                     raise _setup_bc_failure_to_http(exc) from exc
                 apply_summary = SetupBcSummary(
