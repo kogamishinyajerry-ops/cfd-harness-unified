@@ -725,15 +725,33 @@ def test_run_checkmesh_bash_chain_preserves_checkmesh_exit_code(
     # chain's final exit reflects that, NOT the trailing cat. Replace
     # `source /opt/openfoam10/etc/bashrc &&` with `:` (no-op) so we
     # don't depend on the container env.
+    #
+    # R2 P2 closure: the production bash uses
+    #   cd {CONTAINER_WORK_BASE}/{case_id}_{uuid}
+    # which is a CONTAINER path, NOT a host path. Rewrite the cd target
+    # via a regex anchored on `cd /tmp/cfd-harness-cases-checkmesh/...`
+    # so the substitution actually fires. The previous string-replace
+    # on `polymesh.parent.parent` was a no-op (that path was never in
+    # bash_cmd_str), so host bash early-exited from a missing-dir cd
+    # BEFORE reaching the stubbed checkMesh — assertion passed for the
+    # wrong reason and would not catch a regression that snapshotted
+    # $? before checkMesh.
+    import re as _re_test
     test_chain = bash_cmd_str.replace(
         "source /opt/openfoam10/etc/bashrc &&", ":; "
     ).replace(
         "checkMesh -allGeometry -allTopology",
         "false",  # stand-in checkMesh that exits 1
     )
-    # Use a tmpdir so cd doesn't fail — the stub doesn't read the dir.
-    test_chain = test_chain.replace(
-        f"cd {polymesh.parent.parent}", f"cd {shlex.quote(str(tmp_path))}"
+    test_chain = _re_test.sub(
+        r"cd /tmp/cfd-harness-cases-checkmesh/[^\s&]+",
+        f"cd {shlex.quote(str(tmp_path))}",
+        test_chain,
+    )
+    # Defensive: confirm the cd was actually rewritten — this would
+    # have caught the R0 test bug.
+    assert "cd /tmp/cfd-harness-cases-checkmesh/" not in test_chain, (
+        f"regex failed to rewrite container cd path: {test_chain!r}"
     )
 
     proc = subprocess.run(
@@ -746,4 +764,21 @@ def test_run_checkmesh_bash_chain_preserves_checkmesh_exit_code(
         f"bash chain swallowed checkMesh's exit 1 (got {proc.returncode}); "
         f"the rc=$?; ... exit $rc pattern is broken. "
         f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+    )
+
+    # Sanity: the same chain with a SUCCESSFUL stub should exit 0.
+    # This proves the test would catch a regression that hard-codes
+    # exit 1 instead of preserving rc — without this twin-check, a
+    # future "always exit 1" change would still pass the failure case.
+    success_chain = test_chain.replace("false", "true")
+    proc_ok = subprocess.run(
+        ["bash", "-c", success_chain],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc_ok.returncode == 0, (
+        f"bash chain failed even with successful stub (got "
+        f"{proc_ok.returncode}); cd or echo+cat tail is broken. "
+        f"stdout={proc_ok.stdout!r} stderr={proc_ok.stderr!r}"
     )
