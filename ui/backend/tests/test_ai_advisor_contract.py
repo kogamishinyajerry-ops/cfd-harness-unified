@@ -269,8 +269,33 @@ def test_llm_coach_dispatch_no_mutation_for_every_tool(
 
         try:
             dispatch(case_dir=case_dir, tool=descriptor.name, args=sample_args)
-        except (UnknownToolError, ToolArgError, ToolDispatchError):
-            # Validation / dispatch errors don't violate the contract.
+        except UnknownToolError as exc:
+            # Registry / dispatcher mismatch — fails loudly so the
+            # caller fixes the contract test, not silently passes.
+            pytest.fail(
+                f"dispatch raised UnknownToolError for registered tool "
+                f"'{descriptor.name}': {exc}. Tool registry inconsistency."
+            )
+        except ToolArgError as exc:
+            # DEC-V61-132 R2 P2 close (CRS R1 finding): pre-R2 swallowed
+            # ToolArgError, which recreated the very false-negative R1
+            # was supposed to close — if curated _TOOL_HANDLER_REACHABLE_ARGS
+            # drift out of sync with a tool's schema, the handler never
+            # runs but the test would still pass. R2 fails loudly so
+            # the caller updates curated args; the merge gate stays
+            # non-vacuous.
+            pytest.fail(
+                f"dispatch raised ToolArgError for tool "
+                f"'{descriptor.name}' with curated args {sample_args!r}: "
+                f"{exc}. _TOOL_HANDLER_REACHABLE_ARGS has drifted out "
+                f"of sync with this tool's args_model schema; update "
+                f"the curated args dict so the handler is reached."
+            )
+        except ToolDispatchError:
+            # ToolDispatchError raises FROM the handler's body (e.g.,
+            # unsupported_axis / underlying_service_error). The handler
+            # DID run; the contract is "no mutation", which is satisfied
+            # iff mutation_sentinel.records stays empty. Acceptable.
             pass
         except _MutationViolation:
             # Sentinel raised; recorded; assertion below catches it.
