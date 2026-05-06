@@ -1,41 +1,44 @@
 # cfd-harness-unified · Project CLAUDE.md
 
 > Project-specific Claude Code configuration. Inherits from `~/CLAUDE.md` (user-level).
-> See user-level for: 模型分工规则 (四角色架构 v6.2), Codex 调用规则, Subagent 优先原则.
+> See user-level for: 模型分工规则 v2.3 (Kogami opt-in · Codex round cap=3 · DEC scope-driven), Codex 调用规则, Subagent 优先原则.
 >
-> **Established by DEC-V61-087** (Accepted 2026-04-27).
+> **Established by DEC-V61-087** (Accepted 2026-04-27); **简化 by DEC-V61-133** (B+ governance simplification, 2026-05-07).
 
 ---
 
-## Three-layer governance (v6.2 · 2026-04-27 onwards)
+## Three-layer governance (v2.3 · 2026-05-07 · DEC-V61-133)
 
-This project uses three independent review layers:
+This project uses three review layers, with strategic layer **opt-in** post-V133:
 
 | Layer | Reviewer | Trigger | Output location |
 |---|---|---|---|
-| **Strategic** | Kogami-Claude-cosplay (`claude -p` subprocess, `--tools ""`) | per `.planning/methodology/kogami_triggers.md` | `.planning/reviews/kogami/<topic>_<date>/` |
-| **Code** | Codex GPT-5.4 (independent CLI) | per RETRO-V61-001 risk-tier triggers | `reports/codex_tool_reports/` |
-| **Archive** | Notion (write-only, via existing sync) | DEC landing + post-incident retro | Notion Decisions/Sessions DB |
+| **Strategic** (opt-in) | Kogami-Claude-cosplay (`claude -p` subprocess, `--tools ""`) | **User explicitly invokes** when wanting an independent strategic review (auto-triggers废止) | `.planning/reviews/kogami/<topic>_<date>/` |
+| **Code** | Codex GPT-5.4 / GPT-5.5 (relay CLI) | per RETRO-V61-001 risk-tier · v2.2 1-sync-trigger (security boundary / auth / signing) · **round cap = 3** per V133 | `reports/codex_tool_reports/` |
+| **Archive** | Notion (write-only, session-end batch sync) | DEC landing + post-incident retro | Notion Decisions/Sessions DB |
 
-**Both Kogami and Codex APPROVE required for high-risk PR merge** (double-necessary, neither sufficient).
-**User remains final authority** (can override either with explicit ratification).
+**v2.3 changes from v6.2**:
+- Strategic layer is opt-in only; Codex APPROVE alone is sufficient gate for high-risk PR merge (no longer double-necessary)
+- Codex round cap = 3 (R0 + 2 fix iterations); after R3 user ratifies remaining P1 or remaining P2/P3 → retro queue
+- User remains final authority (can invoke Kogami any time, or override Codex)
 
-## Kogami trigger checklist (per DEC-V61-087 §4)
+## When to consider invoking Kogami (advisory · not mandatory · per V133)
 
-Before any of the following, run `bash scripts/governance/kogami_invoke.sh <artifact> <topic> <trigger>`:
+The auto-trigger conditions from old v6.2 are now examples of **when invoking might be high-value** — not requirements:
 
-- [ ] Phase-close (if phase-dir model used) — input = phase CONTEXT.md + PLAN.md + commit list
-- [ ] RETRO draft committed to git, before Notion sync — input = RETRO file
-- [ ] High-risk PR after Codex APPROVE, before merge — input = DEC + intent_summary + merge_risk_summary + Codex verdict ENUM
-- [ ] counter ≥ 20 arc-size retro — input = arc DEC titles + frontmatter
-- [ ] Any autonomous_governance rule-change DEC — input = proposed DEC
+- Phase-close arcs (post-merge) where strategic narrative coherence matters
+- Charter / governance-rule-change DECs where independent second opinion is desired
+- Post-incident retros where blind-spot hypothesis benefits from external eyes
+- High-risk PRs after Codex APPROVE when blast radius is large
 
-**Skip Kogami when** (per DEC §4.2):
-- Single-file ≤50 LOC routine commit
+**To invoke**: `bash scripts/governance/kogami_invoke.sh <artifact> <topic> <trigger>` (unchanged path; only the auto-trigger gate is removed).
+
+**Skip clauses unchanged**:
+- Single-file ≤50 LOC routine commit (no Kogami value added)
 - Codex APPROVE'd verbatim-exception path
 - docs-only CLASS-1 changes
 - Kogami review of Kogami review (anti-recursion)
-- Modification of Kogami's own files (P-1..P-5) OR meta-DECs touching DEC-V61-087 / its successors / Kogami contract
+- Modification of Kogami's own files (P-1..P-5) — still requires user + Codex ratification
 
 ## Strategic package authoring (high-risk PR only)
 
@@ -136,14 +139,19 @@ RETRO follow-up on close-inline-vs-strict-text-validity convention.
 
 ## Inherited rules from `~/CLAUDE.md`
 
-User-level CLAUDE.md governs:
-- Subagent 优先原则 (any work pushing main context > 20% should be subagent-outsourced)
-- Codex 必须调用场景 (RETRO-V61-001 risk-tier triggers)
-- Notion 深度同步规则 (DEC + RETRO sync cadence)
-- v6.1 自主治理规则 (counter cadence, retro triggers, Codex per-risky-PR baseline)
-- Verbatim-exception 5 条件
-- Codex 账号自动切换 (`cx-auto 20 && codex exec ...`)
+User-level CLAUDE.md governs (v2.3 baseline · 2026-05-07 · DEC-V61-133):
+- Model routing v2.3 (Opus 4.7 主驱动 + Codex 4-model 双引擎 · Kogami opt-in)
+- Subagent 优先原则 (任务 push 主 context ≥35% 才考虑外包 · 1M ctx 校准)
+- Codex 调用 1-sync-trigger (auth / signing / 安全边界) + 2-async-post-merge (byte-repro / E2E ≥3 fail)
+- Codex review round cap = 3
+- DEC scope-driven (charter / 跨 ≥3 模块 / governance-rule-change 才写完整 DEC)
+- Cadence floor THRESHOLD 30
+- Surface-scan trailer (V61-088) optional
+- Counter pure telemetry
+- Notion session-end batch sync
+- Codex relay (86gs xhigh primary, CRS high fallback)
 
-This project CLAUDE.md adds the Kogami strategic-layer governance ON TOP OF the above
-(does not replace any of it). Codex code-layer review remains mandatory per RETRO-V61-001
-risk-tier triggers; Kogami strategic-layer review is added per DEC-V61-087 triggers.
+This project CLAUDE.md previously added Kogami strategic-layer governance per V61-087.
+Per V133 (2026-05-07), Kogami is now **opt-in only** (user explicitly invokes); the
+manual invocation path remains operational with all contract files (P-1..P-5)
+preserved and Q1 canary verification intact.

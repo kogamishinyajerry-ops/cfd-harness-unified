@@ -44,7 +44,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-THRESHOLD = 10
+THRESHOLD = 30  # bumped 10→30 by DEC-V61-133 (2026-05-07 B+ governance simplification)
 RISK_LOC_THRESHOLD = 500
 # Round-3 F4: full-history scan safety valve. On a 100k-commit repo the
 # unbounded `git log` would pay full O(N) IO every push. 2000 is well

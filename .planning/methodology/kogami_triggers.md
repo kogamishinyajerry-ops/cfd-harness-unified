@@ -1,8 +1,20 @@
-# Kogami-Claude-cosplay Trigger Rules · v6.2
+# Kogami-Claude-cosplay Trigger Rules · v2.3 (opt-in)
+
+> **STATUS UPDATE 2026-05-07** · DEC-V61-133 — auto-triggers retired; Kogami is now **opt-in only**.
+> User explicitly invokes via `bash scripts/governance/kogami_invoke.sh <artifact> <topic> <trigger>`.
+> Implementation path unchanged; only the auto-trigger gate is removed.
 
 > Authoritative source for **when** Kogami subprocess review fires.
 > Established by **DEC-V61-087** (Accepted 2026-04-27) §4.
 > Implementation: `scripts/governance/kogami_invoke.sh`.
+
+## v2.3 invocation guidance (opt-in)
+
+The five cases below were "must trigger" under v6.2 (DEC-V61-087). Per V133 they are now **examples of when invoking is high-value**, not requirements. User decides per arc.
+
+Invoke when an independent strategic-layer second opinion adds confidence beyond Codex's code-layer review (e.g., charter changes, large blast-radius PRs, blind-spot hypotheses post-incident). Skip when the work is routine code that Codex covers — auto-trigger of Kogami on every governance-rule DEC was process-completion theater, not value creation, per the V133 retro of N1.1's 22-round chain.
+
+## Historical (v6.2 · pre-V133) auto-trigger cases — kept for reference
 
 ## Must trigger (5 cases)
 
