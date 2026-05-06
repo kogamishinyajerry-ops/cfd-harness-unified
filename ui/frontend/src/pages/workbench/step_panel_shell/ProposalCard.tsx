@@ -44,6 +44,12 @@ type CardState =
   | { kind: "idle" }
   | { kind: "applying" }
   | { kind: "applied"; result: ApplyAIProposalResponse }
+  // DEC-V61-131 N1.1 R18 close (branch-level Codex P2): tools may
+  // return `applied=false, advisory=true` (regenerate_mesh after the
+  // hard-strip). Those carry a SUGGESTION but explicitly do NOT
+  // mutate the case. Render a distinct terminal state so the
+  // engineer isn't told "✓ 已应用" when nothing was actually applied.
+  | { kind: "advised"; result: ApplyAIProposalResponse }
   | { kind: "rejected" }
   | { kind: "error"; detail: string };
 
@@ -57,7 +63,12 @@ export function ProposalCard({
   const [state, setState] = useState<CardState>({ kind: "idle" });
 
   const accept = useCallback(async () => {
-    if (state.kind === "applying" || state.kind === "applied") return;
+    if (
+      state.kind === "applying" ||
+      state.kind === "applied" ||
+      state.kind === "advised"
+    )
+      return;
     if (!proposal.ok || !proposal.tool || !proposal.args) return;
     setState({ kind: "applying" });
     try {
@@ -68,17 +79,20 @@ export function ProposalCard({
         model_used: modelUsed,
         conversation_turn_id: turnId,
       });
-      setState({ kind: "applied", result });
-      onApplied?.(result);
       // DEC-V61-131 N1.1: tools may now return advisory results
       // (e.g. regenerate_mesh after the strip). Advisory results
-      // describe a SUGGESTION but do not mutate the case, so we MUST
-      // NOT emit ``ai-coach:proposal-applied`` — listeners
-      // (MeshQualityCard, Step2Mesh, PatchClassificationPanel) treat
-      // that event as a real case mutation and would re-fetch /
-      // display stale data as if the mesh had been regenerated.
+      // describe a SUGGESTION but do not mutate the case, so we
+      // MUST NOT (a) enter the "applied" terminal state (which
+      // renders the green "✓ 已应用" pill, telling engineers a
+      // mutation happened that didn't), and (b) emit the
+      // ``ai-coach:proposal-applied`` event (listeners would
+      // re-fetch as if the case had changed).
       const isAdvisory =
         (result as { advisory?: boolean }).advisory === true;
+      setState(
+        isAdvisory ? { kind: "advised", result } : { kind: "applied", result },
+      );
+      onApplied?.(result);
       if (!isAdvisory) {
         // Codex base-review-4 P2: notify any open panels backed by
         // the case state we just mutated so they can re-fetch and
@@ -179,6 +193,14 @@ export function ProposalCard({
             ✓ 已应用
           </span>
         )}
+        {state.kind === "advised" && (
+          <span
+            className="rounded bg-amber-900/40 px-1.5 py-0.5 text-[10px] uppercase text-amber-300"
+            data-testid={`proposal-card-advised-pill-${proposal.index}`}
+          >
+            建议 · 未应用
+          </span>
+        )}
         {state.kind === "rejected" && (
           <span className="rounded bg-surface-800 px-1.5 py-0.5 text-[10px] uppercase text-surface-400">
             已拒绝
@@ -200,6 +222,23 @@ export function ProposalCard({
       {state.kind === "applied" && (
         <div className="mt-1 text-emerald-300" data-testid={`proposal-card-summary-${proposal.index}`}>
           {state.result.summary}
+          {state.result.audit_warning && (
+            <div className="mt-1 text-amber-300">
+              ⚠ {state.result.audit_warning}
+            </div>
+          )}
+        </div>
+      )}
+
+      {state.kind === "advised" && (
+        <div
+          className="mt-1 text-amber-200"
+          data-testid={`proposal-card-summary-${proposal.index}`}
+        >
+          {state.result.summary}
+          <div className="mt-0.5 text-amber-400/80">
+            （AI 仅给出建议，未对算例做任何修改。如需应用，请使用工作台对应步骤手动操作。）
+          </div>
           {state.result.audit_warning && (
             <div className="mt-1 text-amber-300">
               ⚠ {state.result.audit_warning}

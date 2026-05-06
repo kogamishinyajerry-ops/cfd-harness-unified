@@ -416,8 +416,42 @@ def setup_bc(
     # save_annotations applies the same pattern (locks
     # _resolve_annotations_path(case_dir).parent), so this binding
     # makes the apply path's lock domain identical.
+    #
+    # Codex N1.1 R18 P1 close (branch-level review): containment
+    # check BEFORE resolve. ``case_dir.resolve(strict=True)`` follows
+    # any symlink at the case_dir level, so if
+    # ``user_drafts/imported/<case_id>`` has been replaced by a
+    # symlink pointing outside IMPORTED_DIR, the lock + load +
+    # classify would operate on the symlink target. Verify (a)
+    # case_dir is not itself a symlink, and (b) the resolved
+    # parent matches IMPORTED_DIR.resolve() — V61-109 containment
+    # contract on the apply path mirrors the O_NOFOLLOW guards in
+    # _resolve_annotations_path.
     try:
+        if case_dir.is_symlink():
+            raise HTTPException(
+                status_code=422,
+                detail=SetupBcRejection(
+                    failing_check="symlink_escape",
+                    detail=f"case_dir {case_dir} is a symlink",
+                ).model_dump(),
+            )
         resolved_case_dir = case_dir.resolve(strict=True)
+        expected_parent = IMPORTED_DIR.resolve()
+        if resolved_case_dir.parent != expected_parent:
+            raise HTTPException(
+                status_code=422,
+                detail=SetupBcRejection(
+                    failing_check="symlink_escape",
+                    detail=(
+                        f"case_dir {case_dir} resolves outside the "
+                        f"imported jail (parent {resolved_case_dir.parent}"
+                        f" != {expected_parent})"
+                    ),
+                ).model_dump(),
+            )
+    except HTTPException:
+        raise
     except (OSError, RuntimeError) as exc:
         raise HTTPException(
             status_code=409,
@@ -444,6 +478,25 @@ def setup_bc(
     apply_summary: SetupBcSummary | None = None
     try:
         with annotations_exclusive_lock(resolved_case_dir):
+            # Codex N1.1 R18 P2 close (branch-level review): the apply
+            # path used to silently swallow load_annotations() and
+            # classify_setup_bc() failures and fall through to the
+            # legacy LDC dogfood. That swallowed real failures
+            # (parse_error / schema_version_mismatch / symlink_escape
+            # on the annotations side, classifier crashes on the
+            # geometry side) on the new advisory-apply contract,
+            # potentially returning a misleading channel_pin_mismatch
+            # OR running setup_ldc_bc against corrupt annotations.
+            # Now: when bc_kind / if_match_revision are present (the
+            # new advisory-apply contract), surface IO errors as 422
+            # / 409 / 500 with the failing_check tag. Legacy callers
+            # (no params) keep the swallow-and-fall-through behavior
+            # so the LDC dogfood path doesn't break on malformed
+            # annotations the caller didn't ask the apply contract
+            # to enforce.
+            is_advisory_apply = (
+                bc_kind is not None or if_match_revision is not None
+            )
             try:
                 annotations_for_apply = load_annotations(
                     resolved_case_dir, case_id=case_id
@@ -458,10 +511,33 @@ def setup_bc(
                     use_channel = True
                     cls_inlet = cls_for_apply.inlet_face_ids
                     cls_outlet = cls_for_apply.outlet_face_ids
-            except AnnotationsIOError:
-                pass  # Fall through to LDC dogfood (legacy contract).
-            except Exception:  # noqa: BLE001 — defensive
-                pass
+            except AnnotationsIOError as exc:
+                if is_advisory_apply:
+                    status_map = {
+                        "case_dir_missing": 404,
+                        "parse_error": 422,
+                        "symlink_escape": 422,
+                        "schema_version_mismatch": 422,
+                    }
+                    status = status_map.get(exc.failing_check, 500)
+                    raise HTTPException(
+                        status_code=status,
+                        detail=SetupBcRejection(
+                            failing_check=exc.failing_check,
+                            detail=str(exc),
+                        ).model_dump(),
+                    ) from exc
+                # Legacy contract: fall through to LDC dogfood.
+            except Exception as exc:  # noqa: BLE001 — defensive
+                if is_advisory_apply:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=SetupBcRejection(
+                            failing_check="classify_failed",
+                            detail=f"classifier raised: {exc}",
+                        ).model_dump(),
+                    ) from exc
+                # Legacy contract: fall through to LDC dogfood.
 
             if if_match_revision is not None and annotations_for_apply is not None:
                 current_rev = annotations_for_apply.get("revision", 0)

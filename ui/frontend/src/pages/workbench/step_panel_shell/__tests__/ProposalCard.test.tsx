@@ -145,6 +145,70 @@ describe("ProposalCard", () => {
     expect(onApplied).toHaveBeenCalledTimes(1);
   });
 
+  it("advisory result transitions to 'advised' state with amber pill (Codex N1.1 R18 P2)", async () => {
+    // R18 close: tools may now return `applied=false, advisory=true`
+    // (regenerate_mesh after the hard-strip). The card MUST render
+    // a distinct terminal state rather than the green "✓ 已应用"
+    // pill — engineers should see the AI gave a SUGGESTION but
+    // nothing was actually applied to the case.
+    apiMock.applyAIProposal.mockResolvedValueOnce({
+      applied: false,
+      advisory: true,
+      tool: "regenerate_mesh",
+      summary: "AI suggests doubling cell density on patch X.",
+      state_after: { advisory: true, suggestion: { density: "2x" } },
+      audit_id: "advice456",
+    });
+    const user = userEvent.setup();
+    const onApplied = vi.fn();
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    render(
+      <ProposalCard
+        caseId="ldc"
+        proposal={buildProposal({
+          tool: "regenerate_mesh",
+          args: { density: "2x" },
+        })}
+        modelUsed="opus-4.7"
+        turnId="a-2"
+        onApplied={onApplied}
+      />,
+    );
+    await user.click(screen.getByTestId("proposal-card-accept-0"));
+    await waitFor(() =>
+      expect(screen.getByTestId("proposal-card-0")).toHaveAttribute(
+        "data-card-state",
+        "advised",
+      ),
+    );
+    // Distinct amber "建议 · 未应用" pill, NOT the green "✓ 已应用".
+    expect(
+      screen.getByTestId("proposal-card-advised-pill-0"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("proposal-card-applied-pill-0"),
+    ).not.toBeInTheDocument();
+    // Summary surfaces with the AI-仅建议 disclaimer.
+    expect(screen.getByTestId("proposal-card-summary-0")).toHaveTextContent(
+      /AI 仅给出建议/,
+    );
+    // Buttons hide (terminal state).
+    expect(
+      screen.queryByTestId("proposal-card-accept-0"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("proposal-card-reject-0"),
+    ).not.toBeInTheDocument();
+    // onApplied still fires (parent may want to log the advisory),
+    // but the proposal-applied event MUST NOT fire (no mutation).
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    const proposalAppliedDispatched = dispatchSpy.mock.calls.some(
+      (c) => (c[0] as Event).type === "ai-coach:proposal-applied",
+    );
+    expect(proposalAppliedDispatched).toBe(false);
+    dispatchSpy.mockRestore();
+  });
+
   it("Reject transitions idle → rejected (terminal) without invoking applyAIProposal", async () => {
     const user = userEvent.setup();
     render(
