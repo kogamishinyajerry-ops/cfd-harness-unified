@@ -441,12 +441,19 @@ def run_snappy_addlayers(
         # Discard the staged polyMesh — host's existing polyMesh
         # remains untouched, contract is "failure means no mutation".
         shutil.rmtree(staging, ignore_errors=True)
+        # R1 P2 (Codex 86gs): keep the substring "no layers were
+        # actually added" in the message so pipeline.apply_prism_layers
+        # maps this to failing_check=snappy_addlayers_did_not_converge
+        # instead of falling back to the generic snappy_diverged
+        # bucket. The substring is the dispatch contract between the
+        # runner and the pipeline.
         raise SnappyAddLayersError(
-            "snappyHexMesh exit_code=0 but the log explicitly reports "
-            "0 layers were added (definite_zero signal). Most common "
-            "cause: geometry has high curvature or non-orthogonal "
-            "faces near the wall; reduce first_cell_height or "
-            "expansion_ratio. (Host polyMesh unchanged.)"
+            "snappyHexMesh exit_code=0 but no layers were actually "
+            "added (definite_zero signal: log explicitly reports 0 "
+            "layers added or per-patch summary shows 0/N). Most "
+            "common cause: geometry has high curvature or non-"
+            "orthogonal faces near the wall; reduce first_cell_height "
+            "or expansion_ratio. (Host polyMesh unchanged.)"
         )
 
     # Commit the swap. Atomic-ish: rename existing polyMesh →
@@ -465,10 +472,26 @@ def run_snappy_addlayers(
         shutil.rmtree(prev, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
         # Delete stale pre_split backup if present — see R0 P1
-        # rationale above.
+        # rationale above. R1 P2 (Codex 86gs): do NOT use
+        # ignore_errors=True — a silently-swallowed cleanup failure
+        # leaves the stale backup on disk, and the next
+        # setup_*_bc() invocation would restore from that backup,
+        # silently overwriting our prism-layered mesh. Treat
+        # cleanup failure as a fatal SnappyContainerError so the
+        # engineer sees the issue immediately. Mirrors the
+        # to_foam.py best-effort pattern that escalates errors.
         pre_split = polyMesh_dir.with_suffix(".pre_split")
         if pre_split.exists():
-            shutil.rmtree(pre_split, ignore_errors=True)
+            try:
+                shutil.rmtree(pre_split)
+            except OSError as exc:
+                raise SnappyContainerError(
+                    f"polyMesh swap committed but failed to delete "
+                    f"stale {pre_split} — the next BC setup would "
+                    f"restore from this backup and silently overwrite "
+                    f"the prism layers. Manual cleanup required: "
+                    f"`rm -rf {pre_split}`. Underlying error: {exc}"
+                ) from exc
     except OSError as exc:
         shutil.rmtree(staging, ignore_errors=True)
         raise SnappyContainerError(
