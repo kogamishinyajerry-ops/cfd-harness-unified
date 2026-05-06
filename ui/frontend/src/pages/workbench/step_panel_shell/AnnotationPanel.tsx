@@ -186,6 +186,19 @@ export function AnnotationPanel({
             setPatchType(e.target.value);
             setPatchTypeInteracted(true);
           }}
+          // Codex 86gs N1.1 R13 → R14 close: <select> doesn't fire
+          // onChange when the engineer reopens the dropdown and
+          // re-picks the same value (e.g., re-confirming a legacy
+          // "wall" to upgrade it to explicit). onClick fires on any
+          // mouse interaction with the control — opening the menu
+          // OR clicking an option — so any engagement with the
+          // patch_type widget counts as an explicit positive
+          // signal, including same-value confirmations.
+          onClick={() => setPatchTypeInteracted(true)}
+          // Keyboard equivalent: tabbing into the select and using
+          // arrow keys / Enter to commit a value (browsers may not
+          // fire change on same-value Enter either).
+          onKeyDown={() => setPatchTypeInteracted(true)}
           data-testid="annotation-panel-patch-type"
           className="w-full rounded-sm border border-surface-700 bg-surface-900 px-2 py-1 text-[12px] text-surface-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >

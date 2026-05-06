@@ -172,6 +172,45 @@ describe("AnnotationPanel", () => {
     });
   });
 
+  it("same-value re-confirm on legacy 'wall' upgrades to explicit (Codex 86gs N1.1 R14)", async () => {
+    // R14 close: <select> doesn't fire onChange when the engineer
+    // reopens the dropdown and re-picks the SAME value, so the R13
+    // onChange-only interaction tracking missed the legacy-promotion
+    // path. Adding onClick (any mouse engagement with the control)
+    // captures same-value confirmations as positive signal — the
+    // engineer has clearly re-considered patch_type and chosen wall.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+          // No patch_type_explicit → legacy ambiguous record.
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    // Engineer clicks the dropdown (engages, but doesn't change
+    // value). userEvent.click on a closed select fires onClick.
+    await user.click(select);
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
+      patch_type_explicit: true,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
   it("dropdown interaction upgrades legacy ambiguous to explicit (Codex 86gs N1.1 R13)", async () => {
     // The other half of the legacy-handling: if the engineer DOES
     // open the dropdown and reconfirm/change the value, that's a
