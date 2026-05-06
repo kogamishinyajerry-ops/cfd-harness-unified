@@ -20,7 +20,7 @@ parent_artifacts:
   - ui/frontend/src/pages/workbench/step_panel_shell/types.ts (mirror schema field)
   - ui/frontend/src/pages/workbench/step_panel_shell/MeshQualityCard.tsx (PatchChips uses real per-patch count when present, V128 fallback otherwise)
 counter_impact: +1 (autonomous_governance: true · cross-contract change. Kogami-trigger check: not phase-close, not RETRO draft, not arc-size retro at counter ≥ 20, not governance-rule change. Codex pre-merge MANDATORY per RETRO-V61-001 cross-contract trigger.)
-notion_sync_status: not_synced (sync after R0 commit)
+notion_sync_status: synced 2026-05-06 (https://www.notion.so/DEC-V61-129a-Per-patch-severe-non-ortho-count-from-checkMesh-nonOrthoFaces-faceSet-narrow-V129a--358c68942bed819f9a91f06f66539858)
 self_estimated_pass_rate: 60% (predicted 3-4 rounds · cross-contract per V123 §L1. Backend parser + schema + frontend consumer is exactly the surface that earned cross-contract designation. Empirically captured the real OpenFOAM-10 faceSet body format BEFORE writing the parser to reduce R0→R1 misses on format guesses; this should pull the round count toward 3 rather than 4. The +5% over V128's 75% reflects the empirical-capture discipline; the -15% from V128's actual 100% reflects the genuinely larger surface area.)
 
 ---
