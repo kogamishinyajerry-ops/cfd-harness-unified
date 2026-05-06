@@ -130,25 +130,26 @@ export function Step2Mesh({
     }
     // DEC-V61-136 (N2.2): client-side zone shape validation. Backend
     // re-validates extent + AABB overlap; this just gives instant
-    // feedback for the obvious mistakes.
-    if (zonesOpen) {
-      for (let i = 0; i < zones.length; i++) {
-        const z = zones[i];
-        if (z.geometry === "box") {
-          const [xmin, ymin, zmin, xmax, ymax, zmax] = z.bbox;
-          if (!(xmin < xmax && ymin < ymax && zmin < zmax)) {
-            const msg = `zones[${i}] (box) has zero or inverted extent`;
-            setZonesError(msg);
-            onStepError(`zone validation: ${msg}`);
-            return;
-          }
-        } else if (z.geometry === "sphere") {
-          if (!(z.radius > 0)) {
-            const msg = `zones[${i}] (sphere) radius must be > 0`;
-            setZonesError(msg);
-            onStepError(`zone validation: ${msg}`);
-            return;
-          }
+    // feedback for the obvious mistakes. Validate every configured
+    // zone regardless of disclosure state — same rationale as the
+    // send-on-length>0 fix below: zones list is the data, panel
+    // open/closed is UX state only.
+    for (let i = 0; i < zones.length; i++) {
+      const z = zones[i];
+      if (z.geometry === "box") {
+        const [xmin, ymin, zmin, xmax, ymax, zmax] = z.bbox;
+        if (!(xmin < xmax && ymin < ymax && zmin < zmax)) {
+          const msg = `zones[${i}] (box) has zero or inverted extent`;
+          setZonesError(msg);
+          onStepError(`zone validation: ${msg}`);
+          return;
+        }
+      } else if (z.geometry === "sphere") {
+        if (!(z.radius > 0)) {
+          const msg = `zones[${i}] (sphere) radius must be > 0`;
+          setZonesError(msg);
+          onStepError(`zone validation: ${msg}`);
+          return;
         }
       }
     }
@@ -156,13 +157,18 @@ export function Step2Mesh({
       // Pass sizingField only when the panel is open and at least one
       // field is non-null; otherwise the api client omits the body
       // attribute entirely (preserves V124/V125-era wire shape).
-      // V136: same discipline for zones — only sent when the panel is
-      // open AND has ≥1 zone.
+      // V136 R0 P2 (Codex CRS): zones are explicit data (length > 0 =
+      // engineer added refinement intent); the disclosure state is
+      // UX-only. Sending zones must NOT depend on `zonesOpen` —
+      // otherwise collapsing the panel before mesh-run would silently
+      // drop configured zones with no indication. The summary still
+      // shows the count, so the engineer's mental model is "zones are
+      // configured" regardless of disclosure state.
       const r = await api.meshImported(
         caseId,
         meshMode,
         sizingFieldOpen ? sizingField : null,
-        zonesOpen && zones.length > 0 ? zones : null,
+        zones.length > 0 ? zones : null,
       );
       setResponse(r);
       // V127 R4 P2: api.meshImported now dispatches mesh:mutated which
@@ -226,7 +232,8 @@ export function Step2Mesh({
     sizingField,
     sizingFieldOpen,
     zones,
-    zonesOpen,
+    // zonesOpen intentionally omitted from deps — disclosure state
+    // does not gate validation or send (V136 R0 P2 fix).
   ]);
 
   useEffect(() => {
@@ -681,6 +688,20 @@ function RefinementZoneRow({
   );
 }
 
+// V136 R0 P1 (Codex CRS): a controlled <input type="number"> that
+// coerces every keystroke through Number() destroys partial / negative
+// edits — typing "-1" or ".25" or clearing the field gets stuck on
+// "0" because the intermediate strings parse to 0 / NaN. Track the
+// raw string in local state and only fire onChange when parsing
+// succeeds to a finite number; on blur, drop the draft so the
+// canonical parent value renders again.
+//
+// Implementation note: do NOT auto-reset draft from a useEffect on
+// [value]. React's Object.is comparison distinguishes 0 from -0, so
+// Number("-0.") committing -0 over a previous 0 fires a re-render
+// that would erase a half-typed "-0." draft. Letting blur be the only
+// reset path keeps mid-edit drafts stable through value re-syncs that
+// match the user's intermediate parse.
 function ZoneNumberInput({
   label,
   value,
@@ -692,17 +713,35 @@ function ZoneNumberInput({
   onChange: (next: number) => void;
   testId: string;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? String(value);
+
   return (
     <label className="flex items-baseline gap-2 text-[11px]">
       <span className="w-20 font-mono text-surface-400">{label}</span>
       <input
-        type="number"
-        step="any"
+        type="text"
+        inputMode="decimal"
         data-testid={testId}
-        value={value}
+        value={display}
         onChange={(e) => {
-          const n = Number(e.target.value);
+          const raw = e.target.value;
+          setDraft(raw);
+          // Only commit when the raw string parses to a finite number.
+          // Partial states ("", "-", ".", "-.") leave the parent
+          // value alone so the user can finish typing without losing
+          // characters.
+          if (raw === "" || raw === "-" || raw === "." || raw === "-.") {
+            return;
+          }
+          const n = Number(raw);
           if (Number.isFinite(n)) onChange(n);
+        }}
+        onBlur={() => {
+          // On blur, drop the draft so the canonical committed value
+          // renders. This collapses partial-state drafts like "-" or
+          // "" back to whatever the parent currently holds.
+          setDraft(null);
         }}
         className="w-24 rounded-sm border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-surface-100"
       />
