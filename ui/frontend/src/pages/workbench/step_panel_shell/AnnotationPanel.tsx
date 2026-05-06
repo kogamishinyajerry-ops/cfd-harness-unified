@@ -62,11 +62,21 @@ export function AnnotationPanel({
   const [name, setName] = useState(existing?.name ?? "");
   // patchType holds the dropdown's current value. Empty string means
   // "no real option selected" — the placeholder is showing. Any
-  // PATCH_TYPES value (including "wall") means engineer picked it.
+  // PATCH_TYPES value (including "wall") means a value is shown.
   // Existing values seed the dropdown to that option directly.
   const [patchType, setPatchType] = useState<string>(
     existing?.patch_type ?? PATCH_TYPE_PLACEHOLDER,
   );
+  // Codex 86gs N1.1 R12 → R13 close: track whether the engineer
+  // actually interacted with the dropdown after mount. Without
+  // this, seeding from a legacy pre-R12 record (patch_type="wall",
+  // no patch_type_explicit marker) and saving without re-opening
+  // the dropdown would silently upgrade the legacy ambiguous record
+  // to an explicit wall override — defeating the resume layer's
+  // legacy-aware disambiguation. The flag is reset on faceId change
+  // so a new face starts uninteracted.
+  const [patchTypeInteracted, setPatchTypeInteracted] =
+    useState<boolean>(false);
   const [physicsNotes, setPhysicsNotes] = useState(
     existing?.physics_notes ?? "",
   );
@@ -77,6 +87,7 @@ export function AnnotationPanel({
   useEffect(() => {
     setName(existing?.name ?? "");
     setPatchType(existing?.patch_type ?? PATCH_TYPE_PLACEHOLDER);
+    setPatchTypeInteracted(false);
     setPhysicsNotes(existing?.physics_notes ?? "");
     setError(null);
     setSaveInFlight(false);
@@ -90,24 +101,31 @@ export function AnnotationPanel({
     setError(null);
     setSaveInFlight(true);
     try {
-      const isExplicitPick = patchType !== PATCH_TYPE_PLACEHOLDER;
+      const hasPatchTypeValue = patchType !== PATCH_TYPE_PLACEHOLDER;
+      // R12 explicit-marker policy:
+      //   * Engineer interacted with the dropdown after mount → the
+      //     resulting value is unambiguously explicit (whether
+      //     they picked "wall" or anything else).
+      //   * Engineer did NOT interact, but the seeded existing
+      //     record already had patch_type_explicit=true → preserve
+      //     it as explicit (idempotent re-save of an already-
+      //     explicit record).
+      //   * Otherwise → leave the marker undefined. This covers
+      //     legacy ambiguous records where the engineer only edited
+      //     name/notes (we MUST NOT upgrade legacy "wall" to
+      //     explicit just because the panel was opened). It also
+      //     covers placeholder-still-selected saves on fresh faces.
+      const markExplicit =
+        hasPatchTypeValue &&
+        (patchTypeInteracted || existing?.patch_type_explicit === true);
       await onSave({
         face_id: faceId,
         name: name.trim(),
-        // Persist patch_type only when the engineer actually picked
-        // a real option from the dropdown. Placeholder-still-selected
-        // saves leave it undefined so downstream stale-pin recovery
-        // in Step3SetupBC can carry stale metadata forward
-        // unambiguously, AND so an explicit "wall" pick (which had
-        // no way to be expressed in R10's heuristic world) is
-        // preserved as engineer-authoritative.
-        patch_type: isExplicitPick ? patchType : undefined,
-        // R12 marker: positive signal that this patch_type came from
-        // an explicit engineer pick (or seeded from a prior explicit
-        // save). The stale-pin recovery resume layer keys off this
-        // to disambiguate from legacy pre-R11 records where every
-        // untouched save persisted patch_type="wall" by default.
-        patch_type_explicit: isExplicitPick ? true : undefined,
+        // Persist patch_type only when the dropdown is showing a
+        // real option (placeholder stays undefined so downstream
+        // stale-pin recovery can carry stale metadata forward).
+        patch_type: hasPatchTypeValue ? patchType : undefined,
+        patch_type_explicit: markExplicit ? true : undefined,
         physics_notes: physicsNotes.trim() || undefined,
         confidence: "user_authoritative",
       });
@@ -164,7 +182,10 @@ export function AnnotationPanel({
         <select
           value={patchType}
           disabled={isLocked}
-          onChange={(e) => setPatchType(e.target.value)}
+          onChange={(e) => {
+            setPatchType(e.target.value);
+            setPatchTypeInteracted(true);
+          }}
           data-testid="annotation-panel-patch-type"
           className="w-full rounded-sm border border-surface-700 bg-surface-900 px-2 py-1 text-[12px] text-surface-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >

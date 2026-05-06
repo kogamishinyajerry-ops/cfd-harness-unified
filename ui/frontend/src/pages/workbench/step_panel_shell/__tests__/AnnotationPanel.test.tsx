@@ -99,13 +99,53 @@ describe("AnnotationPanel", () => {
     });
   });
 
-  it("re-save of an existing record preserves seeded patch_type as explicit (Codex 86gs N1.1 R12)", async () => {
-    // When the panel is mounted with an existing.patch_type, the
-    // dropdown seeds to that value (not the placeholder), so a
-    // re-save without further interaction persists patch_type with
-    // patch_type_explicit=true. This means once a record has any
-    // patch_type set, downstream re-saves preserve and re-mark it
-    // as explicit (idempotent under the R12 contract).
+  it("re-save of legacy record (no marker) does NOT upgrade to explicit (Codex 86gs N1.1 R13)", async () => {
+    // R13 contract close: pre-R12 case files persisted untouched-
+    // default saves as patch_type="wall" with no patch_type_explicit
+    // marker. If the engineer reopens such a face just to edit the
+    // name/notes (without touching the dropdown), we MUST NOT upgrade
+    // the ambiguous legacy record to an explicit wall — that would
+    // defeat the resume layer's legacy-aware disambiguation and
+    // recreate the original downgrade-to-wall bug for stale-pin
+    // recovery on legacy data after a re-save.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+          // no patch_type_explicit → legacy ambiguous record
+        }}
+        onSave={onSave}
+      />,
+    );
+    // Engineer edits only the name; never opens the dropdown.
+    const nameInput = screen.getByTestId(
+      "annotation-panel-name",
+    ) as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "inlet_renamed");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet_renamed",
+      patch_type: "wall",
+      patch_type_explicit: undefined,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
+  it("re-save of already-explicit record preserves the explicit marker (Codex 86gs N1.1 R12 idempotency)", async () => {
+    // Symmetric guard: when the seeded existing record was already
+    // explicit (patch_type_explicit=true from a prior post-R12 pick
+    // or AI write), re-saving without dropdown interaction must
+    // PRESERVE the marker. This is the idempotent re-save path —
+    // engineer edits name/notes on a previously-explicit record.
     const onSave = vi.fn(() => Promise.resolve());
     const user = userEvent.setup();
     render(
@@ -115,6 +155,7 @@ describe("AnnotationPanel", () => {
           face_id: "fid_xxx",
           name: "inlet",
           patch_type: "patch",
+          patch_type_explicit: true,
         }}
         onSave={onSave}
       />,
@@ -125,6 +166,47 @@ describe("AnnotationPanel", () => {
       face_id: "fid_xxx",
       name: "inlet",
       patch_type: "patch",
+      patch_type_explicit: true,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
+  it("dropdown interaction upgrades legacy ambiguous to explicit (Codex 86gs N1.1 R13)", async () => {
+    // The other half of the legacy-handling: if the engineer DOES
+    // open the dropdown and reconfirm/change the value, that's a
+    // positive signal of intent and the save legitimately persists
+    // patch_type_explicit=true. (This is the path engineers take
+    // when they want to "promote" a legacy ambiguous record to
+    // explicit without changing the value.)
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    // Cycle through "patch" then back to "wall" so the engineer's
+    // interaction is unambiguous (a same-value re-pick wouldn't
+    // fire onChange in some browser engines, so the user-event
+    // selectOptions chain ensures a real transition).
+    await user.selectOptions(select, "patch");
+    await user.selectOptions(select, "wall");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
       patch_type_explicit: true,
       physics_notes: undefined,
       confidence: "user_authoritative",
