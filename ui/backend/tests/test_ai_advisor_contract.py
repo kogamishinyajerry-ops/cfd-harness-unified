@@ -203,14 +203,45 @@ def test_setup_bc_with_annotations_envelope_no_mutation(
 # ────────── Layer-A tests · llm_coach.dispatch ──────────
 
 
+# Hand-curated args per registered tool. Each entry is one args dict
+# valid for the tool's args_model AND that reaches the tool's handler
+# when dispatched (not blocked at validation). The contract test
+# below requires every registered tool to have an entry; a new tool
+# added without one fails loudly so coverage gaps don't go silent.
+#
+# DEC-V61-132 R1 P1 close (CRS R0 finding): pre-R1 the test derived
+# args from JSON-Schema ``required`` fields, but tools whose
+# required-ness is enforced via Pydantic validators (e.g.,
+# ``RegenerateMeshArgs`` requires exactly-one of {mesh_mode,
+# target_cell_count, lc_override}) have no JSON-Schema required
+# properties, so the test passed ``{}`` and bounced at ToolArgError
+# before the handler ran. A regression that re-introduces a mutation
+# call inside such a handler would leave this test green. Hand-
+# curating one handler-reachable args dict per tool fixes that.
+_TOOL_HANDLER_REACHABLE_ARGS: dict[str, dict[str, Any]] = {
+    "set_patch_bc_type": {
+        "patch_name": "walls",
+        "bc_class": "no_slip_wall",
+    },
+    # regenerate_mesh exposes 3 axes (mesh_mode / target_cell_count /
+    # lc_override); only mesh_mode survives V131 advisory mode without
+    # ToolDispatchError(unsupported_axis), so use it. The handler
+    # still runs and produces ApplyResult; what we are policing is
+    # "no mutation function gets called from within that handler".
+    "regenerate_mesh": {
+        "mesh_mode": "power",
+    },
+}
+
+
 def test_llm_coach_dispatch_no_mutation_for_every_tool(
     tmp_path: Path,
     mutation_sentinel: _SentinelLog,
 ) -> None:
     """Every tool in ``list_tools()`` MUST not invoke any mutation
-    symbol when dispatched through its handler. Tools that legitimately
-    fail with ToolArgError or ToolDispatchError before reaching their
-    handler still satisfy the contract (no mutation symbol fired).
+    symbol when dispatched through its handler. Per V132 R1 P1 close
+    we use hand-curated handler-reachable args (above) so the
+    assertion is non-vacuous — handlers actually run.
     """
     from ui.backend.services.llm_coach import (
         ToolArgError,
@@ -222,29 +253,19 @@ def test_llm_coach_dispatch_no_mutation_for_every_tool(
 
     case_dir = _stage_case_dir(tmp_path, f"contract-{secrets.token_hex(4)}")
 
+    # Coverage gate: every registered tool MUST have a curated args
+    # dict. A new tool landing without an entry fails loudly here so
+    # the no-mutation assertion stays non-vacuous.
+    registered_names = {t.name for t in list_tools()}
+    missing = registered_names - _TOOL_HANDLER_REACHABLE_ARGS.keys()
+    assert not missing, (
+        f"_TOOL_HANDLER_REACHABLE_ARGS missing entries for tools: "
+        f"{sorted(missing)}. Add a valid handler-reachable args dict "
+        f"per tool so the no-mutation assertion stays non-vacuous."
+    )
+
     for descriptor in list_tools():
-        # Construct a minimally-populated args dict from the tool's
-        # Pydantic schema. We send the raw schema's required fields with
-        # plausible values; the tool's handler may then reject them
-        # with ToolDispatchError, which is fine for the contract test.
-        sample_args: dict[str, Any] = {}
-        schema = descriptor.args_model.model_json_schema()
-        for prop_name, prop_schema in schema.get("properties", {}).items():
-            if prop_name in schema.get("required", []):
-                # Fill minimally per type; the handler may still reject.
-                ptype = prop_schema.get("type", "string")
-                if ptype == "string":
-                    sample_args[prop_name] = (
-                        prop_schema.get("enum", ["sample"])[0]
-                        if "enum" in prop_schema
-                        else "sample"
-                    )
-                elif ptype == "integer":
-                    sample_args[prop_name] = prop_schema.get("minimum", 1) or 1
-                elif ptype == "number":
-                    sample_args[prop_name] = 1.0
-                elif ptype == "boolean":
-                    sample_args[prop_name] = False
+        sample_args = _TOOL_HANDLER_REACHABLE_ARGS[descriptor.name]
 
         try:
             dispatch(case_dir=case_dir, tool=descriptor.name, args=sample_args)
@@ -285,13 +306,24 @@ def test_known_mutating_routes_set_is_non_empty() -> None:
 
 
 def test_is_mutating_route_normalizes_case_id_segments() -> None:
-    """Concrete case_id (uuid / hex) segments should match the
-    ``{case_id}`` placeholder in the registry."""
+    """The segment immediately after /api/import/ or /api/cases/ is
+    treated as the case_id regardless of its content shape (per V132
+    R1 P1 close — pre-R1 hex-only regex missed the real
+    ``imported_<timestamp>_<hex>`` shape)."""
     # uuid-style
     assert is_mutating_route("POST", "/api/import/abc123def/mesh")
     # hex-id
     assert is_mutating_route(
         "PUT", "/api/cases/4f7a8b9c/face-annotations"
+    )
+    # real imported case id shape (V132 R1 P1 regression test)
+    assert is_mutating_route(
+        "POST",
+        "/api/import/imported_2026-04-30T00-00-00Z_deadbeef/mesh",
+    )
+    assert is_mutating_route(
+        "PUT",
+        "/api/cases/imported_2026-04-29T00-00-00Z_abc12345/face-annotations",
     )
     # method case-insensitivity
     assert is_mutating_route("post", "/api/import/abc/mesh")
@@ -302,6 +334,57 @@ def test_is_mutating_route_normalizes_case_id_segments() -> None:
     assert not is_mutating_route(
         "POST", "/api/health"
     )
+
+
+def test_is_mutating_route_matches_dicts_path_tail() -> None:
+    """V132 R1 P2 close: dicts route is /dicts/{relative_path:path}
+    where the FastAPI :path converter consumes the rest. Registry
+    uses {rest} wildcard tail to cover any /dicts/<file> path."""
+    # Concrete relative_path tails of varying depth — all should match.
+    assert is_mutating_route(
+        "POST",
+        "/api/cases/imported_2026-04-30T00-00-00Z_x/dicts/system/controlDict",
+    )
+    assert is_mutating_route(
+        "POST",
+        "/api/cases/abc/dicts/0/U",
+    )
+    assert is_mutating_route(
+        "POST",
+        "/api/cases/abc/dicts/constant/transportProperties",
+    )
+    # /dicts with NO tail segment is not the real route shape and
+    # should NOT match (the registry pattern requires {rest}).
+    # Note: trailing-slash /dicts/ DOES match because split('/')
+    # yields a trailing empty segment that is_mutating_route counts as
+    # tail content. This errs on the over-conservative side — flagging
+    # an unusual path as mutating is the safer default for a safety
+    # check, even when FastAPI itself would 404 it.
+    assert not is_mutating_route("POST", "/api/cases/abc/dicts")
+    # GET on a /dicts/<file> path is the read variant; not in
+    # MUTATING_ROUTES.
+    assert not is_mutating_route(
+        "GET", "/api/cases/abc/dicts/system/controlDict"
+    )
+
+
+def test_is_mutating_route_matches_solve_endpoints() -> None:
+    """V132 R1 P2 close: pre-R1 registry had a non-existent
+    /api/cases/{case_id}/run entry; the actual solver mutation routes
+    are /api/import/{case_id}/solve (blocking) and
+    /api/import/{case_id}/solve-stream (SSE streaming)."""
+    assert is_mutating_route(
+        "POST",
+        "/api/import/imported_2026-04-30T00-00-00Z_x/solve",
+    )
+    assert is_mutating_route(
+        "POST",
+        "/api/import/abc/solve-stream",
+    )
+    # The non-existent /run path that pre-R1 registered should NOT
+    # match (we removed it; this guards against a regression that
+    # re-adds the wrong path).
+    assert not is_mutating_route("POST", "/api/cases/abc/run")
 
 
 # ────────── Layer-C · static namespace-binding check ──────────

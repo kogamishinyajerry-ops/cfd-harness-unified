@@ -37,7 +37,6 @@ Change log
 """
 from __future__ import annotations
 
-import re
 from typing import Iterator
 
 __all__ = [
@@ -50,9 +49,13 @@ __all__ = [
 
 # HTTP-surface SSOT.
 #
-# Each pair is ``(method, path_pattern)``. ``path_pattern`` uses
-# ``{case_id}`` as a placeholder for case-id segments; ``is_mutating_route``
-# normalizes incoming paths before matching.
+# Each pair is ``(method, path_pattern)``. ``path_pattern`` may use:
+#   * ``{case_id}`` — placeholder for any case-id segment (positional:
+#     the segment immediately after ``/api/import/`` or ``/api/cases/``).
+#   * ``{rest}`` — wildcard tail segment matching one or more remaining
+#     segments. Only meaningful as the final segment of the pattern.
+# ``is_mutating_route`` normalizes incoming paths against these
+# placeholders before matching.
 MUTATING_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         # POST /api/import/{case_id}/mesh — meshImported (writes polyMesh)
@@ -64,11 +67,20 @@ MUTATING_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/import/{case_id}/setup-bc"),
         # PUT /api/cases/{case_id}/face-annotations — face_annotations writer
         ("PUT", "/api/cases/{case_id}/face-annotations"),
-        # POST /api/cases/{case_id}/dicts — dict mutator
-        ("POST", "/api/cases/{case_id}/dicts"),
-        # POST /api/cases/{case_id}/run — solver kick (writes run log,
-        # field outputs)
-        ("POST", "/api/cases/{case_id}/run"),
+        # POST /api/cases/{case_id}/dicts/{rest} — dict mutator
+        # (V132 R1 P2 close: real route is /dicts/{relative_path:path};
+        # FastAPI :path consumes the rest of the URL, so the registry
+        # entry uses {rest} wildcard for the path tail)
+        ("POST", "/api/cases/{case_id}/dicts/{rest}"),
+        # POST /api/import/{case_id}/solve — solver kick (writes run
+        # log + field outputs); blocking variant.
+        # (V132 R1 P2 close: pre-R1 entry was "/api/cases/{case_id}/run"
+        # which does not exist; the actual entrypoint is on the
+        # import-prefixed path with verb "solve")
+        ("POST", "/api/import/{case_id}/solve"),
+        # POST /api/import/{case_id}/solve-stream — SSE streaming
+        # variant of the same solver mutation; same artifacts written.
+        ("POST", "/api/import/{case_id}/solve-stream"),
     }
 )
 
@@ -99,40 +111,65 @@ KNOWN_MUTATION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-# case_id segments accept hex-id and uuid-id schemas; future case-id
-# schemas not matching this regex require an explicit registry entry
-# with a different placeholder.
-_CASE_ID_PATTERN = re.compile(r"[0-9a-fA-F][0-9a-fA-F-]+")
+# Path roots whose immediately-following segment is the case_id.
+# (V132 R1 P1 close: pre-R1 used a regex matching only hex/UUID
+# segments, but real imported case ids look like
+# ``imported_2026-04-30T00-00-00Z_<hex>`` — the hex regex did not
+# match. Switching to a positional rule: the segment right after
+# /api/import/ or /api/cases/ IS the case_id, regardless of its
+# content shape.)
+_CASE_ID_ROOTS: frozenset[tuple[str, str]] = frozenset(
+    {("api", "import"), ("api", "cases")}
+)
 
 
-def _normalize_path(path: str) -> str:
-    """Replace concrete case_id segments with the literal ``{case_id}``."""
+def _normalize_path(path: str) -> list[str]:
+    """Split ``path`` on '/' and replace the segment immediately after
+    a known case-id root with the literal ``{case_id}``. Returns the
+    segment list (callers compare segment-by-segment to support the
+    ``{rest}`` wildcard)."""
     parts = path.split("/")
-    out: list[str] = []
-    for part in parts:
-        if part and _CASE_ID_PATTERN.fullmatch(part):
-            out.append("{case_id}")
-        else:
-            out.append(part)
-    return "/".join(out)
+    # parts[0] is empty for absolute paths; parts[1] = "api",
+    # parts[2] in {"import", "cases"}, parts[3] = case_id segment.
+    if len(parts) >= 4 and (parts[1], parts[2]) in _CASE_ID_ROOTS:
+        parts[3] = "{case_id}"
+    return parts
 
 
 def is_mutating_route(method: str, path: str) -> bool:
-    """Return True iff ``(method, path)`` matches any registered mutating
-    route, after normalizing case_id segments to ``{case_id}``.
+    """Return True iff ``(method, path)`` matches any registered
+    mutating route, after normalizing the case_id segment to
+    ``{case_id}`` and accepting ``{rest}`` as a one-or-more-segment
+    tail wildcard.
 
     Parameters
     ----------
     method
         HTTP method (case-insensitive; normalized to upper-case).
     path
-        Request path. Concrete case_id segments matching
-        ``[0-9a-fA-F][0-9a-fA-F-]+`` are normalized to ``{case_id}``
-        before matching.
+        Request path. The segment immediately after ``/api/import/``
+        or ``/api/cases/`` is normalized to ``{case_id}`` regardless
+        of its content shape (handles imported_*, hex, uuid, etc).
     """
     norm_method = method.upper()
-    norm_path = _normalize_path(path)
-    return (norm_method, norm_path) in MUTATING_ROUTES
+    norm_parts = _normalize_path(path)
+
+    for reg_method, reg_pattern in MUTATING_ROUTES:
+        if reg_method != norm_method:
+            continue
+        reg_parts = reg_pattern.split("/")
+        if reg_parts and reg_parts[-1] == "{rest}":
+            # Wildcard tail: registry pattern matches if its
+            # leading segments equal the corresponding incoming
+            # segments AND there is at least one extra segment to
+            # cover the {rest} placeholder.
+            head = reg_parts[:-1]
+            if len(norm_parts) > len(head) and norm_parts[: len(head)] == head:
+                return True
+        else:
+            if norm_parts == reg_parts:
+                return True
+    return False
 
 
 def iter_mutation_symbols() -> Iterator[tuple[str, str]]:
