@@ -13,6 +13,17 @@ import type { FaceAnnotation } from "./types";
 
 const PATCH_TYPES = ["wall", "patch", "symmetry", "empty", "cyclic"] as const;
 
+// Codex 86gs N1.1 R17: first-letter set of PATCH_TYPES, used by the
+// onKeyDown handler to decide whether a typeahead keystroke counts as
+// dropdown interaction. Matched typeahead (key matches an option's
+// first letter) → always counts, including same-value re-confirms
+// (focus "wall" + press 'w' fires no onChange but is a real
+// confirmation gesture). Unmatched typeahead → no value change, no
+// gesture, MUST stay a no-op (R15 P2 / R16 spirit).
+const PATCH_TYPE_FIRST_LETTERS = new Set(
+  PATCH_TYPES.map((t) => t.charAt(0).toLowerCase()),
+);
+
 interface AnnotationPanelProps {
   /** The face_id that was picked. The form is keyed off this so it
    *  remounts (resets state) when the engineer picks a new face. */
@@ -195,16 +206,20 @@ export function AnnotationPanel({
           // patch_type widget counts as an explicit positive
           // signal, including same-value confirmations.
           onClick={() => setPatchTypeInteracted(true)}
-          // Codex 86gs N1.1 R14 → R15 → R16 close: keyboard equivalent
-          // for same-value confirms — but ONLY whitelisted keys that
-          // commit a value or navigate the option list. Tab / Escape
-          // / modifier keys / printable type-ahead chars (which 86gs
-          // R15 P2 flagged: an unmatched `z` press doesn't change
-          // the value but used to flip the flag) are NOT counted.
-          // Typeahead presses that ACTUALLY change the value still
-          // fire onChange, which sets the flag through the change
-          // handler; unmatched typeahead is a no-op gesture and
-          // must remain a no-op for the marker.
+          // Codex 86gs N1.1 R14 → R15 → R16 → R17 close: keyboard
+          // signal for patch-type interaction. Counts ONLY:
+          //   * Commit keys (Enter / Space) — engineer pressed
+          //     a key that commits the focused option.
+          //   * Option navigation (Arrow* / Home / End / PageUp /
+          //     PageDown) — engineer is moving through options.
+          //   * Matched typeahead — single printable key whose
+          //     lowercased value equals the first letter of one
+          //     of PATCH_TYPES. Includes the same-value re-confirm
+          //     case (focus seeded "wall" + press 'w' jumps to /
+          //     re-selects "wall"; no onChange fires but a real
+          //     typeahead gesture occurred).
+          // Tab / Escape / modifiers / unmatched printable chars
+          // (R16 close) → ignored.
           onKeyDown={(e) => {
             const key = e.key;
             const isCommit = key === "Enter" || key === " ";
@@ -217,7 +232,13 @@ export function AnnotationPanel({
               key === "End" ||
               key === "PageUp" ||
               key === "PageDown";
-            if (isCommit || isOptionNavigation) {
+            const isMatchedTypeahead =
+              key.length === 1 &&
+              !e.ctrlKey &&
+              !e.metaKey &&
+              !e.altKey &&
+              PATCH_TYPE_FIRST_LETTERS.has(key.toLowerCase());
+            if (isCommit || isOptionNavigation || isMatchedTypeahead) {
               setPatchTypeInteracted(true);
             }
           }}

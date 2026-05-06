@@ -172,6 +172,43 @@ describe("AnnotationPanel", () => {
     });
   });
 
+  it("matched same-letter typeahead on legacy 'wall' upgrades to explicit (Codex 86gs N1.1 R17)", async () => {
+    // R17 close: when the engineer focuses a legacy seeded "wall"
+    // and presses 'w', native typeahead jumps to / re-selects
+    // "wall" — no value change, no onChange fires, but the gesture
+    // is a real confirmation. Our keyboard handler now recognizes
+    // typeahead keys that match an option's first letter (case-
+    // insensitive) and counts them as patch-type interaction.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    select.focus();
+    await user.keyboard("w");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
+      patch_type_explicit: true,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
   it("unmatched printable keystroke on focused select does NOT upgrade (Codex 86gs N1.1 R16)", async () => {
     // R16 close: an unmatched typeahead key (e.g., 'z' when no
     // option starts with z) doesn't change the select's value, so
