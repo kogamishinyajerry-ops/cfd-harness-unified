@@ -272,14 +272,29 @@ export const api = {
   // remediation hint per failure mode.
   meshImported: async (
     caseId: string,
-    meshMode: import("@/types/mesh_imported").MeshMode,
+    meshMode: import("@/types/mesh_imported").MeshRequestMode,
+    sizingField?: import("@/types/mesh_imported").MeshSizingField | null,
   ): Promise<import("@/types/mesh_imported").MeshSuccessResponse> => {
+    // DEC-V61-135 (N2.1): when sizingField is provided AND has at
+    // least one non-null field, send it along; backend gives it
+    // precedence over the preset. Omit otherwise to keep V124/V125-era
+    // wire shape.
+    const body: {
+      mesh_mode: string;
+      sizing_field?: import("@/types/mesh_imported").MeshSizingField;
+    } = { mesh_mode: meshMode };
+    if (sizingField) {
+      const hasValue = Object.values(sizingField).some(
+        (v) => v !== null && v !== undefined,
+      );
+      if (hasValue) body.sizing_field = sizingField;
+    }
     const resp = await fetch(
       `/api/import/${encodeURIComponent(caseId)}/mesh`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ mesh_mode: meshMode }),
+        body: JSON.stringify(body),
         credentials: "same-origin",
       },
     );

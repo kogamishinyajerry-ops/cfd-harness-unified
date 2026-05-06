@@ -10,13 +10,24 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
 import type {
-  MeshMode,
   MeshRejectionDetail,
+  MeshRequestMode,
+  MeshSizingField,
   MeshSuccessResponse,
 } from "@/types/mesh_imported";
 
 import { MeshQualityCard } from "../MeshQualityCard";
 import type { StepTaskPanelProps } from "../types";
+
+// DEC-V61-135 (N2.1): empty sizing-field literal for resetting the
+// advanced panel back to "preset only".
+const EMPTY_SIZING: MeshSizingField = {
+  base_lc: null,
+  min_lc: null,
+  max_lc: null,
+  curvature_target_size: null,
+  proximity_layers: null,
+};
 
 const REJECTION_HINTS: Record<string, string> = {
   cell_cap_exceeded:
@@ -35,10 +46,18 @@ export function Step2Mesh({
   onStepError,
   registerAiAction,
 }: StepTaskPanelProps) {
-  const [meshMode, setMeshMode] = useState<MeshMode>("beginner");
+  const [meshMode, setMeshMode] = useState<MeshRequestMode>("beginner");
   const [response, setResponse] = useState<MeshSuccessResponse | null>(null);
   const [rejection, setRejection] = useState<MeshRejectionDetail | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  // DEC-V61-135 (N2.1): structured sizing field. Collapsed by default;
+  // expanded when the engineer toggles the disclosure. All five fields
+  // are optional — null = "fall back to mesh_mode preset". sizingFieldError
+  // surfaces client-side validation (min ≤ base ≤ max) before the
+  // backend rejects with 422.
+  const [sizingFieldOpen, setSizingFieldOpen] = useState(false);
+  const [sizingField, setSizingField] = useState<MeshSizingField>(EMPTY_SIZING);
+  const [sizingFieldError, setSizingFieldError] = useState<string | null>(null);
   // V127: bumped on every successful mesh regeneration so the
   // MeshQualityCard child re-fetches against the new polyMesh. Also
   // listens for ai-coach:proposal-applied (regenerate_mesh tool) so
@@ -51,8 +70,36 @@ export function Step2Mesh({
   const triggerMesh = useCallback(async () => {
     setRejection(null);
     setNetworkError(null);
+    setSizingFieldError(null);
+    // DEC-V61-135: client-side ordering check before the round-trip.
+    // The backend re-validates; this just gives instant feedback.
+    if (sizingFieldOpen) {
+      const { base_lc, min_lc, max_lc } = sizingField;
+      if (min_lc != null && max_lc != null && min_lc > max_lc) {
+        setSizingFieldError("min_lc must be ≤ max_lc");
+        onStepError("sizing-field validation: min_lc > max_lc");
+        return;
+      }
+      if (min_lc != null && base_lc != null && min_lc > base_lc) {
+        setSizingFieldError("min_lc must be ≤ base_lc");
+        onStepError("sizing-field validation: min_lc > base_lc");
+        return;
+      }
+      if (base_lc != null && max_lc != null && base_lc > max_lc) {
+        setSizingFieldError("base_lc must be ≤ max_lc");
+        onStepError("sizing-field validation: base_lc > max_lc");
+        return;
+      }
+    }
     try {
-      const r = await api.meshImported(caseId, meshMode);
+      // Pass sizingField only when the panel is open and at least one
+      // field is non-null; otherwise the api client omits the body
+      // attribute entirely (preserves V124/V125-era wire shape).
+      const r = await api.meshImported(
+        caseId,
+        meshMode,
+        sizingFieldOpen ? sizingField : null,
+      );
       setResponse(r);
       // V127 R4 P2: api.meshImported now dispatches mesh:mutated which
       // the MeshQualityCard module-level listener handles, so explicit
@@ -80,7 +127,7 @@ export function Step2Mesh({
       // and surfaces aiErrorMessage in the StatusStrip.
       throw e;
     }
-  }, [caseId, meshMode, onStepComplete, onStepError]);
+  }, [caseId, meshMode, onStepComplete, onStepError, sizingField, sizingFieldOpen]);
 
   useEffect(() => {
     registerAiAction(triggerMesh);
@@ -142,6 +189,86 @@ export function Step2Mesh({
           />
         </div>
       </fieldset>
+
+      {/* DEC-V61-135 (N2.1): Advanced sizing field (collapsed by default).
+       *  Engineer-driven base/min/max + curvature + proximity overrides
+       *  the preset path (mesh_mode_used = "custom" in response).
+       *  Workbench-first acceptance: usable without LLM. */}
+      <details
+        data-testid="step2-mesh-advanced-sizing"
+        className="rounded-sm border border-surface-800 bg-surface-950/40"
+        open={sizingFieldOpen}
+        onToggle={(e) =>
+          setSizingFieldOpen((e.target as HTMLDetailsElement).open)
+        }
+      >
+        <summary className="cursor-pointer px-2 py-1 text-[11px] font-mono uppercase tracking-wider text-surface-300 hover:text-surface-100">
+          Advanced sizing (override preset)
+        </summary>
+        <div className="space-y-2 border-t border-surface-800 p-2">
+          <p className="text-[11px] text-surface-400">
+            Set any field to override the preset. Empty = preset default.
+            Backend enforces min ≤ base ≤ max and 50M cell-cap.
+          </p>
+          <SizingFieldInput
+            label="base_lc"
+            hint="Nominal lc (gmsh CharacteristicLengthMax baseline)"
+            value={sizingField.base_lc ?? ""}
+            onChange={(v) => setSizingField({ ...sizingField, base_lc: v })}
+          />
+          <SizingFieldInput
+            label="min_lc"
+            hint="Lower clamp (CharacteristicLengthMin)"
+            value={sizingField.min_lc ?? ""}
+            onChange={(v) => setSizingField({ ...sizingField, min_lc: v })}
+          />
+          <SizingFieldInput
+            label="max_lc"
+            hint="Upper clamp (CharacteristicLengthMax)"
+            value={sizingField.max_lc ?? ""}
+            onChange={(v) => setSizingField({ ...sizingField, max_lc: v })}
+          />
+          <SizingFieldInput
+            label="curvature_target_size"
+            hint="MeshSizeFromCurvature value (elements per 2π)"
+            value={sizingField.curvature_target_size ?? ""}
+            onChange={(v) =>
+              setSizingField({ ...sizingField, curvature_target_size: v })
+            }
+          />
+          <SizingFieldInput
+            label="proximity_layers"
+            hint="MeshSizeExtendFromBoundary (1–10)"
+            value={sizingField.proximity_layers ?? ""}
+            onChange={(v) =>
+              setSizingField({
+                ...sizingField,
+                proximity_layers: v == null ? null : Math.round(v),
+              })
+            }
+            integer
+          />
+          <button
+            type="button"
+            data-testid="step2-mesh-sizing-reset"
+            onClick={() => {
+              setSizingField(EMPTY_SIZING);
+              setSizingFieldError(null);
+            }}
+            className="rounded-sm border border-surface-700 px-2 py-1 text-[11px] text-surface-300 hover:border-surface-500"
+          >
+            Reset to preset
+          </button>
+          {sizingFieldError && (
+            <p
+              data-testid="step2-mesh-sizing-error"
+              className="rounded-sm border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200"
+            >
+              {sizingFieldError}
+            </p>
+          )}
+        </div>
+      </details>
 
       {response && (
         <div
@@ -226,6 +353,45 @@ export function Step2Mesh({
   );
 }
 
+function SizingFieldInput({
+  label,
+  hint,
+  value,
+  onChange,
+  integer = false,
+}: {
+  label: string;
+  hint: string;
+  value: number | "";
+  onChange: (next: number | null) => void;
+  integer?: boolean;
+}) {
+  return (
+    <label
+      data-testid={`step2-mesh-sizing-${label}`}
+      className="flex items-baseline gap-2 text-[11px]"
+    >
+      <span className="w-44 font-mono text-surface-200">{label}</span>
+      <input
+        type="number"
+        step={integer ? 1 : "any"}
+        min={integer ? 1 : 0}
+        value={value}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === "") onChange(null);
+          else {
+            const n = Number(raw);
+            onChange(Number.isFinite(n) ? n : null);
+          }
+        }}
+        className="w-28 rounded-sm border border-surface-700 bg-surface-950 px-2 py-1 font-mono text-surface-100"
+      />
+      <span className="flex-1 text-surface-400">{hint}</span>
+    </label>
+  );
+}
+
 function ModeOption({
   value,
   label,
@@ -233,7 +399,7 @@ function ModeOption({
   checked,
   onChange,
 }: {
-  value: MeshMode;
+  value: MeshRequestMode;
   label: string;
   hint: string;
   checked: boolean;

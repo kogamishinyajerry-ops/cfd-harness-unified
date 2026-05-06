@@ -1,6 +1,12 @@
 // Mirrors ui/backend/schemas/mesh_imported.py — wire types only.
 
-export type MeshMode = "beginner" | "power";
+// Request modes the engineer can pick in Step 2's preset radio.
+export type MeshRequestMode = "beginner" | "power";
+
+// Response modes the backend can label a run with. Includes "target"
+// (DEC-V61-124 / V125 engineer-supplied lc) and "custom" (DEC-V61-135
+// / N2.1 structured sizing field).
+export type MeshMode = "beginner" | "power" | "target" | "custom";
 
 export type MeshFailingCheck =
   | "case_not_found"
@@ -8,6 +14,18 @@ export type MeshFailingCheck =
   | "gmsh_diverged"
   | "cell_cap_exceeded"
   | "gmshToFoam_failed";
+
+// DEC-V61-135 (N2.1): structured per-job sizing field. All fields
+// optional; setting any one switches gmsh away from preset/target lc
+// derivation. Backend MeshSizingField validators (mesh_sizing.py)
+// enforce min ≤ base ≤ max plus positivity.
+export interface MeshSizingField {
+  base_lc?: number | null;
+  min_lc?: number | null;
+  max_lc?: number | null;
+  curvature_target_size?: number | null;
+  proximity_layers?: number | null;
+}
 
 export interface MeshSummary {
   cell_count: number;

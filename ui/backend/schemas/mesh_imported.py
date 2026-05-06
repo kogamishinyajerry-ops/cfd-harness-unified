@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ui.backend.schemas.mesh_sizing import MeshSizingField
+
 
 # Input modes accepted by the /api/import/{case_id}/mesh request.
 # "target" is intentionally NOT in this enum — the import-mesh POST
@@ -18,7 +20,9 @@ MeshRequestMode = Literal["beginner", "power"]
 # pipeline labels target_cell_count runs honestly. R2 P1 fix:
 # without this expansion, a future caller plumbing target_cell_count
 # through to this route would 500 on response-model validation.
-MeshMode = Literal["beginner", "power", "target"]
+# DEC-V61-135 (N2.1) adds "custom" — runs where the request supplied
+# a sizing_field rather than (or in addition to) mesh_mode preset.
+MeshMode = Literal["beginner", "power", "target", "custom"]
 
 FailingCheck = Literal[
     "case_not_found",
@@ -34,6 +38,13 @@ class MeshRequest(BaseModel):
         default="beginner",
         description="Mesh sizing tier. beginner is the default; power "
         "opts in to the finer characteristic length (D6).",
+    )
+    sizing_field: MeshSizingField | None = Field(
+        default=None,
+        description="Engineer-supplied per-job sizing field (DEC-V61-135 · "
+        "N2.1). When present, overrides the mesh_mode preset path and "
+        "uses base_lc/min_lc/max_lc plus curvature/proximity gmsh "
+        "options. Cell-budget hard cap (50M) still applies.",
     )
 
 

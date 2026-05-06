@@ -680,6 +680,7 @@ def test_subprocess_target_routes_oserror_as_os_error(tmp_path: Path):
             mesh_mode="beginner",
             characteristic_length_override=None,
             target_cell_count=None,
+            sizing_field=None,
             queue=captured,
         )
     finally:
@@ -718,6 +719,7 @@ def test_subprocess_target_routes_import_error_as_import_error(tmp_path: Path):
             mesh_mode="beginner",
             characteristic_length_override=None,
             target_cell_count=None,
+            sizing_field=None,
             queue=captured,
         )
     finally:
@@ -757,6 +759,7 @@ def test_subprocess_target_routes_unknown_as_backend_error(tmp_path: Path):
             mesh_mode="beginner",
             characteristic_length_override=None,
             target_cell_count=None,
+            sizing_field=None,
             queue=captured,
         )
     finally:

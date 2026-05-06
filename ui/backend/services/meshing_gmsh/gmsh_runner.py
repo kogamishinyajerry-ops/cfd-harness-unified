@@ -28,6 +28,10 @@ import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ui.backend.schemas.mesh_sizing import MeshSizingField
 
 
 class GmshMeshGenerationError(RuntimeError):
@@ -113,6 +117,7 @@ def _gmsh_inline(
     mesh_mode: str,
     characteristic_length_override: float | None,
     target_cell_count: int | None = None,
+    sizing_field: dict | None = None,
 ) -> GmshRunResult:
     """The original gmsh-API meshing logic. Runs in a subprocess so
     ``gmsh.initialize()``'s ``signal.signal()`` call lands on a fresh
@@ -468,19 +473,47 @@ def _gmsh_inline(
             else:
                 diagonal = 0.0
 
-            # V124: target_cell_count > characteristic_length_override
-            # > preset-derived default. The cell_budget guard
-            # (cell_budget.py) is the ultimate cap regardless of which
-            # path supplied lc.
-            if target_cell_count is not None:
-                lc = _lc_from_target_cell_count(diagonal, target_cell_count)
-            elif characteristic_length_override is not None:
-                lc = characteristic_length_override
+            # V135 (N2.1): sizing_field > target_cell_count >
+            # characteristic_length_override > preset-derived default.
+            # The cell_budget guard (cell_budget.py) is the ultimate
+            # cap regardless of which path supplied lc.
+            sf = sizing_field or {}
+            sf_active = any(sf.get(k) is not None for k in (
+                "base_lc", "min_lc", "max_lc",
+                "curvature_target_size", "proximity_layers",
+            ))
+            if sf_active:
+                # base_lc (or fallback to preset) drives the nominal lc;
+                # min_lc / max_lc override the ±0.5x default bounds.
+                base = sf.get("base_lc")
+                if base is None:
+                    base = _default_characteristic_length(diagonal, mesh_mode)
+                lc = base if base and base > 0 else 0.0
+                lc_min = sf.get("min_lc") if sf.get("min_lc") is not None else (lc * 0.5 if lc > 0 else 0.0)
+                lc_max = sf.get("max_lc") if sf.get("max_lc") is not None else lc
+                if lc_min and lc_min > 0:
+                    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc_min)
+                if lc_max and lc_max > 0:
+                    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc_max)
+                if sf.get("curvature_target_size") is not None:
+                    # gmsh option semantics: target N elements per 2π of
+                    # curvature radius. The schema field name uses
+                    # "_target_size" loosely — in gmsh terminology this
+                    # is "MeshSizeFromCurvature" (an integer angle-quotient).
+                    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", float(sf["curvature_target_size"]))
+                if sf.get("proximity_layers") is not None:
+                    gmsh.option.setNumber("Mesh.MeshSizeFromBoundary", 1)
+                    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", int(sf["proximity_layers"]))
             else:
-                lc = _default_characteristic_length(diagonal, mesh_mode)
-            if lc > 0:
-                gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
-                gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
+                if target_cell_count is not None:
+                    lc = _lc_from_target_cell_count(diagonal, target_cell_count)
+                elif characteristic_length_override is not None:
+                    lc = characteristic_length_override
+                else:
+                    lc = _default_characteristic_length(diagonal, mesh_mode)
+                if lc > 0:
+                    gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
+                    gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
 
             gmsh.model.mesh.generate(3)
 
@@ -580,6 +613,7 @@ def _subprocess_target(
     mesh_mode: str,
     characteristic_length_override: float | None,
     target_cell_count: int | None,
+    sizing_field: dict | None,
     queue: "multiprocessing.Queue[tuple[str, object]]",
 ) -> None:
     """Run the gmsh meshing job inside a child process and post back the
@@ -600,6 +634,7 @@ def _subprocess_target(
             mesh_mode=mesh_mode,
             characteristic_length_override=characteristic_length_override,
             target_cell_count=target_cell_count,
+            sizing_field=sizing_field,
         )
         # asdict() handles the Path → str translation for the dataclass
         # via a custom default factory; do it explicitly for safety.
@@ -625,6 +660,7 @@ def run_gmsh_on_imported_case(
     mesh_mode: str = "beginner",
     characteristic_length_override: float | None = None,
     target_cell_count: int | None = None,
+    sizing_field: "MeshSizingField | None" = None,
 ) -> GmshRunResult:
     """Mesh ``stl_path`` with gmsh and write ``output_msh_path``.
 
@@ -652,6 +688,13 @@ def run_gmsh_on_imported_case(
     shapes (e.g. a stale sentinel 0.0 carried over from an older
     caller). Validation is gated to fire only when the override is
     actually going to be consumed.
+
+    DEC-V61-135 (N2.1): ``sizing_field`` (if active) takes precedence
+    over both ``target_cell_count`` and ``characteristic_length_override``.
+    Pydantic field-level validators on ``MeshSizingField`` already
+    enforce positivity; we marshal it across the subprocess boundary
+    as a dict (pydantic models are picklable but routinely cause
+    'spawn' import-order pain on macOS).
     """
     if (
         target_cell_count is None
@@ -662,6 +705,12 @@ def run_gmsh_on_imported_case(
             "characteristic_length_override must be positive, got "
             f"{characteristic_length_override!r}"
         )
+
+    sizing_field_dict: dict | None = None
+    if sizing_field is not None:
+        # Avoid a cross-subprocess import of MeshSizingField — pass a
+        # plain dict, _gmsh_inline reads keys by name.
+        sizing_field_dict = sizing_field.model_dump(exclude_none=False)
     # Use 'spawn' explicitly: macOS defaults to 'spawn' since 3.8 and
     # Linux defaults to 'fork', which copies the parent process state
     # (including FastAPI / gmsh module-level imports). 'spawn' gives a
@@ -676,6 +725,7 @@ def run_gmsh_on_imported_case(
             mesh_mode,
             characteristic_length_override,
             target_cell_count,
+            sizing_field_dict,
             queue,
         ),
     )

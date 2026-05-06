@@ -1,6 +1,6 @@
 // Step 2 Mesh wired-body tests (M-PANELS spec_v2 §E Step 5).
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -66,6 +66,10 @@ const FAKE_MESH_RESPONSE: MeshSuccessResponse = {
 };
 
 describe("Step2Mesh · wired body", () => {
+  beforeEach(() => {
+    apiMock.meshImported.mockReset();
+  });
+
   it("registers an AI action with the shell on mount", () => {
     const { registerAiAction } = renderStep({});
     expect(registerAiAction).toHaveBeenCalled();
@@ -112,7 +116,9 @@ describe("Step2Mesh · wired body", () => {
       onStepComplete,
     });
     await triggerAi();
-    expect(apiMock.meshImported).toHaveBeenCalledWith("abc", "beginner");
+    // DEC-V61-135 (N2.1): meshImported now takes (caseId, mode, sizingField).
+    // The advanced panel is collapsed by default so the third arg is null.
+    expect(apiMock.meshImported).toHaveBeenCalledWith("abc", "beginner", null);
     expect(onStepComplete).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(screen.getByTestId("step2-mesh-success")).toBeInTheDocument();
@@ -132,6 +138,7 @@ describe("Step2Mesh · wired body", () => {
     expect(apiMock.meshImported).toHaveBeenLastCalledWith(
       expect.any(String),
       "power",
+      null,
     );
   });
 
@@ -162,5 +169,104 @@ describe("Step2Mesh · wired body", () => {
       screen.getByTestId("step2-mesh-network-error"),
     ).toHaveTextContent(/Failed to fetch/);
     expect(onStepError).toHaveBeenCalledWith("Failed to fetch");
+  });
+
+  // DEC-V61-135 (N2.1): advanced sizing-field disclosure tests.
+  it("collapses the advanced sizing panel by default", () => {
+    renderStep({});
+    const details = screen.getByTestId(
+      "step2-mesh-advanced-sizing",
+    ) as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+  });
+
+  it("sends sizing_field when advanced panel is open + values entered", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    // Open the disclosure
+    const summary = screen
+      .getByTestId("step2-mesh-advanced-sizing")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const baseInput = screen
+      .getByTestId("step2-mesh-sizing-base_lc")
+      .querySelector("input") as HTMLInputElement;
+    await user.type(baseInput, "0.05");
+
+    await triggerAi();
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      expect.objectContaining({ base_lc: 0.05 }),
+    );
+  });
+
+  it("blocks the request and surfaces an inline error when min_lc > max_lc", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    const summary = screen
+      .getByTestId("step2-mesh-advanced-sizing")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const minInput = screen
+      .getByTestId("step2-mesh-sizing-min_lc")
+      .querySelector("input") as HTMLInputElement;
+    const maxInput = screen
+      .getByTestId("step2-mesh-sizing-max_lc")
+      .querySelector("input") as HTMLInputElement;
+    await user.type(minInput, "0.5");
+    await user.type(maxInput, "0.1");
+
+    await triggerAi();
+
+    // No POST happened (validation guard fired before)
+    expect(apiMock.meshImported).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("step2-mesh-sizing-error"),
+    ).toHaveTextContent(/min_lc must be ≤ max_lc/);
+    expect(onStepError).toHaveBeenCalledWith(
+      expect.stringMatching(/sizing-field validation/),
+    );
+  });
+
+  it("reset button clears the sizing field back to preset", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-advanced-sizing")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const baseInput = screen
+      .getByTestId("step2-mesh-sizing-base_lc")
+      .querySelector("input") as HTMLInputElement;
+    await user.type(baseInput, "0.05");
+
+    const resetBtn = screen.getByTestId("step2-mesh-sizing-reset");
+    await user.click(resetBtn);
+
+    await triggerAi();
+    // After reset: panel still open but all fields null → meshImported
+    // gets called but the api client strips the sizing_field body. The
+    // mock receives the literal sizingField object passed in (with all
+    // nulls); the wire-stripping happens inside the real client.
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      expect.objectContaining({
+        base_lc: null,
+        min_lc: null,
+        max_lc: null,
+      }),
+    );
   });
 });

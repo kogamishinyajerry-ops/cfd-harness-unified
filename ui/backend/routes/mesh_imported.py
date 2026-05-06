@@ -66,7 +66,11 @@ def mesh_imported_route(
     # default threadpool, so a long mesh blocks one worker thread but
     # leaves the event loop free.
     try:
-        result = mesh_imported_case(case_id, mesh_mode=request.mesh_mode)
+        result = mesh_imported_case(
+            case_id,
+            mesh_mode=request.mesh_mode,
+            sizing_field=request.sizing_field,
+        )
     except MeshPipelineError as exc:
         rejection = MeshRejection(
             reason=str(exc),

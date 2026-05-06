@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from ui.backend.schemas.mesh_sizing import MeshSizingField
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
 
@@ -29,7 +30,7 @@ from .gmsh_runner import (
 from .to_foam import GmshToFoamError, run_gmsh_to_foam
 
 
-MeshMode = Literal["beginner", "power", "target"]
+MeshMode = Literal["beginner", "power", "target", "custom"]
 FailingCheck = Literal[
     "case_not_found",
     "source_not_imported",
@@ -118,6 +119,7 @@ def mesh_imported_case(
     mesh_mode: MeshMode = "beginner",
     target_cell_count: int | None = None,
     characteristic_length_override: float | None = None,
+    sizing_field: MeshSizingField | None = None,
     container_name: str | None = None,
     case_dir_override: Path | None = None,
 ) -> MeshResult:
@@ -137,6 +139,14 @@ def mesh_imported_case(
     ``target_cell_count`` is enforced one layer up at the
     ``RegenerateMeshArgs`` validator.
 
+    DEC-V61-135 (N2.1): ``sizing_field`` is the structured per-job
+    sizing surface (base/min/max/curvature/proximity). When active
+    (``MeshSizingField.is_active() == True``), it takes precedence
+    over both ``target_cell_count`` and
+    ``characteristic_length_override``; the resulting MeshResult is
+    labeled ``mesh_mode="custom"``. Cell-budget hard cap still
+    applies.
+
     Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
     is one of :data:`FailingCheck`. The route maps each value to an
     HTTP 4xx response.
@@ -153,6 +163,7 @@ def mesh_imported_case(
             mesh_mode=mesh_mode,
             target_cell_count=target_cell_count,
             characteristic_length_override=characteristic_length_override,
+            sizing_field=sizing_field,
         )
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
@@ -173,14 +184,17 @@ def mesh_imported_case(
     # MeshMode literal — both are semantically "engineer-supplied
     # sizing"; consumers that need to distinguish the two paths can
     # back-reference the request that triggered the run.
-    effective_mode: MeshMode = (
-        "target"
-        if (
-            target_cell_count is not None
-            or characteristic_length_override is not None
-        )
-        else mesh_mode
-    )
+    # V135 (N2.1): "custom" labels the structured-sizing-field path so
+    # the UI can distinguish single-knob (target/lc-override) runs from
+    # full per-job sizing-field runs. Precedence in the labeling
+    # reflects the gmsh_runner precedence: sizing_field takes priority.
+    sizing_field_active = sizing_field is not None and sizing_field.is_active()
+    if sizing_field_active:
+        effective_mode = "custom"
+    elif target_cell_count is not None or characteristic_length_override is not None:
+        effective_mode = "target"
+    else:
+        effective_mode = mesh_mode
     verdict: BudgetVerdict = classify_cell_count(
         gmsh_result.cell_count, effective_mode
     )

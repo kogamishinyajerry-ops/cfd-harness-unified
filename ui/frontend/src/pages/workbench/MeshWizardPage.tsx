@@ -3,8 +3,8 @@ import { Link, useParams } from "react-router-dom";
 
 import { api, ApiError } from "@/api/client";
 import type {
-  MeshMode,
   MeshRejectionDetail,
+  MeshRequestMode,
   MeshSuccessResponse,
 } from "@/types/mesh_imported";
 
@@ -22,7 +22,7 @@ import type {
 
 export function MeshWizardPage() {
   const { caseId } = useParams<{ caseId: string }>();
-  const [meshMode, setMeshMode] = useState<MeshMode>("beginner");
+  const [meshMode, setMeshMode] = useState<MeshRequestMode>("beginner");
   const [running, setRunning] = useState(false);
   const [response, setResponse] = useState<MeshSuccessResponse | null>(null);
   const [rejection, setRejection] = useState<MeshRejectionDetail | null>(null);
@@ -172,7 +172,7 @@ function ModeOption({
   checked,
   onChange,
 }: {
-  value: MeshMode;
+  value: MeshRequestMode;
   label: string;
   hint: string;
   checked: boolean;
