@@ -593,7 +593,13 @@ describe("Step2Mesh · wired body", () => {
     expect(details.open).toBe(false);
   });
 
-  it("disables Apply prism layers until a mesh has been generated", async () => {
+  // R0 P2 (Codex 86gs): the previous version disabled the Apply
+  // button when local `response` was null, but cases meshed in
+  // earlier sessions arrive at Step 2 with response=null even though
+  // the polyMesh is on disk. The disabled gate broke that flow.
+  // Now: button is enabled by default; the backend's structured
+  // polyMesh_not_ready 422 is the source of truth.
+  it("keeps Apply prism layers enabled even without a current-session mesh", async () => {
     const user = userEvent.setup();
     renderStep({});
 
@@ -605,7 +611,30 @@ describe("Step2Mesh · wired body", () => {
     const applyBtn = screen.getByTestId(
       "step2-mesh-prism-apply",
     ) as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
+    expect(applyBtn.disabled).toBe(false);
+  });
+
+  it("surfaces backend polyMesh_not_ready hint when prism applied without polyMesh", async () => {
+    const user = userEvent.setup();
+    apiMock.meshPrismLayers.mockRejectedValueOnce(
+      new ApiError(422, "rejected", {
+        failing_check: "polyMesh_not_ready",
+        reason: "polyMesh not ready under .../polyMesh — run the gmsh stage first.",
+      }),
+    );
+    renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-prism-apply"));
+
+    await waitFor(() => {
+      const rej = screen.getByTestId("step2-mesh-prism-rejection");
+      expect(rej).toHaveTextContent(/polyMesh_not_ready/);
+      expect(rej).toHaveTextContent(/Run the mesh stage first/);
+    });
   });
 
   it("enables and POSTs prism layers after a successful mesh", async () => {
