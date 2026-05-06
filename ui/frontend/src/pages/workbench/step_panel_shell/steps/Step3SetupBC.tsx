@@ -77,6 +77,12 @@ export function Step3SetupBC({
   // banner below already shows.
   const [rejection, setRejection] = useState<CaseSolveRejection | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  // DEC-V61-131 N1.1: confident envelope is advisory-only; this state
+  // tracks the engineer's [应用 AI 建议] confirm click which calls the
+  // legacy non-envelope api.setupBC to actually mutate the case.
+  const [applying, setApplying] = useState(false);
+  const [appliedSummary, setAppliedSummary] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
   // DEC-V61-102 Phase 2 raw-dict editor mount gate.
   //
   // Codex Phase-2 P2 closure: track whether the disclosure has been
@@ -527,15 +533,15 @@ export function Step3SetupBC({
           result.confidence === "confident" &&
           result.unresolved_questions.length === 0
         ) {
-          // Reset dialog state and complete the step. Tier-B note:
-          // we don't currently fetch the post-envelope SetupBcSummary
-          // (n_lid_faces / Re) — the success surface below renders a
-          // simpler "✓ AI processing complete" note in envelope mode.
-          // The isStale() re-check covers the case where ai_mode flipped
-          // during the nested getFaceAnnotations() await above (Codex
-          // M9 Step 3 R2 finding).
+          // DEC-V61-131 N1.1: confident envelope is advisory-only —
+          // the backend hard-strip removed setup_ldc_bc /
+          // setup_channel_bc invocations from envelope mode. The step
+          // does NOT auto-complete; the engineer must click
+          // [应用 AI 建议] to call legacy api.setupBC and apply.
+          // Reset stale dialog state but stay on this step.
           setPickedFaceIdForQuestion({});
-          onStepComplete();
+          setAppliedSummary(null);
+          setApplyError(null);
         }
       } catch (e) {
         if (isStale()) {
@@ -639,6 +645,44 @@ export function Step3SetupBC({
   const triggerSetup = () =>
     runEnvelope({ useForceFlags: aiMode !== null });
 
+  // DEC-V61-131 N1.1: [应用 AI 建议] confirm button. The advisory
+  // envelope tells the engineer what AI suggests; this click calls
+  // the legacy non-envelope POST /setup-bc to actually write the
+  // dicts. Only renders when the envelope is confident.
+  const handleApplySuggestion = useCallback(async () => {
+    if (applying) return;
+    setApplying(true);
+    setApplyError(null);
+    setRejection(null);
+    setNetworkError(null);
+    try {
+      const summary = await api.setupBC(caseId);
+      setAppliedSummary(
+        `Applied: lid=${summary.n_lid_faces ?? "—"} faces, walls=${
+          summary.n_wall_faces ?? "—"
+        } faces, Re=${summary.reynolds ?? "—"}`,
+      );
+      onStepComplete();
+    } catch (e) {
+      if (
+        e instanceof ApiError &&
+        e.detail &&
+        typeof e.detail === "object" &&
+        "failing_check" in e.detail
+      ) {
+        const detail = e.detail as CaseSolveRejection;
+        setRejection(detail);
+        onStepError(`apply suggestion rejected: ${detail.failing_check}`);
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        setApplyError(msg);
+        onStepError(msg);
+      }
+    } finally {
+      setApplying(false);
+    }
+  }, [applying, caseId, onStepComplete, onStepError]);
+
   useEffect(() => {
     registerAiAction(triggerSetup);
     return () => registerAiAction(null);
@@ -682,15 +726,43 @@ export function Step3SetupBC({
         envelope.unresolved_questions.length === 0 && (
           <div
             data-testid="step3-envelope-success"
-            className="rounded-sm border border-emerald-700/40 bg-emerald-900/10 p-2"
+            className="space-y-2 rounded-sm border border-emerald-700/40 bg-emerald-900/10 p-2"
           >
             <div className="font-mono text-[11px] text-emerald-200">
-              ✓ AI processing complete (envelope mode)
+              {appliedSummary
+                ? "✓ Applied"
+                : "AI suggests (advisory · click to apply)"}
             </div>
-            <p className="mt-1 text-[10px] text-surface-400">{envelope.summary}</p>
-            {envelope.next_step_suggestion && (
-              <p className="mt-1 text-[10px] text-surface-500">
+            <p className="text-[10px] text-surface-400">{envelope.summary}</p>
+            {envelope.next_step_suggestion && !appliedSummary && (
+              <p className="text-[10px] text-surface-500">
                 {envelope.next_step_suggestion}
+              </p>
+            )}
+            {appliedSummary ? (
+              <p
+                data-testid="step3-apply-summary"
+                className="text-[10px] text-emerald-300/80"
+              >
+                {appliedSummary}
+              </p>
+            ) : (
+              <button
+                type="button"
+                data-testid="step3-apply-suggestion-btn"
+                disabled={applying}
+                onClick={handleApplySuggestion}
+                className="rounded-sm border border-emerald-500/60 bg-emerald-700/40 px-2 py-1 text-[11px] font-mono text-emerald-100 hover:bg-emerald-700/60 disabled:opacity-50"
+              >
+                {applying ? "应用中..." : "[应用 AI 建议]"}
+              </button>
+            )}
+            {applyError && (
+              <p
+                data-testid="step3-apply-error"
+                className="text-[10px] text-rose-300"
+              >
+                Apply failed: {applyError}
               </p>
             )}
           </div>

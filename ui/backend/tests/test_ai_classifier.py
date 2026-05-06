@@ -619,9 +619,12 @@ def test_wrapper_classifier_with_top_plane_lid_pin_returns_confident(
     tmp_path,
 ):
     """When the engineer pins the actual top-plane face named 'lid',
-    classifier returns confident, and the wrapper runs setup_ldc_bc
-    to write the dicts. The full fixture has enough polyMesh files
-    for setup_ldc_bc to actually succeed end-to-end.
+    the classifier returns confident.
+
+    DEC-V61-131 N1.1 contract change: confident no longer triggers
+    setup_ldc_bc from the AI wrapper — the envelope is advisory only.
+    No dicts are written; the engineer applies via the legacy
+    non-envelope route.
     """
     case_dir = tmp_path / "wrapper_cube_pinned"
     case_dir.mkdir()
@@ -642,9 +645,9 @@ def test_wrapper_classifier_with_top_plane_lid_pin_returns_confident(
     )
     assert env.confidence == "confident"
     assert env.unresolved_questions == []
-    # setup_ldc_bc actually wrote the dicts.
-    assert (case_dir / "0").is_dir()
-    assert (case_dir / "system").is_dir()
+    # Hard-strip: NO dict tree written by the AI wrapper.
+    assert not (case_dir / "0").is_dir()
+    assert not (case_dir / "system").is_dir()
 
 
 def test_wrapper_classifier_with_non_lid_pin_stays_uncertain_no_setup_run(
@@ -694,24 +697,26 @@ def test_wrapper_force_blocked_overrides_classifier(tmp_path):
     assert env.confidence == "blocked"
 
 
-def test_wrapper_use_classifier_false_falls_back_to_legacy(tmp_path):
-    """Passing use_classifier=False reverts to Tier-A behavior: no
-    classifier call, runs setup_ldc_bc directly. This is what tests
-    that need the legacy contract pass in.
+def test_wrapper_use_classifier_false_returns_advisory_envelope(tmp_path):
+    """DEC-V61-131 N1.1: Passing use_classifier=False used to revert
+    to Tier-A behavior (run setup_ldc_bc directly). Under the
+    hard-strip, no setup runs from the AI wrapper. The envelope
+    returns confident-advisory for backwards compatibility with the
+    legacy classifier-off contract — callers that need actual
+    mutation now go through the legacy non-envelope route.
     """
     case_dir = tmp_path / "no_classifier"
     case_dir.mkdir()
     _stage_polymesh(case_dir, _POINTS_CUBE)
-    # Without classifier, wrapper goes straight to setup_ldc_bc which
-    # fails on this minimal fixture — we just want to verify no
-    # classifier short-circuit happened.
-    with pytest.raises(AIActionError) as exc:
-        setup_bc_with_annotations(
-            case_dir=case_dir,
-            case_id="no_classifier",
-            use_classifier=False,
-        )
-    assert exc.value.failing_check == "setup_bc_failed"
+    env = setup_bc_with_annotations(
+        case_dir=case_dir,
+        case_id="no_classifier",
+        use_classifier=False,
+    )
+    assert env.confidence == "confident"
+    assert env.unresolved_questions == []
+    # No mutation.
+    assert not (case_dir / "0").is_dir()
 
 
 def test_wrapper_classifier_on_degenerate_mesh_blocks(tmp_path):
@@ -766,16 +771,17 @@ def test_full_loop_uncertain_then_pin_top_lid_then_confident(tmp_path):
     save_annotations(case_dir, annotations, if_match_revision=0)
 
     # Step 3: re-run wrapper — classifier verifies the lid pin
-    # geometrically + returns confident → setup_ldc_bc runs to
-    # completion → confident envelope back, dicts on disk.
+    # geometrically + returns confident. DEC-V61-131 N1.1: confident
+    # is now ADVISORY ONLY — no setup_ldc_bc invocation, no dicts on
+    # disk. The engineer applies via the legacy non-envelope route.
     env2 = setup_bc_with_annotations(
         case_dir=case_dir,
         case_id="loop_test",
     )
     assert env2.confidence == "confident"
     assert env2.unresolved_questions == []
-    assert (case_dir / "0").is_dir()
-    assert (case_dir / "system").is_dir()
+    assert not (case_dir / "0").is_dir()
+    assert not (case_dir / "system").is_dir()
 
 
 def test_full_loop_channel_uncertain_pin_inlet_outlet_then_confident(tmp_path):
@@ -830,18 +836,17 @@ def test_full_loop_channel_uncertain_pin_inlet_outlet_then_confident(tmp_path):
     )
     assert env2.confidence == "confident", env2
     assert env2.unresolved_questions == []
-    # Channel-specific summary mentions inlet/outlet face counts + Re.
-    assert "inlet=" in env2.summary and "outlet=" in env2.summary
-    # Executor wrote the dict tree.
-    assert (case_dir / "0" / "U").is_file()
-    assert (case_dir / "0" / "p").is_file()
-    assert (case_dir / "system" / "controlDict").is_file()
-    assert (case_dir / "constant" / "physicalProperties").is_file()
-    # Boundary file got split into 3 named patches.
+    # DEC-V61-131 N1.1: advisory summary describes the channel
+    # classification + the apply affordance; the executor is NOT
+    # invoked from the envelope path.
+    assert "channel" in env2.summary.lower()
+    assert "inlet" in env2.summary.lower()
+    # No dict tree was written — the engineer applies via the legacy
+    # non-envelope route.
+    assert not (case_dir / "0").is_dir()
     bnd_text = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
-    assert "inlet" in bnd_text
-    assert "outlet" in bnd_text
-    assert "walls" in bnd_text
+    assert "inlet" not in bnd_text
+    assert "outlet" not in bnd_text
 
 
 def test_channel_executor_rejects_partially_stale_pin_set(tmp_path):
@@ -1143,16 +1148,19 @@ def test_channel_executor_handles_off_axis_inlet_outlet_topology(tmp_path):
 
     # Classifier sees side_inlet/side_outlet (substring match on
     # "inlet"/"outlet") and verifies face_ids on boundary → confident.
+    # DEC-V61-131 N1.1: confident is advisory only; the executor is
+    # NOT invoked from the envelope wrapper, so the boundary stays
+    # un-split. The executor's topology-independence is verified
+    # directly via setup_channel_bc on the fresh_case below — that's
+    # where the contract still has teeth post-N1.1.
     env = setup_bc_with_annotations(
         case_dir=case_dir, case_id="channel_off_axis"
     )
     assert env.confidence == "confident", env
-    # Executor wrote dicts with inlet/outlet/walls split — boundary
-    # file should contain all three patches.
     bnd = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
-    assert "inlet" in bnd
-    assert "outlet" in bnd
-    assert "walls" in bnd
+    # No split occurred via the envelope path.
+    assert "inlet" not in bnd
+    assert "outlet" not in bnd
 
     # Cross-check face counts on a FRESH case_dir (avoiding the
     # known same-dir non-idempotency: _split_channel_patches reads
@@ -1177,36 +1185,28 @@ def test_channel_executor_handles_off_axis_inlet_outlet_topology(tmp_path):
 
 def test_full_loop_channel_executor_writes_correct_inlet_velocity(tmp_path):
     """DEC-V61-101 BC sanity: 0/U boundary field for inlet must be
-    fixedValue (1 0 0) and outlet must be zeroGradient. Defends
-    against silent BC default changes.
+    fixedValue (1 0 0) and outlet must be zeroGradient.
+
+    DEC-V61-131 N1.1: the AI envelope path no longer invokes the
+    executor, so this contract is now exercised by calling
+    ``setup_channel_bc`` directly (which is what the engineer's
+    [应用 AI 建议] click would call via the legacy non-envelope
+    route).
     """
+    from ui.backend.services.case_solve import setup_channel_bc
+
     case_dir = tmp_path / "channel_bc_check"
     case_dir.mkdir()
     _stage_full_channel(case_dir)
-    annotations = empty_annotations("channel_bc_check")
-    annotations["faces"].extend([
-        {
-            "face_id": _bottom_face_id_of_channel(),
-            "name": "inlet_a",
-            "confidence": "user_authoritative",
-            "annotated_by": "human",
-            "annotated_at": "2026-04-29T00:00:00Z",
-        },
-        {
-            "face_id": _top_face_id_of_channel(),
-            "name": "outlet_b",
-            "confidence": "user_authoritative",
-            "annotated_by": "human",
-            "annotated_at": "2026-04-29T00:00:00Z",
-        },
-    ])
-    save_annotations(case_dir, annotations, if_match_revision=0)
 
-    env = setup_bc_with_annotations(
-        case_dir=case_dir,
+    # Apply directly — mirrors the legacy POST /setup-bc route the
+    # apply-button click drives.
+    setup_channel_bc(
+        case_dir,
         case_id="channel_bc_check",
+        inlet_face_ids=(_bottom_face_id_of_channel(),),
+        outlet_face_ids=(_top_face_id_of_channel(),),
     )
-    assert env.confidence == "confident"
     u_text = (case_dir / "0" / "U").read_text()
     assert "inlet" in u_text
     assert "fixedValue" in u_text

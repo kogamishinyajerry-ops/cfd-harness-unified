@@ -366,7 +366,7 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     );
   });
 
-  it("envelope confident on first call → step completes (no dialog)", async () => {
+  it("envelope confident on first call → renders advisory + apply button (DEC-V61-131 N1.1)", async () => {
     getFaceAnnotationsMock.mockResolvedValue({
       schema_version: 1,
       case_id: "abc",
@@ -383,9 +383,19 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
       next_step_suggestion: null,
       error_detail: null,
     });
+    setupBCMock.mockResolvedValueOnce({
+      case_id: "abc",
+      n_lid_faces: 1,
+      n_wall_faces: 5,
+      lid_velocity: [1, 0, 0],
+      nu: 0.01,
+      reynolds: 100,
+      written_files: [],
+    });
 
     let registeredAction: (() => Promise<void>) | null = null;
     const onStepComplete = vi.fn();
+    const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
         <FacePickProvider>
@@ -404,11 +414,18 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     );
     await waitFor(() => expect(registeredAction).not.toBeNull());
     await registeredAction!();
-    await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
+    // N1.1: step does NOT auto-complete on confident; apply button
+    // appears, engineer must click to actually apply.
+    await screen.findByTestId("step3-envelope-success");
     expect(screen.queryByTestId("dialog-panel")).toBeNull();
-    expect(
-      await screen.findByTestId("step3-envelope-success"),
-    ).toBeInTheDocument();
+    expect(onStepComplete).not.toHaveBeenCalled();
+    const applyBtn = await screen.findByTestId(
+      "step3-apply-suggestion-btn",
+    );
+    await user.click(applyBtn);
+    await waitFor(() => expect(setupBCMock).toHaveBeenCalledWith("abc"));
+    await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
+    await screen.findByTestId("step3-apply-summary");
   });
 
   it("[继续 AI 处理] saves picked face as user_authoritative + re-runs envelope", async () => {
@@ -513,7 +530,13 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     );
     const [, secondCallOpts] = setupBCWithEnvelopeMock.mock.calls[1];
     expect(secondCallOpts).toEqual({});
-    await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
+    // DEC-V61-131 N1.1: confident envelope is advisory; the step
+    // does NOT auto-complete after the second envelope call. Apply
+    // button surfaces; engineer's click is what triggers
+    // onStepComplete. We assert the advisory state here and leave the
+    // apply-click coverage to the dedicated apply test above.
+    await screen.findByTestId("step3-apply-suggestion-btn");
+    expect(onStepComplete).not.toHaveBeenCalled();
   });
 });
 

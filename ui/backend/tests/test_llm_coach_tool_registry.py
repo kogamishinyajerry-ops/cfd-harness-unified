@@ -346,47 +346,29 @@ def test_regenerate_mesh_tool_describes_args():
     assert "power" in desc
 
 
-def test_dispatch_regenerate_mesh_happy_path(tmp_path, monkeypatch):
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123")
-
-    def fake_mesh(case_id, *, mesh_mode, case_dir_override=None):
-        assert case_id == "ldc_v123"
-        assert mesh_mode == "power"
-        # Codex base-review-4 P1: regenerate_mesh handler now passes
-        # the locked case_dir explicitly so case_lock and the pipeline
-        # operate on the same inode.
-        assert case_dir_override is not None
-        return _stub_mesh_result(case_id=case_id, mesh_mode=mesh_mode)
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        fake_mesh,
-    )
+def test_dispatch_regenerate_mesh_happy_path(tmp_path):
+    """DEC-V61-131 N1.1: regenerate_mesh is advisory-only. Dispatch
+    returns ApplyResult describing the suggested density; no pipeline
+    is invoked, no polyMesh is mutated."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131")
     result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
     assert result.tool == "regenerate_mesh"
-    assert "350000" in result.summary or "350,000" in result.summary
-    assert result.state_after["cell_count"] == 350_000
-    assert result.state_after["face_count"] == 2_100_000
-    assert result.state_after["mesh_mode"] == "power"
+    assert "AI suggests" in result.summary
+    assert "'power' mode" in result.summary
+    assert result.state_after["advisory"] is True
+    assert result.state_after["suggestion"]["axis"] == "mesh_mode"
+    assert result.state_after["suggestion"]["mesh_mode"] == "power"
 
 
-def test_dispatch_regenerate_mesh_includes_warning_in_summary(
-    tmp_path, monkeypatch
-):
-    """When the underlying pipeline returns a soft-cap warning (beginner
-    mode only), the operator-facing summary surfaces it."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_warn")
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode, case_dir_override=None: _stub_mesh_result(
-            case_id=case_id,
-            mesh_mode=mesh_mode,
-            warning="beginner soft cap exceeded; consider 'power' mode",
-        ),
-    )
+def test_dispatch_regenerate_mesh_summary_advises_step_2(tmp_path):
+    """DEC-V61-131 N1.1: the advisory summary tells the engineer to
+    apply via Step 2's [AI 处理] button — the only mesh-mutation
+    surface that survives the strip."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_advice")
     result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "beginner"})
-    assert "Warning" in result.summary
-    assert "soft cap" in result.summary
+    assert "Step 2" in result.summary
+    assert "AI 处理" in result.summary
+    assert "N1.1" in result.summary or "V130" in result.summary
 
 
 def test_regenerate_mesh_rejects_extra_keys(tmp_path):
@@ -413,219 +395,45 @@ def test_regenerate_mesh_missing_mode_raises_arg_error(tmp_path):
         dispatch(case_dir, "regenerate_mesh", {})
 
 
-def test_regenerate_mesh_pipeline_error_translated_to_underlying(
-    tmp_path, monkeypatch
+# DEC-V61-131 N1.1: the V123 R1 P2-1 / P2-2 / R2 P2-1 contracts that
+# previously routed MeshPipelineError → underlying_service_error and
+# CaseLockError → underlying_service_error are NO LONGER reachable via
+# the regenerate_mesh tool dispatch path: the handler does not call
+# ``mesh_imported_case`` or acquire ``case_lock`` anymore. Tests that
+# asserted those translations are removed; the legacy mesh route
+# (``POST /api/import/{case_id}/mesh``) still exercises those contracts
+# directly and is covered by ``test_mesh_imported_route.py`` /
+# ``test_meshing_gmsh.py``.
+
+
+def test_regenerate_mesh_disappeared_case_dir_advisory_still_rejects(
+    tmp_path,
 ):
-    """V123 R1 P2-1: MeshPipelineError must surface as
-    ToolDispatchError(failing_check='underlying_service_error') AND
-    preserve the underlying mesh failing_check in
-    inner_failing_check so the frontend ProposalCard can branch on
-    actionable remediation."""
-    from ui.backend.services.meshing_gmsh import MeshPipelineError
-
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_err")
-
-    def boom(case_id, *, mesh_mode, case_dir_override=None):
-        raise MeshPipelineError("cap exceeded", "cell_cap_exceeded")
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        boom,
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert exc_info.value.failing_check == "underlying_service_error"
-    assert exc_info.value.inner_failing_check == "cell_cap_exceeded"
-    assert "cell_cap_exceeded" in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    "underlying_check",
-    [
-        "case_not_found",
-        "source_not_imported",
-        "gmsh_diverged",
-        "cell_cap_exceeded",
-        "gmshToFoam_failed",
-    ],
-)
-def test_regenerate_mesh_preserves_each_pipeline_failing_check(
-    tmp_path, monkeypatch, underlying_check
-):
-    """V123 R1 P2-1: every documented MeshPipelineError.failing_check
-    value round-trips through dispatch as inner_failing_check so the
-    route can include it in the response detail."""
-    from ui.backend.services.meshing_gmsh import MeshPipelineError
-
-    case_dir = _make_minimal_case_dir(
-        tmp_path, case_id=f"ldc_v123_{underlying_check}"
-    )
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode, case_dir_override=None: (_ for _ in ()).throw(
-            MeshPipelineError(f"surface {underlying_check}", underlying_check)
-        ),
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert exc_info.value.inner_failing_check == underlying_check
-
-
-def test_regenerate_mesh_case_lock_error_translates_to_typed_dispatch(
-    tmp_path, monkeypatch
-):
-    """V123 R1 P2-2: CaseLockError (symlink_escape, lock_acquire_failed)
-    must NOT fall into dispatch's catch-all → 500/unexpected. Translate
-    to ToolDispatchError(underlying_service_error) so the route maps to
-    422 with the underlying failing_check preserved as
-    inner_failing_check, matching V108/V109's 422 symlink_escape
-    contract."""
-    from ui.backend.services.case_manifest.locking import CaseLockError
-
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_locksym")
-
-    def fake_lock(case_dir):
-        raise CaseLockError(
-            f"refusing to use {case_dir}", failing_check="symlink_escape"
-        )
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.case_lock", fake_lock
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert exc_info.value.failing_check == "underlying_service_error"
-    assert exc_info.value.inner_failing_check == "symlink_escape"
-
-
-def test_regenerate_mesh_case_lock_acquire_failure_translated(
-    tmp_path, monkeypatch
-):
-    """V123 R1 P2-2: lock_acquire_failed (flock contention / EBUSY) is
-    the second documented CaseLockError surface and must round-trip
-    the same way."""
-    from ui.backend.services.case_manifest.locking import CaseLockError
-
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_lockacq")
-
-    def fake_lock(case_dir):
-        raise CaseLockError(
-            "could not acquire lock", failing_check="lock_acquire_failed"
-        )
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.case_lock", fake_lock
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert exc_info.value.failing_check == "underlying_service_error"
-    assert exc_info.value.inner_failing_check == "lock_acquire_failed"
-
-
-def test_regenerate_mesh_planted_symlink_routes_via_case_lock_not_disappeared(
-    tmp_path, monkeypatch
-):
-    """V123 R2 P2-1: a case_dir tampered to a SYMLINK (not absent) must
-    flow through case_lock's O_NOFOLLOW path so the user sees
-    inner_failing_check='symlink_escape', NOT 'case_disappeared'. The
-    pre-check uses os.path.lexists which is True for any present path
-    (including symlinks), so the symlink survives the gate and
-    case_lock surfaces the proper containment error."""
-    real_target = tmp_path / "real_other_dir"
-    real_target.mkdir()
-    case_dir = tmp_path / "ldc_v123_symlink"
-    # Plant a symlink (NOT absent — lexists()=True, is_dir()=True
-    # because the target is a directory; the test's purpose is to
-    # confirm we don't preempt the case_lock symlink-detection path).
-    case_dir.symlink_to(real_target)
-
-    def boom_lock(case_dir):
-        # Stand in for case_lock's real O_NOFOLLOW raise — the actual
-        # case_lock would also raise here; we mock so the test stays
-        # hermetic and doesn't depend on the real symlink-detection
-        # behavior of the host filesystem.
-        from ui.backend.services.case_manifest.locking import CaseLockError
-        raise CaseLockError(
-            f"refusing to use {case_dir}", failing_check="symlink_escape"
-        )
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.case_lock", boom_lock
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    # Critical: NOT case_disappeared. The R1 P3 pre-check must let
-    # tampered paths through to case_lock.
-    assert exc_info.value.inner_failing_check == "symlink_escape"
-
-
-def test_regenerate_mesh_planted_regular_file_routes_via_case_lock(
-    tmp_path, monkeypatch
-):
-    """V123 R2 P2-1: a regular file planted at the case_dir path is
-    also tampering, NOT disappearance. Same routing requirement."""
-    case_dir = tmp_path / "ldc_v123_planted_file"
-    case_dir.write_text("not a directory")  # plant a regular file
-
-    def boom_lock(case_dir):
-        from ui.backend.services.case_manifest.locking import CaseLockError
-        raise CaseLockError(
-            f"refusing to use {case_dir}", failing_check="symlink_escape"
-        )
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.case_lock", boom_lock
-    )
-    with pytest.raises(ToolDispatchError) as exc_info:
-        dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert exc_info.value.inner_failing_check == "symlink_escape"
-
-
-def test_regenerate_mesh_disappeared_case_dir_does_not_resurrect(
-    tmp_path, monkeypatch
-):
-    """V123 R1 P3: if case_dir vanishes between the route's
-    case_dir.is_dir() check and the handler entering, case_lock would
-    silently mkdir(parents=True, exist_ok=True) and resurrect an empty
-    directory. The pre-lock case_dir.is_dir() check must surface
-    inner_failing_check='case_disappeared' instead, AND must not call
-    mesh_imported_case at all (so no garbage gets written)."""
-    case_dir = tmp_path / "ldc_v123_gone"
-    # Note: case_dir does NOT exist on disk.
-
-    called = {"value": False}
-
-    def should_not_be_called(*args, **kwargs):
-        called["value"] = True
-        return _stub_mesh_result()
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        should_not_be_called,
-    )
+    """DEC-V61-131 N1.1: even though the handler is advisory-only, a
+    request against a vanished case_dir still surfaces
+    inner_failing_check='case_disappeared' — surfacing a suggestion
+    against a non-existent case is misleading. The pre-check must NOT
+    create the case_dir."""
+    case_dir = tmp_path / "ldc_v131_gone"
     with pytest.raises(ToolDispatchError) as exc_info:
         dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
     assert exc_info.value.failing_check == "underlying_service_error"
     assert exc_info.value.inner_failing_check == "case_disappeared"
-    assert called["value"] is False
-    # Critical: the pre-check must NOT have created the case_dir.
-    # (case_lock is skipped since the handler raises before with-block.)
     assert not case_dir.exists()
 
 
-def test_regenerate_mesh_idempotent_re_dispatch(tmp_path, monkeypatch):
-    """gmsh is naturally idempotent (deterministic seed); two sequential
-    dispatches with same args both succeed without a replay-key store."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_idem")
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, *, mesh_mode, case_dir_override=None: _stub_mesh_result(
-            case_id=case_id, mesh_mode=mesh_mode
-        ),
-    )
+def test_regenerate_mesh_idempotent_re_dispatch(tmp_path):
+    """DEC-V61-131 N1.1: advisory dispatch is naturally idempotent —
+    two calls with same args produce the same advisory ApplyResult.
+    No mesh pipeline is invoked, no polyMesh write occurs."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_idem")
     r1 = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
     r2 = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
     assert r1.state_after == r2.state_after
+    assert r1.summary == r2.summary
+    # polyMesh must remain absent (or unchanged) — advisory dispatch
+    # does not write.
+    assert not (case_dir / "constant" / "polyMesh").exists()
 
 
 # ────────── DEC-V61-125 · lc_override arg ──────────
@@ -687,45 +495,21 @@ def test_regenerate_args_rejects_all_three_set():
         )
 
 
-def test_dispatch_regenerate_mesh_with_lc_override_invokes_pipeline(
-    tmp_path, monkeypatch
-):
-    """V125: dispatch path forwards lc_override as
-    characteristic_length_override kwarg to mesh_imported_case."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v125_lc")
-    captured: dict[str, object] = {}
-
-    def fake_mesh(case_id, **kwargs):
-        captured["case_id"] = case_id
-        captured["kwargs"] = kwargs
-        return _stub_mesh_result(case_id=case_id)
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        fake_mesh,
-    )
-    dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
-    assert captured["case_id"] == "ldc_v125_lc"
-    # Pipeline received characteristic_length_override, NOT mesh_mode
-    # or target_cell_count. Plus the base-review-4 P1 case_dir_override
-    # pin.
-    kwargs = captured["kwargs"]
-    assert kwargs["characteristic_length_override"] == 0.005
-    assert "mesh_mode" not in kwargs
-    assert "target_cell_count" not in kwargs
-    assert kwargs["case_dir_override"] == case_dir
+def test_dispatch_regenerate_mesh_with_lc_override_advisory(tmp_path):
+    """DEC-V61-131 N1.1: lc_override surfaces as advisory ApplyResult
+    with axis='lc_override'. No pipeline invocation; no polyMesh write."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_lc")
+    result = dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
+    assert result.tool == "regenerate_mesh"
+    assert result.state_after["advisory"] is True
+    assert result.state_after["suggestion"]["axis"] == "lc_override"
+    assert result.state_after["suggestion"]["lc_override"] == 0.005
 
 
-def test_dispatch_regenerate_mesh_summary_says_lc_when_set(
-    tmp_path, monkeypatch
-):
-    """V125: ApplyResult summary surfaces 'lc=X' when lc_override is
-    set, NOT 'mode' or 'target'."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v125_summary")
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, **kwargs: _stub_mesh_result(case_id=case_id),
-    )
+def test_dispatch_regenerate_mesh_summary_says_lc_when_set(tmp_path):
+    """DEC-V61-131 N1.1: advisory summary surfaces 'lc=X' when
+    lc_override is set, NOT 'mode' or 'target'."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_lc_summary")
     result = dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
     assert "lc=" in result.summary
     assert "0.005" in result.summary
@@ -982,74 +766,40 @@ def test_regenerate_args_target_cell_count_ceiling():
     RegenerateMeshArgs(target_cell_count=50_000_000)
 
 
-def test_dispatch_regenerate_mesh_with_target_cell_count_invokes_pipeline(
-    tmp_path, monkeypatch
-):
-    """V124: dispatch path calls mesh_imported_case with
-    target_cell_count keyword (NOT mesh_mode)."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_target")
-    captured: dict[str, object] = {}
-
-    def fake_mesh(case_id, **kwargs):
-        captured["case_id"] = case_id
-        captured["kwargs"] = kwargs
-        return _stub_mesh_result(case_id=case_id)
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        fake_mesh,
+def test_dispatch_regenerate_mesh_with_target_cell_count_advisory(tmp_path):
+    """DEC-V61-131 N1.1: target_cell_count surfaces as advisory
+    ApplyResult with axis='target_cell_count'. No pipeline invocation."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_target")
+    result = dispatch(
+        case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
     )
-    dispatch(case_dir, "regenerate_mesh", {"target_cell_count": 500_000})
-    assert captured["case_id"] == "ldc_v124_target"
-    # Pipeline received target_cell_count, NOT mesh_mode. Plus the
-    # base-review-4 P1 case_dir_override pin.
-    kwargs = captured["kwargs"]
-    assert kwargs["target_cell_count"] == 500_000
-    assert "mesh_mode" not in kwargs
-    assert kwargs["case_dir_override"] == case_dir
+    assert result.tool == "regenerate_mesh"
+    assert result.state_after["advisory"] is True
+    assert result.state_after["suggestion"]["axis"] == "target_cell_count"
+    assert result.state_after["suggestion"]["target_cell_count"] == 500_000
 
 
-def test_dispatch_regenerate_mesh_summary_says_target_when_set(
-    tmp_path, monkeypatch
-):
-    """V124: ApplyResult summary surfaces 'target ~N cells' when
-    target_cell_count is set, NOT 'mode'."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_summary")
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        lambda case_id, **kwargs: _stub_mesh_result(case_id=case_id),
-    )
+def test_dispatch_regenerate_mesh_summary_says_target_when_set(tmp_path):
+    """DEC-V61-131 N1.1: advisory summary surfaces 'target ~N cells'
+    when target_cell_count is set, NOT 'mode'."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_target_sum")
     result = dispatch(
         case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
     )
     assert "target" in result.summary.lower()
     assert "500,000" in result.summary or "500000" in result.summary
-    # The 'mode' wording is the V123 mesh_mode path; must not appear.
     assert "'beginner' mode" not in result.summary
     assert "'power' mode" not in result.summary
 
 
-def test_dispatch_regenerate_mesh_v123_mesh_mode_path_unchanged(
-    tmp_path, monkeypatch
-):
-    """V124 regression: V123's mesh_mode='power' path still flows
-    through unchanged after the args refactor."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v124_regress")
-    captured: dict[str, object] = {}
-
-    def fake_mesh(case_id, **kwargs):
-        captured["kwargs"] = kwargs
-        return _stub_mesh_result(case_id=case_id, mesh_mode="power")
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        fake_mesh,
-    )
+def test_dispatch_regenerate_mesh_v123_mesh_mode_path_advisory(tmp_path):
+    """DEC-V61-131 N1.1: mesh_mode='power' still routes through the
+    advisory handler with the correct axis label."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_regress")
     result = dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    kwargs = captured["kwargs"]
-    assert kwargs["mesh_mode"] == "power"
-    assert kwargs["case_dir_override"] == case_dir
     assert "'power' mode" in result.summary
+    assert result.state_after["suggestion"]["axis"] == "mesh_mode"
+    assert result.state_after["suggestion"]["mesh_mode"] == "power"
 
 
 def test_regenerate_mesh_tool_description_mentions_target_cell_count():
@@ -1190,46 +940,16 @@ def test_lc_from_target_cell_count_degenerate_diagonal_returns_zero():
     assert _lc_from_target_cell_count(1.0, 0) == 0.0
 
 
-def test_regenerate_mesh_holds_case_lock_during_pipeline(
-    tmp_path, monkeypatch
-):
-    """Concurrent regenerate proposals must serialize via case_lock —
-    mesh_imported_case rewrites polyMesh/ in place and would race on
-    file content. We assert the lock is HELD at the moment the
-    pipeline runs by checking that .case_lock exists and is locked
-    via flock from inside the fake handler."""
-    import fcntl
-
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v123_lock")
-    lock_held = {"value": False}
-
-    def assert_lock_held(case_id, *, mesh_mode, case_dir_override=None):
-        lock_path = case_dir / ".case_lock"
-        # The lockfile must exist while the pipeline is running.
-        assert lock_path.is_file()
-        # And a non-blocking attempt to take the lock from a fresh fd
-        # must fail (it's already held by case_lock above us).
-        fd = None
-        try:
-            fd = lock_path.open("r+")
-            try:
-                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                lock_held["value"] = False  # we got it → not held
-            except BlockingIOError:
-                lock_held["value"] = True
-            finally:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except OSError:
-                    pass
-        finally:
-            if fd is not None:
-                fd.close()
-        return _stub_mesh_result(case_id=case_id, mesh_mode=mesh_mode)
-
-    monkeypatch.setattr(
-        "ui.backend.services.llm_coach.tool_registry.mesh_imported_case",
-        assert_lock_held,
-    )
+def test_regenerate_mesh_does_not_acquire_case_lock(tmp_path):
+    """DEC-V61-131 N1.1 advisory contract: dispatch must NOT acquire
+    the case_lock. The pre-N1.1 path took ``case_lock`` for the duration
+    of ``mesh_imported_case`` to serialize concurrent regenerate
+    accepts; with the strip, the handler does no I/O against the case
+    contents and therefore should not write a ``.case_lock`` file."""
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_nolock")
+    lock_path = case_dir / ".case_lock"
+    assert not lock_path.exists()
     dispatch(case_dir, "regenerate_mesh", {"mesh_mode": "power"})
-    assert lock_held["value"] is True
+    # No lock file should have been created — advisory handler does
+    # not touch case state.
+    assert not lock_path.exists()

@@ -27,7 +27,6 @@ from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ui.backend.services.case_manifest.locking import CaseLockError, case_lock
 from ui.backend.services.case_solve.bc_setup_from_stl_patches import (
     BCClass,
     _read_patch_ranges,
@@ -36,10 +35,10 @@ from ui.backend.services.case_solve.patch_classification_store import (
     PatchClassificationIOError,
     upsert_override,
 )
-from ui.backend.services.meshing_gmsh import (
-    MeshPipelineError,
-    mesh_imported_case,
-)
+# DEC-V61-131 N1.1: regenerate_mesh tool no longer calls
+# mesh_imported_case + case_lock from the AI dispatch path. The
+# handler returns an advisory ApplyResult only; MeshPipelineError /
+# CaseLockError handling was specific to that path and is removed.
 
 
 # ────────── Errors ──────────
@@ -277,91 +276,58 @@ def _handle_set_patch_bc_type(case_dir: Path, args: BaseModel) -> ApplyResult:
 
 
 def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
+    """DEC-V61-131 N1.1: advisory-only handler.
+
+    The pre-N1.1 implementation called ``mesh_imported_case`` under
+    ``case_lock`` to rewrite ``polyMesh/`` in place. Per V130 Principle
+    B, the AI dispatch path no longer mutates the case. The handler
+    now returns an ApplyResult describing the suggested density —
+    the engineer applies it by going to Step 2 and clicking the
+    engineer-driven [AI 处理] button (a human-driven
+    ``api.meshImported`` call), which remains the only mesh mutation
+    surface.
+
+    The pre-lock ``os.path.lexists`` check is preserved purely as a
+    sanity guard so the surfaced summary doesn't claim suggestions
+    for a case that no longer exists; no lock is acquired.
+    """
     typed = args  # type: RegenerateMeshArgs (caller already validated)
     assert isinstance(typed, RegenerateMeshArgs)
-    case_id = case_dir.name
-    # V123 R1 P3 / R2 P2-1: case_lock unconditionally calls
-    # case_dir.mkdir(parents=True, exist_ok=True). If the imported case
-    # dir was DELETED between the route's case_dir.is_dir() check and
-    # this handler entering, the lock would silently RECREATE it as an
-    # empty dir and leak garbage under user_drafts/imported/. Pre-lock
-    # check closes that common-case race.
-    #
-    # R2 P2-1 correction: use os.path.lexists, not is_dir(). is_dir()
-    # returns False for symlinks-to-non-dirs and planted regular files,
-    # which would route TAMPERING into case_disappeared instead of the
-    # symlink_escape contract case_lock surfaces. lexists() is True for
-    # any present path (broken symlinks included) and False only when
-    # the path is truly absent — exactly the disappearance-only signal
-    # we want here. Tampered paths fall through to case_lock, which
-    # handles them via O_NOFOLLOW + ENOTDIR/ELOOP → symlink_escape.
     if not os.path.lexists(case_dir):
         raise ToolDispatchError(
             f"case_dir {case_dir} no longer exists",
             failing_check="underlying_service_error",
             inner_failing_check="case_disappeared",
         )
-    # Serialize concurrent regenerate proposals via V108's case_lock —
-    # mesh_imported_case rewrites polyMesh/ in place; two concurrent
-    # accepts on the same case would race on file content. case_lock is
-    # NOT reentrant, but mesh_imported_case does not itself acquire it,
-    # so a single acquisition here is sound. MeshPipelineError and
-    # CaseLockError are NOT caught here — the dispatcher's typed-error
-    # translation layer maps each to ToolDispatchError preserving the
-    # underlying failing_check as inner_failing_check (V123 R1 P2-1/2-2).
-    with case_lock(case_dir):
-        # Codex base-review-4 P1: pass case_dir_override so
-        # mesh_imported_case operates on the SAME path object case_lock
-        # is pinning. Without this, mesh_imported_case re-resolves
-        # IMPORTED_DIR / case_id internally — a rename/recreate race
-        # between case_lock acquisition and pipeline entry would let
-        # the meshing run against a replacement directory while the
-        # lock still references the original inode, reopening the
-        # path-swap race the lock is meant to prevent.
-        if typed.target_cell_count is not None:
-            # V124 path: AI specified an exact cell count. Pipeline
-            # converts to lc via cube approximation (see DEC-V61-124).
-            result = mesh_imported_case(
-                case_id,
-                target_cell_count=typed.target_cell_count,
-                case_dir_override=case_dir,
-            )
-        elif typed.lc_override is not None:
-            # V125 path: engineer supplied the gmsh characteristic
-            # length directly (escape hatch when the V124 cube formula
-            # diverges too much on non-cube geometries).
-            result = mesh_imported_case(
-                case_id,
-                characteristic_length_override=typed.lc_override,
-                case_dir_override=case_dir,
-            )
-        else:
-            # V123 path: AI picked a preset (beginner / power).
-            result = mesh_imported_case(
-                case_id,
-                mesh_mode=typed.mesh_mode,
-                case_dir_override=case_dir,
-            )
     if typed.target_cell_count is not None:
         density_label = f"target ~{typed.target_cell_count:,} cells"
+        suggestion = {
+            "axis": "target_cell_count",
+            "target_cell_count": typed.target_cell_count,
+        }
     elif typed.lc_override is not None:
         density_label = f"lc={typed.lc_override:.4g}"
+        suggestion = {
+            "axis": "lc_override",
+            "lc_override": typed.lc_override,
+        }
     else:
         density_label = f"'{typed.mesh_mode}' mode"
+        suggestion = {
+            "axis": "mesh_mode",
+            "mesh_mode": typed.mesh_mode,
+        }
     summary = (
-        f"Regenerated mesh ({density_label}): "
-        f"{result.cell_count} cells, {result.face_count} faces."
+        f"AI suggests regenerating the mesh ({density_label}). "
+        f"To apply: re-run Step 2 [AI 处理] with this density. "
+        f"(N1.1 / V130: AI does not auto-apply mesh changes.)"
     )
-    if result.warning:
-        summary += f" Warning: {result.warning}"
     return ApplyResult(
         tool="regenerate_mesh",
         summary=summary,
         state_after={
-            "cell_count": result.cell_count,
-            "face_count": result.face_count,
-            "point_count": result.point_count,
-            "mesh_mode": result.mesh_mode,
+            "advisory": True,
+            "suggestion": suggestion,
         },
     )
 
@@ -439,29 +405,10 @@ def dispatch(case_dir: Path, tool: str, args: dict[str, Any]) -> ApplyResult:
             failing_check="underlying_service_error",
             inner_failing_check=exc.failing_check,
         ) from exc
-    except MeshPipelineError as exc:
-        # V123 R1 P2-1: preserve the underlying mesh failing_check
-        # (cell_cap_exceeded / source_not_imported / gmsh_diverged /
-        # gmshToFoam_failed / case_not_found) so /apply-proposal can
-        # surface it in detail.inner_failing_check instead of collapsing
-        # to a generic underlying_service_error string.
-        raise ToolDispatchError(
-            f"mesh pipeline failed: {exc.failing_check}: {exc}",
-            failing_check="underlying_service_error",
-            inner_failing_check=exc.failing_check,
-        ) from exc
-    except CaseLockError as exc:
-        # V123 R1 P2-2: case_lock's typed errors (symlink_escape /
-        # lock_acquire_failed) used to fall into the catch-all and
-        # surface as 500/unexpected, regressing V108/V109's 422
-        # symlink_escape contract specifically for the new tool path.
-        # Translate explicitly so the route maps to 422 with the
-        # underlying failing_check preserved.
-        raise ToolDispatchError(
-            f"case lock failed: {exc.failing_check}: {exc}",
-            failing_check="underlying_service_error",
-            inner_failing_check=exc.failing_check,
-        ) from exc
+    # DEC-V61-131 N1.1: MeshPipelineError / CaseLockError handlers
+    # removed with regenerate_mesh strip; the only remaining handler
+    # path is _handle_set_patch_bc_type → upsert_override (which
+    # raises PatchClassificationIOError, handled above).
     except Exception as exc:  # noqa: BLE001 — we want to surface as typed
         raise ToolDispatchError(
             f"unexpected dispatch failure for {tool!r}: {type(exc).__name__}",

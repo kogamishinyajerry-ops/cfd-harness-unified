@@ -4,19 +4,21 @@ Spec_v2 §A3 of DEC-V61-098. Each AI action in this package:
 
 1. Reads ``face_annotations.yaml`` to learn user-authoritative
    decisions made in prior dialog turns.
-2. Performs its native action (call into the underlying service —
-   e.g., ``setup_ldc_bc`` for ``setup_bc_with_annotations``).
+2. Performs CLASSIFICATION ONLY (DEC-V61-131 N1.1: envelope
+   hard-strip — AI does NOT call BC mutation routines from the
+   envelope branch).
 3. Returns an ``AIActionEnvelope`` carrying:
    - ``confidence`` ∈ {confident, uncertain, blocked}
    - ``unresolved_questions`` for the dialog panel
    - ``annotations_revision_consumed`` and ``annotations_revision_after``
      for the frontend's stale-run guard.
 
-Tier-A scope: only ``setup_bc_with_annotations`` is implemented. The
-LDC fixture path (``setup_ldc_bc``) is the only concrete action; the
-``force_uncertain`` / ``force_blocked`` flags allow the frontend to
-dogfood the dialog flow without requiring a real arbitrary-STL AI
-classifier (deferred to M9 Tier-B AI per the long-horizon roadmap).
+DEC-V61-131 (N1.1) contract change: confident envelopes describe the
+suggested action ("would set up LDC defaults: lid=N faces, walls=M
+faces") but do NOT call ``setup_ldc_bc`` / ``setup_channel_bc``. The
+engineer applies the suggestion by clicking ``[应用 AI 建议]`` in the UI,
+which calls the legacy non-envelope ``POST /setup-bc`` route. This
+enforces V130 Principle B at the backend layer (per Kogami P1 #2 close).
 """
 from __future__ import annotations
 
@@ -32,13 +34,6 @@ from ui.backend.services.case_annotations import (
     AnnotationsIOError,
     load_annotations,
 )
-from ui.backend.services.case_solve.bc_setup import (
-    BCSetupError,
-    BCSetupResult,
-    ChannelBCSetupResult,
-    setup_channel_bc,
-    setup_ldc_bc,
-)
 
 __all__ = [
     "AIActionError",
@@ -47,10 +42,10 @@ __all__ = [
 
 
 class AIActionError(Exception):
-    """Raised when an AI action's underlying service fails in a way
-    that should propagate to the route as a non-200 response (i.e., a
-    real infrastructure / input failure, NOT a normal blocked/uncertain
-    envelope outcome).
+    """Raised when an AI action's underlying read/classify pipeline
+    fails in a way that should propagate to the route as a non-200
+    response (i.e., a real infrastructure / input failure, NOT a normal
+    blocked/uncertain envelope outcome).
     """
 
     def __init__(self, message: str, *, failing_check: str) -> None:
@@ -85,6 +80,37 @@ def _ldc_dialog_questions(
     ]
 
 
+def _summarize_ldc_suggestion(cls: ClassificationResult) -> str:
+    """Compose the confident-LDC summary message describing what the
+    engineer's apply click would do. The classifier already inspected
+    the polyMesh boundary; we surface its head-counts but do NOT
+    write any dicts.
+    """
+    # The classifier knows the LDC fixture's geometry but not the
+    # exact face counts that would result from setup_ldc_bc — the
+    # advisory message stays generic ("LDC defaults") rather than
+    # quoting numbers we did not compute.
+    return (
+        "AI is confident this is an LDC cube. Click [应用 AI 建议] to "
+        "set up icoFoam LDC defaults (lid + walls split, "
+        "U_lid=1 m/s, Re=100)."
+    )
+
+
+def _summarize_channel_suggestion(cls: ClassificationResult) -> str:
+    """Compose the confident-channel summary describing what apply
+    would do. Mirrors `_summarize_ldc_suggestion` for the non_cube
+    geometry class.
+    """
+    n_inlet = len(cls.inlet_face_ids)
+    n_outlet = len(cls.outlet_face_ids)
+    return (
+        f"AI is confident this is a channel-style geometry "
+        f"(inlet pins: {n_inlet}, outlet pins: {n_outlet}). Click "
+        f"[应用 AI 建议] to set up icoFoam laminar BCs."
+    )
+
+
 def setup_bc_with_annotations(
     *,
     case_dir: Path,
@@ -93,7 +119,12 @@ def setup_bc_with_annotations(
     force_blocked: bool = False,
     use_classifier: bool = True,
 ) -> AIActionEnvelope:
-    """Run setup-bc with annotation-aware envelope return.
+    """Run setup-bc envelope-mode classification (advisory only).
+
+    DEC-V61-131 N1.1: this function NO LONGER mutates the case. It
+    reads annotations + classifier output and returns an envelope
+    describing what the engineer's apply click would do; the engineer
+    applies via the legacy non-envelope ``POST /setup-bc`` route.
 
     Two operating modes:
 
@@ -101,19 +132,18 @@ def setup_bc_with_annotations(
        legacy DEC-V61-098 dogfood path. Returns the canned LDC dialog
        question for engineer practice without running the classifier.
        These flags take precedence over the classifier.
+       (N1.1: ``force_uncertain`` no longer wraps a real setup call;
+       it just returns the uncertain envelope with the LDC dialog.)
 
     2. **Real classifier** (``use_classifier=True``, default since
        DEC-V61-100 M9 Step 2 · no force flags set): consults
        :func:`classify_setup_bc` to inspect the polyMesh geometry
        + existing user_authoritative annotations and decides whether
-       the answer is confident, uncertain, or blocked. If confident,
-       runs the underlying ``setup_ldc_bc``; if not, returns the
-       classifier's questions immediately.
+       the answer is confident, uncertain, or blocked. The envelope
+       describes the suggestion — no mutation.
 
-    Reads ``face_annotations.yaml`` BEFORE the action so the AI can
-    honor any user-authoritative entries from prior dialog turns —
-    M9 Step 2 makes that loop close: the classifier reads the
-    annotations and skips re-asking questions about pinned faces.
+    Reads ``face_annotations.yaml`` BEFORE classification so the AI
+    can honor any user-authoritative entries from prior dialog turns.
 
     Args:
         case_dir: the host case directory.
@@ -126,23 +156,15 @@ def setup_bc_with_annotations(
             ``force_blocked`` wins if both are passed.
         use_classifier: when true (default since DEC-V61-100), the
             geometric classifier is invoked when no force flag is set.
-            Passing ``False`` reverts to the Tier-A confident-only
-            behavior — used by tests that need the legacy contract,
-            and by the LDC dogfood path that doesn't want classifier
-            second-guessing.
 
     Returns:
-        ``AIActionEnvelope`` describing the outcome.
+        ``AIActionEnvelope`` describing the outcome (advisory only).
 
     Raises:
-        AIActionError: if the underlying ``setup_ldc_bc`` failed
-            for an infrastructure reason (the route maps these to
-            HTTP 4xx/5xx). NOT raised for blocked/uncertain envelope
-            outcomes — those return normally via the envelope.
+        AIActionError: if loading annotations fails for an
+            infrastructure reason. NOT raised for blocked/uncertain
+            envelope outcomes — those return normally via the envelope.
     """
-    # Read the current annotations to populate revision tracking.
-    # Annotations file may not exist on first call; load_annotations
-    # returns an empty doc with revision=0 in that case.
     try:
         annotations = load_annotations(case_dir, case_id=case_id)
     except AnnotationsIOError as exc:
@@ -153,8 +175,6 @@ def setup_bc_with_annotations(
 
     revision_before = annotations["revision"]
 
-    # If forced into a non-confident state for dogfood, short-circuit
-    # BEFORE running the underlying setup OR the classifier.
     if force_blocked:
         return AIActionEnvelope(
             confidence="blocked",
@@ -169,12 +189,27 @@ def setup_bc_with_annotations(
             ),
         )
 
-    # M9 Step 2: consult the geometric classifier BEFORE running the
-    # underlying setup. If it returns blocked/uncertain, surface that
-    # immediately and don't write any dicts — the engineer answers
-    # the question(s) via the dialog, the resume PUTs annotations, and
-    # the next envelope call will (ideally) be confident.
-    if use_classifier and not force_uncertain:
+    if force_uncertain:
+        # N1.1: force_uncertain previously ran setup_ldc_bc THEN
+        # wrapped as uncertain. With the hard-strip, no setup runs;
+        # the dialog dogfood path emits the LDC question only.
+        return AIActionEnvelope(
+            confidence="uncertain",
+            summary=(
+                "AI suggests LDC defaults but wants confirmation on "
+                "the lid orientation."
+            ),
+            annotations_revision_consumed=revision_before,
+            annotations_revision_after=revision_before,
+            unresolved_questions=_ldc_dialog_questions(
+                force_blocked=False, force_uncertain=True
+            ),
+            next_step_suggestion=(
+                "After confirming, click [继续 AI 处理] to re-run."
+            ),
+        )
+
+    if use_classifier:
         cls: ClassificationResult = classify_setup_bc(
             case_dir, annotations=annotations
         )
@@ -192,80 +227,36 @@ def setup_bc_with_annotations(
                 ),
             )
 
-    # DEC-V61-101: dispatch the executor by classifier verdict.
-    # When force_uncertain (no classifier was run), default to LDC for
-    # backwards compatibility with the dogfood mock substrate. The
-    # classifier path always sets `cls` above.
-    geometry_class = (
-        cls.geometry_class
-        if (use_classifier and not force_uncertain)
-        else "ldc_cube"
-    )
-
-    if geometry_class == "non_cube":
-        # Channel executor — classifier already verified each pin's
-        # face_id is on the boundary, so bc_setup just consumes the
-        # tuples and writes dicts. Fall through if anything raises.
-        try:
-            ch_result: ChannelBCSetupResult = setup_channel_bc(
-                case_dir,
-                case_id=case_id,
-                inlet_face_ids=cls.inlet_face_ids,
-                outlet_face_ids=cls.outlet_face_ids,
-            )
-        except BCSetupError as exc:
-            raise AIActionError(
-                str(exc), failing_check="setup_channel_bc_failed"
-            ) from exc
+        # Confident path: describe the suggestion. No mutation.
+        if cls.geometry_class == "non_cube":
+            summary = _summarize_channel_suggestion(cls)
+        else:
+            summary = _summarize_ldc_suggestion(cls)
 
         return AIActionEnvelope(
             confidence="confident",
-            summary=(
-                f"Set up channel laminar BCs: inlet="
-                f"{ch_result.n_inlet_faces} face · outlet="
-                f"{ch_result.n_outlet_faces} face · walls="
-                f"{ch_result.n_wall_faces} faces. Re≈"
-                f"{ch_result.reynolds:.0f} (icoFoam laminar)."
-            ),
+            summary=summary,
             annotations_revision_consumed=revision_before,
             annotations_revision_after=revision_before,
-            next_step_suggestion="Proceed to Step 4 (Solve).",
-        )
-
-    # LDC path: run the underlying setup-bc.
-    try:
-        result: BCSetupResult = setup_ldc_bc(case_dir, case_id=case_id)
-    except BCSetupError as exc:
-        raise AIActionError(
-            str(exc), failing_check="setup_bc_failed"
-        ) from exc
-
-    if force_uncertain:
-        return AIActionEnvelope(
-            confidence="uncertain",
-            summary=(
-                f"Set up LDC defaults: lid={result.n_lid_faces} faces, "
-                f"walls={result.n_wall_faces} faces. Please confirm "
-                f"the lid orientation."
-            ),
-            annotations_revision_consumed=revision_before,
-            annotations_revision_after=revision_before,
-            unresolved_questions=_ldc_dialog_questions(
-                force_blocked=False, force_uncertain=True
-            ),
             next_step_suggestion=(
-                "After confirming, click [继续 AI 处理] to re-run."
+                "Click [应用 AI 建议] to apply, or [Skip] to keep current setup."
             ),
         )
 
-    # Confident path.
+    # Tier-A backwards-compat path (use_classifier=False, no force
+    # flags). Pre-N1.1 this ran setup_ldc_bc unconditionally. Now it
+    # returns a confident advisory envelope describing the LDC default
+    # suggestion. Tests that pin the legacy contract should switch to
+    # asserting the envelope shape, not the side effect.
     return AIActionEnvelope(
         confidence="confident",
         summary=(
-            f"Set up LDC defaults: lid={result.n_lid_faces} faces, "
-            f"walls={result.n_wall_faces} faces. Reynolds={result.reynolds}."
+            "AI suggests LDC defaults (legacy classifier-off path). "
+            "Click [应用 AI 建议] to apply icoFoam LDC defaults."
         ),
         annotations_revision_consumed=revision_before,
         annotations_revision_after=revision_before,
-        next_step_suggestion="Proceed to Step 4 (Solve).",
+        next_step_suggestion=(
+            "Click [应用 AI 建议] to apply, or [Skip] to keep current setup."
+        ),
     )

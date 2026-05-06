@@ -388,33 +388,15 @@ export const api = {
     const result = (await resp.json()) as import(
       "@/pages/workbench/step_panel_shell/types"
     ).AIActionEnvelope;
-    // R6 P2: polyMesh-mutation map for setupBCWithEnvelope
-    // (ui/backend/services/ai_actions/__init__.py
-    // setup_bc_with_annotations):
-    //   * force_blocked=1 → short-circuits BEFORE setup_ldc_bc;
-    //     confidence='blocked'; NO polyMesh write.
-    //   * force_uncertain=1 → runs setup_ldc_bc THEN wraps as
-    //     'uncertain' for the dogfood dialog; polyMesh IS written.
-    //   * neither force flag → classifier may short-circuit
-    //     ('uncertain'/'blocked' without writing) or fall through to
-    //     setup_ldc_bc/setup_channel_bc and return 'confident' (which
-    //     always means polyMesh was written).
-    // Therefore: dispatch on confidence×caller-intent:
-    //   * confident  → always write
-    //   * uncertain  → write only when forceUncertain (force_uncertain
-    //     post-setup wrap); plain classifier-uncertain has no write
-    //   * blocked    → never write (force_blocked short-circuits, AND
-    //     force_blocked wins over force_uncertain server-side per
-    //     /api/import/.../setup-bc spec_v2 §A3)
-    // R7 P3: gating on the response confidence first avoids the
-    // both-debug-flags-set case where forceUncertain is true but the
-    // backend returned 'blocked' (no write happened).
-    const polyMeshMutated =
-      result.confidence === "confident" ||
-      (result.confidence === "uncertain" && options.forceUncertain === true);
-    if (polyMeshMutated) {
-      dispatchMeshMutated(caseId);
-    }
+    // DEC-V61-131 N1.1: envelope mode is advisory-only — the backend
+    // hard-strip removed setup_ldc_bc / setup_channel_bc invocations
+    // from every envelope branch (confident / uncertain / blocked /
+    // force_uncertain / force_blocked). Therefore this call NEVER
+    // mutates polyMesh and we do not dispatch mesh:mutated. The actual
+    // mutation surface for Step 3 is the legacy non-envelope
+    // api.setupBC, which the [应用 AI 建议] confirm button calls; that
+    // route still dispatches mesh:mutated as before (see api.setupBC
+    // above).
     return result;
   },
 

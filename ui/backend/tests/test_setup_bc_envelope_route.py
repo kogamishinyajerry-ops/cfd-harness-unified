@@ -144,28 +144,39 @@ def test_envelope_force_blocked_does_not_call_setup_ldc_bc(
 # ────────── envelope=1 + force_uncertain (still calls setup_ldc_bc) ──────────
 
 
-def test_envelope_force_uncertain_propagates_setup_failure(
+def test_envelope_force_uncertain_no_longer_runs_setup(
     monkeypatch, tmp_path
 ):
-    """force_uncertain DOES still run setup_ldc_bc (so the engineer
-    sees real BC numbers in the summary, just with one mock question
-    appended). If setup_ldc_bc fails, the route surfaces the failure
-    via AIActionError → HTTPException, NOT via a degenerate envelope.
+    """DEC-V61-131 N1.1: force_uncertain previously wrapped a real
+    setup_ldc_bc call (so a missing polyMesh would raise BCSetupError
+    and surface as 409/500). Under the hard-strip, force_uncertain
+    returns the uncertain envelope WITHOUT invoking the BC mutation
+    routines — a missing polyMesh is no longer a failure surface
+    because the AI dispatch path doesn't read polyMesh under
+    force_uncertain. The route returns 200 + uncertain envelope.
     """
     imported = _isolated_imported(monkeypatch, tmp_path)
     case_id = _safe_case_id()
-    _stage_imported_case(imported, case_id)  # NO polyMesh → setup will fail
+    _stage_imported_case(imported, case_id)  # NO polyMesh
     client = _new_client()
 
     r = client.post(
         f"/api/import/{case_id}/setup-bc",
         params={"envelope": 1, "force_uncertain": 1},
     )
-    # setup_ldc_bc raises BCSetupError → AIActionError →
-    # _setup_bc_failure_to_http → 409 (mesh_missing) or 500 (write_failed).
-    assert r.status_code in {409, 500}
-    body = r.json()
-    assert "failing_check" in body["detail"]
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["confidence"] == "uncertain"
+    # No write occurred — annotations_revision_after equals consumed.
+    assert (
+        payload["annotations_revision_after"]
+        == payload["annotations_revision_consumed"]
+    )
+    # Dialog question is still surfaced for the LDC dogfood path.
+    assert any(
+        q["id"] == "lid_orientation"
+        for q in payload["unresolved_questions"]
+    )
 
 
 # ────────── envelope=1 + invalid query param combos ──────────
@@ -346,7 +357,8 @@ def test_envelope_full_loop_uncertain_pin_lid_then_confident_via_http(
     assert pinned["confidence"] == "user_authoritative"
 
     # Step 3: re-run envelope → classifier verifies pin geometrically →
-    # confident · setup_ldc_bc runs → BC dicts on disk.
+    # confident · DEC-V61-131 N1.1: advisory only, NO BC dicts written.
+    # The engineer applies via the legacy non-envelope POST /setup-bc.
     r2 = client.post(
         f"/api/import/{case_id}/setup-bc",
         params={"envelope": 1},
@@ -356,9 +368,13 @@ def test_envelope_full_loop_uncertain_pin_lid_then_confident_via_http(
     assert env2["confidence"] == "confident", env2
     assert env2["unresolved_questions"] == []
     assert env2["annotations_revision_consumed"] == 1
-    assert (case_dir / "0").is_dir()
-    assert (case_dir / "system").is_dir()
-    assert (case_dir / "constant").is_dir()
+    # Hard-strip contract: the AI envelope path does NOT write BC dicts.
+    # `0/` should NOT be created by the envelope call. (The engineer's
+    # subsequent click on [应用 AI 建议] calls legacy api.setupBC which
+    # WOULD write 0/ — that's covered by setup-bc legacy route tests.)
+    assert not (case_dir / "0").is_dir()
+    # The advisory summary mentions the apply-button affordance.
+    assert "应用 AI 建议" in env2["summary"] or "LDC" in env2["summary"]
 
 
 def test_envelope_full_loop_lid_pin_off_top_plane_stays_uncertain(
@@ -563,8 +579,10 @@ def test_envelope_full_loop_channel_inlet_outlet_pin_then_confident_via_http(
     assert r_put.status_code == 200, r_put.text
     assert r_put.json()["revision"] == 1
 
-    # Step 3: re-run envelope → classifier verifies pins → confident →
-    # setup_channel_bc writes dicts + splits boundary into 3 patches.
+    # Step 3: re-run envelope → classifier verifies pins → confident.
+    # DEC-V61-131 N1.1: advisory only, NO channel BC dicts written and
+    # NO boundary split. The engineer applies via the legacy
+    # non-envelope POST /setup-bc to actually rewrite the dict tree.
     r2 = client.post(
         f"/api/import/{case_id}/setup-bc",
         params={"envelope": 1},
@@ -574,33 +592,32 @@ def test_envelope_full_loop_channel_inlet_outlet_pin_then_confident_via_http(
     assert env2["confidence"] == "confident", env2
     assert env2["unresolved_questions"] == []
     assert env2["annotations_revision_consumed"] == 1
-    assert "inlet=" in env2["summary"] and "outlet=" in env2["summary"]
-    # Executor wrote the channel dict tree (NOT the LDC tree — no
-    # `lid` patch).
-    assert (case_dir / "0" / "U").is_file()
-    assert (case_dir / "0" / "p").is_file()
-    assert (case_dir / "system" / "controlDict").is_file()
+    # Advisory summary surfaces the channel geometry classification +
+    # the apply-button affordance.
+    assert "channel" in env2["summary"].lower()
+    assert "inlet" in env2["summary"].lower()
+    # Hard-strip: no dict tree was written by the envelope call.
+    assert not (case_dir / "0").is_dir()
     bnd_text = (case_dir / "constant" / "polyMesh" / "boundary").read_text()
-    assert "inlet" in bnd_text
-    assert "outlet" in bnd_text
-    assert "walls" in bnd_text
-    assert "lid" not in bnd_text  # not the LDC executor
+    # Boundary not yet split — still single 'walls' patch from staging.
+    assert "inlet" not in bnd_text
+    assert "outlet" not in bnd_text
 
 
-def test_envelope_channel_executor_failure_routes_to_422_pin_mismatch(
+def test_envelope_channel_executor_no_longer_invoked_from_envelope(
     monkeypatch, tmp_path
 ):
-    """Codex DEC-V61-101 R1 MED closure: when setup_channel_bc raises
-    BCSetupError (e.g., a pin doesn't resolve mid-flight because the
-    classifier's _boundary_face_ids snapshot somehow disagrees with
-    the executor's), the route layer must surface a 422
-    channel_pin_mismatch — NOT generic 422 setup_channel_bc_failed
-    or 500 write_failed.
-
-    We exercise this by directly calling setup_channel_bc with a
-    bogus inlet_face_id; the wrapper raises AIActionError(failing_check
-    = setup_channel_bc_failed), and the route maps it via
-    _setup_bc_failure_to_http to 422 channel_pin_mismatch.
+    """DEC-V61-131 N1.1: pre-N1.1, the envelope confident path called
+    setup_channel_bc, so a bogus pin in the classifier's output would
+    surface as 422 channel_pin_mismatch via the executor failure. Under
+    the hard-strip, the envelope no longer invokes the executor at all
+    — a confident classifier output (even with bogus pins) returns 200
+    + advisory envelope. The pin validation now lives at the legacy
+    non-envelope route (which the engineer's [应用 AI 建议] click
+    drives), where setup_channel_bc still runs and still raises 422.
+    This test pins the new contract: envelope returns 200 advisory
+    even when classifier output would have been rejected by the
+    legacy executor.
     """
     from ui.backend.services.case_annotations import face_id
 
@@ -676,16 +693,18 @@ def test_envelope_channel_executor_failure_routes_to_422_pin_mismatch(
         f"/api/import/{case_id}/setup-bc",
         params={"envelope": 1},
     )
-    assert r.status_code == 422, r.text
+    # N1.1: envelope returns 200 + advisory; the executor failure
+    # surface migrated to the legacy POST /setup-bc route which the
+    # apply-button click invokes.
+    assert r.status_code == 200, r.text
     payload = r.json()
-    assert payload["detail"]["failing_check"] == "channel_pin_mismatch"
-    # Either "stale pins" (partial match) or "no boundary face matched"
-    # (zero match) is valid — both are 422 channel_pin_mismatch with
-    # an actionable engineer message.
-    detail = payload["detail"]["detail"]
+    assert payload["confidence"] == "confident"
+    # No write occurred (advisory only).
     assert (
-        "stale pins" in detail or "no boundary face matched" in detail
-    ), detail
+        payload["annotations_revision_after"]
+        == payload["annotations_revision_consumed"]
+    )
+    assert not (case_dir / "0").is_dir()
 
 
 def test_setup_bc_route_maps_solver_profile_load_failed_to_500(

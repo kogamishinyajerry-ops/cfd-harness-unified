@@ -494,24 +494,19 @@ def test_apply_proposal_truly_absent_case_dir_still_returns_404(
         assert resp.json()["detail"]["failing_check"] == "case_not_found"
 
 
-def test_apply_proposal_422_regenerate_mesh_inner_failing_check_plumbed(
+def test_apply_proposal_regenerate_mesh_returns_advisory(
     tmp_path, monkeypatch
 ):
-    """V123 R2 P2-2: when the regenerate_mesh path fails with a
-    structured MeshPipelineError, the response body must include
-    detail.inner_failing_check so the frontend ProposalCard surfaces
-    the actionable remediation hint (cell_cap_exceeded etc) instead
-    of a generic 'underlying_service_error'."""
+    """DEC-V61-131 N1.1: regenerate_mesh dispatch is advisory-only.
+    /apply-proposal returns 200 + ApplyResult describing the
+    suggestion; no mesh pipeline runs. The pre-N1.1 contract that
+    plumbed MeshPipelineError.failing_check as inner_failing_check is
+    no longer reachable through this path (the legacy mesh route
+    POST /api/import/{case_id}/mesh still surfaces those errors and is
+    covered by `test_mesh_imported_route.py`).
+    """
     _make_case(tmp_path)
     app = _make_app(tmp_path, monkeypatch)
-
-    from ui.backend.services.llm_coach import tool_registry as registry_module
-    from ui.backend.services.meshing_gmsh import MeshPipelineError
-
-    def fake_mesh(case_id, *, mesh_mode, case_dir_override=None):
-        raise MeshPipelineError("hard cap exceeded", "cell_cap_exceeded")
-
-    monkeypatch.setattr(registry_module, "mesh_imported_case", fake_mesh)
 
     with TestClient(app) as client:
         resp = client.post(
@@ -522,8 +517,12 @@ def test_apply_proposal_422_regenerate_mesh_inner_failing_check_plumbed(
                 "args": {"mesh_mode": "power"},
             },
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 200, resp.text
         body = resp.json()
-        assert body["detail"]["failing_check"] == "underlying_service_error"
-        assert body["detail"]["inner_failing_check"] == "cell_cap_exceeded"
-        assert "cell_cap_exceeded" in body["detail"]["message"]
+        # Advisory ApplyResult shape.
+        assert body["tool"] == "regenerate_mesh"
+        assert body["state_after"]["advisory"] is True
+        assert (
+            body["state_after"]["suggestion"]["axis"] == "mesh_mode"
+        )
+        assert "AI suggests" in body["summary"]
