@@ -445,6 +445,80 @@ describe("Step2Mesh · wired body", () => {
     expect(panel).toHaveTextContent(/no overlap with the case geometry/);
   });
 
+  // R0 P1 (Codex CRS): coordinate inputs must accept partial /
+  // negative edits without snapping back to 0.
+  it("accepts negative coordinates and partial decimals in zone inputs", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+
+    const xminInput = screen.getByTestId(
+      "step2-mesh-zone-0-xmin",
+    ) as HTMLInputElement;
+    await user.clear(xminInput);
+    await user.type(xminInput, "-0.5");
+
+    const yminInput = screen.getByTestId(
+      "step2-mesh-zone-0-ymin",
+    ) as HTMLInputElement;
+    await user.clear(yminInput);
+    await user.type(yminInput, ".25");
+
+    await triggerAi();
+
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      null,
+      [
+        expect.objectContaining({
+          geometry: "box",
+          // Negative xmin and partial-decimal ymin must round-trip.
+          bbox: [-0.5, 0.25, 0.0, 1.0, 1.0, 1.0],
+        }),
+      ],
+    );
+  });
+
+  // R0 P2 (Codex CRS): collapsing the disclosure must NOT silently
+  // drop configured zones. Zones list is data; disclosure is UX.
+  it("sends configured zones even when the disclosure is collapsed", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const detailsEl = screen.getByTestId(
+      "step2-mesh-refinement-zones",
+    ) as HTMLDetailsElement;
+    const summary = detailsEl.querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+
+    // Collapse the panel. Zones state remains.
+    await user.click(summary);
+    expect(detailsEl.open).toBe(false);
+
+    await triggerAi();
+
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      null,
+      [
+        expect.objectContaining({
+          geometry: "box",
+          level: 2,
+        }),
+      ],
+    );
+  });
+
   it("removes a zone via Remove button", async () => {
     const user = userEvent.setup();
     const { container } = renderStep({});
