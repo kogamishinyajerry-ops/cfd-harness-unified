@@ -1,24 +1,34 @@
 ---
 dec_id: V61-131
 title: Envelope mode backend hard-strip + regenerate_mesh tool deprecate (advisory only)
-status: Proposed (R0 · 2026-05-06)
+status: Accepted (R17 · 2026-05-06 · 86gs APPROVE on c20dade)
 parent_dec: V61-130
 parent_artifacts:
   - .planning/decisions/2026-05-06_v61_130_strategic_pivot_ai_advisor.md
   - ui/backend/services/ai_actions/__init__.py
+  - ui/backend/services/ai_actions/classifier/__init__.py
   - ui/backend/services/llm_coach/tool_registry.py
+  - ui/backend/services/case_annotations/__init__.py
   - ui/backend/routes/case_solve.py
-  - ui/frontend/src/pages/workbench/step_panel_shell/steps/Step3SetupBC.tsx
+  - ui/backend/routes/case_annotations.py
+  - ui/backend/routes/ai_coach.py
+  - ui/backend/schemas/ai_action.py
+  - ui/backend/schemas/case_solve.py
   - ui/frontend/src/api/client.ts
+  - ui/frontend/src/pages/workbench/step_panel_shell/steps/Step3SetupBC.tsx
+  - ui/frontend/src/pages/workbench/step_panel_shell/AnnotationPanel.tsx
+  - ui/frontend/src/pages/workbench/step_panel_shell/ProposalCard.tsx
+  - ui/frontend/src/pages/workbench/step_panel_shell/types.ts
 phase: N1 (workbench-first / AI is advisor)
 trigger: V130 charter §4 N1.1 — Kogami P1 finding #2 close (backend hard-strip)
 autonomous_governance: true
 counter_impact: +1
 counter_value_after: 28
 external_gate_self_estimated_pass_rate: 70%
-codex_review_relay: 86gs (xhigh)
-codex_tool_report_path: (R0 — pending)
-notion_sync_status: (R0 — pending)
+external_gate_actual_outcome: 17 rounds (R0 → R17 APPROVE; CRS once on R10 fallback when 86gs 503)
+codex_review_relay: 86gs (xhigh) primary; CRS (high) fallback round R10 when 86gs 503
+codex_tool_report_path: /tmp/n11_r17_review_86gs.log (last round APPROVE)
+notion_sync_status: pending (session-end batch)
 ---
 
 # DEC-V61-131 · N1.1 · Envelope hard-strip + regenerate_mesh deprecate
