@@ -549,7 +549,277 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     await screen.findByTestId("step3-apply-suggestion-btn");
     expect(onStepComplete).not.toHaveBeenCalled();
   });
+
+  it("stale-pin recovery: replacement carries stale.patch_type when existing patch_type is the AnnotationPanel 'wall' default (Codex R10 P2)", async () => {
+    // R10 (CRS): AnnotationPanel always saves patch_type, defaulting
+    // to "wall". So a pre-resume sidebar save (just to set the name)
+    // leaves patch_type="wall", which R9 mis-treated as an explicit
+    // engineer override and dropped the stale's meaningful boundary
+    // type — silently downgrading a recovered inlet/outlet to wall.
+    // The R10 fix treats existing.patch_type === "wall" as
+    // indistinguishable from default and lets stale's non-wall value
+    // win; physics_notes still carries when existing is blank.
+    getFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 7,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [
+        {
+          face_id: "fid_stale",
+          name: "old_inlet",
+          patch_type: "patch",
+          physics_notes: "U=1.5 m/s",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:00Z",
+        },
+        {
+          // Engineer pre-annotated the replacement face (just to
+          // give it a name); patch_type defaulted to "wall" because
+          // AnnotationPanel always saves the dropdown's current
+          // value. physics_notes left blank → undefined.
+          face_id: "fid_repl",
+          name: "engineer_typed_name",
+          patch_type: "wall",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:01Z",
+        },
+      ],
+    });
+    setupBCWithEnvelopeMock
+      .mockResolvedValueOnce({
+        confidence: "uncertain",
+        summary: "Stale inlet pin — pick replacement.",
+        annotations_revision_consumed: 7,
+        annotations_revision_after: 7,
+        unresolved_questions: [
+          {
+            id: "inlet_face_replace_deadbeefcafebabe",
+            kind: "face_label",
+            prompt: "Pick replacement inlet.",
+            needs_face_selection: true,
+            candidate_face_ids: [],
+            candidate_options: [],
+            default_answer: "inlet",
+            stale_face_ids: ["fid_stale"],
+          },
+        ],
+        next_step_suggestion: null,
+        error_detail: null,
+      })
+      .mockResolvedValueOnce({
+        confidence: "confident",
+        summary: "Done.",
+        annotations_revision_consumed: 8,
+        annotations_revision_after: 8,
+        unresolved_questions: [],
+        next_step_suggestion: null,
+        error_detail: null,
+      });
+    putFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 8,
+      last_modified: "2026-04-29T00:00:02Z",
+      faces: [
+        {
+          face_id: "fid_repl",
+          name: "inlet_face_replace_deadbeefcafebabe",
+          patch_type: "patch",
+          physics_notes: "U=1.5 m/s",
+          confidence: "user_authoritative",
+        },
+      ],
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <ReplacementFacePushHelper />
+          </Step3StateProvider>
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    await user.click(screen.getByTestId("test-pick-replacement-button"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "dialog-panel-face-hint-inlet_face_replace_deadbeefcafebabe",
+        ),
+      ).toHaveTextContent(/picked: fid_repl/i),
+    );
+
+    await user.click(screen.getByTestId("dialog-panel-resume"));
+
+    await waitFor(() => expect(putFaceAnnotationsMock).toHaveBeenCalled());
+    const [, putBody] = putFaceAnnotationsMock.mock.calls[0];
+    // The replacement face's PUT must carry the stale's patch_type
+    // ("patch"), not preserve the AnnotationPanel-default "wall".
+    expect(putBody.faces[0]).toMatchObject({
+      face_id: "fid_repl",
+      patch_type: "patch",
+      physics_notes: "U=1.5 m/s",
+      confidence: "user_authoritative",
+    });
+    // And the stale entry is purged in the same PUT.
+    expect(putBody.remove_face_ids).toEqual(["fid_stale"]);
+  });
+
+  it("stale-pin recovery: existing non-wall patch_type wins over stale.patch_type (Codex R10 contract)", async () => {
+    // Symmetric guard for R10: when the engineer DID explicitly pick
+    // a non-wall patch_type on the replacement (e.g., "symmetry"),
+    // that explicit choice must win — we only treat "wall" as the
+    // default-indistinguishable sentinel.
+    getFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 9,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [
+        {
+          face_id: "fid_stale",
+          name: "old_inlet",
+          patch_type: "patch",
+          physics_notes: "U=1.5 m/s",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:00Z",
+        },
+        {
+          face_id: "fid_repl",
+          name: "engineer_explicit",
+          patch_type: "symmetry",
+          physics_notes: "explicit override notes",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:01Z",
+        },
+      ],
+    });
+    setupBCWithEnvelopeMock
+      .mockResolvedValueOnce({
+        confidence: "uncertain",
+        summary: "Stale inlet pin — pick replacement.",
+        annotations_revision_consumed: 9,
+        annotations_revision_after: 9,
+        unresolved_questions: [
+          {
+            id: "inlet_face_replace_cafebabedeadbeef",
+            kind: "face_label",
+            prompt: "Pick replacement inlet.",
+            needs_face_selection: true,
+            candidate_face_ids: [],
+            candidate_options: [],
+            default_answer: "inlet",
+            stale_face_ids: ["fid_stale"],
+          },
+        ],
+        next_step_suggestion: null,
+        error_detail: null,
+      })
+      .mockResolvedValueOnce({
+        confidence: "confident",
+        summary: "Done.",
+        annotations_revision_consumed: 10,
+        annotations_revision_after: 10,
+        unresolved_questions: [],
+        next_step_suggestion: null,
+        error_detail: null,
+      });
+    putFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 10,
+      last_modified: "2026-04-29T00:00:02Z",
+      faces: [],
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <ReplacementFacePushHelper />
+          </Step3StateProvider>
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    await user.click(screen.getByTestId("test-pick-replacement-button"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "dialog-panel-face-hint-inlet_face_replace_cafebabedeadbeef",
+        ),
+      ).toHaveTextContent(/picked: fid_repl/i),
+    );
+
+    await user.click(screen.getByTestId("dialog-panel-resume"));
+
+    await waitFor(() => expect(putFaceAnnotationsMock).toHaveBeenCalled());
+    const [, putBody] = putFaceAnnotationsMock.mock.calls[0];
+    // Existing explicit "symmetry" + non-blank physics_notes mean
+    // the resume PUT carries NEITHER stale field — engineer's
+    // explicit override wins. Only name + confidence land.
+    expect(putBody.faces[0]).toMatchObject({
+      face_id: "fid_repl",
+      confidence: "user_authoritative",
+    });
+    expect(putBody.faces[0].patch_type).toBeUndefined();
+    expect(putBody.faces[0].physics_notes).toBeUndefined();
+  });
 });
+
+// Helper: pushes the replacement face pick (used by R10 stale-pin
+// recovery tests). Distinct testid from FacePushHelper's lid pick so
+// both helpers can coexist without collision.
+function ReplacementFacePushHelper() {
+  const { setPicked } = useFacePick();
+  return (
+    <button
+      type="button"
+      data-testid="test-pick-replacement-button"
+      onClick={() =>
+        setPicked({
+          faceId: "fid_repl",
+          faceIds: ["fid_repl"],
+          worldPosition: [0.5, 0.5, 0.0],
+        })
+      }
+    >
+      pick replacement
+    </button>
+  );
+}
 
 // Helper: a small button that pushes a face pick into the context.
 // The envelope-mode tests use this to simulate a viewport pick

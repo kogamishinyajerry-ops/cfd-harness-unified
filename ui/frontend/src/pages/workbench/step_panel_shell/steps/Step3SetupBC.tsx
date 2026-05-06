@@ -602,25 +602,33 @@ export function Step3SetupBC({
         if (!composed) continue;
         const [faceId, label] = composed.split(":");
         if (!faceId) continue;
-        // Codex R8 P2#2 + R9 close: carry forward stale-face
-        // metadata onto the replacement ONLY when the replacement
-        // face has no existing value for that field. The replacement
-        // face's existing annotation may already carry engineer-
-        // entered patch_type / physics_notes (e.g., from a pre-
-        // resume AnnotationPanel save); blindly overwriting with the
-        // stale values would clobber the engineer's freshly-entered
-        // metadata. Only fill blank slots.
+        // Codex R8 P2#2 + R9 + R10 close: carry forward stale-face
+        // metadata onto the replacement, with care not to clobber
+        // engineer-entered values. R9 used `existingReplacement.X !==
+        // undefined` as the override signal, but R10 (CRS) flagged
+        // that AnnotationPanel ALWAYS saves patch_type defaulting to
+        // "wall" — so a pre-resume sidebar save (just to set the
+        // name) leaves patch_type="wall", which R9 mis-treated as an
+        // explicit override and dropped the stale's meaningful value
+        // (e.g., recovering an inlet stuck at "wall" instead of the
+        // original "patch" type). Treat "wall" on the replacement as
+        // indistinguishable from default and let stale's non-wall
+        // boundary type win; only respect a non-wall existing value
+        // (which IS an explicit engineer choice) or a present
+        // physics_notes (which AnnotationPanel leaves undefined when
+        // blank).
         let carryPatchType: FaceAnnotation["patch_type"] | undefined;
         let carryPhysicsNotes: FaceAnnotation["physics_notes"] | undefined;
         if (q.stale_face_ids && q.stale_face_ids.length === 1) {
           const stale = annotationByFaceId.get(q.stale_face_ids[0]);
           const existingReplacement = annotationByFaceId.get(faceId);
           if (stale) {
-            if (
-              !existingReplacement ||
-              existingReplacement.patch_type === undefined ||
-              existingReplacement.patch_type === null
-            ) {
+            const existingPatchType = existingReplacement?.patch_type;
+            const existingPatchTypeIsExplicit =
+              existingPatchType !== undefined &&
+              existingPatchType !== null &&
+              existingPatchType !== "wall";
+            if (!existingPatchTypeIsExplicit) {
               carryPatchType = stale.patch_type;
             }
             if (
