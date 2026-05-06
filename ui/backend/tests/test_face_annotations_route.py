@@ -257,3 +257,112 @@ def test_put_404_for_missing_case(monkeypatch, tmp_path):
         json={"if_match_revision": 0, "annotated_by": "human", "faces": []},
     )
     assert r.status_code == 404
+
+
+def test_put_remove_face_ids_purges_legacy_entry_atomically(
+    monkeypatch, tmp_path
+):
+    """DEC-V61-131 N1.1 R7: PUT /face-annotations#remove_face_ids
+    deletes entries by face_id BEFORE merging the new ``faces`` list,
+    so the stale-pin recovery flow can replace a stale annotation
+    atomically with the engineer's new pick.
+    """
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    _stage_imported_case(imported, case_id)
+    client = _new_client()
+
+    # Seed two annotations.
+    r = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 0,
+            "annotated_by": "human",
+            "faces": [
+                {
+                    "face_id": "fid_old1234567",
+                    "name": "inlet_legacy",
+                    "confidence": "user_authoritative",
+                },
+                {
+                    "face_id": "fid_keep1234567",
+                    "name": "outlet",
+                    "confidence": "user_authoritative",
+                },
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    seeded = r.json()
+    assert seeded["revision"] == 1
+    assert {f["face_id"] for f in seeded["faces"]} == {
+        "fid_old1234567",
+        "fid_keep1234567",
+    }
+
+    # Now: replace fid_old with fid_new, atomically purging fid_old.
+    r2 = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 1,
+            "annotated_by": "human",
+            "remove_face_ids": ["fid_old1234567"],
+            "faces": [
+                {
+                    "face_id": "fid_new1234567",
+                    "name": "inlet",
+                    "confidence": "user_authoritative",
+                },
+            ],
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    after = r2.json()
+    face_ids = {f["face_id"] for f in after["faces"]}
+    # fid_old is GONE; fid_keep remains; fid_new is added.
+    assert face_ids == {"fid_keep1234567", "fid_new1234567"}
+
+
+def test_put_remove_face_ids_ignored_for_ai_writer(monkeypatch, tmp_path):
+    """DEC-V61-131 N1.1 R7: AI writers cannot use remove_face_ids to
+    delete user_authoritative pins (sticky invariant). A PUT from an
+    AI writer with remove_face_ids set is ignored — the legacy entry
+    survives. The engineer ('human' annotated_by) is the only writer
+    that can issue removals.
+    """
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    _stage_imported_case(imported, case_id)
+    client = _new_client()
+
+    # Seed a user_authoritative annotation.
+    r = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 0,
+            "annotated_by": "human",
+            "faces": [
+                {
+                    "face_id": "fid_user1234567",
+                    "name": "inlet",
+                    "confidence": "user_authoritative",
+                },
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Now AI tries to delete it.
+    r2 = client.put(
+        f"/api/cases/{case_id}/face-annotations",
+        json={
+            "if_match_revision": 1,
+            "annotated_by": "ai:rule-based",
+            "remove_face_ids": ["fid_user1234567"],
+            "faces": [],
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    after = r2.json()
+    # User pin survives despite AI's deletion attempt.
+    assert any(f["face_id"] == "fid_user1234567" for f in after["faces"])

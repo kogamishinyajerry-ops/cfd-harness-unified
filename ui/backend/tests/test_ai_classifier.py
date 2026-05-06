@@ -501,14 +501,18 @@ def test_classifier_channel_with_unverifiable_pins_returns_uncertain(
     res = classify_setup_bc(case_dir, annotations=annotations)
     assert res.confidence == "uncertain"
     assert res.geometry_class == "non_cube"
-    # R5: stale-pin filter turns this into the natural face_label
-    # branch — engineer can re-pick via the standard dialog.
+    # R7: each stale face_id surfaces its own replacement question
+    # (inlet_face_replace_<fid> / outlet_face_replace_<fid>) so the
+    # engineer can re-pick face-for-face. stale_face_ids[] on the
+    # question drives PUT remove_face_ids so the legacy entry purges
+    # alongside the new pick.
     qids = {q.id for q in res.questions}
-    assert "inlet_face" in qids
-    assert "outlet_face" in qids
+    assert any(qid.startswith("inlet_face_replace_") for qid in qids)
+    assert any(qid.startswith("outlet_face_replace_") for qid in qids)
     assert all(q.needs_face_selection for q in res.questions)
-    # Summary signals that pre-existing pins went stale (so the UI
-    # can foreground the explanation).
+    for q in res.questions:
+        assert len(q.stale_face_ids) == 1
+    # Summary signals that pre-existing pins went stale.
     assert "no longer on the current boundary" in res.summary
     # Confident-only fields stay empty when verification fails.
     assert res.inlet_face_ids == ()
@@ -1294,9 +1298,15 @@ def test_classifier_channel_partially_stale_inlet_stays_uncertain(tmp_path):
     # MUST NOT silently apply with just the surviving inlet.
     assert res.confidence == "uncertain"
     qids = {q.id for q in res.questions}
-    assert "inlet_face" in qids  # engineer prompted to re-pick inlet
+    # R7: replacement-pick question per stale face_id, with
+    # stale_face_ids carrying the legacy pin for atomic deletion.
+    replace_qs = [
+        q for q in res.questions if q.id.startswith("inlet_face_replace_")
+    ]
+    assert len(replace_qs) == 1
+    assert replace_qs[0].stale_face_ids == [stale_inlet]
     # Outlet was untouched, no question for it.
-    assert "outlet_face" not in qids
+    assert not any(qid.startswith("outlet_face") for qid in qids)
     # Confident-only fields stay empty when verification fails.
     assert res.inlet_face_ids == ()
     assert res.outlet_face_ids == ()

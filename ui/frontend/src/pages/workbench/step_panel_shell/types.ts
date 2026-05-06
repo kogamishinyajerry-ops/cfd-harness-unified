@@ -51,6 +51,10 @@ export interface UnresolvedQuestion {
   candidate_face_ids: string[];
   candidate_options: string[];
   default_answer: string | null;
+  // DEC-V61-131 N1.1 R7: face_ids whose annotations should be purged
+  // when the engineer answers this question — used by the stale-pin
+  // recovery flow so the legacy entry doesn't keep showing as stale.
+  stale_face_ids?: string[];
 }
 
 /** Standard return shape for every AI action under M-AI-COPILOT.
@@ -102,6 +106,11 @@ export interface AnnotationsDocument {
 export interface AnnotationsPutBody {
   if_match_revision: number;
   faces: FaceAnnotation[];
+  // DEC-V61-131 N1.1 R7: face_ids to delete from the doc before the
+  // ``faces`` merge runs. Stale-pin recovery uses this to atomically
+  // remove the legacy entry alongside the engineer's replacement
+  // pick. Empty/omitted by default.
+  remove_face_ids?: string[];
   annotated_by: string;
 }
 

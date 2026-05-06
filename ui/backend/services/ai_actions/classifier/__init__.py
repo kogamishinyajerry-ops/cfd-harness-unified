@@ -536,56 +536,76 @@ def classify_setup_bc(
     inlet_pinned = bool(inlet_pin_ids)
     outlet_pinned = bool(outlet_pin_ids)
 
-    # Codex R5 P1#1 follow-up: a role with stale pins must also surface
-    # an inlet_face/outlet_face face_label question so the engineer can
-    # re-pick — otherwise the uncertain return below would have no
-    # actionable questions and the dialog would render empty.
-    needs_inlet_pick = (not inlet_pinned) or bool(stale_inlet_pin_ids)
-    needs_outlet_pick = (not outlet_pinned) or bool(stale_outlet_pin_ids)
+    # Codex R6 P1+P2 close: emit one face_label question PER stale
+    # face_id (so multi-face stale recovery doesn't silently degrade
+    # to one slot) and surface stale_face_ids on the question so the
+    # frontend's resume can purge them atomically with the new pin
+    # via PUT /face-annotations#remove_face_ids — without that purge,
+    # the next classifier run still sees the stale entry and the
+    # recovery loops indefinitely.
     questions: list[UnresolvedQuestion] = []
-    if needs_inlet_pick:
-        if stale_inlet_pin_ids:
-            inlet_prompt = (
-                f"Previously pinned inlet face(s) "
-                f"{sorted(stale_inlet_pin_ids)} are no longer on the "
-                f"current boundary (mesh may have been regenerated). "
-                f"Click the inlet face in the viewport."
-            )
-        else:
-            inlet_prompt = (
-                f"Non-cube geometry (aspect ratio {ar:.3f}). Click "
-                f"the inlet face in the viewport."
-            )
+    if not inlet_pinned and not stale_inlet_pin_ids:
+        # No inlet pin at all yet — single fresh-pick question.
         questions.append(
             UnresolvedQuestion(
                 id="inlet_face",
                 kind="face_label",
-                prompt=inlet_prompt,
+                prompt=(
+                    f"Non-cube geometry (aspect ratio {ar:.3f}). Click "
+                    f"the inlet face in the viewport."
+                ),
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
                 default_answer="inlet",
             ),
         )
-    if needs_outlet_pick:
-        if stale_outlet_pin_ids:
-            outlet_prompt = (
-                f"Previously pinned outlet face(s) "
-                f"{sorted(stale_outlet_pin_ids)} are no longer on the "
-                f"current boundary. Click the outlet face in the "
-                f"viewport."
-            )
-        else:
-            outlet_prompt = "Click the outlet face in the viewport."
+    for stale_id in sorted(stale_inlet_pin_ids):
+        # One replacement-pick question per stale inlet face_id.
+        questions.append(
+            UnresolvedQuestion(
+                id=f"inlet_face_replace_{stale_id}",
+                kind="face_label",
+                prompt=(
+                    f"Previously pinned inlet face {stale_id!r} is no "
+                    f"longer on the current boundary (mesh may have "
+                    f"been regenerated). Click a replacement inlet "
+                    f"face in the viewport."
+                ),
+                needs_face_selection=True,
+                candidate_face_ids=[],
+                candidate_options=[],
+                default_answer="inlet",
+                stale_face_ids=[stale_id],
+            ),
+        )
+    if not outlet_pinned and not stale_outlet_pin_ids:
         questions.append(
             UnresolvedQuestion(
                 id="outlet_face",
                 kind="face_label",
-                prompt=outlet_prompt,
+                prompt="Click the outlet face in the viewport.",
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
                 default_answer="outlet",
+            ),
+        )
+    for stale_id in sorted(stale_outlet_pin_ids):
+        questions.append(
+            UnresolvedQuestion(
+                id=f"outlet_face_replace_{stale_id}",
+                kind="face_label",
+                prompt=(
+                    f"Previously pinned outlet face {stale_id!r} is no "
+                    f"longer on the current boundary. Click a "
+                    f"replacement outlet face in the viewport."
+                ),
+                needs_face_selection=True,
+                candidate_face_ids=[],
+                candidate_options=[],
+                default_answer="outlet",
+                stale_face_ids=[stale_id],
             ),
         )
 

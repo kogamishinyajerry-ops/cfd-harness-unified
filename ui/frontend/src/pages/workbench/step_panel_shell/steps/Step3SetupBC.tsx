@@ -577,7 +577,14 @@ export function Step3SetupBC({
       // the engineer's label as a user_authoritative annotation. The
       // DialogPanel composes "<face_id>:<label>" when both are
       // present, or just "<face_id>" otherwise. Parse that back here.
+      // DEC-V61-131 N1.1 R7: collect stale_face_ids from any answered
+      // question carrying them so the PUT can purge the legacy entry
+      // alongside the replacement pick — required for the stale-pin
+      // recovery flow to converge (PUT only merges by face_id, so
+      // without the explicit removal the stale entry stays on disk
+      // and the next classifier run sees the same stale state).
       const facesToWrite: FaceAnnotation[] = [];
+      const removeFaceIds: string[] = [];
       for (const q of envelope.unresolved_questions) {
         if (!q.needs_face_selection) continue;
         const composed = answers[q.id];
@@ -589,6 +596,11 @@ export function Step3SetupBC({
           name: label || q.id,
           confidence: "user_authoritative",
         });
+        if (q.stale_face_ids && q.stale_face_ids.length > 0) {
+          for (const stale of q.stale_face_ids) {
+            removeFaceIds.push(stale);
+          }
+        }
       }
       // Codex round-4 P2 (2026-04-30): if facesToWrite is non-empty
       // but annotations hasn't loaded yet, the PUT was previously
@@ -608,6 +620,8 @@ export function Step3SetupBC({
           const updated = await api.putFaceAnnotations(caseId, {
             if_match_revision: annotations.revision,
             faces: facesToWrite,
+            remove_face_ids:
+              removeFaceIds.length > 0 ? removeFaceIds : undefined,
             annotated_by: "human",
           });
           setAnnotations(updated);

@@ -64,6 +64,19 @@ class _AnnotationsPutBody(BaseModel):
 
     if_match_revision: int = Field(..., ge=0)
     faces: list[_FacePut] = Field(default_factory=list)
+    remove_face_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "DEC-V61-131 N1.1 R7: face_ids whose annotations should "
+            "be deleted before the new ``faces`` are merged. Used by "
+            "the stale-pin recovery flow: when the AI classifier "
+            "reports an inlet/outlet pin is no longer on the "
+            "boundary, the engineer's replacement pick supplies the "
+            "stale face_ids here so the legacy entry is purged "
+            "atomically with the new annotation. Empty by default — "
+            "callers that don't need deletion semantics omit it."
+        ),
+    )
     annotated_by: str = Field(
         default="human",
         description=(
@@ -158,9 +171,19 @@ def put_face_annotations(
             },
         ) from exc
 
-    # Merge the supplied faces into the current doc.
+    # DEC-V61-131 N1.1 R7: drop stale entries before merging. The
+    # sticky invariant (AI cannot overwrite user_authoritative) is
+    # preserved — only the engineer ('human' annotated_by) is allowed
+    # to issue removals; an AI writer trying to delete user pins is a
+    # contract violation we reject silently here (drops on AI writes).
     timestamp = datetime.now(timezone.utc).isoformat()
     is_ai_write = body.annotated_by.startswith("ai:")
+
+    if body.remove_face_ids and not is_ai_write:
+        remove_set = set(body.remove_face_ids)
+        current["faces"] = [
+            f for f in current["faces"] if f.get("face_id") not in remove_set
+        ]
 
     for face_put in body.faces:
         face_dict = face_put.model_dump(exclude_none=True)

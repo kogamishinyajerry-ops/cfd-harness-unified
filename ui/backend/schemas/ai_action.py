@@ -90,6 +90,19 @@ class UnresolvedQuestion(BaseModel):
         default=None,
         description="AI's best guess if forced to pick. May be None.",
     )
+    stale_face_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "DEC-V61-131 N1.1 R7: face_ids that were previously pinned "
+            "as the engineer's answer to this question but are no "
+            "longer on the current boundary (e.g., post-remesh). The "
+            "frontend's resume call MUST include these in PUT "
+            "/face-annotations#remove_face_ids so the legacy stale "
+            "annotation is purged when the engineer's replacement "
+            "pick is recorded — without this, the next classifier run "
+            "still sees the stale entry and the recovery loops."
+        ),
+    )
 
     @field_validator("candidate_face_ids", "candidate_options")
     @classmethod
