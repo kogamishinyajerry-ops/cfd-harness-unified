@@ -236,6 +236,58 @@ describe("Step2Mesh · wired body", () => {
     );
   });
 
+  // Codex R0 P2 #2: FastAPI request-validation 422 returns
+  // detail = [...] (array). Old code treated any object-like detail as
+  // MeshRejectionDetail and rendered "mesh rejected: undefined". The
+  // sizing-field surface makes that path reachable, so the catch
+  // block must distinguish array (422) from {reason, failing_check}.
+  it("renders FastAPI 422 array detail as networkError, not blank rejection", async () => {
+    apiMock.meshImported.mockRejectedValueOnce(
+      new ApiError(422, "request validation failed", [
+        {
+          loc: ["body", "sizing_field", "base_lc"],
+          msg: "Input should be greater than 0",
+          type: "greater_than",
+        },
+      ]),
+    );
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    await expect(triggerAi()).rejects.toBeInstanceOf(ApiError);
+
+    // No structured rejection panel
+    expect(screen.queryByTestId("step2-mesh-rejection")).toBeNull();
+    // Network-error panel shows the validation issues
+    const netErr = screen.getByTestId("step2-mesh-network-error");
+    expect(netErr).toHaveTextContent(/request validation failed/);
+    expect(netErr).toHaveTextContent(/sizing_field.base_lc/);
+    expect(netErr).toHaveTextContent(/greater than 0/);
+    expect(onStepError).toHaveBeenCalledWith(
+      expect.stringMatching(/request validation failed/),
+    );
+  });
+
+  it("still renders structured pipeline rejection ({reason, failing_check})", async () => {
+    apiMock.meshImported.mockRejectedValueOnce(
+      new ApiError(422, "mesh rejected", {
+        reason: "mesh has 60M cells exceeds the 50M-cell hard cap",
+        failing_check: "cell_cap_exceeded",
+      }),
+    );
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    await expect(triggerAi()).rejects.toBeInstanceOf(ApiError);
+
+    const rejection = screen.getByTestId("step2-mesh-rejection");
+    expect(rejection).toHaveTextContent(/cell_cap_exceeded/);
+    expect(rejection).toHaveTextContent(/60M cells/);
+    expect(onStepError).toHaveBeenCalledWith(
+      "mesh rejected: cell_cap_exceeded",
+    );
+  });
+
   it("reset button clears the sizing field back to preset", async () => {
     const user = userEvent.setup();
     apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);

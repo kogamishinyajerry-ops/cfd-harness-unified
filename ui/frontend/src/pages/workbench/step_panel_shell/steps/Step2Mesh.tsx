@@ -110,14 +110,41 @@ export function Step2Mesh({
       setMeshGenSeq((s) => s + 1);
       onStepComplete();
     } catch (e) {
+      // Codex R0 P2 #2: distinguish three error shapes:
+      //   1. structured pipeline rejection · ApiError with
+      //      e.detail = {reason, failing_check}
+      //   2. FastAPI request-validation 422 · ApiError with
+      //      e.detail = [{loc, msg, type, ...}, ...]   (array)
+      //   3. network / non-ApiError · plain Error
+      // Old code conflated #2 with #1 and rendered "mesh rejected:
+      // undefined" + a blank rejection panel. The sizing-field surface
+      // makes #2 a routine path (e.g. base_lc=0 / proximity_layers=11),
+      // so route 422s to networkError instead of the rejection panel.
       if (
         e instanceof ApiError &&
         e.detail &&
-        typeof e.detail === "object"
+        typeof e.detail === "object" &&
+        !Array.isArray(e.detail) &&
+        "failing_check" in (e.detail as Record<string, unknown>)
       ) {
         const detail = e.detail as MeshRejectionDetail;
         setRejection(detail);
         onStepError(`mesh rejected: ${detail.failing_check}`);
+      } else if (e instanceof ApiError && Array.isArray(e.detail)) {
+        const issues = (
+          e.detail as Array<{ loc?: unknown[]; msg?: string }>
+        )
+          .map((d) => {
+            const loc = Array.isArray(d.loc)
+              ? d.loc.filter((p) => typeof p !== "number").join(".")
+              : "";
+            return loc ? `${loc}: ${d.msg ?? ""}` : (d.msg ?? "");
+          })
+          .filter(Boolean)
+          .join(" · ");
+        const msg = `request validation failed${issues ? ` — ${issues}` : ""}`;
+        setNetworkError(msg);
+        onStepError(msg);
       } else {
         const msg = e instanceof Error ? e.message : String(e);
         setNetworkError(msg);

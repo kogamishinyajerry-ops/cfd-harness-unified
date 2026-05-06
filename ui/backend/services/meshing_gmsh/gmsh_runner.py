@@ -491,6 +491,25 @@ def _gmsh_inline(
                 lc = base if base and base > 0 else 0.0
                 lc_min = sf.get("min_lc") if sf.get("min_lc") is not None else (lc * 0.5 if lc > 0 else 0.0)
                 lc_max = sf.get("max_lc") if sf.get("max_lc") is not None else lc
+                # Codex R0 P2 #1: schema-level ordering check only fires
+                # when the engineer supplied both endpoints. With a
+                # one-sided field (e.g. only max_lc set) the missing
+                # bound is derived from the preset fallback, which can
+                # invert the range. Re-check after the merge so the
+                # gmsh options are never inverted.
+                if (
+                    lc_min is not None
+                    and lc_max is not None
+                    and lc_min > 0
+                    and lc_max > 0
+                    and lc_min > lc_max
+                ):
+                    raise GmshMeshGenerationError(
+                        "sizing_field produces inverted gmsh range "
+                        f"(min={lc_min}, max={lc_max}) after merging "
+                        "with preset fallback. Supply base_lc or both "
+                        "min_lc/max_lc explicitly."
+                    )
                 if lc_min and lc_min > 0:
                     gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc_min)
                 if lc_max and lc_max > 0:

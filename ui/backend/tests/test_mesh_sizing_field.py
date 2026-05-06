@@ -215,6 +215,101 @@ def test_mesh_route_rejects_bogus_sizing_field():
     assert response.status_code == 422
 
 
+def _stub_gmsh_module():
+    """Install a MagicMock as ``gmsh`` so _gmsh_inline can import +
+    drive the sizing-field branch without the [workbench] extra."""
+    import sys
+    from unittest.mock import MagicMock
+    from numpy import array  # gmsh.model.mesh.getNodes shape: (tags, coords, ...)
+
+    fake = MagicMock()
+    fake.model.getEntities.return_value = [(2, 1)]
+    # Real signature: returns (nodeTags, coords, parametricCoords). The
+    # production code reshapes coords to (-1, 3) then iterates as floats;
+    # supply 2 distinct points so _bbox_diagonal > 0 and the preset
+    # fallback gives lc=diagonal/30 ≈ 0.0577.
+    fake.model.mesh.getNodes.return_value = (
+        array([1, 2]),
+        array([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]),
+        [],
+    )
+    sys.modules["gmsh"] = fake
+    return fake
+
+
+def test_one_sided_max_lc_below_preset_min_is_rejected(tmp_path):
+    """Codex R0 P2 #1: when base_lc is omitted and only max_lc is set,
+    the missing min_lc gets derived from preset fallback (lc * 0.5).
+    If max_lc is below that derived min, gmsh would receive an
+    inverted range. The runtime check inside _gmsh_inline must raise
+    GmshMeshGenerationError before gmsh.generate(3) is invoked.
+    """
+    import sys
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        GmshMeshGenerationError,
+    )
+
+    stl = tmp_path / "x.stl"
+    stl.write_bytes(b"solid\nendsolid\n")
+    out = tmp_path / "x.msh"
+
+    _stub_gmsh_module()
+    try:
+        with pytest.raises(GmshMeshGenerationError, match="inverted"):
+            runner_mod._gmsh_inline(
+                stl_path=stl,
+                output_msh_path=out,
+                mesh_mode="beginner",
+                characteristic_length_override=None,
+                target_cell_count=None,
+                sizing_field={
+                    "base_lc": None,
+                    "min_lc": None,
+                    "max_lc": 0.001,  # below derived min ≈ 0.029
+                    "curvature_target_size": None,
+                    "proximity_layers": None,
+                },
+            )
+    finally:
+        sys.modules.pop("gmsh", None)
+
+
+def test_one_sided_min_lc_above_preset_max_is_rejected(tmp_path):
+    """Symmetric to the test above: only min_lc set, derived max_lc =
+    preset lc < supplied min_lc → inversion."""
+    import sys
+    from ui.backend.services.meshing_gmsh import gmsh_runner as runner_mod
+    from ui.backend.services.meshing_gmsh.gmsh_runner import (
+        GmshMeshGenerationError,
+    )
+
+    stl = tmp_path / "x.stl"
+    stl.write_bytes(b"solid\nendsolid\n")
+    out = tmp_path / "x.msh"
+
+    _stub_gmsh_module()
+    try:
+        with pytest.raises(GmshMeshGenerationError, match="inverted"):
+            runner_mod._gmsh_inline(
+                stl_path=stl,
+                output_msh_path=out,
+                mesh_mode="beginner",
+                characteristic_length_override=None,
+                target_cell_count=None,
+                # min_lc=10.0 forces inversion: derived lc_max ≈ 0.058
+                sizing_field={
+                    "base_lc": None,
+                    "min_lc": 10.0,
+                    "max_lc": None,
+                    "curvature_target_size": None,
+                    "proximity_layers": None,
+                },
+            )
+    finally:
+        sys.modules.pop("gmsh", None)
+
+
 def test_mesh_route_default_omits_sizing_field():
     """Sanity: omitting sizing_field uses None default and reaches
     pipeline as None (back-compat with all V124/V125-era callers)."""
