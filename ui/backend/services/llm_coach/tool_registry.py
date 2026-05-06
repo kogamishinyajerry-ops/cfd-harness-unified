@@ -316,11 +316,20 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
             else "lc_override"
         )
         raise ToolDispatchError(
+            # DEC-V61-131 R22 P2 close (CRS R21 finding): the prior
+            # message ended with "or apply manually via Step 2 advanced
+            # controls", but Step 2 only exposes the beginner/power
+            # selector and the [AI 处理] button — there is no manual-
+            # replay surface for target_cell_count / lc_override yet,
+            # so rendering that text in ProposalCard sent engineers to
+            # a dead end. The remediation now only mentions the
+            # actually-available path; a future DEC that adds a
+            # manual-replay surface to Step 2 will reintroduce the
+            # second branch here.
             (
                 f"regenerate_mesh advisory does not support "
-                f"{unsupported_axis} (no Step 2 manual-replay UI). "
-                f"Use mesh_mode='beginner' or 'power' instead, "
-                f"or apply manually via Step 2 advanced controls."
+                f"{unsupported_axis} (no Step 2 manual-replay UI yet). "
+                f"Use mesh_mode='beginner' or 'power' instead."
             ),
             failing_check="unsupported_axis",
             inner_failing_check=unsupported_axis,
