@@ -195,16 +195,16 @@ export function AnnotationPanel({
           // patch_type widget counts as an explicit positive
           // signal, including same-value confirmations.
           onClick={() => setPatchTypeInteracted(true)}
-          // Codex 86gs N1.1 R14 → R15 close: keyboard equivalent for
-          // same-value confirms (open + Enter on the seeded value),
-          // but only for keys that actually commit / navigate
-          // options / type-ahead. Tab / Escape / pure modifier keys
-          // (Shift / Ctrl / Alt / Meta) are pure-navigation keys
-          // that pass through the focused select without expressing
-          // any patch-type intent — they MUST NOT mark the record
-          // explicit, otherwise a keyboard user tabbing through the
-          // form would silently upgrade legacy ambiguous records
-          // (R14 P2 from 86gs).
+          // Codex 86gs N1.1 R14 → R15 → R16 close: keyboard equivalent
+          // for same-value confirms — but ONLY whitelisted keys that
+          // commit a value or navigate the option list. Tab / Escape
+          // / modifier keys / printable type-ahead chars (which 86gs
+          // R15 P2 flagged: an unmatched `z` press doesn't change
+          // the value but used to flip the flag) are NOT counted.
+          // Typeahead presses that ACTUALLY change the value still
+          // fire onChange, which sets the flag through the change
+          // handler; unmatched typeahead is a no-op gesture and
+          // must remain a no-op for the marker.
           onKeyDown={(e) => {
             const key = e.key;
             const isCommit = key === "Enter" || key === " ";
@@ -217,10 +217,7 @@ export function AnnotationPanel({
               key === "End" ||
               key === "PageUp" ||
               key === "PageDown";
-            // Single printable char → type-ahead navigation (browsers
-            // jump-select the next option starting with that char).
-            const isTypeahead = key.length === 1 && !e.ctrlKey && !e.metaKey;
-            if (isCommit || isOptionNavigation || isTypeahead) {
+            if (isCommit || isOptionNavigation) {
               setPatchTypeInteracted(true);
             }
           }}

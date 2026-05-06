@@ -172,6 +172,45 @@ describe("AnnotationPanel", () => {
     });
   });
 
+  it("unmatched printable keystroke on focused select does NOT upgrade (Codex 86gs N1.1 R16)", async () => {
+    // R16 close: an unmatched typeahead key (e.g., 'z' when no
+    // option starts with z) doesn't change the select's value, so
+    // it must NOT count as a patch-type interaction. R15's
+    // typeahead heuristic (key.length === 1) over-counted these.
+    // Real typeahead matches (e.g., 'p' jumping to "patch") still
+    // fire onChange and get caught by the change handler.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    select.focus();
+    // 'z' has no matching option in PATCH_TYPES (wall, patch,
+    // symmetry, empty, cyclic) — typeahead is a no-op.
+    await user.keyboard("z");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
+      patch_type_explicit: undefined,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
   it("Tab-through select on legacy record does NOT upgrade to explicit (Codex 86gs N1.1 R15)", async () => {
     // R15 close: a keyboard user tabbing through the form passes
     // focus through the patch_type select. Pressing Tab to move
