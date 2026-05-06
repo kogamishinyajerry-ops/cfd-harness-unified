@@ -172,6 +172,80 @@ describe("AnnotationPanel", () => {
     });
   });
 
+  it("Tab-through select on legacy record does NOT upgrade to explicit (Codex 86gs N1.1 R15)", async () => {
+    // R15 close: a keyboard user tabbing through the form passes
+    // focus through the patch_type select. Pressing Tab to move
+    // on must NOT count as patch-type interaction — that's
+    // pure navigation, not engagement with the dropdown's value.
+    // Same for Escape / Shift / Ctrl / Alt / Meta.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+          // No patch_type_explicit → legacy ambiguous record.
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    // Focus the select WITHOUT clicking it (so onClick doesn't fire),
+    // then send a Tab keystroke as if the user is moving past it.
+    select.focus();
+    await user.keyboard("{Tab}");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
+      patch_type_explicit: undefined,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
+  it("Enter-confirm via keyboard upgrades legacy 'wall' to explicit (Codex 86gs N1.1 R15)", async () => {
+    // Symmetric to the Tab-through guard: a keyboard user who
+    // focuses the select and presses Enter to commit the seeded
+    // value HAS expressed patch-type intent (the commit gesture).
+    // That counts as an interaction.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "wall",
+        }}
+        onSave={onSave}
+      />,
+    );
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    select.focus();
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "wall",
+      patch_type_explicit: true,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
   it("same-value re-confirm on legacy 'wall' upgrades to explicit (Codex 86gs N1.1 R14)", async () => {
     // R14 close: <select> doesn't fire onChange when the engineer
     // reopens the dropdown and re-picks the SAME value, so the R13

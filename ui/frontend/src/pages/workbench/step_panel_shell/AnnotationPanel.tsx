@@ -195,10 +195,35 @@ export function AnnotationPanel({
           // patch_type widget counts as an explicit positive
           // signal, including same-value confirmations.
           onClick={() => setPatchTypeInteracted(true)}
-          // Keyboard equivalent: tabbing into the select and using
-          // arrow keys / Enter to commit a value (browsers may not
-          // fire change on same-value Enter either).
-          onKeyDown={() => setPatchTypeInteracted(true)}
+          // Codex 86gs N1.1 R14 → R15 close: keyboard equivalent for
+          // same-value confirms (open + Enter on the seeded value),
+          // but only for keys that actually commit / navigate
+          // options / type-ahead. Tab / Escape / pure modifier keys
+          // (Shift / Ctrl / Alt / Meta) are pure-navigation keys
+          // that pass through the focused select without expressing
+          // any patch-type intent — they MUST NOT mark the record
+          // explicit, otherwise a keyboard user tabbing through the
+          // form would silently upgrade legacy ambiguous records
+          // (R14 P2 from 86gs).
+          onKeyDown={(e) => {
+            const key = e.key;
+            const isCommit = key === "Enter" || key === " ";
+            const isOptionNavigation =
+              key === "ArrowUp" ||
+              key === "ArrowDown" ||
+              key === "ArrowLeft" ||
+              key === "ArrowRight" ||
+              key === "Home" ||
+              key === "End" ||
+              key === "PageUp" ||
+              key === "PageDown";
+            // Single printable char → type-ahead navigation (browsers
+            // jump-select the next option starting with that char).
+            const isTypeahead = key.length === 1 && !e.ctrlKey && !e.metaKey;
+            if (isCommit || isOptionNavigation || isTypeahead) {
+              setPatchTypeInteracted(true);
+            }
+          }}
           data-testid="annotation-panel-patch-type"
           className="w-full rounded-sm border border-surface-700 bg-surface-900 px-2 py-1 text-[12px] text-surface-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
