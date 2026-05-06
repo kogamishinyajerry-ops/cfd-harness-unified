@@ -186,6 +186,19 @@ class MeshQualityReportV126(MeshQualityReport):
             "None when container unavailable OR mesh_ok=True."
         ),
     )
+    checkmesh_n_severe_non_ortho_faces_per_patch: dict[str, int] | None = Field(
+        default=None,
+        description=(
+            "V129a: per-patch breakdown of severely non-orthogonal "
+            "faces (>70°) parsed from checkMesh's nonOrthoFaces faceSet "
+            "(constant/polyMesh/sets/nonOrthoFaces). Each entry maps a "
+            "patch name to the count of severe boundary faces touching "
+            "it. Internal faces (id below all patch startFaces) are "
+            "dropped — they have no named patch home. None when the "
+            "container was unavailable OR no severe faces were found "
+            "(matches the existing `n_severe_non_ortho_faces=0` path)."
+        ),
+    )
 
 
 # V126 R4 P2: discriminated union for the GET /mesh-quality 200 body.

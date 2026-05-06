@@ -217,27 +217,25 @@ def _parse_points_body(body: str) -> list[tuple[float, float, float]]:
     return pts
 
 
-def _read_patch_face_counts(
+def _read_patch_ranges(
     boundary_path: Path, *, dir_fd: int | None = None
-) -> dict[str, int]:
-    """Return {patch_name: nFaces} from polyMesh/boundary. Skips the
-    FoamFile dict that always sits at the head.
+) -> dict[str, tuple[int, int]]:
+    """Return ``{patch_name: (startFace, nFaces)}`` from polyMesh/boundary.
+    Skips the FoamFile header dict.
 
-    Codex R1 P2: the boundary file declares a count header (``N``
-    followed by ``(``) just like points/owner; verify the declared
-    patch count matches the actual matched patches so a truncated
-    boundary file surfaces as a parse error instead of a partial
-    report. base-review-4 P1: ``dir_fd`` opt for fd-relative reads.
+    V129a: the (startFace, nFaces) tuple form is what the per-patch
+    severe-non-ortho aggregator needs; ``_read_patch_face_counts``
+    is now a thin wrapper that drops startFace.
     """
     text = _read_text_no_symlink(
         boundary_path, failing_check="boundary_unreadable", dir_fd=dir_fd
     )
-    out: dict[str, int] = {}
+    out: dict[str, tuple[int, int]] = {}
     for m in _BOUNDARY_PATCH_RE.finditer(text):
         name = m.group(1)
         if name == "FoamFile":
             continue
-        out[name] = int(m.group(2))
+        out[name] = (int(m.group(3)), int(m.group(2)))
     # Validate against the declared count header. Some boundary
     # files have no header (just the FoamFile dict + patch list);
     # only enforce the check when the header is present.
@@ -249,6 +247,59 @@ def _read_patch_face_counts(
                 f"boundary header declares {declared} patches but parsed {len(out)}",
                 failing_check="boundary_count_mismatch",
             )
+    return out
+
+
+def _read_patch_face_counts(
+    boundary_path: Path, *, dir_fd: int | None = None
+) -> dict[str, int]:
+    """Return {patch_name: nFaces} from polyMesh/boundary. Thin wrapper
+    over :func:`_read_patch_ranges` that drops the startFace component.
+
+    Kept for byte-identical V122 callers; downstream V126/V129a code
+    that needs face-id mapping should call ``_read_patch_ranges``
+    directly.
+    """
+    return {
+        name: n_faces for name, (_start, n_faces) in _read_patch_ranges(
+            boundary_path, dir_fd=dir_fd
+        ).items()
+    }
+
+
+def aggregate_severe_faces_per_patch(
+    severe_face_ids: tuple[int, ...] | list[int],
+    patch_ranges: dict[str, tuple[int, int]],
+) -> dict[str, int]:
+    """Map severe-non-ortho face IDs to their patches via the
+    ``(startFace, nFaces)`` ranges from polyMesh/boundary, returning
+    ``{patch_name: count}`` for every named patch.
+
+    Internal faces (id < min(startFace) for all patches) are silently
+    dropped — they don't belong to any boundary patch. The returned
+    dict ALWAYS includes every patch from ``patch_ranges`` (count=0
+    for clean ones) so the frontend can render zero-count chips
+    without a separate name list.
+    """
+    out: dict[str, int] = {name: 0 for name in patch_ranges}
+    if not severe_face_ids:
+        return out
+    # Build a list of (start, end_exclusive, name) sorted by start so
+    # we can binary-search per face id. For the typical case (≤30
+    # patches), linear scan per id is also fine — but sort + bisect
+    # keeps it O(n log p) which matters when checkMesh writes 10k+ ids.
+    ranges = sorted(
+        ((start, start + n, name) for name, (start, n) in patch_ranges.items()),
+        key=lambda triple: triple[0],
+    )
+    for fid in severe_face_ids:
+        # Linear scan is correct and predictable; the patch count is
+        # bounded so the asymptotic win from bisect doesn't justify
+        # the readability cost.
+        for start, end, name in ranges:
+            if start <= fid < end:
+                out[name] += 1
+                break
     return out
 
 
@@ -521,7 +572,10 @@ def analyze_mesh_quality(
             internal_face_count = 0
         boundary_face_count = max(0, owner_face_count - internal_face_count)
 
-        patch_face_counts = _read_patch_face_counts(boundary_path, dir_fd=fd_polymesh)
+        patch_ranges = _read_patch_ranges(boundary_path, dir_fd=fd_polymesh)
+        patch_face_counts = {
+            name: n for name, (_start, n) in patch_ranges.items()
+        }
     finally:
         for fd in reversed(fds_to_close):
             try:
@@ -567,11 +621,15 @@ def analyze_mesh_quality(
     return MeshQualityReportV126(
         report_kind="v126",
         **base_kwargs,
-        **_try_run_checkmesh(case_dir),
+        **_try_run_checkmesh(case_dir, patch_ranges=patch_ranges),
     )
 
 
-def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
+def _try_run_checkmesh(
+    case_dir: Path,
+    *,
+    patch_ranges: dict[str, tuple[int, int]] | None = None,
+) -> dict[str, object]:
     """V126 graceful-degradation wrapper around run_checkmesh.
 
     Returns a dict suitable for kwargs unpacking into MeshQualityReport.
@@ -580,6 +638,12 @@ def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
     with a logged warning so the caller still gets the V122 fields.
     On parse errors and other genuine failures, RE-raises so real
     bugs surface.
+
+    V129a: when ``patch_ranges`` is provided AND checkMesh wrote a
+    nonOrthoFaces faceSet, compute the per-patch severe-non-ortho
+    count and surface it as ``checkmesh_n_severe_non_ortho_faces_per_patch``.
+    Internal faces (face id below all patch startFaces) are dropped —
+    they don't belong to any named patch.
     """
     import logging
 
@@ -616,6 +680,11 @@ def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
         # would have been caught by analyze_mesh_quality's earlier
         # check).
         raise
+    per_patch: dict[str, int] | None = None
+    if patch_ranges is not None and result.severe_non_ortho_face_ids:
+        per_patch = aggregate_severe_faces_per_patch(
+            result.severe_non_ortho_face_ids, patch_ranges
+        )
     return {
         "checkmesh_max_non_orthogonality_deg": result.max_non_orthogonality_deg,
         "checkmesh_max_skewness": result.max_skewness,
@@ -625,4 +694,5 @@ def _try_run_checkmesh(case_dir: Path) -> dict[str, object]:
         "checkmesh_failed_checks": (
             result.failed_checks if result.failed_checks else None
         ),
+        "checkmesh_n_severe_non_ortho_faces_per_patch": per_patch,
     }

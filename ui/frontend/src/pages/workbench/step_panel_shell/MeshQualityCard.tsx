@@ -276,25 +276,40 @@ function QualityGauge({
   );
 }
 
-// V128 R0: per-chip tone derivation from already-fetched report data.
-// No new backend metric — derives the signal from V126's
-// checkmesh_mesh_ok + the V122 patch_face_counts. Rules:
-//   * face_count === 0          → 'rose' (zero-face patch is always wrong)
-//   * V126 mesh_ok === false    → 'amber' (mesh fails globally; can't
-//                                  localize, but this patch is worth
-//                                  the engineer's attention)
-//   * V126 mesh_ok === true     → 'green' (mesh passes globally; no
-//                                  per-patch trouble signal)
+// V128 R0 + V129a: per-chip tone derivation. The V128 baseline derived
+// from checkmesh_mesh_ok + patch_face_counts; V129a adds REAL per-patch
+// data when the backend supplies
+// `checkmesh_n_severe_non_ortho_faces_per_patch`.
+// Rules (highest precedence first):
+//   * face_count === 0          → 'rose' (zero-face patch always wrong)
+//   * V129a per-patch severe>0  → 'rose' (this patch has severe faces)
+//   * V129a per-patch severe===0 → 'green' (this patch is clean even
+//                                   if mesh_ok=false elsewhere)
+//   * V126 mesh_ok === false    → 'amber' (V128 fallback when V129a
+//                                  per-patch dict absent — global
+//                                  failure but no localization)
+//   * V126 mesh_ok === true     → 'green' (V128 fallback)
 //   * V126 mesh_ok === null OR
 //     V122 fallback             → 'neutral' (existing grey)
 type PatchTone = "neutral" | "green" | "amber" | "rose";
 
 function derivePatchTone(
+  patchName: string,
   faceCount: number,
   report: MeshQualityReport,
 ): PatchTone {
   if (faceCount === 0) return "rose";
   if (report.report_kind !== "v126") return "neutral";
+  // V129a precedence: when the per-patch dict is present, it's the
+  // authoritative signal — even if mesh_ok=false globally, a patch
+  // with severe=0 is genuinely clean and should render green so the
+  // engineer can localize attention.
+  const perPatch = report.checkmesh_n_severe_non_ortho_faces_per_patch;
+  if (perPatch !== null && patchName in perPatch) {
+    return perPatch[patchName] > 0 ? "rose" : "green";
+  }
+  // V128 fallback when V129a dict absent (older backend, container
+  // unavailable, or no severe faces written so per-patch is null).
   if (report.checkmesh_mesh_ok === null) return "neutral";
   return report.checkmesh_mesh_ok ? "green" : "amber";
 }
@@ -324,13 +339,23 @@ function PatchChips({
   return (
     <div className="flex flex-wrap gap-1">
       {entries.map(([name, count]) => {
-        const tone = derivePatchTone(count, report);
+        const tone = derivePatchTone(name, count, report);
         // a11y: zero-face patches get an explicit "empty" text label so
         // color-blind users see the same signal as the rose tone.
+        // V129a: when per-patch severe count is available and >0,
+        // surface the count in the chip text (e.g. "·1500 faces ·3 severe")
+        // so color-blind users get the localized signal.
         const isEmpty = count === 0;
+        const perPatch =
+          report.report_kind === "v126"
+            ? report.checkmesh_n_severe_non_ortho_faces_per_patch
+            : null;
+        const severeCount = perPatch?.[name] ?? 0;
         const stateLabel = isEmpty
           ? "empty"
-          : `${count.toLocaleString()} faces`;
+          : severeCount > 0
+            ? `${count.toLocaleString()} faces · ${severeCount} severe`
+            : `${count.toLocaleString()} faces`;
         return (
           <span
             key={name}
@@ -341,7 +366,11 @@ function PatchChips({
           >
             {name}
             <span className="ml-1 opacity-70">
-              {isEmpty ? "· empty" : `·${count}`}
+              {isEmpty
+                ? "· empty"
+                : severeCount > 0
+                  ? `·${count} ·${severeCount} severe`
+                  : `·${count}`}
             </span>
           </span>
         );

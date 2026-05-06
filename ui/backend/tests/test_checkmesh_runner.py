@@ -25,6 +25,7 @@ from ui.backend.services.mesh_quality.checkmesh_runner import (
     CheckMeshError,
     CheckMeshResult,
     _parse_checkmesh_output,
+    _parse_faceset_body,
     run_checkmesh,
 )
 
@@ -545,3 +546,121 @@ def test_analyze_mesh_quality_re_raises_on_genuine_checkmesh_failure(
     with pytest.raises(CheckMeshError) as exc_info:
         analyze_mesh_quality(case_dir, run_checkmesh=True)
     assert exc_info.value.failing_check == "checkmesh_exit_nonzero"
+
+
+# ────────── V129a · faceSet parser + per-patch aggregator ──────────
+
+
+# Captured directly from `checkMesh -allGeometry -allTopology` on a
+# deliberately skewed OpenFOAM 10 mesh (see V129a empirical sweep
+# 2026-05-06). The header banner + FoamFile dict + separator + count
+# + paren list + closer is the canonical shape we must parse.
+_REAL_FACESET_BODY = """\
+/*--------------------------------*- C++ -*----------------------------------*\\
+  =========                 |
+  \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       faceSet;
+    location    "constant/polyMesh/sets";
+    object      nonOrthoFaces;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+30
+(
+0
+3
+5
+7
+8
+11
+13
+15
+16
+18
+19
+20
+21
+24
+26
+28
+29
+32
+34
+36
+37
+39
+40
+41
+42
+44
+47
+49
+52
+53
+)
+
+// ************************************************************************* //
+"""
+
+
+def test_parse_faceset_body_real_openfoam_10_output():
+    """Canonical OpenFOAM-10 faceSet body parses to 30 face IDs."""
+    ids = _parse_faceset_body(_REAL_FACESET_BODY)
+    assert len(ids) == 30
+    assert ids[0] == 0
+    assert ids[-1] == 53
+    assert 47 in ids
+
+
+def test_parse_faceset_body_empty_input_returns_empty():
+    """Absent set file (cat returned empty) yields empty tuple, not raise."""
+    assert _parse_faceset_body("") == ()
+    assert _parse_faceset_body("   \n\n") == ()
+
+
+def test_parse_faceset_body_body_without_list_returns_empty():
+    """Header-only file (no `(` opener) yields empty tuple."""
+    text = "FoamFile { object nonOrthoFaces; }\n// separator\n"
+    assert _parse_faceset_body(text) == ()
+
+
+def test_aggregate_severe_faces_per_patch_maps_ids_to_patches():
+    """Face IDs straddling patch [start, start+n) ranges map correctly."""
+    from ui.backend.services.mesh_quality.analyzer import (
+        aggregate_severe_faces_per_patch,
+    )
+
+    # 100 internal faces, then walls=[100..150), inlet=[150..160), outlet=[160..170).
+    patch_ranges = {
+        "walls": (100, 50),
+        "inlet": (150, 10),
+        "outlet": (160, 10),
+    }
+    severe_face_ids = (5, 105, 155, 165, 175)  # 5=internal (dropped), 175=out-of-range
+    result = aggregate_severe_faces_per_patch(severe_face_ids, patch_ranges)
+    assert result == {"walls": 1, "inlet": 1, "outlet": 1}
+
+
+def test_aggregate_severe_faces_per_patch_empty_ids_returns_zero_for_each_patch():
+    """Empty face-id list → zero count for every patch (NOT empty dict)."""
+    from ui.backend.services.mesh_quality.analyzer import (
+        aggregate_severe_faces_per_patch,
+    )
+
+    patch_ranges = {"walls": (100, 50), "inlet": (150, 10)}
+    result = aggregate_severe_faces_per_patch((), patch_ranges)
+    assert result == {"walls": 0, "inlet": 0}
+
+
+def test_aggregate_severe_faces_per_patch_no_patches_returns_empty():
+    """Empty patch_ranges → empty dict regardless of face-id input."""
+    from ui.backend.services.mesh_quality.analyzer import (
+        aggregate_severe_faces_per_patch,
+    )
+
+    assert aggregate_severe_faces_per_patch((1, 2, 3), {}) == {}

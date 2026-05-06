@@ -103,6 +103,12 @@ class CheckMeshResult:
     n_severe_non_ortho_faces: int | None
     failed_checks: list[str] = field(default_factory=list)
     raw_log_excerpt: str = ""
+    # V129a: face indices written by checkMesh -allTopology -allGeometry
+    # to constant/polyMesh/sets/nonOrthoFaces. Empty tuple when the set
+    # file was absent (mesh passed the orthogonality check) OR when
+    # parsing the file failed. Frozen tuple so the dataclass stays
+    # hashable / immutable.
+    severe_non_ortho_face_ids: tuple[int, ...] = ()
 
 
 # ────────── Regex bank ──────────
@@ -124,6 +130,22 @@ _RE_SEVERE_NON_ORTHO = re.compile(
 )
 _RE_MESH_OK = re.compile(r"^Mesh OK\.?\s*$", re.MULTILINE)
 _RE_FAILED = re.compile(r"Failed\s+(\d+)\s+mesh\s+check")
+
+# V129a: faceSet body parser. The OpenFOAM-10 faceSet file looks like
+#   FoamFile { ... object nonOrthoFaces; }
+#   // ... separator
+#   <count>
+#   (
+#   <face_id>
+#   ...
+#   )
+# We lock onto the integer count line followed by `(`, then collect
+# nonnegative integers up to the matching `)`. Header text varies
+# (banner whitespace, license string) so a single regex over the
+# whole file is brittle; the line-iter approach is more tolerant.
+_RE_FACESET_OPEN = re.compile(r"^\s*\(\s*$")
+_RE_FACESET_CLOSE = re.compile(r"^\s*\)\s*$")
+_RE_FACESET_INT = re.compile(r"^\s*(\d+)\s*$")
 
 
 # ────────── Helpers ──────────
@@ -154,6 +176,39 @@ def _make_polymesh_tarball(polymesh_dir: Path) -> bytes:
             filter=_retag_for_container,
         )
     return buf.getvalue()
+
+
+def _parse_faceset_body(text: str) -> tuple[int, ...]:
+    """Parse an OpenFOAM faceSet dictionary body into a tuple of face
+    indices. Tolerant of header banner / FoamFile dict / blank text:
+    returns empty tuple when no list body is found.
+
+    Format (verified against OpenFOAM-10 checkMesh output):
+        FoamFile { ... }
+        // separator
+        <count>
+        (
+        <id>
+        <id>
+        ...
+        )
+    """
+    if not text or not text.strip():
+        return ()
+    lines = text.splitlines()
+    in_list = False
+    ids: list[int] = []
+    for line in lines:
+        if not in_list:
+            if _RE_FACESET_OPEN.match(line):
+                in_list = True
+            continue
+        if _RE_FACESET_CLOSE.match(line):
+            break
+        m = _RE_FACESET_INT.match(line)
+        if m:
+            ids.append(int(m.group(1)))
+    return tuple(ids)
 
 
 def _parse_checkmesh_output(stdout: str) -> CheckMeshResult:
@@ -335,10 +390,20 @@ def run_checkmesh(
                 failing_check="docker_sdk_error",
             ) from exc
 
+        # V129a: -allGeometry -allTopology enables the extra checks that
+        # cause checkMesh to write `nonOrthoFaces` / `skewFaces` faceSets
+        # to constant/polyMesh/sets/ when faces fail those thresholds.
+        # We append a sentinel + cat the nonOrthoFaces set so the parser
+        # can extract per-face IDs without a second exec round-trip.
+        # `|| true` keeps the bash chain green when the set file is
+        # absent (healthy mesh). The sentinel SET_BODY_DELIM is unique
+        # enough that no checkMesh output line collides with it.
         bash_cmd = (
             f"source /opt/openfoam10/etc/bashrc && "
             f"cd {container_work} && "
-            f"checkMesh 2>&1"
+            f"checkMesh -allGeometry -allTopology 2>&1; "
+            f"echo '__CFD_HARNESS_SET_BODY_DELIM__'; "
+            f"cat constant/polyMesh/sets/nonOrthoFaces 2>/dev/null || true"
         )
         try:
             exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
@@ -362,6 +427,16 @@ def run_checkmesh(
 
     output = exec_result.output.decode("utf-8", errors="replace")
 
+    # V129a: split off the trailing nonOrthoFaces faceSet body before
+    # surfacing the rest as checkMesh stdout. Keep the parser tolerant
+    # of the absent-sentinel case so older container images that
+    # somehow lack the cat-tail still produce a result (set ids stay
+    # empty in that path).
+    set_body = ""
+    delim = "__CFD_HARNESS_SET_BODY_DELIM__"
+    if delim in output:
+        output, _, set_body = output.partition(delim)
+
     # checkMesh exit code semantics (OpenFOAM 10):
     #   * exit 0 + "Mesh OK" → healthy mesh
     #   * exit 0 + "Failed N mesh checks" → mesh has issues but checkMesh
@@ -375,4 +450,18 @@ def run_checkmesh(
             failing_check="checkmesh_exit_nonzero",
         )
 
-    return _parse_checkmesh_output(output)
+    base = _parse_checkmesh_output(output)
+    severe_face_ids = _parse_faceset_body(set_body)
+    if not severe_face_ids:
+        return base
+    # CheckMeshResult is frozen; re-emit a copy with the ids set.
+    return CheckMeshResult(
+        max_non_orthogonality_deg=base.max_non_orthogonality_deg,
+        max_skewness=base.max_skewness,
+        max_aspect_ratio=base.max_aspect_ratio,
+        mesh_ok=base.mesh_ok,
+        n_severe_non_ortho_faces=base.n_severe_non_ortho_faces,
+        failed_checks=base.failed_checks,
+        raw_log_excerpt=base.raw_log_excerpt,
+        severe_non_ortho_face_ids=severe_face_ids,
+    )

@@ -61,6 +61,7 @@ const v126Healthy: MeshQualityReportV126 = {
   checkmesh_mesh_ok: true,
   checkmesh_n_severe_non_ortho_faces: 0,
   checkmesh_failed_checks: null,
+  checkmesh_n_severe_non_ortho_faces_per_patch: null,
 };
 
 const v126Failed: MeshQualityReportV126 = {
@@ -72,6 +73,7 @@ const v126Failed: MeshQualityReportV126 = {
   checkmesh_mesh_ok: false,
   checkmesh_n_severe_non_ortho_faces: 18,
   checkmesh_failed_checks: ["Max skewness = 4.2 > 4 -- SKEWED CELLS DETECTED"],
+  checkmesh_n_severe_non_ortho_faces_per_patch: null,
 };
 
 beforeEach(() => {
@@ -430,5 +432,110 @@ describe("MeshQualityCard · V128 patch chip coloring", () => {
     expect(screen.getByTestId("patch-chip-walls").dataset.tone).toBe("neutral");
     // Zero-face wins over the graceful-degrade neutral default.
     expect(screen.getByTestId("patch-chip-ghost").dataset.tone).toBe("rose");
+  });
+});
+
+// V129a R0 · DEC-V61-129a · per-patch severe-non-ortho count from
+// the backend's checkmesh_n_severe_non_ortho_faces_per_patch field
+// (parsed from constant/polyMesh/sets/nonOrthoFaces).
+describe("MeshQualityCard · V129a per-patch severe-non-ortho coloring", () => {
+  it("per-patch severe>0 → that chip rose with 'N severe' suffix", async () => {
+    const v126: MeshQualityReportV126 = {
+      ...v126Failed,
+      checkmesh_n_severe_non_ortho_faces_per_patch: {
+        walls: 5,
+        inlet: 0,
+        outlet: 0,
+      },
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    const walls = screen.getByTestId("patch-chip-walls");
+    expect(walls.dataset.tone).toBe("rose");
+    expect(walls.textContent).toContain("5 severe");
+    // Other patches go GREEN even though mesh_ok=false globally —
+    // V129a's per-patch dict overrides the V128 amber fallback.
+    expect(screen.getByTestId("patch-chip-inlet").dataset.tone).toBe("green");
+    expect(screen.getByTestId("patch-chip-outlet").dataset.tone).toBe("green");
+  });
+
+  it("per-patch all zero with mesh_ok=true → all chips green (no severe suffix)", async () => {
+    const v126: MeshQualityReportV126 = {
+      ...v126Healthy,
+      checkmesh_n_severe_non_ortho_faces_per_patch: {
+        walls: 0,
+        inlet: 0,
+        outlet: 0,
+      },
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    for (const name of ["walls", "inlet", "outlet"]) {
+      const chip = screen.getByTestId(`patch-chip-${name}`);
+      expect(chip.dataset.tone).toBe("green");
+      expect(chip.textContent).not.toContain("severe");
+    }
+  });
+
+  it("V129a dict null + mesh_ok=false → V128 fallback (amber chips)", async () => {
+    const v126: MeshQualityReportV126 = {
+      ...v126Failed,
+      checkmesh_n_severe_non_ortho_faces_per_patch: null,
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    for (const name of ["walls", "inlet", "outlet"]) {
+      expect(screen.getByTestId(`patch-chip-${name}`).dataset.tone).toBe(
+        "amber",
+      );
+    }
+  });
+
+  it("zero-face patch precedence → rose even if V129a says severe=0 for it", async () => {
+    const v126: MeshQualityReportV126 = {
+      ...v126Healthy,
+      patch_face_counts: { walls: 1500, ghost: 0 },
+      checkmesh_n_severe_non_ortho_faces_per_patch: { walls: 0, ghost: 0 },
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    const ghost = screen.getByTestId("patch-chip-ghost");
+    expect(ghost.dataset.tone).toBe("rose");
+    expect(ghost.textContent).toContain("empty");
+    expect(screen.getByTestId("patch-chip-walls").dataset.tone).toBe("green");
+  });
+
+  it("patch missing from V129a dict → falls through to V128 logic", async () => {
+    // Backend dict only contains some patches (defensive — should
+    // never happen in practice since aggregator includes all patch
+    // names, but the frontend must not crash if it does).
+    const v126: MeshQualityReportV126 = {
+      ...v126Healthy,
+      patch_face_counts: { walls: 1500, inlet: 300, missing_patch: 50 },
+      checkmesh_n_severe_non_ortho_faces_per_patch: { walls: 0, inlet: 2 },
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("patch-chip-walls").dataset.tone).toBe("green");
+    expect(screen.getByTestId("patch-chip-inlet").dataset.tone).toBe("rose");
+    // missing_patch falls through to V128 logic — mesh_ok=true so green.
+    expect(screen.getByTestId("patch-chip-missing_patch").dataset.tone).toBe(
+      "green",
+    );
   });
 });

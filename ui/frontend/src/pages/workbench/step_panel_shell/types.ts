@@ -195,6 +195,13 @@ export interface MeshQualityReportV126 extends Omit<MeshQualityReportV122, "repo
   checkmesh_mesh_ok: boolean | null;
   checkmesh_n_severe_non_ortho_faces: number | null;
   checkmesh_failed_checks: string[] | null;
+  /** V129a: per-patch breakdown of severely non-orthogonal faces from
+   *  checkMesh's nonOrthoFaces faceSet. Each entry maps a patch name to
+   *  the count of severe boundary faces touching it. ALWAYS includes
+   *  every patch in patch_face_counts (count=0 for clean ones). null
+   *  when the container was unavailable OR no severe faces were
+   *  written by checkMesh. */
+  checkmesh_n_severe_non_ortho_faces_per_patch: Record<string, number> | null;
 }
 
 export type MeshQualityReport = MeshQualityReportV122 | MeshQualityReportV126;
