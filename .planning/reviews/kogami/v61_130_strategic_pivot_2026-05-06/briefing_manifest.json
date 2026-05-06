@@ -1,0 +1,185 @@
+{
+  "artifact_under_review": ".planning/decisions/2026-05-06_v61_130_strategic_pivot_ai_advisor.md",
+  "briefing_script_sha256": "0503730b30067986eaa1cf5f908b27e3d3e56612ab4f0c8ce87f556267b5b147",
+  "kogami_briefing_version": "1.0",
+  "section_selection_rules_version": "1.0",
+  "sources": [
+    {
+      "bytes": 5858,
+      "label": "P-1 system prompt",
+      "original_path": ".claude/agents/kogami-claude-cosplay.md",
+      "present": true,
+      "sha256": "852a4f9e0b1e45ad9a2c3a7b8b935911568a62e7452daa392ce69a49a10668ea"
+    },
+    {
+      "bytes": 15740,
+      "label": "artifact_under_review",
+      "original_path": ".planning/decisions/2026-05-06_v61_130_strategic_pivot_ai_advisor.md",
+      "present": true,
+      "sha256": "39a26113859a7890d988dbe6f71546ba02d30c1467d3e04d12ea40da52ccf04a"
+    },
+    {
+      "bytes": 1626,
+      "label": "PROJECT.md",
+      "original_path": ".planning/PROJECT.md",
+      "present": true,
+      "sha256": "22f0702a8befad0e523cb12ebf4b77dc7631da5fb1c3d90d74ec54c0971ccc1e"
+    },
+    {
+      "bytes": 16115,
+      "label": "ROADMAP.md",
+      "original_path": ".planning/ROADMAP.md",
+      "present": true,
+      "sha256": "2f084b19f22cb151b9497b6b7f2c894d1ec378dbe6a545214556c59cc5eb95ab"
+    },
+    {
+      "bytes": 202191,
+      "label": "STATE.md (summary)",
+      "original_path": ".planning/STATE.md",
+      "present": true,
+      "sha256": "ce62fd93b78fd3f9ab9ca2fcfdf8ea8706844779e24c48dbd379dc0145d87c4f"
+    },
+    {
+      "bytes": 9692,
+      "label": "recent_dec_2026-05-06_v61_129a_per_patch_severe_non_ortho.md",
+      "original_path": ".planning/decisions/2026-05-06_v61_129a_per_patch_severe_non_ortho.md",
+      "present": true,
+      "sha256": "f7f99f0b76bb22874f826e3f9859f290eff3088986256149e8259c6ef9c60cf2"
+    },
+    {
+      "bytes": 7675,
+      "label": "recent_dec_2026-05-06_v61_128_patch_chip_derived_coloring.md",
+      "original_path": ".planning/decisions/2026-05-06_v61_128_patch_chip_derived_coloring.md",
+      "present": true,
+      "sha256": "0d12a026fb2f268ee7d06dc43a36662c0f9470c531a8a21aceb28e6b7d40d486"
+    },
+    {
+      "bytes": 8951,
+      "label": "recent_dec_2026-05-05_v61_127_mesh_quality_card.md",
+      "original_path": ".planning/decisions/2026-05-05_v61_127_mesh_quality_card.md",
+      "present": true,
+      "sha256": "7ac1b9d789349fe9179dd25e60ac5ccc4bcaf87724640fefc2a88bbb9d434b81"
+    },
+    {
+      "bytes": 20653,
+      "label": "recent_dec_2026-05-05_v61_126_checkmesh_integration.md",
+      "original_path": ".planning/decisions/2026-05-05_v61_126_checkmesh_integration.md",
+      "present": true,
+      "sha256": "c8b505993c297cfd0342978ef261b1f5c7119baaa28cadebf4941a479f8c13fd"
+    },
+    {
+      "bytes": 17615,
+      "label": "recent_dec_2026-05-05_v61_125_lc_override_arg.md",
+      "original_path": ".planning/decisions/2026-05-05_v61_125_lc_override_arg.md",
+      "present": true,
+      "sha256": "fa14bad1d69bae0cc61cd120e421c42dd2e13ff27e891bcf9c28ff4468d586ca"
+    },
+    {
+      "bytes": 4867,
+      "label": "retro_2026-04-21_pr22_changes_required_incident_retro.md",
+      "original_path": ".planning/retrospectives/2026-04-21_pr22_changes_required_incident_retro.md",
+      "present": true,
+      "sha256": "0219a85cccac60c6fe69e478edf7051e0b0d51d47cf8868b9ab237bebc624be7"
+    },
+    {
+      "bytes": 20224,
+      "label": "retro_2026-04-21_v61_counter16_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-21_v61_counter16_retrospective.md",
+      "present": true,
+      "sha256": "444e6d7280564e01010d84fcf1bfb9095e192ee97a24fff0d009bc31ad13c1e2"
+    },
+    {
+      "bytes": 6750,
+      "label": "retro_2026-04-21_v61_counter20_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-21_v61_counter20_retrospective.md",
+      "present": true,
+      "sha256": "3f1bf67bd43cf37e47b17e614b69d4b4283ebd2abc963b42b65d773ca63c7cb2"
+    },
+    {
+      "bytes": 12463,
+      "label": "retro_2026-04-22_v61_counter32_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-22_v61_counter32_retrospective.md",
+      "present": true,
+      "sha256": "9ebcc8383e83cd9289809c782121a831c5c543bb64a2209997b15b1ab4e589f3"
+    },
+    {
+      "bytes": 20757,
+      "label": "retro_2026-04-24_retro_v61_053_python_parity.md",
+      "original_path": ".planning/retrospectives/2026-04-24_retro_v61_053_python_parity.md",
+      "present": true,
+      "sha256": "48d06d7888e742662b79d6c4f3b1550111f4ff7fa79eed8af75152da06f774bc"
+    },
+    {
+      "bytes": 19269,
+      "label": "retro_2026-04-25_p1_arc_complete_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-25_p1_arc_complete_retrospective.md",
+      "present": true,
+      "sha256": "0f304f76ba2c80e5331a1301f8c5f226872697c1bea3df93f923fb4c16356b14"
+    },
+    {
+      "bytes": 10086,
+      "label": "retro_2026-04-25_retro_adr_002_w2_gate_arc.md",
+      "original_path": ".planning/retrospectives/2026-04-25_retro_adr_002_w2_gate_arc.md",
+      "present": true,
+      "sha256": "22344adb0369d444d86c3df1614a78826a01703a12c7c3960d5a2588cda0fc0d"
+    },
+    {
+      "bytes": 35297,
+      "label": "retro_2026-04-25_retro_w4_prep_r1_incident.md",
+      "original_path": ".planning/retrospectives/2026-04-25_retro_w4_prep_r1_incident.md",
+      "present": true,
+      "sha256": "ff778f0889710659fd4c7b41c9048e45ff4c415430828c4e22ad7d184619c31b"
+    },
+    {
+      "bytes": 11641,
+      "label": "retro_2026-04-26_retro_session_b_arc.md",
+      "original_path": ".planning/retrospectives/2026-04-26_retro_session_b_arc.md",
+      "present": true,
+      "sha256": "6ec136326f6eb8cfb1ac4276203ff72c0308e8bca4d91fcd9e3e4daff8ddf487"
+    },
+    {
+      "bytes": 15097,
+      "label": "retro_2026-04-26_retro_v61_005_governance_closure_draft.md",
+      "original_path": ".planning/retrospectives/2026-04-26_retro_v61_005_governance_closure_draft.md",
+      "present": true,
+      "sha256": "9f78786d53d9697c207209d2a4f0c766644a0433ce9f850d3019cd2fa139e588"
+    },
+    {
+      "bytes": 20884,
+      "label": "retro_2026-05-02_v61_v107_v108_arc_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-05-02_v61_v107_v108_arc_retrospective.md",
+      "present": true,
+      "sha256": "67c5ef95b76759248ba09bf0d007728b7569de76ccabe2186dbd07d376aad1d8"
+    },
+    {
+      "bytes": 12554,
+      "label": "retro_2026-05-04_v61_arc_retro_v088_to_v116.md",
+      "original_path": ".planning/retrospectives/2026-05-04_v61_arc_retro_v088_to_v116.md",
+      "present": true,
+      "sha256": "c2cf03c8375b7947679228130840458cce8a1122f93b3b813c83e0eb0b25a3a6"
+    },
+    {
+      "bytes": 16869,
+      "label": "methodology_2026-04-26_v2_section_10_5_and_11_draft.md",
+      "original_path": ".planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md",
+      "present": true,
+      "sha256": "da11bac7ffa29748f78212c07c9e946730d5519150b9a60c4dc342033c0c06a0"
+    },
+    {
+      "bytes": 6286,
+      "label": "methodology_kogami_counter_rules.md",
+      "original_path": ".planning/methodology/kogami_counter_rules.md",
+      "present": true,
+      "sha256": "b923202caeb59b419ed10dac2ea919c15d559eb16522b94953fd540ae74fb691"
+    },
+    {
+      "bytes": 6520,
+      "label": "methodology_kogami_triggers.md",
+      "original_path": ".planning/methodology/kogami_triggers.md",
+      "present": true,
+      "sha256": "4e5079c9ae1010acef03d942f6e1d82e52189dcfb36d26a1fffb384fc7ee477a"
+    }
+  ],
+  "summary_algorithm_version": "1.0",
+  "trigger": "autonomous_governance_rule_change"
+}
