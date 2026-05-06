@@ -139,49 +139,66 @@ def _read_boundary_patch_names(polyMesh_dir: Path) -> set[str]:
     return names
 
 
-def _parse_addlayers_log(log_text: str) -> tuple[int, float | None]:
-    """Return ``(layers_added, coverage_fraction)`` from a snappyHexMesh
-    addLayers log.
+def _parse_addlayers_log(
+    log_text: str,
+) -> tuple[int | None, float | None, bool]:
+    """Return ``(layers_added, coverage_fraction, definite_zero)`` from
+    a snappyHexMesh addLayers log.
 
-    snappyHexMesh ends its addLayers section with lines like:
-        Layer mesh : cells:NNN faces:MMM ...
-        ...
-        Doing final balancing
-        Mesh layers added in NN s.
+    R0 P1 + P2 (Codex 86gs): the previous version returned ``(0, None)``
+    on unparseable logs and the caller mapped 0 → 422
+    snappy_addlayers_did_not_converge. That conflated "log wording
+    differs from our exact regex" with "snappyHexMesh actually
+    refused to add layers", so a successful run on a different
+    OpenFOAM build would surface as a failure even though it produced
+    a perfectly good mesh.
 
-    and a per-patch summary table. We parse the "Patch faces"
-    coverage from the summary; layers_added is the maximum
-    nSurfaceLayers reported in the per-patch table (a multi-patch
-    extension would aggregate per-patch).
+    Three-state return:
+      * ``layers_added`` — non-None positive int when a layer count
+        was successfully extracted; None when the log is silent.
+      * ``coverage_fraction`` — float in [0, 1] when extracted;
+        None otherwise.
+      * ``definite_zero`` — True ONLY when the log contains a strong
+        explicit "no layers were added" signal (e.g. an explicit
+        ``Layers added: 0`` line or a per-patch summary saying
+        "0 layers requested 0 layers added"). The caller uses this
+        as the trigger for the addlayers-did-not-converge rejection;
+        an unparseable / silent log no longer maps to a failure.
 
-    Returns ``(0, None)`` when parsing fails; the caller treats this
-    as a soft "log unparseable" signal and still surfaces the run as
-    a success if exit_code == 0 and polyMesh exists.
+    Coverage normalization (R0 P2): the percent vs fraction
+    discriminator now looks for the literal ``%`` token in the
+    matched substring rather than a value-magnitude heuristic — a
+    real ``Overall layer coverage: 0.8 %`` is 0.008, not 0.8.
     """
-    layers = 0
+    layers: int | None = None
     coverage: float | None = None
+    definite_zero = False
 
-    # Coverage fraction: snappyHexMesh prints per-patch lines like
-    #     "patch_name      <faces> <layers>  <thickness> ..."
-    # in a table. The exact column format depends on the version, so
-    # match the explicit "Layer add iteration" + "Patch coverage" hint.
-    # Best-effort fallback: try the simpler "fraction" mention.
+    # Coverage fraction. Capture both the value AND any trailing
+    # ``%`` so the normalization is robust against small percent
+    # values (the old > 1.0 heuristic mis-handled "0.8 %" as a
+    # fraction). The match window is the immediate substring after
+    # "Overall layer coverage" through the ``%`` (if present).
     cov_match = re.search(
-        r"Overall layer coverage[^\d]+([0-9]*\.?[0-9]+)\s*%?",
+        r"Overall layer coverage[^\d-]+(-?[0-9]*\.?[0-9]+)\s*(%?)",
         log_text,
     )
     if cov_match:
         try:
             cov_val = float(cov_match.group(1))
-            # Normalize: if value > 1.0 assume percent, divide.
-            coverage = cov_val / 100.0 if cov_val > 1.0 else cov_val
+            has_percent = cov_match.group(2) == "%"
+            coverage = cov_val / 100.0 if has_percent else cov_val
+            # Clamp into [0, 1] in case of weirdly-formatted log.
+            if coverage is not None:
+                if coverage < 0.0:
+                    coverage = 0.0
+                elif coverage > 1.0:
+                    coverage = 1.0
         except ValueError:
             coverage = None
 
-    # Layers added: scan for "nSurfaceLayers" reflected in the log
-    # OR the "thickness=" line which only appears for layers actually
-    # added. The simple "Layers added: N" form is what OpenFOAM 10
-    # emits.
+    # "Layers added" header from OpenFOAM. Capture the number; if it's
+    # explicitly 0 that's the strong signal we mark as definite_zero.
     layer_match = re.search(
         r"Layers? added(?: at finalisation)?[\s:]+(\d+)",
         log_text,
@@ -189,20 +206,44 @@ def _parse_addlayers_log(log_text: str) -> tuple[int, float | None]:
     )
     if layer_match:
         try:
-            layers = int(layer_match.group(1))
+            n = int(layer_match.group(1))
+            layers = n
+            if n == 0:
+                definite_zero = True
         except ValueError:
-            layers = 0
-    else:
-        # Fallback: count "addLayer" iterations performed (not perfect
-        # but bounds the answer).
+            layers = None
+
+    if layers is None:
+        # Fallback 1: per-patch summary lines of the form
+        # "<patch>  N requested  M added". If every per-patch line
+        # reports 0 added (and there is at least one such line),
+        # that's a strong signal of definite zero.
+        per_patch = re.findall(
+            r"(?P<requested>\d+)\s+(?:layers?\s+)?requested[,\s]+"
+            r"(?P<added>\d+)\s+(?:layers?\s+)?added",
+            log_text,
+            flags=re.IGNORECASE,
+        )
+        if per_patch:
+            added_counts = [int(a) for _, a in per_patch]
+            if added_counts:
+                layers = max(added_counts)
+                if layers == 0:
+                    definite_zero = True
+
+    if layers is None:
+        # Fallback 2: count addLayer iterations performed. If there
+        # are iteration markers, snappyHexMesh got into the addLayers
+        # phase — bound the answer at the iteration count. NOT a
+        # definite_zero signal regardless.
         iters = re.findall(r"Layer addition iteration (\d+)", log_text)
         if iters:
             try:
                 layers = max(int(s) for s in iters)
             except ValueError:
-                layers = 0
+                layers = None
 
-    return layers, coverage
+    return layers, coverage, definite_zero
 
 
 def run_snappy_addlayers(
@@ -355,17 +396,17 @@ def run_snappy_addlayers(
             f"{log_dest}. Tail:\n{tail}"
         )
 
-    # Pull refreshed polyMesh back. snappyHexMesh -overwrite writes
-    # to constant/polyMesh in place inside the container, so we mirror
-    # that path back to the host.
+    # R0 P1 (Codex 86gs): pull + stage refreshed polyMesh BEFORE
+    # parsing/validating; do NOT swap into place yet. The previous
+    # version swapped first then raised on layers_added==0, leaving
+    # the host with a mutated mesh while the route reported failure.
+    # Now we extract to a staging dir, validate the run via the log,
+    # and only commit the swap on definite success.
+    staging = case_host_dir / ".snappy_pull"
     try:
         poly_bits, _ = container.get_archive(
             f"{container_work_dir}/constant/polyMesh"
         )
-        # Stage extraction in case_dir/.snappy_pull then move into
-        # place to avoid partial-extraction races with the host's
-        # current polyMesh.
-        staging = case_host_dir / ".snappy_pull"
         if staging.exists():
             shutil.rmtree(staging)
         _extract_tarball(b"".join(chunk for chunk in poly_bits), staging)
@@ -374,9 +415,48 @@ def run_snappy_addlayers(
             raise SnappyContainerError(
                 f"snappyHexMesh did not produce {new_poly} on extraction"
             )
-        # Atomic-ish swap: rename existing polyMesh → polyMesh.prev
-        # (so a failure mid-rename still leaves the host with a mesh),
-        # move the new tree in, then drop the previous.
+    except docker.errors.DockerException as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise SnappyContainerError(
+            f"docker SDK error pulling polyMesh back from container: {exc}"
+        ) from exc
+    except OSError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise SnappyContainerError(
+            f"failed to extract polyMesh to staging (host filesystem fault): {exc}"
+        ) from exc
+
+    # Parse the log for layers-added + coverage stats. R0 P1 (Codex
+    # 86gs): only definite_zero blocks the swap; an unparseable log
+    # no longer fails the run (different OpenFOAM builds emit
+    # different summary wording).
+    log_text = ""
+    try:
+        log_text = log_dest.read_text(encoding="utf-8")
+    except OSError:
+        log_text = ""
+    layers_added, coverage, definite_zero = _parse_addlayers_log(log_text)
+
+    if definite_zero:
+        # Discard the staged polyMesh — host's existing polyMesh
+        # remains untouched, contract is "failure means no mutation".
+        shutil.rmtree(staging, ignore_errors=True)
+        raise SnappyAddLayersError(
+            "snappyHexMesh exit_code=0 but the log explicitly reports "
+            "0 layers were added (definite_zero signal). Most common "
+            "cause: geometry has high curvature or non-orthogonal "
+            "faces near the wall; reduce first_cell_height or "
+            "expansion_ratio. (Host polyMesh unchanged.)"
+        )
+
+    # Commit the swap. Atomic-ish: rename existing polyMesh →
+    # polyMesh.prev, move the new tree in, drop the previous, then
+    # also delete any stale polyMesh.pre_split backup left behind by
+    # earlier setup_*_bc invocations (R0 P1 Codex 86gs: BC setup
+    # restores from pre_split on every invocation, which would
+    # silently overwrite our prism-layered mesh on the next Step 3
+    # run).
+    try:
         prev = polyMesh_dir.with_suffix(".prev")
         if prev.exists():
             shutil.rmtree(prev)
@@ -384,40 +464,26 @@ def run_snappy_addlayers(
         shutil.move(str(new_poly), str(polyMesh_dir))
         shutil.rmtree(prev, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
-    except docker.errors.DockerException as exc:
-        raise SnappyContainerError(
-            f"docker SDK error pulling polyMesh back from container: {exc}"
-        ) from exc
+        # Delete stale pre_split backup if present — see R0 P1
+        # rationale above.
+        pre_split = polyMesh_dir.with_suffix(".pre_split")
+        if pre_split.exists():
+            shutil.rmtree(pre_split, ignore_errors=True)
     except OSError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
         raise SnappyContainerError(
             f"failed to swap polyMesh on host (filesystem fault): {exc}"
         ) from exc
 
-    # Parse the log for layers-added + coverage stats. Best-effort —
-    # parse failures keep the run successful but degrade the summary.
-    log_text = ""
-    try:
-        log_text = log_dest.read_text(encoding="utf-8")
-    except OSError:
-        log_text = ""
-    layers_added, coverage = _parse_addlayers_log(log_text)
-
-    # If the log parse + exit_code 0 BOTH indicate "no layers were
-    # actually added", surface as "did not converge" so the engineer
-    # gets a structured 422 instead of a deceptive 200 with
-    # layers_added=0.
-    if layers_added == 0:
-        raise SnappyAddLayersError(
-            "snappyHexMesh exit_code=0 but no layers were actually "
-            "added (parsed addLayers log shows 0). Most common cause: "
-            "geometry has high curvature or non-orthogonal faces near "
-            "the wall; reduce first_cell_height or expansion_ratio."
-        )
-
     return SnappyRunResult(
         polyMesh_dir=polyMesh_dir,
         log_path=log_dest,
-        layers_added=layers_added,
+        # R0 P1 (Codex 86gs): layers_added is None when the log was
+        # unparseable BUT the run succeeded (no definite_zero, swap
+        # committed). Fall back to 0 in the schema — the engineer can
+        # inspect log_path for ground truth. Coverage_fraction None
+        # already conveys "summary unparsed".
+        layers_added=layers_added if layers_added is not None else 0,
         coverage_fraction=coverage,
         generation_time_s=time.monotonic() - t0,
     )

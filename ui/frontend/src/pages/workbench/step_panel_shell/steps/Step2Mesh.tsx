@@ -650,17 +650,21 @@ export function Step2Mesh({
               })
             }
           />
+          {/* R0 P2 (Codex 86gs): do NOT gate on local `response` —
+            it is null on cases meshed in earlier sessions even though
+            the polyMesh exists on disk (StepPanelShell's /mesh/render
+            probe restores Step 2 in that scenario). The backend
+            already returns a structured `polyMesh_not_ready` 422 if
+            apply is clicked without a polyMesh, which the rejection
+            panel surfaces with a clear hint. Keep the button enabled
+            unless an apply is in flight. */}
           <button
             type="button"
             data-testid="step2-mesh-prism-apply"
-            disabled={prismApplying || !response}
+            disabled={prismApplying}
             onClick={applyPrismLayers}
             className="rounded-sm border border-emerald-600/60 bg-emerald-600/10 px-3 py-1 text-[11px] text-emerald-200 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-surface-700 disabled:bg-surface-950 disabled:text-surface-500"
-            title={
-              !response
-                ? "Run the mesh stage first to produce constant/polyMesh"
-                : "Run snappyHexMesh addLayers on the existing polyMesh"
-            }
+            title="Run snappyHexMesh addLayers on the existing polyMesh (mesh stage must have produced one)"
           >
             {prismApplying ? "Applying…" : "Apply prism layers"}
           </button>

@@ -284,9 +284,10 @@ Overall layer coverage: 84.5 %
 Layers added: 5
 ... more text ...
 """
-    layers, coverage = _parse_addlayers_log(log)
+    layers, coverage, definite_zero = _parse_addlayers_log(log)
     assert layers == 5
     assert coverage == pytest.approx(0.845)
+    assert definite_zero is False
 
 
 def test_parse_addlayers_log_falls_back_to_iteration_count():
@@ -299,19 +300,83 @@ Layer addition iteration 1
 Layer addition iteration 2
 Layer addition iteration 3
 """
-    layers, coverage = _parse_addlayers_log(log)
+    layers, coverage, definite_zero = _parse_addlayers_log(log)
     assert layers == 3
     assert coverage is None
+    # Iteration-count fallback is not a strong "no layers" signal.
+    assert definite_zero is False
 
 
-def test_parse_addlayers_log_unparseable_returns_zero_none():
+def test_parse_addlayers_log_unparseable_returns_none_none_false():
+    """R0 P1 (Codex 86gs): unparseable log no longer maps to layers=0;
+    layers is None so the caller can distinguish "log silent" from
+    "log says zero".
+    """
     from ui.backend.services.meshing_snappy.snappy_runner import (
         _parse_addlayers_log,
     )
 
-    layers, coverage = _parse_addlayers_log("(garbage with no markers)")
-    assert layers == 0
+    layers, coverage, definite_zero = _parse_addlayers_log(
+        "(garbage with no markers)"
+    )
+    assert layers is None
     assert coverage is None
+    assert definite_zero is False
+
+
+def test_parse_addlayers_log_explicit_zero_marks_definite_zero():
+    """R0 P1 (Codex 86gs): the strong "0 layers added" signal is the
+    only thing that triggers SnappyAddLayersError now.
+    """
+    from ui.backend.services.meshing_snappy.snappy_runner import (
+        _parse_addlayers_log,
+    )
+
+    log = """
+Doing final balancing
+Layers added: 0
+"""
+    layers, coverage, definite_zero = _parse_addlayers_log(log)
+    assert layers == 0
+    assert definite_zero is True
+
+
+def test_parse_addlayers_log_per_patch_summary_zeros_definite():
+    from ui.backend.services.meshing_snappy.snappy_runner import (
+        _parse_addlayers_log,
+    )
+
+    log = """
+Per-patch summary:
+   walls: 5 layers requested, 0 layers added
+"""
+    layers, coverage, definite_zero = _parse_addlayers_log(log)
+    assert layers == 0
+    assert definite_zero is True
+
+
+def test_parse_addlayers_log_small_percent_coverage_normalizes():
+    """R0 P2 (Codex 86gs): "0.8 %" is 0.008, not 0.8."""
+    from ui.backend.services.meshing_snappy.snappy_runner import (
+        _parse_addlayers_log,
+    )
+
+    log = "Overall layer coverage: 0.8 %\nLayers added: 1\n"
+    _, coverage, _ = _parse_addlayers_log(log)
+    assert coverage == pytest.approx(0.008)
+
+
+def test_parse_addlayers_log_fraction_coverage_no_percent():
+    """When the log already reports a [0, 1] fraction (no % suffix),
+    do NOT divide.
+    """
+    from ui.backend.services.meshing_snappy.snappy_runner import (
+        _parse_addlayers_log,
+    )
+
+    log = "Overall layer coverage: 0.92\nLayers added: 5\n"
+    _, coverage, _ = _parse_addlayers_log(log)
+    assert coverage == pytest.approx(0.92)
 
 
 # ---------------------- Pipeline tests ----------------------
