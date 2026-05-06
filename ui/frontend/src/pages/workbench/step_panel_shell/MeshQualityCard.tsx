@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
 import type {
+  MeshFixSuggestion,
   MeshQualityReport,
   MeshQualitySeverity,
 } from "./types";
@@ -425,6 +426,88 @@ function WarningList({
   );
 }
 
+// DEC-V61-138 (N2.4) · Suggested fixes panel.
+//
+// Renders advisor suggestions from V126 reports as a collapsible
+// section. Each entry shows the suggestion text + (when present) a
+// `recommended_change` block formatted as displayed key/value text.
+// V132 contract: NEVER renders an Apply button; the engineer reads
+// the metadata and applies it themselves through the relevant Step 2
+// sub-panel (sizing field / refinement zone / prism layers).
+
+function SuggestionsList({ suggestions }: { suggestions: MeshFixSuggestion[] }) {
+  const [open, setOpen] = useState(true);
+  if (suggestions.length === 0) return null;
+  return (
+    <section
+      data-testid="mesh-quality-suggestions"
+      className="mt-2 border-t border-surface-700/60 pt-2"
+    >
+      <button
+        type="button"
+        className="mb-1 flex w-full items-baseline justify-between text-[10px] uppercase tracking-wider text-surface-400 hover:text-surface-200"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="mesh-quality-suggestions-body"
+      >
+        <span>
+          suggested fixes ({suggestions.length})
+        </span>
+        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <ul
+          id="mesh-quality-suggestions-body"
+          className="space-y-1.5 text-[11px]"
+        >
+          {suggestions.map((s, i) => {
+            const tone =
+              s.severity === "critical"
+                ? "rose"
+                : s.severity === "warning"
+                  ? "amber"
+                  : "green";
+            return (
+              <li
+                key={`${s.metric}-${i}`}
+                data-testid={`mesh-quality-suggestion-${s.metric}`}
+                className={`rounded-sm border px-2 py-1.5 ${TONE_BORDER[tone]}`}
+              >
+                <div className="flex items-baseline gap-1.5">
+                  <code
+                    className={`font-mono text-[10px] uppercase ${TONE_TEXT[tone]}`}
+                  >
+                    {s.severity}
+                  </code>
+                  <span className="font-mono text-[10px] text-surface-500">
+                    {s.metric}
+                  </span>
+                </div>
+                <p className="mt-1 text-surface-200">{s.suggestion_text}</p>
+                {s.recommended_change && (
+                  <div
+                    data-testid={`mesh-quality-suggestion-detail-${s.metric}`}
+                    className="mt-1.5 rounded-sm bg-surface-950/50 p-1.5 font-mono text-[10px] text-surface-400"
+                  >
+                    {Object.entries(s.recommended_change).map(([k, v]) => (
+                      <div key={k} className="flex gap-1.5">
+                        <span className="text-surface-500">{k}:</span>
+                        <span className="text-surface-300">
+                          {typeof v === "string" ? v : JSON.stringify(v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function FailedChecksList({ checks }: { checks: string[] }) {
   if (checks.length === 0) return null;
   return (
@@ -647,6 +730,9 @@ export function MeshQualityCard({ caseId, meshGenSeq }: MeshQualityCardProps) {
               <FailedChecksList checks={state.report.checkmesh_failed_checks} />
             )}
           <WarningList warnings={state.report.warnings} />
+          {state.report.report_kind === "v126" && (
+            <SuggestionsList suggestions={state.report.suggestions} />
+          )}
           <div className="mt-2 border-t border-surface-700/60 pt-2">
             <p className="mb-1 text-[10px] uppercase tracking-wider text-surface-500">
               boundary patches

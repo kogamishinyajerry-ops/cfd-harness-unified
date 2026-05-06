@@ -110,6 +110,63 @@ class MeshQualityReport(BaseModel):
     warnings: list[MeshWarning] = Field(default_factory=list)
 
 
+FixSeverity = Literal["critical", "warning", "info"]
+
+
+class MeshFixSuggestion(BaseModel):
+    """DEC-V61-138 (N2.4) advisory record for a single mesh-quality
+    issue.
+
+    Returned in the V126 body's ``suggestions`` list. ``recommended_change``
+    is **metadata only** — the frontend renders it as copy-paste text,
+    NOT as an apply-button action (V130 Principle B + V132 advisor
+    contract: AI / advisory surfaces NEVER call mutating routes).
+
+    Stable wire schema: consumers pattern-match on ``metric`` to scope
+    suggestions to specific UI panels (e.g. "show this under Step 2's
+    sizing field" vs "show this under prism layers"). ``suggestion_text``
+    is the human-readable hint.
+    """
+
+    metric: Literal[
+        "max_non_orthogonality",
+        "max_skewness",
+        "max_aspect_ratio",
+        "n_severe_non_ortho_faces",
+        "mesh_ok",
+    ] = Field(
+        ...,
+        description=(
+            "Which mesh-quality metric this suggestion addresses. "
+            "Stable enum so the UI can route suggestions to the "
+            "right Step 2 sub-panel without parsing free-form text."
+        ),
+    )
+    severity: FixSeverity = Field(
+        ...,
+        description=(
+            "How urgent the suggestion is. critical = mesh likely "
+            "unusable for solver; warning = may cause convergence "
+            "issues; info = optional improvement."
+        ),
+    )
+    suggestion_text: str = Field(
+        ...,
+        description="Human-readable advice. Engineer reads + decides.",
+    )
+    recommended_change: dict | None = Field(
+        default=None,
+        description=(
+            "Structured copy-paste-ready value the engineer can type "
+            "into the relevant Step 2 form (sizing field / refinement "
+            "zone / prism config). NOT an apply-button payload — the "
+            "UI must render this as displayed text only. None when "
+            "the suggestion is qualitative (e.g. 'inspect the case "
+            "STL near the affected patch')."
+        ),
+    )
+
+
 class MeshQualityReportV126(MeshQualityReport):
     """V126 extension of :class:`MeshQualityReport` that adds
     Docker checkMesh-derived fields. Returned by the route ONLY
@@ -197,6 +254,16 @@ class MeshQualityReportV126(MeshQualityReport):
             "dropped — they have no named patch home. None when the "
             "container was unavailable OR no severe faces were found "
             "(matches the existing `n_severe_non_ortho_faces=0` path)."
+        ),
+    )
+    suggestions: list[MeshFixSuggestion] = Field(
+        default_factory=list,
+        description=(
+            "DEC-V61-138 (N2.4): rule-derived advisory suggestions for "
+            "engineer action. Empty when the mesh is clean OR when "
+            "checkMesh data is unavailable. Each entry is read-only "
+            "metadata — UI must render `recommended_change` as "
+            "displayed text, NOT an apply-button payload (V132 contract)."
         ),
     )
 
