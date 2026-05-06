@@ -456,13 +456,30 @@ def run_snappy_addlayers(
             "or expansion_ratio. (Host polyMesh unchanged.)"
         )
 
+    # R2 P2 (Codex 86gs): clean up the stale polyMesh.pre_split
+    # backup BEFORE swapping the new polyMesh into place. If we
+    # swapped first and rmtree(pre_split) then failed, the route
+    # would return snappy_container_failed → frontend skips
+    # mesh:mutated invalidation → UI shows the OLD mesh while the
+    # disk holds the NEW one → engineer's retry runs addLayers on
+    # an already-mutated mesh. Cleaning before the swap means a
+    # cleanup failure leaves the host pre-swap (untouched polyMesh)
+    # and the failure is genuine "no mutation happened".
+    pre_split = polyMesh_dir.with_suffix(".pre_split")
+    if pre_split.exists():
+        try:
+            shutil.rmtree(pre_split)
+        except OSError as exc:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise SnappyContainerError(
+                f"refusing to add prism layers because stale {pre_split} "
+                f"could not be removed — leaving it would silently revert "
+                f"the prism mesh on the next BC setup. Manual cleanup "
+                f"required: `rm -rf {pre_split}`. Underlying error: {exc}"
+            ) from exc
+
     # Commit the swap. Atomic-ish: rename existing polyMesh →
-    # polyMesh.prev, move the new tree in, drop the previous, then
-    # also delete any stale polyMesh.pre_split backup left behind by
-    # earlier setup_*_bc invocations (R0 P1 Codex 86gs: BC setup
-    # restores from pre_split on every invocation, which would
-    # silently overwrite our prism-layered mesh on the next Step 3
-    # run).
+    # polyMesh.prev, move the new tree in, drop the previous.
     try:
         prev = polyMesh_dir.with_suffix(".prev")
         if prev.exists():
@@ -471,27 +488,6 @@ def run_snappy_addlayers(
         shutil.move(str(new_poly), str(polyMesh_dir))
         shutil.rmtree(prev, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
-        # Delete stale pre_split backup if present — see R0 P1
-        # rationale above. R1 P2 (Codex 86gs): do NOT use
-        # ignore_errors=True — a silently-swallowed cleanup failure
-        # leaves the stale backup on disk, and the next
-        # setup_*_bc() invocation would restore from that backup,
-        # silently overwriting our prism-layered mesh. Treat
-        # cleanup failure as a fatal SnappyContainerError so the
-        # engineer sees the issue immediately. Mirrors the
-        # to_foam.py best-effort pattern that escalates errors.
-        pre_split = polyMesh_dir.with_suffix(".pre_split")
-        if pre_split.exists():
-            try:
-                shutil.rmtree(pre_split)
-            except OSError as exc:
-                raise SnappyContainerError(
-                    f"polyMesh swap committed but failed to delete "
-                    f"stale {pre_split} — the next BC setup would "
-                    f"restore from this backup and silently overwrite "
-                    f"the prism layers. Manual cleanup required: "
-                    f"`rm -rf {pre_split}`. Underlying error: {exc}"
-                ) from exc
     except OSError as exc:
         shutil.rmtree(staging, ignore_errors=True)
         raise SnappyContainerError(
