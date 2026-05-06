@@ -40,6 +40,7 @@ from ui.backend.services.case_scaffold import IMPORTED_DIR
 from ui.backend.services.ai_actions.classifier import classify_setup_bc
 from ui.backend.services.case_annotations import (
     AnnotationsIOError,
+    annotations_exclusive_lock,
     load_annotations,
 )
 from ui.backend.services.case_solve import (
@@ -388,114 +389,131 @@ def setup_bc(
     # Legacy LDC dogfood callers (no params) preserve the pre-N1.1
     # behavior: classifier optionally upgrades to channel; classifier
     # uncertain still falls through to setup_ldc_bc.
+    # Codex N1.1 R2 P1 close: hold the annotations-exclusive lock for
+    # the entire load → classify → revision-check → dispatch sequence.
+    # Without the lock, a concurrent PUT /face-annotations could land
+    # between load_annotations() and the executor call, slipping past
+    # the if_match_revision equality check while the executor still
+    # uses the pre-write classifier output. annotations_exclusive_lock
+    # serializes against save_annotations (the only mutator of
+    # face_annotations.yaml), so within this block the revision is
+    # frozen for the engineer's accepted advisory.
     use_channel = False
     cls_inlet: tuple[str, ...] = ()
     cls_outlet: tuple[str, ...] = ()
     cls_for_apply = None
     annotations_for_apply: dict | None = None
+    apply_summary: SetupBcSummary | None = None
     try:
-        annotations_for_apply = load_annotations(case_dir, case_id=case_id)
-        cls_for_apply = classify_setup_bc(
-            case_dir, annotations=annotations_for_apply
-        )
-        if (
-            cls_for_apply.confidence == "confident"
-            and cls_for_apply.geometry_class == "non_cube"
-        ):
-            use_channel = True
-            cls_inlet = cls_for_apply.inlet_face_ids
-            cls_outlet = cls_for_apply.outlet_face_ids
-    except AnnotationsIOError:
-        # Annotations IO failure → fall through to LDC; the
-        # classifier path is only consulted to optionally upgrade a
-        # cube-default request to a channel dispatch when the engineer
-        # has pinned inlet/outlet faces.
-        pass
-    except Exception:  # noqa: BLE001 — defensive: classifier issues
-        # must not break the legacy LDC dogfood path.
-        pass
+        with annotations_exclusive_lock(case_dir):
+            try:
+                annotations_for_apply = load_annotations(
+                    case_dir, case_id=case_id
+                )
+                cls_for_apply = classify_setup_bc(
+                    case_dir, annotations=annotations_for_apply
+                )
+                if (
+                    cls_for_apply.confidence == "confident"
+                    and cls_for_apply.geometry_class == "non_cube"
+                ):
+                    use_channel = True
+                    cls_inlet = cls_for_apply.inlet_face_ids
+                    cls_outlet = cls_for_apply.outlet_face_ids
+            except AnnotationsIOError:
+                pass  # Fall through to LDC dogfood (legacy contract).
+            except Exception:  # noqa: BLE001 — defensive
+                pass
 
-    # Codex N1.1 R1 P2: revision binding. Reject if the engineer's
-    # accepted advisory consumed an older revision than the apply now
-    # sees (concurrent edit between accept and apply).
-    if if_match_revision is not None and annotations_for_apply is not None:
-        current_rev = annotations_for_apply.get("revision", 0)
-        if current_rev != if_match_revision:
-            raise HTTPException(
-                status_code=409,
-                detail=SetupBcRejection(
-                    failing_check="annotations_revision_conflict",
-                    detail=(
-                        f"Annotations changed between AI advisory "
-                        f"(revision {if_match_revision}) and apply "
-                        f"(revision {current_rev}). Re-run the AI "
-                        f"envelope before applying."
-                    ),
-                ).model_dump(),
-            )
+            if if_match_revision is not None and annotations_for_apply is not None:
+                current_rev = annotations_for_apply.get("revision", 0)
+                if current_rev != if_match_revision:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=SetupBcRejection(
+                            failing_check="annotations_revision_conflict",
+                            detail=(
+                                f"Annotations changed between AI "
+                                f"advisory (revision {if_match_revision})"
+                                f" and apply (revision {current_rev}). "
+                                f"Re-run the AI envelope before applying."
+                            ),
+                        ).model_dump(),
+                    )
 
-    # Codex N1.1 R1 P1: stale-pin recoverable error. When the engineer
-    # accepted a confident-channel advisory but the apply-time
-    # classifier disagrees, surface a 422 channel_pin_mismatch with
-    # the actionable question(s) the engineer can answer to re-pin.
-    if bc_kind == "channel" and not use_channel:
-        questions: list[dict] = []
-        question_summary = "channel pins changed since AI advisory"
-        if cls_for_apply is not None:
-            for q in cls_for_apply.questions:
-                # Pydantic models are dict-like via model_dump; classifier
-                # returns UnresolvedQuestion instances.
+            if bc_kind == "channel" and not use_channel:
+                questions: list[dict] = []
+                question_summary = "channel pins changed since AI advisory"
+                if cls_for_apply is not None:
+                    for q in cls_for_apply.questions:
+                        try:
+                            questions.append(q.model_dump())
+                        except AttributeError:
+                            questions.append(dict(q))  # type: ignore[arg-type]
+                    if cls_for_apply.summary:
+                        question_summary = cls_for_apply.summary
+                raise HTTPException(
+                    status_code=422,
+                    detail=SetupBcRejection(
+                        failing_check="channel_pin_mismatch",
+                        detail=question_summary,
+                    ).model_dump()
+                    | {"unresolved_questions": questions},
+                )
+
+            # Dispatch the executor under the same annotations lock so
+            # the BCs we author are tied to the revision we just
+            # verified. setup_*_bc takes its own .case_lock (different
+            # lock file), so reentrance is not an issue.
+            if use_channel:
                 try:
-                    questions.append(q.model_dump())
-                except AttributeError:
-                    questions.append(dict(q))  # type: ignore[arg-type]
-            if cls_for_apply.summary:
-                question_summary = cls_for_apply.summary
+                    ch_result = setup_channel_bc(
+                        case_dir,
+                        case_id=case_id,
+                        inlet_face_ids=cls_inlet,
+                        outlet_face_ids=cls_outlet,
+                    )
+                except BCSetupError as exc:
+                    raise _setup_bc_failure_to_http(exc) from exc
+                apply_summary = SetupBcSummary(
+                    case_id=ch_result.case_id,
+                    bc_kind="channel",
+                    n_inlet_faces=ch_result.n_inlet_faces,
+                    n_outlet_faces=ch_result.n_outlet_faces,
+                    n_wall_faces=ch_result.n_wall_faces,
+                    nu=ch_result.nu,
+                    reynolds=ch_result.reynolds,
+                    written_files=list(ch_result.written_files),
+                )
+            else:
+                try:
+                    ldc_result = setup_ldc_bc(case_dir, case_id=case_id)
+                except BCSetupError as exc:
+                    raise _setup_bc_failure_to_http(exc) from exc
+                apply_summary = SetupBcSummary(
+                    case_id=ldc_result.case_id,
+                    bc_kind="ldc",
+                    n_lid_faces=ldc_result.n_lid_faces,
+                    n_wall_faces=ldc_result.n_wall_faces,
+                    lid_velocity=ldc_result.lid_velocity,
+                    nu=ldc_result.nu,
+                    reynolds=ldc_result.reynolds,
+                    written_files=list(ldc_result.written_files),
+                )
+    except AnnotationsIOError as exc:
+        # annotations_exclusive_lock itself raises AnnotationsIOError
+        # on symlink_escape / lock acquire failures. Map to 422 so the
+        # caller sees a typed rejection rather than a 500.
         raise HTTPException(
             status_code=422,
             detail=SetupBcRejection(
-                failing_check="channel_pin_mismatch",
-                detail=question_summary,
-            ).model_dump()
-            | {"unresolved_questions": questions},
-        )
+                failing_check=exc.failing_check,
+                detail=str(exc),
+            ).model_dump(),
+        ) from exc
 
-    if use_channel:
-        try:
-            ch_result = setup_channel_bc(
-                case_dir,
-                case_id=case_id,
-                inlet_face_ids=cls_inlet,
-                outlet_face_ids=cls_outlet,
-            )
-        except BCSetupError as exc:
-            raise _setup_bc_failure_to_http(exc) from exc
-        return SetupBcSummary(
-            case_id=ch_result.case_id,
-            bc_kind="channel",
-            n_inlet_faces=ch_result.n_inlet_faces,
-            n_outlet_faces=ch_result.n_outlet_faces,
-            n_wall_faces=ch_result.n_wall_faces,
-            nu=ch_result.nu,
-            reynolds=ch_result.reynolds,
-            written_files=list(ch_result.written_files),
-        )
-
-    try:
-        result = setup_ldc_bc(case_dir, case_id=case_id)
-    except BCSetupError as exc:
-        raise _setup_bc_failure_to_http(exc) from exc
-
-    return SetupBcSummary(
-        case_id=result.case_id,
-        bc_kind="ldc",
-        n_lid_faces=result.n_lid_faces,
-        n_wall_faces=result.n_wall_faces,
-        lid_velocity=result.lid_velocity,
-        nu=result.nu,
-        reynolds=result.reynolds,
-        written_files=list(result.written_files),
-    )
+    assert apply_summary is not None  # one of the two branches set it
+    return apply_summary
 
 
 @router.post(

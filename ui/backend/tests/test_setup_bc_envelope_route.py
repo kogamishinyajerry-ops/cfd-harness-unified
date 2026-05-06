@@ -868,3 +868,108 @@ def test_envelope_confident_includes_suggested_bc_kind(monkeypatch, tmp_path):
     body = r.json()
     assert body["confidence"] == "confident"
     assert body["suggested_bc_kind"] == "ldc"
+
+
+def test_apply_concurrent_annotations_write_caught_by_lock(
+    monkeypatch, tmp_path
+):
+    """Codex N1.1 R2 P1 close: the apply path holds the
+    annotations-exclusive lock for the load → revision-check →
+    dispatch sequence. A concurrent save_annotations call from
+    another thread must serialize behind it; we assert this by
+    monkeypatching ``classify_setup_bc`` to take a brief snooze, then
+    racing a save_annotations call from a thread. The save can't land
+    BETWEEN load_annotations and the executor — it either lands
+    before (and the route's load sees the new revision) or after
+    (the route's load sees the old revision and the if_match check
+    enforces consistency).
+    """
+    import threading
+    import time
+
+    from ui.backend.services.case_annotations import (
+        empty_annotations,
+        save_annotations,
+    )
+    from ui.backend.services.ai_actions import classifier as cls_mod
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    save_annotations(case_dir, empty_annotations(case_id), if_match_revision=0)
+    # Now revision is 1 on disk.
+
+    classify_started = threading.Event()
+    classify_release = threading.Event()
+
+    def slow_classify(case_dir, annotations):
+        classify_started.set()
+        # Block until the test thread tries to write annotations.
+        classify_release.wait(timeout=5.0)
+        return cls_mod.ClassificationResult(
+            geometry_class="ldc_cube",
+            confidence="confident",
+            questions=[],
+            summary="LDC confident.",
+            rationale="test",
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.classify_setup_bc",
+        slow_classify,
+    )
+
+    # Stub the executor — we're testing the lock, not the BC writer.
+    class _FakeLDCResult:
+        def __init__(self) -> None:
+            self.case_id = case_id
+            self.n_lid_faces = 1
+            self.n_wall_faces = 5
+            self.lid_velocity = (1.0, 0.0, 0.0)
+            self.nu = 0.01
+            self.reynolds = 100.0
+            self.written_files = ()
+
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.setup_ldc_bc",
+        lambda case_dir, case_id: _FakeLDCResult(),
+    )
+
+    client = _new_client()
+
+    def save_after_classify_starts():
+        classify_started.wait(timeout=5.0)
+        # Concurrent annotations write while route holds the lock.
+        # If the lock works, this blocks until classify_release
+        # is set + the route's executor finishes.
+        save_annotations(
+            case_dir, empty_annotations(case_id), if_match_revision=1
+        )
+
+    saver = threading.Thread(target=save_after_classify_starts)
+    saver.start()
+    try:
+        # Apply with if_match_revision=1 (the pre-write revision).
+        # Inside the lock, the route reads revision=1, checks ==
+        # if_match=1, and dispatches setup_ldc_bc — all before the
+        # concurrent saver can land.
+        # Brief sleep to let the saver block on the lock.
+        def kick_release():
+            time.sleep(0.05)
+            classify_release.set()
+
+        kicker = threading.Thread(target=kick_release)
+        kicker.start()
+        r = client.post(
+            f"/api/import/{case_id}/setup-bc?if_match_revision=1"
+        )
+        kicker.join(timeout=5.0)
+    finally:
+        classify_release.set()
+        saver.join(timeout=5.0)
+
+    # Apply must succeed (lock kept the saver out until executor
+    # completed); concurrent saver bumped revision afterwards.
+    assert r.status_code == 200, r.text

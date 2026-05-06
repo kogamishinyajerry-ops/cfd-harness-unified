@@ -705,9 +705,58 @@ export function Step3SetupBC({
         typeof e.detail === "object" &&
         "failing_check" in e.detail
       ) {
-        const detail = e.detail as CaseSolveRejection;
-        setRejection(detail);
-        onStepError(`apply suggestion rejected: ${detail.failing_check}`);
+        const detail = e.detail as CaseSolveRejection & {
+          unresolved_questions?: UnresolvedQuestion[];
+        };
+        // DEC-V61-131 N1.1 R2 P2 close (Codex 86gs R2): the apply
+        // route now returns structured recovery payloads when the
+        // engineer's accepted advisory is stale — handle them by
+        // restoring Step 3 to a recoverable state instead of
+        // surfacing as a plain CaseSolveRejection that leaves the
+        // confident envelope on screen.
+        if (
+          detail.failing_check === "channel_pin_mismatch" &&
+          Array.isArray(detail.unresolved_questions) &&
+          detail.unresolved_questions.length > 0
+        ) {
+          // Stale pins: synthesize an uncertain envelope from the
+          // backend's classifier questions so the dialog reopens and
+          // the engineer can re-pick.
+          setEnvelope({
+            confidence: "uncertain",
+            summary:
+              detail.detail ||
+              "Channel pins changed since the AI advisory. Re-pick to continue.",
+            annotations_revision_consumed:
+              envelope?.annotations_revision_consumed ?? 0,
+            annotations_revision_after:
+              envelope?.annotations_revision_after ?? 0,
+            unresolved_questions: detail.unresolved_questions,
+            next_step_suggestion:
+              "Re-pick the inlet/outlet face(s), then click [继续 AI 处理].",
+            error_detail: null,
+            suggested_bc_kind: null,
+          });
+          setPickedFaceIdForQuestion({});
+          onStepError(`apply rejected: ${detail.failing_check}`);
+        } else if (
+          detail.failing_check === "annotations_revision_conflict"
+        ) {
+          // Concurrent annotations edit: drop the stale envelope so
+          // the engineer re-runs [AI 处理] and gets a fresh advisory
+          // bound to the new revision.
+          setEnvelope(null);
+          setPickedFaceIdForQuestion({});
+          setNetworkError(
+            "Annotations changed since the AI advisory was shown. Click [AI 处理] to re-run.",
+          );
+          onStepError(`apply rejected: ${detail.failing_check}`);
+        } else {
+          setRejection(detail);
+          onStepError(
+            `apply suggestion rejected: ${detail.failing_check}`,
+          );
+        }
       } else {
         const msg = e instanceof Error ? e.message : String(e);
         setApplyError(msg);
@@ -716,7 +765,15 @@ export function Step3SetupBC({
     } finally {
       if (!cancelledRef.current) setApplying(false);
     }
-  }, [applying, caseId, envelope, onStepComplete, onStepError]);
+  }, [
+    applying,
+    caseId,
+    envelope,
+    onStepComplete,
+    onStepError,
+    setEnvelope,
+    setPickedFaceIdForQuestion,
+  ]);
 
   useEffect(() => {
     registerAiAction(triggerSetup);

@@ -38,6 +38,7 @@ from typing import Any
 from ui.backend.services.case_annotations._yaml_io import (
     AnnotationsIOError,
     AnnotationsRevisionConflict,
+    _exclusive_case_lock as annotations_exclusive_lock,
     load_annotations,
     save_annotations,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "FACE_ID_PREFIX",
     "FACE_ID_ROUND_DECIMALS",
     "SCHEMA_VERSION",
+    "annotations_exclusive_lock",
     "empty_annotations",
     "face_id",
     "load_annotations",
