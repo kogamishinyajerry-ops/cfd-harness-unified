@@ -1,4 +1,5 @@
 ---
+decision_id: DEC-V61-131
 dec_id: V61-131
 title: Envelope mode backend hard-strip + regenerate_mesh tool deprecate (advisory only)
 status: Accepted (R17 · 2026-05-06 · 86gs APPROVE on c20dade)
@@ -28,7 +29,7 @@ external_gate_self_estimated_pass_rate: 70%
 external_gate_actual_outcome: 17 rounds (R0 → R17 APPROVE; CRS once on R10 fallback when 86gs 503)
 codex_review_relay: 86gs (xhigh) primary; CRS (high) fallback round R10 when 86gs 503
 codex_tool_report_path: /tmp/n11_r17_review_86gs.log (last round APPROVE)
-notion_sync_status: pending (session-end batch)
+notion_sync_status: synced 2026-05-06 (https://www.notion.so/DEC-V61-131-Envelope-mode-backend-hard-strip-regenerate_mesh-tool-deprecate-advisory-only-358c68942bed817d88a4d346047a5eb1)
 ---
 
 # DEC-V61-131 · N1.1 · Envelope hard-strip + regenerate_mesh deprecate

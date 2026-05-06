@@ -526,3 +526,60 @@ def test_apply_proposal_regenerate_mesh_returns_advisory(
             body["state_after"]["suggestion"]["axis"] == "mesh_mode"
         )
         assert "AI suggests" in body["summary"]
+
+
+def test_apply_proposal_422_on_unsupported_axis_target_cell_count(
+    tmp_path, monkeypatch
+):
+    """DEC-V61-131 R20 P1 close (CRS R0 finding): regenerate_mesh
+    advisories using ``target_cell_count`` raise
+    ``ToolDispatchError(failing_check="unsupported_axis")`` in
+    tool_registry. Pre-R20 the apply-proposal route mapped this to a
+    500 'unexpected' response because only
+    ``failing_check == "underlying_service_error"`` was 422-mapped.
+    R20 adds an explicit branch so the rejection becomes 422 with the
+    inner axis name surfaced — the frontend ProposalCard can then
+    render the actionable remediation hint (point the engineer at
+    ``mesh_mode='beginner'/'power'`` or Step 2 manual replay) instead
+    of a generic internal-error banner.
+    """
+    _make_case(tmp_path)
+    app = _make_app(tmp_path, monkeypatch)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "lid_driven_cavity",
+                "tool": "regenerate_mesh",
+                "args": {"target_cell_count": 50000},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "unsupported_axis"
+        assert body["detail"]["inner_failing_check"] == "target_cell_count"
+        assert "mesh_mode" in body["detail"]["message"]
+
+
+def test_apply_proposal_422_on_unsupported_axis_lc_override(
+    tmp_path, monkeypatch
+):
+    """Symmetric coverage of the lc_override axis (V125 advisory shape).
+    Same R20 contract: 422 + inner axis name."""
+    _make_case(tmp_path)
+    app = _make_app(tmp_path, monkeypatch)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/ai-coach/apply-proposal",
+            json={
+                "case_id": "lid_driven_cavity",
+                "tool": "regenerate_mesh",
+                "args": {"lc_override": 0.05},
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["failing_check"] == "unsupported_axis"
+        assert body["detail"]["inner_failing_check"] == "lc_override"

@@ -837,8 +837,20 @@ export function Step3SetupBC({
         // classifier's natural uncertain path.
         if (
           detail.failing_check === "channel_pin_mismatch" ||
-          detail.failing_check === "annotations_revision_conflict"
+          detail.failing_check === "annotations_revision_conflict" ||
+          detail.failing_check === "ldc_mismatch"
         ) {
+          // DEC-V61-131 R20 P2 close (CRS R0 finding): ldc_mismatch is
+          // the symmetric guard added in R19 — engineer accepted an LDC
+          // advisory but the geometry/classifier now reports
+          // confident-channel before apply. The right recovery is
+          // identical to channel_pin_mismatch / annotations_revision_conflict:
+          // wipe the stale confident-LDC card and re-run the envelope
+          // so the engineer gets the new face-selection questions
+          // through the classifier's natural uncertain path. Without
+          // this entry the frontend renders ldc_mismatch as a terminal
+          // banner and the engineer is stuck on a stale card with no
+          // path forward except a manual page refresh.
           setEnvelope(null);
           setPickedFaceIdForQuestion({});
           setActiveFaceQuestionId(null);

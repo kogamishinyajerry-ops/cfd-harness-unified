@@ -602,6 +602,28 @@ async def ai_coach_apply_proposal(
                 status_code=422,
                 detail=detail,
             ) from exc
+        if exc.failing_check == "unsupported_axis":
+            # DEC-V61-131 R20 P1 close (CRS R0 finding): tool_registry
+            # rejects target_cell_count / lc_override advisories with
+            # ToolDispatchError(failing_check="unsupported_axis") because
+            # Step 2 has no manual-replay UI for those axes. This is a
+            # caller-actionable rejection, not an internal error — surface
+            # as 422 with the inner axis name so the frontend ProposalCard
+            # can render a typed remediation hint instead of a generic 500.
+            logger.warning(
+                "apply-proposal unsupported axis rejection: %s", exc
+            )
+            detail = {
+                "failing_check": "unsupported_axis",
+                "tool": body.tool,
+                "message": str(exc),
+            }
+            if exc.inner_failing_check is not None:
+                detail["inner_failing_check"] = exc.inner_failing_check
+            raise HTTPException(
+                status_code=422,
+                detail=detail,
+            ) from exc
         logger.exception("apply-proposal unexpected dispatch failure")
         raise HTTPException(
             status_code=500,
