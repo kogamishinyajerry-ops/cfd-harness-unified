@@ -6,9 +6,11 @@ import userEvent from "@testing-library/user-event";
 
 import { ApiError } from "@/api/client";
 import type { MeshSuccessResponse } from "@/types/mesh_imported";
+import type { PrismLayersSuccessResponse } from "@/types/mesh_prism_layers";
 
 const apiMock = vi.hoisted(() => ({
   meshImported: vi.fn(),
+  meshPrismLayers: vi.fn(),
 }));
 vi.mock("@/api/client", async () => {
   const actual = await vi.importActual<typeof import("@/api/client")>(
@@ -16,7 +18,11 @@ vi.mock("@/api/client", async () => {
   );
   return {
     ...actual,
-    api: { ...actual.api, meshImported: apiMock.meshImported },
+    api: {
+      ...actual.api,
+      meshImported: apiMock.meshImported,
+      meshPrismLayers: apiMock.meshPrismLayers,
+    },
   };
 });
 
@@ -65,9 +71,23 @@ const FAKE_MESH_RESPONSE: MeshSuccessResponse = {
   },
 };
 
+const FAKE_PRISM_RESPONSE: PrismLayersSuccessResponse = {
+  case_id: "abc",
+  prism_summary: {
+    cell_count: 0,
+    face_count: 0,
+    layers_added: 5,
+    coverage_fraction: 0.92,
+    polyMesh_path: "/tmp/case/constant/polyMesh",
+    log_path: "/tmp/case/log.snappyHexMesh",
+    generation_time_s: 12.5,
+  },
+};
+
 describe("Step2Mesh · wired body", () => {
   beforeEach(() => {
     apiMock.meshImported.mockReset();
+    apiMock.meshPrismLayers.mockReset();
   });
 
   it("registers an AI action with the shell on mount", () => {
@@ -561,6 +581,127 @@ describe("Step2Mesh · wired body", () => {
           bbox: [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
         }),
       ],
+    );
+  });
+
+  // DEC-V61-137 (N2.3): prism-layers panel tests.
+  it("collapses the prism-layers panel by default", () => {
+    renderStep({});
+    const details = screen.getByTestId(
+      "step2-mesh-prism-layers",
+    ) as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+  });
+
+  it("disables Apply prism layers until a mesh has been generated", async () => {
+    const user = userEvent.setup();
+    renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const applyBtn = screen.getByTestId(
+      "step2-mesh-prism-apply",
+    ) as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+  });
+
+  it("enables and POSTs prism layers after a successful mesh", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    apiMock.meshPrismLayers.mockResolvedValueOnce(FAKE_PRISM_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    // First, run the mesh stage.
+    await triggerAi();
+    await waitFor(() => {
+      expect(screen.getByTestId("step2-mesh-success")).toBeInTheDocument();
+    });
+
+    // Open the prism panel and click apply.
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const applyBtn = screen.getByTestId(
+      "step2-mesh-prism-apply",
+    ) as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(false);
+    await user.click(applyBtn);
+
+    expect(apiMock.meshPrismLayers).toHaveBeenLastCalledWith("abc", [
+      expect.objectContaining({
+        patch: "walls",
+        first_cell_height: 1.0e-4,
+        expansion_ratio: 1.2,
+        num_layers: 5,
+      }),
+    ]);
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("step2-mesh-prism-success"),
+      ).toHaveTextContent(/Prism layers applied/);
+    });
+  });
+
+  it("renders a structured rejection on backend prism failure", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    apiMock.meshPrismLayers.mockRejectedValueOnce(
+      new ApiError(422, "rejected", {
+        failing_check: "patch_not_found",
+        reason: "patch(es) ['airfoil'] not present in .../boundary",
+      }),
+    );
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    await triggerAi();
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-prism-apply"));
+
+    await waitFor(() => {
+      const rej = screen.getByTestId("step2-mesh-prism-rejection");
+      expect(rej).toHaveTextContent(/patch_not_found/);
+      expect(rej).toHaveTextContent(/does not match any patch/);
+    });
+    expect(onStepError).toHaveBeenCalledWith(
+      expect.stringContaining("patch_not_found"),
+    );
+  });
+
+  it("blocks prism apply with inline error when expansion_ratio out of bounds", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    await triggerAi();
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const erInput = screen
+      .getByTestId("step2-mesh-prism-expansion_ratio")
+      .querySelector("input") as HTMLInputElement;
+    await user.clear(erInput);
+    await user.type(erInput, "5");  // > MAX
+
+    await user.click(screen.getByTestId("step2-mesh-prism-apply"));
+
+    expect(apiMock.meshPrismLayers).not.toHaveBeenCalled();
+    expect(screen.getByTestId("step2-mesh-prism-error")).toHaveTextContent(
+      /expansion_ratio/,
+    );
+    expect(onStepError).toHaveBeenCalledWith(
+      expect.stringContaining("prism validation"),
     );
   });
 
