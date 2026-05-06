@@ -1,13 +1,32 @@
 ---
 decision_id: DEC-V61-136
 title: N2.2 · Region refinement zones (box / sphere · gmsh Box+Ball+Min field combinator)
-status: Proposed
+status: Accepted
 parent_dec: V61-134
 phase: N2
 notion_sync_status: pending
+codex_review_relay: crs (gpt-5.4 default)
+codex_review_rounds: R0 CHANGES_REQUIRED → R1 CHANGES_REQUIRED → R2 APPROVE
+codex_review_chain: /tmp/n22_r{0,1,2}_review.md (transient · committed in body)
+implementation_commits: 09a46f6 → ee9c6be → 40ad395
 ---
 
 # DEC-V61-136 · N2.2 Region Refinement Zones
+
+## Status
+
+**Accepted 2026-05-07** — Codex CRS gpt-5.4 review chain closed at
+R2 APPROVE on commit `40ad395`.
+
+## Codex review chain
+
+| Round | Commit | Verdict | Findings → Disposition |
+|---|---|---|---|
+| R0 | `09a46f6` | CHANGES_REQUIRED | P1 ZoneNumberInput coercion blocks negative / partial decimal edits → fixed in R1; P2 zonesOpen gates submit → fixed in R1 |
+| R1 | `ee9c6be` | CHANGES_REQUIRED | P2 draft-only states submit stale parent value → fixed in R2; 2× P2 manifest references (out-of-scope · pre-existing dirty working tree from prior report-engine session, not in commits) → noted, not addressed |
+| R2 | `40ad395` | APPROVE | clean — "narrowly scoped to blurring the active element before submission so draft-only zone input states cannot diverge from the submitted mesh payload, and the added test covers that behavior" |
+
+Within V133 round cap=3.
 
 ## Decision
 
@@ -147,11 +166,11 @@ rejection; gmsh field combinator).
 
 ## confidence
 
-**med** — Schema + plumbing is mechanical extension of the V135 N2.1
-precedent (high confidence on that part). The novel surface is gmsh
-field combinator semantics + AABB intersection math (medium
-confidence; both are well-trodden in gmsh tutorials t10/t11 and
-standard separating-axis-theorem code respectively, but the
-interaction with N2.1's curvature-driven sizing is the kind of
-surface where a Codex second pair of eyes is valuable). Will run
-Codex CRS gpt-5.4 review post-commit per V133 round-cap=3 baseline.
+**med** (initial) → **calibrated honest**. Schema + plumbing was
+mechanical (high), but the frontend ZoneNumberInput correctness was
+genuinely tricky — Codex caught the controlled-input numeric-coercion
+issue (R0 P1) and the disclosure-vs-data UX confusion (R0 P2), then
+caught a second-order draft-state submission issue (R1 P2) that the
+R0 fix introduced. 3 rounds at the V133 ceiling is honest signal that
+this surface deserved review; would not have caught any of these
+solo. Counter-impact +1 (autonomous_governance: true).
