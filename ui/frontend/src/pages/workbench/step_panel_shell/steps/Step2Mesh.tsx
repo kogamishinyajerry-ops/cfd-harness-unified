@@ -10,10 +10,18 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "@/api/client";
 import type {
+  BoxRefinementZone,
+  MeshRefinementZone,
   MeshRejectionDetail,
   MeshRequestMode,
   MeshSizingField,
   MeshSuccessResponse,
+  RefinementLevel,
+  SphereRefinementZone,
+} from "@/types/mesh_imported";
+import {
+  REFINEMENT_LEVEL_MAX,
+  REFINEMENT_LEVEL_MIN,
 } from "@/types/mesh_imported";
 
 import { MeshQualityCard } from "../MeshQualityCard";
@@ -29,6 +37,25 @@ const EMPTY_SIZING: MeshSizingField = {
   proximity_layers: null,
 };
 
+// DEC-V61-136 (N2.2): factory helpers for new zones. Defaults give a
+// non-zero extent so the "Add zone" click immediately has a valid
+// payload — engineer can edit numbers in place.
+function makeBoxZone(): BoxRefinementZone {
+  return {
+    geometry: "box",
+    bbox: [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+    level: 2,
+  };
+}
+function makeSphereZone(): SphereRefinementZone {
+  return {
+    geometry: "sphere",
+    center: [0.5, 0.5, 0.5],
+    radius: 0.1,
+    level: 2,
+  };
+}
+
 const REJECTION_HINTS: Record<string, string> = {
   cell_cap_exceeded:
     "Coarsen the geometry or pick a different mesh tier. The 50M-cell hard cap is a resource guard, not a quality threshold.",
@@ -38,6 +65,8 @@ const REJECTION_HINTS: Record<string, string> = {
     "The OpenFOAM container could not convert the mesh. Confirm cfd-openfoam is running (docker ps | grep cfd-openfoam).",
   source_not_imported:
     "This case has no triSurface/ STL to mesh — only imported cases can use the gmsh path.",
+  refinement_zone_invalid:
+    "A refinement zone has no overlap with the case geometry. Adjust the bbox or sphere center so it intersects the imported STL bounding box.",
 };
 
 export function Step2Mesh({
@@ -58,6 +87,13 @@ export function Step2Mesh({
   const [sizingFieldOpen, setSizingFieldOpen] = useState(false);
   const [sizingField, setSizingField] = useState<MeshSizingField>(EMPTY_SIZING);
   const [sizingFieldError, setSizingFieldError] = useState<string | null>(null);
+  // DEC-V61-136 (N2.2): refinement zones repeater. Collapsed by default;
+  // empty list = behavior identical to N2.1 (api client omits body
+  // attribute). zonesError surfaces client-side validation (zero-extent
+  // bbox / negative radius) before the backend rejects with 422.
+  const [zonesOpen, setZonesOpen] = useState(false);
+  const [zones, setZones] = useState<MeshRefinementZone[]>([]);
+  const [zonesError, setZonesError] = useState<string | null>(null);
   // V127: bumped on every successful mesh regeneration so the
   // MeshQualityCard child re-fetches against the new polyMesh. Also
   // listens for ai-coach:proposal-applied (regenerate_mesh tool) so
@@ -71,6 +107,7 @@ export function Step2Mesh({
     setRejection(null);
     setNetworkError(null);
     setSizingFieldError(null);
+    setZonesError(null);
     // DEC-V61-135: client-side ordering check before the round-trip.
     // The backend re-validates; this just gives instant feedback.
     if (sizingFieldOpen) {
@@ -91,14 +128,41 @@ export function Step2Mesh({
         return;
       }
     }
+    // DEC-V61-136 (N2.2): client-side zone shape validation. Backend
+    // re-validates extent + AABB overlap; this just gives instant
+    // feedback for the obvious mistakes.
+    if (zonesOpen) {
+      for (let i = 0; i < zones.length; i++) {
+        const z = zones[i];
+        if (z.geometry === "box") {
+          const [xmin, ymin, zmin, xmax, ymax, zmax] = z.bbox;
+          if (!(xmin < xmax && ymin < ymax && zmin < zmax)) {
+            const msg = `zones[${i}] (box) has zero or inverted extent`;
+            setZonesError(msg);
+            onStepError(`zone validation: ${msg}`);
+            return;
+          }
+        } else if (z.geometry === "sphere") {
+          if (!(z.radius > 0)) {
+            const msg = `zones[${i}] (sphere) radius must be > 0`;
+            setZonesError(msg);
+            onStepError(`zone validation: ${msg}`);
+            return;
+          }
+        }
+      }
+    }
     try {
       // Pass sizingField only when the panel is open and at least one
       // field is non-null; otherwise the api client omits the body
       // attribute entirely (preserves V124/V125-era wire shape).
+      // V136: same discipline for zones — only sent when the panel is
+      // open AND has ≥1 zone.
       const r = await api.meshImported(
         caseId,
         meshMode,
         sizingFieldOpen ? sizingField : null,
+        zonesOpen && zones.length > 0 ? zones : null,
       );
       setResponse(r);
       // V127 R4 P2: api.meshImported now dispatches mesh:mutated which
@@ -154,7 +218,16 @@ export function Step2Mesh({
       // and surfaces aiErrorMessage in the StatusStrip.
       throw e;
     }
-  }, [caseId, meshMode, onStepComplete, onStepError, sizingField, sizingFieldOpen]);
+  }, [
+    caseId,
+    meshMode,
+    onStepComplete,
+    onStepError,
+    sizingField,
+    sizingFieldOpen,
+    zones,
+    zonesOpen,
+  ]);
 
   useEffect(() => {
     registerAiAction(triggerMesh);
@@ -297,6 +370,82 @@ export function Step2Mesh({
         </div>
       </details>
 
+      {/* DEC-V61-136 (N2.2): Refinement zones (collapsed by default).
+       *  Engineer-driven box / sphere zones layered on top of the
+       *  sizing path. Empty list = N2.1 behavior. Workbench-first
+       *  acceptance: all interactions are forms — no AI surface here. */}
+      <details
+        data-testid="step2-mesh-refinement-zones"
+        className="rounded-sm border border-surface-800 bg-surface-950/40"
+        open={zonesOpen}
+        onToggle={(e) =>
+          setZonesOpen((e.target as HTMLDetailsElement).open)
+        }
+      >
+        <summary className="cursor-pointer px-2 py-1 text-[11px] font-mono uppercase tracking-wider text-surface-300 hover:text-surface-100">
+          Refinement zones (box / sphere · {zones.length})
+        </summary>
+        <div className="space-y-2 border-t border-surface-800 p-2">
+          <p className="text-[11px] text-surface-400">
+            Each zone tightens gmsh&apos;s characteristic length inside a
+            box or sphere. Level 1-3 → lc × 1/2, 1/4, 1/8 inside the
+            zone. Backend rejects out-of-AABB zones with HTTP 422.
+          </p>
+          {zones.map((zone, idx) => (
+            <RefinementZoneRow
+              key={idx}
+              zone={zone}
+              onChange={(next) =>
+                setZones(zones.map((z, i) => (i === idx ? next : z)))
+              }
+              onRemove={() =>
+                setZones(zones.filter((_, i) => i !== idx))
+              }
+              testIdSuffix={`${idx}`}
+            />
+          ))}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="step2-mesh-zones-add-box"
+              onClick={() => setZones([...zones, makeBoxZone()])}
+              className="rounded-sm border border-surface-700 px-2 py-1 text-[11px] text-surface-300 hover:border-surface-500"
+            >
+              + Box zone
+            </button>
+            <button
+              type="button"
+              data-testid="step2-mesh-zones-add-sphere"
+              onClick={() => setZones([...zones, makeSphereZone()])}
+              className="rounded-sm border border-surface-700 px-2 py-1 text-[11px] text-surface-300 hover:border-surface-500"
+            >
+              + Sphere zone
+            </button>
+            {zones.length > 0 && (
+              <button
+                type="button"
+                data-testid="step2-mesh-zones-clear"
+                onClick={() => {
+                  setZones([]);
+                  setZonesError(null);
+                }}
+                className="rounded-sm border border-surface-700 px-2 py-1 text-[11px] text-surface-300 hover:border-surface-500"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          {zonesError && (
+            <p
+              data-testid="step2-mesh-zones-error"
+              className="rounded-sm border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200"
+            >
+              {zonesError}
+            </p>
+          )}
+        </div>
+      </details>
+
       {response && (
         <div
           data-testid="step2-mesh-success"
@@ -415,6 +564,148 @@ function SizingFieldInput({
         className="w-28 rounded-sm border border-surface-700 bg-surface-950 px-2 py-1 font-mono text-surface-100"
       />
       <span className="flex-1 text-surface-400">{hint}</span>
+    </label>
+  );
+}
+
+// DEC-V61-136 (N2.2): one row per refinement zone. Box vs sphere is
+// dispatched on ``zone.geometry``; both branches share the level
+// dropdown + remove button.
+function RefinementZoneRow({
+  zone,
+  onChange,
+  onRemove,
+  testIdSuffix,
+}: {
+  zone: MeshRefinementZone;
+  onChange: (next: MeshRefinementZone) => void;
+  onRemove: () => void;
+  testIdSuffix: string;
+}) {
+  return (
+    <div
+      data-testid={`step2-mesh-zone-${testIdSuffix}`}
+      className="space-y-1 rounded-sm border border-surface-800 bg-surface-950/30 p-2"
+    >
+      <div className="flex items-baseline justify-between">
+        <code className="text-[11px] font-mono uppercase tracking-wider text-surface-300">
+          {zone.geometry} · zone {testIdSuffix}
+        </code>
+        <div className="flex items-baseline gap-2">
+          <label className="flex items-baseline gap-1 text-[11px] text-surface-400">
+            level
+            <select
+              data-testid={`step2-mesh-zone-${testIdSuffix}-level`}
+              value={zone.level}
+              onChange={(e) => {
+                const lvl = Number(e.target.value);
+                if (
+                  lvl >= REFINEMENT_LEVEL_MIN &&
+                  lvl <= REFINEMENT_LEVEL_MAX
+                ) {
+                  onChange({ ...zone, level: lvl as RefinementLevel });
+                }
+              }}
+              className="rounded-sm border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-surface-100"
+            >
+              <option value={1}>1 (×0.5)</option>
+              <option value={2}>2 (×0.25)</option>
+              <option value={3}>3 (×0.125)</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            data-testid={`step2-mesh-zone-${testIdSuffix}-remove`}
+            onClick={onRemove}
+            className="rounded-sm border border-rose-500/40 px-2 py-0.5 text-[11px] text-rose-300 hover:border-rose-400"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+      {zone.geometry === "box" ? (
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+          {(
+            [
+              ["xmin", 0],
+              ["ymin", 1],
+              ["zmin", 2],
+              ["xmax", 3],
+              ["ymax", 4],
+              ["zmax", 5],
+            ] as const
+          ).map(([label, ix]) => (
+            <ZoneNumberInput
+              key={label}
+              label={label}
+              value={zone.bbox[ix]}
+              onChange={(v) => {
+                const next = [...zone.bbox] as typeof zone.bbox;
+                next[ix] = v;
+                onChange({ ...zone, bbox: next });
+              }}
+              testId={`step2-mesh-zone-${testIdSuffix}-${label}`}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+          {(
+            [
+              ["x", 0],
+              ["y", 1],
+              ["z", 2],
+            ] as const
+          ).map(([label, ix]) => (
+            <ZoneNumberInput
+              key={label}
+              label={`center.${label}`}
+              value={zone.center[ix]}
+              onChange={(v) => {
+                const next = [...zone.center] as typeof zone.center;
+                next[ix] = v;
+                onChange({ ...zone, center: next });
+              }}
+              testId={`step2-mesh-zone-${testIdSuffix}-c${label}`}
+            />
+          ))}
+          <ZoneNumberInput
+            label="radius"
+            value={zone.radius}
+            onChange={(v) => onChange({ ...zone, radius: v })}
+            testId={`step2-mesh-zone-${testIdSuffix}-radius`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ZoneNumberInput({
+  label,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  value: number;
+  onChange: (next: number) => void;
+  testId: string;
+}) {
+  return (
+    <label className="flex items-baseline gap-2 text-[11px]">
+      <span className="w-20 font-mono text-surface-400">{label}</span>
+      <input
+        type="number"
+        step="any"
+        data-testid={testId}
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n)) onChange(n);
+        }}
+        className="w-24 rounded-sm border border-surface-700 bg-surface-950 px-1 py-0.5 font-mono text-surface-100"
+      />
     </label>
   );
 }

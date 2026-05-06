@@ -118,7 +118,13 @@ describe("Step2Mesh · wired body", () => {
     await triggerAi();
     // DEC-V61-135 (N2.1): meshImported now takes (caseId, mode, sizingField).
     // The advanced panel is collapsed by default so the third arg is null.
-    expect(apiMock.meshImported).toHaveBeenCalledWith("abc", "beginner", null);
+    // DEC-V61-136 (N2.2): fourth arg = refinementZones; closed panel → null.
+    expect(apiMock.meshImported).toHaveBeenCalledWith(
+      "abc",
+      "beginner",
+      null,
+      null,
+    );
     expect(onStepComplete).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(screen.getByTestId("step2-mesh-success")).toBeInTheDocument();
@@ -138,6 +144,7 @@ describe("Step2Mesh · wired body", () => {
     expect(apiMock.meshImported).toHaveBeenLastCalledWith(
       expect.any(String),
       "power",
+      null,
       null,
     );
   });
@@ -201,6 +208,7 @@ describe("Step2Mesh · wired body", () => {
       expect.any(String),
       "beginner",
       expect.objectContaining({ base_lc: 0.05 }),
+      null,
     );
   });
 
@@ -319,6 +327,139 @@ describe("Step2Mesh · wired body", () => {
         min_lc: null,
         max_lc: null,
       }),
+      null,
     );
+  });
+
+  // DEC-V61-136 (N2.2): refinement-zones repeater tests.
+  it("collapses the refinement-zones panel by default", () => {
+    renderStep({});
+    const details = screen.getByTestId(
+      "step2-mesh-refinement-zones",
+    ) as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+  });
+
+  it("adds a box zone via the + button and sends it on next trigger", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+
+    await triggerAi();
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      null,
+      [
+        expect.objectContaining({
+          geometry: "box",
+          bbox: [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+          level: 2,
+        }),
+      ],
+    );
+  });
+
+  it("adds a sphere zone and edits radius before send", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    await user.click(screen.getByTestId("step2-mesh-zones-add-sphere"));
+
+    const radiusInput = screen.getByTestId(
+      "step2-mesh-zone-0-radius",
+    ) as HTMLInputElement;
+    await user.clear(radiusInput);
+    await user.type(radiusInput, "0.25");
+
+    await triggerAi();
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      null,
+      [
+        expect.objectContaining({
+          geometry: "sphere",
+          radius: 0.25,
+          level: 2,
+        }),
+      ],
+    );
+  });
+
+  it("blocks the request and surfaces an inline error when a box zone is zero-extent", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+
+    // Collapse the box to zero extent on x by setting xmax = xmin.
+    const xmaxInput = screen.getByTestId(
+      "step2-mesh-zone-0-xmax",
+    ) as HTMLInputElement;
+    await user.clear(xmaxInput);
+    await user.type(xmaxInput, "0");
+
+    await triggerAi();
+
+    expect(apiMock.meshImported).not.toHaveBeenCalled();
+    expect(screen.getByTestId("step2-mesh-zones-error")).toHaveTextContent(
+      /zero or inverted extent/,
+    );
+    expect(onStepError).toHaveBeenCalledWith(
+      expect.stringContaining("zone validation"),
+    );
+  });
+
+  it("renders a refinement-zone-invalid hint on backend rejection", async () => {
+    apiMock.meshImported.mockRejectedValueOnce(
+      new ApiError(422, "rejected", {
+        failing_check: "refinement_zone_invalid",
+        reason:
+          "refinement_zones[0] (box) bbox=[10,10,10,11,11,11] has no overlap with case AABB=[0,0,0,1,1,1]; the gmsh field would be a no-op.",
+      }),
+    );
+    const { triggerAi } = renderStep({});
+    await expect(triggerAi()).rejects.toBeInstanceOf(ApiError);
+    const panel = screen.getByTestId("step2-mesh-rejection");
+    expect(panel).toHaveTextContent(/refinement_zone_invalid/);
+    expect(panel).toHaveTextContent(/no overlap with the case geometry/);
+  });
+
+  it("removes a zone via Remove button", async () => {
+    const user = userEvent.setup();
+    const { container } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+    expect(container.querySelector('[data-testid="step2-mesh-zone-0"]'))
+      .toBeTruthy();
+
+    await user.click(screen.getByTestId("step2-mesh-zone-0-remove"));
+    expect(container.querySelector('[data-testid="step2-mesh-zone-0"]'))
+      .toBeNull();
   });
 });

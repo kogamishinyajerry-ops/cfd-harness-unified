@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from ui.backend.schemas.mesh_refinement import MeshRefinementZone
 from ui.backend.schemas.mesh_sizing import MeshSizingField
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
@@ -25,6 +26,7 @@ from .cell_budget import BudgetVerdict, classify_cell_count
 from .gmsh_runner import (
     GmshMeshGenerationError,
     GmshRunResult,
+    RefinementZoneError,
     run_gmsh_on_imported_case,
 )
 from .to_foam import GmshToFoamError, run_gmsh_to_foam
@@ -37,6 +39,7 @@ FailingCheck = Literal[
     "gmsh_diverged",
     "cell_cap_exceeded",
     "gmshToFoam_failed",
+    "refinement_zone_invalid",
 ]
 
 
@@ -120,6 +123,7 @@ def mesh_imported_case(
     target_cell_count: int | None = None,
     characteristic_length_override: float | None = None,
     sizing_field: MeshSizingField | None = None,
+    refinement_zones: list[MeshRefinementZone] | None = None,
     container_name: str | None = None,
     case_dir_override: Path | None = None,
 ) -> MeshResult:
@@ -147,6 +151,16 @@ def mesh_imported_case(
     labeled ``mesh_mode="custom"``. Cell-budget hard cap still
     applies.
 
+    DEC-V61-136 (N2.2): ``refinement_zones`` are engineer-supplied
+    box / sphere zones layered on top of the sizing path via gmsh's
+    Min field combinator. Empty list / None preserves N2.1 behavior
+    exactly. Out-of-domain zones (no AABB overlap with the geometry)
+    are rejected with ``failing_check=refinement_zone_invalid``.
+    Setting ``refinement_zones`` does NOT alone trigger the "custom"
+    mode label — the label still tracks ``sizing_field`` activeness so
+    UI consumers do not need to disambiguate "preset+zones" from
+    "preset+sizing+zones".
+
     Raises :class:`MeshPipelineError` whose ``failing_check`` attribute
     is one of :data:`FailingCheck`. The route maps each value to an
     HTTP 4xx response.
@@ -164,7 +178,14 @@ def mesh_imported_case(
             target_cell_count=target_cell_count,
             characteristic_length_override=characteristic_length_override,
             sizing_field=sizing_field,
+            refinement_zones=refinement_zones,
         )
+    except RefinementZoneError as exc:
+        # V136 (N2.2): structured user-input rejection — the engineer
+        # supplied a zone with no spatial overlap with the case AABB.
+        # Distinct failing_check so the UI can surface the offending
+        # zone index + AABB without conflating with mesh-divergence.
+        raise MeshPipelineError(str(exc), "refinement_zone_invalid") from exc
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
     # Other exception types (ModuleNotFoundError when [workbench] isn't
