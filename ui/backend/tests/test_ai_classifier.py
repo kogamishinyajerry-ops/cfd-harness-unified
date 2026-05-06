@@ -470,11 +470,17 @@ def test_classifier_channel_no_pins_asks_inlet_and_outlet(tmp_path):
 def test_classifier_channel_with_unverifiable_pins_returns_uncertain(
     tmp_path,
 ):
-    """DEC-V61-101: pinning inlet+outlet by name but with face_ids that
-    aren't on the current polyMesh boundary (e.g., after mesh regen)
-    must return uncertain with a channel_pin_mismatch question — NOT
-    confident. The classifier-executor parity rule from Codex M9 Step 2
-    R2 applies to the channel branch too.
+    """DEC-V61-101 / DEC-V61-131 N1.1 R5: pinning inlet+outlet by name
+    but with face_ids that aren't on the current polyMesh boundary
+    (e.g., after mesh regen) must return uncertain — NOT confident.
+
+    R5 contract change: stale pins are now silently filtered out of
+    the verification set instead of triggering a free_text
+    channel_pin_mismatch question. The natural ``inlet_face`` /
+    ``outlet_face`` face_label questions emerge from the
+    not-pinned branch so the engineer can re-pick via the standard
+    dialog flow (free_text would otherwise lock the engineer in a
+    recovery loop — see Codex 86gs R4 P1 close).
     """
     case_dir = tmp_path / "channel_stale_pins"
     case_dir.mkdir()
@@ -495,7 +501,15 @@ def test_classifier_channel_with_unverifiable_pins_returns_uncertain(
     res = classify_setup_bc(case_dir, annotations=annotations)
     assert res.confidence == "uncertain"
     assert res.geometry_class == "non_cube"
-    assert any(q.id == "channel_pin_mismatch" for q in res.questions)
+    # R5: stale-pin filter turns this into the natural face_label
+    # branch — engineer can re-pick via the standard dialog.
+    qids = {q.id for q in res.questions}
+    assert "inlet_face" in qids
+    assert "outlet_face" in qids
+    assert all(q.needs_face_selection for q in res.questions)
+    # Summary signals that pre-existing pins went stale (so the UI
+    # can foreground the explanation).
+    assert "no longer on the current boundary" in res.summary
     # Confident-only fields stay empty when verification fails.
     assert res.inlet_face_ids == ()
     assert res.outlet_face_ids == ()
@@ -570,7 +584,15 @@ def test_classifier_channel_rejects_same_face_for_inlet_and_outlet(
     ])
     res = classify_setup_bc(case_dir, annotations=annotations)
     assert res.confidence == "uncertain"
-    assert any(q.id == "channel_pin_mismatch" for q in res.questions)
+    # DEC-V61-131 N1.1 R5: ambiguity (same face_id pinned as both
+    # inlet and outlet) is now surfaced via a face_label inlet_face
+    # question so the engineer can re-pick a distinct inlet via the
+    # standard dialog. The free_text channel_pin_mismatch question
+    # was removed because its needs_face_selection=false made
+    # recovery impossible (Codex 86gs R4 P1 close).
+    qids = {q.id for q in res.questions}
+    assert "inlet_face" in qids
+    assert all(q.needs_face_selection for q in res.questions)
 
 
 def test_classifier_channel_with_only_inlet_pinned_still_asks_outlet(
@@ -578,10 +600,21 @@ def test_classifier_channel_with_only_inlet_pinned_still_asks_outlet(
 ):
     case_dir = tmp_path / "channel_partial"
     case_dir.mkdir()
-    _stage_polymesh(case_dir, _POINTS_CHANNEL)
+    # DEC-V61-131 N1.1 R5: stale-pin filter requires a real boundary
+    # set; the minimal _stage_polymesh leaves an empty boundary so any
+    # pin gets filtered. Use _stage_full_channel which writes a real
+    # boundary so the inlet pin survives the filter.
+    _stage_full_channel(case_dir)
     annotations = _empty_doc("channel_partial")
+    # DEC-V61-131 N1.1 R5: pinned face_id MUST be on the boundary,
+    # otherwise the stale-pin filter drops it before the question
+    # branching runs (was: any non-empty inlet_pin_ids counted as
+    # pinned regardless of validity). Use a real boundary face_id so
+    # the inlet pin survives the filter and the test exercises the
+    # "inlet pinned, outlet still asked" branch as intended.
+    inlet_fid = _bottom_face_id_of_channel()
     annotations["faces"].append({
-        "face_id": "fid_in",
+        "face_id": inlet_fid,
         "name": "inlet_x",
         "confidence": "user_authoritative",
         "annotated_by": "human",

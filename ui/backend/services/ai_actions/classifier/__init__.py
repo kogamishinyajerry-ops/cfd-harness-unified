@@ -503,8 +503,27 @@ def classify_setup_bc(
     # who pinned a stale/regenerated face_id would see the executor
     # silently honor a different face — exactly the failure mode that
     # caused the R2 HIGH on the cube branch.
-    inlet_pin_ids = _pinned_face_ids_with_name_substring(annotations, "inlet")
-    outlet_pin_ids = _pinned_face_ids_with_name_substring(annotations, "outlet")
+    raw_inlet_pin_ids = _pinned_face_ids_with_name_substring(
+        annotations, "inlet"
+    )
+    raw_outlet_pin_ids = _pinned_face_ids_with_name_substring(
+        annotations, "outlet"
+    )
+    # DEC-V61-131 N1.1 R5 (Codex 86gs R4 P1): drop stale pins (face_ids
+    # that are no longer on the current boundary, e.g., after a remesh)
+    # before treating the case as pinned. Without this, a stale pin
+    # would force the classifier into the channel_pin_mismatch
+    # free_text branch, the apply route would surface 422, the frontend
+    # would re-run the envelope, and the classifier would return the
+    # SAME free_text question — a recovery loop the engineer cannot
+    # exit through the dialog UI. Filtering converts stale-pin cases
+    # into the natural "not pinned" branch with face_label questions,
+    # so the engineer re-picks via the standard viewport flow.
+    boundary_ids_for_filter = _boundary_face_ids(case_dir)
+    inlet_pin_ids = raw_inlet_pin_ids & boundary_ids_for_filter
+    outlet_pin_ids = raw_outlet_pin_ids & boundary_ids_for_filter
+    stale_inlet_pin_ids = raw_inlet_pin_ids - boundary_ids_for_filter
+    stale_outlet_pin_ids = raw_outlet_pin_ids - boundary_ids_for_filter
     inlet_pinned = bool(inlet_pin_ids)
     outlet_pinned = bool(outlet_pin_ids)
 
@@ -538,58 +557,37 @@ def classify_setup_bc(
         )
 
     if inlet_pinned and outlet_pinned:
-        # Both pinned by name. Verify each pin's face_id is on the
-        # boundary (defends against stale annotations after mesh regen).
-        boundary_ids = _boundary_face_ids(case_dir)
-        bad_inlets = inlet_pin_ids - boundary_ids
-        bad_outlets = outlet_pin_ids - boundary_ids
-        # Disjointness: same face_id can't be both inlet and outlet.
+        # Both pinned by name AND every pin survived the boundary
+        # filter. Only ambiguity (same face_id pinned as both inlet and
+        # outlet — a user error, not a stale-pin scenario) needs a
+        # special branch; stale pins were already filtered above.
         ambiguous = inlet_pin_ids & outlet_pin_ids
-        if bad_inlets or bad_outlets or ambiguous:
-            problems = []
-            if bad_inlets:
-                problems.append(
-                    f"inlet pin(s) {sorted(bad_inlets)} not on current "
-                    f"boundary (mesh may have been regenerated)"
-                )
-            if bad_outlets:
-                problems.append(
-                    f"outlet pin(s) {sorted(bad_outlets)} not on current "
-                    f"boundary (mesh may have been regenerated)"
-                )
-            if ambiguous:
-                problems.append(
-                    f"face_id {sorted(ambiguous)} pinned as BOTH inlet "
-                    f"and outlet — pick distinct faces"
-                )
+        if ambiguous:
             return ClassificationResult(
                 geometry_class="non_cube",
                 confidence="uncertain",
                 questions=[
                     UnresolvedQuestion(
-                        id="channel_pin_mismatch",
-                        kind="free_text",
+                        id="inlet_face",
+                        kind="face_label",
                         prompt=(
-                            "Pinned inlet/outlet face_ids don't pass "
-                            "boundary verification: "
-                            + " · ".join(problems)
-                            + ". Re-pick distinct faces in the viewport "
-                            "and retry."
+                            f"face_id {sorted(ambiguous)} is pinned as "
+                            f"BOTH inlet and outlet — pick a distinct "
+                            f"inlet face in the viewport."
                         ),
-                        needs_face_selection=False,
+                        needs_face_selection=True,
                         candidate_face_ids=[],
                         candidate_options=[],
-                        default_answer=None,
+                        default_answer="inlet",
                     ),
                 ],
                 summary=(
-                    f"Non-cube geometry (aspect ratio {ar:.3f}) — pin "
-                    f"verification failed. Re-pick inlet/outlet."
+                    f"Non-cube geometry (aspect ratio {ar:.3f}) — same "
+                    f"face pinned as both inlet and outlet. Re-pick "
+                    f"distinct faces."
                 ),
                 rationale=(
-                    f"non_cube_pin_mismatch ar={ar:.4f} extents={extents} "
-                    f"bad_inlets={sorted(bad_inlets)} "
-                    f"bad_outlets={sorted(bad_outlets)} "
+                    f"non_cube_ambiguous_pin ar={ar:.4f} extents={extents} "
                     f"ambiguous={sorted(ambiguous)}"
                 ),
             )
@@ -614,16 +612,27 @@ def classify_setup_bc(
             outlet_face_ids=tuple(sorted(outlet_pin_ids)),
         )
 
+    if stale_inlet_pin_ids or stale_outlet_pin_ids:
+        summary = (
+            f"Non-cube geometry (aspect ratio {ar:.3f}). Previously "
+            f"pinned inlet/outlet faces are no longer on the current "
+            f"boundary (mesh may have been regenerated). Re-pick the "
+            f"inlet and outlet."
+        )
+    else:
+        summary = (
+            f"Non-cube geometry (aspect ratio {ar:.3f}). Please "
+            f"identify the inlet and outlet faces."
+        )
     return ClassificationResult(
         geometry_class="non_cube",
         confidence="uncertain",
         questions=questions,
-        summary=(
-            f"Non-cube geometry (aspect ratio {ar:.3f}). Please "
-            f"identify the inlet and outlet faces."
-        ),
+        summary=summary,
         rationale=(
             f"non_cube_classify ar={ar:.4f} extents={extents} "
-            f"inlet_pinned={inlet_pinned} outlet_pinned={outlet_pinned}"
+            f"inlet_pinned={inlet_pinned} outlet_pinned={outlet_pinned} "
+            f"stale_inlets={sorted(stale_inlet_pin_ids)} "
+            f"stale_outlets={sorted(stale_outlet_pin_ids)}"
         ),
     )

@@ -485,10 +485,17 @@ def setup_bc(
             # the BCs we author are tied to the revision we just
             # verified. setup_*_bc takes its own .case_lock (different
             # lock file), so reentrance is not an issue.
+            # Codex N1.1 R4 P1 close: pass the UNRESOLVED case_dir
+            # (not resolved_case_dir) to setup_*_bc so their internal
+            # case_lock() retains its O_NOFOLLOW symlink-escape check.
+            # Resolving here previously bypassed V61-109 containment;
+            # the lock above already binds the annotations critical
+            # section to the resolved dir, so the executor can use
+            # the unresolved path safely.
             if use_channel:
                 try:
                     ch_result = setup_channel_bc(
-                        resolved_case_dir,
+                        case_dir,
                         case_id=case_id,
                         inlet_face_ids=cls_inlet,
                         outlet_face_ids=cls_outlet,
@@ -507,9 +514,7 @@ def setup_bc(
                 )
             else:
                 try:
-                    ldc_result = setup_ldc_bc(
-                        resolved_case_dir, case_id=case_id
-                    )
+                    ldc_result = setup_ldc_bc(case_dir, case_id=case_id)
                 except BCSetupError as exc:
                     raise _setup_bc_failure_to_http(exc) from exc
                 apply_summary = SetupBcSummary(
