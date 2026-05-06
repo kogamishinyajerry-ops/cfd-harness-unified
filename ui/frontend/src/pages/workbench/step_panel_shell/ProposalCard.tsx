@@ -133,9 +133,25 @@ export function ProposalCard({
             failing_check: string;
             inner_failing_check?: string;
             tool?: string;
+            message?: string;
           };
-          const code = d.inner_failing_check ?? d.failing_check;
-          detail = `${code}${d.tool ? ` (${d.tool})` : ""}`;
+          if (
+            d.failing_check === "unsupported_axis" &&
+            typeof d.message === "string" &&
+            d.message.length > 0
+          ) {
+            // DEC-V61-131 R21 P2 close (CRS R20 finding): for
+            // unsupported_axis the actionable remediation lives in
+            // detail.message ("regenerate_mesh advisory does not
+            // support target_cell_count … use mesh_mode='beginner'
+            // …"). Without surfacing this the engineer sees only the
+            // axis name and has no path forward; the whole point of
+            // the 422 mapping was to provide the remediation hint.
+            detail = d.message;
+          } else {
+            const code = d.inner_failing_check ?? d.failing_check;
+            detail = `${code}${d.tool ? ` (${d.tool})` : ""}`;
+          }
         } else {
           detail = err.message;
         }

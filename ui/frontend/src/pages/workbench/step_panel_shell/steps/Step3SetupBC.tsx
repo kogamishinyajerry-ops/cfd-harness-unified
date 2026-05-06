@@ -851,10 +851,26 @@ export function Step3SetupBC({
           // this entry the frontend renders ldc_mismatch as a terminal
           // banner and the engineer is stuck on a stale card with no
           // path forward except a manual page refresh.
+          //
+          // DEC-V61-131 R21 P3 close (CRS R20 finding): do NOT call
+          // onStepError() on the auto-recovery branch. onStepError
+          // flips Step 3 to the persistent 'error' state in
+          // StepPanelShell and shows the global AI error banner
+          // until some later successful apply clears it. For these
+          // three rejection codes the panel auto-refreshes the
+          // envelope, so the engineer should see the new
+          // dialog/advisory loading, NOT a red failed step. The
+          // pre-R21 onStepError call was inherited boilerplate from
+          // the non-recovering branch — it was wrong for
+          // channel_pin_mismatch and annotations_revision_conflict
+          // too, but R20 is what surfaced the inconsistency by
+          // adding ldc_mismatch (CRS framing: "this commit newly
+          // introduces inconsistent shell state for ldc_mismatch
+          // cases"). Removing onStepError from all three keeps the
+          // recovery path symmetric and bug-free.
           setEnvelope(null);
           setPickedFaceIdForQuestion({});
           setActiveFaceQuestionId(null);
-          onStepError(`apply rejected: ${detail.failing_check}`);
           // Re-run envelope on a microtask so React processes the
           // state resets above before the new envelope arrives. The
           // refreshed envelope reads the (possibly updated)
