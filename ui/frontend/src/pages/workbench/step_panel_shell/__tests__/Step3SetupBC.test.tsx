@@ -684,14 +684,14 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     expect(putBody.remove_face_ids).toEqual(["fid_stale"]);
   });
 
-  it("stale-pin recovery: existing explicit 'wall' preserves over stale.patch_type (Codex 86gs N1.1 R10 P2)", async () => {
-    // 86gs R10 P2: an engineer who explicitly chose "wall" on the
-    // replacement face (e.g., the recovered face really should be a
-    // wall, not the stale's "patch") must have that choice preserved.
-    // Under R11's AnnotationPanel touched-flag contract, an explicit
-    // selection (even of "wall") persists patch_type="wall", which
-    // the resume layer then sees as set-and-explicit and carries no
-    // stale value forward.
+  it("stale-pin recovery: existing explicit 'wall' (with R12 marker) preserves over stale.patch_type (Codex 86gs N1.1 R12)", async () => {
+    // 86gs R10 P2 / R11 P1#1: an engineer who explicitly chose
+    // "wall" on the replacement face must have that choice preserved.
+    // Under the R12 contract, the AnnotationPanel placeholder UX
+    // makes any picked value (including "wall") accompanied by
+    // patch_type_explicit=true. The resume layer keys off this
+    // marker — explicit-marked values are preserved unambiguously,
+    // even when the value happens to be "wall".
     getFaceAnnotationsMock.mockResolvedValueOnce({
       schema_version: 1,
       case_id: "abc",
@@ -702,20 +702,20 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
           face_id: "fid_stale",
           name: "old_inlet",
           patch_type: "patch",
+          patch_type_explicit: true,
           physics_notes: "U=1.5 m/s",
           confidence: "user_authoritative",
           annotated_by: "human",
           annotated_at: "2026-04-29T00:00:00Z",
         },
         {
-          // Engineer EXPLICITLY chose "wall" on the replacement
-          // face (touched the dropdown, even if the resulting value
-          // matches what would have been the default). Under R11
-          // contract the persisted record has patch_type="wall"
-          // unambiguously meaning "engineer chose this".
+          // Post-R12 explicit "wall" pick: AnnotationPanel saved
+          // patch_type="wall" + patch_type_explicit=true via the
+          // placeholder→wall transition.
           face_id: "fid_repl",
           name: "engineer_picked_wall",
           patch_type: "wall",
+          patch_type_explicit: true,
           confidence: "user_authoritative",
           annotated_by: "human",
           annotated_at: "2026-04-29T00:00:01Z",
@@ -806,6 +806,133 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     expect(putBody.faces[0].patch_type).toBeUndefined();
     // physics_notes still carries (existing has none, stale does).
     expect(putBody.faces[0].physics_notes).toBe("U=1.5 m/s");
+  });
+
+  it("stale-pin recovery: legacy 'wall' without R12 marker carries stale's non-wall role (Codex 86gs N1.1 R11 P1#2)", async () => {
+    // 86gs R11 P1#2: pre-R12 case files persisted every untouched-
+    // default save as patch_type="wall" (the AnnotationPanel default
+    // at write-time). Without legacy-aware handling, those records
+    // would all be treated as explicit overrides after upgrade,
+    // recreating the original downgrade-to-wall bug for stale-pin
+    // recovery on legacy data. Under R12, the resume layer treats
+    // existing.patch_type="wall" WITHOUT the patch_type_explicit
+    // marker as legacy-ambiguous and carries stale's meaningful
+    // non-wall role forward.
+    getFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 13,
+      last_modified: "2026-04-29T00:00:00Z",
+      faces: [
+        {
+          face_id: "fid_stale",
+          name: "old_inlet",
+          patch_type: "patch",
+          patch_type_explicit: true,
+          physics_notes: "U=1.5 m/s",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:00Z",
+        },
+        {
+          // Legacy pre-R12 record: patch_type="wall" persisted
+          // because that was the AnnotationPanel default; no
+          // explicit-marker present, so it's ambiguous. Under
+          // R12, the resume layer treats this as "no opinion"
+          // for recovery purposes and inherits stale's role.
+          face_id: "fid_repl",
+          name: "engineer_old_save",
+          patch_type: "wall",
+          confidence: "user_authoritative",
+          annotated_by: "human",
+          annotated_at: "2026-04-29T00:00:01Z",
+        },
+      ],
+    });
+    setupBCWithEnvelopeMock
+      .mockResolvedValueOnce({
+        confidence: "uncertain",
+        summary: "Stale inlet pin — pick replacement.",
+        annotations_revision_consumed: 13,
+        annotations_revision_after: 13,
+        unresolved_questions: [
+          {
+            id: "inlet_face_replace_bbbbbbbb00000000",
+            kind: "face_label",
+            prompt: "Pick replacement inlet.",
+            needs_face_selection: true,
+            candidate_face_ids: [],
+            candidate_options: [],
+            default_answer: "inlet",
+            stale_face_ids: ["fid_stale"],
+          },
+        ],
+        next_step_suggestion: null,
+        error_detail: null,
+      })
+      .mockResolvedValueOnce({
+        confidence: "confident",
+        summary: "Done.",
+        annotations_revision_consumed: 14,
+        annotations_revision_after: 14,
+        unresolved_questions: [],
+        next_step_suggestion: null,
+        error_detail: null,
+      });
+    putFaceAnnotationsMock.mockResolvedValueOnce({
+      schema_version: 1,
+      case_id: "abc",
+      revision: 14,
+      last_modified: "2026-04-29T00:00:02Z",
+      faces: [],
+    });
+
+    let registeredAction: (() => Promise<void>) | null = null;
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/?ai_mode=force_uncertain"]}>
+        <FacePickProvider>
+          <Step3StateProvider caseId="abc">
+            <Step3SetupBC
+              caseId="abc"
+              onStepComplete={vi.fn()}
+              onStepError={vi.fn()}
+              registerAiAction={(action) => {
+                registeredAction = action;
+              }}
+            />
+            <ReplacementFacePushHelper />
+          </Step3StateProvider>
+        </FacePickProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(registeredAction).not.toBeNull());
+    await registeredAction!();
+    await screen.findByTestId("dialog-panel");
+
+    await user.click(screen.getByTestId("test-pick-replacement-button"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(
+          "dialog-panel-face-hint-inlet_face_replace_bbbbbbbb00000000",
+        ),
+      ).toHaveTextContent(/picked: fid_repl/i),
+    );
+
+    await user.click(screen.getByTestId("dialog-panel-resume"));
+
+    await waitFor(() => expect(putFaceAnnotationsMock).toHaveBeenCalled());
+    const [, putBody] = putFaceAnnotationsMock.mock.calls[0];
+    // Recovery payload carries stale's "patch" forward over the
+    // legacy ambiguous "wall" — and marks it explicit so a future
+    // resume run won't re-treat it as ambiguous.
+    expect(putBody.faces[0]).toMatchObject({
+      face_id: "fid_repl",
+      patch_type: "patch",
+      patch_type_explicit: true,
+      physics_notes: "U=1.5 m/s",
+      confidence: "user_authoritative",
+    });
   });
 
   it("stale-pin recovery: existing non-wall patch_type wins over stale.patch_type (Codex R10 contract)", async () => {

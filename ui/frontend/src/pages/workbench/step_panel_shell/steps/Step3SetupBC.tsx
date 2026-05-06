@@ -375,6 +375,17 @@ export function Step3SetupBC({
         annotationByFaceId.set(f.face_id, f);
       }
       const pickedExisting = annotationByFaceId.get(patch.face_id);
+      // Codex 86gs N1.1 R12 P2 close: normalize the new-encoding
+      // (patch_type=undefined, post-R11 untouched-default save) and
+      // legacy-encoding (patch_type="wall", pre-R11 untouched
+      // default) as the same semantic state for sibling-comparison
+      // purposes. Without this, a multi-face segment that mixed
+      // both shapes would misclassify identical siblings as outliers
+      // and only update part of the segment after the upgrade.
+      const normalizePatchType = (
+        v: FaceAnnotation["patch_type"] | undefined,
+      ): string | undefined =>
+        v === undefined || v === null || v === "wall" ? undefined : v;
       const isSafeSibling = (
         existing: FaceAnnotation | undefined,
       ): boolean => {
@@ -387,7 +398,8 @@ export function Step3SetupBC({
         // Both annotated → safe iff sibling matches picked.
         return (
           existing.name === pickedExisting.name &&
-          existing.patch_type === pickedExisting.patch_type &&
+          normalizePatchType(existing.patch_type) ===
+            normalizePatchType(pickedExisting.patch_type) &&
           (existing.physics_notes ?? undefined) ===
             (pickedExisting.physics_notes ?? undefined)
         );
@@ -602,31 +614,62 @@ export function Step3SetupBC({
         if (!composed) continue;
         const [faceId, label] = composed.split(":");
         if (!faceId) continue;
-        // Codex R8 P2#2 + R9 + R10 + R11 close: carry forward
+        // Codex R8 P2#2 + R9 + R10 + R11 + R12 close: carry forward
         // stale-face metadata onto the replacement only when the
-        // replacement has no existing value for that field. The R10
-        // attempt (treat "wall" as default-indistinguishable) was a
-        // resume-layer heuristic that flipped the ambiguity onto the
-        // explicit-wall case (86gs R10 P2). The proper fix lives in
-        // AnnotationPanel: untouched dropdown saves now persist
-        // patch_type=undefined, so existingReplacement.patch_type !==
-        // undefined here unambiguously means "engineer (or prior
-        // touched save) explicitly set this value" — including an
-        // explicit "wall". physics_notes was already unambiguous
-        // (AnnotationPanel leaves it undefined when blank).
+        // replacement face has NO unambiguously explicit value.
+        // We use the R12 patch_type_explicit marker plus a
+        // legacy-aware fallback to discriminate sources:
+        //   * existing.patch_type_explicit === true → post-R12
+        //     explicit pick (engineer or AI classifier). Preserve,
+        //     including an explicit "wall".
+        //   * existing.patch_type set, no marker, value !== "wall"
+        //     → legacy pre-R12 explicit pick (the dropdown's
+        //     default at write-time WAS "wall", so anything else
+        //     could only have come from an explicit selection).
+        //     Preserve.
+        //   * existing.patch_type === "wall", no marker → legacy
+        //     ambiguous (could be untouched default or explicit
+        //     wall). Treat as ambiguous; if stale has a meaningful
+        //     non-wall role, inherit it (the recovery semantic
+        //     "replacement inherits stale's BC role" wins).
+        //   * existing.patch_type undefined/null → no opinion yet;
+        //     carry stale unconditionally.
+        // This is unambiguous post-R12 (marker resolves) and the
+        // only residual ambiguity is legacy "wall" vs stale-non-
+        // wall — where the recovery semantic favors stale.
         let carryPatchType: FaceAnnotation["patch_type"] | undefined;
         let carryPhysicsNotes: FaceAnnotation["physics_notes"] | undefined;
         if (q.stale_face_ids && q.stale_face_ids.length === 1) {
           const stale = annotationByFaceId.get(q.stale_face_ids[0]);
           const existingReplacement = annotationByFaceId.get(faceId);
           if (stale) {
-            if (
-              !existingReplacement ||
-              existingReplacement.patch_type === undefined ||
-              existingReplacement.patch_type === null
+            const existingPatchType = existingReplacement?.patch_type;
+            const existingHasExplicitMarker =
+              existingReplacement?.patch_type_explicit === true;
+            const existingPatchTypeIsSet =
+              existingPatchType !== undefined && existingPatchType !== null;
+            const staleHasMeaningfulRole =
+              stale.patch_type !== undefined &&
+              stale.patch_type !== null &&
+              stale.patch_type !== "wall";
+            if (!existingPatchTypeIsSet) {
+              // No opinion → carry stale freely.
+              carryPatchType = stale.patch_type;
+            } else if (
+              !existingHasExplicitMarker &&
+              existingPatchType === "wall" &&
+              staleHasMeaningfulRole
             ) {
+              // Legacy "wall" + stale has a real role → inherit
+              // stale's role. This is the only residual ambiguity
+              // from the pre-R12 data shape; we resolve it in
+              // favor of the recovery semantic.
               carryPatchType = stale.patch_type;
             }
+            // else: explicit marker present, OR legacy non-wall
+            // (which was unambiguously explicit pre-R12 because
+            // "wall" was the only default), OR stale has no
+            // meaningful role → preserve existing as-is.
             if (
               !existingReplacement ||
               existingReplacement.physics_notes === undefined ||
@@ -643,6 +686,12 @@ export function Step3SetupBC({
         };
         if (carryPatchType !== undefined) {
           replacement.patch_type = carryPatchType;
+          // The engineer's click on [继续 AI 处理] after the
+          // replacement pick implicitly accepts stale's BC role for
+          // the replacement face — mark the resulting annotation
+          // explicit so a future resume run never treats it as
+          // legacy-ambiguous (Codex 86gs N1.1 R12).
+          replacement.patch_type_explicit = true;
         }
         if (carryPhysicsNotes !== undefined) {
           replacement.physics_notes = carryPhysicsNotes;

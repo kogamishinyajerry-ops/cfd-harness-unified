@@ -42,6 +42,15 @@ interface AnnotationPanelProps {
   onCancel?: () => void;
 }
 
+// Placeholder sentinel for "no patch type selected yet" (Codex 86gs
+// N1.1 R11 P1#1 close). Distinguishing default-untouched from
+// engineer-explicit cannot be done with an onChange touched-flag
+// because <select> doesn't fire change when the engineer clicks the
+// already-selected option to re-confirm. The placeholder UX makes
+// the selection state unambiguous: the dropdown starts on "—",
+// and any real option (including "wall") requires an explicit pick.
+const PATCH_TYPE_PLACEHOLDER = "" as const;
+
 export function AnnotationPanel({
   faceId,
   faceIdCount = 1,
@@ -51,22 +60,12 @@ export function AnnotationPanel({
   onCancel,
 }: AnnotationPanelProps) {
   const [name, setName] = useState(existing?.name ?? "");
+  // patchType holds the dropdown's current value. Empty string means
+  // "no real option selected" — the placeholder is showing. Any
+  // PATCH_TYPES value (including "wall") means engineer picked it.
+  // Existing values seed the dropdown to that option directly.
   const [patchType, setPatchType] = useState<string>(
-    existing?.patch_type ?? "wall",
-  );
-  // Codex 86gs N1.1 R10 P2 close: track whether the engineer
-  // explicitly interacted with the patch_type dropdown so the saved
-  // annotation can distinguish "default wall (untouched)" from
-  // "explicit wall (engineer chose)". Without this, the stale-pin
-  // recovery flow in Step3SetupBC could either silently downgrade a
-  // recovered inlet to wall (R9 ambiguity) OR silently overwrite an
-  // explicit wall override with the stale's value (R10 ambiguity).
-  // Seeding from `existing.patch_type` counts as "touched" — that
-  // value came from a previous explicit save (or AI write).
-  const initialTouched = (): boolean =>
-    existing?.patch_type !== undefined && existing?.patch_type !== null;
-  const [patchTypeTouched, setPatchTypeTouched] = useState<boolean>(
-    initialTouched(),
+    existing?.patch_type ?? PATCH_TYPE_PLACEHOLDER,
   );
   const [physicsNotes, setPhysicsNotes] = useState(
     existing?.physics_notes ?? "",
@@ -77,10 +76,7 @@ export function AnnotationPanel({
   // Reset form when the engineer picks a different face.
   useEffect(() => {
     setName(existing?.name ?? "");
-    setPatchType(existing?.patch_type ?? "wall");
-    setPatchTypeTouched(
-      existing?.patch_type !== undefined && existing?.patch_type !== null,
-    );
+    setPatchType(existing?.patch_type ?? PATCH_TYPE_PLACEHOLDER);
     setPhysicsNotes(existing?.physics_notes ?? "");
     setError(null);
     setSaveInFlight(false);
@@ -94,16 +90,24 @@ export function AnnotationPanel({
     setError(null);
     setSaveInFlight(true);
     try {
+      const isExplicitPick = patchType !== PATCH_TYPE_PLACEHOLDER;
       await onSave({
         face_id: faceId,
         name: name.trim(),
-        // Only persist patch_type when the engineer actually
-        // touched the dropdown (or it was seeded from a prior
-        // explicit save). Untouched-default saves leave it
-        // undefined so downstream consumers (e.g., the stale-pin
-        // recovery resume in Step3SetupBC) can carry stale
-        // metadata forward unambiguously.
-        patch_type: patchTypeTouched ? patchType : undefined,
+        // Persist patch_type only when the engineer actually picked
+        // a real option from the dropdown. Placeholder-still-selected
+        // saves leave it undefined so downstream stale-pin recovery
+        // in Step3SetupBC can carry stale metadata forward
+        // unambiguously, AND so an explicit "wall" pick (which had
+        // no way to be expressed in R10's heuristic world) is
+        // preserved as engineer-authoritative.
+        patch_type: isExplicitPick ? patchType : undefined,
+        // R12 marker: positive signal that this patch_type came from
+        // an explicit engineer pick (or seeded from a prior explicit
+        // save). The stale-pin recovery resume layer keys off this
+        // to disambiguate from legacy pre-R11 records where every
+        // untouched save persisted patch_type="wall" by default.
+        patch_type_explicit: isExplicitPick ? true : undefined,
         physics_notes: physicsNotes.trim() || undefined,
         confidence: "user_authoritative",
       });
@@ -160,13 +164,11 @@ export function AnnotationPanel({
         <select
           value={patchType}
           disabled={isLocked}
-          onChange={(e) => {
-            setPatchType(e.target.value);
-            setPatchTypeTouched(true);
-          }}
+          onChange={(e) => setPatchType(e.target.value)}
           data-testid="annotation-panel-patch-type"
           className="w-full rounded-sm border border-surface-700 bg-surface-900 px-2 py-1 text-[12px] text-surface-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
+          <option value={PATCH_TYPE_PLACEHOLDER}>— select patch type —</option>
           {PATCH_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}

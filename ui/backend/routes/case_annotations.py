@@ -54,6 +54,16 @@ class _FacePut(BaseModel):
     face_id: str = Field(..., min_length=4, max_length=128)
     name: str | None = None
     patch_type: str | None = None
+    # DEC-V61-131 N1.1 R12 (Codex 86gs): per-face marker indicating
+    # the persisted ``patch_type`` represents an explicit engineer
+    # (or AI-classifier) choice rather than an untouched-default
+    # save. Resume-layer stale-pin recovery uses this to safely
+    # disambiguate post-R12 saves from legacy pre-R11 records,
+    # where every untouched save persisted ``patch_type="wall"``
+    # by virtue of the AnnotationPanel default. Optional for back-
+    # compat: legacy records lack this field and their patch_type
+    # is treated as ambiguous; new saves include it explicitly.
+    patch_type_explicit: bool | None = None
     bc: dict[str, Any] | None = None
     physics_notes: str | None = None
     confidence: str | None = None

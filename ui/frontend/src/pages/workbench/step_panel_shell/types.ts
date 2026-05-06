@@ -86,6 +86,16 @@ export interface FaceAnnotation {
   face_id: string;
   name?: string;
   patch_type?: "patch" | "wall" | "symmetry" | "empty" | "cyclic" | string;
+  /** DEC-V61-131 N1.1 R12 (Codex 86gs): per-face marker indicating the
+   *  persisted ``patch_type`` represents an explicit engineer (or
+   *  AI-classifier) choice rather than an untouched-default save.
+   *  AnnotationPanel sets this true on any non-placeholder dropdown
+   *  pick. The stale-pin recovery resume in Step3SetupBC checks it to
+   *  safely disambiguate post-R12 explicit "wall" picks from legacy
+   *  pre-R11 untouched-default "wall" records (which have no marker
+   *  and are treated as ambiguous → carry stale forward). Optional
+   *  for back-compat: legacy records lack this field. */
+  patch_type_explicit?: boolean;
   bc?: Record<string, { type: string; value?: string }>;
   physics_notes?: string;
   confidence?: "user_authoritative" | "ai_confident" | "ai_uncertain";
