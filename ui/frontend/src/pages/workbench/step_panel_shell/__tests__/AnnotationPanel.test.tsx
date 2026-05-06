@@ -50,7 +50,12 @@ describe("AnnotationPanel", () => {
     ).toBe("fixedValue U=(1 0 0)");
   });
 
-  it("dispatches onSave with user_authoritative confidence", async () => {
+  it("dispatches onSave with user_authoritative confidence (untouched patch_type omitted)", async () => {
+    // Codex 86gs N1.1 R10 P2 close: when the engineer hasn't touched
+    // the patch_type dropdown, the save persists patch_type=undefined
+    // so downstream stale-pin recovery can carry stale metadata
+    // forward unambiguously. An explicit save of "wall" still
+    // persists "wall" (see touched-flag test below).
     const onSave = vi.fn(() => Promise.resolve());
     const user = userEvent.setup();
     render(<AnnotationPanel faceId="fid_xxx" onSave={onSave} />);
@@ -60,7 +65,64 @@ describe("AnnotationPanel", () => {
     expect(onSave).toHaveBeenCalledWith({
       face_id: "fid_xxx",
       name: "inlet",
+      patch_type: undefined,
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
+  it("persists patch_type once the dropdown is touched (Codex 86gs N1.1 R10 P2)", async () => {
+    // Even when the touched value equals the default "wall", an
+    // explicit selection counts — without this, an intentional wall
+    // override would be impossible to express and stale-pin recovery
+    // would silently re-classify it.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(<AnnotationPanel faceId="fid_xxx" onSave={onSave} />);
+    await user.type(screen.getByTestId("annotation-panel-name"), "inlet");
+    // Touch the dropdown by selecting a value (any change marks
+    // touched; we cycle through to "wall" to assert explicit-wall
+    // is preserved).
+    const select = screen.getByTestId(
+      "annotation-panel-patch-type",
+    ) as HTMLSelectElement;
+    await user.selectOptions(select, "patch");
+    await user.selectOptions(select, "wall");
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
       patch_type: "wall",
+      physics_notes: undefined,
+      confidence: "user_authoritative",
+    });
+  });
+
+  it("treats existing patch_type seed as touched (subsequent save persists it)", async () => {
+    // When the panel is mounted with an existing.patch_type, that
+    // value came from a previous explicit save (or AI write) — it
+    // counts as already-touched so a re-save (e.g., engineer
+    // changing only physics_notes) preserves the patch_type.
+    const onSave = vi.fn(() => Promise.resolve());
+    const user = userEvent.setup();
+    render(
+      <AnnotationPanel
+        faceId="fid_xxx"
+        existing={{
+          face_id: "fid_xxx",
+          name: "inlet",
+          patch_type: "patch",
+        }}
+        onSave={onSave}
+      />,
+    );
+    await user.click(screen.getByTestId("annotation-panel-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith({
+      face_id: "fid_xxx",
+      name: "inlet",
+      patch_type: "patch",
       physics_notes: undefined,
       confidence: "user_authoritative",
     });

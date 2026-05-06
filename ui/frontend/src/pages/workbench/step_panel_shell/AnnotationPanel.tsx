@@ -54,6 +54,20 @@ export function AnnotationPanel({
   const [patchType, setPatchType] = useState<string>(
     existing?.patch_type ?? "wall",
   );
+  // Codex 86gs N1.1 R10 P2 close: track whether the engineer
+  // explicitly interacted with the patch_type dropdown so the saved
+  // annotation can distinguish "default wall (untouched)" from
+  // "explicit wall (engineer chose)". Without this, the stale-pin
+  // recovery flow in Step3SetupBC could either silently downgrade a
+  // recovered inlet to wall (R9 ambiguity) OR silently overwrite an
+  // explicit wall override with the stale's value (R10 ambiguity).
+  // Seeding from `existing.patch_type` counts as "touched" — that
+  // value came from a previous explicit save (or AI write).
+  const initialTouched = (): boolean =>
+    existing?.patch_type !== undefined && existing?.patch_type !== null;
+  const [patchTypeTouched, setPatchTypeTouched] = useState<boolean>(
+    initialTouched(),
+  );
   const [physicsNotes, setPhysicsNotes] = useState(
     existing?.physics_notes ?? "",
   );
@@ -64,6 +78,9 @@ export function AnnotationPanel({
   useEffect(() => {
     setName(existing?.name ?? "");
     setPatchType(existing?.patch_type ?? "wall");
+    setPatchTypeTouched(
+      existing?.patch_type !== undefined && existing?.patch_type !== null,
+    );
     setPhysicsNotes(existing?.physics_notes ?? "");
     setError(null);
     setSaveInFlight(false);
@@ -80,7 +97,13 @@ export function AnnotationPanel({
       await onSave({
         face_id: faceId,
         name: name.trim(),
-        patch_type: patchType,
+        // Only persist patch_type when the engineer actually
+        // touched the dropdown (or it was seeded from a prior
+        // explicit save). Untouched-default saves leave it
+        // undefined so downstream consumers (e.g., the stale-pin
+        // recovery resume in Step3SetupBC) can carry stale
+        // metadata forward unambiguously.
+        patch_type: patchTypeTouched ? patchType : undefined,
         physics_notes: physicsNotes.trim() || undefined,
         confidence: "user_authoritative",
       });
@@ -137,7 +160,10 @@ export function AnnotationPanel({
         <select
           value={patchType}
           disabled={isLocked}
-          onChange={(e) => setPatchType(e.target.value)}
+          onChange={(e) => {
+            setPatchType(e.target.value);
+            setPatchTypeTouched(true);
+          }}
           data-testid="annotation-panel-patch-type"
           className="w-full rounded-sm border border-surface-700 bg-surface-900 px-2 py-1 text-[12px] text-surface-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
