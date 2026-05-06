@@ -423,7 +423,18 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
       "step3-apply-suggestion-btn",
     );
     await user.click(applyBtn);
-    await waitFor(() => expect(setupBCMock).toHaveBeenCalledWith("abc"));
+    // DEC-V61-131 N1.1 R2: apply call now passes bcKind +
+    // ifMatchRevision derived from the envelope (here both undefined
+    // because the test envelope omits suggested_bc_kind and
+    // annotations_revision_consumed defaults to a value the click
+    // forwards verbatim).
+    await waitFor(() => expect(setupBCMock).toHaveBeenCalled());
+    const [calledCaseId, calledOpts] = setupBCMock.mock.calls[0];
+    expect(calledCaseId).toBe("abc");
+    expect(calledOpts).toMatchObject({
+      bcKind: undefined,
+      ifMatchRevision: 1,
+    });
     await waitFor(() => expect(onStepComplete).toHaveBeenCalled());
     await screen.findByTestId("step3-apply-summary");
   });

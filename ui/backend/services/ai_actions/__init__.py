@@ -230,8 +230,10 @@ def setup_bc_with_annotations(
         # Confident path: describe the suggestion. No mutation.
         if cls.geometry_class == "non_cube":
             summary = _summarize_channel_suggestion(cls)
+            suggested_bc_kind = "channel"
         else:
             summary = _summarize_ldc_suggestion(cls)
+            suggested_bc_kind = "ldc"
 
         return AIActionEnvelope(
             confidence="confident",
@@ -241,6 +243,7 @@ def setup_bc_with_annotations(
             next_step_suggestion=(
                 "Click [应用 AI 建议] to apply, or [Skip] to keep current setup."
             ),
+            suggested_bc_kind=suggested_bc_kind,
         )
 
     # Tier-A backwards-compat path (use_classifier=False, no force
@@ -259,4 +262,5 @@ def setup_bc_with_annotations(
         next_step_suggestion=(
             "Click [应用 AI 建议] to apply, or [Skip] to keep current setup."
         ),
+        suggested_bc_kind="ldc",
     )

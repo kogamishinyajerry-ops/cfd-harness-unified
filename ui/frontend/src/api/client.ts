@@ -310,9 +310,28 @@ export const api = {
   // 3 (setup-bc), 4 (solve), 5 (results) of the M-PANELS step panel.
   setupBC: async (
     caseId: string,
+    options: {
+      // DEC-V61-131 N1.1: when called from the [应用 AI 建议] click,
+      // pass the AI envelope's suggested_bc_kind so the apply-time
+      // classifier is required to still agree (otherwise stale-pin
+      // channels surface as recoverable channel_pin_mismatch instead
+      // of misleading not_an_ldc_cube).
+      bcKind?: "ldc" | "channel";
+      // Bind apply to the annotation revision the envelope consumed;
+      // mismatch returns 409 annotations_revision_conflict.
+      ifMatchRevision?: number;
+    } = {},
   ): Promise<import("@/types/case_solve").SetupBcSummary> => {
+    const params = new URLSearchParams();
+    if (options.bcKind) params.set("bc_kind", options.bcKind);
+    if (options.ifMatchRevision !== undefined) {
+      params.set("if_match_revision", String(options.ifMatchRevision));
+    }
+    const qs = params.toString();
     const resp = await fetch(
-      `/api/import/${encodeURIComponent(caseId)}/setup-bc`,
+      `/api/import/${encodeURIComponent(caseId)}/setup-bc${
+        qs ? `?${qs}` : ""
+      }`,
       {
         method: "POST",
         headers: { Accept: "application/json" },

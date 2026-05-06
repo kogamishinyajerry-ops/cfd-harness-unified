@@ -750,3 +750,121 @@ def test_setup_bc_route_maps_solver_profile_load_failed_to_500(
     )
     body = resp.json()
     assert body["detail"]["failing_check"] == "solver_profile_load_failed"
+
+
+# ────────── DEC-V61-131 N1.1 R2 (Codex R1 P1+P2 close) ──────────
+
+
+def test_apply_with_bc_kind_channel_when_classifier_uncertain_returns_422(
+    monkeypatch, tmp_path
+):
+    """Codex N1.1 R1 P1: when the engineer accepted a confident-channel
+    advisory but apply-time pins went stale (e.g., remesh), classifier
+    returns uncertain; the route must surface 422 channel_pin_mismatch
+    instead of falling through to setup_ldc_bc with not_an_ldc_cube.
+    """
+    from ui.backend.services.ai_actions import classifier as cls_mod
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    # Stage a polyMesh — the route hits classifier before touching
+    # executor, so a populated polyMesh is necessary for classifier
+    # to even run a normal classification (vs returning blocked).
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+
+    # Force classifier to return uncertain with a channel_pin_mismatch
+    # question. The route should surface 422, NOT fall through to LDC.
+    stale_question = cls_mod.UnresolvedQuestion(
+        id="channel_pin_mismatch",
+        kind="face_label",
+        prompt="Re-pick the inlet face — the previous pin no longer matches a boundary face.",
+    )
+    stale_result = cls_mod.ClassificationResult(
+        geometry_class="non_cube",
+        confidence="uncertain",
+        questions=[stale_question],
+        summary="Channel pins went stale.",
+        rationale="test fixture",
+    )
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.classify_setup_bc",
+        lambda case_dir, annotations: stale_result,
+    )
+
+    client = _new_client()
+    r = client.post(
+        f"/api/import/{case_id}/setup-bc?bc_kind=channel"
+    )
+    assert r.status_code == 422, r.text
+    body = r.json()
+    assert body["detail"]["failing_check"] == "channel_pin_mismatch"
+    # The recoverable question must be surfaced so the engineer can
+    # answer it instead of seeing a misleading not_an_ldc_cube.
+    questions = body["detail"]["unresolved_questions"]
+    assert any(q["id"] == "channel_pin_mismatch" for q in questions)
+
+
+def test_apply_with_if_match_revision_mismatch_returns_409(
+    monkeypatch, tmp_path
+):
+    """Codex N1.1 R1 P2: when the apply-time annotations revision
+    differs from the one the AI envelope consumed (concurrent edit),
+    the route surfaces 409 annotations_revision_conflict so the
+    frontend can re-run the envelope before applying.
+    """
+    from ui.backend.services.case_annotations import (
+        empty_annotations,
+        save_annotations,
+    )
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    # Materialize annotations to revision 2.
+    save_annotations(case_dir, empty_annotations(case_id), if_match_revision=0)
+    save_annotations(case_dir, empty_annotations(case_id), if_match_revision=1)
+
+    client = _new_client()
+    # Engineer's envelope was consumed at revision 1; apply at
+    # revision 2 must 409.
+    r = client.post(
+        f"/api/import/{case_id}/setup-bc?if_match_revision=1"
+    )
+    assert r.status_code == 409, r.text
+    body = r.json()
+    assert body["detail"]["failing_check"] == "annotations_revision_conflict"
+
+
+def test_envelope_confident_includes_suggested_bc_kind(monkeypatch, tmp_path):
+    """DEC-V61-131 N1.1 R2: confident envelopes carry suggested_bc_kind
+    so the frontend's [应用 AI 建议] click can pass it back as bc_kind=
+    on the apply request.
+    """
+    from ui.backend.services.ai_actions import classifier as cls_mod
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    _stage_imported_case(imported, case_id)
+
+    cube_confident = cls_mod.ClassificationResult(
+        geometry_class="ldc_cube",
+        confidence="confident",
+        questions=[],
+        summary="Confident LDC cube.",
+        rationale="test",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.ai_actions.classify_setup_bc",
+        lambda case_dir, annotations: cube_confident,
+    )
+
+    client = _new_client()
+    r = client.post(
+        f"/api/import/{case_id}/setup-bc?envelope=1"
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["confidence"] == "confident"
+    assert body["suggested_bc_kind"] == "ldc"

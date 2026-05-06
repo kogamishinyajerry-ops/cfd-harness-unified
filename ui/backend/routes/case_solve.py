@@ -167,6 +167,31 @@ def setup_bc(
             "force_uncertain; if both are passed, force_blocked wins."
         ),
     ),
+    bc_kind: str | None = Query(
+        default=None,
+        description=(
+            "DEC-V61-131 N1.1: when the engineer's [应用 AI 建议] click "
+            "drives this route, the frontend passes the AI's "
+            "suggested_bc_kind ('ldc' or 'channel'). Apply-time "
+            "classifier is required to still agree; mismatches surface "
+            "as 422 channel_pin_mismatch (recoverable re-pick flow) "
+            "instead of falling through to setup_ldc_bc with a "
+            "misleading not_an_ldc_cube. None = legacy auto behavior."
+        ),
+    ),
+    if_match_revision: int | None = Query(
+        default=None,
+        ge=0,
+        description=(
+            "DEC-V61-131 N1.1 R2 P2 close: bind apply to the same "
+            "annotations revision the AI envelope consumed when it "
+            "produced the accepted advisory. If the current revision "
+            "differs (another tab edited pins between accept and "
+            "apply), surface 409 annotations_revision_conflict so the "
+            "engineer re-runs the envelope before applying. None = "
+            "skip the revision check (legacy callers)."
+        ),
+    ),
     from_stl_patches: int = Query(
         default=0,
         ge=0,
@@ -351,21 +376,35 @@ def setup_bc(
     # cases route through ``setup_channel_bc`` instead of erroring out
     # of ``setup_ldc_bc`` with ``not_an_ldc_cube``.
     #
-    # Fallback: if annotations fail to load OR the classifier returns
-    # not-confident OR confident with geometry_class != 'non_cube',
-    # default to ``setup_ldc_bc`` — this preserves the V61-097 LDC
-    # dogfood contract for callers that hit this route without any
-    # AI-driven advisory state.
+    # bc_kind / if_match_revision (Codex N1.1 R1 P1+P2 close):
+    # the apply path enforces the AI's advisory contract:
+    #   * if_match_revision binds the apply to the same annotations
+    #     revision the envelope consumed (no "accept A, apply B" race);
+    #   * bc_kind requires the apply-time classifier to agree with the
+    #     advisory's geometry_class — a stale-pin classifier-uncertain
+    #     surfaces 422 channel_pin_mismatch (recoverable re-pick) instead
+    #     of falling through to setup_ldc_bc with a misleading
+    #     not_an_ldc_cube.
+    # Legacy LDC dogfood callers (no params) preserve the pre-N1.1
+    # behavior: classifier optionally upgrades to channel; classifier
+    # uncertain still falls through to setup_ldc_bc.
     use_channel = False
     cls_inlet: tuple[str, ...] = ()
     cls_outlet: tuple[str, ...] = ()
+    cls_for_apply = None
+    annotations_for_apply: dict | None = None
     try:
-        annotations = load_annotations(case_dir, case_id=case_id)
-        cls = classify_setup_bc(case_dir, annotations=annotations)
-        if cls.confidence == "confident" and cls.geometry_class == "non_cube":
+        annotations_for_apply = load_annotations(case_dir, case_id=case_id)
+        cls_for_apply = classify_setup_bc(
+            case_dir, annotations=annotations_for_apply
+        )
+        if (
+            cls_for_apply.confidence == "confident"
+            and cls_for_apply.geometry_class == "non_cube"
+        ):
             use_channel = True
-            cls_inlet = cls.inlet_face_ids
-            cls_outlet = cls.outlet_face_ids
+            cls_inlet = cls_for_apply.inlet_face_ids
+            cls_outlet = cls_for_apply.outlet_face_ids
     except AnnotationsIOError:
         # Annotations IO failure → fall through to LDC; the
         # classifier path is only consulted to optionally upgrade a
@@ -375,6 +414,51 @@ def setup_bc(
     except Exception:  # noqa: BLE001 — defensive: classifier issues
         # must not break the legacy LDC dogfood path.
         pass
+
+    # Codex N1.1 R1 P2: revision binding. Reject if the engineer's
+    # accepted advisory consumed an older revision than the apply now
+    # sees (concurrent edit between accept and apply).
+    if if_match_revision is not None and annotations_for_apply is not None:
+        current_rev = annotations_for_apply.get("revision", 0)
+        if current_rev != if_match_revision:
+            raise HTTPException(
+                status_code=409,
+                detail=SetupBcRejection(
+                    failing_check="annotations_revision_conflict",
+                    detail=(
+                        f"Annotations changed between AI advisory "
+                        f"(revision {if_match_revision}) and apply "
+                        f"(revision {current_rev}). Re-run the AI "
+                        f"envelope before applying."
+                    ),
+                ).model_dump(),
+            )
+
+    # Codex N1.1 R1 P1: stale-pin recoverable error. When the engineer
+    # accepted a confident-channel advisory but the apply-time
+    # classifier disagrees, surface a 422 channel_pin_mismatch with
+    # the actionable question(s) the engineer can answer to re-pin.
+    if bc_kind == "channel" and not use_channel:
+        questions: list[dict] = []
+        question_summary = "channel pins changed since AI advisory"
+        if cls_for_apply is not None:
+            for q in cls_for_apply.questions:
+                # Pydantic models are dict-like via model_dump; classifier
+                # returns UnresolvedQuestion instances.
+                try:
+                    questions.append(q.model_dump())
+                except AttributeError:
+                    questions.append(dict(q))  # type: ignore[arg-type]
+            if cls_for_apply.summary:
+                question_summary = cls_for_apply.summary
+        raise HTTPException(
+            status_code=422,
+            detail=SetupBcRejection(
+                failing_check="channel_pin_mismatch",
+                detail=question_summary,
+            ).model_dump()
+            | {"unresolved_questions": questions},
+        )
 
     if use_channel:
         try:

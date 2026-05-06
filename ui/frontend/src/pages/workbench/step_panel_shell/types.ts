@@ -68,6 +68,10 @@ export interface AIActionEnvelope {
   unresolved_questions: UnresolvedQuestion[];
   next_step_suggestion: string | null;
   error_detail: string | null;
+  // DEC-V61-131 N1.1: AI's advisory says which BC executor the apply
+  // click should drive ('ldc' or 'channel'). Used by the apply path
+  // to detect stale pins between accept and apply.
+  suggested_bc_kind?: "ldc" | "channel" | null;
 }
 
 /** A face entry in ``face_annotations.yaml`` mirrors

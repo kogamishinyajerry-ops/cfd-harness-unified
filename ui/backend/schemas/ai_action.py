@@ -154,6 +154,18 @@ class AIActionEnvelope(BaseModel):
             "human-readable reason (e.g. 'no inlet face identified')."
         ),
     )
+    suggested_bc_kind: Optional[str] = Field(
+        default=None,
+        description=(
+            "DEC-V61-131 N1.1: when confidence == 'confident', "
+            "carries the geometry class the AI's apply suggestion "
+            "would use ('ldc' or 'channel'). The frontend's [应用 AI 建议] "
+            "click passes this back to POST /setup-bc as ?bc_kind=... "
+            "so the apply route can verify the classifier still agrees "
+            "and surface a recoverable channel_pin_mismatch error if "
+            "the pins went stale between accept and apply."
+        ),
+    )
 
     @field_validator("unresolved_questions")
     @classmethod

@@ -668,7 +668,22 @@ export function Step3SetupBC({
       cancelledRef.current ||
       currentCaseIdRef.current !== requestCaseId;
     try {
-      const summary = await api.setupBC(caseId);
+      // DEC-V61-131 N1.1 R2 (Codex R1 P1+P2 close): bind apply to
+      // the AI advisory's geometry class + annotations revision so
+      // a stale-pin channel surfaces as recoverable
+      // channel_pin_mismatch and a concurrent annotations edit
+      // surfaces as 409 annotations_revision_conflict (instead of
+      // applying to a different face set than the engineer accepted).
+      const bcKind =
+        envelope?.suggested_bc_kind === "channel" ||
+        envelope?.suggested_bc_kind === "ldc"
+          ? envelope.suggested_bc_kind
+          : undefined;
+      const ifMatch = envelope?.annotations_revision_consumed;
+      const summary = await api.setupBC(caseId, {
+        bcKind,
+        ifMatchRevision: ifMatch,
+      });
       if (isStale()) return;
       const inletPart =
         summary.bc_kind === "channel"
@@ -701,7 +716,7 @@ export function Step3SetupBC({
     } finally {
       if (!cancelledRef.current) setApplying(false);
     }
-  }, [applying, caseId, onStepComplete, onStepError]);
+  }, [applying, caseId, envelope, onStepComplete, onStepError]);
 
   useEffect(() => {
     registerAiAction(triggerSetup);
