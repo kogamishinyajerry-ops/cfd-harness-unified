@@ -148,10 +148,15 @@ function VerdictPill({
         </span>
       );
     }
+    // base-review-2 P2 closure: checkmesh_failed_checks is populated
+    // only when the backend can scrape `***` lines from checkMesh
+    // output. If mesh_ok=false but no detail lines were parsed, the
+    // prior "Failed 0 checks" text was factually wrong — fall back to
+    // "Mesh failed" with no count, which is honest about the gap.
     const n = report.checkmesh_failed_checks?.length ?? 0;
     return (
       <span className="rounded-sm border border-rose-500/40 bg-rose-500/15 px-2 py-0.5 font-mono text-[11px] text-rose-200">
-        Failed {n} check{n === 1 ? "" : "s"}
+        {n > 0 ? `Failed ${n} check${n === 1 ? "" : "s"}` : "Mesh failed"}
       </span>
     );
   }
@@ -300,13 +305,23 @@ function derivePatchTone(
 ): PatchTone {
   if (faceCount === 0) return "rose";
   if (report.report_kind !== "v126") return "neutral";
-  // V129a precedence: when the per-patch dict is present, it's the
-  // authoritative signal — even if mesh_ok=false globally, a patch
-  // with severe=0 is genuinely clean and should render green so the
-  // engineer can localize attention.
+  // V129a + base-review-2 P2 closure: the per-patch dict only
+  // localizes severe non-orthogonality — it does NOT account for
+  // skewness / aspect-ratio / other checkMesh failures. So a patch
+  // with severe=0 is "clean for non-ortho", not necessarily "clean
+  // for all checks". We use mesh_ok as the global tiebreaker:
+  //   * severe>0 (any mesh_ok)        → rose (this patch IS implicated)
+  //   * severe=0 + mesh_ok=true       → green (genuinely clean)
+  //   * severe=0 + mesh_ok=false      → amber (non-ortho fine HERE,
+  //                                     but mesh failed elsewhere —
+  //                                     localization unknown)
+  //   * severe=0 + mesh_ok=null       → neutral (graceful degrade)
   const perPatch = report.checkmesh_n_severe_non_ortho_faces_per_patch;
   if (perPatch !== null && patchName in perPatch) {
-    return perPatch[patchName] > 0 ? "rose" : "green";
+    if (perPatch[patchName] > 0) return "rose";
+    if (report.checkmesh_mesh_ok === true) return "green";
+    if (report.checkmesh_mesh_ok === false) return "amber";
+    return "neutral";
   }
   // V128 fallback when V129a dict absent (older backend, container
   // unavailable, or no severe faces written so per-patch is null).

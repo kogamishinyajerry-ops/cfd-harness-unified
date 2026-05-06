@@ -119,6 +119,23 @@ describe("MeshQualityCard · V126 failed path", () => {
     // Failed-check string surfaced verbatim.
     expect(screen.getByText(/SKEWED CELLS DETECTED/)).toBeInTheDocument();
   });
+
+  it("base-review-2 P2: mesh_ok=false + failed_checks=null → 'Mesh failed' (NOT 'Failed 0 checks')", async () => {
+    // The backend can return mesh_ok=false without any *** lines
+    // scraped (parser tolerance). The prior UI rendered
+    // "Failed 0 checks", which was factually wrong for a failing mesh.
+    const v126MeshFailedNoDetail: MeshQualityReportV126 = {
+      ...v126Failed,
+      checkmesh_failed_checks: null,
+    };
+    apiMock.getMeshQuality.mockResolvedValue(v126MeshFailedNoDetail);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByText("Mesh failed")).toBeInTheDocument(),
+    );
+    // No "0 checks" anywhere in the pill.
+    expect(screen.queryByText(/Failed 0 check/)).not.toBeInTheDocument();
+  });
 });
 
 describe("MeshQualityCard · V122 fallback (container down)", () => {
@@ -456,10 +473,13 @@ describe("MeshQualityCard · V129a per-patch severe-non-ortho coloring", () => {
     const walls = screen.getByTestId("patch-chip-walls");
     expect(walls.dataset.tone).toBe("rose");
     expect(walls.textContent).toContain("5 severe");
-    // Other patches go GREEN even though mesh_ok=false globally —
-    // V129a's per-patch dict overrides the V128 amber fallback.
-    expect(screen.getByTestId("patch-chip-inlet").dataset.tone).toBe("green");
-    expect(screen.getByTestId("patch-chip-outlet").dataset.tone).toBe("green");
+    // base-review-2 P2 closure: severe=0 with mesh_ok=false used to
+    // render green (treating per-patch dict as authoritative for ALL
+    // checks). It now renders AMBER — the dict only localizes
+    // non-orthogonality, not skewness/aspect-ratio, so a clean-on-
+    // non-ortho patch may still be implicated in another check.
+    expect(screen.getByTestId("patch-chip-inlet").dataset.tone).toBe("amber");
+    expect(screen.getByTestId("patch-chip-outlet").dataset.tone).toBe("amber");
   });
 
   it("per-patch all zero with mesh_ok=true → all chips green (no severe suffix)", async () => {
