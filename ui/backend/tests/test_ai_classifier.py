@@ -1378,3 +1378,57 @@ def test_classifier_channel_ambiguity_resolves_with_fresh_disjoint_picks(tmp_pat
     assert res.confidence == "confident", (res.summary, res.rationale)
     assert res.inlet_face_ids == (outlet_fid,)
     assert res.outlet_face_ids == (side_fid,)
+
+
+def test_classifier_stale_replace_question_id_does_not_overflow_on_long_face_id(
+    tmp_path,
+):
+    """Codex 86gs R7 P2#1: UnresolvedQuestion.id is capped at 128
+    chars, but face_ids can also be up to 128 chars. Embedding the
+    raw face_id into the question id would overflow on long pins
+    and the AI envelope would 500 instead of returning a recoverable
+    question. R8 fix uses the sorted-index as a surrogate; this test
+    pins a 128-char stale face_id and confirms recovery still works.
+    """
+    case_dir = tmp_path / "channel_long_id"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    valid_inlet = _bottom_face_id_of_channel()
+    valid_outlet = _top_face_id_of_channel()
+    long_stale = "f" + ("a" * 127)  # exactly 128 chars
+    annotations = _empty_doc("channel_long_id")
+    annotations["faces"].extend([
+        {
+            "face_id": valid_inlet,
+            "name": "inlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": long_stale,
+            "name": "inlet_extra",  # name matches "inlet" → counted
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": valid_outlet,
+            "name": "outlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    # Must not throw; must return uncertain with a replacement
+    # question whose id is well within the 128-char schema cap.
+    assert res.confidence == "uncertain"
+    replace_qs = [
+        q for q in res.questions if q.id.startswith("inlet_face_replace_")
+    ]
+    assert len(replace_qs) == 1
+    assert len(replace_qs[0].id) <= 128
+    # stale_face_ids[] still carries the FULL long face_id so PUT
+    # remove_face_ids can target it for deletion.
+    assert replace_qs[0].stale_face_ids == [long_stale]

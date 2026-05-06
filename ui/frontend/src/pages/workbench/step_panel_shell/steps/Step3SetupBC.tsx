@@ -585,17 +585,46 @@ export function Step3SetupBC({
       // and the next classifier run sees the same stale state).
       const facesToWrite: FaceAnnotation[] = [];
       const removeFaceIds: string[] = [];
+      // DEC-V61-131 N1.1 R8 P2#2 close (Codex R7): when replacing a
+      // stale pin, carry the engineer's previously-entered metadata
+      // (patch_type / physics_notes) forward onto the replacement.
+      // Without this, a remesh-then-recover cycle silently wipes
+      // engineer annotations beyond name/confidence.
+      const annotationByFaceId = new Map<string, FaceAnnotation>();
+      if (annotations) {
+        for (const f of annotations.faces) {
+          annotationByFaceId.set(f.face_id, f);
+        }
+      }
       for (const q of envelope.unresolved_questions) {
         if (!q.needs_face_selection) continue;
         const composed = answers[q.id];
         if (!composed) continue;
         const [faceId, label] = composed.split(":");
         if (!faceId) continue;
-        facesToWrite.push({
+        // Carry forward metadata from the stale annotation being
+        // replaced (if exactly one stale id maps to known metadata).
+        let carryPatchType: FaceAnnotation["patch_type"] | undefined;
+        let carryPhysicsNotes: FaceAnnotation["physics_notes"] | undefined;
+        if (q.stale_face_ids && q.stale_face_ids.length === 1) {
+          const stale = annotationByFaceId.get(q.stale_face_ids[0]);
+          if (stale) {
+            carryPatchType = stale.patch_type;
+            carryPhysicsNotes = stale.physics_notes;
+          }
+        }
+        const replacement: FaceAnnotation = {
           face_id: faceId,
           name: label || q.id,
           confidence: "user_authoritative",
-        });
+        };
+        if (carryPatchType !== undefined) {
+          replacement.patch_type = carryPatchType;
+        }
+        if (carryPhysicsNotes !== undefined) {
+          replacement.physics_notes = carryPhysicsNotes;
+        }
+        facesToWrite.push(replacement);
         if (q.stale_face_ids && q.stale_face_ids.length > 0) {
           for (const stale of q.stale_face_ids) {
             removeFaceIds.push(stale);

@@ -560,11 +560,15 @@ def classify_setup_bc(
                 default_answer="inlet",
             ),
         )
-    for stale_id in sorted(stale_inlet_pin_ids):
-        # One replacement-pick question per stale inlet face_id.
+    # Codex R7 P2#1: question.id is capped at 128 chars but
+    # _FacePut.face_id allows up to 128 chars, so embedding the raw
+    # stale face_id would overflow on long ids. Use the sorted index
+    # as a fixed-length surrogate (stale_face_ids[] still carries the
+    # full face_id so the frontend's PUT can target it for deletion).
+    for idx, stale_id in enumerate(sorted(stale_inlet_pin_ids)):
         questions.append(
             UnresolvedQuestion(
-                id=f"inlet_face_replace_{stale_id}",
+                id=f"inlet_face_replace_{idx}",
                 kind="face_label",
                 prompt=(
                     f"Previously pinned inlet face {stale_id!r} is no "
@@ -591,10 +595,10 @@ def classify_setup_bc(
                 default_answer="outlet",
             ),
         )
-    for stale_id in sorted(stale_outlet_pin_ids):
+    for idx, stale_id in enumerate(sorted(stale_outlet_pin_ids)):
         questions.append(
             UnresolvedQuestion(
-                id=f"outlet_face_replace_{stale_id}",
+                id=f"outlet_face_replace_{idx}",
                 kind="face_label",
                 prompt=(
                     f"Previously pinned outlet face {stale_id!r} is no "
