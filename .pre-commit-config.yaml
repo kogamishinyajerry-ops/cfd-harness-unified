@@ -99,3 +99,16 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
         always_run: true
+
+      # DEC-V61-132 N1.2 · AI dispatch path mutation grep lint (warning-only).
+      # Behavioral test in tests/test_ai_advisor_contract.py is the merge
+      # gate. This hook is fast feedback for staged AI dispatch files;
+      # match → WARNING + exit 0. False-positives (deprecation comments
+      # quoting symbols) are acceptable because the hook never blocks.
+      # See DEC-V61-132 §3.3 for warning-only rationale.
+      - id: ai-path-mutation-grep
+        name: DEC-V61-132 · AI advisor mutation pattern (warning-only)
+        entry: scripts/governance/check_ai_path_mutations.sh
+        language: script
+        files: ^(ui/backend/services/(ai_actions|llm_coach)/|ui/backend/routes/ai_.*\.py$)
+        stages: [pre-commit]
