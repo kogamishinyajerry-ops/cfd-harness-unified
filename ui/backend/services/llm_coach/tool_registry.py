@@ -299,24 +299,37 @@ def _handle_regenerate_mesh(case_dir: Path, args: BaseModel) -> ApplyResult:
             failing_check="underlying_service_error",
             inner_failing_check="case_disappeared",
         )
-    if typed.target_cell_count is not None:
-        density_label = f"target ~{typed.target_cell_count:,} cells"
-        suggestion = {
-            "axis": "target_cell_count",
-            "target_cell_count": typed.target_cell_count,
-        }
-    elif typed.lc_override is not None:
-        density_label = f"lc={typed.lc_override:.4g}"
-        suggestion = {
-            "axis": "lc_override",
-            "lc_override": typed.lc_override,
-        }
-    else:
-        density_label = f"'{typed.mesh_mode}' mode"
-        suggestion = {
-            "axis": "mesh_mode",
-            "mesh_mode": typed.mesh_mode,
-        }
+    # Codex N1.1 R19 P2 close (branch-level review): the advisory
+    # path can only emit suggestions the engineer can re-apply
+    # through the workbench. Step 2's [AI 处理] re-mesh client
+    # accepts ``mesh_mode`` (beginner / power) only; it has no UI
+    # affordance for ``target_cell_count`` (V124) or ``lc_override``
+    # (V125). Until those gain manual-replay surfaces in Step 2,
+    # advisory suggestions on those axes are dead ends — the
+    # engineer would have no way to act on the AI's advice. Reject
+    # at dispatch with a clear message so the AI re-prompts on
+    # mesh_mode (or the engineer drops the proposal).
+    if typed.target_cell_count is not None or typed.lc_override is not None:
+        unsupported_axis = (
+            "target_cell_count"
+            if typed.target_cell_count is not None
+            else "lc_override"
+        )
+        raise ToolDispatchError(
+            (
+                f"regenerate_mesh advisory does not support "
+                f"{unsupported_axis} (no Step 2 manual-replay UI). "
+                f"Use mesh_mode='beginner' or 'power' instead, "
+                f"or apply manually via Step 2 advanced controls."
+            ),
+            failing_check="unsupported_axis",
+            inner_failing_check=unsupported_axis,
+        )
+    density_label = f"'{typed.mesh_mode}' mode"
+    suggestion = {
+        "axis": "mesh_mode",
+        "mesh_mode": typed.mesh_mode,
+    }
     summary = (
         f"AI suggests regenerating the mesh ({density_label}). "
         f"To apply: re-run Step 2 [AI 处理] with this density. "

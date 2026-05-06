@@ -575,6 +575,39 @@ def setup_bc(
                     | {"unresolved_questions": questions},
                 )
 
+            # Codex N1.1 R19 P1 close (branch-level review): symmetric
+            # guard for bc_kind="ldc". If the engineer accepted an LDC
+            # advisory but the mesh changed before applying (e.g.,
+            # another tab regenerated the mesh and the classifier now
+            # reports a confident channel geometry), running
+            # setup_ldc_bc against the new geometry would silently
+            # apply wrong BCs. Surface 422 ldc_mismatch so the engineer
+            # re-runs the AI advisory and re-classifies.
+            if (
+                bc_kind == "ldc"
+                and cls_for_apply is not None
+                and cls_for_apply.confidence == "confident"
+                and cls_for_apply.geometry_class == "non_cube"
+            ):
+                ldc_questions: list[dict] = []
+                for q in cls_for_apply.questions:
+                    try:
+                        ldc_questions.append(q.model_dump())
+                    except AttributeError:
+                        ldc_questions.append(dict(q))  # type: ignore[arg-type]
+                ldc_summary = (
+                    cls_for_apply.summary
+                    or "geometry changed since LDC advisory — classifier now reports a non-cube/channel"
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=SetupBcRejection(
+                        failing_check="ldc_mismatch",
+                        detail=ldc_summary,
+                    ).model_dump()
+                    | {"unresolved_questions": ldc_questions},
+                )
+
             # Dispatch the executor under the same annotations lock so
             # the BCs we author are tied to the revision we just
             # verified. setup_*_bc takes its own .case_lock (different

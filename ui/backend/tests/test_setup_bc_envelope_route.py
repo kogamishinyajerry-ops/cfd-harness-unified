@@ -1171,3 +1171,47 @@ def test_apply_legacy_caller_still_falls_through_on_parse_error(
     r = client.post(f"/api/import/{case_id}/setup-bc")
     # Should fall through to LDC dogfood and return 200.
     assert r.status_code == 200, r.text
+
+
+def test_apply_with_bc_kind_ldc_but_classifier_confident_channel_returns_422_ldc_mismatch(
+    monkeypatch, tmp_path
+):
+    """DEC-V61-131 N1.1 R19 P1 close (Codex 86gs branch-level review):
+    symmetric guard for bc_kind='ldc'. If the engineer accepted an
+    LDC advisory but the mesh changed before applying (e.g., another
+    tab regenerated the mesh and the classifier now reports a
+    confident channel geometry), the route must surface 422
+    ldc_mismatch — NOT fall through and run setup_ldc_bc against a
+    different geometry. Prior to R19 the agreement was one-sided
+    (channel-only), allowing a stealth geometry-divergence at apply
+    time.
+    """
+    from ui.backend.services.ai_actions import classifier as cls_mod
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    case_dir = _stage_imported_case(imported, case_id)
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+
+    # Classifier reports confident-channel — the engineer's bc_kind=ldc
+    # advisory has been invalidated by the mesh change.
+    confident_channel = cls_mod.ClassificationResult(
+        geometry_class="non_cube",
+        confidence="confident",
+        questions=[],
+        summary="Mesh now classifies as channel; LDC advisory invalid.",
+        rationale="test fixture",
+        inlet_face_ids=("fid_inlet_xx",),
+        outlet_face_ids=("fid_outlet_xx",),
+    )
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.classify_setup_bc",
+        lambda case_dir, annotations: confident_channel,
+    )
+
+    client = _new_client()
+    r = client.post(f"/api/import/{case_id}/setup-bc?bc_kind=ldc")
+    assert r.status_code == 422, r.text
+    body = r.json()
+    assert body["detail"]["failing_check"] == "ldc_mismatch"

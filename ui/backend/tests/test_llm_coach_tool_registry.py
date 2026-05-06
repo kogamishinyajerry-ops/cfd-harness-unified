@@ -495,27 +495,33 @@ def test_regenerate_args_rejects_all_three_set():
         )
 
 
-def test_dispatch_regenerate_mesh_with_lc_override_advisory(tmp_path):
-    """DEC-V61-131 N1.1: lc_override surfaces as advisory ApplyResult
-    with axis='lc_override'. No pipeline invocation; no polyMesh write."""
+def test_dispatch_regenerate_mesh_lc_override_rejected_unsupported_axis(tmp_path):
+    """DEC-V61-131 N1.1 R19 P2 close (Codex 86gs branch-level review):
+    lc_override has no Step 2 manual-replay UI, so accepting an
+    advisory on this axis would produce advice the engineer can't
+    apply. Dispatch raises ToolDispatchError(unsupported_axis)
+    instead of returning a dead-end advisory."""
+    from ui.backend.services.llm_coach.tool_registry import ToolDispatchError
+
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_lc")
-    result = dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
-    assert result.tool == "regenerate_mesh"
-    assert result.state_after["advisory"] is True
-    assert result.state_after["suggestion"]["axis"] == "lc_override"
-    assert result.state_after["suggestion"]["lc_override"] == 0.005
+    with pytest.raises(ToolDispatchError) as ctx:
+        dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
+    assert ctx.value.failing_check == "unsupported_axis"
+    assert ctx.value.inner_failing_check == "lc_override"
 
 
-def test_dispatch_regenerate_mesh_summary_says_lc_when_set(tmp_path):
-    """DEC-V61-131 N1.1: advisory summary surfaces 'lc=X' when
-    lc_override is set, NOT 'mode' or 'target'."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_lc_summary")
-    result = dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
-    assert "lc=" in result.summary
-    assert "0.005" in result.summary
-    assert "'beginner' mode" not in result.summary
-    assert "'power' mode" not in result.summary
-    assert "target" not in result.summary.lower()
+def test_dispatch_regenerate_mesh_lc_override_message_points_to_mesh_mode(tmp_path):
+    """R19 P2 close: the rejection message tells the engineer how to
+    proceed (use mesh_mode beginner/power, or apply manually via
+    Step 2 advanced)."""
+    from ui.backend.services.llm_coach.tool_registry import ToolDispatchError
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_lc_msg")
+    with pytest.raises(ToolDispatchError) as ctx:
+        dispatch(case_dir, "regenerate_mesh", {"lc_override": 0.005})
+    msg = str(ctx.value)
+    assert "mesh_mode" in msg
+    assert "beginner" in msg or "power" in msg
 
 
 def test_regenerate_mesh_tool_description_mentions_lc_override():
@@ -766,30 +772,33 @@ def test_regenerate_args_target_cell_count_ceiling():
     RegenerateMeshArgs(target_cell_count=50_000_000)
 
 
-def test_dispatch_regenerate_mesh_with_target_cell_count_advisory(tmp_path):
-    """DEC-V61-131 N1.1: target_cell_count surfaces as advisory
-    ApplyResult with axis='target_cell_count'. No pipeline invocation."""
+def test_dispatch_regenerate_mesh_target_cell_count_rejected_unsupported_axis(tmp_path):
+    """DEC-V61-131 N1.1 R19 P2 close: same rejection contract as
+    lc_override — target_cell_count has no Step 2 manual-replay UI."""
+    from ui.backend.services.llm_coach.tool_registry import ToolDispatchError
+
     case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_target")
-    result = dispatch(
-        case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
-    )
-    assert result.tool == "regenerate_mesh"
-    assert result.state_after["advisory"] is True
-    assert result.state_after["suggestion"]["axis"] == "target_cell_count"
-    assert result.state_after["suggestion"]["target_cell_count"] == 500_000
+    with pytest.raises(ToolDispatchError) as ctx:
+        dispatch(
+            case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
+        )
+    assert ctx.value.failing_check == "unsupported_axis"
+    assert ctx.value.inner_failing_check == "target_cell_count"
 
 
-def test_dispatch_regenerate_mesh_summary_says_target_when_set(tmp_path):
-    """DEC-V61-131 N1.1: advisory summary surfaces 'target ~N cells'
-    when target_cell_count is set, NOT 'mode'."""
-    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_target_sum")
-    result = dispatch(
-        case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
-    )
-    assert "target" in result.summary.lower()
-    assert "500,000" in result.summary or "500000" in result.summary
-    assert "'beginner' mode" not in result.summary
-    assert "'power' mode" not in result.summary
+def test_dispatch_regenerate_mesh_target_cell_count_message_points_to_mesh_mode(tmp_path):
+    """R19 P2 close: rejection message routes the engineer to
+    mesh_mode."""
+    from ui.backend.services.llm_coach.tool_registry import ToolDispatchError
+
+    case_dir = _make_minimal_case_dir(tmp_path, case_id="ldc_v131_target_msg")
+    with pytest.raises(ToolDispatchError) as ctx:
+        dispatch(
+            case_dir, "regenerate_mesh", {"target_cell_count": 500_000}
+        )
+    msg = str(ctx.value)
+    assert "mesh_mode" in msg
+    assert "beginner" in msg or "power" in msg
 
 
 def test_dispatch_regenerate_mesh_v123_mesh_mode_path_advisory(tmp_path):
