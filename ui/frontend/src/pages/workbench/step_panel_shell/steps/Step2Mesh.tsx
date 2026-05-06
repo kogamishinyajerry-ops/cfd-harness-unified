@@ -108,6 +108,20 @@ export function Step2Mesh({
     setNetworkError(null);
     setSizingFieldError(null);
     setZonesError(null);
+    // V136 R1 P2 (Codex CRS): blur the focused element before validation.
+    // ZoneNumberInput keeps a local draft string for partial / negative
+    // edits; if the engineer types "" / "-" / "." (draft-only states
+    // that never commit) and then clicks [AI 处理] without leaving the
+    // field, the visible text would diverge from parent zones state.
+    // Forcing blur fires each input's onBlur, which clears the draft so
+    // the displayed value snaps back to the canonical committed
+    // number — what gets submitted is what the engineer now sees.
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
+    }
     // DEC-V61-135: client-side ordering check before the round-trip.
     // The backend re-validates; this just gives instant feedback.
     if (sizingFieldOpen) {

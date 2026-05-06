@@ -519,6 +519,51 @@ describe("Step2Mesh · wired body", () => {
     );
   });
 
+  // R1 P2 (Codex CRS): submitting while a zone input is in a partial
+  // draft state (raw "-" / "" / ".") must NOT silently use the previous
+  // committed value while still showing the draft. triggerMesh blurs
+  // the active element first so the displayed value snaps back to the
+  // committed canonical and submission == display.
+  it("blurs focused zone input before submitting so display matches submitted state", async () => {
+    const user = userEvent.setup();
+    apiMock.meshImported.mockResolvedValueOnce(FAKE_MESH_RESPONSE);
+    const { triggerAi } = renderStep({});
+
+    const summary = screen
+      .getByTestId("step2-mesh-refinement-zones")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+    await user.click(screen.getByTestId("step2-mesh-zones-add-box"));
+
+    // Type a non-committing draft state ("-") into xmin and leave the
+    // cursor focused there.
+    const xminInput = screen.getByTestId(
+      "step2-mesh-zone-0-xmin",
+    ) as HTMLInputElement;
+    await user.clear(xminInput);
+    await user.type(xminInput, "-");
+    expect(xminInput.value).toBe("-");
+
+    // Trigger via the action — internally blurs first.
+    await triggerAi();
+
+    // After blur, the input snaps back to the canonical default 0.
+    expect(xminInput.value).toBe("0");
+    // And the submitted bbox matches the display (xmin=0), NOT some
+    // half-typed "-" that was visible on the screen.
+    expect(apiMock.meshImported).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "beginner",
+      null,
+      [
+        expect.objectContaining({
+          geometry: "box",
+          bbox: [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+        }),
+      ],
+    );
+  });
+
   it("removes a zone via Remove button", async () => {
     const user = userEvent.setup();
     const { container } = renderStep({});
