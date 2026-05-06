@@ -32,6 +32,7 @@ _STATUS_FOR_FAILING_CHECK: dict[FailingCheck, int] = {
     "gmsh_diverged": 422,
     "cell_cap_exceeded": 422,
     "gmshToFoam_failed": 502,  # downstream container-side failure
+    "refinement_zone_invalid": 422,  # V136 (N2.2): zone outside case AABB
 }
 
 
@@ -70,6 +71,7 @@ def mesh_imported_route(
             case_id,
             mesh_mode=request.mesh_mode,
             sizing_field=request.sizing_field,
+            refinement_zones=request.refinement_zones,
         )
     except MeshPipelineError as exc:
         rejection = MeshRejection(
