@@ -70,25 +70,37 @@ export function ProposalCard({
       });
       setState({ kind: "applied", result });
       onApplied?.(result);
-      // Codex base-review-4 P2: notify any open panels backed by the
-      // case state we just mutated so they can re-fetch and avoid
-      // showing stale data. PatchClassificationPanel (Step 3) is the
-      // V121 case for set_patch_bc_type; future tools that mutate
-      // case state should fold their relevant panel listeners here.
-      // Using a window CustomEvent keeps the parent-tree decoupled —
-      // ProposalCard doesn't need to know which panel is mounted.
-      try {
-        window.dispatchEvent(
-          new CustomEvent("ai-coach:proposal-applied", {
-            detail: {
-              caseId,
-              tool: proposal.tool,
-              audit_id: result.audit_id,
-            },
-          }),
-        );
-      } catch {
-        // SSR / non-browser context — no-op.
+      // DEC-V61-131 N1.1: tools may now return advisory results
+      // (e.g. regenerate_mesh after the strip). Advisory results
+      // describe a SUGGESTION but do not mutate the case, so we MUST
+      // NOT emit ``ai-coach:proposal-applied`` — listeners
+      // (MeshQualityCard, Step2Mesh, PatchClassificationPanel) treat
+      // that event as a real case mutation and would re-fetch /
+      // display stale data as if the mesh had been regenerated.
+      const isAdvisory =
+        (result as { advisory?: boolean }).advisory === true;
+      if (!isAdvisory) {
+        // Codex base-review-4 P2: notify any open panels backed by
+        // the case state we just mutated so they can re-fetch and
+        // avoid showing stale data. PatchClassificationPanel (Step
+        // 3) is the V121 case for set_patch_bc_type; future tools
+        // that mutate case state should fold their relevant panel
+        // listeners here. Using a window CustomEvent keeps the
+        // parent-tree decoupled — ProposalCard doesn't need to know
+        // which panel is mounted.
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ai-coach:proposal-applied", {
+              detail: {
+                caseId,
+                tool: proposal.tool,
+                audit_id: result.audit_id,
+              },
+            }),
+          );
+        } catch {
+          // SSR / non-browser context — no-op.
+        }
       }
     } catch (err) {
       let detail = "apply failed";

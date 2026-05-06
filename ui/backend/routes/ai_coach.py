@@ -632,8 +632,19 @@ async def ai_coach_apply_proposal(
             "Operators should grep the FastAPI logs for the underlying error."
         )
 
+    # DEC-V61-131 N1.1: tools may now return advisory ApplyResults
+    # (state_after.advisory == True). For those, the route must NOT
+    # report ``applied=True`` — the frontend ProposalCard would
+    # otherwise mark the proposal as mutated and emit the
+    # ``ai-coach:proposal-applied`` event, falsely signalling a mesh
+    # rewrite to MeshQualityCard / Step2Mesh / PatchClassificationPanel.
+    is_advisory = bool(
+        isinstance(result.state_after, dict)
+        and result.state_after.get("advisory") is True
+    )
     response = {
-        "applied": True,
+        "applied": not is_advisory,
+        "advisory": is_advisory,
         "tool": result.tool,
         "summary": result.summary,
         "state_after": result.state_after,

@@ -5,13 +5,47 @@ from pydantic import BaseModel, Field
 
 
 class SetupBcSummary(BaseModel):
+    """Response shape for POST /api/import/{case_id}/setup-bc.
+
+    DEC-V61-131 N1.1 extended this schema to cover both the LDC
+    (``bc_kind='ldc'``) and channel (``bc_kind='channel'``) executors
+    so the engineer's [应用 AI 建议] click can apply either via a
+    single endpoint. Lid-specific fields are optional; channel
+    responses populate ``n_inlet_faces`` / ``n_outlet_faces`` instead.
+    """
+
     case_id: str
-    n_lid_faces: int = Field(..., description="Boundary faces classified as the moving lid.")
-    n_wall_faces: int = Field(..., description="Boundary faces classified as no-slip walls.")
-    lid_velocity: tuple[float, float, float] = Field(..., description="U vector applied at lid.")
+    bc_kind: str = Field(
+        default="ldc",
+        description=(
+            "Which executor wrote the BC dicts: 'ldc' (lid-driven "
+            "cavity) or 'channel' (inlet/outlet/walls)."
+        ),
+    )
+    n_lid_faces: int | None = Field(
+        default=None,
+        description="LDC: boundary faces classified as the moving lid.",
+    )
+    n_wall_faces: int = Field(
+        ..., description="Boundary faces classified as no-slip walls."
+    )
+    n_inlet_faces: int | None = Field(
+        default=None,
+        description="Channel: boundary faces classified as the inlet.",
+    )
+    n_outlet_faces: int | None = Field(
+        default=None,
+        description="Channel: boundary faces classified as the outlet.",
+    )
+    lid_velocity: tuple[float, float, float] | None = Field(
+        default=None,
+        description="LDC: U vector applied at lid.",
+    )
     nu: float = Field(..., description="Kinematic viscosity ν (m²/s).")
     reynolds: float = Field(..., description="Reynolds number U·L/ν.")
-    written_files: list[str] = Field(..., description="Relative paths of dicts written.")
+    written_files: list[str] = Field(
+        ..., description="Relative paths of dicts written."
+    )
 
 
 class SetupBcRejection(BaseModel):

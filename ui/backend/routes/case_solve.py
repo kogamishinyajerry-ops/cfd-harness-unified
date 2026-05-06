@@ -37,12 +37,18 @@ from ui.backend.services.ai_actions import (
 )
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import IMPORTED_DIR
+from ui.backend.services.ai_actions.classifier import classify_setup_bc
+from ui.backend.services.case_annotations import (
+    AnnotationsIOError,
+    load_annotations,
+)
 from ui.backend.services.case_solve import (
     BCSetupError,
     ResultsExtractError,
     SolverRunError,
     extract_results_summary,
     run_icofoam,
+    setup_channel_bc,
     setup_ldc_bc,
     stream_icofoam,
 )
@@ -337,7 +343,60 @@ def setup_bc(
             status_code=200,
         )
 
-    # Legacy V61-097 path.
+    # DEC-V61-131 N1.1 mutation route: classify first, then dispatch
+    # the right executor. Pre-N1.1 the AI envelope path branched
+    # between LDC and channel internally; with the envelope hard-strip
+    # advisory-only, this mutation route is now the apply-button
+    # surface and must reproduce that branching so confident-channel
+    # cases route through ``setup_channel_bc`` instead of erroring out
+    # of ``setup_ldc_bc`` with ``not_an_ldc_cube``.
+    #
+    # Fallback: if annotations fail to load OR the classifier returns
+    # not-confident OR confident with geometry_class != 'non_cube',
+    # default to ``setup_ldc_bc`` — this preserves the V61-097 LDC
+    # dogfood contract for callers that hit this route without any
+    # AI-driven advisory state.
+    use_channel = False
+    cls_inlet: tuple[str, ...] = ()
+    cls_outlet: tuple[str, ...] = ()
+    try:
+        annotations = load_annotations(case_dir, case_id=case_id)
+        cls = classify_setup_bc(case_dir, annotations=annotations)
+        if cls.confidence == "confident" and cls.geometry_class == "non_cube":
+            use_channel = True
+            cls_inlet = cls.inlet_face_ids
+            cls_outlet = cls.outlet_face_ids
+    except AnnotationsIOError:
+        # Annotations IO failure → fall through to LDC; the
+        # classifier path is only consulted to optionally upgrade a
+        # cube-default request to a channel dispatch when the engineer
+        # has pinned inlet/outlet faces.
+        pass
+    except Exception:  # noqa: BLE001 — defensive: classifier issues
+        # must not break the legacy LDC dogfood path.
+        pass
+
+    if use_channel:
+        try:
+            ch_result = setup_channel_bc(
+                case_dir,
+                case_id=case_id,
+                inlet_face_ids=cls_inlet,
+                outlet_face_ids=cls_outlet,
+            )
+        except BCSetupError as exc:
+            raise _setup_bc_failure_to_http(exc) from exc
+        return SetupBcSummary(
+            case_id=ch_result.case_id,
+            bc_kind="channel",
+            n_inlet_faces=ch_result.n_inlet_faces,
+            n_outlet_faces=ch_result.n_outlet_faces,
+            n_wall_faces=ch_result.n_wall_faces,
+            nu=ch_result.nu,
+            reynolds=ch_result.reynolds,
+            written_files=list(ch_result.written_files),
+        )
+
     try:
         result = setup_ldc_bc(case_dir, case_id=case_id)
     except BCSetupError as exc:
@@ -345,6 +404,7 @@ def setup_bc(
 
     return SetupBcSummary(
         case_id=result.case_id,
+        bc_kind="ldc",
         n_lid_faces=result.n_lid_faces,
         n_wall_faces=result.n_wall_faces,
         lid_velocity=result.lid_velocity,

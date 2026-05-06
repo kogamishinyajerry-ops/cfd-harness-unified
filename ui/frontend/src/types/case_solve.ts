@@ -2,9 +2,15 @@
 
 export interface SetupBcSummary {
   case_id: string;
-  n_lid_faces: number;
+  // DEC-V61-131 N1.1: the legacy setup-bc route now dispatches LDC
+  // or channel by classifier; lid-specific fields are optional, and
+  // channel responses populate the inlet/outlet counts instead.
+  bc_kind?: "ldc" | "channel";
+  n_lid_faces?: number | null;
+  n_inlet_faces?: number | null;
+  n_outlet_faces?: number | null;
   n_wall_faces: number;
-  lid_velocity: [number, number, number];
+  lid_velocity?: [number, number, number] | null;
   nu: number;
   reynolds: number;
   written_files: string[];

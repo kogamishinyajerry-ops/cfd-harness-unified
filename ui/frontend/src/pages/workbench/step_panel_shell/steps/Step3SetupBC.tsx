@@ -648,22 +648,42 @@ export function Step3SetupBC({
   // DEC-V61-131 N1.1: [应用 AI 建议] confirm button. The advisory
   // envelope tells the engineer what AI suggests; this click calls
   // the legacy non-envelope POST /setup-bc to actually write the
-  // dicts. Only renders when the envelope is confident.
+  // dicts. Only renders when the envelope is confident. The legacy
+  // route auto-dispatches LDC vs channel by classifier so the
+  // confident-channel path applies correctly (Codex N1.1 R0 P1).
+  //
+  // Stale-guard mirrors runEnvelope (Codex N1.1 R0 P2#1): a click
+  // that resolves after the engineer switched cases (cancelledRef OR
+  // currentCaseIdRef differs) must NOT mutate the new instance's
+  // state — which would otherwise mis-mark the new case complete or
+  // surface the previous case's apply summary.
   const handleApplySuggestion = useCallback(async () => {
     if (applying) return;
     setApplying(true);
     setApplyError(null);
     setRejection(null);
     setNetworkError(null);
+    const requestCaseId = caseId;
+    const isStale = () =>
+      cancelledRef.current ||
+      currentCaseIdRef.current !== requestCaseId;
     try {
       const summary = await api.setupBC(caseId);
+      if (isStale()) return;
+      const inletPart =
+        summary.bc_kind === "channel"
+          ? `inlet=${summary.n_inlet_faces ?? "—"} outlet=${
+              summary.n_outlet_faces ?? "—"
+            }`
+          : `lid=${summary.n_lid_faces ?? "—"}`;
       setAppliedSummary(
-        `Applied: lid=${summary.n_lid_faces ?? "—"} faces, walls=${
+        `Applied (${summary.bc_kind ?? "ldc"}): ${inletPart} walls=${
           summary.n_wall_faces ?? "—"
-        } faces, Re=${summary.reynolds ?? "—"}`,
+        } Re=${summary.reynolds ?? "—"}`,
       );
       onStepComplete();
     } catch (e) {
+      if (isStale()) return;
       if (
         e instanceof ApiError &&
         e.detail &&
@@ -679,7 +699,7 @@ export function Step3SetupBC({
         onStepError(msg);
       }
     } finally {
-      setApplying(false);
+      if (!cancelledRef.current) setApplying(false);
     }
   }, [applying, caseId, onStepComplete, onStepError]);
 

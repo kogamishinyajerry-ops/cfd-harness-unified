@@ -1065,7 +1065,12 @@ export interface ApplyAIProposalRequest {
 }
 
 export interface ApplyAIProposalResponse {
-  applied: true;
+  // DEC-V61-131 N1.1: applied=true means the tool actually mutated
+  // the case; applied=false + advisory=true means the tool returned a
+  // suggestion (e.g., regenerate_mesh post-strip). The two flags are
+  // complementary — exactly one is true.
+  applied: boolean;
+  advisory?: boolean;
   tool: string;
   summary: string;
   state_after: Record<string, unknown>;
