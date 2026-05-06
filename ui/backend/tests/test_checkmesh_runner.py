@@ -664,3 +664,86 @@ def test_aggregate_severe_faces_per_patch_no_patches_returns_empty():
     )
 
     assert aggregate_severe_faces_per_patch((1, 2, 3), {}) == {}
+
+
+def test_run_checkmesh_bash_chain_preserves_checkmesh_exit_code(
+    tmp_path, monkeypatch
+):
+    """V129a R1 P1 regression: when checkMesh itself exits non-zero
+    (corrupt polyMesh, missing required files), the bash chain must
+    propagate that exit code so `checkmesh_exit_nonzero` still fires.
+
+    Failure mode the original V129a R0 bash had: the trailing
+    `cat ... || true` set the chain's final exit status to 0,
+    swallowing checkMesh's real failure exit and converting fatal
+    runner failures into bogus parsed-success V126 responses.
+
+    This test runs the actual bash_cmd string against a real
+    /bin/bash with checkMesh stubbed by an `exit 1` script, so
+    a regression in the rc=$?; ... exit $rc pattern would fail.
+    """
+    import shlex
+    import subprocess
+
+    case_dir = tmp_path / "lc_case"
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+
+    # Capture the bash_cmd as the production runner builds it. Probe
+    # by mocking exec_run to record its `cmd` argument.
+    captured: dict[str, list[str]] = {}
+
+    class _FakeExecResult:
+        exit_code = 1
+        output = b""
+
+    class _FakeContainer:
+        status = "running"
+
+        def exec_run(self, **kwargs):
+            cmd = kwargs.get("cmd")
+            if isinstance(cmd, list) and len(cmd) >= 3 and "checkMesh" in cmd[-1]:
+                captured["bash_cmd"] = cmd
+            return _FakeExecResult()
+
+        def put_archive(self, **_):
+            return True
+
+    class _FakeClient:
+        class containers:
+            @staticmethod
+            def get(name):
+                return _FakeContainer()
+
+    monkeypatch.setattr("docker.from_env", lambda: _FakeClient())
+    with pytest.raises(CheckMeshError):
+        run_checkmesh(case_dir)
+    assert "bash_cmd" in captured, "production runner did not invoke checkMesh"
+    bash_cmd_str = captured["bash_cmd"][-1]
+
+    # Substitute a non-zero exiting stub for `checkMesh` and verify the
+    # chain's final exit reflects that, NOT the trailing cat. Replace
+    # `source /opt/openfoam10/etc/bashrc &&` with `:` (no-op) so we
+    # don't depend on the container env.
+    test_chain = bash_cmd_str.replace(
+        "source /opt/openfoam10/etc/bashrc &&", ":; "
+    ).replace(
+        "checkMesh -allGeometry -allTopology",
+        "false",  # stand-in checkMesh that exits 1
+    )
+    # Use a tmpdir so cd doesn't fail — the stub doesn't read the dir.
+    test_chain = test_chain.replace(
+        f"cd {polymesh.parent.parent}", f"cd {shlex.quote(str(tmp_path))}"
+    )
+
+    proc = subprocess.run(
+        ["bash", "-c", test_chain],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 1, (
+        f"bash chain swallowed checkMesh's exit 1 (got {proc.returncode}); "
+        f"the rc=$?; ... exit $rc pattern is broken. "
+        f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
+    )

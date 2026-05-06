@@ -395,15 +395,21 @@ def run_checkmesh(
         # to constant/polyMesh/sets/ when faces fail those thresholds.
         # We append a sentinel + cat the nonOrthoFaces set so the parser
         # can extract per-face IDs without a second exec round-trip.
-        # `|| true` keeps the bash chain green when the set file is
-        # absent (healthy mesh). The sentinel SET_BODY_DELIM is unique
-        # enough that no checkMesh output line collides with it.
+        #
+        # R1 P1 closure: capture checkMesh's exit code in `rc` BEFORE
+        # the echo+cat tail, then `exit $rc` at the end so the chain's
+        # exit status reflects checkMesh — not the always-success cat.
+        # Without this, the existing `checkmesh_exit_nonzero` failing-
+        # check path (corrupt polyMesh, missing required files) is
+        # unreachable and fatal failures fall through as bogus
+        # successful V126 responses.
         bash_cmd = (
             f"source /opt/openfoam10/etc/bashrc && "
             f"cd {container_work} && "
-            f"checkMesh -allGeometry -allTopology 2>&1; "
+            f"checkMesh -allGeometry -allTopology 2>&1; rc=$?; "
             f"echo '__CFD_HARNESS_SET_BODY_DELIM__'; "
-            f"cat constant/polyMesh/sets/nonOrthoFaces 2>/dev/null || true"
+            f"cat constant/polyMesh/sets/nonOrthoFaces 2>/dev/null || true; "
+            f"exit $rc"
         )
         try:
             exec_result = container.exec_run(cmd=["bash", "-c", bash_cmd])
