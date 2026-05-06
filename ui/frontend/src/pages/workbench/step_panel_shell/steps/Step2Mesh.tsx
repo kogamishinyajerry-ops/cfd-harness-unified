@@ -144,6 +144,14 @@ export function Step2Mesh({
   // listens for ai-coach:proposal-applied (regenerate_mesh tool) so
   // an AI-driven re-mesh refreshes the gauges without remounting.
   const [meshGenSeq, setMeshGenSeq] = useState(0);
+  // R1 P1 (Codex 86gs): track in-flight gmsh runs so the prism
+  // button can refuse to start while a mesh op is already mutating
+  // constant/polyMesh. Without this guard, an engineer on a
+  // restored-from-disk case could click [AI 处理] (gmsh remesh) AND
+  // "Apply prism layers" simultaneously, sending two concurrent
+  // POSTs that both rewrite polyMesh — whichever finishes last
+  // silently wins.
+  const [meshInFlight, setMeshInFlight] = useState(false);
 
   // Register the mesh-generation action with the shell. The shell's
   // wrapped onAiProcess sets aiInFlight + captures errors; this body
@@ -212,6 +220,7 @@ export function Step2Mesh({
         }
       }
     }
+    setMeshInFlight(true);
     try {
       // Pass sizingField only when the panel is open and at least one
       // field is non-null; otherwise the api client omits the body
@@ -282,6 +291,8 @@ export function Step2Mesh({
       // Re-throw so the shell's aiInFlight wrapper sees the failure
       // and surfaces aiErrorMessage in the StatusStrip.
       throw e;
+    } finally {
+      setMeshInFlight(false);
     }
   }, [
     caseId,
@@ -307,6 +318,18 @@ export function Step2Mesh({
   const applyPrismLayers = useCallback(async () => {
     setPrismRejection(null);
     setPrismError(null);
+    // R1 P1 (Codex 86gs): refuse to start if a gmsh remesh is already
+    // in flight. Both routes mutate constant/polyMesh and neither
+    // backend takes a case_lock, so concurrent requests would race —
+    // whichever finishes last silently wins. Make the contract
+    // explicit at the click handler.
+    if (meshInFlight) {
+      const msg =
+        "mesh stage is currently running — wait for it to finish before applying prism layers";
+      setPrismError(msg);
+      onStepError(`prism validation: ${msg}`);
+      return;
+    }
     if (typeof document !== "undefined") {
       const active = document.activeElement;
       if (active instanceof HTMLElement) active.blur();
@@ -367,7 +390,7 @@ export function Step2Mesh({
     } finally {
       setPrismApplying(false);
     }
-  }, [caseId, onStepError, prismConfig]);
+  }, [caseId, meshInFlight, onStepError, prismConfig]);
 
   // V127: re-fetch the mesh-quality gauges when the AI coach applies a
   // regenerate_mesh proposal (V125 lifecycle). The same custom event
@@ -656,15 +679,21 @@ export function Step2Mesh({
             probe restores Step 2 in that scenario). The backend
             already returns a structured `polyMesh_not_ready` 422 if
             apply is clicked without a polyMesh, which the rejection
-            panel surfaces with a clear hint. Keep the button enabled
-            unless an apply is in flight. */}
+            panel surfaces with a clear hint.
+            R1 P1 (Codex 86gs): also disable while a gmsh remesh is
+            in flight — both routes mutate constant/polyMesh without
+            a case_lock, so concurrent runs would race. */}
           <button
             type="button"
             data-testid="step2-mesh-prism-apply"
-            disabled={prismApplying}
+            disabled={prismApplying || meshInFlight}
             onClick={applyPrismLayers}
             className="rounded-sm border border-emerald-600/60 bg-emerald-600/10 px-3 py-1 text-[11px] text-emerald-200 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-surface-700 disabled:bg-surface-950 disabled:text-surface-500"
-            title="Run snappyHexMesh addLayers on the existing polyMesh (mesh stage must have produced one)"
+            title={
+              meshInFlight
+                ? "Mesh stage running — wait for it to finish before applying prism layers"
+                : "Run snappyHexMesh addLayers on the existing polyMesh (mesh stage must have produced one)"
+            }
           >
             {prismApplying ? "Applying…" : "Apply prism layers"}
           </button>

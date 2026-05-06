@@ -614,6 +614,43 @@ describe("Step2Mesh · wired body", () => {
     expect(applyBtn.disabled).toBe(false);
   });
 
+  // R1 P1 (Codex 86gs): refuse to start prism apply while gmsh
+  // remesh is in flight — both backend routes mutate
+  // constant/polyMesh without a case_lock, so concurrent runs would
+  // race.
+  it("blocks prism apply with inline error while gmsh remesh is in flight", async () => {
+    const user = userEvent.setup();
+    let resolveMesh: ((v: MeshSuccessResponse) => void) | null = null;
+    apiMock.meshImported.mockImplementationOnce(
+      () =>
+        new Promise<MeshSuccessResponse>((resolve) => {
+          resolveMesh = resolve;
+        }),
+    );
+    const onStepError = vi.fn();
+    const { triggerAi } = renderStep({ onStepError });
+
+    // Kick off the mesh stage; do NOT await — it stays in flight.
+    const meshPromise = triggerAi();
+
+    const summary = screen
+      .getByTestId("step2-mesh-prism-layers")
+      .querySelector("summary") as HTMLElement;
+    await user.click(summary);
+
+    const applyBtn = screen.getByTestId(
+      "step2-mesh-prism-apply",
+    ) as HTMLButtonElement;
+    // While mesh is in flight, the button must be disabled.
+    await waitFor(() => expect(applyBtn.disabled).toBe(true));
+
+    // Resolve the mesh so the test cleanup completes.
+    resolveMesh?.(FAKE_MESH_RESPONSE);
+    await meshPromise;
+    // No prism API call ever fired.
+    expect(apiMock.meshPrismLayers).not.toHaveBeenCalled();
+  });
+
   it("surfaces backend polyMesh_not_ready hint when prism applied without polyMesh", async () => {
     const user = userEvent.setup();
     apiMock.meshPrismLayers.mockRejectedValueOnce(
