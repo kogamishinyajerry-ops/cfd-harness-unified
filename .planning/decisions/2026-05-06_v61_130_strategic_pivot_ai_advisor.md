@@ -21,7 +21,7 @@ parent_artifacts:
   - ui/backend/routes/case_solve.py (envelope mode dispatch · N1 will hard-strip envelope mutation behavior)
   - ui/frontend/src/pages/workbench/step_panel_shell/* (existing AI-COPILOT panels · N1 will reframe as "advise → user clicks button")
 counter_impact: +1 (autonomous_governance: true · charter / governance rule change. Kogami-trigger check: IS governance-rule change → MANDATORY Kogami review before status=Accepted. Codex governance review not directly triggered because no code diff; N1 implementation DECs that follow DO trigger Codex per RETRO-V61-001 cross-contract triggers.)
-notion_sync_status: not_synced (sync after Kogami review, per Kogami contract — Notion archives the Accepted state, not Proposed)
+notion_sync_status: synced 2026-05-06 (https://www.notion.so/DEC-V61-130-Strategic-pivot-AI-is-advisor-not-actor-Workbench-first-Fluent-StarCCM-parity-b-358c68942bed81da8770c17cd9b28db0)
 self_estimated_pass_rate: 70% (predicted Kogami may flag 1-2 governance-hygiene findings in the charter wording — typical for charter-class DECs per V61-087/088 history; 70% reflects a clean charter with reasonable chance of some scope-clarification or phrase-tightening). Kogami CHANGES_REQUIRED would block status=Accepted; APPROVE_WITH_COMMENTS allows close-inline per V61-088 convention.
 
 ---
