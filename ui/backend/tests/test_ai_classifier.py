@@ -1432,3 +1432,76 @@ def test_classifier_stale_replace_question_id_does_not_overflow_on_long_face_id(
     # stale_face_ids[] still carries the FULL long face_id so PUT
     # remove_face_ids can target it for deletion.
     assert replace_qs[0].stale_face_ids == [long_stale]
+
+
+def test_classifier_stale_replace_question_id_is_stable_per_face_across_reruns(
+    tmp_path,
+):
+    """Codex 86gs R8 P2#1: question.id must be stable per face across
+    uncertain reruns so the dialog state's pickedFaceIdForQuestion /
+    activeFaceQuestionId (keyed by question.id) survives a re-run.
+    The R9 fix uses sha256(face_id)[:16] as the surrogate; ordinal
+    indices (R8) would shift if the stale-face set changes between
+    runs, mis-routing an old pick to the wrong question.
+    """
+    case_dir = tmp_path / "channel_stable_id"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    valid_inlet = _bottom_face_id_of_channel()
+    valid_outlet = _top_face_id_of_channel()
+    stale_a = "fid_stale_a000000"
+    stale_b = "fid_stale_b000000"
+
+    annotations = _empty_doc("channel_stable_id")
+    for fid, name in [
+        (valid_inlet, "inlet_main"),
+        (stale_a, "inlet_a"),
+        (stale_b, "inlet_b"),
+        (valid_outlet, "outlet_main"),
+    ]:
+        annotations["faces"].append({
+            "face_id": fid,
+            "name": name,
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        })
+    res1 = classify_setup_bc(case_dir, annotations=annotations)
+    res2 = classify_setup_bc(case_dir, annotations=annotations)
+    qids1 = [q.id for q in res1.questions]
+    qids2 = [q.id for q in res2.questions]
+    assert qids1 == qids2, "question.ids must be deterministic"
+
+    # Per-face mapping: each replacement question's id depends only
+    # on its stale_face_ids[0], not the position in the list.
+    by_stale_a_in_res1 = next(
+        q for q in res1.questions if q.stale_face_ids == [stale_a]
+    )
+    by_stale_a_in_res2 = next(
+        q for q in res2.questions if q.stale_face_ids == [stale_a]
+    )
+    assert by_stale_a_in_res1.id == by_stale_a_in_res2.id
+
+    # Even if we add a new stale face that sorts before stale_a,
+    # the surrogate for stale_a stays the same — proving stability
+    # against set membership changes.
+    annotations_with_new_stale = {
+        **annotations,
+        "faces": annotations["faces"]
+        + [
+            {
+                "face_id": "fid_stale_AAA0000",  # sorts before stale_a
+                "name": "inlet_aaa",
+                "confidence": "user_authoritative",
+                "annotated_by": "human",
+                "annotated_at": "2026-04-29T00:00:00Z",
+            }
+        ],
+    }
+    res3 = classify_setup_bc(case_dir, annotations=annotations_with_new_stale)
+    by_stale_a_in_res3 = next(
+        q for q in res3.questions if q.stale_face_ids == [stale_a]
+    )
+    assert by_stale_a_in_res1.id == by_stale_a_in_res3.id, (
+        "surrogate must be face-keyed, NOT position-keyed"
+    )

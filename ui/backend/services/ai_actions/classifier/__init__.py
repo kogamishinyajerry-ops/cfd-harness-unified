@@ -21,6 +21,7 @@ multi-question scenarios. Future Era 2 may layer an LLM on top.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -560,15 +561,23 @@ def classify_setup_bc(
                 default_answer="inlet",
             ),
         )
-    # Codex R7 P2#1: question.id is capped at 128 chars but
-    # _FacePut.face_id allows up to 128 chars, so embedding the raw
-    # stale face_id would overflow on long ids. Use the sorted index
-    # as a fixed-length surrogate (stale_face_ids[] still carries the
-    # full face_id so the frontend's PUT can target it for deletion).
-    for idx, stale_id in enumerate(sorted(stale_inlet_pin_ids)):
+    # Codex R7 P2#1 + R8 P2#1: question.id is capped at 128 chars but
+    # face_id allows up to 128 chars, so embedding the raw stale
+    # face_id would overflow on long ids. Use a deterministic
+    # 16-hex-char prefix of sha256(stale_id) as a fixed-length
+    # surrogate — stable per face across uncertain reruns (so the
+    # frontend's pickedFaceIdForQuestion / activeFaceQuestionId
+    # state keyed by question.id survives a re-run with the same
+    # stale set), unlike the sorted-ordinal that R8 used. The full
+    # face_id is still carried in stale_face_ids[] for the PUT
+    # remove_face_ids deletion target.
+    def _stale_id_surrogate(stale: str) -> str:
+        return hashlib.sha256(stale.encode("utf-8")).hexdigest()[:16]
+
+    for stale_id in sorted(stale_inlet_pin_ids):
         questions.append(
             UnresolvedQuestion(
-                id=f"inlet_face_replace_{idx}",
+                id=f"inlet_face_replace_{_stale_id_surrogate(stale_id)}",
                 kind="face_label",
                 prompt=(
                     f"Previously pinned inlet face {stale_id!r} is no "
@@ -595,10 +604,10 @@ def classify_setup_bc(
                 default_answer="outlet",
             ),
         )
-    for idx, stale_id in enumerate(sorted(stale_outlet_pin_ids)):
+    for stale_id in sorted(stale_outlet_pin_ids):
         questions.append(
             UnresolvedQuestion(
-                id=f"outlet_face_replace_{idx}",
+                id=f"outlet_face_replace_{_stale_id_surrogate(stale_id)}",
                 kind="face_label",
                 prompt=(
                     f"Previously pinned outlet face {stale_id!r} is no "

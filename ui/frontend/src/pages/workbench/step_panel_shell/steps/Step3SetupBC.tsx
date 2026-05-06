@@ -602,15 +602,34 @@ export function Step3SetupBC({
         if (!composed) continue;
         const [faceId, label] = composed.split(":");
         if (!faceId) continue;
-        // Carry forward metadata from the stale annotation being
-        // replaced (if exactly one stale id maps to known metadata).
+        // Codex R8 P2#2 + R9 close: carry forward stale-face
+        // metadata onto the replacement ONLY when the replacement
+        // face has no existing value for that field. The replacement
+        // face's existing annotation may already carry engineer-
+        // entered patch_type / physics_notes (e.g., from a pre-
+        // resume AnnotationPanel save); blindly overwriting with the
+        // stale values would clobber the engineer's freshly-entered
+        // metadata. Only fill blank slots.
         let carryPatchType: FaceAnnotation["patch_type"] | undefined;
         let carryPhysicsNotes: FaceAnnotation["physics_notes"] | undefined;
         if (q.stale_face_ids && q.stale_face_ids.length === 1) {
           const stale = annotationByFaceId.get(q.stale_face_ids[0]);
+          const existingReplacement = annotationByFaceId.get(faceId);
           if (stale) {
-            carryPatchType = stale.patch_type;
-            carryPhysicsNotes = stale.physics_notes;
+            if (
+              !existingReplacement ||
+              existingReplacement.patch_type === undefined ||
+              existingReplacement.patch_type === null
+            ) {
+              carryPatchType = stale.patch_type;
+            }
+            if (
+              !existingReplacement ||
+              existingReplacement.physics_notes === undefined ||
+              existingReplacement.physics_notes === null
+            ) {
+              carryPhysicsNotes = stale.physics_notes;
+            }
           }
         }
         const replacement: FaceAnnotation = {
