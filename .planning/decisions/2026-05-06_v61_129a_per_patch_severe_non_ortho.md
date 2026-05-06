@@ -1,8 +1,8 @@
 ---
 decision_id: DEC-V61-129a
 title: Per-patch severe-non-ortho count from checkMesh nonOrthoFaces faceSet · narrow V129a (V129b heavy per-cell aggregation deferred)
-status: Proposed (2026-05-06 · pre-implementation surface scan complete + empirical container probe captured the OpenFOAM-10 faceSet output format; Codex pre-merge MANDATORY per RETRO-V61-001 cross-contract change touching backend schema + parser + frontend consumer)
-codex_tool_report_path: reports/codex_tool_reports/v61_129a_r1_chain.md (to be created)
+status: Accepted (2026-05-06 · Codex R3 APPROVE clean at 18bc660 · 3-round chain, BOTTOM of 3-4 prediction band. Empirical-capture discipline (faceSet body verified against OpenFOAM 10 container BEFORE writing the parser) prevented format-guess rounds; the two findings caught (R1 P1 bash-rc swallow, R2 P2 test substituting wrong path) were both real bugs caught the first time they were introduced.)
+codex_tool_report_path: reports/codex_tool_reports/v61_129a_r1_chain.md
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline per RETRO-V61-001)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-06
