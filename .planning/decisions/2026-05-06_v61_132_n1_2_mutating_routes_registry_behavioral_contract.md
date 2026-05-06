@@ -19,7 +19,7 @@ counter_impact: +1
 counter_value_after: 29 (V131=28)
 codex_review_relay: 86gs (xhigh) primary; CRS (high) fallback if 86gs 503
 kogami_review_path: .planning/reviews/kogami/v61_132_n1_2_mutating_routes_2026-05-06/ (to be created on draft commit)
-notion_sync_status: pending (session-end batch)
+notion_sync_status: synced 2026-05-06 (https://www.notion.so/DEC-V61-132-N1-2-MUTATING_ROUTES-registry-behavioral-sentinel-test-pre-commit-grep-lint-358c68942bed81da850afab20d9db3af)
 confidence: med
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-06

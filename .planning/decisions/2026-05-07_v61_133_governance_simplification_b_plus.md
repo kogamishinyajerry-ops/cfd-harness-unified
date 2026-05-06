@@ -18,7 +18,7 @@ counter_impact: +1
 counter_value_after: 30 (V132 was 29)
 codex_review_relay: 86gs (xhigh) primary; CRS (high) fallback if 86gs slow
 kogami_review_path: SKIPPED (per self-bootstrap §6 — this DEC creates the rule that retires Kogami auto-trigger; one-time bootstrap exception explicitly authorized by user)
-notion_sync_status: pending (session-end batch)
+notion_sync_status: synced 2026-05-06 (https://www.notion.so/DEC-V61-133-Governance-simplification-B-Kogami-opt-in-Codex-round-cap-DEC-scope-driven-re-358c68942bed81a3bdf6d086caf58d14)
 authored_by: Claude Code Opus 4.7 (1M context)
 authored_at: 2026-05-07
 confidence: high (clear mandate, narrow scope, reversible)
