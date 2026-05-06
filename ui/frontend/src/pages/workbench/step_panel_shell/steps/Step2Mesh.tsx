@@ -23,6 +23,16 @@ import {
   REFINEMENT_LEVEL_MAX,
   REFINEMENT_LEVEL_MIN,
 } from "@/types/mesh_imported";
+import type {
+  PatchPrismConfig,
+  PrismLayersRejectionDetail,
+  PrismLayersSuccessResponse,
+} from "@/types/mesh_prism_layers";
+import {
+  PRISM_EXPANSION_RATIO_MAX,
+  PRISM_EXPANSION_RATIO_MIN,
+  PRISM_MAX_LAYER_COUNT,
+} from "@/types/mesh_prism_layers";
 
 import { MeshQualityCard } from "../MeshQualityCard";
 import type { StepTaskPanelProps } from "../types";
@@ -67,6 +77,27 @@ const REJECTION_HINTS: Record<string, string> = {
     "This case has no triSurface/ STL to mesh — only imported cases can use the gmsh path.",
   refinement_zone_invalid:
     "A refinement zone has no overlap with the case geometry. Adjust the bbox or sphere center so it intersects the imported STL bounding box.",
+  // DEC-V61-137 (N2.3): prism-layer rejection hints.
+  polyMesh_not_ready:
+    "Run the mesh stage first — prism layers operate on the existing constant/polyMesh produced by gmsh.",
+  patch_not_found:
+    "The patch name does not match any patch in constant/polyMesh/boundary. Check the imported case's declared patches and retry.",
+  snappy_diverged:
+    "snappyHexMesh did not run cleanly. Inspect the host log (case_dir/log.snappyHexMesh) for the cause.",
+  snappy_addlayers_did_not_converge:
+    "snappyHexMesh ran but no layers were actually added. Reduce first_cell_height or expansion_ratio, or pick a different patch.",
+  snappy_container_failed:
+    "The cfd-openfoam container could not run snappyHexMesh. Confirm cfd-openfoam is running and reachable.",
+};
+
+// DEC-V61-137 (N2.3): default prism config for the form. First-cell
+// height defaults to 1e-4 (typical wall-bounded RANS y+ ~ 1 starting
+// point); engineer must edit before clicking apply.
+const DEFAULT_PRISM_CONFIG: PatchPrismConfig = {
+  patch: "walls",
+  first_cell_height: 1.0e-4,
+  expansion_ratio: 1.2,
+  num_layers: 5,
 };
 
 export function Step2Mesh({
@@ -94,6 +125,20 @@ export function Step2Mesh({
   const [zonesOpen, setZonesOpen] = useState(false);
   const [zones, setZones] = useState<MeshRefinementZone[]>([]);
   const [zonesError, setZonesError] = useState<string | null>(null);
+  // DEC-V61-137 (N2.3): prism-layer config + apply state. Engineer
+  // explicit click — NOT bound to the [AI 处理] action — because
+  // prism layers refresh the existing polyMesh and are an additive
+  // step the engineer chooses after the gmsh stage succeeds.
+  const [prismOpen, setPrismOpen] = useState(false);
+  const [prismConfig, setPrismConfig] = useState<PatchPrismConfig>(
+    DEFAULT_PRISM_CONFIG,
+  );
+  const [prismResponse, setPrismResponse] =
+    useState<PrismLayersSuccessResponse | null>(null);
+  const [prismRejection, setPrismRejection] =
+    useState<PrismLayersRejectionDetail | null>(null);
+  const [prismError, setPrismError] = useState<string | null>(null);
+  const [prismApplying, setPrismApplying] = useState(false);
   // V127: bumped on every successful mesh regeneration so the
   // MeshQualityCard child re-fetches against the new polyMesh. Also
   // listens for ai-coach:proposal-applied (regenerate_mesh tool) so
@@ -254,6 +299,75 @@ export function Step2Mesh({
     registerAiAction(triggerMesh);
     return () => registerAiAction(null);
   }, [registerAiAction, triggerMesh]);
+
+  // DEC-V61-137 (N2.3): explicit prism-apply handler. Distinct from
+  // triggerMesh because prism layers depend on a successful mesh run
+  // and require engineer-driven explicit confirmation (additive step,
+  // not part of the [AI 处理] gmsh kick-off).
+  const applyPrismLayers = useCallback(async () => {
+    setPrismRejection(null);
+    setPrismError(null);
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+    }
+    // Client-side defensive validation. Backend re-validates.
+    if (!prismConfig.patch || prismConfig.patch.length === 0) {
+      const msg = "patch name required";
+      setPrismError(msg);
+      onStepError(`prism validation: ${msg}`);
+      return;
+    }
+    if (!(prismConfig.first_cell_height > 0)) {
+      const msg = "first_cell_height must be > 0";
+      setPrismError(msg);
+      onStepError(`prism validation: ${msg}`);
+      return;
+    }
+    if (
+      prismConfig.expansion_ratio < PRISM_EXPANSION_RATIO_MIN ||
+      prismConfig.expansion_ratio > PRISM_EXPANSION_RATIO_MAX
+    ) {
+      const msg = `expansion_ratio must be in [${PRISM_EXPANSION_RATIO_MIN}, ${PRISM_EXPANSION_RATIO_MAX}]`;
+      setPrismError(msg);
+      onStepError(`prism validation: ${msg}`);
+      return;
+    }
+    if (
+      !Number.isInteger(prismConfig.num_layers) ||
+      prismConfig.num_layers < 1 ||
+      prismConfig.num_layers > PRISM_MAX_LAYER_COUNT
+    ) {
+      const msg = `num_layers must be an integer in [1, ${PRISM_MAX_LAYER_COUNT}]`;
+      setPrismError(msg);
+      onStepError(`prism validation: ${msg}`);
+      return;
+    }
+    setPrismApplying(true);
+    try {
+      const r = await api.meshPrismLayers(caseId, [prismConfig]);
+      setPrismResponse(r);
+      setMeshGenSeq((s) => s + 1);
+    } catch (e) {
+      if (
+        e instanceof ApiError &&
+        e.detail &&
+        typeof e.detail === "object" &&
+        !Array.isArray(e.detail) &&
+        "failing_check" in (e.detail as Record<string, unknown>)
+      ) {
+        const detail = e.detail as PrismLayersRejectionDetail;
+        setPrismRejection(detail);
+        onStepError(`prism rejected: ${detail.failing_check}`);
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        setPrismError(msg);
+        onStepError(msg);
+      }
+    } finally {
+      setPrismApplying(false);
+    }
+  }, [caseId, onStepError, prismConfig]);
 
   // V127: re-fetch the mesh-quality gauges when the AI coach applies a
   // regenerate_mesh proposal (V125 lifecycle). The same custom event
@@ -462,6 +576,145 @@ export function Step2Mesh({
               className="rounded-sm border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200"
             >
               {zonesError}
+            </p>
+          )}
+        </div>
+      </details>
+
+      {/* DEC-V61-137 (N2.3): Prism layers (boundary-layer addLayers).
+       *  Distinct from the gmsh stage — engineer clicks "Apply prism
+       *  layers" after a successful mesh run. v0 supports a single
+       *  patch; multi-patch is N2.3-extend. Workbench-first: form
+       *  inputs, no AI surface added; backend mutating route is
+       *  registered in V132 MUTATING_ROUTES contract. */}
+      <details
+        data-testid="step2-mesh-prism-layers"
+        className="rounded-sm border border-surface-800 bg-surface-950/40"
+        open={prismOpen}
+        onToggle={(e) => setPrismOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="cursor-pointer px-2 py-1 text-[11px] font-mono uppercase tracking-wider text-surface-300 hover:text-surface-100">
+          Boundary layers · prism (snappyHexMesh)
+        </summary>
+        <div className="space-y-2 border-t border-surface-800 p-2">
+          <p className="text-[11px] text-surface-400">
+            Adds wall-normal prism layers to the existing polyMesh via
+            snappyHexMesh addLayers. Run the mesh stage first, then
+            click "Apply prism layers" — this refreshes
+            constant/polyMesh in place. v0 accepts one patch; multi-
+            patch in N2.3-extend.
+          </p>
+          <PrismFieldInput
+            label="patch"
+            hint="Patch name from constant/polyMesh/boundary"
+            type="text"
+            value={prismConfig.patch}
+            onChange={(v) =>
+              setPrismConfig({ ...prismConfig, patch: v as string })
+            }
+          />
+          <PrismFieldInput
+            label="first_cell_height"
+            hint="Wall-normal thickness of the first layer (case units)"
+            type="number"
+            value={prismConfig.first_cell_height}
+            onChange={(v) =>
+              setPrismConfig({
+                ...prismConfig,
+                first_cell_height: v as number,
+              })
+            }
+          />
+          <PrismFieldInput
+            label="expansion_ratio"
+            hint={`Geometric expansion (${PRISM_EXPANSION_RATIO_MIN}-${PRISM_EXPANSION_RATIO_MAX})`}
+            type="number"
+            value={prismConfig.expansion_ratio}
+            onChange={(v) =>
+              setPrismConfig({
+                ...prismConfig,
+                expansion_ratio: v as number,
+              })
+            }
+          />
+          <PrismFieldInput
+            label="num_layers"
+            hint={`Number of prism layers (1-${PRISM_MAX_LAYER_COUNT})`}
+            type="number"
+            value={prismConfig.num_layers}
+            integer
+            onChange={(v) =>
+              setPrismConfig({
+                ...prismConfig,
+                num_layers: Math.round(v as number),
+              })
+            }
+          />
+          <button
+            type="button"
+            data-testid="step2-mesh-prism-apply"
+            disabled={prismApplying || !response}
+            onClick={applyPrismLayers}
+            className="rounded-sm border border-emerald-600/60 bg-emerald-600/10 px-3 py-1 text-[11px] text-emerald-200 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-surface-700 disabled:bg-surface-950 disabled:text-surface-500"
+            title={
+              !response
+                ? "Run the mesh stage first to produce constant/polyMesh"
+                : "Run snappyHexMesh addLayers on the existing polyMesh"
+            }
+          >
+            {prismApplying ? "Applying…" : "Apply prism layers"}
+          </button>
+          {prismResponse && (
+            <div
+              data-testid="step2-mesh-prism-success"
+              className="rounded-sm border border-emerald-500/30 bg-emerald-500/5 p-2 text-[11px]"
+            >
+              <strong className="text-emerald-300">
+                Prism layers applied
+              </strong>
+              <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 font-mono">
+                <dt className="text-surface-500">layers_added</dt>
+                <dd className="text-surface-200">
+                  {prismResponse.prism_summary.layers_added}
+                </dd>
+                <dt className="text-surface-500">coverage</dt>
+                <dd className="text-surface-200">
+                  {prismResponse.prism_summary.coverage_fraction !== null
+                    ? `${(prismResponse.prism_summary.coverage_fraction * 100).toFixed(1)}%`
+                    : "(unparsed)"}
+                </dd>
+                <dt className="text-surface-500">time</dt>
+                <dd className="text-surface-200">
+                  {prismResponse.prism_summary.generation_time_s.toFixed(2)}s
+                </dd>
+              </dl>
+            </div>
+          )}
+          {prismRejection && (
+            <div
+              data-testid="step2-mesh-prism-rejection"
+              className="rounded-sm border border-rose-500/40 bg-rose-500/10 p-2 text-[11px]"
+            >
+              <div className="flex items-baseline justify-between">
+                <strong className="text-rose-200">Prism rejected</strong>
+                <code className="font-mono text-rose-300">
+                  {prismRejection.failing_check}
+                </code>
+              </div>
+              <p className="mt-1 text-rose-200/90">{prismRejection.reason}</p>
+              {REJECTION_HINTS[prismRejection.failing_check] && (
+                <p className="mt-1 text-rose-200/80">
+                  {REJECTION_HINTS[prismRejection.failing_check]}
+                </p>
+              )}
+            </div>
+          )}
+          {prismError && (
+            <p
+              data-testid="step2-mesh-prism-error"
+              className="rounded-sm border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-rose-200"
+            >
+              {prismError}
             </p>
           )}
         </div>
@@ -699,6 +952,60 @@ function RefinementZoneRow({
         </div>
       )}
     </div>
+  );
+}
+
+// DEC-V61-137 (N2.3): single-row form input for prism config. Text
+// inputs use string draft state internally to avoid the partial-edit
+// snap-back that ZoneNumberInput documents below; number inputs use
+// the same draft pattern.
+function PrismFieldInput({
+  label,
+  hint,
+  type,
+  value,
+  onChange,
+  integer = false,
+}: {
+  label: string;
+  hint: string;
+  type: "text" | "number";
+  value: string | number;
+  onChange: (next: string | number) => void;
+  integer?: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? String(value);
+  return (
+    <label
+      data-testid={`step2-mesh-prism-${label}`}
+      className="flex items-baseline gap-2 text-[11px]"
+    >
+      <span className="w-32 font-mono text-surface-200">{label}</span>
+      <input
+        type="text"
+        inputMode={type === "number" ? "decimal" : "text"}
+        value={display}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setDraft(raw);
+          if (type === "text") {
+            onChange(raw);
+            return;
+          }
+          if (raw === "" || raw === "-" || raw === "." || raw === "-.") {
+            return;
+          }
+          const n = Number(raw);
+          if (Number.isFinite(n)) {
+            onChange(integer ? Math.round(n) : n);
+          }
+        }}
+        onBlur={() => setDraft(null)}
+        className="w-32 rounded-sm border border-surface-700 bg-surface-950 px-2 py-1 font-mono text-surface-100"
+      />
+      <span className="flex-1 text-surface-400">{hint}</span>
+    </label>
   );
 }
 

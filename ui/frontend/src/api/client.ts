@@ -333,6 +333,58 @@ export const api = {
     return result;
   },
 
+  // DEC-V61-137 (N2.3): snappyHexMesh addLayers stage. Engineer-driven
+  // boundary-layer prism injection on top of an already-existing
+  // polyMesh. Distinct POST endpoint registered in V132 MUTATING_ROUTES.
+  meshPrismLayers: async (
+    caseId: string,
+    patches: ReadonlyArray<
+      import("@/types/mesh_prism_layers").PatchPrismConfig
+    >,
+  ): Promise<
+    import("@/types/mesh_prism_layers").PrismLayersSuccessResponse
+  > => {
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/mesh/prism-layers`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ patches }),
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail:
+        | import("@/types/mesh_prism_layers").PrismLayersRejectionDetail
+        | string
+        | undefined;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as { reason: string }).reason
+          : typeof detail === "string"
+            ? detail
+            : `prism layers failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    const result = (await resp.json()) as import(
+      "@/types/mesh_prism_layers"
+    ).PrismLayersSuccessResponse;
+    // The route refreshes constant/polyMesh in place, so MeshQualityCard
+    // listeners need the same invalidation signal as a regular mesh
+    // mutation.
+    dispatchMeshMutated(caseId);
+    return result;
+  },
+
   // Phase-1A LDC demo (DEC-V61-097): the back-half routes wire Steps
   // 3 (setup-bc), 4 (solve), 5 (results) of the M-PANELS step panel.
   setupBC: async (

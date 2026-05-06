@@ -92,6 +92,14 @@ try:
 except ModuleNotFoundError:
     mesh_imported = None  # type: ignore[assignment]
 
+# DEC-V61-137 (N2.3): snappyHexMesh addLayers POST endpoint. Same
+# optional-import discipline as mesh_imported because the service uses
+# the docker SDK (available via the [workbench] / [ui] extra).
+try:
+    from ui.backend.routes import mesh_prism_layers  # noqa: F401
+except ModuleNotFoundError:
+    mesh_prism_layers = None  # type: ignore[assignment]
+
 try:
     from ui.backend.routes import geometry_render  # noqa: F401
 except ModuleNotFoundError:
@@ -209,6 +217,10 @@ if demo_fixtures is not None:
     app.include_router(demo_fixtures.router, prefix="/api", tags=["demo-fixtures"])
 if mesh_imported is not None:
     app.include_router(mesh_imported.router, prefix="/api", tags=["mesh-imported"])
+if mesh_prism_layers is not None:
+    app.include_router(
+        mesh_prism_layers.router, prefix="/api", tags=["mesh-prism-layers"]
+    )
 if geometry_render is not None:
     app.include_router(geometry_render.router, prefix="/api", tags=["geometry-render"])
 if case_solve is not None:
