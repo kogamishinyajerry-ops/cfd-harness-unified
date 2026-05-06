@@ -123,6 +123,24 @@ def _setup_bc_failure_to_http(exc: BCSetupError) -> HTTPException:
                 failing_check="mesh_missing", detail=msg
             ).model_dump(),
         )
+    # DEC-V61-131 N1.1 R6 (Codex 86gs R5 P2 close): the apply route
+    # now passes the unresolved case_dir through to setup_*_bc so
+    # case_lock's O_NOFOLLOW symlink-escape guard runs. CaseLockError
+    # surfaces inside setup_*_bc as ``BCSetupError`` whose message
+    # carries "could not acquire case lock for setup_..." plus the
+    # underlying CaseLockError message ("possible symlink escape" or
+    # "lock_acquire_failed"). Map the symlink-containment substring to
+    # 422 with the canonical V108/V109 ``symlink_escape`` failing_check
+    # so callers see the same typed rejection as other case-mutation
+    # routes; otherwise it would fall through to 500/write_failed and
+    # break the V61-109 contract.
+    if "possible symlink escape" in msg or "symlink_escape" in msg:
+        return HTTPException(
+            status_code=422,
+            detail=SetupBcRejection(
+                failing_check="symlink_escape", detail=msg
+            ).model_dump(),
+        )
     return HTTPException(
         status_code=500,
         detail=SetupBcRejection(

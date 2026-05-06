@@ -1248,3 +1248,123 @@ def test_full_loop_channel_executor_writes_correct_inlet_velocity(tmp_path):
     assert "zeroGradient" in u_text
     assert "walls" in u_text
     assert "noSlip" in u_text
+
+
+# ────────── DEC-V61-131 N1.1 R6 (Codex 86gs R5 P1) ──────────
+
+
+def test_classifier_channel_partially_stale_inlet_stays_uncertain(tmp_path):
+    """Codex 86gs R5 P1#1: when 2 inlet faces were pinned and 1 becomes
+    stale (e.g., post-remesh), the classifier MUST stay uncertain so
+    the engineer is forced to re-pick. Silently dropping the stale
+    face would change the BC selection from 2 inlet faces to 1
+    without consent.
+    """
+    case_dir = tmp_path / "channel_partial_stale"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    annotations = _empty_doc("channel_partial_stale")
+    valid_inlet = _bottom_face_id_of_channel()
+    stale_inlet = "fid_stale0000000"  # not on current boundary
+    valid_outlet = _top_face_id_of_channel()
+    annotations["faces"].extend([
+        {
+            "face_id": valid_inlet,
+            "name": "inlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": stale_inlet,
+            "name": "inlet_secondary",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": valid_outlet,
+            "name": "outlet_main",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+    ])
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    # MUST NOT silently apply with just the surviving inlet.
+    assert res.confidence == "uncertain"
+    qids = {q.id for q in res.questions}
+    assert "inlet_face" in qids  # engineer prompted to re-pick inlet
+    # Outlet was untouched, no question for it.
+    assert "outlet_face" not in qids
+    # Confident-only fields stay empty when verification fails.
+    assert res.inlet_face_ids == ()
+    assert res.outlet_face_ids == ()
+
+
+def test_classifier_channel_ambiguity_resolves_with_fresh_disjoint_picks(tmp_path):
+    """Codex 86gs R5 P1#2: ambiguity (one face_id labeled as both
+    inlet AND outlet) must converge once the engineer picks fresh
+    disjoint inlet/outlet faces, even if the legacy ambiguous
+    annotation persists in storage (handleDialogResume only adds,
+    never deletes).
+    """
+    case_dir = tmp_path / "channel_amb_recover"
+    case_dir.mkdir()
+    _stage_full_channel(case_dir)
+    inlet_fid = _bottom_face_id_of_channel()
+    outlet_fid = _top_face_id_of_channel()
+    # Simulate a rare engineer mistake: face_id X labeled as both
+    # inlet AND outlet. Then the engineer picks fresh disjoint faces
+    # for both roles. The legacy ambiguous annotations on X persist.
+    annotations = _empty_doc("channel_amb_recover")
+    # Pick a third face (z=0 plane corner, but a different face_id) as
+    # the original ambiguous one. Use the inlet face_id as the
+    # ambiguous one for simplicity — it's a valid boundary face.
+    ambiguous_fid = inlet_fid
+    annotations["faces"].extend([
+        {
+            "face_id": ambiguous_fid,
+            "name": "inlet_legacy",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        {
+            "face_id": ambiguous_fid,
+            "name": "outlet_legacy",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:00Z",
+        },
+        # Engineer's fresh picks (disjoint).
+        {
+            "face_id": outlet_fid,  # use outlet_fid as the new inlet
+            "name": "inlet_new",
+            "confidence": "user_authoritative",
+            "annotated_by": "human",
+            "annotated_at": "2026-04-29T00:00:01Z",
+        },
+    ])
+    # We need a 3rd face for the new outlet — use a side face from
+    # the channel fixture. Fall back to any boundary face that is
+    # neither inlet_fid nor outlet_fid.
+    from ui.backend.services.case_annotations import face_id
+
+    side_fid = face_id(
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 0.0, 10.0), (0.0, 0.0, 10.0)]
+    )
+    annotations["faces"].append({
+        "face_id": side_fid,
+        "name": "outlet_new",
+        "confidence": "user_authoritative",
+        "annotated_by": "human",
+        "annotated_at": "2026-04-29T00:00:01Z",
+    })
+    res = classify_setup_bc(case_dir, annotations=annotations)
+    # The ambiguous-X entries cancel out (X excluded from both sides);
+    # the fresh disjoint picks (outlet_fid as inlet, side_fid as
+    # outlet) are valid and disjoint. → confident.
+    assert res.confidence == "confident", (res.summary, res.rationale)
+    assert res.inlet_face_ids == (outlet_fid,)
+    assert res.outlet_face_ids == (side_fid,)

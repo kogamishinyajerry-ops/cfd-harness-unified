@@ -509,46 +509,79 @@ def classify_setup_bc(
     raw_outlet_pin_ids = _pinned_face_ids_with_name_substring(
         annotations, "outlet"
     )
-    # DEC-V61-131 N1.1 R5 (Codex 86gs R4 P1): drop stale pins (face_ids
-    # that are no longer on the current boundary, e.g., after a remesh)
-    # before treating the case as pinned. Without this, a stale pin
-    # would force the classifier into the channel_pin_mismatch
-    # free_text branch, the apply route would surface 422, the frontend
-    # would re-run the envelope, and the classifier would return the
-    # SAME free_text question — a recovery loop the engineer cannot
-    # exit through the dialog UI. Filtering converts stale-pin cases
-    # into the natural "not pinned" branch with face_label questions,
-    # so the engineer re-picks via the standard viewport flow.
+    # DEC-V61-131 N1.1 R6 (Codex 86gs R5 P1#1+#2): tri-axis filter
+    # before the role-classification branches:
+    #   * stale → face_id not on current boundary (e.g., post-remesh).
+    #   * ambiguous → face_id pinned as BOTH inlet and outlet (user
+    #     mistakenly added two annotations for the same face).
+    # Stale pins are kept in stale_*_pin_ids and force the result
+    # uncertain even when the surviving pins would otherwise be
+    # confident — without this, a 2-face inlet whose 2nd face becomes
+    # stale would silently apply with only the surviving 1 face,
+    # quietly changing the engineer's BC selection (Codex R5 P1#1).
+    # Ambiguous face_ids are excluded from both inlet_pin_ids and
+    # outlet_pin_ids so a fresh disjoint pick converges to confident
+    # without the engineer having to delete the legacy duplicate
+    # annotation (Codex R5 P1#2 — handleDialogResume only adds
+    # annotations, never deletes; the previous ambiguous-only branch
+    # could not converge).
     boundary_ids_for_filter = _boundary_face_ids(case_dir)
-    inlet_pin_ids = raw_inlet_pin_ids & boundary_ids_for_filter
-    outlet_pin_ids = raw_outlet_pin_ids & boundary_ids_for_filter
+    on_boundary_inlet = raw_inlet_pin_ids & boundary_ids_for_filter
+    on_boundary_outlet = raw_outlet_pin_ids & boundary_ids_for_filter
+    ambiguous = on_boundary_inlet & on_boundary_outlet
+    inlet_pin_ids = on_boundary_inlet - ambiguous
+    outlet_pin_ids = on_boundary_outlet - ambiguous
     stale_inlet_pin_ids = raw_inlet_pin_ids - boundary_ids_for_filter
     stale_outlet_pin_ids = raw_outlet_pin_ids - boundary_ids_for_filter
     inlet_pinned = bool(inlet_pin_ids)
     outlet_pinned = bool(outlet_pin_ids)
 
+    # Codex R5 P1#1 follow-up: a role with stale pins must also surface
+    # an inlet_face/outlet_face face_label question so the engineer can
+    # re-pick — otherwise the uncertain return below would have no
+    # actionable questions and the dialog would render empty.
+    needs_inlet_pick = (not inlet_pinned) or bool(stale_inlet_pin_ids)
+    needs_outlet_pick = (not outlet_pinned) or bool(stale_outlet_pin_ids)
     questions: list[UnresolvedQuestion] = []
-    if not inlet_pinned:
+    if needs_inlet_pick:
+        if stale_inlet_pin_ids:
+            inlet_prompt = (
+                f"Previously pinned inlet face(s) "
+                f"{sorted(stale_inlet_pin_ids)} are no longer on the "
+                f"current boundary (mesh may have been regenerated). "
+                f"Click the inlet face in the viewport."
+            )
+        else:
+            inlet_prompt = (
+                f"Non-cube geometry (aspect ratio {ar:.3f}). Click "
+                f"the inlet face in the viewport."
+            )
         questions.append(
             UnresolvedQuestion(
                 id="inlet_face",
                 kind="face_label",
-                prompt=(
-                    f"Non-cube geometry (aspect ratio {ar:.3f}). Click "
-                    f"the inlet face in the viewport."
-                ),
+                prompt=inlet_prompt,
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
                 default_answer="inlet",
             ),
         )
-    if not outlet_pinned:
+    if needs_outlet_pick:
+        if stale_outlet_pin_ids:
+            outlet_prompt = (
+                f"Previously pinned outlet face(s) "
+                f"{sorted(stale_outlet_pin_ids)} are no longer on the "
+                f"current boundary. Click the outlet face in the "
+                f"viewport."
+            )
+        else:
+            outlet_prompt = "Click the outlet face in the viewport."
         questions.append(
             UnresolvedQuestion(
                 id="outlet_face",
                 kind="face_label",
-                prompt="Click the outlet face in the viewport.",
+                prompt=outlet_prompt,
                 needs_face_selection=True,
                 candidate_face_ids=[],
                 candidate_options=[],
@@ -556,42 +589,20 @@ def classify_setup_bc(
             ),
         )
 
-    if inlet_pinned and outlet_pinned:
-        # Both pinned by name AND every pin survived the boundary
-        # filter. Only ambiguity (same face_id pinned as both inlet and
-        # outlet — a user error, not a stale-pin scenario) needs a
-        # special branch; stale pins were already filtered above.
-        ambiguous = inlet_pin_ids & outlet_pin_ids
-        if ambiguous:
-            return ClassificationResult(
-                geometry_class="non_cube",
-                confidence="uncertain",
-                questions=[
-                    UnresolvedQuestion(
-                        id="inlet_face",
-                        kind="face_label",
-                        prompt=(
-                            f"face_id {sorted(ambiguous)} is pinned as "
-                            f"BOTH inlet and outlet — pick a distinct "
-                            f"inlet face in the viewport."
-                        ),
-                        needs_face_selection=True,
-                        candidate_face_ids=[],
-                        candidate_options=[],
-                        default_answer="inlet",
-                    ),
-                ],
-                summary=(
-                    f"Non-cube geometry (aspect ratio {ar:.3f}) — same "
-                    f"face pinned as both inlet and outlet. Re-pick "
-                    f"distinct faces."
-                ),
-                rationale=(
-                    f"non_cube_ambiguous_pin ar={ar:.4f} extents={extents} "
-                    f"ambiguous={sorted(ambiguous)}"
-                ),
-            )
-
+    # Codex R5 P1#1: confident requires inlet+outlet pinned AND no
+    # stale pins surviving on either axis. A non-empty stale set on
+    # either side means the engineer's intent partially survived a
+    # remesh; silently dropping the stale faces would change the BC
+    # selection from N to <N faces. Force uncertain so the engineer
+    # explicitly re-picks. Ambiguity is already handled above by
+    # excluding ambiguous face_ids from inlet_pin_ids / outlet_pin_ids,
+    # so a fresh disjoint pick converges naturally to confident.
+    if (
+        inlet_pinned
+        and outlet_pinned
+        and not stale_inlet_pin_ids
+        and not stale_outlet_pin_ids
+    ):
         # Verification passed — confident · executor will write dicts.
         return ClassificationResult(
             geometry_class="non_cube",

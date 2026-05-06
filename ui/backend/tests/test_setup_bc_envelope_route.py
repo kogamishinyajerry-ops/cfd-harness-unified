@@ -973,3 +973,35 @@ def test_apply_concurrent_annotations_write_caught_by_lock(
     # Apply must succeed (lock kept the saver out until executor
     # completed); concurrent saver bumped revision afterwards.
     assert r.status_code == 200, r.text
+
+
+def test_apply_symlink_escape_surfaces_as_422_typed(monkeypatch, tmp_path):
+    """Codex 86gs R5 P2: when setup_*_bc internal case_lock raises
+    CaseLockError(symlink_escape) (V61-109 O_NOFOLLOW containment),
+    the apply route must surface 422 with failing_check=symlink_escape
+    rather than the default 500/write_failed fallback. The pre-N1.1
+    contract was that case-mutation routes consistently report
+    symlink_escape with a typed 422.
+    """
+    from ui.backend.services.case_solve import BCSetupError
+
+    imported = _isolated_imported(monkeypatch, tmp_path)
+    case_id = _safe_case_id()
+    _stage_imported_case(imported, case_id)
+
+    def explode_with_symlink_escape(*args, **kwargs):
+        raise BCSetupError(
+            "could not acquire case lock for setup_ldc_bc: refusing "
+            "to use case dir — possible symlink escape"
+        )
+
+    monkeypatch.setattr(
+        "ui.backend.routes.case_solve.setup_ldc_bc",
+        explode_with_symlink_escape,
+    )
+
+    client = _new_client()
+    r = client.post(f"/api/import/{case_id}/setup-bc")
+    assert r.status_code == 422, r.text
+    body = r.json()
+    assert body["detail"]["failing_check"] == "symlink_escape"
