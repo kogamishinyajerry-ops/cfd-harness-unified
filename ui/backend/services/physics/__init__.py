@@ -27,6 +27,11 @@ from ui.backend.services.physics.regimes_library import (
     get_regime_preset,
     list_regime_preset_ids,
 )
+from ui.backend.services.physics.writer import (
+    render_momentum_transport,
+    render_physical_properties,
+    write_physics_dicts,
+)
 
 __all__ = [
     "MATERIAL_PRESETS",
@@ -37,4 +42,7 @@ __all__ = [
     "get_regime_preset",
     "list_material_preset_ids",
     "list_regime_preset_ids",
+    "render_momentum_transport",
+    "render_physical_properties",
+    "write_physics_dicts",
 ]
