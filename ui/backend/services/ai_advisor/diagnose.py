@@ -22,8 +22,10 @@ symlink escape from ``case_dir``.
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -97,6 +99,11 @@ def _read_solver_log_tail(case_dir: Path) -> Optional[str]:
     Path containment: each candidate is resolved and checked to live
     under ``case_dir.resolve()`` before reading. Symlinks pointing
     outside the case directory are rejected.
+
+    Bounded read (Codex N6.3 R0 P1): for files larger than
+    ``_LOG_MAX_BYTES``, seek to the tail rather than loading the
+    entire file into memory. A 1 GiB log is read as 256 KiB +
+    one ``stat`` call, not 1 GiB into RAM.
     """
     try:
         case_root = case_dir.resolve()
@@ -119,11 +126,25 @@ def _read_solver_log_tail(case_dir: Path) -> Optional[str]:
             )
             continue
         try:
-            data = candidate.read_bytes()
+            size = resolved.stat().st_size
         except OSError:
             continue
-        if len(data) > _LOG_MAX_BYTES:
-            data = data[-_LOG_MAX_BYTES:]
+        try:
+            with open(resolved, "rb") as fh:
+                if size > _LOG_MAX_BYTES:
+                    # Seek-tail: only the last _LOG_MAX_BYTES are
+                    # ever pulled into memory. Discard one
+                    # potentially-partial leading line so the decoded
+                    # text starts on a clean line boundary.
+                    fh.seek(-_LOG_MAX_BYTES, io.SEEK_END)
+                    data = fh.read()
+                    nl_idx = data.find(b"\n")
+                    if nl_idx != -1 and nl_idx < len(data) - 1:
+                        data = data[nl_idx + 1 :]
+                else:
+                    data = fh.read()
+        except OSError:
+            continue
         try:
             text = data.decode("utf-8", errors="replace")
         except UnicodeDecodeError:
@@ -148,15 +169,31 @@ def _residual_trajectory_signal(
 ) -> Optional[FailureMode]:
     """Classify a residual sequence into a failure_mode signal.
 
-    Returns None when the sequence is empty / converging cleanly.
+    Returns None when the sequence is empty, oscillating, or
+    converging cleanly.
+
+    Codex N6.3 R0 P2: divergence requires **monotonic** growth,
+    not just first-vs-last ratio. A spiky/oscillating run whose
+    final sample happens to land >10x above the first must NOT
+    be labeled diverging — that's the wrong top hypothesis and
+    misleads the engineer toward Co-reduction fixes when the
+    real issue is solver instability.
     """
     if len(residuals) < 2:
         return None
-    # Diverging: monotonic increase by ≥10x over the window.
+    # Diverging: monotonic increase across every consecutive pair
+    # AND ≥10x ratio from first to last.
     first = residuals[0]
     last = residuals[-1]
     if first > 0 and last / first > 10.0:
-        return "diverging_residuals"
+        is_monotonic_increasing = all(
+            residuals[i] >= residuals[i - 1] for i in range(1, len(residuals))
+        )
+        if is_monotonic_increasing:
+            return "diverging_residuals"
+        # Falls through: ratio satisfied but not monotonic →
+        # oscillating; no signal emitted (uncertain trajectory
+        # is better than wrong hypothesis).
     # Stalled: every consecutive delta below 1% relative.
     for i in range(1, len(residuals)):
         prev = residuals[i - 1]
