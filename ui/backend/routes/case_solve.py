@@ -874,6 +874,25 @@ def solve(case_id: str) -> SolveSummary:
         # load-bearing guards.
         pass
 
+    # B-ext-6.1 F15 fix layer 1 (DEC-V61-196): create
+    # <case_dir>/<run_id> → <final_time_dir> symlink so the existing
+    # /api/cases/{id}/results/{run_id}/field/{name} route resolves to
+    # the OpenFOAM time-step files. The route looks at
+    # <case_dir>/<run_id>/<name>; without the symlink it returns 404
+    # run_not_found because OpenFOAM writes time-step output under
+    # <case_dir>/0/, <case_dir>/0.5/, etc., NOT under <case_dir>/<run_id>/.
+    # Best-effort: if symlink creation fails (race, FS without
+    # symlink support), the route still returns 404 — same as before.
+    try:
+        if result.time_directories:
+            final_time_name = result.time_directories[-1]
+            target = case_dir / final_time_name
+            link = case_dir / run_id
+            if target.is_dir() and not link.exists():
+                link.symlink_to(final_time_name, target_is_directory=True)
+    except OSError:
+        pass
+
     return SolveSummary(
         case_id=result.case_id,
         end_time_reached=result.end_time_reached,

@@ -239,5 +239,12 @@ def get_case_field_sample(
         resolved,
         media_type="application/octet-stream",
         filename=f"field-{run_id}-{name}.bin",
-        headers={"X-Field-Point-Count": str(result.point_count)},
+        headers={
+            "X-Field-Point-Count": str(result.point_count),
+            # B-ext-6.1 F15 fix layer 2 (DEC-V61-196): U + other vector
+            # fields stream as 3 floats per cell. Bytes-on-the-wire =
+            # 4 * point_count * components_per_cell. Frontend +
+            # persona post-processing both consume this header.
+            "X-Field-Components": str(result.components_per_cell),
+        },
     )

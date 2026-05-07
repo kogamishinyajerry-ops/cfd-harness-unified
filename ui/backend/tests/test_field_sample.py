@@ -76,6 +76,51 @@ def _stage_field(
     return field_path
 
 
+_NONUNIFORM_VECTOR_FIELD = """\
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "{run_id}";
+    object      {name};
+}}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   nonuniform List<vector>
+{count}
+(
+{triples}
+)
+;
+
+boundaryField
+{{
+    inlet  {{ type fixedValue; value uniform (1 0 0); }}
+    outlet {{ type zeroGradient; }}
+}}
+"""
+
+
+def _stage_vector_field(
+    case_dir: Path,
+    run_id: str,
+    name: str,
+    triples: np.ndarray,
+) -> Path:
+    """Write a synthetic OpenFOAM vector field. ``triples`` shape: (N, 3)."""
+    body = "\n".join(f"({vx} {vy} {vz})" for vx, vy, vz in triples)
+    text = _NONUNIFORM_VECTOR_FIELD.format(
+        run_id=run_id, name=name, count=len(triples), triples=body,
+    )
+    run_dir = case_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    field_path = run_dir / name
+    field_path.write_text(text, encoding="utf-8")
+    return field_path
+
+
 @pytest.fixture
 def isolated_imported(tmp_path: Path, monkeypatch):
     drafts = tmp_path / "user_drafts"
@@ -429,3 +474,99 @@ internalField   nonuniform List<scalar>
     with pytest.raises(FieldSampleError) as excinfo:
         build_field_payload(case_id, "run_001", "p")
     assert excinfo.value.failing_check == "field_parse_error"
+
+
+# ───────── B-ext-6.1 F15 fix · vector field parser (DEC-V61-196) ─────────
+
+
+def test_build_field_payload_parses_nonuniform_vector_list(
+    isolated_imported: Path,
+) -> None:
+    """U field is `nonuniform List<vector>` — needs the new vector parser.
+    Pre-fix this would 422 with 'no nonuniform List<scalar>' message."""
+    case_id = "imported_2026-05-07T00-00-00Z_vec"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    triples = np.array(
+        [(0.1, 0.0, 0.0), (-0.05, 0.02, 0.0), (1.5e-3, -2e-5, 0.0)],
+        dtype=np.float32,
+    )
+    _stage_vector_field(case_dir, "run_001", "U", triples)
+
+    result = build_field_payload(case_id, "run_001", "U")
+
+    assert result.point_count == 3
+    assert result.components_per_cell == 3
+    decoded = np.frombuffer(result.cache_path.read_bytes(), dtype=np.float32)
+    assert decoded.shape == (9,)  # 3 cells × 3 components
+    np.testing.assert_allclose(
+        decoded.reshape(3, 3), triples, rtol=1e-5
+    )
+
+
+def test_build_field_payload_vector_cache_hit_preserves_shape(
+    isolated_imported: Path,
+) -> None:
+    """Cache-hit path must report the same components_per_cell on
+    reload — otherwise a vector field would deserialize as a 3x-long
+    scalar array."""
+    case_id = "imported_2026-05-07T00-00-01Z_veccache"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    triples = np.array(
+        [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)], dtype=np.float32,
+    )
+    _stage_vector_field(case_dir, "run_002", "U", triples)
+
+    first = build_field_payload(case_id, "run_002", "U")
+    second = build_field_payload(case_id, "run_002", "U")
+
+    assert first.point_count == second.point_count == 2
+    assert first.components_per_cell == second.components_per_cell == 3
+    assert second.status == "hit"
+
+
+def test_scalar_field_unchanged_components_per_cell_is_1(
+    isolated_imported: Path,
+) -> None:
+    """Regression guard: scalar fields (p, k, T, etc.) keep
+    components_per_cell=1 after the layer-2 fix."""
+    case_id = "imported_2026-05-07T00-00-02Z_scalardefault"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    values = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    _stage_field(case_dir, "run_001", "p", values)
+
+    result = build_field_payload(case_id, "run_001", "p")
+
+    assert result.point_count == 3
+    assert result.components_per_cell == 1
+
+
+def test_resolve_field_path_follows_symlink_to_time_directory(
+    isolated_imported: Path,
+) -> None:
+    """B-ext-6.1 F15 layer 1: a symlink at <case_dir>/<run_id> →
+    <final_time> resolves correctly. is_dir() follows symlinks; the
+    field route's existing path-segment validation (regex) accepts
+    the run_id form `2026-05-07T12-03-10Z`."""
+    case_id = "imported_2026-05-07T00-00-03Z_symlink"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    # Real time directory with U inside, OpenFOAM-style name "2"
+    real_time_dir = case_dir / "2"
+    real_time_dir.mkdir()
+    triples = np.array([(0.5, 0.0, 0.0)], dtype=np.float32)
+    body = "\n".join(f"({vx} {vy} {vz})" for vx, vy, vz in triples)
+    text = _NONUNIFORM_VECTOR_FIELD.format(
+        run_id="2", name="U", count=len(triples), triples=body,
+    )
+    (real_time_dir / "U").write_text(text, encoding="utf-8")
+
+    # Symlink simulating the post-solve hook
+    run_id = "2026-05-07T12-03-10Z"
+    (case_dir / run_id).symlink_to("2", target_is_directory=True)
+
+    result = build_field_payload(case_id, run_id, "U")
+    assert result.point_count == 1
+    assert result.components_per_cell == 3

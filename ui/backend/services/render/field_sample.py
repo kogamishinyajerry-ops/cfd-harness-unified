@@ -52,12 +52,30 @@ _INTERNAL_NONUNIFORM_RE = re.compile(
     re.DOTALL,
 )
 
+# B-ext-6.1 F15 fix layer 2 (DEC-V61-196): vector internalField, e.g.
+# ``internalField nonuniform List<vector> <count>((vx vy vz)(...));``.
+# OpenFOAM writes 3-tuples as ``(vx vy vz)`` separated by whitespace.
+_INTERNAL_NONUNIFORM_VECTOR_RE = re.compile(
+    r"internalField\s+nonuniform\s+List<\s*vector\s*>\s*"
+    r"(\d+)\s*\(\s*(.*?)\s*\)\s*;",
+    re.DOTALL,
+)
+# Match each ``(vx vy vz)`` triple within the vector list body.
+_VECTOR_TRIPLE_RE = re.compile(
+    r"\(\s*([-+0-9eE.]+)\s+([-+0-9eE.]+)\s+([-+0-9eE.]+)\s*\)"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class FieldSampleResult:
     cache_path: Path
     point_count: int
     status: CacheStatus
+    # B-ext-6.1 F15 layer 2: 1 for scalar, 3 for vector. Frontend +
+    # persona post-processing both use this to split the binary blob
+    # into the right shape. point_count counts CELLS (not floats);
+    # bytes-on-the-wire = 4 * point_count * components_per_cell.
+    components_per_cell: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +225,68 @@ def _parse_internal_scalar_field(field_path: Path) -> np.ndarray:
     return values
 
 
+def _parse_internal_vector_field(field_path: Path) -> np.ndarray:
+    """B-ext-6.1 F15 fix layer 2 (DEC-V61-196): parse a nonuniform
+    List<vector> internalField. Returns a float32 array of shape
+    ``(declared_count * 3,)`` flattened in (vx, vy, vz, vx, vy, vz, ...)
+    order. Caller serializes as binary directly; the route emits
+    ``X-Field-Components: 3`` so the client can split into triples.
+
+    Distinct from the scalar parser because the wire format is a list
+    of triples like ``(vx vy vz)(vx vy vz)...`` rather than bare floats.
+    """
+    try:
+        text = field_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise FieldSampleError(
+            failing_check="field_parse_error",
+            message=f"could not read {field_path.name}: {exc!r}",
+        )
+
+    m = _INTERNAL_NONUNIFORM_VECTOR_RE.search(text)
+    if not m:
+        if re.search(r"internalField\s+uniform\s+", text):
+            raise FieldSampleError(
+                failing_check="field_unsupported",
+                message="uniform internalField not supported in Tier-A",
+            )
+        raise FieldSampleError(
+            failing_check="field_parse_error",
+            message=(
+                f"no nonuniform List<vector> internalField in "
+                f"{field_path.name}"
+            ),
+        )
+
+    declared_count = int(m.group(1))
+    body = m.group(2)
+    triples = _VECTOR_TRIPLE_RE.findall(body)
+    if len(triples) != declared_count:
+        raise FieldSampleError(
+            failing_check="field_parse_error",
+            message=(
+                f"declared count {declared_count} != parsed triples "
+                f"{len(triples)} in {field_path.name}"
+            ),
+        )
+    flat: list[float] = []
+    for vx, vy, vz in triples:
+        flat.append(float(vx))
+        flat.append(float(vy))
+        flat.append(float(vz))
+    return np.asarray(flat, dtype=np.float32)
+
+
+# Field-name → component count. Anything not listed defaults to scalar.
+# Vector fields known to OpenFOAM-incompressible: U, gradp, etc.
+# Tensor fields are NOT supported in B-ext-6.1.
+_VECTOR_FIELD_NAMES: frozenset[str] = frozenset({"U", "Uavg", "U.air", "U.water"})
+
+
+def _is_vector_field(name: str) -> bool:
+    return name in _VECTOR_FIELD_NAMES
+
+
 def _cache_target(case_dir: Path, run_id: str, name: str) -> Path:
     return case_dir / ".render_cache" / f"field-{run_id}-{name}.bin"
 
@@ -294,13 +374,19 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
     field_path = _resolve_field_path(case_id, run_id, name)
     case_dir = _imported_case_dir(case_id)
     cache = _cache_target(case_dir, run_id, name)
+    components = 3 if _is_vector_field(name) else 1
 
     if _is_cache_fresh(cache, field_path):
-        # Cache hit — read the cached array's length to populate the result.
-        # The frontend uses Content-Length header for the same info, but the
-        # service returns it for tests / logging.
-        n = cache.stat().st_size // 4
-        return FieldSampleResult(cache_path=cache, point_count=n, status="hit")
+        # Cache hit — derive cell count from cache size and known
+        # components-per-cell. point_count counts cells, not floats.
+        cache_floats = cache.stat().st_size // 4
+        n = cache_floats // components
+        return FieldSampleResult(
+            cache_path=cache,
+            point_count=n,
+            status="hit",
+            components_per_cell=components,
+        )
 
     # Round-3+4 Finding 3 closure: source mtime is snapshotted before
     # parsing, re-checked post-parse, AND threaded into the guarded
@@ -309,7 +395,10 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
     # readers) and aborts WITH unlink if the source changes during the
     # replace syscall itself (closes the kernel-syscall residual).
     src_mtime_before = field_path.stat().st_mtime_ns
-    values = _parse_internal_scalar_field(field_path)
+    if components == 3:
+        values = _parse_internal_vector_field(field_path)
+    else:
+        values = _parse_internal_scalar_field(field_path)
     src_mtime_after_parse = field_path.stat().st_mtime_ns
     if src_mtime_after_parse != src_mtime_before:
         raise FieldSampleError(
@@ -332,6 +421,7 @@ def build_field_payload(case_id: str, run_id: str, name: str) -> FieldSampleResu
         )
     return FieldSampleResult(
         cache_path=cache,
-        point_count=int(values.size),
+        point_count=int(values.size) // components,
         status=status,
+        components_per_cell=components,
     )
