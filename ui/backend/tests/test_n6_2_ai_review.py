@@ -589,6 +589,161 @@ def test_llm_finding_with_action_text_in_recommended_change_is_dropped(
     assert response.findings == []
 
 
+# ────────── Codex R1 P1: non-string field robustness ──────────
+
+
+@pytest.mark.parametrize(
+    "bad_field_value",
+    [
+        ["nested", "list"],
+        {"text": "nested dict"},
+        42,
+        True,
+    ],
+)
+def test_llm_finding_with_non_string_message_does_not_crash_review(
+    bad_field_value, tmp_path: Path
+) -> None:
+    """Codex N6.2 R1 P1: a non-string ``message`` (LLM emits a
+    list/dict/int/bool by accident) must NOT crash _has_action_text
+    and abort the entire review. The malformed finding is dropped
+    individually; siblings in the same response keep flowing."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                # Malformed: bad message type
+                {
+                    "severity": "warning",
+                    "area": "mesh",
+                    "message": bad_field_value,
+                    "citation_chunk_id": real_chunk_id,
+                },
+                # Sibling: valid finding — must survive
+                {
+                    "severity": "info",
+                    "area": "solver",
+                    "message": "Steady RANS appropriate here.",
+                    "citation_chunk_id": real_chunk_id,
+                },
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    # Critical: the LLM call did NOT fail — llm_available stays True
+    # (regression guard against the R1 P1 bug where TypeError
+    # escaped and the whole response fell through to rule-based).
+    assert response.llm_available is True
+    # The malformed finding was dropped; the valid sibling survived.
+    assert len(response.findings) == 1
+    assert response.findings[0].message == "Steady RANS appropriate here."
+
+
+def test_llm_finding_with_non_string_recommended_change_is_dropped_only(
+    tmp_path: Path,
+) -> None:
+    """Same shape as above but the malformed field is
+    recommended_change. The Pydantic validator rejects the finding
+    (since the schema declares Optional[str]); but the action-text
+    pre-check must NOT crash before reaching that point."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                {
+                    "severity": "warning",
+                    "area": "mesh",
+                    "message": "valid message",
+                    "citation_chunk_id": real_chunk_id,
+                    "recommended_change": ["bad", "list"],
+                },
+                {
+                    "severity": "info",
+                    "area": "solver",
+                    "message": "valid sibling",
+                    "citation_chunk_id": real_chunk_id,
+                },
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    assert response.llm_available is True
+    # Malformed dropped; valid sibling kept.
+    assert any(f.message == "valid sibling" for f in response.findings)
+
+
+# ────────── Codex R1 P2: prompt/regex alignment ──────────
+
+
+@pytest.mark.parametrize(
+    "button_label",
+    [
+        "[Submit]",
+        "[Confirm]",
+        "[Commit]",
+        "[Save]",
+        "[保存]",
+        "[ submit ]",
+        "[SUBMIT]",
+    ],
+)
+def test_llm_finding_with_extra_button_labels_is_dropped(
+    button_label, tmp_path: Path
+) -> None:
+    """Codex N6.2 R1 P2: the system prompt FORBIDDEN list claims
+    these labels are blocked; the regex must actually block them."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                {
+                    "severity": "warning",
+                    "area": "physics",
+                    "message": f"Click {button_label} to save the change",
+                    "citation_chunk_id": real_chunk_id,
+                }
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    assert response.findings == [], (
+        f"Button label not stripped: {button_label!r}"
+    )
+
+
 def test_llm_finding_without_action_text_is_kept(tmp_path: Path):
     """Sanity: legitimate prose passes the filter."""
     corpus = _build_test_corpus(tmp_path)
