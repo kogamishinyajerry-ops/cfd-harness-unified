@@ -36,7 +36,7 @@ from scripts.dogfood.workbench_tools import WorkbenchToolExecutor
 logger = logging.getLogger(__name__)
 
 WB_BASE = "http://localhost:8000"
-RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07_r6")
+RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07_r7")
 
 DEEPSEEK_CELLS = [
     ("naca0012", "experienced_fluent"),
