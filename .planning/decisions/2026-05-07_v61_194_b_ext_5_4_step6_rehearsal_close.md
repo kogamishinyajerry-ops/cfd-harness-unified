@@ -4,7 +4,7 @@ title: B-ext-5.4 · Step 6 isolation rehearsal SUCCESS + B-ext-5 close · verdic
 status: Accepted
 parent_dec: V61-191
 phase: B-extend-5
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed818ab9aeefbe2219391a)
 ---
 
 # DEC-V61-194 · B-ext-5.4 · Step 6 rehearsal + B-ext-5 close
