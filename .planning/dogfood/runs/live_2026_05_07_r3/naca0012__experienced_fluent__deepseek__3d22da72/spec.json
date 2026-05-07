@@ -1,0 +1,12 @@
+{
+  "charter_case_id": "naca0012",
+  "workbench_case_id": "imported_2026-05-07T06-16-18Z_c32b5a81",
+  "persona": "experienced_fluent",
+  "family": "deepseek",
+  "model_id": "deepseek-chat",
+  "run_id": "naca0012__experienced_fluent__deepseek__3d22da72",
+  "dry_run": false,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/naca0012.stl",
+  "elapsed_s": 61.94773499999428,
+  "error": null
+}

@@ -132,8 +132,9 @@ def _run_one(charter_case_id: str, persona: str) -> dict:
         family="deepseek",
         model_id=assignment.model_id,
         system_prompt=persona_obj.system_prompt,
-        max_steps=24,  # cap — DeepSeek pricing makes this safe
-        max_input_tokens=180_000,
+        max_steps=40,  # bumped for R3 (B.5.5) — allow more turns post-fixes
+        max_input_tokens=600_000,  # cumulative across turns; effective bound
+                                    # is DeepSeek's per-call ~64k input
         max_output_tokens=2048,
     )
 

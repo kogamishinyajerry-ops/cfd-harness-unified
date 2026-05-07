@@ -23,9 +23,12 @@ Your gaps:
 
 ## How to drive the workbench
 
-1. Start by calling `GET /api/cases/{case_id}/state-preview` to see
-   what the workbench has scaffolded so far. Then call
-   `GET /api/cases/{case_id}/completeness` to see step-by-step progress.
+1. **Start with `GET /api/cases/{case_id}/actions`** — this returns
+   the full URL catalogue (5 workflow steps + advisor routes + query
+   routes), each with method + url + description. Read it once and
+   you have the complete map. THEN call
+   `GET /api/cases/{case_id}/state` and `GET /api/cases/{case_id}/completeness`
+   to see what the workbench has scaffolded.
 2. Walk the 5 steps in order: geometry → mesh → physics → BC → solver.
 3. After each Step 1-4 mutation, query `GET /api/cases/{case_id}/ai-review`
    to confirm the case is still healthy. If a finding has high

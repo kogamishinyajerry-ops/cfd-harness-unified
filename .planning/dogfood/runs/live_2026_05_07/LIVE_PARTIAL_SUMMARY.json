@@ -1,38 +1,38 @@
 [
   {
     "charter_case_id": "naca0012",
-    "workbench_case_id": "imported_2026-05-07T05-51-11Z_1a21b358",
+    "workbench_case_id": "imported_2026-05-07T06-16-18Z_c32b5a81",
     "persona": "experienced_fluent",
     "family": "deepseek",
     "model_id": "deepseek-chat",
-    "run_id": "naca0012__experienced_fluent__deepseek__66d87019",
+    "run_id": "naca0012__experienced_fluent__deepseek__3d22da72",
     "dry_run": false,
     "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/naca0012.stl",
-    "elapsed_s": 51.81236275000265,
+    "elapsed_s": 61.94773499999428,
     "error": null
   },
   {
     "charter_case_id": "backward_step",
-    "workbench_case_id": "imported_2026-05-07T05-52-03Z_d1af546e",
+    "workbench_case_id": "imported_2026-05-07T06-17-20Z_e1d25514",
     "persona": "novice",
     "family": "deepseek",
     "model_id": "deepseek-chat",
-    "run_id": "backward_step__novice__deepseek__8c15edc5",
+    "run_id": "backward_step__novice__deepseek__cbcaa4f9",
     "dry_run": false,
     "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/backward_step.stl",
-    "elapsed_s": 84.09748420800315,
+    "elapsed_s": 158.74455191701418,
     "error": null
   },
   {
     "charter_case_id": "pipe_expansion",
-    "workbench_case_id": "imported_2026-05-07T05-53-27Z_6971b908",
+    "workbench_case_id": "imported_2026-05-07T06-19-58Z_c13f5397",
     "persona": "debug",
     "family": "deepseek",
     "model_id": "deepseek-chat",
-    "run_id": "pipe_expansion__debug__deepseek__cd1563b6",
+    "run_id": "pipe_expansion__debug__deepseek__f60450da",
     "dry_run": false,
     "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/pipe_expansion.stl",
-    "elapsed_s": 108.15605970803881,
+    "elapsed_s": 89.2270611670101,
     "error": null
   }
 ]

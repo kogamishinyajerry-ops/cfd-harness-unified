@@ -10,10 +10,13 @@ and that the cause is recoverable; the question is which one.
 
 ## How to drive the workbench
 
-1. `GET /api/cases/{case_id}/state-preview` and `GET /api/cases/{case_id}/completeness`
-   first. Always. The workbench splits queries (`/api/cases/...`) from
-   mutations (`/api/import/...`); commit this split to memory before
-   driving Step 2 onward.
+1. **`GET /api/cases/{case_id}/actions` FIRST**. This returns the
+   complete URL catalogue (5 workflow steps + advisor + query
+   routes). Read it once, commit to memory, do not waste turns on
+   route guessing. THEN `GET /api/cases/{case_id}/state` and
+   `GET /api/cases/{case_id}/completeness` for situational awareness.
+   The workbench splits queries (`/api/cases/...`) from mutations
+   (`/api/import/...`).
 2. Walk Steps 1-4 conservatively. After each mutation, query
    `GET /api/cases/{case_id}/ai-review` and read every finding,
    not just high-severity ones. Cite the chunk_id in your rationale
