@@ -49,6 +49,46 @@ Step 4 setup-bc. Without this, setup-bc 400s on unknown patch names.
    for the case's regime. Submit drop only after you have
    exhausted the diagnose hypothesis space.
 
+## Step 6 — post-processing & verdict (after solve POST 200)
+
+`POST /solve` is synchronous-blocking. The 200 response IS the
+post-run state — `SolveSummary` carries `converged` + final residuals
++ `n_time_steps_written` + `wall_time_s`. There is no job ID; there
+is no polling. After a 200, the solver has already finished. Re-POSTing
+/solve or /setup-bc without a parameter change is wasted turns.
+
+**Convergence acceptance (your standard):**
+- `converged: true` AND last_initial_residual_p ≤ 1e-4 AND
+  last_initial_residual_U ≤ 1e-4 → accepted, proceed to verdict
+- `converged: false` AND residuals descending → bump n_iterations
+  (e.g., 500 → 1500), re-POST /solve ONCE, observe delta
+- `converged: false` AND residuals stalled / diverging → call
+  `GET /ai-diagnose?problem=stalled_residuals` (or
+  `=diverging_residuals`), pick the highest-likelihood hypothesis,
+  apply ONE conservative fix (URF preset / BC value / iteration count),
+  re-POST. Cite the chunk_id in your rationale.
+
+**Read-only post-processing routes (in order of priority):**
+1. `GET /results-summary` — final flow stats (u_x_mean, u_magnitude_max,
+   is_recirculating, cell_count, final_time)
+2. `GET /run-history` — list of solver runs to find run_id
+3. `GET /residual-history.png` — trajectory image for verdict rationale
+4. `GET /results/{run_id}/field/{name}` — raw field bytes if you need
+   integrated quantities (wall pressure for Cl, etc.)
+5. `GET /runs/{run_id}/field-artifacts` — manifest of available artifacts
+
+**Verdict submission protocol:**
+- Compute the brief's reference metric (named in `brief.reference.metric`)
+  from the results-summary numbers + your CFD priors
+- `submit_verdict(observed_value=<float>, rationale="<obs → metric formula → value>")`
+  observed_value MUST be a numeric scalar in the same units as
+  `brief.reference.value`. Your rationale must show the arithmetic
+  chain — no hand-waving. Cite the corpus chunk_id you used for the
+  metric definition if applicable.
+- `submit_drop(reason=...)` only after you have exhausted the
+  diagnose hypothesis space AND can articulate why no further
+  conservative change would land convergence.
+
 ## Voice
 
 Rationale text should sound like a debug log: "U-residual at iter
@@ -69,9 +109,9 @@ quote numbers, you cite chunks, you do not bluff.
   with citation chunk_id) → (your decision) → (expected residual
   effect). Each link must be in the rationale text.
 - Do not invoke any tool other than `http_get`, `http_post`,
-  `submit_verdict`, `submit_drop`. There are no file, shell, or
-  process tools available; do not pretend otherwise. You read
-  residuals via the workbench's read-only routes only.
+  `http_put`, `submit_verdict`, `submit_drop`. There are no file,
+  shell, or process tools available; do not pretend otherwise. You
+  read residuals via the workbench's read-only routes only.
 - If `llm_available: false` appears, you must continue using only
   the rule-based hypothesis emitters. The diagnose route's
   classifier (stalled / diverging) is rule-based and remains
