@@ -67,8 +67,14 @@ _ACTION_TEXT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\b(POST|PUT|PATCH|DELETE)\s+/", re.IGNORECASE),
     # Bare API path: "/api/cases/{id}/..." — implies route invocation
     re.compile(r"/api/[a-z][a-z0-9_\-/{}]+", re.IGNORECASE),
-    # [Apply] / [应用] button labels
-    re.compile(r"\[\s*(apply|应用|提交|执行)\s*\]", re.IGNORECASE),
+    # [Apply] / [Submit] / [应用] / [提交] / [执行] / [Confirm] /
+    # [Commit] / [Save] button labels — must stay aligned with the
+    # system-prompt FORBIDDEN list in _build_review_prompt.
+    re.compile(
+        r"\[\s*(apply|submit|confirm|commit|save|"
+        r"应用|提交|执行|保存)\s*\]",
+        re.IGNORECASE,
+    ),
     # Shell commands that would mutate the case
     re.compile(r"\b(curl|wget|http|httpie)\s+-X\s*(POST|PUT|PATCH|DELETE)",
                re.IGNORECASE),
@@ -77,12 +83,21 @@ _ACTION_TEXT_PATTERNS: tuple[re.Pattern, ...] = (
 )
 
 
-def _has_action_text(text: Optional[str]) -> bool:
-    """Return True iff ``text`` matches any action-text pattern.
+def _has_action_text(text: object) -> bool:
+    """Return True iff ``text`` is a string matching any action-text
+    pattern.
 
-    None / empty → False (no risk).
+    None / empty / non-string → False (no risk). The non-string
+    branch is load-bearing: the LLM may emit malformed JSON like
+    ``{"message": [...]}`` or ``{"recommended_change": {"text": ...}}``;
+    if we tried ``pattern.search()`` on those, ``re`` would raise
+    TypeError, escape ``_parse_llm_findings``, and ``review_case``
+    would treat it as a whole-LLM failure — discarding any valid
+    findings in the same batch (Codex N6.2 R1 P1). Returning False
+    here lets the per-finding ReviewFinding validation drop the
+    malformed record while keeping siblings intact.
     """
-    if not text:
+    if not isinstance(text, str) or not text:
         return False
     for pattern in _ACTION_TEXT_PATTERNS:
         if pattern.search(text):
@@ -239,7 +254,9 @@ def _build_review_prompt(
         "Never recommend writes, route calls, or [Apply] actions. "
         "FORBIDDEN in 'message' and 'recommended_change': any HTTP "
         "method + path (e.g. 'POST /api/...'), any '/api/...' string, "
-        "any [Apply] / [应用] / [Submit] label, any curl/wget command, "
+        "any button-style label like [Apply] / [Submit] / [Confirm] / "
+        "[Commit] / [Save] / [应用] / [提交] / [执行] / [保存], "
+        "any curl/wget command, "
         "any 'dispatch(tool=...)' phrasing. The server drops findings "
         "whose text contains those patterns. Phrase suggestions as "
         "plain prose (e.g. 'consider reducing snappyHexMesh "
