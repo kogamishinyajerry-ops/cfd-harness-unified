@@ -458,6 +458,175 @@ def test_route_missing_case_id_returns_404(monkeypatch, tmp_path):
     assert resp.status_code == 404
 
 
+# ────────── Codex R0 P1: loopback guard (regression) ──────────
+
+
+def test_route_rejects_non_loopback_caller(monkeypatch, tmp_path):
+    """Codex N6.2 R0 P1: route must require_loopback like ai-chat /
+    ai-coach. A request with X-Forwarded-For (proxy header) gets 403
+    when the override env-var is unset."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage_empty_case(imported, case_id)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("AI_CHAT_ALLOW_NON_LOOPBACK", raising=False)
+    reset_default_corpus()
+
+    resp = _client().get(
+        f"/api/cases/{case_id}/ai-review",
+        headers={"X-Forwarded-For": "203.0.113.42"},
+    )
+    assert resp.status_code == 403
+    assert "loopback" in resp.json()["detail"].lower()
+    reset_default_corpus()
+
+
+def test_route_allows_non_loopback_when_override_set(
+    monkeypatch, tmp_path
+):
+    """Override env-var unblocks the route for operators behind a
+    trusted reverse proxy."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage_empty_case(imported, case_id)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("AI_CHAT_ALLOW_NON_LOOPBACK", "1")
+    reset_default_corpus()
+
+    resp = _client().get(
+        f"/api/cases/{case_id}/ai-review",
+        headers={"X-Forwarded-For": "203.0.113.42"},
+    )
+    assert resp.status_code == 200
+    reset_default_corpus()
+
+
+# ────────── Codex R0 P2: action-text strip (regression) ──────────
+
+
+@pytest.mark.parametrize(
+    "bad_text",
+    [
+        "POST /api/cases/abc/mesh",
+        "Run curl -X POST https://...",
+        "Click [Apply] to commit",
+        "click [应用] now",
+        "mention /api/cases/{id}/physics",
+        "PUT /api/cases/foo/bc-contract",
+        "use dispatch(tool=setupBC, args={...})",
+    ],
+)
+def test_llm_finding_with_action_text_in_message_is_dropped(
+    bad_text, tmp_path: Path
+):
+    """Codex N6.2 R0 P2: any LLM-emitted message containing an HTTP
+    method + path / [Apply] / curl / dispatch phrasing is dropped
+    server-side before reaching the wire."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                {
+                    "severity": "warning",
+                    "area": "mesh",
+                    "message": bad_text,
+                    "citation_chunk_id": real_chunk_id,
+                }
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    assert response.llm_available is True
+    assert response.findings == [], (
+        f"Action-text finding was not dropped: bad_text={bad_text!r}"
+    )
+
+
+def test_llm_finding_with_action_text_in_recommended_change_is_dropped(
+    tmp_path: Path,
+):
+    """Same as above but the action-text is in recommended_change
+    (which N6.4 will render with copy-button affordance)."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                {
+                    "severity": "warning",
+                    "area": "physics",
+                    "message": "Plain factual statement.",
+                    "citation_chunk_id": real_chunk_id,
+                    "recommended_change": (
+                        "POST /api/cases/{id}/physics with regime=ras_keomega"
+                    ),
+                }
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    assert response.findings == []
+
+
+def test_llm_finding_without_action_text_is_kept(tmp_path: Path):
+    """Sanity: legitimate prose passes the filter."""
+    corpus = _build_test_corpus(tmp_path)
+    real_chunk_id = corpus.chunks[0].chunk_id
+    llm_output = json.dumps(
+        {
+            "findings": [
+                {
+                    "severity": "info",
+                    "area": "solver",
+                    "message": (
+                        "Steady RANS via simpleFoam is appropriate for "
+                        "this geometry; no transient features expected."
+                    ),
+                    "citation_chunk_id": real_chunk_id,
+                    "recommended_change": (
+                        "Consider tightening pressure URF from 0.3 to "
+                        "0.2 if residuals oscillate."
+                    ),
+                }
+            ]
+        }
+    )
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    response = _run(
+        review_case(
+            case_dir,
+            corpus=corpus,
+            provider=_FakeLLMProvider(llm_output),
+        )
+    )
+    assert response.llm_available is True
+    assert len(response.findings) == 1
+
+
 # ────────── V132 Layer-A: no mutation symbol invoked ──────────
 
 
