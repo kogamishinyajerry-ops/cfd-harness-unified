@@ -1,0 +1,13 @@
+{
+  "run_id": "backward_step__novice__deepseek__d4240160",
+  "case_id": "imported_2026-05-07T11-03-38Z_703444e6",
+  "persona": "novice",
+  "model_id": "deepseek-chat",
+  "steps": 20,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 332522,
+  "total_output_tokens": 4618,
+  "error": "llm_chat_failed: The read operation timed out"
+}
