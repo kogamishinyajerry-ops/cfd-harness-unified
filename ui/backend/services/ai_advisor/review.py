@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -40,6 +39,7 @@ from ui.backend.services.ai_advisor.corpus_loader import (
     LoadedChunk,
     get_default_corpus,
 )
+from ui.backend.services.ai_advisor.safety import has_action_text
 from ui.backend.services.case_issues import enumerate_issues
 from ui.backend.services.llm_provider.base import (
     ChatMessage,
@@ -49,60 +49,6 @@ from ui.backend.services.llm_provider.base import (
 from ui.backend.services.llm_provider.factory import get_default_provider
 
 logger = logging.getLogger(__name__)
-
-
-# Action-text patterns that indicate an LLM ignored the
-# advisory-only contract (Codex N6.2 R0 P2). Server-side enforcement:
-# any finding whose ``message`` or ``recommended_change`` matches any
-# pattern is dropped before reaching the wire — UI render path
-# (N6.4) cannot display or copy strings that look like routes /
-# button labels / shell commands.
-#
-# False positives (legitimate text mentioning HTTP / api / curl as
-# diagnostic context) are acceptable: the rule-based fallback covers
-# the underlying issue, and the LLM can phrase the same advice
-# without action language.
-_ACTION_TEXT_PATTERNS: tuple[re.Pattern, ...] = (
-    # HTTP method + path: "POST /api/...", "PUT /cases/..."
-    re.compile(r"\b(POST|PUT|PATCH|DELETE)\s+/", re.IGNORECASE),
-    # Bare API path: "/api/cases/{id}/..." — implies route invocation
-    re.compile(r"/api/[a-z][a-z0-9_\-/{}]+", re.IGNORECASE),
-    # [Apply] / [Submit] / [应用] / [提交] / [执行] / [Confirm] /
-    # [Commit] / [Save] button labels — must stay aligned with the
-    # system-prompt FORBIDDEN list in _build_review_prompt.
-    re.compile(
-        r"\[\s*(apply|submit|confirm|commit|save|"
-        r"应用|提交|执行|保存)\s*\]",
-        re.IGNORECASE,
-    ),
-    # Shell commands that would mutate the case
-    re.compile(r"\b(curl|wget|http|httpie)\s+-X\s*(POST|PUT|PATCH|DELETE)",
-               re.IGNORECASE),
-    # Direct dispatcher tool invocation phrasing
-    re.compile(r"\bdispatch\s*\(\s*tool\s*=", re.IGNORECASE),
-)
-
-
-def _has_action_text(text: object) -> bool:
-    """Return True iff ``text`` is a string matching any action-text
-    pattern.
-
-    None / empty / non-string → False (no risk). The non-string
-    branch is load-bearing: the LLM may emit malformed JSON like
-    ``{"message": [...]}`` or ``{"recommended_change": {"text": ...}}``;
-    if we tried ``pattern.search()`` on those, ``re`` would raise
-    TypeError, escape ``_parse_llm_findings``, and ``review_case``
-    would treat it as a whole-LLM failure — discarding any valid
-    findings in the same batch (Codex N6.2 R1 P1). Returning False
-    here lets the per-finding ReviewFinding validation drop the
-    malformed record while keeping siblings intact.
-    """
-    if not isinstance(text, str) or not text:
-        return False
-    for pattern in _ACTION_TEXT_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
 
 
 # Mapping from N5.2 source_rule_id → corpus query keywords. Used by
@@ -340,7 +286,7 @@ def _parse_llm_findings(
         # violated. Drop the entire finding rather than render it.
         candidate_message = raw_finding.get("message", "")
         candidate_recommended = raw_finding.get("recommended_change")
-        if _has_action_text(candidate_message) or _has_action_text(
+        if has_action_text(candidate_message) or has_action_text(
             candidate_recommended
         ):
             logger.info(

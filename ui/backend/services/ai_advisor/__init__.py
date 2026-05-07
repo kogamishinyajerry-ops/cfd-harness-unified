@@ -27,6 +27,7 @@ from ui.backend.services.ai_advisor.corpus_loader import (
     load_corpus,
     reset_default_corpus,
 )
+from ui.backend.services.ai_advisor.diagnose import diagnose_case
 from ui.backend.services.ai_advisor.review import review_case
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "load_corpus",
     "get_default_corpus",
     "reset_default_corpus",
+    "diagnose_case",
     "review_case",
 ]

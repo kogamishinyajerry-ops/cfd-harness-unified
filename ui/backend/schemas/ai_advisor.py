@@ -163,13 +163,102 @@ class ReviewResponse(BaseModel):
     )
 
 
+# ────────── N6.3 · AI 诊断 (case diagnose) wire schema ──────────
+
+
+FailureMode = Literal[
+    "stalled_residuals",
+    "diverging_residuals",
+    "mesh_quality_critical",
+    "bc_or_physics_setup",
+    "unknown",
+]
+HypothesisLikelihood = Literal["high", "medium", "low"]
+
+
+class DiagnosisHypothesis(BaseModel):
+    """One advisor hypothesis for what's wrong with a failing/stalled
+    case. Engineer reads it, examines the cited evidence, decides.
+
+    Hard rules (charter §"Why citation grounding is mandatory"):
+      * ``citation`` REQUIRED; service drops hypotheses whose
+        chunk_id does not resolve to a loaded corpus chunk.
+      * ``suggested_fix`` is metadata-only prose: never a callable,
+        route, or button label. Server-side regex (services/ai_advisor/
+        safety.has_action_text) drops hypotheses that violate.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    failure_mode: FailureMode
+    likelihood: HypothesisLikelihood
+    summary: str = Field(
+        min_length=1,
+        max_length=500,
+        description="Short factual statement of the hypothesis.",
+    )
+    evidence: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Structured key/value bundle the engineer can cross-check "
+            "against case state (e.g. {'last_5_residuals': '1e-3,...,'}). "
+            "Values are stringified to keep the wire shape simple."
+        ),
+    )
+    citation: CitedChunk = Field(
+        ...,
+        description=(
+            "Corpus chunk grounding the hypothesis. Server-side "
+            "verified to resolve to a loaded chunk."
+        ),
+    )
+    suggested_fix: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Metadata-only prose suggestion for the engineer. Never "
+            "a callable, route, or button label. UI renders as text "
+            "+ copy button only."
+        ),
+    )
+    source: FindingSource = Field(
+        description="'llm' or 'rule_based' — how the hypothesis was generated.",
+    )
+
+
+class DiagnoseResponse(BaseModel):
+    """Top-level wire response for ``GET /api/cases/{id}/ai-diagnose``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str = Field(min_length=1, max_length=256)
+    problem_hint: Optional[FailureMode] = Field(
+        default=None,
+        description=(
+            "Echo of the optional ?problem= query param the engineer "
+            "passed. None when unset."
+        ),
+    )
+    hypotheses: list[DiagnosisHypothesis] = Field(default_factory=list)
+    llm_available: bool
+    corpus_sha: str = Field(min_length=64, max_length=64)
+    degradation_note: Optional[str] = Field(default=None, max_length=500)
+    generated_at: str = Field(
+        description="ISO 8601 UTC timestamp when the diagnosis was built.",
+    )
+
+
 __all__ = [
     "CitedChunk",
     "CorpusSource",
     "CorpusStats",
+    "DiagnoseResponse",
+    "DiagnosisHypothesis",
+    "FailureMode",
     "FindingArea",
     "FindingSeverity",
     "FindingSource",
+    "HypothesisLikelihood",
     "ReviewFinding",
     "ReviewResponse",
 ]
