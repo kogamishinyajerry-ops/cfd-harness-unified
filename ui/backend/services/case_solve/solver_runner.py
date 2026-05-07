@@ -398,6 +398,50 @@ def _read_bc_field_patch_names(field_path: Path) -> list[str]:
     return _scan_top_level_block_names(text[body_start:body_end])
 
 
+def _check_mesh_present(case_host_dir: Path) -> str | None:
+    """B-ext-5.2 F13 mitigation: catch missing polyMesh BEFORE we hand
+    the case to the solver container.
+
+    Returns ``None`` if both ``constant/polyMesh/boundary`` AND
+    ``constant/polyMesh/points`` exist (the two files OpenFOAM reads
+    first); otherwise returns a human-readable error string starting
+    with ``mesh_missing:`` so the route can map to 409 with
+    ``failing_check=mesh_missing``.
+
+    R9 surfaced this as F13 — /solve returned generic 502
+    ``solver_diverged: simpleFoam exited with code 1`` because OpenFOAM
+    couldn't find polyMesh files. The persona had no way to tell that
+    re-running /mesh would fix it; cryptic 502 mapped to "case is
+    broken, give up" in the persona's mental model. A friendly 409
+    with a clear remediation hint lets the persona course-correct.
+
+    The B-ext-3 F10 ``_check_mesh_bc_consistency`` only fires when a
+    polyMesh exists but disagrees with 0/* — it explicitly returns None
+    when polyMesh is absent (per its docstring). This new check fills
+    that gap.
+    """
+    polymesh_dir = case_host_dir / "constant" / "polyMesh"
+    if not polymesh_dir.is_dir():
+        return (
+            f"mesh_missing: no constant/polyMesh/ directory at "
+            f"{case_host_dir} — run /api/import/{{case_id}}/mesh first "
+            f"to generate the OpenFOAM mesh from the imported STL."
+        )
+    boundary_file = polymesh_dir / "boundary"
+    points_file = polymesh_dir / "points"
+    missing = [
+        f.name for f in (boundary_file, points_file) if not f.is_file()
+    ]
+    if missing:
+        return (
+            f"mesh_missing: constant/polyMesh/ exists but is incomplete "
+            f"(missing {missing}). The mesh stage may have been "
+            f"interrupted or the files were deleted; re-run "
+            f"/api/import/{{case_id}}/mesh to regenerate."
+        )
+    return None
+
+
 def _check_mesh_bc_consistency(case_host_dir: Path) -> str | None:
     """B-ext-3 F10 fix: validate ``0/<field>/boundaryField`` keys
     reference patch names that exist in ``constant/polyMesh/boundary``.
@@ -463,6 +507,9 @@ def run_icofoam(
             f"no system/controlDict at {case_host_dir} — run "
             "setup-bc first."
         )
+    mesh_missing = _check_mesh_present(case_host_dir)
+    if mesh_missing is not None:
+        raise SolverRunError(mesh_missing)
     mismatch = _check_mesh_bc_consistency(case_host_dir)
     if mismatch is not None:
         raise SolverRunError(mismatch)

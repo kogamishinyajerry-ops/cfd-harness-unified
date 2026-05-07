@@ -66,6 +66,11 @@ def _seed_case_with_mismatched_bc(case_dir: Path) -> None:
         ")\n"
         "// **************** //\n"
     )
+    # B-ext-5.2 F13 fixture migration: the new _check_mesh_present
+    # pre-flight requires both boundary AND points to exist before the
+    # F10 mesh_bc_mismatch check fires. Add a stub points file so this
+    # test still exercises the F10 path it's intended to exercise.
+    (polymesh / "points").write_text("0\n(\n)\n")
     zero = case_dir / "0"
     zero.mkdir()
     (zero / "p").write_text(
