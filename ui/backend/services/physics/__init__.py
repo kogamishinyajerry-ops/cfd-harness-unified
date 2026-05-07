@@ -33,6 +33,14 @@ from ui.backend.services.physics.solver_derivation import (
     SolverName,
     derive_solver,
 )
+from ui.backend.services.physics.tolerance_binding import (
+    TOLERANCE_TEMPLATES,
+    ToleranceTemplate,
+    ToleranceTier,
+    derive_default_tolerance_tier,
+    derive_tolerance_for_regime,
+    get_tolerance_template,
+)
 from ui.backend.services.physics.writer import (
     render_momentum_transport,
     render_physical_properties,
@@ -47,7 +55,13 @@ __all__ = [
     "SOLVER_DERIVATIONS",
     "SolverDerivation",
     "SolverName",
+    "TOLERANCE_TEMPLATES",
+    "ToleranceTemplate",
+    "ToleranceTier",
+    "derive_default_tolerance_tier",
     "derive_solver",
+    "derive_tolerance_for_regime",
+    "get_tolerance_template",
     "get_material_preset",
     "get_regime_preset",
     "list_material_preset_ids",
