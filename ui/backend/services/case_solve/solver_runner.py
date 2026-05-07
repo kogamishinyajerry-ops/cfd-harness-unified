@@ -306,6 +306,144 @@ def _filter_numeric_time_dirs(time_dirs: list[str]) -> list[str]:
     return out
 
 
+_IDENT_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+
+
+def _scan_top_level_block_names(body: str) -> list[str]:
+    """Scan an OpenFOAM dict body and return the ordered names of top-
+    level ``name { ... }`` blocks. Tracks brace depth so nested blocks
+    (``inlet { type fixedValue; value uniform (1 0 0); }``) don't leak
+    their nested key names. Stops at the first matching close-brace
+    if the body is unbalanced."""
+    out: list[str] = []
+    depth = 0
+    i = 0
+    n = len(body)
+    pending_name: str | None = None
+    while i < n:
+        c = body[i]
+        if c == "{":
+            if depth == 0 and pending_name is not None:
+                out.append(pending_name)
+                pending_name = None
+            depth += 1
+            i += 1
+            continue
+        if c == "}":
+            depth -= 1
+            i += 1
+            continue
+        if depth == 0:
+            m = _IDENT_RE.match(body, i)
+            if m:
+                pending_name = m.group(0)
+                i = m.end()
+                continue
+        i += 1
+    return out
+
+
+def _read_polymesh_patch_names(case_host_dir: Path) -> list[str]:
+    """Parse ``constant/polyMesh/boundary`` and return the ordered list
+    of patch names. Returns ``[]`` if the file is missing or unparseable
+    (caller treats that as 'no mesh' rather than 'mismatch')."""
+    boundary = case_host_dir / "constant" / "polyMesh" / "boundary"
+    if not boundary.is_file():
+        return []
+    try:
+        text = boundary.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    # boundary file format: <count>\n(\n<blocks>\n)\n then trailing
+    # `// ***` separator comments. Match the first `<n> ( ... )` group
+    # without anchoring to end-of-string.
+    list_match = re.search(r"\d+\s*\(\s*(.*?)\s*\)", text, re.DOTALL)
+    if not list_match:
+        return []
+    return _scan_top_level_block_names(list_match.group(1))
+
+
+def _read_bc_field_patch_names(field_path: Path) -> list[str]:
+    """Parse a 0/<field> file (e.g., 0/p, 0/U) and return the patch
+    names referenced in its ``boundaryField`` block. Returns ``[]`` if
+    the file is missing or has no boundaryField block."""
+    if not field_path.is_file():
+        return []
+    try:
+        text = field_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    # Locate the boundaryField block, then scan its body for top-level
+    # names. Manual brace-balanced extraction since the body itself
+    # contains nested `{...}` blocks per patch.
+    idx = text.find("boundaryField")
+    if idx < 0:
+        return []
+    open_idx = text.find("{", idx)
+    if open_idx < 0:
+        return []
+    depth = 0
+    body_start = open_idx + 1
+    body_end = -1
+    for j in range(open_idx, len(text)):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = j
+                break
+    if body_end < 0:
+        return []
+    return _scan_top_level_block_names(text[body_start:body_end])
+
+
+def _check_mesh_bc_consistency(case_host_dir: Path) -> str | None:
+    """B-ext-3 F10 fix: validate ``0/<field>/boundaryField`` keys
+    reference patch names that exist in ``constant/polyMesh/boundary``.
+
+    Returns ``None`` if consistent (or if mesh/BC files missing — that
+    is detected by other checks). Returns a human-readable error
+    string when there's a mismatch.
+
+    Triggered by R6 backward_step trace: persona POSTed /mesh AFTER
+    /setup-bc, regenerating polyMesh back to single-patch state and
+    leaving 0/p, 0/U with stale lid/fixedWalls keys. OpenFOAM crashed
+    at field load with 'Cannot find patchField entry for patch0'.
+    Surfacing this loudly pre-solve lets the caller re-run setup-bc
+    instead of debugging cryptic FOAM IO errors.
+    """
+    mesh_patches = _read_polymesh_patch_names(case_host_dir)
+    if not mesh_patches:
+        # No mesh — solver_runner's existing controlDict check or the
+        # caller's case-shape validation handles this case.
+        return None
+    mesh_patch_set = set(mesh_patches)
+    zero_dir = case_host_dir / "0"
+    if not zero_dir.is_dir():
+        return None
+    for field_path in sorted(zero_dir.iterdir()):
+        if not field_path.is_file():
+            continue
+        # Skip non-field files (FoamFile headers, dicts).
+        if field_path.name.startswith("."):
+            continue
+        bc_patches = _read_bc_field_patch_names(field_path)
+        if not bc_patches:
+            continue
+        missing = [p for p in bc_patches if p not in mesh_patch_set]
+        if missing:
+            return (
+                f"mesh_bc_mismatch: 0/{field_path.name} references "
+                f"patches {missing} but constant/polyMesh/boundary "
+                f"only has {sorted(mesh_patch_set)}. The mesh was "
+                f"likely regenerated after setup-bc; re-run "
+                f"/api/import/{{case_id}}/setup-bc to align BC files "
+                f"with the current mesh patches."
+            )
+    return None
+
+
 def run_icofoam(
     *,
     case_host_dir: Path,
@@ -325,6 +463,9 @@ def run_icofoam(
             f"no system/controlDict at {case_host_dir} — run "
             "setup-bc first."
         )
+    mismatch = _check_mesh_bc_consistency(case_host_dir)
+    if mismatch is not None:
+        raise SolverRunError(mismatch)
 
     try:
         import docker  # type: ignore[import-not-found]
