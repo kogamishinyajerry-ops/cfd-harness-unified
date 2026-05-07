@@ -653,6 +653,7 @@ def setup_bc(
                     nu=ldc_result.nu,
                     reynolds=ldc_result.reynolds,
                     written_files=list(ldc_result.written_files),
+                    warnings=list(ldc_result.warnings),
                 )
     except AnnotationsIOError as exc:
         # annotations_exclusive_lock itself raises AnnotationsIOError

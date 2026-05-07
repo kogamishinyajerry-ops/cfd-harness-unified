@@ -96,6 +96,19 @@ If a route 404s and you cannot guess the right path, fall back to
 `GET /api/openapi.json` — it returns the full route spec and you can
 self-discover. Don't burn many turns guessing.
 
+**Step 4 — ALWAYS use `from_stl_patches=1` for non-cube geometry**:
+the LDC default mode (`from_stl_patches=0` or no query param) writes
+canned `lid_velocity=(1,0,0)`, `nu=1e-3`, `Re=100` BC values that
+are correct ONLY for the lid-driven cavity tutorial — a unit cube
+with a top "lid" patch sliding at 1 m/s. Applied to ANY other
+geometry (airfoil, pipe, step), the LDC defaults produce a
+"converged" residual with a NaN or physically-meaningless field.
+For your case, POST `/setup-bc?from_stl_patches=1&solver_name=...&inlet_speed=...&nu=...&end_time=...`
+with values from the case brief: `inlet_speed` from `brief.physics`
+or computed from Re; `nu` from `brief.physics.kinematic_viscosity`;
+`solver_name` per regime (`simpleFoam` for steady incompressible
+external aero/internal flow; `pimpleFoam` for transient).
+
 **Step 4 prerequisite — patch-split before BC**: when STL ingest reports
 only `defaultFaces` (single-shell STL with no named solids), the
 case has ONE patch holding all faces. Before Step 4 setup-bc you must
