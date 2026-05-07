@@ -1,0 +1,13 @@
+{
+  "run_id": "pipe_expansion__debug__deepseek__a97d98f6",
+  "case_id": "imported_2026-05-07T11-21-16Z_7cbbbf4b",
+  "persona": "debug",
+  "model_id": "deepseek-chat",
+  "steps": 113,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 4031269,
+  "total_output_tokens": 38523,
+  "error": "input_token_budget_exceeded"
+}

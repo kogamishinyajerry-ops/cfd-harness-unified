@@ -36,7 +36,7 @@ from scripts.dogfood.workbench_tools import WorkbenchToolExecutor
 logger = logging.getLogger(__name__)
 
 WB_BASE = "http://localhost:8000"
-RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07_r7")
+RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07_r9")
 
 DEEPSEEK_CELLS = [
     ("naca0012", "experienced_fluent"),
@@ -132,8 +132,8 @@ def _run_one(charter_case_id: str, persona: str) -> dict:
         family="deepseek",
         model_id=assignment.model_id,
         system_prompt=persona_obj.system_prompt,
-        max_steps=80,  # R5: +30 turns over R4.5 to cover Step 6 verdict flow
-        max_input_tokens=3_000_000,  # R5: +1.5M to absorb post-solve fetches
+        max_steps=120,  # R9: +40 over R5/R8 — backward_step R8 hit /solve at step ~70, ran out of headroom for Step 6 verdict flow
+        max_input_tokens=4_000_000,  # R9: +1M to absorb extended Step 6 budget
         max_output_tokens=2048,
         prune_keep_full=3,  # tighter than default 6 — keep per-turn input small
         prune_min_turns_before_active=4,

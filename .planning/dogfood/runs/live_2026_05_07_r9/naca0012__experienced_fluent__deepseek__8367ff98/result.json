@@ -1,0 +1,13 @@
+{
+  "run_id": "naca0012__experienced_fluent__deepseek__8367ff98",
+  "case_id": "imported_2026-05-07T10-50-06Z_b4ff4031",
+  "persona": "experienced_fluent",
+  "model_id": "deepseek-chat",
+  "steps": 120,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 3694281,
+  "total_output_tokens": 38312,
+  "error": "max_steps_reached"
+}
