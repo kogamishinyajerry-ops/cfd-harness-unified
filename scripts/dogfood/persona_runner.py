@@ -381,7 +381,11 @@ def run_persona(
             tool_result = executor.execute(call)
             log.emit(
                 "api_call",
-                method="GET" if call.tool_name == "http_get" else "POST",
+                method=(
+                    "GET" if call.tool_name == "http_get"
+                    else "PUT" if call.tool_name == "http_put"
+                    else "POST"
+                ),
                 url=str(call.arguments.get("url", "")),
                 status=tool_result.status,
                 ok=tool_result.ok,

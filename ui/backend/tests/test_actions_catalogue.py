@@ -111,6 +111,35 @@ def test_query_routes_include_state_completeness_meshquality(monkeypatch, tmp_pa
         assert required in query_names, f"missing query route {required}"
 
 
+def test_query_routes_include_patch_discovery_after_b_ext_2(monkeypatch, tmp_path):
+    """B-ext.2 / DEC-V61-174 (F7) — patch-classification + face-annotations
+    + face-index must be in catalogue so personas can split defaultFaces."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage(imported, case_id)
+    body = _client().get(f"/api/cases/{case_id}/actions").json()
+    query_names = {q["name"] for q in body["query"]}
+    for required in ("patch_classification", "face_annotations", "face_index"):
+        assert required in query_names, (
+            f"missing F7 patch-discovery route {required}"
+        )
+
+
+def test_setup_bc_description_warns_about_defaultfaces(monkeypatch, tmp_path):
+    """B-ext.2 / F7 — Step 4 setup-bc description must direct persona to
+    split defaultFaces before invoking; otherwise persona blindly POSTs
+    with non-existent patch names and gets 400 (R3 pipe_expansion)."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage(imported, case_id)
+    body = _client().get(f"/api/cases/{case_id}/actions").json()
+    setup_bc = next(s for s in body["steps"] if s["name"] == "setup_bc")
+    desc = setup_bc["description"].lower()
+    assert "defaultfaces" in desc
+    assert "patch-classification" in desc
+    assert "face-annotations" in desc
+
+
 def test_query_routes_are_get(monkeypatch, tmp_path):
     imported = _isolate(monkeypatch, tmp_path)
     case_id = _safe_id()

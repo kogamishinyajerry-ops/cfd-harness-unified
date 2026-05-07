@@ -83,6 +83,23 @@ _HTTP_POST_SCHEMA: dict[str, Any] = {
 }
 
 
+_HTTP_PUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "url": {"type": "string", "description": "Workbench API URL (must start with /api/ or http://localhost:8000/api/)"},
+        "json": {"type": "object", "description": "JSON body for the PUT"},
+        "rationale": {
+            "type": "string",
+            "description": (
+                "Why you are PUTting this update. NEVER 'AI advisor told me'; "
+                "you are the engineer making the decision."
+            ),
+        },
+    },
+    "required": ["url", "rationale"],
+}
+
+
 def workbench_tool_defs() -> list[ToolDef]:
     return [
         ToolDef(
@@ -94,6 +111,15 @@ def workbench_tool_defs() -> list[ToolDef]:
             name="http_post",
             description="POST against the workbench API. Use for engineer-driven Step 1-4 mutations (import, mesh, physics, BC, solver).",
             input_schema=_HTTP_POST_SCHEMA,
+        ),
+        ToolDef(
+            name="http_put",
+            description=(
+                "PUT against the workbench API. Use for face-annotations / "
+                "patch-classification updates (engineer-driven patch split "
+                "before Step 4 setup-bc). Added by DEC-V61-174 / B-ext.2 (F7)."
+            ),
+            input_schema=_HTTP_PUT_SCHEMA,
         ),
     ]
 
@@ -149,6 +175,8 @@ class WorkbenchToolExecutor:
             return self._do(call, method="GET")
         if call.tool_name == "http_post":
             return self._do(call, method="POST")
+        if call.tool_name == "http_put":
+            return self._do(call, method="PUT")
         return ToolResult(
             call_id=call.call_id,
             tool_name=call.tool_name,
@@ -187,6 +215,9 @@ class WorkbenchToolExecutor:
         try:
             if method == "GET":
                 resp = self._client.get(full_url)
+            elif method == "PUT":
+                body = call.arguments.get("json")
+                resp = self._client.put(full_url, json=body if isinstance(body, dict) else {})
             else:
                 body = call.arguments.get("json")
                 resp = self._client.post(full_url, json=body if isinstance(body, dict) else {})

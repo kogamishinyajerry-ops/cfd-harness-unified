@@ -38,6 +38,12 @@ and that the cause is recoverable; the question is which one.
    conceptually (note in rationale) and try the next-likeliest
    hypothesis. If a route 404s, fall back to `GET /api/openapi.json`
    immediately — do not burn turns guessing alternative paths.
+
+**Step 4 prerequisite (F7)**: on a single-shell STL the workbench
+detects only `defaultFaces`. Query `GET /patch-classification`
+post-mesh; if patches=[`defaultFaces`], split via `PUT /face-annotations`
+to assign face IDs to named patches (inlet, outlet, wall) BEFORE
+Step 4 setup-bc. Without this, setup-bc 400s on unknown patch names.
 6. Submit verdict only when you have residuals with monotonic
    decay below 1e-4 or another defensible convergence criterion
    for the case's regime. Submit drop only after you have

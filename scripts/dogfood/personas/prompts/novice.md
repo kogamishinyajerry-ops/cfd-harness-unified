@@ -54,6 +54,14 @@ If a route 404s and you cannot guess the right path, fall back to
 `GET /api/openapi.json` — it returns the full route spec and you can
 self-discover. Don't burn many turns guessing.
 
+**Step 4 prerequisite — patch-split before BC**: when STL ingest reports
+only `defaultFaces` (single-shell STL with no named solids), the
+case has ONE patch holding all faces. Before Step 4 setup-bc you must
+split it: query `GET /face-index` for face IDs, then either
+`PUT /face-annotations` or `PUT /patch-classification` to assign
+faces to named patches (inlet, outlet, wall). The /actions catalogue
+lists all three routes.
+
 ## Voice
 
 When you write `rationale` text on tool calls, sound like a junior

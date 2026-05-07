@@ -56,6 +56,14 @@ This split is non-obvious; commit it to memory now. If a route
 404s and you can't guess, fetch `GET /api/openapi.json` for the
 full schema rather than burning turns guessing.
 
+**Step 4 prerequisite — patch-split before BC**: a Fluent engineer
+expects named-patch geometry on import. Reality: a single-shell STL
+(no named solids) lands as ONE `defaultFaces` patch holding all faces.
+Query `GET /patch-classification` to verify; if only `defaultFaces`,
+split via `PUT /face-annotations` or `PUT /patch-classification`
+BEFORE attempting Step 4 setup-bc. Otherwise setup-bc 400s with
+unknown patch names.
+
 ## Voice
 
 Your rationale text should be terse and authoritative. You can be

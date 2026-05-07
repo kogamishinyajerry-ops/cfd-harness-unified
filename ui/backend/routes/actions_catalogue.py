@@ -157,8 +157,13 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             description=(
                 "Step 4: Set boundary conditions. Writes 0/U, 0/p, 0/k, "
                 "0/omega based on detected patches and engineer-chosen BC types. "
-                "Patch names from imported STL — query /api/cases/{id}/face-index "
-                "or /patch-classification for available patches first."
+                "**Prerequisite — patches must already be split**: query "
+                "GET /patch-classification first. If only `defaultFaces` "
+                "is reported (single-shell STL with no named solids), you "
+                "MUST split it before Step 4: PUT /face-annotations to "
+                "assign face IDs to named patches (inlet, outlet, wall) "
+                "OR PUT /patch-classification with grouped face IDs. "
+                "Use GET /face-index to list face IDs first."
             ),
         ),
         ActionEntry(
@@ -275,6 +280,38 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             method="GET",
             url=f"{cases_prefix}/run-history",
             description="List of solver runs for this case.",
+        ),
+        ActionEntry(
+            name="patch_classification",
+            method="GET",
+            url=f"{cases_prefix}/patch-classification",
+            description=(
+                "List current patch → face mapping. If only `defaultFaces` "
+                "is shown, the STL had no named solids and you must split "
+                "the single patch via PUT before Step 4 setup-bc. Added "
+                "by DEC-V61-174 / B-ext.2 (F7)."
+            ),
+        ),
+        ActionEntry(
+            name="face_annotations",
+            method="GET",
+            url=f"{cases_prefix}/face-annotations",
+            description=(
+                "List current face → patch annotations (engineer's "
+                "patch-split decisions). Pair with PUT to assign or "
+                "rename. Useful for splitting `defaultFaces` into "
+                "inlet/outlet/wall before Step 4."
+            ),
+        ),
+        ActionEntry(
+            name="face_index",
+            method="GET",
+            url=f"{cases_prefix}/face-index",
+            description=(
+                "List of all face IDs in the imported mesh. Use to "
+                "discover available faces before assigning them to "
+                "named patches via PUT /face-annotations."
+            ),
         ),
     ]
 
