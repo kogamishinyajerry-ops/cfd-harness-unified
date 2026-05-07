@@ -17,8 +17,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from ui.backend.routes._loopback_guard import require_loopback
 from ui.backend.schemas.ai_advisor import ReviewResponse
 from ui.backend.services.ai_advisor.review import review_case
 from ui.backend.services.case_drafts import is_safe_case_id
@@ -47,8 +48,18 @@ def _resolve_case_dir(case_id: str) -> Path:
     response_model=ReviewResponse,
     tags=["ai-advisor"],
 )
-async def get_ai_review(case_id: str) -> ReviewResponse:
+async def get_ai_review(
+    case_id: str,
+    request: Request,
+) -> ReviewResponse:
     """Compose a citation-grounded case review.
+
+    Loopback-only by default (Codex N6.2 R0 P1): the LLM call path
+    is the same blast radius as ``/api/ai-chat`` + ``/api/ai-coach``;
+    require_loopback shares their guard so off-box callers cannot
+    spend the operator's LLM quota or pull case-derived advisor
+    output. Operators who deploy behind a trusted reverse proxy +
+    auth set ``AI_CHAT_ALLOW_NON_LOOPBACK=1`` to opt in.
 
     Read-only:
       * Loads case state via N5.1 + N5.2 walkers (no writes)
@@ -61,5 +72,6 @@ async def get_ai_review(case_id: str) -> ReviewResponse:
     hand if applicable. There is no [Apply] surface — the V132
     contract test enforces this at the function-symbol level.
     """
+    require_loopback(request, route_label="/api/cases/{case_id}/ai-review")
     case_dir = _resolve_case_dir(case_id)
     return await review_case(case_dir)

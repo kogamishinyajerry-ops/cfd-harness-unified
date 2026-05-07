@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -48,6 +49,45 @@ from ui.backend.services.llm_provider.base import (
 from ui.backend.services.llm_provider.factory import get_default_provider
 
 logger = logging.getLogger(__name__)
+
+
+# Action-text patterns that indicate an LLM ignored the
+# advisory-only contract (Codex N6.2 R0 P2). Server-side enforcement:
+# any finding whose ``message`` or ``recommended_change`` matches any
+# pattern is dropped before reaching the wire — UI render path
+# (N6.4) cannot display or copy strings that look like routes /
+# button labels / shell commands.
+#
+# False positives (legitimate text mentioning HTTP / api / curl as
+# diagnostic context) are acceptable: the rule-based fallback covers
+# the underlying issue, and the LLM can phrase the same advice
+# without action language.
+_ACTION_TEXT_PATTERNS: tuple[re.Pattern, ...] = (
+    # HTTP method + path: "POST /api/...", "PUT /cases/..."
+    re.compile(r"\b(POST|PUT|PATCH|DELETE)\s+/", re.IGNORECASE),
+    # Bare API path: "/api/cases/{id}/..." — implies route invocation
+    re.compile(r"/api/[a-z][a-z0-9_\-/{}]+", re.IGNORECASE),
+    # [Apply] / [应用] button labels
+    re.compile(r"\[\s*(apply|应用|提交|执行)\s*\]", re.IGNORECASE),
+    # Shell commands that would mutate the case
+    re.compile(r"\b(curl|wget|http|httpie)\s+-X\s*(POST|PUT|PATCH|DELETE)",
+               re.IGNORECASE),
+    # Direct dispatcher tool invocation phrasing
+    re.compile(r"\bdispatch\s*\(\s*tool\s*=", re.IGNORECASE),
+)
+
+
+def _has_action_text(text: Optional[str]) -> bool:
+    """Return True iff ``text`` matches any action-text pattern.
+
+    None / empty → False (no risk).
+    """
+    if not text:
+        return False
+    for pattern in _ACTION_TEXT_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
 
 
 # Mapping from N5.2 source_rule_id → corpus query keywords. Used by
@@ -197,12 +237,20 @@ def _build_review_prompt(
     system = (
         "You are a CFD case reviewer. You have READ-ONLY access. "
         "Never recommend writes, route calls, or [Apply] actions. "
+        "FORBIDDEN in 'message' and 'recommended_change': any HTTP "
+        "method + path (e.g. 'POST /api/...'), any '/api/...' string, "
+        "any [Apply] / [应用] / [Submit] label, any curl/wget command, "
+        "any 'dispatch(tool=...)' phrasing. The server drops findings "
+        "whose text contains those patterns. Phrase suggestions as "
+        "plain prose (e.g. 'consider reducing snappyHexMesh "
+        "refinement level by 1' — not 'POST /api/cases/{id}/mesh "
+        "with refinement=2'). "
         "Output valid JSON of shape "
         '{"findings": [{"severity": "critical|warning|info", '
         '"area": "geometry|mesh|physics|solver|output", '
-        '"message": "<short factual statement>", '
+        '"message": "<short factual statement, no action text>", '
         '"citation_chunk_id": "<exact chunk_id from CORPUS block>", '
-        '"recommended_change": "<optional metadata-only suggestion>"}]}. '
+        '"recommended_change": "<optional metadata-only prose>"}]}. '
         "Cite only chunk_ids from the CORPUS block. Drop any finding "
         "you cannot ground in a real chunk_id."
     )
@@ -267,13 +315,33 @@ def _parse_llm_findings(
             )
             dropped += 1
             continue
+
+        # Codex N6.2 R0 P2: server-side advisory-only enforcement.
+        # If the LLM ignored the prompt and emitted route-like text
+        # (POST /api/..., [Apply], curl -X POST, ...) the V130
+        # "metadata-only / never a route descriptor" contract is
+        # violated. Drop the entire finding rather than render it.
+        candidate_message = raw_finding.get("message", "")
+        candidate_recommended = raw_finding.get("recommended_change")
+        if _has_action_text(candidate_message) or _has_action_text(
+            candidate_recommended
+        ):
+            logger.info(
+                "Dropping LLM finding with action-text "
+                "(message=%r recommended_change=%r).",
+                candidate_message,
+                candidate_recommended,
+            )
+            dropped += 1
+            continue
+
         try:
             finding = ReviewFinding(
                 severity=raw_finding.get("severity"),
                 area=raw_finding.get("area"),
-                message=raw_finding.get("message", ""),
+                message=candidate_message,
                 citation=loaded.to_cited(),
-                recommended_change=raw_finding.get("recommended_change"),
+                recommended_change=candidate_recommended,
                 source="llm",
             )
         except Exception as exc:  # pydantic.ValidationError + bad-cast
