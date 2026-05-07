@@ -93,6 +93,18 @@ This split is non-obvious; commit it to memory now. If a route
 404s and you can't guess, fetch `GET /api/openapi.json` for the
 full schema rather than burning turns guessing.
 
+**Step 4 — `from_stl_patches=1` is mandatory for anything that isn't
+the LDC tutorial cube**: the default LDC executor (`from_stl_patches=0`
+or no query param) hardcodes `lid_velocity=(1,0,0)`, `nu=1e-3`,
+`Re=100` and the bbox-derived `lid`/`fixedWalls` patches — fine for
+the cavity tutorial, useless for an airfoil. POST
+`/setup-bc?from_stl_patches=1&solver_name=simpleFoam&inlet_speed=<m/s>&nu=<m²/s>&end_time=<iter_count>`
+with values from `brief.physics` (Re, ν) and your engineering
+judgment (n_iterations sized for steady-state SIMPLE convergence,
+typically 500-2000). For external aero on NACA0012 at chord-Re=1e6:
+`inlet_speed=14.6` m/s (standard test condition), `nu=1.45e-5`
+(air at 20°C), `solver_name=simpleFoam`.
+
 **Step 4 prerequisite — patch-split before BC**: a Fluent engineer
 expects named-patch geometry on import. Reality: a single-shell STL
 (no named solids) lands as ONE `defaultFaces` patch holding all faces.

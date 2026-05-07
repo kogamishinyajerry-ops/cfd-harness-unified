@@ -46,6 +46,16 @@ class SetupBcSummary(BaseModel):
     written_files: list[str] = Field(
         ..., description="Relative paths of dicts written."
     )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Soft warnings surfaced by the executor. Currently used by "
+            "the LDC path (B-ext-4.3 F12, DEC-V61-189) to flag "
+            "non-cube geometry where LDC defaults will produce a NaN "
+            "U field; persona / UI should re-POST with from_stl_patches=1 "
+            "+ case-physics bc_contract."
+        ),
+    )
 
 
 class SetupBcRejection(BaseModel):

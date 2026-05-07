@@ -49,6 +49,18 @@ and that the cause is recoverable; the question is which one.
    hypothesis. If a route 404s, fall back to `GET /api/openapi.json`
    immediately — do not burn turns guessing alternative paths.
 
+**Step 4 — `from_stl_patches=1` is the only legitimate path for
+non-LDC cases**: omitting `from_stl_patches=1` (or passing 0) routes
+through `setup_ldc_bc` which hardcodes `lid_velocity=(1,0,0)`,
+`nu=1e-3`, `Re=100` and bbox-derived patches. On any non-cavity
+geometry this produces a "converged" residual + NaN U field
+(B-ext-3 F12). Always POST
+`/setup-bc?from_stl_patches=1&solver_name=...&inlet_speed=...&nu=...&end_time=...`
+with engineering-judgment values from `brief.physics`. If
+`/results-summary` returns 422 `results_malformed` with NaN entries,
+your /setup-bc almost certainly used the LDC fall-through —
+re-POST with `from_stl_patches=1` and explicit physics.
+
 **Step 4 prerequisite (F7)**: on a single-shell STL the workbench
 detects only `defaultFaces`. Query `GET /patch-classification`
 post-mesh; if patches=[`defaultFaces`], split via `PUT /face-annotations`
