@@ -1,0 +1,10 @@
+{
+  "case_id": "backward_step",
+  "persona": "novice",
+  "family": "deepseek",
+  "model_id": "deepseek-chat",
+  "run_id": "backward_step__novice__deepseek__da8fc185",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/backward_step.stl",
+  "elapsed_s": 0.001802499988116324
+}

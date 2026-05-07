@@ -1,0 +1,9 @@
+{
+  "runs_root": ".planning/dogfood/runs/dryrun_2026_05_07",
+  "started_at": 1778132651.071415,
+  "finished_at": 1778132651.082207,
+  "n_outcomes": 9,
+  "n_passed": 8,
+  "n_dropped": 1,
+  "n_errors": 0
+}

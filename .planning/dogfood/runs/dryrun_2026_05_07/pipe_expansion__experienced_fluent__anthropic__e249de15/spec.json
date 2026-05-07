@@ -1,0 +1,10 @@
+{
+  "case_id": "pipe_expansion",
+  "persona": "experienced_fluent",
+  "family": "anthropic",
+  "model_id": "claude-sonnet-4-6",
+  "run_id": "pipe_expansion__experienced_fluent__anthropic__e249de15",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/pipe_expansion.stl",
+  "elapsed_s": 0.0014569160412065685
+}

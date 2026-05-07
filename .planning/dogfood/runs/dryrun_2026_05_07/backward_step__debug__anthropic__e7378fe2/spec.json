@@ -1,0 +1,10 @@
+{
+  "case_id": "backward_step",
+  "persona": "debug",
+  "family": "anthropic",
+  "model_id": "claude-sonnet-4-6",
+  "run_id": "backward_step__debug__anthropic__e7378fe2",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/backward_step.stl",
+  "elapsed_s": 0.001539458055049181
+}

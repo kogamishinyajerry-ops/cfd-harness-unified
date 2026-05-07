@@ -6,6 +6,7 @@ from scripts.dogfood.personas.assignment import (
     list_assignments,
 )
 from scripts.dogfood.personas.library import (
+    PERSONA_NAMES,
     Persona,
     PersonaPromptError,
     PersonaRegistryError,
@@ -15,6 +16,7 @@ from scripts.dogfood.personas.library import (
 )
 
 __all__ = [
+    "PERSONA_NAMES",
     "Persona",
     "PersonaAssignment",
     "PersonaAssignmentError",

@@ -1,0 +1,10 @@
+{
+  "case_id": "backward_step",
+  "persona": "experienced_fluent",
+  "family": "openai_compat",
+  "model_id": "gpt-5.4",
+  "run_id": "backward_step__experienced_fluent__openai_compat__dd9aefb5",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/backward_step.stl",
+  "elapsed_s": 0.0006319169769994915
+}

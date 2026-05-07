@@ -1,0 +1,13 @@
+{
+  "run_id": "pipe_expansion__novice__openai_compat__b06b6094",
+  "case_id": "pipe_expansion",
+  "persona": "novice",
+  "model_id": "gpt-5.4",
+  "steps": 4,
+  "verdict": null,
+  "dropped": true,
+  "drop_reason": "axisymmetric BC type unclear from corpus; need more guidance",
+  "total_input_tokens": 400,
+  "total_output_tokens": 120,
+  "error": null
+}
