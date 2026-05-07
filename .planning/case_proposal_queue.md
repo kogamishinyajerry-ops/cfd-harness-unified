@@ -83,12 +83,13 @@ is **pending** or **partially covered**:
 
 ## Active queue (proposed but not yet dispatched)
 
-(empty — user just established this protocol; first Codex
-request is in flight or about to be sent for case_003)
+(empty — case_003 dispatched 2026-05-07 evening)
 
 ## Dispatched (kickoff paste-ready, awaiting sub-session start)
 
-(empty)
+| case_id | Solver class | Codex 出题 round | CAD source | Defects | Kickoff file | Dispatched |
+|---|---|---|---|---|---|---|
+| `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer | 1 of 2 (no revision needed) | Tier-1 NASA/AIAA HLPW6 CRM-HLS | D1 (0.35 mm gap) + D8 (0.80 mm thin plate) | `kickoff/case_003_crm_hls_boundary_layer.md` | 2026-05-07 evening |
 
 ## In-flight sub-sessions
 

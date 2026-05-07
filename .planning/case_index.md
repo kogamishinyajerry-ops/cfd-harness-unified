@@ -16,6 +16,7 @@
 |---|---|---|---|---|---|
 | `case_002a_apu_bay_buoyant_simple` | Internal flow + buoyancy + forced convection | `~/Desktop/apu-bay-ventilation/` | active · v14 @ iter 813+ | V3-V13 | 2026-05-07 |
 | `case_002b_apu_bay_cht` | CHT (multi-region + radiation) | `~/Desktop/apu-bay-ventilation-cht/` | active · v2 norad @ iter 67+ | V14-V15 | 2026-05-07 |
+| `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer (incompressible-RANS) | `~/Desktop/case_003_crm_hls_boundary_layer/` (sandbox not yet created — sub-session establishes) | dispatched · awaiting sub-session start | (pending — first run will source V16+) | 2026-05-07 |
 
 ## Closed threads
 
