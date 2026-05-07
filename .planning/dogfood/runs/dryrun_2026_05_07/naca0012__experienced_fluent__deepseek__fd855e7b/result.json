@@ -1,0 +1,21 @@
+{
+  "run_id": "naca0012__experienced_fluent__deepseek__fd855e7b",
+  "case_id": "naca0012",
+  "persona": "experienced_fluent",
+  "model_id": "deepseek-chat",
+  "steps": 3,
+  "verdict": {
+    "passed": true,
+    "metric": "Cl",
+    "observed": 0.44,
+    "reference": 0.44,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "detail": "observed=0.44, reference=0.44, err=0.0000 (tol=0.0500 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 300,
+  "total_output_tokens": 90,
+  "error": null
+}

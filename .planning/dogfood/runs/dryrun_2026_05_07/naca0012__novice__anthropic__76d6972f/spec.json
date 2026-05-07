@@ -1,0 +1,10 @@
+{
+  "case_id": "naca0012",
+  "persona": "novice",
+  "family": "anthropic",
+  "model_id": "claude-sonnet-4-6",
+  "run_id": "naca0012__novice__anthropic__76d6972f",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/naca0012.stl",
+  "elapsed_s": 0.0016377919819206
+}

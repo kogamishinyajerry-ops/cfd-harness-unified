@@ -1,0 +1,21 @@
+{
+  "run_id": "naca0012__novice__anthropic__76d6972f",
+  "case_id": "naca0012",
+  "persona": "novice",
+  "model_id": "claude-sonnet-4-6",
+  "steps": 4,
+  "verdict": {
+    "passed": true,
+    "metric": "Cl",
+    "observed": 0.42,
+    "reference": 0.44,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "detail": "observed=0.42, reference=0.44, err=0.0455 (tol=0.0500 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 400,
+  "total_output_tokens": 120,
+  "error": null
+}

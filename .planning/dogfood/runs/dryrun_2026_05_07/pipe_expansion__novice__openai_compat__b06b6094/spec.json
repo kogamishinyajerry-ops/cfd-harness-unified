@@ -1,0 +1,10 @@
+{
+  "case_id": "pipe_expansion",
+  "persona": "novice",
+  "family": "openai_compat",
+  "model_id": "gpt-5.4",
+  "run_id": "pipe_expansion__novice__openai_compat__b06b6094",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/pipe_expansion.stl",
+  "elapsed_s": 0.0017491250182501972
+}

@@ -1,0 +1,21 @@
+{
+  "run_id": "naca0012__debug__openai_compat__a4757003",
+  "case_id": "naca0012",
+  "persona": "debug",
+  "model_id": "gpt-5.4",
+  "steps": 5,
+  "verdict": {
+    "passed": true,
+    "metric": "Cl",
+    "observed": 0.43,
+    "reference": 0.44,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "detail": "observed=0.43, reference=0.44, err=0.0227 (tol=0.0500 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 500,
+  "total_output_tokens": 150,
+  "error": null
+}

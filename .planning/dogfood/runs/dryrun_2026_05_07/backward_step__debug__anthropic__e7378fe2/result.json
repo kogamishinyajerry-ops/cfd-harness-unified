@@ -1,0 +1,21 @@
+{
+  "run_id": "backward_step__debug__anthropic__e7378fe2",
+  "case_id": "backward_step",
+  "persona": "debug",
+  "model_id": "claude-sonnet-4-6",
+  "steps": 4,
+  "verdict": {
+    "passed": true,
+    "metric": "L_over_h",
+    "observed": 5.9,
+    "reference": 6.0,
+    "tolerance": 0.1,
+    "tolerance_kind": "rel",
+    "detail": "observed=5.9, reference=6, err=0.0167 (tol=0.1000 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 400,
+  "total_output_tokens": 120,
+  "error": null
+}

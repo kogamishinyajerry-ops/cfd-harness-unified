@@ -1,0 +1,21 @@
+{
+  "run_id": "backward_step__experienced_fluent__openai_compat__dd9aefb5",
+  "case_id": "backward_step",
+  "persona": "experienced_fluent",
+  "model_id": "gpt-5.4",
+  "steps": 2,
+  "verdict": {
+    "passed": true,
+    "metric": "L_over_h",
+    "observed": 6.1,
+    "reference": 6.0,
+    "tolerance": 0.1,
+    "tolerance_kind": "rel",
+    "detail": "observed=6.1, reference=6, err=0.0167 (tol=0.1000 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 200,
+  "total_output_tokens": 60,
+  "error": null
+}
