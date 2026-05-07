@@ -287,6 +287,25 @@ def _is_converged(
     return True
 
 
+def _filter_numeric_time_dirs(time_dirs: list[str]) -> list[str]:
+    """Filter to OpenFOAM time directories that parse as float.
+
+    The ``ls -d [0-9]*`` glob in run_icofoam matches setup-bc backup
+    dirs like ``0.orig`` (B-ext-2 F9: surfaced when persona drove a
+    full Steps 1-5 sequence and the post-solve scan crashed in
+    ``sorted(..., key=lambda s: float(s))``). Filter defensively here
+    so non-numeric names (``0.orig``, ``0.bak``, etc.) are dropped.
+    """
+    out: list[str] = []
+    for td in time_dirs:
+        try:
+            float(td)
+        except ValueError:
+            continue
+        out.append(td)
+    return out
+
+
 def run_icofoam(
     *,
     case_host_dir: Path,
@@ -457,6 +476,8 @@ def run_icofoam(
             f"host filesystem / archive fault pulling time directories: {exc}"
         ) from exc
 
+    numeric_pulled = _filter_numeric_time_dirs(pulled)
+
     return SolverRunResult(
         case_id=case_host_dir.name,
         end_time_reached=float(parsed["end_time_reached"]),
@@ -467,8 +488,10 @@ def run_icofoam(
             parsed["Uz"],  # type: ignore[arg-type]
         ),
         last_continuity_error=parsed["continuity"],  # type: ignore[arg-type]
-        n_time_steps_written=len(pulled),
-        time_directories=tuple(sorted(pulled, key=lambda s: float(s))),
+        n_time_steps_written=len(numeric_pulled),
+        time_directories=tuple(
+            sorted(numeric_pulled, key=lambda s: float(s))
+        ),
         log_path=log_dest,
         wall_time_s=float(parsed["wall_clock"]),
         converged=converged,
