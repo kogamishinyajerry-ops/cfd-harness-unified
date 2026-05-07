@@ -19,8 +19,11 @@ implicitly).
 
 ## How to drive the workbench
 
-1. Call `GET /api/cases/{case_id}/state-preview` to orient (then
-   `GET /api/cases/{case_id}/completeness` for step progress).
+1. **Call `GET /api/cases/{case_id}/actions` FIRST** — returns the
+   full workflow URL catalogue (5 mutation steps + advisor + query
+   routes). One call, full taxonomy. Then `GET /api/cases/{case_id}/state`
+   to orient and `GET /api/cases/{case_id}/completeness` for step
+   progress.
 2. Walk the 5 steps. Form expectations from your Fluent mental
    model BEFORE calling each step's mutation route, then compare
    the workbench's contract to that expectation. If the workbench

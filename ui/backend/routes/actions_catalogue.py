@@ -46,6 +46,15 @@ class ActionEntry(BaseModel):
             "name, or null for GET routes."
         ),
     )
+    example_body: dict | None = Field(
+        default=None,
+        description=(
+            "Working JSON body example for POST routes. Copy-paste-ready "
+            "with sensible defaults; persona may need to swap preset_id "
+            "or BC patches based on the case. Null for GET routes. "
+            "Added by DEC-V61-170 / B.5.5 to address F5 schema discoverability."
+        ),
+    )
     description: str
 
 
@@ -88,10 +97,16 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             name="mesh",
             method="POST",
             url=f"{import_prefix}/mesh",
-            body="JSON {sizing_strategy, ...}",
+            body="JSON {sizing_strategy, refinement_level, ...}",
+            example_body={
+                "sizing_strategy": "moderate",
+                "refinement_level": 2,
+            },
             description=(
                 "Step 2: Generate volume mesh from imported STL. "
-                "snappyHexMesh / cfMesh backend selected by sizing_strategy."
+                "snappyHexMesh / cfMesh backend selected by sizing_strategy. "
+                "sizing_strategy ∈ {coarse, moderate, fine}; refinement_level "
+                "is an integer 0-4."
             ),
         ),
         ActionEntry(
@@ -100,10 +115,29 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             method="POST",
             url=f"{cases_prefix}/physics",
             body="JSON {material: MaterialContract, regime: RegimeContract}",
+            example_body={
+                "material": {
+                    "kind": "preset",
+                    "preset_id": "air_20c",
+                    "fluid": {
+                        "name": "air @ 20°C",
+                        "density": 1.204,
+                        "kinematic_viscosity": 1.516e-5,
+                    },
+                },
+                "regime": {
+                    "kind": "preset",
+                    "preset_id": "rans_komegasst_default",
+                    "regime": "RANS-kOmegaSST",
+                },
+            },
             description=(
                 "Step 3: Commit physics. Writes constant/physicalProperties "
                 "+ constant/momentumTransport. Pair this with GET /physics "
-                "to query current state before committing."
+                "to query current state before committing. "
+                "Material preset_ids: water_20c, air_20c, air_20c_isothermal, "
+                "oil_iso_vg_46_40c. Regime preset_ids: laminar_internal_default, "
+                "rans_ras_kepsilon_default, rans_komegasst_default."
             ),
         ),
         ActionEntry(
@@ -111,10 +145,20 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             name="setup_bc",
             method="POST",
             url=f"{import_prefix}/setup-bc",
-            body="JSON {boundary_conditions: {...}}",
+            body="JSON {boundary_conditions: [{patch, type, value?}, ...]}",
+            example_body={
+                "boundary_conditions": [
+                    {"patch": "inlet", "type": "fixed_velocity",
+                     "value": [1.0, 0.0, 0.0]},
+                    {"patch": "outlet", "type": "zero_gradient_pressure"},
+                    {"patch": "wall", "type": "no_slip"},
+                ],
+            },
             description=(
                 "Step 4: Set boundary conditions. Writes 0/U, 0/p, 0/k, "
-                "0/omega based on detected patches and engineer-chosen BC types."
+                "0/omega based on detected patches and engineer-chosen BC types. "
+                "Patch names from imported STL — query /api/cases/{id}/face-index "
+                "or /patch-classification for available patches first."
             ),
         ),
         ActionEntry(
@@ -122,11 +166,17 @@ def _build_catalogue(case_id: str) -> ActionsCatalogue:
             name="solve",
             method="POST",
             url=f"{import_prefix}/solve",
-            body="JSON {solver_name, urf_preset, ...}",
+            body="JSON {solver_name, urf_preset, n_iterations}",
+            example_body={
+                "solver_name": "simpleFoam",
+                "urf_preset": "simpleFoam_robust",
+                "n_iterations": 500,
+            },
             description=(
                 "Step 5: Run the solver. simpleFoam / pimpleFoam / icoFoam "
-                "selected by solver_name. Use solve-stream for SSE residual "
-                "monitoring."
+                "selected by solver_name. urf_preset ∈ {simpleFoam_robust, "
+                "simpleFoam_balanced, simpleFoam_aggressive}. Use solve-stream "
+                "for SSE residual monitoring."
             ),
         ),
     ]

@@ -151,6 +151,43 @@ def test_step_descriptions_mention_step_number(monkeypatch, tmp_path):
         )
 
 
+def test_each_post_step_has_example_body(monkeypatch, tmp_path):
+    """B.5.5 / DEC-V61-170: schema discoverability — every POST step must
+    ship an example_body so personas don't need to round-trip
+    /api/openapi.json for working JSON."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage(imported, case_id)
+    body = _client().get(f"/api/cases/{case_id}/actions").json()
+    for s in body["steps"]:
+        if s["method"] == "POST" and s["name"] != "import_geometry":
+            assert s["example_body"] is not None, (
+                f"step {s['name']} missing example_body"
+            )
+            assert isinstance(s["example_body"], dict)
+
+
+def test_physics_example_body_uses_real_preset_ids(monkeypatch, tmp_path):
+    """The physics example_body must reference actual preset_ids that the
+    schema validator will accept (not fabricated)."""
+    imported = _isolate(monkeypatch, tmp_path)
+    case_id = _safe_id()
+    _stage(imported, case_id)
+    body = _client().get(f"/api/cases/{case_id}/actions").json()
+    physics = next(s for s in body["steps"] if s["name"] == "physics")
+    eg = physics["example_body"]
+    # Real preset_ids from materials_library / regimes_library
+    real_material_presets = {
+        "water_20c", "air_20c", "air_20c_isothermal", "oil_iso_vg_46_40c",
+    }
+    real_regime_presets = {
+        "laminar_internal_default", "rans_ras_kepsilon_default",
+        "rans_komegasst_default", "les_stub_placeholder",
+    }
+    assert eg["material"]["preset_id"] in real_material_presets
+    assert eg["regime"]["preset_id"] in real_regime_presets
+
+
 def test_import_geometry_url_has_no_case_id_substitution(monkeypatch, tmp_path):
     """Step 1 import is the entry — url must remain /api/import/stl."""
     imported = _isolate(monkeypatch, tmp_path)
