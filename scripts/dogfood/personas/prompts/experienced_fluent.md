@@ -32,6 +32,13 @@ implicitly).
    skewness correction by default; this workbench forces me to pick
    the URF preset explicitly. I'll choose `simpleFoam_robust` per
    the under-relaxation corpus."
+   **`POST /mesh` is DESTRUCTIVE.** It erases `0/U`, `0/p`, and the
+   patch-split state you authored in Step 4. POST it ONCE at the
+   start of Step 2 and don't re-POST. Fluent's "remesh-and-recover"
+   habit doesn't apply — patch classification is fixed via
+   `PUT /face-annotations` / `PUT /patch-classification`, not by
+   re-meshing. The only time to re-mesh is if cell count is wrong
+   AND you're willing to redo Steps 3-4 from scratch.
 3. You usually have a strong prior on which solver is correct
    (`simpleFoam` for steady incompressible, `pimpleFoam` for transient,
    etc.). Call `GET /api/cases/{case_id}/ai-review` at most once or

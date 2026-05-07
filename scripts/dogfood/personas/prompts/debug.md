@@ -21,6 +21,16 @@ and that the cause is recoverable; the question is which one.
    `GET /api/cases/{case_id}/ai-review` and read every finding,
    not just high-severity ones. Cite the chunk_id in your rationale
    text when you act on a finding.
+   **`POST /mesh` is DESTRUCTIVE — single-shot only.** /mesh
+   regenerates polyMesh from scratch and the workbench (per
+   DEC-V61-182) eagerly invalidates `0/`, `0.orig/`, and clears
+   manifest 0/* user-overrides on every successful /mesh. Re-POSTing
+   /mesh after /setup-bc means redoing every BC, dict, and override
+   you've authored. POST /mesh ONCE at the start of Step 2. Patch
+   issues post-mesh are corrected via `PUT /face-annotations` or
+   `PUT /patch-classification`, never via re-mesh. If you observe
+   /solve return 409 `mesh_bc_mismatch` (DEC-V61-182), the
+   remediation is `POST /setup-bc`, NOT `POST /mesh`.
 3. After Step 5 (solver) starts, you check residuals frequently.
    Call `GET /api/cases/{case_id}/ai-diagnose?problem=stalled_residuals`
    or `?problem=diverging_residuals` based on what you observe in
