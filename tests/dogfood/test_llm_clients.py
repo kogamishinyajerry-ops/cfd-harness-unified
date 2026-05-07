@@ -265,3 +265,144 @@ def test_anthropic_requires_api_key_env(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         AnthropicClient(model_id="claude-sonnet-4-6")
+
+
+# ---------------------------------------------------------------------------
+# F14 mitigation (DEC-V61-192): timeout per-phase + retry on transient errors
+# ---------------------------------------------------------------------------
+
+
+def test_default_timeout_is_per_phase_with_read_180s() -> None:
+    """The default timeout should be a per-phase httpx.Timeout, not a single
+    value that lets slow-trickle responses evade the read deadline (R9 F14)."""
+    from scripts.dogfood.llm_clients import _DEFAULT_TIMEOUT
+
+    assert isinstance(_DEFAULT_TIMEOUT, httpx.Timeout)
+    assert _DEFAULT_TIMEOUT.read == 180.0
+    assert _DEFAULT_TIMEOUT.connect == 10.0
+
+
+def test_resolve_timeout_accepts_legacy_float() -> None:
+    """Float timeouts (legacy callers) keep working, but get coerced to
+    per-phase shape so connect/write don't inherit a long read value."""
+    from scripts.dogfood.llm_clients import _resolve_timeout
+
+    t = _resolve_timeout(60.0)
+    assert isinstance(t, httpx.Timeout)
+    assert t.read == 60.0
+    assert t.connect == 10.0  # capped at 10
+    assert t.write == 30.0  # capped at 30
+
+
+def test_post_with_retry_succeeds_after_one_read_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAICompatClient retries once on httpx.ReadTimeout; second attempt
+    returns a clean response. Mirrors the F14 R9 backward_step crash mode."""
+    monkeypatch.setattr("scripts.dogfood.llm_clients.time.sleep", lambda _s: None)
+
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise httpx.ReadTimeout("simulated", request=request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    transport = httpx.MockTransport(handler)
+    client = OpenAICompatClient(
+        model_id="gpt-5.4",
+        api_key="sk-test",
+        base_url="https://relay.example/v1",
+        api_key_env="UNUSED",
+        transport=transport,
+    )
+    msg = client.chat(system="x", messages=[], tools=[])
+    assert msg.text == "ok"
+    assert attempts["n"] == 2  # 1 retry consumed
+    client.close()
+
+
+def test_post_with_retry_reraises_after_exhausted_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two consecutive ReadTimeouts → second is re-raised to caller."""
+    monkeypatch.setattr("scripts.dogfood.llm_clients.time.sleep", lambda _s: None)
+
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        raise httpx.ReadTimeout("simulated", request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = OpenAICompatClient(
+        model_id="gpt-5.4",
+        api_key="sk-test",
+        base_url="https://relay.example/v1",
+        api_key_env="UNUSED",
+        transport=transport,
+    )
+    with pytest.raises(httpx.ReadTimeout):
+        client.chat(system="x", messages=[], tools=[])
+    assert attempts["n"] == 2  # 1 initial + 1 retry
+    client.close()
+
+
+def test_post_with_retry_does_not_retry_on_4xx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTP 4xx is NOT a network error and must not be retried; caller
+    receives the response and lets raise_for_status surface it."""
+    monkeypatch.setattr("scripts.dogfood.llm_clients.time.sleep", lambda _s: None)
+
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(401, json={"error": "unauthorized"})
+
+    transport = httpx.MockTransport(handler)
+    client = OpenAICompatClient(
+        model_id="gpt-5.4",
+        api_key="sk-test",
+        base_url="https://relay.example/v1",
+        api_key_env="UNUSED",
+        transport=transport,
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        client.chat(system="x", messages=[], tools=[])
+    assert attempts["n"] == 1  # no retry on HTTP error
+    client.close()
+
+
+def test_anthropic_client_also_retries_on_read_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F14 retry applies to AnthropicClient too — same code path."""
+    monkeypatch.setattr("scripts.dogfood.llm_clients.time.sleep", lambda _s: None)
+
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise httpx.RemoteProtocolError("server hung up", request=request)
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "recovered"}],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = AnthropicClient(
+        model_id="claude-sonnet-4-6",
+        api_key="sk-test",
+        transport=transport,
+    )
+    msg = client.chat(system="x", messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert msg.text == "recovered"
+    assert attempts["n"] == 2
+    client.close()

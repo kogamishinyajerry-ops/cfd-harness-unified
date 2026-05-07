@@ -19,12 +19,91 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+# F14 mitigation (DEC-V61-192, B-ext-5): R9 backward_step crashed at
+# step 20 after a 15.5-min wait on DeepSeek; the original `timeout=60.0`
+# was a single value that httpx applied per phase, but slow trickle-byte
+# responses kept the read socket below the per-byte read deadline. Fix:
+# explicit per-phase timeouts (connect=10s, read=180s) + 1 retry on
+# the network-class exceptions that R9 surfaced.
+_DEFAULT_TIMEOUT: httpx.Timeout = httpx.Timeout(
+    connect=10.0, read=180.0, write=30.0, pool=30.0
+)
+_RETRYABLE_EXC: tuple[type[BaseException], ...] = (
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    httpx.RemoteProtocolError,
+    httpx.ConnectError,
+)
+
+
+def _resolve_timeout(timeout: float | httpx.Timeout | None) -> httpx.Timeout:
+    """Back-compat: accept a float (legacy callers) or `httpx.Timeout`.
+
+    A bare float gets coerced to per-phase Timeout with read=value but
+    other phases capped to keep handshake fast.
+    """
+    if timeout is None:
+        return _DEFAULT_TIMEOUT
+    if isinstance(timeout, httpx.Timeout):
+        return timeout
+    # legacy float — keep read=timeout (as caller intended) but use
+    # tighter connect/write so we don't block on dead DNS / dead writes
+    return httpx.Timeout(
+        connect=min(10.0, float(timeout)),
+        read=float(timeout),
+        write=min(30.0, float(timeout)),
+        pool=min(30.0, float(timeout)),
+    )
+
+
+def _post_with_retry(
+    client: httpx.Client,
+    url: str,
+    *,
+    json: dict[str, Any],
+    headers: dict[str, str],
+    retries: int = 1,
+    backoff_s: float = 5.0,
+) -> httpx.Response:
+    """POST with retry on transient network errors (F14 mitigation).
+
+    `retries=1` → up to 2 total attempts. We retry only on the
+    transient-network class; HTTP 4xx/5xx are returned to caller (they
+    handle non-2xx via raise_for_status). The original exception from
+    the final attempt re-raises.
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(retries + 1):
+        try:
+            return client.post(url, json=json, headers=headers)
+        except _RETRYABLE_EXC as exc:
+            last_exc = exc
+            if attempt < retries:
+                logger.warning(
+                    "POST %s failed (attempt %d/%d): %s; retrying in %.1fs",
+                    url,
+                    attempt + 1,
+                    retries + 1,
+                    exc.__class__.__name__,
+                    backoff_s,
+                )
+                time.sleep(backoff_s)
+                continue
+            raise
+    # unreachable — loop either returns or re-raises
+    assert last_exc is not None
+    raise last_exc
 
 
 # ---------------------------------------------------------------------------
@@ -215,14 +294,16 @@ class AnthropicClient:
         model_id: str = "claude-sonnet-4-6",
         api_key: str | None = None,
         base_url: str = "https://api.anthropic.com",
-        timeout: float = 60.0,
+        timeout: float | httpx.Timeout | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         assert_non_opus(model_id)
         self.model_id = model_id
         self._api_key = api_key or _require_env("ANTHROPIC_API_KEY")
         self._base_url = base_url.rstrip("/")
-        self._client = httpx.Client(timeout=timeout, transport=transport)
+        self._client = httpx.Client(
+            timeout=_resolve_timeout(timeout), transport=transport
+        )
         logger.info(
             "AnthropicClient model=%s key_fp=%s",
             model_id,
@@ -252,7 +333,8 @@ class AnthropicClient:
                 }
                 for t in tools
             ]
-        response = self._client.post(
+        response = _post_with_retry(
+            self._client,
             f"{self._base_url}/v1/messages",
             json=payload,
             headers={
@@ -307,14 +389,16 @@ class OpenAICompatClient:
         api_key: str | None,
         base_url: str,
         api_key_env: str,
-        timeout: float = 60.0,
+        timeout: float | httpx.Timeout | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         assert_non_opus(model_id)
         self.model_id = model_id
         self._api_key = api_key or _require_env(api_key_env)
         self._base_url = base_url.rstrip("/")
-        self._client = httpx.Client(timeout=timeout, transport=transport)
+        self._client = httpx.Client(
+            timeout=_resolve_timeout(timeout), transport=transport
+        )
         logger.info(
             "OpenAICompatClient model=%s base=%s key_fp=%s",
             model_id,
@@ -348,7 +432,8 @@ class OpenAICompatClient:
                 }
                 for t in tools
             ]
-        response = self._client.post(
+        response = _post_with_retry(
+            self._client,
             f"{self._base_url}/chat/completions",
             json=payload,
             headers={
@@ -400,7 +485,7 @@ def DeepSeekClient(
     model_id: str = "deepseek-chat",
     api_key: str | None = None,
     base_url: str = "https://api.deepseek.com/v1",
-    timeout: float = 60.0,
+    timeout: float | httpx.Timeout | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> OpenAICompatClient:
     return OpenAICompatClient(
@@ -418,7 +503,7 @@ def Gpt54Client(
     model_id: str = "gpt-5.4",
     api_key: str | None = None,
     base_url: str | None = None,
-    timeout: float = 60.0,
+    timeout: float | httpx.Timeout | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> OpenAICompatClient:
     base = base_url or os.environ.get(
