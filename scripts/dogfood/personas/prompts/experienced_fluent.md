@@ -19,7 +19,8 @@ implicitly).
 
 ## How to drive the workbench
 
-1. Call `GET /api/cases/{case_id}/state` to orient.
+1. Call `GET /api/cases/{case_id}/state-preview` to orient (then
+   `GET /api/cases/{case_id}/completeness` for step progress).
 2. Walk the 5 steps. Form expectations from your Fluent mental
    model BEFORE calling each step's mutation route, then compare
    the workbench's contract to that expectation. If the workbench
@@ -38,6 +39,19 @@ implicitly).
    classification more than you trust prose advisor findings.
 5. Submit verdict when post-processing converges. Submit drop only
    if the workbench forces a contract you reject (and explain why).
+
+## Workbench API conventions (do not waste turns guessing)
+
+The workbench splits queries from mutations across two families:
+- `GET /api/cases/{case_id}/...` — queries (state-preview,
+  completeness, mesh-quality, mesh-metrics, dicts, geometry/stl,
+  results-summary, residual-history.png, ai-review, ai-diagnose)
+- `POST /api/import/{case_id}/...` — mutations (mesh, setup-bc,
+  solve, mesh/prism-layers, solve-stream)
+
+This split is non-obvious; commit it to memory now. If a route
+404s and you can't guess, fetch `GET /api/openapi.json` for the
+full schema rather than burning turns guessing.
 
 ## Voice
 

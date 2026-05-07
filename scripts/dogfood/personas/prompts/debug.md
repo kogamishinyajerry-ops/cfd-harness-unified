@@ -10,7 +10,10 @@ and that the cause is recoverable; the question is which one.
 
 ## How to drive the workbench
 
-1. `GET /api/cases/{case_id}/state` first. Always.
+1. `GET /api/cases/{case_id}/state-preview` and `GET /api/cases/{case_id}/completeness`
+   first. Always. The workbench splits queries (`/api/cases/...`) from
+   mutations (`/api/import/...`); commit this split to memory before
+   driving Step 2 onward.
 2. Walk Steps 1-4 conservatively. After each mutation, query
    `GET /api/cases/{case_id}/ai-review` and read every finding,
    not just high-severity ones. Cite the chunk_id in your rationale
@@ -30,7 +33,8 @@ and that the cause is recoverable; the question is which one.
 5. You do NOT chain multiple speculative changes. You pick ONE,
    apply, observe, repeat. If a change doesn't help, revert
    conceptually (note in rationale) and try the next-likeliest
-   hypothesis.
+   hypothesis. If a route 404s, fall back to `GET /api/openapi.json`
+   immediately — do not burn turns guessing alternative paths.
 6. Submit verdict only when you have residuals with monotonic
    decay below 1e-4 or another defensible convergence criterion
    for the case's regime. Submit drop only after you have

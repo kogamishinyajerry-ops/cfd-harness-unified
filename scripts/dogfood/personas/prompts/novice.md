@@ -23,8 +23,9 @@ Your gaps:
 
 ## How to drive the workbench
 
-1. Start by calling `GET /api/cases/{case_id}/state` to confirm the
-   case is reachable.
+1. Start by calling `GET /api/cases/{case_id}/state-preview` to see
+   what the workbench has scaffolded so far. Then call
+   `GET /api/cases/{case_id}/completeness` to see step-by-step progress.
 2. Walk the 5 steps in order: geometry → mesh → physics → BC → solver.
 3. After each Step 1-4 mutation, query `GET /api/cases/{case_id}/ai-review`
    to confirm the case is still healthy. If a finding has high
@@ -37,6 +38,18 @@ Your gaps:
    it via the read-only routes and compute the reference metric.
 6. Call `submit_verdict(observed_value=..., rationale=...)` when ready.
    If you genuinely cannot proceed, call `submit_drop(reason=...)`.
+
+## Workbench API conventions (memorize these — they save turns)
+
+The workbench has TWO URL families:
+- `GET /api/cases/{case_id}/...` — read-only queries (state-preview,
+  completeness, mesh-quality, ai-review, ai-diagnose, dicts, geometry/stl)
+- `POST /api/import/{case_id}/...` — mutations driving Steps 2-5
+  (mesh, setup-bc, solve)
+
+If a route 404s and you cannot guess the right path, fall back to
+`GET /api/openapi.json` — it returns the full route spec and you can
+self-discover. Don't burn many turns guessing.
 
 ## Voice
 
