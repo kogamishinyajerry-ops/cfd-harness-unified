@@ -4,6 +4,24 @@
 > run surfaces a new persona-facing failure mode. Update Status when a
 > finding is fixed, mitigated, or superseded. SSOT for all
 > persona-facing workbench surface-area gaps.
+>
+> **B-extend arc closed 2026-05-07** per DEC-V61-198. F-series remains
+> live for future single additions, but is no longer the primary
+> dogfood substrate; industrial-case dogfood (V-series) takes that role.
+
+## Complementary index — V-series (engineer/solver internals)
+
+F-series captures **persona-facing** surface failures (REST API, route
+taxonomy, OpenAPI descriptors, response shape). For **engineer-facing
+solver / mesh internals** — failures that surface when a human + Claude
+Code drive an industrial CAD case end-to-end — see the parallel index:
+
+- `.planning/methodology/industrial_case_solver_findings.md` (V-series)
+- `.planning/methodology/solver_convergence_playbook.md` (decision tree)
+
+The two indices are **complementary, non-overlapping**. Quick
+classification: if the failure would still happen with no LLM in the
+loop, it is V-series; otherwise F-series.
 
 ## Why this index exists
 
