@@ -422,6 +422,13 @@ _AI_DISPATCH_MODULES: tuple[str, ...] = (
     "ui/backend/services/llm_coach/tool_registry.py",
     "ui/backend/routes/ai_chat.py",
     "ui/backend/routes/ai_coach.py",
+    # DEC-V61-158 (N6.2): AI 审查 advisor route + service. Read-only
+    # by V130/V132 contract; static AST scan asserts no
+    # KNOWN_MUTATION_FUNCTIONS symbol is imported.
+    "ui/backend/routes/ai_advisor.py",
+    "ui/backend/services/ai_advisor/__init__.py",
+    "ui/backend/services/ai_advisor/corpus_loader.py",
+    "ui/backend/services/ai_advisor/review.py",
 )
 
 
