@@ -87,9 +87,9 @@ is **pending** or **partially covered**:
 
 ## Dispatched (kickoff paste-ready, awaiting sub-session start)
 
-| case_id | Solver class | Codex 出题 round | CAD source | Defects | Kickoff file | Dispatched |
-|---|---|---|---|---|---|---|
-| `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer | 1 of 2 (no revision needed) | Tier-1 NASA/AIAA HLPW6 CRM-HLS | D1 (0.35 mm gap) + D8 (0.80 mm thin plate) | `kickoff/case_003_crm_hls_boundary_layer.md` | 2026-05-07 evening |
+| case_id | Solver class | Codex 出题 round | CAD source | Defects | Kickoff file | Dispatched | Status note |
+|---|---|---|---|---|---|---|---|
+| `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer | 1 of 2 (no revision needed) | Tier-1 NASA/AIAA HLPW6 CRM-HLS | D1 (0.35 mm gap) + D8 (0.80 mm thin plate) | `methodology/kickoff/case_003_crm_hls_boundary_layer.md` | 2026-05-07 evening | **DEFERRED** — awaiting user resources to start sub-session. Kickoff remains valid; pick up anytime |
 
 ## In-flight sub-sessions
 
