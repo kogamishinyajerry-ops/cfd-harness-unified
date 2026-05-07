@@ -83,23 +83,40 @@ flags `defaultFaces` as the only patch when no named solids exist
 split this single patch into inlet/outlet/wall. The
 `face-annotations` route exists; the persona has not discovered it.
 
-## V130 contract: durable green
+## V130 contract: durable green (sample-bounded)
 
 Across 9 live persona-runs (3 per iteration × 3 iterations), the
 aggregator's V130 violation pattern scan returned **0 hits**. No
 persona explained a mutation as "AI told me", "advisor said so",
 "because the AI", "because the advisor", or "auto-apply". Persona
 prompts held the engineer-as-applier line under increasing friction
-pressure. This is a strong V130 signal.
+pressure.
 
-## Cost actuals
+**Caveat**: this attestation is bounded to DeepSeek persona behavior
+under bandwidth pressure. The 9 runs are 3 cells × 3 iterations of
+the same 3 cells — not 9 independent cells. V130 attestation
+strength is a function of friction-pattern diversity, not just run
+count. Cross-family attestation (the same V130 holds for Sonnet 4.6
++ gpt-5.4 personas, which may exhibit longer reasoning chains or
+different politeness gradients toward laundering) requires the
+deferred 6 cells (charter §3×3 table). The DeepSeek result is
+necessary-but-not-sufficient for full V130 confidence.
+
+## Cost actuals & the binding constraint
 
 - R1: ~568k cumulative input tokens, ~$0.15
 - R2: ~615k cumulative input tokens, ~$0.17
 - R3: ~2.0M cumulative input tokens (budget bumped), ~$0.55
 - **Total B-arc live**: ~$0.87 over 3 iterations
 
-User pre-authorized DeepSeek budget; cost is not a constraint.
+User pre-authorized DeepSeek budget. The 3.3× R3 cumulative-input
+jump (615k → 2.0M) is the load-bearing strategic signal: budget
+headroom enabled R3 to discover that **per-turn input bandwidth, not
+budget, is the binding constraint**. R3 personas hit DeepSeek's per-call
+~64k input ceiling around turn 10-15 because conversation history
+accumulates linearly without pruning. This makes F6 (harness
+conversation pruning) the gating factor for verdict pass-rate
+improvement, not budget or workbench routes.
 
 ## Decision: B-arc declares success on infrastructure + signal
 
@@ -120,12 +137,19 @@ Charter §verification (charter-level) checklist:
 - [x] DOGFOOD_REPORT.md classifies findings by severity + assigns
       priority — DOGFOOD_REPORT_LIVE.md + R2 + R3
 - [x] B.5 fixes 3-5 highest-priority items; remainder in backlog —
-      F1, F2, F3 fully resolved; F4 (openapi fallback) addressed in
-      prompts; F5 (schema discoverability) addressed in actions
-      catalogue; F6 + F7 deferred to B-extend
-- [/] Kogami invoked for B.6 retro — pending
+      F1, F2, F3 fully resolved; F4 (openapi fallback) resolved in
+      prompts; **F5 PARTIALLY addressed** (schema examples shipped in
+      actions catalogue; patch-name discovery remains a gap and is
+      coupled to F7 — `pipe_expansion/debug` hit Step 4 setup-bc 400
+      because only `defaultFaces` was detected. F5 ↔ F7 should be
+      treated as a coupled pair in B-extend scope); F6 + F7 deferred
+      to B-extend.
+
+### B.6 close requirements (charter §6 + user-mandate)
+
+- [/] Kogami invoked for B.6 retro — pending (this section)
 - [/] Chinese-language strategic summary delivered to user at B.6
-      close — pending
+      close — pending (next step after Kogami review addressed)
 
 ## What B-arc proved
 
@@ -170,3 +194,20 @@ Charter §verification (charter-level) checklist:
 - `.planning/dogfood/DOGFOOD_REPORT_LIVE.md` — R1 narrative
 - `.planning/dogfood/DOGFOOD_REPORT_LIVE_R2.md` — R2 metrics
 - `.planning/dogfood/DOGFOOD_REPORT_LIVE_R3.md` — R3 metrics
+
+### Review trail
+
+- B.5.1-B.5.5 sub-DECs were authored under charter §"per Opus
+  confidence" exemption (no Codex pre-merge round triggered);
+  confidence: high on each. No prior Kogami round on B-arc
+  artifacts before this B.6 invocation.
+- This progression report received **Kogami APPROVE_WITH_COMMENTS**
+  on 2026-05-07 (b_arc_strategic_retro topic). 3 P2 findings closed
+  inline above (F5 partial reclassification + F5↔F7 coupling; cost
+  framing reframed around F6 as binding constraint; V130 sample
+  bound caveat). 2 P3 findings (charter §verification grouping +
+  this Review trail subsection) addressed.
+- Kogami review artifacts:
+  `.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/`
+  (review.md, review.json, prompt.txt, briefing_manifest.json,
+  prompt_sha256.txt, invoke_meta.json)
