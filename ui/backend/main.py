@@ -164,6 +164,13 @@ try:
 except ModuleNotFoundError:
     case_inspect = None  # type: ignore[assignment]
 
+# actions_catalogue route (DEC-V61-169 / B.5.3 · engineer-discoverable
+# 5-step workflow URL catalogue surfaced by DOGFOOD_REPORT_LIVE F2).
+try:
+    from ui.backend.routes import actions_catalogue  # noqa: F401
+except ModuleNotFoundError:
+    actions_catalogue = None  # type: ignore[assignment]
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan handler.
@@ -258,3 +265,7 @@ if case_dicts is not None:
     app.include_router(case_dicts.router, prefix="/api", tags=["case-dicts"])
 if case_inspect is not None:
     app.include_router(case_inspect.router, prefix="/api", tags=["case-inspect"])
+if actions_catalogue is not None:
+    app.include_router(
+        actions_catalogue.router, prefix="/api", tags=["actions-catalogue"]
+    )
