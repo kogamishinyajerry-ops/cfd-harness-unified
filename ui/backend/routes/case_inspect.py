@@ -51,3 +51,22 @@ def get_state_preview(
     case_dir = _resolve_case_dir(case_id)
     preview = build_state_preview(case_dir, next_action=next_action)  # type: ignore[arg-type]
     return preview.to_wire()
+
+
+@router.get(
+    "/cases/{case_id}/state",
+    tags=["case-inspect"],
+)
+def get_state_alias(
+    case_id: str,
+    next_action: str = Query(default=""),
+) -> dict:
+    """Engineer-friendly alias of /state-preview (DEC-V61-168 / B.5.2).
+
+    The B-arc dogfood (DOGFOOD_REPORT_LIVE F1) showed that engineers
+    open with `/state` not `/state-preview`. This alias removes that
+    discovery friction without dropping any payload feature.
+    """
+    case_dir = _resolve_case_dir(case_id)
+    preview = build_state_preview(case_dir, next_action=next_action)  # type: ignore[arg-type]
+    return preview.to_wire()
