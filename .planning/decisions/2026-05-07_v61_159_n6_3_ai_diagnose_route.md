@@ -49,12 +49,15 @@ classification. Optional `?problem=` query param (validated against
 
 ## Verification
 
-- 30/30 N6.3 tests pass
+- 36/36 N6.3 tests pass (30 baseline + 3 R0 regression + 2 R1 regression + 1 R2 close-patch)
 - 20/20 V132 contract tests pass (Layer-C now scans 6 N6 modules: route + 4 services + safety; +2 parametrized cases vs N6.2)
 - 39/39 N6.2 tests pass (no regression after safety extraction)
 - 25/25 N6.1 tests pass
 - Path containment verified: symlinked log to `tmp_path/rogue.log` outside case_dir is NOT followed; rogue residual signal does not surface
-- Bounded log read verified: 1MB synthetic log truncates to last 256KiB without memory blow-up
+- Bounded log read verified: 1MB synthetic log truncates to last 256KiB; spy on `open()` asserts read() called with explicit size ≤ 256 KiB
+- Live-EOF tracking verified: appending bytes to log between write and helper call surfaces fresh marker in returned tail
+- Aligned-boundary seek verified: marker line at exactly `size - _LOG_MAX_BYTES` survives the trim
+- Divergence classifier verified: non-monotonic 20x spike returns None; strict monotonic 200x rise returns `diverging_residuals`
 - Action-text strip applies to both `summary` and `suggested_fix` fields
 - Non-string LLM output handled per Codex N6.2 R1 P1 lesson (test parametrized over list/dict/int/bool)
 
@@ -71,10 +74,41 @@ Per charter: V132 contract surface change extends v2.2 1-sync-trigger.
 - Bounded log read (256KiB cap, last 200 lines)
 - Whitelist validation on `?problem=` query param at route boundary
   (returns 400 with structured detail before service entry)
-- Evidence dict server-side stringifies non-string values (Pydantic
-  schema declares `dict[str, str]`)
+- Evidence dict server-side stringifies non-string values
 
-Will run `codex-review-relay` once committed.
+**Round chain (V133 cap = 3, used 3)**:
+
+- **R0** on `7f5223d` → CHANGES_REQUIRED
+  - P1: `read_bytes()` loaded entire log into memory before truncation
+  - P2: residual divergence classifier flagged non-monotonic spikes
+- **R1** on `c7f043f` (R0 fixes: seek-tail + monotonic check) → CHANGES_REQUIRED
+  - P2: TOCTOU on growing log — `stat()` then bare `read()` could exceed cap
+  - P3: newline-trim discarded a valid first line on aligned-boundary seeks
+- **R2** on `958ba87` (R1 fixes: explicit-size read + boundary peek) → CHANGES_REQUIRED (no P1)
+  - P2: `seek_offset` derived from stale `stat()` size; live solver appends miss freshest residuals
+  - P3: P3 regression test had a frozen-size invariant break — didn't actually exercise the boundary case
+
+**Round-cap reached**. Per V133, no P1 on R2 → no user ratification
+needed; P2/P3 surfaced for retro queue OR optional close-patch.
+
+**Close-patch applied** at `<close-commit>` (this commit, not a
+fourth Codex round) — both findings small and surgical:
+
+- R2 P2 fix: derive EOF from open file handle via `seek(0, SEEK_END)`
+  + `tell()`, dropping the separate `stat()` call. Tail window now
+  ends at current EOF.
+- R2 P3 fix: rewrote regression test using a clean construction —
+  `payload = prefix + (marker + window_filler)` where the inner
+  window is exactly `_LOG_MAX_BYTES`, so seek lands at start of
+  marker by invariant rather than by adjustment loop. New test
+  asserts both `MARKER_LINE_SHOULD_SURVIVE` is in window AND
+  `PREFIX_LINE_THAT_SHOULD_BE_TRIMMED` is NOT.
+- New test added: `test_log_read_window_tracks_current_eof_when_growing`
+  — appends bytes to log between write and read, asserts fresh
+  marker is in returned tail.
+
+Backend: 86gs `gpt-5.4` xhigh per V133 governance baseline. All
+3 rounds same backend.
 
 ## Confidence
 

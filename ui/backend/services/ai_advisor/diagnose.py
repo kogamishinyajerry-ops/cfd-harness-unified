@@ -22,6 +22,7 @@ symlink escape from ``case_dir``.
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
@@ -124,16 +125,19 @@ def _read_solver_log_tail(case_dir: Path) -> Optional[str]:
             )
             continue
         try:
-            size = resolved.stat().st_size
-        except OSError:
-            continue
-        try:
             with open(resolved, "rb") as fh:
-                # Codex N6.3 R1 P2: bound the read with an explicit
-                # byte count so the cap holds even if the log grows
-                # between stat() and read(). seek() is to an absolute
-                # offset (not SEEK_END) for the same reason.
-                seek_offset = max(0, size - _LOG_MAX_BYTES)
+                # Codex N6.3 R2 P2: derive the EOF from the open
+                # file handle (not a separate stat()) so the tail
+                # window ends at the current EOF — a live solver
+                # appending bytes between stat() and read() will not
+                # cause us to return a stale window pinned to the
+                # old size.
+                fh.seek(0, io.SEEK_END)
+                current_size = fh.tell()
+                seek_offset = max(0, current_size - _LOG_MAX_BYTES)
+                # Codex N6.3 R1 P2: pass an explicit read length so
+                # the cap holds regardless of further growth between
+                # this seek and the read.
                 if seek_offset > 0:
                     # Codex N6.3 R1 P3: peek the byte immediately
                     # before the window. If it is '\n' the window
@@ -148,8 +152,7 @@ def _read_solver_log_tail(case_dir: Path) -> Optional[str]:
                         if nl_idx != -1:
                             data = data[nl_idx + 1 :]
                 else:
-                    # File fits within the cap — read the whole thing
-                    # but still bound the read explicitly.
+                    fh.seek(0)
                     data = fh.read(_LOG_MAX_BYTES)
         except OSError:
             continue

@@ -329,6 +329,9 @@ def test_oversized_log_uses_seek_tail_not_full_load(tmp_path: Path) -> None:
         def seek(self, *a, **kw):
             return self._fh.seek(*a, **kw)
 
+        def tell(self):
+            return self._fh.tell()
+
         def read(self, *a, **kw):
             data = self._fh.read(*a, **kw)
             bytes_read.append(len(data))
@@ -430,6 +433,9 @@ def test_log_read_caps_bytes_even_on_concurrent_growth(
         def seek(self, *a, **kw):
             return self._fh.seek(*a, **kw)
 
+        def tell(self):
+            return self._fh.tell()
+
         def read(self, *a, **kw):
             read_calls.append((a, kw))
             return self._fh.read(*a, **kw)
@@ -472,9 +478,18 @@ def test_log_read_caps_bytes_even_on_concurrent_growth(
 def test_log_seek_on_line_boundary_keeps_first_line(tmp_path: Path) -> None:
     """Codex N6.3 R1 P3: when the seek offset (size - _LOG_MAX_BYTES)
     lands exactly at the start of a real line, the boundary-trim
-    must NOT discard that line. We craft a log whose payload is
-    deliberately sized so the seek lands on a marker line, then
-    assert the marker survived the read."""
+    must NOT discard that line.
+
+    Construction (Codex R2 P3 fix — make the test actually hit the
+    boundary):
+      payload = prefix + marker + window_tail
+      where len(marker) + len(window_tail) == _LOG_MAX_BYTES exactly.
+      Then size = len(prefix) + _LOG_MAX_BYTES, so
+      size - _LOG_MAX_BYTES == len(prefix) — the seek lands right
+      at the start of `marker`. The byte at offset len(prefix) - 1
+      is the '\\n' terminating prefix, so prev_byte == '\\n' →
+      no trim → marker survives.
+    """
     from ui.backend.services.ai_advisor.diagnose import (
         _LOG_MAX_BYTES,
         _read_solver_log_tail,
@@ -484,32 +499,28 @@ def test_log_seek_on_line_boundary_keeps_first_line(tmp_path: Path) -> None:
     imported.mkdir()
     case_dir = _stage_empty_case(imported, _safe_id())
 
-    # Marker line is 32 bytes (with trailing \n) and we want it to
-    # appear at exactly offset (size - _LOG_MAX_BYTES). Strategy:
-    # pad the prefix so size - _LOG_MAX_BYTES = end_of_prefix, then
-    # marker line at that offset. Concretely, prefix = enough A's
-    # so prefix length matches the cap; then marker; then trailing
-    # residual log.
-    marker = "MARKER_LINE_SHOULD_SURVIVE\n"  # 27 bytes (incl \n)
+    marker = "MARKER_LINE_SHOULD_SURVIVE\n"
+    # Fill the rest of the cap-size window with a stalled-residual
+    # tail so the diagnose path still sees parseable U residuals.
     tail_payload = _stalled_residual_log(n=6)
-    # We want: prefix + marker + tail to have:
-    #   size - _LOG_MAX_BYTES = len(prefix)
-    # ⇔ len(marker) + len(tail) = _LOG_MAX_BYTES
-    fill_len = _LOG_MAX_BYTES - len(marker) - len(tail_payload)
-    assert fill_len > 0
-    prefix = "A" * fill_len + "\n"  # ends with \n so prefix-end is line boundary
-    # Pad prefix so that after newline its length puts us exactly
-    # at the boundary. Recompute total size after padding:
-    total_payload = prefix + marker + tail_payload
-    # We need `size - _LOG_MAX_BYTES == len(prefix)`. Adjust if off.
-    size_target_offset = len(prefix)
-    expected_size = size_target_offset + _LOG_MAX_BYTES
-    while len(total_payload) < expected_size:
-        prefix = prefix + "A"
-        total_payload = prefix + marker + tail_payload
-    # Add trailing pad to hit exact size if necessary
-    while len(total_payload) < expected_size:
-        total_payload += "Z"
+    filler_len = _LOG_MAX_BYTES - len(marker) - len(tail_payload)
+    assert filler_len > 0, (
+        "Test fixture sizing — adjust marker/tail so they fit under "
+        "_LOG_MAX_BYTES."
+    )
+    window = marker + ("Z" * filler_len) + tail_payload
+    assert len(window) == _LOG_MAX_BYTES
+
+    # Prefix is any line-terminated text; its length determines the
+    # seek offset. The trailing '\\n' on the prefix is the byte
+    # immediately before the window — that's what makes prev_byte
+    # the line-boundary signal.
+    prefix = "PREFIX_LINE_THAT_SHOULD_BE_TRIMMED\n"
+    total_payload = prefix + window
+    assert len(total_payload) - _LOG_MAX_BYTES == len(prefix), (
+        "Invariant: seek offset == len(prefix) — anything else means "
+        "the test no longer exercises the line-boundary case."
+    )
 
     _write_log(case_dir, "log.simpleFoam", total_payload)
 
@@ -517,6 +528,42 @@ def test_log_seek_on_line_boundary_keeps_first_line(tmp_path: Path) -> None:
     assert text is not None
     assert "MARKER_LINE_SHOULD_SURVIVE" in text, (
         "Aligned-boundary seek discarded a valid first line."
+    )
+    # Sanity: prefix line must NOT appear (it's outside the window).
+    assert "PREFIX_LINE_THAT_SHOULD_BE_TRIMMED" not in text
+
+
+def test_log_read_window_tracks_current_eof_when_growing(
+    tmp_path: Path,
+) -> None:
+    """Codex N6.3 R2 P2: if the log grows between the open() and
+    the read, the helper must still return a window ending at the
+    current EOF — not a stale window pinned to an earlier size.
+
+    We simulate by patching open() to return a wrapper whose
+    underlying file gets appended-to right before the seek+tell;
+    then verify the returned text contains the post-grow content.
+    """
+    from ui.backend.services.ai_advisor.diagnose import (
+        _read_solver_log_tail,
+    )
+
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    initial = "INITIAL_TAIL_LINE\n" + _stalled_residual_log(n=6)
+    log_path = _write_log(case_dir, "log.simpleFoam", initial)
+    # Append a fresh marker line BEFORE the helper runs (simulating
+    # solver growth between scheduling and execution). The helper
+    # must derive EOF from the open handle, not stat-at-call-time.
+    with open(log_path, "ab") as fh:
+        fh.write(b"FRESH_MARKER_AFTER_GROWTH\n")
+
+    text = _read_solver_log_tail(case_dir)
+    assert text is not None
+    assert "FRESH_MARKER_AFTER_GROWTH" in text, (
+        "Helper returned stale tail; should track current EOF."
     )
 
 
