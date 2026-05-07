@@ -168,10 +168,10 @@ If yes → V-series. If no → F-series.
 | Surface | snappyHexMesh refinement levels + BC writer patch existence check |
 | Engineer symptom | Mesh log says "boundary 26 patches" but case.yaml expected 32. `08_write_bcs.py` reports `skipped: beam_3 (not in mesh)`. Solver runs but a thin wall is now silently a fluid interior cell |
 | Root cause | sHM with `refinementSurfaces.<patch>.level [1,2]` (level 1 = 40 mm) on a 50 mm thick beam. Two opposing surfaces of thin wall are inside same level-1 cell; sHM merges, patch ceases to exist. See playbook S8 |
-| Fix | (1) Bump to `[2,3]` (10 mm). (2) Use `refinementRegions` with a slab. (3) Accept as v1 simplification (APU bay path: 6/32 patches lost, ventilation result unaffected) |
-| Status | **playbook** (S8); needs main-project advisor surface to flag this |
-| Reference case | APU bay V13 (REPORT.md §3.4) |
-| Lesson | Refinement-level selection on thin walls is a pre-meshing decision that cannot be recovered post-meshing without re-running sHM. Advisor should warn when surface refinement level is coarser than wall thickness |
+| Fix | (1) Bump to `[2,3]` (10 mm). (2) Use `refinementRegions` with a slab. (3) Accept as v1 simplification (APU bay path: 6/32 patches lost, ventilation result unaffected). (4) **Pre-meshing advisor warns** — `ui/backend/services/geometry_ingest/thin_wall_advisor.detect_thin_wall_patches_at_risk` flags any patch where bbox-min is < 2× effective cell size at assigned level; landed 2026-05-07 driven by case_002b inheritance |
+| Status | **closed** (advisor landed) — pre-meshing path now warns; case-local accept remains a legitimate option once warned |
+| Reference case | case_002a V10 (original); case_002b CHT v1 (inherited unchanged → falsified the assumption that V10 was a one-off and triggered advisor extraction) |
+| Lesson | Refinement-level selection on thin walls is a pre-meshing decision that cannot be recovered post-meshing without re-running sHM. **Pillar 2 example**: a finding that recurred across two case threads on the same physical geometry is a signal to land a main-project advisor, not just to document. Advisor uses bbox-min heuristic (exact for axis-aligned plate/beam; lower-bound for curved shells) |
 
 ### V11 · `nut` / `alphat` initial fields with wrong BC types → wall function NaN
 
@@ -208,6 +208,30 @@ If yes → V-series. If no → F-series.
 | Status | **playbook** (S10) |
 | Reference case | APU bay V13 (REPORT.md §5.4) |
 | Lesson | Pseudo-steady is a legitimate v1 baseline, not a failure. The engineer's job is to decide whether v1 is enough for the question being asked, not to chase production physics on v1 |
+
+### V14 · CHT post-processing reports `T = ±1e+300` for solid regions, but no time directories were ever written
+
+| field | value |
+|---|---|
+| Surface | post-processing / final-time-frame inspection of multi-region case |
+| Engineer symptom | `report_v1.md` of case_002b CHT v1 stated "T_min/T_max per region: solid_outer 1e+300 / -1e+300, ..." across all 6 solid regions; appearance of catastrophic divergence |
+| Root cause | The chtMultiRegionSimpleFoam solver crashed mid-Time=1 (setup-time issue, exact mechanism unclear from truncated log; viewFactor radiation suspected). **No time directory beyond `0/` was ever written.** When 11_post.py iterated time directories looking for solid T fields, OpenFOAM's "field not found" path returned the sentinel `±std::numeric_limits<double>::max()` (~ ±1.8e+308 / displayed as ±1e+300). The "divergence" was an interpretation bug — there was no run to diverge from |
+| Fix | Verify time directories exist before diagnosing solid-region divergence: `ls case/[0-9]*` should show ≥ 2 entries (`0/` plus at least one written step). For the underlying setup-time crash: drop radiation for v2 baseline (matches case_002a v1 pattern of "v1 simplification then restore later") |
+| Status | **closed** (interpretation bug captured; v2 norad path bypasses the original setup-time crash) |
+| Reference case | case_002b CHT v1 → v2 norad |
+| Lesson | When a multi-region CFD post-processor reports physically impossible field values (e.g. `T = ±1e+300`), **always check whether time directories were actually written first**. OpenFOAM's missing-field sentinel can masquerade as a divergence signal. Post-processing tooling should fail loudly when asked to read fields from a run that produced no time output, instead of silently returning sentinels |
+
+### V15 · CHT fluid-side `limitTemperature` clamping 3-5% of cells per iteration (V5 pattern crosses solver families)
+
+| field | value |
+|---|---|
+| Surface | OpenFOAM compressible thermophysics + multi-region solver; chtMultiRegionSimpleFoam fluid sub-solver |
+| Engineer symptom | Solver runs without crashing; per-iter log shows `limitTemperature limitT Lower limited 43308 (3.28%) of cells with min limit 280; Upper limited 27233 (2.06%) cells with max limit 1100`. Percentage rises from 0% at iter 1 to 5%+ by iter 67. The clamp is doing real work, not occasional intervention |
+| Root cause | Same root pattern as V5 (compressible ρ/T runaway under strong gradients). Fluid-region energy equation in chtMultiRegionSimpleFoam is structurally identical to buoyantSimpleFoam's: pressure-velocity-density coupling on a fluid cell zone. Multi-region wrapping does not change the fluid-internal numerics. With strong T gradients (873 K APU body wall heat sources + 328 K freestream + buoyancy) and steady-state SIMPLE relaxation, fluid cells near hot patches will continually overshoot the thermophysics range without the clamp |
+| Fix | Same fix family as S5 (compressible ρ runaway): (1) keep `fvOptions limitTemperature` clamp; (2) lower URF on `h` from 0.40 → 0.20; (3) v2 simplification path = also drop kωSST → laminar (matches case_002a V3 → laminar fallback); (4) long-term v3 = transient `chtMultiRegionPimpleFoam` to let physical time damp the gradient |
+| Status | **partial** — currently mitigated by clamps; structural fix deferred to v3 transient or v3 restart-with-radiation path |
+| Reference case | case_002b CHT v2 norad |
+| Lesson | **V-series findings inherit across solver families** when the fluid-internal numerics are shared. case_002b CHT inherits V5, V6, V7 from case_002a buoyantSimpleFoam because chtMultiRegionSimpleFoam wraps the same fluid-side energy/momentum solver. The corpus should index by **fluid-side numerics class** (compressible-buoyant-RANS, incompressible-RANS, compressible-shock, etc.) not by solver name. New V-findings emerge from multi-region-specific surfaces (region pairing, faceZone, extrusion); fluid-internal V-findings are inherited |
 
 ## Cross-cutting patterns observed
 
@@ -248,6 +272,29 @@ V3 (laminar fallback), V6 (pressure BC instead of mass-flow), V13
 v1 simplified version did". This is the correct engineering
 sequence: get a working baseline, then layer complexity. Tooling
 should encourage this, not penalize it.
+
+### Pattern 6 — V-findings inherit across solver families when fluid-internal numerics are shared (added V15 · 2026-05-07)
+
+V15 demonstrates that V5, V6, V7 (originally surfaced under
+buoyantSimpleFoam) reappear unchanged in chtMultiRegionSimpleFoam,
+because both solvers wrap the same compressible-buoyant-RANS
+fluid-side numerics. Going forward:
+
+- Index V-findings by **fluid-internal numerics class**
+  (compressible-buoyant-RANS, incompressible-RANS, compressible-
+  shock-density-based, multiphase-VOF, etc.), not by solver name
+- A new industrial case in solver class X should pre-emptively
+  inherit all V-findings whose `numerics_class` matches X's
+  fluid-side numerics
+- Genuinely new V-findings emerge only from surfaces that **did
+  not exist** in the parent class — e.g. multi-region pairing,
+  cellZone definition, periodic boundaries — not from fluid
+  internals
+
+The corpus loader (M6 prerequisite) should expose this inheritance
+explicitly so AI Diagnose can suggest "your case is class
+compressible-buoyant-RANS, here are the 6 V-findings that apply
+even though you're using a different solver family".
 
 ## How to add a new V-finding
 

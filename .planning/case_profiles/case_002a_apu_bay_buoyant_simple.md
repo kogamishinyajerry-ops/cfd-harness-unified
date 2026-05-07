@@ -1,11 +1,17 @@
-# Case 002 · APU Bay Ventilation (Industrial Reference)
+# Case 002a · APU Bay Ventilation · buoyantSimpleFoam thread (Industrial Reference)
 
 > **NOT a gold-standard case.** No benchmark data, no verdict-pass
 > criterion. This is an **industrial reference** — proof artifact and
 > V-series finding source.
 >
 > Established by DEC-V61-198 (APU bay strategic pivot, 2026-05-07) as
-> the first non-academic case in the project's case fleet.
+> the first non-academic case in the project's case fleet. Renamed
+> from `case_002` to `case_002a` 2026-05-07 evening when a CHT thread
+> (`case_002b`) on the same physical case forked into a parallel
+> sandbox `~/Desktop/apu-bay-ventilation-cht/`.
+>
+> **Sibling thread**: `case_002b_apu_bay_cht.md` — same APU geometry,
+> chtMultiRegionSimpleFoam with 7 regions (1 fluid + 6 Ti solids).
 
 ## What this entry is
 
