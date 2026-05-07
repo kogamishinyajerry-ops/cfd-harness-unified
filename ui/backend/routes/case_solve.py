@@ -719,7 +719,14 @@ def solve_stream(case_id: str) -> StreamingResponse:
         ) from exc
     except SolverRunError as exc:
         msg = str(exc)
-        if "container" in msg.lower() and (
+        if msg.startswith("mesh_missing:"):
+            # B-ext-5.2 F13 mitigation — same as blocking /solve route.
+            status = 409
+            failing = "mesh_missing"
+        elif msg.startswith("mesh_bc_mismatch:"):
+            status = 409
+            failing = "mesh_bc_mismatch"
+        elif "container" in msg.lower() and (
             "not running" in msg.lower() or "not found" in msg.lower()
         ):
             status = 503
@@ -776,6 +783,18 @@ def solve(case_id: str) -> SolveSummary:
                 status_code=409,
                 detail=SolveRejection(
                     failing_check="bc_not_setup",
+                    detail=msg,
+                ).model_dump(),
+            ) from exc
+        if msg.startswith("mesh_missing:"):
+            # B-ext-5.2 F13 mitigation: pre-flight caught missing
+            # polyMesh before spawning solver. 409 Conflict so the
+            # persona can re-run /mesh instead of seeing a generic 502
+            # solver_diverged on a cryptic FOAM IO error.
+            raise HTTPException(
+                status_code=409,
+                detail=SolveRejection(
+                    failing_check="mesh_missing",
                     detail=msg,
                 ).model_dump(),
             ) from exc
