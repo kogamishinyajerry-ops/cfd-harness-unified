@@ -107,6 +107,12 @@ try:
 except ModuleNotFoundError:
     physics = None  # type: ignore[assignment]
 
+# DEC-V61-146 (N4.1): Structured BC contract commit endpoint.
+try:
+    from ui.backend.routes import case_bc  # noqa: F401
+except ModuleNotFoundError:
+    case_bc = None  # type: ignore[assignment]
+
 try:
     from ui.backend.routes import geometry_render  # noqa: F401
 except ModuleNotFoundError:
@@ -230,6 +236,8 @@ if mesh_prism_layers is not None:
     )
 if physics is not None:
     app.include_router(physics.router, prefix="/api", tags=["physics"])
+if case_bc is not None:
+    app.include_router(case_bc.router, prefix="/api", tags=["bc-contract"])
 if geometry_render is not None:
     app.include_router(geometry_render.router, prefix="/api", tags=["geometry-render"])
 if case_solve is not None:
