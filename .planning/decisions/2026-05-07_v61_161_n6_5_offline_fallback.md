@@ -4,7 +4,7 @@ title: N6.5 · LLM-offline rule-based fallback — broaden review path with mesh
 status: Accepted
 parent_dec: V61-156
 phase: N6
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed81fb8daac620fc33d78d)
 ---
 
 # DEC-V61-161 · N6.5 · LLM-Offline Rule-Based Fallback
