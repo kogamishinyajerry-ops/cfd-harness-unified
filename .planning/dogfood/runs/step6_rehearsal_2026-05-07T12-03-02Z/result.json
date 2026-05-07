@@ -1,0 +1,13 @@
+{
+  "run_id": "backward_step__novice__step6__e2e2f4ef",
+  "case_id": "imported_2026-05-07T12-03-02Z_61442510",
+  "persona": "novice",
+  "model_id": "deepseek-chat",
+  "steps": 9,
+  "verdict": null,
+  "dropped": true,
+  "drop_reason": "The results-summary confirms the case converged with recirculation (is_recirculating=true, u_x_min=-0.071), but does not contain reattachment length. The field/U endpoint returns 404 (run not found), so I cannot access cell-level velocity data to locate where wall shear stress changes sign on the lower wall. Without the ability to compute the reattachment point from field data, I cannot report L/h.",
+  "total_input_tokens": 32496,
+  "total_output_tokens": 2253,
+  "error": null
+}
