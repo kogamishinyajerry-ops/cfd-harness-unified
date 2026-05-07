@@ -159,3 +159,49 @@ def test_read_configured_end_time_partial_parse(tmp_path: Path):
     end_t, dt = _read_configured_end_time(case)
     assert end_t == pytest.approx(3.7)
     assert dt == pytest.approx(0.01)
+
+
+# ---------------------------------------------------------------------------
+# B-ext-2 F9 regression: 0.orig dir from setup-bc backup must not crash sort
+# ---------------------------------------------------------------------------
+
+
+def test_filter_numeric_time_dirs_drops_setup_bc_backup():
+    """B-ext-2 F9: ls -d [0-9]* matches `0.orig` (the BC-backup dir
+    that setup-bc creates). Pre-fix, the post-solve scanner did
+    `sorted(..., key=lambda s: float(s))` and crashed on `0.orig`."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "0.001", "0.002", "0.5", "0.orig"]
+    filtered = _filter_numeric_time_dirs(raw)
+    assert "0.orig" not in filtered
+    assert filtered == ["0", "0.001", "0.002", "0.5"]
+    # downstream sort must succeed
+    assert sorted(filtered, key=lambda s: float(s)) == [
+        "0", "0.001", "0.002", "0.5"
+    ]
+
+
+def test_filter_numeric_time_dirs_drops_other_non_numeric_suffixes():
+    """Defensive: any non-float-parseable name is dropped, not just .orig."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "0.bak", "0.5", "0.5.tmp", "1.0", "garbage"]
+    assert _filter_numeric_time_dirs(raw) == ["0", "0.5", "1.0"]
+
+
+def test_filter_numeric_time_dirs_preserves_scientific_notation():
+    """OpenFOAM occasionally writes time dirs in scientific notation
+    when deltaT is tiny. float() handles it; we must too."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "1e-05", "5e-05", "0.0001"]
+    out = _filter_numeric_time_dirs(raw)
+    assert "1e-05" in out
+    assert "5e-05" in out
