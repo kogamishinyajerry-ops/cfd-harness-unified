@@ -296,6 +296,101 @@ def test_oversized_log_is_truncated_to_tail(tmp_path: Path) -> None:
     assert "stalled_residuals" in modes
 
 
+def test_oversized_log_uses_seek_tail_not_full_load(tmp_path: Path) -> None:
+    """Codex N6.3 R0 P1: large log must NOT be loaded into memory
+    in full before truncation. We verify the read path bounds
+    memory by patching open() to count the bytes returned by
+    f.read() on the log file path; assert it's bounded by
+    _LOG_MAX_BYTES + small slack."""
+    from ui.backend.services.ai_advisor import diagnose as diag_mod
+
+    corpus = _build_test_corpus(tmp_path)
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+    # 4 MiB log — well above the 256 KiB cap.
+    big = "X" * (4 * 1024 * 1024) + "\n" + _stalled_residual_log(n=6)
+    log_path = _write_log(case_dir, "log.simpleFoam", big)
+
+    real_open = open
+    bytes_read: list[int] = []
+
+    class _CountingFile:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._fh.close()
+            return False
+
+        def seek(self, *a, **kw):
+            return self._fh.seek(*a, **kw)
+
+        def read(self, *a, **kw):
+            data = self._fh.read(*a, **kw)
+            bytes_read.append(len(data))
+            return data
+
+    def _spying_open(path, *a, **kw):
+        if str(path) == str(log_path.resolve()) or str(path) == str(log_path):
+            return _CountingFile(real_open(path, *a, **kw))
+        return real_open(path, *a, **kw)
+
+    import builtins
+
+    orig_open = builtins.open
+    builtins.open = _spying_open  # type: ignore[assignment]
+    try:
+        _run(
+            diagnose_case(
+                case_dir, corpus=corpus, provider=MockLLMProvider()
+            )
+        )
+    finally:
+        builtins.open = orig_open  # type: ignore[assignment]
+
+    assert bytes_read, "Log file was never opened by the spy"
+    # Allow modest overhead vs the cap (line-boundary trim, decoding
+    # buffers); but reject anything close to the 4 MiB total.
+    cap = 256 * 1024  # _LOG_MAX_BYTES
+    assert max(bytes_read) <= cap + 64 * 1024, (
+        f"Log read pulled {max(bytes_read)} bytes — should be bounded "
+        f"to ~{cap} after seek-tail."
+    )
+
+
+# ────────── Codex N6.3 R0 P2: divergence requires monotonic ──────────
+
+
+def test_divergence_classifier_requires_monotonic_growth(
+    tmp_path: Path,
+) -> None:
+    """Codex R0 P2: a spiky/oscillating sequence whose tail happens
+    to be >10x the head must NOT be labeled diverging."""
+    from ui.backend.services.ai_advisor.diagnose import (
+        _residual_trajectory_signal,
+    )
+
+    # First 1e-3, then drops, then spikes back up to 2e-2 (last/first
+    # ≈ 20x but path is non-monotonic).
+    oscillating = [1e-3, 5e-4, 8e-4, 6e-4, 2e-2]
+    assert _residual_trajectory_signal(oscillating) is None
+
+
+def test_divergence_classifier_fires_on_strict_monotonic(
+    tmp_path: Path,
+) -> None:
+    from ui.backend.services.ai_advisor.diagnose import (
+        _residual_trajectory_signal,
+    )
+
+    monotonic = [1e-4, 1e-3, 5e-3, 1e-2, 2e-2]
+    assert _residual_trajectory_signal(monotonic) == "diverging_residuals"
+
+
 # ────────── LLM path with injected provider ──────────
 
 
