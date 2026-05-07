@@ -52,12 +52,38 @@ def test_resolve_path_rejects_off_allowlist(url: str, reason: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_workbench_tool_defs_exposes_get_and_post() -> None:
+def test_workbench_tool_defs_exposes_get_post_put() -> None:
     defs = workbench_tool_defs()
     names = {t.name for t in defs}
-    assert names == {"http_get", "http_post"}
+    assert names == {"http_get", "http_post", "http_put"}
     for t in defs:
         assert "rationale" in t.input_schema["required"]
+
+
+def test_executor_put_success_with_body() -> None:
+    captured: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured["method"] = req.method
+        captured["body"] = req.read()
+        return httpx.Response(200, json={"updated": True})
+
+    ex = _executor_with_handler(handler)
+    result = ex.execute(
+        ToolCall(
+            call_id="c",
+            tool_name="http_put",
+            arguments={
+                "url": "/api/cases/x/face-annotations",
+                "json": {"annotations": [{"face_id": 0, "patch": "inlet"}]},
+                "rationale": "engineer-driven patch split",
+            },
+        )
+    )
+    assert result.ok is True
+    assert captured["method"] == "PUT"
+    assert b"face-annotations" in captured.get("body", b"") or b"inlet" in captured["body"]
+    ex.close()
 
 
 # ---------------------------------------------------------------------------
