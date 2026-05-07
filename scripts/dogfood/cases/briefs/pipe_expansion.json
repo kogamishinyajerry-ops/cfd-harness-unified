@@ -1,0 +1,22 @@
+{
+  "case_id": "pipe_expansion",
+  "title": "Sudden pipe expansion, area ratio A1/A2=1/4 (ER=2 in diameter)",
+  "geometry": "Two coaxial cylindrical pipes; upstream radius r1=0.5, downstream radius r2=1.0; sudden expansion at the joint plane; total length 12 diameters",
+  "physics": {
+    "regime": "incompressible_steady",
+    "Re": 10000,
+    "diameter_ratio": 2.0,
+    "area_ratio_A1_over_A2": 0.25,
+    "fluid": "water_isothermal",
+    "turbulence_model_recommended": "kOmegaSST"
+  },
+  "question": "Compute the pressure recovery coefficient Kp = (p_downstream - p_upstream) / (0.5 * rho * v1²) where p_upstream is sampled just upstream of the expansion and p_downstream is sampled far enough downstream that the recovery has stabilized.",
+  "reference": {
+    "metric": "Kp",
+    "value": 0.5625,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "source": "White, Fluid Mechanics 7e §6.10 (Borda-Carnot for sudden expansion)"
+  },
+  "notes": "Closed-form Borda-Carnot: Kp = (1 - A1/A2)² = (1 - 0.25)² = 0.5625. ±5% relative absorbs entry-length effects + numerical dissipation. The case can be solved as 2D-axisymmetric (1-cell-thick wedge) or full-3D; both are valid."
+}
