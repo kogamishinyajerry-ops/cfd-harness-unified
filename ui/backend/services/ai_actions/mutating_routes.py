@@ -93,6 +93,11 @@ MUTATING_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # physicalProperties + momentumTransport. V130 Principle B —
         # engineer applies, AI advises; AI dispatch must NEVER call.
         ("POST", "/api/cases/{case_id}/physics"),
+        # POST /api/cases/{case_id}/bc-contract — DEC-V61-146 (N4.1):
+        # commit structured per-patch BCContract to 0.orig/{U, p}.
+        # V130 Principle B — engineer applies, AI advises; AI dispatch
+        # must NEVER call.
+        ("POST", "/api/cases/{case_id}/bc-contract"),
     }
 )
 
@@ -128,6 +133,11 @@ KNOWN_MUTATION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
         # call this; engineer-driven via POST /api/cases/{id}/physics.
         ("ui.backend.services.physics.writer", "write_physics_dicts"),
         ("ui.backend.services.physics", "write_physics_dicts"),
+        # BC contract writer (DEC-V61-146 · N4.1) — translates
+        # BCContract → 0.orig/{U, p}. AI dispatch MUST NEVER call;
+        # engineer-driven via POST /api/cases/{id}/bc-contract.
+        ("ui.backend.services.case_bc.writer", "write_bc_dicts"),
+        ("ui.backend.services.case_bc", "write_bc_dicts"),
     }
 )
 
