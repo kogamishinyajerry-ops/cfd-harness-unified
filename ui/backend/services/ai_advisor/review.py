@@ -39,6 +39,9 @@ from ui.backend.services.ai_advisor.corpus_loader import (
     LoadedChunk,
     get_default_corpus,
 )
+from ui.backend.services.ai_advisor.fallback import (
+    broaden_review_findings,
+)
 from ui.backend.services.ai_advisor.safety import has_action_text
 from ui.backend.services.case_issues import enumerate_issues
 from ui.backend.services.llm_provider.base import (
@@ -334,19 +337,20 @@ async def review_case(
 
     issues = enumerate_issues(case_dir)
 
-    # LLM-offline branch: rule-based subset (N6.5 will broaden with
-    # more rule-based emitters).
+    # LLM-offline branch: rule-based subset (N6.5 broadened with
+    # mesh-quality advisor outputs in addition to N5.2 IssueList).
     if _is_mock_provider(provider):
         findings = _issue_list_to_findings(issues, corpus)
+        findings = broaden_review_findings(case_dir, findings, corpus)
         return ReviewResponse(
             case_id=case_dir.name,
             findings=findings,
             llm_available=False,
             corpus_sha=corpus.stats.corpus_sha,
             degradation_note=(
-                "DEEPSEEK_API_KEY unset — rule-based subset of N5.2 "
-                "honest issue list grounded in corpus. N6.5 will "
-                "broaden the rule-based emitter set."
+                "DEEPSEEK_API_KEY unset — rule-based subset combining "
+                "N5.2 honest issue list + mesh-quality advisor outputs, "
+                "all grounded in corpus citations."
             ),
             generated_at=_now_iso(),
         )
@@ -396,6 +400,7 @@ async def review_case(
             "LLM review failed (%s); falling through to rule-based.", exc
         )
         findings = _issue_list_to_findings(issues, corpus)
+        findings = broaden_review_findings(case_dir, findings, corpus)
         return ReviewResponse(
             case_id=case_dir.name,
             findings=findings,
@@ -403,7 +408,7 @@ async def review_case(
             corpus_sha=corpus.stats.corpus_sha,
             degradation_note=(
                 f"LLM call failed ({type(exc).__name__}); served "
-                "rule-based subset."
+                "rule-based subset (N5.2 issues + mesh-quality advisor)."
             ),
             generated_at=_now_iso(),
         )

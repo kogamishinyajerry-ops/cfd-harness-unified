@@ -433,6 +433,9 @@ _AI_DISPATCH_MODULES: tuple[str, ...] = (
     # contract as N6.2 — read-only, no mutation symbol bound.
     "ui/backend/services/ai_advisor/diagnose.py",
     "ui/backend/services/ai_advisor/safety.py",
+    # DEC-V61-161 (N6.5): broadened LLM-offline rule-based fallback.
+    # Read-only orchestrator over existing rule-based emitters.
+    "ui/backend/services/ai_advisor/fallback.py",
 )
 
 
