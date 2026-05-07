@@ -1,0 +1,22 @@
+{
+  "case_id": "backward_step",
+  "title": "Backward-facing step, expansion ratio ER=2, Re=5000",
+  "geometry": "Channel with sudden expansion: pre-step height h=1, post-step height H=2, streamwise length 10h, unit spanwise width",
+  "physics": {
+    "regime": "incompressible_steady",
+    "Re": 5000,
+    "step_height_m": 1.0,
+    "expansion_ratio": 2.0,
+    "fluid": "air_isothermal",
+    "turbulence_model_recommended": "kOmegaSST"
+  },
+  "question": "Compute the streamwise reattachment length L (measured from the step edge to where the wall shear stress changes sign on the lower wall). Report L/h.",
+  "reference": {
+    "metric": "L_over_h",
+    "value": 6.0,
+    "tolerance": 0.10,
+    "tolerance_kind": "rel",
+    "source": "Kim, Kline, Johnston, J. Fluids Eng. 102 (1980)"
+  },
+  "notes": "Kim 1980 reports L/h between 5.5 and 6.5 across turbulence treatments at Re=5000 ER=2. ±10% relative tolerance. Inlet velocity profile should be fully developed channel flow; outlet is zero-gradient pressure outlet."
+}

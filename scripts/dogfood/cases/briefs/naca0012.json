@@ -1,0 +1,22 @@
+{
+  "case_id": "naca0012",
+  "title": "NACA0012 airfoil at AoA=4°, Re=1×10⁶",
+  "geometry": "NACA0012 profile, chord c=1m, span=0.1m extrusion, thin-wing slice",
+  "physics": {
+    "regime": "incompressible_steady",
+    "Re": 1000000,
+    "AoA_deg": 4.0,
+    "freestream_velocity_mps": 14.6,
+    "fluid": "air_sealevel",
+    "turbulence_model_recommended": "kOmegaSST"
+  },
+  "question": "Compute the lift coefficient Cl on the airfoil surface at AoA=4°. Use steady incompressible RANS (simpleFoam recommended). Report observed Cl integrated over the airfoil surface.",
+  "reference": {
+    "metric": "Cl",
+    "value": 0.44,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "source": "Abbott & Doenhoff, Theory of Wing Sections, Dover 1959, Fig 4-5 linear region"
+  },
+  "notes": "Linear-region slope ≈ 2π per radian; AoA=4° = 0.0698 rad → Cl ≈ 0.44. ±5% relative absorbs solver / mesh / turbulence-model variance. Use a C-grid topology if possible; refine near the sharp trailing edge."
+}
