@@ -27,6 +27,12 @@ from ui.backend.services.physics.regimes_library import (
     get_regime_preset,
     list_regime_preset_ids,
 )
+from ui.backend.services.physics.solver_derivation import (
+    SOLVER_DERIVATIONS,
+    SolverDerivation,
+    SolverName,
+    derive_solver,
+)
 from ui.backend.services.physics.writer import (
     render_momentum_transport,
     render_physical_properties,
@@ -38,6 +44,10 @@ __all__ = [
     "MaterialPreset",
     "REGIME_PRESETS",
     "RegimePreset",
+    "SOLVER_DERIVATIONS",
+    "SolverDerivation",
+    "SolverName",
+    "derive_solver",
     "get_material_preset",
     "get_regime_preset",
     "list_material_preset_ids",
