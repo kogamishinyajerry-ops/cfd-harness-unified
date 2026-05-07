@@ -757,7 +757,15 @@ def solve(case_id: str) -> SolveSummary:
     """Run icoFoam inside the cfd-openfoam container. Blocks until the
     solver finishes (≈60s wall-time for the default LDC config).
     """
+    from datetime import datetime, timezone
+
+    from ui.backend.services.run_history import (
+        new_run_id,
+        write_run_artifacts,
+    )
+
     case_dir = _resolve_case_dir(case_id)
+    started_at = datetime.now(timezone.utc)
     try:
         result = run_icofoam(case_host_dir=case_dir)
     except SolverRunError as exc:
@@ -807,6 +815,45 @@ def solve(case_id: str) -> SolveSummary:
             ).model_dump(),
         ) from exc
 
+    # B-ext-4.2 F11 fix (DEC-V61-188): persist run artifacts to
+    # reports/{case_id}/runs/{run_id}/ so /api/cases/{id}/run-history
+    # surfaces the run. Pre-fix the route was wired only by
+    # RealSolverDriver (M3 closed-loop main-line); /solve was running
+    # icoFoam directly without persisting anything, leaving
+    # /run-history with empty runs:[] after every successful solve.
+    run_id = new_run_id()
+    try:
+        write_run_artifacts(
+            case_id=case_id,
+            run_id=run_id,
+            started_at=started_at,
+            task_spec=None,
+            source_origin="ui_solve_route",
+            success=result.converged,
+            exit_code=0,
+            verdict_summary=(
+                "converged" if result.converged else "ran_but_not_converged"
+            ),
+            duration_s=result.wall_time_s,
+            key_quantities={
+                "end_time_reached": result.end_time_reached,
+                "n_time_steps_written": result.n_time_steps_written,
+            },
+            residuals={
+                "p": result.last_initial_residual_p,
+                "Ux": result.last_initial_residual_U[0],
+                "Uy": result.last_initial_residual_U[1],
+                "Uz": result.last_initial_residual_U[2],
+                "continuity": result.last_continuity_error,
+            },
+        )
+    except (OSError, ValueError):
+        # Run-history persistence is best-effort; never fail the
+        # /solve response on artifact-write errors. The pre-flight
+        # mesh-BC check + container availability check are the
+        # load-bearing guards.
+        pass
+
     return SolveSummary(
         case_id=result.case_id,
         end_time_reached=result.end_time_reached,
@@ -817,6 +864,7 @@ def solve(case_id: str) -> SolveSummary:
         time_directories=list(result.time_directories),
         wall_time_s=result.wall_time_s,
         converged=result.converged,
+        run_id=run_id,
     )
 
 
