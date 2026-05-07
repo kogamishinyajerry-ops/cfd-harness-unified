@@ -21,10 +21,20 @@ from ui.backend.services.physics.materials_library import (
     get_material_preset,
     list_material_preset_ids,
 )
+from ui.backend.services.physics.regimes_library import (
+    REGIME_PRESETS,
+    RegimePreset,
+    get_regime_preset,
+    list_regime_preset_ids,
+)
 
 __all__ = [
     "MATERIAL_PRESETS",
     "MaterialPreset",
+    "REGIME_PRESETS",
+    "RegimePreset",
     "get_material_preset",
+    "get_regime_preset",
     "list_material_preset_ids",
+    "list_regime_preset_ids",
 ]
