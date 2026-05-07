@@ -36,7 +36,7 @@ from scripts.dogfood.workbench_tools import WorkbenchToolExecutor
 logger = logging.getLogger(__name__)
 
 WB_BASE = "http://localhost:8000"
-RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07")
+RUNS_ROOT = Path(".planning/dogfood/runs/live_2026_05_07_r4b")
 
 DEEPSEEK_CELLS = [
     ("naca0012", "experienced_fluent"),
@@ -132,10 +132,11 @@ def _run_one(charter_case_id: str, persona: str) -> dict:
         family="deepseek",
         model_id=assignment.model_id,
         system_prompt=persona_obj.system_prompt,
-        max_steps=40,  # bumped for R3 (B.5.5) — allow more turns post-fixes
-        max_input_tokens=600_000,  # cumulative across turns; effective bound
-                                    # is DeepSeek's per-call ~64k input
+        max_steps=50,
+        max_input_tokens=1_500_000,  # R4.5 bump per B-ext.3 first-pass measurement
         max_output_tokens=2048,
+        prune_keep_full=3,  # tighter than default 6 — keep per-turn input small
+        prune_min_turns_before_active=4,
     )
 
     client = DeepSeekClient(model_id=assignment.model_id)
