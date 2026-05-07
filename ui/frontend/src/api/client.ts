@@ -20,6 +20,11 @@ import type {
 import type { AuditPackageBuildResponse } from "@/types/audit_package";
 import type { BatchMatrix } from "@/types/batch_matrix";
 import type { CaseCompletenessReport } from "@/types/case_completeness";
+import type {
+  DiagnoseResponse,
+  FailureMode,
+  ReviewResponse,
+} from "@/types/ai_advisor";
 import type { ExportManifest } from "@/types/exports";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
@@ -189,6 +194,22 @@ export const api = {
 
   // Stage 6 — ExportPack manifest (download URLs are constructed inline)
   getExportManifest: () => request<ExportManifest>(`/api/exports/manifest`),
+
+  // DEC-V61-158/159 (N6.2/N6.3) — AI advisor surfaces (read-only).
+  // Both routes are GET + idempotent + loopback-guarded; per V132
+  // contract they NEVER mutate case state.
+  getAIReview: (caseId: string) =>
+    request<ReviewResponse>(
+      `/api/cases/${encodeURIComponent(caseId)}/ai-review`,
+    ),
+  getAIDiagnose: (caseId: string, problemHint?: FailureMode) => {
+    const q = problemHint
+      ? `?problem=${encodeURIComponent(problemHint)}`
+      : "";
+    return request<DiagnoseResponse>(
+      `/api/cases/${encodeURIComponent(caseId)}/ai-diagnose${q}`,
+    );
+  },
 
   // Stage 8a — Onboarding Workbench wizard
   listWizardTemplates: () =>
