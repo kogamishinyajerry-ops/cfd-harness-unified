@@ -1,0 +1,38 @@
+[
+  {
+    "charter_case_id": "naca0012",
+    "workbench_case_id": "imported_2026-05-07T05-51-11Z_1a21b358",
+    "persona": "experienced_fluent",
+    "family": "deepseek",
+    "model_id": "deepseek-chat",
+    "run_id": "naca0012__experienced_fluent__deepseek__66d87019",
+    "dry_run": false,
+    "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/naca0012.stl",
+    "elapsed_s": 51.81236275000265,
+    "error": null
+  },
+  {
+    "charter_case_id": "backward_step",
+    "workbench_case_id": "imported_2026-05-07T05-52-03Z_d1af546e",
+    "persona": "novice",
+    "family": "deepseek",
+    "model_id": "deepseek-chat",
+    "run_id": "backward_step__novice__deepseek__8c15edc5",
+    "dry_run": false,
+    "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/backward_step.stl",
+    "elapsed_s": 84.09748420800315,
+    "error": null
+  },
+  {
+    "charter_case_id": "pipe_expansion",
+    "workbench_case_id": "imported_2026-05-07T05-53-27Z_6971b908",
+    "persona": "debug",
+    "family": "deepseek",
+    "model_id": "deepseek-chat",
+    "run_id": "pipe_expansion__debug__deepseek__cd1563b6",
+    "dry_run": false,
+    "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/pipe_expansion.stl",
+    "elapsed_s": 108.15605970803881,
+    "error": null
+  }
+]

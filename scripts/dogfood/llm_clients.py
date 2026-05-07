@@ -121,6 +121,86 @@ def _require_env(var: str) -> str:
     return value
 
 
+def _to_openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert harness-internal (Anthropic-shaped) messages to OpenAI/DeepSeek wire format.
+
+    persona_runner emits assistant messages with `content: [{type:text}, {type:tool_use}]`
+    and user follow-ups with `content: [{type:tool_result, tool_use_id, content, is_error}]`.
+
+    OpenAI-compat APIs (DeepSeek, gpt-5.4 via 86gs) want:
+      - assistant: {role: "assistant", content: <text>, tool_calls: [{id, type:"function", function:{name, arguments:json}}]}
+      - tool result: {role: "tool", tool_call_id: <id>, content: <text>}
+    """
+    import json as _json
+
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content")
+
+        if role == "assistant" and isinstance(content, list):
+            text_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text":
+                    text_parts.append(str(block.get("text") or ""))
+                elif btype == "tool_use":
+                    tool_calls.append(
+                        {
+                            "id": str(block.get("id") or ""),
+                            "type": "function",
+                            "function": {
+                                "name": str(block.get("name") or ""),
+                                "arguments": _json.dumps(
+                                    block.get("input") or {},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    )
+            converted: dict[str, Any] = {
+                "role": "assistant",
+                "content": "\n".join(p for p in text_parts if p) or None,
+            }
+            if tool_calls:
+                converted["tool_calls"] = tool_calls
+            out.append(converted)
+            continue
+
+        if role == "user" and isinstance(content, list):
+            tool_results: list[dict[str, Any]] = []
+            text_blocks: list[str] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_result":
+                    body = block.get("content")
+                    if not isinstance(body, str):
+                        body = _json.dumps(body, ensure_ascii=False)
+                    tool_results.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": str(block.get("tool_use_id") or ""),
+                            "content": body,
+                        }
+                    )
+                elif block.get("type") == "text":
+                    text_blocks.append(str(block.get("text") or ""))
+            if tool_results:
+                out.extend(tool_results)
+                continue
+            if text_blocks:
+                out.append({"role": "user", "content": "\n".join(text_blocks)})
+                continue
+
+        # fallthrough: pass through unmodified (string content, system msgs, etc.)
+        out.append(msg)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Anthropic (Sonnet 4.6)
 # ---------------------------------------------------------------------------
@@ -250,10 +330,11 @@ class OpenAICompatClient:
         tools: list[ToolDef],
         max_tokens: int = 4096,
     ) -> AssistantMessage:
+        oai_messages = _to_openai_messages(messages)
         payload: dict[str, Any] = {
             "model": self.model_id,
             "max_tokens": max_tokens,
-            "messages": [{"role": "system", "content": system}, *messages],
+            "messages": [{"role": "system", "content": system}, *oai_messages],
         }
         if tools:
             payload["tools"] = [
