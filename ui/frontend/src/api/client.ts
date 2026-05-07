@@ -935,6 +935,43 @@ export const api = {
     }
     return (await resp.json()) as import("@/types/case_dicts").RawDictPostResponse;
   },
+
+  // DEC-V61-142 (N3.3) — commit MaterialContract + RegimeContract
+  // to the case's constant/ dicts. V132 mutating route.
+  commitPhysics: async (
+    caseId: string,
+    body: import("@/types/physics").PhysicsCommitRequest,
+  ): Promise<import("@/types/physics").PhysicsCommitResponse> => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/physics`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail: unknown;
+      try {
+        const json = await resp.json();
+        detail = json?.detail ?? json;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "message" in detail
+          ? (detail as { message: string }).message
+          : typeof detail === "string"
+            ? detail
+            : `commitPhysics failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    return (await resp.json()) as import("@/types/physics").PhysicsCommitResponse;
+  },
 };
 
 // ────────── DEC-V61-120 · AI coach streaming consumer ──────────
