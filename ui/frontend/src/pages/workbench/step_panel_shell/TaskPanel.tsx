@@ -10,9 +10,15 @@
 // (above StepNavigation), giving the engineer an always-visible chat
 // surface to ask the LLM about case completeness. Read-only adviser
 // in V120; tool-calling + action-approval lands in V61-121.
+//
+// DEC-V61-160 (N6.4): an AIAdvisorPanel renders inside the scrollable
+// Body region (after CompletenessCard, before the step-specific Body)
+// hosting the V130 advisory entry points — AI 审查 + AI 诊断. Read-
+// only by V132 contract; copy buttons only, NEVER apply.
 
 import type { ComponentType } from "react";
 
+import { AIAdvisorPanel } from "./AIAdvisorPanel";
 import { AICoachPanel } from "./AICoachPanel";
 import { CompletenessCard } from "./CompletenessCard";
 import { StepNavigation } from "./StepNavigation";
@@ -54,6 +60,7 @@ export function TaskPanel({
       </header>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {caseId && <CompletenessCard caseId={caseId} />}
+        {caseId && <AIAdvisorPanel caseId={caseId} />}
         <Body
           caseId={caseId}
           onStepComplete={onStepComplete}
