@@ -246,6 +246,15 @@ def mesh_imported_case(
     # surface them as 5xx so diagnosis is not misdirected. to_foam.py
     # is responsible for wrapping all docker SDK calls itself.
 
+    # B-ext-3 F10 fix (DEC-V61-182): the mesh has been regenerated, so
+    # any pre-existing 0/<field> BC files reference patches the new
+    # mesh might not have. Invalidate the BC-time directory + clear
+    # manifest user-overrides for those files, forcing the engineer
+    # to re-run setup-bc against the fresh mesh. This prevents the
+    # /mesh-after-/setup-bc-then-/solve crash class observed in R6
+    # (FOAM FATAL IO ERROR: Cannot find patchField entry for patch0).
+    _invalidate_stale_bc_after_mesh_regen(case_dir)
+
     return MeshResult(
         case_id=case_id,
         mesh_mode=effective_mode,
@@ -257,3 +266,56 @@ def mesh_imported_case(
         generation_time_s=gmsh_result.generation_time_s,
         warning=verdict.warning,
     )
+
+
+def _invalidate_stale_bc_after_mesh_regen(case_dir: Path) -> None:
+    """Remove ``0/`` and ``0.orig/`` directories and clear manifest
+    user-overrides on those files. Idempotent: missing dirs / missing
+    manifest are silently OK.
+
+    Called from mesh_imported_case after a successful gmshToFoam to
+    invalidate stale BC field files (``0/p``, ``0/U``, etc.) whose
+    patch-name keys no longer match the freshly regenerated polyMesh.
+
+    Engineer-facing contract: after /mesh, the engineer must re-run
+    /setup-bc; this is documented in setup-bc descriptions and the
+    actions catalogue (DEC-V61-182).
+    """
+    import shutil
+
+    for stale_dir_name in ("0", "0.orig"):
+        stale = case_dir / stale_dir_name
+        if stale.is_dir():
+            try:
+                shutil.rmtree(stale)
+            except OSError:
+                # Best-effort; if rmtree fails the pre-flight check in
+                # solver_runner._check_mesh_bc_consistency will still
+                # surface the inconsistency to the caller.
+                pass
+
+    # Clear 0/* user-override entries in the manifest so the next
+    # setup-bc run authors fresh BC files from AI defaults instead of
+    # respecting stale source=user entries that no longer have backing
+    # disk files. Best-effort: if the manifest is missing or unreadable
+    # we silently skip — solver_runner pre-flight is the load-bearing
+    # check.
+    try:
+        from ui.backend.services.case_manifest.io import (
+            ManifestNotFoundError,
+            ManifestParseError,
+            read_case_manifest,
+            write_case_manifest,
+        )
+
+        manifest = read_case_manifest(case_dir)
+    except (ManifestNotFoundError, ManifestParseError):
+        return
+    overrides = manifest.overrides
+    raw = overrides.raw_dict_files
+    stale_keys = [k for k in raw if k.startswith("0/")]
+    if not stale_keys:
+        return
+    for k in stale_keys:
+        del raw[k]
+    write_case_manifest(case_dir, manifest)

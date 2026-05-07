@@ -770,6 +770,17 @@ def solve(case_id: str) -> SolveSummary:
                     detail=msg,
                 ).model_dump(),
             ) from exc
+        if msg.startswith("mesh_bc_mismatch:"):
+            # B-ext-3 F10 fix: pre-flight catches a stale-BC-after-/mesh
+            # state. 409 Conflict — engineer must re-run setup-bc to
+            # bring the BC files back in sync with the regenerated mesh.
+            raise HTTPException(
+                status_code=409,
+                detail=SolveRejection(
+                    failing_check="mesh_bc_mismatch",
+                    detail=msg,
+                ).model_dump(),
+            ) from exc
         if "container" in msg.lower() and (
             "not running" in msg.lower() or "not found" in msg.lower()
         ):
