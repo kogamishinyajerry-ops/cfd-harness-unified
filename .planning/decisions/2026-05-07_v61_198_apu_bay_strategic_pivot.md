@@ -31,6 +31,175 @@ evidence that:
 This DEC closes the B-extend arc, resequences the M1-M6 roadmap, and
 commits to a 5-artifact extraction from the APU bay reference case.
 
+## New development philosophy (the framing this DEC encodes)
+
+The user's framing, captured verbatim in conversation post-charter
+draft (2026-05-07):
+
+> 工程师 + 现有项目 + Claude Code 已经能从 0 完成工业级 CFD 仿真。
+> 接下来通过各种各样不同方面（或者同一个方面不同工况）的真正工业
+> 级 CFD 仿真作为案例去不断积累，在过程中积累项目对不同算力类型
+> 的处理能力，并且把之前可能累积的错误的设计及时修正。也就是说，
+> 从 RAG 论文 + RAG 简单算例，变成 RAG 复杂的真实工程级仿真。
+
+This is the load-bearing reframe. Old vs new mental model:
+
+| Axis | Old | New |
+|---|---|---|
+| What is the project | A toolbox (feature list) | A **container that accumulates industrial CFD experience** |
+| What is value | UI coverage breadth × feature count | **Industrial-case breadth covered × depth sedimented per case** |
+| What is progress | Landed N DECs / shipped N UIs | **+1 new solver-class covered AND −K old assumptions falsified by industrial cases** |
+| What is RAG corpus | OpenFOAM docs + textbooks + benchmark cases | **Real industrial-case process logs + V-series death-mode chains + decision rationale** |
+| What is a case | Test fixture | **Nutrient — each industrial case feeds the container** |
+| What is UI | Entry ticket | **Luxury — defer until proven necessary by repeated industrial-case friction** |
+
+### Three pillars of the new philosophy
+
+#### Pillar 1 — Industrial cases are the new dogfood substrate
+
+Not as a calendar target ("one per month"), but as a **systematic
+capability axis**. Each new industrial case = one corpus injection
++ one round of stale-assumption falsification.
+
+Solver-class coverage map (priority unranked beyond "what's already
+covered"):
+
+| Solver class | Physics signature | Candidate case | Validates |
+|---|---|---|---|
+| Internal flow + forced convection + buoyancy ✅ | buoyantSimpleFoam, kωSST→laminar | APU bay (covered) | CAD ingest, V-series death modes |
+| External flow + high-Re + boundary layer | simpleFoam, kωSST, y+ control | intake diffuser / aircraft external | prism layer in practice, y+ tuning |
+| Conjugate heat transfer (CHT) | chtMultiRegion*Foam | radiator / cooled turbine blade | multi-region coupling, fluid-solid interface |
+| Rotating machinery | MRF / SRF / sliding mesh | fan / turbine stage | periodic boundary, rotating frame |
+| Multiphase / free surface | interFoam / multiphaseEulerFoam | sloshing oil sump / offshore platform | VOF, density ratio |
+| Compressible high-speed | rhoCentralFoam / sonicFoam | nozzle / transonic | shock capture, high Mach |
+| Combustion / reacting flow | reactingFoam / fireFoam | combustor / fire spread | chemistry source terms, radiation |
+| Transient LES / DES | pisoFoam-LES / hybrid | bluff-body / aeroacoustics | time stepping, spectral analysis |
+
+Each new solver-class = a **systematic capability expansion**, not
+"one more case in the fleet". Project state is described by what
+coverage rows are filled, not by case count.
+
+#### Pillar 2 — Run-and-correct (retroactive correction)
+
+Each new industrial case will surface 3 classes of stale design
+assumptions. **Fix in place, do not open a new DEC arc.**
+
+1. **Toy-case-biased thresholds** — e.g. an advisor threshold tuned
+   on LDC trips false-positive on industrial cases → adjust + add
+   V-series row
+2. **Over-narrow schema** — e.g. `BCSetupRequest` schema assumed all
+   cases use mass-flow as primary; APU bay's pressure-outlet
+   simplification path was outside it → widen schema
+3. **Over-confident capability claims** — e.g. README says "supports
+   industrial CFD" but doesn't actually support CHT today → update
+   the today-can / today-cannot explicit list
+
+Frequency = per-case high-cadence small steps, not low-cadence
+versioned releases. Commit message documents the correction; no
+full DEC unless the correction crosses ≥3 modules.
+
+#### Pillar 3 — RAG corpus pivots from "papers + simple cases" to "real engineering simulations"
+
+This is the most important paradigm shift. Original M6 AI-advisor
+RAG-corpus assumption was:
+
+- OpenFOAM official docs
+- Fluent / StarCCM user manuals
+- Classical textbook excerpts
+- 10 academic gold-standard cases
+
+**New corpus assumption**:
+
+- Each industrial case's **complete process log** (e.g. the V3→V13
+  13-version progression, debugging reasoning, final selection)
+- V-series finding index (symptom → root cause → fix chain)
+- `solver_convergence_playbook.md` decision tree
+- Each case's SSOT YAML + rendered dict + checkMesh log + solver
+  log + final report
+- The **engineering decision rationale** (why v1 used laminar
+  fallback, why BC simplified to pressure-outlet, etc.)
+
+**What "AI Review" button does under new corpus**: feed current case's
+case.yaml + checkMesh.log + solver log into RAG, get answer
+"your version most resembles industrial case X version Y in our
+corpus; likely failure mode is V-series Vn".
+
+**What "AI Diagnose" button does under new corpus**: on convergence
+failure, match nearest V-series entry, give specific suggestion
+e.g. "S2 + S3 combination: try PBiCGStab + diagonal preconditioner".
+
+This is **orders of magnitude more useful than RAG-papers** —
+papers tell you "why ω blowup happens"; the industrial corpus
+tells you "APU bay V4 had this exact failure; v7 switched to
+laminar and converged."
+
+### Operating procedure (per-case standard moves)
+
+Six mandatory moves after each new industrial case:
+
+1. Write `case_NNN_<name>` reference profile (NOT gold-standard);
+   pointer to local case path
+2. Append V-series rows for each new death mode → V14, V15, ...
+3. Append solver_convergence_playbook decision-tree row (if a new
+   pattern class)
+4. Fix stale design assumptions discovered this run (parameters,
+   schema, docs)
+5. Extract artifacts (if reusable engineer hand-work patterns
+   surfaced) → land in main project as sub-DEC
+6. Inject into RAG corpus (once M6 lands): feed case process logs
+
+### Explicit reject list
+
+Behaviors that look like progress but are negative-value under the
+new philosophy:
+
+| Reject | Reason |
+|---|---|
+| Restart persona-driven dogfood | F1-F15 exhausted; CI smoke covers; continued grinding is negative-value |
+| Use toy cases (LDC / backward_step) as primary substrate | Surfaces toy-class problems only; cannot surface industrial-class problems |
+| Large UI investments (sizing-field UI, region-refinement UI under old M2-M5 plan) | APU bay falsified UI as entry ticket; UI deferred |
+| AI auto-mutate routes (any AI call to mutating endpoint) | Violates V130 advisory-only |
+| Use "case count" as KPI | Progress = solver-class coverage breadth + assumption-correction depth, not case count |
+| Write charter DEC per new case | sub-DEC scope suffices; only **first-time solver-class introduction** (e.g. first CHT case) warrants charter |
+
+### Compatibility with v2.3 governance
+
+Fully compatible and mutually reinforcing:
+
+- **DEC scope-driven**: new case = sub-DEC (commit message + tests);
+  charter only for solver-class first-introduction
+- **Codex round cap=3**: marginal-return threshold for industrial
+  cases is naturally low; cap prevents over-review
+- **Kogami opt-in**: invoked only on first-introduction charter
+  level, not per case
+- **Counter as pure telemetry**: counting +1 per case is not
+  meaningful; what matters is monthly solver-class coverage delta
+
+### Project narrative shift
+
+When describing the project externally, the framing changes:
+
+**Old**: "cfd-harness-unified is a CFD workbench providing full-stack
+UI for mesh generation / BC setup / solver control / post-processing
+/ AI advisor"
+(—sounds like another Fluent shell)
+
+**New**: "cfd-harness-unified is a **container that accumulates
+industrial CFD experience**. Every real engineering-grade case
+that runs through it deposits another layer of OpenFOAM practical
+knowledge. Today's capability = solver-classes covered ×
+sediment-depth per class. The AI advisor's leverage is not
+OpenFOAM textbooks; it is our own industrial process logs."
+
+### Single-sentence framing
+
+**The project shifts from "building a tool" to "growing a container
+that gets stronger with every industrial simulation it digests".
+Cases are not test fixtures — they are nutrients. UI is not the
+entry ticket — it is a luxury. The AI advisor's corpus is not
+papers — it is the death-mode chains we ourselves produced, one
+industrial case at a time.**
+
 ## Trigger event
 
 User completed `~/Desktop/apu-bay-ventilation/` over one development
