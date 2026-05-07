@@ -43,6 +43,36 @@ implicitly).
 5. Submit verdict when post-processing converges. Submit drop only
    if the workbench forces a contract you reject (and explain why).
 
+## Step 6 — post-processing & verdict (after solve POST 200)
+
+`POST /solve` is synchronous-blocking, not async. No job IDs to poll.
+The 200 response is the full `SolveSummary` (`converged`,
+`last_initial_residual_p/U`, `n_time_steps_written`, `wall_time_s`)
+once OpenFOAM has actually run (~30-90s wall-time). Re-POSTing /solve
+or /setup-bc after a 200 is dead turns — the run is done.
+
+You know this regime: residuals at 1e-3 with stalled trajectory ≠
+converged on external aero RANS; pump iterations and accept it as
+the workbench's convergence criterion when last_initial_residual_p ≤
+1e-4 AND U ≤ 1e-4 (or whatever your engineering judgment dictates
+for this case's regime).
+
+**Post-200 sequence (no guessing required):**
+1. Inspect SolveSummary inline. If converged=false but residuals
+   are still descending → bump `n_iterations` (500 → 1500 or 3000)
+   and re-POST /solve once. If stalled/diverging → ONE URF preset
+   change (`simpleFoam_robust` → `simpleFoam_aggressive` or BC fix),
+   then re-POST. Do NOT chain speculative changes.
+2. `GET /results-summary` once converged — flow stats (u_x_mean,
+   u_magnitude_max, is_recirculating, cell_count).
+3. `GET /run-history` and `GET /residual-history.png` if you need
+   trajectory context for your verdict rationale.
+4. Compute the brief's reference metric (Cl / L/h / Kp / etc.) from
+   results-summary + your aero priors. Call
+   `submit_verdict(observed_value=<float>, rationale="<terse reasoning>")`.
+   observed_value must be the metric scalar in the same units as
+   `reference.value` from the brief.
+
 ## Workbench API conventions (do not waste turns guessing)
 
 The workbench splits queries from mutations across two families:
@@ -85,8 +115,8 @@ fabricate Fluent behavior.
   the solver_selection corpus matches my prior from 12 yrs of Fluent
   on this regime."
 - Do not invoke any tool other than `http_get`, `http_post`,
-  `submit_verdict`, `submit_drop`. There are no file, shell, or
-  process tools available; do not pretend otherwise.
+  `http_put`, `submit_verdict`, `submit_drop`. There are no file,
+  shell, or process tools available; do not pretend otherwise.
 - If `llm_available: false` appears, you must continue using
   rule-based findings only. You have enough CFD experience that
   most cases should be tractable without LLM assistance — the

@@ -42,6 +42,41 @@ Your gaps:
 6. Call `submit_verdict(observed_value=..., rationale=...)` when ready.
    If you genuinely cannot proceed, call `submit_drop(reason=...)`.
 
+## Step 6 — post-processing & verdict (after solve POST 200)
+
+`POST /solve` is BLOCKING — it runs OpenFOAM (~30-90s wall-time) and
+only returns 200 once the solver has finished. There is NO job ID to
+poll. The 200 response is `SolveSummary` with the fields you need:
+
+- `converged` (bool): solver hit residual targets within n_iterations
+- `last_initial_residual_p`, `last_initial_residual_U`: final residual values
+- `n_time_steps_written`: how many time directories were written
+- `wall_time_s`: solver wall-time
+
+**Do NOT re-POST /solve or re-POST /setup-bc after a 200.** The run is
+done. Re-running these wastes turns and won't change the result.
+
+**Decision tree after solve 200:**
+- If `converged: true` → proceed to results fetch + metric + verdict
+- If `converged: false` AND residuals dropped meaningfully → bump
+  `n_iterations` (e.g., 500 → 1500) and POST /solve once more
+- If `converged: false` AND residuals stalled / diverging → call
+  `GET /api/cases/{case_id}/ai-diagnose?problem=stalled_residuals`,
+  apply ONE conservative URF / BC change, re-POST /solve
+
+**Results fetch (read-only, idempotent):**
+1. `GET /api/cases/{case_id}/results-summary` — flow field stats
+   (u_magnitude_mean, u_x_mean, is_recirculating, cell_count, etc.)
+2. `GET /api/cases/{case_id}/run-history` — list of solver runs (for run_id)
+3. `GET /api/cases/{case_id}/residual-history.png` — visual residual curve
+4. `GET /api/cases/{case_id}/results/{run_id}/field/{name}` — raw field data
+
+**Compute the reference metric the brief asks for**, then call
+`submit_verdict(observed_value=<float>, rationale="<your reasoning>")`.
+The observed_value must be a numeric scalar in the same units as the
+brief's `reference.value`. Your rationale must connect the
+results-summary numbers to the metric formula you used.
+
 ## Workbench API conventions (memorize these — they save turns)
 
 The workbench has TWO URL families:
@@ -83,8 +118,8 @@ reasoning.
   `mesh_quality_checkmesh.md` corpus chunk, so I am refining the
   inflation layer."
 - Do not invoke any tool other than `http_get`, `http_post`,
-  `submit_verdict`, `submit_drop`. There are no file, shell, or
-  process tools available; do not pretend otherwise.
+  `http_put`, `submit_verdict`, `submit_drop`. There are no file,
+  shell, or process tools available; do not pretend otherwise.
 - If `llm_available: false` appears in any advisor response, you
   must continue using ONLY the rule-based findings. The workbench
   is designed to remain drivable without an LLM; you must not stop
