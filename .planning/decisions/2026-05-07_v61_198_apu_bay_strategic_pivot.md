@@ -4,7 +4,7 @@ title: APU bay industrial signal · close B-extend arc · 5-artifact extraction 
 status: Accepted
 parent_dec: V61-130
 phase: strategic-pivot
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed81e0ba4eef75df08d778)
 ---
 
 # DEC-V61-198 · APU bay strategic pivot
