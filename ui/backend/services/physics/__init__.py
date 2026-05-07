@@ -41,6 +41,11 @@ from ui.backend.services.physics.tolerance_binding import (
     derive_tolerance_for_regime,
     get_tolerance_template,
 )
+from ui.backend.services.physics.urf_advisor import (
+    HintSeverity,
+    StabilityHint,
+    derive_stability_hints,
+)
 from ui.backend.services.physics.writer import (
     render_momentum_transport,
     render_physical_properties,
@@ -55,10 +60,13 @@ __all__ = [
     "SOLVER_DERIVATIONS",
     "SolverDerivation",
     "SolverName",
+    "HintSeverity",
+    "StabilityHint",
     "TOLERANCE_TEMPLATES",
     "ToleranceTemplate",
     "ToleranceTier",
     "derive_default_tolerance_tier",
+    "derive_stability_hints",
     "derive_solver",
     "derive_tolerance_for_regime",
     "get_tolerance_template",
