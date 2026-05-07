@@ -92,13 +92,22 @@ jobs:
           # (case_completeness service). 18 tests across 6 layers
           # (whitelist · imported manifest · Re-turbulence rule ·
           # tri-state precondition · manifest-equivalent · HTTP route).
+          # ui/backend/tests/test_persona_facing_smoke_e2e.py is the
+          # P2 follow-up to DEC-V61-197 (B-ext-6 close meta-retro): a
+          # live-fire E2E smoke that walks the persona-visible chain
+          # (/solve → /run-history → /results-summary → /field/U) and
+          # asserts every F11/F12/F13/F15 invariant in one place.
+          # Catches regressions on the persona-driven path that
+          # accumulated 30+ live-run samples across B-ext-2..6. See
+          # .planning/methodology/workbench_persona_findings.md (P1).
           python -m pytest tests/ \
             ui/backend/tests/test_report_bundle.py \
             ui/backend/tests/test_solver_profiles.py \
             ui/backend/tests/test_setup_bc_envelope_route.py \
             ui/backend/tests/test_bc_setup_user_override.py \
             ui/backend/tests/test_bc_setup_from_stl_patches.py \
-            ui/backend/tests/test_case_completeness.py -q
+            ui/backend/tests/test_case_completeness.py \
+            ui/backend/tests/test_persona_facing_smoke_e2e.py -q
 
       # ADR-002 §5 W4 dogfood window 2026-04-25 → 2026-05-09:
       # Re-run pytest with the runtime guard installed in WARN mode so any
@@ -122,7 +131,8 @@ jobs:
             ui/backend/tests/test_setup_bc_envelope_route.py \
             ui/backend/tests/test_bc_setup_user_override.py \
             ui/backend/tests/test_bc_setup_from_stl_patches.py \
-            ui/backend/tests/test_case_completeness.py -q --no-header -p no:cacheprovider \
+            ui/backend/tests/test_case_completeness.py \
+            ui/backend/tests/test_persona_facing_smoke_e2e.py -q --no-header -p no:cacheprovider \
             -o "log_cli=true" -o "log_cli_level=WARNING" \
             2>&1 | tee reports/plane_guard/ci_warn_pytest.log
           python scripts/plane_guard_rollback_eval.py \
