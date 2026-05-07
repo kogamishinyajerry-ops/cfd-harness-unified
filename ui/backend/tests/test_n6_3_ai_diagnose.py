@@ -391,6 +391,135 @@ def test_divergence_classifier_fires_on_strict_monotonic(
     assert _residual_trajectory_signal(monotonic) == "diverging_residuals"
 
 
+# ────────── Codex N6.3 R1 P2: bounded read on growing log ──────────
+
+
+def test_log_read_caps_bytes_even_on_concurrent_growth(
+    tmp_path: Path,
+) -> None:
+    """Codex N6.3 R1 P2: between stat() and read() the file may
+    grow. The read must still be bounded by _LOG_MAX_BYTES; we
+    enforce that by patching open() to return a file whose
+    underlying read() ignores requested size, simulating an
+    over-eager reader. The fixed code passes _LOG_MAX_BYTES
+    explicitly to .read(), so the spy must observe a size arg.
+    """
+    from ui.backend.services.ai_advisor.diagnose import _LOG_MAX_BYTES
+
+    corpus = _build_test_corpus(tmp_path)
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+    big = "X" * (4 * 1024 * 1024) + "\n" + _stalled_residual_log(n=6)
+    log_path = _write_log(case_dir, "log.simpleFoam", big)
+
+    real_open = open
+    read_calls: list[tuple] = []
+
+    class _SpyFile:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._fh.close()
+            return False
+
+        def seek(self, *a, **kw):
+            return self._fh.seek(*a, **kw)
+
+        def read(self, *a, **kw):
+            read_calls.append((a, kw))
+            return self._fh.read(*a, **kw)
+
+    def _spying_open(path, *a, **kw):
+        if str(path) == str(log_path.resolve()) or str(path) == str(log_path):
+            return _SpyFile(real_open(path, *a, **kw))
+        return real_open(path, *a, **kw)
+
+    import builtins
+
+    orig_open = builtins.open
+    builtins.open = _spying_open  # type: ignore[assignment]
+    try:
+        _run(
+            diagnose_case(
+                case_dir, corpus=corpus, provider=MockLLMProvider()
+            )
+        )
+    finally:
+        builtins.open = orig_open  # type: ignore[assignment]
+
+    # The big-tail read must pass an explicit size arg equal to or
+    # bounded by _LOG_MAX_BYTES (excluding the 1-byte boundary peek).
+    big_reads = [
+        call for call in read_calls if call[0] and call[0][0] > 1
+    ]
+    assert big_reads, (
+        f"Expected an explicit-size read; observed read_calls={read_calls}"
+    )
+    for args, _ in big_reads:
+        assert args[0] <= _LOG_MAX_BYTES, (
+            f"Read called with size {args[0]} > cap {_LOG_MAX_BYTES}"
+        )
+
+
+# ────────── Codex N6.3 R1 P3: aligned-boundary first-line preserved ──────────
+
+
+def test_log_seek_on_line_boundary_keeps_first_line(tmp_path: Path) -> None:
+    """Codex N6.3 R1 P3: when the seek offset (size - _LOG_MAX_BYTES)
+    lands exactly at the start of a real line, the boundary-trim
+    must NOT discard that line. We craft a log whose payload is
+    deliberately sized so the seek lands on a marker line, then
+    assert the marker survived the read."""
+    from ui.backend.services.ai_advisor.diagnose import (
+        _LOG_MAX_BYTES,
+        _read_solver_log_tail,
+    )
+
+    imported = tmp_path / "imported"
+    imported.mkdir()
+    case_dir = _stage_empty_case(imported, _safe_id())
+
+    # Marker line is 32 bytes (with trailing \n) and we want it to
+    # appear at exactly offset (size - _LOG_MAX_BYTES). Strategy:
+    # pad the prefix so size - _LOG_MAX_BYTES = end_of_prefix, then
+    # marker line at that offset. Concretely, prefix = enough A's
+    # so prefix length matches the cap; then marker; then trailing
+    # residual log.
+    marker = "MARKER_LINE_SHOULD_SURVIVE\n"  # 27 bytes (incl \n)
+    tail_payload = _stalled_residual_log(n=6)
+    # We want: prefix + marker + tail to have:
+    #   size - _LOG_MAX_BYTES = len(prefix)
+    # ⇔ len(marker) + len(tail) = _LOG_MAX_BYTES
+    fill_len = _LOG_MAX_BYTES - len(marker) - len(tail_payload)
+    assert fill_len > 0
+    prefix = "A" * fill_len + "\n"  # ends with \n so prefix-end is line boundary
+    # Pad prefix so that after newline its length puts us exactly
+    # at the boundary. Recompute total size after padding:
+    total_payload = prefix + marker + tail_payload
+    # We need `size - _LOG_MAX_BYTES == len(prefix)`. Adjust if off.
+    size_target_offset = len(prefix)
+    expected_size = size_target_offset + _LOG_MAX_BYTES
+    while len(total_payload) < expected_size:
+        prefix = prefix + "A"
+        total_payload = prefix + marker + tail_payload
+    # Add trailing pad to hit exact size if necessary
+    while len(total_payload) < expected_size:
+        total_payload += "Z"
+
+    _write_log(case_dir, "log.simpleFoam", total_payload)
+
+    text = _read_solver_log_tail(case_dir)
+    assert text is not None
+    assert "MARKER_LINE_SHOULD_SURVIVE" in text, (
+        "Aligned-boundary seek discarded a valid first line."
+    )
+
+
 # ────────── LLM path with injected provider ──────────
 
 
