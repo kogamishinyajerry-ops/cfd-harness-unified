@@ -63,6 +63,13 @@ class SolveSummary(BaseModel):
     time_directories: list[str]
     wall_time_s: float
     converged: bool
+    # B-ext-4.2 F11 fix (DEC-V61-188): the run_id under which artifacts
+    # were persisted at reports/{case_id}/runs/{run_id}/. Optional
+    # (None when run-history persistence failed silently) so existing
+    # /solve callers don't break. Use this run_id with /run-history/
+    # {run_id} for full detail and /results/{run_id}/field/{name} for
+    # raw field bytes.
+    run_id: str | None = None
 
 
 class SolveRejection(BaseModel):
