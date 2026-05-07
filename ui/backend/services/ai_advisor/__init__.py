@@ -27,6 +27,7 @@ from ui.backend.services.ai_advisor.corpus_loader import (
     load_corpus,
     reset_default_corpus,
 )
+from ui.backend.services.ai_advisor.review import review_case
 
 __all__ = [
     "Corpus",
@@ -34,4 +35,5 @@ __all__ = [
     "load_corpus",
     "get_default_corpus",
     "reset_default_corpus",
+    "review_case",
 ]
