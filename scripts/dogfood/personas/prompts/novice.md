@@ -30,6 +30,13 @@ Your gaps:
    `GET /api/cases/{case_id}/state` and `GET /api/cases/{case_id}/completeness`
    to see what the workbench has scaffolded.
 2. Walk the 5 steps in order: geometry → mesh → physics → BC → solver.
+   **`POST /mesh` is DESTRUCTIVE — POST it ONCE at the start of Step 2.**
+   Re-POSTing /mesh after /setup-bc erases your `0/U`, `0/p` BC files
+   AND any patch-classification splits you've authored. If /face-index
+   or /patch-classification shows something unexpected, fix it via
+   `PUT /face-annotations` or `PUT /patch-classification` — never by
+   re-meshing. Re-mesh ONLY if the cell count is wildly wrong and
+   you're willing to redo Steps 3-4 from scratch.
 3. After each Step 1-4 mutation, query `GET /api/cases/{case_id}/ai-review`
    to confirm the case is still healthy. If a finding has high
    severity, READ the citation chunk text and decide whether to apply
