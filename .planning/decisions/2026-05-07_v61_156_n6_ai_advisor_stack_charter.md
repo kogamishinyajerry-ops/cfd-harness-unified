@@ -5,7 +5,7 @@ title: N6 phase charter · AI Advisor Stack (RAG-backed) — case-review + diagn
 status: Accepted
 parent_dec: V61-130
 phase: N6
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed813499a2e011be748252)
 parent_artifacts:
   - .planning/strategic/blueprint_v3_2026-05-07.md
   - .planning/strategic/n3_n6_outline_2026-05-07.md

@@ -4,7 +4,7 @@ title: N6.3 · AI 诊断 (case diagnose) advisor route — GET /api/cases/{id}/a
 status: Accepted
 parent_dec: V61-156
 phase: N6
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed814095fff72616424c19)
 ---
 
 # DEC-V61-159 · N6.3 · AI 诊断 Advisor Route
