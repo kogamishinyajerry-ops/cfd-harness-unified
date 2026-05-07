@@ -131,6 +131,27 @@
 | Fix #3 | Switch to true transient (`buoyantPimpleFoam`); let physical time damp the oscillation. Costs wall-clock but is the correct physics |
 | Reference | APU bay V13 (REPORT.md §5.1, §8.1) |
 
+### S11 · Multi-region post-processing reports `T = ±1e+300` for solid regions; misread as divergence
+
+| field | value |
+|---|---|
+| Symptom | `11_post.py` (or equivalent) reports per-region T_min/T_max as `1e+300 / -1e+300` for one or more solid regions; appearance of catastrophic divergence; `report.md` summarises "fluid bounded but solid runaway" |
+| Root cause | Multi-region solver (`chtMultiRegionSimpleFoam` / `chtMultiRegionFoam`) crashed setup-time or first-iter without writing any `case/<step>/` time directory beyond `0/`. Post-processor iterates time directories looking for solid T fields; OpenFOAM's missing-field path returns `±std::numeric_limits<double>::max()` ~= `±1e+308`, displayed as `±1e+300`. **The "divergence" is an interpretation bug, not a numerical one** |
+| Fix #1 (cheap) | Verify `ls case/[0-9]*` shows ≥ 2 entries before diagnosing solid divergence. If only `0/` exists, the run did not progress; investigate setup-time crash, not solid numerics |
+| Fix #2 | Drop radiation for v2 baseline (`viewFactor` setup is brittle; a radiation-off run isolates the multi-region transport from radiation issues). Restart radiation in v3 from converged v2 IC |
+| Fix #3 | Make post-processor fail loudly when asked to read fields from a run that produced no time output, instead of silently returning sentinels (main-project tooling improvement) |
+| Reference | case_002b CHT v1; V14 |
+
+### S12 · Multi-region fluid sub-solver inherits S5 (compressible ρ/T runaway)
+
+| field | value |
+|---|---|
+| Symptom | Multi-region solver runs without crash, but per-iter fluid-side log shows `limitTemperature limitT Lower limited N (M%) of cells; Upper limited N (M%) cells`. Percentage rises with iter; clamp is doing continuous work |
+| Root cause | chtMultiRegionSimpleFoam fluid sub-solver = same compressible-buoyant-RANS numerics as `buoyantSimpleFoam`. With strong T gradients + buoyancy + steady-state SIMPLE relaxation, fluid cells near hot patches overshoot thermophysics range. Multi-region wrapping does not insulate from S5 |
+| Fix | Same fix family as S5: (1) keep `fvOptions limitTemperature` clamp; (2) lower URF on `h` (0.40 → 0.20); (3) v2 simplification = drop kωSST → laminar; (4) v3 = transient `chtMultiRegionPimpleFoam` |
+| Cross-link | S5 (buoyantSimpleFoam ρ runaway). When the fluid sub-solver class matches, the S-family decision tree applies regardless of multi-region wrapping |
+| Reference | case_002b CHT v2 norad; V15; V-series Pattern 6 (inheritance across solver families) |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9
