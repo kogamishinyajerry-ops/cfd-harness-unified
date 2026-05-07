@@ -22,10 +22,8 @@ symlink escape from ``case_dir``.
 """
 from __future__ import annotations
 
-import io
 import json
 import logging
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -131,18 +129,28 @@ def _read_solver_log_tail(case_dir: Path) -> Optional[str]:
             continue
         try:
             with open(resolved, "rb") as fh:
-                if size > _LOG_MAX_BYTES:
-                    # Seek-tail: only the last _LOG_MAX_BYTES are
-                    # ever pulled into memory. Discard one
-                    # potentially-partial leading line so the decoded
-                    # text starts on a clean line boundary.
-                    fh.seek(-_LOG_MAX_BYTES, io.SEEK_END)
-                    data = fh.read()
-                    nl_idx = data.find(b"\n")
-                    if nl_idx != -1 and nl_idx < len(data) - 1:
-                        data = data[nl_idx + 1 :]
+                # Codex N6.3 R1 P2: bound the read with an explicit
+                # byte count so the cap holds even if the log grows
+                # between stat() and read(). seek() is to an absolute
+                # offset (not SEEK_END) for the same reason.
+                seek_offset = max(0, size - _LOG_MAX_BYTES)
+                if seek_offset > 0:
+                    # Codex N6.3 R1 P3: peek the byte immediately
+                    # before the window. If it is '\n' the window
+                    # starts on a clean line boundary — keep the
+                    # whole window. If it is anything else we landed
+                    # mid-line and must trim through the first '\n'.
+                    fh.seek(seek_offset - 1)
+                    prev_byte = fh.read(1)
+                    data = fh.read(_LOG_MAX_BYTES)
+                    if prev_byte != b"\n":
+                        nl_idx = data.find(b"\n")
+                        if nl_idx != -1:
+                            data = data[nl_idx + 1 :]
                 else:
-                    data = fh.read()
+                    # File fits within the cap — read the whole thing
+                    # but still bound the read explicitly.
+                    data = fh.read(_LOG_MAX_BYTES)
         except OSError:
             continue
         try:
