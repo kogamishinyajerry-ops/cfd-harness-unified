@@ -72,6 +72,24 @@ served by a 4-way ceiling diffuser.
 | D1 | 0.35 mm gap diffuser_face_plate ↔ ceiling | `freecadcmd scripts/check_gap.py` (env-var args) | PASS — measured 0.350 mm |
 | D7 | louver_vane_2 rotated 38° from intended | `freecadcmd scripts/check_face_normal.py` (env-var args) | PASS — measured 38.000° |
 
+## v1 run results (2026-05-09)
+
+| Metric | v1 result | Target | Verdict |
+|--------|-----------|--------|---------|
+| Mesh cells (sHM after V52 fix) | 1.16 M | — | OK |
+| Solver iterations completed | 133 / 200 (stopped early) | — | partial pseudo-steady |
+| ADPI (27-point ASHRAE 55) | **0.0 %** | ≥ 80 % | **FAIL (V53 sealed-room)** |
+| occupied-zone U_max | 4.05 m/s | < 0.25 m/s | FAIL (V53) |
+| Throw distance T_50 | **0.0 m** (no jet) | ≈ 2.7 m | FAIL (V53) |
+| occZone vol-mean T | 295.03 K (21.9 °C) | — | room ≈ isothermal |
+| occZone max T | 309.32 K (36.2 °C) | — | local heat-source heating |
+| Max dT/dz (occupied zone) | 0.045 K/m | < 2.0 K/m | PASS (incidentally) |
+
+Interpretation: V53 sealed-room signal — buoyancy + sHM-discretized
+0.35 mm D1 gap (~6 mm effective opening) drive whole-room circulation
+with no forced supply jet. ADPI = 0 % because room is nearly
+isothermal (no temperature input from absent supply BC).
+
 ## A2 advisor exercise (9th cross-topology PASS)
 
 ```
