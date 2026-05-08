@@ -231,6 +231,54 @@
 | Reference | case_009_sandia_flame_d v1 (2026-05-08); cold-flow ran clean at min/max(T) = [294, 1880] K; ignite started chemistry; T_max = 1880 → 1980+ K within 5e-4 s of physical time |
 | **V-row anchors** | (no V-finding — this is the "good practice" S-row that PREVENTS V-findings; it is the chemistry-startup playbook) |
 
+### S19 · pimpleFoam LES staged restart: transient settle → averaging → tail-mean (case_010 / incompressible-LES root)
+
+| Branch | Action |
+|---|---|
+| Symptom | LES Cd / Cl / Cm signals contaminated by initial transient if `fieldAverage` includes the spin-up window. Time-averaged Cd appears to "drift" continuously instead of converging — but the drift is settling-bias, not insufficient sampling. Fix is two-stage restart: discard the spin-up time, then start averaging cleanly |
+| Decision tree |  |
+| Stage A (transient settle) | `system/controlDict.functions.fieldAverage1` ABSENT (or `timeStart` set beyond endTime). `endTime = 2 * L / U_inf` (= 2 flow-through times). Run from t=0 to discard the artifact-rich window during which boundary-layer growth + recirculation onset + wake-shedding-frequency-locking happen. For case_010: endTime ≈ 0.576 s. Verdict: clean exit; sampled Cd signal swings around mean without monotonic drift |
+| Stage B (averaging) | Restart from latestTime. `system/controlDict.functions.fieldAverage1` now present with `cleanRestart true; timeStart <Stage_A_endTime>`. `endTime = 7 * L / U_inf` (= 5 additional flow-through times after the 2-FT settle). For case_010: endTime ≈ 2.017 s. Verdict: forceCoeffs1 tail-window mean (last 5 FTs) is the time-averaged Cd; std-dev across the 5 sub-windows quantifies sampling error |
+| Stage C (tail-mean) | After Stage B, parse `postProcessing/forceCoeffs1/<startTime>/coefficient.dat`; tail-average the last 5 L/U_inf samples; report Cd_total = Cd_pressure + Cd_friction; also extract `<startTime>/U` and `<startTime>/p` (Stage B time-averaged fields) for surface Cp at TUM tap regions + base-pressure-recovery analysis |
+| Failure mode A — skipping Stage A | `fieldAverage` ON at t=0 with zero IC + initial-pressure-pulse + boundary-layer growth → all included in mean → Cd over-predicts by 5-15% (depends on settling artifact magnitude). **Fix**: NEVER include `fieldAverage` in Stage A; ALWAYS use `cleanRestart true` in Stage B |
+| Failure mode B — Stage B too short (< 5 FT) | Cd visibly varies between sub-windows; std-dev across 5 sub-windows is large compared to mean. **Fix**: extend Stage B endTime; rerun. (Common for first LES iteration: estimate endTime conservatively then extend if std-dev > 2% of mean) |
+| Failure mode C — Stage A 0/0.orig template wrong | `0.orig` for LES MUST contain `nut` (Spalding wall function), MUST NOT contain `nuTilda` (Spalart-Allmaras only) and MUST NOT contain `k`/`omega` (k-omega RANS only). Inheriting RANS templates fails immediately. **Fix**: dedicated LES `0.orig` template with U+p+nut only |
+| Productizable artifact | `field_average_function_object_writer.py` (case_010 sandbox `08e_write_field_average_function_object.py`) — `--stage transient` emits Stage A controlDict; `--stage averaging` emits Stage B controlDict with cleanRestart + timeStart. Same script writes both stages from the same case.yaml SSOT. Promote to harness for next LES case |
+| Reference | case_010_drivaer_fastback_les v1 baseline 2026-05-08 (`scripts/08e_write_field_average_function_object.py`, `templates/controlDict_LES.j2`); two-stage restart contract |
+| **V-row anchors** | V45 (LES infrastructure) — this is the "how to use V45's templates correctly" playbook |
+
+### S20 · LES wall-modeled y+ band (30-100): nutUSpaldingWallFunction + addLayers tuning (case_010 / incompressible-LES root)
+
+| Branch | Action |
+|---|---|
+| Symptom | LES with target y+=30-100 (wall-modeled regime) on vehicle/airfoil bodies. Mean y+ acceptable but max y+ overshoots (e.g., 200+) at A-pillar / wing-LE / sharp-edge stagnation regions. Overshoot regions get spurious wall-shear + skin-friction drag |
+| Decision tree |  |
+| Stage A (diagnose) | After Stage A averaging or even mid-spinup, enable `yPlus` function-object in controlDict. checkMesh-style scan: parse log.transient for "max yPlus" and "min yPlus" + `postProcessing/yPlus/0/yPlus.dat`. **Pass criterion**: 5th–95th percentile y+ in [30, 100] band; max y+ < 200 acceptable (peak local overshoot tolerable for wall-modeled) |
+| Stage B (mesh fix · increase prism layers) | If max y+ overshoots > 200: `addLayersControls.nSurfaceLayers` from 3 → 5-6 with `expansionRatio` from 1.3 → 1.2 (smaller growth ratio packs more cells in inner layer). Also `finalLayerThickness` from 0.5 → 0.3 (relative to background). Re-run sHM addLayers stage |
+| Stage C (alternate · switch wall function) | If sHM layer addition keeps failing on sharp edges (negative-volume warnings during layer extrusion): switch from `nutUSpaldingWallFunction` to `nutUWallFunction` (smoother but less accurate at log-layer transition). Acceptable for v1 LES; revisit in v2 with refinementRegions slab around the offending sharp edge |
+| Failure mode A — y+ < 5 (over-resolved sublayer) | Means addLayers thickness too small OR background cell already too small. `nutUSpaldingWallFunction` works at any y+ but cells smaller than required at y+=5 waste compute and may trigger near-wall instability for LES (subgrid model assumes inertial-range eddies which require y+ >~ 30). **Fix**: bump background cell size or reduce nSurfaceLayers |
+| Failure mode B — y+ > 200 globally | Background mesh too coarse. **Fix**: bump body refinement level (4,5) → (5,6); rerun sHM. Cost: ~4× cells in body region |
+| Failure mode C — local y+ spikes only | Tolerable; documented in v2 REPORT.md as "expected at sharp-feature stagnation". Do not over-refine globally to chase local outliers |
+| Productizable artifact | yPlus diagnostic snippet `scripts/post/yplus_audit.py` (parse postProcessing/yPlus output → percentile distribution → severity classification). Not extracted in v1; candidate for v3 |
+| Reference | case_010_drivaer_fastback_les v1 sandbox (`templates/controlDict_LES.j2` includes yPlus FO; templates/snappyHexMeshDict.j2 has addLayers config) |
+| **V-row anchors** | V45 (LES infrastructure) |
+
+### S21 · LES rear-base separation over-prediction → WALE Cw constant tune OR dynamicKEqn fallback (case_010 / incompressible-LES root)
+
+| Branch | Action |
+|---|---|
+| Symptom | After Stage A + Stage B (S19), time-averaged Cd compared to TUM fastback target (Cd ≈ 0.281) shows over-prediction by 10-30%, primarily from over-active rear-base separation. WALE may under-predict subgrid dissipation in the high-shear rear-slant region |
+| Decision tree |  |
+| Stage A (diagnose) | Cd_pressure / Cd_friction decomposition (case_010 `scripts/10c_compute_cd_decomposition.py`): if Cd_pressure dominates (> 80% of total), separation-driven; if Cd_friction dominates, skin-friction-driven (different cause; see S20). Visualize Q-criterion isosurfaces near rear base — over-predicted separation shows as too-large recirculation bubble + premature reattachment downstream |
+| Stage B (WALE Cw tune) | `templates/turbulenceProperties_LES.j2.WALECoeffs.Cw` default 0.325. Reduce to 0.25 (less aggressive subgrid eddy-viscosity in regions with strain-rate dominance) and rerun Stage B. Cost: ~5 FTs of compute. Risk: Cw too small lets numerical diffusion dominate → opposite problem (under-resolved structures) |
+| Stage C (model swap · dynamicKEqn) | `08c_write_les_turbulenceProperties.py --les-model dynamicKEqn`. dynamicKEqn computes Cw locally per-cell from the resolved scales (Germano dynamic procedure) — typically more accurate near separations but ~30% more expensive per timestep. v2 fallback per Codex brief |
+| Stage D (mesh fix) | If v2 stage fails → mesh is the limiter. Bump body level (4,5) → (5,6) AND wake box level (3) → (4); rerun sHM. Cost: 3-5× total cells |
+| Failure mode A — Cd over-predicts by < 5% | Acceptable for wall-modeled half-domain LES with stationary wheels. The TUM Cd ≈ 0.281 reference ALSO has wheel/floor-rotation modeling that case_010 v1 simplified away. **Fix**: not a fix — document as "consistent with stationary-wheel/half-domain caveats" in v3 REPORT.md |
+| Failure mode B — Cd UNDER-predicts | Different cause: typically y+ over-resolved (S20 failure A) or AVeraging window too short (S19 failure B). **Fix**: revisit S20 + S19 first before tuning WALE |
+| Productizable artifact | None in v1; v3 candidate `cd_decomposition_post_processor.py` |
+| Reference | case_010_drivaer_fastback_les v1 templates (`turbulenceProperties_LES.j2` parameterized on `les_model`); v2 fallback path documented |
+| **V-row anchors** | V45 (LES infrastructure) |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9
