@@ -53,12 +53,13 @@ the right risk-managed path. Sub-session can use the script's
 output STEP locally; external publication would require explicit
 ITTC permission check.
 
-### N2 · 5th consecutive case A2-pending
+### N2 · A2 advisor LANDED (2026-05-08)
 
-D1's `expected_advisor_to_catch: virtual_interface_detector_pending_A2`.
-Cases 003 / 004 / 005 / 006 / **007** all surface this same gap.
-**5-of-5 evidence is overdetermined**. A2 extraction is the
-single highest-leverage harvest task next cycle.
+D1's `expected_advisor_to_catch: virtual_interface_detector`
+(backfilled from `_pending_A2`). The 5-of-5 compounded evidence
+across cases 003-007 (later 8-of-8 through case_010) triggered
+A2 extraction; advisor landed in commit `a09ae0a` at
+`ui/backend/services/geometry_ingest/virtual_interface_detector.py`.
 
 ### N3 · D8 exercises landed advisor
 

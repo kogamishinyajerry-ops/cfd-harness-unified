@@ -731,7 +731,7 @@ defects:
       claimed_gap_mm: 0.35
       verification_command: >-
         FreeCADCmd -c "import FreeCAD as App, Import; doc=App.newDocument(); Import.insert('/Users/Zhuanz/Desktop/case_005_rae_m2129_sduct/inputs/cad_codex_v1.step', doc.Name); o={x.Label:x for x in doc.Objects}; print(o['inlet_flange_ring'].Shape.distToShape(o['inlet_flange_cover'].Shape)[0])"
-    expected_advisor_to_catch: virtual_interface_detector_pending_A2
+    expected_advisor_to_catch: virtual_interface_detector  # A2 LANDED 2026-05-08 (commit a09ae0a)
     hypothesized_v_series_match: "Geometry-advisor analogue of V2/V8 only; no compressible-RANS numerics inheritance."
     reference_data_validity: "preserved: external flange defect does not touch AIP or centerline."
 
