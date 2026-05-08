@@ -176,6 +176,19 @@
 | Fix #3 (downstream pipeline) | For the meshing pipeline (sHM input STL), regenerate the surface parametrically as a connected manifold trimesh from the same constants used by the CAD generator. case_005 `01_extract_stl.py` demonstrates: 80×96 axial × theta grid with vertex deduplication produces a 15,360-face cylinder surface from the same `radius()` + `centerline_z()` formulas |
 | Reference | case_005_rae_m2129_sduct (2026-05-08); V16 (Codex CAD pattern) |
 
+### S15 · rhoCentralFoam infrastructure: adjustTimeStep + smoothSolver + freestream BC family (density-based root)
+
+| field | value |
+|---|---|
+| Symptom | (a) First-iter Mean Co > 100 / Max Co > 10⁴ when controlDict has `adjustTimeStep no` + fixed `deltaT 1`. Solver may not crash immediately because rhoCentralFoam's `diagonal` solver tolerates Co arbitrarily, but produces numerical garbage and downstream errors. (b) `Unknown symmetric matrix preconditioner type DILU` runtime error after iter 1. (c) `0/p/boundaryField/... characteristicPressureInletOutletPressure not found in valid types`. All three are first-time-density-based traps |
+| Root cause | rhoCentralFoam is **explicit central-upwind**: CFL stability requires Co < 1 universally. (a) Fixed dt=1 on 31 mm cells at 625 m/s wave speed = Co ≈ 20,000. (b) rhoCentralFoam wraps U/e/k/omega in symmetric matrix path; DILU is asymmetric-only. (c) `characteristicPressureInletOutletPressure` is foam-extend; OpenFOAM ESI uses `freestream`+`freestreamPressure`. Pattern: density-based solvers have an entire class of numerics + BC + solver-setup conventions distinct from pressure-based compressible solvers (rhoSimpleFoam, rhoPimpleFoam) |
+| Fix #1 (cheap) | controlDict: `adjustTimeStep yes`, `maxCo 0.5`, initial `deltaT 1e-6`. Single change — gets solver running with self-adjusting CFL |
+| Fix #2 | fvSolution: `diagonal` for ρ/ρU/ρE; `smoothSolver + symGaussSeidel` for U/e/k/omega. Standard rhoCentralFoam pattern from `tutorials/compressible/rhoCentralFoam/biconic25-55Run35` |
+| Fix #3 | 0/* fields use OpenFOAM ESI canonical BC family for transonic external: U → `freestream` (with `freestreamValue`), p → `freestreamPressure`, T → `freestream`. NOT `characteristicPressureInletOutletPressure` (foam-extend) NOT `pressureInletOutletVelocity` (incompressible-only) |
+| Mesh-side | Density-based mesh requirements differ from pressure-based: (a) max Co ≤ 0.5 on smallest cell drives wall-clock cost — coarse mesh is acceptable for v1 pipeline validation; (b) lambda-shock pattern resolution needs ≥30 spanwise cells across η=0.65-0.95 lambda zone + ≥10 cells across shock thickness — minimum ~1M cells for canonical case_006-class problem |
+| Reference | case_006_onera_m6_transonic v1 (2026-05-08); first density-based case for the project |
+| **V-row anchors** | V27 (adjustTimeStep), V28 (smoothSolver), V29 (freestream BC), V30 (thin_wall_advisor extreme-thinness validation), V31 (Codex defect-mapping mismatch), V32 (Tier-1 source double-blocker) |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9

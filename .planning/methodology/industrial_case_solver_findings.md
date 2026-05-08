@@ -354,6 +354,90 @@ If yes → V-series. If no → F-series.
 | Reference cases | case_005_rae_m2129_sduct V16 (cq.Compound of cq.Face, faces-only fragmentation, 2026-05-08); case_004_nrel_phase_vi_mrf V24 (cq.Compound of cq.Solid, additional datum-frame fragmentation, 2026-05-08) |
 | Lesson | V16 was first signal; V24 is second-case confirmation that `cq.Compound.makeCompound` is unreliable for "I want this to be one body." Pattern is now strong enough to retire the pattern from the Codex case-design protocol — recommend `cq.Solid.fuse(...)` or distinct named bodies. Additional case_004 surface: FreeCAD body-datum frames must be filtered. **Pillar 2 escalation**: 2 cases on the same Codex CAD pattern crystalize the protocol revision. **Pattern 6 reinforcement**: V16 inheritance applies wherever Codex uses `cq.Compound.makeCompound` regardless of solver class — this is a **CAD-ingest-side finding** (not a fluid-numerics finding), inherits across all numerics classes |
 
+### V26 · Codex CAD generator off-by-half-width on `centered=True` cq.Workplane.box() origin
+
+| field | value |
+|---|---|
+| Surface | Codex case-design CAD pattern; cadquery `cq.Workplane.box(W, H, D, centered=True)` semantics |
+| Engineer symptom | case_006 D1 ground-truth verification (FreeCAD `distToShape(pad, cover)`) returned **22.35 mm** instead of the manifest's claimed **0.35 mm**. Codex's `build_cad.py` placed the `cover` body at origin `pad_x + 22.0 + GAP + 22.0`, producing a 22.35 mm edge-to-edge gap. The intended formula is `pad_x + 22.0 + GAP` for two centered=True boxes (each centered on its origin → extends ±11 mm), where the 22.0 represents pad_half_width + cover_half_width = 11+11 |
+| Root cause | Codex wrote the formula as if both boxes were `centered=False` (origin at LE) but called them with `centered=True` (origin at centroid). With centered=True, going from one box's center to the next requires `(this_half_width + gap + next_half_width)`, not `(full_width + gap + full_width)`. Codex's mental model conflated "box-width-as-step" with "centroid-to-centroid distance" — analogous to V16's "Compound-of-Faces vs single-Solid" mental-model bug, but a different mechanism |
+| Fix | (1) **Sub-session local fix** (applied 2026-05-08): one-line edit in `build_cad.py` removed the second `+ 22.0`; FreeCAD distToShape post-fix = 0.35 mm exact. (2) **Codex case-design protocol revision** (compounded with V16+V24): require Codex to **declare verification dimensions and tolerance ranges in `defect_manifest.yaml`** (as Codex case_006 did declare 0.35 mm but did not verify the script produces it). Add a "post-build CAD self-check" step where Codex must run the build script and verify the defect dimensions before marking the deliverable complete. (3) Update `codex_case_design_protocol.md` defect-injection examples to show the centered=True semantics explicitly with comments |
+| Status | **partial** — case-local fix-in-place applied; protocol revision pending. Compounded evidence: 3 Codex CAD bugs in 2 cases (V16 case_005 cq.Compound-of-Faces, V24 case_004 cq.Compound-of-Solids, V26 case_006 centered=True formula) → protocol revision overdetermined |
+| Reference case | case_006_onera_m6_transonic v1 build (2026-05-08); evidence: pre-fix `distToShape` = 22.35 mm, post-fix = 0.35 mm exact |
+| Lesson | Codex CAD generators have a recurring class of mental-model bugs that produce structurally-correct-but-numerically-wrong defects. The sub-session's first action on any Codex CAD output must be ground-truth verification (FreeCAD distToShape + BoundBox.min). Updating `codex_case_design_protocol.md` to require Codex to self-verify is the highest-leverage protocol fix |
+
+### V27 · rhoCentralFoam fixed deltaT yields catastrophic Co at first iter; adjustTimeStep mandatory
+
+| field | value |
+|---|---|
+| Surface | rhoCentralFoam controlDict; explicit central-upwind time integration |
+| Engineer symptom | First-iter mean Courant Number = 674.83, max = 69,440.73 with `deltaT 1.0` and `adjustTimeStep no`. Solver did not crash immediately (rhoCentralFoam's `diagonal` solver tolerates Co arbitrarily because each cell time-step is local), but produced numerical garbage and aborted on a downstream `DILU preconditioner` error before any flow could establish |
+| Root cause | rhoCentralFoam uses an **explicit** central-upwind flux scheme. The CFL stability limit is `Co = (|U| + a) * dt / dx` where a is the local sound speed. With wing-wall cells of 31 mm, U≈285 m/s, a≈340 m/s, the stable dt is 31mm / 625 m/s ≈ 50 microseconds. A fixed `deltaT 1.0` produces dt 20,000× too large. The user-side trap: rhoCentralFoam's controlDict is structurally similar to other compressible solvers (rhoSimpleFoam, rhoPimpleFoam) where a fixed dt is reasonable; novice users assume the same here |
+| Fix | (1) **Always set `adjustTimeStep yes`** with `maxCo 0.5` (or 0.3 for shock cases) in rhoCentralFoam controlDict. (2) Set initial `deltaT 1e-6` (1 microsecond) — gives sub-iteration to compute Co from CFL and self-adjust. (3) Codify in **S15 (NEW)** of `solver_convergence_playbook.md` |
+| Status | **playbook** — codified as S15 root case |
+| Reference case | case_006_onera_m6_transonic v1 first solver run (2026-05-08, before fix) |
+| Lesson | First time the project ran a density-based explicit solver. The `adjustTimeStep yes` requirement is rhoCentralFoam-specific and easy to overlook; main project's controlDict template must default this on for any density-based solver class |
+
+### V28 · rhoCentralFoam fvSolution: DILU preconditioner unavailable for symmetric matrices
+
+| field | value |
+|---|---|
+| Surface | rhoCentralFoam fvSolution; symmetric matrix solver setup |
+| Engineer symptom | Solver runtime error after iter 1: `Unknown symmetric matrix preconditioner type DILU. Valid: 6(DIC FDIC GAMG diagonal distributedDIC none)`. The case_005 fvSolution template (which case_006 inherited as starting point) used `PBiCGStab + DILU` for U/e/k/omega — works for rhoSimpleFoam but fails for rhoCentralFoam |
+| Root cause | rhoCentralFoam wraps U/e/k/omega in a different lduMatrix path that maps to symmetric solver registry. DILU (Diagonal Incomplete LU) is for asymmetric matrices; symmetric matrix path requires DIC (Diagonal Incomplete Cholesky) or one of the explicit-iteration smoothers. The matrix symmetry classification is a property of the solver/equation form, not user-configurable |
+| Fix | (1) **Use `smoothSolver + symGaussSeidel`** for U/e/k/omega in rhoCentralFoam (canonical from OpenFOAM tutorial set tutorials/compressible/rhoCentralFoam/biconic25-55Run35). (2) Keep `diagonal` for ρ/ρU/ρE (these are direct-update, not iterative). (3) Codify in S15 |
+| Status | **playbook** — codified as S15 |
+| Reference case | case_006_onera_m6_transonic v1 first solver run (2026-05-08) |
+| Lesson | Codex's deliverable did not specify fvSolution choices. The case_005 inheritance was a natural assumption but wrong — case_005 is rhoSimpleFoam (pressure-based, asymmetric matrices for U), case_006 is rhoCentralFoam (density-based, symmetric matrix path). Inheritance across solver classes is risky; main project should provide rhoCentralFoam-canonical fvSolution template |
+
+### V29 · OpenFOAM ESI lacks `characteristicPressureInletOutletPressure`/`characteristicVelocityInletOutletVelocity` BC types
+
+| field | value |
+|---|---|
+| Surface | OpenFOAM 0/* boundary condition catalog; openfoam-default:2312 (ESI fork) BC type registry |
+| Engineer symptom | Solver runtime error: `file: 0/p/boundaryField/...characteristicPressureInletOutletPressure not found in valid types`. Codex's parts manifest specified these BC types per the AGARD-style transonic far-field convention; they exist in foam-extend but NOT in opencfd/openfoam-default:2312 (the project's default Docker image) |
+| Root cause | The `characteristic*` BC family is a foam-extend / older OpenFOAM-1.7 era feature. OpenFOAM ESI (since v3+) replaced them with `freestream` (auto-direction-detecting based on flow), `freestreamPressure`, and `waveTransmissive` for upwind/downwind. Codex's training data appears to mix foam-extend and ESI BC names. The naming is so similar that catching the mismatch requires either (a) running the case OR (b) cross-checking against the actual OpenFOAM image's BC registry |
+| Fix | (1) **Substitute canonical OpenFOAM ESI BC family**: U → `freestream` with `freestreamValue uniform (Ux Uy Uz)`; p → `freestreamPressure` with `freestreamValue uniform p_inf`; T → `freestream` with `freestreamValue uniform T_inf`. (2) Add a **BC-name compatibility check** to `codex_case_design_protocol.md`: validate every `parts_manifest.yaml.parts.*.bc.<field>` against the actual OpenFOAM image's BC registry (e.g., via `foamHelp boundary -listAll | grep <type>`) **before** dispatch. Sub-session can fast-fail on dispatch invalid types |
+| Status | **partial** — case-local fix-in-place applied; protocol enhancement pending |
+| Reference case | case_006_onera_m6_transonic v1 first solver run (2026-05-08) |
+| Lesson | This is the second Codex BC-protocol-mismatch finding (V29). First was V11/V19 about per-field BC consistency. Now adds: BC type names themselves can be wrong-fork (foam-extend vs ESI). Compounded with V26 (CAD formula) + V31 (advisor mapping): Codex case-design needs a **declarative-and-verified** protocol revision, not just doc updates |
+
+### V30 · thin_wall_advisor extreme-thinness field-validation: 0.18 mm sliver flagged critical at all reasonable refinement levels
+
+| field | value |
+|---|---|
+| Surface | `ui/backend/services/geometry_ingest/thin_wall_advisor.detect_thin_wall_patches_at_risk` |
+| Engineer symptom | case_006 D4 (0.18 mm sliver body `tip_cap_sliver`, 8-triangle sliver mesh) tested across 3 refinement levels with 50 mm bg cell. Results: level [1,2] → cells_per_thickness=0.014, severity=critical; level [2,3] → 0.029, critical; level [3,4] → 0.058, critical. Recommended_level_max=10 in all cases (level 10 = 0.05 mm cell ≈ 3.69 cells per thickness). At level 10, mesh would be O(10⁹) cells — mathematically correct, practically infeasible |
+| Root cause | thin_wall_advisor's algorithm correctly identifies the patch as far-below-resolvable. A 0.18 mm sliver in a transonic external case (where reasonable bg cell is meters) is fundamentally outside the regime sHM can preserve at any practical refinement. The advisor surfaces this without false positives or negatives — the fundamental geometry-physics tension is real |
+| Fix | (1) **Sub-session accepts patch loss** (per S8 fix #3 v1 simplification): tip_cap_sliver does not exist post-sHM. (2) **Advisor message enhancement candidate**: when `recommended_level_max ≥ 8` (mathematically infeasible — would produce > 256× refinement vs bg, i.e., O(10⁷)+ cells), add a "PATCH LOSS UNAVOIDABLE" warning telling the engineer the only viable strategies are (a) accept loss, (b) re-design CAD to merge the sliver into a parent body, or (c) ignore the defect at the case scale. This makes V31's "Codex's mapping is wrong" finding even sharper — Codex pointed at geometry_surgery (which can't help: face count too small to decimate); thin_wall_advisor catches it but the only resolution is patch deletion. (3) Update thin_wall_advisor docstring to cite case_006 V30 as the extreme-thinness reference |
+| Status | **closed · field-validated** — extends V10 (thin_wall_advisor 1st landing) and V23 (cross-topology to rotating-machinery) to the extreme-thinness regime. **5-case cross-topology now**: case_002a/b CATIA Frame curved (50 mm) + case_003 planar (0.80 mm) + case_004 rotating-machinery aux (0.75 mm) + case_006 wing-tip aerodynamic edge (0.18 mm). Spans 3 orders of magnitude in thickness without behavioral divergence |
+| Reference case | case_006_onera_m6_transonic v1 advisor exercise (2026-05-08); evidence at `evidence/v1/d4_advisor_exercise.md` |
+| Lesson | thin_wall_advisor remains the cleanest A1-A5 sediment. Cross-topology scope now confirmed at 4 industrial cases, all pass. Recommended_level_max output is monotonically correct but practically infeasible at extreme thinness — adding a "patch loss unavoidable" UX hint when the recommendation crosses ~level 8 would prevent engineer confusion |
+
+### V31 · Codex defect→advisor mapping incorrect for D4 (sub-mm sliver); should be thin_wall_advisor not geometry_surgery
+
+| field | value |
+|---|---|
+| Surface | `codex_case_design_protocol.md` defect→advisor mapping table; Codex case-design output |
+| Engineer symptom | case_006 `defect_manifest.yaml` mapped D4 (0.18 mm sliver) to `expected_advisor_to_catch: geometry_surgery.decimate_to_tier`. Sub-session exercise per kickoff Hard Guardrail (try thin_wall_advisor first): geometry_surgery silently no-op'd (sliver face count = 8, well under min_to_decimate=8000); thin_wall_advisor fired critical at all levels (V30) |
+| Root cause | Codex's defect-injection vocabulary uses "sliver" for both: (a) D2-class over-dense triangulation slivers (case_005's D2: 102k+ tri faces from cq.Compound-of-Faces) where geometry_surgery.decimate_to_tier IS the correct catch; (b) D4-class sub-mm sliver bodies (case_006's D4: 8-tri 0.18 mm body) where thin_wall_advisor IS the correct catch. The defect-name "sliver" overloaded the mapping |
+| Fix | (1) **Update `codex_case_design_protocol.md` defect→advisor table**: D2 (over-dense triangulation, 1k-1M+ faces) → geometry_surgery.decimate_to_tier; D4 (sub-mm sliver bodies, 1-100 faces) → thin_wall_advisor.detect_thin_wall_patches_at_risk; D8 (thin shell ≥0.5 mm) → thin_wall_advisor with severity=warning. Make the discriminator explicit: face count + bbox-min thickness. (2) Update Codex case-design prompts to require declaring **which numerical regime** the defect lives in (over-dense vs sub-mm) so it picks the right advisor |
+| Status | **open** — protocol revision required; sub-session corrected mapping locally for case_006 evidence purposes |
+| Reference case | case_006_onera_m6_transonic v1 dual-advisor exercise (2026-05-08); evidence at `evidence/v1/d4_advisor_exercise.md` |
+| Lesson | Codex case-design defect→advisor mapping is the FIRST place sub-sessions hit Codex-knowledge-gap on advisor capabilities. Compounded with V26 (CAD formula bug), V29 (BC name foam-extend-vs-ESI mismatch): Codex's case-design protocol needs at minimum 3 enhancements: self-verify CAD dimensions + canonical BC names + correct advisor mapping for defect classes. All three feed into one `codex_case_design_protocol.md` revision sub-DEC |
+
+### V32 · Tier-1 NASA Glenn HTTP 500 + corporate SSL cert chain double-blocker; airfoil-proxy substitution required
+
+| field | value |
+|---|---|
+| Surface | CAD-source availability; Tier-1 reference geometry caching |
+| Engineer symptom | case_006 `build_cad.py` tries to fetch ONERA D-section airfoil coordinates from `https://www.grc.nasa.gov/WWW/wind/valid/m6wing/foilmod.txt`. Two failures stack: (a) NASA Glenn returns HTTP 500 — same persistent issue as case_005 V20 documented; (b) the local environment has a corporate SSL proxy with self-signed cert chain that blocks Python's urllib SSL verification (`SSL: CERTIFICATE_VERIFY_FAILED self-signed certificate in certificate chain`) even for sources that DO work. Net: no Tier-1 source path is reachable from this sub-session |
+| Root cause | Two independent failures in the source-availability stack: (1) NASA Glenn archive infrastructure issue (out of sub-session scope); (2) corporate SSL proxy that doesn't trust standard CA roots, blocking ALL HTTPS fetches that don't use a custom-CA-aware HTTP client. Combined, no path from `build_cad.py`'s `urllib.request.urlopen` to any external resource works |
+| Fix | (1) **Sub-session local fix**: bake an ONERA-D **proxy** airfoil — NACA 0010 (10% symmetric, max thickness at x/c=0.30, closest open analogue to ONERA D) — into `inputs/cache/onera_d_proxy_naca0010.txt` and use `CASE006_FOILMOD_PATH` env var to point build_cad.py at it. (2) Document the **lambda-shock x/c displacement caveat** in v1 REPORT (NACA 0010 differs from ONERA D in rooftop region x/c=0.30-0.60 → lambda x/c may shift 5-15%). (3) **Bundle with V20 in A1 extraction sub-DEC**: include offline-cache support + airfoil-proxy-substitution path in `cad_ingest_freecad.py`. Allow the airfoil-cache file to be checked into `.planning/cad_cache/` per the script's `CACHE_DIR = DEFAULT_REPO_ROOT / ".planning" / "cad_cache"` convention. (4) Bigger-picture: the Tier-1 source resilience is a recurring theme (case_005 NASA Glenn, case_006 NASA Glenn, anticipated case_009 Sandia TUD); main session should consider per-case Tier-1 mirror caching as a strategic action |
+| Status | **open** — case-local fix applied; structural fix in A1 extraction sub-DEC scope |
+| Reference case | case_006_onera_m6_transonic v1 build (2026-05-08); evidence: `inputs/cache/onera_d_proxy_naca0010.txt` (proxy), build_cad.py output mentioning the proxy substitution |
+| Lesson | The project's Tier-1 source pipeline is brittle to upstream infrastructure issues. Sub-session pragmatic substitution (airfoil proxy) is acceptable for v1 with explicit caveats, but inflates the v1 finding budget — N=2 cases (005 + 006) on the same NASA Glenn infrastructure issue suggests time to consider a project-side Tier-1 mirror cache strategy |
+
 ## Cross-cutting patterns observed
 
 ### Pattern 1 — Zero IC is the universal first-iter killer
