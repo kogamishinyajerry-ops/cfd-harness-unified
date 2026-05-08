@@ -73,9 +73,10 @@ If yes → V-series. If no → F-series.
 | Engineer symptom | Code that pairs `body_a.Face_i` with `body_b.Face_j` by BREP-level equality (FreeCAD `isSame()`) returns no matches. But visually, body_a and body_b clearly share an interface plane in the model |
 | Root cause | CATIA STEP exports are often non-manifold at body interfaces — body_a's interface face and body_b's interface face occupy the same geometric plane but are distinct BREP entities (different vertex orderings, different parametric directions, different topology). FreeCAD's BREP comparison is too strict |
 | Fix | Geometric (not topological) face matching: compare BoundBox + face area + face normal direction. Two faces match if their bounding boxes overlap by > 80%, areas differ by < 5%, and normals point toward each other (dot product < -0.5). APU bay `02_domain_subtract.py` `INTERFACE_SPECS` with `mode: shared`. Extracted as artifact A2 (`virtual_interface_detector.py`) per DEC-V61-198 |
-| Status | **partial** — APU bay workaround in case-local script; A2 extraction productizes |
+| Status | **closed** — A2 advisor landed 2026-05-08 (commit `a09ae0a`). 11 tests green covering 5 enumerated cases. Closes 6 compounded-evidence A2-pending references (cases 003-008). Sub-sessions consume the landed advisor instead of `virtual_interface_detector_pending_A2` |
+| Reference advisor | `ui/backend/services/geometry_ingest/virtual_interface_detector.py` |
 | Reference case | APU bay `apu_intake` patch (body_2 ↔ body_4) |
-| Lesson | Industrial CAD exports are noisy. Geometric heuristics are more robust than topological equality on real-world data |
+| Lesson | Industrial CAD exports are noisy. Geometric heuristics are more robust than topological equality on real-world data. V2 lesson explicitly preserved in advisor docstring: do NOT add `isSame()` fast-path (reintroduces the bug) |
 
 ### V3 · `kOmegaSST` + zero IC → ω blowup at iter 3 → wall function NaN
 
