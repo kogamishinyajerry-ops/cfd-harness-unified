@@ -1,7 +1,9 @@
 # Codex Case-Design Request · case_004
 
-> **Status**: drafted 2026-05-07 evening; **NOT yet sent to Codex**.
-> Awaiting user OK before invoking `codex-relay-with gpt-5.5`.
+> **Status**: SENT to Codex 2026-05-07 evening (gpt-5.5 xhigh via
+> codex-relay-with). Round 1 returned `case_004_nrel_phase_vi_mrf`.
+> Validation: PASS WITH NOTES (see `case_004_validation.md`).
+> Kickoff: `case_004_nrel_phase_vi_mrf.md` (paste-ready).
 >
 > Same pattern as case_003 request — Codex 出题, then 6-check
 > validation, then sub-session kickoff.

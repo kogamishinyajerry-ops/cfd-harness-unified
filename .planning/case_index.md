@@ -17,6 +17,13 @@
 | `case_002a_apu_bay_buoyant_simple` | Internal flow + buoyancy + forced convection | `~/Desktop/apu-bay-ventilation/` | active · v14 @ iter 813+ | V3-V13 | 2026-05-07 |
 | `case_002b_apu_bay_cht` | CHT (multi-region + radiation) | `~/Desktop/apu-bay-ventilation-cht/` | active · v2 norad @ iter 67+ | V14-V15 | 2026-05-07 |
 | `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer (incompressible-RANS) | `~/Desktop/case_003_crm_hls_boundary_layer/` (sandbox not yet created) | **dispatched · DEFERRED** (awaiting user resources to start sub-session) | (pending — first run will source V16+) | 2026-05-07 |
+| `case_004_nrel_phase_vi_mrf` | Rotating machinery (MRF / sliding mesh) (incompressible-RANS-MRF) | `~/Desktop/case_004_nrel_phase_vi_mrf/` (sandbox not yet created) | **dispatched · DEFERRED** (drafted alongside case_003; both queued; order of execution flexible) | (pending — root-of-numerics-class, no inheritance from case_002a/b/case_003) | 2026-05-07 |
+| `case_005_rae_m2129_sduct` | Internal compressible subsonic-transonic diffuser (compressible-RANS) | `~/Desktop/case_005_rae_m2129_sduct/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire sequence; first case to exercise LANDED advisor A3) | (pending — first compressible case for project; root-of-numerics-class) | 2026-05-08 |
+| `case_006_onera_m6_transonic` | External transonic 3D wing (compressible-shock-density-based) | `~/Desktop/case_006_onera_m6_transonic/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire sequence; CRS gpt-5.4 fallback — 86gs xhigh 503'd) | (pending — first density-based case for project; root-of-numerics-class) | 2026-05-08 |
+| `case_007_kcs_ship_vof` | Free-surface ship hydrodynamics (multiphase-VOF / interFoam) | `~/Desktop/case_007_kcs_ship_vof/` (sandbox not yet created) | **dispatched · DEFERRED** (round 2 of 2; first multiphase case; D8 thin_wall_advisor consistency check vs case_004) | (pending — first multiphase case; root-of-numerics-class) | 2026-05-08 |
+| `case_008_glc305_irt_lagrangian` | External + Lagrangian icing (incompressible-RANS-Lagrangian) | `~/Desktop/case_008_glc305_irt_lagrangian/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire; first Lagrangian case; D8 advisor consistency 3-of-3) | (pending — first Lagrangian case; root-of-numerics-class) | 2026-05-08 |
+| `case_009_sandia_flame_d` | Reacting low-Mach piloted jet flame (reacting-low-Mach / reactingFoam + DRM-19) | `~/Desktop/case_009_sandia_flame_d/` (sandbox not yet created) | **dispatched · DEFERRED** (longest sub-session effort 12-16h; first reacting case; 5+ artifact extractions likely) | (pending — first reacting case; root-of-numerics-class) | 2026-05-08 |
+| `case_010_drivaer_fastback_les` | External transient LES vehicle aero (incompressible-LES / pimpleFoam + WALE) | `~/Desktop/case_010_drivaer_fastback_les/` (sandbox not yet created) | **dispatched · DEFERRED** (final case in 10-case roster; 4-case D8 advisor consistency context) | (pending — first transient LES case; root-of-numerics-class) | 2026-05-08 |
 
 ## Closed threads
 
@@ -29,12 +36,14 @@ not pre-stage.
 
 | Solver class | Status | Likely candidate when triggered |
 |---|---|---|
-| External flow + high-Re + boundary layer | pending | intake diffuser / NACA airfoil at engineering Re |
-| Rotating machinery (MRF / sliding mesh) | pending | fan / pump impeller |
-| Multiphase / VOF | pending | sloshing oil sump / offshore |
-| Compressible high-speed | pending | nozzle / transonic |
-| Combustion / reacting flow | pending | combustor / fire spread |
-| Transient LES / DES | pending | bluff-body wake / aeroacoustics |
+| External flow + high-Re + boundary layer | dispatched (case_003, deferred) | NASA/AIAA HLPW6 CRM-HLS |
+| Rotating machinery (MRF / sliding mesh) | dispatched (case_004, deferred) | NREL Phase VI rotor (UAE) |
+| Internal compressible diffuser | dispatched (case_005, deferred) | RAE M2129 S-duct |
+| Compressible high-speed (shock) | dispatched (case_006, deferred) | ONERA M6 transonic wing |
+| Multiphase / VOF | dispatched (case_007, deferred) | KCS ship hull (ITTC G2010) |
+| Particle-laden / Lagrangian (icing) | dispatched (case_008, deferred) | NASA IRT GLC305 |
+| Combustion / reacting flow | dispatched (case_009, deferred) | Sandia Flame D (TNF) |
+| Transient LES / DES | dispatched (case_010, deferred) | DrivAer fastback (TUM) |
 
 ## Gold-standard academic cases (reference fleet, not industrial)
 
