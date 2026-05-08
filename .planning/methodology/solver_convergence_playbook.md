@@ -201,6 +201,36 @@
 | Reference | case_008_glc305_irt_lagrangian v1 (2026-05-08); first Lagrangian case for the project; pattern intended for inheritance by future Lagrangian/spray/sediment cases |
 | **V-row anchors** | V36 (A2 advisor cross-topology PASS on Lagrangian airfoil-mount topology), V37 (thin_wall_advisor 6-topology arc closed) |
 
+### S17 · reactingFoam infrastructure: chemkin mech ingestion + thermo header normalization (case_009 / reacting-low-Mach root)
+
+| Branch | Action |
+|---|---|
+| Symptom | `chemkinToFoam` fails with one of: (a) "expected `<word><label>` (4(2A1,I3)) but found '\"0\"0.000'" — bare `THERMO` header parsed as species record; (b) "ill defined primitiveEntry starting at keyword 'AR' on line 1 and ending at line 111" — tran.dat missing `END` terminator; (c) `attempt to use janafThermo<...> out of temperature range 300 -> 3000` floods log even though physical T is 294 K — GRI-3.0 header line clamps Tlow=300 |
+| Decision tree |  |
+| Fix #1 (`THERMO` header) | Normalize header line to `THERMO ALL` before chemkinToFoam (chemkin-II convention; chemkinReader requires the `ALL` keyword to recognize the next line as global temperature range). Idempotent sed `s/^THERMO$/THERMO ALL/`. **V-row**: V38 |
+| Fix #2 (transport file `END`) | Append `END\n` to tran.dat if missing. OpenFOAM's primitiveEntry reader is strict about block terminators; chemkin-II spec requires `END` after transport block but some published mech files (Berkeley GRI-3.0 mirror) omit it. **V-row**: V39 |
+| Fix #3 (Tlow=200 patch) | If physical T can drop below 300 K (e.g. ambient inflow, buoyancy-driven cooling), edit thermo file's header `300.000  1000.000  5000.000` → `200.000  1000.000  5000.000` BEFORE chemkinToFoam. Per-species records in GRI-3.0 thermo30.dat already include polynomial fits down to 200 K; only the global header was clamping. Without this fix, log floods with limit warnings + wall-clock dominates I/O. **V-row**: V41 |
+| Fix #4 (transport input choice) | chemkinToFoam transport-file argument is dual-mode: chemkin tran.dat (per-species coefficients) OR OpenFOAM-format dict with regex `.*` and air-like sutherland (`As 1.4584e-06; Ts 110.4;`). For v1 reacting baseline, OpenFOAM-dict path is faster + more portable; per-species fitting from chemkin tran.dat is a v2 deliverable. **V-row**: V40 |
+| Productizable artifact | `chemkin_mechanism_loader.py` — fetches chem.inp + therm.dat + tran.dat (with cache); applies V38/V39/V41 patches idempotently; chooses transport-input mode (chemkin or dict); invokes chemkinToFoam in OpenFOAM container. Composition: under DEC-V61-198 sub-DEC, ~150 LOC. Bundles V38+V39+V40+V41 |
+| Reference | case_009_sandia_flame_d v1 (2026-05-08); first reacting-low-Mach case for the project; pattern intended for inheritance by future reacting cases (fireFoam, reactingPimpleFoam, edcSimpleFoam) |
+| **V-row anchors** | V38, V39, V40, V41 — chemkinToFoam infrastructure cluster |
+
+### S18 · reactingFoam staged startup: cold-flow → ignite → ramp (case_009 / reacting-low-Mach root)
+
+| Branch | Action |
+|---|---|
+| Symptom | reactingFoam with chemistry on at t=0 + zero IC fields → first chemistry ODE solve sees ill-conditioned state (no flow, no temperature gradient, no species mixing). Diverges or NaNs in first few iterations |
+| Decision tree |  |
+| Stage A (cold-flow) | `combustionProperties:active false`; `deltaT 1e-5`; run for ≥ 0.005 s of physical time (∼1× domain pass for the slowest inlet). Develops velocity field, species mixing layers, temperature stratification. Verdict: clean exit + min/max(T) bounded by inlet values + no spurious species drift |
+| Stage B (ignite) | `combustionProperties:active true`; `deltaT 1e-6` (10× smaller than cold-flow); run from latestTime for ≥ 1e-3 s. Pilot's hot products propagate finite-rate chemistry into the fuel-air mixing layer; T_max should rise above the hottest inlet bound (1880 K for Flame D pilot) within ∼200 μs of physical time. Verdict: T_max climbs without overshoot above ∼2200 K (CH4/air adiabatic flame); species bounded in [0, 1] |
+| Stage C (ramp) | `adjustTimeStep yes`, `maxCo 0.5`, initial `deltaT 1e-5`; run from latestTime to pseudo-steady (∼ 0.5-1.0 s for Flame D L_vis ≈ 482 mm jet at 49.6 m/s = 1 flow-through). Solver auto-tunes dt against chemistry stiffness + Courant; expect dt to settle at ∼1e-5 with maxCo=0.5 |
+| Failure mode A — skipping Stage A | Chemistry on at t=0 with zero IC → first ODE solve is on garbage state, NaN within 10 iterations. **Fix**: NEVER skip Stage A |
+| Failure mode B — Stage B dt too large | dt=1e-5 with chemistry on → heat-release rate spike per cell exceeds local enthalpy advection → first inner iteration explodes. **Fix**: drop dt to 1e-6 in Stage B; Stage C re-ramps with adjustTimeStep + maxCo |
+| Failure mode C — endTime too short for Stage C | Pseudo-steady requires ≥ 1 flow-through (∼ 0.012 s at U_jet=49.6 m/s for the 576 mm domain). v1 smoke runs of 0.001 s ignite + 0.005 s cold are PIPELINE demonstrations, NOT verdict-grade |
+| Productizable artifact | `staged_startup_runner.sh` shell artifact: `09_run_solver.sh cold|ignite|ramp|all` — flips combustionProperties.active + dt + endTime per stage; bundle template with main-project case-runner shared services |
+| Reference | case_009_sandia_flame_d v1 (2026-05-08); cold-flow ran clean at min/max(T) = [294, 1880] K; ignite started chemistry; T_max = 1880 → 1980+ K within 5e-4 s of physical time |
+| **V-row anchors** | (no V-finding — this is the "good practice" S-row that PREVENTS V-findings; it is the chemistry-startup playbook) |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9
