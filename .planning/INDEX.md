@@ -50,7 +50,21 @@
 
 Currently:
 - `case_003_*` (4 files) — CRM-HLS boundary layer, dispatched 2026-05-07, **deferred awaiting user resources**
-- (`case_004_*` populated when next round runs)
+- `case_004_*` (4 files) — NREL Phase VI MRF rotating machinery, dispatched 2026-05-07, **deferred awaiting user resources**
+- `case_005_*` (4 files) — RAE M2129 S-duct compressible-RANS, dispatched 2026-05-08, **deferred awaiting user resources** · first case to exercise LANDED A3 advisor
+- `case_006_*` (4 files) — ONERA M6 transonic wing, compressible-shock-density-based, dispatched 2026-05-08, **deferred awaiting user resources** · CRS gpt-5.4 fallback used (86gs 503); first density-based case
+- `case_007_*` (4 files) — KCS ship multiphase VOF, dispatched 2026-05-08, **deferred** · round 2 of 2 (round 1 hallucinated read-only); first multiphase
+- `case_008_*` (4 files) — GLC305 IRT Lagrangian icing, dispatched 2026-05-08, **deferred** · first Lagrangian; clarification preamble added to prompt template
+- `case_009_*` (4 files) — Sandia Flame D reacting-low-Mach, dispatched 2026-05-08, **deferred** · first reacting case; longest sub-session effort 12-16h; DRM-19 chemistry
+- `case_010_*` (4 files) — DrivAer fastback LES, dispatched 2026-05-08, **deferred** · final case; first transient LES; coverage matrix complete
+
+**10-case roster complete as of 2026-05-08**. All 10 numerics-class
+roots covered (compressible-buoyant-RANS, +CHT, incompressible-RANS,
++MRF, compressible-RANS, compressible-shock-density-based,
+multiphase-VOF, RANS-Lagrangian, reacting-low-Mach, incompressible-LES).
+Workhorse OpenFOAM solver matrix complete. 8 deferred kickoffs in
+queue (cases 003-010); awaiting compute resources to dispatch
+sub-sessions.
 
 ## Active work products
 
