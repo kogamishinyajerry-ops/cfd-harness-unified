@@ -18,7 +18,7 @@
 | `case_002b_apu_bay_cht` | CHT (multi-region + radiation) | `~/Desktop/apu-bay-ventilation-cht/` | active · v2 norad @ iter 67+ | V14-V15 | 2026-05-07 |
 | `case_003_crm_hls_boundary_layer` | External high-Re + boundary layer (incompressible-RANS) | `~/Desktop/case_003_crm_hls_boundary_layer/` (sandbox not yet created) | **dispatched · DEFERRED** (awaiting user resources to start sub-session) | (pending — first run will source V16+) | 2026-05-07 |
 | `case_004_nrel_phase_vi_mrf` | Rotating machinery (MRF / sliding mesh) (incompressible-RANS-MRF) | `~/Desktop/case_004_nrel_phase_vi_mrf/` (sandbox not yet created) | **dispatched · DEFERRED** (drafted alongside case_003; both queued; order of execution flexible) | (pending — root-of-numerics-class, no inheritance from case_002a/b/case_003) | 2026-05-07 |
-| `case_005_rae_m2129_sduct` | Internal compressible subsonic-transonic diffuser (compressible-RANS) | `~/Desktop/case_005_rae_m2129_sduct/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire sequence; first case to exercise LANDED advisor A3) | (pending — first compressible case for project; root-of-numerics-class) | 2026-05-08 |
+| `case_005_rae_m2129_sduct` | Internal compressible subsonic-transonic diffuser (compressible-RANS) | `~/Desktop/case_005_rae_m2129_sduct/` | **active · v1 baseline complete @ iter 500** (52,078 cells, 144 s solver wall time; pseudo-steady oscillating per V18; AIP Mach 0.18 vs target 0.40-0.60; A2 + A3 first industrial falsifications both = PARTIAL with the same scope-narrowness shape) | V16, V17, V18, V19 sourced; S13, S14 playbook entries | 2026-05-08 |
 | `case_006_onera_m6_transonic` | External transonic 3D wing (compressible-shock-density-based) | `~/Desktop/case_006_onera_m6_transonic/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire sequence; CRS gpt-5.4 fallback — 86gs xhigh 503'd) | (pending — first density-based case for project; root-of-numerics-class) | 2026-05-08 |
 | `case_007_kcs_ship_vof` | Free-surface ship hydrodynamics (multiphase-VOF / interFoam) | `~/Desktop/case_007_kcs_ship_vof/` (sandbox not yet created) | **dispatched · DEFERRED** (round 2 of 2; first multiphase case; D8 thin_wall_advisor consistency check vs case_004) | (pending — first multiphase case; root-of-numerics-class) | 2026-05-08 |
 | `case_008_glc305_irt_lagrangian` | External + Lagrangian icing (incompressible-RANS-Lagrangian) | `~/Desktop/case_008_glc305_irt_lagrangian/` (sandbox not yet created) | **dispatched · DEFERRED** (single-fire; first Lagrangian case; D8 advisor consistency 3-of-3) | (pending — first Lagrangian case; root-of-numerics-class) | 2026-05-08 |
@@ -38,7 +38,7 @@ not pre-stage.
 |---|---|---|
 | External flow + high-Re + boundary layer | dispatched (case_003, deferred) | NASA/AIAA HLPW6 CRM-HLS |
 | Rotating machinery (MRF / sliding mesh) | dispatched (case_004, deferred) | NREL Phase VI rotor (UAE) |
-| Internal compressible diffuser | dispatched (case_005, deferred) | RAE M2129 S-duct |
+| Internal compressible diffuser | ✅ covered (case_005, v1 baseline 2026-05-08) | RAE M2129 S-duct |
 | Compressible high-speed (shock) | dispatched (case_006, deferred) | ONERA M6 transonic wing |
 | Multiphase / VOF | dispatched (case_007, deferred) | KCS ship hull (ITTC G2010) |
 | Particle-laden / Lagrangian (icing) | dispatched (case_008, deferred) | NASA IRT GLC305 |

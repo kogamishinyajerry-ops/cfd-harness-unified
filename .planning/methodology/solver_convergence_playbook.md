@@ -152,6 +152,29 @@
 | Cross-link | S5 (buoyantSimpleFoam ρ runaway). When the fluid sub-solver class matches, the S-family decision tree applies regardless of multi-region wrapping |
 | Reference | case_002b CHT v2 norad; V15; V-series Pattern 6 (inheritance across solver families) |
 
+### S13 · Compressible-RANS pseudo-steady mass imbalance: totalPressure-inlet + fixedValue/waveTransmissive-outlet on a coarse mesh fails to lock in mass conservation
+
+| field | value |
+|---|---|
+| Symptom | rhoSimpleFoam runs 0-500 iter without crashing; Tmin/Tmax bounded; no NaN/SIGFPE. But residuals oscillate without monotonic decrease (Ux 0.1-0.3 throughout, p ~0.005 throughout); cumulative continuity error grows; `surfaceFieldValue` shows phi_inlet ≠ phi_outlet by factor 2-3 |
+| Root cause | SIMPLE algorithm with totalPressure inlet + fixedValue (or waveTransmissive) outlet, started from non-zero but rough initial U, struggles to establish the inlet→outlet pressure ratio. Compressible momentum equation lags the pressure update (URF p=0.20, U=0.50), and a coarse mesh (50-100k cells, no prism layers) does not have enough resolution to enforce wall-bounded boundary layer. Mass conservation does not lock in within 500 iter — the BC chain is in transient balance |
+| Fix #1 (cheap) | `potentialFoam -writePhi -initialiseUBCs` warm-start before rhoSimpleFoam. potentialFoam solves Laplace's equation on Φ with the totalPressure-inlet flow-rate BCs to produce a divergence-free U field. rhoSimpleFoam then iterates from a sensible initial condition that satisfies mass conservation at iter 1 |
+| Fix #2 | Lower URF further (p: 0.20 → 0.10, U: 0.50 → 0.30, e/h: 0.20 → 0.10) + extend iter budget to 2000-5000. Slower per iter but eventually settles. Compressible URF tuning is more sensitive than incompressible — overshoot the URF and the SIMPLE pressure update overshoots, producing waveTransmissive bounce-back |
+| Fix #3 | Switch to `rhoPimpleFoam` transient (Codex's v2 fallback). Use `dt = 1e-5` to `1e-4 s` with adaptive Co control. Lets physical time damp the transient instead of forcing SIMPLE to absorb it |
+| Mesh-side | Refine mesh on duct wall to (3, 4) — get to ~150-300k cells; add 3-layer prism (expansion 1.2, finalLayerThickness 0.4); fix concave cells from sHM on S-curve transitions (geometry surgery + smoother centerline parameterization upstream). All three reduce the BC-chain settling time |
+| Reference | case_005_rae_m2129_sduct v1 (2026-05-08); V18 (compressible-RANS root) |
+
+### S14 · `cq.Compound.makeCompound([Face, Face, ...])` STEP export pattern fragments through FreeCAD as N standalone Part::Feature objects
+
+| field | value |
+|---|---|
+| Symptom | Defect manifest verification command `len(o['<body>'].Shape.Faces)` returns 1 instead of the expected N. FreeCAD doc has N+M objects total (M expected named bodies + N triangle-face objects with auto-generated suffix names) |
+| Root cause | Codex CAD generator builds N standalone `cq.Face` objects and packs them via `cq.Compound.makeCompound(faces)` to inject an over-density defect. cadquery's STEP exporter emits each face as a separate top-level entity; FreeCAD's `Import.insert()` correctly creates one Part::Feature per top-level entity. The single-object verification command was written assuming a single `Solid` wrapping the over-dense triangulation |
+| Fix #1 (verification side) | Aggregate by label prefix in the verification script — sum `Shape.Faces` across all `<body>*` objects matching `startswith()`. case_005 `verify_defects.py` demonstrates this (302 LOC) |
+| Fix #2 (generation side) | Update `codex_case_design_protocol.md` to require Codex CAD generators to wrap over-density triangulations in a single `cq.Solid` (or `cq.Shell`) — emit a structurally-coherent body, not a Compound of disjoint faces. Update Codex case-design prompts to specify "single solid output" for D2-class defects |
+| Fix #3 (downstream pipeline) | For the meshing pipeline (sHM input STL), regenerate the surface parametrically as a connected manifold trimesh from the same constants used by the CAD generator. case_005 `01_extract_stl.py` demonstrates: 80×96 axial × theta grid with vertex deduplication produces a 15,360-face cylinder surface from the same `radius()` + `centerline_z()` formulas |
+| Reference | case_005_rae_m2129_sduct (2026-05-08); V16 (Codex CAD pattern) |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9
