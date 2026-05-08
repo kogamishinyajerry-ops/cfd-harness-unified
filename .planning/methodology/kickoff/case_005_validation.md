@@ -171,15 +171,17 @@ nowhere near AIP at x=489 mm). D2 location: x=8-42 mm at radius
 
 ### Check 12 · Defect ↔ advisor mapping
 
-**D1 (sub-mm gap)**: ⚠️ **NOTE** — `expected_advisor_to_catch:
-virtual_interface_detector_pending_A2` references **A2 (still
-pending extraction per DEC-V61-198)**. Now THREE consecutive
-cases (003/004/005) all surface this same advisor gap.
+**D1 (sub-mm gap)**: ✅ **PASS** — `expected_advisor_to_catch:
+virtual_interface_detector` references **A2 LANDED 2026-05-08**
+(commit `a09ae0a`). The advisor lives at
+`ui/backend/services/geometry_ingest/virtual_interface_detector.py`
+with 11 tests green.
 
-**Compounded evidence**: with case_005 making it 3-of-3, A2
-extraction priority should rise in next harvest cycle. After
-case_007 (KCS ship, also likely sub-mm rudder gap), this becomes
-4-of-4 — at that point A2 extraction is overdetermined.
+**Backfill note**: this row originally read
+`virtual_interface_detector_pending_A2`; backfilled to the landed
+advisor name as part of harvest 001 directive after compounded
+evidence (8-of-8 across cases 003-010) triggered Pillar 2
+extraction.
 
 **D2 (over-dense triangulation)**: ✅ **PASS — first case to
 exercise a LANDED advisor**.

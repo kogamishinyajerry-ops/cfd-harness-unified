@@ -379,22 +379,20 @@ FreeCADCmd -c "import FreeCAD as App, Import; \
 
 Expected: ≈ 0.35 mm. Report actual measured value.
 
-**Important · A2 advisor pending (NOW 3RD CONSECUTIVE CASE)**:
-D1's `expected_advisor_to_catch` is `virtual_interface_detector_pending_A2`,
-which is **NOT yet extracted in main project** (per DEC-V61-198
-the A2 artifact is in pending queue). case_003, case_004, AND
-case_005 all surface this gap. You must:
+**A2 advisor LANDED (2026-05-08, commit `a09ae0a`)**:
+D1's `expected_advisor_to_catch` is `virtual_interface_detector`,
+**now available in main project** at
+`ui/backend/services/geometry_ingest/virtual_interface_detector.py`.
+You should:
 
-1. **Manually verify the defect via FreeCAD** (above command)
-2. **Document in your final report**: "D1 sub-mm gap detected
-   manually; main-project A2 (virtual_interface_detector) STILL
-   NOT LANDED — request main session A2 extraction in next
-   harvest cycle. case_005 is the 3RD consecutive case to surface
-   this gap; compounded evidence justifies elevated priority."
-3. This is **expected behavior**, not a defect — the case-thread
-   force-surfacing missing advisors is exactly the Pillar 2
-   run-and-correct loop in DEC-V61-198. With three cases
-   surfacing the same gap, A2 extraction priority compounds
+1. **Use the landed advisor** to detect D1 gap programmatically
+   (see module docstring; `detect_virtual_interfaces()` driver +
+   `InterfaceSpec(mode='shared'|'endcap')`)
+2. Optionally also run the FreeCAD command above as a manual
+   cross-check
+3. **Document in your final report**: defect detection used the
+   landed A2 advisor (no longer pending). Pillar 2 run-and-correct
+   loop discharged for V2/A2 axis
 
 ### D2 verification
 
