@@ -71,6 +71,37 @@ Measured 2026-05-08 on macOS Apple Silicon, Docker `opencfd/openfoam-default:231
 
 Total: **~3 min** wall clock for v1 (excluding the 30 s one-time defect-audit FreeCAD STEP import).
 
+### Per-step wall time (v2, 2026-05-08 afternoon)
+
+v2 = minimum-change CFD push: URF.p 0.20→0.10, URF.U 0.50→0.30, iter 500→2000, transport const→sutherland. No mesh / template / script changes (other than `10b_compute_dc60.py` made version-aware via `CASE005_VERSION` env var).
+
+| Step | Script | Wall time | Output |
+|---|---|---|---|
+| 0' | `a2_falsification_run_shared.py` | <1 s | `evidence/v2_a2_run_shared.json` (V21 disambiguation: matched=True both orderings, V25 surfaced) |
+| 5 | `05_make_dicts.py` (re-render with v2 config) | <1 s | dicts updated |
+| 9 | `09_run_solver.sh` (rhoSimpleFoam, 2000 iter) | **767 s** (12.8 min) | case/{200..2000}/ |
+| 10b | `CASE005_VERSION=v2 .venv/bin/python 10b_compute_dc60.py` | ~5 s | `evidence/v2_post/dc60.{json,txt}` |
+
+Total: **~13 min** wall clock for v2 solver + post (excluding ~1 s for V21 disambiguation script).
+
+### v2 metrics summary (vs v1 vs reference)
+
+| Metric | v1 (iter 500) | v2 (iter 2000) | Reference target | v2 verdict |
+|---|---|---|---|---|
+| Ux Initial residual @ end | ~0.2-0.5 | **~0.007-0.008** | <1e-3 | **30-70× improvement** |
+| AIP Mach (avg) | 0.18 | 0.153 | 0.40-0.60 | DROPPED (URF damping) |
+| AIP recovery PR | 0.955 | 0.955 | 0.839 | UNCHANGED |
+| DC60 distortion | 0.351 | **0.264** | 0.10-0.20 | IMPROVED, 1.3× target |
+| phi_inlet (kg/s) | -1.51 | -1.49 | balanced | UNCHANGED |
+| phi_outlet (kg/s) | +4.36 | +4.16 | balanced | UNCHANGED |
+| Mass-flow asymmetry | 2.9× | 2.8× | <5% | UNCHANGED |
+| Continuity cumulative @ end | 130,957 | 418,924 | low → good | grew, BUT growth rate slower |
+| Tmax | 389 K | 484 K | <600 K | warmer (Sutherland) |
+
+**v2 verdict: PSEUDO-STEADY OSCILLATION PERSISTS; V18 REINFORCED**.
+
+URF damping + extended iter + Sutherland made the SOLVER converge cleanly (Ux residual dropped 30-70×) but did NOT fix the inlet/outlet mass imbalance (preserved at 2.8×). The structural cause is the BC chain (totalPressure inlet + fixedValue outlet on coarse mesh), not URF tuning. **S13 sharpened**: path 2 (Fix #2) alone is INSUFFICIENT — must combine with path 1 (potentialFoam) OR path 3 (rhoPimpleFoam) OR mesh refinement.
+
 ## What was hand-coded vs reused from main project
 
 **Hand-coded in case-local scripts** (V-series source material, all new for compressible-RANS):
@@ -106,14 +137,14 @@ The main project's existing 5-artifact extraction (A1-A5 from APU bay) is unchan
 
 ## What this case does NOT yet have
 
-- **Converged steady state**: v1 ended at iter 500 with cumulative continuity error 130,957 and 3× mass-flow asymmetry between inlet (-1.51 kg/s) and outlet (+4.36 kg/s) patches. V13-pattern pseudo-steady, but a degree more severe than case_002a v13 (which had ~1% continuity error).
-- **AIP Mach within reference target**: v1 produced 0.185 vs the 0.40-0.60 reference target. Flow has not pressurized through the diffuser to the design point — the BC chain is in transient balance.
-- **DC60 in physical range**: v1 produced 0.351 vs typical RAE M2129 reference at PR=0.839 of 0.10-0.20. Consistent with the under-pressurized v1 flow.
-- **waveTransmissive outlet**: Codex's primary BC plan; v1 used fixedValue p as the documented fallback. v2 should attempt waveTransmissive once flow field is established.
-- **Prism layers**: v1 disabled; v2 should add 3-layer prism with expansion 1.2 once the geometry-side concave cells are addressed.
-- **`potentialFoam` warm start**: v1 used a non-zero internal U seed (100 m/s) instead. v2 should pre-iterate `potentialFoam -writePhi` to seed a divergence-free U field (S4/new S13).
-- **Sutherland transport**: v1 used `transport const`; v2 should switch to sutherland for variable-T accuracy.
-- **rhoPimpleFoam transient escalation**: Codex's v2 fallback if pseudo-steady oscillation persists past 2000 iter.
+- **Converged steady state**: v1 ended at iter 500 with cumulative continuity error 130,957 and 2.9× mass-flow asymmetry between inlet (-1.51 kg/s) and outlet (+4.36 kg/s) patches. V13-pattern pseudo-steady, but a degree more severe than case_002a v13 (which had ~1% continuity error). **v2 update (2026-05-08 afternoon)**: 2000 iter with URF.p=0.10, URF.U=0.30, Sutherland transport — Ux Initial residual converged to 0.007-0.008 (30-70× improvement) but mass-flow asymmetry preserved at 2.8×. **V18 reinforced; S13 sharpened**: BC chain is structurally responsible, not URF tuning. v3 needed for full convergence.
+- **AIP Mach within reference target**: v1 produced 0.185 vs the 0.40-0.60 reference target. v2 produced 0.153 (slightly LOWER due to URF damping). Flow has not pressurized through the diffuser to the design point — the BC chain is in transient balance.
+- **DC60 in physical range**: v1 produced 0.351 vs typical RAE M2129 reference at PR=0.839 of 0.10-0.20. v2 produced 0.264 — improvement, closer to physical range, but still 1.3× typical. Consistent with the under-pressurized flow.
+- **waveTransmissive outlet**: Codex's primary BC plan; v1+v2 used fixedValue p as the documented fallback. v3 should attempt waveTransmissive once flow field is established.
+- **Prism layers**: v1+v2 disabled. v3 should add 3-layer prism with expansion 1.2 once the geometry-side concave cells are addressed (1,688 in v1+v2 mesh).
+- **`potentialFoam` warm start**: v1+v2 used a non-zero internal U seed (100 m/s) instead. v3 should pre-iterate `potentialFoam -writePhi` to seed a divergence-free U field — REQUIRES temp BC swap (compressible inlet incompatible with potentialFoam directly). S13 path 1.
+- **Sutherland transport**: v1 used `transport const`; **v2 switched to sutherland** for variable-T accuracy. Hot-cell Tmax climbed 389→484 K with sutherland (vs const-mu); fvOptions limit 600 K not active.
+- **rhoPimpleFoam transient escalation**: Codex's v2 fallback if pseudo-steady oscillation persists past 2000 iter. **v2 confirmed pseudo-steady persists at 2000 iter; rhoPimpleFoam now confirmed v3-priority** (S13 path 3).
 
 ## When to update this entry
 
