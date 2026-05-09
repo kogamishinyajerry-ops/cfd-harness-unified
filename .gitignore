@@ -100,3 +100,8 @@ uv.lock
 !.claude/
 !.claude/agents/
 !.claude/agents/*.md
+
+# cfd-harness-dream skill — per-fire artifacts are untracked
+# (see .planning/dreams/README.md). README itself is tracked.
+.planning/dreams/*_dream.md
+.planning/dreams/archive/
