@@ -100,19 +100,30 @@ Measured 2026-05-10 on macOS Apple Silicon, Docker
 | 4 | `02_scaffold_case.py` | < 5 s | 40 case files (system + constant + 0.orig) |
 | 5 | `05_run_mesh.sh STAGE=bg` | < 10 s | blockMesh: 43 524 cells |
 | 6 | `05_run_mesh.sh STAGE=features` | < 30 s | extendedFeatureEdgeMesh × 3 |
-| 7 | `05_run_mesh.sh STAGE=snappy` | ~5-15 min | sHM final mesh (target: 1-3M cells with 2 prism layers) |
-| 8 | `05_run_mesh.sh STAGE=split` | ~30 s | per-region polyMesh × 3 |
-| 9 | `09_run_solver.sh STAGE=potential` | ~1 min | potentialFoam init per fluid region |
-| 10 | `09_run_solver.sh STAGE=solver` | **N flow-throughs × ~5 s each → ≥ 75 s phys = HOURS-DAYS wall** | chtMultiRegionFoam transient; production statistics out of single-session scope |
-| 11 | `10_compute_wall_T_statistics.py` | < 30 s | wall-T mean + RMS + FFT JSON |
+| 7 | `05_run_mesh.sh STAGE=snappy` | 322 s (run 1) → 289 s (run 2) → 1257 s (run 3) | sHM mesh: 3.3M / 3.2M / 3.2M cells respectively, 0 quality errors all 3 runs |
+| 8 | `05_run_mesh.sh STAGE=split` | ~30 s | per-region polyMesh — **DEGENERATE** in all 3 attempts (see V51); only main_fluid produced cleanly in run 3 |
+| 9 | `09_run_solver.sh STAGE=potential` | (not run — blocked by V51) | requires all 3 region polyMeshes |
+| 10 | `09_run_solver.sh STAGE=solver` | (not run — blocked by V51) | chtMultiRegionFoam transient; production stats anyway out of single-session scope |
+| 11 | `10_compute_wall_T_statistics.py` | (not run — no probes data) | wall-T mean + RMS + FFT JSON |
 
-> **Single-session honesty**: full LES + CHT at production statistics
-> (≥ 15 flow-throughs with dt = 1e-4 on a 1-3M cell mesh) is **hours to
-> days** of wall-clock compute. This sub-session delivers the full
-> scaffold + mesh + solver-runs-cleanly proof-of-concept; long-time
-> statistics are explicitly out of scope per the boundaries clause
-> ("CANNOT exceed 15h"). Post-processor reports
-> `[QUESTIONABLE 2026-05-10]` if duration < 5 flow-throughs.
+> **Single-session honesty (v1, 2026-05-10)**: solver execution is BLOCKED at
+> the splitMeshRegions step by V51 (multi-region cellZone tagging on
+> intersecting fluid volumes — see V-series). 3 sHM iterations totaling
+> ~30 min wall time established this; full fix requires either CAD
+> revision (boolean-subtract branch-tee intersection from one fluid
+> volume) or topology change (single-fluid-region with faceSet inlet
+> patches). Both are out-of-scope per Codex brief "Do NOT redesign";
+> the V51 finding is the deliverable for the mesh-execution leg of
+> this case.
+>
+> Even if mesh were fixed in-session, full LES + CHT at production
+> statistics (≥ 15 flow-throughs with dt = 1e-4 on a 1-3M cell mesh)
+> is **hours to days** of wall-clock compute — production statistics
+> were always out of single-session scope per "CANNOT exceed 15h".
+> Post-processor `10_compute_wall_T_statistics.py` is wired with
+> `[QUESTIONABLE 2026-05-10]` markers for any sub-5-flow-through
+> duration result. Scaffold + scripts are complete and inheritable
+> for case_016 (or a case_015-v2 follow-up that addresses V51 CAD).
 
 ## Hand-coded vs reused
 
@@ -157,6 +168,7 @@ second compound numerics root) kickoff.
 | V48 | chtMR top-level controlDict function objects require explicit `region` keyword for cross-region targeting | chtMR dispatches FOs per-region; without explicit region, FO registers in alphabetically-first dispatched region | **partial** (case_015 first appearance) |
 | V49 | Wall-modeled LES at conjugate fluid-solid baffle requires the `compressible::` triplet on nut + alphat + k for energy-equation coupling | chtMR uses heRhoThermo internally even for liquid water; non-compressible wall-function on alphat produces silent 10-30% wall heat-flux error | **partial** (case_015 first appearance) |
 | V50 | A2 advisor `_run_shared` cross-topology PASS on pipe-pipe weld-toe — **12th** cross-topology algorithm-runs PASS in V25 chain | Same placeholder semantic as V19/V21/V25 — algorithm runs cleanly but does not field-validate the 60 µm offset as a defect | **partial · still [QUESTIONABLE]** |
+| V51 | snappyHexMesh multi-region cellZone tagging on intersecting/overlapping fluid volumes silently degrades to single-region (3 sHM iterations all degenerate) | Branch fluid volume physically intersects main fluid volume at the T-junction (Codex's verbatim CAD per brief); both `locationsInMesh` and `refinementSurfaces.cellZoneInside` strategies produce ≤ 2 of 3 reliable cellZones | **open** (blocks solver execution; full fix requires Codex-revision CAD or single-fluid-region topology — out of scope per "Do NOT redesign") |
 
 V47/V48/V49 statuses: **partial** (one-case appearance). All three
 require a second LES+CHT case (e.g. case_016 compressible-DES if it
@@ -164,6 +176,12 @@ shares the function-object dispatch + wall-function compatibility
 pattern) to upgrade to **confirmed** per
 `knowledge_status_convention.md`. V50 inherits the still-open V25
 [QUESTIONABLE] status — only A2-v2 land + injection test resolves it.
+**V51 is the headline finding for this case** — it BLOCKS solver
+execution within session scope; the fix requires either CAD revision
+(out-of-scope per "Do NOT redesign" brief boundary) or a topology
+re-specification to single-fluid-region. Promotion path: open
+case_015-v2 sub-DEC to revisit CAD, OR re-route case_015 to
+single-fluid-region in case_016's adjacent compressible-DES root.
 
 ## Defect catalog
 
