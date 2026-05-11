@@ -13,6 +13,7 @@ Flow:
 from __future__ import annotations
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+import trimesh
 
 from ui.backend.schemas.import_geometry import (
     ImportRejection,
@@ -23,12 +24,30 @@ from ui.backend.schemas.import_geometry import (
 from ui.backend.services.case_scaffold import scaffold_imported_case
 from ui.backend.services.geometry_ingest import (
     IngestReport,
+    LoadedSTL,
     combine,
     detect_patches,
     load_stl_from_bytes,
     run_health_checks,
     solid_count,
 )
+
+
+def _per_body_max_extents(loaded: LoadedSTL) -> list[float]:
+    """Per-body max bbox extents (raw STL units) for unit-detector body-class
+    filtering. Returns empty list for single-Trimesh loads (no class info
+    to filter on). For ``Scene``, returns one max-extent per geometry in
+    insertion order — matches ``detect_patches`` order.
+    """
+    if not isinstance(loaded, trimesh.Scene):
+        return []
+    extents: list[float] = []
+    for geom in loaded.geometry.values():
+        if geom.faces.shape[0] == 0:
+            continue
+        b = geom.bounds
+        extents.append(float(max(b[1][0] - b[0][0], b[1][1] - b[0][1], b[1][2] - b[0][2])))
+    return extents
 
 
 MAX_STL_BYTES = 200 * 1024 * 1024  # 200 MB · raised from 50 MB (V198 substrate · case_003 Q3 airframe 87 MB · 2026-05-11)
@@ -107,11 +126,13 @@ async def import_stl_route(file: UploadFile = File(...)) -> ImportSTLResponse:
         raise HTTPException(status_code=400, detail=rejection.model_dump())
 
     patches, all_default = detect_patches(loaded)
+    body_extents_raw = _per_body_max_extents(loaded)
     report = run_health_checks(
         combined=combined,
         solid_count=solid_count(loaded),
         patches=patches,
         all_default_faces=all_default,
+        body_extents_raw=body_extents_raw or None,
     )
 
     if report.errors:

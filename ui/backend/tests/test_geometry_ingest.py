@@ -57,6 +57,64 @@ def test_unit_guess_mm_band_kicks_in_for_large_extent():
     assert report.unit_guess == "mm"
 
 
+def test_run_health_checks_body_class_filter_wires_through(monkeypatch):
+    """V198 session 4 wiring: body_extents_raw plumbed from route layer
+    flips a case_003-like overall-bbox-dominated payload from 'unknown'
+    to 'mm' via :func:`detect_unit`.
+
+    Without the filter, overall bbox 2.44e6 (raw) is industrially
+    implausible under every common unit → UNKNOWN. With the filter,
+    the 3 airframe-class bodies (~2e4 raw, plausible as mm) survive →
+    decision = MM.
+    """
+    import trimesh as _tm
+
+    combined = _tm.creation.box([2438552.0, 1600000.0, 1540000.0])
+    combined.merge_vertices()
+    report_with_filter = run_health_checks(
+        combined=combined,
+        solid_count=7,
+        patches=[],
+        all_default_faces=True,
+        body_extents_raw=[
+            2438552.0, 1600200.0, 1540764.0, 1600000.0,  # 4 CFD-domain walls
+            18290.0, 27430.0, 18290.0,  # 3 airframe-class bodies (18-27 m at mm)
+        ],
+    )
+    assert report_with_filter.unit_guess == "mm"
+
+    report_no_filter = run_health_checks(
+        combined=combined,
+        solid_count=1,
+        patches=[],
+        all_default_faces=True,
+        body_extents_raw=None,
+    )
+    # Legacy band: 2.44e6 > 1e5 cap → "unknown". Filter absent and the
+    # bbox alone is too large to commit to any unit.
+    assert report_no_filter.unit_guess == "unknown"
+
+
+def test_run_health_checks_legacy_band_fallback_preserved():
+    """Single-class loads with ambiguous bbox (multiple plausible units
+    under :func:`detect_unit`) still get a deterministic band-based
+    answer so naca0012/cylinder/ldc_box UX doesn't regress."""
+    import trimesh as _tm
+
+    combined = _tm.creation.box([1.0, 1.0, 1.0])
+    combined.merge_vertices()
+    report = run_health_checks(
+        combined=combined,
+        solid_count=1,
+        patches=[],
+        all_default_faces=True,
+        body_extents_raw=None,
+    )
+    # 1.0 raw is plausible under m, cm, inch → detect_unit returns UNKNOWN.
+    # Legacy band: 1e-3 ≤ 1.0 ≤ 10 → "m".
+    assert report.unit_guess == "m"
+
+
 def test_unit_guess_unknown_for_extreme_extent():
     report = ingest_stl(box_stl(size=1.0e7))
     assert report.unit_guess == "unknown"
