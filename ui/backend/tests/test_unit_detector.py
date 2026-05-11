@@ -210,6 +210,62 @@ def test_detect_unit_returns_unit_detection_dataclass():
     assert isinstance(result.evidence, tuple)
 
 
+# ───── body-class filter (F-NEW-12 · 2026-05-11) ─────
+
+
+def test_detect_unit_body_class_filter_case_003_like(tmp_path: Path):
+    """case_003 archetype: airframe + 3 defects are mm-plausible; inlet /
+    outlet / farfield_* / symmetry are flagged as CFD-domain class because
+    their raw extents (1.5M–2.4M mm = 1500–2400 m) are implausible under
+    any common unit. Decision should lock to MM via the airframe-class
+    extent, not UNKNOWN via the overall bbox.
+    """
+    p = tmp_path / "mm.step"
+    p.write_text(_STEP_HEADER_MM)
+    # Mirror session 1 probe numbers (raw mm): airframe 182880, defects
+    # 18290/27430/12700, domain walls 1600200/1540764/2438552.
+    body_extents = [182880.0, 18290.0, 27430.0, 12700.0,
+                    1600200.0, 1540764.0, 2438552.0]
+    result = detect_unit(
+        step_path=p,
+        bbox_max_extent_raw=2438552.0,  # overall would be domain wall → UNKNOWN
+        body_extents_raw=body_extents,
+    )
+    assert result.decision == GeometricUnit.MM
+    assert result.confidence >= 0.85
+    assert any("body-class filter" in line and "discarded" in line
+               for line in result.evidence)
+    assert any("airframe-class extent" in line for line in result.evidence)
+    # Substrate finding: 4 of 7 bodies filter out (3 CFD-domain walls +
+    # the Codex-3×-scaled airframe at 182m exceeds the 100m industrial
+    # upper bound; 3 defects at 12.7/18.3/27.4 m carry the unit decision).
+    assert any("4/7" in line for line in result.evidence)
+
+
+def test_detect_unit_body_class_filter_all_implausible_falls_back(tmp_path: Path):
+    """When every body has an implausible extent, body filter abstains
+    and the existing bbox_max_extent_raw path runs unchanged."""
+    p = tmp_path / "mm.step"
+    p.write_text(_STEP_HEADER_MM)
+    result = detect_unit(
+        step_path=p,
+        bbox_max_extent_raw=2438552.0,
+        body_extents_raw=[1600200.0, 2438552.0, 1540764.0],
+    )
+    # Header says MM but bbox 2.4M mm = 2400 m is implausible under any
+    # unit; matches existing "contradiction → UNKNOWN" path.
+    assert result.decision == GeometricUnit.UNKNOWN
+    assert any("all" in line and "implausible" in line
+               for line in result.evidence)
+
+
+def test_detect_unit_no_body_extents_backward_compat():
+    """Calls without body_extents_raw behave exactly as before."""
+    result = detect_unit(bbox_max_extent_raw=50000.0)
+    # Existing behavior: 50000 raw is mm-plausible only (50 m) → MM.
+    assert result.decision == GeometricUnit.MM
+
+
 # ───── V130 advisor contract: must not be in mutation registry ─────
 
 
