@@ -3,7 +3,7 @@
 M5.0 routine path. Consumes ``geometry_ingest`` + ``case_scaffold`` services.
 
 Flow:
-    1. Stream-read multipart upload, capped at 50 MB
+    1. Stream-read multipart upload, capped at 200 MB
     2. Parse STL via trimesh (4xx on parse failure)
     3. Run health checks (4xx on watertight failure; warnings allowed)
     4. Scaffold imported case (write triSurface + sHM stub + manifest +
@@ -31,7 +31,7 @@ from ui.backend.services.geometry_ingest import (
 )
 
 
-MAX_STL_BYTES = 50 * 1024 * 1024  # 50 MB · spec D-route limit
+MAX_STL_BYTES = 200 * 1024 * 1024  # 200 MB · raised from 50 MB (V198 substrate · case_003 Q3 airframe 87 MB · 2026-05-11)
 _READ_CHUNK = 1 << 20  # 1 MB
 
 
