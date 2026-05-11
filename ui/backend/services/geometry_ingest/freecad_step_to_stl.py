@@ -26,6 +26,8 @@ DEFAULT_FREECAD_CMD = "/Applications/FreeCAD.app/Contents/Resources/bin/freecadc
 
 _SIDECAR_SCRIPT = Path(__file__).parent / "_freecad_step_to_stl_sidecar.py"
 _SANITIZE_PATTERN = re.compile(r"[^a-z0-9]+")
+_SOLID_HEADER_RE = re.compile(rb"^\s*solid\b[^\n]*", re.MULTILINE)
+_ENDSOLID_HEADER_RE = re.compile(rb"^\s*endsolid\b[^\n]*", re.MULTILINE)
 
 
 class STEPToSTLBackendUnavailable(RuntimeError):
@@ -95,3 +97,33 @@ def step_to_per_body_stl(
         )
     manifest = json.loads(manifest_path.read_text())
     return [Path(entry["path"]) for entry in manifest["bodies"]]
+
+
+def combine_per_body_stls(
+    stl_dir: Path | str,
+    out_path: Path | str | None = None,
+) -> Path:
+    """Combine per-body ASCII STLs into one multi-solid ASCII STL.
+
+    Pairs with :func:`step_to_per_body_stl` output. Reads ``manifest.json``
+    from ``stl_dir``; for each body, reads its STL and rewrites the
+    FreeCAD-generic ``solid Mesh`` header to ``solid <stem>`` so the
+    workbench's :func:`detect_patches` recovers body labels as patch
+    names (F-NEW-10 fix; ratified by session 3 probe C).
+
+    Default ``out_path`` = ``<stl_dir>/combined.stl``.
+    """
+    stl_dir = Path(stl_dir)
+    manifest = json.loads((stl_dir / "manifest.json").read_text())
+    out_path = Path(out_path) if out_path else stl_dir / "combined.stl"
+    chunks: list[bytes] = []
+    for body in manifest["bodies"]:
+        raw = Path(body["path"]).read_bytes()
+        encoded = body["stem"].encode("ascii", errors="replace")
+        rewritten = _SOLID_HEADER_RE.sub(b"solid " + encoded, raw, count=1)
+        rewritten = _ENDSOLID_HEADER_RE.sub(b"endsolid " + encoded, rewritten, count=1)
+        if not rewritten.endswith(b"\n"):
+            rewritten += b"\n"
+        chunks.append(rewritten)
+    out_path.write_bytes(b"".join(chunks))
+    return out_path

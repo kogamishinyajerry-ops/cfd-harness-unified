@@ -19,10 +19,10 @@ meshed; not yet solved.
 | # | Finding | Class | Estimate | Status |
 |---|---|---|---|---|
 | ~~1~~ | ~~F-NEW-9 · 50 MB cap~~ | ~~spike~~ | ~~3 LOC~~ | **DONE** · cap raised to 200 MB; 87 MB airframe rides route 200 OK |
-| **2** | **F-NEW-10** · Bridge lacks "combined multi-solid ASCII emit" mode | spike-class | ~30 LOC + 1 test | next |
-| **3** | **F-NEW-12 / 4b** · workbench `unit_guess` conflates airframe-class with CFD-domain bodies | spike-class | ~40 LOC + 1 test | then |
+| ~~2~~ | ~~F-NEW-10 · combined multi-solid ASCII emit~~ | ~~spike~~ | ~~21 LOC + 25 LOC test~~ | **DONE** · `combine_per_body_stls`; 10 patches round-trip through workbench |
+| **3** | **F-NEW-12 / 4b** · workbench `unit_guess` conflates airframe-class with CFD-domain bodies | spike-class | ~40 LOC + 1 test | next |
 | **4** | **F-NEW-13** · `is_watertight=True` on boundary-only payload is misleading | UX / truth-chain copy | deferred to M-CONTROL-RAIL UI work | deferred |
-| **5** | **F-NEW-15** (NEW) · Codex-built case_003 airframe is 2 disconnected bodies | substrate / data | investigate `build_cad.py` first | investigate before code action |
+| **5** | **F-NEW-15 + F-NEW-16** · Codex-built airframe is 2 disconnected bodies (confirmed across upload paths) | substrate / data | read `build_cad.py` first | substrate-data, not workbench-code |
 
 Recommended order: 2 → 3 in two spike commits. F-NEW-15 needs CAD-generator
 reading first; potentially out of substrate-listening scope (project-data
