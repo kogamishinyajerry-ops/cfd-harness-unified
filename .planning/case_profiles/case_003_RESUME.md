@@ -20,9 +20,11 @@ meshed; not yet solved.
 |---|---|---|---|---|
 | ~~1~~ | ~~F-NEW-9 · 50 MB cap~~ | ~~spike~~ | ~~3 LOC~~ | **DONE** · cap raised to 200 MB; 87 MB airframe rides route 200 OK |
 | ~~2~~ | ~~F-NEW-10 · combined multi-solid ASCII emit~~ | ~~spike~~ | ~~21 LOC + 25 LOC test~~ | **DONE** · `combine_per_body_stls`; 10 patches round-trip through workbench |
-| **3** | **F-NEW-12 / 4b** · workbench `unit_guess` conflates airframe-class with CFD-domain bodies | spike-class | ~40 LOC + 1 test | next |
+| ~~3~~ | ~~F-NEW-12 · body-class filter for unit_guess~~ | ~~spike~~ | ~~25 LOC + 3 tests~~ | **DONE** · `detect_unit(body_extents_raw=...)`; UNKNOWN→MM confidence 1.0 on real case_003 |
 | **4** | **F-NEW-13** · `is_watertight=True` on boundary-only payload is misleading | UX / truth-chain copy | deferred to M-CONTROL-RAIL UI work | deferred |
-| **5** | **F-NEW-15 + F-NEW-16** · Codex-built airframe is 2 disconnected bodies (confirmed across upload paths) | substrate / data | read `build_cad.py` first | substrate-data, not workbench-code |
+| **5** | **F-NEW-15 + F-NEW-16** · Codex-built airframe is 2 disconnected bodies | substrate / data | read `build_cad.py` first | substrate-data, not workbench-code |
+| **6** | **F-NEW-17** (NEW from spike #3) · Body-class filter cross-talks with F-NEW-4 (Codex 3× scaling); ship/large geometries may need configurable industrial range | enhancement / not blocking | n/a | revisit when ≥1 case has all-bodies-above-100 m |
+| **7** | **Wiring** · the new `body_extents_raw` path isn't wired into the workbench route yet (route still passes only overall bbox) | wiring / new spike | ~20 LOC | next session candidate |
 
 Recommended order: 2 → 3 in two spike commits. F-NEW-15 needs CAD-generator
 reading first; potentially out of substrate-listening scope (project-data

@@ -159,12 +159,20 @@ def bbox_plausible_units(
 def detect_unit(
     step_path: Optional[Path | str] = None,
     bbox_max_extent_raw: Optional[float] = None,
+    body_extents_raw: Optional[list[float]] = None,
 ) -> UnitDetection:
     """Combine STEP header and bbox-magnitude signals into a single advisory.
 
     Either signal may be None; if both are None the result is UNKNOWN with
     zero confidence. The advisor strictly does not mutate; the caller is
     responsible for surfacing the decision to the engineer.
+
+    When ``body_extents_raw`` is supplied (per-body max bbox extents), bodies
+    whose extent is implausible under every common unit (mm/cm/m/inch) are
+    discarded as "CFD-domain class" (F-NEW-12 fix). The largest extent among
+    the surviving "airframe class" bodies replaces ``bbox_max_extent_raw``
+    for the unit decision. If no body survives the filter, the supplied
+    ``bbox_max_extent_raw`` is used as-is (backward-compatible).
     """
     evidence: list[str] = []
     declared: Optional[GeometricUnit] = None
@@ -173,6 +181,24 @@ def detect_unit(
     if step_path is not None:
         declared, header_ev = parse_step_header_unit(step_path)
         evidence.extend(header_ev)
+
+    if body_extents_raw:
+        plausible_bodies = [ext for ext in body_extents_raw
+                            if ext > 0 and bbox_plausible_units(ext)]
+        domain_count = len(body_extents_raw) - len(plausible_bodies)
+        if plausible_bodies:
+            airframe_extent = max(plausible_bodies)
+            evidence.append(
+                f"body-class filter: {domain_count}/{len(body_extents_raw)} bodies "
+                f"discarded as CFD-domain class (implausible under any common unit). "
+                f"Using largest airframe-class extent {airframe_extent:.4g} for unit decision."
+            )
+            bbox_max_extent_raw = airframe_extent
+        else:
+            evidence.append(
+                f"body-class filter: all {len(body_extents_raw)} bodies have implausible "
+                f"extents; falling back to overall bbox_max_extent_raw if supplied."
+            )
 
     if bbox_max_extent_raw is not None:
         bbox_plaus = bbox_plausible_units(bbox_max_extent_raw)
