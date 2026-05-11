@@ -1,5 +1,7 @@
 # Kogami-Claude-cosplay Trigger Rules · v2.3 (opt-in)
 
+> **STATUS UPDATE 2026-05-11** · v2.3 round-1 loosen (calibration retro F-NEW-loosen-2): the "≥3 modules → charter" historical trigger is reinterpreted as **≥3 shared code paths actually touched at first sub-DEC implementation**. A strategic brief listing N pillars is NOT itself a ≥N-module change; the charter trigger fires when the first sub-DEC's diff touches the third shared path, not when the brief is authored. This matches the calibration retro evidence (4-pillar brief → 1 spike actually shipped → charter would have been process-for-process).
+
 > **STATUS UPDATE 2026-05-07** · DEC-V61-133 — auto-triggers retired; Kogami is now **opt-in only**.
 > User explicitly invokes via `bash scripts/governance/kogami_invoke.sh <artifact> <topic> <trigger>`.
 > Implementation path unchanged; only the auto-trigger gate is removed.
