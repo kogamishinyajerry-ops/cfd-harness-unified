@@ -76,7 +76,7 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
 | ~~4~~ | ~~F-NEW-12 wiring · route call detect_unit~~ | ~~spike~~ | ~~~70 LOC + 2 tests~~ | **DONE** session 4 · `unit_guess` now `mm` on case_003 combined STL |
 | ~~5~~ | ~~M7 sHM real run~~ — **superseded by session 4 follow-up M6 observation**; the relevant stage in this codebase is M6 gmsh, not M7 sHM | obs | n/a | **DONE-as-observation** session 4 |
 | ~~5a~~ | ~~F-NEW-19 mitigation spike · body-class-aware default lc~~ | ~~spike~~ | ~~~80 LOC + 8 tests~~ | **DONE** session 5 — but not yet exercised end-to-end (blocked by F-NEW-22) |
-| **5c** | **F-NEW-22 + F-NEW-24 joint spike** · F2 path implementation in `gmsh_runner.py`: fast-classify (`boundary=False`, `forReparametrization=False`) + skip `createGeometry()` + `addSurfaceLoop` + `addVolume` + `Geometry.Tolerance=1e-12` for multi-named-solid industrial CAD payloads. Conditionally activated by detected solid count + facet count threshold | spike | ~80-150 LOC + 4-6 tests | **NEXT** — unit-test on synthetic 2-body STL; case_003 e2e validation gated on 5d |
+| ~~5c~~ | ~~F-NEW-22 + F-NEW-24 joint spike~~ F2 path implementation in `gmsh_runner.py`: fast-classify + skip `createGeometry()` + `addSurfaceLoop` + `addVolume` + `Geometry.Tolerance=1e-12`. Activation gate `_should_use_f2_path` (≥2 named solids + ≥10k facets) | spike | 100 LOC service + 139 LOC tests | **DONE** session 7 (commit `3d4a778`) — 52/52 tests pass (43 baseline + 9 new). F2 path PhysicalGroup preservation verified on seamed multi-solid STL with monkeypatched threshold. case_003 e2e still gated on 5e. |
 | ~~5d~~ | ~~F-NEW-24 bridge filter~~ — **REMOVED session 7**: F-NEW-24 is artifact, not substrate. No bridge change needed. |
 | **5e** | **F-NEW-25 mitigation** · bridge pre-tessellation farfield-merge in `_freecad_step_to_stl_sidecar.py`: detect bodies whose faces share edges (or `farfield`-prefixed) and join via `Part.Fuse` before `MeshPart.meshFromShape` | sub-DEC | ~100 LOC sidecar + 2-3 tests | clears the **only** remaining substrate wall before case_003 e2e |
 | **5f** | **F-NEW-17 mitigation** · adjust `_is_industrial_plausible_extent` upper bound for industrial airframes >100m (CRM-HLS at 152m fails); needs configurable band per body-class | spike | ~30-50 LOC + tests | independent of 5c/5e; can ship anytime; not blocking F2 implementation if F2 ignores the filter |
@@ -171,22 +171,20 @@ Session 7 collapsed F-NEW-24 into an artifact (gmsh tolerance) and
 confirmed F-NEW-25 is the only remaining substrate wall. The plan
 forward is now:
 
-**Option A (recommended, session 7 continuation)**: F2 path joint spike
-in `gmsh_runner.py` — bundles F-NEW-22 + F-NEW-24 fix into one change:
-fast-classify + skip createGeometry + addSurfaceLoop + addVolume +
-`Geometry.Tolerance=1e-12`. Unit-tested on synthetic 2-body multi-named-
-solid STL. ~80-150 LOC service code + 4-6 tests. Same shape as F-NEW-19's
-session-5 landing (unit-validated; e2e on case_003 gated on 5e).
+~~Option A (session 7 continuation)~~ — **DONE** session 7 commit
+`3d4a778`. F2 path is now resident in `gmsh_runner.py`, activation-
+gated by `_should_use_f2_path`. 52/52 tests pass.
 
-**Option B (session 8)**: F-NEW-25 sub-DEC — bridge sidecar pre-
-tessellation farfield-merge via `Part.Fuse` on coplanar / edge-sharing
-bodies before `MeshPart.meshFromShape`. ~100 LOC sidecar + 2-3 tests.
-Sub-DEC because it touches the bridge's emit contract (number of output
-bodies may shrink).
+**Option B (session 8 recommended)**: F-NEW-25 sub-DEC — bridge sidecar
+pre-tessellation farfield-merge via `Part.Fuse` on coplanar / edge-
+sharing bodies before `MeshPart.meshFromShape`. ~100 LOC sidecar + 2-3
+tests. Sub-DEC because it touches the bridge's emit contract (number
+of output bodies may shrink). Once this lands, re-run case_003 e2e:
+F2 path + clean-stitched substrate should mesh.
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
-Independent of 5c/5e/F2, can ship anytime. ~30-50 LOC.
+Independent; can ship anytime. ~30-50 LOC.
 
-Recommended order: A (this session, if energy permits) → B (next
-session) → C (any time). After A+B, case_003 e2e mesh should clear
-on the F2 + clean-stitched-substrate combination.
+Recommended next session: B. After B, case_003 e2e should clear and
+F2 path's performance claim (~80× speedup, V36) can be measured
+in-suite on the real 393k-facet load.
