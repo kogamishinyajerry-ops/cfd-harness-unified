@@ -12,6 +12,7 @@ from ui.backend.services.geometry_ingest.freecad_step_to_stl import (
     DEFAULT_FREECAD_CMD,
     STEPToSTLBackendUnavailable,
     STEPToSTLConversionFailed,
+    combine_per_body_stls,
     sanitize_label,
     step_to_per_body_stl,
 )
@@ -91,6 +92,47 @@ def test_step_to_per_body_stl_parses_manifest(tmp_path, monkeypatch):
     )
     assert [p.name for p in result] == ["airframe_reference.stl", "inlet.stl"]
     assert all(p.exists() for p in result)
+
+
+def test_combine_per_body_stls_rewrites_solid_headers_per_manifest(tmp_path):
+    """Each body's `solid Mesh` header (FreeCAD generic) becomes `solid <stem>`.
+
+    Verifies the F-NEW-10 round-trip: manifest stem → solid header →
+    detect_patches recovers patch name downstream.
+    """
+    bodies = [
+        ("inlet", b"solid Mesh\nfacet ...\nendsolid Mesh\n"),
+        ("outlet", b"solid Mesh\nfacet ...\nendsolid Mesh\n"),
+        ("airframe_reference", b"solid Mesh\nfacet ...\nendsolid Mesh\n"),
+    ]
+    body_records = []
+    for stem, raw in bodies:
+        p = tmp_path / f"{stem}.stl"
+        p.write_bytes(raw)
+        body_records.append({"label": stem, "stem": stem, "path": str(p), "n_facets": 1})
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"step_path": "x.step", "n_bodies": 3, "bodies": body_records})
+    )
+
+    out = combine_per_body_stls(stl_dir=tmp_path)
+
+    assert out == tmp_path / "combined.stl"
+    combined = out.read_bytes()
+    # `solid <name>` matches as substring of `endsolid <name>`, so anchor
+    # to start-of-line via regex when counting opening headers.
+    import re as _re
+    def _opening_count(name: str) -> int:
+        pat = rb"(?:^|\n)solid " + _re.escape(name.encode()) + rb"\n"
+        return len(_re.findall(pat, combined))
+
+    assert _opening_count("inlet") == 1
+    assert _opening_count("outlet") == 1
+    assert _opening_count("airframe_reference") == 1
+    assert combined.count(b"endsolid inlet\n") == 1
+    assert combined.count(b"endsolid outlet\n") == 1
+    assert combined.count(b"endsolid airframe_reference\n") == 1
+    assert b"solid Mesh\n" not in combined  # all generic headers rewritten
+    assert b"endsolid Mesh\n" not in combined
 
 
 @pytest.mark.skipif(
