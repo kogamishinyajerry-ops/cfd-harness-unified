@@ -16,15 +16,17 @@ meshed; not yet solved.
 
 ## Outstanding blockers — prioritized by substrate evidence
 
-| # | Finding | Class | Estimate | Promotion |
+| # | Finding | Class | Estimate | Status |
 |---|---|---|---|---|
-| **1** | **F-NEW-9** · 50 MB STL cap blocks 87 MB airframe at Q3 deflection | sub-DEC (changes route) | ~3 LOC + 1 test | unblocks every industrial STEP case |
-| **2** | **F-NEW-10** · Bridge lacks "combined multi-solid ASCII emit" mode | spike-class | ~30 LOC + 1 test | makes one-shot workbench upload trivial |
-| **3** | **F-NEW-12 / 4b** · P0 unit_detector / workbench unit_guess conflates airframe-class bodies with CFD-domain bodies | spike-class | ~40 LOC + 1 test on `unit_detector.py` | fixes UNKNOWN unit_guess UX |
-| **4** | **F-NEW-13** · `is_watertight=True` on boundary-only payload is misleading as CFD-readiness | UX / Truth Chain copy | deferred to M-CONTROL-RAIL UI work | no code action this session |
+| ~~1~~ | ~~F-NEW-9 · 50 MB cap~~ | ~~spike~~ | ~~3 LOC~~ | **DONE** · cap raised to 200 MB; 87 MB airframe rides route 200 OK |
+| **2** | **F-NEW-10** · Bridge lacks "combined multi-solid ASCII emit" mode | spike-class | ~30 LOC + 1 test | next |
+| **3** | **F-NEW-12 / 4b** · workbench `unit_guess` conflates airframe-class with CFD-domain bodies | spike-class | ~40 LOC + 1 test | then |
+| **4** | **F-NEW-13** · `is_watertight=True` on boundary-only payload is misleading | UX / truth-chain copy | deferred to M-CONTROL-RAIL UI work | deferred |
+| **5** | **F-NEW-15** (NEW) · Codex-built case_003 airframe is 2 disconnected bodies | substrate / data | investigate `build_cad.py` first | investigate before code action |
 
-Recommended order: 1 → 2 → 3 in three small commits (≈90 min total). 1
-needs sub-DEC frontmatter (changes route gate); 2 + 3 are spike-class.
+Recommended order: 2 → 3 in two spike commits. F-NEW-15 needs CAD-generator
+reading first; potentially out of substrate-listening scope (project-data
+issue, not workbench issue).
 
 ## V-series queue (5 not-yet-committed rows)
 
