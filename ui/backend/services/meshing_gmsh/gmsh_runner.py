@@ -98,6 +98,83 @@ def _default_characteristic_length(diagonal: float, mesh_mode: str) -> float:
     return diagonal / (60.0 if mesh_mode == "power" else 30.0)
 
 
+# F-NEW-19 fix (case_003 substrate · 2026-05-11): industrial-plausibility
+# range and unit factors for the airframe-class filter, matching
+# ``unit_detector.bbox_plausible_units`` semantics. Kept inline here
+# rather than imported to avoid cross-service coupling (ADR-001) — this
+# is a small, stable contract pair (range + factors).
+_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 100.0)
+_UNIT_FACTORS_M: tuple[float, ...] = (1e-3, 1e-2, 1.0, 0.0254)  # mm, cm, m, inch
+
+
+def _is_industrial_plausible_extent(extent: float) -> bool:
+    """True iff ``extent`` (raw STL units) is industrial-CFD-plausible
+    under at least one common unit (mm/cm/m/inch). Mirrors
+    :func:`unit_detector.bbox_plausible_units` but returns a single
+    plausibility bit instead of the unit list.
+    """
+    if extent <= 0:
+        return False
+    lo_m, hi_m = _INDUSTRIAL_EXTENT_RANGE_M
+    for factor in _UNIT_FACTORS_M:
+        extent_m = extent * factor
+        if lo_m <= extent_m <= hi_m:
+            return True
+    return False
+
+
+def _airframe_class_diagonal(
+    body_bboxes: list[tuple[float, ...]],
+    fallback_diagonal: float,
+) -> float:
+    """Compute the union-bbox diagonal of airframe-class bodies, filtering
+    out CFD-domain-class bodies whose max extent is industrially
+    implausible under every common unit.
+
+    F-NEW-19 fix (V198 session 5 · case_003 substrate): when a
+    multi-class STEP (airframe + CFD-domain walls) is meshed, the
+    overall bbox diagonal is dominated by farfield/symmetry boxes
+    (e.g. case_003 raw 2.44 M ≈ 2.44 km if treated as m, far above
+    the 100 m industrial cap). The resulting default
+    ``lc = diagonal / 30`` is then orders of magnitude coarser than
+    the airframe surface tessellation can absorb, and gmsh spends
+    unbounded CPU reconciling. Filtering out implausible bodies and
+    taking the union bbox of the survivors yields a sensible lc.
+
+    Returns the filtered diagonal, or ``fallback_diagonal`` if the
+    filter discards everything (e.g. ship/large-vehicle geometries
+    where all bodies legitimately exceed 100 m — see F-NEW-17). When
+    no body is filtered out, returns ``fallback_diagonal`` unchanged
+    to preserve byte-identical mesh output on single-class loads.
+    """
+    if not body_bboxes:
+        return fallback_diagonal
+    kept_bboxes: list[tuple[float, ...]] = []
+    for bbox in body_bboxes:
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox
+        max_extent = max(xmax - xmin, ymax - ymin, zmax - zmin)
+        if _is_industrial_plausible_extent(max_extent):
+            kept_bboxes.append(bbox)
+    if not kept_bboxes:
+        # All bodies industrially implausible — let the caller fall back
+        # to the full diagonal rather than producing a zero lc.
+        return fallback_diagonal
+    if len(kept_bboxes) == len(body_bboxes):
+        # No body filtered out — preserve byte-identical behavior on
+        # single-class loads by returning the full diagonal exactly.
+        return fallback_diagonal
+    xmin = min(b[0] for b in kept_bboxes)
+    ymin = min(b[1] for b in kept_bboxes)
+    zmin = min(b[2] for b in kept_bboxes)
+    xmax = max(b[3] for b in kept_bboxes)
+    ymax = max(b[4] for b in kept_bboxes)
+    zmax = max(b[5] for b in kept_bboxes)
+    dx = xmax - xmin
+    dy = ymax - ymin
+    dz = zmax - zmin
+    return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+
 def _geometry_aabb(
     points: list[tuple[float, float, float]]
 ) -> tuple[float, float, float, float, float, float] | None:
@@ -579,6 +656,20 @@ def _gmsh_inline(
             else:
                 diagonal = 0.0
                 geometry_aabb = None
+
+            # F-NEW-19 fix (V198 session 5 · case_003 substrate): when
+            # multi-class STEP (airframe + CFD-domain walls) lands here,
+            # the overall ``diagonal`` is dominated by domain walls and
+            # default ``lc = diagonal / 30`` runs unworkably coarse for
+            # the airframe surface. Filter out industrially-implausible
+            # bodies and recompute the diagonal from the airframe-class
+            # union when applicable. Single-class loads (all bodies
+            # plausible OR all implausible) return ``diagonal`` unchanged,
+            # preserving byte-identical mesh output.
+            if len(bodies) > 1:
+                from .topology import _body_bbox
+                body_bboxes = [_body_bbox(gmsh, body) for body in bodies]
+                diagonal = _airframe_class_diagonal(body_bboxes, diagonal)
 
             # V136 (N2.2): validate refinement zones BEFORE expensive
             # 3D mesh generation. Pydantic already enforced shape;

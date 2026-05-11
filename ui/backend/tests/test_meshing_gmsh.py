@@ -21,6 +21,8 @@ from ui.backend.services.meshing_gmsh.cell_budget import (
 )
 from ui.backend.services.meshing_gmsh.gmsh_runner import (
     GmshMeshGenerationError,
+    _airframe_class_diagonal,
+    _is_industrial_plausible_extent,
     run_gmsh_on_imported_case,
 )
 from ui.backend.services.meshing_gmsh.pipeline import (
@@ -1663,3 +1665,91 @@ def test_v61_105_phase2_4_passes_through_clean_triangle3(
         # Any other exception class is fine — we only assert the
         # defensive checks didn't misfire.
         pass
+
+
+# ----- F-NEW-19 fix: airframe-class diagonal filter -----------------------
+
+
+def test_plausible_extent_industrial_mm_range():
+    # Typical CFD mm extents (1mm to 100m raw = 1e-3 .. 1e5)
+    assert _is_industrial_plausible_extent(1.0) is True
+    assert _is_industrial_plausible_extent(1000.0) is True
+    assert _is_industrial_plausible_extent(50_000.0) is True
+
+
+def test_plausible_extent_industrial_meter_range():
+    assert _is_industrial_plausible_extent(0.05) is True  # 5cm → m
+    assert _is_industrial_plausible_extent(10.0) is True  # 10m
+
+
+def test_plausible_extent_implausible_above_all_caps():
+    # case_003 CFD-domain wall: 2.4M raw mm = 2.4km if treated as m
+    assert _is_industrial_plausible_extent(2_438_552.0) is False
+
+
+def test_plausible_extent_implausible_below_all_floors():
+    assert _is_industrial_plausible_extent(1e-6) is False
+    assert _is_industrial_plausible_extent(0.0) is False
+    assert _is_industrial_plausible_extent(-1.0) is False
+
+
+def test_airframe_class_diagonal_filters_case_003_like_domain():
+    """F-NEW-19 substrate · case_003 mock: 4 farfield walls + 3
+    airframe-class bodies. Filter discards the farfield walls and
+    returns a diagonal computed from the airframe-class union, NOT
+    from the full multi-class union (which would be the 2.4M-domain-
+    dominated value).
+    """
+    # Bodies expressed as (xmin, ymin, zmin, xmax, ymax, zmax).
+    body_bboxes = [
+        # 4 CFD-domain walls (case_003 raw values)
+        (0.0, 0.0, 0.0, 2_438_552.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1_600_200.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1.0, 1_540_764.0),
+        (0.0, 0.0, 0.0, 1_600_000.0, 1.0, 1.0),
+        # 3 airframe-class bodies (case_003 raw mm: ~18-27 m)
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 27_430.0, 3_430.0, 1.0),
+    ]
+    fallback_diag = 3.318e6  # ~case_003 full-bbox diagonal
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    # The airframe-class union diagonal: max bbox is 27430 × 3430 × 3050.
+    # sqrt(27430^2 + 3430^2 + 3050^2) ≈ 27810
+    assert 27_000 < out < 28_000, f"expected ~27800, got {out}"
+    # Critically: must be far below the fallback (3 orders of magnitude)
+    assert out < fallback_diag / 100
+
+
+def test_airframe_class_diagonal_preserves_single_class_byte_identity():
+    """When every body passes the filter (single-class load like
+    naca0012, cylinder, LDC), the helper returns ``fallback_diagonal``
+    unchanged — preserves byte-identical mesh output."""
+    body_bboxes = [
+        (0.0, 0.0, 0.0, 0.1, 0.1, 0.1),  # LDC-class
+        (0.0, 0.0, 0.0, 0.1, 0.1, 0.1),
+    ]
+    fallback_diag = 0.173  # √3 × 0.1
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    assert out == fallback_diag
+
+
+def test_airframe_class_diagonal_all_implausible_falls_back():
+    """When ALL bodies fail the filter (e.g. hypothetical ship/large-
+    vehicle case where every body legitimately exceeds 100m), the
+    helper returns ``fallback_diagonal`` rather than zero so the
+    caller still has a usable lc (the engineer can override via
+    ``sizing_field``)."""
+    body_bboxes = [
+        (0.0, 0.0, 0.0, 2e6, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 3e6, 1.0, 1.0),
+    ]
+    fallback_diag = 3.5e6
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    assert out == fallback_diag
+
+
+def test_airframe_class_diagonal_empty_input_falls_back():
+    """Defensive: empty body_bboxes list returns fallback."""
+    out = _airframe_class_diagonal([], 1.0)
+    assert out == 1.0
