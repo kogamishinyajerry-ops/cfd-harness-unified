@@ -35,6 +35,56 @@ if TYPE_CHECKING:
     from ui.backend.schemas.mesh_sizing import MeshSizingField
 
 
+# --- F2 path activation (F-NEW-22 + F-NEW-24 joint mitigation, case_003
+# session 6-7 ramp; V36/V37/V41/V45) ---
+#
+# When the STL is industrial-CAD-scale multi-named-solid (e.g. CRM-HLS
+# airframe + farfield boxes from the FreeCAD STEP bridge), the baseline
+# classifySurfaces(angle=40°, boundary=True, forReparametrization=True)
+# runs super-linear on the boundary flag (O(n²)-ish on facet count) and
+# the default Geometry.Tolerance=1e-8 collapses near-coincident cross-
+# solid vertices into collinear triangles (gmsh reports them as
+# "degenerate" but the STL bytes are clean — see case_003 session 7
+# ramp_log).
+#
+# The fast-classify path:
+#   - Geometry.Tolerance=1e-12 preserves Q3-tessellation features
+#   - classifySurfaces(angle=180°, boundary=False, forReparametrization=False)
+#     runs ~80× faster (case_003: 1.5s vs >120s on 393k facets)
+#   - createGeometry() is skipped (impossible without forReparametrization)
+#   - Downstream code (partition_surfaces_by_body, named-solid voting,
+#     addSurfaceLoop+addVolume) operates on classified surface tags
+#     irrespective of parametric vs discrete representation
+#
+# Trade-off: Mesh.MeshSizeFromCurvature becomes a no-op without
+# parametric surfaces. Acceptable for industrial CAD where
+# sizing-fields + refinement-zones dominate over curvature-driven
+# sizing.
+#
+# Activation gate: multi-named-solid (≥2) AND total facet count
+# ≥ threshold. The threshold protects byte-identity on small test
+# fixtures (seamed_multi_solid_box_stl has 12 facets) and small clean
+# multi-patch geometries where the baseline path is fast enough.
+_F2_PATH_FACET_THRESHOLD = 10_000
+_F2_PATH_GEOMETRY_TOLERANCE = 1e-12
+
+
+def _should_use_f2_path(
+    named_solid_count: int,
+    facet_count: int,
+    *,
+    threshold: int = _F2_PATH_FACET_THRESHOLD,
+) -> bool:
+    """Return True when the F2 fast-classify path should be engaged.
+
+    Gate: ≥2 named solids AND ≥``threshold`` total facets. Below the
+    threshold the baseline parametric path is fast and well-tested;
+    above it the baseline path's super-linearity + tolerance artifact
+    block real industrial CAD payloads (case_003).
+    """
+    return named_solid_count >= 2 and facet_count >= threshold
+
+
 class GmshMeshGenerationError(RuntimeError):
     """Raised when gmsh fails to produce a valid 3D mesh."""
 
@@ -318,6 +368,21 @@ def _gmsh_inline(
     output_msh_path.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
 
+    # F2 path pre-merge probe (V45): parse STL for named-solid count +
+    # facet count BEFORE gmsh.initialize() so we can decide whether to
+    # set Geometry.Tolerance ahead of merge. parse_named_solids_from_path
+    # is a sub-second regex parse, cheap even on 80 MB STLs.
+    from .stl_solid_index import parse_named_solids_from_path
+
+    _f2_named_solids_preview = parse_named_solids_from_path(stl_path)
+    _f2_facet_count_preview = sum(
+        s.centroids.shape[0] for s in _f2_named_solids_preview
+    )
+    _f2_active = _should_use_f2_path(
+        named_solid_count=len(_f2_named_solids_preview),
+        facet_count=_f2_facet_count_preview,
+    )
+
     gmsh.initialize()
     # Wrap the entire post-init gmsh-API region in a single
     # GmshMeshGenerationError boundary. The gmsh Python bindings raise
@@ -346,6 +411,15 @@ def _gmsh_inline(
             # selects gmsh's Delaunay 3D — robust default for closed
             # triangulated surfaces from real-world CAD exports.
             gmsh.option.setNumber("Mesh.Algorithm3D", 1)
+
+            # F2 path (F-NEW-24 mitigation): tighten Geometry.Tolerance
+            # BEFORE gmsh.merge so cross-solid vertex dedup uses an
+            # absolute tolerance well below Q3 STL deflection. Default
+            # 1e-8 collapses Q3 features on km-scale industrial CAD.
+            if _f2_active:
+                gmsh.option.setNumber(
+                    "Geometry.Tolerance", _F2_PATH_GEOMETRY_TOLERANCE
+                )
             # NOTE: Codex R11 Finding 1 suggested wrapping gmsh.merge()
             # to relabel plain-Exception failures as OSError when the
             # STL still exists (host read-side faults on a permission-
@@ -364,13 +438,32 @@ def _gmsh_inline(
             # Reclassify the imported triangles as a surface, then build
             # a volume from the surface loop. Standard gmsh incantation
             # for "STL → tetrahedral volume mesh".
-            gmsh.model.mesh.classifySurfaces(
-                angle=40.0 * 3.141592653589793 / 180.0,
-                boundary=True,
-                forReparametrization=True,
-                curveAngle=180.0 * 3.141592653589793 / 180.0,
-            )
-            gmsh.model.mesh.createGeometry()
+            #
+            # F2 path (F-NEW-22 mitigation, V36/V37): on industrial-scale
+            # multi-named-solid loads, the baseline (angle=40°,
+            # boundary=True, forReparametrization=True) is super-linear
+            # in facet count. The fast variant (angle=180°, boundary=False,
+            # forReparametrization=False) is ~80× faster on 393k facets
+            # and produces classified surface tags that the downstream
+            # named-solid voting + topology partition code accepts. The
+            # cost: createGeometry() cannot be called without
+            # forReparametrization=True, so we skip it on the F2 path.
+            if _f2_active:
+                gmsh.model.mesh.classifySurfaces(
+                    angle=180.0 * 3.141592653589793 / 180.0,
+                    boundary=False,
+                    forReparametrization=False,
+                    curveAngle=180.0 * 3.141592653589793 / 180.0,
+                )
+                # createGeometry() deliberately omitted on F2 path.
+            else:
+                gmsh.model.mesh.classifySurfaces(
+                    angle=40.0 * 3.141592653589793 / 180.0,
+                    boundary=True,
+                    forReparametrization=True,
+                    curveAngle=180.0 * 3.141592653589793 / 180.0,
+                )
+                gmsh.model.mesh.createGeometry()
 
             surfaces = gmsh.model.getEntities(dim=2)
             if not surfaces:

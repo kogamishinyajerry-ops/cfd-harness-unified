@@ -21,8 +21,11 @@ from ui.backend.services.meshing_gmsh.cell_budget import (
 )
 from ui.backend.services.meshing_gmsh.gmsh_runner import (
     GmshMeshGenerationError,
+    _F2_PATH_FACET_THRESHOLD,
+    _F2_PATH_GEOMETRY_TOLERANCE,
     _airframe_class_diagonal,
     _is_industrial_plausible_extent,
+    _should_use_f2_path,
     run_gmsh_on_imported_case,
 )
 from ui.backend.services.meshing_gmsh.pipeline import (
@@ -1753,3 +1756,139 @@ def test_airframe_class_diagonal_empty_input_falls_back():
     """Defensive: empty body_bboxes list returns fallback."""
     out = _airframe_class_diagonal([], 1.0)
     assert out == 1.0
+
+
+# ----- F2 path (F-NEW-22 + F-NEW-24 joint mitigation, case_003 session 6-7 ramp) -----
+#
+# The F2 fast-classify path activates on industrial-scale multi-named-
+# solid STL inputs (e.g. CRM-HLS airframe + farfield boxes). Tests below
+# cover the activation predicate, byte-identity preservation on small
+# fixtures, named-solid voting compatibility, and the Geometry.Tolerance
+# pre-merge option.
+
+
+def test_should_use_f2_path_baseline_single_solid():
+    """Single-named-solid → baseline path regardless of facet count."""
+    assert _should_use_f2_path(named_solid_count=1, facet_count=1_000_000) is False
+
+
+def test_should_use_f2_path_baseline_below_threshold():
+    """Multi-named-solid but below facet threshold → baseline."""
+    assert (
+        _should_use_f2_path(named_solid_count=10, facet_count=_F2_PATH_FACET_THRESHOLD - 1)
+        is False
+    )
+
+
+def test_should_use_f2_path_activates_at_threshold():
+    """Multi-named-solid + exactly threshold facets → F2 path."""
+    assert (
+        _should_use_f2_path(named_solid_count=2, facet_count=_F2_PATH_FACET_THRESHOLD)
+        is True
+    )
+
+
+def test_should_use_f2_path_activates_above_threshold():
+    """Industrial CAD scale (case_003: 10 solids, 393k facets) → F2."""
+    assert _should_use_f2_path(named_solid_count=10, facet_count=393_498) is True
+
+
+def test_should_use_f2_path_zero_solids_baseline():
+    """Anonymous STL (no named solids) → baseline path."""
+    assert _should_use_f2_path(named_solid_count=0, facet_count=1_000_000) is False
+
+
+def test_should_use_f2_path_custom_threshold_override():
+    """Tests can override the threshold to exercise F2 with small fixtures."""
+    assert _should_use_f2_path(named_solid_count=3, facet_count=20, threshold=10) is True
+    assert _should_use_f2_path(named_solid_count=3, facet_count=5, threshold=10) is False
+
+
+def test_f2_path_preserves_named_solid_physical_groups(tmp_path: Path, monkeypatch):
+    """F2 path regression of test_gmsh_preserves_stl_solid_names_as_physical_groups
+    (line 86): on a seamed multi-solid STL, even when F2 activates, the
+    named-solid voting block must still emit one $PhysicalNames entry per
+    solid. F2 skips createGeometry() but the downstream voting block
+    operates on classified surface tags + Triangle3 mesh elements, which
+    exist regardless of parametric reconstruction.
+
+    Monkeypatches the facet threshold to 1 so the 12-tri seamed fixture
+    trips F2 activation.
+    """
+    # Lower threshold so seamed_multi_solid_box_stl (~12 facets) trips F2
+    monkeypatch.setattr(
+        "ui.backend.services.meshing_gmsh.gmsh_runner._F2_PATH_FACET_THRESHOLD",
+        1,
+    )
+
+    stl_path = tmp_path / "seamed_f2.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())
+    msh_path = tmp_path / "seamed_f2.msh"
+
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0, "F2 path produced empty mesh"
+
+    text = msh_path.read_text()
+
+    # PhysicalNames must include inlet/outlet/walls — same contract as
+    # the baseline test at line 86. F2 skips createGeometry but the
+    # named-solid voting block still runs.
+    in_pn = False
+    dim2_names: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("$PhysicalNames"):
+            in_pn = True
+            continue
+        if line.startswith("$EndPhysicalNames"):
+            break
+        if not in_pn:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            dim = int(parts[0])
+        except ValueError:
+            continue
+        if dim == 2:
+            raw_name = " ".join(parts[2:]).strip().strip('"')
+            dim2_names.add(raw_name)
+    assert dim2_names == {"inlet", "outlet", "walls"}, (
+        f"F2 path: expected dim=2 physical names {{inlet,outlet,walls}}, got {dim2_names}"
+    )
+
+
+def test_baseline_path_unchanged_for_single_body_box(tmp_path: Path):
+    """Single-body STL (box_stl) does not trigger F2 — exercises the
+    byte-identity preservation guarantee that small clean inputs still
+    flow through the baseline parametric path.
+    """
+    stl_path = tmp_path / "box.stl"
+    stl_path.write_bytes(box_stl())  # binary STL, no named solid headers
+    msh_path = tmp_path / "box.msh"
+
+    # No threshold patching — default threshold gates F2 off.
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0
+
+
+def test_f2_path_tolerance_constant_is_tight_enough():
+    """The F2 Geometry.Tolerance must be small enough to preserve Q3
+    tessellation features on km-scale industrial CAD. Q3 deflection ≈
+    50 μm; case_003 bbox max ≈ 2.4 km. Required absolute tolerance
+    must be << 50 μm. Sanity-check the module constant.
+    """
+    # Hardcoded sanity: 1e-12 is way below 50e-6 (50 μm), even at 2.4 km
+    # bbox absolute scale (= 2.4e6 mm × 1e-12 effective ≈ 2.4 fm).
+    assert _F2_PATH_GEOMETRY_TOLERANCE <= 1e-10, (
+        f"_F2_PATH_GEOMETRY_TOLERANCE={_F2_PATH_GEOMETRY_TOLERANCE} too loose "
+        f"to preserve Q3 features on km-scale industrial CAD"
+    )
