@@ -1,0 +1,10 @@
+{
+  "case_id": "naca0012",
+  "persona": "debug",
+  "family": "openai_compat",
+  "model_id": "gpt-5.4",
+  "run_id": "naca0012__debug__openai_compat__a4757003",
+  "dry_run": true,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/naca0012.stl",
+  "elapsed_s": 0.002063249994534999
+}

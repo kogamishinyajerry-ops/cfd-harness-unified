@@ -1,0 +1,21 @@
+{
+  "run_id": "pipe_expansion__experienced_fluent__anthropic__e249de15",
+  "case_id": "pipe_expansion",
+  "persona": "experienced_fluent",
+  "model_id": "claude-sonnet-4-6",
+  "steps": 3,
+  "verdict": {
+    "passed": true,
+    "metric": "Kp",
+    "observed": 0.56,
+    "reference": 0.5625,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "detail": "observed=0.56, reference=0.5625, err=0.0044 (tol=0.0500 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 300,
+  "total_output_tokens": 90,
+  "error": null
+}

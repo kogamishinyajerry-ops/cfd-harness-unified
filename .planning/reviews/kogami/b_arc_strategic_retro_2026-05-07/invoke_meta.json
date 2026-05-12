@@ -1,0 +1,26 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "8fa96803c1e0a777c502c2385f2944ff2edbb7ab97b380fe8f6515bc53b7ad4e",
+  "empty_cwd": "/tmp/strategic_brief_cwd_pdloDi",
+  "trigger": "user-mandate",
+  "artifact": ".planning/dogfood/DOGFOOD_REPORT_LIVE_PROGRESSION.md",
+  "invoked_at_utc": "2026-05-07T06:25:51Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 49879,
+    "total_cost_usd": 0.9650205,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "27ccce15-faae-4680-8f05-a51b5c9895be",
+    "uuid": "7a0ebba9-c4f9-4c9a-94db-666c20ae45e0",
+    "model_keys": [
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 144612,
+    "cache_read_tokens": 6891,
+    "output_tokens": 2309
+  }
+}

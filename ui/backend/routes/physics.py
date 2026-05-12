@@ -48,6 +48,38 @@ class PhysicsCommitRequest(BaseModel):
     regime: RegimeContract = Field(...)
 
 
+class PhysicsStateResponse(BaseModel):
+    """GET /api/cases/{case_id}/physics — current committed state.
+
+    Engineer mental model is query-before-mutate: this paired GET
+    surfaces the dict text already written by an earlier POST so the
+    persona / UI can compare against intended changes. Both fields
+    are nullable: a freshly scaffolded case (Step 1 only) has neither
+    file on disk yet — the route returns null rather than 404 because
+    "nothing committed" is a valid Step 3 state.
+
+    Added by DEC-V61-168 / B.5.2 to address DOGFOOD_REPORT_LIVE F3.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str
+    material_dict_text: str | None = Field(
+        default=None,
+        description=(
+            "Raw text of `constant/physicalProperties` if the file "
+            "exists; null otherwise."
+        ),
+    )
+    regime_dict_text: str | None = Field(
+        default=None,
+        description=(
+            "Raw text of `constant/momentumTransport` if the file "
+            "exists; null otherwise."
+        ),
+    )
+
+
 class PhysicsCommitResponse(BaseModel):
     """Echo what was written. Lets the engineer verify the dict text
     in the UI without re-fetching from disk. Path strings are
@@ -73,6 +105,45 @@ class PhysicsCommitResponse(BaseModel):
     committed_at: str = Field(
         ...,
         description="ISO 8601 UTC timestamp the commit completed.",
+    )
+
+
+@router.get(
+    "/cases/{case_id}/physics",
+    response_model=PhysicsStateResponse,
+    tags=["physics"],
+)
+def get_physics_state(case_id: str) -> PhysicsStateResponse:
+    """Return current `constant/physicalProperties` + `constant/momentumTransport`
+    text for an imported case.
+
+    Both fields are null when the case has been scaffolded but not yet
+    physics-committed. Added per DEC-V61-168 / B.5.2 (DOGFOOD_REPORT_LIVE F3).
+    """
+    if not is_safe_case_id(case_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"failing_check": "bad_case_id", "case_id": case_id},
+        )
+    case_dir: Path = IMPORTED_DIR / case_id
+    if not case_dir.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail={"failing_check": "case_not_found", "case_id": case_id},
+        )
+    constant_dir = case_dir / "constant"
+    material_path = constant_dir / "physicalProperties"
+    regime_path = constant_dir / "momentumTransport"
+    return PhysicsStateResponse(
+        case_id=case_id,
+        material_dict_text=(
+            material_path.read_text(encoding="utf-8")
+            if material_path.is_file() else None
+        ),
+        regime_dict_text=(
+            regime_path.read_text(encoding="utf-8")
+            if regime_path.is_file() else None
+        ),
     )
 
 

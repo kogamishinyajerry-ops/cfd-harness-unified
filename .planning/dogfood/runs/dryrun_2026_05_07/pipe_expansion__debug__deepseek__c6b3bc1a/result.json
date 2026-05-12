@@ -1,0 +1,21 @@
+{
+  "run_id": "pipe_expansion__debug__deepseek__c6b3bc1a",
+  "case_id": "pipe_expansion",
+  "persona": "debug",
+  "model_id": "deepseek-chat",
+  "steps": 4,
+  "verdict": {
+    "passed": true,
+    "metric": "Kp",
+    "observed": 0.5625,
+    "reference": 0.5625,
+    "tolerance": 0.05,
+    "tolerance_kind": "rel",
+    "detail": "observed=0.5625, reference=0.5625, err=0.0000 (tol=0.0500 relative)"
+  },
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 400,
+  "total_output_tokens": 120,
+  "error": null
+}
