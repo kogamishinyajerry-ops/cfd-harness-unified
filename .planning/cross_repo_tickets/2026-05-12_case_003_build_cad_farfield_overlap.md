@@ -2,12 +2,14 @@
 
 **Status**: Open
 **Filed**: 2026-05-12 (session 10 F-NEW-15 substrate dig)
+**Updated**: 2026-05-12 session 12 — full survey across 11 case_* repos:
+  6 of 11 cases confirmed affected (case_003/006/007/008/010/016).
 **Affects repo**: `~/Desktop/case_*` (Codex-maintained case generators,
-not this workbench). At minimum **case_003** and **case_008** share the
-exact pattern; **case_006, case_007, case_010** also have
-`build_domain_patches` functions and likely share the bug.
+not this workbench).
 **Affects file**: `scripts/build_cad.py` lines 191–219 in case_003;
-analogous `build_domain_patches` / `make_plate_z` regions in other cases
+analogous `build_domain_patches` / `build_farfield` / `build_patch_tags`
+regions in case_006/007/008/010/016. See "Class-wide affected cases"
+section below for per-case evidence.
 **Blocks**: case_003 e2e mesh in `cfd-harness-unified` (F-NEW-26 in case_003
 ramp log; see also DEC-V61-105 multi-named-solid intake path).
 **Discovered by**: `cfd-harness-unified` sessions 6–9 substrate-first ramp.
@@ -229,25 +231,57 @@ bridge should produce a `combined.stl` that:
 Validation script: `cfd-harness-unified` session 8 probe5 can be
 reused to verify the fix.
 
-## Class-wide affected cases (session 10 grep across `~/Desktop/case_*`)
+## Class-wide affected cases (session 12 full survey)
 
-Same `build_domain_patches` thick-plate pattern present in:
+Surveyed all 11 build_cad.py files under `~/Desktop/case_*`. Same
+thick-plate-at-face construction confirmed in **6 of 11 cases**:
 
-| Case | Evidence |
+| Case | Evidence | Severity |
+|---|---|---|
+| **case_003** crm_hls_boundary_layer | confirmed root-cause (this ticket); `make_box(t, ly, lz, ...)` per plate; 6 plates at 6 faces of CFD domain | base |
+| **case_006** onera_m6_transonic | `farfield_box` (full cuboid) + 6 thin plates (`farfield_upstream/downstream/top/bottom/outboard/symmetry_plane_root` via `make_plate_x/y/z`) at the 6 faces of that cuboid → **DOUBLE overlap**: plates overlap each other AND each plate overlaps farfield_box | **worse** (cuboid + plates) |
+| **case_007** kcs_ship_vof | 6 thick boxes (`water_inlet/water_outlet/atmosphere/side_walls/domain_bottom/symmetry_plane_centerline`) constructed as `make_box(center=(DOMAIN_*_MIN/MAX, ...), size=(PATCH_THICKNESS_MM, ...))` — identical case_003 pattern | base |
+| **case_008** glc305_irt_lagrangian | `make_box(center=(X_MIN_MM, y_mid, 0.0), size=(PATCH_THICKNESS_MM, y_len, z_len))` × 6 patches | base |
+| **case_010** drivaer_fastback_les | 6 thick boxes (`inlet/outlet/top/side_outboard/ground/symmetry_plane_centerline`) via `make_box((X_MIN_MM, y_mid, z_mid), (PATCH_THICKNESS_MM, y_len, z_len))` | base |
+| **case_016** m219_cavity_des_acoustic | **14 thick patch tags** via `make_box(X_MIN_MM, X_MIN_MM + t, ...)`: inflow/outflow/top_far_field/far_field_port/starboard + flat_plate_upstream/downstream/side_port/starboard + cavity_floor/le_wall/te_wall/side_wall_port/starboard + fwh_porous_surface. Higher patch count → more pairwise edge overlaps | **worst** (14 plates) |
+
+**Not affected** (5 cases, different geometry patterns):
+
+| Case | Why not affected |
 |---|---|
-| **case_003** crm_hls_boundary_layer | confirmed root-cause (this ticket); `make_box(t, ly, lz, ...)` per plate |
-| **case_008** glc305_irt_lagrangian | confirmed; `make_box(center=(X_MIN_MM, y_mid, 0.0), size=(PATCH_THICKNESS_MM, y_len, z_len))` — identical thickness-at-face pattern, named `inlet/outlet/farfield_top/...` |
-| **case_006** onera_m6_transonic | likely affected; uses `make_plate_z(z_max, box_size[0], box_size[1], 0.5)` and `asm.add(farfield["farfield_top"], name="farfield_top")` |
-| **case_007** kcs_ship_vof | likely affected; has `build_domain_patches()` |
-| **case_010** drivaer_fastback_les | likely affected; has `build_domain_patches()` |
+| case_004 nrel_phase_vi_mrf | Rotor case; blade/hub/spinner construction, no flat domain patches |
+| case_005 rae_m2129_sduct | Internal duct case; boundary disks via `cylinder_along_x` (not boxes; at axially-distinct x positions) |
+| case_009 sandia_flame_d | Cylindrical wedge-sector domain; `sector_solid` annuli at distinct radii (don't axis-aligned-overlap) |
+| case_011 plate_fin_compact_hx | Internal HX; stack-pack geometry, no external domain patches |
+| case_012 hvac_supply_diffuser | Internal HVAC; centered boxes via different layout |
+| case_015 vattenfall_t_junction | Internal T-junction; cylindrical pipes via `cyl_x`/`cyl_z` |
 
-Cases without `build_domain_patches` (case_004/005/009/011/012/015/016) use
-different CFD-domain construction patterns and may or may not have the
-same defect; would need per-case review.
+**Conclusion**: 6 of 11 cases (54%) share the thick-plate-at-face
+defect. This is a Codex case-generator framework-wide issue, not a
+one-case bug.
 
-**Recommendation**: treat as a Codex case-generator framework defect.
-Fixing the shared helper / template once (or shipping a per-case
-boolean-cut pass at emit time) clears all affected cases simultaneously.
+**Recommendation**: prioritize fixing the shared pattern. Three
+practical paths:
+
+1. **Per-case retrofit** (most direct): apply Option A or B from the
+   "Recommended fix" section to each affected build_cad.py
+   independently. ~6 PRs but each is mechanical and case-local.
+
+2. **Shared-helper extraction** (best long-term): factor out a
+   `cfd_domain_patches(domain_bbox, thickness, names)` helper that
+   applies Option A or B once. Migrate the 6 affected cases to use it.
+
+3. **Workbench-side enforcement** (interim mitigation): the workbench
+   side has already shipped session 11's defensive layer
+   (`cfd-harness-unified` commit `4f671c4`), which detects this
+   pattern at import time and emits a structured error pointing at
+   this ticket. Affected cases will get clear diagnostics until the
+   source fix lands. Does NOT replace the fix; just makes the symptom
+   visible and actionable.
+
+The 14-plate case_016 has the most pairwise edge overlaps and should
+be a priority for the fix (or for not-yet-attempted import to confirm
+behavior — but the workbench defensive layer will reject it loudly).
 
 ## Workbench-side state (no further action pending fix)
 

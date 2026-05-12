@@ -1,7 +1,7 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 11 — F-NEW-26 defensive layer:
-M5.0 import-time body-pair AABB overlap detection landed)
+**Last session**: 2026-05-12 (session 12 — class-wide build_cad.py
+survey: 6/11 cases confirmed affected by F-NEW-26; ticket updated)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -150,7 +150,12 @@ with 3-tier classification: containment / edge_overlap / significant)
 + **V60** (session 11 — cavity pattern preserved by classification:
 no UX regression on LDC / cylinder-in-channel) + **V61** (session 11
 — route layer transparently carries diagnostic; explicit route-test
-deferred to Option H). V27 already LANDED-by-V199-bridge.
+deferred to Option H) + **V62** (session 12 — full survey: 6/11 cases
+affected; 5 not) + **V63** (session 12 — case_006 DOUBLE overlap
+worst-case identified) + **V64** (session 12 — case_016 has 14 patch
+tags; worst extent of bug) + **V65** (session 12 — recommended fix
+path = shared-helper extraction across 6 affected cases).
+V27 already LANDED-by-V199-bridge.
 
 V32 needs status update next batch: **F-NEW-19 fix LANDED session 5**;
 the unworkable-default-lc issue is solved for cases that reach the
@@ -210,19 +215,27 @@ bug error path. Cavity / interior-obstacle cases (LDC, cylinder-in-
 channel) preserved as silent (containment-only). 9 new tests, 76/76
 in ingest+meshing.
 
-**Option G (session 12 recommended — non-coding)**: review case_006 /
-case_007 / case_010 build_cad.py for the same thick-plate-at-face
-pattern that case_003 + case_008 share. ≤30 min per case. Confirms or
-expands the cross-repo ticket's scope.
+~~Option G (session 12)~~ — **DONE** session 12 (no commit; doc-only
+class-wide survey). 6 of 11 cases confirmed affected
+(case_003/006/007/008/010/016); 5 not affected with reasons. Ticket
+updated with recommended fix paths.
+
+**Option H (session 13 recommended — route-layer test)**: end-to-end
+integration test exercising `POST /api/import/stl` with a synthetic
+6-plate STL to verify the session 11 defensive-layer error surfaces
+as a structured 4xx through the route. ~30-50 LOC. Confirms the route
+already carries the diagnostic transparently (which it should, but
+unverified).
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
 Independent; can ship anytime. ~30-50 LOC.
 
-**Option H (route-layer follow-up)**: end-to-end integration test
-exercising `POST /api/import/stl` with a synthetic 6-plate STL to
-verify the new defensive-layer error surfaces as a structured 4xx
-through the route. ~30-50 LOC. Confirms the route already carries
-the diagnostic transparently (which it should, but unverified).
+**Option I (proactive — session 13+)**: pick an affected case
+(case_007 ship_vof or case_010 drivaer recommended as simpler
+parallels of case_003) and attempt end-to-end import + diagnose
+whether the F-NEW-26 defensive layer correctly catches that case's
+specific overlap pattern. Validates the defensive layer against
+real-world variations of the bug.
 
-Recommended order: G (confirm class-wide scope + escalate ticket if
-needed) → H (close route-side test gap) → C (independent).
+Recommended order: H (close route-side test gap) → I (validate
+defensive layer on a second affected case) → C (independent).
