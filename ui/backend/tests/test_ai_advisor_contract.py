@@ -422,6 +422,20 @@ _AI_DISPATCH_MODULES: tuple[str, ...] = (
     "ui/backend/services/llm_coach/tool_registry.py",
     "ui/backend/routes/ai_chat.py",
     "ui/backend/routes/ai_coach.py",
+    # DEC-V61-158 (N6.2): AI 审查 advisor route + service. Read-only
+    # by V130/V132 contract; static AST scan asserts no
+    # KNOWN_MUTATION_FUNCTIONS symbol is imported.
+    "ui/backend/routes/ai_advisor.py",
+    "ui/backend/services/ai_advisor/__init__.py",
+    "ui/backend/services/ai_advisor/corpus_loader.py",
+    "ui/backend/services/ai_advisor/review.py",
+    # DEC-V61-159 (N6.3): AI 诊断 advisor service. Same V130/V132
+    # contract as N6.2 — read-only, no mutation symbol bound.
+    "ui/backend/services/ai_advisor/diagnose.py",
+    "ui/backend/services/ai_advisor/safety.py",
+    # DEC-V61-161 (N6.5): broadened LLM-offline rule-based fallback.
+    # Read-only orchestrator over existing rule-based emitters.
+    "ui/backend/services/ai_advisor/fallback.py",
 )
 
 
