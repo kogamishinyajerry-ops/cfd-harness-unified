@@ -803,8 +803,15 @@ def test_subprocess_wrapper_hard_crash_raises_gmsh_subprocess_error(tmp_path: Pa
         def start(self) -> None:
             return None
 
-        def join(self) -> None:
+        def join(self, timeout: float | None = None) -> None:
+            # F-NEW-20: runner now calls join(timeout=N). Accept and
+            # ignore — this test simulates an immediate hard-crash exit,
+            # not a hung subprocess, so the timeout path is not exercised.
             return None
+
+        def is_alive(self) -> bool:
+            # Hard crash → process is dead, not alive past join.
+            return False
 
     class _FakeCtx:
         def Queue(self):

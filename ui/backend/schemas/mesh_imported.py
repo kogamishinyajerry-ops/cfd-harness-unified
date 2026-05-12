@@ -29,6 +29,7 @@ FailingCheck = Literal[
     "case_not_found",
     "source_not_imported",
     "gmsh_diverged",
+    "gmsh_timeout",  # F-NEW-20: subprocess wall-clock timeout
     "cell_cap_exceeded",
     "gmshToFoam_failed",
     "refinement_zone_invalid",

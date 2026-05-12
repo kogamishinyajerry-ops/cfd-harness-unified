@@ -68,6 +68,14 @@ if TYPE_CHECKING:
 _F2_PATH_FACET_THRESHOLD = 10_000
 _F2_PATH_GEOMETRY_TOLERANCE = 1e-12
 
+# F-NEW-20 wall-clock timeout for the gmsh subprocess (seconds).
+# Default 600s = 10 min covers all observed industrial-case meshing
+# durations (case_003 ~minutes, case_006/007/010 ~tens-of-seconds).
+# Override via env GMSH_TIMEOUT_S. See GmshTimeoutError docstring.
+_DEFAULT_GMSH_TIMEOUT_S = float(os.environ.get("GMSH_TIMEOUT_S", "600.0"))
+# Grace window for SIGTERM to land cleanly before SIGKILL escalation.
+_GMSH_TERMINATE_GRACE_S = 10.0
+
 
 def _should_use_f2_path(
     named_solid_count: int,
@@ -108,6 +116,20 @@ class GmshSubprocessError(RuntimeError):
     Codex Round 5 P1 + Round 6 P1: distinguishing this from
     ``GmshMeshGenerationError`` is what keeps the route layer's
     "bad geometry vs backend fault" contract intact.
+    """
+
+
+class GmshTimeoutError(RuntimeError):
+    """Raised when the gmsh subprocess exceeds the wall-clock timeout.
+
+    F-NEW-20 / V35 / V69: gmsh's C++ stages do not yield to in-process
+    Python signal handlers (SIGALRM, signal.set_wakeup_fd), so a
+    cooperative timeout via ``signal.alarm`` cannot interrupt them.
+    Timeout is enforced at the ``multiprocessing.Process`` boundary
+    via ``join(timeout=N)`` + ``terminate()`` + cleanup join. The
+    pipeline maps this to ``failing_check=gmsh_timeout`` (HTTP 504),
+    distinct from ``gmsh_diverged`` (geometry fault 422) and
+    ``GmshSubprocessError`` (deployment fault 5xx crash).
     """
 
 
@@ -1137,6 +1159,7 @@ def run_gmsh_on_imported_case(
     target_cell_count: int | None = None,
     sizing_field: "MeshSizingField | None" = None,
     refinement_zones: "list[MeshRefinementZone] | None" = None,
+    timeout_s: float | None = None,
 ) -> GmshRunResult:
     """Mesh ``stl_path`` with gmsh and write ``output_msh_path``.
 
@@ -1222,8 +1245,32 @@ def run_gmsh_on_imported_case(
             queue,
         ),
     )
+    effective_timeout = (
+        timeout_s if timeout_s is not None else _DEFAULT_GMSH_TIMEOUT_S
+    )
+
     proc.start()
-    proc.join()
+    proc.join(timeout=effective_timeout)
+
+    # F-NEW-20: V35 + V69 — gmsh C++ stages don't yield to Python signal
+    # handlers. Multiprocessing.Process.join(timeout) + terminate is the
+    # only reliable wall-clock fence. If the child is still alive after
+    # the budget, escalate SIGTERM → SIGKILL with a grace window so the
+    # subprocess can clean temp files where possible.
+    if proc.is_alive():
+        proc.terminate()
+        proc.join(timeout=_GMSH_TERMINATE_GRACE_S)
+        if proc.is_alive():
+            proc.kill()
+            proc.join()
+        raise GmshTimeoutError(
+            f"gmsh subprocess exceeded wall-clock timeout "
+            f"{effective_timeout:.1f}s (F-NEW-20). The gmsh C++ stages "
+            "do not yield to in-process Python signals, so termination "
+            "was enforced at the multiprocessing.Process boundary. "
+            "Increase GMSH_TIMEOUT_S env or supply timeout_s= if the "
+            "geometry legitimately requires more time."
+        )
 
     if proc.exitcode != 0 and queue.empty():
         # Codex Round 6 P1: a hard child crash (segfault, OOM kill,

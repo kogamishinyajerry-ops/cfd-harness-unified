@@ -26,6 +26,7 @@ from .cell_budget import BudgetVerdict, classify_cell_count
 from .gmsh_runner import (
     GmshMeshGenerationError,
     GmshRunResult,
+    GmshTimeoutError,
     RefinementZoneError,
     run_gmsh_on_imported_case,
 )
@@ -37,6 +38,7 @@ FailingCheck = Literal[
     "case_not_found",
     "source_not_imported",
     "gmsh_diverged",
+    "gmsh_timeout",
     "cell_cap_exceeded",
     "gmshToFoam_failed",
     "refinement_zone_invalid",
@@ -186,6 +188,11 @@ def mesh_imported_case(
         # Distinct failing_check so the UI can surface the offending
         # zone index + AABB without conflating with mesh-divergence.
         raise MeshPipelineError(str(exc), "refinement_zone_invalid") from exc
+    except GmshTimeoutError as exc:
+        # F-NEW-20: subprocess wall-clock timeout. Distinct failing_check
+        # so the route maps to 504 Gateway Timeout (server-side wait
+        # exhausted) instead of gmsh_diverged 422 (user-geometry fault).
+        raise MeshPipelineError(str(exc), "gmsh_timeout") from exc
     except GmshMeshGenerationError as exc:
         raise MeshPipelineError(str(exc), "gmsh_diverged") from exc
     # Other exception types (ModuleNotFoundError when [workbench] isn't

@@ -30,6 +30,7 @@ _STATUS_FOR_FAILING_CHECK: dict[FailingCheck, int] = {
     "case_not_found": 404,
     "source_not_imported": 400,
     "gmsh_diverged": 422,
+    "gmsh_timeout": 504,  # F-NEW-20: server-side wall-clock timeout
     "cell_cap_exceeded": 422,
     "gmshToFoam_failed": 502,  # downstream container-side failure
     "refinement_zone_invalid": 422,  # V136 (N2.2): zone outside case AABB
