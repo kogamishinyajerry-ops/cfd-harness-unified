@@ -88,6 +88,16 @@ MUTATING_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # polyMesh. Refreshes constant/polyMesh in place; AI dispatch
         # paths must NEVER call this route.
         ("POST", "/api/import/{case_id}/mesh/prism-layers"),
+        # POST /api/cases/{case_id}/physics — DEC-V61-142 (N3.3):
+        # commit MaterialContract + RegimeContract to constant/
+        # physicalProperties + momentumTransport. V130 Principle B —
+        # engineer applies, AI advises; AI dispatch must NEVER call.
+        ("POST", "/api/cases/{case_id}/physics"),
+        # POST /api/cases/{case_id}/bc-contract — DEC-V61-146 (N4.1):
+        # commit structured per-patch BCContract to 0.orig/{U, p}.
+        # V130 Principle B — engineer applies, AI advises; AI dispatch
+        # must NEVER call.
+        ("POST", "/api/cases/{case_id}/bc-contract"),
     }
 )
 
@@ -117,6 +127,17 @@ KNOWN_MUTATION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
         # snappyHexMesh addLayers writer (DEC-V61-137 · N2.3)
         ("ui.backend.services.meshing_snappy.pipeline", "apply_prism_layers"),
         ("ui.backend.services.meshing_snappy", "apply_prism_layers"),
+        # Physics dict writer (DEC-V61-142 · N3.3) — translates
+        # MaterialContract + RegimeContract → constant/physicalProperties
+        # + constant/momentumTransport. AI dispatch paths MUST NEVER
+        # call this; engineer-driven via POST /api/cases/{id}/physics.
+        ("ui.backend.services.physics.writer", "write_physics_dicts"),
+        ("ui.backend.services.physics", "write_physics_dicts"),
+        # BC contract writer (DEC-V61-146 · N4.1) — translates
+        # BCContract → 0.orig/{U, p}. AI dispatch MUST NEVER call;
+        # engineer-driven via POST /api/cases/{id}/bc-contract.
+        ("ui.backend.services.case_bc.writer", "write_bc_dicts"),
+        ("ui.backend.services.case_bc", "write_bc_dicts"),
     }
 )
 
