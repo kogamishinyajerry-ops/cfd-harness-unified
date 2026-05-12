@@ -147,6 +147,59 @@ def test_parse_checkmesh_output_failed_format():
     assert any("SKEWED" in check.upper() for check in result.failed_checks)
 
 
+def test_check_mesh_result_max_non_orthogonality_alias_returns_deg_value():
+    """V73 (2026-05-12) backward-compat: industrial-case consumers
+    predating the `_deg` rename access `max_non_orthogonality` directly.
+    The property must return the canonical `_deg` value, including None
+    when checkMesh aborted before orthogonality was reported."""
+    populated = CheckMeshResult(
+        max_non_orthogonality_deg=69.37,
+        max_skewness=7.5,
+        max_aspect_ratio=54.0,
+        mesh_ok=False,
+        n_severe_non_ortho_faces=0,
+        failed_checks=["x"],
+    )
+    assert populated.max_non_orthogonality == 69.37
+    assert populated.max_non_orthogonality == populated.max_non_orthogonality_deg
+
+    aborted = CheckMeshResult(
+        max_non_orthogonality_deg=None,
+        max_skewness=None,
+        max_aspect_ratio=None,
+        mesh_ok=False,
+        n_severe_non_ortho_faces=None,
+    )
+    assert aborted.max_non_orthogonality is None
+
+
+def test_check_mesh_result_n_failed_checks_returns_failed_checks_length():
+    """V73 (2026-05-12) backward-compat: older consumers used
+    `n_failed_checks: int`. Schema evolved to `failed_checks: list[str]`
+    carrying the richer payload. Property derives the count for
+    consumers that only care about it."""
+    empty = CheckMeshResult(
+        max_non_orthogonality_deg=0.0,
+        max_skewness=0.0,
+        max_aspect_ratio=1.0,
+        mesh_ok=True,
+        n_severe_non_ortho_faces=None,
+        failed_checks=[],
+    )
+    assert empty.n_failed_checks == 0
+
+    populated = CheckMeshResult(
+        max_non_orthogonality_deg=78.4,
+        max_skewness=4.2,
+        max_aspect_ratio=850.5,
+        mesh_ok=False,
+        n_severe_non_ortho_faces=18,
+        failed_checks=["***SKEWED", "***NON-ORTHOGONAL", "aspect ratio high"],
+    )
+    assert populated.n_failed_checks == 3
+    assert populated.n_failed_checks == len(populated.failed_checks)
+
+
 def test_parse_checkmesh_output_handles_missing_metrics_gracefully():
     """Partial output (e.g. checkMesh aborted early) → fields default to
     None / False; parser does NOT raise."""

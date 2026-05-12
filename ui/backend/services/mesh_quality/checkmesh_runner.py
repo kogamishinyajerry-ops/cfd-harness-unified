@@ -110,6 +110,24 @@ class CheckMeshResult:
     # hashable / immutable.
     severe_non_ortho_face_ids: tuple[int, ...] = ()
 
+    # V73 (2026-05-12) backward-compat properties for industrial-case
+    # consumers (e.g. APU bay scripts/07_check_mesh.py) that predate
+    # the `_deg` unit-suffix rename and the `failed_checks: list[str]`
+    # shape change. Older consumers accessed `max_non_orthogonality`
+    # (no suffix) and `n_failed_checks` (int count). These aliases let
+    # them keep working without consumer-side rename pressure. New
+    # code should prefer the canonical fields (`_deg` suffix +
+    # `failed_checks` list) for richer payload.
+    @property
+    def max_non_orthogonality(self) -> float | None:
+        """V73 backward-compat alias for ``max_non_orthogonality_deg``."""
+        return self.max_non_orthogonality_deg
+
+    @property
+    def n_failed_checks(self) -> int:
+        """V73 backward-compat: count derived from ``failed_checks``."""
+        return len(self.failed_checks)
+
 
 # ────────── Regex bank ──────────
 
