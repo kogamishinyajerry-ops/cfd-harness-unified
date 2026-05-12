@@ -28,7 +28,7 @@
 | **D6_advisor** (extra-body-in-fluid) | case_016 + case_018 dispatched · case_016 V55 sediment 2026-05-11 | **1 sediment + 1 dispatched** | speculative · spec drafted | DEFER until case_018 sediment · spec: `methodology/advisor_candidates_a4_a8.md` |
 | **D9_advisor** (over-aggressive simplification) | case_016 + case_017 + case_020 dispatched · case_016 V56 sediment 2026-05-11 | **1 sediment + 2 dispatched** | speculative · spec drafted | DEFER until 2-of-3 sediment · spec: `methodology/advisor_candidates_a4_a8.md` |
 | **D10_advisor** (open-shell beyond watertight) | case_020 dispatched | 0 sediment + 1 dispatched | speculative · spec drafted | DEFER · spec: `methodology/advisor_candidates_a4_a8.md` |
-| **Codex CAD inlet/outlet protocol amendment** | V53 (case_012) | 1 sediment + ALL Phase 1-4 cases at risk | LOW LOC / VERY HIGH frequency | **#2 (this cycle)** — protocol amendment, not new advisor |
+| **Codex CAD inlet/outlet protocol amendment** | V81 (case_012 backfill 2026-05-13) | 1 sediment + 6 dispatched at risk · **LANDED 2026-05-12** | governance amendment + V81 row | **DONE — was #2; protocol amended 2026-05-12 by DEC-V61-198-sub-protocol-inlet-outlet · A8 auto-validator deferred** |
 
 ## Loop closure check on advisor priorities (harvest 002 → harvest 003)
 

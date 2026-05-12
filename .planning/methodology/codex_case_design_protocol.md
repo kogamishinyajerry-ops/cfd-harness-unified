@@ -269,10 +269,116 @@ Before pasting the kickoff into a sub-session, main session runs:
    `^[A-Za-z][A-Za-z0-9_]*$`
 6. **Solver-class match** — does the engineering brief actually
    target the requested solver class?
+7. **Boundary-zone audit** (added 2026-05-12 per DEC-V61-198-sub-protocol-inlet-outlet · V81): for every entry
+   in `parts_manifest.yaml` whose role is `supply` / `return` /
+   `inlet` / `outlet` (or any through-flow boundary), verify the
+   CAD generator emits **either**:
+   - A thin-extrusion body (≤ 5 mm in the boundary-normal direction)
+     **with** a `boundary_emission: thin_extrusion` annotation in
+     parts_manifest, **OR**
+   - A `boundary_zones` entry in parts_manifest specifying bbox +
+     parent patch for a post-mesh `createPatch` carve, **OR**
+   - An explicit `boundary_emission: sealed_room_natural_convection`
+     annotation that documents the brief was knowingly relaxed to
+     sealed-room physics (case_012 v1 honest-evidence pattern; v1.5
+     must still address)
+   If none of the three: validation **FAIL**; Codex must respin with
+   the inlet/outlet emission pattern fixed. See §"Inlet/outlet
+   boundary geometry emission" below for approved emission patterns
 
 If any check fails → main session asks Codex to fix (round-cap=2
 per v2.3 governance). After 2 rounds, escalate to user or fall
 back to a different component bank pick.
+
+## Inlet/outlet boundary geometry emission (added 2026-05-12 · V81 · DEC-V61-198-sub-protocol-inlet-outlet)
+
+When the engineering brief specifies fluid through-flow boundaries
+(supply, return, inlet, outlet), the CAD generator MUST emit those
+boundaries in one of the three approved patterns below — NOT as 3D
+solid bodies that snappyHexMesh will treat as walls. V81 root: case_012
+emitted `supply_inlet` / `return_outlet` as 3D solid bodies (`cq.box(...)`);
+sHM closed-surface meshed them as walls; v1 ran as natural-convection-only
+sealed-room, not the intended HVAC-with-supply-jet case.
+
+### Pattern 1 — Thin-extrusion (cheapest, most-portable; preferred)
+
+Emit the boundary as a 1 mm thin extrusion on the parent wall plane:
+
+```python
+supply_inlet = (
+    cq.Workplane("XY")
+    .center(x, y)
+    .rect(L_inlet, W_inlet)
+    .extrude(0.001)            # 1 mm thick
+)
+# parts_manifest.yaml:
+#   - name: supply_inlet
+#     role: inlet
+#     boundary_emission: thin_extrusion
+#     bbox: [...]
+```
+
+sHM treats the thin extrusion as a fluid opening; `01_extract_stl.py`
+exports the two parallel faces; `snappyHexMeshDict.geometry.<name>{
+type triSurfaceMesh; }` + `meshQualityControls` + `patchInfo { type
+patch; }` correctly registers as a bounded patch.
+
+### Pattern 2 — `createPatch` carve (post-mesh)
+
+Emit the boundary location as metadata in `parts_manifest.yaml` without
+producing geometry; the pipeline post-mesh carves the patch from a
+parent wall via `createPatch`:
+
+```yaml
+boundary_zones:
+  - name: supply_inlet
+    role: inlet
+    type: patch
+    bbox: [x_min, y_min, z_min, x_max, y_max, z_max]
+    carve_from_patch: ceiling
+```
+
+Pipeline scripts run `createPatchDict` after sHM to carve faces from
+the parent wall patch matching the bbox. More setup overhead than
+Pattern 1; preferred when the parent wall is a single large patch
+that would not benefit from explicit geometry.
+
+### Pattern 3 — Named `faceZones` (cadquery API; experimental)
+
+Reserved. Do not use until verified across ≥ 2 cases. Future use:
+cases where the inlet/outlet shape is non-planar (curved manifold,
+swept inlet) and Pattern 1's planar thin extrusion would
+misrepresent the geometry.
+
+### When sealed-room is the honest answer
+
+If the engineering brief turns out to require sealed-room natural
+convection only (no through-flow), document explicitly with
+`boundary_emission: sealed_room_natural_convection` in parts_manifest
+and update the brief. Do not silently fall back to sealed-room when
+the brief specified through-flow — that is the V81 failure mode.
+
+### Risk surface across dispatched cases
+
+Every case with through-flow boundaries inherits this risk: case_013
+(pump), case_015 (T-junction), case_017 (pin-fin air channel),
+case_018 (cyclone), case_019 (mixer), case_020 (filter). Before each
+sub-session dispatch, main session re-verifies the case's CadQuery
+script against Pattern 1 / 2 / 3.
+
+### Out of scope for this protocol amendment
+
+- The **A8-class validator script** (`codex_cad_inlet_outlet_audit.py`)
+  that would automate the audit. Tracked as separate future sub-DEC;
+  this amendment is the governance prevention going forward + manual
+  audit guidance for already-dispatched cases. Skipping the auto-
+  validator keeps this DEC scope minimal (per v2.3 sub-DEC < 250 LOC).
+- Retroactive **case-by-case re-dispatch** of case_013-020. The
+  amendment guides future case design + dispatch verification; cases
+  whose sub-sessions already ran will surface V53-pattern failures
+  case-by-case (per V81 lesson, case_012 found the pattern only at
+  sediment-time; same will hold for sibling cases until manual audit
+  catches them).
 
 If all checks pass → main session writes the case-specific kickoff
 prompt (using the template) and presents to user for sub-session
