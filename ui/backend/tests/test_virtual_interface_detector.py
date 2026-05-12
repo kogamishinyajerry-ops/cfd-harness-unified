@@ -26,6 +26,8 @@ from ui.backend.services.geometry_ingest.virtual_interface_detector import (
     find_endcap_face,
     find_face_facing_target,
     normal_dot,
+    perpendicular_distance,
+    should_have_been_shared_with_unintended_gap,
     validate_interface_coverage,
 )
 
@@ -197,3 +199,135 @@ def test_unknown_mode_returns_unmatched():
     [result] = detect_virtual_interfaces({"X": body}, [spec])
     assert not result.matched
     assert "unknown mode" in result.diagnostic
+
+
+# ---------------------------------------------------------------- A2-v2 gap detection (V25 closure)
+
+
+def test_inter_face_gap_mm_zero_for_touching_faces():
+    """V2 pattern: touching interface → gap_mm == 0.0.
+
+    Two boxes sharing the z=0 plane; both bodies' facing faces are
+    coincident (same centroid). A2-v2 must report gap exactly 0.0
+    so the classifier does NOT fire on clean shared interfaces.
+    """
+    body_a, body_b, _, _ = _shared_pair_bodies()
+    spec = InterfaceSpec(patch_name="ab_iface", mode="shared", body_a="A", body_b="B")
+    [result] = detect_virtual_interfaces({"A": body_a, "B": body_b}, [spec])
+    assert result.matched
+    assert result.inter_face_gap_mm == 0.0
+    # V25 closure: measurement fields no longer hardcoded placeholders
+    assert result.bbox_overlap_fraction == 1.0  # real measurement, identical bboxes
+    assert result.area_diff_fraction == 0.0     # real measurement, identical areas
+
+
+def test_inter_face_gap_mm_positive_for_separated_faces():
+    """case_003 D1 reproduction: planar Z-axis 0.35 mm gap.
+
+    Two axis-aligned boxes whose top-of-A and bottom-of-B faces
+    point at each other with a 0.35 mm Z-axis separation. A2-v2
+    must measure gap ≈ 0.35.
+    """
+    # body A: top face at z=0 (normal +z)
+    face_a = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, -0.005), bbox_max=(1.0, 1.0, 0.0),
+        normal=(0.0, 0.0, 1.0), centroid=(0.5, 0.5, 0.0),
+    )
+    # body B: bottom face at z=0.35 (normal -z, looking down)
+    face_b = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, 0.35), bbox_max=(1.0, 1.0, 0.355),
+        normal=(0.0, 0.0, -1.0), centroid=(0.5, 0.5, 0.35),
+    )
+    body_a = BodyGeometry(name="A", faces=(face_a,), centroid=(0.5, 0.5, -0.5))
+    body_b = BodyGeometry(name="B", faces=(face_b,), centroid=(0.5, 0.5, 0.85))
+    spec = InterfaceSpec(patch_name="d1_gap", mode="shared", body_a="A", body_b="B")
+    [result] = detect_virtual_interfaces({"A": body_a, "B": body_b}, [spec])
+    assert result.matched
+    assert result.inter_face_gap_mm is not None
+    assert abs(result.inter_face_gap_mm - 0.35) < 1e-9
+
+
+def test_inter_face_gap_mm_curved_geometry():
+    """case_005 D1 reproduction: flange-ring axial 0.35 mm gap.
+
+    Approximates the case_005 inlet_flange_ring ↔ inlet_flange_cover
+    geometry with X-axis facing planes separated by 0.35 mm. The
+    cross-topology check: gap measurement is independent of which
+    axis the bodies are arranged along.
+    """
+    face_ring = FaceGeometry(
+        area=2.0, bbox_min=(0.0, 0.0, 0.0), bbox_max=(0.005, 1.0, 1.0),
+        normal=(1.0, 0.0, 0.0), centroid=(0.0, 0.5, 0.5),
+    )
+    face_cover = FaceGeometry(
+        area=2.0, bbox_min=(0.35, 0.0, 0.0), bbox_max=(0.355, 1.0, 1.0),
+        normal=(-1.0, 0.0, 0.0), centroid=(0.35, 0.5, 0.5),
+    )
+    ring = BodyGeometry(name="ring", faces=(face_ring,), centroid=(-0.5, 0.5, 0.5))
+    cover = BodyGeometry(name="cover", faces=(face_cover,), centroid=(0.85, 0.5, 0.5))
+    spec = InterfaceSpec(
+        patch_name="flange_gap", mode="shared", body_a="ring", body_b="cover"
+    )
+    [result] = detect_virtual_interfaces({"ring": ring, "cover": cover}, [spec])
+    assert result.matched
+    assert result.inter_face_gap_mm is not None
+    assert abs(result.inter_face_gap_mm - 0.35) < 1e-9
+
+
+def test_should_have_been_shared_classifier_pass_on_d1_defect():
+    """D1-class defect: 0.35 mm gap → classifier returns True."""
+    face_a = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, -0.005), bbox_max=(1.0, 1.0, 0.0),
+        normal=(0.0, 0.0, 1.0), centroid=(0.5, 0.5, 0.0),
+    )
+    face_b = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, 0.35), bbox_max=(1.0, 1.0, 0.355),
+        normal=(0.0, 0.0, -1.0), centroid=(0.5, 0.5, 0.35),
+    )
+    body_a = BodyGeometry(name="A", faces=(face_a,), centroid=(0.5, 0.5, -0.5))
+    body_b = BodyGeometry(name="B", faces=(face_b,), centroid=(0.5, 0.5, 0.85))
+    spec = InterfaceSpec(patch_name="d1_gap", mode="shared", body_a="A", body_b="B")
+    [result] = detect_virtual_interfaces({"A": body_a, "B": body_b}, [spec])
+    assert should_have_been_shared_with_unintended_gap(result) is True
+
+
+def test_should_have_been_shared_classifier_fail_on_clean_interface():
+    """V2 pattern: touching interface (gap=0) → classifier returns False."""
+    body_a, body_b, _, _ = _shared_pair_bodies()
+    spec = InterfaceSpec(patch_name="ab_iface", mode="shared", body_a="A", body_b="B")
+    [result] = detect_virtual_interfaces({"A": body_a, "B": body_b}, [spec])
+    assert should_have_been_shared_with_unintended_gap(result) is False
+
+
+def test_should_have_been_shared_classifier_fail_on_no_match():
+    """No facing-face candidates (matched=False) → classifier returns False."""
+    # Same setup as test_case2: two boxes far apart, no facing planes
+    face_a = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, 0.0), bbox_max=(1.0, 1.0, 0.01),
+        normal=(0.0, 0.0, 1.0), centroid=(0.5, 0.5, 0.005),
+    )
+    face_b = FaceGeometry(
+        area=1.0, bbox_min=(10.0, 10.0, 0.0), bbox_max=(11.0, 11.0, 0.01),
+        normal=(0.0, 0.0, 1.0), centroid=(10.5, 10.5, 0.005),
+    )
+    body_a = BodyGeometry(name="A", faces=(face_a,), centroid=(0.5, 0.5, 0.5))
+    body_b = BodyGeometry(name="B", faces=(face_b,), centroid=(10.5, 10.5, 0.5))
+    spec = InterfaceSpec(patch_name="iface", mode="shared", body_a="A", body_b="B")
+    [result] = detect_virtual_interfaces({"A": body_a, "B": body_b}, [spec])
+    assert not result.matched
+    assert should_have_been_shared_with_unintended_gap(result) is False
+
+
+def test_perpendicular_distance_helper_axis_aligned():
+    """The helper is exported and works on raw FaceGeometry pairs."""
+    fa = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, -0.005), bbox_max=(1.0, 1.0, 0.0),
+        normal=(0.0, 0.0, 1.0), centroid=(0.5, 0.5, 0.0),
+    )
+    fb = FaceGeometry(
+        area=1.0, bbox_min=(0.0, 0.0, 0.35), bbox_max=(1.0, 1.0, 0.355),
+        normal=(0.0, 0.0, -1.0), centroid=(0.5, 0.5, 0.35),
+    )
+    assert abs(perpendicular_distance(fa, fb) - 0.35) < 1e-9
+    # Symmetry: should not depend on argument order (absolute value)
+    assert abs(perpendicular_distance(fb, fa) - 0.35) < 1e-9

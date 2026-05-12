@@ -12,14 +12,14 @@
 |---|---|---|---|
 | `geometry_surgery.py` (205 LOC) | A3 — decimate-by-tier + axial stretch | case_005 v1 PARTIAL (V17 scope-narrow on D2 redundancy) | scope-expansion sub-DEC arc opened (low priority — single-instance) |
 | `thin_wall_advisor.py` (210 LOC) | V10 advisor — bbox-min vs cell-size | case_002a/b origin + 7-topology cross-topology arc PASS (case_003/004/006/007/008/010/011) | **[VALIDATED]** — most robust advisor in stack; case_011 V48/V50 demonstrates pre-mesh PASS correctly predicts post-mesh sHM struggle |
-| `virtual_interface_detector.py` (246 LOC) | A2 v1 — V2-pattern shared-interface detection | 10-of-10 cross-topology PASS (case_003/004/005/006/007/008/009/010/011/012); ALL placeholder-semantic per V25 | **scope-narrow per V25**; A2-v2 sub-DEC drafted (`patches/draft_a2_v2_gap_detection_2026-05-08.md`) but **NOT LANDED** — see harvest 003 #2 |
+| `virtual_interface_detector.py` (~290 LOC post-A2-v2) | A2 v1 + A2-v2 — V2-pattern shared-interface detection + D1-class gap-defect classifier | 10-of-10 cross-topology PASS (case_003/004/005/006/007/008/009/010/011/012); v1 placeholder-semantic closed by A2-v2 | **A2-v2 LANDED 2026-05-12 (DEC-V61-198-sub-A2v2)** — `inter_face_gap_mm` + `perpendicular_distance` + `should_have_been_shared_with_unintended_gap` classifier; 18-test suite green; V25 closed; V22/V33/V36/V42/V43/V50 [QUESTIONABLE 2026-05-08] markers field-validated |
 | `stl_loader.py` / `patch_detector.py` / `health_check.py` | Utilities | All cases reuse | (utility, not advisory) |
 
 ## Pending advisor extractions (priority-scored for harvest 003)
 
 | Artifact | Trigger source | Compounded count (sediment + dispatched) | Score = N × HIGH / LOC | Priority |
 |---|---|---|---|---|
-| **A2-v2** — gap-distance API + classifier | V25 (open since 2026-05-08) | **10 sediment + 5 dispatched-deferred = 15** | 15 × HIGH / 185 LOC = **OVERWHELMING** | **#1 — top of harvest 003** |
+| **A2-v2** — gap-distance API + classifier | V25 (closed 2026-05-12 by DEC-V61-198-sub-A2v2) | **LANDED** | 174 LOC source+test; under 250 sub-DEC ceiling | **DONE — was #1; closed by Claude Code main session 2026-05-12** |
 | **A6** — `hvac_adpi.py` ADPI/throw/dumping post-processor | case_012 v1 sediment | 1 sediment + N dispatched (012/015 likely) | 1 × MED / 150 LOC = LOW | DEFER until 2nd HVAC-class case |
 | **A7** — `step_canonicalizer.py` | V51 (case_012 + cross-checked case_002a/case_005/case_011) | **4 sediment** (timestamp-determinism observed in all four) | 4 × MED / 80 LOC = **MEDIUM-HIGH** | **#3 (this cycle)** — bundle into Codex-protocol fix arc |
 | **A8** — `shm_dict_validator.py` | V52 (case_012) | 1 sediment + N dispatched (HVAC-class + porous filter likely) | 1 × MED / 120 LOC = LOW | DEFER until 2nd typo-class case |

@@ -78,13 +78,13 @@ If yes → V-series. If no → F-series.
 | V16 | Codex `cq.Compound.makeCompound` STEP fragments via FreeCAD | cad | 003 | partial |
 | V17 | A3 advisor lacks redundancy/overlay-detection logic | A3 | 005 | open |
 | V18 | Compressible-RANS pseudo-steady mass imbalance (SIMPLE+totalP) | N-comp-rans | 005 | partial |
-| V19 | A2 advisor lacks sub-mm gap-as-defect detection (V2-pattern only) | A2 / D1 | 005 | superseded by V25 |
+| V19 | A2 advisor lacks sub-mm gap-as-defect detection (V2-pattern only) | A2 / D1 | 005 | superseded by V25 · A2-v2 landed |
 | V20 | Tier-1 STEP unit-context lost on cadquery roundtrip | cad / infra | 003 | open |
-| V21 | A2 field contradiction case_003 PASS vs case_005 V19 FAIL | A2 / D1 | 005 | closed by V25 |
-| V22 | A2 `_run_shared` cross-topology PASS on rotating-machinery | A2 / D1 | 004 | Q-2026-05-08 |
+| V21 | A2 field contradiction case_003 PASS vs case_005 V19 FAIL | A2 / D1 | 005 | closed by V25 · A2-v2 landed |
+| V22 | A2 `_run_shared` cross-topology PASS on rotating-machinery | A2 / D1 | 004 | closed · A2-v2 landed 2026-05-12 |
 | V23 | thin_wall_advisor field-validation on rotating-machinery aux | A1 | 004 | V-4x |
 | V24 | V16 fragmentation reproduced in case_004 rotating-machinery | cad | 004 | partial |
-| V25 | A2 `_run_shared` placeholder semantic (shared vs should-be-shared) | A2 / D1 | 005 v2 | open (A2-v2 pending) |
+| V25 | A2 `_run_shared` placeholder semantic (shared vs should-be-shared) | A2 / D1 | 005 v2 | closed 2026-05-12 · A2-v2 landed (DEC-V61-198-sub-A2v2) |
 | V26 | Codex CAD off-by-half-width on `centered=True` cq.box origin | cad | 006 | closed |
 | V27 | rhoCentralFoam fixed deltaT yields catastrophic Co at iter 1 | N-shock | 006 | closed |
 | V28 | rhoCentralFoam fvSolution DILU unavailable for symmetric matrices | N-shock | 006 | closed |
@@ -92,24 +92,24 @@ If yes → V-series. If no → F-series.
 | V30 | thin_wall_advisor extreme-thinness validation: 0.18 mm sliver | A1 | 006 | V-4x |
 | V31 | Codex defect→advisor mapping wrong for D4 sliver | cad | 006 | closed |
 | V32 | Tier-1 NASA Glenn HTTP 500 + SSL double-blocker | infra | 006 | workaround |
-| V33 | A2 `_run_shared` cross-topology PASS on ship-hydro (4th) | A2 / D1 | 007 | Q-2026-05-08 |
+| V33 | A2 `_run_shared` cross-topology PASS on ship-hydro (4th) | A2 / D1 | 007 | closed · A2-v2 landed 2026-05-12 |
 | V34 | sHM free-surface band + near-hull box saturates maxGlobalCells | N-vof | 007 | partial |
 | V35 | interFoam + kOmegaSST requires `wallDist` in fvSchemes | N-vof | 007 | closed |
-| V36 | A2 cross-topology PASS on incompressible-RANS-Lag (5th) | A2 / D1 | 008 | Q-2026-05-08 |
+| V36 | A2 cross-topology PASS on incompressible-RANS-Lag (5th) | A2 / D1 | 008 | closed · A2-v2 landed 2026-05-12 |
 | V37 | thin_wall 6-topology arc closed `[VALIDATED]` | A1 | 008 | V-6x |
 | V38 | chemkinToFoam requires `THERMO ALL` header | N-react | 009 | closed |
 | V39 | chemkinToFoam transport file requires explicit `END` | N-react | 009 | closed |
 | V40 | chemkinToFoam transport-input is dual-mode | N-react | 009 | closed |
 | V41 | GRI-3.0 Tlow=300 clamp + buoyancy coflow inlet T=291 | N-react | 009 | partial |
-| V42 | A2 cross-topology PASS on combustion-burner (6th) | A2 / D1 | 009 | Q-2026-05-08 |
-| V43 | A2 cross-topology PASS on vehicle-aero (7th, roster closed) | A2 / D1 | 010 | Q-2026-05-08 |
+| V42 | A2 cross-topology PASS on combustion-burner (6th) | A2 / D1 | 009 | closed · A2-v2 landed 2026-05-12 |
+| V43 | A2 cross-topology PASS on vehicle-aero (7th, roster closed) | A2 / D1 | 010 | closed · A2-v2 landed 2026-05-12 |
 | V44 | thin_wall 7-topology arc reinforces `[VALIDATED]` | A1 | 010 | V-7x |
 | V45 | First transient LES infra: pimpleFoam + WALE + FOs | N-les | 010 | closed |
 | V46 | sHM 4.6M bg-cell vehicle aero interrupted at refinement iter 2 | N-les | 010 | partial |
 | V47 | sHM `minMedialAxisAngle` vs `minMedianAxisAngle` typo silent fail | infra | 015 | closed · playbook S24 |
 | V48 | chtMR controlDict FOs need explicit `region` keyword | N-les-cht | 015 | closed |
 | V49 | Wall-modeled LES at conjugate baffle needs compressible:: triplet | N-les-cht | 015 | partial · playbook S22 · A8 candidate |
-| V50 | A2 cross-topology PASS on pipe-pipe weld-toe (12th) | A2 / D1 / D5 | 015 | Q-2026-05-08 |
+| V50 | A2 cross-topology PASS on pipe-pipe weld-toe (12th) | A2 / D1 / D5 | 015 | closed · A2-v2 landed 2026-05-12 |
 | V51 | sHM multi-region cellZone on intersecting volumes silently degrades | N-les-cht | 015 | open · playbook S24 · A8 candidate |
 | V52 | kOmegaSSTIDDES registered under simulationType LES not RAS | N-des | 016 | partial · playbook S23 |
 | V53 | Compressible PIMPLE `transonic yes` → p asymmetric → need PBiCGStab | N-des | 016 | partial · playbook S23 |
@@ -367,7 +367,7 @@ If yes → V-series. If no → F-series.
 | Engineer symptom | `_run_shared` (lines 179-204 of `virtual_interface_detector.py`) returns a `DetectedInterface` with `matched=True` whenever it finds a face on either body whose normal aligns with the centroid-direction. The result fields `bbox_overlap_fraction=1.0`, `area_diff_fraction=0.0` are **hardcoded placeholders** (line 200-201), not measurements. The actual inter-face gap distance is never computed and never returned. case_005 D1 (0.35 mm flange gap, V21 disambiguation 2026-05-08 v2): `_run_shared` returns `matched=True` for both orderings (ring↔cover and cover↔ring), `body_owner='inlet_flange_ring'` or `'inlet_flange_cover'`, hardcoded `bbox_overlap_fraction=1.0`. Identical positive output as case_003 (clean 0.35mm gap, reported as PASS) and case_004 (clean 0.30mm gap, reported as PASS). All three cases — case_003 D1 + case_004 D1 + case_005 D1 — produce the SAME result shape from `_run_shared`. The advisor cannot tell the engineer whether the gap is 0 mm (clean shared interface) or 0.35 mm (defective separation). |
 | Root cause | `_run_shared`'s contract is "find a candidate facing-face on each body when the engineer SAYS via InterfaceSpec(mode='shared') that they SHOULD share an interface" — this is a confirmation step for the V2 pattern (BREP `isSame()` failed on non-manifold STEP, but the bodies are in geometric contact and the engineer needs to retain that interface as a shared OpenFOAM patch). It was NOT designed to detect the COMPLEMENTARY case: bodies the engineer SHOULD share but accidentally didn't (D1 sub-mm gap defect). The result schema reflects the V2 design intent: matched=True/False is enough to drive the patch-emission code; the geometric measurements (`bbox_overlap_fraction`, `area_diff_fraction`, `normal_dot`) are only meaningful in the `_run_endcap` path — for `_run_shared` they are stub placeholders. Reading the code, the two `1.0` and `0.0` literals on lines 200-201 are documentation-via-default, not computed quantities |
 | Fix | (1) **A2 v2 API extension**: add `inter_face_gap_mm: float | None` field to `DetectedInterface`; populate from `||fa.centroid - fb.centroid||` projected onto the centroid-direction (or use the perpendicular distance between the two facing-face planes) when both fa and fb are non-None. (2) Add `should_have_been_shared_with_unintended_gap(detected, max_gap_mm) -> bool` classifier downstream of `detect_virtual_interfaces`: returns True when `matched=True` AND `inter_face_gap_mm > 0` AND `inter_face_gap_mm < max_gap_mm`. (3) Compute and return real `bbox_overlap_fraction` / `area_diff_fraction` measurements in `_run_shared` (currently placeholders) so cross-case PASS reports can be compared on actual measurements, not on positive-vs-negative verdict alone. (4) Document A2 contract: "matched=True does NOT imply gap=0; the engineer must check `inter_face_gap_mm` separately." (5) **Sub-session implication**: case_003 and case_004 sub-sessions reported A2 PASS as positive evidence the advisor "works" — under V25, those PASSes confirm only that `find_face_facing_target` runs and finds candidate faces. They do NOT field-validate A2 as a gap-defect detector, because A2 has no gap-defect detector. **Recommend main session re-interpret case_003 + case_004 reference profiles** to clarify A2's PASS = "advisor algorithm runs cleanly + finds facing-face candidates on axis-aligned bodies" (true), NOT "advisor detects sub-mm gap as defect" (the latter requires V25's API extension that is not yet implemented) |
-| Status | **open** — first sourced 2026-05-08 v2 in case_005 V21 disambiguation. Not visible from case_003 / case_004 alone because their PASS reports only printed `matched=True` (which IS the placeholder output). Visible from V21 cross-case investigation when case_005 v1 FAIL provoked re-examination of the public API. Expected resolution: A2 v2 API extension as the first deliverable of the advisor-scope-expansion sub-DEC under DEC-V61-198 |
+| Status | **closed 2026-05-12 by DEC-V61-198-sub-A2v2** — A2-v2 lands: `inter_face_gap_mm: float | None = None` field added to `DetectedInterface`; `perpendicular_distance(fa, fb)` helper; `_run_shared` rewritten to compute real measurements (replacing v1 placeholders) and populate gap when both bodies contribute a facing face; `should_have_been_shared_with_unintended_gap(detected, max_gap_mm=1.0) -> bool` classifier added. Tests 11→18 (added 7 new: zero-for-touching / positive-for-separated / curved / classifier-pass / classifier-fail-clean / classifier-fail-no-match / helper-symmetric). All 18 green. V25's claim "A2 has no gap-defect detector" was true 2026-05-08; A2-v2 closes it. V22/V33/V36/V42/V43/V50 [QUESTIONABLE 2026-05-08] markers now field-validated (their cross-topology PASSes pre-date the classifier; the classifier landing means those PASSes can now be retroactively cross-checked against gap measurements when case sub-sessions re-run with the new API) |
 | Reference case | case_005_rae_m2129_sduct V21 disambiguation (2026-05-08 v2, `evidence/v2_a2_run_shared.json`); cross-case implication for case_003 + case_004 D1 PASSes (re-interpretation needed by main session) |
 | Lesson | When an advisor's PASS report relies on a single boolean (matched=True), and the geometric measurement fields surrounding the boolean are HARDCODED PLACEHOLDERS rather than computed quantities, **the PASS does not validate what the engineer thinks it validates**. case_003 PASS confirmed "_run_shared finds facing-face candidates on axis-aligned planar boxes"; that's a real signal. It did NOT confirm "A2 detects sub-mm gap as defect" because A2's API has no surface for that signal. **Pillar 2 reinforcement**: case_005 V21 disambiguation surfaces a finding that affects how case_003 + case_004 PASSes should be interpreted — one industrial case can retro-correct multi-case sediment when it tests a code path the others missed. **Pattern 5 corollary**: V19's v1 verdict (PARTIAL) was directionally correct on the conclusion ("A2 doesn't catch D1") even though the mechanism diagnosis was wrong. v1 simplification's robustness depends on the conclusion being directionally correct; subsequent disambiguation can sharpen the mechanism without invalidating the v1 directional signal |
 
