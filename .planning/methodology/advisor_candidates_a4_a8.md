@@ -50,9 +50,9 @@ in this doc + the V-row, INDEX.md cross-link.
 | Defect class | D7 — "wrong-normal-direction face" (`component_bank.md` L128); generalized to "component rotated from intended orientation" |
 | Signature | A face or body whose dominant face normal deviates from a declared/sibling-consensus orientation by more than a per-group tolerance (default 5°) |
 | Engineering symptom | Silent flow-pattern asymmetry (rotated diffuser vane → asymmetric jet throw), or sHM `locationInMesh` ambiguity if normal is fully reversed |
-| Current evidence | **1 / 2** (V78 case_012 first injection · case_013 dispatched · deferred) |
+| Current evidence | **1 / 2** (V79 case_012 first injection · case_013 dispatched · deferred) |
 | Status | `drafted` — pending case_013 sediment |
-| V-row(s) | V78 (case_012 first injection · backfilled 2026-05-12) |
+| V-row(s) | V79 (case_012 first injection · backfilled 2026-05-12) |
 | Sibling | Parallel to V55 (A5 / D6) and V56 (A6 / D9) advisor-gap surfacers |
 
 **Pre-drafted spec**:
@@ -86,7 +86,7 @@ Downstream classifier: `body_has_rotation_defect(anomaly, sibling_consensus_deg)
 | Current evidence | **1 / 2** (V55 case_016 first injection · case_018 dispatched · deferred) |
 | Status | `drafted` — pending case_018 sediment |
 | V-row(s) | V55 (case_016 first injection 2026-05-11) |
-| Sibling | Parallel to V78 (A4 / D7) and V56 (A6 / D9) |
+| Sibling | Parallel to V79 (A4 / D7) and V56 (A6 / D9) |
 
 **Pre-drafted spec**:
 
@@ -120,7 +120,7 @@ overlap classifier V59).
 | Current evidence | **1 / 2** (V56 case_016 first injection · case_017 + case_020 dispatched · deferred) |
 | Status | `drafted` — pending case_017 OR case_020 sediment |
 | V-row(s) | V56 (case_016 first injection 2026-05-11) |
-| Sibling | Parallel to V78 (A4 / D7) and V55 (A5 / D6) |
+| Sibling | Parallel to V79 (A4 / D7) and V55 (A5 / D6) |
 
 **Pre-drafted spec**:
 
@@ -234,7 +234,7 @@ allocation deferred to harvest-003 retrospective.
       second injection
 - [ ] Verify A6 has ≥ 2 V-rows (V56 + case_020 D9) → flip status
       `drafted` → `ready-to-land`
-- [ ] If case_013 sediment landed: verify A4 has ≥ 2 V-rows (V78 + case_013 D7)
+- [ ] If case_013 sediment landed: verify A4 has ≥ 2 V-rows (V79 + case_013 D7)
       → flip A4 status
 - [ ] If case_018 sediment landed: verify A5 has ≥ 2 V-rows (V55 + case_018 D6)
       → flip A5 status
@@ -247,7 +247,7 @@ allocation deferred to harvest-003 retrospective.
 
 ## References
 
-- `methodology/industrial_case_solver_findings.md` V55 / V56 / V78
+- `methodology/industrial_case_solver_findings.md` V55 / V56 / V79
 - `methodology/component_bank.md` Defect Catalog (D6 / D7 / D9 / D10)
 - `case_profiles/case_012_hvac_supply_diffuser.md` §"Defects"
 - `case_index.md` rows for case_012 / case_013 / case_016 / case_017 /
