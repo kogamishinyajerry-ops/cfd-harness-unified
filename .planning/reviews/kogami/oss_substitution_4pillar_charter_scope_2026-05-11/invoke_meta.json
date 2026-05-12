@@ -1,0 +1,26 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "f4eb469f0de1bd9acaa023b0f6ef48f687a5f47653199b0c50e463fea8b2513f",
+  "empty_cwd": "/tmp/strategic_brief_cwd_8PVZ8q",
+  "trigger": "manual-invoke-charter-strategic-review",
+  "artifact": ".planning/strategic/oss_substitution_4pillar_brief_2026-05-11.md",
+  "invoked_at_utc": "2026-05-11T07:59:44Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 1,
+    "duration_ms": 97851,
+    "total_cost_usd": 1.8524455000000002,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "99f736fa-0838-424c-824b-9654c907f856",
+    "uuid": "1acd4084-398e-4418-bf7f-a6c2b65039dd",
+    "model_keys": [
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 277660,
+    "cache_read_tokens": 6891,
+    "output_tokens": 4544
+  }
+}

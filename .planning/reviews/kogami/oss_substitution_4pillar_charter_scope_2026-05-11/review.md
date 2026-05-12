@@ -1,0 +1,81 @@
+# Kogami Review · oss_substitution_4pillar_charter_scope · 2026-05-11
+
+**Verdict**: `APPROVE_WITH_COMMENTS`
+**Recommended next**: `revise`
+**Trigger**: manual-invoke-charter-strategic-review
+**Artifact**: `.planning/strategic/oss_substitution_4pillar_brief_2026-05-11.md`
+**Prompt SHA256**: `f4eb469f0de1bd9acaa023b0f6ef48f687a5f47653199b0c50e463fea8b2513f`
+
+## Summary
+
+The 4-pillar charter brief is decision-arc coherent with V130/V198 pivots and the advisor philosophy, and the four-question gate pre-answers are honest about the P2/P3 offline-degradation risks. Main-session correctly identifies and corrects three structural issues (M-naming mismatch, V198 A1 unfilled, N6 advisor stack already shipped) before Kogami sees them, which is the right discipline. Remaining gaps are scope-discipline tightening, missing risk codification (license/supply-chain, advisor-philosophy creep on P3, V198 §S5 cadence enforcement), and the need to commit to option C explicitly with a stated trigger for P4 charter authoring.
+
+## Strategic Assessment
+
+This brief is decision-arc coherent with the V130 advisor pivot (2026-05-07), V198 APU bay industrial pivot (2026-05-07), DEC-V61-133 v2.3 governance simplification (B+ scope/freedom), and the user-as-first-customer Pivot Charter. It correctly inherits from V198's substrate-philosophy (industrial-case dogfood as primary signal) and respects N6's already-shipped advisor stack (proposing increment, not rewrite). Roadmap fit is strong for P1/P2/P3 — they directly extend the workbench's industrial CFD capability along axes V198 §S5 demands (CAD healing, mesh diagnostic, advisor coverage). P4 is roadmap-incremental but territory-distinct (V4 multi-engine), correctly flagged for separation. The four-question-gate pre-answers in §4 are unusually honest about offline-degradation risks for P2 and P3, which is the right discipline. The main strategic concern is anti-list completeness and dependency-ingest policy — without those codified at charter level, sub-DECs will re-litigate them under round-cap pressure. Main-session's leaning toward option C (single charter for P1+P2+P3, defer P4) is correct and should be ratified with a signal-driven trigger for the V4 charter.
+
+## Findings
+
+### [P1] P3 MeshGraphNet advisor-philosophy compatibility under-examined
+**Position**: §3.3 Q3 + §1.4 Pillar 3
+
+**Problem**: Brief frames Q3 as a UX-coexistence question (rules vs ML / parallel/replace/layered) but does not interrogate the deeper advisor-philosophy invariant: a probabilistic ML model that outputs 'recommended sHM refinement level' with a confidence score is operationally indistinguishable from an actor when the engineer's default action becomes 'click accept'. V130 advisor pivot was driven precisely by this failure mode in the AI-mutate-on-write era. Without an explicit acceptance criterion that engineers must justify (in artifact) any divergence from rules-based when ML overrides it, P3 risks becoming a soft-actor by accumulation, not by design.
+
+**Recommendation**: Charter must codify a P3-specific four-question Q4 sub-clause: (a) ML output is rendered as 'evidence' alongside rules-based output, never as primary; (b) engineer must record acceptance/rejection in artifact with one-line rationale when ML and rules disagree; (c) measure 'rejection rate' as a leading indicator of advisor-actor drift (target: ≥20% rejection in steady state, else investigate). This makes Q3 answerable on philosophy grounds, not just UX grounds.
+
+### [P1] Anti-list missing 3 load-bearing items surfaced by RETROs and V-series
+**Position**: §1.5 + §6
+
+**Problem**: Brief asks Kogami to evaluate anti-list completeness. Three load-bearing absences: (1) 'No mesh-RL closed-loop' — already mentioned in §6 as Kogami-eval candidate but not codified; should be in §1.5 because RL closed-loop is the natural slippage path for P3 and re-litigates V130. (2) 'No automated CAD healing without engineer confirm-button' — P2 boundary against the SALOME pillar becoming an actor; the brief's P2 acceptance hints at this but anti-list should make it permanent. (3) 'No NVIDIA PhysicsNeMo checkpoint as production dependency without offline mirror + version-pin' — supply-chain risk that the Q1 risk discussion in §4 surfaces but doesn't codify as a 'don't' (ties to P1 below).
+
+**Recommendation**: Add three rows to §1.5 with the same '别做 / 原因' format. The reason column should reference the prior decision arc (V130 for #1, advisor-philosophy for #2, executable_smoke_test risk_flag from RETRO-V61-053 for #3).
+
+### [P1] Supply-chain / license / offline-installability not treated as charter-level constraint
+**Position**: §4 Q1 column for P3 + missing §1.5 entry
+
+**Problem**: P3 depends on NVIDIA PhysicsNeMo Apache-2.0 checkpoint (download-required at first run); P2 depends on SALOME 9.15 (~2GB Docker image); P4 depends on SU2 v8.1 binary. The Q1 risk is noted for P3 only, but the charter does not propose a uniform offline-mirror + version-pin policy across all three. This is a sub-DEC nightmare waiting to happen: one sub-DEC ships P3 with a curl-from-NVIDIA install path, another ships SALOME with apt-from-upstream, and the four-question gate Q1 (LLM offline) becomes formally satisfied while the full workbench is silently network-dependent.
+
+**Recommendation**: Charter must include a 'Dependency-ingest policy' clause: every external dependency (model checkpoint, Docker image, binary) lands with (a) SHA256-pinned offline cache under .planning/external_cache/ or knowledge/external_models/, (b) a regenerable fetch script with deterministic output, (c) failure-mode documentation if cache miss + offline. This is the project's existing pattern (per .planning/cad_cache/ from public_cad_sources.md) and should be explicit, not inherited.
+
+### [P1] V198 §S5 monthly industrial-case cadence enforcement under-specified
+**Position**: §3.4 Q4
+
+**Problem**: Brief asks Kogami to pick between hard codify / soft risk-list / per-sub-DEC handling for monthly-case cadence. The right answer is hard codify, but the brief does not propose the enforcement mechanism. Without a mechanism, 'every 4-week sprint must include ≥1 industrial case' becomes aspirational. Given the 36-50 person-day pillar work directly competes with case-thread bandwidth, and case_index.md shows 8 case_profiles already queued (case_003-case_010), structural tension is real and immediate.
+
+**Recommendation**: Codify as: (a) charter declares a 4-week rolling window invariant; (b) sub-DEC discuss-phase template gains a mandatory field 'monthly_case_status: on-track | at-risk | blocked-by-this-DEC'; (c) any sub-DEC marking itself blocked-by-this-DEC for ≥2 consecutive weeks auto-triggers a Kogami advisory review on whether to pause the pillar. Mechanism mirrors RETRO-V61-001 cadence-driven retros — proven pattern in this project.
+
+### [P2] Charter topology Q1 — option C is the right call but trigger for the P4 V4 charter is unspecified
+**Position**: §3.1 Q1
+
+**Problem**: Main-session correctly leans toward option C (P1+P2+P3 single charter, P4 deferred to V4 charter). The reasoning is sound: P4 SU2 is the only V4-territory work and bundling it with N6/V198-territory pillars creates governance-cadence mismatch. However, 'P4 in the V4 charter when the four-pillar dust settles' is too vague — what specifically triggers V4 charter authoring?
+
+**Recommendation**: Adopt option C explicitly with stated trigger: 'P4 V4 charter is authored when (a) P1 charter has ≥1 sub-DEC accepted AND (b) at least one BlueprintV4 physics-extension proposal (compressibility, multiphase, multi-engine) has been independently surfaced in case_proposal_queue.md or main-session work plan'. This converts a soft 'eventually' into a signal-driven trigger consistent with project's no-calendar-gating discipline (per RETRO-V61-006 Addendum 5).
+
+### [P2] P1 FAISS-vs-keyword question better deferred to data-driven sub-DEC than pre-decided in charter
+**Position**: §3.2 Q2
+
+**Problem**: Main-session asks Kogami to decide whether FAISS belongs in the P1 charter. This is a code-architecture decision, not a strategic one — Kogami is the wrong layer to adjudicate. The strategically correct framing: charter declares the corpus-extension goal (V-series + CFDLLMBench injection) without prescribing index implementation, and the first P1 sub-DEC's discuss-phase enumerates real failure modes of the existing keyword+anchor on the expanded corpus. If failure modes warrant FAISS, sub-DEC ships FAISS; if not, sub-DEC documents why keyword+anchor sufficed.
+
+**Recommendation**: Charter should NOT pre-decide FAISS. It should declare: (a) P1 sub-DEC #1 = corpus expansion (V-series + CFDLLMBench) on existing keyword+anchor architecture; (b) P1 sub-DEC #2 = empirical retrieval-failure-mode audit on expanded corpus; (c) P1 sub-DEC #3 (conditional on #2 findings) = index-architecture decision. This preserves N6 contracts (CitedChunk, corpus_sha, chunk_id:sha16) by default and only breaks them with evidence.
+
+### [P2] P2 SALOME prerequisite framing — A1 should be charter-level prerequisite, not a sub-DEC option
+**Position**: §2.2 + §5
+
+**Problem**: Brief offers two options for V198 A1 (cad_ingest_freecad.py): pre-extract before P2 starts, OR fold A1 into P2 charter as first sub-DEC. Both options are presented as equivalent. They are not — the V198 strategic charter (DEC-V61-198) explicitly identified A1 as the first deliverable in its 5-artifact extraction list, and it has been unfilled for 4 days. P2 inheriting A1 muddies the V198 closure status and creates a cross-charter dependency that complicates retro accounting.
+
+**Recommendation**: Charter must declare A1 extraction as a hard prerequisite gate on P2 sub-DEC #1. This is not a P2-internal sub-DEC; it is V198 closure work that P2 cannot start without. Frame it as: 'P2 charter ratification is contingent on V198 A1 extraction being Accepted'. This preserves V198's strategic-charter integrity and avoids charter-scope blur.
+
+### [P2] Hidden risk — RAG corpus injection of V-series creates a confidentiality / scope-leak vector
+**Position**: §7 hidden risks (not enumerated)
+
+**Problem**: P1 proposes injecting V-series + CFDLLMBench 110-case into the advisor corpus. The V-series corpus includes case_002 APU bay industrial reference (real industrial geometry context) and likely future case_NNN profiles with engineer-private rationale. The advisor will surface these in TrustGate top-K diff outputs, including potentially sensitive industrial-context strings. rag_corpus_format.md §'Privacy / governance constraints' already flags this for the 'no PII / customer data' axis but the charter brief doesn't carry the constraint forward into P1 acceptance.
+
+**Recommendation**: P1 charter acceptance must require: (a) every V-series corpus entry carries a 'redacted: bool' field; (b) corpus_loader has a sanitization pre-pass that fails-closed if a redacted entry attempts to enter the index; (c) TrustGate top-K output respects redaction (cite-by-anonymized-id, never quote redacted strings). Treat as a sub-DEC #1 acceptance criterion for P1, not a downstream concern.
+
+### [P3] Brief uses M-naming in §1 but reconciles in §2 — cleaner to use territory-tags throughout
+**Position**: §1.4 vs §5
+
+**Problem**: Pillar headers in §1.4 still use 'M6 / M2 / M2.5 / M4' naming inherited from main-session's strategic input verbatim, even though §2.1 explicitly corrects this. Kogami had to cross-reference §2.1 to evaluate §1.4. Charter draft should adopt the corrected territory-tag naming (P1=N6+, P2=V198-fix-arc, P3=N2-advisor-ext, P4=V4-multi-engine-P1) in the first sentence of each pillar.
+
+**Recommendation**: In the eventual charter (not this brief), pillar headers use territory tags exclusively. Brief is fine as-is for review purposes since §2.1 is upfront.
+
