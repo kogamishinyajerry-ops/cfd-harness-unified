@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -30,7 +31,20 @@ def temp_reports(tmp_path: Path, repo_root: Path) -> Path:
 @pytest.fixture
 def run_subprocess():
     def _run(args):
-        return subprocess.run(args, capture_output=True, text=True, check=False)
+        env = {**os.environ}
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            str(SRC_ROOT)
+            if not existing_pythonpath
+            else f"{SRC_ROOT}{os.pathsep}{existing_pythonpath}"
+        )
+        return subprocess.run(
+            args,
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
     return _run
-
