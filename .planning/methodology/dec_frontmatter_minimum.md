@@ -41,7 +41,30 @@ external_gate_actual_outcome: <rounds summary>
 |---|---|---|
 | **Charter / governance-rule-change** | Full (all relevant fields) | V130 (workbench-first pivot), V133 (this), V61-087 (Kogami bootstrap) |
 | **Sub-DEC under a charter** | Slim (6 required + as needed) | V131 (envelope hard-strip), V132 (MUTATING_ROUTES registry), future N2.x / N3.x |
+| **Spike** (v2.3 round-1 loosen · 2026-05-11) | No DEC — commit + ≤1 retro | ≤30 LOC + 0 schema change + 0 contract break + 1 test + `confidence:` trailer |
 | **Routine bug fix** | No DEC — commit message + tests | (per V133 §2.2 RELAX rule) |
+
+## Spike-class formal definition (v2.3 round-1 · 2026-05-11)
+
+A **spike** is the smallest reversible unit of work that ships:
+
+- ≤30 LOC of production code (tests don't count; sidecar scripts don't count toward the 30 if they're isolated executables outside the test envelope — count their LOC separately and keep <100 total)
+- 0 schema changes (no new fields in stored manifests, no Pydantic model rename, no DB migration)
+- 0 contract breaks (existing test suite stays green; no public-API rename)
+- ≥1 test (unit or integration; integration may be gated by `pytest.importorskip` / `os.path.exists`)
+- commit message carries `confidence: high|med|low`
+- ≤1 retro file (only if learnings warrant; many spikes need no retro)
+
+**What a spike skips entirely**:
+- No DEC frontmatter (this file's 6-field minimum does not apply)
+- No Codex relay call (unless the spike happens to touch the v2.2 1-sync-trigger surface — auth / signing / security boundary — in which case it is not actually a spike and must escalate)
+- No Kogami invocation (Kogami is opt-in for strategic uncertainty, not data adds or single-file extensions)
+- No Notion sync (retros + spike commits stay local; only Accepted DECs go to Notion)
+- No phase tagging (phase belongs to code milestones, not data extensions or single-file additions)
+
+**Promotion to sub-DEC**: if mid-spike the work grows to touch a 3rd shared code path, a schema, or a contract — stop, write a slim sub-DEC, and continue. Spike → sub-DEC is a normal path; sub-DEC → spike is a downgrade that almost never happens.
+
+**Reference precedent**: calibration retro `.planning/retrospectives/2026-05-11_calibration_spike_v_series_corpus_injection.md` documents the measurement that motivated this class (process overhead was ~3× the actual work when forced through full sub-DEC ceremony).
 
 ## Why slim works for sub-DECs
 

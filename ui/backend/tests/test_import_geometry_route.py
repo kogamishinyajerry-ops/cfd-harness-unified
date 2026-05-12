@@ -11,7 +11,12 @@ from ui.backend.main import app
 from ui.backend.routes import import_geometry as import_route
 from ui.backend.services import case_drafts
 from ui.backend.services.case_scaffold import template_clone
-from ui.backend.tests.conftest import box_stl, open_box_stl
+from ui.backend.tests.conftest import (
+    box_stl,
+    farfield_6_plate_stl,
+    multi_solid_ascii_stl,
+    open_box_stl,
+)
 
 
 client = TestClient(app)
@@ -85,6 +90,51 @@ def test_bundled_fixtures_roundtrip(fixture_name: str):
     assert body["ingest_report"]["is_watertight"] is True
     assert body["ingest_report"]["unit_guess"] == "m"
     assert body["edit_url"].startswith("/workbench/case/")
+
+
+def test_f_new_26_6_plate_returns_400_with_body_overlap_failing_check():
+    """F-NEW-26 systematic CAD bug: 6 thick farfield plates whose AABBs
+    overlap at 12 cube edges. Session 11 added the import-time defensive
+    layer; session 13 verifies it surfaces through the route as a
+    structured 4xx with a cross-repo ticket reference.
+
+    Pre-session-13 gap: the route called ``run_health_checks`` without
+    ``body_aabbs``, so the defensive layer was dead code at the HTTP
+    layer (only the :func:`ingest_stl` wrapper fired it). This test
+    pins the wiring.
+    """
+    resp = client.post(
+        "/api/import/stl",
+        files={"file": ("6_plate_farfield.stl", farfield_6_plate_stl(), "application/octet-stream")},
+    )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert detail["failing_check"] == "body_overlap", detail
+    reason = detail["reason"]
+    assert "edge AABB" in reason, reason
+    assert "F-NEW-26" in reason, reason
+    assert "2026-05-12_case_003_build_cad_farfield_overlap.md" in reason, reason
+    # Ingest report attached so UI can render the per-body AABB diagnostic.
+    assert detail["ingest_report"]["is_watertight"] is True
+    assert detail["ingest_report"]["solid_count"] == 6
+
+
+def test_disjoint_multi_solid_returns_200_no_overlap_diagnostic():
+    """Two named solids with non-intersecting AABBs must NOT fire the
+    F-NEW-26 defensive layer. Pins that the wiring doesn't misfire on
+    clean multi-body STLs (regression guard for false positives)."""
+    resp = client.post(
+        "/api/import/stl",
+        files={"file": ("two_bodies.stl", multi_solid_ascii_stl("body_a", "body_b"), "application/octet-stream")},
+    )
+    assert resp.status_code == 200, resp.text
+    report = resp.json()["ingest_report"]
+    assert report["errors"] == []
+    overlap_msgs = [
+        m for m in report["warnings"] + report["errors"]
+        if "AABB" in m or "F-NEW-26" in m
+    ]
+    assert overlap_msgs == [], f"unexpected overlap diagnostic on disjoint bodies: {overlap_msgs}"
 
 
 def test_oversize_upload_returns_413(monkeypatch):

@@ -3,7 +3,7 @@
 M5.0 routine path. Consumes ``geometry_ingest`` + ``case_scaffold`` services.
 
 Flow:
-    1. Stream-read multipart upload, capped at 50 MB
+    1. Stream-read multipart upload, capped at 200 MB
     2. Parse STL via trimesh (4xx on parse failure)
     3. Run health checks (4xx on watertight failure; warnings allowed)
     4. Scaffold imported case (write triSurface + sHM stub + manifest +
@@ -13,6 +13,7 @@ Flow:
 from __future__ import annotations
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+import trimesh
 
 from ui.backend.schemas.import_geometry import (
     ImportRejection,
@@ -22,7 +23,9 @@ from ui.backend.schemas.import_geometry import (
 )
 from ui.backend.services.case_scaffold import scaffold_imported_case
 from ui.backend.services.geometry_ingest import (
+    BodyAABB,
     IngestReport,
+    LoadedSTL,
     combine,
     detect_patches,
     load_stl_from_bytes,
@@ -31,7 +34,36 @@ from ui.backend.services.geometry_ingest import (
 )
 
 
-MAX_STL_BYTES = 50 * 1024 * 1024  # 50 MB · spec D-route limit
+def _per_body_info(loaded: LoadedSTL) -> tuple[list[float], list[BodyAABB]]:
+    """Per-body max bbox extents + full AABBs for a multi-solid Scene.
+
+    Extents feed the unit-detector body-class filter (F-NEW-12, session 4).
+    AABBs feed the F-NEW-26 defensive layer (session 11) inside
+    :func:`run_health_checks` so the systematic-CAD-bug edge-overlap
+    diagnostic surfaces through the route, not just at the
+    :func:`ingest_stl` wrapper path. Single-Trimesh loads return empties
+    (no per-body identity to filter on).
+    """
+    if not isinstance(loaded, trimesh.Scene):
+        return [], []
+    extents: list[float] = []
+    aabbs: list[BodyAABB] = []
+    for name, geom in loaded.geometry.items():
+        if geom.faces.shape[0] == 0:
+            continue
+        b = geom.bounds
+        extents.append(float(max(b[1][0] - b[0][0], b[1][1] - b[0][1], b[1][2] - b[0][2])))
+        aabbs.append(
+            BodyAABB(
+                name=str(name),
+                min_xyz=(float(b[0][0]), float(b[0][1]), float(b[0][2])),
+                max_xyz=(float(b[1][0]), float(b[1][1]), float(b[1][2])),
+            )
+        )
+    return extents, aabbs
+
+
+MAX_STL_BYTES = 200 * 1024 * 1024  # 200 MB · raised from 50 MB (V198 substrate · case_003 Q3 airframe 87 MB · 2026-05-11)
 _READ_CHUNK = 1 << 20  # 1 MB
 
 
@@ -60,7 +92,29 @@ def _classify_failing_check(report: IngestReport, parse_errors: list[str]) -> st
         return "stl_parse"
     if not report.is_watertight:
         return "watertight"
+    if any("AABB" in e for e in report.errors):
+        # F-NEW-26 defensive layer (session 11) — named-solid bodies have
+        # systematic AABB overlap (≥3 edge_overlap pairs or a "significant"
+        # pair). Surface as distinct failing_check so the UI can link the
+        # cross-repo ticket instead of showing a generic "unknown".
+        return "body_overlap"
     return "unknown"
+
+
+def _select_primary_error(errors: list[str]) -> str:
+    """Pick the most actionable error to show as the rejection ``reason``.
+
+    F-NEW-26 (body AABB overlap) is preferred over downstream errors when
+    present because it points at the source-CAD defect rather than a
+    symptom. With the current 6-plate fixture (interpenetrating closed
+    shells), watertight stays True and AABB error is the only error;
+    this helper exists to keep behavior correct if a future fixture or
+    real-world STL hits both.
+    """
+    aabb_errors = [e for e in errors if "AABB" in e]
+    if aabb_errors:
+        return aabb_errors[0]
+    return errors[0]
 
 
 async def _read_with_limit(file: UploadFile, max_bytes: int) -> bytes:
@@ -107,16 +161,19 @@ async def import_stl_route(file: UploadFile = File(...)) -> ImportSTLResponse:
         raise HTTPException(status_code=400, detail=rejection.model_dump())
 
     patches, all_default = detect_patches(loaded)
+    body_extents_raw, body_aabbs = _per_body_info(loaded)
     report = run_health_checks(
         combined=combined,
         solid_count=solid_count(loaded),
         patches=patches,
         all_default_faces=all_default,
+        body_extents_raw=body_extents_raw or None,
+        body_aabbs=body_aabbs or None,
     )
 
     if report.errors:
         rejection = ImportRejection(
-            reason=report.errors[0],
+            reason=_select_primary_error(report.errors),
             failing_check=_classify_failing_check(report, []),
             ingest_report=_ingest_to_payload(report),
         )

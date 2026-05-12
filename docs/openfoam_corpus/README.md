@@ -22,3 +22,10 @@ on next process restart. There is no auto-reindex in V1.
 - `boundary_conditions_basics.md` — common BC types + when each applies
 - `under_relaxation_factors.md` — URF guidance for SIMPLE / PISO loops
 - `residual_diagnostics.md` — interpreting solver residuals
+
+## V-series industrial findings (synced 2026-05-11, spike scope)
+
+Synced copies of methodology SSOT files. Originals at `.planning/methodology/` remain authoritative; corpus copies enable AI advisor retrieval. Re-sync manually when SSOT changes (no auto-watcher in spike scope).
+
+- `solver_convergence_playbook.md` — S1-S10 decision tree from APU bay V3→V13 industrial case
+- `industrial_solver_findings_v_series.md` — V1-V14+ per-finding index (engineer-facing solver/mesh internals)

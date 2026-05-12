@@ -35,6 +35,66 @@ if TYPE_CHECKING:
     from ui.backend.schemas.mesh_sizing import MeshSizingField
 
 
+# --- F2 path activation (F-NEW-22 + F-NEW-24 joint mitigation, case_003
+# session 6-7 ramp; V36/V37/V41/V45) ---
+#
+# When the STL is industrial-CAD-scale multi-named-solid (e.g. CRM-HLS
+# airframe + farfield boxes from the FreeCAD STEP bridge), the baseline
+# classifySurfaces(angle=40°, boundary=True, forReparametrization=True)
+# runs super-linear on the boundary flag (O(n²)-ish on facet count) and
+# the default Geometry.Tolerance=1e-8 collapses near-coincident cross-
+# solid vertices into collinear triangles (gmsh reports them as
+# "degenerate" but the STL bytes are clean — see case_003 session 7
+# ramp_log).
+#
+# The fast-classify path:
+#   - Geometry.Tolerance=1e-12 preserves Q3-tessellation features
+#   - classifySurfaces(angle=180°, boundary=False, forReparametrization=False)
+#     runs ~80× faster (case_003: 1.5s vs >120s on 393k facets)
+#   - createGeometry() is skipped (impossible without forReparametrization)
+#   - Downstream code (partition_surfaces_by_body, named-solid voting,
+#     addSurfaceLoop+addVolume) operates on classified surface tags
+#     irrespective of parametric vs discrete representation
+#
+# Trade-off: Mesh.MeshSizeFromCurvature becomes a no-op without
+# parametric surfaces. Acceptable for industrial CAD where
+# sizing-fields + refinement-zones dominate over curvature-driven
+# sizing.
+#
+# Activation gate: multi-named-solid (≥2) AND total facet count
+# ≥ threshold. The threshold protects byte-identity on small test
+# fixtures (seamed_multi_solid_box_stl has 12 facets) and small clean
+# multi-patch geometries where the baseline path is fast enough.
+_F2_PATH_FACET_THRESHOLD = 10_000
+_F2_PATH_GEOMETRY_TOLERANCE = 1e-12
+
+
+def _should_use_f2_path(
+    named_solid_count: int,
+    facet_count: int,
+    *,
+    threshold: int | None = None,
+) -> bool:
+    """Return True when the F2 fast-classify path should be engaged.
+
+    Gate: ≥2 named solids AND ≥``threshold`` total facets. Below the
+    threshold the baseline parametric path is fast and well-tested;
+    above it the baseline path's super-linearity + tolerance artifact
+    block real industrial CAD payloads (case_003).
+
+    Session 9 fix: ``threshold`` defaults to ``None`` so the module-level
+    constant ``_F2_PATH_FACET_THRESHOLD`` is read at call time. Earlier
+    versions bound the constant as a default-argument value at function-
+    definition time, which made test-time monkeypatching of the module
+    constant a silent no-op (session 7's test inadvertently exercised
+    the baseline path instead of F2 — discovered by session 9 probe1).
+    """
+    effective_threshold = (
+        threshold if threshold is not None else _F2_PATH_FACET_THRESHOLD
+    )
+    return named_solid_count >= 2 and facet_count >= effective_threshold
+
+
 class GmshMeshGenerationError(RuntimeError):
     """Raised when gmsh fails to produce a valid 3D mesh."""
 
@@ -96,6 +156,111 @@ def _default_characteristic_length(diagonal: float, mesh_mode: str) -> float:
         # if the result is unreasonable.
         return 0.0
     return diagonal / (60.0 if mesh_mode == "power" else 30.0)
+
+
+# F-NEW-19 fix (case_003 substrate · 2026-05-11): airframe-class
+# identification band for the lc-decision filter. Kept inline rather
+# than imported to avoid cross-service coupling (ADR-001).
+#
+# F-NEW-17 mitigation (session 13 · case_003 ramp): upper bound raised
+# 100 → 500 m to accommodate full-size industrial airframes (CRM-HLS
+# 152 m wingspan in transport configuration), ship hulls (200-400 m),
+# and other large bodies. Typical CFD domain is 5-10× the body of
+# interest; domain walls ≥ 2.5 km still get rejected for 500 m-class
+# airframes — distinction is preserved.
+#
+# **Intentionally decoupled from** ``unit_detector._INDUSTRIAL_EXTENT_
+# RANGE_M`` (still 100 m). Different use-cases:
+#   - gmsh_runner here: "is this a body of interest vs a CFD-domain
+#     wall" for lc calculation. Multiple plausible unit interpretations
+#     all confirm airframe-class if ANY pass — uniqueness not required.
+#   - unit_detector: "is there a SINGLE unit under which this geometry
+#     is industrially plausible" for unit decision. Raising its ceiling
+#     would flip case_003 sub-structures (18-27 m raw mm) from confident
+#     mm to engineer-confirm UNKNOWN because cm (1800-2700 m) also
+#     becomes plausible. F-NEW-12 confident-mm guess on case_003 must
+#     be preserved.
+#
+# If a future case has a body >500 m that needs lc-decision admission
+# (e.g. tunnel, dam, suspension bridge), revisit per-body-class
+# configurability (RESUME 5f) rather than raising this constant further.
+_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 500.0)
+_UNIT_FACTORS_M: tuple[float, ...] = (1e-3, 1e-2, 1.0, 0.0254)  # mm, cm, m, inch
+
+
+def _is_industrial_plausible_extent(extent: float) -> bool:
+    """True iff ``extent`` (raw STL units) is airframe-class-plausible
+    under at least one common unit (mm/cm/m/inch). Used by
+    :func:`_airframe_class_diagonal` to filter CFD-domain walls out of
+    the lc-decision union bbox.
+
+    Note: this is NOT the same predicate as
+    :func:`unit_detector.bbox_plausible_units` despite the analogous
+    construction. See the module-level comment above
+    ``_INDUSTRIAL_EXTENT_RANGE_M`` for the decoupling rationale.
+    """
+    if extent <= 0:
+        return False
+    lo_m, hi_m = _INDUSTRIAL_EXTENT_RANGE_M
+    for factor in _UNIT_FACTORS_M:
+        extent_m = extent * factor
+        if lo_m <= extent_m <= hi_m:
+            return True
+    return False
+
+
+def _airframe_class_diagonal(
+    body_bboxes: list[tuple[float, ...]],
+    fallback_diagonal: float,
+) -> float:
+    """Compute the union-bbox diagonal of airframe-class bodies, filtering
+    out CFD-domain-class bodies whose max extent is industrially
+    implausible under every common unit.
+
+    F-NEW-19 fix (V198 session 5 · case_003 substrate): when a
+    multi-class STEP (airframe + CFD-domain walls) is meshed, the
+    overall bbox diagonal is dominated by farfield/symmetry boxes
+    (e.g. case_003 raw 2.44 M ≈ 2.44 km if treated as m, far above
+    the 100 m industrial cap). The resulting default
+    ``lc = diagonal / 30`` is then orders of magnitude coarser than
+    the airframe surface tessellation can absorb, and gmsh spends
+    unbounded CPU reconciling. Filtering out implausible bodies and
+    taking the union bbox of the survivors yields a sensible lc.
+
+    Returns the filtered diagonal, or ``fallback_diagonal`` if the
+    filter discards everything (e.g. tunnel/dam/bridge geometries
+    where all bodies legitimately exceed 500 m — F-NEW-17 partial
+    relief; ultra-large bodies still need per-body-class config per
+    RESUME 5f). When no body is filtered out, returns
+    ``fallback_diagonal`` unchanged to preserve byte-identical mesh
+    output on single-class loads.
+    """
+    if not body_bboxes:
+        return fallback_diagonal
+    kept_bboxes: list[tuple[float, ...]] = []
+    for bbox in body_bboxes:
+        xmin, ymin, zmin, xmax, ymax, zmax = bbox
+        max_extent = max(xmax - xmin, ymax - ymin, zmax - zmin)
+        if _is_industrial_plausible_extent(max_extent):
+            kept_bboxes.append(bbox)
+    if not kept_bboxes:
+        # All bodies industrially implausible — let the caller fall back
+        # to the full diagonal rather than producing a zero lc.
+        return fallback_diagonal
+    if len(kept_bboxes) == len(body_bboxes):
+        # No body filtered out — preserve byte-identical behavior on
+        # single-class loads by returning the full diagonal exactly.
+        return fallback_diagonal
+    xmin = min(b[0] for b in kept_bboxes)
+    ymin = min(b[1] for b in kept_bboxes)
+    zmin = min(b[2] for b in kept_bboxes)
+    xmax = max(b[3] for b in kept_bboxes)
+    ymax = max(b[4] for b in kept_bboxes)
+    zmax = max(b[5] for b in kept_bboxes)
+    dx = xmax - xmin
+    dy = ymax - ymin
+    dz = zmax - zmin
+    return (dx * dx + dy * dy + dz * dz) ** 0.5
 
 
 def _geometry_aabb(
@@ -241,6 +406,21 @@ def _gmsh_inline(
     output_msh_path.parent.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
 
+    # F2 path pre-merge probe (V45): parse STL for named-solid count +
+    # facet count BEFORE gmsh.initialize() so we can decide whether to
+    # set Geometry.Tolerance ahead of merge. parse_named_solids_from_path
+    # is a sub-second regex parse, cheap even on 80 MB STLs.
+    from .stl_solid_index import parse_named_solids_from_path
+
+    _f2_named_solids_preview = parse_named_solids_from_path(stl_path)
+    _f2_facet_count_preview = sum(
+        s.centroids.shape[0] for s in _f2_named_solids_preview
+    )
+    _f2_active = _should_use_f2_path(
+        named_solid_count=len(_f2_named_solids_preview),
+        facet_count=_f2_facet_count_preview,
+    )
+
     gmsh.initialize()
     # Wrap the entire post-init gmsh-API region in a single
     # GmshMeshGenerationError boundary. The gmsh Python bindings raise
@@ -269,6 +449,15 @@ def _gmsh_inline(
             # selects gmsh's Delaunay 3D — robust default for closed
             # triangulated surfaces from real-world CAD exports.
             gmsh.option.setNumber("Mesh.Algorithm3D", 1)
+
+            # F2 path (F-NEW-24 mitigation): tighten Geometry.Tolerance
+            # BEFORE gmsh.merge so cross-solid vertex dedup uses an
+            # absolute tolerance well below Q3 STL deflection. Default
+            # 1e-8 collapses Q3 features on km-scale industrial CAD.
+            if _f2_active:
+                gmsh.option.setNumber(
+                    "Geometry.Tolerance", _F2_PATH_GEOMETRY_TOLERANCE
+                )
             # NOTE: Codex R11 Finding 1 suggested wrapping gmsh.merge()
             # to relabel plain-Exception failures as OSError when the
             # STL still exists (host read-side faults on a permission-
@@ -287,13 +476,44 @@ def _gmsh_inline(
             # Reclassify the imported triangles as a surface, then build
             # a volume from the surface loop. Standard gmsh incantation
             # for "STL → tetrahedral volume mesh".
-            gmsh.model.mesh.classifySurfaces(
-                angle=40.0 * 3.141592653589793 / 180.0,
-                boundary=True,
-                forReparametrization=True,
-                curveAngle=180.0 * 3.141592653589793 / 180.0,
-            )
-            gmsh.model.mesh.createGeometry()
+            #
+            # F2 path (F-NEW-22 mitigation, V36/V37/V52): on industrial-
+            # scale multi-named-solid loads, skip classifySurfaces +
+            # createGeometry entirely. Use gmsh.merge's pre-classify
+            # discrete entities directly (one per `solid <name>` block
+            # by default Mesh.StlOneSolidPerSurface=1). This:
+            #   - is ~∞× faster than baseline classifySurfaces (which
+            #     was super-linear on case_003's 393k facets)
+            #   - preserves 1-to-1 mapping between discrete entities
+            #     and STL solid names (no entity-merging via classifier)
+            #   - bypasses partition_surfaces_by_body (DEC-V61-104)
+            #     because discrete entities lack edge entities; the F2
+            #     activation gate (multi-named-solid industrial CAD)
+            #     does not use interior-obstacle subtraction anyway
+            #
+            # Session 9 fix history:
+            #   - Session 7 commit 3d4a778 used classifySurfaces with
+            #     angle=180°, boundary=False, fr=False. Session 9
+            #     probe1 discovered this merges N discrete entities
+            #     into 1 on topologically-connected meshes, collapsing
+            #     named-solid PhysicalGroups to a single area-majority
+            #     winner. The seamed multi-solid test fixture
+            #     (sessions 7 + 9) exposed the bug.
+            #   - Session 9 redesign: skip classifySurfaces. Verified
+            #     on both seamed (3 patches of 1 box, shared vertices)
+            #     and disjoint (2 nested boxes, distinct vertex sets)
+            #     fixtures — both produce N entities preserved post-
+            #     merge.
+            if not _f2_active:
+                gmsh.model.mesh.classifySurfaces(
+                    angle=40.0 * 3.141592653589793 / 180.0,
+                    boundary=True,
+                    forReparametrization=True,
+                    curveAngle=180.0 * 3.141592653589793 / 180.0,
+                )
+                gmsh.model.mesh.createGeometry()
+            # On F2 path: NO classifySurfaces, NO createGeometry.
+            # The merge-time discrete entities are the surface set.
 
             surfaces = gmsh.model.getEntities(dim=2)
             if not surfaces:
@@ -311,21 +531,34 @@ def _gmsh_inline(
             # Single-body geometries (LDC, channel, naca0012, cylinder)
             # fall through to the single-loop path so byte-identical
             # mesh output is preserved.
-            from .topology import (
-                TopologyPartitionError,
-                partition_surfaces_by_body,
-            )
+            #
+            # F2 path bypasses partition_surfaces_by_body: discrete
+            # entities (from gmsh.merge, without classifySurfaces) lack
+            # explicit edge entities (dim=1), so gmsh.model.getBoundary
+            # returns empty lists and the union-find sees every surface
+            # as its own body — wrong partitioning. The F2 activation
+            # gate (multi-named-solid industrial CAD) doesn't use
+            # interior-obstacle subtraction in its target use cases
+            # (external-aerodynamics-style external flow, not
+            # cavity-with-obstacle). All entities feed one surface loop.
+            if _f2_active:
+                bodies = [[s[1] for s in surfaces]]
+            else:
+                from .topology import (
+                    TopologyPartitionError,
+                    partition_surfaces_by_body,
+                )
 
-            try:
-                bodies = partition_surfaces_by_body(gmsh, surfaces)
-            except TopologyPartitionError as exc:
-                # Codex post-merge MED guard: disconnected exterior
-                # shells, not interior obstacles. Surface as a 4xx-class
-                # mesh failure with a clear message rather than silently
-                # corrupting the geometry.
-                raise GmshMeshGenerationError(
-                    f"topology partition rejected the STL: {exc}"
-                ) from exc
+                try:
+                    bodies = partition_surfaces_by_body(gmsh, surfaces)
+                except TopologyPartitionError as exc:
+                    # Codex post-merge MED guard: disconnected exterior
+                    # shells, not interior obstacles. Surface as a 4xx-class
+                    # mesh failure with a clear message rather than silently
+                    # corrupting the geometry.
+                    raise GmshMeshGenerationError(
+                        f"topology partition rejected the STL: {exc}"
+                    ) from exc
             if len(bodies) <= 1:
                 surface_loop = gmsh.model.geo.addSurfaceLoop(
                     [s[1] for s in surfaces]
@@ -579,6 +812,20 @@ def _gmsh_inline(
             else:
                 diagonal = 0.0
                 geometry_aabb = None
+
+            # F-NEW-19 fix (V198 session 5 · case_003 substrate): when
+            # multi-class STEP (airframe + CFD-domain walls) lands here,
+            # the overall ``diagonal`` is dominated by domain walls and
+            # default ``lc = diagonal / 30`` runs unworkably coarse for
+            # the airframe surface. Filter out industrially-implausible
+            # bodies and recompute the diagonal from the airframe-class
+            # union when applicable. Single-class loads (all bodies
+            # plausible OR all implausible) return ``diagonal`` unchanged,
+            # preserving byte-identical mesh output.
+            if len(bodies) > 1:
+                from .topology import _body_bbox
+                body_bboxes = [_body_bbox(gmsh, body) for body in bodies]
+                diagonal = _airframe_class_diagonal(body_bboxes, diagonal)
 
             # V136 (N2.2): validate refinement zones BEFORE expensive
             # 3D mesh generation. Pydantic already enforced shape;

@@ -21,13 +21,22 @@ from ui.backend.services.meshing_gmsh.cell_budget import (
 )
 from ui.backend.services.meshing_gmsh.gmsh_runner import (
     GmshMeshGenerationError,
+    _F2_PATH_FACET_THRESHOLD,
+    _F2_PATH_GEOMETRY_TOLERANCE,
+    _airframe_class_diagonal,
+    _is_industrial_plausible_extent,
+    _should_use_f2_path,
     run_gmsh_on_imported_case,
 )
 from ui.backend.services.meshing_gmsh.pipeline import (
     MeshPipelineError,
     mesh_imported_case,
 )
-from ui.backend.tests.conftest import box_stl, seamed_multi_solid_box_stl
+from ui.backend.tests.conftest import (
+    box_stl,
+    large_seamed_multi_solid_box_stl,
+    seamed_multi_solid_box_stl,
+)
 
 
 # ----- cell_budget --------------------------------------------------------
@@ -1663,3 +1672,418 @@ def test_v61_105_phase2_4_passes_through_clean_triangle3(
         # Any other exception class is fine — we only assert the
         # defensive checks didn't misfire.
         pass
+
+
+# ----- F-NEW-19 fix: airframe-class diagonal filter -----------------------
+
+
+def test_plausible_extent_industrial_mm_range():
+    # Typical CFD mm extents (1mm to 100m raw = 1e-3 .. 1e5)
+    assert _is_industrial_plausible_extent(1.0) is True
+    assert _is_industrial_plausible_extent(1000.0) is True
+    assert _is_industrial_plausible_extent(50_000.0) is True
+
+
+def test_plausible_extent_industrial_meter_range():
+    assert _is_industrial_plausible_extent(0.05) is True  # 5cm → m
+    assert _is_industrial_plausible_extent(10.0) is True  # 10m
+
+
+def test_plausible_extent_implausible_above_all_caps():
+    # case_003 CFD-domain wall: 2.4M raw mm = 2.4km if treated as m
+    assert _is_industrial_plausible_extent(2_438_552.0) is False
+
+
+def test_plausible_extent_implausible_below_all_floors():
+    assert _is_industrial_plausible_extent(1e-6) is False
+    assert _is_industrial_plausible_extent(0.0) is False
+    assert _is_industrial_plausible_extent(-1.0) is False
+
+
+def test_airframe_class_diagonal_filters_case_003_like_domain():
+    """F-NEW-19 substrate · case_003 mock: 4 farfield walls + 3
+    airframe-class bodies. Filter discards the farfield walls and
+    returns a diagonal computed from the airframe-class union, NOT
+    from the full multi-class union (which would be the 2.4M-domain-
+    dominated value).
+    """
+    # Bodies expressed as (xmin, ymin, zmin, xmax, ymax, zmax).
+    body_bboxes = [
+        # 4 CFD-domain walls (case_003 raw values)
+        (0.0, 0.0, 0.0, 2_438_552.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1_600_200.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1.0, 1_540_764.0),
+        (0.0, 0.0, 0.0, 1_600_000.0, 1.0, 1.0),
+        # 3 airframe-class bodies (case_003 raw mm: ~18-27 m)
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 27_430.0, 3_430.0, 1.0),
+    ]
+    fallback_diag = 3.318e6  # ~case_003 full-bbox diagonal
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    # The airframe-class union diagonal: max bbox is 27430 × 3430 × 3050.
+    # sqrt(27430^2 + 3430^2 + 3050^2) ≈ 27810
+    assert 27_000 < out < 28_000, f"expected ~27800, got {out}"
+    # Critically: must be far below the fallback (3 orders of magnitude)
+    assert out < fallback_diag / 100
+
+
+def test_airframe_class_diagonal_preserves_single_class_byte_identity():
+    """When every body passes the filter (single-class load like
+    naca0012, cylinder, LDC), the helper returns ``fallback_diagonal``
+    unchanged — preserves byte-identical mesh output."""
+    body_bboxes = [
+        (0.0, 0.0, 0.0, 0.1, 0.1, 0.1),  # LDC-class
+        (0.0, 0.0, 0.0, 0.1, 0.1, 0.1),
+    ]
+    fallback_diag = 0.173  # √3 × 0.1
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    assert out == fallback_diag
+
+
+def test_airframe_class_diagonal_all_implausible_falls_back():
+    """When ALL bodies fail the filter (e.g. hypothetical ship/large-
+    vehicle case where every body legitimately exceeds 100m), the
+    helper returns ``fallback_diagonal`` rather than zero so the
+    caller still has a usable lc (the engineer can override via
+    ``sizing_field``)."""
+    body_bboxes = [
+        (0.0, 0.0, 0.0, 2e6, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 3e6, 1.0, 1.0),
+    ]
+    fallback_diag = 3.5e6
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    assert out == fallback_diag
+
+
+def test_airframe_class_diagonal_empty_input_falls_back():
+    """Defensive: empty body_bboxes list returns fallback."""
+    out = _airframe_class_diagonal([], 1.0)
+    assert out == 1.0
+
+
+# ----- F-NEW-17 mitigation (session 13 · case_003 ramp): ceiling 100 → 500 m -----
+
+
+def test_plausible_extent_accepts_crm_hls_full_airframe():
+    """F-NEW-17: 152 m CRM-HLS airframe (transport configuration) raw mm
+    value 152000 must be admitted under the mm interpretation. The
+    session 5 ceiling of 100 m rejected it; the session 13 ceiling of
+    500 m accepts it.
+    """
+    # 152 m wingspan in raw mm units = 152000.
+    # mm interpretation: 152 m → ≤ 500 → plausible
+    # cm interpretation: 1520 m → > 500 → out
+    # m interpretation: 152000 m → out
+    # inch interpretation: 3860 m → out
+    # → exactly one plausible unit, but the filter only needs ≥1.
+    assert _is_industrial_plausible_extent(152_000.0) is True
+
+
+def test_plausible_extent_accepts_large_ship_hull():
+    """F-NEW-17: 300 m container-ship hull raw mm = 300000 must be
+    admitted (mm interp = 300 m ≤ 500). Verifies the filter covers
+    ship-scale industrial bodies, not just airframes."""
+    assert _is_industrial_plausible_extent(300_000.0) is True
+
+
+def test_plausible_extent_at_new_500m_ceiling_boundary():
+    """500 m is the new inclusive ceiling. Raw mm = 500000 → mm interp
+    exactly 500 m → plausible. 500001 raw → 500.001 m → out."""
+    assert _is_industrial_plausible_extent(500_000.0) is True
+    assert _is_industrial_plausible_extent(500_001.0) is False
+    # Sanity at the OLD 100 m ceiling — still plausible (cm/m/inch may
+    # also match now, but at least one always did under the old band).
+    assert _is_industrial_plausible_extent(100_000.0) is True
+
+
+def test_plausible_extent_above_new_ceiling_still_rejected():
+    """Bodies exceeding 500 m under every common unit are still
+    rejected. Domain-wall extents (case_003 2.44 km) and ultra-large
+    bridge/dam geometries land here and need explicit sizing_field."""
+    assert _is_industrial_plausible_extent(600_000.0) is False  # 600 m
+    assert _is_industrial_plausible_extent(2_438_552.0) is False  # case_003 domain
+    assert _is_industrial_plausible_extent(1e9) is False
+
+
+def test_airframe_class_diagonal_includes_crm_hls_152m_airframe():
+    """F-NEW-17 integration: case_003-like multi-class bbox with a
+    full 152 m airframe alongside 18-27 m sub-structures and 2.4 km
+    CFD-domain walls. The 152 m airframe must now contribute to the
+    airframe-class union diagonal (was filtered out at the 100 m
+    ceiling, session 5).
+    """
+    body_bboxes = [
+        # 4 CFD-domain walls (case_003 raw mm) — still rejected
+        (0.0, 0.0, 0.0, 2_438_552.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1_600_200.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1.0, 1_540_764.0),
+        (0.0, 0.0, 0.0, 1_600_000.0, 1.0, 1.0),
+        # CRM-HLS full airframe (152 m wingspan in raw mm)
+        (0.0, 0.0, 0.0, 152_000.0, 30_000.0, 14_000.0),
+        # 3 airframe-class sub-structures (case_003 raw mm: ~18-27 m)
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 27_430.0, 3_430.0, 1.0),
+    ]
+    fallback_diag = 3.318e6  # ~case_003 full-bbox diagonal
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    # The airframe-class union bbox is now driven by the 152 m airframe:
+    # diagonal ≥ 152000 (still in raw mm units). Old (100 m ceiling)
+    # produced ~27800 — strictly less than the airframe wingspan.
+    assert out >= 152_000.0, f"expected ≥152000 (full airframe in union), got {out}"
+    assert out < 200_000.0, (
+        f"expected union diagonal driven by 152 m airframe, not contaminated "
+        f"by domain walls; got {out}"
+    )
+    # Must still be far below the 2.44 km domain fallback (domain walls rejected).
+    assert out < fallback_diag / 10
+
+
+def test_airframe_class_diagonal_ceiling_decoupled_from_unit_detector():
+    """F-NEW-17 design invariant (session 13): gmsh_runner ceiling
+    (500 m) MUST be looser than unit_detector ceiling (100 m). Pinning
+    this here so a future "let's unify the constants" refactor doesn't
+    silently regress F-NEW-12 confident-mm guess on case_003.
+    """
+    from ui.backend.services.geometry_ingest import unit_detector
+    from ui.backend.services.meshing_gmsh import gmsh_runner
+
+    detector_ceiling = unit_detector._INDUSTRIAL_EXTENT_RANGE_M[1]
+    runner_ceiling = gmsh_runner._INDUSTRIAL_EXTENT_RANGE_M[1]
+    assert runner_ceiling > detector_ceiling, (
+        f"gmsh_runner ceiling ({runner_ceiling}) must exceed unit_detector "
+        f"ceiling ({detector_ceiling}); see F-NEW-17 docstring for the "
+        f"decoupling rationale (raising unit_detector flips case_003 "
+        f"sub-structures from confident-mm to engineer-confirm UNKNOWN)."
+    )
+
+
+# ----- F2 path (F-NEW-22 + F-NEW-24 joint mitigation, case_003 session 6-7 ramp) -----
+#
+# The F2 fast-classify path activates on industrial-scale multi-named-
+# solid STL inputs (e.g. CRM-HLS airframe + farfield boxes). Tests below
+# cover the activation predicate, byte-identity preservation on small
+# fixtures, named-solid voting compatibility, and the Geometry.Tolerance
+# pre-merge option.
+
+
+def test_should_use_f2_path_baseline_single_solid():
+    """Single-named-solid → baseline path regardless of facet count."""
+    assert _should_use_f2_path(named_solid_count=1, facet_count=1_000_000) is False
+
+
+def test_should_use_f2_path_baseline_below_threshold():
+    """Multi-named-solid but below facet threshold → baseline."""
+    assert (
+        _should_use_f2_path(named_solid_count=10, facet_count=_F2_PATH_FACET_THRESHOLD - 1)
+        is False
+    )
+
+
+def test_should_use_f2_path_activates_at_threshold():
+    """Multi-named-solid + exactly threshold facets → F2 path."""
+    assert (
+        _should_use_f2_path(named_solid_count=2, facet_count=_F2_PATH_FACET_THRESHOLD)
+        is True
+    )
+
+
+def test_should_use_f2_path_activates_above_threshold():
+    """Industrial CAD scale (case_003: 10 solids, 393k facets) → F2."""
+    assert _should_use_f2_path(named_solid_count=10, facet_count=393_498) is True
+
+
+def test_should_use_f2_path_zero_solids_baseline():
+    """Anonymous STL (no named solids) → baseline path."""
+    assert _should_use_f2_path(named_solid_count=0, facet_count=1_000_000) is False
+
+
+def test_should_use_f2_path_custom_threshold_override():
+    """Tests can override the threshold to exercise F2 with small fixtures."""
+    assert _should_use_f2_path(named_solid_count=3, facet_count=20, threshold=10) is True
+    assert _should_use_f2_path(named_solid_count=3, facet_count=5, threshold=10) is False
+
+
+def test_f2_path_preserves_named_solid_physical_groups(tmp_path: Path, monkeypatch):
+    """F2 path regression of test_gmsh_preserves_stl_solid_names_as_physical_groups
+    (line 86): on a seamed multi-solid STL, even when F2 activates, the
+    named-solid voting block must still emit one $PhysicalNames entry per
+    solid. F2 skips createGeometry() but the downstream voting block
+    operates on classified surface tags + Triangle3 mesh elements, which
+    exist regardless of parametric reconstruction.
+
+    Monkeypatches the facet threshold to 1 so the 12-tri seamed fixture
+    trips F2 activation.
+    """
+    # Lower threshold so seamed_multi_solid_box_stl (~12 facets) trips F2
+    monkeypatch.setattr(
+        "ui.backend.services.meshing_gmsh.gmsh_runner._F2_PATH_FACET_THRESHOLD",
+        1,
+    )
+
+    stl_path = tmp_path / "seamed_f2.stl"
+    stl_path.write_bytes(seamed_multi_solid_box_stl())
+    msh_path = tmp_path / "seamed_f2.msh"
+
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0, "F2 path produced empty mesh"
+
+    text = msh_path.read_text()
+
+    # PhysicalNames must include inlet/outlet/walls — same contract as
+    # the baseline test at line 86. F2 skips createGeometry but the
+    # named-solid voting block still runs.
+    in_pn = False
+    dim2_names: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("$PhysicalNames"):
+            in_pn = True
+            continue
+        if line.startswith("$EndPhysicalNames"):
+            break
+        if not in_pn:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            dim = int(parts[0])
+        except ValueError:
+            continue
+        if dim == 2:
+            raw_name = " ".join(parts[2:]).strip().strip('"')
+            dim2_names.add(raw_name)
+    assert dim2_names == {"inlet", "outlet", "walls"}, (
+        f"F2 path: expected dim=2 physical names {{inlet,outlet,walls}}, got {dim2_names}"
+    )
+
+
+def test_baseline_path_unchanged_for_single_body_box(tmp_path: Path):
+    """Single-body STL (box_stl) does not trigger F2 — exercises the
+    byte-identity preservation guarantee that small clean inputs still
+    flow through the baseline parametric path.
+    """
+    stl_path = tmp_path / "box.stl"
+    stl_path.write_bytes(box_stl())  # binary STL, no named solid headers
+    msh_path = tmp_path / "box.msh"
+
+    # No threshold patching — default threshold gates F2 off.
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0
+
+
+def test_f2_path_tolerance_constant_is_tight_enough():
+    """The F2 Geometry.Tolerance must be small enough to preserve Q3
+    tessellation features on km-scale industrial CAD. Q3 deflection ≈
+    50 μm; case_003 bbox max ≈ 2.4 km. Required absolute tolerance
+    must be << 50 μm. Sanity-check the module constant.
+    """
+    # Hardcoded sanity: 1e-12 is way below 50e-6 (50 μm), even at 2.4 km
+    # bbox absolute scale (= 2.4e6 mm × 1e-12 effective ≈ 2.4 fm).
+    assert _F2_PATH_GEOMETRY_TOLERANCE <= 1e-10, (
+        f"_F2_PATH_GEOMETRY_TOLERANCE={_F2_PATH_GEOMETRY_TOLERANCE} too loose "
+        f"to preserve Q3 features on km-scale industrial CAD"
+    )
+
+
+# ----- F2 path real-threshold validation (session 9 follow-up to session 7) -----
+#
+# Session 7's test_f2_path_preserves_named_solid_physical_groups used
+# monkeypatch(_F2_PATH_FACET_THRESHOLD=1) to force F2 activation on a
+# 12-facet fixture. The tests below remove that monkeypatch and use a
+# fixture that crosses the real ``_F2_PATH_FACET_THRESHOLD = 10_000`` gate.
+# This validates F2 path on a fixture that (a) trips the production
+# activation predicate without test-time intervention, (b) is clean
+# (no overlap / no self-intersection — unlike case_003's source CAD per
+# session 8 F-NEW-26 finding), and (c) exercises the named-solid voting
+# block at industrial scale.
+
+
+def test_large_fixture_crosses_f2_activation_threshold():
+    """Sanity check on the fixture itself: at default subdivisions=5,
+    the multi-named-solid box produces ≥10k facets across 3 named
+    solids, so F2 path activates without monkeypatching.
+
+    Counts named solids + facets directly from the STL bytes (cheap;
+    no gmsh involvement).
+    """
+    from ui.backend.services.meshing_gmsh.stl_solid_index import (
+        parse_named_solids,
+    )
+
+    stl_bytes = large_seamed_multi_solid_box_stl()
+    named_solids = parse_named_solids(stl_bytes)
+
+    assert len(named_solids) == 3, (
+        f"fixture should emit 3 named solids (inlet/outlet/walls), got {len(named_solids)}"
+    )
+    total_facets = sum(s.centroids.shape[0] for s in named_solids)
+    assert total_facets >= _F2_PATH_FACET_THRESHOLD, (
+        f"fixture facet count {total_facets} < activation threshold "
+        f"{_F2_PATH_FACET_THRESHOLD}; bump subdivisions"
+    )
+    # And the predicate agrees.
+    assert _should_use_f2_path(
+        named_solid_count=len(named_solids),
+        facet_count=total_facets,
+    ) is True
+
+
+def test_f2_path_on_industrial_fixture_preserves_physical_groups(
+    tmp_path: Path,
+):
+    """F2 path natural-activation regression: on a ≥10k-facet 3-named-
+    solid clean STL, F2 activates without monkeypatch and the
+    downstream named-solid voting block still emits one
+    $PhysicalNames entry per source solid. Session 7's
+    test_f2_path_preserves_named_solid_physical_groups verified the
+    same contract under threshold=1 monkeypatch; this verifies it at
+    real threshold on industrial-scale input.
+    """
+    stl_path = tmp_path / "industrial_f2.stl"
+    stl_path.write_bytes(large_seamed_multi_solid_box_stl())
+    msh_path = tmp_path / "industrial_f2.msh"
+
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0, "F2 path produced empty mesh on industrial fixture"
+
+    text = msh_path.read_text()
+
+    # Same contract as session 7 test_f2_path_preserves_named_solid_physical_groups
+    in_pn = False
+    dim2_names: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("$PhysicalNames"):
+            in_pn = True
+            continue
+        if line.startswith("$EndPhysicalNames"):
+            break
+        if not in_pn:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            dim = int(parts[0])
+        except ValueError:
+            continue
+        if dim == 2:
+            raw_name = " ".join(parts[2:]).strip().strip('"')
+            dim2_names.add(raw_name)
+    assert dim2_names == {"inlet", "outlet", "walls"}, (
+        f"F2 path on industrial fixture: expected dim=2 physical names "
+        f"{{inlet,outlet,walls}}, got {dim2_names}"
+    )
