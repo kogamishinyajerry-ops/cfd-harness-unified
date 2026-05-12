@@ -1,8 +1,8 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 9 — F2 path redesign: skip
-classifySurfaces entirely + fix default-arg pitfall surfaced by
-industrial-fixture test)
+**Last session**: 2026-05-12 (session 10 — F-NEW-15 substrate dig:
+build_cad.py thick-plate-at-face root cause confirmed; class-wide
+ticket filed)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -80,7 +80,7 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
 | ~~5c~~ | ~~F-NEW-22 + F-NEW-24 joint spike~~ F2 path: **session 7 commit `3d4a778`** used fast-classify (bug B in session 9); **session 9 redesign** skips `classifySurfaces` entirely + uses gmsh.merge-time discrete entities directly. Activation gate `_should_use_f2_path` (≥2 named solids + ≥10k facets) — default-arg pitfall fixed (bug A). Bypasses `partition_surfaces_by_body` (DEC-V61-104) because discrete entities lack edges; F2 target use cases (external aerodynamics) don't need interior-obstacle subtraction. | spike | service + tests | **REDESIGNED** session 9 — 54/54 tests pass on both seamed + disjoint topologies. case_003 e2e still gated on F-NEW-26 cross-repo. |
 | ~~5d~~ | ~~F-NEW-24 bridge filter~~ — **REMOVED session 7**: F-NEW-24 is artifact, not substrate. No bridge change needed. |
 | ~~5e~~ | ~~F-NEW-25 bridge sub-DEC~~ — **REDIRECTED session 8**: cannot fix at bridge layer; root cause is source CAD overlap |
-| **5g** | **F-NEW-26 source-CAD fix** · Codex's `build_cad.py` farfield bodies overlap (probe5 evidence). Options: (a) single watertight farfield box with face-group naming, (b) per-body offset to exclude neighbors, (c) BRepAlgoAPI_Section at construction. Cross-repo work | sub-DEC (other repo) | ~100-200 LOC in `build_cad.py` | **NEXT** — only path to case_003 e2e mesh |
+| **5g** | **F-NEW-26 source-CAD fix** (cross-repo) | sub-DEC (other repo) | ~100 LOC in `build_cad.py` (Option A) | **DIAGNOSED + TICKETED** session 10. Root cause = `build_domain_patches` thick-plate-at-face construction; 13 pairwise edge-overlaps + 8 corner overlaps. Class-wide issue (≥case_003 + case_008 confirmed identical). Ticket: `.planning/cross_repo_tickets/2026-05-12_case_003_build_cad_farfield_overlap.md`. **PENDING cross-repo (Codex) action**. |
 | ~~5h~~ | ~~F2 path validation alternative~~ synthetic industrial-scale fixture | spike | 50 LOC fixture + 3 tests | **DONE** session 9 — `large_seamed_multi_solid_box_stl` (12,288 facets) added to conftest. Surfaced 2 bugs in session 7 F2 path (default-arg pitfall + classify collapse on connected topology). Both fixed in session 9 redesign. |
 | **5f** | **F-NEW-17 mitigation** · adjust `_is_industrial_plausible_extent` upper bound for industrial airframes >100m (CRM-HLS at 152m fails); needs configurable band per body-class | spike | ~30-50 LOC + tests | independent of 5c/5e; can ship anytime; not blocking F2 implementation if F2 ignores the filter |
 | **5b** | **F-NEW-20 mitigation spike** · M6 route soft wall-clock timeout + `gmsh_timeout` failing_check; protects workbench from degenerate sizing burning CPU indefinitely. **F-NEW-23 add**: in-process Python signals don't interrupt gmsh C++ stages — must use subprocess-wrapper + external kill | spike | ~40 LOC + 1 test | optional after 5c |
@@ -140,7 +140,12 @@ entities) + **V53** (session 9 — Python default-arg pitfall masked
 session 7 F2 test setup bug) + **V54** (session 9 —
 `classifySurfaces(angle=180°, ...)` topology-dependent: preserves
 disjoint entities, collapses seamed) + **V55** (session 9 — F2
-bypasses `partition_surfaces_by_body`; OK for external aerodynamics).
+bypasses `partition_surfaces_by_body`; OK for external aerodynamics) +
+**V56** (session 10 — F-NEW-26 root cause precisely localized:
+`build_domain_patches` thick-plate-at-face; 12 edge + 8 corner
+overlaps) + **V57** (session 10 — class-wide issue: case_003 + case_008
+share identical pattern, ≥3 more cases likely affected) + **V58**
+(session 10 — cross-repo ticket filed with 3 fix options ranked).
 V27 already LANDED-by-V199-bridge.
 
 V32 needs status update next batch: **F-NEW-19 fix LANDED session 5**;
@@ -190,26 +195,25 @@ Session 7 collapsed F-NEW-24 into an artifact (gmsh tolerance) and
 confirmed F-NEW-25 is the only remaining substrate wall. The plan
 forward is now:
 
-Session 9 closed Option D and surfaced two real F2 path bugs from
-session 7. After the redesign, F2 path is now topology-independent
-(works on both seamed and disjoint multi-named-solid inputs) and
-provably correct on the synthetic industrial fixture.
+Session 10 closed Option E. case_003 e2e now waits on cross-repo
+Codex action (F-NEW-26 ticket). Workbench-side actionable items:
 
-case_003 e2e remains blocked by F-NEW-26 (cross-repo Codex build_cad.py
-farfield overlap). Workbench-side, the only remaining items are:
-
-**Option E (session 10 recommended)**: F-NEW-15 substrate dig — read
-Codex's `build_cad.py` in `~/Desktop/case_003_crm_hls_boundary_layer/`,
-identify the farfield-overlap mechanism, write up a cross-repo ticket.
-≤30 min reading; documents what Codex needs to fix.
+**Option F (session 11 recommended — defensive)**: add a startup-time
+check that detects F-NEW-26-style source-CAD overlap on import.
+Implementation: M5.0 health check runs an HXT-based body-bisection
+probe (subset of session 8 probe5 logic) on multi-named-solid imports
+and rejects with a structured error pointing at the offending body
+pair. Fails fast at import rather than at mesh time, and improves
+error message specificity for downstream users hitting similar
+CAD bugs. ~80-120 LOC + 3-4 tests.
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
 Independent; can ship anytime. ~30-50 LOC.
 
-**Option F (defensive)**: add a startup-time check that detects
-F-NEW-26-style source-CAD overlap on import (e.g., body-bisection
-HXT probe in M5.0 health check) so future cases with similar CAD
-bugs fail fast at import rather than at mesh time. ~50-80 LOC.
+**Option G (cross-repo follow-up — non-coding)**: review case_006 /
+case_007 / case_010 build_cad.py for the same thick-plate-at-face
+pattern that case_003 + case_008 share. ≤30 min per case. Confirms or
+expands the cross-repo ticket's scope.
 
-Recommended order: E (file cross-repo ticket so Codex can fix
-case_003) → C → F.
+Recommended order: F (closes the defensive layer for current+future
+similar CAD bugs) → G (confirm class-wide scope) → C (independent).
