@@ -1,0 +1,13 @@
+{
+  "run_id": "naca0012__experienced_fluent__deepseek__9218e2d7",
+  "case_id": "imported_2026-05-07T09-32-33Z_8f858dd4",
+  "persona": "experienced_fluent",
+  "model_id": "deepseek-chat",
+  "steps": 63,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 1325213,
+  "total_output_tokens": 25084,
+  "error": "llm_chat_failed: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)"
+}

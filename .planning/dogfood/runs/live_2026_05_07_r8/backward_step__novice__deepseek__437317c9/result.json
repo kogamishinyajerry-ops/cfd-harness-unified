@@ -1,0 +1,13 @@
+{
+  "run_id": "backward_step__novice__deepseek__437317c9",
+  "case_id": "imported_2026-05-07T10-27-03Z_1e6fcecf",
+  "persona": "novice",
+  "model_id": "deepseek-chat",
+  "steps": 80,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 2945899,
+  "total_output_tokens": 25915,
+  "error": "max_steps_reached"
+}

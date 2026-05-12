@@ -1,0 +1,12 @@
+{
+  "charter_case_id": "pipe_expansion",
+  "workbench_case_id": "imported_2026-05-07T09-50-24Z_d1911ec3",
+  "persona": "debug",
+  "family": "deepseek",
+  "model_id": "deepseek-chat",
+  "run_id": "pipe_expansion__debug__deepseek__67e68dd7",
+  "dry_run": false,
+  "stl_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/scripts/dogfood/cases/geometry/pipe_expansion.stl",
+  "elapsed_s": 0.002557417028583586,
+  "error": null
+}
