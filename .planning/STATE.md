@@ -1641,7 +1641,79 @@ Closes V61-109 successor candidate but with the scope inverted by Codex.
 - **DEC-V61-110** (counter +1): Codex-corrected V109 framing in `patch_classification_store._assert_fd_still_matches_path` — **keep the S_ISLNK branch (not dead)**, update docstring + add post-lock-yield regression. Codex APPROVE R2 commit `767ed6c` after 2 rounds. R0 attempt `80ed3a8` (drop S_ISLNK branch) → Codex R1 CHANGES_REQUIRED: branch IS reachable on post-lock-yield symlink swap (V109's O_NOFOLLOW protects only case_lock's OPEN moment; once case_lock yields with dir_fd pinned, attacker can rename original case_dir away and plant symlink BEFORE _assert_fd_still_matches_path runs). R2 final scope: docstring-only correction + new regression test. **Original "drop dead branch" intent abandoned — Codex caught it as Codex-prevented regression, not post-R3 defect.** Self-pass 0.95 / R1 calibration validated.
 
 **Counter**: ~75 → ~76
-**Open**: STATE.md backfill (this file).
+**Open**: ~~STATE.md backfill (this file)~~ — closed 2026-05-12 audit pass (V61-111..V61-198 blocks added below).
+
+---
+
+## 2026-05-03 → 2026-05-05 — V61-111..V61-127 · numerics fixes + solver profile + AI coach + mesh tools
+
+Bridge from V61-110 (S_ISLNK docstring) into the May arc. Pre-pivot work: generalize fvSolution contract, wire LLM provider + AI coach chat panel, ship first-cut mesh quality + regenerate tooling.
+
+- **V61-111**: iter01 numerical setup fix — closes the residual physics defect re-scoped from V61-104 Phase 1.5.
+- **V61-112** (4 phases): `solver_profile.yaml` generalization — fvSolution/fvSchemes per-solver-class contract; lazy validation; CI regression coverage; same-day phase-4 close.
+- **V61-113**: lazy validation audit (V61-112's deferred load model · audit pass).
+- **V61-114**: CI explicit-include of V61-112 regression tests.
+- **V61-115**: workbench default landing hero (Step Physics workbench UX entry).
+- **V61-116**: case completeness analyzer — synthesizes manifest readiness signal across mesh/BC/solver stages.
+- **V61-117**: steptree fluent hierarchy (workbench navigation refactor).
+- **V61-118..V61-121**: LLM provider integration → coach streaming completeness → AI coach chat panel UI → action proposals (4 sequential sub-DECs · first AI-advisor surface live).
+- **V61-122..V61-127**: mesh tools burst — quality adviser, regenerate tool, target-cell-count arg, lc override, checkmesh integration, mesh quality card.
+
+**Counter**: ~76 → ~92
+**Retro**: 2026-05-04 V088..V116 arc retrospective (`2026-05-04_v61_arc_retro_v088_to_v116.md`) — arc-size review across 28 DECs.
+
+---
+
+## 2026-05-06 — V61-128..V61-132 · **AI-advisor strategic pivot (V61-130 charter)**
+
+The day the project pivots away from "AI auto-mutate" toward "AI as advisor". Falsifies V120/V121 action-proposal direction.
+
+- **V61-128**: patch chip derived coloring (UX micro).
+- **V61-129a**: per-patch severe non-orthogonality surface.
+- **V61-130** ⭐ **CHARTER**: strategic pivot to AI-as-advisor (the four-question gate is born here: LLM-offline / artifacts / TrustGate / advisor-not-driver). Parent of V61-198. **Lands the durable framing**: workbench must run LLM-offline; AI calls only GET + advise; no mutation routes.
+- **V61-131**: envelope hard-strip · `regenerate_mesh` route deprecated as AI mutation surface.
+- **V61-132**: N1.2 mutating routes registry behavioral contract — AI advisor mutation pattern hook (warning-only · still active in pre-commit).
+
+**Counter**: ~92 → ~97
+
+---
+
+## 2026-05-07 — **THE BIG DAY** · V61-133..V61-198 (66 DECs in one calendar day)
+
+Five charters land in sequence: governance simplification → N2 mesh → N3 physics → N4 BC+solver → N5 post-processing → N6 AI advisor stack → B subagent dogfood → B-extend persona arc → APU bay strategic pivot.
+
+- **V61-133** ⭐ **CHARTER**: governance simplification B+ (v2.3 baseline). Kogami opt-in / Codex round cap=3 / DEC scope-driven / cadence floor 30 / retire 3 pre-commit hooks / counter pure telemetry / DEC 6-field minimum frontmatter. SSOT = this DEC.
+- **V61-134..V61-138** (N2): mesh control parity charter + N2.1 sizing field + N2.2 region refinement + N2.3 prism layer + N2.4 checkmesh advisor.
+- **V61-139..V61-144** (N3): physics+materials charter + material contract + regime contract + physics panel + solver derivation + tolerance binding.
+- **V61-145..V61-150** (N4): BC+solver unification charter + BC contract (`BCContract` schema · target of A4 mass-balance audit added 2026-05-12) + solver dicts override + URF advisor + escape hatch + controlDict timing.
+- **V61-151..V61-155** (N5): post-processing charter + beginner report + honest issue list + audit v2 manifest + export formats.
+- **V61-156..V61-161** (N6 + close): AI advisor stack charter + corpus loader + AI review route + AI diagnose route + advisor panel + offline fallback; **N6 phase-close DEC same day** (`v61_n6_phase_close.md`).
+- **V61-162..V61-171** (B subagent dogfood arc): charter + dogfood harness + persona library + case pool + orchestrate/aggregate + 4 sub-DECs + phase-close (B-6).
+- **V61-172..V61-197** (B-extend arc): charter + 6 sub-extends (B-ext-1 pruning → B-ext-2 patch discovery → B-ext-3 fix → B-ext-4 anti-mesh-cycle + F11/F12 → B-ext-5 F14 fix + F13 mitigation + step6 rehearsal → B-ext-6 F15 fix + close). ~26 sub-DECs.
+- **V61-198** ⭐ **CHARTER**: APU bay strategic pivot — close B-extend arc; 5-artifact extraction (A1-A5); roadmap v2 relabel with **new M2.5 CAD ingest hardening** milestone; monthly industrial-case dogfood substrate; V-series finding index seeded V1-V13.
+
+**Counter**: ~97 → ~163
+
+---
+
+## 2026-05-08 → 2026-05-12 — industrial-case sediment burst + v2.3 round-1 loosen + A1-A5 land
+
+V61-198's "container-of-industrial-experience" philosophy materializes fast: 13 new industrial cases sedimented across 5 days, V-series extended from V13 seed to V51+, S-series from S10 to S21+. A1-A5 artifacts physically land in `ui/backend/services/`. v2.3 governance gets first calibration pass.
+
+- **Industrial cases sedimented** (`case_003`..`case_016`): CRM-HLS BL, NREL phase VI MRF, RAE M2129 S-duct, ONERA M6 transonic, KCS ship VOF, GLC305 IRT Lagrangian, Sandia Flame D reacting, DrivAer fastback LES, plate-fin compact HX (CHT), HVAC supply diffuser, Vattenfall T-junction, M219 cavity DES-acoustic. Each adds V-series rows (V14-V51+) + S-series rows (S11-S21+).
+- **5 工件 LANDED** (DEC-V61-198 §C):
+  - A1 `cad_ingest_freecad.py` · A2 `virtual_interface_detector.py` · A3 `geometry_surgery.py` in `ui/backend/services/geometry_ingest/`
+  - A4 `check_mass_balance(contract)` in `case_bc/writer.py` — commit `3b21802` 2026-05-12 (this audit · only outstanding item)
+  - A5 `solver_convergence_playbook.md` · `industrial_case_solver_findings.md` (V-series index) · `workbench_persona_findings.md` F↔V cross-link in `.planning/methodology/`
+  - `case_002a_apu_bay_buoyant_simple.md` + `case_002b_apu_bay_cht.md` reference profiles
+- **PR train · codex/stack-XX-* (PR #51-#60)**: stack-00 CI baseline through stack-09 artifact closeout — batch merge train pattern (10 PRs land 2026-05-12). **Not in v2.3 governance baseline as documented PR shape** — needs methodology codification (open question).
+- **v2.3 calibration retros (2026-05-11)**:
+  - `2026-05-11_v23_governance_loosen_round1.md` — B1 spike-class one-class scope class (≤30 LOC + 1 test + skip DEC/Codex/Kogami/Notion) · B2 charter trigger = ≥3 共享代码路径 (not strategic-brief pillar count) · B3 Notion sync仅 Accepted DEC.
+  - `2026-05-11_calibration_spike_v_series_corpus_injection.md` — V-series corpus injection workflow calibration.
+- **2026-05-12 audit pass** (this session): A4 補丁 (commit `3b21802`) + DEC-V61-198 status-update addendum (commit `c713ce6`) + memory hygiene + this STATE.md backfill.
+
+**Counter**: ~163 → ~165+ (telemetry only · sediment commits don't necessarily land as DEC each)
+**Open**: Notion resync of DEC-V61-198 (frontmatter flipped to `drift 2026-05-12` · session-end batch sync needed); 56 staged `reports/codex_tool_reports/*` deletions未 commit (purpose unclear · separate inquiry); methodology codification of codex/stack-XX-* PR train pattern.
 
 ---
 
@@ -1657,5 +1729,8 @@ Closes V61-109 successor candidate but with the scope inverted by Codex.
 | **RETRO-V61-005 (governance closure)** | `2026-04-26_retro_v61_005_governance_closure_draft.md` | governance-window phase-close | 治理收口 2026-04-26 → 2026-05-03 window |
 | **RETRO-V61-006 (Session B)** | `2026-04-26_retro_session_b_arc.md` | Session B v3 P-1 + P-2 close | V61-080..V61-085 + FORENSIC-FLAKE-1 + FORENSIC-FLAKE-1-FIX · GOV-1 enrichment + multi-class authority + citation integrity + test-isolation |
 | **RETRO-V61-V107-V108** | `2026-05-02_v61_v107_v108_arc_retrospective.md` | arc-size + repeated under-calibration (V107.5 actual ~10% / V108-A actual ~10%) | V61-107 / V61-107.5 / V61-108-A / V61-108-B arc |
+| **V61-088..V61-116 arc retro** | `2026-05-04_v61_arc_retro_v088_to_v116.md` | arc-size review (28 DECs) | V61-088..V61-116 cross-arc · spans surface-scan discipline + numerics fixes + AI coach kickoff |
+| **v2.3 round-1 loosen** | `2026-05-11_v23_governance_loosen_round1.md` | v2.3 calibration · post-DEC-V61-133 ~4 days | B1 spike-class one-class scope + B2 charter trigger refinement + B3 Notion sync gates |
+| **V-series corpus injection calibration** | `2026-05-11_calibration_spike_v_series_corpus_injection.md` | spike calibration · industrial-case sediment workflow | V-series row promotion criteria + S-playbook trigger |
 
 > Note: The 2026-04-25 + 2026-04-26 retros use overlapping `RETRO-V61-005` / `RETRO-V61-006` IDs across different files — the IDs were reassigned during the 治理收口 anchor session per Session-B's audit ratification path. Refer to each file's `retro_id:` / `retrospective_id:` frontmatter for canonical attribution.
