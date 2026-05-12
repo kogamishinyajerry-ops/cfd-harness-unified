@@ -918,6 +918,30 @@ If yes → V-series. If no → F-series.
 | Reference case | case_003 session 13 cont |
 | Lesson | **"Configurable" is not always better than "tuned constant".** When the constant covers 95%+ of real cases and the override path is engineer-supplied sizing_field (already exists), adding config is API bloat. **Counter row**: autonomous_governance: true |
 
+### V73 · Main-repo schema evolution without consumer broadcast — CheckMeshResult drift
+
+| field | value |
+|---|---|
+| Surface | 2026-05-12 audit: APU bay `scripts/07_check_mesh.py` consumed main-repo `CheckMeshResult.max_non_orthogonality` (no suffix) and `result.n_failed_checks` (int). Main repo evolved schema to `max_non_orthogonality_deg` (added unit suffix) and `failed_checks: list[str]` (richer payload). APU bay regex fallback masked the drift — `make 07_check` printed `[WARN] harness 解析器不可用` and silently degraded to local parser, giving `max_non_orthogonality = None` in the printed report |
+| Engineer symptom | Main-repo integration appeared to work but actually wasn't — the engineer running the pipeline saw the report but did not realize `None` orthogonality meant the harness parser had been bypassed. The local regex fallback omits the orthogonality metric entirely |
+| Root cause | Main repo's mesh_quality module evolved (`_deg` suffix for unit clarity; `failed_checks: list[str]` instead of just count) but APU bay consumer was not updated. Main repo did not have a deprecation alias for old names. Consumer-side `try / except AttributeError + regex fallback` pattern catches the breakage but silently degrades |
+| Fix | (1) **APU bay consumer side** (immediate): rename `result.max_non_orthogonality` → `result.max_non_orthogonality_deg`; `result.n_failed_checks or 0` → `len(result.failed_checks)`. 2 lines + comment. (2) **Main repo side** (candidate): add backward-compat properties `max_non_orthogonality` (proxy for `_deg`) and `n_failed_checks` (return `len(failed_checks)`) on CheckMeshResult to absorb consumer evolution lag. Cost: ~10 LOC properties + 2 tests. Trade-off: schema bloat vs migration ergonomics |
+| Status | confirmed — APU bay side fixed; main-repo backward-compat decision deferred to user (the Pillar-3 RAG corpus already absorbs this V-finding regardless) |
+| Reference case | APU bay 07_check_mesh.py 2026-05-12 audit · main repo `ui/backend/services/mesh_quality/checkmesh_runner.py::CheckMeshResult` |
+| Lesson | **Consumer-side try/except + regex fallback silently degrades when producer schema evolves.** The defensive fallback that was supposed to keep pipelines running actually masks integration failure. Pattern matches V61 (the AABB overlap defensive layer that was dead code at HTTP layer until session 13 corrected) — defensive fallbacks need explicit visibility (e.g. `[WARN]` on the fallback path), not silent degradation. **Inheritance**: any consumer that imports a frozen dataclass from main repo + uses try/except for field access inherits this risk. **Counter row**: autonomous_governance: true (in-session fix landed without DEC; future main-repo backward-compat alias would be sub-DEC) |
+
+### V74 · SSOT forward-write vs implementation drift — naming.yaml 32-patch retreat trap
+
+| field | value |
+|---|---|
+| Surface | 2026-05-12 audit: APU bay `inputs/naming.yaml` documented "v3/v4 STL surgery: APU_door + Plane_Outer_Surf merged into Outer_Surf; Frame_3 + Frame_6 dropped (patch count 32 → 30)" at the **top comment**. But `scripts/01b_optimize_geom.py:33-34` still listed all 4 bodies in its `SHELLS` and frame sets. `inputs/cleaned_*.stl` outputs (timestamp 2026-05-07 19:56) still contained 32 bodies. `make 03_validate` correctly flagged 4 patches present in STL but absent from naming.yaml → `Error 1` halt |
+| Engineer symptom | Pipeline halted on validation step. Engineer initial interpretation: "naming.yaml missing 4 entries · add them as wall types and move on". Correct interpretation: "naming.yaml is forward-write to an unimplemented future state · either retreat SSOT to actual STL state OR implement the planned surgery" |
+| Root cause | SSOT was **forward-written** to describe the post-surgery state before the surgery was actually implemented in code. The comment chain `v3 STL 手术后 (after surgery)` implied surgery as a past event, but `01b_optimize_geom.py` was never updated and `cleaned_*.stl` regeneration was never re-run. Three artifacts drifted on different timelines: doc (forward), code (current), data (current) |
+| Fix | Pillar-2 retreat: (1) SSOT → revert to 32-patch state with 4 new wall_adiabatic entries (`APU_door`, `Plane_Outer_Surf`, `Frame_3`, `Frame_6`); (2) each new entry's `role` field explicitly notes "v3/v4 hybrid 曾计划 drop/merge · 实际 STL 仍含此 body · 2026-05-12 audit 退回"; (3) top comment rewritten from "v3 surgery 后 32→30" to "当前 32-patch · 历史 v3/v4 forward-write 未实施 · 未来 surgery 三步路径" |
+| Status | confirmed — APU bay naming.yaml retreated 2026-05-12 audit; `make 03_validate` now `[ok] 全部 32 个 patch 在 STL 和 naming.yaml 中一致` |
+| Reference case | APU bay `inputs/naming.yaml` 2026-05-12 audit |
+| Lesson | **Forward-writing a SSOT to describe planned-but-unimplemented state creates time-skew between documentation and reality.** When the next engineer (or fresh Claude Code session) reads the SSOT, they have no signal that the surgery was planned-but-deferred — the doc reads as describing current state. **Mitigation patterns**: (a) when forward-writing intent, use explicit future-tense markers (`planned`, `TODO`, `pending implementation`); (b) when retreating from forward-write, narrate the retreat in the comment chain so future readers understand the history; (c) where possible, gate forward-writes on actual implementation landing (CI check linking SSOT entries to code paths). **Inheritance**: any project documenting "planned change → SSOT updated → implementation deferred" inherits this trap. **Counter row**: autonomous_governance: true (in-session retreat, no DEC needed for SSOT bookkeeping) |
+
 ## Cross-cutting patterns observed
 
 ### Pattern 1 — Zero IC is the universal first-iter killer
