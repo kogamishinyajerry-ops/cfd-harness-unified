@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from ui.backend.schemas.bc_contract import (
     BCContract,
@@ -88,6 +90,50 @@ def render_p_field(contract: BCContract) -> str:
         lines.append("    }")
     lines.append("}")
     return "\n".join(lines) + "\n"
+
+
+@dataclass(frozen=True)
+class MassBalanceCheck:
+    """DEC-V61-198 A4 advisory result. Never blocks; surfaces signal."""
+
+    status: Literal["ok", "no_mass_flow", "no_relief_outlet"]
+    total_inlet_kg_s: float
+    has_relief_outlet: bool
+    message: str
+
+
+def check_mass_balance(contract: BCContract) -> MassBalanceCheck:
+    """Pre-flight advisory adapted from APU bay 05_make_dicts.py:317-336.
+
+    Main-repo schema has no mass_flow_outlet variant, so the check
+    reduces to: when MassFlowInletBC patches are present, ensure at
+    least one PressureOutletBC or InletOutletBC exists to absorb the
+    imposed mdot. Advisory only — caller decides whether to surface.
+    """
+    total_in = sum(
+        bc.mass_flow_rate
+        for bc in contract.patches.values()
+        if isinstance(bc, MassFlowInletBC)
+    )
+    has_relief = any(
+        isinstance(bc, (PressureOutletBC, InletOutletBC))
+        for bc in contract.patches.values()
+    )
+    if total_in == 0.0:
+        return MassBalanceCheck(
+            "no_mass_flow", 0.0, has_relief,
+            "no MassFlowInletBC patches — pressure-driven case?",
+        )
+    if not has_relief:
+        return MassBalanceCheck(
+            "no_relief_outlet", total_in, False,
+            f"Σmdot={total_in:.4f} kg/s with no PressureOutlet/InletOutlet "
+            "— solver will likely diverge",
+        )
+    return MassBalanceCheck(
+        "ok", total_in, True,
+        f"Σmdot={total_in:.4f} kg/s + relief outlet present",
+    )
 
 
 def write_bc_dicts(
