@@ -7,9 +7,13 @@
 > Designed by Codex (gpt-5.5 via codex-relay) per
 > `codex_case_design_protocol.md`. Validated by main session
 > 2026-05-07 evening — see `case_004_validation.md` for the
-> 6-check report. Verdict: PASS WITH NOTES (A2 advisor pending +
-> URL fetch may fail on local network with DNS hijacking;
-> documented as non-blocking).
+> 6-check report. Verdict: PASS WITH NOTES (URL fetch may fail
+> on local network with DNS hijacking; documented as non-blocking).
+>
+> **A2 advisor LANDED 2026-05-08 (commit `a09ae0a`)** — kickoff
+> updated to direct sub-session at the landed
+> `virtual_interface_detector`; Pillar 2 force-extraction signal
+> for V2 has discharged.
 
 ---
 
@@ -33,13 +37,14 @@ finding index + RAG corpus.
 Three cases already in the case fleet:
 - case_002a (APU bay buoyantSimpleFoam, internal flow + buoyancy) — active
 - case_002b (APU bay CHT, multi-region thermal coupling) — active
-- case_003 (CRM-HLS, external high-Re + boundary layer) — dispatched, **DEFERRED** awaiting user resources
+- case_003 (CRM-HLS, external high-Re + boundary layer) — dispatched
 
 Your case fills the **rotating machinery (MRF / sliding mesh)**
-row — currently uncovered. After you complete, the project's
-solver-class coverage advances by one axis. Note: case_003 may
-or may not have run before you. Either order works because both
-cases are root-of-numerics-class (no inheritance between them).
+row — currently uncovered. case_003 may or may not have run
+before you; either order works because both are root-of-numerics-
+class (no inheritance between them). After you complete, the
+project's solver-class coverage advances by one axis and the
+harvest cycle gains rotating-machinery sediment for the first time.
 
 You are NOT here to ship a generic feature. You are here to:
 1. Run case_004 end-to-end in its desktop sandbox
@@ -79,8 +84,10 @@ You are NOT here to ship a generic feature. You are here to:
    deliverables: brief + CAD script + STEP path + parts manifest +
    defect manifest)
 9. `.planning/methodology/kickoff/case_004_validation.md` — main
-   session's validation notes (especially A2-pending finding +
-   DNS-hijack note)
+   session's validation notes (DNS-hijack note + MRF specifics)
+10. `.planning/cross_cuts/v_series_2026-05-08.md` — current
+    V-series snapshot; note A2 advisor LANDED row (your case_004
+    D1 row is one of 8 cases waiting for field validation)
 
 ## Hard guardrails (do NOT violate)
 
@@ -99,6 +106,9 @@ You are NOT here to ship a generic feature. You are here to:
 6. **Use main-project advisors when applicable**:
    - `from ui.backend.services.geometry_ingest.thin_wall_advisor
      import detect_thin_wall_patches_at_risk` (for D8 verification)
+   - `from ui.backend.services.geometry_ingest.virtual_interface_detector
+     import detect_virtual_interfaces, InterfaceSpec` (for D1 — A2
+     LANDED 2026-05-08, commit a09ae0a)
    - `from ui.backend.services.geometry_ingest.geometry_surgery
      import decimate_to_tier, axial_stretch, apply_surgery` (if
      you need sHM-friendly mesh adjustments)
@@ -289,7 +299,29 @@ sliding mesh trigger.
 
 Before running the CFD pipeline, verify defects:
 
-### D1 verification
+### D1 verification — A2 advisor LANDED, USE IT
+
+A2 advisor extracted to main project 2026-05-08 (commit `a09ae0a`).
+You are among the first sub-sessions to exercise it on a real
+industrial case. Treat your run as **field validation**.
+
+> [QUESTIONABLE 2026-05-08]: "exercise A2; expect detection of
+> 0.30 mm gap" framing assumes a capability A2 v1 does NOT have.
+> A2 LANDED for V2 pattern (shared-interface confirmation on
+> non-manifold STEP), NOT D1 pattern (gap-as-defect detection).
+> Per V25 (open · `industrial_case_solver_findings.md#V25`),
+> A2's `_run_shared` returns `matched=True` with hardcoded
+> placeholder fields regardless of actual gap distance.
+> Verification pending: A2-v2 sub-DEC adds `inter_face_gap_mm`
+> field to `DetectedInterface` (drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`).
+> To resolve: A2-v2 lands AND sub-session re-runs case_004 D1
+> falsification. Until then, your A2 PASS (V22) confirms only
+> that `_run_shared` algorithm runs cleanly on rotating-machinery
+> axis-aligned bodies — NOT that A2 detects the 0.30 mm gap as
+> a defect.
+
+**Step 1 — manual ground truth via FreeCAD**:
 
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; \
@@ -301,22 +333,42 @@ FreeCADCmd -c "import FreeCAD as App, Import; \
 
 Expected: ≈ 0.30 mm. Report actual measured value.
 
-**Important · A2 advisor pending**: D1's `expected_advisor_to_catch`
-is `virtual_interface_detector`, which is **NOT yet extracted in
-main project** (per DEC-V61-198 the A2 artifact is in pending
-queue; case_003 also surfaces this). You must:
+**Step 2 — exercise landed A2 advisor**:
 
-1. **Manually verify the defect via FreeCAD** (above command)
-2. **Document in your final report**: "D1 sub-mm gap detected
-   manually; main-project A2 (virtual_interface_detector) NOT
-   YET LANDED — request main session A2 extraction in next
-   harvest cycle"
-3. This is **expected behavior**, not a defect — the case-thread
-   force-surfacing missing advisors is exactly the Pillar 2
-   run-and-correct loop in DEC-V61-198. After case_003 + case_004
-   both surface the same A2 gap, main session has compounded
-   evidence to extract A2 across rotating + external solver
-   classes
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    detect_virtual_interfaces, InterfaceSpec, FaceGeometry, BodyGeometry,
+)
+# Build BodyGeometry for nacelle_body and nacelle_service_cover from
+# STEP face extraction (FreeCAD or trimesh). Each face needs:
+#   area, bbox_min, bbox_max, normal, centroid (case units, meters).
+spec = InterfaceSpec(
+    name="nacelle_body__nacelle_service_cover_interface",
+    mode="shared",
+    bodies=("nacelle_body", "nacelle_service_cover"),
+)
+result = detect_virtual_interfaces(bodies=[nacelle_body, cover_body],
+                                   specs=[spec])
+# Expect: result contains 1 DetectedInterface with the two facing
+# faces despite isSame() failing on the BREP (V2 lesson).
+```
+
+**Step 3 — V-finding judgments**:
+
+- If A2 detects the interface → upgrade V2 / case_004 row in
+  `industrial_case_solver_findings.md` from "advisor landed" to
+  "advisor field-validated on case_004 (rotating-machinery topology)"
+- If A2 misses (false negative) → V_n finding "A2 advisor toy-case
+  bias on rotating-machinery aux-hardware face counts" + propose
+  threshold tuning sub-DEC
+- If A2 produces extra spurious matches (false positive) → V_n
+  finding "A2 advisor over-eager on adjacent-but-not-shared faces
+  in nacelle topology" + propose `mode='shared'` tightening
+
+The advisor's docstring explicitly forbids `isSame()` fast-path —
+do NOT propose adding one (V2 lesson preserved).
 
 ### D8 verification
 
@@ -351,7 +403,11 @@ print(warnings)  # expect a 'critical' warning
 
 If `thin_wall_advisor` does NOT produce a warning, that's a real
 V-finding — flag in your report under
-"main-project advisor blind spots".
+"main-project advisor blind spots". Note: case_004's 0.75mm shim
+is similar to case_007's 0.80mm transom plate — divergent advisor
+behavior across these topologies signals advisor-context
+sensitivity (future V-finding for thin_wall_advisor field
+validation).
 
 ## Six per-case standard moves (DEC-V61-198)
 
@@ -363,7 +419,9 @@ Execute these as your work plan:
 2. **V-series append**: every NEW failure mode goes in
    `industrial_case_solver_findings.md` as V_n (next available is
    V16 if case_003 hasn't run; otherwise pick up where case_003
-   left off). MRF-specific candidates to watch for:
+   left off). Candidates to watch for:
+   - **A2 advisor field-behavior on rotating-machinery topology**
+     (above three-branch decision tree)
    - `rotating_cellzone` name mismatch in MRFProperties → false
      stationary run with near-zero useful torque
    - Rotating zone too short axially → blade leading/trailing
@@ -449,6 +507,9 @@ When you complete (or pause):
 
 1. Reference profile up to date in main repo
 2. V-series rows added to `industrial_case_solver_findings.md`
+   (especially A2 field-validation row + MRF-specific findings —
+   both high-value sediment, you are first rotating-machinery
+   sub-session)
 3. Any new playbook patterns added to
    `solver_convergence_playbook.md`
 4. `case_index.md` updated (your row's status + last-touch)
@@ -478,8 +539,8 @@ If you encounter:
 - Stale assumption needing cross-case discussion → flag in final
   report under "Main session attention required"
 - Blocker requiring un-extracted main-project capability (e.g.,
-  A2 virtual_interface_detector, MRF advisor stack) → hand-craft
-  case-locally, document the gap, flag for main-session extraction
+  MRF advisor stack) → hand-craft case-locally, document the gap,
+  flag for main-session extraction (counter for harvester)
 - Codex's design fundamentally unworkable → pause, flag, main
   session asks Codex for revision (round-cap=2)
 
@@ -503,6 +564,7 @@ You CANNOT:
 - Take a different case
 - Re-design the case (only execute Codex's design + flag for
   revision if needed)
+- Add `isSame()` fast-path to `virtual_interface_detector` (V2 lesson)
 
 ## When you are done
 
@@ -515,27 +577,27 @@ do NOT spawn additional sub-sessions or take additional cases.
 Per main session's validation report
 (`case_004_validation.md`):
 
-1. **A2 (virtual_interface_detector) not yet landed** — D1 verified
-   manually; flag for extraction (compounded with case_003 if it
-   surfaced same gap)
-2. **NREL URL DNS hijack on local network** — `nrel.gov` resolves
+1. **NREL URL DNS hijack on local network** — `nrel.gov` resolves
    via Alibaba DNS to RFC 2544 reserved range. Script's
    `resolve_reference_report` is best-effort; CAD generates from
    in-script constants. Skip `--require-reference-cache`
-3. **SOURCE_SHA256 empty** — pin after first successful PDF
+2. **SOURCE_SHA256 empty** — pin after first successful PDF
    download for reproducibility
-4. **Domain half-width tight (1.25 D)** — consider expanding to
+3. **Domain half-width tight (1.25 D)** — consider expanding to
    ~5-10 D if v1 shows tunnel-wall blockage
-5. **Blade airfoil from AirfoilTools may differ sub-mm from NREL's
+4. **Blade airfoil from AirfoilTools may differ sub-mm from NREL's
    internal S809 tweak** — acceptable for v1 (engineering question
    is harness ingestion, not strict NASA Ames parity)
-6. **Steady MRF may not converge force monitors** — v2 AMI
+5. **Steady MRF may not converge force monitors** — v2 AMI
    sliding mesh is the documented fallback; AMI patch names
    (`rotor_ami_inner`, `stator_ami_outer`) declared in manifest
    but unused in v1
-7. **MRF infrastructure all-new** — main project has no
+6. **MRF infrastructure all-new** — main project has no
    `MRFProperties` template, no cellZone-aware sHM, no MRF audit
    advisor. Hand-craft case-locally; flag for extraction
+7. **A2 advisor JUST landed** (commit `a09ae0a`, 2026-05-08) — you
+   are among first industrial validators; expect threshold-tuning
+   sub-DEC candidate to surface from your run
 
 === END KICKOFF ===
 
@@ -550,9 +612,10 @@ After user pastes the kickoff into a new Claude Code session:
 - [ ] Update `case_index.md` — add case_004 row, status = "dispatched"
 - [ ] Wait for sub-session sediment in subsequent main-session
       turns
-- [ ] When sub-session reports A2-extraction is needed, queue
-      the A2 sub-DEC commit in next harvest cycle (especially if
-      case_003 also surfaces it — compounded evidence)
+- [ ] When sub-session reports A2 field-validation outcome
+      (validated / false-negative / false-positive on rotating-
+      machinery topology), update `industrial_case_solver_findings.md`
+      V2 row + queue any threshold-tuning sub-DEC for harvest cycle
 - [ ] When sub-session extracts MRF infrastructure
       (MRFProperties writer, audit advisor), evaluate for
       promotion to main-project shared services
