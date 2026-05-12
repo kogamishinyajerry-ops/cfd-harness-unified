@@ -48,23 +48,59 @@
 | `case_NNN_validation.md` | Main session 6-check validation report |
 | `case_NNN_<name>.md` | **Paste-ready** sub-session kickoff (template + Codex brief slot) |
 
-Currently:
-- `case_003_*` (4 files) — CRM-HLS boundary layer, dispatched 2026-05-07, **deferred awaiting user resources**
-- `case_004_*` (4 files) — NREL Phase VI MRF rotating machinery, dispatched 2026-05-07, **deferred awaiting user resources**
-- `case_005_*` (4 files) — RAE M2129 S-duct compressible-RANS, dispatched 2026-05-08, **deferred awaiting user resources** · first case to exercise LANDED A3 advisor
-- `case_006_*` (4 files) — ONERA M6 transonic wing, compressible-shock-density-based, dispatched 2026-05-08, **deferred awaiting user resources** · CRS gpt-5.4 fallback used (86gs 503); first density-based case
-- `case_007_*` (4 files) — KCS ship multiphase VOF, dispatched 2026-05-08, **deferred** · round 2 of 2 (round 1 hallucinated read-only); first multiphase
-- `case_008_*` (4 files) — GLC305 IRT Lagrangian icing, dispatched 2026-05-08, **deferred** · first Lagrangian; clarification preamble added to prompt template
-- `case_009_*` (4 files) — Sandia Flame D reacting-low-Mach, dispatched 2026-05-08, **deferred** · first reacting case; longest sub-session effort 12-16h; DRM-19 chemistry
-- `case_010_*` (4 files) — DrivAer fastback LES, dispatched 2026-05-08, **deferred** · final case; first transient LES; coverage matrix complete
+Currently (status reconciled to `case_index.md` SSOT 2026-05-08
+harvest cycle 002):
 
-**10-case roster complete as of 2026-05-08**. All 10 numerics-class
+- `case_003_*` (4 files) — CRM-HLS boundary layer, dispatched 2026-05-07, **active · v1 paused at advisor-validation** (V20 unit-scale block; CFD pipeline pending). A2 + thin_wall first cross-topology PASSes (per V25 = algorithm-runs-cleanly, not gap-defect-detected)
+- `case_004_*` (4 files) — NREL Phase VI MRF rotating machinery, dispatched 2026-05-07, **active · v1 advisor-validation done; MRF infra ready** (CFD pending v2). V22 + V23 + V24 sourced
+- `case_005_*` (4 files) — RAE M2129 S-duct compressible-RANS, dispatched 2026-05-08, **active · v1 baseline + v2 V21 disambiguation + v2 CFD push** · first case to exercise LANDED A3 advisor; surfaced V16-V25 chain including V25 (open · A2 placeholder semantic)
+- `case_006_*` (4 files) — ONERA M6 transonic wing, compressible-shock-density-based, dispatched 2026-05-08, **deferred awaiting compute** · CRS gpt-5.4 fallback used (86gs 503); first density-based case
+- `case_007_*` (4 files) — KCS ship multiphase VOF, dispatched 2026-05-08, **deferred awaiting compute** · round 2 of 2 (round 1 hallucinated read-only); first multiphase
+- `case_008_*` (4 files) — GLC305 IRT Lagrangian icing, dispatched 2026-05-08, **deferred awaiting compute** · first Lagrangian; clarification preamble added to prompt template
+- `case_009_*` (4 files) — Sandia Flame D reacting-low-Mach, dispatched 2026-05-08, **deferred awaiting compute** · first reacting case; longest sub-session effort 12-16h; DRM-19 chemistry
+- `case_010_*` (4 files) — DrivAer fastback LES, dispatched 2026-05-08, **deferred awaiting compute** · final case in original roster; first transient LES; numerics-root coverage matrix complete
+- `case_011_*` (4 files) — Plate-fin compact HX, Phase 1 #1, multi-stream CHT NEW root, 86gs xhigh R0 + CRS R1 emit fallback
+- `case_012_*` (4 files) — HVAC supply diffuser, Phase 1 #2 close, buoyantSimpleFoam direct 002a inheritance, **D7 first injection · advisor-gap surfacer**
+- `case_013_*` (4 files) — Centrifugal pump cavitating, Phase 2 #1, simpleFoam+MRF v1 / cavitatingFoam v2, ERCOFTAC-class water-treatment pump, 86gs network-disconnect → CRS fallback emit
+- `case_014_*` (4 files) — NASA CC3 compressor stage, Phase 2 #2 close, rhoSimpleFoam+MRF+cyclicAMI gold-standard turbomachinery
+- `case_015_*` (4 files) — Vattenfall T-junction LES+CHT, Phase 3 #1, first compound numerics root (LES+CHT) for project
+- `case_016_*` (4 files) — M219 cavity DES+acoustic, Phase 3 #2 close, second compound root (compressible-DES), **D6+D9 first injections**
+- `case_017_*` (4 files) — Pin-fin electronic heatsink, Phase 4 #1, microscale 4-region CHT with TIM solid-solid conjugate
+- `case_018_*` (4 files) — Stairmand cyclone separator, Phase 4 #2, first 3D swirl + first RSM for project
+- `case_019_*` (4 files) — Kenics static mixer, Phase 4 #3, scalar transport + A3 advisor stress-test
+- `case_020_*` (4 files) — Porous media filter Darcy-Forchheimer, **Phase 4 #4 FINAL CASE in 11-case batch**, **D10 first injection closes defect-catalog gap (D3+D4 only remaining uncovered)**
+
+**Original 10-case roster complete as of 2026-05-08**. All 10 numerics-class
 roots covered (compressible-buoyant-RANS, +CHT, incompressible-RANS,
 +MRF, compressible-RANS, compressible-shock-density-based,
 multiphase-VOF, RANS-Lagrangian, reacting-low-Mach, incompressible-LES).
-Workhorse OpenFOAM solver matrix complete. 8 deferred kickoffs in
-queue (cases 003-010); awaiting compute resources to dispatch
-sub-sessions.
+Workhorse OpenFOAM solver matrix complete. **3 of 8 dispatched cases
+have run v1 sediment** (003 paused on V20, 004 advisor-validation
+done, 005 v1+v2). 5 cases (006-010) deferred awaiting compute.
+
+**Industrial-extension batch (case_011-020) FULLY DISPATCHED as of 2026-05-08
+evening** — all 11 cases through Codex case-design + main-session validation
++ paste-ready kickoff. None yet sub-session-sedimented (all `dispatched · DEFERRED`).
+Codex backend mix: case_011 (86gs+CRS fallback) / case_013 (86gs+CRS fallback) /
+all others CRS gpt-5.4 high single-round. Total Codex tokens consumed:
+~1.67M across 11 cases.
+
+**Defect catalog coverage post-batch**: D1 (11×) · D2 (1×) · D3 (0× UNCOVERED) ·
+D4 (0× UNCOVERED) · D5 (2×) · D6 (2×) · D7 (2×) · D8 (3× +D8 [VALIDATED] arc) ·
+D9 (3×) · D10 (1×). D3 + D4 carry to next batch.
+
+**Advisor-gap V-findings to be consolidated by harvest cycle 003**:
+A4-A8 candidates surfaced — face-orientation (D7 across 012/013) /
+extra-body-in-fluid (D6 across 016/018) / curved-tessellation (D9 across
+016/017/020) / non-watertight-shell (D10 from 020). A2-v2 sub-DEC pending
+12 D1 cross-topology `[QUESTIONABLE]` PASSes (003-014/017 etc).
+
+**Compound numerics roots validated**: case_015 (LES+CHT) + case_016
+(compressible-DES). Pattern 6 numerics-class inheritance methodology
+demonstrated across 21 cases.
+
+**Trigger after sediment**: harvest cycle 003 full-mode + `case_021_030_*.md`
+strategic doc for next batch.
 
 ## Active work products
 
@@ -80,6 +116,8 @@ sub-sessions.
 
 | Path | Purpose |
 |---|---|
+| `strategic/case_011_020_industrial_extension_roadmap_2026-05-08.md` | **Strategic SSOT for case_011-020 batch** (post-original-roster industrial extension) |
+| `strategic/case_013_020_dispatch_plan_2026-05-08.md` | Dispatch order, dependencies, blockers, per-case readiness for case_013-020. Companion to roadmap above; case_011 dispatched, case_012 codex_request ready |
 | `strategic/` | Strategic memos (Pivot Charter Addendum 3, Blueprint v3, etc.) — historical record of strategic shifts |
 | `roadmaps/` | Roadmap drafts (post_w5, workbench_rollout) |
 | `specs/` | Technical specs (executor abstraction, etc.) |

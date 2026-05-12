@@ -20,6 +20,10 @@
 | Observable | Reference | Tolerance |
 | --- | --- | --- |
 | `nusselt_number` | `8.8` | `relative=0.1` |
+| `nusselt_max` | `17.925` | `relative=0.07` |
+| `u_max_centerline_v` | `64.63` | `relative=0.05` |
+| `v_max_centerline_h` | `219.36` | `relative=0.05` |
+| `psi_max_center` | `16.75` | `relative=0.08` |
 
 ## Results vs Reference
 

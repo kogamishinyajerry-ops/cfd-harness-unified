@@ -1,0 +1,4 @@
+{"case_id": "imported_2026-05-07T09-50-24Z_45b142b1", "event_type": "run_start", "model_id": "deepseek-chat", "persona": "novice", "run_id": "backward_step__novice__deepseek__c95e05b9", "ts": 1778147424.7875872}
+{"detail": "live partial run · charter_case=backward_step · workbench_case_id=imported_2026-05-07T09-50-24Z_45b142b1 · model=deepseek-chat", "event_type": "decision", "run_id": "backward_step__novice__deepseek__c95e05b9", "step": 0, "ts": 1778147424.7877362}
+{"detail": "llm_chat_failed: [Errno 8] nodename nor servname provided, or not known", "event_type": "error", "phase": "llm_chat", "run_id": "backward_step__novice__deepseek__c95e05b9", "ts": 1778147424.78992}
+{"event_type": "run_end", "final_status": "complete", "run_id": "backward_step__novice__deepseek__c95e05b9", "ts": 1778147424.7899919}

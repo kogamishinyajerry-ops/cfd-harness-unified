@@ -7,8 +7,12 @@
 > Designed by Codex (gpt-5.5 via codex-relay) per
 > `codex_case_design_protocol.md`. Validated by main session
 > 2026-05-07 evening — see `case_003_validation.md` for the
-> 6-check report. Verdict: PASS WITH NOTES (A2 advisor pending,
-> documented as Pillar 2 force-extraction signal).
+> 6-check report. Verdict: PASS WITH NOTES.
+>
+> **A2 advisor LANDED 2026-05-08 (commit `a09ae0a`)** — kickoff
+> updated to direct sub-session at the landed
+> `virtual_interface_detector`; Pillar 2 force-extraction signal
+> for V2 has discharged.
 
 ---
 
@@ -35,13 +39,15 @@ Two cases already covered:
 - case_002b (APU bay CHT, multi-region thermal coupling)
 
 Your case fills the **external high-Re + boundary layer** row —
-currently uncovered. After you complete, the project's
-solver-class coverage advances by one axis.
+currently uncovered. You are the FIRST of 8 dispatched cases
+(003-010) to actually run sub-session execution. After you
+complete, the project's solver-class coverage advances by one
+axis AND the harvest cycle gains its first 003-series sediment.
 
 You are NOT here to ship a generic feature. You are here to:
 1. Run case_003 end-to-end in its desktop sandbox
 2. Produce sediment artifacts in the format the main session expects
-3. Surface and document new failure modes (V-series candidates)
+3. Surface and document new failure modes (V-series candidates V16+)
 4. Verify Codex's injected defects against main-project advisors
 5. Do NOT refactor main project code beyond what your case
    strictly forces
@@ -72,7 +78,10 @@ You are NOT here to ship a generic feature. You are here to:
    deliverables: brief + CAD script + STEP path + parts manifest +
    defect manifest)
 9. `.planning/methodology/kickoff/case_003_validation.md` — main
-   session's validation notes (especially the A2-pending finding)
+   session's validation notes
+10. `.planning/cross_cuts/v_series_2026-05-08.md` — current
+    V-series snapshot; note the A2 advisor LANDED row covering
+    cases 003-010
 
 ## Hard guardrails (do NOT violate)
 
@@ -91,6 +100,9 @@ You are NOT here to ship a generic feature. You are here to:
 6. **Use main-project advisors when applicable**:
    - `from ui.backend.services.geometry_ingest.thin_wall_advisor
      import detect_thin_wall_patches_at_risk` (for D8 verification)
+   - `from ui.backend.services.geometry_ingest.virtual_interface_detector
+     import detect_virtual_interfaces, InterfaceSpec` (for D1 — A2
+     LANDED 2026-05-08, commit a09ae0a)
    - `from ui.backend.services.geometry_ingest.geometry_surgery
      import decimate_to_tier, axial_stretch, apply_surgery` (if
      you need sHM-friendly mesh adjustments)
@@ -196,7 +208,28 @@ Save at `inputs/defect_manifest.yaml`. Two defects:
 
 Before running the CFD pipeline, verify defects:
 
-### D1 verification
+### D1 verification — A2 advisor LANDED, USE IT
+
+A2 advisor extracted to main project 2026-05-08 (commit `a09ae0a`).
+You are the FIRST sub-session to exercise it on a real industrial
+case. Treat your run as **field validation**.
+
+> [QUESTIONABLE 2026-05-08]: "exercise A2; expect detection of
+> 0.35 mm gap" framing assumes a capability A2 v1 does NOT have.
+> A2 LANDED for V2 pattern (shared-interface confirmation on
+> non-manifold STEP), NOT D1 pattern (gap-as-defect detection).
+> Per V25 (open · `industrial_case_solver_findings.md#V25`),
+> A2's `_run_shared` returns `matched=True` with hardcoded
+> placeholder fields regardless of actual gap distance.
+> Verification pending: A2-v2 sub-DEC adds `inter_face_gap_mm`
+> field to `DetectedInterface` (drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`).
+> To resolve: A2-v2 lands AND sub-session re-runs case_003 D1
+> falsification. Until then, your A2 PASS confirms only that
+> `_run_shared` algorithm runs cleanly and finds a facing-face
+> candidate — NOT that A2 detects the 0.35 mm gap as a defect.
+
+**Step 1 — manual ground truth via FreeCAD**:
 
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; \
@@ -208,20 +241,42 @@ FreeCADCmd -c "import FreeCAD as App, Import; \
 
 Expected: ≈ 0.35 mm. Report actual measured value.
 
-**Important · A2 advisor pending**: D1's `expected_advisor_to_catch`
-is `virtual_interface_detector`, which is **NOT yet extracted in
-main project** (per DEC-V61-198 the A2 artifact is in pending
-queue). You must:
+**Step 2 — exercise landed A2 advisor**:
 
-1. **Manually verify the defect via FreeCAD** (above command)
-2. **Document in your final report**: "D1 sub-mm gap detected
-   manually; main-project A2 (virtual_interface_detector) NOT
-   YET LANDED — request main session A2 extraction in next
-   harvest cycle"
-3. This is **expected behavior**, not a defect — the case-thread
-   force-surfacing missing advisors is exactly the Pillar 2
-   run-and-correct loop in DEC-V61-198. Your finding gets V_n
-   tagged "advisor extraction candidate"
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    detect_virtual_interfaces, InterfaceSpec, FaceGeometry, BodyGeometry,
+)
+# Build BodyGeometry for root_mount_pad and root_mount_cover from STEP
+# face extraction (FreeCAD or trimesh — your choice). Each face needs:
+#   area, bbox_min, bbox_max, normal, centroid (case units, meters).
+spec = InterfaceSpec(
+    name="root_mount_pad__root_mount_cover_interface",
+    mode="shared",
+    bodies=("root_mount_pad", "root_mount_cover"),
+)
+result = detect_virtual_interfaces(bodies=[pad_body, cover_body],
+                                   specs=[spec])
+# Expect: result contains 1 DetectedInterface with the two facing
+# faces despite isSame() failing on the BREP (V2 lesson).
+```
+
+**Step 3 — V-finding judgments**:
+
+- If A2 detects the interface → upgrade V2 / case_003 row in
+  `industrial_case_solver_findings.md` from "advisor landed" to
+  "advisor field-validated on case_003"
+- If A2 misses (false negative) → V16 finding "A2 advisor toy-case
+  bias on industrial-scale BREP face counts/areas" + propose
+  threshold tuning sub-DEC
+- If A2 produces extra spurious matches (false positive) → V17
+  finding "A2 advisor over-eager on adjacent-but-not-shared faces"
+  + propose `mode='shared'` tightening
+
+The advisor's docstring explicitly forbids `isSame()` fast-path —
+do NOT propose adding one (V2 lesson preserved).
 
 ### D8 verification
 
@@ -271,9 +326,11 @@ Execute these as your work plan:
 2. **V-series append**: every NEW failure mode goes in
    `industrial_case_solver_findings.md` as V_n (next available is
    V16 — V14, V15 already taken by case_002b). Watch for:
+   - **A2 advisor field-behavior on industrial BREP** (above —
+     three-branch V-finding decision tree)
    - Prism layer first-cell-height vs y+ target mismatch
    - Wake-region cell sizing under-resolved
-   - kOmegaSST inadequate at 30°-35° transition slant
+   - kOmegaSST inadequate at high-lift separated zones
    - Far-field too-close blockage effects
    - High-lift separated steady RANS pseudo-steady oscillation
 3. **Playbook tree append**: if a new generalizable pattern
@@ -337,6 +394,8 @@ When you complete (or pause):
 
 1. Reference profile up to date in main repo
 2. V-series rows added to `industrial_case_solver_findings.md`
+   (especially A2 field-validation row — this is high-value
+   sediment, you are first 003-series case)
 3. Any new playbook patterns added to
    `solver_convergence_playbook.md`
 4. `case_index.md` updated (your row's status + last-touch)
@@ -388,6 +447,7 @@ You CANNOT:
 - Take a different case
 - Re-design the case (only execute Codex's design + flag for
   revision if needed)
+- Add `isSame()` fast-path to `virtual_interface_detector` (V2 lesson)
 
 ## When you are done
 
@@ -400,14 +460,15 @@ do NOT spawn additional sub-sessions or take additional cases.
 Per main session's validation report
 (`case_003_validation.md`):
 
-1. **A2 (virtual_interface_detector) not yet landed** — D1 verified
-   manually; flag for extraction
-2. **CRM-HLS reference flattens to one body** — Codex uses
+1. **CRM-HLS reference flattens to one body** — Codex uses
    `cq.Compound.makeCompound`; loses internal slat/flap/main
    element separation. v1 acceptable; v2 may want per-component
    patches if needed
-3. **SOURCE_SHA256 empty** — first run downloads without checksum;
+2. **SOURCE_SHA256 empty** — first run downloads without checksum;
    pin after first successful download for reproducibility
+3. **A2 advisor JUST landed** (commit `a09ae0a`, 2026-05-08) — you
+   are first industrial validator; expect threshold-tuning sub-DEC
+   candidate to surface from your run
 
 === END KICKOFF ===
 
@@ -422,5 +483,7 @@ After user pastes the kickoff into a new Claude Code session:
 - [ ] Update `case_index.md` — add case_003 row, status = "active"
 - [ ] Wait for sub-session sediment in subsequent main-session
       turns
-- [ ] When sub-session reports A2-extraction is needed, queue
-      the A2 sub-DEC commit in next harvest cycle
+- [ ] When sub-session reports A2 field-validation outcome
+      (validated / false-negative / false-positive), update
+      `industrial_case_solver_findings.md` V2 row + queue any
+      threshold-tuning sub-DEC for harvest cycle

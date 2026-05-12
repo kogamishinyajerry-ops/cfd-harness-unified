@@ -4,6 +4,14 @@
 > Claude Code session. Designed by Codex (gpt-5.5 xhigh, 86gs).
 > Validated 2026-05-08 — see `case_010_validation.md`. PASS WITH
 > NOTES. **Final case in 10-case roster.**
+>
+> **A2 advisor LANDED 2026-05-08 (commit `a09ae0a`) BUT scope-narrow
+> per V25** (open · sourced by case_005 v2 disambiguation, captured
+> in harvest cycle 002): A2's `_run_shared` returns matched=True
+> with hardcoded placeholder fields regardless of actual gap
+> distance. D1 exercise produces algorithm-runs-cleanly evidence,
+> NOT gap-detection field-validation. A2-v2 sub-DEC drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`.
 
 === BEGIN ===
 
@@ -15,28 +23,65 @@ classes covered after you complete).
 
 ## Project context
 cfd-harness-unified at `/Users/Zhuanz/Desktop/cfd-harness-unified/`.
-Per DEC-V61-198, accumulates industrial CFD experience. Nine
-prior cases dispatched. Your case fills **incompressible-LES**
-external transient (vehicle aerodynamics) — first LES for project.
+Per DEC-V61-198, accumulates industrial CFD experience.
+
+Nine prior cases:
+- case_002a, 002b: active
+- case_003 (CRM-HLS, external high-Re): active · v1 paused on V20
+  unit-scale block
+- case_004 (NREL Phase VI rotor, MRF): active · v1 advisor-validation
+  done; CFD pending v2
+- case_005 (RAE M2129 S-duct): active · v1+v2 ran; sourced
+  V16-V25 chain (incl. V25: A2 placeholder semantic OPEN; V17:
+  A3 redundancy gap OPEN)
+- case_006 (ONERA M6 transonic): dispatched-deferred
+- case_007 (KCS ship VOF): dispatched-deferred
+- case_008 (GLC305 Lagrangian): dispatched-deferred
+- case_009 (Sandia Flame D): dispatched-deferred
+
+Your case fills **incompressible-LES** external transient (vehicle
+aerodynamics) — first LES for project. You also EXTEND the
+thin_wall_advisor cross-topology validation arc to **6-case**:
+case_002a (curved CATIA) + case_003 (planar aero) + case_004
+(rotating-machinery shim) + case_007 (ship transom) + case_008
+(airfoil TE tab) + case_010 (vehicle underbody cover) — final
+case in roster makes the cross-topology arc complete.
 
 ## Required reading
 1. `.planning/decisions/2026-05-07_v61_198_apu_bay_strategic_pivot.md`
 2. `.planning/case_proposal_queue.md`
 3. `.planning/case_profiles/case_002a_*.md`, `case_002b_*.md`
-4. `.planning/methodology/industrial_case_solver_findings.md` (Pattern 6: case_010 inherits NONE)
+4. `.planning/methodology/industrial_case_solver_findings.md`
+   (Pattern 6: case_010 inherits NONE of V3-V25; incompressible-LES
+   is a new numerics root)
 5. `.planning/methodology/solver_convergence_playbook.md`
 6. `.planning/methodology/rag_corpus_format.md`
-7. `~/Desktop/apu-bay-ventilation/`
-8. `.planning/methodology/kickoff/case_010_codex_response.md`
-9. `.planning/methodology/kickoff/case_010_validation.md`
+7. **`.planning/methodology/knowledge_status_convention.md`**
+   (NEW · 2026-05-08 harvest 002) — defines `[QUESTIONABLE]` /
+   `[REFUTED]` / `[SUPERSEDED]` / `[VALIDATED]` markers
+8. `.planning/cross_cuts/v_series_2026-05-08.md` (V-series snapshot)
+9. `.planning/harvest_reports/2026-05-08_harvest_002.md` (cycle 002
+   findings — A2 capability framing notes)
+10. `~/Desktop/apu-bay-ventilation/`
+11. `.planning/methodology/kickoff/case_010_codex_response.md`
+12. `.planning/methodology/kickoff/case_010_validation.md`
 
 ## Hard guardrails
 1. V130 advisory-only · V132 no AI-mutating routes
 2. No date/calendar gating; OpenFOAM is truth source
 3. Use main-project advisors:
-   - `thin_wall_advisor` for D8 (4-case consistency: cases 004 + 007 + 008 + 010)
-   - `geometry_surgery` for vehicle CAD decimation if forced
-4. Do NOT redesign the case
+   - `from ui.backend.services.geometry_ingest.thin_wall_advisor
+     import detect_thin_wall_patches_at_risk` (for D8 — LANDED,
+     case_010 is 6th in cross-topology arc)
+   - `from ui.backend.services.geometry_ingest.virtual_interface_detector
+     import detect_virtual_interfaces, InterfaceSpec` (for D1 — A2
+     LANDED 2026-05-08 a09ae0a, BUT see `[QUESTIONABLE]` marker
+     in D1 verification section below)
+   - `from ui.backend.services.geometry_ingest.geometry_surgery
+     import decimate_to_tier` (for vehicle CAD decimation if forced)
+   - DO NOT re-implement these case-locally
+4. Do NOT redesign the case — execute Codex's brief; revision
+   request only if fundamentally unworkable (round-cap=2)
 5. **Wall-modeled LES** (y+=30-100); do NOT escalate to
    wall-resolved DNS-quality (out of scope, multi-month effort)
 6. **Stationary wheels and ground in v1** (moving floor / rotating
@@ -44,6 +89,8 @@ external transient (vehicle aerodynamics) — first LES for project.
 7. **No Ahmed body** — Lane B excluded; you're using DrivAer
 8. **No external redistribution of generated STEP** without
    TUM registration verification (license caveat per case_007 pattern)
+9. Do NOT add `isSame()` fast-path to `virtual_interface_detector`
+   (V2 lesson preserved)
 
 ## Case identifier
 `case_010_drivaer_fastback_les` · solver-class
@@ -167,17 +214,69 @@ Use ParaView (or pyvista):
 
 ## Defect verification
 
-### D1 (mirror_edge_trim_strip 0.35 mm gap)
+### D1 (mirror_edge_trim_strip 0.35 mm gap) — A2 advisor LANDED with caveat
+
+> [QUESTIONABLE 2026-05-08]: "exercise A2; expect detection of
+> 0.35 mm gap" framing assumes a capability A2 v1 does NOT have.
+> A2 LANDED for V2 pattern (shared-interface confirmation on
+> non-manifold STEP), NOT D1 pattern (gap-as-defect detection).
+> Per V25 (open · `industrial_case_solver_findings.md#V25`),
+> A2's `_run_shared` returns `matched=True` with hardcoded
+> placeholder `bbox_overlap_fraction=1.0` /
+> `area_diff_fraction=0.0` regardless of actual gap distance.
+> Verification pending: A2-v2 sub-DEC adds `inter_face_gap_mm`
+> field to `DetectedInterface` (drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`).
+> To resolve: A2-v2 lands AND case_010 sub-session re-runs D1
+> falsification on side-mirror trim geometry. Until then, your
+> A2 PASS confirms only that `_run_shared` runs cleanly on
+> mirror-trim faces — NOT that A2 detects the 0.35 mm gap as
+> a defect.
+
+**Step 1 — manual ground truth via FreeCAD**:
+
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; doc=App.newDocument(); \
-  Import.insert('inputs/cad_codex_v1.step', doc.Name); \
+  Import.insert('/Users/Zhuanz/Desktop/case_010_drivaer_fastback_les/inputs/cad_codex_v1.step', doc.Name); \
   o={x.Label:x for x in doc.Objects}; \
   print(o['side_mirror_outboard'].Shape.distToShape(o['mirror_edge_trim_strip'].Shape)[0])"
 ```
-Expected ≈ 0.35 mm. **A2 advisor pending — 8th consecutive case
-(if pattern holds)**.
 
-### D8 (underbody_sensor_cover_thin)
+Expected ≈ 0.35 mm. Report actual measured value.
+
+**Step 2 — exercise landed A2 advisor**:
+
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    detect_virtual_interfaces, InterfaceSpec, FaceGeometry, BodyGeometry,
+)
+spec = InterfaceSpec(
+    name="side_mirror__mirror_trim_interface",
+    mode="shared",
+    bodies=("side_mirror_outboard", "mirror_edge_trim_strip"),
+)
+result = detect_virtual_interfaces(bodies=[mirror_body, trim_body],
+                                   specs=[spec])
+# Expect: matched=True (per V21/V22 pattern) BUT this PASS is
+# NOT field-validation of gap-detection capability per V25.
+```
+
+**Step 3 — V-finding judgments**:
+
+- If `matched=True`: document as "case_010 cross-topology PASS for
+  `_run_shared` on vehicle-aero side-mirror trim geometry"
+  (algorithm-runs-cleanly, NOT gap-detection per V25).
+  **FINAL case in roster** — this completes A2 `_run_shared`
+  cross-topology evidence (axis-aligned-planar / flange-ring
+  axial-end / rotating-machinery / ship-hydro / Lagrangian-
+  airfoil-mount / combustion-burner if D1 / vehicle-aero).
+- If `matched=False`: NEW V-finding documenting which geometric
+  property of side-mirror trim fails `find_face_facing_target`.
+- Do NOT propose `isSame()` fast-path (V2 lesson).
+
+### D8 (underbody_sensor_cover_thin) — thin_wall_advisor LANDED
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; doc=App.newDocument(); \
   Import.insert('inputs/cad_codex_v1.step', doc.Name); \
@@ -185,22 +284,51 @@ FreeCADCmd -c "import FreeCAD as App, Import; doc=App.newDocument(); \
   bb=o['underbody_sensor_cover_thin'].Shape.BoundBox; \
   print(min(bb.XLength, bb.YLength, bb.ZLength))"
 ```
-Expected sub-mm. Run thin_wall_advisor (LANDED). **4-case
-consistency check** (cases 004 + 007 + 008 + 010). Strong
-falsification context.
+Expected sub-mm. Then exercise:
+
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.thin_wall_advisor import (
+    PatchGeometry, detect_thin_wall_patches_at_risk
+)
+warnings = detect_thin_wall_patches_at_risk(
+    patches=[PatchGeometry(name="underbody_sensor_cover_thin",
+                            bbox_dimensions=(cover_dx_m, cover_dy_m, cover_dz_m))],
+    refinement_levels={"underbody_sensor_cover_thin": (1, 2)},
+    background_cell_size=YOUR_BG_CELL_SIZE_METERS,
+)
+print(warnings)  # expect 'critical'
+```
+
+**6-case cross-topology validation arc (FINAL — completes
+roster)**: case_002a (curved CATIA Frame) + case_003 (planar
+CadQuery thin_access_plate) + case_004 (rotating-machinery
+`yaw_sensor_shim` 0.75mm) + case_007 (ship transom plate 0.80mm)
++ case_008 (airfoil TE tab 0.80mm) + case_010 (vehicle underbody
+cover sub-mm). If all 6 produce critical warning consistent,
+**upgrade V10 / V23 status to "6-of-6 — robust across (curved-
+shell, planar-aero, rotating-aux, ship-hydro, airfoil-TE, vehicle-
+underbody) topologies — cleanest piece of A1-A5 sediment in
+project"** per `knowledge_status_convention.md` `[VALIDATED]`
+marker. If divergent on case_010 specifically, flag as advisor-
+context-sensitivity V-finding for vehicle aerodynamics.
 
 ## Six per-case standard moves
 1. Reference profile at `case_profiles/case_010_drivaer_fastback_les.md`
-2. V-series: LES timestep stability vs CFL, time-averaging window
-   sufficiency, A-pillar / mirror / wake transient coherent
+2. V-series append: LES timestep stability vs CFL, time-averaging
+   window sufficiency, A-pillar / mirror / wake transient coherent
    structures, sHM refinement near vehicle body, ground-vehicle
-   gap mesh resolution
+   gap mesh resolution. ALSO: **A2 `_run_shared` behavior on
+   vehicle-aero topology** (above); **thin_wall 6-case cross-
+   topology FINAL check** (above)
 3. Playbook S13+: "LES Cd unstable when averaged < 5 flow-throughs
    → extend averaging window" / "y+ overshoot at A-pillar → refine
    prism layer near sharp edge" / "fastback base separation
    over-predicts → check WALE Ck constant or switch dynamicKEqn"
 4. Stale-assumption fixes: 0.orig template needs LES variants;
-   turbulenceProperties needs LES section
+   turbulenceProperties needs LES section. Commit tag:
+   `corrects-assumption: <X>, surfaced-by: case_010-V<n>`
 5. Artifact extraction (4 likely):
    - `les_fvschemes_writer.py`
    - `les_turbulence_properties_writer.py`
@@ -224,34 +352,80 @@ falsification context.
 
 ## Sediment + commit convention
 Same as case_002a/b. `confidence: <high|med|low>` trailer.
+Co-author Claude Opus 4.7. `case/` runtime gitignored.
+
+If you produce a V-finding involving an advisor capability claim,
+apply `knowledge_status_convention.md` grammar — do NOT write
+"A2 field-validated" if you only confirmed `_run_shared` runs cleanly.
 
 ## Boundaries
-- CAN: end-to-end run, sandbox modify, sediment, <250 LOC
+- CAN: end-to-end run, sandbox modify, sediment commits, <250 LOC
   artifact extraction (4 likely), advisor-bias fixes, add LES
-  fields to 0.orig
+  fields to 0.orig if missing
 - CANNOT: redesign case, modify other cases, open new DEC arcs,
   upgrade to wall-resolved DNS-quality, redistribute DrivAer STEP
-  externally without TUM registration verification
+  externally without TUM registration verification, add `isSame()`
+  fast-path to `virtual_interface_detector` (V2 lesson)
 
 ## Known issues
-1. **A2 pending — 8-of-8 evidence likely after this case**
-2. **D8 thin_wall_advisor 4-case consistency** — strong context
+1. **A2 advisor LANDED but scope-narrow (V25 open)** — D1 exercise
+   produces algorithm-runs-cleanly evidence, NOT gap-detection
+   field-validation. See `[QUESTIONABLE]` marker in D1 verification
+   section above. A2-v2 sub-DEC drafted
+   (`patches/draft_a2_v2_gap_detection_2026-05-08.md`); after it
+   lands, case_010 v3 re-runs D1 falsification.
+2. **D8 thin_wall_advisor 6-case cross-topology FINAL check** —
+   case_002a + 003 + 004 + 007 + 008 + 010 should all produce
+   critical warning; this completes the roster's cross-topology
+   validation arc. Upgrade V10/V23 to `[VALIDATED]` (6-of-6) on
+   consistency, or flag context-sensitivity V-finding on divergence.
 3. **First transient LES for project** — pimpleFoam + WALE
    infrastructure all-new
 4. **Time-averaging window sensitivity** — Cd convergence may
    require ≥ 5 L/U_inf accumulation; v1 may show drift
 5. **Wall-modeled y+** — sHM prism layer must produce y+=30-100
    on body surfaces; use `checkMesh -allTopology` to verify
+6. **License caveat** — bake-into-script keeps STEP regeneration
+   deterministic from public TUM offsets; do NOT publish the
+   generated binary externally without TUM permission
+
+## Coverage matrix complete after this case
+
+After your sub-session sediment lands, the project's 10-case
+roster covers all 10 numerics-class roots:
+1. compressible-buoyant-RANS (case_002a)
+2. + CHT extension (case_002b)
+3. incompressible-RANS external (case_003)
+4. incompressible-RANS-MRF (case_004)
+5. compressible-RANS internal (case_005)
+6. compressible-shock-density-based (case_006)
+7. multiphase-VOF (case_007)
+8. incompressible-RANS-Lagrangian (case_008)
+9. reacting-low-Mach (case_009)
+10. **incompressible-LES (case_010 — YOU)**
+
+Workhorse OpenFOAM solver matrix complete. Future cases extend
+combinations (LES+CHT, reacting-LES, compressible-Lagrangian) but
+each numerics root has at least one anchor case.
 
 === END ===
 
 ## Main session post-dispatch checklist
-- [ ] Move case_010 row from "Active queue" to "Dispatched"
-- [ ] Update `case_index.md` with case_010 status=dispatched
-- [ ] Update `INDEX.md` kickoff list
-- [ ] **10-case roster complete** — 5 deferred kickoffs in queue
-      (003, 004, 005, 006, 007, 008, 009, 010 = 8 cases minus
-      002a/b active = 8 deferred)
+- [ ] Move case_010 row from "Active queue" to "In-flight"
+- [ ] Update `case_index.md` with case_010 status=active
+- [ ] Update `INDEX.md` kickoff list status reconciled
+- [ ] **10-case roster fully dispatched** — all numerics-class
+      roots have anchor cases; future work extends combinations
+- [ ] When sub-session reports A2 `_run_shared` outcome on
+      vehicle-aero side-mirror trim topology (PASS = algorithm-
+      runs-cleanly, NOT gap-detection per V25), update V22 / V25
+      evidence rows — case_010 is FINAL piece of A2 cross-topology
+      evidence
+- [ ] When sub-session reports thin_wall 6-case cross-topology
+      outcome, upgrade V10/V23 to `[VALIDATED]` (6-of-6) or open
+      context-sensitivity V-finding on divergence — completes the
+      roster's cross-topology validation arc
 - [ ] When sub-session extracts LES infrastructure (fvSchemes
       writer, turbulence writer, field-averaging, Q-criterion
-      post-processor), evaluate for promotion
+      post-processor), evaluate for promotion to main-project
+      shared services

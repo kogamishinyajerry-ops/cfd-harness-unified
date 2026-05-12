@@ -1,0 +1,262 @@
+{
+  "artifact_under_review": ".planning/strategic/oss_substitution_4pillar_brief_2026-05-11.md",
+  "briefing_script_sha256": "0503730b30067986eaa1cf5f908b27e3d3e56612ab4f0c8ce87f556267b5b147",
+  "kogami_briefing_version": "1.0",
+  "section_selection_rules_version": "1.0",
+  "sources": [
+    {
+      "bytes": 5858,
+      "label": "P-1 system prompt",
+      "original_path": ".claude/agents/kogami-claude-cosplay.md",
+      "present": true,
+      "sha256": "852a4f9e0b1e45ad9a2c3a7b8b935911568a62e7452daa392ce69a49a10668ea"
+    },
+    {
+      "bytes": 17887,
+      "label": "artifact_under_review",
+      "original_path": ".planning/strategic/oss_substitution_4pillar_brief_2026-05-11.md",
+      "present": true,
+      "sha256": "a913693c2adf69f500d55d2e632da78d6fa3a8d556ce9e61ec6fffb44935f90d"
+    },
+    {
+      "bytes": 1626,
+      "label": "PROJECT.md",
+      "original_path": ".planning/PROJECT.md",
+      "present": true,
+      "sha256": "22f0702a8befad0e523cb12ebf4b77dc7631da5fb1c3d90d74ec54c0971ccc1e"
+    },
+    {
+      "bytes": 16115,
+      "label": "ROADMAP.md",
+      "original_path": ".planning/ROADMAP.md",
+      "present": true,
+      "sha256": "2f084b19f22cb151b9497b6b7f2c894d1ec378dbe6a545214556c59cc5eb95ab"
+    },
+    {
+      "bytes": 202191,
+      "label": "STATE.md (summary)",
+      "original_path": ".planning/STATE.md",
+      "present": true,
+      "sha256": "ce62fd93b78fd3f9ab9ca2fcfdf8ea8706844779e24c48dbd379dc0145d87c4f"
+    },
+    {
+      "bytes": 9852,
+      "label": "recent_dec_2026-05-07_v61_n6_phase_close.md",
+      "original_path": ".planning/decisions/2026-05-07_v61_n6_phase_close.md",
+      "present": true,
+      "sha256": "8ce845ace9b6c0fc7d345475003964150f336804c3f2e78e5481c7ef0c123330"
+    },
+    {
+      "bytes": 20825,
+      "label": "recent_dec_2026-05-07_v61_198_apu_bay_strategic_pivot.md",
+      "original_path": ".planning/decisions/2026-05-07_v61_198_apu_bay_strategic_pivot.md",
+      "present": true,
+      "sha256": "60abd2ae86ea38004963695b6295f056b3a1327331b4352a144ba670e89e17ae"
+    },
+    {
+      "bytes": 7903,
+      "label": "recent_dec_2026-05-07_v61_197_b_ext_6_close.md",
+      "original_path": ".planning/decisions/2026-05-07_v61_197_b_ext_6_close.md",
+      "present": true,
+      "sha256": "22cda0014102a7b9ca0348b22772e8db30757470dd7de4a8ddd7a00f0b07588f"
+    },
+    {
+      "bytes": 8104,
+      "label": "recent_dec_2026-05-07_v61_196_b_ext_6_1_f15_fix.md",
+      "original_path": ".planning/decisions/2026-05-07_v61_196_b_ext_6_1_f15_fix.md",
+      "present": true,
+      "sha256": "c92bdebbc651b8b9a2c026909c23419aded1fe8c394083ab55ae0ebb705aa273"
+    },
+    {
+      "bytes": 4263,
+      "label": "recent_dec_2026-05-07_v61_195_b_ext_6_charter.md",
+      "original_path": ".planning/decisions/2026-05-07_v61_195_b_ext_6_charter.md",
+      "present": true,
+      "sha256": "8eea14cac1142e1f2dc3db1b862baa63cba4d2054b36a7b9151e4acbd44fa4cc"
+    },
+    {
+      "bytes": 4867,
+      "label": "retro_2026-04-21_pr22_changes_required_incident_retro.md",
+      "original_path": ".planning/retrospectives/2026-04-21_pr22_changes_required_incident_retro.md",
+      "present": true,
+      "sha256": "0219a85cccac60c6fe69e478edf7051e0b0d51d47cf8868b9ab237bebc624be7"
+    },
+    {
+      "bytes": 20224,
+      "label": "retro_2026-04-21_v61_counter16_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-21_v61_counter16_retrospective.md",
+      "present": true,
+      "sha256": "444e6d7280564e01010d84fcf1bfb9095e192ee97a24fff0d009bc31ad13c1e2"
+    },
+    {
+      "bytes": 6750,
+      "label": "retro_2026-04-21_v61_counter20_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-21_v61_counter20_retrospective.md",
+      "present": true,
+      "sha256": "3f1bf67bd43cf37e47b17e614b69d4b4283ebd2abc963b42b65d773ca63c7cb2"
+    },
+    {
+      "bytes": 12463,
+      "label": "retro_2026-04-22_v61_counter32_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-22_v61_counter32_retrospective.md",
+      "present": true,
+      "sha256": "9ebcc8383e83cd9289809c782121a831c5c543bb64a2209997b15b1ab4e589f3"
+    },
+    {
+      "bytes": 20757,
+      "label": "retro_2026-04-24_retro_v61_053_python_parity.md",
+      "original_path": ".planning/retrospectives/2026-04-24_retro_v61_053_python_parity.md",
+      "present": true,
+      "sha256": "48d06d7888e742662b79d6c4f3b1550111f4ff7fa79eed8af75152da06f774bc"
+    },
+    {
+      "bytes": 19269,
+      "label": "retro_2026-04-25_p1_arc_complete_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-04-25_p1_arc_complete_retrospective.md",
+      "present": true,
+      "sha256": "0f304f76ba2c80e5331a1301f8c5f226872697c1bea3df93f923fb4c16356b14"
+    },
+    {
+      "bytes": 10086,
+      "label": "retro_2026-04-25_retro_adr_002_w2_gate_arc.md",
+      "original_path": ".planning/retrospectives/2026-04-25_retro_adr_002_w2_gate_arc.md",
+      "present": true,
+      "sha256": "22344adb0369d444d86c3df1614a78826a01703a12c7c3960d5a2588cda0fc0d"
+    },
+    {
+      "bytes": 35297,
+      "label": "retro_2026-04-25_retro_w4_prep_r1_incident.md",
+      "original_path": ".planning/retrospectives/2026-04-25_retro_w4_prep_r1_incident.md",
+      "present": true,
+      "sha256": "ff778f0889710659fd4c7b41c9048e45ff4c415430828c4e22ad7d184619c31b"
+    },
+    {
+      "bytes": 11641,
+      "label": "retro_2026-04-26_retro_session_b_arc.md",
+      "original_path": ".planning/retrospectives/2026-04-26_retro_session_b_arc.md",
+      "present": true,
+      "sha256": "6ec136326f6eb8cfb1ac4276203ff72c0308e8bca4d91fcd9e3e4daff8ddf487"
+    },
+    {
+      "bytes": 15097,
+      "label": "retro_2026-04-26_retro_v61_005_governance_closure_draft.md",
+      "original_path": ".planning/retrospectives/2026-04-26_retro_v61_005_governance_closure_draft.md",
+      "present": true,
+      "sha256": "9f78786d53d9697c207209d2a4f0c766644a0433ce9f850d3019cd2fa139e588"
+    },
+    {
+      "bytes": 20884,
+      "label": "retro_2026-05-02_v61_v107_v108_arc_retrospective.md",
+      "original_path": ".planning/retrospectives/2026-05-02_v61_v107_v108_arc_retrospective.md",
+      "present": true,
+      "sha256": "67c5ef95b76759248ba09bf0d007728b7569de76ccabe2186dbd07d376aad1d8"
+    },
+    {
+      "bytes": 12554,
+      "label": "retro_2026-05-04_v61_arc_retro_v088_to_v116.md",
+      "original_path": ".planning/retrospectives/2026-05-04_v61_arc_retro_v088_to_v116.md",
+      "present": true,
+      "sha256": "c2cf03c8375b7947679228130840458cce8a1122f93b3b813c83e0eb0b25a3a6"
+    },
+    {
+      "bytes": 16869,
+      "label": "methodology_2026-04-26_v2_section_10_5_and_11_draft.md",
+      "original_path": ".planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md",
+      "present": true,
+      "sha256": "da11bac7ffa29748f78212c07c9e946730d5519150b9a60c4dc342033c0c06a0"
+    },
+    {
+      "bytes": 14343,
+      "label": "methodology_case_kickoff_prompt_template.md",
+      "original_path": ".planning/methodology/case_kickoff_prompt_template.md",
+      "present": true,
+      "sha256": "0e9a8c74d348748e4f8694b8e9e56fc13ba638e4b9dd0f7fa96fe46b840af19c"
+    },
+    {
+      "bytes": 14134,
+      "label": "methodology_codex_case_design_protocol.md",
+      "original_path": ".planning/methodology/codex_case_design_protocol.md",
+      "present": true,
+      "sha256": "edb8c03ad36680490b92a8bb9e17af4e7904fd480deaae0bd277b7764789022c"
+    },
+    {
+      "bytes": 10502,
+      "label": "methodology_component_bank.md",
+      "original_path": ".planning/methodology/component_bank.md",
+      "present": true,
+      "sha256": "aa211e11116033c3835fe7db810e17c7e75e5a5c76828ca95f71ac4ea5de5ee9"
+    },
+    {
+      "bytes": 2804,
+      "label": "methodology_dec_frontmatter_minimum.md",
+      "original_path": ".planning/methodology/dec_frontmatter_minimum.md",
+      "present": true,
+      "sha256": "8bc0e2bf9a0069f9565d6f209b6504cde4d32db1556ceec8916ae16071c0d522"
+    },
+    {
+      "bytes": 13084,
+      "label": "methodology_harvest_session_kickoff.md",
+      "original_path": ".planning/methodology/harvest_session_kickoff.md",
+      "present": true,
+      "sha256": "4b50efe5616762556f5faf8662b46642e0148c195b772e55b9c1f6c145fb0a36"
+    },
+    {
+      "bytes": 162213,
+      "label": "methodology_industrial_case_solver_findings.md",
+      "original_path": ".planning/methodology/industrial_case_solver_findings.md",
+      "present": true,
+      "sha256": "0e8c97cbd9efef9e6b2d88bc3837a6f52fd1b32d4764795832093bc47f93b095"
+    },
+    {
+      "bytes": 7775,
+      "label": "methodology_knowledge_status_convention.md",
+      "original_path": ".planning/methodology/knowledge_status_convention.md",
+      "present": true,
+      "sha256": "d0077bb14cb290d5ac711c7a508e8f9fade81bc3faa780826f15992ee5f4b835"
+    },
+    {
+      "bytes": 6286,
+      "label": "methodology_kogami_counter_rules.md",
+      "original_path": ".planning/methodology/kogami_counter_rules.md",
+      "present": true,
+      "sha256": "b923202caeb59b419ed10dac2ea919c15d559eb16522b94953fd540ae74fb691"
+    },
+    {
+      "bytes": 7498,
+      "label": "methodology_kogami_triggers.md",
+      "original_path": ".planning/methodology/kogami_triggers.md",
+      "present": true,
+      "sha256": "c2e87768c30ec89a904d02302dfa6f25ff46f41368436e7db5984694d63e0ebb"
+    },
+    {
+      "bytes": 10532,
+      "label": "methodology_public_cad_sources.md",
+      "original_path": ".planning/methodology/public_cad_sources.md",
+      "present": true,
+      "sha256": "6294d9cdfee4e8ea1bac7a2bfffced541a62818e51c43c05b4059923c7724ac4"
+    },
+    {
+      "bytes": 8406,
+      "label": "methodology_rag_corpus_format.md",
+      "original_path": ".planning/methodology/rag_corpus_format.md",
+      "present": true,
+      "sha256": "016c8a2e2bb70f14178fca77fc056b1334e80d31c9da6d7c8c3f366d98c4cd01"
+    },
+    {
+      "bytes": 42199,
+      "label": "methodology_solver_convergence_playbook.md",
+      "original_path": ".planning/methodology/solver_convergence_playbook.md",
+      "present": true,
+      "sha256": "653adbc82dd15b4132821a0e7233f7530c3b5e784dc8eab9b97621c3f7e582f8"
+    },
+    {
+      "bytes": 20310,
+      "label": "methodology_workbench_persona_findings.md",
+      "original_path": ".planning/methodology/workbench_persona_findings.md",
+      "present": true,
+      "sha256": "58fc1c271456feba1d95678b48694b21e3710a04d4cbaa249b0e7f9a1ac24ac9"
+    }
+  ],
+  "summary_algorithm_version": "1.0",
+  "trigger": "manual-invoke-charter-strategic-review"
+}

@@ -1,0 +1,13 @@
+{
+  "run_id": "backward_step__novice__deepseek__c95e05b9",
+  "case_id": "imported_2026-05-07T09-50-24Z_45b142b1",
+  "persona": "novice",
+  "model_id": "deepseek-chat",
+  "steps": 1,
+  "verdict": null,
+  "dropped": false,
+  "drop_reason": null,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "error": "llm_chat_failed: [Errno 8] nodename nor servname provided, or not known"
+}
