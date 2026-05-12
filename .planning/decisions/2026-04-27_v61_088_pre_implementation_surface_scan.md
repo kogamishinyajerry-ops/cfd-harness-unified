@@ -18,7 +18,7 @@ parent_review:
     > ROADMAP §60-day 已勾选项,这是 ROADMAP 状态读取失败,不是"两条独立线"。
     > 如果接受"server hardening 与 client UI 平行演化"作为通用借口,下一次会
     > 变成"在已有 X 旁边重写 X′"的合理化。
-notion_sync_status: synced 2026-05-03 (https://www.notion.so/354c68942bed81c487fbe424d82d524c)
+notion_sync_status: drift 2026-05-12 · resync needed (base sync 2026-05-03 https://www.notion.so/354c68942bed81c487fbe424d82d524c)
 autonomous_governance: true  # this DEC modifies Claude Code's own startup discipline; does NOT modify Kogami contract or files (P-1..P-5), so §4 skip rule does NOT fire — Kogami review IS required per §4 first item (autonomous_governance rule-change DEC)
 kogami_review_round1_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/review.md
 kogami_review_round2_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md
@@ -385,3 +385,100 @@ illustrating the v6.2 three-layer architecture working as designed:
 
 The methodology lesson Notion-Opus surfaced is one only a "session shape"
 reader can catch. This DEC operationalizes it.
+
+## 2026-05-12 amendment · V69 call-graph trace for optional kwargs
+
+> **Origin**: V69 (case_003 ramp session 13 · `industrial_case_solver_findings.md`).
+> Lands as in-place amendment per DEC-V61-198 §"Run-and-correct" (fix in
+> place, no new DEC arc, commit-message documentation). Status field
+> remains `Accepted` — no flip.
+
+### Trigger
+
+When the proposed change introduces **a new optional kwarg with a
+fail-safe default** to an existing public function (e.g.
+`def f(..., new_arg: T | None = None)`), Step 2 (existing-implementation
+grep) alone is insufficient — the default makes missing wire-up
+**silent**, so symbol-grep finds the changed module but does not
+detect call sites that quietly inherit the default.
+
+### Concrete failure mode (V61 incident · September 2026-05-07 inflow)
+
+V59 (M5.0 import-time body-pair AABB overlap defensive layer) added
+`body_aabbs: list[BodyAABB] | None = None` to `run_health_checks`.
+Symbol-grep at session 11 found:
+- `health_check.py` (the modified module)
+- `__init__.py` (the `ingest_stl(data: bytes)` wrapper that passes the
+  new kwarg through)
+
+…but **did not** find `ui/backend/routes/import_geometry.py`, which calls
+`run_health_checks` directly (because it needs `combined` for downstream
+`scaffold_imported_case`). The route call site silently inherited the
+`None` default, so the defensive layer was **dead code at the HTTP
+layer**. Session 11 logged the "transparent surfacing" claim (V61)
+without an integration test that exercised the route + multi-body
+combination. Session 13 (Option H · commit `78e1f32`) closed the gap
+with `_per_body_max_extents → _per_body_info(loaded)` returning
+`(extents, aabbs)` + route wiring + 2 new integration tests.
+
+### Amendment to Step 2 (call-graph trace sub-step)
+
+For changes that introduce an optional kwarg with a fail-safe default
+to an existing public function, augment Step 2 grep with **call-graph
+trace**:
+
+1. Symbol-grep the changed function name across the codebase (as before)
+2. **Also grep all imports / re-exports** of the changed function's
+   module/package (e.g. `from .health_check import` /
+   `from ui.backend.services.geometry_ingest import`)
+3. For each indirect caller surfaced by (2), read the actual call site
+   and decide explicitly: pass the new kwarg, or accept the default?
+4. Document the per-site decision in the commit message under a
+   `call-graph-trace:` trailer enumerating sites + dispositions
+
+### Why the amendment is narrow
+
+- **Required kwargs** are caught by type checker / runtime error on
+  next call — no silent failure mode.
+- **Default-value changes** to existing optional kwargs are caught by
+  symbol-grep + behavior diff inspection.
+- **New optional kwarg with fail-safe default** is the unique pattern
+  where missing wire-up is silent.
+
+### Skip clause inherited from §"Skip clause"
+
+This amendment inherits the §"Skip clause" exemptions (routine bugfix,
+docs-only, user "rewrite X" scope, ≤10 LOC + no new top-level file).
+A 9-LOC change adding `new_arg=None` to an existing 3-call-site function
+still triggers call-graph trace because the trigger-wins-on-conflict
+rule (the new-optional-kwarg pattern is the substantive trigger, not
+the LOC count).
+
+### Out of scope for this amendment
+
+- Does NOT modify Steps 1 (ROADMAP scan) or Skip clause structure.
+- Does NOT introduce a new commit-message trailer beyond `call-graph-trace:`
+  (which is optional but encouraged, matching `Surface-scan-found:` /
+  `Surface-scan: clean` conventions).
+- Does NOT promote V69 into a separate DEC — Pillar-2 in-place fix
+  satisfies the methodology gap; future RETRO may consolidate if the
+  pattern recurs.
+
+### Acceptance Criteria (amendment-specific)
+
+1. **Documentation locality**: The amendment is appended to V61-088;
+   no other DEC is modified.
+2. **Trigger clarity**: The trigger is precisely "new optional kwarg
+   with fail-safe default added to existing public function" — not
+   broader (would over-trigger) and not narrower (would miss V61
+   class).
+3. **Test for the pattern**: V66 (the V61 correction) already exists
+   in `test_import_geometry_route.py` (positive + negative cases on
+   `body_overlap` wiring); no new test required by this amendment —
+   the amendment formalizes the methodology that V66 ad-hoc satisfied.
+
+### Notion sync
+
+This amendment drifts the local DEC body from the 2026-05-03 Notion
+sync. Frontmatter `notion_sync_status` flipped to `drift 2026-05-12 ·
+resync needed`; session-end batch sync should re-push.
