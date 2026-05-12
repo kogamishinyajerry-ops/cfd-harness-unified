@@ -279,19 +279,77 @@
 | Reference | case_010_drivaer_fastback_les v1 templates (`turbulenceProperties_LES.j2` parameterized on `les_model`); v2 fallback path documented |
 | **V-row anchors** | V45 (LES infrastructure) |
 
+### S22 · chtMR LES conjugate baffle: compressible:: triplet on nut/alphat/k (case_015 / LES+CHT root)
+
+| Branch | Action |
+|---|---|
+| Symptom | chtMultiRegionFoam LES with `compressible::turbulentTemperatureCoupledBaffleMixed` BC on T at `(.*_to_.*)` patches. Solver runs cleanly without residual issues, but `wallHeatFlux` function-object reports values 10-30% off the expected log-law-derived nominal. Silent inconsistency — no fatal, no residual misbehavior, the energy-equation coupling at the baffle has the wrong Prt-weighted heat flux |
+| Decision tree |  |
+| Stage A (audit) | grep `0.orig/` for every conjugate-baffle patch (`(.*_to_.*)`) and check the triplet on `nut`, `alphat`, `k`. **The check**: all three must be present AND set to compressible:: wall-function variants. If any of the three is missing or set to incompressible-style variant, the coupling is broken silently |
+| Stage B (fix) | On every `(.*_to_.*)` patch, set ALL THREE:<br>· `nut`: `nutUSpaldingWallFunction`<br>· `alphat`: `compressible::alphatJayatillekeWallFunction { Prt 0.85; }`<br>· `k`: `kqRWallFunction` |
+| Stage C (extend to physical walls) | On every outer-wall `(.*_outer_wall.*)` patch (physical walls, no coupling), apply the same triplet — these are physical walls and the wall function logic is identical. Pattern: chtMR LES treats both coupling-baffle and physical-wall surfaces with compressible:: variants because heRhoThermo internally uses compressible thermo even for incompressible-like water flows |
+| Failure mode A — fixed nut, forgot alphat | Energy-eq coupling has thermal eddy diffusivity = 0 at the baffle. Heat flux under-predicts by ∼20%. **Fix**: add alphat compressible::alphatJayatillekeWallFunction with Prt 0.85 |
+| Failure mode B — fixed nut + alphat, forgot k | k diffuses normally into the wall layer but its wall function doesn't acknowledge compressible thermo. Heat flux drift is smaller (5-10%) but present. **Fix**: add k kqRWallFunction |
+| Failure mode C — used incompressible variant of alphat | `alphatJayatillekeWallFunction` (without compressible:: namespace) errors at run-init: `"Unknown patchField type alphatJayatillekeWallFunction"` — fatal not silent. ESI 2312+ namespaces matter |
+| Productizable artifact | `emit_nut/emit_alphat/emit_k` BC-writer functions in case_015 `02_scaffold_case.py`. Pattern replicable to any chtMR LES variant; **A8 advisor candidate** (`wall_function_compat_advisor`) per V49 lesson |
+| Reference | case_015_vattenfall_t_junction_thermal_striping v1 (`02_scaffold_case.py::emit_nut/emit_alphat/emit_k` 2026-05-10) |
+| **V-row anchors** | V49 (first appearance · LES+CHT compound root) |
+
+### S23 · Compressible-DES setup gotchas (case_016 / compressible-DES root)
+
+| Branch | Action |
+|---|---|
+| Symptom | rhoPimpleFoam + kOmegaSSTIDDES + transonic regime. Two independent runtime fatals at iteration 0, both class-mismatch shape, both surfaced by Codex case-design and trivially-fixable but easy to mis-diagnose as model-physics issues |
+| Decision tree |  |
+| Gotcha A (turbulence-block registry) | Codex briefs often place `kOmegaSSTIDDES` under `RAS { RASModel kOmegaSSTIDDES; }` (semantically — it's an SST-based hybrid). ESI registers IDDES via the LESModel template — error `Unknown RASModel type kOmegaSSTIDDES`. **Fix**: rewrite turbulenceProperties as `simulationType LES; LES { LESModel kOmegaSSTIDDES; delta IDDESDelta; ... }`. Same pattern applies to SA-DDES (V52 status `[QUESTIONABLE]` pending verification) |
+| Gotcha B (matrix symmetry) | rhoPimpleFoam + `transonic yes` adds velocity-divergence term to p-equation → matrix asymmetric. `p { solver PCG; preconditioner DIC; }` errors at first solver call: `Unknown asymmetric matrix solver type PCG; Valid: GAMG PBiCG PBiCGStab smoothSolver`. **Fix**: `p { solver PBiCGStab; preconditioner DILU; tolerance 1e-7; relTol 0.01; }`. The V28 + V53 inversion: symmetric flow (compressible buoyant, subsonic) = DIC/PCG; asymmetric flow (transonic, compressible-DES) = DILU/PBiCGStab |
+| Gotcha C (probe coordinates at CAD surfaces) | Helper-solid patch tags (a CAD pattern for STEP-export friendliness) are 0.5 mm thick layers extracted as per-patch STLs but NOT meshed as part of region_air. sHM treats them as boundary surface and stops fluid cells at their fluid-facing face (0.5 mm offset from nominal CAD surface). Probe at literal CAD z = -0.102 m falls inside the helper solid, NOT in the fluid mesh → `# Probe 0 (...) # Not Found` + pressure `-1e+300`. **Fix**: lift probes by ≥ `PATCH_TAG_THICKNESS_MM` (default 0.5, recommended 1.0 mm margin) above any nominal CAD surface |
+| Decision sequence | A first (model error blocks everything), then B (solver error blocks everything after model loads), then C (probes silently fail to bind but solver runs). Pre-flight checklist: parse turbulenceProperties, fvSolution.p, controlDict.probes against the three checks BEFORE invoking solver |
+| Failure mode A — diagnosed as model-physics | "kOmegaSSTIDDES is broken, let me try SA-DDES instead". The model is registered correctly; just under the wrong block. Switching models doesn't help; rewriting the block does |
+| Failure mode B — switched solver but kept DIC preconditioner | `p { solver PBiCGStab; preconditioner DIC; }` still errors — DIC is symmetric-only. Solver and preconditioner travel as a pair (symmetric class vs asymmetric class) |
+| Failure mode C — diagnosed probes as solver failure | Solver runs cleanly; only the probe FO fails to bind. Easy to misread as "solver couldn't write to that point". The fix is geometric, not solver |
+| Productizable artifact | (none in v1; v2 candidate: pre-flight checker `validate_compressible_des_setup.py` that grep+parses turbulenceProperties + fvSolution.p + controlDict.probes against the 3-gotcha checklist) |
+| Reference | case_016_m219_cavity_des_acoustic v1 sandbox (`scripts/02_scaffold_case.py::write_turbulenceProperties` + `write_fvSolution` + `_lib.py::PROBE_KULITE_05_M` 2026-05-11) |
+| **V-row anchors** | V52 (turb-block registry) · V53 (matrix symmetry) · V54 (probe-coord offset) |
+
+### S24 · sHM mesh-prep silent-fail traps (cross-case mesh hygiene)
+
+| Branch | Action |
+|---|---|
+| Symptom | sHM completes without fatal errors, checkMesh reports mesh quality within thresholds, but downstream solver result is wrong OR layer addition produces fewer/no prism layers than configured. The mesh-prep step lied silently |
+| Decision tree |  |
+| Trap A (key typo silently ignored) | `meshQualityControls.minMedialAxisAngle` (correct) vs `minMedianAxisAngle` (typo). ESI accepts the misspelled key without warning AND treats the parameter as unset → default value used → layer addition behavior unexpectedly conservative or aggressive. Class extends to: `minTwist` vs `minTwistAngle`; `nFeatureSnapIter` vs `nFeatureSnapIters`; `featureAngle` vs `featuresAngle`. **Detection**: grep sHM log for "Layers added by patch" — if numbers ≪ requested, suspect key typo |
+| Trap B (helper-solid patch-tag CAD-surface offset) | A CAD pattern that uses thin helper solids (0.5-1 mm thick) for patch-naming convenience produces fluid-face positions offset from nominal CAD surfaces by the helper thickness. Probes / patch-based BCs / postProcessing sample lines anchored at literal CAD-surface coordinates fall inside or outside the fluid mesh by exactly that offset. **Detection**: any probe FO log showing `# Not Found` AND any sample-line with first / last cell value = uninitialized field marker (-1e+300 / +1e+300). Cross-link: S23 gotcha C (case_016 instance) |
+| Trap C (sliver / negative-volume warnings during addLayers) | sHM logs "Reverting layer addition for cell" repeatedly + final `Layers added by patch` shows the requested patch at 0 or 1 layer. Often interpreted as "addLayers chose not to layer here" — actually the input mesh has slivers OR the surface has features below the layer thickness. **Detection**: grep sHM log for `Reverting` per patch; if > 5% of patch faces reverted, the mesh-prep failed silently. Fix path: reduce `finalLayerThickness` OR increase `nGrow` OR (V77-class) remesh the input STL |
+| Trap D (cellZone splitMeshRegions degeneration) | `splitMeshRegions -cellZones -overwrite` reports fewer regions than expected (e.g., 2 of 3) without fatal error. Cause: `locationsInMesh` seeds or `refinementSurfaces.<name>.cellZoneInside` produced ambiguous tagging on intersecting volumes (V51 case_015 instance). **Detection**: count `region_*` polyMesh directories after splitMeshRegions; compare to expected region count from parts_manifest |
+| Stage A — pre-flight | Before running sHM: grep `snappyHexMeshDict` for any key in the `meshQualityControls`/`addLayersControls` block; cross-check spelling against ESI 2312 source headers |
+| Stage B — post-run audit | After sHM completes, run a 4-step audit: (1) `Layers added by patch` per-patch summary; (2) grep for `Reverting` counts; (3) probe FO and sample line `# Not Found` markers; (4) `splitMeshRegions` polyMesh directory count vs expected |
+| Failure mode A — typo audit deferred to "later" | sHM mesh used in production, results 10-30% off from expected, root cause never traced. **Fix**: audit Stage A before EVERY sHM run; cost is 30 seconds |
+| Failure mode B — assumed `Layers added: 0` means "no layers needed" | sHM intended to add 3 layers per patch but got 0; user reads "0" as expected behavior because no error printed. **Fix**: every `Layers added by patch` value below requested is an audit signal — never accept silently |
+| Productizable artifact | `audit_sHM_log.py` — single-script post-run audit covering traps A-D; v2 candidate (not extracted in v1) |
+| Reference | case_015 V47 (minMedialAxisAngle typo); case_016 V54 (helper-solid offset); case_015 V51 (cellZone degeneration); STL-surgery decision tree V75-V78 (when input mesh genuinely needs surgery — see V-series for full tree, do not duplicate here) |
+| **V-row anchors** | V47 (typo silent fail) · V51 (cellZone degeneration) · V54 (helper-solid offset · primary S23 anchor); reference: V75-V78 STL surgery tree |
+
 ## Common patterns across all entries
 
 1. **Zero initial field is the root of half the failures.** S1, S4, S9
    are all "first iter has no flow, all derived quantities are
    garbage". `potentialFoam` warm start is the universal cheap fix.
-2. **Preconditioner choice trumps solver choice.** S2, S3 both
+2. **Preconditioner choice trumps solver choice.** S2, S3, S23 all
    resolve by changing preconditioner (`diagonal` for stability,
    `PBiCGStab+diagonal` instead of GAMG when GAMG agglomeration
-   fails). Solver choice (PBiCG vs PBiCGStab vs GAMG) is secondary.
+   fails, `PBiCGStab+DILU` when matrix becomes asymmetric under
+   `transonic yes`). Solver choice (PBiCG vs PBiCGStab vs GAMG) is
+   secondary. **Matrix-symmetry class is the deciding axis** (S23
+   inverts S3): symmetric → DIC/PCG; asymmetric → DILU/PBiCGStab.
 3. **Mesh quality margin = numerical safety margin.** S6 underlies
    S1-S5 in many cases — bad cells contaminate the linear system
    regardless of solver/preconditioner. Tightening `meshQualityControls`
-   pre-empts S1-S5.
+   pre-empts S1-S5. **But the inverse is also true** (V75-V78): on
+   industrial CAD-exported STL, tight controls may be unachievable;
+   relaxing `maxSkewness 4 → 8` + choosing robust schemes (limited
+   grad, deferred correction) is a legitimate path when STL surgery
+   plateaus.
 4. **URF lowering is the universal "give it more time" knob.** S2, S3,
    S5, S10 all benefit from lower URF on the offending field. Cost
    is iter count, gain is stability.
@@ -299,19 +357,48 @@
    pressure-outlet BC instead of kωSST + mass-flow. The simplification
    gets a working baseline; v2 layers complexity on top. Do not
    chase production physics on v1.
+6. **Staged startup beats single-shot for stiff physics** (S15-S21
+   era). S15 (rhoCentralFoam adjustTimeStep), S16 (Lagrangian on frozen
+   Eulerian), S17 + S18 (reacting cold-flow → ignite → ramp), S19 (LES
+   transient settle → averaging → tail-mean), S20 (wall-modeled y+
+   tune), S21 (WALE Cw tune). The unifying recipe: separate physics-
+   class onset so each stage sees a fully-developed precursor state.
+   Single-shot startup with chemistry / transient / LES active from
+   t=0 is the failure mode.
+7. **Multi-region setup is checklist-driven, not knob-tuned** (S22-S24
+   era). chtMR LES conjugate baffles (S22) require the compressible::
+   triplet on nut+alphat+k together — fixing any one alone produces
+   silent 10-30% wall-heat-flux error. Compressible-DES setup (S23)
+   requires the LES-vs-RAS turb-block split + symmetric-vs-asymmetric
+   matrix-class split — both gotchas surface as runtime fatals, not
+   residual stalls. **Diagnostic**: if the solver dies at iteration 0
+   with a class-mismatch error (turb-model not in registry, solver-
+   type unknown), it is checklist-class not convergence-class — look
+   at S22-S24 before S1-S6.
+8. **Silent-fail mesh-prep traps need separate vigilance** (S24).
+   sHM accepts misspelled / case-mismatched keys without warning
+   (V47 `minMedialAxisAngle` vs `minMedianAxisAngle`); helper-solid
+   patch tags introduce a CAD-surface ↔ mesh-face offset (V54);
+   addLayers can degrade silently when input mesh has slivers. These
+   do not produce convergence stalls — they produce *wrong* results
+   that pass mesh-quality gates. The audit habit: grep sHM log for
+   "Unknown" or unexpected layer-addition statistics after every run.
 
 ## How to add a new entry
 
-When a future industrial case surfaces a death mode not in S1-S10:
+When a future industrial case surfaces a death mode not in S1-S24:
 
 1. Add a row to V-series index
    (`industrial_case_solver_findings.md`) with case ID, symptom,
    root cause, fix, reference
-2. Add a corresponding section here (S11, S12, ...) with the
+2. Add a corresponding section here (S25, S26, ...) with the
    decision tree expansion
-3. Cross-link both directions
+3. Cross-link both directions (V-row → "playbook S<n>" + S-row →
+   `**V-row anchors**` row at end of the S-row table)
 4. Update "Common patterns" if the new entry surfaces a new pattern
-   class
+   class (the patterns section captures the "what's the *shape* of
+   this category of fix"; do not add a pattern row for every S-row,
+   only when a third or fourth instance reveals a structural axis)
 
 ## References
 

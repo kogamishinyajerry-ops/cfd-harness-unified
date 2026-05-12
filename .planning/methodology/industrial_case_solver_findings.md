@@ -106,14 +106,14 @@ If yes → V-series. If no → F-series.
 | V44 | thin_wall 7-topology arc reinforces `[VALIDATED]` | A1 | 010 | V-7x |
 | V45 | First transient LES infra: pimpleFoam + WALE + FOs | N-les | 010 | closed |
 | V46 | sHM 4.6M bg-cell vehicle aero interrupted at refinement iter 2 | N-les | 010 | partial |
-| V47 | sHM `minMedialAxisAngle` vs `minMedianAxisAngle` typo silent fail | infra | 015 | closed |
+| V47 | sHM `minMedialAxisAngle` vs `minMedianAxisAngle` typo silent fail | infra | 015 | closed · playbook S24 |
 | V48 | chtMR controlDict FOs need explicit `region` keyword | N-les-cht | 015 | closed |
-| V49 | Wall-modeled LES at conjugate baffle needs compressible:: triplet | N-les-cht | 015 | partial (A8 candidate) |
+| V49 | Wall-modeled LES at conjugate baffle needs compressible:: triplet | N-les-cht | 015 | partial · playbook S22 · A8 candidate |
 | V50 | A2 cross-topology PASS on pipe-pipe weld-toe (12th) | A2 / D1 / D5 | 015 | Q-2026-05-08 |
-| V51 | sHM multi-region cellZone on intersecting volumes silently degrades | N-les-cht | 015 | open (A8 candidate) |
-| V52 | kOmegaSSTIDDES registered under simulationType LES not RAS | N-des | 016 | partial |
-| V53 | Compressible PIMPLE `transonic yes` → p asymmetric → need PBiCGStab | N-des | 016 | partial |
-| V54 | Probe coords at CAD surface fall in patch-tag helper solids | infra | 016 | partial |
+| V51 | sHM multi-region cellZone on intersecting volumes silently degrades | N-les-cht | 015 | open · playbook S24 · A8 candidate |
+| V52 | kOmegaSSTIDDES registered under simulationType LES not RAS | N-des | 016 | partial · playbook S23 |
+| V53 | Compressible PIMPLE `transonic yes` → p asymmetric → need PBiCGStab | N-des | 016 | partial · playbook S23 |
+| V54 | Probe coords at CAD surface fall in patch-tag helper solids | infra | 016 | partial · playbook S23+S24 |
 | V55 | First D6 injection — `extra_body_in_fluid` advisor gap | D6 / A5 | 016 | Q-2026-05-11 |
 | V56 | First D9 injection — `curved_surface_tessellation` advisor gap | D9 / A6 | 016 | Q-2026-05-11 |
 | V57 | First compound-DES root validated (rhoPimpleFoam+IDDES+FW-H) | N-des | 016 | partial |
