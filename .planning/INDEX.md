@@ -38,6 +38,7 @@
 | `methodology/workbench_persona_findings.md` | F-series (persona/UI surface). B-extend arc closed; F-series remains live for individual additions but not primary substrate |
 | `methodology/plan_md_passes_field.md` | DEC-V61-199 Rule 2 · PLAN.md task tables from N2+ carry a `passes` column; `status: COMPLETED` alone insufficient. Sets E2E gate convention |
 | `methodology/skill_description_audit_protocol.md` | DEC-V61-199 Rule 3 · opt-in transcript-driven loop for rewriting skill `description:` fields. Same posture as Kogami (no auto-trigger) |
+| `methodology/advisor_candidates_a4_a8.md` | Harvest-003 prep · A4-A8 advisor candidates (face-orientation / extra-body / curved-tess / non-watertight). Defect-class signatures + pre-drafted specs + cross-topology evidence ledger. Promotes `drafted` → `ready-to-land` when ≥2 cases sediment |
 
 ### Kickoff materials (per-case Codex round + sub-session paste-ready)
 
