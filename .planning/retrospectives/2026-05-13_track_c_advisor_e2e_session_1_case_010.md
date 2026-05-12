@@ -182,4 +182,44 @@ STAGE=snappy   bash scripts/06_run_mesh.sh
 
 **What this does NOT do**: case_010 v1.5 is not yet a sediment release in the case-thread sense — no v1.5 REPORT.md was written, no parts_manifest update, no full audit. To upgrade V82 from "fix-verified · 1 case" to "validated · cross-case", a 2nd case with the same scale pattern must surface independently (Pillar-2 trigger). case_007 (KCS, also CadQuery STL pipeline) is the highest-probability next candidate; main session should grep case_007 sHM log eMesh bbox before next dispatch.
 
+## 10. case_007 probe appendix (2026-05-13 · post-retro within same session)
+
+Per §9 directive, ran the case_007 sHM eMesh-bbox probe to test whether V82 reproduces.
+
+**Result: NEGATIVE — V82 does NOT reproduce in case_007.**
+
+```text
+grep -nE "boundingBox|Marked for refinement|intersected edges" \
+  ~/Desktop/case_007_kcs_ship_vof/case/log.snappyHexMesh
+
+49:    boundingBox : (-3.6393001 0 -0.3418) (4.1293001 0.56961375 0.2595)
+66:    Number of intersected edges : 439
+110:   Number of intersected edges : 1481
+126:   Number of intersected edges : 3910
+163:   Marked for refinement due to surface intersection: 1450 cells.
+182:   Marked for refinement due to surface intersection: 547 cells.
+331:   Number of intersected edges : 13044
+```
+
+case_007's eMesh bbox is at m-scale (KCS scale-model LPP=7.28 m → bbox max ≈4.13 m on x-axis is consistent). Surface intersection fires correctly. The mesh contains the hull.
+
+**Pipeline differential**:
+
+| case | extraction script | conversion | result |
+|---|---|---|---|
+| case_007 KCS | `04_step_to_stl.py` | explicit `* 0.001` (script line 63 comment "convert mm → m") with STEP→STL bridge stage | STL in m · sHM safe |
+| case_010 DrivAer | `01_extract_stl.py` | none (`cq.exporters.export(..., exportType="STL")` direct from CadQuery shapes) | STL in mm · V82 reproduces |
+
+**Conclusion**: V82 failure mode is **bound to the cq-direct-export pipeline shape**, not to the CadQuery + OpenFOAM tooling generally. STEP-bridge pipelines force the unit-conversion question on the author (because reading the STEP `LENGTH_UNIT_MILLIMETRE` header is a deliberate step); cq-direct-export pipelines hide it.
+
+**Pillar-2 trigger does NOT fire**. Required 2 cases with same scale-mismatch pattern; observed = 1 same-pattern (case_010) + 1 differential-safe (case_007). The pipeline-shape lesson is captured in V82's Lesson row but `surface_scale_advisor` extraction is **deferred** until either:
+- (a) a 2nd cq-direct-export case reproduces the bug (e.g., case_005/006/009/011/012/015/016 if any uses that pipeline pattern), OR
+- (b) a STEP→STL-bridge case nevertheless fails (would indicate a deeper underlying pattern).
+
+**Cases not yet probed** (sandbox sHM run absent or incomplete): case_004 NREL Phase VI MRF (uses `_freecad_extract.py` · FreeCAD bridge · likely safe like STEP bridge) · case_008 GLC305 IRT Lagrangian (only build_cad.py visible, no extraction script — sandbox sHM did not complete). Both have advisor JSON evidence but no mesh-stage logs, so the probe is moot for them in v1 state.
+
+**Cases to probe next sub-session** (have completed sHM somewhere): case_005 / case_006 / case_009 / case_011 / case_012 / case_015 / case_016 — each needs a single `grep -nE "boundingBox" case/log.snappyHexMesh` + a glance at intersected-edges to classify pipeline pattern. Cheap; 2-3 min per case; bulk-probe in one shot is a viable next-session opener.
+
+**Codex case-design protocol** (`codex_case_design_protocol.md`) does not currently mandate scale-conversion documentation in `build_cad.py` / extraction scripts. **Amendment candidate** noted in V82 Lesson row but not landed: every new CadQuery-based `build_cad.py` paired with an extraction script must either (a) route through STEP→STL bridge with explicit `*0.001`, OR (b) apply CadQuery `shape.scale(0.001)` before `cq.exporters.export(..., exportType="STL")`. Deferred to a future sub-DEC when Pillar-2 fires.
+
 — EOF —
