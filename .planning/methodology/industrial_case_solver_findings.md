@@ -51,7 +51,7 @@ If yes → V-series. If no → F-series.
 - **playbook** — codified in `solver_convergence_playbook.md`; no
   code fix needed (the knowledge is the fix)
 
-## Quick-lookup index (V1–V83)
+## Quick-lookup index (V1–V84)
 
 > Skim layer for JIT. Each row points at the deep V-row below.
 > **Tag** uses the smallest non-overlapping axis: `D<n>` = defect class · `A<n>` = advisor · `N-<class>` = numerics inheritance · `infra` = workbench/methodology · `cad` = CAD ingest.
@@ -143,6 +143,7 @@ If yes → V-series. If no → F-series.
 | V81 | Codex CAD inlet/outlet emitted as 3D solid → sHM walls → no patch → silent sealed-room (backfill) | cad / infra | 012 | partial 2026-05-12 · protocol amended (DEC-V61-198-sub-protocol-inlet-outlet) · validator deferred |
 | V82 | STL coord-scale mismatch (mm vs m) → sHM surface refinement = 0 → mesh contains zero vehicle (Track C session 1 backfill · supersedes V46 primary attribution) | cad / mesh / scale | 010 | **fix-verified 2026-05-13 · 1 case** · case_010 v1.5 re-mesh confirms · surface refinement 0 → 20,749+ cells, intersected edges 0 → 345k · V46 secondary obstruction now active · **case_007 probe (2026-05-13) negative**: STEP→STL bridge pipeline is safe (cq-direct-export is the failure mode) · Pillar-2 advisor extraction deferred · pipeline-shape pattern lesson documented in V82 row |
 | V83 | `mesh_ok=true` doesn't cover "geometry-derived wall patches have zero faces" → silent acceptance of meshes with no intended geometry (methodology gap · Track C session 1 backfill) | mesh / audit | 010 | open 2026-05-13 · per-case fix is sub-session action · main-project `mesh_geometry_audit.py` advisor extraction blocked on 2nd-case trigger |
+| V84 | `max_skewness 4` is sHM's reject-wall, NOT a solver-instability ceiling — buoyantSimpleFoam runs stably on max_skew 6.87 / 20-skew-face industrial mesh with production-tuned schemes (case_002a F4b · added by parallel session) | mesh / solver / pattern | 002a | preliminary positive 2026-05-13 · empirically observed through step 213/3000 · DEC-V61-198 Pillar-4 (Bash-driven solver exec) operationally validated · full convergence + post-mortem pending |
 
 ## Findings index
 
@@ -1219,6 +1220,46 @@ The corpus loader (M6 prerequisite) should expose this inheritance
 explicitly so AI Diagnose can suggest "your case is class
 compressible-buoyant-RANS, here are the 6 V-findings that apply
 even though you're using a different solver family".
+
+## Corpus sync arrears (2026-05-13 · open methodology gap)
+
+`docs/openfoam_corpus/industrial_solver_findings_v_series.md` (consumed by
+`ui/backend/services/ai_advisor/corpus_loader.py`, which feeds the N6
+`/ai-review` and `/ai-diagnose` routes) is the **runtime advisor copy** of
+this file. The two are intended to be kept in sync.
+
+**As of 2026-05-13, the runtime copy is V57-high.** This file is V84-high.
+**V58 through V84 (27 V-rows) + the V46 2026-05-13 amendment** are NOT
+visible to the shipped advisor routes. Findings in this drift band include
+substantive solver / mesh / advisor lessons across case_003/004/005/006/
+007/008/009/010/011/012/015/016/002a — the corpus is materially behind the
+case-sediment harness.
+
+Surfaced by Codex review on `e56f160..e89a88f` (2026-05-13, P2 finding):
+"For any `/ai-review` or `/ai-diagnose` request that needs the case_010
+lessons, this patch does not actually make them available to the advisor
+routes." The narrow Codex finding (V82/V83/V46-amendment unsynced) is in
+fact a symptom of a wider 27-row sync arrears.
+
+**Resolution path** (deferred to a dedicated sync commit, NOT bundled into
+the Codex-verified trailer commit that surfaces this note):
+
+1. Append V58..V84 + the V46 amendment block to
+   `docs/openfoam_corpus/industrial_solver_findings_v_series.md` in
+   order, preserving the row structure (Surface / Engineer symptom /
+   Root cause / Fix / Status / Reference case / Lesson)
+2. Verify `corpus_loader.py` ingests the updated file (re-run
+   `tests/test_n6_1_corpus_loader.py` + ad-hoc query for "STL scale"
+   to confirm V82 surfaces)
+3. Update this section to "synced through V<N> as of <date>"
+4. Promote sync discipline into a hook or scheduled
+   sediment-end-of-session check so the drift can't grow past
+   ~5 rows again
+
+**Why deferred**: a 27-row sync is a non-trivial doc edit that warrants
+its own focused commit; bundling it into a Codex-verified trailer
+muddies both the trailer's audit value and the sync commit's scope.
+Next session that opens this V-series file is the natural pickup.
 
 ## How to add a new V-finding
 
