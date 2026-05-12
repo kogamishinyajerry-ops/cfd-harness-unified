@@ -73,7 +73,7 @@ def _should_use_f2_path(
     named_solid_count: int,
     facet_count: int,
     *,
-    threshold: int = _F2_PATH_FACET_THRESHOLD,
+    threshold: int | None = None,
 ) -> bool:
     """Return True when the F2 fast-classify path should be engaged.
 
@@ -81,8 +81,18 @@ def _should_use_f2_path(
     threshold the baseline parametric path is fast and well-tested;
     above it the baseline path's super-linearity + tolerance artifact
     block real industrial CAD payloads (case_003).
+
+    Session 9 fix: ``threshold`` defaults to ``None`` so the module-level
+    constant ``_F2_PATH_FACET_THRESHOLD`` is read at call time. Earlier
+    versions bound the constant as a default-argument value at function-
+    definition time, which made test-time monkeypatching of the module
+    constant a silent no-op (session 7's test inadvertently exercised
+    the baseline path instead of F2 — discovered by session 9 probe1).
     """
-    return named_solid_count >= 2 and facet_count >= threshold
+    effective_threshold = (
+        threshold if threshold is not None else _F2_PATH_FACET_THRESHOLD
+    )
+    return named_solid_count >= 2 and facet_count >= effective_threshold
 
 
 class GmshMeshGenerationError(RuntimeError):
@@ -439,24 +449,34 @@ def _gmsh_inline(
             # a volume from the surface loop. Standard gmsh incantation
             # for "STL → tetrahedral volume mesh".
             #
-            # F2 path (F-NEW-22 mitigation, V36/V37): on industrial-scale
-            # multi-named-solid loads, the baseline (angle=40°,
-            # boundary=True, forReparametrization=True) is super-linear
-            # in facet count. The fast variant (angle=180°, boundary=False,
-            # forReparametrization=False) is ~80× faster on 393k facets
-            # and produces classified surface tags that the downstream
-            # named-solid voting + topology partition code accepts. The
-            # cost: createGeometry() cannot be called without
-            # forReparametrization=True, so we skip it on the F2 path.
-            if _f2_active:
-                gmsh.model.mesh.classifySurfaces(
-                    angle=180.0 * 3.141592653589793 / 180.0,
-                    boundary=False,
-                    forReparametrization=False,
-                    curveAngle=180.0 * 3.141592653589793 / 180.0,
-                )
-                # createGeometry() deliberately omitted on F2 path.
-            else:
+            # F2 path (F-NEW-22 mitigation, V36/V37/V52): on industrial-
+            # scale multi-named-solid loads, skip classifySurfaces +
+            # createGeometry entirely. Use gmsh.merge's pre-classify
+            # discrete entities directly (one per `solid <name>` block
+            # by default Mesh.StlOneSolidPerSurface=1). This:
+            #   - is ~∞× faster than baseline classifySurfaces (which
+            #     was super-linear on case_003's 393k facets)
+            #   - preserves 1-to-1 mapping between discrete entities
+            #     and STL solid names (no entity-merging via classifier)
+            #   - bypasses partition_surfaces_by_body (DEC-V61-104)
+            #     because discrete entities lack edge entities; the F2
+            #     activation gate (multi-named-solid industrial CAD)
+            #     does not use interior-obstacle subtraction anyway
+            #
+            # Session 9 fix history:
+            #   - Session 7 commit 3d4a778 used classifySurfaces with
+            #     angle=180°, boundary=False, fr=False. Session 9
+            #     probe1 discovered this merges N discrete entities
+            #     into 1 on topologically-connected meshes, collapsing
+            #     named-solid PhysicalGroups to a single area-majority
+            #     winner. The seamed multi-solid test fixture
+            #     (sessions 7 + 9) exposed the bug.
+            #   - Session 9 redesign: skip classifySurfaces. Verified
+            #     on both seamed (3 patches of 1 box, shared vertices)
+            #     and disjoint (2 nested boxes, distinct vertex sets)
+            #     fixtures — both produce N entities preserved post-
+            #     merge.
+            if not _f2_active:
                 gmsh.model.mesh.classifySurfaces(
                     angle=40.0 * 3.141592653589793 / 180.0,
                     boundary=True,
@@ -464,6 +484,8 @@ def _gmsh_inline(
                     curveAngle=180.0 * 3.141592653589793 / 180.0,
                 )
                 gmsh.model.mesh.createGeometry()
+            # On F2 path: NO classifySurfaces, NO createGeometry.
+            # The merge-time discrete entities are the surface set.
 
             surfaces = gmsh.model.getEntities(dim=2)
             if not surfaces:
@@ -481,21 +503,34 @@ def _gmsh_inline(
             # Single-body geometries (LDC, channel, naca0012, cylinder)
             # fall through to the single-loop path so byte-identical
             # mesh output is preserved.
-            from .topology import (
-                TopologyPartitionError,
-                partition_surfaces_by_body,
-            )
+            #
+            # F2 path bypasses partition_surfaces_by_body: discrete
+            # entities (from gmsh.merge, without classifySurfaces) lack
+            # explicit edge entities (dim=1), so gmsh.model.getBoundary
+            # returns empty lists and the union-find sees every surface
+            # as its own body — wrong partitioning. The F2 activation
+            # gate (multi-named-solid industrial CAD) doesn't use
+            # interior-obstacle subtraction in its target use cases
+            # (external-aerodynamics-style external flow, not
+            # cavity-with-obstacle). All entities feed one surface loop.
+            if _f2_active:
+                bodies = [[s[1] for s in surfaces]]
+            else:
+                from .topology import (
+                    TopologyPartitionError,
+                    partition_surfaces_by_body,
+                )
 
-            try:
-                bodies = partition_surfaces_by_body(gmsh, surfaces)
-            except TopologyPartitionError as exc:
-                # Codex post-merge MED guard: disconnected exterior
-                # shells, not interior obstacles. Surface as a 4xx-class
-                # mesh failure with a clear message rather than silently
-                # corrupting the geometry.
-                raise GmshMeshGenerationError(
-                    f"topology partition rejected the STL: {exc}"
-                ) from exc
+                try:
+                    bodies = partition_surfaces_by_body(gmsh, surfaces)
+                except TopologyPartitionError as exc:
+                    # Codex post-merge MED guard: disconnected exterior
+                    # shells, not interior obstacles. Surface as a 4xx-class
+                    # mesh failure with a clear message rather than silently
+                    # corrupting the geometry.
+                    raise GmshMeshGenerationError(
+                        f"topology partition rejected the STL: {exc}"
+                    ) from exc
             if len(bodies) <= 1:
                 surface_loop = gmsh.model.geo.addSurfaceLoop(
                     [s[1] for s in surfaces]

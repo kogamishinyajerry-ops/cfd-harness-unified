@@ -32,7 +32,11 @@ from ui.backend.services.meshing_gmsh.pipeline import (
     MeshPipelineError,
     mesh_imported_case,
 )
-from ui.backend.tests.conftest import box_stl, seamed_multi_solid_box_stl
+from ui.backend.tests.conftest import (
+    box_stl,
+    large_seamed_multi_solid_box_stl,
+    seamed_multi_solid_box_stl,
+)
 
 
 # ----- cell_budget --------------------------------------------------------
@@ -1891,4 +1895,98 @@ def test_f2_path_tolerance_constant_is_tight_enough():
     assert _F2_PATH_GEOMETRY_TOLERANCE <= 1e-10, (
         f"_F2_PATH_GEOMETRY_TOLERANCE={_F2_PATH_GEOMETRY_TOLERANCE} too loose "
         f"to preserve Q3 features on km-scale industrial CAD"
+    )
+
+
+# ----- F2 path real-threshold validation (session 9 follow-up to session 7) -----
+#
+# Session 7's test_f2_path_preserves_named_solid_physical_groups used
+# monkeypatch(_F2_PATH_FACET_THRESHOLD=1) to force F2 activation on a
+# 12-facet fixture. The tests below remove that monkeypatch and use a
+# fixture that crosses the real ``_F2_PATH_FACET_THRESHOLD = 10_000`` gate.
+# This validates F2 path on a fixture that (a) trips the production
+# activation predicate without test-time intervention, (b) is clean
+# (no overlap / no self-intersection — unlike case_003's source CAD per
+# session 8 F-NEW-26 finding), and (c) exercises the named-solid voting
+# block at industrial scale.
+
+
+def test_large_fixture_crosses_f2_activation_threshold():
+    """Sanity check on the fixture itself: at default subdivisions=5,
+    the multi-named-solid box produces ≥10k facets across 3 named
+    solids, so F2 path activates without monkeypatching.
+
+    Counts named solids + facets directly from the STL bytes (cheap;
+    no gmsh involvement).
+    """
+    from ui.backend.services.meshing_gmsh.stl_solid_index import (
+        parse_named_solids,
+    )
+
+    stl_bytes = large_seamed_multi_solid_box_stl()
+    named_solids = parse_named_solids(stl_bytes)
+
+    assert len(named_solids) == 3, (
+        f"fixture should emit 3 named solids (inlet/outlet/walls), got {len(named_solids)}"
+    )
+    total_facets = sum(s.centroids.shape[0] for s in named_solids)
+    assert total_facets >= _F2_PATH_FACET_THRESHOLD, (
+        f"fixture facet count {total_facets} < activation threshold "
+        f"{_F2_PATH_FACET_THRESHOLD}; bump subdivisions"
+    )
+    # And the predicate agrees.
+    assert _should_use_f2_path(
+        named_solid_count=len(named_solids),
+        facet_count=total_facets,
+    ) is True
+
+
+def test_f2_path_on_industrial_fixture_preserves_physical_groups(
+    tmp_path: Path,
+):
+    """F2 path natural-activation regression: on a ≥10k-facet 3-named-
+    solid clean STL, F2 activates without monkeypatch and the
+    downstream named-solid voting block still emits one
+    $PhysicalNames entry per source solid. Session 7's
+    test_f2_path_preserves_named_solid_physical_groups verified the
+    same contract under threshold=1 monkeypatch; this verifies it at
+    real threshold on industrial-scale input.
+    """
+    stl_path = tmp_path / "industrial_f2.stl"
+    stl_path.write_bytes(large_seamed_multi_solid_box_stl())
+    msh_path = tmp_path / "industrial_f2.msh"
+
+    result = run_gmsh_on_imported_case(
+        stl_path=stl_path,
+        output_msh_path=msh_path,
+        mesh_mode="beginner",
+    )
+    assert result.cell_count > 0, "F2 path produced empty mesh on industrial fixture"
+
+    text = msh_path.read_text()
+
+    # Same contract as session 7 test_f2_path_preserves_named_solid_physical_groups
+    in_pn = False
+    dim2_names: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("$PhysicalNames"):
+            in_pn = True
+            continue
+        if line.startswith("$EndPhysicalNames"):
+            break
+        if not in_pn:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            dim = int(parts[0])
+        except ValueError:
+            continue
+        if dim == 2:
+            raw_name = " ".join(parts[2:]).strip().strip('"')
+            dim2_names.add(raw_name)
+    assert dim2_names == {"inlet", "outlet", "walls"}, (
+        f"F2 path on industrial fixture: expected dim=2 physical names "
+        f"{{inlet,outlet,walls}}, got {dim2_names}"
     )
