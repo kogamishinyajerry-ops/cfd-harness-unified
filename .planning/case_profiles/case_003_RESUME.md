@@ -1,7 +1,10 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 12 — class-wide build_cad.py
-survey: 6/11 cases confirmed affected by F-NEW-26; ticket updated)
+**Last session**: 2026-05-12 (session 13 — Option H closed: route
+wiring gap for F-NEW-26 defensive layer fixed + 2 integration tests
+pin the wiring; session 11 V61 claim "no route-code change needed"
+corrected to V66 "route did NOT transparently carry; wiring closed
+session 13")
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -220,12 +223,16 @@ class-wide survey). 6 of 11 cases confirmed affected
 (case_003/006/007/008/010/016); 5 not affected with reasons. Ticket
 updated with recommended fix paths.
 
-**Option H (session 13 recommended — route-layer test)**: end-to-end
-integration test exercising `POST /api/import/stl` with a synthetic
-6-plate STL to verify the session 11 defensive-layer error surfaces
-as a structured 4xx through the route. ~30-50 LOC. Confirms the route
-already carries the diagnostic transparently (which it should, but
-unverified).
+~~Option H (session 13 — route-layer test)~~ — **DONE** session 13.
+Verification revealed a **wiring gap**: route called `run_health_
+checks` without `body_aabbs`, so defensive layer was dead code at the
+HTTP layer (only the `ingest_stl` wrapper exercised it). Gap closed:
+`_per_body_max_extents` → `_per_body_info` (returns both extents +
+AABBs); route passes both; `failing_check` taxonomy adds
+`"body_overlap"`; `_select_primary_error` prefers AABB message over
+co-occurring watertight error. 2 new route tests (positive: 6-plate
+→ 400 with ticket reference; negative: disjoint named solids → 200
+silent). V66/V67/V68/V69 logged. Session 11 V61 claim corrected.
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
 Independent; can ship anytime. ~30-50 LOC.
@@ -237,5 +244,6 @@ whether the F-NEW-26 defensive layer correctly catches that case's
 specific overlap pattern. Validates the defensive layer against
 real-world variations of the bug.
 
-Recommended order: H (close route-side test gap) → I (validate
-defensive layer on a second affected case) → C (independent).
+Recommended order: ~~H (close route-side test gap)~~ DONE session 13
+→ I (validate defensive layer on a second affected case · case_007 or
+case_010) → C (independent · F-NEW-17 airframe extent band).

@@ -155,6 +155,60 @@ def cube_with_interior_obstacle_stl(
     return buf.getvalue()
 
 
+def farfield_6_plate_stl(
+    *,
+    domain: float = 10.0,
+    thickness: float = 0.5,
+) -> bytes:
+    """F-NEW-26 reproduction: 6 thick plates at the 6 faces of a CFD
+    domain cuboid, emitted as a named-solid ASCII multi-solid STL.
+
+    The plates' AABBs overlap at the 12 cube edges + 8 corners (the
+    systematic CAD bug signature documented in
+    ``.planning/cross_repo_tickets/2026-05-12_case_003_build_cad_farfield_overlap.md``).
+    Each plate is an individually-watertight box; their faces
+    interpenetrate at corners, but ``combine`` keeps the merged mesh
+    watertight (each shell's edges still pair within itself), so the
+    ``run_health_checks`` watertight branch passes and the F-NEW-26
+    error is the only failure surfaced to the route.
+
+    With ``domain=10`` and ``thickness=0.5`` the plates are far enough
+    apart to keep the per-pair intersection volume small enough to be
+    classified ``edge_overlap`` rather than ``significant`` (≥25% of
+    smaller body's volume).
+    """
+    import re as _re
+
+    L = domain
+    t = thickness
+    plates_specs: list[tuple[str, list[float], list[float]]] = [
+        ("inlet",           [t,       L,       L],     [0.0,   L / 2, L / 2]),
+        ("outlet",          [t,       L,       L],     [L,     L / 2, L / 2]),
+        ("symmetry",        [L,       t,       L],     [L / 2, 0.0,   L / 2]),
+        ("farfield_outer",  [L,       t,       L],     [L / 2, L,     L / 2]),
+        ("farfield_bottom", [L,       L,       t],     [L / 2, L / 2, 0.0]),
+        ("farfield_top",    [L,       L,       t],     [L / 2, L / 2, L]),
+    ]
+
+    solid_re = _re.compile(rb"^\s*solid\b[^\n]*", _re.MULTILINE)
+    endsolid_re = _re.compile(rb"^\s*endsolid\b[^\n]*", _re.MULTILINE)
+
+    chunks: list[bytes] = []
+    for name, size, center in plates_specs:
+        m = trimesh.creation.box(size)
+        m.apply_translation(center)
+        raw = m.export(file_type="stl_ascii")
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        encoded = name.encode("ascii")
+        raw = solid_re.sub(b"solid " + encoded, raw, count=1)
+        raw = endsolid_re.sub(b"endsolid " + encoded, raw, count=1)
+        if not raw.endswith(b"\n"):
+            raw += b"\n"
+        chunks.append(raw)
+    return b"".join(chunks)
+
+
 def multi_solid_ascii_stl(*names: str) -> bytes:
     """Compose a multi-solid ASCII STL with the given solid names. Each
     solid is a translated cube so trimesh ingests them as distinct
