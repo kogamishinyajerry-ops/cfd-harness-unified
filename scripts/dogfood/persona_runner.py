@@ -88,6 +88,96 @@ class PersonaConfig:
     max_steps: int = 30
     max_input_tokens: int = 200_000
     max_output_tokens: int = 4096
+    # B-ext.1 / DEC-V61-173 (F6) — conversation pruning controls.
+    # Keep the last `prune_keep_full` assistant+tool_result turn-pairs
+    # in full; older tool_result blocks get content compressed to a
+    # one-liner. The initial user brief is always preserved.
+    # Set keep_full=0 to disable pruning (legacy behavior).
+    prune_keep_full: int = 6
+    prune_min_turns_before_active: int = 4
+
+
+def _prune_messages(
+    messages: list[dict[str, Any]],
+    *,
+    keep_full: int,
+    min_turns_before_active: int,
+) -> list[dict[str, Any]]:
+    """Compress tool_result content for older turns to control token growth.
+
+    Strategy:
+    - The initial user message (case brief) is always preserved verbatim.
+    - The last `keep_full` `(assistant, user_tool_results)` pairs are
+      preserved verbatim.
+    - Earlier `tool_result` blocks have their `content` field replaced
+      with a one-liner stub: `[pruned: tool_use_id=... · is_error=False]`.
+      The persona still sees the call/response existed but doesn't
+      carry the body in context.
+    - Older `assistant` text+tool_use blocks are kept (they're small;
+      they document persona decisions).
+
+    No-op if pruning is disabled or the conversation is short enough.
+    """
+    if keep_full <= 0 or len(messages) <= min_turns_before_active:
+        return messages
+
+    # Find indices of "user" messages that contain tool_result blocks.
+    # The initial brief is index 0 (or the first 'user' string-content
+    # message), which we preserve.
+    pruneable_user_indices: list[int] = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        if any(
+            isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+        ):
+            pruneable_user_indices.append(i)
+
+    if len(pruneable_user_indices) <= keep_full:
+        return messages
+
+    cutoff_idx = pruneable_user_indices[-keep_full]
+    pruned: list[dict[str, Any]] = []
+    for i, msg in enumerate(messages):
+        if i >= cutoff_idx or msg.get("role") != "user" or not isinstance(
+            msg.get("content"), list
+        ):
+            pruned.append(msg)
+            continue
+        content = msg["content"]
+        if not any(
+            isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+        ):
+            pruned.append(msg)
+            continue
+        # Compress tool_result content
+        new_blocks: list[dict[str, Any]] = []
+        for b in content:
+            if not isinstance(b, dict):
+                new_blocks.append(b)
+                continue
+            if b.get("type") == "tool_result":
+                tool_use_id = b.get("tool_use_id", "")
+                is_error = bool(b.get("is_error"))
+                stub = (
+                    f"[pruned for context · tool_use_id={tool_use_id} · "
+                    f"is_error={is_error}]"
+                )
+                new_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": stub,
+                        "is_error": is_error,
+                    }
+                )
+            else:
+                new_blocks.append(b)
+        pruned.append({"role": "user", "content": new_blocks})
+    return pruned
 
 
 @dataclass
@@ -183,10 +273,26 @@ def run_persona(
 
     step = 0
     for step in range(1, config.max_steps + 1):
+        outbound_messages = _prune_messages(
+            messages,
+            keep_full=config.prune_keep_full,
+            min_turns_before_active=config.prune_min_turns_before_active,
+        )
+        if outbound_messages is not messages and len(outbound_messages) == len(
+            messages
+        ):
+            log.emit(
+                "decision",
+                step=step,
+                detail=(
+                    f"conversation pruned: keep_full={config.prune_keep_full} "
+                    f"turn_pairs (F6)"
+                ),
+            )
         try:
             response: AssistantMessage = client.chat(
                 system=config.system_prompt,
-                messages=messages,
+                messages=outbound_messages,
                 tools=tools,
                 max_tokens=config.max_output_tokens,
             )
@@ -275,7 +381,11 @@ def run_persona(
             tool_result = executor.execute(call)
             log.emit(
                 "api_call",
-                method="GET" if call.tool_name == "http_get" else "POST",
+                method=(
+                    "GET" if call.tool_name == "http_get"
+                    else "PUT" if call.tool_name == "http_put"
+                    else "POST"
+                ),
                 url=str(call.arguments.get("url", "")),
                 status=tool_result.status,
                 ok=tool_result.ok,

@@ -159,3 +159,179 @@ def test_read_configured_end_time_partial_parse(tmp_path: Path):
     end_t, dt = _read_configured_end_time(case)
     assert end_t == pytest.approx(3.7)
     assert dt == pytest.approx(0.01)
+
+
+# ---------------------------------------------------------------------------
+# B-ext-2 F9 regression: 0.orig dir from setup-bc backup must not crash sort
+# ---------------------------------------------------------------------------
+
+
+def test_filter_numeric_time_dirs_drops_setup_bc_backup():
+    """B-ext-2 F9: ls -d [0-9]* matches `0.orig` (the BC-backup dir
+    that setup-bc creates). Pre-fix, the post-solve scanner did
+    `sorted(..., key=lambda s: float(s))` and crashed on `0.orig`."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "0.001", "0.002", "0.5", "0.orig"]
+    filtered = _filter_numeric_time_dirs(raw)
+    assert "0.orig" not in filtered
+    assert filtered == ["0", "0.001", "0.002", "0.5"]
+    # downstream sort must succeed
+    assert sorted(filtered, key=lambda s: float(s)) == [
+        "0", "0.001", "0.002", "0.5"
+    ]
+
+
+def test_filter_numeric_time_dirs_drops_other_non_numeric_suffixes():
+    """Defensive: any non-float-parseable name is dropped, not just .orig."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "0.bak", "0.5", "0.5.tmp", "1.0", "garbage"]
+    assert _filter_numeric_time_dirs(raw) == ["0", "0.5", "1.0"]
+
+
+def test_filter_numeric_time_dirs_preserves_scientific_notation():
+    """OpenFOAM occasionally writes time dirs in scientific notation
+    when deltaT is tiny. float() handles it; we must too."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _filter_numeric_time_dirs,
+    )
+
+    raw = ["0", "1e-05", "5e-05", "0.0001"]
+    out = _filter_numeric_time_dirs(raw)
+    assert "1e-05" in out
+    assert "5e-05" in out
+
+
+# ---------------------------------------------------------------------------
+# B-ext-3 F10 regression: mesh/BC patch-name mismatch must be caught pre-flight
+# ---------------------------------------------------------------------------
+
+
+def test_check_mesh_bc_consistency_returns_none_on_match(tmp_path):
+    """Happy path: 0/p references the same patches as polyMesh/boundary."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _check_mesh_bc_consistency,
+    )
+
+    polymesh = tmp_path / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "boundary").write_text(
+        "FoamFile { object boundary; }\n"
+        "2\n(\n"
+        "    inlet\n    { type patch; nFaces 100; startFace 1000; }\n"
+        "    walls\n    { type wall; nFaces 200; startFace 1100; }\n"
+        ")\n"
+    )
+    zero = tmp_path / "0"
+    zero.mkdir()
+    (zero / "p").write_text(
+        "FoamFile { object p; }\n"
+        "internalField uniform 0;\n"
+        "boundaryField\n{\n"
+        "    inlet { type zeroGradient; }\n"
+        "    walls { type zeroGradient; }\n"
+        "}\n"
+    )
+
+    assert _check_mesh_bc_consistency(tmp_path) is None
+
+
+def test_check_mesh_bc_consistency_detects_post_mesh_regen_drift(tmp_path):
+    """B-ext-3 F10: persona POSTed /mesh after setup-bc; polyMesh
+    regenerated to single ``patch0`` but 0/p still has lid/fixedWalls.
+    Pre-flight must catch this with a clear mesh_bc_mismatch message."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _check_mesh_bc_consistency,
+    )
+
+    polymesh = tmp_path / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "boundary").write_text(
+        "FoamFile { object boundary; }\n"
+        "1\n(\n"
+        "    patch0\n    { type patch; nFaces 1408; startFace 4954; }\n"
+        ")\n"
+    )
+    zero = tmp_path / "0"
+    zero.mkdir()
+    (zero / "p").write_text(
+        "FoamFile { object p; }\n"
+        "internalField uniform 0;\n"
+        "boundaryField\n{\n"
+        "    lid { type zeroGradient; }\n"
+        "    fixedWalls { type zeroGradient; }\n"
+        "}\n"
+    )
+
+    msg = _check_mesh_bc_consistency(tmp_path)
+    assert msg is not None
+    assert msg.startswith("mesh_bc_mismatch:")
+    assert "0/p" in msg
+    assert "lid" in msg or "fixedWalls" in msg
+    assert "patch0" in msg
+    assert "re-run" in msg.lower() and "setup-bc" in msg
+
+
+def test_check_mesh_bc_consistency_handles_missing_zero_dir(tmp_path):
+    """If 0/ doesn't exist, no BC files to validate — return None."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _check_mesh_bc_consistency,
+    )
+
+    polymesh = tmp_path / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "boundary").write_text(
+        "FoamFile { object boundary; }\n1\n(\n    patch0 { type patch; nFaces 100; startFace 0; }\n)\n"
+    )
+    assert _check_mesh_bc_consistency(tmp_path) is None
+
+
+def test_check_mesh_bc_consistency_handles_missing_polymesh(tmp_path):
+    """No polyMesh — solver_runner has separate controlDict check;
+    patch consistency check returns None to avoid double-reporting."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _check_mesh_bc_consistency,
+    )
+
+    zero = tmp_path / "0"
+    zero.mkdir()
+    (zero / "p").write_text(
+        "boundaryField { lid { type zeroGradient; } }"
+    )
+    assert _check_mesh_bc_consistency(tmp_path) is None
+
+
+def test_check_mesh_bc_consistency_multi_field_independent_check(tmp_path):
+    """Each 0/<field> is checked independently — 0/U mismatch surfaces
+    even if 0/p is consistent."""
+    from ui.backend.services.case_solve.solver_runner import (
+        _check_mesh_bc_consistency,
+    )
+
+    polymesh = tmp_path / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "boundary").write_text(
+        "FoamFile { object boundary; }\n"
+        "2\n(\n"
+        "    inlet { type patch; nFaces 100; startFace 1000; }\n"
+        "    walls { type wall; nFaces 200; startFace 1100; }\n"
+        ")\n"
+    )
+    zero = tmp_path / "0"
+    zero.mkdir()
+    (zero / "p").write_text(
+        "boundaryField { inlet { type zeroGradient; } walls { type zeroGradient; } }"
+    )
+    (zero / "U").write_text(
+        "boundaryField { lid { type fixedValue; } walls { type noSlip; } }"
+    )
+
+    msg = _check_mesh_bc_consistency(tmp_path)
+    assert msg is not None
+    assert "0/U" in msg
+    assert "lid" in msg

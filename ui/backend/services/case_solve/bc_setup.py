@@ -81,6 +81,12 @@ class BCSetupResult:
     # a `source: user` manifest entry — preserved across re-runs of
     # setup_ldc_bc so manual rescues survive AI re-author cycles.
     skipped_user_overrides: tuple[str, ...] = ()
+    # B-ext-4.3 F12 mitigation (DEC-V61-189): soft warnings surfaced
+    # in the route response. Currently used for "this geometry is
+    # almost certainly not the LDC tutorial cube — using LDC defaults
+    # will produce NaN field" signal so personas know to re-POST with
+    # from_stl_patches=1 + case-physics bc_contract.
+    warnings: tuple[str, ...] = ()
 
 
 # DEC-V61-101: minimal laminar channel executor. Defaults locked in
@@ -541,6 +547,8 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
             f"could not acquire case lock for setup_ldc_bc: {exc}"
         ) from exc
 
+    warnings = _ldc_geometry_mismatch_warnings(case_dir)
+
     return BCSetupResult(
         case_id=case_id,
         case_dir=case_dir,
@@ -551,6 +559,58 @@ def setup_ldc_bc(case_dir: Path, *, case_id: str) -> BCSetupResult:
         reynolds=_LID_VELOCITY[0] * 0.1 / _NU_KINEMATIC,
         written_files=written,
         skipped_user_overrides=skipped,
+        warnings=warnings,
+    )
+
+
+def _ldc_geometry_mismatch_warnings(case_dir: Path) -> tuple[str, ...]:
+    """B-ext-4.3 F12 mitigation: detect when the LDC executor is being
+    run on geometry that almost certainly isn't the cavity tutorial
+    cube, and surface a soft warning so the caller (persona / UI)
+    knows to re-POST with ``from_stl_patches=1`` + case-physics
+    bc_contract.
+
+    Detection heuristic: read ``case_manifest.yaml``'s
+    ``ingest_report_summary.bbox_extent`` and check the aspect ratio.
+    A unit cube has all three extents equal (ratio 1.0); LDC tutorial
+    cubes accept up to a 1.5× imbalance. If max/min > 3, the geometry
+    is decisively non-LDC and the LDC defaults will produce a "NaN
+    converged" result (B-ext-3 F12).
+
+    Best-effort: missing/unreadable manifest returns no warning rather
+    than failing setup-bc.
+    """
+    manifest_path = case_dir / "case_manifest.yaml"
+    if not manifest_path.is_file():
+        return ()
+    try:
+        import yaml as _yaml
+
+        raw = _yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except (OSError, _yaml.YAMLError):  # type: ignore[name-defined]
+        return ()
+    ingest = raw.get("ingest_report_summary") or {}
+    extent = ingest.get("bbox_extent")
+    if not isinstance(extent, list) or len(extent) != 3:
+        return ()
+    try:
+        dims = [float(d) for d in extent]
+    except (TypeError, ValueError):
+        return ()
+    if min(dims) <= 0.0:
+        return ()
+    aspect = max(dims) / min(dims)
+    if aspect <= 3.0:
+        return ()
+    return (
+        f"ldc_geometry_mismatch: bbox_extent={dims} has aspect ratio "
+        f"{aspect:.2f} (> 3.0). The LDC default executor hardcodes "
+        f"lid_velocity=(1,0,0), nu=1e-3, Re=100 and is calibrated for "
+        f"the lid-driven cavity tutorial CUBE. Applied to this geometry, "
+        f"the solver may 'converge' residuals but produce a NaN U field "
+        f"(B-ext-3 F12 / DEC-V61-185). Re-POST "
+        f"/setup-bc?from_stl_patches=1&solver_name=...&inlet_speed=...&"
+        f"nu=...&end_time=... with values from your case brief.",
     )
 
 

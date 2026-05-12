@@ -46,6 +46,16 @@ class SetupBcSummary(BaseModel):
     written_files: list[str] = Field(
         ..., description="Relative paths of dicts written."
     )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Soft warnings surfaced by the executor. Currently used by "
+            "the LDC path (B-ext-4.3 F12, DEC-V61-189) to flag "
+            "non-cube geometry where LDC defaults will produce a NaN "
+            "U field; persona / UI should re-POST with from_stl_patches=1 "
+            "+ case-physics bc_contract."
+        ),
+    )
 
 
 class SetupBcRejection(BaseModel):
@@ -63,6 +73,13 @@ class SolveSummary(BaseModel):
     time_directories: list[str]
     wall_time_s: float
     converged: bool
+    # B-ext-4.2 F11 fix (DEC-V61-188): the run_id under which artifacts
+    # were persisted at reports/{case_id}/runs/{run_id}/. Optional
+    # (None when run-history persistence failed silently) so existing
+    # /solve callers don't break. Use this run_id with /run-history/
+    # {run_id} for full detail and /results/{run_id}/field/{name} for
+    # raw field bytes.
+    run_id: str | None = None
 
 
 class SolveRejection(BaseModel):

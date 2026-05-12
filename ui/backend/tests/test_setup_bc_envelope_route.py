@@ -931,6 +931,8 @@ def test_apply_concurrent_annotations_write_caught_by_lock(
             self.nu = 0.01
             self.reynolds = 100.0
             self.written_files = ()
+            # B-ext-4.3 (DEC-V61-189): BCSetupResult gained warnings field
+            self.warnings = ()
 
     monkeypatch.setattr(
         "ui.backend.routes.case_solve.setup_ldc_bc",

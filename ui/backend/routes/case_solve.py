@@ -653,6 +653,7 @@ def setup_bc(
                     nu=ldc_result.nu,
                     reynolds=ldc_result.reynolds,
                     written_files=list(ldc_result.written_files),
+                    warnings=list(ldc_result.warnings),
                 )
     except AnnotationsIOError as exc:
         # annotations_exclusive_lock itself raises AnnotationsIOError
@@ -718,7 +719,14 @@ def solve_stream(case_id: str) -> StreamingResponse:
         ) from exc
     except SolverRunError as exc:
         msg = str(exc)
-        if "container" in msg.lower() and (
+        if msg.startswith("mesh_missing:"):
+            # B-ext-5.2 F13 mitigation — same as blocking /solve route.
+            status = 409
+            failing = "mesh_missing"
+        elif msg.startswith("mesh_bc_mismatch:"):
+            status = 409
+            failing = "mesh_bc_mismatch"
+        elif "container" in msg.lower() and (
             "not running" in msg.lower() or "not found" in msg.lower()
         ):
             status = 503
@@ -757,7 +765,15 @@ def solve(case_id: str) -> SolveSummary:
     """Run icoFoam inside the cfd-openfoam container. Blocks until the
     solver finishes (≈60s wall-time for the default LDC config).
     """
+    from datetime import datetime, timezone
+
+    from ui.backend.services.run_history import (
+        new_run_id,
+        write_run_artifacts,
+    )
+
     case_dir = _resolve_case_dir(case_id)
+    started_at = datetime.now(timezone.utc)
     try:
         result = run_icofoam(case_host_dir=case_dir)
     except SolverRunError as exc:
@@ -767,6 +783,29 @@ def solve(case_id: str) -> SolveSummary:
                 status_code=409,
                 detail=SolveRejection(
                     failing_check="bc_not_setup",
+                    detail=msg,
+                ).model_dump(),
+            ) from exc
+        if msg.startswith("mesh_missing:"):
+            # B-ext-5.2 F13 mitigation: pre-flight caught missing
+            # polyMesh before spawning solver. 409 Conflict so the
+            # persona can re-run /mesh instead of seeing a generic 502
+            # solver_diverged on a cryptic FOAM IO error.
+            raise HTTPException(
+                status_code=409,
+                detail=SolveRejection(
+                    failing_check="mesh_missing",
+                    detail=msg,
+                ).model_dump(),
+            ) from exc
+        if msg.startswith("mesh_bc_mismatch:"):
+            # B-ext-3 F10 fix: pre-flight catches a stale-BC-after-/mesh
+            # state. 409 Conflict — engineer must re-run setup-bc to
+            # bring the BC files back in sync with the regenerated mesh.
+            raise HTTPException(
+                status_code=409,
+                detail=SolveRejection(
+                    failing_check="mesh_bc_mismatch",
                     detail=msg,
                 ).model_dump(),
             ) from exc
@@ -796,6 +835,64 @@ def solve(case_id: str) -> SolveSummary:
             ).model_dump(),
         ) from exc
 
+    # B-ext-4.2 F11 fix (DEC-V61-188): persist run artifacts to
+    # reports/{case_id}/runs/{run_id}/ so /api/cases/{id}/run-history
+    # surfaces the run. Pre-fix the route was wired only by
+    # RealSolverDriver (M3 closed-loop main-line); /solve was running
+    # icoFoam directly without persisting anything, leaving
+    # /run-history with empty runs:[] after every successful solve.
+    run_id = new_run_id()
+    try:
+        write_run_artifacts(
+            case_id=case_id,
+            run_id=run_id,
+            started_at=started_at,
+            task_spec=None,
+            source_origin="ui_solve_route",
+            success=result.converged,
+            exit_code=0,
+            verdict_summary=(
+                "converged" if result.converged else "ran_but_not_converged"
+            ),
+            duration_s=result.wall_time_s,
+            key_quantities={
+                "end_time_reached": result.end_time_reached,
+                "n_time_steps_written": result.n_time_steps_written,
+            },
+            residuals={
+                "p": result.last_initial_residual_p,
+                "Ux": result.last_initial_residual_U[0],
+                "Uy": result.last_initial_residual_U[1],
+                "Uz": result.last_initial_residual_U[2],
+                "continuity": result.last_continuity_error,
+            },
+        )
+    except (OSError, ValueError):
+        # Run-history persistence is best-effort; never fail the
+        # /solve response on artifact-write errors. The pre-flight
+        # mesh-BC check + container availability check are the
+        # load-bearing guards.
+        pass
+
+    # B-ext-6.1 F15 fix layer 1 (DEC-V61-196): create
+    # <case_dir>/<run_id> → <final_time_dir> symlink so the existing
+    # /api/cases/{id}/results/{run_id}/field/{name} route resolves to
+    # the OpenFOAM time-step files. The route looks at
+    # <case_dir>/<run_id>/<name>; without the symlink it returns 404
+    # run_not_found because OpenFOAM writes time-step output under
+    # <case_dir>/0/, <case_dir>/0.5/, etc., NOT under <case_dir>/<run_id>/.
+    # Best-effort: if symlink creation fails (race, FS without
+    # symlink support), the route still returns 404 — same as before.
+    try:
+        if result.time_directories:
+            final_time_name = result.time_directories[-1]
+            target = case_dir / final_time_name
+            link = case_dir / run_id
+            if target.is_dir() and not link.exists():
+                link.symlink_to(final_time_name, target_is_directory=True)
+    except OSError:
+        pass
+
     return SolveSummary(
         case_id=result.case_id,
         end_time_reached=result.end_time_reached,
@@ -806,6 +903,7 @@ def solve(case_id: str) -> SolveSummary:
         time_directories=list(result.time_directories),
         wall_time_s=result.wall_time_s,
         converged=result.converged,
+        run_id=run_id,
     )
 
 

@@ -1,0 +1,14 @@
+{
+  "charter_case_id": "backward_step",
+  "workbench_case_id": "imported_2026-05-07T12-06-26Z_b440a05b",
+  "variant": "B",
+  "persona": "novice",
+  "family": "deepseek",
+  "model_id": "deepseek-chat",
+  "run_id": "backward_step__novice__step6_B__6ed6bc79",
+  "max_steps": 30,
+  "max_input_tokens": 400000,
+  "prestage_s": 6.3522167080082,
+  "elapsed_s": 5.313933541998267,
+  "error": null
+}
